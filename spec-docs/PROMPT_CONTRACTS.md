@@ -20244,3 +20244,101 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2c-2a ===== -->
+
+<!-- ===== CONTRACT: RA-2c-2b-1 ===== -->
+## CONTRACT: RA-2c-2b-1 — wire the RA-2c signal engine into the dark checkpoint sweep (assemble + per-rating fan-out; build-dark)
+
+**ROUTE:** Branch A. Worktree `/Users/johnkruse/Projects/kbl-tracker`, branch `codex/franchise-v1-next`. Branch-only — do NOT commit, do NOT push. Opus stages/commits/gates after auditing your real diff.
+
+**ROLE:** You are the builder (Codex). Opus (a different model) audits the actual git diff afterward, builder≠auditor. Return raw results, not reassurance.
+
+**GOAL:** Replace the placeholder "True-Value-valueDelta → one stable-hashed rating" development in the dark checkpoint sweep with the REAL RA-2c per-category-rate → per-rating signal produced by the already-built engine `src/utils/checkpointRatingSignal.ts`. Each MOVED rating writes its own overlay (cardinality 1→N). This ticket lands the assemble+signal+fan-out spine ONLY. **Window-eligibility (Gate 3) and confidence-weighting are DEFERRED to RA-2c-2b-2 — do NOT implement them here.** Everything stays build-DARK behind the existing default-OFF Phase-2 checkpoint flag; no runtime behavior changes when the flag is off (it is off).
+
+**SOURCE OF TRUTH (read before coding):**
+- `spec-docs/CURRENT_STATE.md` LIVE-HEADER §(2b) — the RA-2c-2b spec block (authoritative).
+- `spec-docs/DECISIONS_LOG.md` 2026-06-24 entries: "RA-2c-2 qualifier model — the three sample gates + flat floors" and "RA-2 peer-pool, eligibility & signal model".
+- Engine (already built — do NOT modify): `src/utils/checkpointRatingSignal.ts` — exports `computeCheckpointRatingSignals(members: readonly CheckpointSignalMember[]): Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>`, `classifyRatingsPoolKey({role, effectivePosition, startsShare}): RatingsPoolKey | null`, and the type `CheckpointSignalMember = {playerId; role:'hitter'|'pitcher'; ageBand: ExpectedStatsAgeBand; ratings: Partial<Record<ExpectedStatsRatingKey, number>>; poolKey: RatingsPoolKey; categoryRates: CategoryRateResult}`. The flat per-category sample-floor gating is performed INTERNALLY by `computeCheckpointRatingSignals` — do not re-gate.
+- Adapter (already built — do NOT modify): `src/engines/expectedStatsCategoryRates.ts` — `toExpectedStatsCategoryRates(input: {role:'hitter'|'pitcher'; batting?: PlayerSeasonBatting; pitching?: PlayerSeasonPitching; fielding?: PlayerSeasonFielding}): CategoryRateResult`.
+- Types (already exist): `src/engines/expectedStatsEngine.ts` — `ExpectedStatsRatingKey = 'power'|'contact'|'speed'|'fielding'|'arm'|'velocity'|'junk'|'accuracy'`; `ExpectedStatsAgeBand = '18-21'|'22-24'|'25-31'|'32-35'|'36+'`.
+- Season getters (already exist, roster-agnostic by seasonId): `src/utils/seasonStorage.ts` — `getSeasonBattingStats(seasonId): Promise<PlayerSeasonBatting[]>` (:364), `getSeasonPitchingStats(seasonId): Promise<PlayerSeasonPitching[]>` (:439), `getAllFieldingStats(seasonId): Promise<PlayerSeasonFielding[]>` (:828). Each returns one aggregate row per player.
+- Effective-position report (already exists): `src/utils/franchiseEffectivePosition.ts` — `buildFranchiseEffectivePositionReport({franchiseId, seasonId, statsScopeId, players: FranchiseEffectivePositionPlayerInput[]}): Promise<FranchiseEffectivePositionReport>`; returns `.playerPositions: Record<playerId, {effectivePosition: PlayerPosition|null; startsShare: number|null; ...}>`. Live call precedent to MIRROR for the players-input array: `src/utils/franchiseValueInputs.ts:447-459`.
+
+**CONSTRAINTS:**
+- EDIT EXACTLY TWO FILES: `src/utils/franchiseCheckpointSweepCompute.ts` (production) and `src/utils/tests/franchiseCheckpointSweepCompute.test.ts` (its test). Touch NOTHING else.
+- Do NOT modify `ratingsDevelopment.ts` (confidence-weighting is 2b-2), `checkpointRatingSignal.ts`, `expectedStatsCategoryRates.ts`, `expectedStatsEngine.ts`, `seasonStorage.ts`, `franchiseEffectivePosition.ts`, or any spec doc.
+- Do NOT add a call site — the sweep is ALREADY invoked at `processCompletedGame.ts:1080` via `persistDarkCheckpointSweepForCompletedGame`. Wire the INTERIOR only.
+- NO `TRACKER_DB_VERSION` bump. Reuse the existing `franchiseRatingsOverlays` store and the existing `putFranchiseRatingsOverlay` writer. The overlay-row shape is UNCHANGED.
+- Determinism is a HARD contract (there is a test that greps the source for `Math.random|Date.now|new Date(|indexedDB.open`): introduce none of those. No caller timestamps.
+- `iv_oracle.json` is FROZEN/read-only; do not touch it.
+- Keep `CompletedGameArchiveOptions` exported (an external module imports the type).
+
+**THE CHANGES — `src/utils/franchiseCheckpointSweepCompute.ts`:**
+
+1. **Imports.**
+   - In the existing `'../engines/ratingsDevelopment'` import (currently `computeCheckpointRatingDevelopment, normalizePerformanceSignal, RATINGS_DEVELOPMENT_TUNING, type RatingsDevelopmentTuning`), REMOVE `normalizePerformanceSignal` (it is no longer used here; it is still exported and used by `franchiseL10SweepCompute.ts` — do NOT delete the export). Keep the other three.
+   - In the existing `'./seasonStorage'` import (currently `getSeasonMetadata`), ADD `getSeasonBattingStats, getSeasonPitchingStats, getAllFieldingStats`.
+   - ADD: `import { buildFranchiseEffectivePositionReport } from './franchiseEffectivePosition';`
+   - ADD: `import { toExpectedStatsCategoryRates } from '../engines/expectedStatsCategoryRates';`
+   - ADD: `import { classifyRatingsPoolKey, computeCheckpointRatingSignals, type CheckpointSignalMember } from './checkpointRatingSignal';`
+   - ADD: `import type { ExpectedStatsAgeBand, ExpectedStatsRatingKey } from '../engines/expectedStatsEngine';`
+
+2. **`CheckpointRosterEntry` type (currently :88-99).** Replace the field `performanceSignal: number;` (:97) with `signalByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;`. Change `createdAt: string;` to `createdAt: string | null;` (no-True-Value cohort members have no deterministic timestamp — see step 4 + the OPEN-DECISION note). Keep every other field unchanged (`playerId, teamId, isPitcher, baseRatings, personality, modifiers, playerMorale, teamFanMorale`).
+
+3. **NEW pure helper `ageToExpectedStatsBand(age: number): ExpectedStatsAgeBand`** (place near the other module-private helpers). Map: `age <= 21 → '18-21'`; `22..24 → '22-24'`; `25..31 → '25-31'`; `32..35 → '32-35'`; `age >= 36 → '36+'`. Non-finite/missing age → `'25-31'` (documented prime-band default; the band edges are §16-tunable but follow the `ExpectedStatsAgeBand` literals).
+
+4. **`resolveCheckpointRoster` (currently :119-190) — rewrite the body.**
+   - Keep the `leagueId` resolution + early `return []` (:123-124).
+   - Fetch concurrently: `getAllFranchisePlayers(scope.franchiseId)`, `getFranchiseTrueValueRows({franchiseId, seasonId, statsScopeId})` (KEEP — used for per-member `createdAt`), `getSeasonBattingStats(scope.seasonId)`, `getSeasonPitchingStats(scope.seasonId)`, `getAllFieldingStats(scope.seasonId)`.
+   - Build `trueValueRowsByPlayerId`, `battingByPlayerId`, `pitchingByPlayerId`, `fieldingByPlayerId` (one row per playerId; key off `.playerId`).
+   - Build the effective-position report by MIRRORING `franchiseValueInputs.ts:447-459`: `buildFranchiseEffectivePositionReport({franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, players: players.map(p => ({playerId: p.id, profilePosition: p.primaryPosition, currentTeamId: getPlayerTeamIdForLeague(p, leagueId) ?? null, trait1: p.trait1 ?? null, trait2: p.trait2 ?? null, pitcherRole: p.primaryPosition}))})`.
+   - **RELAX all three guards for POOL membership** (per the live-header ruling "relax all three for pool membership; capture rosterStatus but don't exclude"): DROP the `:139` `getPlayerRosterStatusForLeague(...) !== 'MLB'` continue, DROP the `:141-142` `!trueValueRow` continue, DROP the `:144-145` `!teamId` continue. Every franchise player is now a candidate cohort member. (`getPlayerRosterStatusForLeague` may still be called to record status, but it MUST NOT exclude — and since it is no longer used to gate, you may drop its import if it becomes unused; check.)
+   - For each player build a `CheckpointSignalMember`: `role = getPlayerIsPitcher(player) ? 'pitcher' : 'hitter'`; `effectivePosition = report.playerPositions[player.id]?.effectivePosition ?? player.primaryPosition`; `startsShare = report.playerPositions[player.id]?.startsShare ?? null`; `poolKey = classifyRatingsPoolKey({role, effectivePosition, startsShare})`. If `poolKey === null` the player is UNCLASSIFIABLE — exclude them from the member set entirely (they cannot contribute to or receive a pool signal). Otherwise: `categoryRates = toExpectedStatsCategoryRates({role, batting: battingByPlayerId.get(player.id), pitching: pitchingByPlayerId.get(player.id), fielding: fieldingByPlayerId.get(player.id)})`; `ratings = baseRatings` (the same `{velocity,junk,accuracy}` for pitchers / `{power,contact,speed,fielding,arm}` for hitters object you already build — cast to `Partial<Record<ExpectedStatsRatingKey, number>>`); `ageBand = ageToExpectedStatsBand(player.age)`.
+   - Call `computeCheckpointRatingSignals(members)` ONCE over the WHOLE member set (the pool mean/SD are cross-player; never call it per-player). It returns `Map<playerId, Partial<Record<ExpectedStatsRatingKey, number>>>`.
+   - Assemble `CheckpointRosterEntry[]` (one per classifiable member): `signalByRatingKey = signalMap.get(player.id) ?? {}`; `teamFanMorale` = the snapshot fallback-50 logic you already have IF `teamId` is present, else `50` directly (keep the existing per-team memoized snapshot map for teamed players); `createdAt = trueValueRowsByPlayerId.get(player.id)?.computedAt ?? null` (null when the player has no True-Value row — these stay cohort members for the signal pass but receive NO overlay; see step 5 + OPEN-DECISION). Keep `personality = normalizePersonality(player.personality)`, `modifiers` from `player.hiddenPersonalityModifiers ?? NEUTRAL_HIDDEN_MODIFIERS`, `playerMorale = player.morale`, `baseRatings` as today.
+
+5. **Persist loop (currently :246-282) — fan out 1→N.**
+   - Keep the `sourceEventId = \`checkpoint-${gameNumber}\`` line.
+   - For each `entry` of `roster`: if `entry.createdAt == null` → `continue` (no deterministic timestamp ⇒ cohort-only member, no overlay). Then for each `ratingKey` of `Object.keys(entry.signalByRatingKey)` (cast to `ExpectedStatsRatingKey`): let `signal = entry.signalByRatingKey[ratingKey]`; if `signal == null || !Number.isFinite(signal)` continue; `baseRatingValue = entry.baseRatings[ratingKey]`; if `!Number.isFinite(baseRatingValue)` continue; call `computeCheckpointRatingDevelopment({ratingKey, baseRatingValue, performanceSignal: signal, playerMorale: entry.playerMorale, teamFanMorale: entry.teamFanMorale, personality: entry.personality, modifiers: entry.modifiers}, CHECKPOINT_DEV_TUNING)`; if `!dev.shouldShift` continue; push the overlay row with the SAME shape and the EXACT id formula `\`${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${ratingKey}:${sourceEventId}\`` and `createdAt: entry.createdAt` (now a non-null string here). Keep `kind:'permanent'`, `expiresAtGameNumber:null`, `confirmationStatus:'pending'`, `source:'ratings-development'`, `sourceEventId`, `createdAtGameNumber: gameNumber` EXACTLY as today.
+   - This fan-out naturally yields "pitcher never writes an arm overlay" (a pitcher's `signalByRatingKey` only contains velocity/junk/accuracy because the pitcher categoryRates path emits no hitter categories, and a pitcher's `baseRatings` has no `arm`). Do not add a special-case; just confirm it holds.
+   - The `Object.keys(signalByRatingKey)` order is deterministic (the engine fills it by iterating a fixed rating-key list) — fine.
+
+6. **`CHECKPOINT_DEV_TUNING` (currently :59-62).** Leave the object as-is (it is referenced by the test) BUT update its comment: `performanceSignalScale` is now VESTIGIAL in this path — the signal arrives pre-normalized to [-1,1] from `computeCheckpointRatingSignals`, and `computeRawRatingDelta` scales by `baseDeltaScale`, not `performanceSignalScale`. `normalizePerformanceSignal` is no longer called here.
+
+7. **DELETE** `selectDevelopmentRatingKey` (currently :196-199) and the private `stableHash` (currently :310-316). Both become unused. Confirm no remaining reference in this file.
+
+**THE CHANGES — `src/utils/tests/franchiseCheckpointSweepCompute.test.ts`:**
+- This test currently uses a PARTIAL `vi.mock('../seasonStorage', () => ({ getSeasonMetadata: vi.fn() }))`. The production file now imports `getSeasonBattingStats/getSeasonPitchingStats/getAllFieldingStats` from `seasonStorage`, AND the new `toExpectedStatsCategoryRates` path imports `calcBattingAvg/calcOBP/calcSLG` from `seasonStorage`. **You MUST convert the seasonStorage mock to an importActual-spread partial mock** so the real `calcBattingAvg/calcOBP/calcSLG` survive while the three getters + `getSeasonMetadata` are mockable:
+  ```
+  vi.mock('../seasonStorage', async (importActual) => ({
+    ...(await importActual<typeof import('../seasonStorage')>()),
+    getSeasonMetadata: vi.fn(),
+    getSeasonBattingStats: vi.fn(),
+    getSeasonPitchingStats: vi.fn(),
+    getAllFieldingStats: vi.fn(),
+  }));
+  ```
+  Default the three getters to `mockResolvedValue([])` in `beforeEach`.
+- ADD `vi.mock('../franchiseEffectivePosition', () => ({ buildFranchiseEffectivePositionReport: vi.fn() }))` and default it in `beforeEach` to resolve `{ playerPositions: {} }` (or per-test controlled positions).
+- DROP the `selectDevelopmentRatingKey` import and DELETE the `'selectDevelopmentRatingKey is deterministic...'` test.
+- Update the `entry()` helper: replace `performanceSignal: 1` with `signalByRatingKey: isPitcher ? { velocity: 1 } : { power: 1 }` and `createdAt: '2026-06-18T00:00:00.000Z'` stays (these seam-mocked entries DO get overlays). Keep `baseRatings` as-is.
+- The persist tests that `vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([...])` still drive the persist loop directly — update them to the new entry shape and to the per-rating fan-out. Keep/adapt: `flag OFF → dark-noop`, `non-boundary → not-checkpoint`, `unresolved gameNumber → dark-noop`, `boundary sweep writes one pending permanent overlay per shifter` (now: a `signalByRatingKey` with ONE rating → exactly 1 overlay; assert the id ends `:${theRatingKey}:checkpoint-2`), the frequent-cadence test, and the idempotent-replay test.
+- ADD a **fan-out test**: a seam-mocked entry with `signalByRatingKey: { power: 1, contact: 1 }` (both strong) → 2 overlays, one per rating, distinct ids. (Tune the signal magnitudes so both clear `shouldShift`; if a magnitude of 1 doesn't shift given base 50, raise base separation or use the dev helper to confirm.)
+- ADD a **pitcher-never-arm test**: a seam-mocked pitcher entry with `signalByRatingKey: { velocity: 1 }` (and a hypothetical `arm` not present) → overlays only for velocity; assert no overlay has `ratingKey === 'arm'`.
+- ADD a **thin/empty no-throw test**: seam returns `[]` → `{status:'dark-noop', written:0, reason:'Empty checkpoint roster.'}` (unchanged behavior); and a roster of cohort-only members (`createdAt: null`, non-empty signal) → `written: 0`, no overlays, no throw.
+- REWRITE `'resolveCheckpointRoster returns MLB players...'` into a real assemble test: mock `getAllFranchiseTeams`, `getAllFranchisePlayers` (an MLB hitter with a TV row + a FARM/no-TV player), `getPlayerTeamIdForLeague`, `getFranchiseTrueValueRows`, `getFranchiseMoraleSnapshot`, the three season getters (return controlled batting/fielding rows so at least one category clears its flat floor), and `buildFranchiseEffectivePositionReport` (return controlled `playerPositions` with an `effectivePosition`+`startsShare` that classifies the hitter into a starter pool). Assert: the relaxed-guard FARM/no-TV player IS present as a cohort member in the member set (i.e., it is no longer excluded), but produces `createdAt: null` → no overlay; the MLB hitter gets a `signalByRatingKey` map (assert it is an object; exact values are engine-owned, so assert shape/keys, not magic numbers). Do NOT assert exact signal magnitudes (they are engine-derived) — assert structural facts (which players are members, who has null vs non-null createdAt, that a starter classifies into a non-bench pool).
+- KEEP the `isCheckpointBoundary` tests, the cadence-constants test, and the `'compute module source stays deterministic and store-safe'` grep test unchanged.
+
+**EXPECTED OUTPUT:** A unified diff over exactly the two files above. New file `franchiseCheckpointSweepCompute.ts` compiles; the test passes. No other files changed.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/franchiseCheckpointSweepCompute.test.ts` → all green; paste the summary.
+3. `git --no-pager diff --stat` → exactly the two files.
+4. Confirm `git --no-pager diff src/utils/franchiseCheckpointSweepCompute.ts` contains NO `Math.random`/`Date.now`/`new Date(`/`indexedDB.open`.
+
+**MAKE-OR-BREAK:** `computeCheckpointRatingSignals` is called ONCE over the full classifiable member set (cross-player pool stats), the persist loop fans out one overlay per finite-signal MOVED rating with the byte-exact id formula, the seasonStorage test mock spreads `importActual` (else `calcBattingAvg`/the getters are undefined and the suite breaks at load — the documented transitive-import-mock-break), and determinism holds.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report (do NOT improvise around) if: (a) any of the engine/adapter/getter/report signatures differ from what this contract states (re-read the file and report the real signature — do not guess); (b) implementing the spine cleanly would force a change outside the two permitted files; (c) you cannot make the test green without weakening determinism or touching a frozen/forbidden file; (d) the window-eligibility or confidence-weighting logic appears necessary to compile (it is NOT — it is 2b-2; if you think it is, STOP and report why). A correct STOP with a precise reason is a SUCCESS, not a failure.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
+<!-- ===== END CONTRACT: RA-2c-2b-1 ===== -->
