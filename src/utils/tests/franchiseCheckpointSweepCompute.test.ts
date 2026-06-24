@@ -8,7 +8,9 @@ import {
   checkpointSweepSeam,
   isCheckpointBoundary,
   persistDarkCheckpointSweepForCompletedGame,
+  resolvePreviousCheckpointGameNumber,
   resolveCheckpointRoster,
+  resolveWindowActivePlayerIds,
   type CheckpointRosterEntry,
   type CheckpointSweepScope,
 } from '../franchiseCheckpointSweepCompute';
@@ -23,6 +25,7 @@ import {
   getSeasonPitchingStats,
 } from '../seasonStorage';
 import { getGame as getScheduledGame } from '../scheduleStorage';
+import { getGameEvents, getGameHeadersForScope } from '../eventLog';
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -48,6 +51,12 @@ vi.mock('../seasonStorage', async (importActual) => ({
 
 vi.mock('../scheduleStorage', () => ({
   getGame: vi.fn(),
+}));
+
+vi.mock('../eventLog', async (importActual) => ({
+  ...(await importActual<typeof import('../eventLog')>()),
+  getGameHeadersForScope: vi.fn(),
+  getGameEvents: vi.fn(),
 }));
 
 vi.mock('../franchisePlayerStorage', () => ({
@@ -196,11 +205,24 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     await deleteDatabase('kbl-tracker');
     vi.spyOn(syncEngine, 'isSuppressed').mockReturnValue(true);
     vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-2', gameNumber: 2 } as never);
+    vi.mocked(getGameHeadersForScope).mockResolvedValue([]);
+    vi.mocked(getGameEvents).mockResolvedValue([]);
     vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10 } as never);
     vi.mocked(getSeasonBattingStats).mockResolvedValue([]);
     vi.mocked(getSeasonPitchingStats).mockResolvedValue([]);
     vi.mocked(getAllFieldingStats).mockResolvedValue([]);
     vi.mocked(buildFranchiseEffectivePositionReport).mockResolvedValue({ playerPositions: {} } as never);
+    vi.spyOn(checkpointSweepSeam, 'resolveWindowActivePlayerIds').mockResolvedValue({
+      hitters: new Set([
+        'player-shifter',
+        'player-no-shift',
+        'player-frequent',
+        'player-idempotent',
+        'player-fanout',
+        'player-hitter',
+      ]),
+      pitchers: new Set(['pitcher-signal']),
+    });
   });
 
   afterEach(async () => {
@@ -256,6 +278,13 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     for (let gameNumber = 1; gameNumber <= 60; gameNumber += 1) {
       expect(isCheckpointBoundary(gameNumber, 60, 10)).toBe(trueFor60.includes(gameNumber));
     }
+  });
+
+  test('resolvePreviousCheckpointGameNumber finds the prior boundary for each cadence', () => {
+    expect(resolvePreviousCheckpointGameNumber(6, 10, 5)).toBe(4);
+    expect(resolvePreviousCheckpointGameNumber(2, 10, 5)).toBe(0);
+    expect(resolvePreviousCheckpointGameNumber(3, 10, 10)).toBe(2);
+    expect(resolvePreviousCheckpointGameNumber(1, 10, 10)).toBe(0);
   });
 
   test('flag OFF returns dark-noop without calling the seam or overlay writer', async () => {
@@ -421,6 +450,101 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].ratingKey).toBe('velocity');
     expect(rows.some((row) => row.ratingKey === 'arm')).toBe(false);
+  });
+
+  test('window-inactive roster entries remain cohort members but write no overlays', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const inactive = entry({ playerId: 'player-window-inactive', signalByRatingKey: { power: 1 } });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([inactive]);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(),
+      pitchers: new Set(),
+    });
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 0 });
+    expect(rows).toEqual([]);
+  });
+
+  test('resolveWindowActivePlayerIds reads only completed games inside the checkpoint window by scheduled gameNumber', async () => {
+    vi.mocked(getGameHeadersForScope).mockResolvedValue([
+      {
+        gameId: 'out-before',
+        scheduleGameId: 'schedule-4',
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        isComplete: true,
+        date: 4,
+      },
+      {
+        gameId: 'in-five',
+        scheduleGameId: 'schedule-5',
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        isComplete: true,
+        date: 5,
+      },
+      {
+        gameId: 'in-six',
+        scheduleGameId: 'schedule-6',
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        isComplete: true,
+        date: 6,
+      },
+      {
+        gameId: 'unresolved',
+        scheduleGameId: 'schedule-missing',
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        isComplete: true,
+        date: 7,
+      },
+    ] as never);
+    vi.mocked(getScheduledGame).mockImplementation(async (scheduleGameId: string) => {
+      const gameNumbers: Record<string, number> = {
+        'schedule-4': 4,
+        'schedule-5': 5,
+        'schedule-6': 6,
+      };
+      const gameNumber = gameNumbers[scheduleGameId];
+      return gameNumber ? ({ id: scheduleGameId, gameNumber } as never) : null;
+    });
+    vi.mocked(getGameEvents).mockImplementation(async (gameId: string) => {
+      const eventsByGameId: Record<string, Array<{ batterId: string; pitcherId: string }>> = {
+        'out-before': [{ batterId: 'hitter-before', pitcherId: 'pitcher-before' }],
+        'in-five': [{ batterId: 'hitter-five', pitcherId: 'pitcher-five' }],
+        'in-six': [
+          { batterId: 'hitter-six', pitcherId: 'pitcher-six' },
+          { batterId: 'hitter-five', pitcherId: 'pitcher-six' },
+        ],
+      };
+      return (eventsByGameId[gameId] ?? []).map((event, index) => ({
+        eventId: `${gameId}-${index + 1}`,
+        gameId,
+        eventIndex: index + 1,
+        ...event,
+      })) as never;
+    });
+
+    const active = await resolveWindowActivePlayerIds(scope, 4, 6);
+
+    expect(getGameHeadersForScope).toHaveBeenCalledWith({
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      isComplete: true,
+    });
+    expect(getGameEvents).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getGameEvents).mock.calls.map(([gameId]) => gameId).sort()).toEqual([
+      'in-five',
+      'in-six',
+    ]);
+    expect([...active.hitters].sort()).toEqual(['hitter-five', 'hitter-six']);
+    expect([...active.pitchers].sort()).toEqual(['pitcher-five', 'pitcher-six']);
+    expect(active.hitters.has('hitter-before')).toBe(false);
+    expect(active.pitchers.has('pitcher-before')).toBe(false);
   });
 
   test('empty roster and cohort-only members no-throw without overlays', async () => {

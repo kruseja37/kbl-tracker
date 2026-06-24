@@ -49,6 +49,7 @@ import {
   getSeasonPitchingStats,
 } from './seasonStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
+import { getGameEvents, getGameHeadersForScope } from './eventLog';
 import { buildFranchiseEffectivePositionReport } from './franchiseEffectivePosition';
 import { toExpectedStatsCategoryRates } from '../engines/expectedStatsCategoryRates';
 import {
@@ -123,6 +124,59 @@ export function isCheckpointBoundary(gameNumber: number, totalGames: number, che
     Math.floor(((gameNumber - 1) * checkpointCount) / totalGames) !==
       Math.floor((gameNumber * checkpointCount) / totalGames)
   );
+}
+
+export function resolvePreviousCheckpointGameNumber(
+  currentGameNumber: number,
+  totalGames: number,
+  checkpointCount: number,
+): number {
+  for (let gameNumber = currentGameNumber - 1; gameNumber >= 1; gameNumber -= 1) {
+    if (isCheckpointBoundary(gameNumber, totalGames, checkpointCount)) {
+      return gameNumber;
+    }
+  }
+  return 0;
+}
+
+export async function resolveWindowActivePlayerIds(
+  scope: FranchiseRatingsOverlayScopeInput,
+  prevBoundaryGameNumber: number,
+  currentGameNumber: number,
+): Promise<{ hitters: Set<string>; pitchers: Set<string> }> {
+  const hitters = new Set<string>();
+  const pitchers = new Set<string>();
+  const headers = await getGameHeadersForScope({
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    isComplete: true,
+  });
+
+  for (const header of headers) {
+    if (!header.scheduleGameId) continue;
+
+    let gameNumber: number | null = null;
+    try {
+      const scheduledGame = await getScheduledGame(header.scheduleGameId);
+      if (scheduledGame && Number.isInteger(scheduledGame.gameNumber) && scheduledGame.gameNumber > 0) {
+        gameNumber = scheduledGame.gameNumber;
+      }
+    } catch {
+      continue;
+    }
+
+    if (gameNumber == null || gameNumber <= prevBoundaryGameNumber || gameNumber > currentGameNumber) {
+      continue;
+    }
+
+    const events = await getGameEvents(header.gameId);
+    for (const event of events) {
+      hitters.add(event.batterId);
+      pitchers.add(event.pitcherId);
+    }
+  }
+
+  return { hitters, pitchers };
 }
 
 function ageToExpectedStatsBand(age: number): ExpectedStatsAgeBand {
@@ -268,6 +322,7 @@ export async function resolveCheckpointRoster(
 
 export const checkpointSweepSeam = {
   resolveCheckpointRoster,
+  resolveWindowActivePlayerIds,
 };
 
 export async function persistDarkCheckpointSweepForCompletedGame(
@@ -312,11 +367,21 @@ export async function persistDarkCheckpointSweepForCompletedGame(
     return { status: 'dark-noop', written: 0, reason: 'Empty checkpoint roster.' };
   }
 
+  const prevBoundaryGameNumber = resolvePreviousCheckpointGameNumber(gameNumber, totalGames, checkpointCount);
+  const windowActive = await checkpointSweepSeam.resolveWindowActivePlayerIds(
+    scope,
+    prevBoundaryGameNumber,
+    gameNumber,
+  );
   const rows: FranchiseRatingsOverlayRow[] = [];
   const sourceEventId = `checkpoint-${gameNumber}`;
 
   for (const entry of roster) {
     if (entry.createdAt == null) continue;
+    const windowActiveForEntry = entry.isPitcher
+      ? windowActive.pitchers.has(entry.playerId)
+      : windowActive.hitters.has(entry.playerId);
+    if (!windowActiveForEntry) continue;
 
     for (const ratingKey of Object.keys(entry.signalByRatingKey) as ExpectedStatsRatingKey[]) {
       const signal = entry.signalByRatingKey[ratingKey];
