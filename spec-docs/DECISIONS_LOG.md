@@ -39,6 +39,14 @@
 
 **Grounding:** recon `wf_a93cad4a-288` (7 readers + synthesis + adversarial critique; verdict SOUND, critique re-verified the load-bearing anchors + caught the already-wired-call-site framing + the teamId-guard miss). Supersedes nothing in the prior 2026-06-24 peer-pool ruling below (this REFINES the sample-gate detail it left as "the sample gate").
 
+### 2026-06-24 (attended): prospect generator — generate pitcher ARM SLOT at the 440-pool empirical rates (B-armSlot)
+
+**Context:** JK noticed arm slot is absent from the player generators. Confirmed from source: both `smb4PlayerGenerator.ts:827` and `prospectScoutingDraftEngine.ts:1518` hard-emit `armSlot: null`; every downstream path is a passthrough (`?? null`). The ONLY real arm slots live on the 440 hand-curated stock players (`playerDatabase.ts`, field comment :71 "pitcher arm slot from SMB4 source roster"). So generated/drafted pitchers have no arm slot and miss its IV pricing component (the `'Sub'` premium etc.).
+
+**RULING (JK):** generate pitcher arm slot in the prospect generator **at the same rates seen in the 440 stock pool.** Measured distribution among the **179 stock pitchers** (= the arm-slot-bearing set; armSlot is pitcher-only): **High 65 (36.3%) · Mid 65 (36.3%) · Low 44 (24.6%) · Sub 5 (2.8%)** — weights 65/65/44/5.
+
+**Scope (B-armSlot, Lane 4B, worktree mode1-v1-b):** seeded weighted draw (`pickWeightedValue` at the gen seed, RB-14 pattern); **PITCHERS ONLY** (incl. two-way; pure position players stay `null`). **Interaction:** armSlot is priced in IV → generated pitchers gain IV parity with stock pitchers; generated prospects are NOT in the frozen `iv_oracle.json`, so no oracle re-bless expected (verify at build). Optional realism refinement (defer): condition `Sub` on RP role (n=5 → global default per JK's "same rates"). Small ticket; added to the ROADMAP_TO_V1 Lane-4B index.
+
 ### 2026-06-24 (attended, design discussion): RA-2 ratings-adjustment — peer-pool, eligibility & signal model RULED
 
 **Context:** JK interrogated the RA-2c pool/fallback design via the demote+rookie pool-shrinkage scenario (a starter sent down + a rookie called up shrinks the position peer pool, especially across teams in a small league). Grounded via workflows `wf_1c09a82b-ea3` + `wayq6m143` (+ a critique that caught two Captain errors, below). Six rulings:
