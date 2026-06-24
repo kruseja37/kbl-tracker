@@ -58,6 +58,7 @@ export interface CheckpointRatingDevelopmentInput {
   ratingKey: string;
   baseRatingValue: number;
   performanceSignal: number;
+  confidence?: number;
   playerMorale: number;
   teamFanMorale: number;
   personality: CanonicalPersonality;
@@ -115,8 +116,9 @@ export function computeCheckpointRatingDevelopment(
     tuning,
   );
   const cappedRaw = clamp(rawDelta, -tuning.maxAbsDelta, tuning.maxAbsDelta);
+  const confidenceScaled = cappedRaw * clamp(input.confidence ?? 1, 0, 1);
   const dampener = applyFanMoraleDampener(
-    cappedRaw,
+    confidenceScaled,
     input.teamFanMorale,
     input.personality,
     input.modifiers,

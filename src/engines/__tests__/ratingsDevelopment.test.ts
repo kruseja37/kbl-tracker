@@ -278,6 +278,41 @@ describe('ratingsDevelopment L8a pure engine', () => {
     expect(justAbove.shouldShift).toBe(true);
   });
 
+  test('zero confidence suppresses even a strong rating-development signal', () => {
+    const result = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      confidence: 0,
+      performanceSignal: 1,
+      teamFanMorale: 80,
+    });
+
+    expect(result.rawDelta).toBe(3);
+    expect(result.dampenedDelta).toBe(0);
+    expect(result.proposedRating).toBe(50);
+    expect(result.appliedDelta).toBe(0);
+    expect(result.shouldShift).toBe(false);
+    expect(result.direction).toBe('none');
+  });
+
+  test('half confidence halves the neutral dampened delta exactly', () => {
+    const fullConfidence = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      confidence: 1,
+      performanceSignal: 1,
+      teamFanMorale: 80,
+    });
+    const halfConfidence = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      confidence: 0.5,
+      performanceSignal: 1,
+      teamFanMorale: 80,
+    });
+
+    expect(fullConfidence.dampener.applied).toBe(false);
+    expect(halfConfidence.dampener.applied).toBe(false);
+    expect(halfConfidence.dampenedDelta).toBe(fullConfidence.dampenedDelta / 2);
+  });
+
   test('maxAbsDelta caps a huge raw signal before the dampener', () => {
     const capTuning = withTuning({
       baseDeltaScale: 20,

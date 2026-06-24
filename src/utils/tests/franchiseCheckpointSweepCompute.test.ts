@@ -4,10 +4,12 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { PersistedGameState } from '../gameStorage';
 import {
+  CHECKPOINT_FULL_SEASON_SAMPLE,
   CHECKPOINT_DEV_TUNING,
   checkpointSweepSeam,
   isCheckpointBoundary,
   persistDarkCheckpointSweepForCompletedGame,
+  ratingConfidence,
   resolvePreviousCheckpointGameNumber,
   resolveCheckpointRoster,
   resolveWindowActivePlayerIds,
@@ -148,6 +150,14 @@ function gameState(overrides: Partial<PersistedGameState> = {}): PersistedGameSt
 
 function entry(overrides: Partial<CheckpointRosterEntry> = {}): CheckpointRosterEntry {
   const isPitcher = overrides.isPitcher ?? false;
+  const signalByRatingKey =
+    overrides.signalByRatingKey ?? (isPitcher ? { velocity: 1 } : { power: 1 });
+  const sampleByRatingKey =
+    overrides.sampleByRatingKey ??
+    Object.fromEntries(
+      Object.keys(signalByRatingKey).map((ratingKey) => [ratingKey, 9999]),
+    ) as CheckpointRosterEntry['sampleByRatingKey'];
+
   return {
     playerId: overrides.playerId ?? 'player-hitter',
     teamId: overrides.teamId ?? 'team-a',
@@ -159,7 +169,8 @@ function entry(overrides: Partial<CheckpointRosterEntry> = {}): CheckpointRoster
     modifiers: neutralModifiers,
     playerMorale: 50,
     teamFanMorale: 50,
-    signalByRatingKey: isPitcher ? { velocity: 1 } : { power: 1 },
+    signalByRatingKey,
+    sampleByRatingKey,
     createdAt: '2026-06-18T00:00:00.000Z',
     ...overrides,
   };
@@ -261,6 +272,16 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(checkpointCountForCadence(undefined)).toBe(5);
     expect(checkpointCountForCadence('standard')).toBe(5);
     expect(checkpointCountForCadence('frequent')).toBe(10);
+  });
+
+  test('ratingConfidence scales sample against the season-scaled full-season denominator', () => {
+    expect(CHECKPOINT_FULL_SEASON_SAMPLE.power).toBe(502);
+    expect(ratingConfidence('power', 0, 162)).toBe(0);
+    expect(ratingConfidence('power', 251, 162)).toBeCloseTo(0.5);
+    expect(ratingConfidence('power', 502, 162)).toBe(1);
+    expect(ratingConfidence('power', 9999, 162)).toBe(1);
+    expect(ratingConfidence('contact', 251, 81)).toBe(1);
+    expect(ratingConfidence('velocity', 200, 162)).toBeCloseTo(0.5);
   });
 
   test('isCheckpointBoundary supports frequent ten-boundary cadence via the third parameter', () => {
@@ -369,6 +390,41 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         createdAt: shifter.createdAt,
       },
     ]);
+  });
+
+  test('confidence dead-band blocks thin checkpoint samples but lets full samples shift', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-thin', 'player-full']),
+      pitchers: new Set(),
+    });
+    const thin = entry({
+      playerId: 'player-thin',
+      signalByRatingKey: { power: 1 },
+      sampleByRatingKey: { power: 1 },
+    });
+    const full = entry({
+      playerId: 'player-full',
+      signalByRatingKey: { power: 1 },
+      sampleByRatingKey: { power: 9999 },
+    });
+    const rosterSpy = vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster');
+
+    rosterSpy.mockResolvedValueOnce([thin]);
+    const thinResult = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const thinRows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(thinResult).toEqual({ status: 'written', written: 0 });
+    expect(thinRows).toEqual([]);
+
+    rosterSpy.mockResolvedValueOnce([full]);
+    const fullResult = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const fullRows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(fullResult.status).toBe('written');
+    expect(fullResult.written).toBeGreaterThanOrEqual(1);
+    expect(fullRows.some((row) => row.playerId === 'player-full')).toBe(true);
+    expect(fullRows.some((row) => row.playerId === 'player-thin')).toBe(false);
   });
 
   test('frequent cadence from season metadata makes game 3 of 10 a checkpoint boundary', async () => {
@@ -722,6 +778,13 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(Object.keys(hitterEntry?.signalByRatingKey ?? {})).toEqual(
       expect.arrayContaining(['power', 'contact']),
     );
+    expect(hitterEntry?.sampleByRatingKey).toMatchObject({
+      power: 24,
+      contact: 24,
+      speed: 3,
+      fielding: 12,
+      arm: 0,
+    });
     expect(farmEntry?.createdAt).toBeNull();
     expect(farmEntry?.signalByRatingKey).toEqual(expect.any(Object));
     expect(getFranchiseMoraleSnapshot).toHaveBeenCalledTimes(1);

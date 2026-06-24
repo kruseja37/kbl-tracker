@@ -51,19 +51,32 @@ import {
 import { getGame as getScheduledGame } from './scheduleStorage';
 import { getGameEvents, getGameHeadersForScope } from './eventLog';
 import { buildFranchiseEffectivePositionReport } from './franchiseEffectivePosition';
-import { toExpectedStatsCategoryRates } from '../engines/expectedStatsCategoryRates';
+import {
+  toExpectedStatsCategoryRates,
+  type CategoryRateResult,
+} from '../engines/expectedStatsCategoryRates';
 import {
   classifyRatingsPoolKey,
   computeCheckpointRatingSignals,
   type CheckpointSignalMember,
 } from './checkpointRatingSignal';
-import type { ExpectedStatsAgeBand, ExpectedStatsRatingKey } from '../engines/expectedStatsEngine';
+import {
+  EXPECTED_STATS_CATEGORIES,
+  EXPECTED_STATS_CATEGORY_META,
+  type ExpectedStatsAgeBand,
+  type ExpectedStatsRatingKey,
+} from '../engines/expectedStatsEngine';
 import {
   putFranchiseRatingsOverlay,
   type FranchiseRatingsOverlayRow,
   type FranchiseRatingsOverlayScopeInput,
 } from './franchiseRatingsOverlayStorage';
 import { isFranchisePhase2CheckpointEnabled } from './franchisePhase2Flags';
+import {
+  DEFAULT_ADAPTIVE_STANDARDS_CONFIG,
+  scaledThreshold,
+  type AdaptiveThresholdBasis,
+} from './franchiseAdaptiveStandards';
 
 // §16 placeholder: performanceSignalScale is vestigial in this path because
 // RA-2c signals arrive pre-normalized to [-1, 1]; computeRawRatingDelta scales
@@ -83,6 +96,22 @@ const NEUTRAL_HIDDEN_MODIFIERS: HiddenModifiers = {
 };
 
 const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY', 'P']);
+
+// §16 sim-tune placeholder: full-season samples where confidence reaches 1 before season scaling.
+export const CHECKPOINT_FULL_SEASON_SAMPLE: Record<ExpectedStatsRatingKey, number> = {
+  power: 502,
+  contact: 502,
+  speed: 40,
+  fielding: 350,
+  arm: 80,
+  velocity: 600,
+  junk: 600,
+  accuracy: 600,
+};
+
+const CHECKPOINT_RATING_KEYS = Object.keys(
+  CHECKPOINT_FULL_SEASON_SAMPLE,
+) as ExpectedStatsRatingKey[];
 
 export interface CompletedGameArchiveOptions {
   context?: {
@@ -105,6 +134,7 @@ export interface CheckpointRosterEntry {
   playerMorale: number;
   teamFanMorale: number;
   signalByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
+  sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   createdAt: string | null;
 }
 
@@ -137,6 +167,61 @@ export function resolvePreviousCheckpointGameNumber(
     }
   }
   return 0;
+}
+
+function confidenceBasisForRating(ratingKey: ExpectedStatsRatingKey): AdaptiveThresholdBasis {
+  for (const category of EXPECTED_STATS_CATEGORIES) {
+    const meta = EXPECTED_STATS_CATEGORY_META[category];
+    if (meta.ratingKey === ratingKey && meta.basis === 'season') {
+      return 'season';
+    }
+  }
+
+  for (const category of EXPECTED_STATS_CATEGORIES) {
+    const meta = EXPECTED_STATS_CATEGORY_META[category];
+    if (meta.ratingKey === ratingKey && meta.basis !== 'none') {
+      return meta.basis;
+    }
+  }
+
+  return 'none';
+}
+
+export function ratingConfidence(
+  ratingKey: ExpectedStatsRatingKey,
+  sample: number,
+  totalGames: number,
+): number {
+  const basis = confidenceBasisForRating(ratingKey);
+  const denom = scaledThreshold(
+    CHECKPOINT_FULL_SEASON_SAMPLE[ratingKey],
+    { ...DEFAULT_ADAPTIVE_STANDARDS_CONFIG, gamesPerSeason: totalGames },
+    basis,
+  );
+  if (denom <= 0) return 1;
+
+  const finiteSample = Number.isFinite(sample) ? sample : 0;
+  return clamp(finiteSample / denom, 0, 1);
+}
+
+function sampleByRatingKeyFromCategoryRates(
+  categoryRates: CategoryRateResult,
+): Partial<Record<ExpectedStatsRatingKey, number>> {
+  const sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>> = {};
+
+  for (const ratingKey of CHECKPOINT_RATING_KEYS) {
+    let maxSample = 0;
+    for (const category of EXPECTED_STATS_CATEGORIES) {
+      if (EXPECTED_STATS_CATEGORY_META[category].ratingKey !== ratingKey) continue;
+      const sample = categoryRates.sampleSizeByCat[category];
+      if (typeof sample === 'number' && Number.isFinite(sample)) {
+        maxSample = Math.max(maxSample, sample);
+      }
+    }
+    sampleByRatingKey[ratingKey] = maxSample;
+  }
+
+  return sampleByRatingKey;
 }
 
 export async function resolveWindowActivePlayerIds(
@@ -238,6 +323,7 @@ export async function resolveCheckpointRoster(
     isPitcher: boolean;
     baseRatings: Record<string, number>;
     member: CheckpointSignalMember;
+    sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   }> = [];
 
   for (const player of players) {
@@ -262,6 +348,12 @@ export async function resolveCheckpointRoster(
           fielding: player.fielding,
           arm: player.arm,
         };
+    const categoryRates = toExpectedStatsCategoryRates({
+      role,
+      batting: battingByPlayerId.get(player.id),
+      pitching: pitchingByPlayerId.get(player.id),
+      fielding: fieldingByPlayerId.get(player.id),
+    });
 
     memberEntries.push({
       player,
@@ -274,20 +366,16 @@ export async function resolveCheckpointRoster(
         ageBand: ageToExpectedStatsBand(player.age),
         ratings: baseRatings as Partial<Record<ExpectedStatsRatingKey, number>>,
         poolKey,
-        categoryRates: toExpectedStatsCategoryRates({
-          role,
-          batting: battingByPlayerId.get(player.id),
-          pitching: pitchingByPlayerId.get(player.id),
-          fielding: fieldingByPlayerId.get(player.id),
-        }),
+        categoryRates,
       },
+      sampleByRatingKey: sampleByRatingKeyFromCategoryRates(categoryRates),
     });
   }
 
   const signalMap = computeCheckpointRatingSignals(memberEntries.map((entry) => entry.member));
   const roster: CheckpointRosterEntry[] = [];
 
-  for (const { player, teamId, isPitcher, baseRatings } of memberEntries) {
+  for (const { player, teamId, isPitcher, baseRatings, sampleByRatingKey } of memberEntries) {
     if (teamId && !teamFanMoraleByTeamId.has(teamId)) {
       teamFanMoraleByTeamId.set(
         teamId,
@@ -313,6 +401,7 @@ export async function resolveCheckpointRoster(
       playerMorale: player.morale,
       teamFanMorale: teamId ? await teamFanMoraleByTeamId.get(teamId)! : 50,
       signalByRatingKey: signalMap.get(player.id) ?? {},
+      sampleByRatingKey,
       createdAt: trueValueRowsByPlayerId.get(player.id)?.computedAt ?? null,
     });
   }
@@ -399,6 +488,7 @@ export async function persistDarkCheckpointSweepForCompletedGame(
           teamFanMorale: entry.teamFanMorale,
           personality: entry.personality,
           modifiers: entry.modifiers,
+          confidence: ratingConfidence(ratingKey, entry.sampleByRatingKey[ratingKey] ?? 0, totalGames),
         },
         CHECKPOINT_DEV_TUNING,
       );
@@ -455,4 +545,8 @@ function getPlayerIsPitcher(player: Player): boolean {
     (player as Player & { isPitcher?: boolean }).isPitcher === true ||
     PITCHER_POSITIONS.has(player.primaryPosition)
   );
+}
+
+function clamp(amount: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, amount));
 }
