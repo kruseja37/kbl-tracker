@@ -7,6 +7,24 @@
 
 ## June 2026
 
+### 2026-06-24 (attended): path-forward rulings — 5 open calls + re-grade cadence + grade-display design spun off
+
+JK cleared the path-to-v1 open decisions:
+
+1. **One-model ratings cleanup — APPROVED, do it NOW while dark (zero-risk).** (a) Drop the worksheet-retired box-score categories from the live ratings blend (Contact: AVG/OBP/K%; Junk: HR-suppression where superseded; Accuracy: FIP; Power: ISO/HR-rate), per `RATINGS_MEASUREMENT_WORKSHEET.md`, and finish wiring the new SMB4-native measures for Power/Speed/Fielding (the A1.5 aggregators built-dark). (b) Execute roadmap **RA-12**: delete the legacy offseason **Model B** (`computeNetChange`, `RatingsAdjustmentFlow.tsx`) + retire **Model C** (`agingEngine` random-walk) UI usage, so the new over-expectation **Model A** is the ONLY rating-mutation engine. **Must land before the offseason flag (`FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED` / F-138) flips** — that flag currently lights up Model B. Audit `wf_4a384de0-eeb` confirmed: both engines flag-dark today, two separate flags = the live-coexistence trap.
+
+2. **Peer-group structure — RULED position-PURE base + same-position bench.** A position is compared to itself PLUS its own bench (catchers + backup catchers; CF + backup CF; SS to SS-and-its-bench; etc.). The cross-position groups (middleIF/cornerIF/cornerOF, all-IF/all-OF, all-hitters) become FALLBACK rungs only, used when a position is genuinely thin. **Supersedes** the current `RatingsPoolKey` base merges (2B+SS / 1B+3B / LF+RF as the base). Rationale: bigger N is cleanest when added SAME-position (zero positional bias) vs cross-position (adds fielding/arm bias); the roster-agnostic season-total pool makes ~16/position viable; position-pure mean + borrowed spread keeps even ~10 reliable.
+
+3. **D-7c-2 RESOLVED — a player's SEASON SALARY = the winning auction bid the team paid to sign him.** True for BOTH the MLB and Farm drafts. The winning bid carries into Mode-2 as cap/payroll (not a separate frozen number).
+
+4. **v1 SCOPE confirmed IN:** park-factor → WAR (**V8**), pitcher game-score stat (**§8.5**), beat-reporter standout Q&A (**§8.6** + §8.1 pronoun prereq), and **full DH removal**. All four are v1, not deferred.
+
+5. **LANE-MERGE — Captain (Opus) OWNS it; sequence as the next big build step.** ⚠ Execute in a DEDICATED session at a clean seam — NOT concurrently with the active build sessions (the merge is delicate; two committers in one tree is the known collision risk). Not started in this thread (low context).
+
+**RE-GRADE CADENCE (JK):** the player evaluation GRADE re-computes at **each checkpoint** — both ratings changes and trait changes feed the grade, so the grade must re-derive off the then-current ratings + traits every checkpoint (same cadence as ratings-dev + traits).
+
+**GRADE-DISPLAY DESIGN — spun off to a new thread (JK):** explore converting player grades from LETTERS to NUMBERS for more nuance in player evaluation. Prompt handed to JK; a separate design thread will produce the spec + rulings.
+
 ### 2026-06-24 (attended Hybrid via `/kbl-captain`): RA-2c-2 qualifier model — the three sample gates + flat floors RULED
 
 **Context:** Building RA-2c-2 (the checkpoint-sweep live-wiring), JK interrogated the "what qualifies a player to be in the peer pool and to have ratings adjusted" measurement. Grounded the adapter (`expectedStatsCategoryRates.ts` emits raw rate + per-category sample; gating is downstream) + the engine gate (`expectedAndSignal` per-category `peerPoolSize`/`sample` checks). Result = a THREE-GATE qualifier model with FLAT (not season-scaled) floors. This is a soul-layer measurement (ratings development) — extracted verbatim from JK, not inferred. Supersedes the §3B "season-scaled min-sample gate" language (purge-on-supersede in the RA-2c-2b build).
