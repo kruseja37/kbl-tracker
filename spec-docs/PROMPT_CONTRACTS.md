@@ -20342,3 +20342,63 @@ Use high reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
 <!-- ===== END CONTRACT: RA-2c-2b-1 ===== -->
+
+<!-- ===== CONTRACT: RA-2c-2b-2 ===== -->
+## CONTRACT: RA-2c-2b-2 — Gate 3 window-eligibility (recency) for the dark checkpoint sweep (build-dark)
+
+**ROUTE:** Branch A. Worktree `/Users/johnkruse/Projects/kbl-tracker`, branch `codex/franchise-v1-next`. Branch-only — do NOT commit, do NOT push.
+
+**ROLE:** Builder (Codex). Opus audits the real diff afterward (builder≠auditor).
+
+**GOAL:** Add **Gate 3 (window-active recency)** to the dark checkpoint sweep landed in RA-2c-2b-1. A player's ratings move at a checkpoint ONLY if he accumulated **≥1 PA (hitter) / ≥1 BF (pitcher) since the last checkpoint**. A window-INACTIVE player STAYS a pool member (he still anchors the cohort comparison via `computeCheckpointRatingSignals` in `resolveCheckpointRoster` — do NOT remove him from the pool) but receives **NO development overlay**. Confidence-weighting and the §9/§3B spec rewrite are SEPARATE tickets — do NOT touch them here. Everything stays build-DARK behind the existing default-OFF Phase-2 checkpoint flag.
+
+**SOURCE OF TRUTH (read first):**
+- `spec-docs/DECISIONS_LOG.md` 2026-06-24, "Gate 3 — window-active": *"ratings move this checkpoint ONLY if the player accumulated qualifying play SINCE the last checkpoint (no stale re-hit of a benched/injured/demoted player). Compute method = Option 1: read the games since the last checkpoint on the fly (NO new persistence, no DB bump). Default threshold = appeared at all (≥1 PA hitter / ≥1 BF pitcher) in the window; §16-tunable. A window-inactive player STAYS a Gate-1 pool member (his data still anchors the comparison) — he just isn't moved."*
+- `spec-docs/CURRENT_STATE.md` LIVE-HEADER §(2b).
+
+**GROUNDED ANCHORS (re-read each before editing):**
+- `src/utils/eventLog.ts:1993` `getGameHeadersForScope(query: {statsScopeId?; seasonId?; competitionType?; competitionId?; isComplete?}): Promise<GameHeader[]>`. `GameHeader` (`eventLog.ts:145`) has `gameId`, `scheduleGameId?`, `isComplete`, `date` — but **NO gameNumber and NO per-player PA/BF**.
+- `src/utils/eventLog.ts:1651` `getGameEvents(gameId): Promise<AtBatEvent[]>` — already filters out `undoneAt` events by default; each `AtBatEvent` has `batterId` and `pitcherId` (`eventLog.ts:218/221`). THIS is the true "≥1 PA / ≥1 BF" source.
+- `src/utils/scheduleStorage.ts` `getGame(scheduleGameId)` (imported as `getScheduledGame` in the sweep) → the scheduled game whose `.gameNumber` is the league-wide game number. This is the ONLY way to map a completed header to its gameNumber (check `scheduleStorage` for a batch getter; if none, resolve per header).
+- `isCheckpointBoundary(gameNumber, totalGames, checkpointCount)` already exists in the sweep file.
+- The sweep's `persistDarkCheckpointSweepForCompletedGame` already computes `gameNumber`, `totalGames`, `checkpointCount` before the boundary check, and the RA-2c-2b-1 fan-out loop already has a `if (entry.createdAt == null) continue;` guard.
+
+**CONSTRAINTS:**
+- EDIT EXACTLY TWO FILES: `src/utils/franchiseCheckpointSweepCompute.ts` + `src/utils/tests/franchiseCheckpointSweepCompute.test.ts`. Touch nothing else.
+- Do NOT modify `ratingsDevelopment.ts` (confidence is RA-2c-2b-3), the engine, the adapter, `seasonStorage.ts`, `eventLog.ts`, `scheduleStorage.ts`, or any spec doc.
+- NO new persistence, NO `TRACKER_DB_VERSION` bump. NO new call site (the sweep is already invoked at `processCompletedGame.ts:1080`).
+- Determinism HARD (the source-grep test forbids `Math.random|Date.now|new Date(|indexedDB.open`).
+- `iv_oracle.json` frozen/untouched. Branch-only.
+
+**THE CHANGES — `franchiseCheckpointSweepCompute.ts`:**
+1. NEW pure helper `resolvePreviousCheckpointGameNumber(currentGameNumber: number, totalGames: number, checkpointCount: number): number` — return the largest `g` in `[1, currentGameNumber - 1]` with `isCheckpointBoundary(g, totalGames, checkpointCount) === true`; return `0` if none (the first checkpoint → window is all games 1..current). A simple descending scan is fine and clearest.
+2. NEW async helper `resolveWindowActivePlayerIds(scope: FranchiseRatingsOverlayScopeInput, prevBoundaryGameNumber: number, currentGameNumber: number): Promise<{ hitters: Set<string>; pitchers: Set<string> }>`:
+   - `getGameHeadersForScope({ seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, isComplete: true })`.
+   - For each header, resolve its gameNumber via `getScheduledGame(header.scheduleGameId)` (skip headers with no `scheduleGameId` or an unresolved/non-positive gameNumber; wrap in try/catch — an unresolved id is non-fatal, just skip that game). Keep games where `prevBoundaryGameNumber < gameNumber <= currentGameNumber`.
+   - For each in-window game, `await getGameEvents(gameId)`; for each event add `event.batterId` to `hitters` and `event.pitcherId` to `pitchers`.
+   - Return `{ hitters, pitchers }`. (Empty sets if no window games — that yields zero moves, which is correct.)
+3. ADD `resolveWindowActivePlayerIds` to the exported `checkpointSweepSeam` object (next to `resolveCheckpointRoster`) so it is independently mockable in tests.
+4. In `persistDarkCheckpointSweepForCompletedGame`, AFTER the roster resolve + the `roster.length === 0` early return, BEFORE building `rows`: compute `const prevBoundaryGameNumber = resolvePreviousCheckpointGameNumber(gameNumber, totalGames, checkpointCount);` then `const windowActive = await checkpointSweepSeam.resolveWindowActivePlayerIds(scope, prevBoundaryGameNumber, gameNumber);`.
+5. In the fan-out loop, immediately AFTER the existing `if (entry.createdAt == null) continue;`, add the Gate-3 skip: `const windowActiveForEntry = entry.isPitcher ? windowActive.pitchers.has(entry.playerId) : windowActive.hitters.has(entry.playerId); if (!windowActiveForEntry) continue;`. (A window-inactive entry writes no overlay; it already contributed to the cohort inside `resolveCheckpointRoster`, which is UNCHANGED.)
+6. Do NOT change `resolveCheckpointRoster`, the id formula, the overlay shape, `computeCheckpointRatingSignals`, the fan-out cardinality, or any RA-2c-2b-1 behavior other than inserting the Gate-3 skip.
+
+**THE CHANGES — the test:**
+- The existing seam-mocked persist tests (`boundary sweep...`, `frequent cadence...`, `replaying...`, `fans out...`, `pitcher...`) drive `checkpointSweepSeam.resolveCheckpointRoster` directly and currently expect overlays. With Gate 3, they will now write 0 unless the test players are window-active. **Add a default `beforeEach` mock** `vi.spyOn(checkpointSweepSeam, 'resolveWindowActivePlayerIds').mockResolvedValue({ hitters: new Set(['player-shifter','player-no-shift','player-frequent','player-idempotent','player-fanout','player-hitter']), pitchers: new Set(['pitcher-signal']) })` — i.e. make ALL player ids those persist tests use window-active (simplest: include every id the `entry()` helper / tests reference, both the hitter default `'player-hitter'` and the explicit ids). Keep those tests' existing assertions intact.
+- ADD a **Gate-3 window-inactive test**: seam-mock `resolveCheckpointRoster` to return a strong-signal entry with a non-null `createdAt`, but seam-mock `resolveWindowActivePlayerIds` to return EMPTY sets (or sets not containing that player) → assert `{ status: 'written', written: 0 }` and zero overlays (proves window-inactive stays a pool member but isn't moved).
+- ADD a **real `resolveWindowActivePlayerIds` integration test** (do NOT mock the seam for this one; mock the raw readers): convert the `../eventLog` import to a mock — use `vi.mock('../eventLog', async (importActual) => ({ ...(await importActual<typeof import('../eventLog')>()), getGameHeadersForScope: vi.fn(), getGameEvents: vi.fn() }))` (importActual-spread — `eventLog` is large and the sweep + transitive deps import other members; do NOT shrink it to a partial object). Mock `getScheduledGame` (already mocked) to map gameIds→gameNumbers. Provide ~3 completed headers across a boundary; assert only in-window games' batter/pitcher ids land in the returned sets, and that an out-of-window game's players are excluded. Also unit-test `resolvePreviousCheckpointGameNumber` for a couple of cadences (e.g. totalGames 10 / checkpointCount 5 → boundaries [2,4,6,8,10]; prev of 6 is 4; prev of 2 is 0).
+- Keep the `importActual` seasonStorage mock, the `franchiseEffectivePosition` mock, and the deterministic source-grep test from RA-2c-2b-1.
+
+**EXPECTED OUTPUT:** A unified diff over exactly the two files. Builds; the test passes.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/franchiseCheckpointSweepCompute.test.ts` → all green.
+3. `git --no-pager diff --stat` → exactly the two files.
+4. Confirm no `Math.random|Date.now|new Date(|indexedDB.open` in the production diff.
+
+**MAKE-OR-BREAK:** window-inactive players keep contributing to the cohort (`resolveCheckpointRoster` untouched) but get zero overlays; the window is `(prevBoundary, current]` resolved by REAL gameNumber (via `getScheduledGame`), not header order; "active" = a real batter/pitcher id in a window game's at-bat events (≥1 PA/BF), not a starting-lineup proxy; the `eventLog` test mock spreads `importActual`; determinism holds.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report if: (a) `getGameEvents`/`getGameHeadersForScope`/`getScheduledGame` signatures differ from those stated (re-read + report the real signature); (b) the window computation can't be done without a gameNumber source other than `getScheduledGame` (report what you found); (c) you'd need to touch a third file or weaken determinism; (d) any RA-2c-2b-1 behavior other than the Gate-3 skip would have to change to make it compile/pass. A correct STOP with a precise reason is a SUCCESS.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
+<!-- ===== END CONTRACT: RA-2c-2b-2 ===== -->
