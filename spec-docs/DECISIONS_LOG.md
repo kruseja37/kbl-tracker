@@ -2545,3 +2545,20 @@ sim-tune dials, none block the build.
   terms use the catcher's own responsibility share). *(Rejected: k = 0.55, the pitcher-share the spec sentence names —
   less internally consistent with the 0.95 CS credit.)* No sample-size gate for v1 (mirrors `outfieldArmRate`; a MIN gate
   would be a §16 sim-tune). Career parity deferred (season-only). Built in A1.5c-4 (writer + pure rate fn).
+
+## 2026-06-23 — S7 design forks RULED (Branch B price re-anchor; JK, Hybrid surface)
+
+- **S7a price range = MIDPOINT-to-MIDPOINT** off the canonical `GRADE_SALARY_BOUNDS` (`ratingsAdjustmentEngine.ts:149`,
+  T5-calibrated; EXPORT it, do not duplicate). `gradeBandToPriceRange({best,worst}) = {low: midpoint(worst), high:
+  midpoint(best)}`, `midpoint = (floor+ceiling)/2`. *(Rejected: floor-to-ceiling full span — too wide for actionable
+  guidance.)* The `C`/`C-` + `D+`/`D` midpoint overlaps are a documented T5-bridge artifact, out of S7a scope.
+- **S7b guidance = the band IS the displayed range** (chemFit-scaled ≤+8%); DROP `perceivedValueRange`'s IV-noise
+  widening from the auction guidance path entirely (the grade band already carries the spread → no double-widening).
+  *(Rejected: band-center + a width helper.)*
+- **S7c salary stamp = ALL real winners** (human + CPU-controlled farm winners get their won bid stamped as the
+  going-into-season `Player.salary`; shill/dissolved teams stay excluded per RB-10). Consistent Mode-2 league economics.
+  *(Rejected: human-GM only.)*
+- **Defaults TAKEN (correctness, noted not asked):** (1) S7d KEEPS `perceivedValueRange`/`scoutValueRange.ts` — the
+  Mode-2 freeze calls it directly (`draftFreezeInputs.ts:81`→`franchiseInitializer.ts:739`); deleting it breaks the
+  freeze→Mode-2 morale pipeline. Only `scoutPriceOpinion` (auction-only) is retired. (2) `gradeToTwentyEighty` is
+  RELOCATED to a surviving module before `scoutPriceOpinion.ts` is deleted, so the live 20-80 reveal persists.
