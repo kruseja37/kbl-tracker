@@ -1310,6 +1310,7 @@ instruction + idempotent confirm transform + revert reminder + change log; pure/
 
 ## SUITE BASELINE
 
+**Branch A: 7,975 pass / 478 files** — full suite 2026-06-23 (attended Hybrid `/kbl-captain`, real node v20, `NODE_ENV=`) after **A1.5c-4** (`f16cbfd3`): **3 fail = the characterized set** (`wpaRuntimeBoundary` hard + `GameTrackerLaunchState` + `franchiseManualSmokeFixture`, the latter two order-flakes verified solo-pass 9/9 + 4/4). RA-8 (`0edf060a`) ran clean earlier at 7,972 pass / 2 fail (GameTrackerLaunchState didn't trip that run). ZERO new reds both tickets. trackerDb **v25** (NO bump this session — RA-8 added additive optional fields only; A1.5c-4 = live aggregator + pure fn, no store change). The A1.5c-4 make-or-break held (the new `getBetweenPlayEvents` import routed through the `isMissingVitestMockExport` swallow-guard → the 3 `processCompletedGame` object-literal mock tests stayed green at module-load). **Branch B (`codex/mode1-v1-b`): 8,087 pass / 501 files** after **S7a** (`d1a578ab`): **1 fail = `wpaRuntimeBoundary`** (Branch-B baseline; the `AwardsWatchlist` order-flake didn't trip). Build exit 0 both branches. *(Prior baselines retained below for the arc trail.)*
 **7,765 tests / 447 files** — full suite run 2026-06-19 (attended, real node v20, `NODE_ENV=`) after **L12-3R-2**
 (`cd7a4eae`, → L12-3 COMPLETE): **7,763 pass / 2 fail** = EXACTLY the characterized baseline (`wpaRuntimeBoundary`
 "allowlisted" + `franchiseManualSmokeFixture` 5000ms timeout). ZERO new reds across the whole L12-3 arc this session
