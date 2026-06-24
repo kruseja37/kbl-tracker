@@ -20402,3 +20402,58 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
 <!-- ===== END CONTRACT: RA-2c-2b-2 ===== -->
+
+<!-- ===== CONTRACT: RA-2c-2b-3 ===== -->
+## CONTRACT: RA-2c-2b-3 — confidence-weighting for the dark checkpoint sweep (build-dark; the last code piece of RA-2c-2b)
+
+**ROUTE:** Branch A. Worktree `/Users/johnkruse/Projects/kbl-tracker`, branch `codex/franchise-v1-next`. Branch-only — do NOT commit, do NOT push.
+
+**ROLE:** Builder (Codex). Opus audits the real diff afterward (builder≠auditor).
+
+**GOAL:** Scale each rating's checkpoint MOVE by a confidence factor so thin/early checkpoints move gently and full-sample late checkpoints move fully (DECISIONS_LOG 2026-06-24: *"the move MAGNITUDE scales by clamp(accumulatedSample / scaledFullSeasonSample, 0,1); scaledFullSeasonSample IS season-length-aware via scaledThreshold"* + point 6 *"early/thin checkpoints move gently, full moves land late"*; pitcher-symmetric). Build-DARK behind the existing default-OFF flag.
+
+**SOURCE OF TRUTH (read first):** `DECISIONS_LOG.md` 2026-06-24 (RA-2 confidence-weighting paragraph + point 6); `CURRENT_STATE.md` LIVE-HEADER §(2b) START-HERE.
+
+**GROUNDED ANCHORS (re-read before editing):**
+- `src/engines/ratingsDevelopment.ts:106` `computeCheckpointRatingDevelopment(input, tuning)`; line 117 `const cappedRaw = clamp(rawDelta, -tuning.maxAbsDelta, tuning.maxAbsDelta);` then `applyFanMoraleDampener(cappedRaw, …)`. `CheckpointRatingDevelopmentInput` (`:57-65`) is `{ratingKey; baseRatingValue; performanceSignal; playerMorale; teamFanMorale; personality; modifiers}`.
+- `src/engines/__tests__/ratingsDevelopment.test.ts` pins (must stay green): `dampenedDelta === rawDelta` for a neutral case (:170), the `0.74`/`0.76` shift-threshold boundary (:271-277), and the `maxAbsDelta` cap → `dampenedDelta === 6` (:296). All of these have an implied `confidence` of 1, so the new param MUST default to 1 and act as identity.
+- `src/utils/franchiseAdaptiveStandards.ts` `scaledThreshold(threshold, config?, basis?: 'season'|'innings'|'combined'|'none')` (season/innings/combined scaling; `'none'` returns the threshold unscaled) + `DEFAULT_ADAPTIVE_STANDARDS_CONFIG` (has `gamesPerSeason`). `MilestoneConfig` has `gamesPerSeason`.
+- `src/engines/expectedStatsEngine.ts:43-74` `EXPECTED_STATS_CATEGORY_META` — per category `{ratingKey, basis}`. Per-rating basis: power/contact/speed/fielding/arm → `'season'`; velocity/junk/accuracy → `'combined'`; `contactQualityRate` → `'none'` (the only non-season hitter category; its rating `contact` also has season categories).
+- The sweep (`franchiseCheckpointSweepCompute.ts`): `resolveCheckpointRoster` builds each member's `categoryRates` (`CategoryRateResult` = `{actualByCat, sampleSizeByCat}`) via `toExpectedStatsCategoryRates`; `CheckpointRosterEntry` currently carries `signalByRatingKey` + `baseRatings` + `createdAt` but NOT the per-rating sample. `persistDarkCheckpointSweepForCompletedGame` has `totalGames` in scope (from `getSeasonMetadata`) and the fan-out loop calls `computeCheckpointRatingDevelopment(..., CHECKPOINT_DEV_TUNING)` per rating.
+
+**CONSTRAINTS:**
+- EDIT EXACTLY FOUR FILES: `src/engines/ratingsDevelopment.ts`, `src/engines/__tests__/ratingsDevelopment.test.ts`, `src/utils/franchiseCheckpointSweepCompute.ts`, `src/utils/tests/franchiseCheckpointSweepCompute.test.ts`. Nothing else.
+- Do NOT modify the engine/adapter/seasonStorage/eventLog/scheduleStorage/franchiseAdaptiveStandards or any spec doc.
+- `computeCheckpointRatingDevelopment` MUST stay 100% back-compatible: the new param is OPTIONAL and defaults to 1 (identity). Do NOT change `RATINGS_DEVELOPMENT_TUNING` or `CHECKPOINT_DEV_TUNING`.
+- Determinism HARD (the sweep source-grep test). NO DB bump. `iv_oracle.json` frozen. Branch-only. No new call site.
+
+**THE CHANGES:**
+1. **`ratingsDevelopment.ts`:** add `confidence?: number` to `CheckpointRatingDevelopmentInput`. In `computeCheckpointRatingDevelopment`, immediately AFTER `cappedRaw` (line 117), insert `const confidenceScaled = cappedRaw * clamp(input.confidence ?? 1, 0, 1);` and pass `confidenceScaled` (NOT `cappedRaw`) into `applyFanMoraleDampener(...)`. Nothing else changes. (Order: rawDelta → cap to ±maxAbsDelta → × confidence → dampener. With `confidence` absent/1 this is identical to today.)
+2. **`ratingsDevelopment.test.ts`:** keep every existing test. ADD two tests: (a) `confidence: 0` → `dampenedDelta === 0` and `shouldShift === false` even on a strong signal; (b) `confidence: 0.5` → `dampenedDelta` is half the `confidence:1` `dampenedDelta` for the same neutral input (use a neutral-personality/neutral-morale case so the dampener is identity and the halving is exact).
+3. **`franchiseCheckpointSweepCompute.ts`:**
+   - Add imports: `scaledThreshold`, `DEFAULT_ADAPTIVE_STANDARDS_CONFIG` from `../utils/franchiseAdaptiveStandards`; `EXPECTED_STATS_CATEGORY_META` from `../engines/expectedStatsEngine`; and the `ExpectedStatsCategory` type if needed.
+   - Add `sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>` to `CheckpointRosterEntry`.
+   - In `resolveCheckpointRoster`, when assembling each roster entry, compute `sampleByRatingKey`: for each `ExpectedStatsRatingKey`, take the MAX `categoryRates.sampleSizeByCat[category]` over the categories whose `EXPECTED_STATS_CATEGORY_META[category].ratingKey === thatRating` (0 if none finite). Attach it to the entry. (The member's `categoryRates` is already built right there.)
+   - Add a NEW exported §16 placeholder map `CHECKPOINT_FULL_SEASON_SAMPLE: Record<ExpectedStatsRatingKey, number>` — the full-season sample at which confidence reaches 1, BEFORE season-scaling. Placeholders (flag `// §16 sim-tune placeholder`): `power: 502, contact: 502, speed: 40, fielding: 350, arm: 80, velocity: 600, junk: 600, accuracy: 600`. (PA/BF-scale qualifier-style baselines; speed=steal-events, fielding=chances; all sim-tunable.)
+   - Add a NEW pure helper `ratingConfidence(ratingKey, sample, totalGames): number`: pick the rating's `basis` (the basis of any of its categories in the meta — all categories of a rating share a basis except contact, which mixes 'season'+'none'; use `'season'` for contact, i.e. use the FIRST season-basis category's basis, never `'none'`), compute `const denom = scaledThreshold(CHECKPOINT_FULL_SEASON_SAMPLE[ratingKey], { ...DEFAULT_ADAPTIVE_STANDARDS_CONFIG, gamesPerSeason: totalGames }, basis);` then `return denom > 0 ? clamp(sample / denom, 0, 1) : 1;` (a non-positive denom ⇒ confidence 1, no extra dampening). Add a local `clamp` or reuse one.
+   - In the persist fan-out loop, after computing nothing extra, pass `confidence: ratingConfidence(ratingKey, entry.sampleByRatingKey[ratingKey] ?? 0, totalGames)` into the `computeCheckpointRatingDevelopment(...)` input object. Everything else in the loop (the `createdAt`/window-active skips, the id formula, the fan-out) is UNCHANGED.
+4. **`franchiseCheckpointSweepCompute.test.ts`:**
+   - Update the `entry()` helper to include a `sampleByRatingKey` default (e.g. a large sample like `{ power: 9999, contact: 9999, … }` for the rating(s) each seam-mocked test uses, OR mirror `signalByRatingKey`'s keys with a big number) so the EXISTING seam-mocked persist tests still shift (confidence ≈ 1 at large sample). Keep all existing assertions.
+   - ADD a **confidence dead-band test** (the header trap "a sustained signal eventually clears 0.75"): two seam-mocked entries, identical strong `signalByRatingKey`, one with a TINY `sampleByRatingKey` (confidence ≪ 1 → move shrinks below the 0.75 shift threshold → `written: 0`) and one with a LARGE sample (confidence ≈ 1 → shifts → overlay written). Assert the thin one writes 0 and the full one writes ≥1.
+   - ADD a small unit test for `ratingConfidence` (e.g. sample == the scaled full-season denom → 1.0; sample == 0 → 0; sample == half → ~0.5) and/or for the `sampleByRatingKey` MAX-over-categories assembly in the real `resolveCheckpointRoster` test (extend it to assert `sampleByRatingKey.power` equals the batting PA you mocked).
+   - Keep the `importActual` mocks (seasonStorage, eventLog, franchiseEffectivePosition) and the deterministic source-grep test.
+
+**EXPECTED OUTPUT:** A unified diff over exactly the four files. Builds; both test files pass.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/franchiseCheckpointSweepCompute.test.ts src/engines/__tests__/ratingsDevelopment.test.ts` → all green.
+3. `git --no-pager diff --stat` → exactly the four files.
+4. Confirm no `Math.random|Date.now|new Date(|indexedDB.open` in the sweep production diff.
+
+**MAKE-OR-BREAK:** `confidence` defaults to 1 and is pure identity (every existing `ratingsDevelopment.test.ts` assertion stays green); confidence is applied at the cappedRaw stage (after the maxAbsDelta cap, before the dampener); the per-rating sample is the MAX over that rating's categories; the denom is season-scaled via `scaledThreshold(..., gamesPerSeason: totalGames, basis)`; a thin sample shrinks the move below the 0.75 dead-band (no premature shift) while a sustained full sample clears it; determinism holds.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report if: (a) any cited signature differs (re-read + report); (b) keeping `ratingsDevelopment.test.ts` green is impossible without changing the confidence default from 1 (it must NOT be); (c) you'd need a 5th file or to weaken determinism; (d) `scaledThreshold`'s basis/config behavior differs from stated. A correct STOP with a precise reason is a SUCCESS.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
+<!-- ===== END CONTRACT: RA-2c-2b-3 ===== -->
