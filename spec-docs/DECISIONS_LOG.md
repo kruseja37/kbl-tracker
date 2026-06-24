@@ -7,6 +7,38 @@
 
 ## June 2026
 
+### 2026-06-24 (attended Hybrid via `/kbl-captain`): RA-2c-2 qualifier model — the three sample gates + flat floors RULED
+
+**Context:** Building RA-2c-2 (the checkpoint-sweep live-wiring), JK interrogated the "what qualifies a player to be in the peer pool and to have ratings adjusted" measurement. Grounded the adapter (`expectedStatsCategoryRates.ts` emits raw rate + per-category sample; gating is downstream) + the engine gate (`expectedAndSignal` per-category `peerPoolSize`/`sample` checks). Result = a THREE-GATE qualifier model with FLAT (not season-scaled) floors. This is a soul-layer measurement (ratings development) — extracted verbatim from JK, not inferred. Supersedes the §3B "season-scaled min-sample gate" language (purge-on-supersede in the RA-2c-2b build).
+
+**The three gates (plain language):**
+- **Gate 1 — peer-pool membership** ("enough sample to be a fair yardstick"): a player counts toward his position group's MEAN/SPREAD for a skill only if his season-to-date sample in *that skill* clears the flat floor. Roster-agnostic (his data stays in everyone's comparison even after he's demoted — the anti-gaming bit).
+- **Gate 2 — own-move trust** ("enough sample to trust HIS number"): the SAME flat floor applied to the player himself — below it, that skill doesn't move this checkpoint. Gate 1 == Gate 2 (same cumulative floor, applied as peer vs. subject).
+- **Gate 3 — window-active** ("actually played recently"): even when Gates 1&2 pass on cumulative stats, ratings move this checkpoint ONLY if the player accumulated qualifying play SINCE the last checkpoint (no stale re-hit of a benched/injured/demoted player). Compute method = **Option 1: read the games since the last checkpoint on the fly** (NO new persistence, no DB bump). Default threshold = appeared at all (≥1 PA hitter / ≥1 BF pitcher) in the window; §16-tunable. A window-inactive player STAYS a Gate-1 pool member (his data still anchors the comparison) — he just isn't moved.
+
+**FLAT per-category floors (Gate 1 == Gate 2; NOT season-scaled — JK ruled flat; confidence-weighting handles early-season magnitude separately):**
+| Rating | Category sample | Flat floor |
+|---|---|---|
+| Power (ISO/SLG/HR-rate) | plate appearances | **10 starter / 5 bench** |
+| Contact (AVG/OBP/K-avoid) | plate appearances | **10 starter / 5 bench** |
+| Contact-quality | tracked balls-in-play | **10** (prior ruling) |
+| Speed (SB+3B rate) | **speed events = SB + CS + triples** | **≥2** |
+| Fielding (FLD%/range) | fielding chances (PO+A+E) | **≥5** |
+| Pitching (velo/junk/acc; FIP on outs) | batters faced (FIP: outs) | **≥10** (all pitchers, SP+RP) |
+
+- **Starter/bench split (10/5) applies ONLY to the PA-gated batting categories** (power, contact). Speed (2 events), fielding (5 chances), contact-quality (10 BIP), pitching (10 BF) use single flat floors regardless of starter/bench. Starter vs bench is the player's pool classification (benchIF/benchOF pools = bench floor).
+- **Defense-only / glove-first players accounted for:** fielding gates on fielding CHANCES (not PA) — JK ruled Option 1 — so a low-PA defensive specialist's GLOVE still develops on his actual fielding plays, while his batting ratings sit (correct). The 5-PA bench floor mops up their light batting.
+- **Reliever fix:** the old 20-BF ('combined' scaled) floor was too high for relievers (~3-4 BF/outing) — dropped to a flat 10 BF for all pitchers.
+- **Speed = steal attempts + triples** (JK ruled): gating purely on steal attempts would wrongly exclude a fast triples-hitter who doesn't run; so speed events = SB+CS+triples. Requires changing the adapter's `speedStealTripleRate` sample from PA → (SB+CS+triples).
+
+**DEFERRED — RA-2c-3 (the very next ticket, before the flag-flip):** baserunning ADVANCEMENT in the speed model (first-to-third on a single, second-to-home, first-to-home on a double = UBR). The full speed model is `SB% + UBR + BEAT_THROW`; A1.5c-2 built `ubrAggregator.ts` but it is fully DARK (no season store, no live writer, no consumers). Wiring it needs its OWN data layer (additive season advancement-count fields + a per-game live writer + un-dorm `speedBaserunningRate` in the adapter + fold extra-base events into the speed gate) — the RA-2CQ stack pattern. JK ruled DEFER to RA-2c-3 (keeps the RA-2c-2 soul-layer wiring diff clean + isolates the saved-shape change); both land before the flag-flip so the player never sees the intermediate state.
+
+**Confidence-weighting (distinct from the flat gate):** the move MAGNITUDE scales by `clamp(accumulatedSample / scaledFullSeasonSample, 0,1)`; `scaledFullSeasonSample` IS season-length-aware via `scaledThreshold` (§3B). The flat-floor decision is about the GATE (qualify y/n); the confidence denominator is about magnitude (season-scaled) — no conflict.
+
+**Build split (build-then-wire):** **RA-2c-2a** (engine-layer, pure/build-dark): the adapter speed-sample change (PA→SB+CS+triples) + the flat per-category sample-floor gating (Gates 1&2, starter/bench-aware via poolKey) added to `computeCheckpointRatingSignals` in `checkpointRatingSignal.ts`, with the engine's internal `minSample` zeroed in `CHECKPOINT_EXPECTED_STATS_TUNING` so the flat floors are the SOLE sample gate (minPeerPool stays 6 from RA-2c-1a). **RA-2c-2b** (the live-dark wiring): `franchiseCheckpointSweepCompute.ts` — roster-agnostic fetch + effective-position report, build members, Gate-3 window-eligibility (read games since last checkpoint), confidence-weighting, fan out 1→N overlays, bypass `normalizePerformanceSignal` (do NOT delete — L10 uses it), delete `selectDevelopmentRatingKey`, relax the MLB filter (:139) + teamId guard (:144) + trueValueRow guard (:141-142); + purge-on-supersede rewrite of RATINGS_ADJUSTMENT_SPEC §9 (MLB-only→roster-agnostic) AND §3B (season-scaled gate→flat floors). NO trackerDb bump; reuse `franchiseRatingsOverlays` (cardinality 1→N). The sweep is ALREADY called from `processCompletedGame.ts:1080` — wire the INTERIOR, no new call site.
+
+**Grounding:** recon `wf_a93cad4a-288` (7 readers + synthesis + adversarial critique; verdict SOUND, critique re-verified the load-bearing anchors + caught the already-wired-call-site framing + the teamId-guard miss). Supersedes nothing in the prior 2026-06-24 peer-pool ruling below (this REFINES the sample-gate detail it left as "the sample gate").
+
 ### 2026-06-24 (attended, design discussion): RA-2 ratings-adjustment — peer-pool, eligibility & signal model RULED
 
 **Context:** JK interrogated the RA-2c pool/fallback design via the demote+rookie pool-shrinkage scenario (a starter sent down + a rookie called up shrinks the position peer pool, especially across teams in a small league). Grounded via workflows `wf_1c09a82b-ea3` + `wayq6m143` (+ a critique that caught two Captain errors, below). Six rulings:
