@@ -318,7 +318,7 @@ function scaledMinSampleFor(
   return basis === 'none' ? base : scaledThreshold(base, config, basis);
 }
 
-function winsorizedStandardDeviation(values: readonly number[] | undefined): number | null {
+export function winsorizedStandardDeviation(values: readonly number[] | undefined): number | null {
   const sorted = finiteSorted(values);
   if (sorted.length < 2) return null;
 

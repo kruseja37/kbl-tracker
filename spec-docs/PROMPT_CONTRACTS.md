@@ -19608,3 +19608,221 @@ FAILURE PROTOCOL:
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2CQ-2c ===== -->
+
+<!-- ===== CONTRACT: RA-2b ===== -->
+## CONTRACT: RA-2b — pure expected-stats peer-pool aggregator (build-dark, new module)
+
+ROUTE: Codex 5.5 | high reasoning effort
+
+You are a precise TypeScript builder on the KBL Tracker repo (branch `codex/franchise-v1-next`, worktree `/Users/johnkruse/Projects/kbl-tracker`).
+
+GOAL:
+Create the PURE, build-DARK RA-2b peer-pool aggregator: a new module that, given a caller-assigned cohort of players, produces the per-category peer-pool maps (mean / winsorized SD / count) the expected-stats engine's resolve* helpers consume — plus the §4 sticky-starter classifier and a thin-pool floor-check. NO live caller (RA-2c wires it later). Cohort grouping, ladder membership, the hitter start-share numerator, and hysteresis state are NOT in scope (RA-2c owns them) — RA-2b takes them as inputs.
+
+SOURCE OF TRUTH:
+- DECISIONS_LOG.md 2026-06-24 "A2.4 RA-2b scope — pure cohort-math; grouping + hysteresis-memory deferred to RA-2c" (JK ruling).
+- RATINGS_ADJUSTMENT_SPEC.md §4 (position-pure mean; winsorized SD borrowed from a wider reference; min peer-pool 6; sticky promote ~0.60 / demote ~0.45 with hysteresis dead-band).
+- Engine consumer contract (read, do not modify): `src/engines/expectedStatsEngine.ts` — `resolvePoolMeanProduction` (prefers `poolMeanByCat`), `resolvePeerSd` (prefers `poolSdByCat`), `resolvePeerPoolSize` (prefers the `peerPoolSize` per-category map). `winsorizedStandardDeviation` is the SD helper to REUSE.
+- `TRUE_VALUE_MIN_PEER_POOL_SIZE = 6` exported at `src/engines/salaryCalculator.ts:915`.
+- RA-2a adapter `src/engines/expectedStatsCategoryRates.ts` exports `toExpectedStatsCategoryRates` + the `CategoryRateResult` type (each cohort member is one `CategoryRateResult`).
+
+CONSTRAINTS:
+- Edit exactly these THREE files:
+  - `src/engines/expectedStatsEngine.ts` (ONE change only: export the existing `winsorizedStandardDeviation` — change `function winsorizedStandardDeviation` to `export function winsorizedStandardDeviation`. Do NOT change its body/logic. Do NOT export anything else.)
+  - `src/engines/expectedStatsPoolAggregator.ts` (NEW FILE — full contents below).
+  - `src/engines/__tests__/expectedStatsPoolAggregator.test.ts` (NEW FILE — tests per spec below).
+- Do NOT touch: `src/engines/salaryCalculator.ts` (import `TRUE_VALUE_MIN_PEER_POOL_SIZE` only; do NOT modify `getPositionPeerPool` or reuse the TV-reserve `TrueValuePoolKey`), `src/engines/expectedStatsCategoryRates.ts` (frozen; only import its types/fn), `src/utils/franchiseCheckpointSweepCompute.ts` (RA-2c wires the seam), `src/utils/seasonStorage.ts`, `src/utils/trackerDb.ts` (NO DB bump), `src/data/ivCurves.ts`, `spec-docs/reference/iv_oracle.json`, `src/engines/index.ts` (keep RA-2b OUT of the barrel while build-dark).
+- The RatingsPoolKey enum MUST be the §4-named keys, DECOUPLED from salaryCalculator's TrueValuePoolKey. Do NOT import or reuse any TV pool key/function.
+- Quote RA-2b in your report for each change. No commits (leave the diff uncommitted for audit).
+
+EXPECTED OUTPUT:
+
+=== FILE 1: src/engines/expectedStatsEngine.ts (one-token export) ===
+Change the declaration at ~line 321:
+`function winsorizedStandardDeviation(values: readonly number[] | undefined): number | null {`
+to:
+`export function winsorizedStandardDeviation(values: readonly number[] | undefined): number | null {`
+(Body unchanged. This is the only edit to this file.)
+
+=== FILE 2: src/engines/expectedStatsPoolAggregator.ts (NEW — verbatim) ===
+```ts
+/**
+ * RA-2b expected-stats peer-pool aggregator — pure / build-DARK.
+ *
+ * Source of truth: RATINGS_ADJUSTMENT_SPEC.md §4 + DECISIONS_LOG 2026-06-23 (RA-2,
+ * wf_1598c5dc) + 2026-06-24 (RA-2b scope: pure cohort-math; role-derivation,
+ * ladder membership + hysteresis STATE deferred to RA-2c).
+ *
+ * Given a cohort the caller has already grouped, this produces the per-category
+ * peer-pool maps the expected-stats engine's resolve* helpers consume
+ * (poolMeanByCat / poolSdByCat / peerPoolSize). It does NOT read the live league,
+ * storage, DB, rosters, or prior-cohort state — RA-2c wires those. The MEAN is
+ * position-pure (from members); the SD may be borrowed from a wider reference.
+ */
+
+import { TRUE_VALUE_MIN_PEER_POOL_SIZE } from './salaryCalculator';
+import {
+  EXPECTED_STATS_CATEGORIES,
+  winsorizedStandardDeviation,
+  type ExpectedStatsCategory,
+} from './expectedStatsEngine';
+import type { CategoryRateResult } from './expectedStatsCategoryRates';
+
+/** §4 ratings-specific position pools — DECOUPLED from the TV-reserve TrueValuePoolKey. */
+export type RatingsPoolKey =
+  | 'C'
+  | 'cornerIF'
+  | 'middleIF'
+  | 'cornerOF'
+  | 'CF'
+  | 'benchIF'
+  | 'benchOF'
+  | 'SP'
+  | 'RP';
+
+export type StarterRole = 'starter' | 'bench';
+
+/** §4:80 sticky hysteresis thresholds (~0.55-0.60 promote / <0.45 demote). §16 sim-tune. */
+export interface StarterRoleThresholds {
+  promote: number;
+  demote: number;
+}
+
+export const DEFAULT_STARTER_ROLE_THRESHOLDS: StarterRoleThresholds = {
+  promote: 0.6,
+  demote: 0.45,
+};
+
+/**
+ * §4:80 sticky starter classifier with a promote/demote dead-band. In the
+ * dead-band the prior cohort is retained (hysteresis); with no prior role a
+ * dead-band player defaults to 'bench' (conservative — the everyday bar is not
+ * granted to an unproven part-time player). priorRole + the start-share
+ * numerator are supplied by RA-2c.
+ */
+export function classifyStarterRole(
+  startShare: number,
+  priorRole?: StarterRole,
+  thresholds: StarterRoleThresholds = DEFAULT_STARTER_ROLE_THRESHOLDS,
+): StarterRole {
+  if (!Number.isFinite(startShare)) return priorRole ?? 'bench';
+  if (startShare >= thresholds.promote) return 'starter';
+  if (startShare < thresholds.demote) return 'bench';
+  return priorRole ?? 'bench';
+}
+
+/** True when a category's finite-member count is below the min peer-pool floor (RA-2c climbs the §4 ladder). */
+export function isPeerPoolBelowFloor(
+  count: number,
+  minPeerPool: number = TRUE_VALUE_MIN_PEER_POOL_SIZE,
+): boolean {
+  return !Number.isFinite(count) || count < minPeerPool;
+}
+
+export interface PoolAggregatorInput {
+  /** Cohort members, each already mapped through RA-2a toExpectedStatsCategoryRates. */
+  members: readonly CategoryRateResult[];
+  /**
+   * Optional wider reference for the winsorized SD ONLY (§4:65 "borrow a stable
+   * SPREAD from a wider reference when the pool is thin"). The MEAN stays
+   * position-pure (from members). Falls back to members when omitted.
+   */
+  spreadReference?: readonly CategoryRateResult[];
+}
+
+export interface PoolStatsResult {
+  /** Position-pure mean of finite member rates, per category (engine poolMeanByCat). */
+  poolMeanByCat: Partial<Record<ExpectedStatsCategory, number>>;
+  /** Winsorized SD of the spread-reference rates, per category (engine poolSdByCat). */
+  poolSdByCat: Partial<Record<ExpectedStatsCategory, number>>;
+  /** Per-category count of finite member rates (engine peerPoolSize map form). */
+  peerPoolSize: Partial<Record<ExpectedStatsCategory, number>>;
+  /** Echo: sorted-ascending finite member rates per category (audit only). */
+  peerValuesByCat: Partial<Record<ExpectedStatsCategory, number[]>>;
+}
+
+function finiteValuesForCategory(
+  rows: readonly CategoryRateResult[],
+  category: ExpectedStatsCategory,
+): number[] {
+  const values: number[] = [];
+  for (const row of rows) {
+    const value = row.actualByCat[category];
+    if (typeof value === 'number' && Number.isFinite(value)) values.push(value);
+  }
+  return values;
+}
+
+/**
+ * Aggregate one already-grouped cohort into the engine's peer-pool maps. Emits a
+ * category only when it has >=1 finite member rate (honors RA-1/RA-2a null-gating
+ * — e.g. armThrowingRate stays empty pre-RA-8). SD is emitted only when the
+ * winsorized estimate is defined (needs >=2 finite spread values).
+ */
+export function aggregatePoolStats(input: PoolAggregatorInput): PoolStatsResult {
+  const result: PoolStatsResult = {
+    poolMeanByCat: {},
+    poolSdByCat: {},
+    peerPoolSize: {},
+    peerValuesByCat: {},
+  };
+
+  const spreadRows = input.spreadReference ?? input.members;
+
+  for (const category of EXPECTED_STATS_CATEGORIES) {
+    const memberValues = finiteValuesForCategory(input.members, category);
+    if (memberValues.length === 0) continue;
+
+    const sum = memberValues.reduce((acc, value) => acc + value, 0);
+    result.poolMeanByCat[category] = sum / memberValues.length;
+    result.peerPoolSize[category] = memberValues.length;
+    result.peerValuesByCat[category] = [...memberValues].sort((a, b) => a - b);
+
+    const sd = winsorizedStandardDeviation(finiteValuesForCategory(spreadRows, category));
+    if (sd !== null) {
+      result.poolSdByCat[category] = sd;
+    }
+  }
+
+  return result;
+}
+```
+
+=== FILE 3: src/engines/__tests__/expectedStatsPoolAggregator.test.ts (NEW) ===
+Follow the hand-worked-fixture style of `expectedStatsCategoryRates.test.ts`. Cover:
+1. classifyStarterRole:
+   - 0.65, undefined => 'starter'; 0.60, undefined => 'starter' (>= promote).
+   - 0.40, undefined => 'bench'; 0.44, undefined => 'bench' (< demote).
+   - dead-band hysteresis: 0.50 with priorRole 'starter' => 'starter'; 0.50 with priorRole 'bench' => 'bench'; 0.50 with undefined => 'bench'.
+   - NaN startShare with priorRole 'starter' => 'starter'.
+2. aggregatePoolStats — build members as plain `CategoryRateResult` objects (actualByCat/sampleSizeByCat). Use a single hitter category (e.g. contactAverage) across, say, 4 members with values [0.250, 0.300, 0.275, 0.325]:
+   - poolMeanByCat.contactAverage `toBeCloseTo` the hand-computed mean (0.2875, 10).
+   - peerPoolSize.contactAverage === 4.
+   - peerValuesByCat.contactAverage `toEqual` the sorted array [0.250, 0.275, 0.300, 0.325].
+   - poolSdByCat.contactAverage `toBeCloseTo` `winsorizedStandardDeviation([0.250,0.275,0.300,0.325])` (import the now-exported helper and compute the expected inline so the test is self-checking).
+   - a member whose actualByCat omits the category is excluded from count/mean (add a 5th member with no contactAverage and assert count stays 4).
+3. spreadReference borrow: pass `members` = 2 values and a wider `spreadReference` = 6 values; assert poolSdByCat uses the spreadReference SD (`toBeCloseTo winsorizedStandardDeviation(spreadValues)`), while poolMeanByCat + peerPoolSize stay from `members` (count===2, mean from the 2 members).
+4. isPeerPoolBelowFloor: 5 => true, 6 => false, default min; NaN => true.
+5. Fork-4 ANCHOR-IDENTITY (the cheap regression assert): import `expectedAndSignal` from `../expectedStatsEngine`. Build a one-category hitter cohort, run aggregatePoolStats, then call expectedAndSignal with playerRole 'hitter', ratings set so the player's contact rating EQUALS the pool-mean rating you pass as `poolMeanRating`, curveBlock 'SS', and the poolMeanByCat/poolSdByCat/peerPoolSize from the aggregator (plus a finite peerValues so peerSd resolves). Assert `result.expectedByCat.contactAverage` `toBeCloseTo` `poolMeanByCat.contactAverage` (10) — at the pool-mean rating, expected == pool-mean production. (Pick ratings/poolMeanRating equal so playerCurve===poolCurve.)
+
+VERIFICATION (run from repo root, each prefixed `NODE_ENV= `):
+1. `NODE_ENV= npm run build` => exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsPoolAggregator.test.ts` => all green.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsEngine.test.ts src/engines/__tests__/expectedStatsCategoryRates.test.ts` => green, no new reds (the winsor export must not break them).
+4. `git diff --stat` => ONLY the 3 listed files (2 new + 1 one-line export). `git diff -- src/utils/trackerDb.ts spec-docs/reference/iv_oracle.json` => empty.
+5. Build-dark proof: `git grep -n "expectedStatsPoolAggregator" -- 'src/*' | grep -v "__tests__"` => only the new file itself (no live importer).
+
+FORMAT (your report):
+1. Files changed (exact paths) + total changed-path count.
+2. Each change referencing RA-2b.
+3. Verification results (paste actual output of all 5 commands).
+4. "RA-2b complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL:
+- If `winsorizedStandardDeviation` is not at the described location / not a plain `function` decl => STOP, quote the actual line, report. Do NOT guess.
+- If exporting it breaks any existing test => STOP and report the failing test verbatim (do NOT edit other files to compensate).
+- If a change would require touching a file not in the allowed list => STOP and report.
+- Do NOT import or reference any salaryCalculator TV pool key/function beyond `TRUE_VALUE_MIN_PEER_POOL_SIZE`. Do NOT add RA-2b to any barrel/index. Do NOT invent sim-tune values beyond the documented defaults.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2b ===== -->
