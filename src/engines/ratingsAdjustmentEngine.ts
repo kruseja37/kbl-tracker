@@ -146,7 +146,7 @@ const MAX_RATING_ADJUSTMENT = 10;
  * Salary floor/ceiling by grade for System B.
  * Per GAP-B12-025 spec, re-denominated to T5 canonical dollars.
  */
-const GRADE_SALARY_BOUNDS: Record<Grade, { floor: number; ceiling: number }> = {
+export const GRADE_SALARY_BOUNDS: Record<Grade, { floor: number; ceiling: number }> = {
   'S':  { floor: 49994.58, ceiling: 149983.74 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
   'A+': { floor: 39995.66, ceiling: 133318.88 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
   'A':  { floor: 33329.72, ceiling: 116654.02 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)

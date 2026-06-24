@@ -14886,3 +14886,54 @@ FORMAT: (1) every changed file + line counts; (2) the wiring as built (band-comp
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S6-BOARD-BANDS ===== -->
+
+<!-- ===== CONTRACT: S7a ===== -->
+## CONTRACT: S7a — pure gradeBandToPriceRange converter (build-dark, no wiring)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder, Branch B (codex/mode1-v1-b, worktree /Users/johnkruse/Projects/kbl-mode1-b). Pure build-dark new engine + ONE additive export. Builder only — do NOT audit/commit/push.
+
+GOAL:
+A NET-NEW pure function converting a scout's overall grade BAND ({best, worst} grades) into a $ bidding-guidance price range, sourced from the canonical grade→$ table. No consumer yet (S7b wires it). Build-dark.
+
+SOURCE OF TRUTH:
+- **JK RULING 2026-06-23: range = MIDPOINT-to-MIDPOINT** — `low = midpoint(worst grade)`, `high = midpoint(best grade)`; the grade→$ anchor = the canonical `GRADE_SALARY_BOUNDS` (`src/engines/ratingsAdjustmentEngine.ts:149`, T5-calibrated). `midpoint(grade) = (floor + ceiling) / 2`.
+- `Grade` type = `src/engines/gradeEngine.ts:19` (12 grades S..D). The scout band only ever emits A..D (`GRADES` ladder `prospectScoutingDraftEngine.ts:268`) but the signature accepts `Grade`.
+- BRANCH_B_PROGRESS.md S7a row.
+
+CONSTRAINTS:
+- Edit ONLY: `src/engines/ratingsAdjustmentEngine.ts` (add `export` to `GRADE_SALARY_BOUNDS` — additive, NO other change). CREATE: `src/engines/gradeBandPrice.ts` + `src/engines/__tests__/gradeBandPrice.test.ts`.
+- Do NOT touch: any scouting/draft/auction file (S7b/c/d wire it), the 2 cross-branch overlap files (`leagueBuilderStorage.ts`, `franchiseMoraleState.ts`), any DB/store/version, the frozen `iv_oracle.json`.
+- SINGLE SOURCE OF TRUTH: import `GRADE_SALARY_BOUNDS`, do NOT duplicate its $ values into the new file.
+- Branch-only (codex/mode1-v1-b). Do NOT commit/push. Leave changes unstaged.
+
+EXPECTED OUTPUT:
+1. `src/engines/ratingsAdjustmentEngine.ts`: `const GRADE_SALARY_BOUNDS` (:149) → `export const GRADE_SALARY_BOUNDS`. NO other change.
+2. NEW `src/engines/gradeBandPrice.ts`:
+   - `import { GRADE_SALARY_BOUNDS } from './ratingsAdjustmentEngine';` + `import type { Grade } from './gradeEngine';`
+   - `export interface GradePriceRange { low: number; high: number; }`
+   - `export function gradeMidpointSalary(grade: Grade): number { const b = GRADE_SALARY_BOUNDS[grade]; return (b.floor + b.ceiling) / 2; }`
+   - ```
+     export function gradeBandToPriceRange(band: { best: Grade; worst: Grade }): GradePriceRange {
+       const high = gradeMidpointSalary(band.best);
+       const low = gradeMidpointSalary(band.worst);
+       return { low: Math.min(low, high), high: Math.max(low, high) };
+     }
+     ```
+   - Banner comment line 1: build-dark, no consumer yet (S7b wires); NOTE the `C`/`C-` and `D+`/`D` GRADE_SALARY_BOUNDS midpoints are identical (documented T5-bridge overlap, `ratingsAdjustmentEngine.ts:158-161`) so those adjacent bands price identically — intentional, not a bug.
+3. NEW `src/engines/__tests__/gradeBandPrice.test.ts`: midpoint correct (`gradeMidpointSalary('A')`=(33329.72+116654.02)/2=74991.87); monotonic (A-band high > D-band high); low≤high; single-grade band `best===worst` → low===high; `C` vs `C-` identical midpoint (overlap); swapped `{best:'D',worst:'A'}` still returns low≤high.
+
+VERIFICATION (run in the mode1-b worktree, paste actual output):
+- `NODE_ENV= npx tsc -b` → 0
+- `NODE_ENV= npx vitest run` → FULL suite; expect the Branch-B characterized baseline (sole hard fail `wpaRuntimeBoundary` + the `AwardsWatchlist` order-flake, solo-passing) = ZERO NEW REDS; the new gradeBandPrice test passes.
+- `git --no-pager diff --stat` → `ratingsAdjustmentEngine.ts` (+1 export) + 2 new files.
+
+FORMAT: 1. files changed 2. diffs/new files 3. verification output (pasted) 4. "S7a complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF exporting `GRADE_SALARY_BOUNDS` requires any OTHER change to `ratingsAdjustmentEngine.ts` — report it.
+- STOP-IF `GRADE_SALARY_BOUNDS` is already exported, or the `Grade` type is not the 12-grade S..D union — report it.
+- Do NOT duplicate the $ values, do NOT wire any consumer, do NOT touch scouting/auction files, do NOT commit/push.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S7a ===== -->
