@@ -20457,3 +20457,105 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
 <!-- ===== END CONTRACT: RA-2c-2b-3 ===== -->
+
+<!-- ===== CONTRACT: RA-2c-3a ===== -->
+## CONTRACT: RA-2c-3a — season advancement fields + un-dorm `speedBaserunningRate` in the adapter (build-dark)
+
+**ROUTE:** Branch A. Worktree `/Users/johnkruse/Projects/kbl-tracker`, branch `codex/franchise-v1-next`. Branch-only — do NOT commit, do NOT push.
+
+**ROLE:** Builder (Codex). Opus audits the real diff afterward (builder≠auditor).
+
+**GOAL:** Make the currently-DORMANT `speedBaserunningRate` expected-stats category emit a sample + actual rate, fed by two NEW additive season-batting fields. This is the pure "fields + adapter" half of RA-2c-3 (the RA-2CQ pattern). The LIVE per-game writer that populates the fields is the SEPARATE RA-2c-3b — so after this ticket the fields are present but always 0 (no writer yet) ⇒ the category emits sample 0 ⇒ gated out by the existing floor ⇒ build-DARK, zero behavior change today.
+
+**SOURCE OF TRUTH:** `RATINGS_ADJUSTMENT_SPEC.md` §3B (Speed = SB+3B rate / **baserunning**); DECISIONS_LOG 2026-06-24 (RA-2c speed enrichment, deferred); the RA-2CQ-2a/2c precedent (contact-quality count fields + adapter emission).
+
+**GROUNDED ANCHORS (re-read each before editing):**
+- `src/utils/seasonStorage.ts:81-83` the RA-2CQ precedent fields on `PlayerSeasonBatting`: `contactQualityGood?: number;` / `contactQualityTracked?: number;` (just above the `// Timestamps` block at :85). `createInitialBattingStats` inits them at `:223-224` (`contactQualityGood: 0, contactQualityTracked: 0,`) just above `lastUpdated`.
+- `src/engines/expectedStatsCategoryRates.ts` — the adapter. The dormancy comment (:8-9) says `speedBaserunningRate … is RA-2c-3 and still dormant`. The SIBLING `speedStealTripleRate` is the emission template: SAMPLE at :70-72 (`setSample(result.sampleSizeByCat,'speedStealTripleRate', (batting?.stolenBases??0)+(batting?.caughtStealing??0)+(batting?.triples??0))`), ACTUAL at :95-99 (`(batting.stolenBases+batting.triples)/batting.pa` under `if (batting.pa>0)`). The rate-from-counts template is `contactQualityRate` at :101-108 (`const contactQualityTracked = batting.contactQualityTracked ?? 0; if (contactQualityTracked > 0) emitActual(..., 'contactQualityRate', (batting.contactQualityGood ?? 0)/contactQualityTracked);`). `addHitterRates(result, batting?, fielding?)` is where hitter categories are emitted.
+- `src/utils/checkpointRatingSignal.ts:74` `speedBaserunningRate: { starter: 2, bench: 2 }` already in `CHECKPOINT_SAMPLE_FLOORS` — the gate side is wired; only the adapter emission is missing.
+
+**CONSTRAINTS:**
+- EDIT EXACTLY: `src/utils/seasonStorage.ts`, `src/engines/expectedStatsCategoryRates.ts`, and their tests (`src/engines/__tests__/expectedStatsCategoryRates.test.ts`; a `seasonStorage` test only if a field-list pin forces it — there is none expected).
+- Do NOT touch `seasonAggregator.ts` (the writer is RA-2c-3b), `ubrAggregator.ts`, `checkpointRatingSignal.ts`, `franchiseCheckpointSweepCompute.ts`, any ratings engine, `playerDatabase.ts`, or `iv_oracle.json`.
+- **NO `TRACKER_DB_VERSION` bump** — the two new fields are OPTIONAL (`?`), additive, init 0 (mirrors RA-2CQ exactly).
+- Branch-only.
+
+**THE CHANGES:**
+1. **`seasonStorage.ts` — add two optional fields to `PlayerSeasonBatting`** right after `contactQualityTracked?` (:83), before `// Timestamps`:
+   ```
+   // Baserunning advancement (RA-2c-3; counts; speedBaserunningRate = extraBasesTaken/advancementOpportunities; populated by the RA-2c-3b writer)
+   extraBasesTaken?: number;            // successful extra bases taken beyond the forced minimum
+   advancementOpportunities?: number;   // total chances to take an extra base (the rate denominator)
+   ```
+   And init BOTH to `0` in `createInitialBattingStats` right after `contactQualityTracked: 0,` (:224): `extraBasesTaken: 0,` / `advancementOpportunities: 0,`.
+2. **`expectedStatsCategoryRates.ts` — emit `speedBaserunningRate`** in `addHitterRates`, mirroring `contactQualityRate`:
+   - SAMPLE: `setSample(result.sampleSizeByCat, 'speedBaserunningRate', batting?.advancementOpportunities ?? 0);` (place near the other speed sample at :70-72).
+   - ACTUAL (inside the `if (batting) { … }` block, mirroring the contactQuality guard at :101-108): `const advancementOpportunities = batting.advancementOpportunities ?? 0; if (advancementOpportunities > 0) { emitActual(result.actualByCat, 'speedBaserunningRate', (batting.extraBasesTaken ?? 0) / advancementOpportunities); }`.
+   - Update the dormancy comment (:8-9): `speedBaserunningRate` is now LIVE from the RA-2c-3 `extraBasesTaken`/`advancementOpportunities` fields (populated by the RA-2c-3b writer; 0 until then).
+3. **`expectedStatsCategoryRates.test.ts`** — add cases: (a) a hitter batting row with `advancementOpportunities: 10, extraBasesTaken: 4` ⇒ `sampleSizeByCat.speedBaserunningRate === 10` and `actualByCat.speedBaserunningRate === 0.4`; (b) `advancementOpportunities: 0` ⇒ sample 0 and `speedBaserunningRate` ABSENT from `actualByCat` (no divide-by-zero, gated out). Keep all existing cases green.
+
+**DESIGN DEFAULT (documented, §16-tunable — flag in the comment):** `speedBaserunningRate = extraBasesTaken / advancementOpportunities` (successful extra bases ÷ chances). The exact set of `AdvancementStats` events that count as "extraBasesTaken" vs "advancementOpportunities" is fixed by the RA-2c-3b writer; this ticket only divides the two stored counts.
+
+**EXPECTED OUTPUT:** A unified diff over the 2 production files + the adapter test. Builds; tests pass.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsCategoryRates.test.ts` → green.
+3. `NODE_ENV= npx vitest run` (FULL suite — seasonStorage + the adapter are core import-chain modules; report the failed-file list, characterized baseline = `wpaRuntimeBoundary` hard + `franchiseManualSmokeFixture`/`GameTrackerLaunchState` solo-flakes ⇒ ZERO NEW REDS).
+4. `git --no-pager diff --stat` → only the 2 production files + the adapter test; confirm NO `TRACKER_DB_VERSION` change.
+
+**MAKE-OR-BREAK:** the two fields are OPTIONAL + init 0 (no DB bump); the adapter emits `speedBaserunningRate` sample = `advancementOpportunities` and actual = `extraBasesTaken/advancementOpportunities` ONLY when the denominator > 0 (mirrors `contactQualityRate`); zero behavior change today (fields are 0 with no writer); zero new reds.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report if: (a) a cited anchor differs (re-read + report the real line); (b) adding the fields forces a `TRACKER_DB_VERSION` bump or breaks a field-list/store-list test pin (report which); (c) you'd need to touch `seasonAggregator.ts` or any forbidden file to make it compile/pass. A correct STOP with a precise reason is a SUCCESS.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
+<!-- ===== END CONTRACT: RA-2c-3a ===== -->
+
+<!-- ===== CONTRACT: RA-2c-3b ===== -->
+## CONTRACT: RA-2c-3b — live per-game writer for the baserunning-advancement counts (closes RA-2c-3)
+
+**ROUTE:** Branch A. Worktree `/Users/johnkruse/Projects/kbl-tracker`, branch `codex/franchise-v1-next`. Branch-only — do NOT commit, do NOT push.
+
+**ROLE:** Builder (Codex). Opus audits the real diff afterward (builder≠auditor).
+
+**GOAL:** Populate the RA-2c-3a season fields `extraBasesTaken` / `advancementOpportunities` LIVE, per game, from the persisted at-bat `runnerOutcomes`, by reusing the already-built UBR advancement engine. This is the writer half of RA-2c-3 (the RA-2CQ-2b pattern). After this, `speedBaserunningRate` accrues real values each game and becomes a live development signal once the checkpoint flag is on (still display-dark behind that flag).
+
+**SOURCE OF TRUTH:** the RA-2CQ-2b writer precedent (commit `3291415c`) — `aggregateBattingStats` tallies a per-player stat from at-bat events and accrues it into the season row; RA-2c-3a (committed `082cd967`) added the target fields.
+
+**GROUNDED ANCHORS (re-read each before editing):**
+- `src/engines/ubrAggregator.ts:121` `export function aggregateUbrFromEvents(atBats: AtBatEvent[], leagueStats?): Record<string, UbrRunnerAggregate>` — keyed by **runnerId**; `UbrRunnerAggregate = { advancementStats: AdvancementStats; ubr: number }` (:18-21). It does NOT filter undone events itself (the caller must), and it skips automatic-HR at-bats internally.
+- `src/engines/rwarCalculator.ts:87-98` `AdvancementStats` — the SUCCESS extra-base counters are `firstToThird` + `firstToHomeOnDouble` + `secondToHomeOnSingle` + `tagsScored` (NOTE: `tagsScored` already INCLUDES the granular `tagsScoredFrom2B`/`tagsScoredFrom3B` — do NOT add those, it double-counts). `advancementOpportunities` is the denominator field (per `accumulateAdvancement`: it counts `extra` successes + `held` opportunities, and EXCLUDES forced advances and thrown-out — use it verbatim).
+- `src/utils/seasonAggregator.ts:233-283` `aggregateBattingStats(gameState, seasonId)` — the writer to extend. It already: reads events via `getAtBatEventsForAggregation` (:237, the swallow-guard), builds `cqByBatter = tallyContactQualityByPlayer(atBatEvents.filter(e => !e.undoneAt)...)` (:238), iterates `Object.entries(gameState.playerStats)` (:248), and accrues `contactQualityGood/Tracked` at :277-278 in the `updated` object. The swallow-guard `getAtBatEventsForAggregation` (:459-468) catches `isMissingVitestMockExport(error,'getGameEvents')`.
+- The chain: `aggregateBattingStats` ← `aggregateGameToSeason` (`seasonAggregator.ts:165`) ← `processCompletedGame.ts:165`. **Transitive-import-mock-break risk:** adding `import { aggregateUbrFromEvents } from '../engines/ubrAggregator'` pulls `ubrAggregator` (→ `rwarCalculator`) into the seasonAggregator module graph; a partial-mock test of `rwarCalculator`/`ubrAggregator` could fail at module-load with `No "X" export`.
+
+**CONSTRAINTS:**
+- EDIT: `src/utils/seasonAggregator.ts` (the writer) + its test(s). You MAY add a small exported pure helper to `src/engines/ubrAggregator.ts` (e.g. `extraBasesTakenFromAdvancementStats(stats): number`) if you prefer it there instead of inline — that file is allowed. Do NOT touch `seasonStorage.ts` (3a already added the fields), `expectedStatsCategoryRates.ts` (3a), `checkpointRatingSignal.ts`, the ratings/checkpoint engines, `playerDatabase.ts`, or `iv_oracle.json`.
+- NO `TRACKER_DB_VERSION` bump (the fields already exist from 3a; this only writes them). Branch-only.
+- Compute-only into the EXISTING `extraBasesTaken`/`advancementOpportunities` fields — do NOT add new fields, do NOT touch `rwar`/`mapBaserunningStats`/the WAR path (UBR's `ubr` value is IGNORED here; only the advancement counts are written).
+
+**THE CHANGES — `aggregateBattingStats`:**
+1. ADD `import { aggregateUbrFromEvents } from '../engines/ubrAggregator';` (and, if you add the helper there, import it too).
+2. After the `cqByBatter` tally (≈:246), build `const ubrByRunner = aggregateUbrFromEvents(atBatEvents.filter((event) => !event.undoneAt));` (filter undone, mirroring the cq tally — `aggregateUbrFromEvents` does not filter undone itself).
+3. In the per-player `updated` object (alongside `contactQualityGood/Tracked` at :277-278), accrue:
+   - `extraBasesTaken: (seasonStats.extraBasesTaken ?? 0) + extraBasesTakenFor(ubrByRunner[playerId])`
+   - `advancementOpportunities: (seasonStats.advancementOpportunities ?? 0) + (ubrByRunner[playerId]?.advancementStats.advancementOpportunities ?? 0)`
+   where `extraBasesTakenFor(agg)` = `agg ? agg.advancementStats.firstToThird + agg.advancementStats.firstToHomeOnDouble + agg.advancementStats.secondToHomeOnSingle + agg.advancementStats.tagsScored : 0` (inline or the ubrAggregator helper). Note `ubrByRunner` is a plain `Record` (use `ubrByRunner[playerId]`, not `.get`).
+4. Nothing else in `aggregateBattingStats` changes (counting stats, contactQuality, the iteration, `updateBattingStats` all stay).
+
+**THE CHANGES — tests:**
+- Add a writer test (extend `seasonAggregator`'s batting test, or the appropriate existing suite): a `gameState` whose at-bat `runnerOutcomes` include a clear EXTRA-base take (e.g. a runner going first→third on a single = `firstToThird`) and a HELD opportunity, for a player present in `gameState.playerStats`; assert the player's season row accrues `extraBasesTaken` (the success count) and `advancementOpportunities` (success + held). Provide events either inline via `gameState.atBatEvents` or by mocking `getGameEvents` (match the existing test's pattern). Assert undone events are excluded.
+- **TRANSITIVE-MOCK-BREAK PROTOCOL:** run the FULL suite. If any `processCompletedGame.*`/`seasonAggregator` partial-mock test fails at MODULE-LOAD with `No "<name>" export is defined on the "../engines/ubrAggregator"` (or `rwarCalculator`) mock, FIX IT TEST-ONLY by adding the missing export to that test's mock object (a stub) — do NOT change production to satisfy a mock. This is the documented `processCompletedGame transitive-import-mock-break` and is the expected, deterministic fallout of the new import.
+
+**EXPECTED OUTPUT:** A unified diff over `seasonAggregator.ts` (+ optional `ubrAggregator.ts` helper) + test files (incl. any test-only mock stubs). Builds; full suite zero-new-reds.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run` (FULL suite — REQUIRED, processCompletedGame transitive chain + new import). Report the failed-file list; characterized baseline = `wpaRuntimeBoundary` (hard) + `franchiseManualSmokeFixture`/`GameTrackerLaunchState` (solo-pass flakes) ⇒ ZERO NEW REDS. Any NEW red must be a module-load mock break you then fix test-only (re-run to green).
+3. `git --no-pager diff --stat` → only `seasonAggregator.ts` (+ optional `ubrAggregator.ts`) + tests.
+
+**MAKE-OR-BREAK:** the writer reuses `aggregateUbrFromEvents` (undone filtered by the caller), accrues per **runner** into the existing fields (`extraBasesTaken` = the 4 success counters with `tagsScored` NOT double-counted; `advancementOpportunities` = the field verbatim); the `ubr` value is ignored; no new fields / no DB bump / no WAR-path touch; the new import's transitive-mock-break (if any) is fixed test-only; full suite zero-new-reds.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report if: (a) a cited anchor differs (re-read + report); (b) accruing the counts requires touching `seasonStorage.ts`/`rwarCalculator.ts` production or the WAR path (report why); (c) the transitive-mock-break cannot be resolved test-only within the mock objects (report the failing file + error). A correct STOP with a precise reason is a SUCCESS.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
+<!-- ===== END CONTRACT: RA-2c-3b ===== -->
