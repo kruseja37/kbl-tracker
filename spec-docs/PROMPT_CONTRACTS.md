@@ -19232,3 +19232,122 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S7b ===== -->
+
+<!-- ===== CONTRACT: S7c ===== -->
+## CONTRACT: S7c — stamp the won auction bid onto the farm prospect's visible salary
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch B, codex/mode1-v1-b, worktree /Users/johnkruse/Projects/kbl-mode1-b). Wire the already-computed won bid into the farm prospect's visible salary. Builder only — do NOT audit/commit/push.
+
+GOAL:
+After the draft freeze, the farm prospect's WON auction bid must become the visible farm salary (today it shows a round-based placeholder). The won bid already flows to `freeze.players[].settledSalary` for FARM; the gaps are (1) the freeze loop only writes MLB players — it skips farm because farm prospects aren't in the franchisePlayer store — and (2) the visible-salary getter returns the round-based hidden value first. Stamp the won bid onto the farm prospect's Player record AND make the visible-salary getter prefer it for farm — for ALL real winners (human + CPU-controlled; shills are ALREADY excluded upstream).
+
+SOURCE OF TRUTH:
+- JK RULING (DECISIONS_LOG 2026-06-23): S7c salary = stamp ALL real winners (human + CPU-controlled; shill excluded).
+- D-S7c-CPU RESOLVED (grounded): `deriveShillTeamIds` (cpuTeamRoles.ts:34 = `shillIds.has(id) && !controlledCpuTeamIds.has(id)`) excludes ONLY shills, so CPU-controlled NON-shill farm winners ARE in `freeze.players` already; the upstream `farmExcludedTeamIds` (franchiseInitializer.ts:735) handles shill exclusion. No extra filtering needed in S7c.
+- The won bid is in `freeze.players[].settledSalary` for FARM (draftFreezeInputs.ts:93 `settledSalary: result.salary`; `DraftFreezePlayerInput.tier` 'MLB'|'FARM' at draftFreeze.ts:23/25).
+- `Player.settledSalary?` already exists (RB-7c, leagueBuilderStorage.ts:283); farm prospect Player objects live in the leagueBuilder player store (`getPlayer`/`savePlayer`) — `getFranchisePlayer` returns null for farm (franchiseInitializer.ts:756 comment); `FranchiseFarmRecord` is roster-metadata only (no salary).
+
+CONSTRAINTS:
+- EDIT ONLY: `src/utils/franchiseInitializer.ts` (the freeze loop ~:754-759 — add the FARM write branch), `src/utils/franchiseSalary.ts` (the getter ~:111-113 — prefer the won bid for farm), and the integration test `src/src_figma/__tests__/franchiseMode/franchiseInitializer.test.ts` (~:396-418). If a focused getter test exists, update `src/utils/tests/franchiseSalary.test.ts`.
+- Do NOT touch: `src/utils/leagueBuilderStorage.ts` (Player type — `settledSalary` already exists; IMPORT `getPlayer`/`savePlayer` only), the frozen oracle, trackerDb / any DB version, the auction engine / `cpuTeamRoles` / `draftFreeze*` (read-only).
+- NO TRACKER_DB_VERSION bump. Branch-only (codex/mode1-v1-b); do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+
+A) `franchiseInitializer.ts` — the freeze loop (~:754-759). Today: `getFranchisePlayer` (MLB) then `continue` on null (skips farm). Restructure so FARM-tier freeze.players are also written, idempotently:
+   - MLB path (existing — when `getFranchisePlayer` returns a player): unchanged behavior (write `settledSalary` if it differs).
+   - FARM path (NEW — when `getFranchisePlayer` returns null AND `player.tier === 'FARM'`): load the farm prospect Player via `getPlayer(player.playerId)` (leagueBuilder store); if found, write BOTH `salary` and `settledSalary` = `player.settledSalary` via `savePlayer`, idempotently (skip if both already equal the won bid).
+   - STOP-IF: farm prospect Player objects are NOT in the leagueBuilder player store / have no `.salary` field — report the real store.
+   - STOP-IF: `freeze.players[]` entries do NOT carry `tier` — report the discriminator.
+
+B) `franchiseSalary.ts` — `getVisibleSafeFranchisePlayerSalary` (~:111-113): for a hidden-farm-prospect-context player, PREFER a finite positive `settledSalary` (the won bid IS the real, public salary) BEFORE the round-based placeholder. Keep the non-farm path byte-identical:
+   ```
+   export function getVisibleSafeFranchisePlayerSalary(player: Player): number | null {
+     if (isHiddenFarmProspectSalaryContext(player)) {
+       const wonBid = finitePositive(player.settledSalary);
+       if (wonBid !== null) return wonBid;
+     }
+     return calculateHiddenFarmProspectSalaryFromPublicContext(player) ?? finitePositive(player.salary);
+   }
+   ```
+
+C) Update the integration test `franchiseInitializer.test.ts` (~:396-418): today it asserts `saveFranchisePlayer` called with `settledSalary` for MLB and NOT for farm. Rewrite the farm assertion to verify the farm winner's salary is stamped (`savePlayer` called for the farm playerId with `salary === settledSalary === the won bid`). Keep the MLB assertion. Add a case proving a CPU-controlled (non-shill) farm winner IS stamped and a shill-won farm prospect is NOT (shill already excluded from `freeze.players`).
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm --prefix /Users/johnkruse/Projects/kbl-mode1-b run build` → exit 0.
+- `NODE_ENV= npx vitest run` (from the worktree) → FULL suite. Expected failed files ⊆ { `wpaRuntimeBoundary` } = the characterized baseline ⇒ ZERO NEW REDS.
+- `git --no-pager diff --stat`.
+
+FORMAT: 1. files changed 2. the diffs 3. verification output verbatim 4. "S7c complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF farm prospect Players are NOT in the leagueBuilder player store / have no `.salary` field / would need a DB or store change — report the real store + shape.
+- STOP-IF `freeze.players` entries don't carry `tier` — report the discriminator.
+- STOP-IF making the getter prefer `settledSalary` breaks an MLB or revealed-salary case in the existing tests — report which.
+- Do NOT add any new persisted field, do NOT bump trackerDb, do NOT touch the shill-derivation / draftFreeze engine.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S7c ===== -->
+
+<!-- ===== CONTRACT: RA-2CQ-1 ===== -->
+## CONTRACT: RA-2CQ-1 — pure contact-quality classifier + batter/pitcher rate aggregators (build-dark)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch A, codex/franchise-v1-next, worktree /Users/johnkruse/Projects/kbl-tracker). ONE pure build-dark engine + test (the A1.5c aggregator pattern). Builder only — do NOT audit/commit/push.
+
+GOAL:
+A pure, build-dark engine that measures contact QUALITY from the per-ball `contactType` tag: a hitter "quality-contact RATE" (feeds the Contact rating) and the symmetric pitcher "weak-contact-induced RATE" (feeds Junk). NO season fields, NO writer, NO meta/adapter wiring — those are follow-ups. This ticket encodes the RULED measurement in a pure classifier + two rate aggregators + tests.
+
+SOURCE OF TRUTH (the measurement is JK-RULED — do NOT infer beyond this):
+- `RATINGS_MEASUREMENT_WORKSHEET.md` §3 / §9 (contactType hard/normal/weak/bloop/bunt; PO got-under-it; FLO graded by hardness, no power).
+- DECISIONS_LOG 2026-06-23 fork-sweep item 2: a HARD contactType OVERRIDES the pop-out penalty (hard PO → NEUTRAL, not negative); FLO is NOT capped — grades on contactType (hard foul liner ≠ sky-high foul pop).
+- **JK RULINGS 2026-06-23 (this session):** (a) SHAPE = a RATE (not a continuous score); (b) GOOD-contact cut = HARD ONLY (strict): hard=good, normal=neutral, weak+bloop=weak, bunt=excluded.
+- contactType values: `'hard'|'normal'|'weak'|'bloop'|'bunt'` (EnrichmentPanel.tsx CONTACT_TYPE_OPTIONS); persisted as `enrichment.exitType` (the CALLER extracts it — this engine takes the already-extracted tag).
+- `AtBatResult` union: `src/types/game.ts` (PO = pop-up, FLO = foul-out). **Do NOT use `requiresBallInPlayData`/`isOut` to decide tracked-vs-excluded** — their sets wrongly omit `ITPHR`/`GRD`/`SF`, which ARE contact-bearing and must be CLASSIFIED. Use the explicit EXCLUDED set below.
+- Do NOT reuse `clutchCalculator.ts` `DEFAULT_CONTACT_QUALITY` (different domain — trajectory-based; this is contactType-based).
+
+THE RULED CLASSIFICATION — `classifyContactQuality(contactType, result) → 'good'|'neutral'|'weak'|'excluded'`:
+- contactType missing/unmappable → `'excluded'` (untracked).
+- contactType `'bunt'` → `'excluded'` (intentional, not a contact-skill signal).
+- result NOT a ball-in-play (K/Kc/Ꝁ/D3K/WP_K/PB_K/BB/IBB/HBP/SAC — contactType meaningless) → `'excluded'`.
+- result `'PO'` (pop-up): `'hard'` → `'neutral'` (the ruled override — hard PO is neutral, NOT negative); else → `'weak'`.
+- result `'FLO'` (foul-out): `'hard'` → `'good'`; `'weak'|'bloop'` → `'weak'`; `'normal'` → `'neutral'`.
+- all OTHER balls in play (GO/FO/LO/1B/2B/3B/HR/ITPHR/DP/TP/SF/FC/E/GRD): `'hard'` → `'good'`; `'normal'` → `'neutral'`; `'weak'|'bloop'` → `'weak'`.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/contactQualityAggregator.ts` + `src/engines/__tests__/contactQualityAggregator.test.ts`.
+- Do NOT touch: `src/utils/seasonStorage.ts`, `src/engines/expectedStatsEngine.ts`, `src/engines/expectedStatsCategoryRates.ts`, `src/utils/seasonAggregator.ts`, `src/utils/eventLog.ts`, any UI, the oracle, trackerDb. (Season fields / live writer / meta+adapter = follow-ups.)
+- NO DB bump. Branch-only; do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT — `src/engines/contactQualityAggregator.ts` (pure; no React/storage/Date/random imports):
+- Banner: build-dark; the RULED contact-quality measurement (rate; hard-only good); SOURCE refs.
+- `export type ContactQualityTag = 'hard' | 'normal' | 'weak' | 'bloop' | 'bunt';`
+- `export type ContactQualityClass = 'good' | 'neutral' | 'weak' | 'excluded';`
+- `export interface ContactQualityEvent { result: AtBatResult; contactType?: ContactQualityTag | null; }` (import `AtBatResult` type-only from `../types/game`).
+- `export function classifyContactQuality(contactType: ContactQualityTag | null | undefined, result: AtBatResult): ContactQualityClass` — implement the RULED CLASSIFICATION exactly. Define a module-local `const CONTACT_QUALITY_EXCLUDED_RESULTS: ReadonlySet<AtBatResult> = new Set(['K','Kc','Ꝁ','D3K','WP_K','PB_K','BB','IBB','HBP','SAC'])` (no contact; `SAC` = sac-bunt). A result IN that set → `'excluded'`. Everything NOT in that set (incl. `ITPHR`/`GRD`/`SF`/`FC`/`E` and the PO/FLO special cases) is classified by contactType per the table above. Do NOT use `requiresBallInPlayData`/`isOut`.
+- `export const DEFAULT_CONTACT_QUALITY_MIN_SAMPLE = 10;` (§16 sim-tune placeholder — min tracked balls for a non-null rate).
+- `export interface ContactQualityRateResult { rate: number | null; trackedCount: number; goodCount: number; neutralCount: number; weakCount: number; }`
+- `export function aggregateBatterContactQuality(events: ContactQualityEvent[], minSample = DEFAULT_CONTACT_QUALITY_MIN_SAMPLE): ContactQualityRateResult` — classify each; tracked = good+neutral+weak; rate = `tracked < minSample ? null : goodCount / tracked`.
+- `export function aggregatePitcherWeakContact(events: ContactQualityEvent[], minSample = DEFAULT_CONTACT_QUALITY_MIN_SAMPLE): ContactQualityRateResult` — same tracked denominator; rate = `tracked < minSample ? null : weakCount / tracked`.
+
+TEST — `src/engines/__tests__/contactQualityAggregator.test.ts`:
+- classifyContactQuality: hard GO→good; normal GO→neutral; weak GO→weak; bloop FO→weak; hard PO→neutral; weak PO→weak; hard FLO→good; weak FLO→weak; normal FLO→neutral; bunt 1B→excluded; K (any tag)→excluded; missing tag→excluded.
+- aggregateBatterContactQuality: a mix (≥ minSample) → rate = good/(good+neutral+weak); below minSample → null; all-normal → rate 0; empty → null.
+- aggregatePitcherWeakContact: same mix → rate = weak/tracked; below minSample → null.
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/contactQualityAggregator.test.ts` → passes.
+- `NODE_ENV= npx vitest run` → FULL suite; failed files ⊆ { `wpaRuntimeBoundary`, `franchiseManualSmokeFixture`, `GameTrackerLaunchState` } ⇒ ZERO NEW REDS (a pure new file should perturb nothing).
+- `git --no-pager diff --stat` + the 2 new files.
+
+FORMAT: 1. files 2. the new files 3. verification verbatim 4. "RA-2CQ-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF the `AtBatResult` union is MISSING any of `K/Kc/Ꝁ/D3K/WP_K/PB_K/BB/IBB/HBP/SAC` or `PO`/`FLO` — report it. (Do NOT block on `requiresBallInPlayData`/`isOut` differing — they are intentionally NOT used; classify via the explicit EXCLUDED set.)
+- STOP-IF you cannot classify without importing UI code — define the tag union locally (do NOT import from EnrichmentPanel).
+- Do NOT add season fields / a writer / a meta category / an adapter change (follow-ups). Do NOT change the hard-only cut or the hard-PO-neutral rule.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2CQ-1 ===== -->
