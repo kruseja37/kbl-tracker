@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { normalizeToChemistryCode } from "../../../data/chemistryCanonical";
 import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
-import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
-import { perceivedValueRange } from "../../../engines/scoutValueRange";
+import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
+import { gradeToTwentyEighty } from "../../../engines/scoutPriceOpinion";
 import { seededNominationOrder, surfaceNextPlayer } from "../../../engines/auctionStateMachine";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import {
@@ -15,7 +15,9 @@ import {
   saveScoutProfile,
 } from "../../../utils/leagueBuilderStorage";
 import {
-  scoutAccuracy,
+  scoutOverallGradeBand,
+  scoutTierForPosition,
+  type DraftPosition,
   type LeagueBuilderProspectPlayerDto,
   type ProspectScoutDescriptor,
 } from "../../../utils/prospectScoutingDraftEngine";
@@ -260,15 +262,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       .map((playerId) => expected.session.players[playerId])
       .map((candidate) => {
         const prospect = prospectById.get(candidate.playerId)!;
-        const accuracy = scoutAccuracy(prospect.primaryPosition, SCOUTS_BY_TEAM_ID["team-a"]);
-        const priceOpinion = scoutPriceOpinion({
-          trueIV: candidate.iv,
-          scoutAccuracy: accuracy,
-          scoutId: SCOUTS_BY_TEAM_ID["team-a"].scoutId,
-          candidateId: candidate.playerId,
-          seed: `${seed}:team-a`,
-        });
-        return { candidate, prospect, accuracy, priceOpinion };
+        return { candidate, prospect };
       });
     const boostedChemistry = normalizeToChemistryCode(baseCandidates[0].prospect.chemistry);
     const mlbPlayers = [
@@ -290,12 +284,21 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     }));
     const target = baseCandidates.find((candidate) => candidate.candidate.playerId === surfacedLot.playerId);
     if (!target) throw new Error("Expected the engine-surfaced farm lot in the candidate list.");
-    const targetChemFit = chemistryFitPriceMultiplier(target.prospect.chemistry, rosterChemistryCounts);
-    const targetRange = perceivedValueRange(
-      target.priceOpinion * targetChemFit,
-      target.accuracy,
-      `${seed}:team-a:${target.candidate.playerId}`,
+    const targetTeamId = "team-a";
+    const targetScout = SCOUTS_BY_TEAM_ID[targetTeamId];
+    const targetBand = scoutOverallGradeBand(
+      target.prospect.prospectProfile.trueGrade,
+      scoutTierForPosition(target.prospect.primaryPosition as DraftPosition, targetScout),
+      `${seed}:grade-band:${target.prospect.id}:${targetTeamId}`,
     );
+    const targetPriceRange = gradeBandToPriceRange(targetBand);
+    const targetChemFit = chemistryFitPriceMultiplier(target.prospect.chemistry, rosterChemistryCounts);
+    const targetRange = {
+      w: 0,
+      low: targetPriceRange.low * targetChemFit,
+      high: targetPriceRange.high * targetChemFit,
+      displayedEstimate: ((targetPriceRange.low * targetChemFit) + (targetPriceRange.high * targetChemFit)) / 2,
+    };
     const targetName = prospectDisplayName(target.prospect);
     const targetRangeText = formatScoutRange(targetRange);
     const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
@@ -337,7 +340,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
     expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();
     expect(targetRange.low).not.toBe(targetRange.high);
-    expect(targetRangeMidpoint).toBeCloseTo(target.priceOpinion * targetChemFit, 10);
+    expect(targetRangeMidpoint).toBeCloseTo(targetRange.displayedEstimate, 10);
     expect(targetRangeMidpoint).not.toBe(target.candidate.iv);
     expect(screen.queryByText(formatMoney(target.candidate.iv))).not.toBeInTheDocument();
     expect(screen.queryByText(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/)).not.toBeInTheDocument();

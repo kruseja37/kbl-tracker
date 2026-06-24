@@ -19,8 +19,9 @@ import {
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
 import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
-import { gradeToTwentyEighty, scoutPriceOpinion } from "../../../engines/scoutPriceOpinion";
-import { perceivedValueRange, type ScoutValueRange } from "../../../engines/scoutValueRange";
+import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
+import { gradeToTwentyEighty } from "../../../engines/scoutPriceOpinion";
+import type { ScoutValueRange } from "../../../engines/scoutValueRange";
 import {
   sortByTiltedPriority,
   tiltAnalyzerFindings,
@@ -31,7 +32,8 @@ import {
   type DraftAnalyzerMlbEntry,
 } from "../../../utils/rosterAnalyzerDraftAdapter";
 import {
-  scoutAccuracy,
+  scoutOverallGradeBand,
+  scoutTierForPosition,
   type DraftPosition,
   type LeagueBuilderProspectPlayerDto,
   type ProspectScoutDescriptor,
@@ -111,16 +113,18 @@ function scoutRangeForProspect(input: {
   const { prospect, auctionPlayer, teamId, scoutsByTeamId, rosterChemistryCounts, seed } = input;
   if (!prospect || !auctionPlayer || !teamId) return null;
   const scout = scoutsByTeamId?.[teamId];
-  const accuracy = scoutAccuracy(prospect.primaryPosition as DraftPosition, scout);
-  const priceOpinion = scoutPriceOpinion({
-    trueIV: auctionPlayer.iv,
-    scoutAccuracy: accuracy,
-    scoutId: scout?.scoutId,
-    candidateId: auctionPlayer.playerId,
-    seed: `${seed}:${teamId}`,
-  });
+  if (!scout) return null;
+  const band = scoutOverallGradeBand(
+    prospect.prospectProfile.trueGrade,
+    scoutTierForPosition(prospect.primaryPosition as DraftPosition, scout),
+    `${seed}:grade-band:${prospect.id}:${teamId}`,
+  );
+  const priceRange = gradeBandToPriceRange(band);
   const chemFit = chemistryFitPriceMultiplier(prospect.chemistry, rosterChemistryCounts);
-  return perceivedValueRange(priceOpinion * chemFit, accuracy, `${seed}:${teamId}:${auctionPlayer.playerId}`);
+  const low = priceRange.low * chemFit;
+  const high = priceRange.high * chemFit;
+  const displayedEstimate = (low + high) / 2;
+  return { w: 0, low, high, displayedEstimate };
 }
 
 function formatScoutRange(range: ScoutValueRange | null): string {
