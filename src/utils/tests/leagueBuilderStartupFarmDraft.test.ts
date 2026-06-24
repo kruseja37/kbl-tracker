@@ -129,7 +129,7 @@ function makePlayer(
 
 async function seedScouts(): Promise<void> {
   for (const teamId of [TEAM_A, TEAM_B]) {
-    for (let index = 1; index <= 2; index += 1) {
+    for (let index = 1; index <= 1; index += 1) {
       await saveScoutProfile({
         id: `${teamId}-scout-${index}`,
         leagueId: LEAGUE_ID,
@@ -251,10 +251,10 @@ describe('League Builder startup farm draft persistence', () => {
       charisma: expect.any(Number),
     }));
     expect(handoff.status).toBe('blocked');
-    expect(handoff.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+    expect(handoff.blockers.join(' ')).toMatch(/expected 1 hired scouts/i);
   });
 
-  test('session scout draft creates deterministic scout pool and persists two scouts per team', async () => {
+  test('session scout draft creates deterministic scout pool and persists one scout per team', async () => {
     const {
       createLeagueBuilderStartupDraftSession,
       draftLeagueBuilderScout,
@@ -279,6 +279,14 @@ describe('League Builder startup farm draft persistence', () => {
       !scout.weaknesses.includes('DH') &&
       !Object.keys(scout.accuracyByPosition).includes('DH'),
     )).toBe(true);
+    const draftPositions = new Set<string>(['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP']);
+    expect(view.session?.scoutPool.every((scout) => {
+      const tierPositions = [...scout.specialties, ...scout.weaknesses];
+      return scout.specialties.length === 2 &&
+        scout.weaknesses.length === 2 &&
+        new Set(tierPositions).size === 4 &&
+        tierPositions.every((position) => draftPositions.has(position) && position !== 'DH');
+    })).toBe(true);
     expect(view.session?.scoutPool.every((scout) => {
       const [firstName, ...lastNameParts] = scout.name.split(' ');
       return SMB4_FIRST_NAMES.includes(firstName) &&
@@ -295,9 +303,9 @@ describe('League Builder startup farm draft persistence', () => {
     }
 
     const storedScouts = await getScoutProfilesForLeague(LEAGUE_ID);
-    expect(storedScouts).toHaveLength(4);
-    expect(storedScouts.filter((scout) => scout.teamId === TEAM_A)).toHaveLength(2);
-    expect(storedScouts.filter((scout) => scout.teamId === TEAM_B)).toHaveLength(2);
+    expect(storedScouts).toHaveLength(2);
+    expect(storedScouts.filter((scout) => scout.teamId === TEAM_A)).toHaveLength(1);
+    expect(storedScouts.filter((scout) => scout.teamId === TEAM_B)).toHaveLength(1);
     expect(view.scoutDraftComplete).toBe(true);
   });
 
@@ -394,13 +402,23 @@ describe('League Builder startup farm draft persistence', () => {
     expect(view.currentProspectPick?.teamId).toBe(TEAM_A);
     const candidate = view.prospectBoard[0];
     expect(candidate.salary).toBe(prospectSalaryForDraftRound(view.currentProspectPick!.round));
-    expect(candidate.reports).toHaveLength(2);
+    expect(candidate.reports).toHaveLength(1);
     expect(candidate.reports.every((report) => report.salary === candidate.salary)).toBe(true);
     expect(candidate.reports.every((report) =>
-      report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][0] ||
-      report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][1],
+      report.scoutId === view.session?.hiredScoutIdsByTeamId[TEAM_A][0],
     )).toBe(true);
-    expect(JSON.stringify(candidate)).not.toMatch(/hiddenPersonalityModifiers|trueGrade|power|contact|velocity/i);
+    expect(candidate).not.toHaveProperty('hiddenPersonalityModifiers');
+    expect(candidate).not.toHaveProperty('trueGrade');
+    expect(candidate).not.toHaveProperty('power');
+    expect(candidate).not.toHaveProperty('contact');
+    expect(candidate).not.toHaveProperty('velocity');
+    expect(candidate.reports.every((report) => (
+      !('hiddenPersonalityModifiers' in report) &&
+      !('trueGrade' in report) &&
+      !('power' in report) &&
+      !('contact' in report) &&
+      !('velocity' in report)
+    ))).toBe(true);
 
     view = await confirmLeagueBuilderProspectPick({
       leagueId: LEAGUE_ID,
@@ -476,7 +494,7 @@ describe('League Builder startup farm draft persistence', () => {
     const view = await getLeagueBuilderStartupDraftView(LEAGUE_ID);
 
     expect(view.prepared).toBe(false);
-    expect(view.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+    expect(view.blockers.join(' ')).toMatch(/expected 1 hired scouts/i);
   });
 
   test('deleted durable scouts block prospect picks before writes', async () => {

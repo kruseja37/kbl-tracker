@@ -6,6 +6,7 @@ import {
   applyFranchiseMoraleEffect,
   getFranchiseMoraleSnapshot,
   resetFranchiseMoraleDatabaseForTests,
+  seedFranchiseMoraleBaseline,
 } from '../franchiseMoraleState';
 import { setFranchisePhase2MoraleEnabledForTests } from '../franchisePhase2Flags';
 import { syncEngine } from '../syncEngine';
@@ -90,6 +91,95 @@ describe('franchise morale state', () => {
     expect(snapshot?.currentValue).toBe(0);
     expect(snapshot?.history).toHaveLength(2);
     expect(snapshot?.history.map((entry) => entry.sourceKind)).toEqual(['manual-override', 'manual-override']);
+  });
+
+  test('draft seed writes baseline and current value with a draft-seed history entry', async () => {
+    const result = await seedFranchiseMoraleBaseline({
+      ...scope,
+      targetType: 'player',
+      playerId: 'draft-player',
+      value: 120,
+      timestamp: '2026-01-05T00:00:00.000Z',
+    });
+
+    expect(result.status).toBe('applied');
+    expect(result.previousValue).toBe(50);
+    expect(result.currentValue).toBe(99);
+    expect(result.delta).toBe(49);
+    const snapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'draft-player');
+    expect(snapshot).toMatchObject({
+      baselineValue: 99,
+      currentValue: 99,
+      lastModified: '2026-01-05T00:00:00.000Z',
+    });
+    expect(snapshot?.history).toEqual([
+      expect.objectContaining({
+        sourceEventId: 'draft-seed:player:draft-player',
+        sourceKind: 'draft-seed',
+        previousValue: 50,
+        currentValue: 99,
+        delta: 49,
+        reason: 'Draft-derived starting morale (§10 freeze)',
+        actorDisplayName: 'System',
+        timestamp: '2026-01-05T00:00:00.000Z',
+      }),
+    ]);
+  });
+
+  test('draft seed is idempotent by existing draft-seed history and does not overwrite the first value', async () => {
+    const first = await seedFranchiseMoraleBaseline({
+      ...scope,
+      targetType: 'team-fan',
+      teamId: 'team-draft',
+      value: 42,
+      actorDisplayName: 'Seed Writer',
+      timestamp: '2026-01-06T00:00:00.000Z',
+    });
+    const second = await seedFranchiseMoraleBaseline({
+      ...scope,
+      targetType: 'team-fan',
+      teamId: 'team-draft',
+      value: 88,
+      timestamp: '2026-01-07T00:00:00.000Z',
+    });
+
+    expect(first.status).toBe('applied');
+    expect(second.status).toBe('skipped');
+    const snapshot = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-draft');
+    expect(snapshot?.baselineValue).toBe(42);
+    expect(snapshot?.currentValue).toBe(42);
+    expect(snapshot?.history).toHaveLength(1);
+    expect(snapshot?.history[0]).toMatchObject({
+      sourceKind: 'draft-seed',
+      actorDisplayName: 'Seed Writer',
+      currentValue: 42,
+    });
+  });
+
+  test('draft seed validates the required target identity', async () => {
+    const missingPlayer = await seedFranchiseMoraleBaseline({
+      ...scope,
+      targetType: 'player',
+      value: 55,
+    });
+    const missingTeam = await seedFranchiseMoraleBaseline({
+      ...scope,
+      targetType: 'team-fan',
+      value: 55,
+    });
+
+    expect(missingPlayer).toMatchObject({
+      status: 'failed',
+      snapshot: null,
+      currentValue: null,
+      blockers: ['Player id is required for player morale.'],
+    });
+    expect(missingTeam).toMatchObject({
+      status: 'failed',
+      snapshot: null,
+      currentValue: null,
+      blockers: ['Team id is required for fan morale.'],
+    });
   });
 
   test('matrix auto path is dark when the Phase-2 morale flag is disabled', async () => {

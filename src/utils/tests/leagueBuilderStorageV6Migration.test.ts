@@ -31,6 +31,7 @@ import type { LeagueBuilderMlbDraftSession } from '../leagueBuilderStorage';
 const DB_NAME = 'kbl-league-builder';
 
 const expectedStores = [
+  'auctionSessions',
   'globalPlayers',
   'globalTeams',
   'leaguePlayerOverrides',
@@ -189,7 +190,76 @@ async function seedV6LeagueBuilderDatabase(): Promise<void> {
   });
 }
 
-describe('leagueBuilderStorage v7 MLB draft session migration', () => {
+async function seedV7LeagueBuilderDatabase(): Promise<void> {
+  await deleteDatabase(DB_NAME).catch(() => undefined);
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 7);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      const leagues = db.createObjectStore('leagueTemplates', { keyPath: 'id' });
+      leagues.createIndex('name', 'name', { unique: false });
+      leagues.put({
+        id: 'league-v7',
+        name: 'Legacy V7 League',
+        createdDate: '2026-06-20T00:00:00.000Z',
+        lastModified: '2026-06-20T00:00:00.000Z',
+        teamIds: ['team-v7'],
+        conferences: [],
+        divisions: [],
+        defaultRulesPreset: 'rules-v7',
+      });
+
+      const teams = db.createObjectStore('globalTeams', { keyPath: 'id' });
+      teams.createIndex('name', 'name', { unique: false });
+      teams.createIndex('abbreviation', 'abbreviation', { unique: false });
+      teams.put({ id: 'team-v7', name: 'Vultures', abbreviation: 'VLT' });
+
+      const players = db.createObjectStore('globalPlayers', { keyPath: 'id' });
+      players.createIndex('lastName', 'lastName', { unique: false });
+      players.createIndex('primaryPosition', 'primaryPosition', { unique: false });
+      players.createIndex('overallGrade', 'overallGrade', { unique: false });
+      players.put({ id: 'player-v7', lastName: 'Legacy', primaryPosition: 'CF', overallGrade: 'B+' });
+
+      const overrides = db.createObjectStore('leaguePlayerOverrides', { keyPath: 'id' });
+      overrides.createIndex('leagueId', 'leagueId', { unique: false });
+      overrides.createIndex('playerId', 'playerId', { unique: false });
+      overrides.put({ id: 'league-v7::player-v7', leagueId: 'league-v7', playerId: 'player-v7' });
+
+      const rules = db.createObjectStore('rulesPresets', { keyPath: 'id' });
+      rules.put({ id: 'rules-v7', name: 'Rules V7' });
+
+      const rosters = db.createObjectStore('teamRosters', { keyPath: 'teamId' });
+      rosters.put({ teamId: 'team-v7', mlbRoster: ['player-v7'], farmRoster: [] });
+
+      const scoutProfiles = db.createObjectStore('scoutProfiles', { keyPath: 'id' });
+      scoutProfiles.createIndex('leagueId', 'leagueId', { unique: false });
+      scoutProfiles.createIndex('teamId', 'teamId', { unique: false });
+      scoutProfiles.put({ id: 'scout-v7', leagueId: 'league-v7', teamId: 'team-v7' });
+
+      const startupDraftSessions = db.createObjectStore('startupDraftSessions', { keyPath: 'id' });
+      startupDraftSessions.createIndex('leagueId', 'leagueId', { unique: false });
+      startupDraftSessions.put({ id: 'league-v7::startup-farm-draft::1', leagueId: 'league-v7' });
+
+      const registeredPools = db.createObjectStore('registeredPools', { keyPath: 'leagueId' });
+      registeredPools.put({ leagueId: 'league-v7', players: [{ id: 'player-v7', iv: 2, salary: 2 }] });
+
+      const mlbDraftSessions = db.createObjectStore('mlbDraftSessions', { keyPath: 'id' });
+      mlbDraftSessions.createIndex('leagueId', 'leagueId', { unique: false });
+      mlbDraftSessions.put({ id: 'league-v7::startup-mlb-draft::1', leagueId: 'league-v7', seasonNumber: 1 });
+    };
+
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+describe('leagueBuilderStorage v8 auction session migration', () => {
   beforeEach(async () => {
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
@@ -200,11 +270,11 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test('fresh v7 database creates mlbDraftSessions and preserves all prior stores', async () => {
+  test('fresh v8 database creates auctionSessions and preserves all prior stores', async () => {
     const db = await initLeagueBuilderDatabase();
 
     expect(db.name).toBe(DB_NAME);
-    expect(db.version).toBe(7);
+    expect(db.version).toBe(8);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
   });
 
@@ -212,7 +282,7 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
     await seedV5LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(7);
+    expect(db.version).toBe(8);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const template = await getLeagueTemplate('league-v5');
@@ -242,11 +312,11 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
     rawDb.close();
   });
 
-  test('raw v6 database upgrades additively to v7 and preserves all nine prior stores with data', async () => {
+  test('raw v6 database upgrades additively to v8 and preserves all nine prior stores with data', async () => {
     await seedV6LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(7);
+    expect(db.version).toBe(8);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const priorStoreAssertions: Array<[string, string, string]> = [
@@ -268,6 +338,38 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
 
     const mlbDraftSessions = await getAllFromStore(db, 'mlbDraftSessions');
     expect(mlbDraftSessions).toEqual([]);
+
+    const auctionSessions = await getAllFromStore(db, 'auctionSessions');
+    expect(auctionSessions).toEqual([]);
+  });
+
+  test('raw v7 database upgrades additively to v8 and preserves all prior stores + creates auctionSessions', async () => {
+    await seedV7LeagueBuilderDatabase();
+
+    const db = await initLeagueBuilderDatabase();
+    expect(db.version).toBe(8);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
+
+    const priorStoreAssertions: Array<[string, string, string]> = [
+      ['leagueTemplates', 'id', 'league-v7'],
+      ['globalTeams', 'id', 'team-v7'],
+      ['globalPlayers', 'id', 'player-v7'],
+      ['leaguePlayerOverrides', 'id', 'league-v7::player-v7'],
+      ['rulesPresets', 'id', 'rules-v7'],
+      ['teamRosters', 'teamId', 'team-v7'],
+      ['scoutProfiles', 'id', 'scout-v7'],
+      ['startupDraftSessions', 'id', 'league-v7::startup-farm-draft::1'],
+      ['registeredPools', 'leagueId', 'league-v7'],
+      ['mlbDraftSessions', 'id', 'league-v7::startup-mlb-draft::1'],
+    ];
+
+    for (const [storeName, keyField, value] of priorStoreAssertions) {
+      const records = await getAllFromStore(db, storeName);
+      expect(records).toEqual(expect.arrayContaining([expect.objectContaining({ [keyField]: value })]));
+    }
+
+    const auctionSessions = await getAllFromStore(db, 'auctionSessions');
+    expect(auctionSessions).toEqual([]);
   });
 
   test('saveRegisteredPool, getRegisteredPool, and deleteRegisteredPool round-trip', async () => {
@@ -369,6 +471,50 @@ describe('leagueBuilderStorage v7 MLB draft session migration', () => {
 
     await expect(getTeam(savedWithIdentity.id)).resolves.toEqual(
       expect.objectContaining({ capIdentity }),
+    );
+  });
+
+  test('farmCapIdentity is an additive Team field that round-trips when present and stays undefined when absent', async () => {
+    const savedWithoutIdentity = await saveTeam({
+      name: 'No Farm Identity Club',
+      abbreviation: 'NFC',
+      location: 'Nowhere',
+      nickname: 'Blank',
+      colors: { primary: '#111111', secondary: '#eeeeee' },
+      stadium: 'Plain Park',
+      leagueIds: ['league-a'],
+    });
+
+    await expect(getTeam(savedWithoutIdentity.id)).resolves.toEqual(
+      expect.not.objectContaining({ farmCapIdentity: expect.anything() }),
+    );
+
+    const farmCapIdentity = {
+      bandPriorities: {
+        Power: 6,
+        Contact: 0,
+        Speed: 1,
+        Defense: 4,
+        Rotation: 2,
+        Bullpen: 3,
+      },
+      increase: ['Big Swings', 'Bullpen Aces'],
+      decrease: ['Glove First'],
+    };
+
+    const savedWithIdentity = await saveTeam({
+      name: 'Farm Identity Club',
+      abbreviation: 'FIC',
+      location: 'Texture',
+      nickname: 'Seedlings',
+      colors: { primary: '#224466', secondary: '#ffee99' },
+      stadium: 'Farm Yard',
+      leagueIds: ['league-a'],
+      farmCapIdentity,
+    });
+
+    await expect(getTeam(savedWithIdentity.id)).resolves.toEqual(
+      expect.objectContaining({ farmCapIdentity }),
     );
   });
 });

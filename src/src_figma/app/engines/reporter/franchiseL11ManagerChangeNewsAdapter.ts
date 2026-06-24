@@ -48,6 +48,9 @@ export interface FranchiseManagerChangeNewsInput {
   seasonNumber: number;
   teamId: string;
   teamName: string;
+  /** §8 front-office actor; live caller supplies from getGmProfile post-D13. */
+  gmId?: string;
+  gmName?: string;
   firedManagerId: string;
   firedManagerName?: string;
   successorManagerId?: string;
@@ -98,6 +101,8 @@ export function buildFranchiseManagerChangeSeasonNewsEvent(
     facts: {
       teamId: input.teamId,
       teamName: input.teamName,
+      gmId: input.gmId,
+      gmName: input.gmName,
       firedManagerId: input.firedManagerId,
       firedManagerName: input.firedManagerName,
       successorManagerId: input.successorManagerId,

@@ -8,6 +8,7 @@ export type RosterAnalyzerSurface =
   | 'franchise_team_hub'
   | 'franchise_home'
   | 'game_prep'
+  | 'draft_prep'
   | 'offseason_roster_lock_preview';
 
 export type AnalyzerSeverity = 'blocker' | 'critical' | 'warning' | 'info';

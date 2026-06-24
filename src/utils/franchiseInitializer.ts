@@ -36,7 +36,23 @@ import {
   updateFranchiseMetadata,
   setActiveFranchise,
 } from './franchiseManager';
-import { getLeagueTemplate, getTeam, type LeagueTemplate } from './leagueBuilderStorage';
+import { buildGmProfile } from './gmIdentity';
+import {
+  createFarmAuctionSessionId,
+  getAuctionSession,
+  getAuctionSessionById,
+  getLeagueTemplate,
+  getPlayer,
+  savePlayer,
+  getTeam,
+  type LeagueTemplate,
+} from './leagueBuilderStorage';
+import { computeDraftFreeze } from '../engines/draftFreeze';
+import {
+  TRUE_VALUE_CALCULATION_VERSION,
+  normalizeTrueValuePosition,
+  type PlayerPosition,
+} from '../engines/salaryCalculator';
 import { FRANCHISE_PROFILE_GRADES } from './franchisePlayerProfileEdit';
 import type { ScheduleTeam } from './scheduleGenerator';
 import {
@@ -48,6 +64,7 @@ import {
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
   getAllFranchiseTeams,
+  getFranchisePlayer,
   saveFranchisePlayer,
   saveFranchiseTeam,
   type Player,
@@ -67,15 +84,34 @@ import {
   getFranchiseSeasonId,
   getFranchiseSeasonName,
 } from './franchisePersistenceContract';
+import { buildDraftFreezeInputs } from './draftFreezeInputs';
+import { deriveShillTeamIds } from '../engines/cpuTeamRoles';
+import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import {
   carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason,
   getFranchiseFarmRoster,
 } from './franchiseFarmStorage';
+import { seedFranchiseMoraleBaseline } from './franchiseMoraleState';
+import {
+  saveFranchiseTrueValueRows,
+  type FranchiseTrueValueRow,
+} from './franchiseTrueValueStorage';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
   teams: ScheduleTeam[];
+}
+
+async function resolveDraftBaselinePosition(
+  playerId: string,
+  freezePosition: PlayerPosition | null | undefined,
+  metaPosition: PlayerPosition | null | undefined,
+): Promise<PlayerPosition | null> {
+  if (freezePosition) return freezePosition;
+  if (metaPosition) return metaPosition;
+  const draftedPlayer = await getPlayer(playerId);
+  return normalizeTrueValuePosition(draftedPlayer?.primaryPosition);
 }
 
 function normalizeSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]): string[] {
@@ -609,6 +645,11 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     const controlledTeamId = teamControlSnapshot.controlledTeams[0]?.teamId || teams[0].teamId;
     const controlledTeam = teams.find(t => t.teamId === controlledTeamId);
     const controlledTeamName = controlledTeam?.teamName || 'Unknown Team';
+    const gmProfile = buildGmProfile({
+      franchiseId,
+      controlledTeamId,
+      gmName: config.gmName,
+    });
 
     // 5. Update franchise metadata with enhanced fields
     await updateFranchiseMetadata(franchiseId, {
@@ -616,6 +657,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
       leagueId: franchiseLeagueId,
       controlledTeamId,
       controlledTeamName,
+      gmName: gmProfile.displayName,
       currentSeason: 1,
     });
 
@@ -644,6 +686,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     const storedConfig: StoredFranchiseConfig = {
       ...franchiseConfig,
       franchiseType: teamControlSnapshot.franchiseType,
+      gm: gmProfile,
       teamControl: teamControlSnapshot.teamControl,
       controlledTeams: teamControlSnapshot.controlledTeams,
       rulesSnapshot,
@@ -668,6 +711,127 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     const initialSeasonId = getFranchiseSeasonId(franchiseId, 1);
     await assignTeamCaptains(franchiseId, undefined, hiddenModifierBackfill.players);
     await assignTeamFanHopefuls(franchiseId, initialSeasonId, undefined, hiddenModifierBackfill.players);
+
+    // RB-7b §10 payoff: draft-derived morale baselines override neutral-50 defaults.
+    const mlbSession = await getAuctionSession(config.league, 1);
+    if (mlbSession?.session) {
+      const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(config.league, 1));
+      const neutralModifiers = {
+        loyalty: 50,
+        ambition: 50,
+        resilience: 50,
+        charisma: 50,
+      };
+      const metaByPlayerId = new Map(hiddenModifierBackfill.players.map((player) => [
+        player.id,
+        {
+          personality: player.personality,
+          modifiers: player.hiddenPersonalityModifiers ?? neutralModifiers,
+          position: normalizeTrueValuePosition(player.primaryPosition),
+        },
+      ]));
+      const auctionLeagueTemplate = await getLeagueTemplate(config.league);
+      const leagueTeams: { id: string; controlledBy?: 'human' | 'ai' }[] = [];
+      for (const teamId of auctionLeagueTemplate?.teamIds ?? []) {
+        const team = await getTeam(teamId);
+        if (team) {
+          leagueTeams.push({ id: team.id, controlledBy: team.controlledBy });
+        }
+      }
+      const mlbShillIds = new Set(deriveShillTeamIds(
+        mlbSession.session as CpuShillAuctionSession,
+        leagueTeams,
+      ));
+      const farmShillIds = new Set(deriveShillTeamIds(
+        (farmSession?.session ?? null) as CpuShillAuctionSession | null,
+        leagueTeams,
+      ));
+      const inputs = buildDraftFreezeInputs({
+        mlbSession: mlbSession.session,
+        farmSession: farmSession?.session ?? null,
+        metaByPlayerId,
+        mlbExcludedTeamIds: mlbShillIds,
+        farmExcludedTeamIds: farmShillIds,
+      });
+      const freeze = computeDraftFreeze(inputs);
+      const scope = {
+        franchiseId,
+        seasonId: initialSeasonId,
+        statsScopeId: initialSeasonId,
+        seasonNumber: 1,
+      };
+
+      for (const player of freeze.players) {
+        const existing = await getFranchisePlayer(franchiseId, player.playerId);
+        if (existing) {
+          if (existing.settledSalary === player.settledSalary) continue; // idempotent / re-init safe
+          await saveFranchisePlayer(franchiseId, { ...existing, settledSalary: player.settledSalary });
+          continue;
+        }
+
+        if (player.tier !== 'FARM') continue;
+
+        const farmProspect = await getPlayer(player.playerId);
+        if (!farmProspect) continue;
+        if (
+          farmProspect.salary === player.settledSalary &&
+          farmProspect.settledSalary === player.settledSalary
+        ) {
+          continue;
+        }
+        await savePlayer({
+          ...farmProspect,
+          salary: player.settledSalary,
+          settledSalary: player.settledSalary,
+        });
+      }
+
+      for (const player of freeze.players) {
+        await seedFranchiseMoraleBaseline({
+          ...scope,
+          targetType: 'player',
+          playerId: player.playerId,
+          value: player.startingMorale,
+        });
+      }
+      for (const team of freeze.teams) {
+        await seedFranchiseMoraleBaseline({
+          ...scope,
+          targetType: 'team-fan',
+          teamId: team.teamId,
+          value: team.startingFanMorale,
+        });
+      }
+
+      const computedAt = new Date().toISOString();
+      const draftBaselineRows: FranchiseTrueValueRow[] = [];
+      for (const player of freeze.players) {
+        const position = await resolveDraftBaselinePosition(
+          player.playerId,
+          player.position,
+          metaByPlayerId.get(player.playerId)?.position,
+        );
+        if (!position) {
+          throw new Error(`Missing draft-baseline position for drafted player ${player.playerId}`);
+        }
+
+        draftBaselineRows.push({
+          franchiseId,
+          seasonId: initialSeasonId,
+          statsScopeId: 'draft-baseline',
+          playerId: player.playerId,
+          trueValue: player.iv,
+          contractValue: player.settledSalary,
+          valueDelta: player.iv - player.settledSalary,
+          warPercentile: 0,
+          position,
+          peerPoolSize: 0,
+          calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+          computedAt,
+        });
+      }
+      await saveFranchiseTrueValueRows(draftBaselineRows);
+    }
 
     // 9. Create the season metadata record franchise mode reads later.
     await createFranchiseSeasonMetadata(

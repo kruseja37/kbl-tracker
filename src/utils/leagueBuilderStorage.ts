@@ -18,7 +18,9 @@ import {
   normalizeCheckpointCadence,
   type CheckpointCadence,
 } from '../data/rosterEngineConstants';
+import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../data/chemistryCanonical';
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
+import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
@@ -26,6 +28,7 @@ import type { ParkDimensions } from '../data/parkLookup';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 import type { RebrandRelocationMarker } from '../engines/franchiseRebrandCascade';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+import type { FarmAuctionPool } from './farmAuctionPool';
 import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import {
   markOptimalLineupSnapshotsStaleForChange,
@@ -38,7 +41,7 @@ export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
@@ -51,6 +54,7 @@ const STORES = {
   STARTUP_DRAFT_SESSIONS: 'startupDraftSessions',
   REGISTERED_POOLS: 'registeredPools',
   MLB_DRAFT_SESSIONS: 'mlbDraftSessions',
+  AUCTION_SESSIONS: 'auctionSessions',
 } as const;
 
 // ============================================
@@ -100,11 +104,16 @@ export interface LeagueTemplate {
   conferences: Conference[];
   divisions: Division[];
   defaultRulesPreset: string;
+  draftFormat?: 'auction' | 'snake';
   tier?: TierKey;
   balanceMode?: BalanceMode;
   checkpointCadence?: CheckpointCadence;
   logoUrl?: string;
   color?: string;
+}
+
+export function getLeagueDraftFormat(template: Pick<LeagueTemplate, 'draftFormat'> | null | undefined): 'auction' | 'snake' {
+  return template?.draftFormat ?? 'auction';
 }
 
 // Team
@@ -139,6 +148,7 @@ export interface Team {
   heritageFacts?: string[];
   rivalries?: TeamRivalry[];
   capIdentity?: TeamCapIdentity;
+  farmCapIdentity?: TeamCapIdentity;
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
   teamHistory?: RebrandRelocationMarker[];
@@ -223,6 +233,17 @@ export interface LeagueBuilderMlbDraftSession {
   lastModified: string;
 }
 
+export interface LeagueBuilderAuctionSession {
+  id: string;
+  leagueId: string;
+  seasonNumber: number;
+  seed: string;
+  session: CpuShillAuctionSession;
+  pool?: FarmAuctionPool;
+  createdDate: string;
+  lastModified: string;
+}
+
 // Player
 export interface Player {
   id: string;
@@ -263,6 +284,8 @@ export interface Player {
   mojo: MojoState;
   fame: number;
   salary: number;
+  // §10 freeze: the auction winning bid (RB-7c); additive, no consumer in v1
+  settledSalary?: number;
   salaryCalculationVersion?: string;
   salarySeasonId?: string;
   salaryStatsScopeId?: string;
@@ -758,6 +781,11 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains(STORES.MLB_DRAFT_SESSIONS)) {
         const store = db.createObjectStore(STORES.MLB_DRAFT_SESSIONS, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.AUCTION_SESSIONS)) {
+        const store = db.createObjectStore(STORES.AUCTION_SESSIONS, { keyPath: 'id' });
         store.createIndex('leagueId', 'leagueId', { unique: false });
       }
 
@@ -1452,6 +1480,14 @@ export function createMlbDraftSessionId(leagueId: string, seasonNumber = 1): str
   return `${leagueId}::startup-mlb-draft::${seasonNumber}`;
 }
 
+export function createAuctionSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-auction-draft::${seasonNumber}`;
+}
+
+export function createFarmAuctionSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-farm-auction-draft::${seasonNumber}`;
+}
+
 export async function getAllScoutProfiles(): Promise<LeagueBuilderScoutProfile[]> {
   const db = await initLeagueBuilderDatabase();
 
@@ -1641,6 +1677,81 @@ export async function deleteMlbDraftSession(leagueId: string, seasonNumber = 1):
   });
 }
 
+export async function getAuctionSession(
+  leagueId: string,
+  seasonNumber = 1,
+): Promise<LeagueBuilderAuctionSession | null> {
+  return getAuctionSessionById(createAuctionSessionId(leagueId, seasonNumber));
+}
+
+export async function getAuctionSessionById(id: string): Promise<LeagueBuilderAuctionSession | null> {
+  const db = await initLeagueBuilderDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readonly');
+    const store = tx.objectStore(STORES.AUCTION_SESSIONS);
+    const request = store.get(id);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveAuctionSession(
+  session: Omit<LeagueBuilderAuctionSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderAuctionSession> {
+  return saveAuctionSessionById(session);
+}
+
+export async function saveAuctionSessionById(
+  session: Omit<LeagueBuilderAuctionSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderAuctionSession> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = await getAuctionSessionById(session.id);
+  const fullSession: LeagueBuilderAuctionSession = {
+    ...session,
+    seed: session.session.config.nominationOrderSeed,
+    createdDate: session.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.AUCTION_SESSIONS);
+    const request = store.put(fullSession);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'auctionSessions', fullSession.id, fullSession);
+      resolve(fullSession);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteAuctionSession(leagueId: string, seasonNumber = 1): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createAuctionSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.AUCTION_SESSIONS);
+    const request = store.delete(id);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'auctionSessions', id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // ============================================
 // DEFAULT PRESETS
 // ============================================
@@ -1755,6 +1866,7 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
       { store: STORES.STARTUP_DRAFT_SESSIONS, keyField: 'id' },
       { store: STORES.REGISTERED_POOLS, keyField: 'leagueId' },
       { store: STORES.MLB_DRAFT_SESSIONS, keyField: 'id' },
+      { store: STORES.AUCTION_SESSIONS, keyField: 'id' },
     ];
 
     for (const { store: storeName, keyField } of storeConfigs) {
@@ -1781,6 +1893,7 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
         STORES.STARTUP_DRAFT_SESSIONS,
         STORES.REGISTERED_POOLS,
         STORES.MLB_DRAFT_SESSIONS,
+        STORES.AUCTION_SESSIONS,
       ],
       'readwrite'
     );
@@ -1795,6 +1908,7 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
     tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS).clear();
     tx.objectStore(STORES.REGISTERED_POOLS).clear();
     tx.objectStore(STORES.MLB_DRAFT_SESSIONS).clear();
+    tx.objectStore(STORES.AUCTION_SESSIONS).clear();
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -1810,24 +1924,6 @@ import { SUPER_MEGA_LEAGUE, MAJOR_LEAGUE_BASEBALL } from '../data/leagueStructur
 import { MLB_TEAMS } from '../data/teams/mlbTeams';
 import { ALL_MLB_PLAYERS } from '../data/players/mlb';
 import { calculateSalary, type PlayerForSalary, type PlayerPosition as SalaryPosition } from '../engines/salaryCalculator';
-
-/**
- * Chemistry code to full chemistry name mapping
- */
-const CHEMISTRY_MAP: Record<string, Chemistry> = {
-  'SPI': 'Spirited',
-  'DIS': 'Disciplined',
-  'CMP': 'Competitive',
-  'SCH': 'Scholarly',
-  'CRA': 'Crafty',
-  'SPIRITED': 'Spirited',
-  'DISCIPLINED': 'Disciplined',
-  'COMPETITIVE': 'Competitive',
-  'SCHOLARLY': 'Scholarly',
-  'CRAFTY': 'Crafty',
-  'FIERY': 'Competitive',  // Map FIERY to Competitive
-  'GRITTY': 'Competitive', // Map GRITTY to Competitive
-};
 
 /**
  * Compute salary from SMB4 player ratings using the salary engine
@@ -1871,8 +1967,8 @@ function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'crea
   const firstName = nameParts[0] || 'Unknown';
   const lastName = nameParts.slice(1).join(' ') || player.id;
 
-  // Map chemistry code to full name
-  const chemistry = CHEMISTRY_MAP[player.chemistry] || CHEMISTRY_MAP[player.chemistry.toUpperCase()] || 'Competitive';
+  // Map player chemistry code to the League Builder title-case name.
+  const chemistry: Chemistry = CHEMISTRY_CODE_TO_WORD[normalizeToChemistryCode(player.chemistry)];
 
   // Determine position for League Builder format
   let primaryPosition: Position = player.primaryPosition as Position;

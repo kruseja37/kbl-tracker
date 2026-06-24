@@ -6,6 +6,7 @@ import {
   type Player,
   type Team,
 } from "../../hooks/useLeagueBuilderData";
+import { LongPressReveal } from "../components/LongPressReveal";
 import {
   confirmLeagueBuilderProspectPick,
   createLeagueBuilderStartupDraftSession,
@@ -310,7 +311,7 @@ export function LeagueBuilderDraft() {
 
             {prepared && (
               <div className="mt-5 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 text-sm">
-                League Builder is prepared: each team has two hired scouts and 10 hidden-safe FARM prospects. Franchise Setup can validate and copy this state.
+                League Builder is prepared: each team has one hired scout and 10 hidden-safe FARM prospects. Franchise Setup can validate and copy this state.
               </div>
             )}
           </section>
@@ -373,7 +374,9 @@ export function LeagueBuilderDraft() {
                       <div>Chemistry {candidate.chemistry}</div>
                       <div>Personality {candidate.personality}</div>
                       <div>Salary ${candidate.salary.toFixed(1)}M</div>
-                      <div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>
+                      <div>Traits {candidate.traitCount}</div>
+                      <div>Archetype {candidate.archetypeFamily}</div>
+                      {candidate.secondaryPosition ? <div>Secondary {candidate.secondaryPosition}</div> : null}
                     </div>
                     <div className="space-y-2 mb-3">
                       {candidate.reports.map((report) => (
@@ -382,6 +385,21 @@ export function LeagueBuilderDraft() {
                           <div>Scouted {report.scoutedGrade} · {report.scoutConfidence} · {report.scoutAccuracy}%</div>
                           <div>Specialties: {report.scoutSpecialtiesVisible.join(", ")}</div>
                           <div>Weaknesses: {report.scoutWeaknessesVisible.join(", ")}</div>
+                          {report.toolBands ? (
+                            <LongPressReveal
+                              label="Hold to reveal scout bands"
+                              className="mt-2 text-left text-[#E8E8D8]/75"
+                            >
+                              <div className="text-xs text-[#E8E8D8]/75 space-y-0.5">
+                                {Object.entries(report.toolBands).map(([tool, band]) => (
+                                  <div key={tool}>{tool.toUpperCase()} {band.lower}–{band.upper}</div>
+                                ))}
+                                {report.overallGradeBand ? (
+                                  <div>Grade {report.overallGradeBand.best}–{report.overallGradeBand.worst}</div>
+                                ) : null}
+                              </div>
+                            </LongPressReveal>
+                          ) : null}
                         </div>
                       ))}
                     </div>
@@ -426,7 +444,7 @@ export function LeagueBuilderDraft() {
             <div>
               <h4 className="font-bold text-sm mb-1">League Builder Startup Draft</h4>
               <p className="text-xs text-[#E8E8D8]/70">
-                Hire two scouts for every team, then draft prospects one pick at a time. Only the team on the clock sees its own scouts' reports. True ratings and hidden personality modifiers stay hidden until call-up.
+                Hire one scout for every team, then draft prospects one pick at a time. Only the team on the clock sees its own scouts' reports. True ratings and hidden personality modifiers stay hidden until call-up.
               </p>
             </div>
           </div>

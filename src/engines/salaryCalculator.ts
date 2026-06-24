@@ -38,6 +38,7 @@ import {
   type IVPlayerInput,
 } from './ivEngine';
 import { getPercentile, getValueAtPercentile } from './percentile';
+import { LEAGUE_MINIMUM_SALARY } from '../data/rosterEngineConstants';
 
 // Re-export DHContext for consumers
 export type { DHContext } from '../utils/leagueConfig';
@@ -341,7 +342,7 @@ export const MAX_SALARY = 166648.6; // CALIBRATE (T5 bridge — see PROMPT_CONTR
 /**
  * Minimum salary in canonical kblIV dollars.
  */
-export const MIN_SALARY = 1666.49; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+export const MIN_SALARY = LEAGUE_MINIMUM_SALARY; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 
 /**
  * Personality modifiers (for free agency)

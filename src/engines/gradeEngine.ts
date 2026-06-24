@@ -18,6 +18,8 @@
 
 export type Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'C-' | 'D+' | 'D';
 
+const GRADE_LADDER: readonly Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'];
+
 export interface PositionPlayerRatings {
   power: number;
   contact: number;
@@ -95,6 +97,18 @@ const PITCHER_WEIGHTS = {
   junk: 1 / 3,
   accuracy: 1 / 3,
 };
+
+// ============================================
+// GRADE DISPLAY
+// ============================================
+
+export function gradeToTwentyEighty(grade: Grade): number {
+  const index = GRADE_LADDER.indexOf(grade);
+  if (index < 0) return 50;
+
+  const value = Math.round(80 - index * (60 / (GRADE_LADDER.length - 1)));
+  return clamp(value, 20, 80);
+}
 
 // ============================================
 // GRADE CALCULATION

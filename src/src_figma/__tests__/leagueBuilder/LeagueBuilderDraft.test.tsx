@@ -182,8 +182,9 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
         scoutConfidence: 'high',
         chemistry: 'Crafty',
         personality: 'Competitive',
-        trait1: 'RBI Man',
-        trait2: 'First Pitch Slayer',
+        traitCount: 2,
+        archetypeFamily: 'Balanced',
+        secondaryPosition: 'LF',
         salary: 2.0,
         reports: [
           {
@@ -198,8 +199,9 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
             scoutConfidence: 'high',
             chemistry: 'Crafty',
             personality: 'Competitive',
-            trait1: 'RBI Man',
-            trait2: 'First Pitch Slayer',
+            traitCount: 2,
+            archetypeFamily: 'Balanced',
+            secondaryPosition: 'LF',
             salary: 2.0,
             scoutId: 'scout-1',
             scoutName: 'Riley Kline',
@@ -219,8 +221,9 @@ function prospectDraftView(overrides: Record<string, unknown> = {}) {
             scoutConfidence: 'medium',
             chemistry: 'Crafty',
             personality: 'Competitive',
-            trait1: 'RBI Man',
-            trait2: 'First Pitch Slayer',
+            traitCount: 2,
+            archetypeFamily: 'Balanced',
+            secondaryPosition: 'LF',
             salary: 2.0,
             scoutId: 'scout-2',
             scoutName: 'Morgan Vale',
@@ -352,6 +355,9 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
     expect(screen.getByText('ON THE CLOCK: Boston Sox')).toBeInTheDocument();
     expect(screen.getByText('Ari Banks')).toBeInTheDocument();
     expect(screen.getByText('Salary $2.0M')).toBeInTheDocument();
+    expect(screen.getByText('Traits 2')).toBeInTheDocument();
+    expect(screen.getByText('Archetype Balanced')).toBeInTheDocument();
+    expect(screen.getByText('Secondary LF')).toBeInTheDocument();
     expect(screen.getByText('Riley Kline')).toBeInTheDocument();
     expect(screen.getByText('Morgan Vale')).toBeInTheDocument();
     expect(screen.getByText(/Scouted B\+/i)).toBeInTheDocument();
@@ -379,17 +385,17 @@ describe('LeagueBuilderDraft scout and prospect draft UI', () => {
       scoutDraftComplete: true,
       prospectDraftComplete: true,
       teams: [
-        { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 10, mlbCount: 22, missingFarm: 0, scoutCount: 2, prepared: true },
-        { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 10, mlbCount: 22, missingFarm: 0, scoutCount: 2, prepared: true },
+        { teamId: 'team-1', teamName: 'Boston Sox', farmCount: 10, mlbCount: 22, missingFarm: 0, scoutCount: 1, prepared: true },
+        { teamId: 'team-2', teamName: 'Detroit Tigers', farmCount: 10, mlbCount: 22, missingFarm: 0, scoutCount: 1, prepared: true },
       ],
     }) as any);
 
     render(<LeagueBuilderDraft />);
 
     expect(await screen.findByText('PREPARED')).toBeInTheDocument();
-    expect(screen.getByText(/each team has two hired scouts and 10 hidden-safe FARM prospects/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Scouts 2\/2/i)).toHaveLength(2);
-    expect(screen.queryByText(/Scouts 0\/2/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/each team has one hired scout and 10 hidden-safe FARM prospects/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Scouts 1\/1/i)).toHaveLength(2);
+    expect(screen.queryByText(/Scouts 0\/1/i)).not.toBeInTheDocument();
     expect(screen.getByText(/normal scout draft restart is blocked in v1/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /BEGIN SCOUT DRAFT/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /APPLY DRAFT TO LEAGUE BUILDER/i })).not.toBeInTheDocument();

@@ -105,6 +105,16 @@ const LeagueBuilderSnakeDraft = lazy(() =>
     default: module.LeagueBuilderSnakeDraft,
   })),
 );
+const LeagueBuilderAuctionDraft = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderAuctionDraft").then((module) => ({
+    default: module.LeagueBuilderAuctionDraft,
+  })),
+);
+const LeagueBuilderFarmAuctionDraft = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderFarmAuctionDraft").then((module) => ({
+    default: module.LeagueBuilderFarmAuctionDraft,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -289,6 +299,14 @@ function App() {
         <Route
           path="/league-builder/snake-draft"
           element={<LeagueBuilderSnakeDraft />}
+        />
+        <Route
+          path="/league-builder/auction-draft"
+          element={<LeagueBuilderAuctionDraft />}
+        />
+        <Route
+          path="/league-builder/farm-auction-draft"
+          element={<LeagueBuilderFarmAuctionDraft />}
         />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 

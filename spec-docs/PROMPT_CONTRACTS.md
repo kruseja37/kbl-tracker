@@ -20559,3 +20559,604 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it before you edit.
 <!-- ===== END CONTRACT: RA-2c-3b ===== -->
+<!-- ===== START CONTRACT: S1-SCOUT-COUNT ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 build task **S1 (minimal, in-place)** — change the startup scout draft from **2 scouts/team to 1 scout/team**, and reconcile every hardcoded "two scouts" string + every test that asserts the old 2-scout count, so the suite stays green. NOTHING else. This is the count flip ONLY — NOT a re-sequencing of the draft and NOT the per-tool/specialty/band rework (those are S2–S7).
+
+SOURCE OF TRUTH (embedded inline — the ratified spec lives on the Branch-A docs branch and is NOT on this worktree; build to THIS text, do not look for a docs file):
+- SCOUTING_SYSTEM_SPEC §1A.3 (RULED JK 2026-06-22): "**ONE scout per team (not 2).**" and "SCOUT DRAFT (new phase): before the MLB player draft, each team drafts **one** scout from a pool of **3× the number of teams**."
+- SCOUTING_SYSTEM_SPEC §1A.4 S1: "1 scout/team from a 3×-teams pool … change `STARTUP_SCOUTS_PER_TEAM` 2→1."
+- JK ruling 2026-06-23 (this session): do the **minimal in-place 2→1 flip now**; the "scout draft must run before the MLB auction" RE-SEQUENCING is deferred to RB-13b (auction routing) and is OUT OF SCOPE here.
+- NOTE: the pool size is already `teamCount × STARTUP_SCOUTS_PER_TEAM × STARTUP_SCOUT_POOL_MULTIPLIER`. With the constant = 1 and the multiplier already 3, the pool becomes exactly `3 × teamCount` automatically — DO NOT change the multiplier or the pool formula.
+
+ALLOWED FILES (edit only these):
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/utils/leagueBuilderFarmScoutingHandoff.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/src_figma/app/pages/FranchiseManualSmokeSetup.tsx`
+- `src/src_figma/app/pages/FranchiseSetup.tsx`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+- `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`
+- `src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx`
+
+EXACT CHANGES (make precisely these; the line numbers are a guide — match on the text, and if a quoted string is not found verbatim, STOP and report rather than guessing):
+1. `leagueBuilderStartupFarmDraft.ts:51` — `export const STARTUP_SCOUTS_PER_TEAM = 2;` → `= 1;`. This is the ONLY logic change. Every constant-derived site (pool size `:790`, the round loop `:823`, the `=== STARTUP_SCOUTS_PER_TEAM` validations `:970/:1001/:1003/:1021/:1022/:1025/:1026`, the `>=` guard `:1292/:1293`) MUST stay as-is and will auto-adjust — DO NOT hand-edit them.
+2. Hardcoded copy → make SINGULAR (exact new wording):
+   - `leagueBuilderStartupFarmDraft.ts:1331` `'Every team must hire two scouts before the prospect draft begins.'` → `'Every team must hire one scout before the prospect draft begins.'`
+   - `leagueBuilderFarmScoutingHandoff.ts:145` `'Each team must hire two League Builder scouts before Franchise Setup can copy farm/scouting state.'` → `'Each team must hire one League Builder scout before Franchise Setup can copy farm/scouting state.'`
+   - `LeagueBuilderDraft.tsx:313` "each team has two hired scouts and 10 hidden-safe FARM prospects" → "each team has one hired scout and 10 hidden-safe FARM prospects"
+   - `LeagueBuilderDraft.tsx:429` "Hire two scouts for every team, then draft prospects one pick at a time." → "Hire one scout for every team, then draft prospects one pick at a time."
+   - `FranchiseManualSmokeSetup.tsx:35` "and two hired scouts per team." → "and one hired scout per team."
+   - `FranchiseSetup.tsx:1230` "Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time." → "Use League Builder Draft to hire one scout for every team, then draft FARM prospects one pick at a time."
+3. Tests asserting the OLD count/copy → update to the 1-scout reality:
+   - `leagueBuilderStartupFarmDraft.test.ts`: the test name `:257` "...persists two scouts per team" → "one scout per team"; `:298` `toHaveLength(4)` → `toHaveLength(2)` (2 teams × 1); `:299` TEAM_A `toHaveLength(2)` → `toHaveLength(1)`; `:300` TEAM_B `toHaveLength(2)` → `toHaveLength(1)`. The symbolic pool-length assert `:272` (`2 * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER`) STAYS unchanged (it derives from the constant).
+   - `LeagueBuilderDraft.test.tsx:390` regex `/each team has two hired scouts and 10 hidden-safe FARM prospects/i` → "one hired scout".
+   - `FranchiseSetup.test.tsx:278` regex `/hire two scouts for every team/i` → "hire one scout for every team".
+   - `FranchiseManualSmokeSetup.test.tsx:73` regex `/6 teams · 132 MLB · 60 FARM · 12 scouts/i` → `12 scouts` becomes `6 scouts` (6 teams × 1).
+4. COMPLETENESS GREP (mandatory): after editing, run `grep -rniE "two (hired )?scouts?|hire two|2 scouts|12 scouts" src --include=*.ts --include=*.tsx | grep -v src/archived` and reconcile ANY remaining hit that encodes the 2-scout count (copy or test) using the same singular rule. Also re-check any other per-team scout-count assertion (e.g. another `toHaveLength` after a `while (!view.scoutDraftComplete)` loop in the test file) and fix it to 1/team. Report the final grep output (must be empty of 2-scout-count hits).
+
+DO NOT TOUCH (outside scope):
+- The scout-draft ENGINE LOGIC: `buildScoutPool`, `buildScoutPickOrder`, `draftLeagueBuilderScout`, `currentScoutPick`, the validation structure — only the constant value changes; their bodies stay byte-identical.
+- The prospect/farm draft, the MLB auction, the draft sequencing/routing (that is RB-13b), the specialty/weakness model + `accuracyByPosition` (that is S2), per-tool bands (S3/S4).
+- `STARTUP_SCOUT_POOL_MULTIPLIER` (stays 3), `STARTUP_FARM_TARGET_SIZE`, `STARTUP_MLB_REQUIRED_SIZE`.
+- `src/engines/ivEngine.ts` / `iv_oracle.json` (no oracle effect), `TRACKER_DB_VERSION` / any store list (NO DB bump — this change adds no store), `franchiseSeasonLedgerStorage.test.ts`.
+- Any file not in ALLOWED FILES.
+
+VERIFICATION (run and paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- Focused tests: `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx` (expect ALL pass).
+- The completeness grep from step 4 (expect no 2-scout-count hits).
+
+STOP IF: any quoted string above is not found verbatim in its file; flipping the constant surfaces a compile/logic error that needs a structural change beyond these edits; a change would require touching a file outside ALLOWED FILES; the focused tests reveal a 2-scout assumption baked somewhere not listed (report it, do not improvise a fix outside the allowed files). → output "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + the total changed-path count.
+2. Each change with its source ref (S1 / the exact spec line).
+3. ACTUAL tsc + focused-vitest output + the completeness-grep output.
+4. "S1-SCOUT-COUNT complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S1-SCOUT-COUNT ===== -->
+
+<!-- ===== START CONTRACT: S1-SCOUT-COUNT-V2 ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+SUPERSEDES `S1-SCOUT-COUNT` (v1) — v1 was INCOMPLETE; Codex correctly BLOCKED on a hardcoded `scoutCount !== 2` validator + 2 test files outside the allow-list. v2 is the COMPLETE surface (12 files), re-verified by an exhaustive grep. Build to v2.
+
+GOAL:
+Scouting v2 build task **S1 (minimal, in-place)** — change the startup scout draft from **2 scouts/team to 1 scout/team**, and reconcile EVERY hardcoded 2-scout reference (validators, copy, UI denominators, fixtures, and the tests that assert the old count/copy) so `tsc -b` is clean and the suite stays green. This is the COUNT FLIP ONLY — NOT a re-sequencing of the draft, NOT the specialty/per-tool/band rework (S2–S7).
+
+SOURCE OF TRUTH (embedded inline — the ratified spec lives on the Branch-A docs branch and is NOT on this worktree; build to THIS text):
+- SCOUTING_SYSTEM_SPEC §1A.3 (RULED JK 2026-06-22): "**ONE scout per team (not 2).**" + "each team drafts **one** scout from a pool of **3× the number of teams**."
+- §1A.4 S1: "change `STARTUP_SCOUTS_PER_TEAM` 2→1." JK ruling 2026-06-23: minimal in-place flip; the "before the MLB auction" re-sequencing is deferred to RB-13b (OUT OF SCOPE).
+- The pool is `teamCount × STARTUP_SCOUTS_PER_TEAM × STARTUP_SCOUT_POOL_MULTIPLIER`; with the constant=1 and the multiplier already 3, the pool auto-becomes `3 × teamCount`. DO NOT change the multiplier or the formula.
+
+ALLOWED FILES (edit only these 12):
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/utils/leagueBuilderFarmScoutingHandoff.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/src_figma/app/pages/FranchiseManualSmokeSetup.tsx`
+- `src/src_figma/app/pages/FranchiseSetup.tsx`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/utils/tests/leagueBuilderFarmScoutingHandoff.test.ts`
+- `src/utils/tests/franchiseStartupProspectDraft.test.ts`
+- `src/utils/tests/franchiseManualSmokeFixture.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+- `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`
+- `src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx`
+
+EXACT CHANGES (match on text; if a quoted string is not found verbatim, STOP and report — do not guess):
+**Logic (1):**
+1. `leagueBuilderStartupFarmDraft.ts:51` `export const STARTUP_SCOUTS_PER_TEAM = 2;` → `= 1;`. This is the ONLY logic change. ALL constant-derived sites (pool `:790`, round loop `:823`, `=== STARTUP_SCOUTS_PER_TEAM` validations `:970/:1001/:1003/:1021–1026`, `>=` guard `:1292/:1293`, the `:1003` message `expected ${STARTUP_SCOUTS_PER_TEAM} hired scouts`) STAY as-is and auto-adjust. DO NOT hand-edit them.
+
+**The hardcoded validator (2) — this is what v1 missed:**
+2. `leagueBuilderFarmScoutingHandoff.ts:214` `if (scoutCount !== 2) {` → `if (scoutCount !== 1) {`
+3. `leagueBuilderFarmScoutingHandoff.ts:215` `expected 2 hired scouts` → `expected 1 hired scouts` (change ONLY the digit; keep "scouts" plural so it matches the constant-derived sibling message at `leagueBuilderStartupFarmDraft.ts:1003`, which resolves to "expected 1 hired scouts" too).
+
+**Hardcoded copy → singular (6):**
+4. `leagueBuilderStartupFarmDraft.ts:1331` `'Every team must hire two scouts before the prospect draft begins.'` → `'Every team must hire one scout before the prospect draft begins.'`
+5. `leagueBuilderFarmScoutingHandoff.ts:145` `'Each team must hire two League Builder scouts before Franchise Setup can copy farm/scouting state.'` → `'Each team must hire one League Builder scout before Franchise Setup can copy farm/scouting state.'`
+6. `LeagueBuilderDraft.tsx:313` "each team has two hired scouts and 10 hidden-safe FARM prospects" → "each team has one hired scout and 10 hidden-safe FARM prospects"
+7. `LeagueBuilderDraft.tsx:429` "Hire two scouts for every team, then draft prospects one pick at a time." → "Hire one scout for every team, then draft prospects one pick at a time."
+8. `FranchiseManualSmokeSetup.tsx:35` "and two hired scouts per team." → "and one hired scout per team."
+9. `FranchiseSetup.tsx:1230` "Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time." → "...hire one scout for every team..."
+
+**UI denominator (1):**
+10. `FranchiseManualSmokeSetup.tsx:88` `Scouts {team.hiredScouts}/2` → `Scouts {team.hiredScouts}/1`
+
+**Tests → update to the 1-scout reality (the rest):**
+11. `leagueBuilderStartupFarmDraft.test.ts`: `:254` and `:479` `/expected 2 hired scouts/i` → `/expected 1 hired scouts/i`; `:257` test NAME "...persists two scouts per team" → "one scout per team"; `:298` `toHaveLength(4)` → `toHaveLength(2)`; `:299` (TEAM_A) `toHaveLength(2)` → `(1)`; `:300` (TEAM_B) `toHaveLength(2)` → `(1)`. **The symbolic pool-length assert `:272` (`2 * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER`) STAYS unchanged.**
+12. `leagueBuilderFarmScoutingHandoff.test.ts:250` `/expected 2 hired scouts/i` → `/expected 1 hired scouts/i`.
+13. `franchiseStartupProspectDraft.test.ts:311` `/expected 2 hired scouts/i` → `/expected 1 hired scouts/i`.
+14. `franchiseManualSmokeFixture.test.ts`: `:69` `toBe(12)` → `toBe(6)`; `:75` `team.hiredScouts === 2` → `=== 1`; `:88` `team.scouts === 2` → `=== 1`.
+15. `LeagueBuilderDraft.test.tsx`: `:382` and `:383` `scoutCount: 2` → `scoutCount: 1`; `:390` `/each team has two hired scouts and 10 hidden-safe FARM prospects/i` → "one hired scout".
+16. `FranchiseSetup.test.tsx:278` `/hire two scouts for every team/i` → "hire one scout for every team".
+17. `FranchiseManualSmokeSetup.test.tsx`: `:41` `scoutsPerTeam: 2` → `1`; `:44` `hiredScouts: 12` → `6`; `:55` (per-team) `hiredScouts: 2` → `1`; `:73` `/6 teams · 132 MLB · 60 FARM · 12 scouts/i` → `12 scouts` becomes `6 scouts`.
+
+**COMPLETENESS GREP (mandatory, zsh — note the QUOTED globs):**
+Run: `grep -rniE "two (hired )?scouts|hire two|expected 2 hired|12 scouts|!== 2|scoutCount: 2|scoutsPerTeam: 2|hiredScouts: 2|hiredScouts: 12|scouts === 2|hiredScouts === 2" src --include='*.ts' --include='*.tsx' | grep -v src/archived | grep -iE "scout"`
+It MUST return empty. Reconcile (within the allowed files) any remaining 2-scout-count hit before declaring complete; paste the final (empty) grep output.
+
+DO NOT TOUCH:
+- The scout-draft ENGINE LOGIC bodies (`buildScoutPool`, `buildScoutPickOrder`, `draftLeagueBuilderScout`, `currentScoutPick`, validation structure) — only the constant VALUE changes.
+- The prospect/farm draft, the MLB auction, the draft sequencing/routing (RB-13b), the specialty/weakness model + `accuracyByPosition` (S2), per-tool bands (S3/S4).
+- `STARTUP_SCOUT_POOL_MULTIPLIER` (stays 3), the MLB/FARM size constants.
+- `src/engines/ivEngine.ts` / `iv_oracle.json`, `TRACKER_DB_VERSION` / any store list (NO DB bump), `franchiseSeasonLedgerStorage.test.ts`. Any file not in ALLOWED FILES.
+
+VERIFICATION (run and paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/leagueBuilderFarmScoutingHandoff.test.ts src/utils/tests/franchiseStartupProspectDraft.test.ts src/utils/tests/franchiseManualSmokeFixture.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx src/src_figma/__tests__/app/FranchiseManualSmokeSetup.test.tsx` (expect ALL pass).
+- The completeness grep above (expect empty).
+
+STOP IF: any quoted string is not found verbatim; flipping the constant surfaces a compile/logic error needing a structural change beyond these edits; a change would require a file outside ALLOWED FILES; a 2-scout assumption appears somewhere not listed (report it). → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total changed-path count.
+2. Each change with its source ref.
+3. ACTUAL tsc + focused-vitest + completeness-grep output.
+4. "S1-SCOUT-COUNT-V2 complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S1-SCOUT-COUNT-V2 ===== -->
+
+<!-- ===== START CONTRACT: S2-SCOUT-TIERING ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S2 (SMALL / generation-only, JK-ruled 2026-06-23)** — replace the free-form scout specialty/weakness GENERATION with a fixed tiering: each generated scout gets **exactly 2 distinct HIGH positions + 2 distinct LOW positions (no DH), every other position MEDIUM**. Add an exported `scoutTierForPosition` accessor (the fixed-tier source of truth for the later band tickets S3/S4). KEEP the saved `accuracyByPosition` a numeric `Record<string, number>` (NO saved-shape/type change) and DO NOT touch the old Gaussian scoring — that is S7.
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- SCOUTING_SYSTEM_SPEC §1A.3: "Each scout has exactly **2 specialty positions → HIGH**, **2 blind-spot positions → LOW**, and **every other position → MEDIUM** (the fixed tiering replaces the free-form ±18 specialty/weakness lists). Confidence for a given prospect = the scout's tier for that prospect's **primary position**."
+- §1A.4 S2: "Fixed specialty structure: exactly 2 HIGH / 2 LOW positions + MEDIUM default (replace free-form `specialties[]`/`weaknesses[]`). No DH."
+- JK ruling 2026-06-23: **SMALL / generation-only** — change ONLY generation; `accuracyByPosition` stays numeric/tier-derived (NO type change); the literal tier-label storage + per-tool bands + retiring the Gaussian model = S3/S4/S7.
+
+ALLOWED FILES (edit only these 4):
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+
+EXACT CHANGES:
+1. `leagueBuilderStartupFarmDraft.ts` `buildScoutPool` (the draw at lines ~793–797 + the descriptor at ~798–803): replace the 1-specialty/1-weakness draw with a **4-distinct-position draw from `DRAFT_POSITIONS`** (the 11 positions C/1B/2B/3B/SS/LF/CF/RF/SP/RP/CP — no DH). Exact algorithm:
+   ```
+   const high1 = pick(`${scoutSeed}:high:1`, DRAFT_POSITIONS);
+   const afterHigh1 = DRAFT_POSITIONS.filter((p) => p !== high1);
+   const high2 = pick(`${scoutSeed}:high:2`, afterHigh1);
+   const afterHigh2 = afterHigh1.filter((p) => p !== high2);
+   const low1 = pick(`${scoutSeed}:low:1`, afterHigh2);
+   const afterLow1 = afterHigh2.filter((p) => p !== low1);
+   const low2 = pick(`${scoutSeed}:low:2`, afterLow1);
+   ```
+   Then set `descriptor.specialties = [high1, high2]` and `descriptor.weaknesses = [low1, low2]`. Keep the NAME draw (`${scoutSeed}:first`/`:last`) and EVERYTHING else byte-identical. **The `accuracyByPosition` computation (`DRAFT_POSITIONS.map((position) => [position, scoutAccuracy(position, descriptor)])`) STAYS unchanged** — with exact-position specialties it now yields base+18 (HIGH) / base (MEDIUM) / base−18 (LOW), i.e. tier-derived. Do NOT change `scoutAccuracy`.
+2. **Retire the now-orphaned `SCOUT_SPECIALTY_POOL`** (the `const SCOUT_SPECIALTY_POOL: ScoutSpecialty[] = [...]` line) — DELETE it. (After the draw change its only consumers are gone; CONFIRM via grep.)
+3. `prospectScoutingDraftEngine.ts`: add + export, near `scoutAccuracy`:
+   ```
+   export function scoutTierForPosition(
+     position: DraftPosition,
+     scout?: { specialties?: string[]; weaknesses?: string[] },
+   ): 'high' | 'medium' | 'low' {
+     if (scout?.specialties?.includes(position)) return 'high';
+     if (scout?.weaknesses?.includes(position)) return 'low';
+     return 'medium';
+   }
+   ```
+   Position-EXACT membership ONLY (NOT `specialtyMatches` category logic) — the fixed tier is position-exact per §1A.3.
+4. Tests:
+   - `leagueBuilderStartupFarmDraft.test.ts`: in the EXISTING generated-pool test (`'session scout draft creates deterministic scout pool ...'`), add assertions that EVERY generated `scoutPool` scout has `specialties.length === 2` AND `weaknesses.length === 2`, all 4 entries DISTINCT, every entry ∈ `DRAFT_POSITIONS`, and none === `'DH'`. (Keep the existing generic assertions.)
+   - `prospectScoutingDraftEngine.test.ts`: add a focused unit test importing `scoutTierForPosition` — high for a specialty position, low for a weakness position, medium otherwise.
+
+DO NOT TOUCH:
+- `scoutAccuracy` / `specialtyMatches` / `baseAccuracy` / `confidenceFromAccuracy` / `scoutProspect` (the old Gaussian overall-grade model — retired in S7).
+- The `accuracyByPosition` formula or its `Record<string, number>` type (SAVED SHAPE — no type change), the `ScoutSpecialty` type, `LeagueBuilderScoutProfile` / `types/franchise.ts` types.
+- The highlights UI `formatAccuracy` (that's S6); the draft sequencing; the MANUAL scout fixtures in OTHER test files (they are INPUT data using the old category format and must stay).
+- `TRACKER_DB_VERSION` / any store (NO DB bump); `iv_oracle.json` (scout gen is NOT in the oracle). Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/prospectScoutingDraftEngine.test.ts` (expect all pass).
+- `grep -n "SCOUT_SPECIALTY_POOL" src/utils/leagueBuilderStartupFarmDraft.ts` (expect EMPTY — retired).
+
+STOP IF: `SCOUT_SPECIALTY_POOL` has a consumer other than the `buildScoutPool` draw (report it); the draw rewrite needs a structural change beyond the algorithm above; a change would require a file outside ALLOWED FILES; an existing test asserts the OLD generator specialty format (report it). → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total changed-path count.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest + grep output.
+4. "S2-SCOUT-TIERING complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S2-SCOUT-TIERING ===== -->
+
+<!-- ===== START CONTRACT: S3-TOOL-BANDS ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S3 — per-tool confidence band engine (PURE, build-DARK)**. Add a deterministic engine that converts a prospect's TRUE per-tool ratings into 0–99 confidence BANDS whose WIDTH is set by the scout's fixed tier (from S2's `scoutTierForPosition`), with the true value placed uniform-random inside the band so it is un-gameable. **Build-DARK: pure functions + tests only — NO wiring into the report DTO/board/UI** (that is S5 reveal / S6 UI) and NO change to the old Gaussian scoring (S7).
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- SCOUTING_SYSTEM_SPEC §1A.2: "Each TOOL → a 0–99 NUMERIC band, width by the scout's tier: **HIGH = 30 pts, MEDIUM = 50 pts, LOW = 70 pts**. Tools: **5 for hitters (power/contact/speed/fielding/arm); 7 for pitchers (velocity/junk/accuracy + power/contact/speed/fielding — NO arm)**. The true tool value sits uniform-random inside the band."
+- §1A.2 Uniform-in-band placement (un-gameable): "band [L, L+W] with **L drawn uniformly from [max(0, true−W), min(true, 99−W)]** — guarantees the band contains the true value, stays in [0,99], and the true value's offset is uniform (NOT always centered/top/bottom). Near the 0/99 extremes the feasible offset narrows (acceptable). Deterministic (seeded per scout×prospect)."
+- §1A.4 S3: "Per-tool band engine: 0–99 bands 30/50/70 by tier, uniform-in-band (clamp [0,99]), deterministic. Per-tool, not overall."
+- CAPTAIN DEFAULT (documented, §16 sim-tune, flagged for JK): the band WIDTHS (30/50/70) are the "groups of 10"; implement the spec's EXACT continuous placement formula above with integer rounding — do NOT additionally snap band edges to multiples of 10 (that would break the "band always contains the true value" guarantee near the extremes).
+
+ALLOWED FILES (edit only these 2):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+
+EXACT CHANGES (add near `scoutTierForPosition`; reuse the existing `clamp`, `randomUnit`, `isPitcher`, `DraftPosition`, `scoutTierForPosition` already in the file):
+1. `export const SCOUT_TOOL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = { high: 30, medium: 50, low: 70 };` // §16 sim-tune
+2. `export const HITTER_SCOUT_TOOLS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;`
+   `export const PITCHER_SCOUT_TOOLS = ['velocity', 'junk', 'accuracy', 'power', 'contact', 'speed', 'fielding'] as const;` // NO arm
+3. The placement function:
+   ```
+   export function scoutToolBand(trueValue: number, tier: 'high' | 'medium' | 'low', seed: string): { lower: number; upper: number } {
+     const width = SCOUT_TOOL_BAND_WIDTHS[tier];
+     const trueClamped = clamp(trueValue, 0, 99);
+     const loBound = Math.max(0, trueClamped - width);
+     const hiBound = Math.min(trueClamped, 99 - width);
+     const span = Math.max(0, hiBound - loBound);
+     const lower = Math.round(loBound + randomUnit(seed) * span);
+     return { lower, upper: lower + width };
+   }
+   ```
+   (Confirm `clamp` rounds to an integer and signature is `clamp(value, min, max)`; if not, adapt so `trueClamped` is an integer in [0,99]. The math must GUARANTEE `lower <= trueClamped <= upper` and `0 <= lower`, `upper <= 99`.)
+4. The per-prospect map (consumes S2's tier):
+   ```
+   export function scoutToolBands(input: {
+     ratings: Record<string, number>;
+     position: DraftPosition;
+     scout?: { specialties?: string[]; weaknesses?: string[] };
+     seed: string;
+   }): Record<string, { lower: number; upper: number }> {
+     const tier = scoutTierForPosition(input.position, input.scout);
+     const tools = isPitcher(input.position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
+     const bands: Record<string, { lower: number; upper: number }> = {};
+     for (const tool of tools) {
+       bands[tool] = scoutToolBand(input.ratings[tool] ?? 0, tier, `${input.seed}:${tool}`);
+     }
+     return bands;
+   }
+   ```
+5. Tests in `prospectScoutingDraftEngine.test.ts` (import the new exports): for a spread of true values (incl. 20, 50, 99) × each tier — assert (a) `lower <= true <= upper`, (b) `lower >= 0 && upper <= 99`, (c) `upper - lower === SCOUT_TOOL_BAND_WIDTHS[tier]`, (d) determinism (same seed → identical band), (e) different seeds yield different `lower` (offset is not fixed/centered). For `scoutToolBands`: a hitter position yields exactly the 5 hitter tools (no velocity/junk/accuracy), a pitcher position yields the 7 pitcher tools (NO arm), and a HIGH-tier specialty position gives width-30 bands while a non-listed (MEDIUM) position gives width-50.
+
+DO NOT TOUCH: `scoutProspect` / `scoutAccuracy` / `specialtyMatches` / `confidenceFromAccuracy` / `baseAccuracy` (the Gaussian model — S7); `scoutTierForPosition` (S2, just call it); any report/board DTO (`VisibleSafeProspectReport`, `StartupProspectBoard*`) or UI — S3 is build-DARK with NO consumer yet (S5 wires it); `accuracyByPosition`; saved-shape types; `TRACKER_DB_VERSION` / stores (NO DB bump); `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` (expect all pass).
+
+STOP IF: `clamp`/`randomUnit`/`isPitcher`/`scoutTierForPosition` are not available in the file as assumed; the containment math can't be guaranteed integer-safe; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest output.
+4. "S3-TOOL-BANDS complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S3-TOOL-BANDS ===== -->
+
+<!-- ===== START CONTRACT: S4-OVERALL-BAND ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S4 (PART 1 ONLY — overall grade-BAND engine, PURE, build-DARK)**. Add a deterministic engine that converts a prospect's TRUE overall grade into a letter-grade BAND whose width is set by the scout's fixed tier, with the true grade placed uniform-random inside the band, clamped to the ladder ends. **JK ruling 2026-06-23: build the band ENGINE only; do NOT touch the auction price / salary / the saved `scoutedGrade`** — the spec's "derive the auction price from the banded overall" collides with the shipped RB true-IV price model and is a SEPARATE flagged decision. So this is build-DARK like S3: pure function + tests, NO consumer wiring.
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- SCOUTING_SYSTEM_SPEC §1A.2: "OVERALL grade → a LETTER-GRADE band on the grade ladder, width by the scout's tier: **HIGH = 3 grade-bands (e.g. A→B+), MEDIUM = 5 (A→B−), LOW = 7 (A→C)**. The true overall grade sits **uniform-random inside the band, clamped to the ladder ends**." (Same un-gameable placement logic as the S3 tool bands, on the discrete grade ladder; deterministic, seeded per scout×prospect.)
+- §1A.4 S4 (this ticket = the band only): "Overall grade band: 3/5/7 letter-steps by tier, uniform-in-band." The "+ derive the auction price range" half is DEFERRED (JK 2026-06-23 — separate price-anchor decision).
+- Grade ladder = the existing prospect ladder `GRADES` in `prospectScoutingDraftEngine.ts` (`['A','A-','B+','B','B-','C+','C','C-','D+','D']`, best→worst, NO S/A+). Widths are GRADE POSITIONS covered: HIGH=3, MEDIUM=5, LOW=7.
+
+ALLOWED FILES (edit only these 2):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+
+EXACT CHANGES (add near `scoutToolBand`; reuse the existing `GRADES`, `Grade`, `randomUnit` already in the file):
+1. `export const SCOUT_OVERALL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = { high: 3, medium: 5, low: 7 };` // grade positions covered; §16 sim-tune
+2. The placement function (mirror `scoutToolBand`, on the discrete `GRADES` ladder; `best` = the better-quality end [lower index], `worst` = the lower-quality end [higher index]):
+   ```
+   export function scoutOverallGradeBand(
+     trueGrade: Grade,
+     tier: 'high' | 'medium' | 'low',
+     seed: string,
+   ): { best: Grade; worst: Grade } {
+     const width = SCOUT_OVERALL_BAND_WIDTHS[tier];      // grades covered
+     const span = width - 1;                             // index span
+     const lastIndex = GRADES.length - 1;
+     const trueIdxRaw = GRADES.indexOf(trueGrade);
+     const trueIdx = trueIdxRaw < 0 ? 0 : trueIdxRaw;
+     const loBound = Math.max(0, trueIdx - span);
+     const hiBound = Math.min(trueIdx, lastIndex - span);
+     const range = Math.max(0, hiBound - loBound);
+     const bestIndex = Math.round(loBound + randomUnit(seed) * range);
+     const worstIndex = Math.min(lastIndex, bestIndex + span);
+     return { best: GRADES[bestIndex], worst: GRADES[worstIndex] };
+   }
+   ```
+   The math MUST GUARANTEE: `bestIndex <= trueIdx <= worstIndex` (the band contains the true grade), `0 <= bestIndex`, `worstIndex <= lastIndex`. (Same structure as the S3 `scoutToolBand` containment proof.)
+3. Tests in `prospectScoutingDraftEngine.test.ts`: using a LOCAL copy of the ladder `['A','A-','B+','B','B-','C+','C','C-','D+','D']` to compute indices — for a spread of true grades (incl. `'A'`, a mid grade like `'B'`, and `'D'`) × each tier, assert: (a) `idx(best) <= idx(true) <= idx(worst)` (band contains the true grade); (b) `best`/`worst` are valid ladder grades and `idx(best) >= 0`, `idx(worst) <= 9`; (c) the covered count `idx(worst) - idx(best) + 1` equals `SCOUT_OVERALL_BAND_WIDTHS[tier]` EXCEPT where clamped at a ladder end (then it may be smaller — assert `<=` the width there); (d) determinism (same seed → identical band); (e) different seeds yield different `best` for a mid grade with open span. Also assert the spec extreme: `scoutOverallGradeBand('A', 'high', seed)` → `best === 'A'` and `worst === 'B+'`.
+
+DO NOT TOUCH (deferred / out of scope — JK 2026-06-23):
+- The auction price (`scoutPriceOpinion`, `perceivedValueRange`, `scoutValueRange.ts`, `chemistryFitPriceMultiplier`, `scoutRangeForProspect`), the prospect SALARY path (`franchiseSalary.ts`, `safeRoundFromScoutedGrade`), the saved `scoutedGrade` field / `franchisePlayerProfile`, the old Gaussian `scoutProspect` / `scoutAccuracy` / `confidenceFromAccuracy` (S7), the `gradeToTwentyEighty` / 12-grade `GRADE_LADDER`.
+- Any report/board DTO or UI (S4 is build-DARK, no consumer yet — S5 wires it). `TRACKER_DB_VERSION` / stores (NO DB bump). `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` (expect all pass).
+
+STOP IF: `GRADES`/`Grade`/`randomUnit` are not available in the file as assumed; the containment math can't be guaranteed; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest output.
+4. "S4-OVERALL-BAND complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S4-OVERALL-BAND ===== -->
+
+<!-- ===== START CONTRACT: S5-REVEAL-FIELDS ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+GOAL:
+Scouting v2 **S5 (reveal-fields, JK-ruled 2026-06-23)** — on the scout-facing `VisibleSafeProspectReport`: **replace the leaked `trait1`/`trait2` NAMES with a `traitCount` (0/1/2)**, and **reveal `archetypeFamily` + `secondaryPosition`** accurately. This is a contained LIVE change to the COMPUTED draft-board report (NOT persisted with traits → no migration). Do NOT wire the S3/S4 bands (that is S6), do NOT touch the player's real traits or the Gaussian `scoutedGrade` (S7).
+
+SOURCE OF TRUTH (embedded inline — ratified spec lives on the Branch-A docs branch, not this worktree):
+- §1A.1: "Revealed ACCURATELY: Name · age · primary + secondary position · **archetype** (the §5.6 generation family)."
+- §1A.1b (RULED): "Traits — COUNT only, identities HIDDEN. The scout report shows only the trait COUNT: 0, 1, or 2 — never which traits, never pos/neg. ⚠ today `VisibleSafeProspectReport` reveals `trait1`/`trait2` names — v2 replaces those with a `traitCount` (0/1/2) and hides names until call-up."
+- §1A.4 S5 + JK 2026-06-23: reveal archetype + secondary + traitCount; bands stay build-dark for S6.
+
+ALLOWED FILES (edit only these; the last is only if a test there asserts the old trait display):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+
+EXACT CHANGES:
+1. DTO `VisibleSafeProspectReport` (`prospectScoutingDraftEngine.ts:157-173`): REMOVE `trait1?: string;` and `trait2?: string;`. ADD `traitCount: 0 | 1 | 2;`, `archetypeFamily: ProspectArchetypeFamily;`, `secondaryPosition?: Position;`. (`ProspectArchetypeFamily` is declared in-file `:529`; `Position` is imported `:20`.)
+2. Constructor `visibleReportFromPlayer` (`:1473-1489`): REMOVE `trait1: player.trait1,` and `trait2: player.trait2,`. ADD:
+   - `traitCount: ([player.trait1, player.trait2].filter(Boolean).length) as 0 | 1 | 2,`
+   - `archetypeFamily: candidate.archetypeFamily,`
+   - `secondaryPosition: player.secondaryPosition,`
+   (This is the ONLY `VisibleSafeProspectReport` constructor; `visibleReportForProspectPlayer` `:1642` delegates to it; the franchise `visibleReportFromPick` spreads `pick.visibleReport` and does not reference traits → auto-carries the new fields.)
+3. UI `LeagueBuilderDraft.tsx:376`: replace `<div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>` with a trait-COUNT display, e.g. `<div>Traits {candidate.traitCount}</div>`, AND add an archetype line `<div>Archetype {candidate.archetypeFamily}</div>` and, when present, a secondary line `{candidate.secondaryPosition ? <div>Secondary {candidate.secondaryPosition}</div> : null}`. (tsc will force this change since `candidate.trait1/trait2` no longer exist.)
+4. Tests in `prospectScoutingDraftEngine.test.ts`:
+   - `:721` currently asserts `output.visibleReports.every((report) => !('archetypeFamily' in report))` — **INVERT** it: assert every visible report now HAS `archetypeFamily` (a non-empty string / a valid family), i.e. `('archetypeFamily' in report)` is true.
+   - Add positive assertions: every visible report has a numeric `traitCount` in `{0,1,2}`, does NOT have `trait1`/`trait2` (`!('trait1' in report) && !('trait2' in report)`), and reveals `archetypeFamily`; and that the report's `traitCount` equals the matching generated player's actual `[trait1,trait2].filter(Boolean).length`.
+   - Verify the existing `:1177` "hidden true ratings stay out of visible-safe reports" test still passes (it asserts no `power`/`contact`/`trueGrade`; archetype/secondary/traitCount are revealed-accurately fields, not hidden true data — it should be unaffected).
+5. `LeagueBuilderDraft.test.tsx`: ONLY if a test there asserts the OLD "Traits <names>" display, update it to the new count/archetype display; otherwise leave untouched.
+6. COMPLETENESS GREP (mandatory): `grep -rnE "\.trait1|\.trait2" src --include='*.ts' --include='*.tsx' | grep -v src/archived | grep -iE "report|candidate|visible"` — confirm NO remaining reader of a VISIBLE-REPORT `trait1`/`trait2` (the `player.trait1/trait2`, `input.trait1/trait2`, and grade-solver sites are the PLAYER's real traits and MUST stay). Report the output.
+
+DO NOT TOUCH: the player's real traits — `buildPlayerDto` `:1527-1528` (`player.trait1/trait2`), the grade-solver trait inputs `:983/:1015/:1071`, and the live roster/lineup/GameTracker `player.trait1/trait2` consumers (those are revealed at call-up, correct). The S3/S4 BANDS (S6). The Gaussian `scoutProspect`/`scoutedGrade` (S7). The persisted `franchisePlayerProfile` prospectReport (it has no traits). `TRACKER_DB_VERSION`/stores (NO DB bump). `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0 — and tsc will FAIL loudly if any consumer still reads the removed report `trait1`/`trait2`, which is the safety net).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts src/utils/tests/franchiseStartupProspectDraft.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` (expect all pass).
+- The completeness grep (no visible-report trait reader remains).
+
+STOP IF: a removed report field is read somewhere not in ALLOWED FILES (report the file:line — do NOT edit outside the list); `ProspectArchetypeFamily`/`Position` are not available as assumed; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest + completeness-grep output.
+4. "S5-REVEAL-FIELDS complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S5-REVEAL-FIELDS ===== -->
+
+<!-- ===== START CONTRACT: S5-REVEAL-FIELDS-V2 ===== -->
+ROUTE: Codex 5.5 | high reasoning effort
+
+SUPERSEDES `S5-REVEAL-FIELDS` (v1) — v1 was INCOMPLETE; Codex correctly BLOCKED: `leagueBuilderStartupFarmDraft.ts`'s `buildBoardForSession` ALSO constructs `StartupProspectBoardReport`/`StartupProspectBoardCandidate` (which extend `VisibleSafeProspectReport`) with `trait1`/`trait2`, so removing the DTO fields breaks tsc there. v2 adds that file + its 2 board sites. The full surface (verified by a comprehensive `trait1:/trait2:` sweep): the ONLY scout-report constructors are `prospectScoutingDraftEngine.ts:1486-1487` + `leagueBuilderStartupFarmDraft.ts:1088-1089` (board report) + `:1118-1119` (board candidate). Everything else (`playerDatabase.ts`, roster/lineup/GameTracker, the grade-solver, `buildPlayerDto`) is the PLAYER's real traits — leave untouched.
+
+GOAL:
+Scouting v2 **S5 (reveal-fields, JK-ruled 2026-06-23)** — on the scout-facing `VisibleSafeProspectReport` (and the 2 board types that extend it): **replace `trait1`/`trait2` NAMES with a `traitCount` (0/1/2)**, and **reveal `archetypeFamily` + `secondaryPosition`** accurately. Contained LIVE change to the COMPUTED draft-board report (no migration). Do NOT wire the S3/S4 bands (S6), do NOT touch the player's real traits or the Gaussian `scoutedGrade` (S7).
+
+SOURCE OF TRUTH (embedded inline):
+- §1A.1: "Revealed ACCURATELY: Name · age · primary + secondary position · archetype."
+- §1A.1b (RULED): "Traits — COUNT only, identities HIDDEN: the report shows only the trait COUNT 0/1/2, never which traits, never pos/neg. v2 replaces `trait1`/`trait2` with a `traitCount`."
+- §1A.4 S5 + JK 2026-06-23: reveal archetype + secondary + traitCount; bands stay build-dark for S6.
+
+ALLOWED FILES (edit only these; the two test files only if they assert the old trait display):
+- `src/utils/prospectScoutingDraftEngine.ts`
+- `src/utils/leagueBuilderStartupFarmDraft.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx`
+- `src/utils/tests/prospectScoutingDraftEngine.test.ts`
+- `src/utils/tests/leagueBuilderStartupFarmDraft.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`
+
+EXACT CHANGES:
+1. DTO `VisibleSafeProspectReport` (`prospectScoutingDraftEngine.ts:157-173`): REMOVE `trait1?: string;` + `trait2?: string;`. ADD `traitCount: 0 | 1 | 2;`, `archetypeFamily: ProspectArchetypeFamily;`, `secondaryPosition?: Position;`. (`ProspectArchetypeFamily` declared in-file `:529`; `Position` imported `:20`.)
+2. Constructor `visibleReportFromPlayer` (`:1486-1487`): REMOVE `trait1: player.trait1,` + `trait2: player.trait2,`. ADD `traitCount: ([player.trait1, player.trait2].filter(Boolean).length) as 0 | 1 | 2,`, `archetypeFamily: candidate.archetypeFamily,`, `secondaryPosition: player.secondaryPosition,`.
+3. `leagueBuilderStartupFarmDraft.ts` `buildBoardForSession` — TWO object literals build from a `candidate: GeneratedProspectCandidate` (which has `trait1`/`trait2`, required `archetypeFamily`, optional `secondaryPosition`):
+   - the `... satisfies StartupProspectBoardReport` literal (`:1088-1089`): REMOVE `trait1: candidate.trait1,` + `trait2: candidate.trait2,`; ADD `traitCount: ([candidate.trait1, candidate.trait2].filter(Boolean).length) as 0 | 1 | 2,`, `archetypeFamily: candidate.archetypeFamily,`, `secondaryPosition: candidate.secondaryPosition,`.
+   - the `... satisfies StartupProspectBoardCandidate` literal (`:1118-1119`): the SAME replacement.
+   (Leave the hardcoded `age: 18`/`bats: 'R'`/`throws: 'R'` board placeholders as-is — out of scope.)
+4. UI `LeagueBuilderDraft.tsx:376`: replace `<div>Traits {[candidate.trait1, candidate.trait2].filter(Boolean).join(", ") || "None"}</div>` with a trait-COUNT display `<div>Traits {candidate.traitCount}</div>`, plus `<div>Archetype {candidate.archetypeFamily}</div>` and, when present, `{candidate.secondaryPosition ? <div>Secondary {candidate.secondaryPosition}</div> : null}`.
+5. Tests in `prospectScoutingDraftEngine.test.ts`:
+   - `:721` asserts `output.visibleReports.every((report) => !('archetypeFamily' in report))` — **INVERT**: assert every visible report now HAS `archetypeFamily`.
+   - ADD: every visible report has numeric `traitCount` ∈ {0,1,2}, NO `trait1`/`trait2`, reveals `archetypeFamily`; and `traitCount` equals the matching generated player's `[trait1,trait2].filter(Boolean).length`.
+   - Verify `:1177` ("hidden true ratings stay out") still passes (it asserts no `power`/`contact`/`trueGrade`; unaffected).
+6. The two `.test.*` files (`leagueBuilderStartupFarmDraft.test.ts`, `LeagueBuilderDraft.test.tsx`): ONLY if a test asserts the OLD "Traits <names>" board display, update it to the count/archetype display; otherwise leave untouched.
+7. COMPLETENESS GREP (mandatory): `grep -rnE "\.trait1|\.trait2" src --include='*.ts' --include='*.tsx' | grep -v src/archived | grep -iE "report|candidate|visible"` — confirm NO remaining reader of a VISIBLE-REPORT/board `trait1`/`trait2` (the `player.trait1/trait2`, `input.trait1/trait2`, grade-solver sites are the PLAYER's real traits and MUST stay). Paste the output.
+
+DO NOT TOUCH: the player's real traits — `buildPlayerDto` `:1527-1528`, the grade-solver inputs `:983/:1015/:1071`, and all the live roster/lineup/GameTracker/`playerDatabase` `trait1/trait2` (revealed at call-up, correct). The S3/S4 BANDS (S6). The Gaussian `scoutProspect`/`scoutedGrade` (S7). The persisted `franchisePlayerProfile` prospectReport (no traits). The board `age/bats/throws` placeholders. `TRACKER_DB_VERSION`/stores (NO DB bump). `iv_oracle.json`. Any file outside ALLOWED FILES.
+
+VERIFICATION (paste ACTUAL output):
+- `NODE_ENV= npx tsc -b` (expect 0 — fails loudly if any consumer still reads the removed report `trait1`/`trait2`).
+- `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/franchiseStartupProspectDraft.test.ts src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` (expect all pass).
+- The completeness grep (no visible-report/board trait reader remains).
+
+STOP IF: a removed report field is read somewhere not in ALLOWED FILES (report the file:line, do NOT edit outside the list); `ProspectArchetypeFamily`/`Position`/`candidate.archetypeFamily`/`candidate.secondaryPosition` not available as assumed; a change would require a file outside ALLOWED FILES. → "BLOCKED: <reason>".
+
+REPORT:
+1. Every changed git path + total.
+2. Each change with source ref.
+3. ACTUAL tsc + focused-vitest + completeness-grep output.
+4. "S5-REVEAL-FIELDS-V2 complete" OR "BLOCKED: <reason>".
+
+Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S5-REVEAL-FIELDS-V2 ===== -->
+
+<!-- ===== START CONTRACT: S6-BOARD-BANDS ===== -->
+## CONTRACT S6 — DRAFT-BOARD UI: per-tool 0–99 bands + overall grade band (default-covered / long-press) (Branch B / `codex/mode1-v1-b` / worktree `/Users/johnkruse/Projects/kbl-mode1-b`)
+ROUTE: Codex gpt-5.5 | high reasoning effort.
+> **CAPTAIN-GROUNDED 2026-06-23 (Branch-B; spec EMBEDDED INLINE because the ratified specs live on the OTHER branch and may be absent here — verify only `src/…` CODE anchors).** S6 is the FIRST consumer of the build-dark S3/S4 band engines (built, never wired). The CRITICAL S5 invariant: `VisibleSafeProspectReport` must NEVER carry raw numeric ratings — only SAFE/derived data. Bands are DERIVED (published widths around the true value, NOT the true value), so they are safe; compute them at the BOARD-BUILD layer (where the true ratings + scout + seed are in scope) and expose only the bands. Anchor every claim on `src/…` source you re-read; do not infer.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). This wires existing pure band engines into the prospect-draft board card. Anchor every edit on CALL TEXT, not line numbers (they drift).
+
+GOAL:
+On the startup prospect-draft board card, show — **default-COVERED, revealed only on long-press** — the scout's per-tool 0–99 confidence bands + the overall letter-grade band, computed deterministically at the board-build layer. No raw ratings reach the UI.
+
+SPEC (embedded verbatim — `SCOUTING_SYSTEM_SPEC.md` §1A.2 + the S6 line; authoritative):
+- "**S6** Draft-board UI: per-tool 0–99 bands + overall grade band; **default-covered / long-press-to-reveal** scout report (JK ruling 2026-06-20, never built)."
+- "**OVERALL grade → a LETTER-GRADE band** on the grade ladder, width by the scout's confidence tier for the prospect's PRIMARY position: **HIGH = 3 grade-bands**, **MEDIUM = 5**, **LOW = 7**. The true overall grade sits uniform-random inside the band, clamped to the ladder ends."
+- "**Each TOOL → a 0–99 NUMERIC band**, width by the same tier: **HIGH = 30 pts, MEDIUM = 50, LOW = 70**. Tools: 5 for hitters (POW/CON/SPD/FLD/ARM); **7 for pitchers (VEL/JNK/ACC + POW/CON/SPD/FLD — no arm)**. The true tool value sits uniform-random inside the band."
+The band MATH is ALREADY IMPLEMENTED + tested (S3/S4) — you only WIRE the existing functions; do NOT reimplement the band formula.
+
+GROUNDED CODE ANCHORS (re-read in THIS worktree to confirm, then build):
+- `src/utils/prospectScoutingDraftEngine.ts` — the EXISTING build-dark band engines (REUSE, do not modify their bodies): `export function scoutToolBands({ ratings: Record<string,number>; position: DraftPosition; scout?: { specialties?: string[]; weaknesses?: string[] }; seed: string }): Record<string,{ lower:number; upper:number }>`; `export function scoutOverallGradeBand(trueGrade: Grade, tier: 'high'|'medium'|'low', seed: string): { best: Grade; worst: Grade }`; `export function scoutTierForPosition(position, scout): 'high'|'medium'|'low'`. + the base `export interface VisibleSafeProspectReport { … }` (find it; it currently ends with `salary: number;`).
+- `src/utils/prospectScoutingDraftEngine.ts` — `interface GeneratedProspectCandidate` carries `ratings: PositionPlayerRatings & PitcherRatings;` (the TRUE per-tool ratings, keys power/contact/speed/fielding/arm/velocity/junk/accuracy) + `trueGrade: Grade` + `position`.
+- `src/utils/leagueBuilderStartupFarmDraft.ts` — `function buildBoardForSession(session)`: the inner `scouts.map((scout) => { const descriptor = toScoutDescriptor(scout); const report = scoutProspect(candidate, descriptor, session.seed); return { …, scoutId: scout.id, … } satisfies StartupProspectBoardReport; })` loop. THIS is the band-compute site — `candidate.ratings`, `candidate.position`, `candidate.trueGrade`, `descriptor` (the scout w/ specialties/weaknesses), `scout.id`, and `session.seed` are ALL in scope. + the interfaces `StartupProspectBoardReport extends VisibleSafeProspectReport` and `StartupProspectBoardCandidate extends VisibleSafeProspectReport`.
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx` — the prospect-board card: `draftView.prospectBoard.map((candidate: StartupProspectBoardCandidate) => …)`, inside it the `candidate.reports.map((report) => …)` per-scout report rows (each shows `report.scoutName` / `Scouted {report.scoutedGrade} · {report.scoutConfidence} · {report.scoutAccuracy}%` / specialties / weaknesses). The BANDS render INSIDE this per-report row (bands are scout-specific).
+- `src/src_figma/app/components/LongPressReveal.tsx` — `export function LongPressReveal({ label, children, className }: { label: string; children: ReactNode; className?: string })` (pointer-based: default shows a 🔒 + label, long-press reveals children, re-covers on release). REUSE it.
+
+EXACT CHANGES:
+1. **`src/utils/prospectScoutingDraftEngine.ts`** — add TWO OPTIONAL fields to the base `VisibleSafeProspectReport` (after `salary: number;`): `toolBands?: Record<string, { lower: number; upper: number }>;` and `overallGradeBand?: { best: Grade; worst: Grade };`. (Optional ⇒ all extending interfaces + their existing construction sites stay valid without edits; only the board literal below populates them.)
+2. **`src/utils/leagueBuilderStartupFarmDraft.ts`** — inside `buildBoardForSession`'s inner `scouts.map` report builder, BEFORE the `return { … } satisfies StartupProspectBoardReport`, compute:
+   ```
+   const bandTier = scoutTierForPosition(candidate.position, descriptor);
+   const toolBands = scoutToolBands({ ratings: candidate.ratings, position: candidate.position, scout: descriptor, seed: `${session.seed}:tool-bands:${candidate.candidateId}:${scout.id}` });
+   const overallGradeBand = scoutOverallGradeBand(candidate.trueGrade, bandTier, `${session.seed}:grade-band:${candidate.candidateId}:${scout.id}`);
+   ```
+   and add `toolBands,` + `overallGradeBand,` to the returned report literal. Import `scoutToolBands`, `scoutOverallGradeBand`, `scoutTierForPosition` from `./prospectScoutingDraftEngine` (extend the existing import). DECISION (Captain default, logged): bands live on the per-scout REPORT (scout-specific), NOT the outer candidate — the candidate's optional band fields stay undefined. Do NOT compute bands at render time (non-deterministic re-renders) and do NOT add them to the farm/franchise `visibleReportFromPick` paths (no seed/ratings there).
+3. **`src/src_figma/app/pages/LeagueBuilderDraft.tsx`** — inside the `candidate.reports.map((report) => …)` row, ADD a `LongPressReveal` (import it from `../components/LongPressReveal`) that is DEFAULT-COVERED and reveals the bands on long-press:
+   ```
+   {report.toolBands ? (
+     <LongPressReveal label="Hold to reveal scout bands">
+       <div className="text-xs text-[#E8E8D8]/75 space-y-0.5">
+         {Object.entries(report.toolBands).map(([tool, band]) => (
+           <div key={tool}>{tool.toUpperCase()} {band.lower}–{band.upper}</div>
+         ))}
+         {report.overallGradeBand ? (<div>Grade {report.overallGradeBand.best}–{report.overallGradeBand.worst}</div>) : null}
+       </div>
+     </LongPressReveal>
+   ) : null}
+   ```
+   Match the card's existing class palette; keep it inside the report row so each scout's bands are under that scout's line.
+
+MAKE-OR-BREAK:
+(a) NO raw rating reaches the UI — the card renders ONLY `band.lower`/`band.upper`/`best`/`worst` (derived), never `candidate.ratings.*`. (b) Bands are COVERED by default — `LongPressReveal` shows the 🔒 label until long-press; nothing reveals the bands without the press. (c) The band MATH is the existing engines' (you wire, not reimplement) — `scoutToolBands` picks the 5-hitter / 7-pitcher tool set by position internally; do not hand-roll the tool list.
+
+STOP-IF: the work seems to require modifying the BODY of `scoutToolBands`/`scoutOverallGradeBand`/`scoutTierForPosition`/`LongPressReveal`, editing `prospectScoutingDraftEngine.ts` band formulas, touching `leagueBuilderStorage.ts`/`franchiseMoraleState.ts` (the cross-branch overlap files — STOP and report), bumping `TRACKER_DB_VERSION`/any store, or threading a seed into `visibleReportFromPick`. A correct STOP-and-report is GOOD.
+
+CONSTRAINTS — edit ONLY: `src/utils/prospectScoutingDraftEngine.ts` (the 2-field interface add), `src/utils/leagueBuilderStartupFarmDraft.ts` (compute + attach bands in `buildBoardForSession` + the import), `src/src_figma/app/pages/LeagueBuilderDraft.tsx` (the LongPressReveal render + import), and IF a characterized test breaks: `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` (update assertions to the new covered-bands behavior; preserve the non-band assertions). NO `TRACKER_DB_VERSION` bump, NO store/saved-shape change (the board is RECOMPUTED, not persisted — confirm `prospectBoard` comes from `buildBoardForSession`, not a stored row). The frozen `iv_oracle.json` is READ-ONLY. Branch-only — do NOT commit or push (the Captain commits).
+
+GATE (run yourself, report output): `NODE_ENV= npx tsc -b` exit 0 (the type safety net — fails if the band fields are misused) + `NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` green + `git diff --stat spec-docs/reference/iv_oracle.json` empty. Do NOT run the full suite or commit — the auditor runs the FULL gate (this touches a shared type + a live page) + commits.
+
+FORMAT: (1) every changed file + line counts; (2) the wiring as built (band-compute site + the per-report render), referencing the embedded §1A.2 + the no-raw-leak invariant; (3) confirm covered-by-default + derived-only; (4) tsc + focused-vitest output pasted; (5) "S6 board-bands complete" OR "BLOCKED: <reason>".
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S6-BOARD-BANDS ===== -->
+
+<!-- ===== CONTRACT: S7a ===== -->
+## CONTRACT: S7a — pure gradeBandToPriceRange converter (build-dark, no wiring)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder, Branch B (codex/mode1-v1-b, worktree /Users/johnkruse/Projects/kbl-mode1-b). Pure build-dark new engine + ONE additive export. Builder only — do NOT audit/commit/push.
+
+GOAL:
+A NET-NEW pure function converting a scout's overall grade BAND ({best, worst} grades) into a $ bidding-guidance price range, sourced from the canonical grade→$ table. No consumer yet (S7b wires it). Build-dark.
+
+SOURCE OF TRUTH:
+- **JK RULING 2026-06-23: range = MIDPOINT-to-MIDPOINT** — `low = midpoint(worst grade)`, `high = midpoint(best grade)`; the grade→$ anchor = the canonical `GRADE_SALARY_BOUNDS` (`src/engines/ratingsAdjustmentEngine.ts:149`, T5-calibrated). `midpoint(grade) = (floor + ceiling) / 2`.
+- `Grade` type = `src/engines/gradeEngine.ts:19` (12 grades S..D). The scout band only ever emits A..D (`GRADES` ladder `prospectScoutingDraftEngine.ts:268`) but the signature accepts `Grade`.
+- BRANCH_B_PROGRESS.md S7a row.
+
+CONSTRAINTS:
+- Edit ONLY: `src/engines/ratingsAdjustmentEngine.ts` (add `export` to `GRADE_SALARY_BOUNDS` — additive, NO other change). CREATE: `src/engines/gradeBandPrice.ts` + `src/engines/__tests__/gradeBandPrice.test.ts`.
+- Do NOT touch: any scouting/draft/auction file (S7b/c/d wire it), the 2 cross-branch overlap files (`leagueBuilderStorage.ts`, `franchiseMoraleState.ts`), any DB/store/version, the frozen `iv_oracle.json`.
+- SINGLE SOURCE OF TRUTH: import `GRADE_SALARY_BOUNDS`, do NOT duplicate its $ values into the new file.
+- Branch-only (codex/mode1-v1-b). Do NOT commit/push. Leave changes unstaged.
+
+EXPECTED OUTPUT:
+1. `src/engines/ratingsAdjustmentEngine.ts`: `const GRADE_SALARY_BOUNDS` (:149) → `export const GRADE_SALARY_BOUNDS`. NO other change.
+2. NEW `src/engines/gradeBandPrice.ts`:
+   - `import { GRADE_SALARY_BOUNDS } from './ratingsAdjustmentEngine';` + `import type { Grade } from './gradeEngine';`
+   - `export interface GradePriceRange { low: number; high: number; }`
+   - `export function gradeMidpointSalary(grade: Grade): number { const b = GRADE_SALARY_BOUNDS[grade]; return (b.floor + b.ceiling) / 2; }`
+   - ```
+     export function gradeBandToPriceRange(band: { best: Grade; worst: Grade }): GradePriceRange {
+       const high = gradeMidpointSalary(band.best);
+       const low = gradeMidpointSalary(band.worst);
+       return { low: Math.min(low, high), high: Math.max(low, high) };
+     }
+     ```
+   - Banner comment line 1: build-dark, no consumer yet (S7b wires); NOTE the `C`/`C-` and `D+`/`D` GRADE_SALARY_BOUNDS midpoints are identical (documented T5-bridge overlap, `ratingsAdjustmentEngine.ts:158-161`) so those adjacent bands price identically — intentional, not a bug.
+3. NEW `src/engines/__tests__/gradeBandPrice.test.ts`: midpoint correct (`gradeMidpointSalary('A')`=(33329.72+116654.02)/2=74991.87); monotonic (A-band high > D-band high); low≤high; single-grade band `best===worst` → low===high; `C` vs `C-` identical midpoint (overlap); swapped `{best:'D',worst:'A'}` still returns low≤high.
+
+VERIFICATION (run in the mode1-b worktree, paste actual output):
+- `NODE_ENV= npx tsc -b` → 0
+- `NODE_ENV= npx vitest run` → FULL suite; expect the Branch-B characterized baseline (sole hard fail `wpaRuntimeBoundary` + the `AwardsWatchlist` order-flake, solo-passing) = ZERO NEW REDS; the new gradeBandPrice test passes.
+- `git --no-pager diff --stat` → `ratingsAdjustmentEngine.ts` (+1 export) + 2 new files.
+
+FORMAT: 1. files changed 2. diffs/new files 3. verification output (pasted) 4. "S7a complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF exporting `GRADE_SALARY_BOUNDS` requires any OTHER change to `ratingsAdjustmentEngine.ts` — report it.
+- STOP-IF `GRADE_SALARY_BOUNDS` is already exported, or the `Grade` type is not the 12-grade S..D union — report it.
+- Do NOT duplicate the $ values, do NOT wire any consumer, do NOT touch scouting/auction files, do NOT commit/push.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S7a ===== -->
+
+<!-- ===== CONTRACT: RB-13b ===== -->
+## CONTRACT: RB-13b — route the draft flow by the league's draftFormat + thread an explicit leagueId (Mode-1, Branch B)
+
+**ROUTE:** Build + commit in THIS worktree `/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — do NOT commit, do NOT push (the Captain commits after auditing). Use xhigh reasoning effort.
+
+**ROLE:** Builder (Codex). The Captain (a different model) audits your real diff afterward.
+
+**GOAL (JK ruling, embedded — RB-13b is an ENGINEERING routing fix, "no design call"):** Today the draft flow ignores each league's persisted `draftFormat` and every draft page self-picks `leagues[0]`. Fix both: (1) route auction-vs-snake by the *selected league's* `draftFormat`; (2) replace the implicit `leagues[0]` anchor with an EXPLICIT leagueId threaded to the draft page. The leagueId-threading mechanism is the builder's documented choice — **use a URL query param `?leagueId=<id>`** (simplest, explicit, bookmarkable; JK left this to the builder). Snake stays user-selectable (do NOT remove snake). This is user-visible UI — build the routing LOGIC + unit tests now; the rendered result is a **browser-verify (BV) follow-up**, not a blocker.
+
+**SOURCE OF TRUTH (embedded — do NOT rely on this branch's spec-docs, which may be stale):**
+- DECISIONS_LOG 2026-06-22: "wire the hub/draft flow to route auction-vs-snake by the selected league's `draftFormat` … per-league 'Draft' actions in the CURRENT LEAGUES list that route by that league's `draftFormat`, threading the leagueId to the draft page."
+- DECISIONS_LOG 2026-06-23 (item 10): "RB-13b: engineering routing fix (no design call) — route the draft by the selected league's persisted `draftFormat` + a minimal explicit active-league id (not `leagues[0]`); land before the lane-merge."
+
+**GROUNDED ANCHORS (verified in THIS worktree; re-read each before editing):**
+- `src/utils/leagueBuilderStorage.ts:105` `draftFormat?: 'auction' | 'snake'` on `LeagueTemplate`; `:113` `export function getLeagueDraftFormat(template): 'auction' | 'snake'` (defaults `'auction'`). **READ-ONLY — import and use it; do NOT edit `leagueBuilderStorage.ts` (it is a cross-branch overlap file).**
+- `src/src_figma/app/pages/LeagueBuilder.tsx:220` the "MLB DRAFT" hub button hardcodes `navigate("/league-builder/snake-draft")` (the routing bug); `:211` `/league-builder/draft` is the separate FARM startup draft (leave it).
+- The CURRENT LEAGUES list page: `src/src_figma/app/pages/LeagueBuilderLeagues.tsx` (renders the leagues; each league has `draftFormat`). This is where the per-league "Draft" action belongs.
+- The draft pages (each self-picks `leagues[0]` on load): `LeagueBuilderSnakeDraft.tsx:238` (`setActiveLeagueId(leagues[0].id)`), `LeagueBuilderAuctionDraft.tsx:115` (`leagueData.leagues[0].id`), `LeagueBuilderFarmAuctionDraft.tsx` (~:220), `LeagueBuilderDraft.tsx` (~:54, the farm startup draft). Each ALSO has a league-picker dropdown (`onChange={(e) => setActiveLeagueId(e.target.value)}`) — keep it.
+- App routes (`src/App.tsx` ~:298-310): `/league-builder/snake-draft`, `/league-builder/auction-draft`, `/league-builder/farm-auction-draft`, `/league-builder/draft` (static, no param today).
+
+**CONSTRAINTS:**
+- Edit ONLY Mode-1 UI files: `LeagueBuilderLeagues.tsx`, `LeagueBuilder.tsx`, and the MLB draft pages `LeagueBuilderSnakeDraft.tsx` + `LeagueBuilderAuctionDraft.tsx` (+ `LeagueBuilderFarmAuctionDraft.tsx` only if it shares the same MLB entry; the FARM startup `LeagueBuilderDraft.tsx` may get the query-param read for consistency but its routing is separate — keep its behavior). Plus test files.
+- **Do NOT edit `src/utils/leagueBuilderStorage.ts`** (cross-branch overlap — read `getLeagueDraftFormat` only). Do NOT touch `src/data/playerDatabase.ts`, `spec-docs/reference/iv_oracle.json`, `seasonAggregator.ts`, or any ratings/expected-stats/checkpoint engine.
+- Back-compat: a draft page opened WITHOUT `?leagueId` must still fall back to `leagues[0]` (so existing tests + existing nav paths keep working).
+- Branch-only. No `TRACKER_DB_VERSION` bump.
+
+**THE CHANGES:**
+1. **Per-league routing entry (`LeagueBuilderLeagues.tsx`):** add a per-league "Draft" action (button/menu item) on each league row that navigates by that league's format: `navigate(\`/league-builder/${getLeagueDraftFormat(league) === 'snake' ? 'snake-draft' : 'auction-draft'}?leagueId=${league.id}\`)`. (Reuse existing row-action styling.) This is the canonical RB-13b entry point.
+2. **Hub button (`LeagueBuilder.tsx:220`):** change the hardcoded "MLB DRAFT" → `navigate("/league-builder/snake-draft")` so it no longer forces snake. Minimal documented fix: route it to the leagues list (`navigate("/league-builder/leagues")`) so the user picks a league whose per-league Draft action then routes by format. (Do not invent a hub-level "active league" — there isn't one.)
+3. **Draft pages read the explicit leagueId:** in `LeagueBuilderSnakeDraft.tsx`, `LeagueBuilderAuctionDraft.tsx` (and `LeagueBuilderFarmAuctionDraft.tsx` if it's the same MLB entry), on load read `leagueId` from the URL query string (`useSearchParams` or equivalent already used in this codebase — match the existing pattern); if present and it matches a known league, `setActiveLeagueId(thatId)`; ELSE fall back to the existing `leagues[0]` default. Keep the in-page league-picker dropdown working.
+4. **A NEW routing unit test** (the build-dark, non-visible proof): a small pure helper or inline-tested function `draftRouteForFormat(format): string` (or test the navigate target) asserting `'snake' → '/league-builder/snake-draft'` and `'auction' | undefined → '/league-builder/auction-draft'`, and that the per-league action threads `?leagueId=<id>`. Plus assert a draft page honors `?leagueId` over `leagues[0]` (and falls back when absent).
+5. Keep all existing draft-page tests green (`src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`, `LeagueBuilderSnakeDraft.test.tsx`, `src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx`, `LeagueBuilderFarmAuctionDraft.test.tsx`) — update their render/mocks only as needed (they may need a router/searchParams wrapper).
+
+**EXPECTED OUTPUT:** A unified diff over the Mode-1 UI files above + tests. Builds; tests pass.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npx tsc -b` (or `npm run build`) → clean / exit 0.
+2. `NODE_ENV= npx vitest run` (FULL suite) — the sole characterized fail on this branch is `wpaRuntimeBoundary` (re-run any suspected NEW red SOLO before judging it real). Report the failed-file list.
+3. `git --no-pager diff --stat` → only the Mode-1 UI files + tests; confirm `src/utils/leagueBuilderStorage.ts` is NOT in it.
+
+**MAKE-OR-BREAK:** `getLeagueDraftFormat` is imported READ-ONLY (no `leagueBuilderStorage.ts` edit); a per-league Draft action routes snake-vs-auction by THAT league's `draftFormat` and threads `?leagueId`; the draft pages honor `?leagueId` but fall back to `leagues[0]` when absent (back-compat); snake stays selectable; the new routing unit test passes.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report (do not improvise) if: (a) any cited anchor differs from the real file (re-read + report); (b) routing-by-format cannot be done without editing `leagueBuilderStorage.ts` or another overlap/frozen/Branch-A file (report which); (c) the existing draft-page tests cannot be kept green without a behavior change beyond the query-param/fallback (report it). A correct STOP with a precise reason is a SUCCESS.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: RB-13b ===== -->

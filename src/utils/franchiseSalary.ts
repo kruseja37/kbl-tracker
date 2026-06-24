@@ -109,6 +109,10 @@ export function calculateHiddenFarmProspectSalaryFromPublicContext(player: Playe
 }
 
 export function getVisibleSafeFranchisePlayerSalary(player: Player): number | null {
+  if (isHiddenFarmProspectSalaryContext(player)) {
+    const wonBid = finitePositive(player.settledSalary);
+    if (wonBid !== null) return wonBid;
+  }
   return calculateHiddenFarmProspectSalaryFromPublicContext(player) ?? finitePositive(player.salary);
 }
 

@@ -7,7 +7,11 @@
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { LeagueBuilderLeagues } from '../../app/pages/LeagueBuilderLeagues';
+import {
+  LeagueBuilderLeagues,
+  draftRouteForFormat,
+  draftRouteForLeague,
+} from '../../app/pages/LeagueBuilderLeagues';
 
 // ============================================
 // MOCKS
@@ -33,6 +37,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         description: 'Main league',
         teamIds: ['team-1', 'team-2'],
         defaultRulesPreset: 'preset-1',
+        draftFormat: 'auction',
         color: '#5A8352',
         createdDate: '2026-01-15T00:00:00.000Z',
       },
@@ -41,6 +46,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         name: 'Minor League',
         teamIds: ['team-3'],
         defaultRulesPreset: 'preset-1',
+        draftFormat: 'snake',
         color: '#CC44CC',
         createdDate: '2026-01-20T00:00:00.000Z',
       },
@@ -62,6 +68,21 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     duplicateLeague: mockDuplicateLeague,
   })),
 }));
+
+const openCreateLeagueModal = async () => {
+  fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
+  expect(await screen.findByText('Create New League')).toBeInTheDocument();
+};
+
+const createLeagueFromModal = async (name: string) => {
+  fireEvent.change(screen.getByPlaceholderText('e.g., Kruse Baseball League'), {
+    target: { value: name },
+  });
+  fireEvent.click(screen.getByRole('button', { name: /^create league$/i }));
+  await waitFor(() => {
+    expect(screen.queryByText('Create New League')).not.toBeInTheDocument();
+  });
+};
 
 // ============================================
 // TESTS
@@ -141,6 +162,27 @@ describe('LeagueBuilderLeagues Component', () => {
       render(<LeagueBuilderLeagues />);
       const deleteButtons = screen.getAllByTitle('Delete league');
       expect(deleteButtons.length).toBe(2);
+    });
+
+    test('draft route helper maps snake to snake and auction/default to auction', () => {
+      expect(draftRouteForFormat('snake')).toBe('/league-builder/snake-draft');
+      expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
+      expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
+    });
+
+    test('per-league Draft action routes by format and threads leagueId', () => {
+      expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
+        '/league-builder/snake-draft?leagueId=league-2',
+      );
+
+      render(<LeagueBuilderLeagues />);
+      const draftButtons = screen.getAllByTitle('Draft league');
+
+      fireEvent.click(draftButtons[0]);
+      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/auction-draft?leagueId=league-1');
+
+      fireEvent.click(draftButtons[1]);
+      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/snake-draft?leagueId=league-2');
     });
   });
 
@@ -343,6 +385,36 @@ describe('LeagueBuilderLeagues Component', () => {
         btn.textContent?.toLowerCase().includes('create league')
       );
       expect(saveButton).toBeInTheDocument();
+    });
+  });
+
+  describe('Draft Format', () => {
+    test('creating a league persists selected snake draft format', async () => {
+      render(<LeagueBuilderLeagues />);
+      await openCreateLeagueModal();
+
+      fireEvent.change(screen.getByLabelText('Draft format'), {
+        target: { value: 'snake' },
+      });
+      await createLeagueFromModal('Snake Draft League');
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ draftFormat: 'snake' })
+        );
+      });
+    });
+
+    test('creating a league persists default auction draft format', async () => {
+      render(<LeagueBuilderLeagues />);
+      await openCreateLeagueModal();
+      await createLeagueFromModal('Auction Draft League');
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ draftFormat: 'auction' })
+        );
+      });
     });
   });
 

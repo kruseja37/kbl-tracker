@@ -1227,7 +1227,7 @@ function Step5RosterMode({
             <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTUP PROSPECT DRAFT</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              <p>Use League Builder Draft to hire two scouts for every team, then draft FARM prospects one pick at a time.</p>
+              <p>Use League Builder Draft to hire one scout for every team, then draft FARM prospects one pick at a time.</p>
               <p>Franchise Setup does not auto-fill farms. It only validates and copies prepared League Builder state.</p>
               <p>Drafted prospects keep true ratings and hidden personality modifiers hidden until call-up.</p>
               <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
@@ -1313,6 +1313,25 @@ function Step6Confirm({
           style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
           placeholder="Enter franchise name..."
         />
+      </div>
+
+      {/* GM Name — the user IS the GM (§8) */}
+      <div className="mb-6">
+        <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>GM NAME</p>
+        <input
+          type="text"
+          value={config.gmName ?? ''}
+          onChange={(e) =>
+            setConfig({
+              ...config,
+              gmName: e.target.value,
+            })
+          }
+          className="w-full px-4 py-3 bg-[#2A4A22] border-4 border-[#E8E8D8] text-[#E8E8D8] text-sm"
+          style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+          placeholder="Enter your GM name (or leave blank for a generated one)..."
+        />
+        <p className="text-xs text-[#E8E8D8]/60 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>You are the GM — your name appears on roster &amp; draft moves.</p>
       </div>
 
       {/* Settings Summary */}

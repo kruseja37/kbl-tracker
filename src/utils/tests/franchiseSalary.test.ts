@@ -178,6 +178,22 @@ describe('franchise salary helpers', () => {
     expect(calculateFranchiseCurrentSalary(highTrueRatings).salary).toBe(3999.57);
   });
 
+  test('hidden FARM visible salary prefers the won auction bid when settled salary is present', () => {
+    const hiddenFarm = makePlayer({
+      salary: 3999.57,
+      settledSalary: 25,
+      ratingRevealState: 'hidden',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
+      prospectProfile: {
+        draftRound: 2,
+        scoutedGrade: 'B',
+      },
+    } as Partial<Player> & Record<string, unknown>);
+
+    expect(calculateHiddenFarmProspectSalaryFromPublicContext(hiddenFarm)).toBe(3999.57);
+    expect(getVisibleSafeFranchisePlayerSalary(hiddenFarm)).toBe(25);
+  });
+
   test('revealed FARM players keep known salary context instead of hidden prospect fallback', () => {
     const revealedFarm = makePlayer({
       salary: 6.4,

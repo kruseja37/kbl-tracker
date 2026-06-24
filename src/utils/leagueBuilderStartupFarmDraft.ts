@@ -31,7 +31,10 @@ import {
   prospectSalaryForDraftRound,
   PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
   scoutAccuracy,
+  scoutOverallGradeBand,
   scoutProspect,
+  scoutTierForPosition,
+  scoutToolBands,
   visibleReportForProspectPlayer,
   type DraftPosition,
   type GeneratedProspectCandidate,
@@ -48,7 +51,7 @@ export const LEAGUE_BUILDER_STARTUP_FARM_DRAFT_VERSION =
 
 export const STARTUP_FARM_TARGET_SIZE = 10;
 export const STARTUP_MLB_REQUIRED_SIZE = 22;
-export const STARTUP_SCOUTS_PER_TEAM = 2;
+export const STARTUP_SCOUTS_PER_TEAM = 1;
 export const STARTUP_SCOUT_POOL_MULTIPLIER = 3;
 
 export interface StartupFarmDraftTeamStatus {
@@ -748,7 +751,6 @@ export async function applyLeagueBuilderStartupFarmDraft(
 }
 
 const DRAFT_POSITIONS: DraftPosition[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'SP', 'RP', 'CP'];
-const SCOUT_SPECIALTY_POOL: ScoutSpecialty[] = ['pitching', 'outfield', 'infield', 'catching', 'power', 'contact', 'defense', 'speed', 'SP', 'RP', 'CF', 'SS', 'CP', '1B'];
 
 function hashString(input: string): number {
   let hash = 2166136261;
@@ -790,16 +792,18 @@ function buildScoutPool(leagueId: string, seed: string, teamCount: number): Leag
   const poolSize = teamCount * STARTUP_SCOUTS_PER_TEAM * STARTUP_SCOUT_POOL_MULTIPLIER;
   return Array.from({ length: poolSize }, (_, index) => {
     const scoutSeed = `${seed}:scout:${index + 1}`;
-    const specialty = pick(`${scoutSeed}:specialty`, SCOUT_SPECIALTY_POOL);
-    let weakness = pick(`${scoutSeed}:weakness`, SCOUT_SPECIALTY_POOL);
-    if (weakness === specialty) {
-      weakness = pick(`${scoutSeed}:weakness-alt`, SCOUT_SPECIALTY_POOL.filter((item) => item !== specialty));
-    }
+    const high1 = pick(`${scoutSeed}:high:1`, DRAFT_POSITIONS);
+    const afterHigh1 = DRAFT_POSITIONS.filter((p) => p !== high1);
+    const high2 = pick(`${scoutSeed}:high:2`, afterHigh1);
+    const afterHigh2 = afterHigh1.filter((p) => p !== high2);
+    const low1 = pick(`${scoutSeed}:low:1`, afterHigh2);
+    const afterLow1 = afterHigh2.filter((p) => p !== low1);
+    const low2 = pick(`${scoutSeed}:low:2`, afterLow1);
     const descriptor: ProspectScoutDescriptor = {
       scoutId: `scout-${leagueId}-${index + 1}`,
       scoutName: `${pick(`${scoutSeed}:first`, SMB4_FIRST_NAMES)} ${pick(`${scoutSeed}:last`, SMB4_LAST_NAMES)}`,
-      specialties: [specialty],
-      weaknesses: [weakness],
+      specialties: [high1, high2],
+      weaknesses: [low1, low2],
     };
     return {
       id: descriptor.scoutId,
@@ -1072,6 +1076,18 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
     const reports = scouts.map((scout) => {
       const descriptor = toScoutDescriptor(scout);
       const report = scoutProspect(candidate, descriptor, session.seed);
+      const bandTier = scoutTierForPosition(candidate.position, descriptor);
+      const toolBands = scoutToolBands({
+        ratings: candidate.ratings as unknown as Record<string, number>,
+        position: candidate.position,
+        scout: descriptor,
+        seed: `${session.seed}:tool-bands:${candidate.candidateId}:${scout.id}`,
+      });
+      const overallGradeBand = scoutOverallGradeBand(
+        candidate.trueGrade,
+        bandTier,
+        `${session.seed}:grade-band:${candidate.candidateId}:${scout.id}`,
+      );
       return {
         candidateId: candidate.candidateId,
         playerName: `${candidate.firstName} ${candidate.lastName}`,
@@ -1084,9 +1100,12 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
         scoutConfidence: report.scoutConfidence,
         chemistry: candidate.chemistry,
         personality: candidate.personality,
-        trait1: candidate.trait1,
-        trait2: candidate.trait2,
+        traitCount: ([candidate.trait1, candidate.trait2].filter(Boolean).length) as 0 | 1 | 2,
+        archetypeFamily: candidate.archetypeFamily,
+        secondaryPosition: candidate.secondaryPosition,
         salary,
+        toolBands,
+        overallGradeBand,
         scoutId: scout.id,
         scoutName: scout.name,
         scoutAccuracy: report.scoutAccuracy,
@@ -1114,8 +1133,9 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
       scoutConfidence: best.scoutConfidence,
       chemistry: candidate.chemistry,
       personality: candidate.personality,
-      trait1: candidate.trait1,
-      trait2: candidate.trait2,
+      traitCount: ([candidate.trait1, candidate.trait2].filter(Boolean).length) as 0 | 1 | 2,
+      archetypeFamily: candidate.archetypeFamily,
+      secondaryPosition: candidate.secondaryPosition,
       salary,
       reports,
     } satisfies StartupProspectBoardCandidate;
@@ -1328,7 +1348,7 @@ export async function confirmLeagueBuilderProspectPick(input: {
   const seasonNumber = input.seasonNumber ?? 1;
   const session = await getStartupDraftSession(input.leagueId, seasonNumber);
   if (!session) throw new Error('Start a League Builder prospect draft session first.');
-  if (!allTeamsHaveScouts(session)) throw new Error('Every team must hire two scouts before the prospect draft begins.');
+  if (!allTeamsHaveScouts(session)) throw new Error('Every team must hire one scout before the prospect draft begins.');
   const durableScoutIssues = await validateSessionDurableScoutState(session);
   if (durableScoutIssues.length > 0) {
     throw new Error(`Startup prospect draft scout state changed: ${durableScoutIssues.join(' ')}`);

@@ -9,10 +9,15 @@ const mocks = vi.hoisted(() => ({
   setActiveFranchise: vi.fn(),
   getLeagueTemplate: vi.fn(),
   getTeam: vi.fn(),
+  getAuctionSession: vi.fn(),
+  getAuctionSessionById: vi.fn(),
+  createFarmAuctionSessionId: vi.fn(),
+  getPlayer: vi.fn(),
   getAllGamesByFranchise: vi.fn(),
   initScheduleDatabase: vi.fn(),
   deepCopyLeagueToFranchise: vi.fn(),
   deleteFranchiseDatabase: vi.fn(),
+  getFranchisePlayer: vi.fn(),
   getAllFranchisePlayers: vi.fn(),
   getAllFranchiseTeams: vi.fn(),
   saveFranchisePlayer: vi.fn(),
@@ -38,6 +43,10 @@ vi.mock('../franchiseManager', () => ({
 vi.mock('../leagueBuilderStorage', () => ({
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
+  getAuctionSession: mocks.getAuctionSession,
+  getAuctionSessionById: mocks.getAuctionSessionById,
+  createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
+  getPlayer: mocks.getPlayer,
 }));
 
 vi.mock('../scheduleStorage', () => ({
@@ -48,6 +57,7 @@ vi.mock('../scheduleStorage', () => ({
 vi.mock('../franchisePlayerStorage', () => ({
   deepCopyLeagueToFranchise: mocks.deepCopyLeagueToFranchise,
   deleteFranchiseDatabase: mocks.deleteFranchiseDatabase,
+  getFranchisePlayer: mocks.getFranchisePlayer,
   getAllFranchisePlayers: mocks.getAllFranchisePlayers,
   getAllFranchiseTeams: mocks.getAllFranchiseTeams,
   saveFranchisePlayer: mocks.saveFranchisePlayer,
@@ -110,6 +120,12 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       id: teamId,
       name: teamId === 'team-a' ? 'Team A' : 'Team B',
     }));
+    mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.getPlayer.mockResolvedValue(null);
+    mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
+      `${leagueId}::startup-farm-auction-draft::${seasonNumber}`,
+    );
     mocks.deepCopyLeagueToFranchise.mockResolvedValue({
       rosterRequirements: {},
       stadiums: [],
@@ -135,6 +151,7 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
     mocks.saveSeasonMetadata.mockImplementation((metadata) => Promise.resolve(metadata));
     mocks.getAllGamesByFranchise.mockResolvedValue([{}, {}, {}]);
     mocks.getFranchiseFarmRoster.mockResolvedValue([]);
+    mocks.getFranchisePlayer.mockResolvedValue(null);
     mocks.getAllFranchisePlayers.mockResolvedValue([{
       id: 'player-1',
       hiddenPersonalityModifiers: {

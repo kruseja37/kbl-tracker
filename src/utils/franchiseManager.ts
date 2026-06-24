@@ -42,6 +42,7 @@ export interface FranchiseMetadata {
   leagueId?: string;
   controlledTeamId?: string;
   controlledTeamName?: string;
+  gmName?: string;
   currentSeason?: number;
 }
 
@@ -355,7 +356,7 @@ export async function getFranchiseConfig(franchiseId: FranchiseId): Promise<Stor
  */
 export async function updateFranchiseMetadata(
   franchiseId: FranchiseId,
-  updates: Partial<Pick<FranchiseMetadata, 'leagueName' | 'leagueId' | 'controlledTeamId' | 'controlledTeamName' | 'currentSeason'>>
+  updates: Partial<Pick<FranchiseMetadata, 'leagueName' | 'leagueId' | 'controlledTeamId' | 'controlledTeamName' | 'gmName' | 'currentSeason'>>
 ): Promise<void> {
   const metadata = await loadFranchise(franchiseId);
   if (!metadata) throw new Error(`Franchise ${franchiseId} not found`);

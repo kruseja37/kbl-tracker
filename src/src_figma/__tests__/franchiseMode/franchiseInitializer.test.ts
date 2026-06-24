@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { FranchiseConfig, StoredFranchiseConfig } from '../../../types/franchise';
+import type { AuctionResult, AuctionSession } from '../../../engines/auctionStateMachine';
 import { YANKEES_PLAYERS } from '../../../data/players/mlb/yankeesPlayers';
+import { TRUE_VALUE_CALCULATION_VERSION } from '../../../engines/salaryCalculator';
+import { TRACKER_DB_VERSION } from '../../../utils/trackerDb';
 
 const mocks = vi.hoisted(() => ({
   createFranchise: vi.fn(),
@@ -11,14 +14,23 @@ const mocks = vi.hoisted(() => ({
   deleteFranchise: vi.fn(),
   getLeagueTemplate: vi.fn(),
   getTeam: vi.fn(),
+  getAuctionSession: vi.fn(),
+  getAuctionSessionById: vi.fn(),
+  createFarmAuctionSessionId: vi.fn(),
+  getPlayer: vi.fn(),
+  savePlayer: vi.fn(),
   generateSchedule: vi.fn(),
   initScheduleDatabase: vi.fn(),
   getAllGamesByFranchise: vi.fn(),
   deepCopyLeagueToFranchise: vi.fn(),
   deleteFranchiseDatabase: vi.fn(),
+  getFranchisePlayer: vi.fn(),
   getAllFranchisePlayers: vi.fn(),
   getAllFranchiseTeams: vi.fn(),
+  saveFranchisePlayer: vi.fn(),
   saveFranchiseTeam: vi.fn(),
+  seedFranchiseMoraleBaseline: vi.fn(),
+  saveFranchiseTrueValueRows: vi.fn(),
   getOrCreateSeason: vi.fn(),
   getSeasonMetadata: vi.fn(),
   saveSeasonMetadata: vi.fn(),
@@ -40,6 +52,11 @@ vi.mock('../../../utils/franchiseManager', () => ({
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
+  getAuctionSession: mocks.getAuctionSession,
+  getAuctionSessionById: mocks.getAuctionSessionById,
+  createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
+  getPlayer: mocks.getPlayer,
+  savePlayer: mocks.savePlayer,
 }));
 
 vi.mock('../../../utils/scheduleGenerator', () => ({
@@ -54,8 +71,10 @@ vi.mock('../../../utils/scheduleStorage', () => ({
 vi.mock('../../../utils/franchisePlayerStorage', () => ({
   deepCopyLeagueToFranchise: mocks.deepCopyLeagueToFranchise,
   deleteFranchiseDatabase: mocks.deleteFranchiseDatabase,
+  getFranchisePlayer: mocks.getFranchisePlayer,
   getAllFranchisePlayers: mocks.getAllFranchisePlayers,
   getAllFranchiseTeams: mocks.getAllFranchiseTeams,
+  saveFranchisePlayer: mocks.saveFranchisePlayer,
   saveFranchiseTeam: mocks.saveFranchiseTeam,
 }));
 
@@ -70,6 +89,14 @@ vi.mock('../../../utils/franchiseFarmStorage', () => ({
   carryOverFranchiseFarmRecordsToSeason: mocks.carryOverFranchiseFarmRecordsToSeason,
   deleteFranchiseFarmRecordsForSeason: mocks.deleteFranchiseFarmRecordsForSeason,
   getFranchiseFarmRoster: mocks.getFranchiseFarmRoster,
+}));
+
+vi.mock('../../../utils/franchiseMoraleState', () => ({
+  seedFranchiseMoraleBaseline: mocks.seedFranchiseMoraleBaseline,
+}));
+
+vi.mock('../../../utils/franchiseTrueValueStorage', () => ({
+  saveFranchiseTrueValueRows: mocks.saveFranchiseTrueValueRows,
 }));
 
 import {
@@ -155,6 +182,37 @@ const copyResult = {
   ],
 };
 
+function sold(playerId: string, winnerTeamId: string, salary: number): AuctionResult {
+  return {
+    playerId,
+    disposition: 'SOLD',
+    nominatorTeamId: 'team-away',
+    winnerTeamId,
+    salary,
+  };
+}
+
+function auctionSession(
+  players: Record<string, { playerId: string; iv: number; ivPercentile: number }>,
+  results: AuctionResult[],
+): AuctionSession {
+  return {
+    state: 'AUCTION_COMPLETE',
+    config: { cpuShillCount: 0 } as AuctionSession['config'],
+    teams: [],
+    nominationOrder: ['team-away', 'team-home'],
+    nominationIndex: 0,
+    nominationRound: 0,
+    players,
+    playerOrder: Object.keys(players),
+    availablePlayerIds: [],
+    currentLot: null,
+    pendingClaim: null,
+    results,
+    saleCount: results.filter((result) => result.disposition === 'SOLD').length,
+  };
+}
+
 describe('franchiseInitializer Wave 1 persistence handoff', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -175,6 +233,13 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         id: teamId,
         name: teamId === 'team-away' ? 'Away Club' : 'Home Club',
       }),
+    );
+    mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.getPlayer.mockResolvedValue(null);
+    mocks.savePlayer.mockImplementation(async (player: unknown) => player);
+    mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
+      `${leagueId}::startup-farm-auction-draft::${seasonNumber}`,
     );
     mocks.generateSchedule.mockReturnValue([
       {
@@ -199,6 +264,10 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     mocks.deleteSeasonMetadata.mockResolvedValue(undefined);
     mocks.deleteFranchise.mockResolvedValue(undefined);
     mocks.deleteFranchiseDatabase.mockResolvedValue(undefined);
+    mocks.getFranchisePlayer.mockResolvedValue(null);
+    mocks.saveFranchisePlayer.mockImplementation(async (_franchiseId: string, player: unknown) => player);
+    mocks.seedFranchiseMoraleBaseline.mockResolvedValue(undefined);
+    mocks.saveFranchiseTrueValueRows.mockImplementation(async (rows: unknown[]) => rows);
     mocks.carryOverFranchiseFarmRecordsToSeason.mockResolvedValue({
       fromSeasonId: 'franchise-1-season-1',
       toSeasonId: 'franchise-1-season-2',
@@ -304,6 +373,173 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     const ronCharles = YANKEES_PLAYERS.find((player) => player.id === 'nyy-charles');
     expect(ronCharles?.primaryPosition).toBe('LF');
     expect(ronCharles?.secondaryPosition).not.toBe('LF');
+  });
+
+  test('stamps draft-baseline true value rows for MLB players and farm prospects without a DB version bump', async () => {
+    const mlbPlayer = {
+      id: 'mlb-drafted',
+      primaryPosition: 'CF',
+      personality: 'Competitive',
+      hiddenPersonalityModifiers: {
+        loyalty: 60,
+        ambition: 50,
+        resilience: 55,
+        charisma: 65,
+      },
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-away', rosterStatus: 'MLB' }],
+    };
+    const farmPlayer = {
+      id: 'farm-drafted',
+      primaryPosition: 'SP',
+      personality: 'Relaxed',
+      salary: 3.99957,
+      settledSalary: 3.99957,
+      hiddenPersonalityModifiers: {
+        loyalty: 50,
+        ambition: 50,
+        resilience: 50,
+        charisma: 50,
+      },
+    };
+    const cpuFarmPlayer = {
+      id: 'cpu-farm-drafted',
+      primaryPosition: 'SS',
+      personality: 'Competitive',
+      salary: 2.33308,
+      hiddenPersonalityModifiers: {
+        loyalty: 55,
+        ambition: 60,
+        resilience: 50,
+        charisma: 45,
+      },
+    };
+    const shillFarmPlayer = {
+      id: 'shill-farm-drafted',
+      primaryPosition: 'CF',
+      personality: 'Disciplined',
+      salary: 2.33308,
+    };
+    mocks.getAllFranchisePlayers.mockResolvedValueOnce([mlbPlayer]);
+    mocks.getTeam.mockImplementation((teamId: string) =>
+      Promise.resolve({
+        id: teamId,
+        name: teamId === 'team-away' ? 'Away Club' : 'Home Club',
+        controlledBy: teamId === 'team-home' ? 'ai' : 'human',
+      }),
+    );
+    mocks.getAuctionSession.mockResolvedValueOnce({
+      session: auctionSession(
+        {
+          'mlb-drafted': { playerId: 'mlb-drafted', iv: 125, ivPercentile: 0.75 },
+        },
+        [sold('mlb-drafted', 'team-away', 90)],
+      ),
+    });
+    mocks.getAuctionSessionById.mockResolvedValueOnce({
+      session: {
+        ...auctionSession(
+          {
+            'farm-drafted': { playerId: 'farm-drafted', iv: 40, ivPercentile: 0.25 },
+            'cpu-farm-drafted': { playerId: 'cpu-farm-drafted', iv: 55, ivPercentile: 0.4 },
+            'shill-farm-drafted': { playerId: 'shill-farm-drafted', iv: 45, ivPercentile: 0.3 },
+          },
+          [
+            sold('farm-drafted', 'team-away', 25),
+            sold('cpu-farm-drafted', 'team-home', 27),
+            sold('shill-farm-drafted', 'ghost-shill', 29),
+          ],
+        ),
+        config: { cpuShillCount: 2 },
+        nominationOrder: ['team-away', 'team-home', 'ghost-shill'],
+      },
+    });
+    mocks.getFranchisePlayer.mockImplementation(async (_franchiseId: string, playerId: string) => (
+      playerId === 'mlb-drafted' ? { ...mlbPlayer, settledSalary: 80 } : null
+    ));
+    mocks.getPlayer.mockImplementation(async (playerId: string) => (
+      playerId === 'farm-drafted' ? farmPlayer :
+        playerId === 'cpu-farm-drafted' ? cpuFarmPlayer :
+          playerId === 'shill-farm-drafted' ? shillFarmPlayer :
+            null
+    ));
+
+    await initializeFranchise(franchiseConfig);
+
+    expect(TRACKER_DB_VERSION).toBe(25);
+    expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
+      'franchise-1',
+      expect.objectContaining({
+        id: 'mlb-drafted',
+        settledSalary: 90,
+      }),
+    );
+    expect(mocks.savePlayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'farm-drafted',
+        salary: 25,
+        settledSalary: 25,
+      }),
+    );
+    expect(mocks.savePlayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'cpu-farm-drafted',
+        salary: 27,
+        settledSalary: 27,
+      }),
+    );
+    expect(mocks.savePlayer).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'shill-farm-drafted',
+      }),
+    );
+    expect(mocks.getPlayer).toHaveBeenCalledWith('farm-drafted');
+    expect(mocks.getPlayer).toHaveBeenCalledWith('cpu-farm-drafted');
+    expect(mocks.getPlayer).not.toHaveBeenCalledWith('shill-farm-drafted');
+    expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledTimes(1);
+    expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledWith([
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        statsScopeId: 'draft-baseline',
+        playerId: 'mlb-drafted',
+        trueValue: 125,
+        contractValue: 90,
+        valueDelta: 35,
+        warPercentile: 0,
+        position: 'CF',
+        peerPoolSize: 0,
+        calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+        computedAt: expect.any(String),
+      }),
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        statsScopeId: 'draft-baseline',
+        playerId: 'farm-drafted',
+        trueValue: 40,
+        contractValue: 25,
+        valueDelta: 15,
+        warPercentile: 0,
+        position: 'SP',
+        peerPoolSize: 0,
+        calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+        computedAt: expect.any(String),
+      }),
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        statsScopeId: 'draft-baseline',
+        playerId: 'cpu-farm-drafted',
+        trueValue: 55,
+        contractValue: 27,
+        valueDelta: 28,
+        warPercentile: 0,
+        position: 'SS',
+        peerPoolSize: 0,
+        calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+        computedAt: expect.any(String),
+      }),
+    ]);
   });
 
   test('new season schedule initialization writes zero schedule rows by default', async () => {

@@ -121,6 +121,7 @@ interface TeamFormData {
   managerHometown: string;
   managerStyleLabel: string;
   capIdentity: TeamCapIdentity;
+  farmCapIdentity: TeamCapIdentity;
 }
 
 function createEmptyBandPriorities(): BandPriorities {
@@ -179,6 +180,7 @@ const DEFAULT_FORM_DATA: TeamFormData = {
   managerHometown: "",
   managerStyleLabel: "",
   capIdentity: createEmptyCapIdentity(),
+  farmCapIdentity: createEmptyCapIdentity(),
 };
 
 function createDefaultFormData(): TeamFormData {
@@ -187,6 +189,7 @@ function createDefaultFormData(): TeamFormData {
     heritageFacts: [],
     rivalries: [],
     capIdentity: createEmptyCapIdentity(),
+    farmCapIdentity: createEmptyCapIdentity(),
   };
 }
 
@@ -255,6 +258,7 @@ export function LeagueBuilderTeams() {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isCapIdentityOpen, setIsCapIdentityOpen] = useState(true);
+  const [isFarmCapIdentityOpen, setIsFarmCapIdentityOpen] = useState(true);
   const [isHeritageFactsOpen, setIsHeritageFactsOpen] = useState(true);
   const [isRivalriesOpen, setIsRivalriesOpen] = useState(true);
   const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
@@ -345,6 +349,7 @@ export function LeagueBuilderTeams() {
     setEditingTeam(null);
     setFormData(createDefaultFormData());
     setIsCapIdentityOpen(true);
+    setIsFarmCapIdentityOpen(true);
     setIsHeritageFactsOpen(true);
     setIsRivalriesOpen(true);
     autosavedTeamMetadataRef.current = null;
@@ -380,6 +385,7 @@ export function LeagueBuilderTeams() {
       managerHometown: managerProfile?.hometown || "",
       managerStyleLabel: managerProfile?.managementStyle?.label || "",
       capIdentity: normalizeCapIdentity(team.capIdentity),
+      farmCapIdentity: normalizeCapIdentity(team.farmCapIdentity),
     });
     autosavedTeamMetadataRef.current = {
       heritageFacts: normalizeHeritageFacts(team.heritageFacts || []),
@@ -388,6 +394,7 @@ export function LeagueBuilderTeams() {
     setIsHeritageFactsOpen(true);
     setIsRivalriesOpen(true);
     setIsCapIdentityOpen(true);
+    setIsFarmCapIdentityOpen(true);
     setIsModalOpen(true);
   };
 
@@ -523,6 +530,7 @@ export function LeagueBuilderTeams() {
   const handleSave = async () => {
     if (!formData.name.trim() || !formData.abbreviation.trim()) return;
     if (!capIdentityValidation.identity) return;
+    if (!farmCapIdentityValidation.identity) return;
 
     setIsSaving(true);
     try {
@@ -535,6 +543,14 @@ export function LeagueBuilderTeams() {
         },
         increase: capIdentityValidation.identity.increase,
         decrease: capIdentityValidation.identity.decrease,
+      };
+      const farmCapIdentity: TeamCapIdentity = {
+        bandPriorities: {
+          ...createEmptyBandPriorities(),
+          ...(formData.farmCapIdentity.bandPriorities ?? {}),
+        },
+        increase: farmCapIdentityValidation.identity.increase,
+        decrease: farmCapIdentityValidation.identity.decrease,
       };
       const teamData = {
         name: formData.name.trim(),
@@ -567,6 +583,7 @@ export function LeagueBuilderTeams() {
           ? normalizedRivalries
           : undefined,
         capIdentity,
+        farmCapIdentity,
         leagueIds: editingTeam?.leagueIds || [],
         retiredNumbers: editingTeam?.retiredNumbers || [],
       };
@@ -654,6 +671,22 @@ export function LeagueBuilderTeams() {
       };
     }
   }, [formData.capIdentity.decrease, formData.capIdentity.increase]);
+  const farmCapIdentityValidation = useMemo(() => {
+    try {
+      return {
+        identity: applyIdentitySelection({
+          increase: formData.farmCapIdentity.increase,
+          decrease: formData.farmCapIdentity.decrease,
+        }),
+        error: "",
+      };
+    } catch (err) {
+      return {
+        identity: null,
+        error: err instanceof Error ? err.message : "Invalid farm identity selection",
+      };
+    }
+  }, [formData.farmCapIdentity.decrease, formData.farmCapIdentity.increase]);
   const previewTier = useMemo<TierKey>(() => {
     const leagueId = editingTeam?.leagueIds?.[0];
     if (!leagueId) return "juiced";
@@ -672,6 +705,19 @@ export function LeagueBuilderTeams() {
       .filter(({ base, shifted }) => base && Math.abs(shifted.cap - base.cap) >= 0.01)
       .slice(0, 2);
   }, [capIdentityValidation.identity, previewTier]);
+  const farmCapShiftPreview = useMemo(() => {
+    if (!farmCapIdentityValidation.identity) return null;
+    return identityCapShift(farmCapIdentityValidation.identity);
+  }, [farmCapIdentityValidation.identity]);
+  const farmShiftedCapPreviewRows = useMemo(() => {
+    if (!farmCapIdentityValidation.identity) return [];
+    const baseCaps = LUXURY_CAP_TABLES[previewTier];
+    const shiftedCaps = shiftLuxuryCaps(baseCaps, farmCapIdentityValidation.identity);
+    return shiftedCaps
+      .map((row, index) => ({ base: baseCaps[index], shifted: row }))
+      .filter(({ base, shifted }) => base && Math.abs(shifted.cap - base.cap) >= 0.01)
+      .slice(0, 2);
+  }, [farmCapIdentityValidation.identity, previewTier]);
 
   const updateCapIdentityPriority = (band: Band, value: number) => {
     const nextValue = Math.max(
@@ -712,6 +758,45 @@ export function LeagueBuilderTeams() {
     });
   };
 
+  const updateFarmCapIdentityPriority = (band: Band, value: number) => {
+    const nextValue = Math.max(
+      CAP_IDENTITY_PRIORITY_MIN,
+      Math.min(CAP_IDENTITY_PRIORITY_MAX, Math.round(value)),
+    );
+    setFormData((prev) => ({
+      ...prev,
+      farmCapIdentity: {
+        ...prev.farmCapIdentity,
+        bandPriorities: {
+          ...createEmptyBandPriorities(),
+          ...(prev.farmCapIdentity.bandPriorities ?? {}),
+          [band]: nextValue,
+        },
+      },
+    }));
+  };
+
+  const updateFarmCapIdentityMod = (
+    kind: "increase" | "decrease",
+    index: number,
+    value: string,
+  ) => {
+    setFormData((prev) => {
+      const slots = [
+        prev.farmCapIdentity[kind][0] ?? "",
+        prev.farmCapIdentity[kind][1] ?? "",
+      ];
+      slots[index] = value;
+      return {
+        ...prev,
+        farmCapIdentity: {
+          ...prev.farmCapIdentity,
+          [kind]: normalizeIdentityMods(slots),
+        },
+      };
+    });
+  };
+
   const suggestCapIdentityFromPriorities = () => {
     setFormData((prev) => {
       const bandPriorities = {
@@ -723,6 +808,24 @@ export function LeagueBuilderTeams() {
         ...prev,
         capIdentity: {
           ...prev.capIdentity,
+          bandPriorities,
+          increase: suggested.increase,
+        },
+      };
+    });
+  };
+
+  const suggestFarmCapIdentityFromPriorities = () => {
+    setFormData((prev) => {
+      const bandPriorities = {
+        ...createEmptyBandPriorities(),
+        ...(prev.farmCapIdentity.bandPriorities ?? {}),
+      };
+      const suggested = composeIdentity(bandPriorities);
+      return {
+        ...prev,
+        farmCapIdentity: {
+          ...prev.farmCapIdentity,
           bandPriorities,
           increase: suggested.increase,
         },
@@ -1705,6 +1808,196 @@ export function LeagueBuilderTeams() {
                 </div>
               </section>
 
+              <section className="bg-[#4A6844]/55 border-[4px] border-[#3F5A3A] p-4 space-y-4">
+                <div className="border-[3px] border-[#2d3d2f] bg-[#3F5A3A]/70">
+                  <button
+                    type="button"
+                    onClick={() => setIsFarmCapIdentityOpen((prev) => !prev)}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[#4A6844]/70 transition"
+                  >
+                    <div>
+                      <h3 className="text-sm font-bold tracking-[0.16em] uppercase">
+                        Farm Identity (Cap)
+                      </h3>
+                      <p className="mt-1 text-xs text-[#E8E8D8]/60">
+                        Farm band priority, cap-mod stack, and shifted luxury-cap preview.
+                      </p>
+                    </div>
+                    {isFarmCapIdentityOpen ? (
+                      <ChevronDown className="w-4 h-4 text-[#D4A020]" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-[#D4A020]" />
+                    )}
+                  </button>
+
+                  {isFarmCapIdentityOpen && (
+                    <div className="space-y-4 border-t-[3px] border-[#2d3d2f] px-4 py-4">
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        {BANDS.map((band) => {
+                          const priority = formData.farmCapIdentity.bandPriorities?.[band] ?? 0;
+                          return (
+                            <div
+                              key={band}
+                              className="border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3"
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <label className="text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                                  {band}
+                                </label>
+                                <input
+                                  type="number"
+                                  min={CAP_IDENTITY_PRIORITY_MIN}
+                                  max={CAP_IDENTITY_PRIORITY_MAX}
+                                  step={1}
+                                  value={priority}
+                                  onChange={(e) =>
+                                    updateFarmCapIdentityPriority(band, Number(e.target.value))
+                                  }
+                                  aria-label={`Farm ${band} priority`}
+                                  className="w-14 bg-[#3F5A3A] border-[3px] border-[#2d3d2f] p-1 text-center text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                                />
+                              </div>
+                              <input
+                                type="range"
+                                min={CAP_IDENTITY_PRIORITY_MIN}
+                                max={CAP_IDENTITY_PRIORITY_MAX}
+                                step={1}
+                                value={priority}
+                                onChange={(e) =>
+                                  updateFarmCapIdentityPriority(band, Number(e.target.value))
+                                }
+                                aria-label={`Farm ${band} priority slider`}
+                                className="w-full accent-[#D4A020]"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={suggestFarmCapIdentityFromPriorities}
+                          className="inline-flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] border-[3px] border-[#E8E8D8]/70 px-4 py-2 text-sm font-bold transition"
+                        >
+                          <Check className="w-4 h-4" />
+                          Suggest farm from priorities
+                        </button>
+                        <span className="text-xs font-bold uppercase tracking-[0.14em] text-[#D4A020]">
+                          Tier {previewTier.toUpperCase()}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {(["increase", "decrease"] as const).map((kind) => {
+                          const selected = [
+                            formData.farmCapIdentity[kind][0] ?? "",
+                            formData.farmCapIdentity[kind][1] ?? "",
+                          ];
+                          return (
+                            <div
+                              key={kind}
+                              className="space-y-3 border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3"
+                            >
+                              <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                                Farm {kind === "increase" ? "Increase" : "Decrease"}
+                              </h4>
+                              {[0, 1].map((slotIndex) => (
+                                <select
+                                  key={`${kind}-${slotIndex}`}
+                                  value={selected[slotIndex]}
+                                  onChange={(e) =>
+                                    updateFarmCapIdentityMod(kind, slotIndex, e.target.value)
+                                  }
+                                  className="w-full bg-[#3F5A3A] border-[3px] border-[#2d3d2f] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                                  aria-label={`Farm ${kind} cap modification ${slotIndex + 1}`}
+                                >
+                                  <option value="">-- none --</option>
+                                  {CAP_IDENTITY_MOD_OPTIONS.map((modName) => (
+                                    <option
+                                      key={modName}
+                                      value={modName}
+                                      disabled={
+                                        selected.some(
+                                          (candidate, candidateIndex) =>
+                                            candidateIndex !== slotIndex && candidate === modName,
+                                        )
+                                      }
+                                    >
+                                      {modName}
+                                    </option>
+                                  ))}
+                                </select>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {farmCapIdentityValidation.error && (
+                        <div className="border-[3px] border-red-400/60 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+                          {farmCapIdentityValidation.error}
+                        </div>
+                      )}
+
+                      <div className="border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3">
+                        <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                          Farm Cap Shift Preview
+                        </h4>
+                        {farmCapShiftPreview && CAP_IDENTITY_STAT_GROUPS.some((group) =>
+                          group.stats.some((stat) => Math.abs(farmCapShiftPreview[stat]) > 0.000001),
+                        ) ? (
+                          <div className="space-y-2">
+                            {CAP_IDENTITY_STAT_GROUPS.map((group) => {
+                              if (!farmCapShiftPreview) return null;
+                              const entries = group.stats.filter(
+                                (stat) => Math.abs(farmCapShiftPreview[stat]) > 0.000001,
+                              );
+                              if (entries.length === 0) return null;
+                              return (
+                                <div key={group.label} className="flex flex-wrap items-center gap-2">
+                                  <span className="w-20 text-[10px] font-bold uppercase tracking-[0.14em] text-[#D4A020]">
+                                    {group.label}
+                                  </span>
+                                  {entries.map((stat) => (
+                                    <span
+                                      key={stat}
+                                      className="border border-[#E8E8D8]/25 bg-[#3F5A3A] px-2 py-1 text-xs font-bold"
+                                    >
+                                      {CAP_IDENTITY_STAT_LABELS[stat]} {formatSignedPercent(farmCapShiftPreview[stat])}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#E8E8D8]/55">No farm cap shifts selected.</p>
+                        )}
+
+                        {farmShiftedCapPreviewRows.length > 0 && (
+                          <div className="mt-4 grid gap-2 md:grid-cols-2">
+                            {farmShiftedCapPreviewRows.map(({ base, shifted }) => (
+                              <div
+                                key={`${shifted.group}-${shifted.stat}`}
+                                className="border border-[#E8E8D8]/20 bg-[#3F5A3A]/80 px-3 py-2 text-xs"
+                              >
+                                <div className="font-bold uppercase tracking-[0.12em] text-[#E8E8D8]/75">
+                                  {shifted.group} {shifted.stat}
+                                </div>
+                                <div className="mt-1 text-[#D4A020]">
+                                  {base.cap.toFixed(1)} → {shifted.cap.toFixed(1)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {/* Colors */}
               <div>
                 <label className="block text-sm font-bold mb-2">Team Colors</label>
@@ -1801,6 +2094,7 @@ export function LeagueBuilderTeams() {
                   !formData.name.trim() ||
                   !formData.abbreviation.trim() ||
                   Boolean(capIdentityValidation.error) ||
+                  Boolean(farmCapIdentityValidation.error) ||
                   isSaving
                 }
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

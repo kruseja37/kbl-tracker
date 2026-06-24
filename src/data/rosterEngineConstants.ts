@@ -38,13 +38,22 @@ export const TWO_WAY_ARM_BY_TIER: Record<PotencyTier, number> = { L1: 60, L2: 80
 /** §12/D15 JK ruling: Two Way holders unlock 1.00 usage on all hitter attributes. */
 export const TWO_WAY_USAGE = 1.00;
 
-/** §12 JK ruling 2026-06-10: IV potency scales trait deltas around L2 neutrality. */
+/**
+ * §12 JK ruling 2026-06-10: IV potency scales trait deltas around L2 neutrality.
+ * Strong tier corrected 2.0→3.0 (JK 2026-06-22): the canonical valuation source
+ * (XBL Test Texas Rangers workbook `ImportedTraits`) ramps positives 0.5/1.0/3.0
+ * and negatives 3.0/1.0/0.5 — verified cell-for-cell (Cannon Arm 23/45/135, Tough
+ * Out 5/10/30, Whiffer 8/15/45). The prior 2.0 matched the BillyYank guide's loose
+ * "x1/x2/x4" wording, not the workbook the IV logic was built from. DORMANT today
+ * (all ivEngine/effectiveRatings callers run at L2; oracle pins only L2 → no re-bless).
+ * See spec-docs/CHEMISTRY_TRAIT_POTENCY_VALUATION_SPEC.md §2.5/§9.7.
+ */
 export const POTENCY_SCALE: {
   positives: Record<PotencyTier, number>;
   standardInverted: Record<PotencyTier, number>;
 } = {
-  positives: { L1: 0.5, L2: 1.0, L3: 2.0 },
-  standardInverted: { L1: 2.0, L2: 1.0, L3: 0.5 },
+  positives: { L1: 0.5, L2: 1.0, L3: 3.0 },
+  standardInverted: { L1: 3.0, L2: 1.0, L3: 0.5 },
 };
 
 /**
@@ -52,6 +61,9 @@ export const POTENCY_SCALE: {
  * must never consume this value.
  */
 export const PITCHER_ASSUMED_ARM = 99;
+
+// §3.2 / §12 scout-obscured value range; display-only, NOT an IV input
+export const SCOUT_NOISE_BASE = 0.6;
 
 export const PITCHER_ROLES: readonly PitcherRoleKey[] = ['SP', 'SP/RP', 'RP', 'CP'] as const;
 export const PITCH_ATTRS = ['VEL', 'JNK', 'ACC'] as const;
@@ -295,3 +307,65 @@ export const POOL_SURPLUS_MAX = 1.2;
 
 /** §12/§5.3 T3 acceptance criterion: flag identity EV drift above 10%. */
 export const EV_FLATNESS_TOLERANCE = 0.10;
+
+/**
+ * Shared league-minimum salary in canonical kblIV dollars.
+ * Source: existing T5 salary bridge floor, moved here so auction minSalaryByPosition
+ * and salaryCalculator share one numeric source.
+ */
+export const LEAGUE_MINIMUM_SALARY = 1666.49;
+
+/**
+ * IV_ENGINE §7.5 / D14: auction opening asks use a reserve multiplier that
+ * scales from 0.5 at the pool bottom to 0.7 by the top decile.
+ */
+export const RESERVE_PRICE_CURVE_MIN = 0.5;
+export const RESERVE_PRICE_CURVE_MAX = 0.7;
+export const RESERVE_PRICE_CURVE_MAX_PERCENTILE = 90;
+
+export function reservePriceCurve(ivPercentile: number): number {
+  const percentile = Number.isFinite(ivPercentile)
+    ? Math.min(Math.max(ivPercentile, 0), RESERVE_PRICE_CURVE_MAX_PERCENTILE)
+    : 0;
+  const progress = percentile / RESERVE_PRICE_CURVE_MAX_PERCENTILE;
+  return RESERVE_PRICE_CURVE_MIN + (RESERVE_PRICE_CURVE_MAX - RESERVE_PRICE_CURVE_MIN) * progress;
+}
+
+export const AUCTION_MIN_SALARY_POSITIONS = [
+  'C',
+  '1B',
+  '2B',
+  '3B',
+  'SS',
+  'LF',
+  'CF',
+  'RF',
+  'DH',
+  'SP',
+  'SP/RP',
+  'RP',
+  'CP',
+] as const;
+
+export type AuctionMinSalaryPosition = typeof AUCTION_MIN_SALARY_POSITIONS[number];
+
+/** IV_ENGINE §7.5 minSalaryByPosition, sourced from the existing league minimum salary floor. */
+export const MIN_SALARY_BY_POSITION: Record<AuctionMinSalaryPosition, number> =
+  Object.fromEntries(AUCTION_MIN_SALARY_POSITIONS.map((position) => [position, LEAGUE_MINIMUM_SALARY])) as Record<
+    AuctionMinSalaryPosition,
+    number
+  >;
+
+/**
+ * AUCTION_DRAFT_SPEC.md §2.3 / IV_ENGINE §7.5 solvency cap.
+ * Compute projectedTax at the call site with leagueConstruction.luxuryTax, then
+ * pass it here to keep the per-bid ceiling pure.
+ */
+export function auctionMaxBid(
+  remainingBudget: number,
+  slotsRemaining: number,
+  minSalary: number,
+  projectedTax: number,
+): number {
+  return Math.max(0, remainingBudget - Math.max(0, slotsRemaining - 1) * minSalary - projectedTax);
+}

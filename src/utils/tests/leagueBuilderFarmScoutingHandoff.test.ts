@@ -170,7 +170,7 @@ async function seedLeague(options: {
     await saveTeamRoster(makeRoster(teamId, farmIds));
 
     if (options.scouts !== false) {
-      for (let index = 1; index <= 2; index += 1) {
+      for (let index = 1; index <= 1; index += 1) {
         await saveScoutProfile({
           id: `${teamId}-scout-${index}`,
           leagueId: LEAGUE_ID,
@@ -217,7 +217,7 @@ describe('League Builder farm/scouting handoff validation', () => {
         }),
       ]),
     );
-    expect(report.teams[0].scouts).toBe(2);
+    expect(report.teams[0].scouts).toBe(1);
   });
 
   test('incomplete farm state is blocked until the League Builder prospect draft fills vacancies', async () => {
@@ -247,7 +247,7 @@ describe('League Builder farm/scouting handoff validation', () => {
     const report = await validatePreparedLeagueBuilderFarmScoutingState(LEAGUE_ID);
 
     expect(report.status).toBe('blocked');
-    expect(report.blockers.join(' ')).toMatch(/expected 2 hired scouts/i);
+    expect(report.blockers.join(' ')).toMatch(/expected 1 hired scouts/i);
   });
 
   test('missing visible-safe metadata remains a warning with required scouts present', async () => {

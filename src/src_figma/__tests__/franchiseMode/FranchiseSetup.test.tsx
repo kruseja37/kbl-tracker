@@ -275,7 +275,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.getByRole('button', { name: /Fantasy Draft.*Deferred/i })).toBeDisabled();
       expect(screen.getByText(/22 MLB \+ 10 FARM/i)).toBeInTheDocument();
       expect(screen.getByText(/Startup farm\/scouting belongs to League Builder/i)).toBeInTheDocument();
-      expect(screen.getByText(/hire two scouts for every team/i)).toBeInTheDocument();
+      expect(screen.getByText(/hire one scout for every team/i)).toBeInTheDocument();
       expect(screen.getByText(/Franchise Setup does not auto-fill farms/i)).toBeInTheDocument();
       expect(screen.queryByText(/Generate new fictional players/i)).not.toBeInTheDocument();
     });
@@ -300,6 +300,24 @@ describe('FranchiseSetup Component', () => {
         },
       });
       expect(screen.queryByText(/CREATING FRANCHISE/i)).not.toBeInTheDocument();
+    });
+
+    test('passes typed GM name to franchise initialization config', async () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.change(screen.getByPlaceholderText(/Enter your GM name/i), {
+        target: { value: 'Casey Ledger' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+
+      await waitFor(() => {
+        expect(mockInitializeFranchise).toHaveBeenCalledWith(
+          expect.objectContaining({ gmName: 'Casey Ledger' })
+        );
+      });
     });
 
     test('blocks franchise initialization when farms are incomplete instead of running a setup bridge', async () => {

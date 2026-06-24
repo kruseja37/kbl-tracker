@@ -15,6 +15,7 @@ import {
   Copy,
   Edit3,
   ChevronRight,
+  Shuffle,
   Users,
   Loader2,
   X,
@@ -30,6 +31,7 @@ import {
 import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
+import { getLeagueDraftFormat } from "../../../utils/leagueBuilderStorage";
 
 // ============================================
 // TYPES
@@ -40,6 +42,7 @@ interface LeagueFormData {
   description: string;
   teamIds: string[];
   defaultRulesPreset: string;
+  draftFormat: 'auction' | 'snake';
   tier: TierKey;
   balanceMode: BalanceMode;
   checkpointCadence: CheckpointCadence;
@@ -51,6 +54,7 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   description: "",
   teamIds: [],
   defaultRulesPreset: "",
+  draftFormat: "auction",
   tier: "juiced",
   balanceMode: BALANCE_MODE_DEFAULT,
   checkpointCadence: CHECKPOINT_CADENCE_DEFAULT,
@@ -69,6 +73,11 @@ const BALANCE_MODE_OPTIONS: Array<{ value: BalanceMode; label: string }> = [
   { value: "off", label: "Off" },
 ];
 
+const DRAFT_FORMAT_OPTIONS: Array<{ value: 'auction' | 'snake'; label: string }> = [
+  { value: "auction", label: "Auction (default)" },
+  { value: "snake", label: "Snake" },
+];
+
 const CHECKPOINT_CADENCE_OPTIONS: Array<{ value: CheckpointCadence; label: string }> = [
   { value: "standard", label: "Standard" },
   { value: "frequent", label: "Frequent" },
@@ -84,6 +93,16 @@ function formatBalanceMode(value: BalanceMode | undefined): string {
 
 function formatCheckpointCadence(value: CheckpointCadence | undefined): string {
   return CHECKPOINT_CADENCE_OPTIONS.find((option) => option.value === (value ?? CHECKPOINT_CADENCE_DEFAULT))?.label ?? "Standard";
+}
+
+export function draftRouteForFormat(format: LeagueTemplate["draftFormat"]): "/league-builder/snake-draft" | "/league-builder/auction-draft" {
+  return getLeagueDraftFormat({ draftFormat: format }) === "snake"
+    ? "/league-builder/snake-draft"
+    : "/league-builder/auction-draft";
+}
+
+export function draftRouteForLeague(league: Pick<LeagueTemplate, "id" | "draftFormat">): string {
+  return `${draftRouteForFormat(league.draftFormat)}?leagueId=${encodeURIComponent(league.id)}`;
 }
 
 // ============================================
@@ -143,6 +162,7 @@ export function LeagueBuilderLeagues() {
       description: league.description || "",
       teamIds: league.teamIds,
       defaultRulesPreset: league.defaultRulesPreset,
+      draftFormat: league.draftFormat ?? "auction",
       tier: league.tier ?? "juiced",
       balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
       checkpointCadence: league.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT,
@@ -169,6 +189,7 @@ export function LeagueBuilderLeagues() {
           description: formData.description.trim() || undefined,
           teamIds: formData.teamIds,
           defaultRulesPreset: formData.defaultRulesPreset,
+          draftFormat: formData.draftFormat,
           tier: formData.tier,
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
@@ -182,6 +203,7 @@ export function LeagueBuilderLeagues() {
           conferences: [],
           divisions: [],
           defaultRulesPreset: formData.defaultRulesPreset,
+          draftFormat: formData.draftFormat,
           tier: formData.tier,
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
@@ -368,6 +390,16 @@ export function LeagueBuilderLeagues() {
                       <span className="text-xs font-bold">Register Pool</span>
                     </button>
 
+                    {/* Draft */}
+                    <button
+                      onClick={() => navigate(draftRouteForLeague(league))}
+                      className="px-3 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-[3px] border-[#E8E8D8]/70 transition flex items-center gap-2"
+                      title="Draft league"
+                    >
+                      <Shuffle className="w-4 h-4" />
+                      <span className="text-xs font-bold">Draft</span>
+                    </button>
+
                     {/* Edit */}
                     <button
                       onClick={() => openEditModal(league)}
@@ -518,6 +550,31 @@ export function LeagueBuilderLeagues() {
                   className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
                 >
                   {TIER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Draft Format */}
+              <div>
+                <label htmlFor="league-draft-format" className="block text-sm font-bold mb-2">
+                  DRAFT FORMAT
+                </label>
+                <select
+                  id="league-draft-format"
+                  aria-label="Draft format"
+                  value={formData.draftFormat}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      draftFormat: e.target.value as 'auction' | 'snake',
+                    }))
+                  }
+                  className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                >
+                  {DRAFT_FORMAT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
