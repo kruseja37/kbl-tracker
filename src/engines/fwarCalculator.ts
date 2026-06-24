@@ -619,7 +619,7 @@ function mapPersistedDifficulty(
   return mapping[difficulty] || 'routine';
 }
 
-function mapPersistedSpecialPlayType(
+export function mapPersistedSpecialPlayType(
   specialPlayType?: PersistedFieldingEvent['specialPlayType'] | null,
 ): Difficulty | null {
   switch (specialPlayType) {

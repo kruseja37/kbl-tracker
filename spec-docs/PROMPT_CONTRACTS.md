@@ -18763,6 +18763,80 @@ FORMAT: (1) the 2 new files + line counts; (2) the engine design as built, refer
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A1.5b-CARRY-CONVERTER ===== -->
 
+<!-- ===== START CONTRACT: A1.5c-1-DIFFICULTY-FIELDING ===== -->
+## CONTRACT A1.5c-1 — ByPOSITION DIFFICULTY-WEIGHTED FIELDING SIGNAL (pure engine, build-dark) (Branch A / `codex/franchise-v1-next` / worktree `/Users/johnkruse/Projects/kbl-tracker`)
+ROUTE: Codex gpt-5.5 | xhigh reasoning effort.
+> **CAPTAIN-GROUNDED 2026-06-23 (every anchor below re-read from source this session).** A1.5c was split into 4 sub-tickets; this is the FIRST (cleanest; the FIELD-LEAK WATCH lives here). KEY confirmations from source: (a) the persisted `FieldingEvent` (`eventLog.ts:731-755`) carries a STAMPED `playerId` + `position` + `success` — so the fielder is event-time-resolved, never re-mapped; (b) the difficulty source MUST be `specialPlayType` via `mapPersistedSpecialPlayType` (`fwarCalculator.ts:622-659`), NOT `FieldingEvent.difficulty` (the 5-tier `difficulty` collapses diving/leaping/overShoulder → '50-50' and maps spectacular→robbedHR, corrupting the ladder); (c) the RULED §9 ladder is a NEW ratings weighting, NOT the FWAR `DIFFICULTY_MULTIPLIERS` (`fwarCalculator.ts:82` — those are run-value multipliers, leave untouched); (d) the `*ByPosition` maps already exist on `PlayerSeasonFielding` (`seasonStorage.ts:152-155`) with ZERO writers, but they carry only PO/A/E/games counts (no difficulty) → the difficulty signal MUST derive from raw `FieldingEvent[]`, and the rate is derive-on-read (NO new persisted field).
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-tracker` (branch `codex/franchise-v1-next`). This ticket adds a PURE, deterministic, storage-free season aggregator with NO live consumer (build-dark; wiring deferred to the RA-2 era). Anchor every claim on source you re-read; do not infer.
+
+GOAL:
+Add a pure function that aggregates persisted `FieldingEvent`s into a per-(playerId, position) DIFFICULTY-WEIGHTED conversion signal, using the RULED play-type ladder. It is the "difficulty is MEASURED, not inferred" Fielding signal (`RATINGS_MEASUREMENT_WORKSHEET.md §9`). It writes nothing and is called by nobody yet.
+
+SOURCE OF TRUTH (read first): `spec-docs/RATINGS_MEASUREMENT_WORKSHEET.md` §4 FIELDING (lines ~79-96) + the RULED play-type difficulty ladder table (lines ~82-90) + `spec-docs/AUTONOMOUS_RUN_LOG.md` the "A1.5c GROUNDED + SPLIT" entry (the A1.5c-1 bullet) + `spec-docs/GAMETRACKER_INVARIANTS_FAILURE_MODES_AUDIT.md:127` (the field-leak failure mode this ticket guards). Re-read these + the anchors below before building.
+
+GROUNDED ANCHORS (re-read to confirm, then build):
+- `src/utils/eventLog.ts:731-755` — `interface FieldingEvent`. Use these STAMPED fields: `playerId: string`, `position: Position`, `specialPlayType?: SpecialPlayType | null`, `success: boolean` (the explicit made/missed Result), `playType` (putout/assist/error/…), `teamId`. NOTE the in-source comment at :738-739: new rows carry STABLE runtime player identity — that stamped `playerId` is the field-leak-safe fielder key. Do NOT use `difficulty` for the ladder.
+- `src/engines/fwarCalculator.ts:622-659` — `function mapPersistedSpecialPlayType(specialPlayType?): Difficulty | null`. It normalizes the display-cased `SpecialPlayType` strings (incl. aliases: 'Robbery Attempt'→`robbedHR`, 'Over Shoulder'→`overShoulder`, 'Wall Catch'→`wall`, 'Missed Dive'→`missedDive`, default/unknown→`null`) into the `Difficulty` enum (`fwarCalculator.ts:123-136`). It is currently UNEXPORTED — add the `export` keyword to its declaration (the ONLY edit to this file; do NOT change its body, the switch arms, `DIFFICULTY_MULTIPLIERS`, or anything else).
+- `src/utils/seasonStorage.ts:152-155` — the existing `gamesByPosition/putoutsByPosition/assistsByPosition/errorsByPosition: Record<string, number>` on `PlayerSeasonFielding` (init `{}`, ZERO writers, counts only). CONFIRM-ONLY: you do NOT write to these and you do NOT add a field here. The difficulty RATE is derive-on-read from `FieldingEvent[]`.
+
+EXACT ENGINE DESIGN (implement in a NEW file `src/engines/difficultyFieldingAggregator.ts`):
+Pure (no `Math.random`, no IndexedDB, no Date, no store, no React, no I/O). Import the `FieldingEvent` TYPE from `../utils/eventLog` and the value `mapPersistedSpecialPlayType` + the `Difficulty` TYPE from `./fwarCalculator`.
+
+1. **The RULED ladder (`RATINGS_MEASUREMENT_WORKSHEET §9`, §16 sim-tune placeholder magnitudes — export as a named tunable const `DIFFICULTY_CONVERSION_LADDER`):** classify each event's mapped `Difficulty` into a tier with a weight AND an `isDifficultyOpportunity` flag:
+   | mapped Difficulty | tier | weight (default) | difficulty opportunity? |
+   |---|---|---|---|
+   | `robbedHR` | MAX | 1.0 | yes |
+   | `diving`, `sliding` | HIGH | 0.75 | yes |
+   | `leaping` | MID | 0.5 | yes |
+   | `overShoulder`, `running` | LOW | 0.25 | yes |
+   | `missedDive` | HIGH (attempted, missed) | 0.75 | yes |
+   | `missedLeap` | MID (attempted, missed) | 0.5 | yes |
+   | `routine`, `charging`, `wall`, `beatRunner`, `beatThrow`, `null` | routine | 0 | NO |
+   - **`wall` → tier 0 (routine).** A 'Wall Catch' that isn't a robbery is a warning-track routine/leap, NOT its own tier (`wall` is REMOVED per the RULED ladder; the mapper still emits `wall` for 'Wall Catch' → treat as routine). Do NOT give it positive credit.
+   - **`beatRunner`/`beatThrow` → tier 0, NOT difficulty opportunities** — those are close-play / IF-ARM signals (a separate rating, a different aggregator); they must not pollute this fielding-RANGE signal.
+   - The `missedDive`/`missedLeap` tokens are NON-CONVERSIONS at their attempted tier: they ARE difficulty opportunities (count in the denominator) but earn 0 numerator credit (the `made` gate below zeroes them).
+2. **Made/missed:** `made = event.success === true`. The numerator credit for an event = `(made && isDifficultyOpportunity) ? tierWeight : 0`. (A missed hard play → opportunity counted, 0 credit → correctly drags the rate down.)
+3. **Aggregate by the STAMPED fielder key (the field-leak guard):** group strictly by `event.playerId` then `event.position` AS STORED on the event. Produce `Record<playerId, Record<position, DifficultyFieldingAggregate>>` where:
+   ```
+   interface DifficultyFieldingAggregate {
+     weightedConversion: number;       // Σ over events of the numerator credit (made difficulty conversions × tier weight)
+     difficultyOpportunities: number;  // count of events where isDifficultyOpportunity (made OR missed)
+     difficultyConversions: number;    // count of difficulty opportunities that were made (success)
+     routinePlays: number;             // tier-0 events (context; not in the rate)
+     totalPlays: number;               // all events for this (playerId, position)
+     difficultyWeightedRate: number | null; // documented-default derived rate (see #4); null until min sample
+   }
+   ```
+4. **Derived rate (DECOUPLED — the denominator is a documented OPEN-DECISION):** expose the raw components above so a downstream consumer can form ANY rate; ALSO compute a convenience default `difficultyWeightedRate = difficultyOpportunities >= MIN_DIFFICULTY_OPPORTUNITIES ? weightedConversion / difficultyOpportunities : null`. Export `MIN_DIFFICULTY_OPPORTUNITIES = 5` (§16 default, tunable). **Default denominator = `difficultyOpportunities`** (drops the routine-VOLUME dilution that §9 line ~95 explicitly says to drop). The literal "÷ the fielder's plays" alternative (= `totalPlays`) is recoverable from the exposed components → ZERO rework risk; this fork is logged for JK, not blocking.
+5. Primary export `aggregateDifficultyFielding(events: FieldingEvent[]): Record<string, Record<string, DifficultyFieldingAggregate>>`. Empty input → `{}`. Pure, total, deterministic.
+
+MAKE-OR-BREAK — the FIELD-LEAK GUARD (this IS the ticket's reason to exist; JK's historical correctness problem, `GAMETRACKER_INVARIANTS_FAILURE_MODES_AUDIT.md:127` "Fielding stats are resolved late through position mapping … late resolution can misattribute if positions changed after the logged fielding event context"):
+The fielder MUST be the STAMPED `event.playerId` (and `event.position`) read directly off each `FieldingEvent`. The aggregator must NOT: do any position→player lookup, consult any roster/lineup/substitution state, re-derive the fielder from `position` alone, merge two different `playerId`s because they share a `position`, or take any input other than the `FieldingEvent[]`. Two events at the SAME position with DIFFERENT `playerId` (a mid-game sub) MUST land on their respective stamped players.
+
+STOP-IF: the work seems to require reading `FieldingEvent.difficulty` for the ladder (must use `specialPlayType` via the mapper), editing `seasonStorage.ts`/`seasonAggregator.ts`/`processCompletedGame.ts`/`careerStorage.ts`, writing into the `*ByPosition` maps, adding a persisted field, bumping `TRACKER_DB_VERSION`/any store, wiring the function into ANY live caller, editing the body of `mapPersistedSpecialPlayType` or `DIFFICULTY_MULTIPLIERS`, or importing from any `.tsx`. A correct STOP-and-report is GOOD.
+
+CONSTRAINTS — create/edit ONLY: NEW `src/engines/difficultyFieldingAggregator.ts` + NEW `src/engines/__tests__/difficultyFieldingAggregator.test.ts` + the ONE-TOKEN `export` addition to `mapPersistedSpecialPlayType` in `src/engines/fwarCalculator.ts` (nothing else in that file). Add a top-of-file comment in the new engine: "SEASON-ONLY: career `*ByPosition` difficulty parity is deferred (careerStorage.ts:159-162 has the same unfed maps); a future career consumer must not assume this fills them." NO `TRACKER_DB_VERSION` bump, NO saved-shape change, NO wiring, NO UI touch. The frozen `iv_oracle.json` is READ-ONLY. Branch-only — do NOT commit or push (the Captain commits).
+
+TESTS YOU MUST WRITE (`difficultyFieldingAggregator.test.ts` — this IS part of the gate; construct `FieldingEvent` fixtures inline):
+  - robbedHR made → weightedConversion += MAX(1.0), difficultyOpportunities=1, difficultyConversions=1.
+  - diving made + leaping made + overShoulder made (same player/position) → tiers HIGH(0.75)+MID(0.5)+LOW(0.25), difficultyOpportunities=3, conversions=3.
+  - 'Wall Catch' made → tier 0, NOT a difficulty opportunity (routinePlays +1; difficultyOpportunities unchanged). Assert `mapPersistedSpecialPlayType('Wall Catch') === 'wall'` is treated as routine.
+  - 'Robbery Attempt' with `success:false` → MAX-tier difficulty opportunity, 0 credit (weightedConversion unchanged, difficultyConversions=0).
+  - `missedDive` with `success:false` → HIGH-tier opportunity, 0 credit (a missed hard play counts in the denominator and drags the rate down).
+  - `beatRunner`/`beatThrow` events → tier 0, NOT difficulty opportunities (must not pollute the range signal).
+  - routine putout (specialPlayType `null`/'Routine') → routinePlays +1, not an opportunity; totalPlays counts it.
+  - **FIELD-LEAK TEST:** two events, SAME `position:'CF'`, DIFFERENT `playerId` ('p1','p2') → two separate player buckets, each credited its own play; NO merge by position. A third event for 'p1' at a DIFFERENT position keys under p1→that position.
+  - MIN-SAMPLE gate: a player with `difficultyOpportunities < 5` → `difficultyWeightedRate === null`; at ≥5 → a finite rate = weightedConversion / difficultyOpportunities.
+  - DECOUPLING: assert the raw components are present so `weightedConversion / totalPlays` (the alternative denominator) is independently computable from the output.
+
+GATE (run yourself; report output): `NODE_ENV= npx tsc -b` exit 0 + the FULL suite (`NODE_ENV= npm test`) ZERO NEW REDS vs the characterized baseline (hard fail `wpaRuntimeBoundary`; re-run any suspected new red SOLO — `franchiseManualSmokeFixture` is a known solo-passing order-flake) — the full suite is required because this adds an `export` to the core `fwarCalculator.ts` (transitive-import-mock-break insurance) + `NODE_ENV= npx vitest run src/engines/__tests__/difficultyFieldingAggregator.test.ts` all green + `git diff --stat spec-docs/reference/iv_oracle.json` empty (byte-unchanged).
+
+FORMAT: (1) every changed file + line counts (the 2 new files + the 1-token fwarCalculator export); (2) the engine design as built, referencing RATINGS §9 ladder + the field-leak guard + the decoupled-denominator default; (3) the field-leak test + the ladder/wall/missed tests; (4) gate output pasted (tsc + full-suite summary + the new test); (5) "A1.5c-1 difficulty fielding complete" OR "BLOCKED: <reason>".
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.5c-1-DIFFICULTY-FIELDING ===== -->
+
 <!-- ===== CONTRACT SKELETONS (Captain authors fully at dispatch from the cited specs — decision-complete, all forks resolved) ===== -->
 <!-- A1.5b-CARRY-CONVERTER: src/engines/ deterministic ballLocation{x,y}+ParkDimensions→park-adjusted carry feet, air-balls-only. HR distance USER-ENTERED never inferred. The spray ALREADY uses a marker-anchored POLAR model (EnrichmentPanel.tsx:227 + SPRAY_ZONE_LAYOUTS): r=0 home plate, r=0.45 IF/OF boundary, r=1.0 fence, foul lines = angular fair-bounds. So: IF/OF split = r<0.45 vs >0.45 (NOT a guessed radius); carry ≈ r × the park's fence distance in that direction (LF/CF/RF from ParkDimensions); grounder/IF-landing carry=0; foul = outside the fair angular bounds. REPLACE random estimateDistance/estimateAngle/createStadiumBattedBallEvent (fieldZones.ts:735-809). **FIELD-LEAK GATE (JK — historical problem): VERIFY the drawn field image's markers (rendered IF arc, fence, foul lines) ALIGN with the polar model + the svgToNormalizedPoint/viewBox transform (a tap "at the fence" must map to r≈1.0) BEFORE trusting any distance — confirm marker→coordinate fidelity, no drift across viewBox scaling.** Source: RATINGS_MEASUREMENT_WORKSHEET §2/§9 + STADIUM_V2 §2 + DECISIONS_LOG fork #6. Build-dark, no DB bump. -->
 <!-- A1.5c FIELD-LEAK WATCH: the *ByPosition fielding-range aggregator credits the play to the SPRAY-INFERRED fielder — guard the documented historical misattribution-through-substitution/position-change bug (GAMETRACKER_INVARIANTS_FAILURE_MODES_AUDIT.md:127): resolve the fielder from the play's logged position-context at event time, not a late re-map after subs. -->
