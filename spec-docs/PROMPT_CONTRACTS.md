@@ -19826,3 +19826,196 @@ FAILURE PROTOCOL:
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2b ===== -->
+
+<!-- ===== CONTRACT: RA-2c-1 ===== -->
+## CONTRACT: RA-2c-1 — pure checkpoint rating-signal engine (build-dark, new module)
+
+ROUTE: Codex 5.5 | high reasoning effort
+
+You are a precise TypeScript builder on KBL Tracker (branch `codex/franchise-v1-next`, worktree `/Users/johnkruse/Projects/kbl-tracker`).
+
+GOAL:
+Create the PURE, build-DARK RA-2c-1 engine: given an already-classified roster of cohort members (each with its §4 RatingsPoolKey + its RA-2a category rates + base ratings), produce per-player per-attribute development signals by grouping into peer pools (with a thin-pool fallback ladder), aggregating each pool (RA-2b), running the RA-1 expected-stats engine, and blending the per-category signals into one signal per rating attribute (equal weight). NO live caller (RA-2c-2 wires it). NO DB. The classify rules + the ladder are the JK-ruled Fork A/B/D data — use them VERBATIM.
+
+SOURCE OF TRUTH:
+- DECISIONS_LOG.md 2026-06-24 "RA-2c — SMB4-asset gate APPROVED + 4 forks RULED" (Fork A = startsShare; Fork B = effectivePosition; Fork C = hysteresis OFF; Fork D = explicit rung ladder; equal-weight blend; pool-level ladder; curveBlock omitted; ageBand inert).
+- Shipped helpers to REUSE (do not reimplement): `aggregatePoolStats`, `classifyStarterRole`, `DEFAULT_STARTER_ROLE_THRESHOLDS`, `RatingsPoolKey`, `StarterRoleThresholds`, `PoolStatsResult` from `src/engines/expectedStatsPoolAggregator.ts`; `expectedAndSignal`, `EXPECTED_STATS_CATEGORY_META`, `EXPECTED_STATS_CATEGORIES`, `ExpectedStatsAgeBand`, `ExpectedStatsRatingKey`, `ExpectedStatsCategory` from `src/engines/expectedStatsEngine.ts`; `CategoryRateResult` from `src/engines/expectedStatsCategoryRates.ts`; `TRUE_VALUE_MIN_PEER_POOL_SIZE` from `src/engines/salaryCalculator.ts`.
+
+CONSTRAINTS:
+- Edit exactly TWO files (both NEW): `src/utils/checkpointRatingSignal.ts`, `src/utils/tests/checkpointRatingSignal.test.ts`.
+- Do NOT touch: `src/utils/franchiseCheckpointSweepCompute.ts` (RA-2c-2 wires it), any engine file, `trackerDb.ts`, `iv_oracle.json`, any barrel/index. Do NOT modify the reused helpers.
+- Pure module: no IndexedDB, no storage import, no live caller. Quote RA-2c-1 in your report. No commits.
+
+EXPECTED OUTPUT:
+
+=== FILE 1: src/utils/checkpointRatingSignal.ts (NEW) ===
+Use these VERBATIM for the types + the Fork A/B/D constants + helpers:
+```ts
+/**
+ * RA-2c-1 pure checkpoint rating-signal engine — build-DARK.
+ *
+ * Source: RATINGS_ADJUSTMENT_SPEC §4 + DECISIONS_LOG 2026-06-24 (RA-2c forks).
+ * Given cohort members already classified into §4 RatingsPoolKeys, produces a
+ * per-player per-attribute development signal in [-1,1] by: grouping into pools,
+ * borrowing a wider reference for thin pools (Fork D ladder), aggregating (RA-2b),
+ * running expectedAndSignal (RA-1), and blending each rating's categories
+ * (equal weight). No live caller (RA-2c-2 wires it). No I/O.
+ */
+
+import {
+  aggregatePoolStats,
+  classifyStarterRole,
+  DEFAULT_STARTER_ROLE_THRESHOLDS,
+  type PoolStatsResult,
+  type RatingsPoolKey,
+  type StarterRoleThresholds,
+} from '../engines/expectedStatsPoolAggregator';
+import {
+  EXPECTED_STATS_CATEGORIES,
+  EXPECTED_STATS_CATEGORY_META,
+  expectedAndSignal,
+  type ExpectedStatsAgeBand,
+  type ExpectedStatsCategory,
+  type ExpectedStatsRatingKey,
+} from '../engines/expectedStatsEngine';
+import type { CategoryRateResult } from '../engines/expectedStatsCategoryRates';
+import { TRUE_VALUE_MIN_PEER_POOL_SIZE } from '../engines/salaryCalculator';
+
+export interface CheckpointSignalMember {
+  playerId: string;
+  role: 'hitter' | 'pitcher';
+  ageBand: ExpectedStatsAgeBand;
+  ratings: Partial<Record<ExpectedStatsRatingKey, number>>;
+  poolKey: RatingsPoolKey;
+  categoryRates: CategoryRateResult;
+}
+
+const HITTER_POOLS: RatingsPoolKey[] = ['C', 'cornerIF', 'middleIF', 'cornerOF', 'CF', 'benchIF', 'benchOF'];
+const PITCHER_POOLS: RatingsPoolKey[] = ['SP', 'RP'];
+
+/** Fork D §4:85 ladder. Each entry: ordered rungs of progressively-wider pools; rung 0 = position-pure. Sim-tunable §16. */
+export const CHECKPOINT_POOL_LADDER: Record<RatingsPoolKey, RatingsPoolKey[][]> = {
+  C: [['C'], ['C', 'cornerIF', 'middleIF'], HITTER_POOLS],
+  cornerIF: [['cornerIF'], ['cornerIF', 'middleIF'], HITTER_POOLS],
+  middleIF: [['middleIF'], ['cornerIF', 'middleIF'], HITTER_POOLS],
+  cornerOF: [['cornerOF'], ['cornerOF', 'CF'], HITTER_POOLS],
+  CF: [['CF'], ['cornerOF', 'CF'], HITTER_POOLS],
+  benchIF: [['benchIF'], ['benchIF', 'benchOF'], HITTER_POOLS],
+  benchOF: [['benchOF'], ['benchIF', 'benchOF'], HITTER_POOLS],
+  SP: [['SP'], PITCHER_POOLS],
+  RP: [['RP'], PITCHER_POOLS],
+};
+
+/**
+ * Fork A + B: classify a player into a §4 RatingsPoolKey from the effective-position
+ * report. Hitters: starter (classifyStarterRole on startsShare, hysteresis OFF =
+ * no priorRole) -> position pool; bench -> benchIF/benchOF. Pitchers: SP->SP,
+ * RP/CP/SP-RP->RP. Returns null when the position is unmappable.
+ */
+export function classifyRatingsPoolKey(input: {
+  role: 'hitter' | 'pitcher';
+  effectivePosition: string | null | undefined;
+  startsShare: number | null | undefined;
+  thresholds?: StarterRoleThresholds;
+}): RatingsPoolKey | null {
+  const pos = (input.effectivePosition ?? '').trim().toUpperCase();
+  if (input.role === 'pitcher') {
+    if (pos === 'SP') return 'SP';
+    if (pos === 'RP' || pos === 'CP' || pos === 'SP/RP') return 'RP';
+    return null;
+  }
+  const role = classifyStarterRole(
+    input.startsShare ?? 0,
+    undefined,
+    input.thresholds ?? DEFAULT_STARTER_ROLE_THRESHOLDS,
+  );
+  if (role === 'starter') {
+    if (pos === 'C') return 'C';
+    if (pos === '1B' || pos === '3B') return 'cornerIF';
+    if (pos === '2B' || pos === 'SS') return 'middleIF';
+    if (pos === 'LF' || pos === 'RF') return 'cornerOF';
+    if (pos === 'CF') return 'CF';
+    return null;
+  }
+  if (pos === 'C' || pos === '1B' || pos === '2B' || pos === 'SS' || pos === '3B') return 'benchIF';
+  if (pos === 'LF' || pos === 'CF' || pos === 'RF') return 'benchOF';
+  return null;
+}
+
+function membersInRung(allMembers: readonly CheckpointSignalMember[], rung: readonly RatingsPoolKey[]): CheckpointSignalMember[] {
+  const set = new Set<RatingsPoolKey>(rung);
+  return allMembers.filter((m) => set.has(m.poolKey));
+}
+
+/**
+ * Fork D pool-level ladder (mean members): the NARROWEST rung whose member count
+ * reaches the min peer-pool; else the WIDEST rung. The mean stays as position-pure
+ * as the floor allows (§4:65).
+ */
+export function resolvePoolMeanMembers(
+  poolKey: RatingsPoolKey,
+  allMembers: readonly CheckpointSignalMember[],
+  minPeerPool: number = TRUE_VALUE_MIN_PEER_POOL_SIZE,
+): { members: CheckpointSignalMember[]; rungIndex: number } {
+  const ladder = CHECKPOINT_POOL_LADDER[poolKey];
+  for (let i = 0; i < ladder.length; i += 1) {
+    const members = membersInRung(allMembers, ladder[i]);
+    if (members.length >= minPeerPool) return { members, rungIndex: i };
+  }
+  const lastIndex = ladder.length - 1;
+  return { members: membersInRung(allMembers, ladder[lastIndex]), rungIndex: lastIndex };
+}
+
+/** Spread-reference (§4:65 SD borrow): the rung one wider than the mean rung; the mean rung itself when already widest. */
+export function resolveSpreadMembers(
+  poolKey: RatingsPoolKey,
+  allMembers: readonly CheckpointSignalMember[],
+  meanRungIndex: number,
+): CheckpointSignalMember[] {
+  const ladder = CHECKPOINT_POOL_LADDER[poolKey];
+  const idx = Math.min(meanRungIndex + 1, ladder.length - 1);
+  return membersInRung(allMembers, ladder[idx]);
+}
+```
+Then IMPLEMENT (you write this body + the rating-blend per the precise algorithm; keep it pure):
+```ts
+export function computeCheckpointRatingSignals(
+  members: readonly CheckpointSignalMember[],
+): Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>
+```
+ALGORITHM (implement exactly):
+1. Determine the distinct poolKeys present in `members`. For EACH distinct poolKey, compute ONCE:
+   - `{ members: meanMembers, rungIndex }` = `resolvePoolMeanMembers(poolKey, members)`.
+   - `spreadMembers` = `resolveSpreadMembers(poolKey, members, rungIndex)`.
+   - `stats: PoolStatsResult` = `aggregatePoolStats({ members: meanMembers.map(m => m.categoryRates), spreadReference: spreadMembers.map(m => m.categoryRates) })`.
+   - `poolMeanRating: Partial<Record<ExpectedStatsRatingKey, number>>` = for each ExpectedStatsRatingKey rk, the arithmetic mean of `meanMembers`' finite `ratings[rk]` (omit rk when no finite value).
+   Cache per poolKey.
+2. For EACH member:
+   - `rByCat` = `expectedAndSignal({ playerRole: member.role, ageBand: member.ageBand, ratings: member.ratings, actualByCat: member.categoryRates.actualByCat, sampleSizeByCat: member.categoryRates.sampleSizeByCat, poolMeanByCat: stats.poolMeanByCat, poolSdByCat: stats.poolSdByCat, peerValuesByCat: stats.peerValuesByCat, peerPoolSize: stats.peerPoolSize, poolMeanRating }).rByCat` — where `stats`/`poolMeanRating` are this member's poolKey cache. Do NOT pass `curveBlock` (uses each category's defaultCurveBlock). `ageBand` is passed but inert.
+   - BLEND (equal weight): for each ExpectedStatsRatingKey rk, gather `rByCat[cat]` for every `cat` in `EXPECTED_STATS_CATEGORIES` where `EXPECTED_STATS_CATEGORY_META[cat].ratingKey === rk` AND `rByCat[cat]` is a finite number (skip null/undefined/NaN). If the gathered list is non-empty, set `signal[rk]` = arithmetic mean of the list. Omit rk otherwise.
+   - Put `signal` in the result map under `member.playerId`.
+3. Return the map.
+
+=== FILE 2: src/utils/tests/checkpointRatingSignal.test.ts (NEW) ===
+vitest, hand-worked fixtures. Cover:
+A. classifyRatingsPoolKey: {hitter,'SS',0.8}->'middleIF'; {hitter,'1B',0.8}->'cornerIF'; {hitter,'3B',0.8}->'cornerIF'; {hitter,'CF',0.8}->'CF'; {hitter,'LF',0.8}->'cornerOF'; {hitter,'C',0.8}->'C'; {hitter,'1B',0.3}->'benchIF'; {hitter,'LF',0.3}->'benchOF'; {hitter,'C',0.5}->'benchIF' (dead-band->bench); {hitter,'SS',null}->'benchIF'; {pitcher,'SP',null}->'SP'; {pitcher,'CP',null}->'RP'; {pitcher,'RP',null}->'RP'; {pitcher,'SP/RP',null}->'RP'; {hitter,null,0.8}->null; {pitcher,'C',null}->null.
+B. CHECKPOINT_POOL_LADDER shape: assert CHECKPOINT_POOL_LADDER.middleIF toEqual [['middleIF'],['cornerIF','middleIF'],HITTER_POOLS-array] (spell the full HITTER_POOLS array literal).
+C. resolvePoolMeanMembers ladder: build a member array (helper that makes a CheckpointSignalMember with a given poolKey + a categoryRates with contactAverage set). With 6 'middleIF' members -> resolvePoolMeanMembers('middleIF', all) returns rungIndex 0 and 6 members (position-pure). With 2 'middleIF' + 6 'cornerIF' -> returns rungIndex 1 and 8 members (broadened). With 2 'middleIF' only -> returns the LAST rung (HITTER_POOLS) with 2 members (floor).
+D. computeCheckpointRatingSignals blend + anchor identity: build a VARIED 'middleIF' starter cohort of >=6 members with different contactAverage actual rates (e.g. 0.240..0.320) and a fixed contact rating per member, where ONE designated member's contactAverage EQUALS the cohort mean rate AND its contact rating EQUALS the cohort mean contact rating. Assert that designated member's `signal.contact` toBeCloseTo 0 (anchor identity: an exactly-average player earns no contact move). Assert a clearly-above member (high contactAverage, mean rating) has `signal.contact` > 0, and a clearly-below member < 0. (Set sampleSizeByCat.contactAverage well above 50 on every member so the season-basis gate passes; set contact ratings equal across members so playerCurve==poolCurve and the expected reduces to the pool mean.)
+E. empty/thin safety: computeCheckpointRatingSignals([]) returns an empty Map; a 1-member pool does not throw (winsorized SD null -> no signal is acceptable).
+
+VERIFICATION (run from repo root, each `NODE_ENV= `):
+1. `NODE_ENV= npm run build` => exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/checkpointRatingSignal.test.ts` => all green.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsPoolAggregator.test.ts src/engines/__tests__/expectedStatsEngine.test.ts` => green (reused helpers unaffected).
+4. `git status --short` shows ONLY the 2 new files (plus pre-existing dirty docs). `git grep -n "checkpointRatingSignal" -- 'src/*' | grep -v tests` => only the new module (no live importer).
+
+FORMAT: 1. files changed + count. 2. each change referencing RA-2c-1. 3. paste all 4 verification outputs. 4. "RA-2c-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL:
+- If any reused export is not found at the named path => STOP, quote the actual export, report. Do NOT reimplement it.
+- If the anchor-identity test cannot be made to pass because the engine guard nulls the category (e.g. peerSd 0 from identical members) => adjust the FIXTURE to give spread while keeping the designated member at the mean; do NOT change the engine or the blend rule. If still stuck, STOP and report the exact rByCat you observed.
+- Do NOT add a barrel export. Do NOT pass curveBlock. Do NOT wire any live caller.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2c-1 ===== -->
