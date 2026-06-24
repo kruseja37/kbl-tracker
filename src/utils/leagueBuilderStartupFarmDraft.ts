@@ -31,7 +31,10 @@ import {
   prospectSalaryForDraftRound,
   PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
   scoutAccuracy,
+  scoutOverallGradeBand,
   scoutProspect,
+  scoutTierForPosition,
+  scoutToolBands,
   visibleReportForProspectPlayer,
   type DraftPosition,
   type GeneratedProspectCandidate,
@@ -1073,6 +1076,18 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
     const reports = scouts.map((scout) => {
       const descriptor = toScoutDescriptor(scout);
       const report = scoutProspect(candidate, descriptor, session.seed);
+      const bandTier = scoutTierForPosition(candidate.position, descriptor);
+      const toolBands = scoutToolBands({
+        ratings: candidate.ratings as unknown as Record<string, number>,
+        position: candidate.position,
+        scout: descriptor,
+        seed: `${session.seed}:tool-bands:${candidate.candidateId}:${scout.id}`,
+      });
+      const overallGradeBand = scoutOverallGradeBand(
+        candidate.trueGrade,
+        bandTier,
+        `${session.seed}:grade-band:${candidate.candidateId}:${scout.id}`,
+      );
       return {
         candidateId: candidate.candidateId,
         playerName: `${candidate.firstName} ${candidate.lastName}`,
@@ -1089,6 +1104,8 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
         archetypeFamily: candidate.archetypeFamily,
         secondaryPosition: candidate.secondaryPosition,
         salary,
+        toolBands,
+        overallGradeBand,
         scoutId: scout.id,
         scoutName: scout.name,
         scoutAccuracy: report.scoutAccuracy,

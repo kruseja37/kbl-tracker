@@ -14825,3 +14825,64 @@ REPORT:
 
 Do not run the full suite or commit — the auditor runs the full gate and commits. Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S5-REVEAL-FIELDS-V2 ===== -->
+
+<!-- ===== START CONTRACT: S6-BOARD-BANDS ===== -->
+## CONTRACT S6 — DRAFT-BOARD UI: per-tool 0–99 bands + overall grade band (default-covered / long-press) (Branch B / `codex/mode1-v1-b` / worktree `/Users/johnkruse/Projects/kbl-mode1-b`)
+ROUTE: Codex gpt-5.5 | high reasoning effort.
+> **CAPTAIN-GROUNDED 2026-06-23 (Branch-B; spec EMBEDDED INLINE because the ratified specs live on the OTHER branch and may be absent here — verify only `src/…` CODE anchors).** S6 is the FIRST consumer of the build-dark S3/S4 band engines (built, never wired). The CRITICAL S5 invariant: `VisibleSafeProspectReport` must NEVER carry raw numeric ratings — only SAFE/derived data. Bands are DERIVED (published widths around the true value, NOT the true value), so they are safe; compute them at the BOARD-BUILD layer (where the true ratings + scout + seed are in scope) and expose only the bands. Anchor every claim on `src/…` source you re-read; do not infer.
+
+You are a precise TypeScript builder. Work ONLY in `/Users/johnkruse/Projects/kbl-mode1-b` (branch `codex/mode1-v1-b`). This wires existing pure band engines into the prospect-draft board card. Anchor every edit on CALL TEXT, not line numbers (they drift).
+
+GOAL:
+On the startup prospect-draft board card, show — **default-COVERED, revealed only on long-press** — the scout's per-tool 0–99 confidence bands + the overall letter-grade band, computed deterministically at the board-build layer. No raw ratings reach the UI.
+
+SPEC (embedded verbatim — `SCOUTING_SYSTEM_SPEC.md` §1A.2 + the S6 line; authoritative):
+- "**S6** Draft-board UI: per-tool 0–99 bands + overall grade band; **default-covered / long-press-to-reveal** scout report (JK ruling 2026-06-20, never built)."
+- "**OVERALL grade → a LETTER-GRADE band** on the grade ladder, width by the scout's confidence tier for the prospect's PRIMARY position: **HIGH = 3 grade-bands**, **MEDIUM = 5**, **LOW = 7**. The true overall grade sits uniform-random inside the band, clamped to the ladder ends."
+- "**Each TOOL → a 0–99 NUMERIC band**, width by the same tier: **HIGH = 30 pts, MEDIUM = 50, LOW = 70**. Tools: 5 for hitters (POW/CON/SPD/FLD/ARM); **7 for pitchers (VEL/JNK/ACC + POW/CON/SPD/FLD — no arm)**. The true tool value sits uniform-random inside the band."
+The band MATH is ALREADY IMPLEMENTED + tested (S3/S4) — you only WIRE the existing functions; do NOT reimplement the band formula.
+
+GROUNDED CODE ANCHORS (re-read in THIS worktree to confirm, then build):
+- `src/utils/prospectScoutingDraftEngine.ts` — the EXISTING build-dark band engines (REUSE, do not modify their bodies): `export function scoutToolBands({ ratings: Record<string,number>; position: DraftPosition; scout?: { specialties?: string[]; weaknesses?: string[] }; seed: string }): Record<string,{ lower:number; upper:number }>`; `export function scoutOverallGradeBand(trueGrade: Grade, tier: 'high'|'medium'|'low', seed: string): { best: Grade; worst: Grade }`; `export function scoutTierForPosition(position, scout): 'high'|'medium'|'low'`. + the base `export interface VisibleSafeProspectReport { … }` (find it; it currently ends with `salary: number;`).
+- `src/utils/prospectScoutingDraftEngine.ts` — `interface GeneratedProspectCandidate` carries `ratings: PositionPlayerRatings & PitcherRatings;` (the TRUE per-tool ratings, keys power/contact/speed/fielding/arm/velocity/junk/accuracy) + `trueGrade: Grade` + `position`.
+- `src/utils/leagueBuilderStartupFarmDraft.ts` — `function buildBoardForSession(session)`: the inner `scouts.map((scout) => { const descriptor = toScoutDescriptor(scout); const report = scoutProspect(candidate, descriptor, session.seed); return { …, scoutId: scout.id, … } satisfies StartupProspectBoardReport; })` loop. THIS is the band-compute site — `candidate.ratings`, `candidate.position`, `candidate.trueGrade`, `descriptor` (the scout w/ specialties/weaknesses), `scout.id`, and `session.seed` are ALL in scope. + the interfaces `StartupProspectBoardReport extends VisibleSafeProspectReport` and `StartupProspectBoardCandidate extends VisibleSafeProspectReport`.
+- `src/src_figma/app/pages/LeagueBuilderDraft.tsx` — the prospect-board card: `draftView.prospectBoard.map((candidate: StartupProspectBoardCandidate) => …)`, inside it the `candidate.reports.map((report) => …)` per-scout report rows (each shows `report.scoutName` / `Scouted {report.scoutedGrade} · {report.scoutConfidence} · {report.scoutAccuracy}%` / specialties / weaknesses). The BANDS render INSIDE this per-report row (bands are scout-specific).
+- `src/src_figma/app/components/LongPressReveal.tsx` — `export function LongPressReveal({ label, children, className }: { label: string; children: ReactNode; className?: string })` (pointer-based: default shows a 🔒 + label, long-press reveals children, re-covers on release). REUSE it.
+
+EXACT CHANGES:
+1. **`src/utils/prospectScoutingDraftEngine.ts`** — add TWO OPTIONAL fields to the base `VisibleSafeProspectReport` (after `salary: number;`): `toolBands?: Record<string, { lower: number; upper: number }>;` and `overallGradeBand?: { best: Grade; worst: Grade };`. (Optional ⇒ all extending interfaces + their existing construction sites stay valid without edits; only the board literal below populates them.)
+2. **`src/utils/leagueBuilderStartupFarmDraft.ts`** — inside `buildBoardForSession`'s inner `scouts.map` report builder, BEFORE the `return { … } satisfies StartupProspectBoardReport`, compute:
+   ```
+   const bandTier = scoutTierForPosition(candidate.position, descriptor);
+   const toolBands = scoutToolBands({ ratings: candidate.ratings, position: candidate.position, scout: descriptor, seed: `${session.seed}:tool-bands:${candidate.candidateId}:${scout.id}` });
+   const overallGradeBand = scoutOverallGradeBand(candidate.trueGrade, bandTier, `${session.seed}:grade-band:${candidate.candidateId}:${scout.id}`);
+   ```
+   and add `toolBands,` + `overallGradeBand,` to the returned report literal. Import `scoutToolBands`, `scoutOverallGradeBand`, `scoutTierForPosition` from `./prospectScoutingDraftEngine` (extend the existing import). DECISION (Captain default, logged): bands live on the per-scout REPORT (scout-specific), NOT the outer candidate — the candidate's optional band fields stay undefined. Do NOT compute bands at render time (non-deterministic re-renders) and do NOT add them to the farm/franchise `visibleReportFromPick` paths (no seed/ratings there).
+3. **`src/src_figma/app/pages/LeagueBuilderDraft.tsx`** — inside the `candidate.reports.map((report) => …)` row, ADD a `LongPressReveal` (import it from `../components/LongPressReveal`) that is DEFAULT-COVERED and reveals the bands on long-press:
+   ```
+   {report.toolBands ? (
+     <LongPressReveal label="Hold to reveal scout bands">
+       <div className="text-xs text-[#E8E8D8]/75 space-y-0.5">
+         {Object.entries(report.toolBands).map(([tool, band]) => (
+           <div key={tool}>{tool.toUpperCase()} {band.lower}–{band.upper}</div>
+         ))}
+         {report.overallGradeBand ? (<div>Grade {report.overallGradeBand.best}–{report.overallGradeBand.worst}</div>) : null}
+       </div>
+     </LongPressReveal>
+   ) : null}
+   ```
+   Match the card's existing class palette; keep it inside the report row so each scout's bands are under that scout's line.
+
+MAKE-OR-BREAK:
+(a) NO raw rating reaches the UI — the card renders ONLY `band.lower`/`band.upper`/`best`/`worst` (derived), never `candidate.ratings.*`. (b) Bands are COVERED by default — `LongPressReveal` shows the 🔒 label until long-press; nothing reveals the bands without the press. (c) The band MATH is the existing engines' (you wire, not reimplement) — `scoutToolBands` picks the 5-hitter / 7-pitcher tool set by position internally; do not hand-roll the tool list.
+
+STOP-IF: the work seems to require modifying the BODY of `scoutToolBands`/`scoutOverallGradeBand`/`scoutTierForPosition`/`LongPressReveal`, editing `prospectScoutingDraftEngine.ts` band formulas, touching `leagueBuilderStorage.ts`/`franchiseMoraleState.ts` (the cross-branch overlap files — STOP and report), bumping `TRACKER_DB_VERSION`/any store, or threading a seed into `visibleReportFromPick`. A correct STOP-and-report is GOOD.
+
+CONSTRAINTS — edit ONLY: `src/utils/prospectScoutingDraftEngine.ts` (the 2-field interface add), `src/utils/leagueBuilderStartupFarmDraft.ts` (compute + attach bands in `buildBoardForSession` + the import), `src/src_figma/app/pages/LeagueBuilderDraft.tsx` (the LongPressReveal render + import), and IF a characterized test breaks: `src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` (update assertions to the new covered-bands behavior; preserve the non-band assertions). NO `TRACKER_DB_VERSION` bump, NO store/saved-shape change (the board is RECOMPUTED, not persisted — confirm `prospectBoard` comes from `buildBoardForSession`, not a stored row). The frozen `iv_oracle.json` is READ-ONLY. Branch-only — do NOT commit or push (the Captain commits).
+
+GATE (run yourself, report output): `NODE_ENV= npx tsc -b` exit 0 (the type safety net — fails if the band fields are misused) + `NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx` green + `git diff --stat spec-docs/reference/iv_oracle.json` empty. Do NOT run the full suite or commit — the auditor runs the FULL gate (this touches a shared type + a live page) + commits.
+
+FORMAT: (1) every changed file + line counts; (2) the wiring as built (band-compute site + the per-report render), referencing the embedded §1A.2 + the no-raw-leak invariant; (3) confirm covered-by-default + derived-only; (4) tsc + focused-vitest output pasted; (5) "S6 board-bands complete" OR "BLOCKED: <reason>".
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S6-BOARD-BANDS ===== -->

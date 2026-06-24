@@ -6,6 +6,7 @@ import {
   type Player,
   type Team,
 } from "../../hooks/useLeagueBuilderData";
+import { LongPressReveal } from "../components/LongPressReveal";
 import {
   confirmLeagueBuilderProspectPick,
   createLeagueBuilderStartupDraftSession,
@@ -384,6 +385,21 @@ export function LeagueBuilderDraft() {
                           <div>Scouted {report.scoutedGrade} · {report.scoutConfidence} · {report.scoutAccuracy}%</div>
                           <div>Specialties: {report.scoutSpecialtiesVisible.join(", ")}</div>
                           <div>Weaknesses: {report.scoutWeaknessesVisible.join(", ")}</div>
+                          {report.toolBands ? (
+                            <LongPressReveal
+                              label="Hold to reveal scout bands"
+                              className="mt-2 text-left text-[#E8E8D8]/75"
+                            >
+                              <div className="text-xs text-[#E8E8D8]/75 space-y-0.5">
+                                {Object.entries(report.toolBands).map(([tool, band]) => (
+                                  <div key={tool}>{tool.toUpperCase()} {band.lower}–{band.upper}</div>
+                                ))}
+                                {report.overallGradeBand ? (
+                                  <div>Grade {report.overallGradeBand.best}–{report.overallGradeBand.worst}</div>
+                                ) : null}
+                              </div>
+                            </LongPressReveal>
+                          ) : null}
                         </div>
                       ))}
                     </div>

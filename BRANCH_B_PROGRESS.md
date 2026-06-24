@@ -170,3 +170,15 @@ S3/S4 band engines get their FIRST consumer (wire `scoutToolBands` + `scoutOvera
 scout's tier). Then S7 (supersede + dead-code cleanup + the S4-part-2 price re-anchor, LAST — needs the parked price
 decision). All serialize on the generator/scout files. (RB-13b + RB-18 also remain on the Branch-B backlog; the S4-part-2
 price-anchor open decision above is still pending JK.)
+
+### ✅ S6 — draft-board UI: per-tool + overall grade bands (default-covered / long-press) — COMPLETE (branch-only, ZERO NEW REDS)
+
+**Captain-run (Branch-A Opus session driving Branch B in parallel per JK fan-out, 2026-06-23).** Codex-built (`S6-BOARD-BANDS`, high) → Opus-audited (read the REAL diff, never the paste). The FIRST consumer of the build-dark S3/S4 band engines.
+
+**Built (3 files, +35 lines):** `prospectScoutingDraftEngine.ts` +2 optional SAFE fields on `VisibleSafeProspectReport` (`toolBands?` / `overallGradeBand?`) · `leagueBuilderStartupFarmDraft.ts` `buildBoardForSession` inner `scouts.map` computes the bands via the EXISTING `scoutTierForPosition`/`scoutToolBands`/`scoutOverallGradeBand` (seeds `${session.seed}:tool-bands|grade-band:${candidateId}:${scout.id}`) + attaches to the per-scout `StartupProspectBoardReport` · `LeagueBuilderDraft.tsx` renders the bands inside the per-scout report row via `LongPressReveal` (default-COVERED 🔒, reveals on long-press).
+
+**S5 invariant HELD (make-or-break):** NO raw rating reaches the UI — the card renders only `band.lower/upper/best/worst`; `candidate.ratings` flows ONLY into the pure band engine at the board layer. Bands placed PER-SCOUT-REPORT (scout-specific; the outer candidate's optional band fields stay undefined). Build computed deterministically at the board layer (not at render → no re-render bounce).
+
+**Gate (independent, full suite — touches a shared type + a live page):** `NODE_ENV= tsc -b` → 0 · full suite **8081 pass / 1 fail (500 files)** = sole `wpaRuntimeBoundary` (characterized) = **ZERO NEW REDS** (the `AwardsWatchlist` order-flake did not trip this run). No `trackerDb` bump; no `iv_oracle.json` change; the 2 cross-branch overlap files untouched. Characterized `LeagueBuilderDraft.test.tsx` stayed green (9/9, additive).
+
+**BV-S6 (browser-verify, BATCHED):** on the startup prospect-draft board, each scout row shows a 🔒 "Hold to reveal scout bands" → long-press reveals per-tool 0–99 bands + the overall grade band; nothing reveals without the press; no raw numeric ratings anywhere. **D-S6-1 (Captain default):** bands per-scout-report (not on the candidate). **Next: S7** (supersede + dead-code cleanup + the S4-part-2 price re-anchor, LAST — needs the parked price decision).

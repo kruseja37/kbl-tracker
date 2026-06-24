@@ -171,6 +171,8 @@ export interface VisibleSafeProspectReport {
   archetypeFamily: ProspectArchetypeFamily;
   secondaryPosition?: Position;
   salary: number;
+  toolBands?: Record<string, { lower: number; upper: number }>;
+  overallGradeBand?: { best: Grade; worst: Grade };
 }
 
 export interface LeagueBuilderProspectPlayerDto {
