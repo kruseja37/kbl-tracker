@@ -2534,3 +2534,14 @@ sim-tune dials, none block the build.
   when a prospect would level-up/buffer the GM's roster) STAYS on that guidance, now applied to the grade-band range
   instead of the true-IV range. The won bid still becomes the stamped going-into-season salary (the missing FARM piece
   S7 also wires). *(Rejected: pure grade-band-only guidance with no chemFit signal.)*
+
+## 2026-06-23 — A1.5c-4 catcher-arm rate constant k = 0.45 (JK ruling, Hybrid surface)
+
+- **Catcher caught-stealing RATE = `(CS×0.95)/((CS×0.95)+(SB_allowed×0.45))`, null at 0 denominator (JK ruling).** The
+  SOURCE spec (`RATINGS_MEASUREMENT_WORKSHEET.md:100`) names two percentages ("CS 95% catcher / SB-allowed 55% pitcher;
+  surface the discounted rate, never raw CS%") but writes NO formula — so the rate form was a propagated Captain inference
+  in the header/queue/ledger, surfaced to JK per the soul-layer no-inference rule. **k = 0.45 = the catcher's OWN SB blame
+  share** (`kblWpaAttribution.ts:1378`, `catcher ? 0.45`), symmetric with crediting him 0.95 of a caught-stealing (both
+  terms use the catcher's own responsibility share). *(Rejected: k = 0.55, the pitcher-share the spec sentence names —
+  less internally consistent with the 0.95 CS credit.)* No sample-size gate for v1 (mirrors `outfieldArmRate`; a MIN gate
+  would be a §16 sim-tune). Career parity deferred (season-only). Built in A1.5c-4 (writer + pure rate fn).
