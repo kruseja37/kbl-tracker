@@ -7,7 +7,7 @@
  */
 
 import type { PersistedGameState } from './gameStorage';
-import { getGameFieldingEvents, type FieldingEvent } from './eventLog';
+import { getGameFieldingEvents, getBetweenPlayEvents, type FieldingEvent, type BetweenPlayEvent } from './eventLog';
 import {
   getOrCreateBattingStats,
   getOrCreatePitchingStats,
@@ -360,6 +360,18 @@ async function aggregateFieldingStats(
     ofMap.set(fieldingEvent.playerId, playerArmEvents);
   }
 
+  const betweenPlayEvents = await getBetweenPlayEventsForAggregation(gameState);
+  const catcherMap = new Map<string, { cs: number; sb: number }>();
+  for (const ev of betweenPlayEvents) {
+    if (ev.undoneAt) continue;
+    const catcherId = ev.runnerAttribution?.catcherId;
+    if (!catcherId) continue;
+    const entry = catcherMap.get(catcherId) ?? { cs: 0, sb: 0 };
+    if (ev.type === 'caught_stealing') entry.cs += 1;
+    else if (ev.type === 'stolen_base') entry.sb += 1;
+    catcherMap.set(catcherId, entry);
+  }
+
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
     // Player name and team carried through from PersistedGameState
     const playerName = gameStats.playerName || playerId;
@@ -379,6 +391,8 @@ async function aggregateFieldingStats(
       nutshots: (seasonStats.nutshots ?? 0) + (gameStats.nutshots ?? 0),
       outfieldAssists: (seasonStats.outfieldAssists ?? 0) + (ofMap.get(playerId)?.assists ?? 0),
       baserunnersHeld: (seasonStats.baserunnersHeld ?? 0) + (ofMap.get(playerId)?.held ?? 0),
+      caughtStealingAgainst: (seasonStats.caughtStealingAgainst ?? 0) + (catcherMap.get(playerId)?.cs ?? 0),
+      stolenBasesAllowed: (seasonStats.stolenBasesAllowed ?? 0) + (catcherMap.get(playerId)?.sb ?? 0),
       // Note: DP, position-specific stats would need more tracking
     };
 
@@ -401,6 +415,17 @@ async function getFieldingEventsForAggregation(gameState: PersistedGameState): P
     ) {
       return [];
     }
+    throw error;
+  }
+}
+
+async function getBetweenPlayEventsForAggregation(gameState: PersistedGameState): Promise<BetweenPlayEvent[]> {
+  const source = gameState as PersistedGameState & { betweenPlayEvents?: BetweenPlayEvent[] };
+  if (Array.isArray(source.betweenPlayEvents)) return source.betweenPlayEvents;
+  try {
+    return await getBetweenPlayEvents(gameState.gameId);
+  } catch (error) {
+    if (isMissingVitestMockExport(error, 'getBetweenPlayEvents') || isNonBrowserIndexedDbUnavailable(error)) return [];
     throw error;
   }
 }

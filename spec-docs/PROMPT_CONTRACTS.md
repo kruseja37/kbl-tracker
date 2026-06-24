@@ -19004,3 +19004,96 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-8 ===== -->
+
+<!-- ===== CONTRACT: A1.5c-4 ===== -->
+## CONTRACT: A1.5c-4 — catcher caught-stealing rate (pure fn) + the live writer that populates the RA-8 fields
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder. Two coupled additions: a LIVE writer (populates the RA-8 catcher fields in the season fielding aggregator) + a PURE build-dark rate fn. Builder only — do NOT audit/commit/push.
+
+GOAL:
+(1) WRITER: populate the already-added (RA-8 `0edf060a`) `PlayerSeasonFielding.caughtStealingAgainst`/`stolenBasesAllowed` from the persisted between-play steal events, keyed by the STAMPED catcher, inside `aggregateFieldingStats` (ungated live substrate write).
+(2) RATE FN: a pure, build-dark catcher caught-stealing rate = `(CS×0.95)/((CS×0.95)+(SB_allowed×0.45))`, null at 0 denominator.
+
+SOURCE OF TRUTH:
+- `RATINGS_MEASUREMENT_WORKSHEET.md` §9 (catcher arm: CS 95% catcher; SB catcher share 0.45 per `kblWpaAttribution.ts:1378`).
+- **JK RULING 2026-06-23 (DECISIONS_LOG): denominator constant k = 0.45** (the catcher's own SB share). Formula = `(CS×0.95)/((CS×0.95)+(SB_allowed×0.45))`. Do NOT use 0.55.
+- RA-8 (`0edf060a`) already added `caughtStealingAgainst?`/`stolenBasesAllowed?` to `PlayerSeasonFielding` (seed 0); A1.5c-4 owns the writer + reader.
+- Mirror the established A1.5c pure-fn pattern: `src/engines/extraBasesAllowedAggregator.ts`.
+
+CONSTRAINTS:
+- Edit ONLY: `src/utils/seasonAggregator.ts` (the writer). CREATE: `src/engines/catcherCaughtStealingAggregator.ts` (pure rate fn) + `src/engines/__tests__/catcherCaughtStealingAggregator.test.ts` (NEW test).
+- Do NOT touch: `src/utils/seasonStorage.ts` (fields already exist), `src/utils/careerStorage.ts` (career parity DEFERRED — season-only), `src/utils/tests/processCompletedGame.*.test.ts` (their object-literal eventLog mocks MUST pass via the swallow-guard, NOT a mock edit), `src/reference/iv_oracle.json` (FROZEN), `trackerDb.ts`/any DB version/store list.
+- NO TRACKER_DB_VERSION bump. Branch-only (codex/franchise-v1-next); do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+
+A) `src/utils/seasonAggregator.ts`:
+  A1. Extend the line-10 eventLog import:
+      `import { getGameFieldingEvents, getBetweenPlayEvents, type FieldingEvent, type BetweenPlayEvent } from './eventLog';`
+  A2. Add a guarded loader IMMEDIATELY AFTER `getFieldingEventsForAggregation` (after its close `}` ~:406), MIRRORING it exactly — including the swallow guard with the exact exportName `'getBetweenPlayEvents'` (**MAKE-OR-BREAK**: an unguarded read reds the FULL suite at module-load in the 3 processCompletedGame mock tests):
+      ```
+      async function getBetweenPlayEventsForAggregation(gameState: PersistedGameState): Promise<BetweenPlayEvent[]> {
+        const source = gameState as PersistedGameState & { betweenPlayEvents?: BetweenPlayEvent[] };
+        if (Array.isArray(source.betweenPlayEvents)) return source.betweenPlayEvents;
+        try {
+          return await getBetweenPlayEvents(gameState.gameId);
+        } catch (error) {
+          if (isMissingVitestMockExport(error, 'getBetweenPlayEvents') || isNonBrowserIndexedDbUnavailable(error)) return [];
+          throw error;
+        }
+      }
+      ```
+  A3. Inside `aggregateFieldingStats`, BEFORE the `for (const [playerId, gameStats] of Object.entries(gameState.playerStats))` loop (~:363), build a catcherMap:
+      ```
+      const betweenPlayEvents = await getBetweenPlayEventsForAggregation(gameState);
+      const catcherMap = new Map<string, { cs: number; sb: number }>();
+      for (const ev of betweenPlayEvents) {
+        if (ev.undoneAt) continue;
+        const catcherId = ev.runnerAttribution?.catcherId;
+        if (!catcherId) continue; // truthiness: buckets '' and undefined as UNKNOWN
+        const entry = catcherMap.get(catcherId) ?? { cs: 0, sb: 0 };
+        if (ev.type === 'caught_stealing') entry.cs += 1;
+        else if (ev.type === 'stolen_base') entry.sb += 1;
+        catcherMap.set(catcherId, entry);
+      }
+      ```
+      Branch on the `BetweenPlayEvent` discriminator field `type` (union eventLog.ts:460 includes `'caught_stealing'`/`'stolen_base'`). Do NOT use `runnerAction.reason` or `stolenBase.caughtBy` (a position number).
+  A4. In the `updated: PlayerSeasonFielding` object literal, IMMEDIATELY AFTER `baserunnersHeld: ...,` (~:381) and before the `// Note: DP...` comment:
+      ```
+      caughtStealingAgainst: (seasonStats.caughtStealingAgainst ?? 0) + (catcherMap.get(playerId)?.cs ?? 0),
+      stolenBasesAllowed: (seasonStats.stolenBasesAllowed ?? 0) + (catcherMap.get(playerId)?.sb ?? 0),
+      ```
+
+B) NEW `src/engines/catcherCaughtStealingAggregator.ts` (pure; mirror `extraBasesAllowedAggregator.ts`):
+   - Banner comment line 1: build-dark / derive-on-read, SEASON-only (career parity deferred), reads the RA-8 persisted fields.
+   - `export interface CatcherArmRateInput { caughtStealingAgainst?: number | null; stolenBasesAllowed?: number | null; }`
+   - a local `finiteOrZero(v): number` (null/undefined/NaN -> 0)
+   - ```
+     export function catcherCaughtStealingRate(input: CatcherArmRateInput): number | null {
+       const cs = finiteOrZero(input.caughtStealingAgainst);
+       const sb = finiteOrZero(input.stolenBasesAllowed);
+       const numerator = cs * 0.95;
+       const denominator = numerator + sb * 0.45;
+       return denominator === 0 ? null : numerator / denominator;
+     }
+     ```
+   - NO React/storage/Date/random imports. NO sample-size gate (v1).
+
+C) NEW `src/engines/__tests__/catcherCaughtStealingAggregator.test.ts`: null at 0/0; cs=3,sb=7 -> 0.475 (2.85/6.0); finiteOrZero null/undefined/NaN -> 0; cs=0,sb>0 -> 0.
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm run build` → exit 0
+- `NODE_ENV= npx vitest run` → FULL suite. Expect 2 failed files (`wpaRuntimeBoundary` hard + `franchiseManualSmokeFixture` order-flake) = the characterized baseline ⇒ ZERO NEW REDS. The 3 `src/utils/tests/processCompletedGame.{warPersistence,statBoundary,warMetadata}.test.ts` MUST stay green via the swallow-guard (do NOT edit them).
+- `git --no-pager diff --stat` → `seasonAggregator.ts` + 2 new files.
+
+FORMAT: 1. files changed 2. the diffs / new files 3. verification output (pasted verbatim) 4. "A1.5c-4 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF the BetweenPlayEvent discriminator is NOT `.type` or the catcher path is NOT `runnerAttribution.catcherId` — report the real field, do not guess.
+- STOP-IF any `processCompletedGame.*.test.ts` reds at module-load — the swallow-guard exportName is wrong; FIX the guard string, do NOT edit the test mocks.
+- STOP-IF populating requires a trackerDb bump or touching seasonStorage/careerStorage — report it.
+- Do NOT add a sample-size gate, do NOT add career fields, do NOT change the constant from 0.45.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A1.5c-4 ===== -->
