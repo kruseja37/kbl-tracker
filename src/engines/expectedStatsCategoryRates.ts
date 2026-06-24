@@ -5,7 +5,8 @@
  * DECISIONS_LOG 2026-06-23 RA-2:
  * - armThrowingRate: RA-8 catcher caught-stealing season fields are not stored yet.
  * - pitcher non-pitching power/contact/speed/fielding categories: RA-11/B14 co-design.
- * - speedBaserunningRate: no clean per-PA baserunning rate exists beyond SB+3B.
+ * - speedBaserunningRate: steal-attempts+triples is the speedStealTripleRate
+ *   sample; UBR/baserunning-advancement is RA-2c-3 and still dormant.
  * - fieldingAvoidErrorRate: collinear with fieldingFieldingPct, folded for v1.
  *
  * RA-2CQ-2c: contactQualityRate and pitchingWeakContactRate are live from
@@ -64,7 +65,11 @@ function addHitterRates(
   setSample(result.sampleSizeByCat, 'contactAverage', battingSample);
   setSample(result.sampleSizeByCat, 'contactOnBase', battingSample);
   setSample(result.sampleSizeByCat, 'contactAvoidStrikeoutRate', battingSample);
-  setSample(result.sampleSizeByCat, 'speedStealTripleRate', battingSample);
+  setSample(
+    result.sampleSizeByCat,
+    'speedStealTripleRate',
+    (batting?.stolenBases ?? 0) + (batting?.caughtStealing ?? 0) + (batting?.triples ?? 0),
+  );
   setSample(result.sampleSizeByCat, 'contactQualityRate', batting?.contactQualityTracked ?? 0);
 
   if (batting) {

@@ -20151,3 +20151,96 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2c-1a ===== -->
+
+<!-- ===== CONTRACT: RA-2c-2a ===== -->
+## CONTRACT: RA-2c-2a — speed-event sample + flat per-category sample-floor gating (engine-layer, build-dark)
+
+ROUTE: Codex 5.5 | high reasoning effort
+ROLE: Precise TypeScript builder revising two pure, build-DARK SMB4 ratings soul-layer modules + their tests. The measurement is ruled verbatim below — do NOT infer or vary it.
+
+GOAL:
+(1) Change the SPEED category's qualifying sample from plate-appearances to speed-events (SB + caught-stealing + triples).
+(2) Add the JK-ruled FLAT per-category sample-floor gating (Gate 1 pool-membership == Gate 2 own-move) into the checkpoint rating-signal engine, so a category's rate is dropped (excluded from BOTH the peer-pool mean/spread AND the player's own signal) when his cumulative sample for that category is below the flat floor. Make the flat floors the SOLE sample gate by zeroing the engine's internal min-sample in the checkpoint tuning.
+
+SOURCE OF TRUTH (ruled verbatim — DECISIONS_LOG.md 2026-06-24 "RA-2c-2 qualifier model — the three sample gates + flat floors"):
+FLAT floors (NOT season-scaled), Gate 1 == Gate 2, cumulative season-to-date:
+| Rating category | sample field (already set by the adapter) | flat floor |
+| power* (powerIso/powerSlugging/powerHomeRunRate) | PA | 10 starter / 5 bench |
+| contact AVG-family (contactAverage/contactOnBase/contactAvoidStrikeoutRate) | PA | 10 starter / 5 bench |
+| contactQualityRate | tracked balls-in-play | 10 |
+| speedStealTripleRate | speed events = SB+CS+triples (THIS ticket sets it) | 2 |
+| fielding (fieldingFieldingPct/fieldingRangeRate) | fielding chances | 5 |
+| pitching (pitchingStrikeoutRate/pitchingWalkAvoidanceRate/pitchingHomeRunSuppressionRate/pitchingFipPrevention/pitchingWeakContactRate) | batters faced (FIP: outs) | 10 |
+| armThrowingRate | (dormant, no actual ever emitted) | n/a (use 10; moot) |
+- Starter/bench split (10/5) applies ONLY to the PA-gated batting categories (power* + contact AVG-family). All other categories use a single flat floor regardless of starter/bench.
+- "bench" = a member whose poolKey is 'benchIF' or 'benchOF'; everyone else (incl. pitchers) = "starter".
+- Floors are §16-sim-tunable — expose them as an exported const.
+
+CONSTRAINTS:
+- Edit ONLY these four files:
+  - `src/engines/expectedStatsCategoryRates.ts` (the speed-sample line + its docstring note)
+  - `src/utils/checkpointRatingSignal.ts` (the flat-floor gating + zero the internal min-sample in CHECKPOINT_EXPECTED_STATS_TUNING)
+  - `src/engines/__tests__/expectedStatsCategoryRates.test.ts` (add/adjust the speed-sample test) — IF this file does not exist, create it OR add the case to the nearest existing adapter test; report which.
+  - `src/utils/tests/checkpointRatingSignal.test.ts` (add flat-floor gating tests; keep all existing RA-2c-1a tests green)
+- Do NOT touch: `src/engines/expectedStatsEngine.ts`, `src/engines/expectedStatsPoolAggregator.ts`, `src/utils/franchiseCheckpointSweepCompute.ts` (RA-2c-2b wires it), `trackerDb.ts`, `iv_oracle.json`, any barrel. Do NOT change the SPEED RATE FORMULA (stays (SB+3B)/PA) — only its SAMPLE changes.
+- Branch-only: do NOT commit, do NOT push. Keep the module pure / build-DARK (no live caller — RA-2c-2b wires it).
+
+EXPECTED OUTPUT — `src/engines/expectedStatsCategoryRates.ts`:
+- In addHitterRates, change the speedStealTripleRate SAMPLE from `battingSample` (PA) to speed-events:
+  `setSample(result.sampleSizeByCat, 'speedStealTripleRate', (batting?.stolenBases ?? 0) + (batting?.caughtStealing ?? 0) + (batting?.triples ?? 0));`
+  Leave the speedStealTripleRate ACTUAL exactly as is: `(batting.stolenBases + batting.triples) / batting.pa` inside the `if (batting.pa > 0)` block.
+  Update the top docstring's speed note to say the sample is steal-attempts+triples (UBR/baserunning-advancement is RA-2c-3, still dormant).
+
+EXPECTED OUTPUT — `src/utils/checkpointRatingSignal.ts`:
+1. Add an exported §16-tunable flat-floor table (one entry per ExpectedStatsCategory; satisfies Record<ExpectedStatsCategory, {starter:number; bench:number}>), e.g.:
+```ts
+/** RA-2c-2a flat per-category sample floors (Gate 1 == Gate 2). §16 sim-tunable. DECISIONS_LOG 2026-06-24. */
+export const CHECKPOINT_SAMPLE_FLOORS: Record<ExpectedStatsCategory, { starter: number; bench: number }> = {
+  powerIso: { starter: 10, bench: 5 }, powerSlugging: { starter: 10, bench: 5 }, powerHomeRunRate: { starter: 10, bench: 5 },
+  contactAverage: { starter: 10, bench: 5 }, contactOnBase: { starter: 10, bench: 5 }, contactAvoidStrikeoutRate: { starter: 10, bench: 5 },
+  contactQualityRate: { starter: 10, bench: 10 },
+  speedStealTripleRate: { starter: 2, bench: 2 },
+  speedBaserunningRate: { starter: 2, bench: 2 },
+  fieldingFieldingPct: { starter: 5, bench: 5 }, fieldingAvoidErrorRate: { starter: 5, bench: 5 }, fieldingRangeRate: { starter: 5, bench: 5 },
+  armThrowingRate: { starter: 10, bench: 10 },
+  pitchingStrikeoutRate: { starter: 10, bench: 10 }, pitchingWeakContactRate: { starter: 10, bench: 10 },
+  pitchingHomeRunSuppressionRate: { starter: 10, bench: 10 }, pitchingWalkAvoidanceRate: { starter: 10, bench: 10 }, pitchingFipPrevention: { starter: 10, bench: 10 },
+};
+```
+   (Include EVERY ExpectedStatsCategory key so the Record is exhaustive; the keys above are the full set — verify against EXPECTED_STATS_CATEGORIES.)
+2. Add a pure helper that returns a flat-floor-GATED copy of a member's categoryRates: for each ExpectedStatsCategory, KEEP actualByCat[cat] only when it is a finite number AND sampleSizeByCat[cat] is a finite number >= the floor for that category (bench floor iff poolKey is 'benchIF'/'benchOF', else starter floor). Drop (omit) actualByCat[cat] otherwise. Keep sampleSizeByCat unchanged.
+3. In computeCheckpointRatingSignals: apply that gate to EACH member ONCE up front, and use the GATED categoryRates everywhere downstream — both the pool aggregation (resolvePoolMeanMembers/resolveSpreadMembers feed aggregatePoolStats over the gated members) AND each member's expectedAndSignal call. (Gate the members at the top; the rest of the function consumes the gated members.)
+4. Update CHECKPOINT_EXPECTED_STATS_TUNING to ALSO zero the internal sample floors so the flat floors are the SOLE sample gate (the engine must not re-gate with its scaled defaults):
+```ts
+const CHECKPOINT_EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
+  ...EXPECTED_STATS_TUNING,
+  minPeerPool: TRUE_VALUE_MIN_PEER_POOL_SIZE, // RA-2c-1a (stays)
+  minSampleSeason: 0, minSampleCombined: 0, minSampleRate: 0, // RA-2c-2a: flat-floor gating is the sole sample gate
+};
+```
+   (minPeerPool stays 6 — the thin-pool suppression from RA-2c-1a is unchanged.)
+
+EXPECTED OUTPUT — tests:
+- expectedStatsCategoryRates: assert speedStealTripleRate SAMPLE == SB+CS+triples (e.g. SB=3, CS=1, triples=2 -> sample 6) and that the ACTUAL is still (SB+3B)/PA.
+- checkpointRatingSignal: KEEP all RA-2c-1a tests green. ADD:
+  - A starter middleIF member with contactAverage sample 9 (< 10 starter floor) -> his contact signal is suppressed (undefined) even in a 6-strong pool; the same member at sample 10 -> not suppressed by the floor.
+  - A bench (benchIF) member at contactAverage sample 6 -> NOT floor-suppressed (>= 5 bench floor); at sample 4 -> floor-suppressed.
+  - A speedStealTripleRate member at speed-event sample 1 -> suppressed; at 2 -> not floor-suppressed.
+  - Build the fixtures so the pool is >=6 members (so minPeerPool=6 does NOT suppress) -> isolating the FLAT-floor gate as the cause. (The existing `member()`/`categoryRate()` helpers set sampleSize; extend them or add a speed/pool-size helper as needed.)
+
+VERIFICATION (run from repo root, each `NODE_ENV= `):
+1. `NODE_ENV= npm run build` => exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/checkpointRatingSignal.test.ts src/engines/__tests__/expectedStatsCategoryRates.test.ts` => all green (note the exact adapter test path you used).
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsEngine.test.ts src/engines/__tests__/expectedStatsPoolAggregator.test.ts` => green (reused engine/aggregator unaffected).
+4. `git status --short` => only the (up to) four named files dirty (+ pre-existing dirty docs). `git grep -n "checkpointRatingSignal" -- 'src/*' | grep -v tests` => only the module self-reference (no live importer).
+
+FORMAT: 1. files changed + count. 2. each change referencing RA-2c-2a + the ruled source. 3. paste all 4 verification outputs. 4. "RA-2c-2a complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- If EXPECTED_STATS_CATEGORIES contains a key not in CHECKPOINT_SAMPLE_FLOORS (or vice-versa) => STOP, list the exact key set, report (the Record must be exhaustive).
+- If zeroing the internal minSample breaks any kept RA-2c-1a test => STOP and report the failing assertion (do NOT alter the RA-2c-1a tests' intent; the anchor-identity + suppression tests must stay green).
+- If the adapter test file path differs from the assumed one => report the actual path you used; do not create a duplicate.
+- Do NOT change the speed RATE formula, do NOT touch the engine/aggregator/sweep, do NOT wire a live caller, do NOT add a barrel.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2c-2a ===== -->

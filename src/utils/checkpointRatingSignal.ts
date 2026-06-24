@@ -4,9 +4,10 @@
  * Source: RATINGS_ADJUSTMENT_SPEC §4:65 + DECISIONS_LOG 2026-06-24
  * (RA-2 ratings-adjustment — peer-pool, eligibility & signal model).
  * Given cohort members already classified into §4 RatingsPoolKeys, produces a
- * per-player per-attribute development signal in [-1,1] by: grouping into pools,
- * keeping the MEAN always position-pure (Rung 0), borrowing SPREAD/SD from Rung 1,
- * suppressing category moves when the position-pure peer pool is below
+ * per-player per-attribute development signal in [-1,1] by: applying the
+ * RA-2c-2a flat per-category sample floors, grouping into pools, keeping the
+ * MEAN always position-pure (Rung 0), borrowing SPREAD/SD from Rung 1,
+ * suppressing category moves when the post-floor position-pure peer pool is below
  * TRUE_VALUE_MIN_PEER_POOL_SIZE, aggregating (RA-2b), running expectedAndSignal
  * (RA-1), and blending each rating's categories (equal weight). No live caller
  * (RA-2c-2 wires it). No I/O.
@@ -54,6 +55,32 @@ const PITCHER_POOLS: RatingsPoolKey[] = ['SP', 'RP'];
 const CHECKPOINT_EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
   ...EXPECTED_STATS_TUNING,
   minPeerPool: TRUE_VALUE_MIN_PEER_POOL_SIZE,
+  // RA-2c-2a: flat-floor gating is the sole checkpoint sample gate.
+  minSampleSeason: 0,
+  minSampleCombined: 0,
+  minSampleRate: 0,
+};
+
+/** RA-2c-2a flat per-category sample floors (Gate 1 == Gate 2). §16 sim-tunable. DECISIONS_LOG 2026-06-24. */
+export const CHECKPOINT_SAMPLE_FLOORS: Record<ExpectedStatsCategory, { starter: number; bench: number }> = {
+  powerIso: { starter: 10, bench: 5 },
+  powerSlugging: { starter: 10, bench: 5 },
+  powerHomeRunRate: { starter: 10, bench: 5 },
+  contactAverage: { starter: 10, bench: 5 },
+  contactOnBase: { starter: 10, bench: 5 },
+  contactAvoidStrikeoutRate: { starter: 10, bench: 5 },
+  contactQualityRate: { starter: 10, bench: 10 },
+  speedStealTripleRate: { starter: 2, bench: 2 },
+  speedBaserunningRate: { starter: 2, bench: 2 },
+  fieldingFieldingPct: { starter: 5, bench: 5 },
+  fieldingAvoidErrorRate: { starter: 5, bench: 5 },
+  fieldingRangeRate: { starter: 5, bench: 5 },
+  armThrowingRate: { starter: 10, bench: 10 },
+  pitchingStrikeoutRate: { starter: 10, bench: 10 },
+  pitchingWeakContactRate: { starter: 10, bench: 10 },
+  pitchingHomeRunSuppressionRate: { starter: 10, bench: 10 },
+  pitchingWalkAvoidanceRate: { starter: 10, bench: 10 },
+  pitchingFipPrevention: { starter: 10, bench: 10 },
 };
 
 /** Fork D §4:85 ladder. Each entry: ordered rungs of progressively-wider pools; rung 0 = position-pure. Sim-tunable §16. */
@@ -182,15 +209,50 @@ function blendSignalsByRatingKey(
   return signal;
 }
 
+function sampleFloorRole(poolKey: RatingsPoolKey): 'starter' | 'bench' {
+  return poolKey === 'benchIF' || poolKey === 'benchOF' ? 'bench' : 'starter';
+}
+
+function gateCategoryRatesByFlatSampleFloor(
+  member: CheckpointSignalMember,
+): CheckpointSignalMember {
+  const role = sampleFloorRole(member.poolKey);
+  const gatedActualByCat: Partial<Record<ExpectedStatsCategory, number>> = {};
+
+  for (const category of EXPECTED_STATS_CATEGORIES) {
+    const actual = member.categoryRates.actualByCat[category];
+    const sample = member.categoryRates.sampleSizeByCat[category];
+    const floor = CHECKPOINT_SAMPLE_FLOORS[category][role];
+    if (
+      typeof actual === 'number' &&
+      Number.isFinite(actual) &&
+      typeof sample === 'number' &&
+      Number.isFinite(sample) &&
+      sample >= floor
+    ) {
+      gatedActualByCat[category] = actual;
+    }
+  }
+
+  return {
+    ...member,
+    categoryRates: {
+      actualByCat: gatedActualByCat,
+      sampleSizeByCat: member.categoryRates.sampleSizeByCat,
+    },
+  };
+}
+
 export function computeCheckpointRatingSignals(
   members: readonly CheckpointSignalMember[],
 ): Map<string, Partial<Record<ExpectedStatsRatingKey, number>>> {
+  const gatedMembers = members.map(gateCategoryRatesByFlatSampleFloor);
   const poolCache = new Map<RatingsPoolKey, PoolSignalCache>();
-  const distinctPoolKeys = new Set<RatingsPoolKey>(members.map((member) => member.poolKey));
+  const distinctPoolKeys = new Set<RatingsPoolKey>(gatedMembers.map((member) => member.poolKey));
 
   for (const poolKey of distinctPoolKeys) {
-    const { members: meanMembers, rungIndex } = resolvePoolMeanMembers(poolKey, members);
-    const spreadMembers = resolveSpreadMembers(poolKey, members, rungIndex);
+    const { members: meanMembers, rungIndex } = resolvePoolMeanMembers(poolKey, gatedMembers);
+    const spreadMembers = resolveSpreadMembers(poolKey, gatedMembers, rungIndex);
     const stats = aggregatePoolStats({
       members: meanMembers.map((member) => member.categoryRates),
       spreadReference: spreadMembers.map((member) => member.categoryRates),
@@ -202,7 +264,7 @@ export function computeCheckpointRatingSignals(
   }
 
   const result = new Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>();
-  for (const member of members) {
+  for (const member of gatedMembers) {
     const cached = poolCache.get(member.poolKey);
     if (!cached) {
       result.set(member.playerId, {});

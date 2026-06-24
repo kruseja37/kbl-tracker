@@ -8,6 +8,10 @@ import {
   type CheckpointSignalMember,
 } from '../checkpointRatingSignal';
 import type { RatingsPoolKey } from '../../engines/expectedStatsPoolAggregator';
+import type {
+  ExpectedStatsCategory,
+  ExpectedStatsRatingKey,
+} from '../../engines/expectedStatsEngine';
 
 const categoryRate = (contactAverage?: number, sampleSize = 100) => ({
   actualByCat:
@@ -30,6 +34,62 @@ const member = (
   poolKey,
   categoryRates: categoryRate(contactAverage),
 });
+
+const categoryRateFor = (
+  category: ExpectedStatsCategory,
+  actual: number,
+  sampleSize: number,
+) => ({
+  actualByCat: { [category]: actual } as Partial<Record<ExpectedStatsCategory, number>>,
+  sampleSizeByCat: { [category]: sampleSize } as Partial<Record<ExpectedStatsCategory, number>>,
+});
+
+const ratedCategoryMember = (
+  playerId: string,
+  poolKey: RatingsPoolKey,
+  category: ExpectedStatsCategory,
+  ratingKey: ExpectedStatsRatingKey,
+  actual: number,
+  sampleSize: number,
+  rating = 60,
+): CheckpointSignalMember => ({
+  playerId,
+  role: poolKey === 'SP' || poolKey === 'RP' ? 'pitcher' : 'hitter',
+  ageBand: '25-31',
+  ratings: { [ratingKey]: rating },
+  poolKey,
+  categoryRates: categoryRateFor(category, actual, sampleSize),
+});
+
+const qualifyingContactPeers = (
+  poolKey: RatingsPoolKey,
+  count: number,
+  sampleSize: number,
+): CheckpointSignalMember[] => (
+  Array.from({ length: count }, (_, i) => (
+    ratedCategoryMember(
+      `${poolKey}-contact-peer-${i}`,
+      poolKey,
+      'contactAverage',
+      'contact',
+      0.245 + i * 0.010,
+      sampleSize,
+    )
+  ))
+);
+
+const qualifyingSpeedPeers = (count: number): CheckpointSignalMember[] => (
+  Array.from({ length: count }, (_, i) => (
+    ratedCategoryMember(
+      `speed-peer-${i}`,
+      'middleIF',
+      'speedStealTripleRate',
+      'speed',
+      0.050 + i * 0.010,
+      2,
+    )
+  ))
+);
 
 describe('checkpointRatingSignal RA-2c-1', () => {
   test('classifyRatingsPoolKey follows Fork A/B startsShare and effectivePosition rulings', () => {
@@ -134,5 +194,47 @@ describe('checkpointRatingSignal RA-2c-1', () => {
           return typeof signal === 'number' && Number.isFinite(signal);
         }),
     ).toBe(true);
+  });
+
+  test('RA-2c-2a flat floors suppress starter contact below 10 PA and allow it at 10', () => {
+    const belowFloor = [
+      ratedCategoryMember('target', 'middleIF', 'contactAverage', 'contact', 0.330, 9),
+      ...qualifyingContactPeers('middleIF', 6, 10),
+    ];
+    const atFloor = [
+      ratedCategoryMember('target', 'middleIF', 'contactAverage', 'contact', 0.330, 10),
+      ...qualifyingContactPeers('middleIF', 6, 10),
+    ];
+
+    expect(computeCheckpointRatingSignals(belowFloor).get('target')?.contact).toBeUndefined();
+    expect(computeCheckpointRatingSignals(atFloor).get('target')?.contact).toEqual(expect.any(Number));
+  });
+
+  test('RA-2c-2a flat floors use the 5 PA bench contact floor for benchIF members', () => {
+    const aboveBenchFloor = [
+      ratedCategoryMember('bench-target', 'benchIF', 'contactAverage', 'contact', 0.330, 6),
+      ...qualifyingContactPeers('benchIF', 6, 5),
+    ];
+    const belowBenchFloor = [
+      ratedCategoryMember('bench-target', 'benchIF', 'contactAverage', 'contact', 0.330, 4),
+      ...qualifyingContactPeers('benchIF', 6, 5),
+    ];
+
+    expect(computeCheckpointRatingSignals(aboveBenchFloor).get('bench-target')?.contact).toEqual(expect.any(Number));
+    expect(computeCheckpointRatingSignals(belowBenchFloor).get('bench-target')?.contact).toBeUndefined();
+  });
+
+  test('RA-2c-2a flat floors suppress speedStealTripleRate below 2 speed events and allow it at 2', () => {
+    const belowFloor = [
+      ratedCategoryMember('speed-target', 'middleIF', 'speedStealTripleRate', 'speed', 0.140, 1),
+      ...qualifyingSpeedPeers(6),
+    ];
+    const atFloor = [
+      ratedCategoryMember('speed-target', 'middleIF', 'speedStealTripleRate', 'speed', 0.140, 2),
+      ...qualifyingSpeedPeers(6),
+    ];
+
+    expect(computeCheckpointRatingSignals(belowFloor).get('speed-target')?.speed).toBeUndefined();
+    expect(computeCheckpointRatingSignals(atFloor).get('speed-target')?.speed).toEqual(expect.any(Number));
   });
 });

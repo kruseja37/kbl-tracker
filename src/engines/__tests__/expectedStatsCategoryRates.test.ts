@@ -174,10 +174,27 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       contactOnBase: 120,
       contactAvoidStrikeoutRate: 120,
       contactQualityRate: 0,
-      speedStealTripleRate: 120,
+      speedStealTripleRate: 10,
       fieldingFieldingPct: 80,
       fieldingRangeRate: 80,
     });
+  });
+
+  test('uses speed events as the speed sample while keeping the SB+3B per-PA actual', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      batting: baseBatting({
+        pa: 50,
+        ab: 45,
+        hits: 12,
+        triples: 2,
+        stolenBases: 3,
+        caughtStealing: 1,
+      }),
+    });
+
+    expect(result.sampleSizeByCat.speedStealTripleRate).toBe(6);
+    expect(result.actualByCat.speedStealTripleRate).toBeCloseTo(5 / 50, 10);
   });
 
   test('maps a full pitcher season row to hand-worked live rates and samples', () => {
