@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getAuctionSessionById: vi.fn(),
   createFarmAuctionSessionId: vi.fn(),
   getPlayer: vi.fn(),
+  savePlayer: vi.fn(),
   generateSchedule: vi.fn(),
   initScheduleDatabase: vi.fn(),
   getAllGamesByFranchise: vi.fn(),
@@ -54,6 +55,7 @@ vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getAuctionSessionById: mocks.getAuctionSessionById,
   createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
   getPlayer: mocks.getPlayer,
+  savePlayer: mocks.savePlayer,
 }));
 
 vi.mock('../../../utils/scheduleGenerator', () => ({
@@ -234,6 +236,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     mocks.getAuctionSession.mockResolvedValue(null);
     mocks.getAuctionSessionById.mockResolvedValue(null);
     mocks.getPlayer.mockResolvedValue(null);
+    mocks.savePlayer.mockImplementation(async (player: unknown) => player);
     mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
       `${leagueId}::startup-farm-auction-draft::${seasonNumber}`,
     );
@@ -369,6 +372,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       id: 'farm-drafted',
       primaryPosition: 'SP',
       personality: 'Relaxed',
+      salary: 3.99957,
+      settledSalary: 3.99957,
       hiddenPersonalityModifiers: {
         loyalty: 50,
         ambition: 50,
@@ -376,7 +381,32 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         charisma: 50,
       },
     };
+    const cpuFarmPlayer = {
+      id: 'cpu-farm-drafted',
+      primaryPosition: 'SS',
+      personality: 'Competitive',
+      salary: 2.33308,
+      hiddenPersonalityModifiers: {
+        loyalty: 55,
+        ambition: 60,
+        resilience: 50,
+        charisma: 45,
+      },
+    };
+    const shillFarmPlayer = {
+      id: 'shill-farm-drafted',
+      primaryPosition: 'CF',
+      personality: 'Disciplined',
+      salary: 2.33308,
+    };
     mocks.getAllFranchisePlayers.mockResolvedValueOnce([mlbPlayer]);
+    mocks.getTeam.mockImplementation((teamId: string) =>
+      Promise.resolve({
+        id: teamId,
+        name: teamId === 'team-away' ? 'Away Club' : 'Home Club',
+        controlledBy: teamId === 'team-home' ? 'ai' : 'human',
+      }),
+    );
     mocks.getAuctionSession.mockResolvedValueOnce({
       session: auctionSession(
         {
@@ -386,18 +416,31 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       ),
     });
     mocks.getAuctionSessionById.mockResolvedValueOnce({
-      session: auctionSession(
-        {
-          'farm-drafted': { playerId: 'farm-drafted', iv: 40, ivPercentile: 0.25 },
-        },
-        [sold('farm-drafted', 'team-away', 25)],
-      ),
+      session: {
+        ...auctionSession(
+          {
+            'farm-drafted': { playerId: 'farm-drafted', iv: 40, ivPercentile: 0.25 },
+            'cpu-farm-drafted': { playerId: 'cpu-farm-drafted', iv: 55, ivPercentile: 0.4 },
+            'shill-farm-drafted': { playerId: 'shill-farm-drafted', iv: 45, ivPercentile: 0.3 },
+          },
+          [
+            sold('farm-drafted', 'team-away', 25),
+            sold('cpu-farm-drafted', 'team-home', 27),
+            sold('shill-farm-drafted', 'ghost-shill', 29),
+          ],
+        ),
+        config: { cpuShillCount: 2 },
+        nominationOrder: ['team-away', 'team-home', 'ghost-shill'],
+      },
     });
     mocks.getFranchisePlayer.mockImplementation(async (_franchiseId: string, playerId: string) => (
       playerId === 'mlb-drafted' ? { ...mlbPlayer, settledSalary: 80 } : null
     ));
     mocks.getPlayer.mockImplementation(async (playerId: string) => (
-      playerId === 'farm-drafted' ? farmPlayer : null
+      playerId === 'farm-drafted' ? farmPlayer :
+        playerId === 'cpu-farm-drafted' ? cpuFarmPlayer :
+          playerId === 'shill-farm-drafted' ? shillFarmPlayer :
+            null
     ));
 
     await initializeFranchise(franchiseConfig);
@@ -410,13 +453,28 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         settledSalary: 90,
       }),
     );
-    expect(mocks.saveFranchisePlayer).not.toHaveBeenCalledWith(
-      'franchise-1',
+    expect(mocks.savePlayer).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'farm-drafted',
+        salary: 25,
+        settledSalary: 25,
+      }),
+    );
+    expect(mocks.savePlayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'cpu-farm-drafted',
+        salary: 27,
+        settledSalary: 27,
+      }),
+    );
+    expect(mocks.savePlayer).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'shill-farm-drafted',
       }),
     );
     expect(mocks.getPlayer).toHaveBeenCalledWith('farm-drafted');
+    expect(mocks.getPlayer).toHaveBeenCalledWith('cpu-farm-drafted');
+    expect(mocks.getPlayer).not.toHaveBeenCalledWith('shill-farm-drafted');
     expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledTimes(1);
     expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -443,6 +501,20 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         valueDelta: 15,
         warPercentile: 0,
         position: 'SP',
+        peerPoolSize: 0,
+        calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
+        computedAt: expect.any(String),
+      }),
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        statsScopeId: 'draft-baseline',
+        playerId: 'cpu-farm-drafted',
+        trueValue: 55,
+        contractValue: 27,
+        valueDelta: 28,
+        warPercentile: 0,
+        position: 'SS',
         peerPoolSize: 0,
         calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
         computedAt: expect.any(String),

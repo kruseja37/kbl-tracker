@@ -43,6 +43,7 @@ import {
   getAuctionSessionById,
   getLeagueTemplate,
   getPlayer,
+  savePlayer,
   getTeam,
   type LeagueTemplate,
 } from './leagueBuilderStorage';
@@ -753,9 +754,27 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
 
       for (const player of freeze.players) {
         const existing = await getFranchisePlayer(franchiseId, player.playerId);
-        if (!existing) continue; // farm prospects live in the farm store (D-7c-1) — skip
-        if (existing.settledSalary === player.settledSalary) continue; // idempotent / re-init safe
-        await saveFranchisePlayer(franchiseId, { ...existing, settledSalary: player.settledSalary });
+        if (existing) {
+          if (existing.settledSalary === player.settledSalary) continue; // idempotent / re-init safe
+          await saveFranchisePlayer(franchiseId, { ...existing, settledSalary: player.settledSalary });
+          continue;
+        }
+
+        if (player.tier !== 'FARM') continue;
+
+        const farmProspect = await getPlayer(player.playerId);
+        if (!farmProspect) continue;
+        if (
+          farmProspect.salary === player.settledSalary &&
+          farmProspect.settledSalary === player.settledSalary
+        ) {
+          continue;
+        }
+        await savePlayer({
+          ...farmProspect,
+          salary: player.settledSalary,
+          settledSalary: player.settledSalary,
+        });
       }
 
       for (const player of freeze.players) {
