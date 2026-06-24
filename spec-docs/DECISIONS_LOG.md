@@ -2517,3 +2517,20 @@ resume JK ruled the four RB-2b forks:
 
 All four are durable RB-2b build inputs; baked into HANDOFF_NEEDED. k + reserve + filler magnitudes are RB-16
 sim-tune dials, none block the build.
+
+## 2026-06-23 — RA-8 build-dark + S7 grade-band guidance (fresh Hybrid /kbl-captain session)
+
+- **RA-8 (A2.2) catcher CS/SB-allowed = BUILD-DARK field-add (JK ruling, Hybrid inline surface).** Add optional
+  `caughtStealingAgainst?`/`stolenBasesAllowed?` to `PlayerSeasonFielding` + seed 0; NO per-game writer. The spec
+  assigns the field-ADD to RA-8 and the READER to A1.5c-4 but is SILENT on the writer; the aggregator has zero catcher
+  plumbing, so live-populate is real build-work (csMap/sbMap from BETWEEN_PLAY_EVENTS + undo-exclusion + empty-catcherId
+  bucketing) best landed WITH its reader at A1.5c-4. Canonical names = `caughtStealingAgainst`/`stolenBasesAllowed` (NOT
+  the decoupled test mirror's `caughtStealing`). No DB bump; season-only. Committed `0edf060a`. *(Rejected: live-populate
+  now — would bloat the run's first saved-shape ticket + front-load untested edge cases.)*
+- **Branch-B S7 bidding guidance = GRADE-BAND + chemistry-fit nudge (JK ruling).** The S4-pt2 price re-anchor makes the
+  bidding GUIDANCE range come from the scout's overall grade band (S4-pt1 `scoutOverallGradeBand`) → price range,
+  REPLACING the true-IV `scoutRangeForProspect` (LeagueBuilderFarmAuctionDraft.tsx:114-123) as the guidance SOURCE — per
+  the prior "scout's grade range, not true value" ruling. AND the RB-1b boundary-aware chemistry-fit multiplier (≤+8%
+  when a prospect would level-up/buffer the GM's roster) STAYS on that guidance, now applied to the grade-band range
+  instead of the true-IV range. The won bid still becomes the stamped going-into-season salary (the missing FARM piece
+  S7 also wires). *(Rejected: pure grade-band-only guidance with no chemFit signal.)*
