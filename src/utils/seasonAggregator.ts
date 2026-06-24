@@ -27,6 +27,7 @@ import {
 } from './milestoneAggregator';
 import { SMB4_DEFAULT_GAMES, type MilestoneConfig } from './milestoneDetector';
 import { extractContactQualityTag, tallyContactQualityByPlayer } from '../engines/contactQualityAggregator';
+import { aggregateUbrFromEvents, type UbrRunnerAggregate } from '../engines/ubrAggregator';
 import {
   MLB_BASELINE_GAMES,
   MLB_BASELINE_INNINGS,
@@ -244,11 +245,13 @@ async function aggregateBattingStats(
         contactType: extractContactQualityTag(event.enrichment?.exitType),
       })),
   );
+  const ubrByRunner = aggregateUbrFromEvents(atBatEvents.filter((event) => !event.undoneAt));
 
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
     // Player name and team carried through from PersistedGameState
     const playerName = gameStats.playerName || playerId;
     const teamId = gameStats.teamId || gameState.awayTeamId;
+    const ubrRunnerAggregate = ubrByRunner[playerId];
 
     const seasonStats = await getOrCreateBattingStats(seasonId, playerId, playerName, teamId);
 
@@ -276,10 +279,24 @@ async function aggregateBattingStats(
       d3kOutcomes: (seasonStats.d3kOutcomes ?? 0) + (gameStats.d3kOutcomes ?? 0),
       contactQualityGood: (seasonStats.contactQualityGood ?? 0) + (cqByBatter.get(playerId)?.goodCount ?? 0),
       contactQualityTracked: (seasonStats.contactQualityTracked ?? 0) + (cqByBatter.get(playerId)?.trackedCount ?? 0),
+      extraBasesTaken: (seasonStats.extraBasesTaken ?? 0) + extraBasesTakenFor(ubrRunnerAggregate),
+      advancementOpportunities:
+        (seasonStats.advancementOpportunities ?? 0) +
+        (ubrRunnerAggregate?.advancementStats.advancementOpportunities ?? 0),
     };
 
     await updateBattingStats(updated);
   }
+}
+
+function extraBasesTakenFor(agg: UbrRunnerAggregate | undefined): number {
+  if (!agg) return 0;
+
+  const stats = agg.advancementStats;
+  return stats.firstToThird +
+    stats.firstToHomeOnDouble +
+    stats.secondToHomeOnSingle +
+    stats.tagsScored;
 }
 
 /**

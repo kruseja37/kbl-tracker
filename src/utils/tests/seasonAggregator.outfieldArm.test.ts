@@ -3,9 +3,9 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { aggregateGameToSeason } from '../seasonAggregator';
-import { getOrCreateFieldingStats } from '../seasonStorage';
+import { getOrCreateBattingStats, getOrCreateFieldingStats } from '../seasonStorage';
 import { resetTrackerDbForTests } from '../trackerDb';
-import type { FieldingEvent } from '../eventLog';
+import type { AtBatEvent, FieldingEvent, RunnerState } from '../eventLog';
 import type { PersistedGameState } from '../gameStorage';
 
 vi.mock('../syncEngine', () => ({
@@ -17,6 +17,10 @@ vi.mock('../syncEngine', () => ({
 }));
 
 const DB_NAME = 'kbl-tracker';
+
+type RunnerOutcome = NonNullable<AtBatEvent['runnerOutcomes']>[number];
+
+const noRunners: RunnerState = { first: null, second: null, third: null };
 
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -127,6 +131,100 @@ function fieldingEvent(
   };
 }
 
+function runnerOutcome(
+  runnerId: string,
+  fromBase: RunnerOutcome['fromBase'],
+  toBase: RunnerOutcome['toBase'],
+  overrides: Partial<RunnerOutcome> = {},
+): RunnerOutcome {
+  return {
+    runnerId,
+    runnerName: runnerId,
+    fromBase,
+    toBase,
+    ...overrides,
+  };
+}
+
+function atBat(
+  gameId: string,
+  eventIndex: number,
+  result: AtBatEvent['result'],
+  runnerOutcomes: RunnerOutcome[],
+  overrides: Partial<AtBatEvent> = {},
+): AtBatEvent {
+  return {
+    eventId: `${gameId}-ab-${eventIndex}`,
+    gameId,
+    eventIndex,
+    timestamp: eventIndex,
+    batterId: 'batter-1',
+    batterName: 'Batter One',
+    batterTeamId: 'away',
+    pitcherId: 'pitcher-1',
+    pitcherName: 'Pitcher One',
+    pitcherTeamId: 'home',
+    result,
+    rbiCount: 0,
+    runsScored: [],
+    inning: 1,
+    halfInning: 'TOP',
+    outs: 0,
+    runners: noRunners,
+    awayScore: 0,
+    homeScore: 0,
+    outsAfter: 0,
+    runnersAfter: noRunners,
+    awayScoreAfter: 0,
+    homeScoreAfter: 0,
+    leverageIndex: 1,
+    winProbabilityBefore: 0.5,
+    winProbabilityAfter: 0.5,
+    wpa: 0,
+    ballInPlay: null,
+    fameEvents: [],
+    isLeadoff: false,
+    isClutch: false,
+    isWalkOff: false,
+    runnerOutcomes,
+    ...overrides,
+  };
+}
+
+function baserunningGameState(gameId: string, atBatEvents: AtBatEvent[]): PersistedGameState {
+  return {
+    id: 'current',
+    gameId,
+    savedAt: 1,
+    inning: 9,
+    halfInning: 'BOTTOM',
+    outs: 3,
+    homeScore: 3,
+    awayScore: 2,
+    bases: { first: null, second: null, third: null },
+    currentBatterIndex: 0,
+    atBatCount: atBatEvents.length,
+    awayTeamId: 'away',
+    homeTeamId: 'home',
+    awayTeamName: 'Away',
+    homeTeamName: 'Home',
+    seasonNumber: 1,
+    playerStats: {
+      'runner-1': playerStats('Runner One', 'away'),
+    },
+    pitcherGameStats: [],
+    fameEvents: [],
+    lastHRBatterId: null,
+    consecutiveHRCount: 0,
+    inningStrikeouts: 0,
+    maxDeficitAway: 0,
+    maxDeficitHome: 0,
+    activityLog: [],
+    atBatEvents,
+    fieldingEvents: [],
+  };
+}
+
 describe('season aggregator outfield arm capture', () => {
   beforeEach(async () => {
     resetTrackerDbForTests();
@@ -185,5 +283,65 @@ describe('season aggregator outfield arm capture', () => {
     const playerZ = await getOrCreateFieldingStats(seasonId, 'player-z', 'Player Z', 'away');
     expect(playerZ.outfieldAssists).toBe(0);
     expect(playerZ.baserunnersHeld).toBe(0);
+  });
+});
+
+describe('season aggregator baserunning advancement writer', () => {
+  beforeEach(async () => {
+    resetTrackerDbForTests();
+    await deleteDatabase(DB_NAME);
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    resetTrackerDbForTests();
+    await deleteDatabase(DB_NAME);
+  });
+
+  test('accrues extra-base advancement counts from non-undone runner outcomes by runner', async () => {
+    const seasonId = 'baserunning-advancement-season';
+
+    const gameOneEvents = [
+      atBat('baserunning-advancement-game-1', 1, '1B', [
+        runnerOutcome('runner-1', 'first', 'third'),
+      ]),
+      atBat('baserunning-advancement-game-1', 2, '1B', [
+        runnerOutcome('runner-1', 'first', 'second', { heldByOf: true }),
+      ]),
+      atBat(
+        'baserunning-advancement-game-1',
+        3,
+        '1B',
+        [runnerOutcome('runner-1', 'first', 'third')],
+        { undoneAt: 123 },
+      ),
+    ];
+
+    const gameTwoEvents = [
+      atBat('baserunning-advancement-game-2', 1, '1B', [
+        runnerOutcome('runner-1', 'first', 'third'),
+      ]),
+      atBat('baserunning-advancement-game-2', 2, '1B', [
+        runnerOutcome('runner-1', 'first', 'second', { heldByOf: true }),
+      ]),
+    ];
+
+    await expect(
+      aggregateGameToSeason(baserunningGameState('baserunning-advancement-game-1', gameOneEvents), {
+        seasonId,
+        detectMilestones: false,
+      }),
+    ).resolves.toMatchObject({ success: true });
+
+    await expect(
+      aggregateGameToSeason(baserunningGameState('baserunning-advancement-game-2', gameTwoEvents), {
+        seasonId,
+        detectMilestones: false,
+      }),
+    ).resolves.toMatchObject({ success: true });
+
+    const stats = await getOrCreateBattingStats(seasonId, 'runner-1', 'Runner One', 'away');
+    expect(stats.extraBasesTaken).toBe(2);
+    expect(stats.advancementOpportunities).toBe(4);
   });
 });
