@@ -7,7 +7,7 @@ import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { normalizeToChemistryCode } from "../../../data/chemistryCanonical";
 import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
 import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
-import { gradeToTwentyEighty } from "../../../engines/scoutPriceOpinion";
+import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
 import { seededNominationOrder, surfaceNextPlayer } from "../../../engines/auctionStateMachine";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import {

@@ -20,7 +20,7 @@ import {
 } from "../../../engines/auctionStateMachine";
 import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
 import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
-import { gradeToTwentyEighty } from "../../../engines/scoutPriceOpinion";
+import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
 import type { ScoutValueRange } from "../../../engines/scoutValueRange";
 import {
   sortByTiltedPriority,
