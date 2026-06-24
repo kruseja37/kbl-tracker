@@ -19442,3 +19442,56 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2CQ-2a ===== -->
+
+<!-- ===== CONTRACT: RA-2CQ-2b ===== -->
+## CONTRACT: RA-2CQ-2b — live writer: accumulate contact-quality counts from per-game at-bat events
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch A, codex/franchise-v1-next, worktree /Users/johnkruse/Projects/kbl-tracker). The LIVE writer (the A1.5c-4 catcher-writer pattern). Builder only — do NOT audit/commit/push.
+
+GOAL:
+Populate the RA-2CQ-2a count fields from the per-game at-bat events: in `aggregateBattingStats` accumulate the batter's `contactQualityGood`/`contactQualityTracked`; in `aggregatePitchingStats` accumulate the pitcher's `weakContactInduced`/`weakContactTracked`. Live/ungated substrate accrual (like A1.5c-4). The contactType lives on `AtBatEvent.enrichment.exitType`; classify via RA-2CQ-1.
+
+SOURCE OF TRUTH:
+- RA-2CQ-1 (`d97504dd`) `src/engines/contactQualityAggregator.ts`: `classifyContactQuality(tag, result)` (good/neutral/weak/excluded) + the local `CONTACT_QUALITY_TAGS` set + `ContactQualityTag`/`ContactQualityRateResult` types.
+- RA-2CQ-2a (`90f134f1`): `PlayerSeasonBatting.contactQualityGood?/contactQualityTracked?` + `PlayerSeasonPitching.weakContactInduced?/weakContactTracked?` (seeded 0).
+- A1.5c-4 catcher-writer precedent in `seasonAggregator.ts`: the guarded loader `getBetweenPlayEventsForAggregation` (:422) + the swallow-guard `isMissingVitestMockExport(error, '<exportName>')` (:433) — MIRROR EXACTLY (MAKE-OR-BREAK: an unguarded `getGameEvents` read reds the 3 `processCompletedGame.*.test.ts` mock tests at runtime).
+- `AtBatEvent` (eventLog.ts:210) has `batterId`/`pitcherId`/`result`/`enrichment?.exitType`/`undoneAt`. `gameState.atBatEvents?: AtBatEvent[]` is inline (gameStorage.ts:626). Getter: `getGameEvents(gameId): Promise<AtBatEvent[]>` (eventLog.ts:1651, excludes undone by default).
+- contactType = the `exitType` value when it is one of the 5 tags; do NOT import the UI's `mapExitTypeToContactType` (EnrichmentPanel).
+
+CONSTRAINTS:
+- EDIT ONLY: `src/engines/contactQualityAggregator.ts` (ADD 2 pure exported helpers), `src/utils/seasonAggregator.ts` (the loader + the 2 aggregation fns). CREATE: a focused test (e.g. `src/engines/__tests__/contactQualityTally.test.ts`) for the new pure helpers.
+- Do NOT touch: `src/utils/seasonStorage.ts` (fields already exist), the `processCompletedGame.*.test.ts` mock tests (must pass via the swallow-guard, NOT a mock edit), `expectedStatsEngine.ts`/`expectedStatsCategoryRates.ts` (the signal = RA-2CQ-2c), the oracle, trackerDb.
+- NO TRACKER_DB_VERSION bump. Branch-only; do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+A) `src/engines/contactQualityAggregator.ts` — ADD (pure, additive):
+   - `export function extractContactQualityTag(exitType: string | null | undefined): ContactQualityTag | null` — return the tag iff `exitType` ∈ `CONTACT_QUALITY_TAGS`, else null.
+   - `export interface ContactQualityKeyedEvent { key: string; result: AtBatResult; contactType?: ContactQualityTag | null; }`
+   - `export function tallyContactQualityByPlayer(events: ContactQualityKeyedEvent[]): Map<string, ContactQualityRateResult>` — group by `key`; for each, classify; skip `'excluded'`; accumulate good/neutral/weak + tracked (good+neutral+weak); leave `rate: null` (counts only).
+B) `src/utils/seasonAggregator.ts`:
+   - Extend the eventLog import with `getGameEvents` (+ `type AtBatEvent` if needed). Import `classifyContactQuality` no longer needed directly if using the tally helper — import `extractContactQualityTag, tallyContactQualityByPlayer` from `../engines/contactQualityAggregator`.
+   - Add `getAtBatEventsForAggregation(gameState)` IMMEDIATELY AFTER `getBetweenPlayEventsForAggregation`, MIRRORING it (inline `source.atBatEvents` else `await getGameEvents(gameState.gameId)`; swallow-guard with exportName `'getGameEvents'`).
+   - In `aggregateBattingStats`, BEFORE the `for (const [playerId, gameStats] ...)` loop (:236): `const atBatEvents = await getAtBatEventsForAggregation(gameState);` then `const cqByBatter = tallyContactQualityByPlayer(atBatEvents.filter(e => !e.undoneAt).map(e => ({ key: e.batterId, result: e.result, contactType: extractContactQualityTag(e.enrichment?.exitType) })));`. In the `updated` object (after `d3kOutcomes`, :264) add:
+     `contactQualityGood: (seasonStats.contactQualityGood ?? 0) + (cqByBatter.get(playerId)?.goodCount ?? 0),`
+     `contactQualityTracked: (seasonStats.contactQualityTracked ?? 0) + (cqByBatter.get(playerId)?.trackedCount ?? 0),`
+   - In `aggregatePitchingStats`, AFTER the `pitchingWpaByPlayerId` map (:283): `const atBatEvents = await getAtBatEventsForAggregation(gameState); const cqByPitcher = tallyContactQualityByPlayer(atBatEvents.filter(e => !e.undoneAt).map(e => ({ key: e.pitcherId, result: e.result, contactType: extractContactQualityTag(e.enrichment?.exitType) })));`. In the `updated: PlayerSeasonPitching` object add:
+     `weakContactInduced: (seasonStats.weakContactInduced ?? 0) + (cqByPitcher.get(pitcherStats.pitcherId)?.weakCount ?? 0),`
+     `weakContactTracked: (seasonStats.weakContactTracked ?? 0) + (cqByPitcher.get(pitcherStats.pitcherId)?.trackedCount ?? 0),`
+C) Test the pure helpers: `extractContactQualityTag('hard')='hard'`, `('ground_ball')=null`, `(undefined)=null`; `tallyContactQualityByPlayer` groups 2 batters' events → correct per-key good/weak/tracked, excluded skipped.
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run` → FULL suite. Expected failed files ⊆ { `wpaRuntimeBoundary`, `franchiseManualSmokeFixture`, `GameTrackerLaunchState` } ⇒ ZERO NEW REDS. The 3 `src/utils/tests/processCompletedGame.{warPersistence,statBoundary,warMetadata}.test.ts` MUST stay green via the swallow-guard (do NOT edit them).
+- `git --no-pager diff --stat`.
+
+FORMAT: 1. files changed 2. the diffs / new test 3. verification verbatim 4. "RA-2CQ-2b complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF `AtBatEvent` lacks `batterId`/`pitcherId`/`enrichment.exitType`/`undoneAt`, or `getGameEvents` is not the at-bat getter — report the real shape.
+- STOP-IF any `processCompletedGame.*.test.ts` reds at module-load/runtime — the swallow-guard exportName is wrong; FIX the guard string, do NOT edit the mocks.
+- STOP-IF `ContactQualityRateResult` does not expose `goodCount`/`weakCount`/`trackedCount` — use the real field names from RA-2CQ-1.
+- Do NOT add a meta category / adapter change (RA-2CQ-2c). Do NOT change the classification.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2CQ-2b ===== -->

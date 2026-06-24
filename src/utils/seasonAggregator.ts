@@ -7,7 +7,7 @@
  */
 
 import type { PersistedGameState } from './gameStorage';
-import { getGameFieldingEvents, getBetweenPlayEvents, type FieldingEvent, type BetweenPlayEvent } from './eventLog';
+import { getGameFieldingEvents, getBetweenPlayEvents, getGameEvents, type FieldingEvent, type BetweenPlayEvent, type AtBatEvent } from './eventLog';
 import {
   getOrCreateBattingStats,
   getOrCreatePitchingStats,
@@ -26,6 +26,7 @@ import {
   type MilestoneAggregationResult,
 } from './milestoneAggregator';
 import { SMB4_DEFAULT_GAMES, type MilestoneConfig } from './milestoneDetector';
+import { extractContactQualityTag, tallyContactQualityByPlayer } from '../engines/contactQualityAggregator';
 import {
   MLB_BASELINE_GAMES,
   MLB_BASELINE_INNINGS,
@@ -233,6 +234,17 @@ async function aggregateBattingStats(
   gameState: PersistedGameState,
   seasonId: string
 ): Promise<void> {
+  const atBatEvents = await getAtBatEventsForAggregation(gameState);
+  const cqByBatter = tallyContactQualityByPlayer(
+    atBatEvents
+      .filter((event) => !event.undoneAt)
+      .map((event) => ({
+        key: event.batterId,
+        result: event.result,
+        contactType: extractContactQualityTag(event.enrichment?.exitType),
+      })),
+  );
+
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
     // Player name and team carried through from PersistedGameState
     const playerName = gameStats.playerName || playerId;
@@ -262,6 +274,8 @@ async function aggregateBattingStats(
       caughtStealing: seasonStats.caughtStealing + gameStats.cs,
       gidp: seasonStats.gidp + (gameStats.gidp || 0),               // MAJ-11
       d3kOutcomes: (seasonStats.d3kOutcomes ?? 0) + (gameStats.d3kOutcomes ?? 0),
+      contactQualityGood: (seasonStats.contactQualityGood ?? 0) + (cqByBatter.get(playerId)?.goodCount ?? 0),
+      contactQualityTracked: (seasonStats.contactQualityTracked ?? 0) + (cqByBatter.get(playerId)?.trackedCount ?? 0),
     };
 
     await updateBattingStats(updated);
@@ -281,6 +295,16 @@ async function aggregatePitchingStats(
       pitchingWpaByPlayerId.set(playerWpa.playerId, playerWpa.pitchingWpa);
     }
   }
+  const atBatEvents = await getAtBatEventsForAggregation(gameState);
+  const cqByPitcher = tallyContactQualityByPlayer(
+    atBatEvents
+      .filter((event) => !event.undoneAt)
+      .map((event) => ({
+        key: event.pitcherId,
+        result: event.result,
+        contactType: extractContactQualityTag(event.enrichment?.exitType),
+      })),
+  );
 
   for (const pitcherStats of gameState.pitcherGameStats) {
     const seasonStats = await getOrCreatePitchingStats(
@@ -333,6 +357,8 @@ async function aggregatePitchingStats(
       holds: seasonStats.holds + (pitcherStats.hold ? 1 : 0),
       blownSaves: seasonStats.blownSaves + (pitcherStats.blownSave ? 1 : 0),
       pitchingWpa: (seasonStats.pitchingWpa ?? 0) + (pitchingWpaByPlayerId.get(pitcherStats.pitcherId) ?? 0),
+      weakContactInduced: (seasonStats.weakContactInduced ?? 0) + (cqByPitcher.get(pitcherStats.pitcherId)?.weakCount ?? 0),
+      weakContactTracked: (seasonStats.weakContactTracked ?? 0) + (cqByPitcher.get(pitcherStats.pitcherId)?.trackedCount ?? 0),
     };
 
     await updatePitchingStats(updated);
@@ -426,6 +452,17 @@ async function getBetweenPlayEventsForAggregation(gameState: PersistedGameState)
     return await getBetweenPlayEvents(gameState.gameId);
   } catch (error) {
     if (isMissingVitestMockExport(error, 'getBetweenPlayEvents') || isNonBrowserIndexedDbUnavailable(error)) return [];
+    throw error;
+  }
+}
+
+async function getAtBatEventsForAggregation(gameState: PersistedGameState): Promise<AtBatEvent[]> {
+  const source = gameState as PersistedGameState & { atBatEvents?: AtBatEvent[] };
+  if (Array.isArray(source.atBatEvents)) return source.atBatEvents;
+  try {
+    return await getGameEvents(gameState.gameId);
+  } catch (error) {
+    if (isMissingVitestMockExport(error, 'getGameEvents') || isNonBrowserIndexedDbUnavailable(error)) return [];
     throw error;
   }
 }

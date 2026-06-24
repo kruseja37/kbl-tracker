@@ -12,6 +12,12 @@ export interface ContactQualityEvent {
   contactType?: ContactQualityTag | null;
 }
 
+export interface ContactQualityKeyedEvent {
+  key: string;
+  result: AtBatResult;
+  contactType?: ContactQualityTag | null;
+}
+
 export const DEFAULT_CONTACT_QUALITY_MIN_SAMPLE = 10;
 
 export interface ContactQualityRateResult {
@@ -57,6 +63,12 @@ function isMappableContactQualityTag(
   contactType: ContactQualityTag | null | undefined,
 ): contactType is ContactQualityTag {
   return typeof contactType === 'string' && CONTACT_QUALITY_TAGS.has(contactType);
+}
+
+export function extractContactQualityTag(exitType: string | null | undefined): ContactQualityTag | null {
+  return typeof exitType === 'string' && CONTACT_QUALITY_TAGS.has(exitType)
+    ? exitType as ContactQualityTag
+    : null;
 }
 
 export function classifyContactQuality(
@@ -135,4 +147,32 @@ export function aggregatePitcherWeakContact(
   minSample = DEFAULT_CONTACT_QUALITY_MIN_SAMPLE,
 ): ContactQualityRateResult {
   return aggregateContactQuality(events, minSample, 'weak');
+}
+
+export function tallyContactQualityByPlayer(
+  events: ContactQualityKeyedEvent[],
+): Map<string, ContactQualityRateResult> {
+  const tallies = new Map<string, ContactQualityRateResult>();
+
+  for (const event of events) {
+    const contactQuality = classifyContactQuality(event.contactType, event.result);
+    if (contactQuality === 'excluded') {
+      continue;
+    }
+
+    const aggregate = tallies.get(event.key) ?? emptyRateResult();
+    aggregate.trackedCount += 1;
+
+    if (contactQuality === 'good') {
+      aggregate.goodCount += 1;
+    } else if (contactQuality === 'neutral') {
+      aggregate.neutralCount += 1;
+    } else {
+      aggregate.weakCount += 1;
+    }
+
+    tallies.set(event.key, aggregate);
+  }
+
+  return tallies;
 }
