@@ -20019,3 +20019,135 @@ FAILURE PROTOCOL:
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2c-1 ===== -->
+
+<!-- ===== CONTRACT: RA-2c-1a ===== -->
+## CONTRACT: RA-2c-1a — mean-position-pure + suppress-when-thin revision of the RA-2c-1 engine
+
+ROUTE: Codex 5.5 | high reasoning effort
+ROLE: You are a precise TypeScript builder revising one pure, build-DARK module (a SMB4 ratings-development soul-layer engine) + its test. You do NOT make design decisions — the measurement is ruled verbatim below.
+
+GOAL:
+Revise the committed RA-2c-1 engine so the peer-pool MEAN stays position-pure (never widens), the SD spread borrows the next-wider rung, and a category's move is SUPPRESSED this checkpoint when its position-pure peer pool is below the min peer-pool floor. This FIXES a §4:65 conflict in the committed `9ae54ef3`: `resolvePoolMeanMembers` currently widens the MEAN below the floor.
+
+SOURCE OF TRUTH (ruled — implement verbatim, do not infer):
+- DECISIONS_LOG.md 2026-06-24 "RA-2 ... peer-pool, eligibility & signal model" ruling #2:
+  "the MEAN stays at the position-group (Rung 0); the SPREAD borrows Rung 1; and when even the
+  position-group mean pool is below ~5-6 real peers, SUPPRESS that category's move this checkpoint
+  (it moves next checkpoint when data thickens). Reaffirms §4:65; no spec change."
+- RATINGS_ADJUSTMENT_SPEC.md §4:65 "Small-pool spread (RULED — keep comparison position-pure)":
+  "Compute the position-pool MEAN from the position pool (the comparison stays catcher-vs-catcher),
+  but borrow a stable SPREAD (SD) from a wider reference when the pool is thin (~5–6 is fine for the mean)."
+- The floor constant: `TRUE_VALUE_MIN_PEER_POOL_SIZE = 6` (src/engines/salaryCalculator.ts:915), already imported in the module.
+- The engine's per-category suppression gate already exists: expectedStatsEngine.ts:197-207 nulls a category when
+  `peerPoolSize < tuning.minPeerPool`. The engine default `minPeerPool` is 3 (expectedStatsEngine.ts:143) — the ratings
+  system must raise it to TRUE_VALUE_MIN_PEER_POOL_SIZE (6) by passing a tuning override. `EXPECTED_STATS_TUNING` and the
+  type `ExpectedStatsTuning` are exported from expectedStatsEngine.ts (lines 139, 120).
+
+CONSTRAINTS:
+- Only edit these two files:
+  - `src/utils/checkpointRatingSignal.ts`
+  - `src/utils/tests/checkpointRatingSignal.test.ts`
+- Do NOT touch: `src/engines/expectedStatsEngine.ts`, `src/engines/expectedStatsPoolAggregator.ts`,
+  `src/engines/salaryCalculator.ts`, `src/utils/franchiseCheckpointSweepCompute.ts` (RA-2c-2 wires it),
+  `trackerDb.ts`, `iv_oracle.json`, any barrel/index. Do NOT modify the reused helpers or the engine gate.
+- Branch-only: do NOT commit, do NOT push. Leave the working tree dirty for the auditor.
+- Keep the module PURE / build-DARK: no live caller, no I/O, no new imports beyond what's named below.
+
+EXPECTED OUTPUT — exact changes to `src/utils/checkpointRatingSignal.ts`:
+
+1) Add to the existing `expectedStatsEngine` import: `EXPECTED_STATS_TUNING` (value) and `type ExpectedStatsTuning`.
+   `TRUE_VALUE_MIN_PEER_POOL_SIZE` is already imported — keep it.
+
+2) Add a module-level tuning constant (after the imports / near CHECKPOINT_POOL_LADDER):
+```ts
+/**
+ * §4:65 + DECISIONS_LOG 2026-06-24: a category's move is SUPPRESSED when its position-pure (Rung 0)
+ * peer pool is below TRUE_VALUE_MIN_PEER_POOL_SIZE. Reuses the engine's existing per-category
+ * peer-pool gate (expectedStatsEngine.ts) by raising minPeerPool from the engine default to the
+ * ratings floor. All other tuning is inherited unchanged.
+ */
+const CHECKPOINT_EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
+  ...EXPECTED_STATS_TUNING,
+  minPeerPool: TRUE_VALUE_MIN_PEER_POOL_SIZE,
+};
+```
+
+3) REPLACE `resolvePoolMeanMembers` so the MEAN is ALWAYS Rung 0 (position-pure) — it must never climb the
+   ladder. Drop the `minPeerPool` parameter (no longer used for the mean). Keep the `{ members, rungIndex }`
+   return shape with `rungIndex` always 0:
+```ts
+/**
+ * §4:65 (RA-2c-1a revision): the MEAN is ALWAYS the position-pure pool (Rung 0); it never widens.
+ * Below-floor thinness is handled downstream by SUPPRESSION (CHECKPOINT_EXPECTED_STATS_TUNING.minPeerPool),
+ * NOT by borrowing a wider mean. Only the SPREAD/SD borrows a wider reference (resolveSpreadMembers).
+ */
+export function resolvePoolMeanMembers(
+  poolKey: RatingsPoolKey,
+  allMembers: readonly CheckpointSignalMember[],
+): { members: CheckpointSignalMember[]; rungIndex: number } {
+  const ladder = CHECKPOINT_POOL_LADDER[poolKey];
+  return { members: membersInRung(allMembers, ladder[0]), rungIndex: 0 };
+}
+```
+
+4) KEEP `resolveSpreadMembers` as-is in behavior (it already returns the rung one wider than the mean rung,
+   i.e. Rung 1 now that the mean rung is always 0; clamped to the widest rung for the 2-rung pitcher ladders).
+   Update only its doc comment to say "§4:65 SD borrow: Rung 1 (one wider than the always-position-pure mean)".
+
+5) In `computeCheckpointRatingSignals`, pass the checkpoint tuning to `expectedAndSignal` (3rd arg; pass
+   `undefined` for the 2nd `config` arg so the engine default config applies):
+```ts
+   const { rByCat } = expectedAndSignal(
+     { /* ...the existing input object, unchanged... */ },
+     undefined,
+     CHECKPOINT_EXPECTED_STATS_TUNING,
+   );
+```
+   The per-poolKey precompute (resolvePoolMeanMembers -> resolveSpreadMembers -> aggregatePoolStats -> meanRatingByKey)
+   and the blend stay structurally the same; resolvePoolMeanMembers is now called with 2 args (no minPeerPool).
+
+6) Update the module top-of-file docstring to describe the revised model: mean always position-pure (Rung 0),
+   spread borrows Rung 1, suppress-when-thin at the TRUE_VALUE_MIN_PEER_POOL_SIZE floor.
+
+EXPECTED OUTPUT — `src/utils/tests/checkpointRatingSignal.test.ts`:
+- KEEP the `classifyRatingsPoolKey` test and the `CHECKPOINT_POOL_LADDER` shape test unchanged.
+- REPLACE the `resolvePoolMeanMembers ...` test with one proving the MEAN is always Rung 0 / position-pure:
+  - 6 'middleIF' members -> rungIndex 0, 6 members.
+  - 2 'middleIF' + 6 'cornerIF' -> rungIndex 0, and the returned members are EXACTLY the 2 middleIF (assert by
+    playerId set) — it must NOT widen to the 8-member group.
+  - 2 'middleIF' only -> rungIndex 0, 2 members (stays position-pure; thinness is suppressed downstream, not widened).
+- KEEP the existing anchor-identity test (the 6-member 'middleIF' cohort clears the 6-floor: 6 is NOT < 6 -> not suppressed).
+- KEEP the empty/one-member-thin safety test.
+- ADD a make-or-break suppression test, `computeCheckpointRatingSignals suppresses a thin position-pure pool
+  and never borrows the wider MEAN (RA-2c-1a)`:
+  - A 5-member 'middleIF' cohort (below the 6 floor): every member's resulting `signal.contact` is `undefined`
+    (suppressed this checkpoint).
+  - A cohort of 2 'middleIF' (one low ~0.240, one high ~0.320) + 6 'cornerIF' (varied rates ~0.260..0.308):
+    BOTH middleIF members' `signal.contact` is `undefined` (their mean stayed the 2 thin peers -> suppressed;
+    under the pre-1a widening bug they would have borrowed the 8-member mean and produced a move), AND at least
+    one 'cornerIF' member has a finite numeric `signal.contact` (the cornerIF pool clears the 6-floor and still
+    moves — proving suppression is per-pool-thinness, not a global off-switch).
+  Use the existing `member()` / `categoryRate()` helpers (sampleSize default 100 clears the season gate).
+
+VERIFICATION (run from repo root, each prefixed `NODE_ENV= `):
+1. `NODE_ENV= npm run build` => exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/checkpointRatingSignal.test.ts` => all green.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsEngine.test.ts src/engines/__tests__/expectedStatsPoolAggregator.test.ts` => green (reused engine + aggregator unaffected).
+4. `git status --short` shows ONLY the two named files dirty (plus any pre-existing dirty docs). `git grep -n "checkpointRatingSignal" -- 'src/*' | grep -v tests` => only the module self-reference (no live importer).
+
+FORMAT:
+1. Files changed (exact paths) + total changed-path count.
+2. Each change, referencing RA-2c-1a + the ruled source.
+3. Paste all 4 verification outputs verbatim.
+4. "RA-2c-1a complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- If `EXPECTED_STATS_TUNING` / `ExpectedStatsTuning` are NOT exported at expectedStatsEngine.ts as named, or
+  `expectedAndSignal`'s 3rd param is not the tuning => STOP, quote the actual signature, report. Do NOT edit the engine.
+- If raising minPeerPool to 6 breaks the kept anchor-identity test (6-member cohort should NOT suppress because
+  6 is not < 6) => STOP and report the observed peerPoolSize/rByCat; do NOT change the engine gate or the floor.
+- If any change would require touching a file not in the two-file allow-list => STOP and report.
+- Do NOT add a barrel export, do NOT pass curveBlock, do NOT wire any live caller, do NOT touch the engine/aggregator/sweep.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2c-1a ===== -->

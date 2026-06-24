@@ -1,12 +1,15 @@
 /**
- * RA-2c-1 pure checkpoint rating-signal engine — build-DARK.
+ * RA-2c-1a pure checkpoint rating-signal engine — build-DARK.
  *
- * Source: RATINGS_ADJUSTMENT_SPEC §4 + DECISIONS_LOG 2026-06-24 (RA-2c forks).
+ * Source: RATINGS_ADJUSTMENT_SPEC §4:65 + DECISIONS_LOG 2026-06-24
+ * (RA-2 ratings-adjustment — peer-pool, eligibility & signal model).
  * Given cohort members already classified into §4 RatingsPoolKeys, produces a
  * per-player per-attribute development signal in [-1,1] by: grouping into pools,
- * borrowing a wider reference for thin pools (Fork D ladder), aggregating (RA-2b),
- * running expectedAndSignal (RA-1), and blending each rating's categories
- * (equal weight). No live caller (RA-2c-2 wires it). No I/O.
+ * keeping the MEAN always position-pure (Rung 0), borrowing SPREAD/SD from Rung 1,
+ * suppressing category moves when the position-pure peer pool is below
+ * TRUE_VALUE_MIN_PEER_POOL_SIZE, aggregating (RA-2b), running expectedAndSignal
+ * (RA-1), and blending each rating's categories (equal weight). No live caller
+ * (RA-2c-2 wires it). No I/O.
  */
 
 import {
@@ -20,10 +23,12 @@ import {
 import {
   EXPECTED_STATS_CATEGORIES,
   EXPECTED_STATS_CATEGORY_META,
+  EXPECTED_STATS_TUNING,
   expectedAndSignal,
   type ExpectedStatsAgeBand,
   type ExpectedStatsCategory,
   type ExpectedStatsRatingKey,
+  type ExpectedStatsTuning,
 } from '../engines/expectedStatsEngine';
 import type { CategoryRateResult } from '../engines/expectedStatsCategoryRates';
 import { TRUE_VALUE_MIN_PEER_POOL_SIZE } from '../engines/salaryCalculator';
@@ -39,6 +44,17 @@ export interface CheckpointSignalMember {
 
 const HITTER_POOLS: RatingsPoolKey[] = ['C', 'cornerIF', 'middleIF', 'cornerOF', 'CF', 'benchIF', 'benchOF'];
 const PITCHER_POOLS: RatingsPoolKey[] = ['SP', 'RP'];
+
+/**
+ * §4:65 + DECISIONS_LOG 2026-06-24: a category's move is SUPPRESSED when its position-pure (Rung 0)
+ * peer pool is below TRUE_VALUE_MIN_PEER_POOL_SIZE. Reuses the engine's existing per-category
+ * peer-pool gate (expectedStatsEngine.ts) by raising minPeerPool from the engine default to the
+ * ratings floor. All other tuning is inherited unchanged.
+ */
+const CHECKPOINT_EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
+  ...EXPECTED_STATS_TUNING,
+  minPeerPool: TRUE_VALUE_MIN_PEER_POOL_SIZE,
+};
 
 /** Fork D §4:85 ladder. Each entry: ordered rungs of progressively-wider pools; rung 0 = position-pure. Sim-tunable §16. */
 export const CHECKPOINT_POOL_LADDER: Record<RatingsPoolKey, RatingsPoolKey[][]> = {
@@ -95,25 +111,19 @@ function membersInRung(allMembers: readonly CheckpointSignalMember[], rung: read
 }
 
 /**
- * Fork D pool-level ladder (mean members): the NARROWEST rung whose member count
- * reaches the min peer-pool; else the WIDEST rung. The mean stays as position-pure
- * as the floor allows (§4:65).
+ * §4:65 (RA-2c-1a revision): the MEAN is ALWAYS the position-pure pool (Rung 0); it never widens.
+ * Below-floor thinness is handled downstream by SUPPRESSION (CHECKPOINT_EXPECTED_STATS_TUNING.minPeerPool),
+ * NOT by borrowing a wider mean. Only the SPREAD/SD borrows a wider reference (resolveSpreadMembers).
  */
 export function resolvePoolMeanMembers(
   poolKey: RatingsPoolKey,
   allMembers: readonly CheckpointSignalMember[],
-  minPeerPool: number = TRUE_VALUE_MIN_PEER_POOL_SIZE,
 ): { members: CheckpointSignalMember[]; rungIndex: number } {
   const ladder = CHECKPOINT_POOL_LADDER[poolKey];
-  for (let i = 0; i < ladder.length; i += 1) {
-    const members = membersInRung(allMembers, ladder[i]);
-    if (members.length >= minPeerPool) return { members, rungIndex: i };
-  }
-  const lastIndex = ladder.length - 1;
-  return { members: membersInRung(allMembers, ladder[lastIndex]), rungIndex: lastIndex };
+  return { members: membersInRung(allMembers, ladder[0]), rungIndex: 0 };
 }
 
-/** Spread-reference (§4:65 SD borrow): the rung one wider than the mean rung; the mean rung itself when already widest. */
+/** §4:65 SD borrow: Rung 1 (one wider than the always-position-pure mean); clamped to the widest rung. */
 export function resolveSpreadMembers(
   poolKey: RatingsPoolKey,
   allMembers: readonly CheckpointSignalMember[],
@@ -210,7 +220,7 @@ export function computeCheckpointRatingSignals(
       peerValuesByCat: cached.stats.peerValuesByCat,
       peerPoolSize: cached.stats.peerPoolSize,
       poolMeanRating: cached.poolMeanRating,
-    });
+    }, undefined, CHECKPOINT_EXPECTED_STATS_TUNING);
 
     result.set(member.playerId, blendSignalsByRatingKey(rByCat));
   }

@@ -59,25 +59,26 @@ describe('checkpointRatingSignal RA-2c-1', () => {
     ]);
   });
 
-  test('resolvePoolMeanMembers uses the narrowest floor-satisfying rung, else the widest rung', () => {
+  test('resolvePoolMeanMembers always returns the position-pure Rung 0 mean pool', () => {
     const pure = Array.from({ length: 6 }, (_, i) => member(`m${i}`, 'middleIF', 0.250 + i * 0.010));
     const pureResult = resolvePoolMeanMembers('middleIF', pure);
     expect(pureResult.rungIndex).toBe(0);
     expect(pureResult.members).toHaveLength(6);
 
-    const broadened = [
+    const sameGroup = [
       member('mi1', 'middleIF'),
       member('mi2', 'middleIF'),
       ...Array.from({ length: 6 }, (_, i) => member(`ci${i}`, 'cornerIF', 0.260 + i * 0.005)),
     ];
-    const broadenedResult = resolvePoolMeanMembers('middleIF', broadened);
-    expect(broadenedResult.rungIndex).toBe(1);
-    expect(broadenedResult.members).toHaveLength(8);
+    const sameGroupResult = resolvePoolMeanMembers('middleIF', sameGroup);
+    expect(sameGroupResult.rungIndex).toBe(0);
+    expect(sameGroupResult.members).toHaveLength(2);
+    expect(new Set(sameGroupResult.members.map((m) => m.playerId))).toEqual(new Set(['mi1', 'mi2']));
 
-    const floor = [member('thin1', 'middleIF'), member('thin2', 'middleIF')];
-    const floorResult = resolvePoolMeanMembers('middleIF', floor);
-    expect(floorResult.rungIndex).toBe(2);
-    expect(floorResult.members).toHaveLength(2);
+    const thin = [member('thin1', 'middleIF'), member('thin2', 'middleIF')];
+    const thinResult = resolvePoolMeanMembers('middleIF', thin);
+    expect(thinResult.rungIndex).toBe(0);
+    expect(thinResult.members).toHaveLength(2);
   });
 
   test('computeCheckpointRatingSignals blends contact categories and preserves anchor identity', () => {
@@ -102,5 +103,36 @@ describe('checkpointRatingSignal RA-2c-1', () => {
 
     expect(() => computeCheckpointRatingSignals([member('solo', 'middleIF')])).not.toThrow();
     expect(computeCheckpointRatingSignals([member('solo', 'middleIF')]).get('solo')).toEqual({});
+  });
+
+  test('computeCheckpointRatingSignals suppresses a thin position-pure pool and never borrows the wider MEAN (RA-2c-1a)', () => {
+    const fiveMiddleInfielders = Array.from({ length: 5 }, (_, i) => (
+      member(`thin-mi-${i}`, 'middleIF', 0.250 + i * 0.010)
+    ));
+    const thinResult = computeCheckpointRatingSignals(fiveMiddleInfielders);
+
+    for (const thinMember of fiveMiddleInfielders) {
+      expect(thinResult.get(thinMember.playerId)?.contact).toBeUndefined();
+    }
+
+    const mixedCohort: CheckpointSignalMember[] = [
+      member('low-mi', 'middleIF', 0.240),
+      member('high-mi', 'middleIF', 0.320),
+      ...[0.260, 0.270, 0.282, 0.292, 0.300, 0.308].map((rate, i) => (
+        member(`corner-${i}`, 'cornerIF', rate)
+      )),
+    ];
+    const mixedResult = computeCheckpointRatingSignals(mixedCohort);
+
+    expect(mixedResult.get('low-mi')?.contact).toBeUndefined();
+    expect(mixedResult.get('high-mi')?.contact).toBeUndefined();
+    expect(
+      mixedCohort
+        .filter((m) => m.poolKey === 'cornerIF')
+        .some((m) => {
+          const signal = mixedResult.get(m.playerId)?.contact;
+          return typeof signal === 'number' && Number.isFinite(signal);
+        }),
+    ).toBe(true);
   });
 });
