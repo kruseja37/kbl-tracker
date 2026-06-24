@@ -9,34 +9,41 @@ import {
   isCheckpointBoundary,
   persistDarkCheckpointSweepForCompletedGame,
   resolveCheckpointRoster,
-  selectDevelopmentRatingKey,
   type CheckpointRosterEntry,
   type CheckpointSweepScope,
 } from '../franchiseCheckpointSweepCompute';
-import { computeCheckpointRatingDevelopment, normalizePerformanceSignal } from '../../engines/ratingsDevelopment';
+import { computeCheckpointRatingDevelopment } from '../../engines/ratingsDevelopment';
 import { setFranchisePhase2CheckpointEnabledForTests } from '../franchisePhase2Flags';
 import * as overlayStorage from '../franchiseRatingsOverlayStorage';
 import { syncEngine } from '../syncEngine';
-import { getSeasonMetadata } from '../seasonStorage';
+import {
+  getAllFieldingStats,
+  getSeasonBattingStats,
+  getSeasonMetadata,
+  getSeasonPitchingStats,
+} from '../seasonStorage';
 import { getGame as getScheduledGame } from '../scheduleStorage';
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
 } from '../franchisePlayerStorage';
-import {
-  getPlayerRosterStatusForLeague,
-  getPlayerTeamIdForLeague,
-} from '../leagueBuilderStorage';
+import { getPlayerTeamIdForLeague } from '../leagueBuilderStorage';
 import { getFranchiseTrueValueRows } from '../franchiseTrueValueStorage';
 import { getFranchiseMoraleSnapshot } from '../franchiseMoraleState';
+import { buildFranchiseEffectivePositionReport } from '../franchiseEffectivePosition';
+import * as checkpointRatingSignal from '../checkpointRatingSignal';
 import {
   CHECKPOINT_CADENCE_COUNTS,
   CHECKPOINT_CADENCE_DEFAULT,
   checkpointCountForCadence,
 } from '../../data/rosterEngineConstants';
 
-vi.mock('../seasonStorage', () => ({
+vi.mock('../seasonStorage', async (importActual) => ({
+  ...(await importActual<typeof import('../seasonStorage')>()),
   getSeasonMetadata: vi.fn(),
+  getSeasonBattingStats: vi.fn(),
+  getSeasonPitchingStats: vi.fn(),
+  getAllFieldingStats: vi.fn(),
 }));
 
 vi.mock('../scheduleStorage', () => ({
@@ -49,7 +56,6 @@ vi.mock('../franchisePlayerStorage', () => ({
 }));
 
 vi.mock('../leagueBuilderStorage', () => ({
-  getPlayerRosterStatusForLeague: vi.fn(),
   getPlayerTeamIdForLeague: vi.fn(),
 }));
 
@@ -59,6 +65,10 @@ vi.mock('../franchiseTrueValueStorage', () => ({
 
 vi.mock('../franchiseMoraleState', () => ({
   getFranchiseMoraleSnapshot: vi.fn(),
+}));
+
+vi.mock('../franchiseEffectivePosition', () => ({
+  buildFranchiseEffectivePositionReport: vi.fn(),
 }));
 
 const scope: CheckpointSweepScope = {
@@ -140,7 +150,7 @@ function entry(overrides: Partial<CheckpointRosterEntry> = {}): CheckpointRoster
     modifiers: neutralModifiers,
     playerMorale: 50,
     teamFanMorale: 50,
-    performanceSignal: 1,
+    signalByRatingKey: isPitcher ? { velocity: 1 } : { power: 1 },
     createdAt: '2026-06-18T00:00:00.000Z',
     ...overrides,
   };
@@ -187,6 +197,10 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     vi.spyOn(syncEngine, 'isSuppressed').mockReturnValue(true);
     vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-2', gameNumber: 2 } as never);
     vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10 } as never);
+    vi.mocked(getSeasonBattingStats).mockResolvedValue([]);
+    vi.mocked(getSeasonPitchingStats).mockResolvedValue([]);
+    vi.mocked(getAllFieldingStats).mockResolvedValue([]);
+    vi.mocked(buildFranchiseEffectivePositionReport).mockResolvedValue({ playerPositions: {} } as never);
   });
 
   afterEach(async () => {
@@ -244,16 +258,6 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     }
   });
 
-  test('selectDevelopmentRatingKey is deterministic and selects a valid pitcher or hitter key', () => {
-    const pitcherKey = selectDevelopmentRatingKey(entry({ playerId: 'same-pitcher', isPitcher: true }));
-    const hitterKey = selectDevelopmentRatingKey(entry({ playerId: 'same-hitter', isPitcher: false }));
-
-    expect(['velocity', 'junk', 'accuracy']).toContain(pitcherKey);
-    expect(['power', 'contact', 'speed', 'fielding', 'arm']).toContain(hitterKey);
-    expect(selectDevelopmentRatingKey(entry({ playerId: 'same-pitcher', isPitcher: true }))).toBe(pitcherKey);
-    expect(selectDevelopmentRatingKey(entry({ playerId: 'same-hitter', isPitcher: false }))).toBe(hitterKey);
-  });
-
   test('flag OFF returns dark-noop without calling the seam or overlay writer', async () => {
     setFranchisePhase2CheckpointEnabledForTests(false);
     const seam = vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster');
@@ -296,18 +300,18 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
 
   test('boundary sweep writes one pending permanent overlay per shifter', async () => {
     setFranchisePhase2CheckpointEnabledForTests(true);
-    const shifter = entry({ playerId: 'player-shifter', performanceSignal: 1 });
-    const nonShifter = entry({ playerId: 'player-no-shift', performanceSignal: 0 });
+    const shifter = entry({ playerId: 'player-shifter', signalByRatingKey: { power: 1 } });
+    const nonShifter = entry({ playerId: 'player-no-shift', signalByRatingKey: { power: 0 } });
     vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter, nonShifter]);
 
     const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
     const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
-    const ratingKey = selectDevelopmentRatingKey(shifter);
+    const ratingKey = 'power';
     const dev = computeCheckpointRatingDevelopment(
       {
         ratingKey,
         baseRatingValue: shifter.baseRatings[ratingKey],
-        performanceSignal: shifter.performanceSignal,
+        performanceSignal: shifter.signalByRatingKey[ratingKey]!,
         playerMorale: shifter.playerMorale,
         teamFanMorale: shifter.teamFanMorale,
         personality: shifter.personality,
@@ -342,7 +346,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     setFranchisePhase2CheckpointEnabledForTests(true);
     vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-3', gameNumber: 3 } as never);
     vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10, checkpointCadence: 'frequent' } as never);
-    const shifter = entry({ playerId: 'player-frequent', performanceSignal: 1 });
+    const shifter = entry({ playerId: 'player-frequent', signalByRatingKey: { power: 1 } });
     vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
 
     const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
@@ -359,7 +363,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
 
   test('replaying the same boundary checkpoint overwrites the same overlay id without duplicates', async () => {
     setFranchisePhase2CheckpointEnabledForTests(true);
-    const shifter = entry({ playerId: 'player-idempotent', performanceSignal: 1 });
+    const shifter = entry({ playerId: 'player-idempotent', signalByRatingKey: { power: 1 } });
     vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
 
     const first = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
@@ -380,39 +384,106 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     });
   });
 
-  test('resolveCheckpointRoster returns MLB players with TV rows and projected checkpoint inputs', async () => {
-    const hitter = player({
-      id: 'hitter-tv',
+  test('boundary sweep fans out one overlay per finite moved rating signal', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const shifter = entry({
+      playerId: 'player-fanout',
+      signalByRatingKey: { power: 1, contact: 1 },
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 2 });
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.ratingKey).sort()).toEqual(['contact', 'power']);
+    expect(new Set(rows.map((row) => row.id)).size).toBe(2);
+    expect(rows.map((row) => row.id).sort()).toEqual([
+      `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:player-fanout:contact:checkpoint-2`,
+      `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:player-fanout:power:checkpoint-2`,
+    ]);
+  });
+
+  test('pitcher seam entry writes velocity only and never writes arm', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const pitcher = entry({
+      playerId: 'pitcher-signal',
+      isPitcher: true,
+      signalByRatingKey: { velocity: 1 },
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([pitcher]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ratingKey).toBe('velocity');
+    expect(rows.some((row) => row.ratingKey === 'arm')).toBe(false);
+  });
+
+  test('empty roster and cohort-only members no-throw without overlays', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const seam = vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster');
+    seam.mockResolvedValueOnce([]);
+
+    const emptyResult = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const emptyRows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(emptyResult).toEqual({
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Empty checkpoint roster.',
+    });
+    expect(emptyRows).toEqual([]);
+
+    seam.mockResolvedValueOnce([
+      entry({
+        playerId: 'cohort-only',
+        signalByRatingKey: { power: 1 },
+        createdAt: null,
+      }),
+    ]);
+
+    const cohortOnlyResult = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const cohortOnlyRows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(cohortOnlyResult).toEqual({ status: 'written', written: 0 });
+    expect(cohortOnlyRows).toEqual([]);
+  });
+
+  test('resolveCheckpointRoster assembles roster-agnostic classifiable members with RA-2c signals', async () => {
+    const playerIds = ['hitter-tv', 'farm-no-tv', 'peer-1', 'peer-2', 'peer-3', 'peer-4'];
+    const hitters = playerIds.map((id, index) => player({
+      id,
       primaryPosition: 'SS',
-      personality: 'Spirited',
-      morale: 64,
-      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
-    });
-    const pitcher = player({
-      id: 'pitcher-tv',
-      primaryPosition: 'SP',
-      personality: 'Crafty',
-      morale: 42,
-      hiddenPersonalityModifiers: { loyalty: 61, ambition: 72, resilience: 83, charisma: 94 },
-      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-b', rosterStatus: 'MLB' }],
-    });
-    const noTrueValue = player({
-      id: 'no-tv',
-      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
-    });
-    const farm = player({
-      id: 'farm-tv',
-      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'FARM' }],
-    });
+      personality: index === 0 ? 'Spirited' : 'Relaxed',
+      morale: index === 0 ? 64 : 50,
+      power: 48 + index,
+      contact: 50 + index,
+      speed: 52 + index,
+      fielding: 54 + index,
+      arm: 56 + index,
+      leagueAssignments: [{
+        leagueId: 'league-1',
+        teamId: 'team-a',
+        rosterStatus: id === 'farm-no-tv' ? 'FARM' : 'MLB',
+      }],
+    }));
+    const battingProfiles = [
+      { singles: 9, doubles: 4, triples: 1, homeRuns: 3, strikeouts: 1, contactQualityGood: 11 },
+      { singles: 8, doubles: 3, triples: 1, homeRuns: 2, strikeouts: 2, contactQualityGood: 10 },
+      { singles: 7, doubles: 2, triples: 0, homeRuns: 1, strikeouts: 3, contactQualityGood: 8 },
+      { singles: 6, doubles: 2, triples: 0, homeRuns: 1, strikeouts: 4, contactQualityGood: 7 },
+      { singles: 5, doubles: 1, triples: 0, homeRuns: 0, strikeouts: 5, contactQualityGood: 6 },
+      { singles: 4, doubles: 1, triples: 0, homeRuns: 0, strikeouts: 6, contactQualityGood: 5 },
+    ];
 
     vi.mocked(getAllFranchiseTeams).mockResolvedValue([{ id: 'team-a', leagueIds: ['league-1'] } as never]);
-    vi.mocked(getAllFranchisePlayers).mockResolvedValue([hitter, pitcher, noTrueValue, farm]);
-    vi.mocked(getPlayerRosterStatusForLeague).mockImplementation((p) => {
-      const id = (p as { id: string }).id;
-      return id === 'farm-tv' ? 'FARM' : 'MLB';
-    });
+    vi.mocked(getAllFranchisePlayers).mockResolvedValue(hitters);
     vi.mocked(getPlayerTeamIdForLeague).mockImplementation((p) =>
-      (p as { id: string }).id === 'pitcher-tv' ? 'team-b' : 'team-a',
+      (p as { leagueAssignments?: Array<{ teamId?: string }> }).leagueAssignments?.[0]?.teamId ?? null,
     );
     vi.mocked(getFranchiseTrueValueRows).mockResolvedValue([
       {
@@ -421,62 +492,115 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         valueDelta: 100000,
         computedAt: '2026-06-18T01:00:00.000Z',
       },
-      {
-        ...scope,
-        playerId: 'pitcher-tv',
-        valueDelta: -300000,
-        computedAt: '2026-06-18T02:00:00.000Z',
-      },
-      {
-        ...scope,
-        playerId: 'farm-tv',
-        valueDelta: 250000,
-        computedAt: '2026-06-18T03:00:00.000Z',
-      },
     ] as never);
-    vi.mocked(getFranchiseMoraleSnapshot).mockImplementation(async (_scope, _targetType, teamId) =>
-      teamId === 'team-a' ? ({ currentValue: 71 } as never) : null,
-    );
+    vi.mocked(getSeasonBattingStats).mockResolvedValue(playerIds.map((playerId, index) => {
+      const profile = battingProfiles[index];
+      const hits = profile.singles + profile.doubles + profile.triples + profile.homeRuns;
+      return {
+        seasonId: scope.seasonId,
+        playerId,
+        playerName: playerId,
+        teamId: 'team-a',
+        games: 8,
+        pa: 24,
+        ab: 22,
+        hits,
+        singles: profile.singles,
+        doubles: profile.doubles,
+        triples: profile.triples,
+        homeRuns: profile.homeRuns,
+        rbi: 0,
+        runs: 0,
+        walks: 2,
+        strikeouts: profile.strikeouts,
+        hitByPitch: 0,
+        sacFlies: 0,
+        sacBunts: 0,
+        stolenBases: 2,
+        caughtStealing: 0,
+        gidp: 0,
+        fameBonuses: 0,
+        fameBoners: 0,
+        fameNet: 0,
+        contactQualityGood: profile.contactQualityGood,
+        contactQualityTracked: 12,
+        lastUpdated: 1,
+      };
+    }) as never);
+    vi.mocked(getAllFieldingStats).mockResolvedValue(playerIds.map((playerId, index) => ({
+      seasonId: scope.seasonId,
+      playerId,
+      playerName: playerId,
+      teamId: 'team-a',
+      games: 8,
+      putouts: 8 + index,
+      assists: 4,
+      errors: index % 2,
+      doublePlays: 0,
+      gamesByPosition: { SS: 8 },
+      putoutsByPosition: { SS: 8 + index },
+      assistsByPosition: { SS: 4 },
+      errorsByPosition: { SS: index % 2 },
+      lastUpdated: 1,
+    })) as never);
+    vi.mocked(buildFranchiseEffectivePositionReport).mockResolvedValue({
+      playerPositions: Object.fromEntries(playerIds.map((playerId) => [
+        playerId,
+        { effectivePosition: 'SS', startsShare: 0.75 },
+      ])),
+    } as never);
+    vi.mocked(getFranchiseMoraleSnapshot).mockResolvedValue({ currentValue: 71 } as never);
+    const signalSpy = vi.spyOn(checkpointRatingSignal, 'computeCheckpointRatingSignals');
 
     const roster = await resolveCheckpointRoster(scope, gameState());
 
-    expect(roster).toEqual([
-      {
-        playerId: 'hitter-tv',
-        teamId: 'team-a',
-        isPitcher: false,
-        baseRatings: {
-          power: 50,
-          contact: 51,
-          speed: 52,
-          fielding: 53,
-          arm: 54,
-        },
-        personality: 'JOLLY',
-        modifiers: neutralModifiers,
-        playerMorale: 64,
-        teamFanMorale: 71,
-        performanceSignal: normalizePerformanceSignal(100000, CHECKPOINT_DEV_TUNING),
-        createdAt: '2026-06-18T01:00:00.000Z',
+    expect(signalSpy).toHaveBeenCalledTimes(1);
+    const members = signalSpy.mock.calls[0][0];
+    expect(members.map((member) => member.playerId).sort()).toEqual([...playerIds].sort());
+    expect(members.find((member) => member.playerId === 'hitter-tv')?.poolKey).toBe('middleIF');
+    expect(members.find((member) => member.playerId === 'farm-no-tv')?.poolKey).toBe('middleIF');
+    expect(buildFranchiseEffectivePositionReport).toHaveBeenCalledWith({
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      players: playerIds.map((playerId) => ({
+        playerId,
+        profilePosition: 'SS',
+        currentTeamId: 'team-a',
+        trait1: null,
+        trait2: null,
+        pitcherRole: 'SS',
+      })),
+    });
+
+    expect(roster.map((row) => row.playerId).sort()).toEqual([...playerIds].sort());
+    const hitterEntry = roster.find((row) => row.playerId === 'hitter-tv');
+    const farmEntry = roster.find((row) => row.playerId === 'farm-no-tv');
+
+    expect(hitterEntry).toMatchObject({
+      playerId: 'hitter-tv',
+      teamId: 'team-a',
+      isPitcher: false,
+      baseRatings: {
+        power: 48,
+        contact: 50,
+        speed: 52,
+        fielding: 54,
+        arm: 56,
       },
-      {
-        playerId: 'pitcher-tv',
-        teamId: 'team-b',
-        isPitcher: true,
-        baseRatings: {
-          velocity: 55,
-          junk: 56,
-          accuracy: 57,
-        },
-        personality: 'TOUGH',
-        modifiers: { loyalty: 61, ambition: 72, resilience: 83 },
-        playerMorale: 42,
-        teamFanMorale: 50,
-        performanceSignal: normalizePerformanceSignal(-300000, CHECKPOINT_DEV_TUNING),
-        createdAt: '2026-06-18T02:00:00.000Z',
-      },
-    ]);
-    expect(getFranchiseMoraleSnapshot).toHaveBeenCalledTimes(2);
+      personality: 'JOLLY',
+      modifiers: neutralModifiers,
+      playerMorale: 64,
+      teamFanMorale: 71,
+      createdAt: '2026-06-18T01:00:00.000Z',
+    });
+    expect(hitterEntry?.signalByRatingKey).toEqual(expect.any(Object));
+    expect(Object.keys(hitterEntry?.signalByRatingKey ?? {})).toEqual(
+      expect.arrayContaining(['power', 'contact']),
+    );
+    expect(farmEntry?.createdAt).toBeNull();
+    expect(farmEntry?.signalByRatingKey).toEqual(expect.any(Object));
+    expect(getFranchiseMoraleSnapshot).toHaveBeenCalledTimes(1);
   });
 
   test('compute module source stays deterministic and store-safe', () => {

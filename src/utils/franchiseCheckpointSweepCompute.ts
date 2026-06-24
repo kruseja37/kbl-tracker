@@ -8,14 +8,13 @@
  * DEFAULTS-TAKEN:
  * - cadence denominator = league-wide `totalGames`, matching the scheduled
  *   league-wide gameNumber, not gamesPerTeam.
- * - performance signal = True Value `valueDelta` in signed dollars; no-TV-row
- *   MLB players do not develop because there is no measurable earned signal.
+ * - performance signal = RA-2c category-rate signal, pre-normalized to [-1, 1]
+ *   by `computeCheckpointRatingSignals`.
  * - fan-morale fallback = 50, which is dark-safe and neutral when the morale
  *   store is empty under the default-OFF morale flag.
  * - overlay = permanent + pending. Checkpoints stack by distinct
  *   `sourceEventId`; replaying the same checkpoint overwrites the same id.
- * - which-key = one deterministic stable-hash rating key per shifter/checkpoint
- *   (sim-refinable later; no randomization).
+ * - per-rating fan-out = one overlay per finite MOVED rating signal.
  *
  * Determinism: no runtime randomness, caller timestamps, or direct IndexedDB opens.
  * `createdAt` comes from the persisted True Value row's `computedAt`.
@@ -23,7 +22,6 @@
 
 import {
   computeCheckpointRatingDevelopment,
-  normalizePerformanceSignal,
   RATINGS_DEVELOPMENT_TUNING,
   type RatingsDevelopmentTuning,
 } from '../engines/ratingsDevelopment';
@@ -39,14 +37,26 @@ import {
   getAllFranchiseTeams,
 } from './franchisePlayerStorage';
 import {
-  getPlayerRosterStatusForLeague,
   getPlayerTeamIdForLeague,
   type Player,
 } from './leagueBuilderStorage';
 import { getFranchiseTrueValueRows } from './franchiseTrueValueStorage';
 import { getFranchiseMoraleSnapshot } from './franchiseMoraleState';
-import { getSeasonMetadata } from './seasonStorage';
+import {
+  getAllFieldingStats,
+  getSeasonBattingStats,
+  getSeasonMetadata,
+  getSeasonPitchingStats,
+} from './seasonStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
+import { buildFranchiseEffectivePositionReport } from './franchiseEffectivePosition';
+import { toExpectedStatsCategoryRates } from '../engines/expectedStatsCategoryRates';
+import {
+  classifyRatingsPoolKey,
+  computeCheckpointRatingSignals,
+  type CheckpointSignalMember,
+} from './checkpointRatingSignal';
+import type { ExpectedStatsAgeBand, ExpectedStatsRatingKey } from '../engines/expectedStatsEngine';
 import {
   putFranchiseRatingsOverlay,
   type FranchiseRatingsOverlayRow,
@@ -54,8 +64,9 @@ import {
 } from './franchiseRatingsOverlayStorage';
 import { isFranchisePhase2CheckpointEnabled } from './franchisePhase2Flags';
 
-// §16 placeholder: valueDelta is signed dollars (~+/-$50k-$500k), so L8b owns
-// the dollar-to-signal scale instead of L8a's small-signal default.
+// §16 placeholder: performanceSignalScale is vestigial in this path because
+// RA-2c signals arrive pre-normalized to [-1, 1]; computeRawRatingDelta scales
+// by baseDeltaScale. normalizePerformanceSignal is not called here.
 export const CHECKPOINT_DEV_TUNING: RatingsDevelopmentTuning = {
   ...RATINGS_DEVELOPMENT_TUNING,
   performanceSignalScale: 200000,
@@ -70,8 +81,6 @@ const NEUTRAL_HIDDEN_MODIFIERS: HiddenModifiers = {
   charisma: 50,
 };
 
-const PITCHER_RATING_KEYS = ['velocity', 'junk', 'accuracy'] as const;
-const HITTER_RATING_KEYS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;
 const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY', 'P']);
 
 export interface CompletedGameArchiveOptions {
@@ -94,8 +103,8 @@ export interface CheckpointRosterEntry {
   modifiers: Pick<HiddenModifiers, 'loyalty' | 'ambition' | 'resilience'>;
   playerMorale: number;
   teamFanMorale: number;
-  performanceSignal: number;
-  createdAt: string;
+  signalByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
+  createdAt: string | null;
 }
 
 export type PersistDarkCheckpointSweepResult = {
@@ -116,6 +125,20 @@ export function isCheckpointBoundary(gameNumber: number, totalGames: number, che
   );
 }
 
+function ageToExpectedStatsBand(age: number): ExpectedStatsAgeBand {
+  // Prime-band default for missing/non-finite ages; age remains inert in RA-2c-2b.
+  if (!Number.isFinite(age)) return '25-31';
+  if (age <= 21) return '18-21';
+  if (age <= 24) return '22-24';
+  if (age <= 31) return '25-31';
+  if (age <= 35) return '32-35';
+  return '36+';
+}
+
+function mapByPlayerId<T extends { playerId: string }>(rows: readonly T[]): Map<string, T> {
+  return new Map(rows.map((row) => [row.playerId, row]));
+}
+
 export async function resolveCheckpointRoster(
   scope: FranchiseRatingsOverlayScopeInput,
   _gameState: PersistedGameState,
@@ -123,28 +146,95 @@ export async function resolveCheckpointRoster(
   const leagueId = (await getAllFranchiseTeams(scope.franchiseId))[0]?.leagueIds?.[0];
   if (!leagueId) return [];
 
-  const [players, trueValueRows] = await Promise.all([
+  const [players, trueValueRows, battingStats, pitchingStats, fieldingStats] = await Promise.all([
     getAllFranchisePlayers(scope.franchiseId),
     getFranchiseTrueValueRows({
       franchiseId: scope.franchiseId,
       seasonId: scope.seasonId,
       statsScopeId: scope.statsScopeId,
     }),
+    getSeasonBattingStats(scope.seasonId),
+    getSeasonPitchingStats(scope.seasonId),
+    getAllFieldingStats(scope.seasonId),
   ]);
-  const trueValueRowsByPlayerId = new Map(trueValueRows.map((row) => [row.playerId, row]));
+  const trueValueRowsByPlayerId = mapByPlayerId(trueValueRows);
+  const battingByPlayerId = mapByPlayerId(battingStats);
+  const pitchingByPlayerId = mapByPlayerId(pitchingStats);
+  const fieldingByPlayerId = mapByPlayerId(fieldingStats);
+  const teamIdByPlayerId = new Map(
+    players.map((player) => [player.id, getPlayerTeamIdForLeague(player, leagueId)]),
+  );
+  const effectivePositionReport = await buildFranchiseEffectivePositionReport({
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+    players: players.map((player) => ({
+      playerId: player.id,
+      profilePosition: player.primaryPosition,
+      currentTeamId: teamIdByPlayerId.get(player.id) ?? null,
+      trait1: player.trait1 ?? null,
+      trait2: player.trait2 ?? null,
+      pitcherRole: player.primaryPosition,
+    })),
+  });
   const teamFanMoraleByTeamId = new Map<string, Promise<number>>();
-  const roster: CheckpointRosterEntry[] = [];
+  const memberEntries: Array<{
+    player: Player;
+    teamId: string | null;
+    isPitcher: boolean;
+    baseRatings: Record<string, number>;
+    member: CheckpointSignalMember;
+  }> = [];
 
   for (const player of players) {
-    if (getPlayerRosterStatusForLeague(player, leagueId) !== 'MLB') continue;
+    const isPitcher = getPlayerIsPitcher(player);
+    const role = isPitcher ? 'pitcher' : 'hitter';
+    const effectivePosition =
+      effectivePositionReport.playerPositions[player.id]?.effectivePosition ?? player.primaryPosition;
+    const startsShare = effectivePositionReport.playerPositions[player.id]?.startsShare ?? null;
+    const poolKey = classifyRatingsPoolKey({ role, effectivePosition, startsShare });
+    if (poolKey === null) continue;
 
-    const trueValueRow = trueValueRowsByPlayerId.get(player.id);
-    if (!trueValueRow) continue;
+    const baseRatings: Record<string, number> = isPitcher
+      ? {
+          velocity: player.velocity,
+          junk: player.junk,
+          accuracy: player.accuracy,
+        }
+      : {
+          power: player.power,
+          contact: player.contact,
+          speed: player.speed,
+          fielding: player.fielding,
+          arm: player.arm,
+        };
 
-    const teamId = getPlayerTeamIdForLeague(player, leagueId);
-    if (!teamId) continue;
+    memberEntries.push({
+      player,
+      teamId: teamIdByPlayerId.get(player.id) ?? null,
+      isPitcher,
+      baseRatings,
+      member: {
+        playerId: player.id,
+        role,
+        ageBand: ageToExpectedStatsBand(player.age),
+        ratings: baseRatings as Partial<Record<ExpectedStatsRatingKey, number>>,
+        poolKey,
+        categoryRates: toExpectedStatsCategoryRates({
+          role,
+          batting: battingByPlayerId.get(player.id),
+          pitching: pitchingByPlayerId.get(player.id),
+          fielding: fieldingByPlayerId.get(player.id),
+        }),
+      },
+    });
+  }
 
-    if (!teamFanMoraleByTeamId.has(teamId)) {
+  const signalMap = computeCheckpointRatingSignals(memberEntries.map((entry) => entry.member));
+  const roster: CheckpointRosterEntry[] = [];
+
+  for (const { player, teamId, isPitcher, baseRatings } of memberEntries) {
+    if (teamId && !teamFanMoraleByTeamId.has(teamId)) {
       teamFanMoraleByTeamId.set(
         teamId,
         getFranchiseMoraleSnapshot(scope, 'team-fan', teamId).then(
@@ -153,26 +243,13 @@ export async function resolveCheckpointRoster(
       );
     }
 
-    const isPitcher = getPlayerIsPitcher(player);
     const hidden = player.hiddenPersonalityModifiers ?? NEUTRAL_HIDDEN_MODIFIERS;
 
     roster.push({
       playerId: player.id,
-      teamId,
+      teamId: teamId ?? '',
       isPitcher,
-      baseRatings: isPitcher
-        ? {
-            velocity: player.velocity,
-            junk: player.junk,
-            accuracy: player.accuracy,
-          }
-        : {
-            power: player.power,
-            contact: player.contact,
-            speed: player.speed,
-            fielding: player.fielding,
-            arm: player.arm,
-          },
+      baseRatings,
       personality: normalizePersonality(player.personality),
       modifiers: {
         loyalty: hidden.loyalty,
@@ -180,9 +257,9 @@ export async function resolveCheckpointRoster(
         resilience: hidden.resilience,
       },
       playerMorale: player.morale,
-      teamFanMorale: await teamFanMoraleByTeamId.get(teamId)!,
-      performanceSignal: normalizePerformanceSignal(trueValueRow.valueDelta, CHECKPOINT_DEV_TUNING),
-      createdAt: trueValueRow.computedAt,
+      teamFanMorale: teamId ? await teamFanMoraleByTeamId.get(teamId)! : 50,
+      signalByRatingKey: signalMap.get(player.id) ?? {},
+      createdAt: trueValueRowsByPlayerId.get(player.id)?.computedAt ?? null,
     });
   }
 
@@ -192,11 +269,6 @@ export async function resolveCheckpointRoster(
 export const checkpointSweepSeam = {
   resolveCheckpointRoster,
 };
-
-export function selectDevelopmentRatingKey(entry: CheckpointRosterEntry): string {
-  const keySet = entry.isPitcher ? PITCHER_RATING_KEYS : HITTER_RATING_KEYS;
-  return keySet[stableHash(entry.playerId) % keySet.length];
-}
 
 export async function persistDarkCheckpointSweepForCompletedGame(
   gameState: PersistedGameState,
@@ -244,41 +316,47 @@ export async function persistDarkCheckpointSweepForCompletedGame(
   const sourceEventId = `checkpoint-${gameNumber}`;
 
   for (const entry of roster) {
-    const ratingKey = selectDevelopmentRatingKey(entry);
-    const baseRatingValue = entry.baseRatings[ratingKey];
-    if (!Number.isFinite(baseRatingValue)) continue;
+    if (entry.createdAt == null) continue;
 
-    const dev = computeCheckpointRatingDevelopment(
-      {
+    for (const ratingKey of Object.keys(entry.signalByRatingKey) as ExpectedStatsRatingKey[]) {
+      const signal = entry.signalByRatingKey[ratingKey];
+      if (signal == null || !Number.isFinite(signal)) continue;
+
+      const baseRatingValue = entry.baseRatings[ratingKey];
+      if (!Number.isFinite(baseRatingValue)) continue;
+
+      const dev = computeCheckpointRatingDevelopment(
+        {
+          ratingKey,
+          baseRatingValue,
+          performanceSignal: signal,
+          playerMorale: entry.playerMorale,
+          teamFanMorale: entry.teamFanMorale,
+          personality: entry.personality,
+          modifiers: entry.modifiers,
+        },
+        CHECKPOINT_DEV_TUNING,
+      );
+
+      if (!dev.shouldShift) continue;
+
+      rows.push({
+        id: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${ratingKey}:${sourceEventId}`,
+        franchiseId: scope.franchiseId,
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        playerId: entry.playerId,
         ratingKey,
-        baseRatingValue,
-        performanceSignal: entry.performanceSignal,
-        playerMorale: entry.playerMorale,
-        teamFanMorale: entry.teamFanMorale,
-        personality: entry.personality,
-        modifiers: entry.modifiers,
-      },
-      CHECKPOINT_DEV_TUNING,
-    );
-
-    if (!dev.shouldShift) continue;
-
-    rows.push({
-      id: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${ratingKey}:${sourceEventId}`,
-      franchiseId: scope.franchiseId,
-      seasonId: scope.seasonId,
-      statsScopeId: scope.statsScopeId,
-      playerId: entry.playerId,
-      ratingKey,
-      delta: dev.appliedDelta,
-      kind: 'permanent',
-      expiresAtGameNumber: null,
-      confirmationStatus: 'pending',
-      source: 'ratings-development',
-      sourceEventId,
-      createdAtGameNumber: gameNumber,
-      createdAt: entry.createdAt,
-    });
+        delta: dev.appliedDelta,
+        kind: 'permanent',
+        expiresAtGameNumber: null,
+        confirmationStatus: 'pending',
+        source: 'ratings-development',
+        sourceEventId,
+        createdAtGameNumber: gameNumber,
+        createdAt: entry.createdAt,
+      });
+    }
   }
 
   for (const row of rows) {
@@ -305,14 +383,6 @@ export async function resolveCheckpointGameNumber(
   }
 
   return null;
-}
-
-function stableHash(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash += value.charCodeAt(index);
-  }
-  return hash;
 }
 
 function getPlayerIsPitcher(player: Player): boolean {
