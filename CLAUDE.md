@@ -144,10 +144,11 @@ Before declaring any task complete:
 4. Ask the user to confirm
 
 ### 5. Communication Preferences
+- **Plain language for JK — always.** Every summary and every question to JK goes in plain, non-engineering language: lead with the bottom line, explain it the way you would to a smart non-engineer, and keep file paths, line numbers, commit hashes, flag/constant names, code symbols, and long multi-section technical breakdowns OUT of the surfaced message. A clean shape: **where we are / the catch / the fix (or recommendation).** The rigorous technical detail still happens — it belongs in the work artifacts (Codex contracts, audit evidence, DECISIONS_LOG, commits), NOT in the message to JK. Do the engineering, then TRANSLATE before surfacing. Use file:line / flag-level detail only when JK explicitly asks for it. (JK directive 2026-06-24 — he called out "complex, over-detailed engineer-speak.")
 - Confirm understanding by restating the task
 - Propose approach before executing
 - Flag scope concerns early
-- Ask clarifying questions upfront
+- Ask clarifying questions upfront — framed as a plain decision with a clear recommendation
 
 ### 6. Code Verification Hierarchy
 1. **Static analysis** — Read the code logic
