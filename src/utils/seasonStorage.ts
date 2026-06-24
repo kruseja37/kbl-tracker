@@ -78,6 +78,10 @@ export interface PlayerSeasonBatting {
   fwar?: number;       // Fielding WAR
   totalWar?: number;   // Combined WAR (bwar + rwar + fwar)
 
+  // Contact quality (RA-2CQ; counts; batter quality rate = good/tracked; populated by the RA-2CQ-2b writer)
+  contactQualityGood?: number;
+  contactQualityTracked?: number;
+
   // Timestamps
   lastUpdated: number;
 }
@@ -125,6 +129,10 @@ export interface PlayerSeasonPitching {
   // WAR (populated by WAR orchestrator after calculation)
   pwar?: number;       // Pitching WAR
   pitchingWpa?: number;
+
+  // Contact quality allowed (RA-2CQ; counts; pitcher weak-induced rate = weakInduced/tracked; RA-2CQ-2b writer)
+  weakContactInduced?: number;
+  weakContactTracked?: number;
 
   // Timestamps
   lastUpdated: number;
@@ -212,6 +220,8 @@ export function createInitialBattingStats(
     fameBonuses: 0,
     fameBoners: 0,
     fameNet: 0,
+    contactQualityGood: 0,
+    contactQualityTracked: 0,
     lastUpdated: Date.now(),
   };
 }
@@ -252,6 +262,8 @@ export function createInitialPitchingStats(
     fameBonuses: 0,
     fameBoners: 0,
     fameNet: 0,
+    weakContactInduced: 0,
+    weakContactTracked: 0,
     lastUpdated: Date.now(),
   };
 }

@@ -19351,3 +19351,94 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2CQ-1 ===== -->
+
+<!-- ===== CONTRACT: S7d-1 ===== -->
+## CONTRACT: S7d-1 — relocate gradeToTwentyEighty + retire the dead scoutPriceOpinion module
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch B, codex/mode1-v1-b, worktree /Users/johnkruse/Projects/kbl-mode1-b). Low-risk cleanup that unblocks the S7d Gaussian-model deletion. Builder only — do NOT audit/commit/push.
+
+GOAL:
+Relocate the live `gradeToTwentyEighty` grade-display helper out of the soon-to-be-deleted `scoutPriceOpinion` module into a surviving module, repoint its importers, then DELETE the now-dead `scoutPriceOpinion` module + its test (S7b orphaned `scoutPriceOpinion` — no production caller remains). NO other S7d work (the Gaussian-model deletion + band-required + downstream readers are S7d-2/S7d-3).
+
+SOURCE OF TRUTH:
+- S7 forks RULED (DECISIONS_LOG 2026-06-23): retire `scoutPriceOpinion` (auction-only, now dead post-S7b); KEEP `perceivedValueRange`/`scoutValueRange.ts`; relocate `gradeToTwentyEighty` FIRST.
+- `gradeToTwentyEighty` lives at `src/engines/scoutPriceOpinion.ts:7-13` (a pure Grade→20-80 map using the grade ladder + a clamp).
+- Post-S7b, `scoutPriceOpinion` (the function) has NO production caller; `gradeToTwentyEighty` is imported by `LeagueBuilderFarmAuctionDraft.tsx` (scoutGradeDisplay) + its test, both currently FROM the scoutPriceOpinion module.
+
+CONSTRAINTS:
+- EDIT: `src/engines/gradeEngine.ts` (ADD `gradeToTwentyEighty`), `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` (repoint import), `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` (repoint import). DELETE: `src/engines/scoutPriceOpinion.ts` + `src/engines/__tests__/scoutPriceOpinion.test.ts`. If scoutPriceOpinion.test.ts is the ONLY coverage of `gradeToTwentyEighty`, MOVE that test to `src/engines/__tests__/gradeEngine.test.ts` (create if needed) — do NOT lose the coverage.
+- Do NOT touch: `src/utils/prospectScoutingDraftEngine.ts` (the Gaussian model — S7d-2), `src/engines/scoutValueRange.ts` (KEEP), the oracle, trackerDb.
+- NO TRACKER_DB_VERSION bump. Branch-only; do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+A) Move `gradeToTwentyEighty` (exact body from scoutPriceOpinion.ts:7-13) into `src/engines/gradeEngine.ts` as an export, bringing whatever it needs (the GRADE_LADDER ordering + a clamp). STOP-IF gradeEngine.ts lacks the grade ladder/clamp and importing them would create a cycle — then relocate to a clean new `src/engines/gradeDisplay.ts` instead and report.
+B) Repoint the 2 importers (the page + its test) to import `gradeToTwentyEighty` from the new location. Verify NO other file imports it from scoutPriceOpinion.
+C) DELETE `scoutPriceOpinion.ts` + `scoutPriceOpinion.test.ts`. Grep-confirm ZERO remaining references to `scoutPriceOpinion` (the function or the module path) anywhere in src/.
+D) If scoutPriceOpinion.test.ts tested `gradeToTwentyEighty`, relocate that test to cover the new location.
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm --prefix /Users/johnkruse/Projects/kbl-mode1-b run build` → exit 0.
+- `NODE_ENV= npx vitest run` → FULL suite, failed files ⊆ { `wpaRuntimeBoundary` } ⇒ ZERO NEW REDS.
+- `grep -rn "scoutPriceOpinion" src/` → ZERO hits (paste it).
+- `git --no-pager diff --stat` + `git status --porcelain` (show the 2 deletes).
+
+FORMAT: 1. files changed/deleted 2. the diffs 3. verification + the grep output 4. "S7d-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF any OTHER file still imports `scoutPriceOpinion` (the function) — report it (S7b should have removed all production callers).
+- STOP-IF relocating `gradeToTwentyEighty` to gradeEngine.ts creates an import cycle — use a clean new module + report.
+- Do NOT touch the Gaussian model / ProspectScoutingReport / band fields (S7d-2/3). Do NOT delete scoutValueRange.ts.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S7d-1 ===== -->
+
+<!-- ===== CONTRACT: RA-2CQ-2a ===== -->
+## CONTRACT: RA-2CQ-2a — contact-quality season COUNT fields (additive, build-dark, RA-8 pattern)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch A, codex/franchise-v1-next, worktree /Users/johnkruse/Projects/kbl-tracker). Additive season-row fields only — NO writer/meta/adapter (those are RA-2CQ-2b/2c). Builder only — do NOT audit/commit/push.
+
+GOAL:
+Add the contact-quality COUNT fields to `PlayerSeasonBatting` + `PlayerSeasonPitching` so the RA-2CQ-2b live writer can accumulate them and the season rate can be derived. Counts (not a rate) accumulate cleanly across games. Mirror the RA-8 precedent exactly (additive optional `?:number` + seed 0; NO trackerDb bump).
+
+SOURCE OF TRUTH:
+- RA-8 precedent (`seasonStorage.ts`): `caughtStealingAgainst?`/`stolenBasesAllowed?` on `PlayerSeasonFielding` (:150-151) + seed 0 in `createInitialFieldingStats` (:280-281); additive, NO DB bump, version stays 25.
+- RA-2CQ-1 (`d97504dd`) classification: per ball → good/neutral/weak/excluded. Hitter quality rate = good/(good+neutral+weak); pitcher weak-induced rate = weak/(good+neutral+weak). So the batter stores good + tracked; the pitcher stores weak-induced + tracked.
+- DECISIONS_LOG 2026-06-23: rate shape, hard-only good.
+
+CONSTRAINTS:
+- EDIT ONLY: `src/utils/seasonStorage.ts`.
+- Do NOT touch: `src/utils/seasonAggregator.ts` (the writer = RA-2CQ-2b), `src/engines/expectedStatsEngine.ts` / `expectedStatsCategoryRates.ts` (the signal = RA-2CQ-2c), trackerDb, the oracle.
+- NO TRACKER_DB_VERSION bump (stays 25; the `franchiseSeasonLedgerStorage.test.ts` version pin must stay green). Branch-only; do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+A) `PlayerSeasonBatting` — IMMEDIATELY AFTER `totalWar?: number;` (~:79), add:
+   ```
+   // Contact quality (RA-2CQ; counts; batter quality rate = good/tracked; populated by the RA-2CQ-2b writer)
+   contactQualityGood?: number;
+   contactQualityTracked?: number;
+   ```
+B) `PlayerSeasonPitching` — IMMEDIATELY AFTER `pitchingWpa?: number;` (~:127), add:
+   ```
+   // Contact quality allowed (RA-2CQ; counts; pitcher weak-induced rate = weakInduced/tracked; RA-2CQ-2b writer)
+   weakContactInduced?: number;
+   weakContactTracked?: number;
+   ```
+C) `createInitialBattingStats` — after `fameNet: 0,` (~:214), add `contactQualityGood: 0,` + `contactQualityTracked: 0,`.
+D) `createInitialPitchingStats` — after `fameNet: 0,` (~:254), add `weakContactInduced: 0,` + `weakContactTracked: 0,`.
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run` → FULL suite (the season row shape is broadly imported — a scoped run MISSES `toEqual` shape breaks; the L12-3R-2 lesson). Failed files ⊆ { `wpaRuntimeBoundary`, `franchiseManualSmokeFixture`, `GameTrackerLaunchState` } ⇒ ZERO NEW REDS.
+- `git --no-pager diff --stat` (only `seasonStorage.ts`).
+
+FORMAT: 1. files changed 2. the diff 3. verification verbatim 4. "RA-2CQ-2a complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF a `toEqual`/`toMatchObject` season-shape test breaks because of the seed-0 additions — FIX it test-only (add the 2 fields to the expected object), do NOT remove the seeds; report which test.
+- STOP-IF adding these fields somehow requires a trackerDb version bump — report it (it must NOT; they are additive optional, RA-8 precedent).
+- Do NOT add a writer, a meta category, or an adapter change (RA-2CQ-2b/2c).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2CQ-2a ===== -->
