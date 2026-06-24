@@ -21160,3 +21160,48 @@ Use high reasoning effort. Think step-by-step.
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: RB-13b ===== -->
+
+<!-- ===== CONTRACT: RA-12a ===== -->
+## RA-12a — delete the legacy Model-B offseason rating engine (one-model cleanup, part 1)
+
+**ROUTE:** Codex (gpt-5.5) | high reasoning effort
+**ROLE:** You are a precise TypeScript/React surgeon removing dead/legacy code from a single component. You do NOT add features.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Remove the legacy "Model B" age→rating engine (`computeNetChange` and the netChange-driven legacy offseason screens) from `RatingsAdjustmentFlow.tsx`, so the live Model-A dry-run surface is the only thing this component renders, and the `franchiseId`-less branch becomes a thin "not available" shell.
+
+**SOURCE OF TRUTH:** `spec-docs/DECISIONS_LOG.md` 2026-06-24 "path-forward rulings" #1(b) — RA-12: delete legacy offseason Model B (`computeNetChange`, `RatingsAdjustmentFlow.tsx`) + retire Model C, so the over-expectation Model A is the ONLY rating-mutation engine; must land before the offseason flag (`FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED`) flips. `spec-docs/RATINGS_ADJUSTMENT_SPEC.md` (one engine, v1).
+
+**CONSTRAINTS:**
+- Edit ONLY `src/src_figma/app/components/RatingsAdjustmentFlow.tsx`. (Model C / `agingEngine` is a SEPARATE ticket — do NOT touch it here.)
+- Frozen `spec-docs/reference/iv_oracle.json` = read-only (not touched by this change anyway).
+- Do NOT touch any other source file. If a NON-test file outside this component imports a symbol you must remove → STOP and report it (do not edit it).
+
+**MAKE-OR-BREAK (must hold, or the change is wrong):**
+- KEEP byte-intact the `if (franchiseId) { return <FranchiseRatingsSalaryDryRunSurface ... /> }` branch (~:529–542), the `FranchiseRatingsSalaryDryRunSurface` component (~:645–897), `IssueList` (~:898), and EVERY symbol/state/effect they read: `franchisePreviewData`, `franchisePreviewIssues`, `franchisePreviewLoading`, `franchisePreviewError` + the franchise-preview loader `useEffect`, `seasonId`, `seasonNumber`, `onClose`, `formatPreviewSalary`. This dry-run surface is the LIVE Model-A path — production callers ALWAYS pass `franchiseId`, so it is the only branch ever rendered.
+- DELETE `computeNetChange` (~:176) and remove every symbol that becomes UNUSED once the Model-B screens are gone: the `netChange`/`ratingsAfter`/`salaryChange` math in `convertToLocalPlayer`; `handleSaveAndClose` (the Model-B apply path ~:447–518, incl. its `getPlayer`/`savePlayer`/`saveRatingChanges` usage); the `ALL_PLAYERS`/`TEAMS` Model-B data + their loader effect + the `isLoading`/screen-navigation state used only by Model-B; `calculateTeamSummary`; `getManagerPool`; `OverviewScreen` and the other Model-B-only screen components/helpers (`mwarToGrade`/`getGradeColor`/`getSalaryTierColor`/`getChangeColor`, the Model-B-only interfaces) — IF and only if they are Model-B-only after the JSX swap.
+- REPLACE the `franchiseId`-undefined `return (...)` (the big Model-B JSX starting ~:544) with a THIN shell: a single full-screen panel stating ratings adjustment is only available inside a franchise, with a back/close control calling `onClose`. It must compile and render valid JSX.
+- The build runs `noUnusedLocals` — let the build surface dead code and remove it ALL until the build is clean, but NEVER remove anything the kept `franchiseId` branch transitively uses.
+
+**EXPECTED OUTPUT:** `RatingsAdjustmentFlow.tsx` with no `computeNetChange`, no netChange-driven rating math, no Model-B screens; the `franchiseId` branch + dry-run surface unchanged; the `franchiseId`-undefined branch a thin shell. No other source file changed.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/src_figma/__tests__/franchiseMode/franchiseOffseasonGuards.component.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseHome.test.tsx src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx` → all pass.
+3. `grep -rn "computeNetChange" src/` → zero hits.
+4. `git --no-pager diff --stat` → only `RatingsAdjustmentFlow.tsx` (plus a test only if a characterized test pinned a removed symbol — report it).
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing RA-12 / the make-or-break.
+3. Verification output pasted (build exit, vitest summary, grep, diff --stat).
+4. "RA-12a complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP with a precise reason is a SUCCESS):**
+- A NON-test file outside `RatingsAdjustmentFlow.tsx` imports a symbol you must remove → STOP, report the importer.
+- Removing Model-B code would break the `FranchiseRatingsSalaryDryRunSurface` branch or any of the 3 named tests → STOP.
+- The `franchiseId`-undefined branch cannot be made a valid thin shell without touching another file → STOP.
+- Never summarize/batch; report every changed path including trivial test edits.
+
+Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: RA-12a ===== -->
