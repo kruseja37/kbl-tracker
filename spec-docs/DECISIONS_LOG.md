@@ -7,6 +7,25 @@
 
 ## June 2026
 
+### 2026-06-24 (attended, dedicated session): LANE-MERGE EXECUTED — `codex/mode1-v1-b` → `codex/franchise-v1-next`
+
+The lane-merge ruled in the path-forward entry below (Captain/Opus owns it) was executed in a dedicated session with JK present, per the safety protocol (assess conflicts → side branch → full gate → JK confirm → fast-forward; branch-only, never push). Result: **`codex/franchise-v1-next` fast-forwarded to `87a59ec0`** — the entire Mode-1 build (auction + prospect-gen + scout + draft-freeze + draft-morale + GM entity + roster board) now lives on the living-season branch alongside the L/D-stack.
+
+**Mechanics:** merge-base `549f9832`; franchise +272 / mode1-b +91 commits. Ran the merge on side branch `merge/mode1-into-franchise` in an isolated worktree with an APFS-cloned `node_modules` (deps byte-identical on both tips, so the clone was valid) — keeping the live franchise worktree (which held a concurrent doc-worker's uncommitted edits) completely untouched. After gate + JK confirm, fast-forwarded `franchise-v1-next` from the main worktree (`merge --ff-only`), removed the temp worktree, deleted the redundant side branch. Nothing pushed.
+
+**Conflict surface (a real read-only 3-way merge predicted it exactly):** 8 files changed on both sides, **only 2 truly conflicted** — and neither was production source:
+- `franchiseInitializer.test.ts` — each lane had ADDED a different test at the same spot. **Resolution: kept BOTH** (franchise's "no-DH seal" test + mode1's "draft-baseline true-value rows" test) + union of imports.
+- `PROMPT_CONTRACTS.md` — append collision in the contract log. **Resolution: base-aware union** (`git merge-file --union`), no duplication of shared base content.
+The 6 auto-merged files included the real code (`masterMoraleMatrix.ts`, `franchiseInitializer.ts`, `franchiseMoraleState.ts`, `leagueBuilderStorage.ts`). mode1-b's legacy deletions (`traitPools.ts`, `PlayerNameWithMorale.tsx`, `TraitLotteryWheel.tsx`) applied cleanly — grep confirmed zero dangling references.
+
+**Gate on the merged tree (all green):** `npm run build` exit 0 · full suite **8,228 pass / 1 fail** where the lone fail is the pre-existing `wpaRuntimeBoundary` "allowlisted" hard fail, **proven byte-identical on the pre-merge franchise tip** (`franchiseAnalyticsTrust.ts` untouched by either lane) ⇒ **ZERO new reds** · frozen IV oracle byte-identical (`a0b501b1…`) across merged + both lanes · `TRACKER_DB_VERSION` = 25 on all three, store list identical (no double-bump) · L-SIM smoke (flags-on 24-game season) ALL CRITICAL invariants green (2 non-blocking `fame-war-legitimacy-floor` INVESTIGATE notes, not merge-caused — to be looked at in the full L-SIM-final run).
+
+**Branch hygiene (step-6 rulings applied):** the eventLog box-score fix (`875e4368`) folded in via cherry-pick of the single code-fix commit (its 3 design-doc commits were already duplicated on franchise-v1-next). The ~26 stray `codex/*` branches are all Feb–May 2026 (pre-V1) ⇒ confirmed stale; left untouched (unmerged ≠ deleted), out of v1.
+
+**➡ Next in the gate chain:** L-SIM final (full-season, regenerates the committed baselines) → RB-16 → D12 → D13 → flag-flip → F-141. Resume all building on the single combined `codex/franchise-v1-next` tree.
+
+---
+
 ### 2026-06-24 (attended): path-forward rulings — 5 open calls + re-grade cadence + grade-display design spun off
 
 JK cleared the path-to-v1 open decisions:
