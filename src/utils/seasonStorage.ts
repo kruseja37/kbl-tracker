@@ -82,6 +82,10 @@ export interface PlayerSeasonBatting {
   contactQualityGood?: number;
   contactQualityTracked?: number;
 
+  // Baserunning advancement (RA-2c-3; counts; §16-tunable speedBaserunningRate = extraBasesTaken/advancementOpportunities; populated by the RA-2c-3b writer)
+  extraBasesTaken?: number;            // successful extra bases taken beyond the forced minimum
+  advancementOpportunities?: number;   // total chances to take an extra base (the rate denominator)
+
   // Timestamps
   lastUpdated: number;
 }
@@ -222,6 +226,8 @@ export function createInitialBattingStats(
     fameNet: 0,
     contactQualityGood: 0,
     contactQualityTracked: 0,
+    extraBasesTaken: 0,
+    advancementOpportunities: 0,
     lastUpdated: Date.now(),
   };
 }

@@ -21,6 +21,7 @@ const HITTER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
   'contactAvoidStrikeoutRate',
   'contactQualityRate',
   'speedStealTripleRate',
+  'speedBaserunningRate',
   'fieldingFieldingPct',
   'fieldingRangeRate',
 ];
@@ -35,7 +36,6 @@ const PITCHER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
 
 const DORMANT_CATEGORIES: ExpectedStatsCategory[] = [
   'armThrowingRate',
-  'speedBaserunningRate',
   'fieldingAvoidErrorRate',
 ];
 
@@ -175,6 +175,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       contactAvoidStrikeoutRate: 120,
       contactQualityRate: 0,
       speedStealTripleRate: 10,
+      speedBaserunningRate: 0,
       fieldingFieldingPct: 80,
       fieldingRangeRate: 80,
     });
@@ -195,6 +196,32 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
 
     expect(result.sampleSizeByCat.speedStealTripleRate).toBe(6);
     expect(result.actualByCat.speedStealTripleRate).toBeCloseTo(5 / 50, 10);
+  });
+
+  test('maps baserunning advancement counts to hitter actual and sample', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      batting: baseBatting({
+        advancementOpportunities: 10,
+        extraBasesTaken: 4,
+      }),
+    });
+
+    expect(result.sampleSizeByCat.speedBaserunningRate).toBe(10);
+    expect(result.actualByCat.speedBaserunningRate).toBeCloseTo(0.4, 10);
+  });
+
+  test('omits baserunning advancement actual when advancement opportunities are zero', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      batting: baseBatting({
+        advancementOpportunities: 0,
+        extraBasesTaken: 4,
+      }),
+    });
+
+    expect(result.sampleSizeByCat.speedBaserunningRate).toBe(0);
+    expect('speedBaserunningRate' in result.actualByCat).toBe(false);
   });
 
   test('maps a full pitcher season row to hand-worked live rates and samples', () => {
@@ -248,6 +275,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       contactAvoidStrikeoutRate: 0,
       contactQualityRate: 0,
       speedStealTripleRate: 0,
+      speedBaserunningRate: 0,
       fieldingFieldingPct: 0,
       fieldingRangeRate: 0,
     });
