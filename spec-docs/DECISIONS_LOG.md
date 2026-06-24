@@ -7,6 +7,15 @@
 
 ## June 2026
 
+### 2026-06-23 (attended Hybrid via `/kbl-captain`): Contact-quality measurement — 2 forks RULED + the full classification
+
+**Context:** RA-2CQ-1 (the contact-quality data+signal layer feeding hitter Contact + pitcher Junk). The spec ruled the STRUCTURE (hard > normal > weak; hard PO → neutral-not-negative; FLO graded by hardness; symmetric hitter/pitcher) but left the measurement SHAPE open. Per the no-inference rule, surfaced to JK rather than inferred.
+
+1. **SHAPE = a RATE** (not a continuous 0–1 quality score). JK asked "which is more trustworthy?"; Captain reasoned: the game emits only 5 coarse contact tags, so a continuous average just launders arbitrary per-bucket weights (false precision + a second scale to calibrate); the rate has one knob (the hard/not-hard cut), sits on the same percentile currency as the other rate stats (AVG/OBP/K%), and is symmetric with the already-named `pitchingWeakContactRate` field. → RATE.
+2. **GOOD-contact cut = HARD ONLY (strict).** hard = good, normal = neutral, weak + bloop = weak, bunt = excluded.
+
+**Resulting full classification (Captain-derived from the rulings + the already-ruled direction; pure build-dark engine `src/engines/contactQualityAggregator.ts`, RA-2CQ-1 `d97504dd`):** per ball — `excluded` if a strikeout/walk/HBP/SAC-bunt (`K/Kc/Ꝁ/D3K/WP_K/PB_K/BB/IBB/HBP/SAC`) OR a non-contact/bunt tag; `PO` → hard=neutral / else=weak; `FLO` → hard=good / normal=neutral / weak,bloop=weak; all other balls in play (incl. `ITPHR/GRD/SF/FC/E`) → hard=good / normal=neutral / weak,bloop=weak. Hitter `contactQualityRate = good/(good+neutral+weak)`; pitcher `weakContactRate = weak/(good+neutral+weak)`; null below min-sample (default 10, §16-tunable). Shipped as the pure classifier + 2 rate aggregators (the A1.5c pattern); season fields + live writer + meta/adapter signal wiring are bounded follow-ups (mirrors A1.5c → RA-8 → A1.5c-4).
+
 ### 2026-06-23 (attended Hybrid via `/kbl-captain`): A2.3 rookie-window + S7b band-source — 2 forks RULED
 
 **Context:** fresh Hybrid session resuming the dual-branch build loop (Branch A `codex/franchise-v1-next` = A2.3 RA-rookie; Branch B `codex/mode1-v1-b` = S7b scout-range re-anchor). Grounding surfaced two genuine forks; JK ruled inline (AskUserQuestion) so the builds dispatch on no guesses.
