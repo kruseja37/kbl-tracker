@@ -14937,3 +14937,50 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: S7a ===== -->
+
+<!-- ===== CONTRACT: RB-13b ===== -->
+## CONTRACT: RB-13b — route the draft flow by the league's draftFormat + thread an explicit leagueId (Mode-1, Branch B)
+
+**ROUTE:** Build + commit in THIS worktree `/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Branch-only — do NOT commit, do NOT push (the Captain commits after auditing). Use xhigh reasoning effort.
+
+**ROLE:** Builder (Codex). The Captain (a different model) audits your real diff afterward.
+
+**GOAL (JK ruling, embedded — RB-13b is an ENGINEERING routing fix, "no design call"):** Today the draft flow ignores each league's persisted `draftFormat` and every draft page self-picks `leagues[0]`. Fix both: (1) route auction-vs-snake by the *selected league's* `draftFormat`; (2) replace the implicit `leagues[0]` anchor with an EXPLICIT leagueId threaded to the draft page. The leagueId-threading mechanism is the builder's documented choice — **use a URL query param `?leagueId=<id>`** (simplest, explicit, bookmarkable; JK left this to the builder). Snake stays user-selectable (do NOT remove snake). This is user-visible UI — build the routing LOGIC + unit tests now; the rendered result is a **browser-verify (BV) follow-up**, not a blocker.
+
+**SOURCE OF TRUTH (embedded — do NOT rely on this branch's spec-docs, which may be stale):**
+- DECISIONS_LOG 2026-06-22: "wire the hub/draft flow to route auction-vs-snake by the selected league's `draftFormat` … per-league 'Draft' actions in the CURRENT LEAGUES list that route by that league's `draftFormat`, threading the leagueId to the draft page."
+- DECISIONS_LOG 2026-06-23 (item 10): "RB-13b: engineering routing fix (no design call) — route the draft by the selected league's persisted `draftFormat` + a minimal explicit active-league id (not `leagues[0]`); land before the lane-merge."
+
+**GROUNDED ANCHORS (verified in THIS worktree; re-read each before editing):**
+- `src/utils/leagueBuilderStorage.ts:105` `draftFormat?: 'auction' | 'snake'` on `LeagueTemplate`; `:113` `export function getLeagueDraftFormat(template): 'auction' | 'snake'` (defaults `'auction'`). **READ-ONLY — import and use it; do NOT edit `leagueBuilderStorage.ts` (it is a cross-branch overlap file).**
+- `src/src_figma/app/pages/LeagueBuilder.tsx:220` the "MLB DRAFT" hub button hardcodes `navigate("/league-builder/snake-draft")` (the routing bug); `:211` `/league-builder/draft` is the separate FARM startup draft (leave it).
+- The CURRENT LEAGUES list page: `src/src_figma/app/pages/LeagueBuilderLeagues.tsx` (renders the leagues; each league has `draftFormat`). This is where the per-league "Draft" action belongs.
+- The draft pages (each self-picks `leagues[0]` on load): `LeagueBuilderSnakeDraft.tsx:238` (`setActiveLeagueId(leagues[0].id)`), `LeagueBuilderAuctionDraft.tsx:115` (`leagueData.leagues[0].id`), `LeagueBuilderFarmAuctionDraft.tsx` (~:220), `LeagueBuilderDraft.tsx` (~:54, the farm startup draft). Each ALSO has a league-picker dropdown (`onChange={(e) => setActiveLeagueId(e.target.value)}`) — keep it.
+- App routes (`src/App.tsx` ~:298-310): `/league-builder/snake-draft`, `/league-builder/auction-draft`, `/league-builder/farm-auction-draft`, `/league-builder/draft` (static, no param today).
+
+**CONSTRAINTS:**
+- Edit ONLY Mode-1 UI files: `LeagueBuilderLeagues.tsx`, `LeagueBuilder.tsx`, and the MLB draft pages `LeagueBuilderSnakeDraft.tsx` + `LeagueBuilderAuctionDraft.tsx` (+ `LeagueBuilderFarmAuctionDraft.tsx` only if it shares the same MLB entry; the FARM startup `LeagueBuilderDraft.tsx` may get the query-param read for consistency but its routing is separate — keep its behavior). Plus test files.
+- **Do NOT edit `src/utils/leagueBuilderStorage.ts`** (cross-branch overlap — read `getLeagueDraftFormat` only). Do NOT touch `src/data/playerDatabase.ts`, `spec-docs/reference/iv_oracle.json`, `seasonAggregator.ts`, or any ratings/expected-stats/checkpoint engine.
+- Back-compat: a draft page opened WITHOUT `?leagueId` must still fall back to `leagues[0]` (so existing tests + existing nav paths keep working).
+- Branch-only. No `TRACKER_DB_VERSION` bump.
+
+**THE CHANGES:**
+1. **Per-league routing entry (`LeagueBuilderLeagues.tsx`):** add a per-league "Draft" action (button/menu item) on each league row that navigates by that league's format: `navigate(\`/league-builder/${getLeagueDraftFormat(league) === 'snake' ? 'snake-draft' : 'auction-draft'}?leagueId=${league.id}\`)`. (Reuse existing row-action styling.) This is the canonical RB-13b entry point.
+2. **Hub button (`LeagueBuilder.tsx:220`):** change the hardcoded "MLB DRAFT" → `navigate("/league-builder/snake-draft")` so it no longer forces snake. Minimal documented fix: route it to the leagues list (`navigate("/league-builder/leagues")`) so the user picks a league whose per-league Draft action then routes by format. (Do not invent a hub-level "active league" — there isn't one.)
+3. **Draft pages read the explicit leagueId:** in `LeagueBuilderSnakeDraft.tsx`, `LeagueBuilderAuctionDraft.tsx` (and `LeagueBuilderFarmAuctionDraft.tsx` if it's the same MLB entry), on load read `leagueId` from the URL query string (`useSearchParams` or equivalent already used in this codebase — match the existing pattern); if present and it matches a known league, `setActiveLeagueId(thatId)`; ELSE fall back to the existing `leagues[0]` default. Keep the in-page league-picker dropdown working.
+4. **A NEW routing unit test** (the build-dark, non-visible proof): a small pure helper or inline-tested function `draftRouteForFormat(format): string` (or test the navigate target) asserting `'snake' → '/league-builder/snake-draft'` and `'auction' | undefined → '/league-builder/auction-draft'`, and that the per-league action threads `?leagueId=<id>`. Plus assert a draft page honors `?leagueId` over `leagues[0]` (and falls back when absent).
+5. Keep all existing draft-page tests green (`src/src_figma/__tests__/leagueBuilder/LeagueBuilderDraft.test.tsx`, `LeagueBuilderSnakeDraft.test.tsx`, `src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx`, `LeagueBuilderFarmAuctionDraft.test.tsx`) — update their render/mocks only as needed (they may need a router/searchParams wrapper).
+
+**EXPECTED OUTPUT:** A unified diff over the Mode-1 UI files above + tests. Builds; tests pass.
+
+**VERIFICATION (run all; paste raw output):**
+1. `NODE_ENV= npx tsc -b` (or `npm run build`) → clean / exit 0.
+2. `NODE_ENV= npx vitest run` (FULL suite) — the sole characterized fail on this branch is `wpaRuntimeBoundary` (re-run any suspected NEW red SOLO before judging it real). Report the failed-file list.
+3. `git --no-pager diff --stat` → only the Mode-1 UI files + tests; confirm `src/utils/leagueBuilderStorage.ts` is NOT in it.
+
+**MAKE-OR-BREAK:** `getLeagueDraftFormat` is imported READ-ONLY (no `leagueBuilderStorage.ts` edit); a per-league Draft action routes snake-vs-auction by THAT league's `draftFormat` and threads `?leagueId`; the draft pages honor `?leagueId` but fall back to `leagues[0]` when absent (back-compat); snake stays selectable; the new routing unit test passes.
+
+**FAILURE PROTOCOL / STOP-IF:** STOP and report (do not improvise) if: (a) any cited anchor differs from the real file (re-read + report); (b) routing-by-format cannot be done without editing `leagueBuilderStorage.ts` or another overlap/frozen/Branch-A file (report which); (c) the existing draft-page tests cannot be kept green without a behavior change beyond the query-param/fallback (report it). A correct STOP with a precise reason is a SUCCESS.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: RB-13b ===== -->

@@ -29,7 +29,7 @@ import {
   type AuctionResult,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
-import type { Player, Team } from "../../hooks/useLeagueBuilderData";
+import type { LeagueTemplate, Player, Team } from "../../hooks/useLeagueBuilderData";
 
 const DEFAULT_AUCTION_SEED = "startup-auction-v1";
 const DRAFT_BOARD_GAP_KINDS = new Set([
@@ -72,6 +72,20 @@ function positionBadges(player: Player | null | undefined) {
   ));
 }
 
+function leagueIdFromSearch(search: string): string | null {
+  return new URLSearchParams(search).get("leagueId");
+}
+
+function resolveInitialLeagueId(
+  leagues: readonly Pick<LeagueTemplate, "id">[],
+  requestedLeagueId: string | null,
+): string {
+  if (requestedLeagueId && leagues.some((league) => league.id === requestedLeagueId)) {
+    return requestedLeagueId;
+  }
+  return leagues[0]?.id ?? "";
+}
+
 function resultText(result: AuctionResult, playerById: Map<string, Player>, teamById: Map<string, Team>): string {
   const playerName = playerDisplayName(playerById.get(result.playerId));
   if (result.disposition === "SOLD") {
@@ -103,6 +117,7 @@ export function LeagueBuilderAuctionDraft() {
   const navigate = useNavigate();
   const auction = useAuctionDraft();
   const { leagueData, loadAuction, session } = auction;
+  const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [seed, setSeed] = useState(DEFAULT_AUCTION_SEED);
   const [cpuCount, setCpuCount] = useState(0);
@@ -112,9 +127,9 @@ export function LeagueBuilderAuctionDraft() {
 
   useEffect(() => {
     if (!activeLeagueId && leagueData.leagues.length > 0) {
-      setActiveLeagueId(leagueData.leagues[0].id);
+      setActiveLeagueId(resolveInitialLeagueId(leagueData.leagues, requestedLeagueId));
     }
-  }, [activeLeagueId, leagueData.leagues]);
+  }, [activeLeagueId, leagueData.leagues, requestedLeagueId]);
 
   useEffect(() => {
     if (!activeLeagueId) return;

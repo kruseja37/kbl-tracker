@@ -207,6 +207,7 @@ function mockHook(overrides: Record<string, unknown> = {}) {
 describe('LeagueBuilderSnakeDraft', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, '', '/league-builder/snake-draft');
     mockRefresh.mockResolvedValue(undefined);
     mockGetRoster.mockResolvedValue(currentRoster);
     mockUpdateRoster.mockImplementation(async (roster) => roster);
@@ -220,6 +221,33 @@ describe('LeagueBuilderSnakeDraft', () => {
       lastModified: '2026-01-02',
     }));
     mockHook();
+  });
+
+  test('uses leagueId query param over the first league when it matches a known league', async () => {
+    mockHook({
+      leagues: [
+        baseLeague,
+        { ...baseLeague, id: 'league-2', name: 'League Two' },
+      ],
+    });
+    window.history.pushState({}, '', '/league-builder/snake-draft?leagueId=league-2');
+
+    render(<LeagueBuilderSnakeDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('LEAGUE')).toHaveValue('league-2');
+      expect(mockGetRegisteredPool).toHaveBeenCalledWith('league-2');
+    });
+    expect(mockGetRegisteredPool).not.toHaveBeenCalledWith('league-1');
+  });
+
+  test('falls back to leagues[0] when leagueId query param is absent', async () => {
+    render(<LeagueBuilderSnakeDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('LEAGUE')).toHaveValue('league-1');
+      expect(mockGetRegisteredPool).toHaveBeenCalledWith('league-1');
+    });
   });
 
   test('mounts a resumed MLB draft board and shows the team on the clock', async () => {

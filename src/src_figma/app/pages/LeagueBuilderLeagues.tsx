@@ -15,6 +15,7 @@ import {
   Copy,
   Edit3,
   ChevronRight,
+  Shuffle,
   Users,
   Loader2,
   X,
@@ -30,6 +31,7 @@ import {
 import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
+import { getLeagueDraftFormat } from "../../../utils/leagueBuilderStorage";
 
 // ============================================
 // TYPES
@@ -91,6 +93,16 @@ function formatBalanceMode(value: BalanceMode | undefined): string {
 
 function formatCheckpointCadence(value: CheckpointCadence | undefined): string {
   return CHECKPOINT_CADENCE_OPTIONS.find((option) => option.value === (value ?? CHECKPOINT_CADENCE_DEFAULT))?.label ?? "Standard";
+}
+
+export function draftRouteForFormat(format: LeagueTemplate["draftFormat"]): "/league-builder/snake-draft" | "/league-builder/auction-draft" {
+  return getLeagueDraftFormat({ draftFormat: format }) === "snake"
+    ? "/league-builder/snake-draft"
+    : "/league-builder/auction-draft";
+}
+
+export function draftRouteForLeague(league: Pick<LeagueTemplate, "id" | "draftFormat">): string {
+  return `${draftRouteForFormat(league.draftFormat)}?leagueId=${encodeURIComponent(league.id)}`;
 }
 
 // ============================================
@@ -376,6 +388,16 @@ export function LeagueBuilderLeagues() {
                         <Database className="w-4 h-4" />
                       )}
                       <span className="text-xs font-bold">Register Pool</span>
+                    </button>
+
+                    {/* Draft */}
+                    <button
+                      onClick={() => navigate(draftRouteForLeague(league))}
+                      className="px-3 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-[3px] border-[#E8E8D8]/70 transition flex items-center gap-2"
+                      title="Draft league"
+                    >
+                      <Shuffle className="w-4 h-4" />
+                      <span className="text-xs font-bold">Draft</span>
                     </button>
 
                     {/* Edit */}

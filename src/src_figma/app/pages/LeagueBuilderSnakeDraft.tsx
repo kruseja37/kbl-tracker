@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   toConstructionPlayer,
   useLeagueBuilderData,
+  type LeagueTemplate,
   type LeagueBuilderMlbDraftSession,
   type Player,
   type RegisteredPool,
@@ -51,6 +52,20 @@ function teamDisplayName(team: Team): string {
 
 function playerDisplayName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim() || player.id;
+}
+
+function leagueIdFromSearch(search: string): string | null {
+  return new URLSearchParams(search).get("leagueId");
+}
+
+function resolveInitialLeagueId(
+  leagues: readonly Pick<LeagueTemplate, "id">[],
+  requestedLeagueId: string | null,
+): string {
+  if (requestedLeagueId && leagues.some((league) => league.id === requestedLeagueId)) {
+    return requestedLeagueId;
+  }
+  return leagues[0]?.id ?? "";
 }
 
 function formatMoney(value: number): string {
@@ -220,6 +235,7 @@ export function LeagueBuilderSnakeDraft() {
     getMlbDraftSession,
     saveMlbDraftSession,
   } = useLeagueBuilderData();
+  const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [seed, setSeed] = useState("startup-mlb-v1");
   const [teamOrder, setTeamOrder] = useState<string[]>([]);
@@ -235,9 +251,9 @@ export function LeagueBuilderSnakeDraft() {
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
-      setActiveLeagueId(leagues[0].id);
+      setActiveLeagueId(resolveInitialLeagueId(leagues, requestedLeagueId));
     }
-  }, [activeLeagueId, leagues]);
+  }, [activeLeagueId, leagues, requestedLeagueId]);
 
   const activeLeague = useMemo(
     () => leagues.find((league) => league.id === activeLeagueId) ?? null,

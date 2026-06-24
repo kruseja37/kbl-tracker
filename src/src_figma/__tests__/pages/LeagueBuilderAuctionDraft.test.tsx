@@ -50,7 +50,7 @@ function deleteDatabase(name: string): Promise<void> {
   });
 }
 
-function makeLeague(): LeagueTemplate {
+function makeLeague(overrides: Partial<LeagueTemplate> = {}): LeagueTemplate {
   return {
     id: "league-page",
     name: "Page League",
@@ -62,6 +62,7 @@ function makeLeague(): LeagueTemplate {
     balanceMode: "taxed",
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
+    ...overrides,
   };
 }
 
@@ -187,11 +188,13 @@ function mockLeagueData() {
   } as unknown as UseLeagueBuilderDataReturn;
 
   vi.mocked(useLeagueBuilderData).mockReturnValue(leagueData);
+  return leagueData;
 }
 
 describe("LeagueBuilderAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    window.history.pushState({}, "", "/league-builder/auction-draft");
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
     mockLeagueData();
@@ -219,6 +222,35 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByRole("button", { name: /IV SORT/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Avery Anchor|Blake Bolt/)).toBeInTheDocument();
     expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
+  });
+
+  test("uses leagueId query param over the first league when it matches a known league", async () => {
+    const leagueData = mockLeagueData();
+    leagueData.leagues = [
+      makeLeague({ id: "first-league", name: "First League" }),
+      makeLeague({ id: "league-page", name: "Page League" }),
+    ];
+    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page");
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("LEAGUE")).toHaveValue("league-page");
+    });
+  });
+
+  test("falls back to leagues[0] when leagueId query param is absent", async () => {
+    const leagueData = mockLeagueData();
+    leagueData.leagues = [
+      makeLeague({ id: "first-league", name: "First League" }),
+      makeLeague({ id: "second-league", name: "Second League" }),
+    ];
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("LEAGUE")).toHaveValue("first-league");
+    });
   });
 
   test("renders open bidding with names and records a SOLD result row with winner salary", async () => {
