@@ -170,6 +170,7 @@ import type {
 } from "../../../utils/leagueBuilderStorage";
 import type { RosterAnalyzerReport } from "../../../engines/rosterAnalyzerEngine";
 import { formatSalary } from "../../../engines/salaryCalculator";
+import { isPlayerRookie, type RookieStatusValue } from "../../../engines/rookieStatus";
 import {
   buildLineupSnapshotFromSlots,
   buildOptimalLineupSnapshot,
@@ -213,6 +214,7 @@ interface RosterTableItem {
   statSummary: string;
   statSortValue: number;
   designationSummary: string;
+  rookieStatus?: RookieStatusValue | null;
   hiddenSafe: boolean;
   originalIndex: number;
 }
@@ -236,6 +238,12 @@ const TEAM_HUB_FAN_HOPEFUL_BADGE = {
   borderStyle: 'solid' as const,
   colorHex: '#38BDF8',
   backgroundHex: '#123A4A',
+};
+const TEAM_HUB_ROOKIE_BADGE = {
+  label: 'ROOKIE',
+  borderStyle: 'solid' as const,
+  colorHex: '#F59E0B',
+  backgroundHex: '#3A2412',
 };
 const FRANCHISE_TEAM_HUB_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
   'trade',
@@ -271,10 +279,31 @@ interface TeamDesignationStripBadge {
 interface TeamDesignationStripSlot {
   key: string;
   title: string;
+  playerId?: string | null;
   playerName: string | null;
   badge: TeamDesignationStripBadge | null;
+  rookieStatus?: RookieStatusValue | null;
   detail: string;
   stateLabel: string;
+}
+
+function renderTeamHubBadge(
+  badge: TeamDesignationStripBadge,
+  className = 'inline-flex border-2 px-2 py-1 text-[7px] font-bold leading-none',
+) {
+  return (
+    <span
+      className={className}
+      style={{
+        borderColor: badge.colorHex,
+        borderStyle: badge.borderStyle,
+        color: badge.colorHex,
+        backgroundColor: badge.backgroundHex,
+      }}
+    >
+      {badge.label}
+    </span>
+  );
 }
 
 interface FranchiseProfileEditForm {
@@ -858,6 +887,7 @@ function convertFranchisePlayerToRosterItem(input: {
       hiddenSafe,
       projectedDesignationRows: input.projectedDesignationRows,
     }),
+    rookieStatus: player.rookieStatus ?? null,
     hiddenSafe,
     originalIndex: input.originalIndex,
   };
@@ -2089,8 +2119,10 @@ export function TeamHubContent() {
       return {
         key: type,
         title,
+        playerId: row.playerId,
         playerName: resolveTeamDesignationPlayerName(row.playerId, franchisePlayerById, row.playerName),
         badge,
+        rookieStatus: franchisePlayerById.get(row.playerId)?.rookieStatus ?? null,
         detail: row.status === 'active' ? 'Final holder' : 'Projected mid-season',
         stateLabel: row.status === 'active' ? 'Final' : 'Projected',
       };
@@ -2105,8 +2137,12 @@ export function TeamHubContent() {
       {
         key: 'CAPTAIN',
         title: 'Captain',
+        playerId: franchiseTeam?.captainPlayerId,
         playerName: captainName,
         badge: captainName ? TEAM_HUB_CAPTAIN_BADGE : null,
+        rookieStatus: franchiseTeam?.captainPlayerId
+          ? franchisePlayerById.get(franchiseTeam.captainPlayerId)?.rookieStatus ?? null
+          : null,
         detail: 'Season-start assignment',
         stateLabel: captainName ? 'Set' : 'Valid null designation',
       },
@@ -2117,8 +2153,10 @@ export function TeamHubContent() {
       {
         key: 'FAN_HOPEFUL',
         title: 'Fan Hopeful',
+        playerId: fanHopefulPlayerId ?? undefined,
         playerName: resolveTeamDesignationPlayerName(fanHopefulPlayerId, franchisePlayerById),
         badge: fanHopefulPlayerId ? TEAM_HUB_FAN_HOPEFUL_BADGE : null,
+        rookieStatus: fanHopefulPlayer?.rookieStatus ?? null,
         detail: fanHopefulPlayerId
           ? `Scouted ${fanHopefulScoutedGrade ?? 'grade unavailable'}`
           : 'No holder',
@@ -2882,18 +2920,11 @@ export function TeamHubContent() {
                       {slot.playerName ? (
                         <>
                           <div className="mt-1 text-[9px] font-bold text-[var(--franchise-text)] leading-tight">{slot.playerName}</div>
-                          {slot.badge && (
-                            <span
-                              className="mt-2 inline-flex border-2 px-2 py-1 text-[7px] font-bold leading-none"
-                              style={{
-                                borderColor: slot.badge.colorHex,
-                                borderStyle: slot.badge.borderStyle,
-                                color: slot.badge.colorHex,
-                                backgroundColor: slot.badge.backgroundHex,
-                              }}
-                            >
-                              {slot.badge.label}
-                            </span>
+                          {(slot.badge || isPlayerRookie(slot.rookieStatus, seasonId)) && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {slot.badge && renderTeamHubBadge(slot.badge)}
+                              {isPlayerRookie(slot.rookieStatus, seasonId) && renderTeamHubBadge(TEAM_HUB_ROOKIE_BADGE)}
+                            </div>
                           )}
                           <div className="mt-2 text-[7px] text-[var(--franchise-text)]/65">{slot.detail}</div>
                         </>
@@ -3325,6 +3356,11 @@ export function TeamHubContent() {
                     </td>
                     <td className={`py-2 px-2 text-left ${player.hiddenSafe ? 'text-[var(--franchise-text)]/60' : 'text-[var(--franchise-text)]'}`}>
                       {player.designationSummary}
+                      {isPlayerRookie(player.rookieStatus, seasonId) && (
+                        <div className="mt-1">
+                          {renderTeamHubBadge(TEAM_HUB_ROOKIE_BADGE, 'inline-flex border-2 px-2 py-1 text-[7px] font-bold leading-none')}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-center">
                       <button
@@ -3504,6 +3540,7 @@ export function TeamHubContent() {
         <FranchisePlayerProfileModal
           profile={selectedProfile}
           projectedDesignations={selectedProfileProjectedDesignations}
+          rookieStatus={selectedProfilePlayer?.rookieStatus ?? null}
           continuity={selectedProfileContinuity}
           relationshipContext={selectedProfileRelationshipContext}
           continuityLoading={continuityLoading}
@@ -3637,6 +3674,7 @@ interface FranchisePlayerDirectoryPanelProps {
 interface FranchisePlayerProfileModalProps {
   profile: FranchisePlayerProfileViewModel;
   projectedDesignations: FranchisePlayerDesignationRecord[];
+  rookieStatus?: RookieStatusValue | null;
   continuity: FranchisePlayerContinuityReport | null;
   relationshipContext: FranchiseRelationshipContextPreviewReport | null;
   continuityLoading: boolean;
@@ -4412,6 +4450,7 @@ function ProfileSelectInput<T extends string>({
 function FranchisePlayerProfileModal({
   profile,
   projectedDesignations,
+  rookieStatus,
   continuity,
   relationshipContext,
   continuityLoading,
@@ -4524,30 +4563,32 @@ function FranchisePlayerProfileModal({
           </div>
         )}
 
-        {projectedDesignations.length > 0 && (
+        {(projectedDesignations.length > 0 || isPlayerRookie(rookieStatus, seasonId)) && (
           <section className="mb-3 border-[4px] border-[var(--franchise-border)] bg-[var(--franchise-panel-darker)] p-3">
             <div className="text-[9px] font-bold text-[var(--franchise-gold)]">PROJECTED DESIGNATIONS</div>
             <div className="mt-1 text-[8px] text-[var(--franchise-text)]/65">
               Solid badges are live engine designations. Dotted Proj. badges are mid-season projections. Season-end locking, morale, salary, and Mode 3 effects remain blocked.
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
+              {isPlayerRookie(rookieStatus, seasonId) &&
+                renderTeamHubBadge(TEAM_HUB_ROOKIE_BADGE, 'border-2 bg-[var(--franchise-border)] px-2 py-1 text-[8px] font-bold')}
               {projectedDesignations.map((designation) => {
                 const badge = designation.status === 'active'
                   ? (getLiveDesignationBadge(designation.type) ?? getProjectedDesignationBadge(designation.type))
                   : getProjectedDesignationBadge(designation.type);
                 return (
-                <span
-                  key={`${designation.type}:${designation.teamId}:${designation.calculatedAt}`}
-                  className="border-2 bg-[var(--franchise-border)] px-2 py-1 text-[8px] font-bold"
-                  style={{
-                    borderColor: badge.colorHex,
-                    borderStyle: badge.borderStyle,
-                    color: badge.colorHex,
-                    backgroundColor: badge.backgroundHex,
-                  }}
-                >
-                  {badge.label}
-                </span>
+                  <span
+                    key={`${designation.type}:${designation.teamId}:${designation.calculatedAt}`}
+                    className="border-2 bg-[var(--franchise-border)] px-2 py-1 text-[8px] font-bold"
+                    style={{
+                      borderColor: badge.colorHex,
+                      borderStyle: badge.borderStyle,
+                      color: badge.colorHex,
+                      backgroundColor: badge.backgroundHex,
+                    }}
+                  >
+                    {badge.label}
+                  </span>
                 );
               })}
             </div>

@@ -19097,3 +19097,138 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: A1.5c-4 ===== -->
+
+<!-- ===== CONTRACT: A2.3-RA-ROOKIE ===== -->
+## CONTRACT: A2.3-RA-ROOKIE — drafted-prospect rookie status (additive field + first-call-up stamp + read-time window + badge)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch A, codex/franchise-v1-next, worktree /Users/johnkruse/Projects/kbl-tracker). Additive living-season feature. Builder only — do NOT audit/commit/push.
+
+GOAL:
+Add a per-PLAYER, time-boxed ROOKIE status: every player drafted as a farm prospect, upon their FIRST call-up to MLB, becomes a rookie for that season ONLY — and a recalled veteran (sent down then back up) NEVER does. Implement as two additive optional `Player` fields + a first-call-up stamp + a read-time "is this player a rookie THIS season" helper (NO explicit rollover-clear write) + a visible ROOKIE badge. The ratings rookie modifier (RA-5) is FUTURE WORK — A2.3 is field + stamp + badge only, no modifier wiring.
+
+SOURCE OF TRUTH:
+- `RATINGS_ADJUSTMENT_SPEC.md` §13B (Rookie vs Fan Hopeful — RULED): ROOKIE = per-player, drafted-farm-prospect, on first call-up, NOT a recalled vet; do NOT reuse `rookieScaleActiveBySeason` (it fires on EVERY call-up incl. recall and never clears); add `draftedAsFarmProspect` (draft-origin gate) + `rookieStatus`; visible badge mirroring existing badges; do NOT add ROOKIE to `FranchiseDesignationType`; no DB version bump.
+- **JK RULING 2026-06-23 (DECISIONS_LOG): rookie window = DEBUT SEASON ONLY** (clears at next-season rollover). Implemented as a READ-TIME season comparison (`activatedSeasonId === currentSeasonId`), NOT an explicit rollover-clear mutation — equivalent to "clears at rollover", mirrors the season-keyed `rookieScaleActiveBySeason` model, and avoids touching the (ambiguous) rollover path.
+
+CONSTRAINTS:
+- EDIT ONLY: `src/utils/leagueBuilderStorage.ts` (Player type), `src/utils/franchiseStartupProspectDraft.ts` (stamp `draftedAsFarmProspect`), `src/utils/franchiseRosterMovement.ts` (stamp `rookieStatus` on first call-up), `src/src_figma/app/components/TeamHubContent.tsx` (badge). CREATE: `src/engines/rookieStatus.ts` (pure helper) + `src/engines/__tests__/rookieStatus.test.ts`. EDIT the test `src/utils/tests/franchiseRosterMovement.test.ts` (new rookie assertions).
+- Do NOT touch: `src/utils/prospectScoutingDraftEngine.ts` (BRANCH-B CHOKEPOINT — only the auto-snake WRAPPER `franchiseStartupProspectDraft.ts` gets the stamp on Branch A; the auction-path stamp is a Branch-B follow-up), `src/utils/trackerDb.ts` / any DB version / store list, `src/reference/iv_oracle.json` (FROZEN), `src/utils/careerStorage.ts`, `src/utils/seasonStorage.ts`.
+- NO TRACKER_DB_VERSION bump (stays 25; the version-pin test must stay green). Branch-only; do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+
+A) `src/utils/leagueBuilderStorage.ts` — Player interface: IMMEDIATELY AFTER `rookieScaleActiveBySeason?: Record<string, boolean>;` (~:270) add:
+   ```
+   draftedAsFarmProspect?: boolean;
+   rookieStatus?: { activatedSeasonId: string };
+   ```
+
+B) `src/utils/franchiseStartupProspectDraft.ts` — in `toBridgeProspectPlayer` (~:243-251), in the returned object add `draftedAsFarmProspect: true,` alongside `sourceDatabase: 'startup-prospect-draft',`.
+
+C) `src/utils/franchiseRosterMovement.ts` — in `buildCallUpSalaryLedgerUpdate`, the `transition.firstCallUp` TRUE branch (~:338-339), currently `? withSalaryFields(player, calculateFranchiseCurrentSalary(player, { rookieScaleActive: true }), input, computedAt)`. Replace with a spread that stamps `rookieStatus` ONLY for a drafted prospect:
+   ```
+   ? {
+       ...withSalaryFields(player, calculateFranchiseCurrentSalary(player, { rookieScaleActive: true }), input, computedAt),
+       ...(player.draftedAsFarmProspect ? { rookieStatus: { activatedSeasonId: scope.seasonId } } : {}),
+     }
+   ```
+   Do NOT alter the `: { ...recall branch... }` (firstCallUp===false) — a recalled vet must never get `rookieStatus`.
+
+D) CREATE `src/engines/rookieStatus.ts` (pure; no React/storage/Date/random; no Player import):
+   ```
+   export interface RookieStatusValue { activatedSeasonId: string; }
+   // Debut-season-only (JK 2026-06-23): a player is a rookie ONLY during the season the status was activated.
+   export function isPlayerRookie(
+     rookieStatus: RookieStatusValue | null | undefined,
+     currentSeasonId: string | null | undefined,
+   ): boolean {
+     if (!rookieStatus || !currentSeasonId) return false;
+     return rookieStatus.activatedSeasonId === currentSeasonId;
+   }
+   ```
+
+E) CREATE `src/engines/__tests__/rookieStatus.test.ts`: same season → true; different season → false; undefined/null status → false; null/empty currentSeasonId → false.
+
+F) `src/src_figma/app/components/TeamHubContent.tsx` — render a ROOKIE badge next to the existing per-player designation badge `<span>`s (~:2886-2896 and ~:4539-4550), gated on `isPlayerRookie(player.rookieStatus, <the active franchise seasonId already in scope in this component>)`. Mirror the existing badge `<span>` style. Do NOT add 'ROOKIE' to `FranchiseDesignationType`.
+   STOP-IF the active/current franchise seasonId is NOT already cleanly in scope at the badge render site — report what IS available; do NOT fabricate a season lookup or thread new props deeply. (If blocked, ship A–E + the tests and report the badge as DEFERRED.)
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run` → FULL suite. Expected failed files ⊆ { `wpaRuntimeBoundary` (hard), `GameTrackerLaunchState` (solo-pass order-flake), `franchiseManualSmokeFixture` (solo-pass order-flake) } = the characterized baseline ⇒ ZERO NEW REDS. The new `rookieStatus` test + the `franchiseRosterMovement` rookie tests pass.
+- `git --no-pager diff --stat`.
+
+Tests to ADD in `src/utils/tests/franchiseRosterMovement.test.ts`:
+- a drafted prospect (`draftedAsFarmProspect: true`) on FIRST call-up → resulting `player.rookieStatus.activatedSeasonId === seasonId`.
+- a NON-drafted player on first call-up → no `rookieStatus` (undefined).
+- a recalled veteran (a prior ledger row exists → `firstCallUp===false`) → no `rookieStatus`.
+
+FORMAT: 1. files changed (every path) 2. the diffs / new files 3. verification output verbatim 4. "A2.3 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF stamping `draftedAsFarmProspect`/`rookieStatus` would require editing `prospectScoutingDraftEngine.ts` (Branch-B chokepoint) or a trackerDb version bump — report it; do NOT edit those.
+- STOP-IF the `firstCallUp` gate semantics differ from "false once any ledger row (incl. a send-down) exists" — report the real semantics.
+- STOP-IF the badge season is not in scope (per F) — ship A–E + tests, report the badge deferred.
+- Do NOT reuse `rookieScaleActiveBySeason` for rookie status. Do NOT add an explicit rollover-clear mutation. Do NOT wire any ratings modifier (RA-5 is future).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: A2.3-RA-ROOKIE ===== -->
+
+<!-- ===== CONTRACT: S7b ===== -->
+## CONTRACT: S7b — re-anchor the farm-auction scout range onto the grade band (band-is-range × chemFit)
+
+ROUTE: Codex (gpt-5.5) | high reasoning effort
+ROLE: KBL builder (Branch B, codex/mode1-v1-b, worktree /Users/johnkruse/Projects/kbl-mode1-b). Re-anchor one scout-range function + rewrite its keystone test. Builder only — do NOT audit/commit/push.
+
+GOAL:
+Re-anchor `scoutRangeForProspect` (`LeagueBuilderFarmAuctionDraft.tsx`) so the farm-auction scout price RANGE is derived from the current bidder's scout's OVERALL GRADE BAND (band-is-range) instead of a noise band around the prospect's true IV. The grade band IS the range; DROP `perceivedValueRange` from THIS path. Apply the chemistry-fit multiplier to BOTH endpoints. Then rewrite the keystone test to the new expectation.
+
+SOURCE OF TRUTH:
+- JK RULINGS (DECISIONS_LOG 2026-06-23): S7 guidance = grade-band + chemFit; S7a range = midpoint (already shipped in `gradeBandToPriceRange`); **S7b guidance = BAND-IS-RANGE (drop `perceivedValueRange` on THIS path)**; keep `perceivedValueRange`/`scoutValueRange.ts` ELSEWHERE (S7d), relocate `gradeToTwentyEighty` (S7d) — NOT this ticket.
+- **JK RULING 2026-06-23: S7b band source = RE-DERIVE ON THE AUCTION PAGE** (do not persist a band). The auction range is the CURRENT BIDDER's team scout's deterministic band — it is NOT required to byte-match the separate `/league-builder/draft` board (different page, different scout). Verified: `overallGradeBand` is NOT on `ProspectProfile`/the DTO; it must be computed inline from the prospect's true grade.
+- Existing exported helpers (IMPORT, do not edit): `scoutOverallGradeBand(trueGrade, tier, seed)` + `scoutTierForPosition(position, descriptor)` (`prospectScoutingDraftEngine.ts:1267` / `:1221`) · `gradeBandToPriceRange(band)` (S7a, `gradeBandPrice.ts`) · `chemistryFitPriceMultiplier` · `ProspectProfile.trueGrade` (`prospectScoutingDraftEngine.ts:110`).
+- Board reference recipe (`leagueBuilderStartupFarmDraft.ts:1086-1090`): `scoutOverallGradeBand(candidate.trueGrade, scoutTierForPosition(position, descriptor), seed)`.
+
+CONSTRAINTS:
+- EDIT ONLY: `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx` (the `scoutRangeForProspect` function + its imports) and `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` (the keystone block).
+- Do NOT touch: `src/utils/prospectScoutingDraftEngine.ts` (CHOKEPOINT — IMPORT only), `src/engines/gradeBandPrice.ts` (S7a, read-only), `src/engines/scoutValueRange.ts` (`perceivedValueRange` — KEEP for S7d; other consumers remain), `src/utils/draftFreezeInputs.ts` (separate `perceivedValueRange` consumer), the frozen oracle / trackerDb / any DB version.
+- NO TRACKER_DB_VERSION bump. Branch-only (codex/mode1-v1-b); do NOT commit/push; leave changes unstaged.
+
+EXPECTED OUTPUT:
+
+A) Rewrite the body of `scoutRangeForProspect` (`LeagueBuilderFarmAuctionDraft.tsx:103-124`). Keep the SAME signature + the `if (!prospect || !auctionPlayer || !teamId) return null;` guard. New body:
+   ```
+   const scout = scoutsByTeamId?.[teamId];
+   if (!scout) return null;
+   const band = scoutOverallGradeBand(
+     prospect.prospectProfile.trueGrade,
+     scoutTierForPosition(prospect.primaryPosition as DraftPosition, scout),
+     `${seed}:grade-band:${prospect.id}:${teamId}`,
+   );
+   const priceRange = gradeBandToPriceRange(band);          // { low, high } off GRADE_SALARY_BOUNDS midpoints
+   const chemFit = chemistryFitPriceMultiplier(prospect.chemistry, rosterChemistryCounts);
+   const low = priceRange.low * chemFit;
+   const high = priceRange.high * chemFit;
+   const displayedEstimate = (low + high) / 2;              // range=midpoint representative point
+   return { w: 0, low, high, displayedEstimate };           // valid ScoutValueRange
+   ```
+   The returned object MUST satisfy the `ScoutValueRange` interface (read `scoutValueRange.ts`). If `w` is documented as a scout-noise fraction, 0 is correct under band-is-range; STOP-IF a real consumer reads `w` meaningfully.
+B) Add the imports for `scoutOverallGradeBand`, `scoutTierForPosition` (from `prospectScoutingDraftEngine`), `gradeBandToPriceRange` (from `gradeBandPrice`). REMOVE now-unused imports from THIS file (`scoutPriceOpinion`, `scoutAccuracy`, `perceivedValueRange`) IF unused elsewhere in the file (grep to confirm — they are used by `scoutRangeForProspect` only). Keep `gradeToTwentyEighty` (used by `scoutGradeDisplay` — S7d's concern).
+C) Rewrite the keystone test block (`LeagueBuilderFarmAuctionDraft.test.tsx` ~:262-342) so the EXPECTED scout range is computed the SAME way the component now does — `gradeBandToPriceRange(scoutOverallGradeBand(prospect.prospectProfile.trueGrade, scoutTierForPosition(prospect.primaryPosition, scout), \`${activeSeed}:grade-band:${prospect.id}:${teamId}\`)) × chemFit` on both endpoints, midpoint = mean(low,high) — using the SAME `activeSeed` + `teamId` + scout descriptor the component uses for the current lot. Preserve the non-scout assertions. **MAKE-OR-BREAK:** the test's expected band must use the IDENTICAL seed string, scout descriptor, and `trueGrade` the component uses, or the asserted rendered text will not match.
+
+VERIFICATION (run, paste actual output):
+- `NODE_ENV= npm --prefix /Users/johnkruse/Projects/kbl-mode1-b run build` → exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx` (from the worktree) → the keystone test passes.
+- `NODE_ENV= npx vitest run` → FULL suite. Expected failed files ⊆ { `wpaRuntimeBoundary` } = the characterized baseline ⇒ ZERO NEW REDS.
+- `git --no-pager diff --stat`.
+
+FORMAT: 1. files changed 2. the diffs 3. verification output verbatim 4. "S7b complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- STOP-IF `prospect.prospectProfile.trueGrade` is not the true grade, or the scout descriptor type / `scoutTierForPosition`'s tier param does not match what `scoutOverallGradeBand` expects — report the real types.
+- STOP-IF the component's current-lot seed/teamId/scout the test must mirror cannot be determined exactly — report what the component uses.
+- STOP-IF dropping `perceivedValueRange` from this path breaks any OTHER consumer in this file — report it.
+- Do NOT relocate `gradeToTwentyEighty`, do NOT delete `scoutValueRange.ts`, do NOT touch the chokepoint engine (S7c/S7d).
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: S7b ===== -->

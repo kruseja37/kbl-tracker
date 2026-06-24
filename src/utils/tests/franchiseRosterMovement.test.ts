@@ -39,6 +39,7 @@ import {
   clearFranchiseSeasonLedgerDatabaseForTests,
   getFranchiseSeasonLedgerRow,
   resetFranchiseSeasonLedgerDatabaseForTests,
+  upsertFranchiseSeasonLedgerRow,
 } from '../franchiseSeasonLedgerStorage';
 import { ROOKIE_SCALE_FACTOR } from '../../engines/salaryCalculator';
 
@@ -583,6 +584,154 @@ describe('franchise roster movement boundary', () => {
       status: 'active',
       capCharge: activeLedger?.salary,
     }));
+  });
+
+  test('drafted farm prospect first call-up stamps rookie status for the active season', async () => {
+    const franchiseId = nextId('franchise-rookie-drafted');
+    const seasonId = `${franchiseId}-season-1`;
+    const playerId = 'drafted-rookie-first-call-up';
+    await saveFranchisePlayer(franchiseId, makePlayer({
+      id: playerId,
+      draftedAsFarmProspect: true,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      ratingRevealState: 'hidden',
+    }));
+    await saveFranchiseFarmRecord({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      optionsUsed: 0,
+      ratingRevealState: 'hidden',
+    });
+
+    const callUp = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+
+    expect(callUp.success).toBe(true);
+    expect(callUp.player?.rookieStatus?.activatedSeasonId).toBe(seasonId);
+  });
+
+  test('non-drafted player first call-up does not stamp rookie status', async () => {
+    const franchiseId = nextId('franchise-rookie-non-drafted');
+    const seasonId = `${franchiseId}-season-1`;
+    const playerId = 'non-drafted-first-call-up';
+    await saveFranchisePlayer(franchiseId, makePlayer({
+      id: playerId,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      ratingRevealState: 'hidden',
+    }));
+    await saveFranchiseFarmRecord({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      optionsUsed: 0,
+      ratingRevealState: 'hidden',
+    });
+
+    const callUp = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+
+    expect(callUp.success).toBe(true);
+    expect(callUp.player?.rookieStatus).toBeUndefined();
+  });
+
+  test('recalled veteran with a prior ledger row does not stamp rookie status', async () => {
+    const franchiseId = nextId('franchise-rookie-recall');
+    const seasonId = `${franchiseId}-season-1`;
+    const playerId = 'recalled-veteran-no-rookie';
+    await saveFranchisePlayer(franchiseId, makePlayer({
+      id: playerId,
+      draftedAsFarmProspect: true,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      ratingRevealState: 'revealed',
+    }));
+    await saveFranchiseFarmRecord({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      optionsUsed: 1,
+      ratingRevealState: 'revealed',
+    });
+    await upsertFranchiseSeasonLedgerRow({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      playerId,
+      salary: 1_000_000,
+      status: 'deadMoney',
+      capCharge: 750_000,
+      calculationVersion: 'test-existing-ledger',
+      computedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const recall = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 1,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+
+    expect(recall.success).toBe(true);
+    expect(recall.player?.rookieStatus).toBeUndefined();
+  });
+
+  test('drafted prospect with prior rookie activation is not re-stamped in a later season', async () => {
+    const franchiseId = nextId('franchise-rookie-prior-activation');
+    const debutSeasonId = `${franchiseId}-season-1`;
+    const seasonId = `${franchiseId}-season-2`;
+    const playerId = 'prior-activation-no-restamp';
+    await saveFranchisePlayer(franchiseId, makePlayer({
+      id: playerId,
+      draftedAsFarmProspect: true,
+      rookieStatus: { activatedSeasonId: debutSeasonId },
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FARM' }],
+      ratingRevealState: 'revealed',
+    }));
+    await saveFranchiseFarmRecord({
+      franchiseId,
+      seasonId,
+      seasonNumber: 2,
+      teamId: 'team-1',
+      playerId,
+      optionsUsed: 0,
+      ratingRevealState: 'revealed',
+    });
+
+    const callUp = await callUpFranchisePlayer({
+      franchiseId,
+      seasonId,
+      seasonNumber: 2,
+      teamId: 'team-1',
+      playerId,
+      leagueId: 'league-1',
+      rosterMovementPhase: 'REGULAR_SEASON',
+    });
+
+    expect(callUp.success).toBe(true);
+    expect(callUp.player?.rookieStatus?.activatedSeasonId).toBe(debutSeasonId);
   });
 
 

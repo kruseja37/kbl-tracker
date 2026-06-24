@@ -268,6 +268,8 @@ export interface Player {
   salaryStatsScopeId?: string;
   salarySeasonNumber?: number;
   rookieScaleActiveBySeason?: Record<string, boolean>;
+  draftedAsFarmProspect?: boolean;
+  rookieStatus?: { activatedSeasonId: string };
   salaryUpdatedAt?: string;
   salaryFactors?: {
     source: 'multifactor-current-season' | 'hidden-farm-public-context';

@@ -247,6 +247,7 @@ function toBridgeProspectPlayer(player: LeagueBuilderProspectPlayerDto): BridgeP
     personality: player.personality as Personality,
     chemistry: player.chemistry as Chemistry,
     sourceDatabase: 'startup-prospect-draft',
+    draftedAsFarmProspect: true,
   };
 }
 

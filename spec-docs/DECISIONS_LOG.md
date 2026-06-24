@@ -7,6 +7,14 @@
 
 ## June 2026
 
+### 2026-06-23 (attended Hybrid via `/kbl-captain`): A2.3 rookie-window + S7b band-source — 2 forks RULED
+
+**Context:** fresh Hybrid session resuming the dual-branch build loop (Branch A `codex/franchise-v1-next` = A2.3 RA-rookie; Branch B `codex/mode1-v1-b` = S7b scout-range re-anchor). Grounding surfaced two genuine forks; JK ruled inline (AskUserQuestion) so the builds dispatch on no guesses.
+
+1. **A2.3 — rookie window = DEBUT SEASON ONLY.** A drafted farm prospect becomes a ROOKIE on first call-up and keeps the development edge only for that season; clears at the next-season rollover. §13B left this open ("next-season rollover OR after N games/AB/IP"). **Captain implementation note (engineering, documented):** implemented as a READ-TIME season comparison — store `rookieStatus.activatedSeasonId`, treat a player as a rookie only when `activatedSeasonId === currentSeasonId` (pure `isPlayerRookie`); **no explicit rollover-clear mutation** (mirrors the season-keyed `rookieScaleActiveBySeason` model; avoids touching the ~20-file rollover path). The `draftedAsFarmProspect` stamp lands on the Branch-A-safe auto-snake wrapper (`franchiseStartupProspectDraft.ts`); the Mode-1 auction-path stamp (`prospectScoutingDraftEngine.ts`, a Branch-B chokepoint) is a deferred Branch-B follow-up. Additive, no `TRACKER_DB_VERSION` bump. RA-5 modifier consumer = future work; A2.3 = field + stamp + badge only.
+
+2. **S7b — band source = RE-DERIVE ON THE AUCTION PAGE.** The farm-auction scout range is re-anchored to the current bidder's scout's overall grade band (band-is-range × chemFit, drop `perceivedValueRange` on this path). **Grounding discovery:** `overallGradeBand` is NOT on `ProspectProfile`/the DTO — it lives only on the report types in the separate `/league-builder/draft` board flow. **RULED:** re-derive the band inline at the auction call site from `prospect.prospectProfile.trueGrade` + the bidding scout's `scoutTierForPosition` tier + a deterministic seed (reusing exported `scoutOverallGradeBand`/`gradeBandToPriceRange`); do NOT persist a band onto the record. The auction band is the bidding scout's own deterministic view and is **not required to byte-match the separate draft-board** (different page, different scout) — the consistency worry dissolved once grounding showed they're distinct flows. No saved-shape change, no DB bump.
+
 ### 2026-06-23 (attended): V1 BUILD-SURFACE FORK SWEEP — 11 pre-AUTH-4 decisions RULED (minimize unattended defaults)
 
 **Context:** before an unattended AUTH-4 run, JK pre-answered every genuine STRUCTURAL/scope fork the audit (`wf_b0b25400`) surfaced — so the overnight loop guesses on nothing that matters. §16 magnitudes + build-confirms stay Captain-defaulted (designed-to-be-swept). Rulings:

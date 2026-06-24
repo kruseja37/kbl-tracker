@@ -336,7 +336,10 @@ async function buildCallUpSalaryLedgerUpdate(input: FranchiseRosterMovementInput
     salary: player.salary,
   });
   const salaryPlayer = transition.firstCallUp
-    ? withSalaryFields(player, calculateFranchiseCurrentSalary(player, { rookieScaleActive: true }), input, computedAt)
+    ? {
+        ...withSalaryFields(player, calculateFranchiseCurrentSalary(player, { rookieScaleActive: true }), input, computedAt),
+        ...(player.draftedAsFarmProspect && !player.rookieStatus ? { rookieStatus: { activatedSeasonId: scope.seasonId } } : {}),
+      }
     : {
         ...player,
         salary: transition.entry.salary,
