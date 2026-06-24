@@ -19,6 +19,7 @@ const HITTER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
   'contactAverage',
   'contactOnBase',
   'contactAvoidStrikeoutRate',
+  'contactQualityRate',
   'speedStealTripleRate',
   'fieldingFieldingPct',
   'fieldingRangeRate',
@@ -29,11 +30,11 @@ const PITCHER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
   'pitchingWalkAvoidanceRate',
   'pitchingHomeRunSuppressionRate',
   'pitchingFipPrevention',
+  'pitchingWeakContactRate',
 ];
 
 const DORMANT_CATEGORIES: ExpectedStatsCategory[] = [
   'armThrowingRate',
-  'pitchingWeakContactRate',
   'speedBaserunningRate',
   'fieldingAvoidErrorRate',
 ];
@@ -172,6 +173,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       contactAverage: 120,
       contactOnBase: 120,
       contactAvoidStrikeoutRate: 120,
+      contactQualityRate: 0,
       speedStealTripleRate: 120,
       fieldingFieldingPct: 80,
       fieldingRangeRate: 80,
@@ -208,6 +210,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       pitchingWalkAvoidanceRate: battersFaced,
       pitchingHomeRunSuppressionRate: battersFaced,
       pitchingFipPrevention: 90,
+      pitchingWeakContactRate: 0,
     });
   });
 
@@ -226,10 +229,41 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       contactAverage: 0,
       contactOnBase: 0,
       contactAvoidStrikeoutRate: 0,
+      contactQualityRate: 0,
       speedStealTripleRate: 0,
       fieldingFieldingPct: 0,
       fieldingRangeRate: 0,
     });
+  });
+
+  test('maps contact-quality season counts to hitter actual and sample', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      batting: baseBatting({
+        pa: 120,
+        ab: 100,
+        hits: 30,
+        contactQualityGood: 30,
+        contactQualityTracked: 60,
+      }),
+    });
+
+    expect(result.actualByCat.contactQualityRate).toBeCloseTo(0.5, 10);
+    expect(result.sampleSizeByCat.contactQualityRate).toBe(60);
+  });
+
+  test('maps weak-contact season counts to pitcher actual and sample', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'pitcher',
+      pitching: basePitching({
+        outsRecorded: 90,
+        weakContactInduced: 25,
+        weakContactTracked: 50,
+      }),
+    });
+
+    expect(result.actualByCat.pitchingWeakContactRate).toBeCloseTo(0.5, 10);
+    expect(result.sampleSizeByCat.pitchingWeakContactRate).toBe(50);
   });
 
   test('never emits dormant category keys in actual or sample maps', () => {

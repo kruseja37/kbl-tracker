@@ -4,10 +4,12 @@
  * Dormant/null-gated categories from RATINGS_ADJUSTMENT_SPEC §3B +
  * DECISIONS_LOG 2026-06-23 RA-2:
  * - armThrowingRate: RA-8 catcher caught-stealing season fields are not stored yet.
- * - pitchingWeakContactRate: no weak-contact season field exists in v1.
  * - pitcher non-pitching power/contact/speed/fielding categories: RA-11/B14 co-design.
  * - speedBaserunningRate: no clean per-PA baserunning rate exists beyond SB+3B.
  * - fieldingAvoidErrorRate: collinear with fieldingFieldingPct, folded for v1.
+ *
+ * RA-2CQ-2c: contactQualityRate and pitchingWeakContactRate are live from
+ * RA-2CQ-2a season counts.
  */
 
 import { calculateFIP } from './pwarCalculator';
@@ -63,6 +65,7 @@ function addHitterRates(
   setSample(result.sampleSizeByCat, 'contactOnBase', battingSample);
   setSample(result.sampleSizeByCat, 'contactAvoidStrikeoutRate', battingSample);
   setSample(result.sampleSizeByCat, 'speedStealTripleRate', battingSample);
+  setSample(result.sampleSizeByCat, 'contactQualityRate', batting?.contactQualityTracked ?? 0);
 
   if (batting) {
     const battingAverage = calcBattingAvg(batting);
@@ -88,6 +91,14 @@ function addHitterRates(
         result.actualByCat,
         'speedStealTripleRate',
         (batting.stolenBases + batting.triples) / batting.pa,
+      );
+    }
+    const contactQualityTracked = batting.contactQualityTracked ?? 0;
+    if (contactQualityTracked > 0) {
+      emitActual(
+        result.actualByCat,
+        'contactQualityRate',
+        (batting.contactQualityGood ?? 0) / contactQualityTracked,
       );
     }
   }
@@ -128,6 +139,7 @@ function addPitcherRates(
   setSample(result.sampleSizeByCat, 'pitchingWalkAvoidanceRate', battersFaced);
   setSample(result.sampleSizeByCat, 'pitchingHomeRunSuppressionRate', battersFaced);
   setSample(result.sampleSizeByCat, 'pitchingFipPrevention', outsRecorded);
+  setSample(result.sampleSizeByCat, 'pitchingWeakContactRate', pitching?.weakContactTracked ?? 0);
 
   if (!pitching) {
     return;
@@ -162,6 +174,15 @@ function addPitcherRates(
     if (fip > 0) {
       emitActual(result.actualByCat, 'pitchingFipPrevention', 1 / fip);
     }
+  }
+
+  const weakContactTracked = pitching.weakContactTracked ?? 0;
+  if (weakContactTracked > 0) {
+    emitActual(
+      result.actualByCat,
+      'pitchingWeakContactRate',
+      (pitching.weakContactInduced ?? 0) / weakContactTracked,
+    );
   }
 }
 

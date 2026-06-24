@@ -50,6 +50,8 @@ export const EXPECTED_STATS_CATEGORY_META = {
   contactAverage: { ratingKey: 'contact', attr: 'CON', basis: 'season', defaultCurveBlock: 'SS' },
   contactOnBase: { ratingKey: 'contact', attr: 'CON', basis: 'season', defaultCurveBlock: 'SS' },
   contactAvoidStrikeoutRate: { ratingKey: 'contact', attr: 'CON', basis: 'season', defaultCurveBlock: 'SS' },
+  // RA-2CQ: quality-of-contact rate (good/tracked). basis:'none' => fixed min-sample floor of 10 (JK 2026-06-24, count early on balls-in-play).
+  contactQualityRate: { ratingKey: 'contact', attr: 'CON', basis: 'none', defaultCurveBlock: 'SS' },
 
   // Speed = SB+3B rate / baserunning.
   speedStealTripleRate: { ratingKey: 'speed', attr: 'SPD', basis: 'season', defaultCurveBlock: 'SS' },
@@ -101,6 +103,7 @@ const ONE_BY_CATEGORY: Record<ExpectedStatsCategory, number> = {
   contactAverage: 1,
   contactOnBase: 1,
   contactAvoidStrikeoutRate: 1,
+  contactQualityRate: 1,
   speedStealTripleRate: 1,
   speedBaserunningRate: 1,
   fieldingFieldingPct: 1,

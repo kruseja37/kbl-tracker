@@ -19495,3 +19495,116 @@ FAILURE PROTOCOL (STOP-IF):
 
 Use high reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: RA-2CQ-2b ===== -->
+
+<!-- ===== CONTRACT: RA-2CQ-2c ===== -->
+## CONTRACT: RA-2CQ-2c — contact-quality SIGNAL layer (new category + un-dorm pitcher rate, build-dark)
+
+ROUTE: Codex 5.5 | high reasoning effort
+
+You are a precise TypeScript builder on the KBL Tracker repo (branch `codex/franchise-v1-next`, worktree `/Users/johnkruse/Projects/kbl-tracker`).
+
+GOAL:
+Wire the already-shipped RA-2CQ-2a contact-quality SEASON COUNTS into the expected-stats SIGNAL layer: (1) add a new `contactQualityRate` expected-stats category (batter Contact), (2) un-dorm `pitchingWeakContactRate` (pitcher Junk), (3) extend the RA-2a adapter to emit both rates from the season counts. Pure / build-DARK. NO behavior beyond computing a derived rate.
+
+SOURCE OF TRUTH:
+- DECISIONS_LOG.md 2026-06-24 "RA-2CQ-2c contact-quality SIGNAL layer — min-sample floor RULED" (JK ruling: batter `contactQualityRate` uses `basis: 'none'` → fixed floor 10; pitcher keeps `basis: 'combined'`; sample denominator == rate denominator; baselines untouched).
+- Season-count source fields (RA-2CQ-2a, already shipped + seeded 0): `PlayerSeasonBatting.contactQualityGood?`, `PlayerSeasonBatting.contactQualityTracked?` (`src/utils/seasonStorage.ts:82-83`); `PlayerSeasonPitching.weakContactInduced?`, `PlayerSeasonPitching.weakContactTracked?` (`src/utils/seasonStorage.ts:134-135`). All optional `number`.
+
+CONSTRAINTS:
+- Only edit these THREE files:
+  - `src/engines/expectedStatsEngine.ts`
+  - `src/engines/expectedStatsCategoryRates.ts`
+  - `src/engines/__tests__/expectedStatsCategoryRates.test.ts`
+- Do NOT touch: `src/utils/seasonStorage.ts`, `src/utils/seasonAggregator.ts`, `src/engines/contactQualityAggregator.ts`, `src/utils/trackerDb.ts`, `spec-docs/reference/iv_oracle.json`, `src/engines/__tests__/expectedStatsEngine.test.ts` (only touch the engine test if it goes RED — report if so, do not pre-edit).
+- NO trackerDb / DB_VERSION / store change. NO new exports beyond the category key (which auto-joins the keyof union). Do NOT change `SMB4_EXPECTED_STATS_BASELINES`. Do NOT change `pitchingWeakContactRate`'s `basis` (it stays `'combined'`).
+- Quote this contract id (RA-2CQ-2c) in your report for each change.
+- Work directly on the current branch (no worktrees, no commits — leave the diff uncommitted for audit).
+
+EXPECTED OUTPUT (apply these edits EXACTLY):
+
+=== FILE 1: src/engines/expectedStatsEngine.ts ===
+
+Edit 1a — in `EXPECTED_STATS_CATEGORY_META`, immediately AFTER the `contactAvoidStrikeoutRate` line (currently line 52), still inside the Contact group, insert:
+```ts
+  // RA-2CQ: quality-of-contact rate (good/tracked). basis:'none' => fixed min-sample floor of 10 (JK 2026-06-24, count early on balls-in-play).
+  contactQualityRate: { ratingKey: 'contact', attr: 'CON', basis: 'none', defaultCurveBlock: 'SS' },
+```
+
+Edit 1b — in `ONE_BY_CATEGORY`, immediately AFTER `contactAvoidStrikeoutRate: 1,` (currently line 103), insert:
+```ts
+  contactQualityRate: 1,
+```
+(`pitchingWeakContactRate: 1,` is ALREADY present at line 111 — do NOT add it again. `ONE_BY_CATEGORY` is an exhaustive `Record<ExpectedStatsCategory, number>`, so omitting `contactQualityRate` will fail `tsc -b` — this is the build-dark exhaustiveness gate.)
+
+=== FILE 2: src/engines/expectedStatsCategoryRates.ts ===
+
+Edit 2a — in the module doc comment, DELETE the dormant bullet (currently line 7):
+```
+ * - pitchingWeakContactRate: no weak-contact season field exists in v1.
+```
+and (optional) add a one-line note that `contactQualityRate` + `pitchingWeakContactRate` are now LIVE from the RA-2CQ-2a season counts.
+
+Edit 2b — in `addHitterRates(...)`: immediately AFTER the `setSample(result.sampleSizeByCat, 'speedStealTripleRate', battingSample);` line (currently line 65), insert the unconditional sample (denominator == tracked, per the ruling):
+```ts
+  setSample(result.sampleSizeByCat, 'contactQualityRate', batting?.contactQualityTracked ?? 0);
+```
+Then INSIDE the existing `if (batting) {` block, AFTER the closing `}` of the `if (batting.pa > 0) {...}` sub-block (currently line 92) and BEFORE the `}` that closes `if (batting)` (currently line 93), insert the guarded actual:
+```ts
+    const contactQualityTracked = batting.contactQualityTracked ?? 0;
+    if (contactQualityTracked > 0) {
+      emitActual(
+        result.actualByCat,
+        'contactQualityRate',
+        (batting.contactQualityGood ?? 0) / contactQualityTracked,
+      );
+    }
+```
+
+Edit 2c — in `addPitcherRates(...)`: immediately AFTER the `setSample(result.sampleSizeByCat, 'pitchingFipPrevention', outsRecorded);` line (currently line 130) and BEFORE the `if (!pitching) { return; }` guard, insert the unconditional sample (denominator == weakContactTracked):
+```ts
+  setSample(result.sampleSizeByCat, 'pitchingWeakContactRate', pitching?.weakContactTracked ?? 0);
+```
+Then INSIDE the function, AFTER the FIP block's closing `}` (currently line 165) and BEFORE the function's closing `}` (currently line 166), insert the guarded actual:
+```ts
+  const weakContactTracked = pitching.weakContactTracked ?? 0;
+  if (weakContactTracked > 0) {
+    emitActual(
+      result.actualByCat,
+      'pitchingWeakContactRate',
+      (pitching.weakContactInduced ?? 0) / weakContactTracked,
+    );
+  }
+```
+
+=== FILE 3: src/engines/__tests__/expectedStatsCategoryRates.test.ts ===
+
+Edit 3a — add `'contactQualityRate',` to `HITTER_LIVE_CATEGORIES` (now 10 entries).
+Edit 3b — add `'pitchingWeakContactRate',` to `PITCHER_LIVE_CATEGORIES` (now 5 entries).
+Edit 3c — REMOVE `'pitchingWeakContactRate',` from `DORMANT_CATEGORIES` (now 3: armThrowingRate, speedBaserunningRate, fieldingAvoidErrorRate).
+Edit 3d — in the "full hitter season row" test, the `sampleSizeByCat` `toEqual({...})` (currently lines 168-178): ADD `contactQualityRate: 0,` (the fixture does not set `contactQualityTracked`, so it is 0). `toEqual` is order-independent; placement does not matter.
+Edit 3e — in the "full pitcher season row" test, the `sampleSizeByCat` `toEqual({...})` (currently lines 206-211): ADD `pitchingWeakContactRate: 0,`.
+Edit 3f — in the "zero-PA hitter" test, the `sampleSizeByCat` `toEqual({...})` (currently lines 222-232): ADD `contactQualityRate: 0,`.
+Edit 3g — ADD two NEW `test(...)` cases (real non-zero coverage; do NOT mutate the existing hand-worked fixtures):
+  - a hitter test: `baseBatting({ pa: 120, ab: 100, hits: 30, contactQualityGood: 30, contactQualityTracked: 60 })` → assert `result.actualByCat.contactQualityRate` `toBeCloseTo(0.5, 10)` AND `result.sampleSizeByCat.contactQualityRate` === 60.
+  - a pitcher test: `basePitching({ outsRecorded: 90, weakContactInduced: 25, weakContactTracked: 50 })` → assert `result.actualByCat.pitchingWeakContactRate` `toBeCloseTo(0.5, 10)` AND `result.sampleSizeByCat.pitchingWeakContactRate` === 50.
+
+VERIFICATION (run from repo root, every command prefixed `NODE_ENV= `):
+1. `NODE_ENV= npm run build` → exit 0 (proves ONE_BY_CATEGORY exhaustiveness + the new META literal types).
+2. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsCategoryRates.test.ts` → all tests green (incl. the 2 new ones).
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsEngine.test.ts` → green, no new reds.
+4. `git diff --stat` → ONLY the 3 listed files changed. `git diff -- src/utils/trackerDb.ts src/utils/seasonStorage.ts spec-docs/reference/iv_oracle.json` → empty.
+
+FORMAT (your report):
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing RA-2CQ-2c + the edit id (1a/1b/2a/2b/2c/3a–3g).
+3. Verification results (paste actual output of all 4 commands).
+4. "RA-2CQ-2c complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL:
+- If any anchor line does not match the description (the file drifted) → STOP, quote the actual lines, report. Do NOT guess a new location.
+- If a change would require touching a file not in the allowed list → STOP and report.
+- If `tsc -b` reports a missing `ONE_BY_CATEGORY` key or an unknown category, fix per Edit 1b only; if any OTHER type error appears → STOP and report it verbatim.
+- Never invent an `SMB4_EXPECTED_STATS_BASELINES` value. Never change `pitchingWeakContactRate`'s `basis`.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: RA-2CQ-2c ===== -->

@@ -7,6 +7,19 @@
 
 ## June 2026
 
+### 2026-06-24 (attended Hybrid via `/kbl-captain`): RA-2CQ-2c contact-quality SIGNAL layer — min-sample floor RULED
+
+**Context:** RA-2CQ-2c wires the already-shipped contact-quality season counts (RA-2CQ-2a/2b: `contactQualityGood/Tracked` on `PlayerSeasonBatting`, `weakContactInduced/Tracked` on `PlayerSeasonPitching`) into the expected-stats SIGNAL layer — a new `contactQualityRate` category (batter Contact) + un-dorming `pitchingWeakContactRate` (pitcher Junk). The ticket said "min-sample gate, default 10." Recon (workflow `wf_1a3733a2-fbf`, 6 agents) found the gate is NOT in the adapter — it lives in `expectedStatsEngine.ts` via each category's `basis`: `scaledMinSampleFor('none')` → `minSampleRate` = **10 unscaled** (`expectedStatsEngine.ts:310-315`); `'season'` → 50 scaled; `'combined'` → 20 scaled. The three EXISTING `contact` categories (AVG/OBP/K-avoidance) all use `basis: 'season'` (=50). So the ticket's literal "10" requires `basis: 'none'`, which DEVIATES from the sibling contact categories. Per the soul-layer no-inference rule, surfaced to JK rather than baking the deviation silently.
+
+**RULING (JK, AskUserQuestion):** **`contactQualityRate` = `basis: 'none'` → fixed min-sample floor of 10 ("count early").** Quality-of-contact starts counting toward the Contact signal after ~10 tracked balls-in-play — sooner than AVG/OBP (which need ~50), on a smaller sample. It is a §16 sim-tunable dial, re-validated at RB-16 / L-SIM.
+
+**Defaults taken (not JK forks — clean engineering / no-inference):**
+- **Sample denominator = the rate denominator.** `contactQualityRate` sample = `contactQualityTracked` (not PA); pitcher sample = `weakContactTracked` (not BF) — so the gate population == the rate population (good/tracked). Prevents clearing the gate on PA while having ~0 tracked balls.
+- **`pitchingWeakContactRate` keeps its existing `basis: 'combined'` (gate ~20).** Its siblings (K-rate, walk-avoidance, HR-suppression) are all `'combined'`, so it is already self-consistent; the "default 10" applies only to the new batter category. The dormant META entry's basis is NOT changed.
+- **`SMB4_EXPECTED_STATS_BASELINES` left untouched** — no ratified SMB4 league-mean for quality-of-contact% or weak-contact% exists; will NOT invent one (matches the dormant-category precedent, e.g. `armThrowingRate` has no baseline). Expected falls back to the IV-curve path.
+
+**Build-dark proof (grep):** `toExpectedStatsCategoryRates` + `EXPECTED_STATS_CATEGORY_META` + `expectedAndSignal` have ZERO non-test consumers — adding the category + un-dorming computes a rate but nothing renders/persists it. NO `trackerDb` bump; `iv_oracle.json` disjoint (byte-unchanged by construction).
+
 ### 2026-06-23 (attended Hybrid via `/kbl-captain`): Contact-quality measurement — 2 forks RULED + the full classification
 
 **Context:** RA-2CQ-1 (the contact-quality data+signal layer feeding hitter Contact + pitcher Junk). The spec ruled the STRUCTURE (hard > normal > weak; hard PO → neutral-not-negative; FLO graded by hardness; symmetric hitter/pitcher) but left the measurement SHAPE open. Per the no-inference rule, surfaced to JK rather than inferred.
