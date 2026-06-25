@@ -21505,3 +21505,108 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-2 ===== -->
+
+<!-- ===== CONTRACT: T-5a ===== -->
+## T-5a — §8B value+incumbency selection layer (deterministic; the slot-duel, NO seeded roll yet)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer rewriting the displacement/duel currency of an already-built, characterized trait reconciler — from raw performance-P to value+incumbency scoring — and fixing a latent cap-collision bug. Pure engine + its test only. NO seeded randomness (that is T-5b). NO caller wiring.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** In `reconcileGainProposals` (the trait cap/displacement layer), replace the raw-`probability` comparison currency with **`gainScore = P × traitWeight`** vs **`keepScore = P_held × traitWeight × β`** (β = 1.25 incumbency), admit firing gains **best-first by gainScore**, enforce `maxTraits = 2` open-slot capping, and **recompute the weakest-held after each displacement** so two gains can't both target the same slot — so a player's 2 trait slots become a value-weighted contest where valuable traits defend their slots and only a genuinely better trait breaks through.
+
+**SOURCE OF TRUTH (VERBATIM):** `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md` §8B (lines 104–125, the Scoring + Algorithm steps 4/5/6/7 + Build cost) and Appendix A (lines 146–156, the deterministic worked examples — examples 1/2/3/5/6 are the acceptance oracle; example 4 is probabilistic = T-5b, OUT of scope here). Scoring is VERBATIM: `gainScore(new) = P × traitWeight`; `keepScore(held) = P_held × traitWeight × β`, **β = 1.25 RULED**. `traitWeight` = the §2/§6 weight built in T-1. **§8B step 2 (the seeded firing roll) is EXPLICITLY DEFERRED to T-5b** — in T-5a, every eligible (threshold-clearing) gain/loss fires deterministically, exactly as today.
+
+**GROUNDING (Captain-verified by reading the real files in this worktree — re-read each before editing; line numbers are post-T-2 and may drift, re-anchor by symbol):**
+- `src/engines/traitAcquisition.ts`:
+  - `reconcileGainProposals(args)` is at **~:411–473**. Today the comparison currency is raw `proposal.probability` at two points: the opposite-pair-both-gains duel **:443** (`leftGain.probability >= rightGain.probability`) and the displacement duel **:464** (`proposal.probability > effectiveHeldStrength(weakestHeld)`).
+  - `effectiveHeldStrength(held)` (**:425–426**) = `args.heldProbabilityByTrait.get(held.traitName) ?? normalizeHeldStrength(held.strength)` — the recomputed-P-this-cycle, else the supplied strength. **This is exactly `P_held`.** REUSE it unchanged as the P_held input to keepScore.
+  - `getWeakestHeld(heldTraits, strengthOf)` (**:475–483**) is a `reduce` argmin over a passed `strengthOf`. Today `strengthOf = effectiveHeldStrength`. CHANGE the argmin key to `keepScore` (see algorithm). It is called ONCE at **:450** before the loop — that single-shot call is the collision bug; the new loop recomputes it.
+  - `needsDisplacement = heldAfterLosses.length >= 2` (**:451**) — the hard literal `2` is `maxTraits`. The admission loop **:454–470** pushes a gain unconditionally when `!needsDisplacement` → **latent over-admission** (0 held + 3 gains admits all 3, exceeding the cap). §8B step 5 ("admit best-first into OPEN slots; maxTraits = 2") fixes this.
+  - `TRAIT_ACQUISITION_TUNING` is at **:90–99**; the `TraitAcquisitionTuning` interface at **:73–82**.
+- `src/data/traitTierConfig.ts` (T-1, `7e0e62ed`): **`computeTraitWeight(name): number`** (**:264**) is the §2 80/20 weight, MEMOIZED. It **THROWS** for `TRAIT_ADAPTIVE_EXCLUDED` (Sign Stealer, Stimulated) and for unknown/unpriced names. It internally normalizes a trailing ` (+)`/` (-)` suffix (`normalizeTraitName` :160), so bare runtime names (`'Clutch'`, `'Two Way (IF)'`) resolve. `assignTier(name).traitWeight` is the same value — prefer the direct `computeTraitWeight`.
+- **Captain-verified:** every BUILDABLE/test trait IS priced — `Utility, Clutch, Stealer, Choker, Big Hack, Rally Starter, Butter Fingers, CON vs LHP, RBI Zero, K Collector` each resolve via `computeTraitWeight` (the throw path is unreachable for buildable traits; it exists only for excluded/unpriced). The excluded-fallback test (`'Stimulated'`, test ~:730) DOES reach the throw — so a safe wrapper is mandatory or that test crashes.
+
+**BUILD (`src/engines/traitAcquisition.ts` + `src/engines/__tests__/traitAcquisition.test.ts` ONLY):**
+1. **Import** `computeTraitWeight` from `../data/traitTierConfig`.
+2. **Two new OPTIONAL tuning constants** on `TRAIT_ACQUISITION_TUNING` + the interface: add `maxTraits?: number` and `incumbencyBeta?: number`, set `maxTraits: 2` and `incumbencyBeta: 1.25` on the `TRAIT_ACQUISITION_TUNING` literal, each flagged `// §16 sim-tune placeholder` / `// β=1.25 RULED`. **They MUST be OPTIONAL** (`?`) so existing custom-tuning literals in the test (`NO_SWING_FORCE_GAIN_TUNING`, which omits fields) still typecheck and run; the engine reads them with `?? 2` / `?? 1.25`.
+3. **Safe weight wrapper** (module-private): `function traitWeightFor(traitName: string): number { try { return computeTraitWeight(traitName); } catch { return DEFAULT_TRAIT_WEIGHT_FALLBACK; } }` with `const DEFAULT_TRAIT_WEIGHT_FALLBACK = 0.15; // §16 sim-tune — Common-floor; UNREACHABLE for buildable traits (excluded/unpriced only), proven by test`. Use it everywhere a weight is needed.
+4. **Rewrite `reconcileGainProposals`** to the §8B algorithm. The two pre-existing passes (held-opposite drop **:428–434**, and the opposite-pair-both-gains pass **:436–446**) STAY, except the duel key at **:443** flips from `probability` to **gainScore**: keep the side with the higher `gainScore(gain) = gain.probability × traitWeightFor(gain.traitName)` (tiebreak: keep the existing `>=` direction, i.e. `left` wins ties — preserve current tiebreak semantics). Then REPLACE the admission section (**:448–472**) with:
+   ```
+   const maxTraits = args.tuning?.maxTraits ?? 2;            // thread tuning in (see §5)
+   const beta = args.tuning?.incumbencyBeta ?? 1.25;
+   const gainScore = (p: TraitChangeProposal) => p.probability * traitWeightFor(p.traitName);
+   const keepScore = (h: HeldTrait) => effectiveHeldStrength(h) * traitWeightFor(h.traitName) * beta;
+
+   const lossNames = new Set(loseProposals.map(p => p.traitName));
+   const working = args.heldTraits.filter(h => !lossNames.has(h.traitName)); // original incumbents = displacement targets
+   const survivingGains = args.gainProposals
+     .filter(p => !dropped.has(p.traitName))
+     .sort((a, b) => gainScore(b) - gainScore(a));   // best-first; stable tiebreak below
+
+   let admittedCount = 0;
+   const reconciled: TraitChangeProposal[] = [];
+   for (const gain of survivingGains) {
+     const occupants = working.length + admittedCount;
+     if (occupants < maxTraits) { reconciled.push(gain); admittedCount++; continue; }  // open slot
+     // at cap → duel the CURRENT weakest incumbent by keepScore (recomputed each iter ⇒ collision-safe)
+     const weakest = getWeakestHeld(working, keepScore);   // argmin keepScore over `working`
+     if (weakest && gainScore(gain) > keepScore(weakest)) {
+       reconciled.push({ ...gain, displaces: weakest.traitName });
+       working.splice(working.indexOf(weakest), 1);        // remove ⇒ next iter recomputes weakest
+       admittedCount++;                                     // swap: −1 incumbent, +1 gain (net occupants unchanged)
+     } else {
+       args.skipped.push({ traitName: gain.traitName, reason: 'cap_no_displacement' });
+     }
+   }
+   return reconciled;
+   ```
+   - **`getWeakestHeld` signature**: it already takes `(heldTraits, strengthOf)` — call it with `keepScore` as `strengthOf`. No change to its body.
+   - **Sort stability / determinism:** JS `.sort` is stable; for exactly-equal gainScores keep input order (do NOT add a name tiebreak unless a test needs it — preserve determinism).
+   - **`effectiveHeldStrength` stays exactly as-is** (the recomputed-P-or-supplied-strength fallback at :425–426). keepScore wraps it.
+5. **Thread `tuning` into `reconcileGainProposals`**: it currently does NOT receive `tuning`. Add `tuning` to its `args` object and pass `tuning` from `computeTraitAcquisition` (the caller has it at :243/:307). Minimal: add `tuning: TraitAcquisitionTuning` to the args interface (**:411–418**) and `tuning,` at the call (**:307–314**).
+6. **NO seed, NO randomness, NO caller wiring.** Do NOT touch `franchiseTraitGrantCompute.ts`, `traitCandidateBuilder.ts`, `traitRealityScorer.ts`, or `iv_oracle.json`/`traitPricing.ts`.
+
+**TEST UPDATES (`traitAcquisition.test.ts`) — re-derive expecteds from the REAL weights, do NOT guess, do NOT weaken:**
+- The 4 displacement/duel tests change currency from raw-P to gainScore/keepScore. For EACH, COMPUTE the actual `computeTraitWeight` for the traits involved (run it / log it), show the arithmetic in a comment, and set the expected `displaces` / survivor / skip accordingly:
+  - **"both sides of an opposite pair are gains, only the higher … survives"** (~:794, Clutch P0.8 vs Choker P0.9): assert the survivor by `gainScore` (= P × weight), not raw P. If the gainScore order differs from the raw-P order, the survivor flips — assert the gainScore winner + the loser's `offsetting_pair_held` skip.
+  - **"a stronger gain displaces the weakest held trait"** (~:813, held Clutch s0.6 / Utility s0.4, gain Stealer P0.8): the weakest is now by `keepScore = P_held × weight × 1.25`; assert the real `displaces` target + that `gainScore(Stealer) > keepScore(weakest)`.
+  - **"equal strength is not enough for displacement"** (~:831, both held s0.8, gain P0.8): with β incumbency, keepScore ≥ gainScore at equal P unless the gain's weight greatly exceeds the held's — assert `cap_no_displacement` (likely still blocked, now via incumbency); show the keepScore vs gainScore numbers.
+  - **"displacement follows the recomputed P …"** (~:872, Clutch recomputed-P 0.4 / Utility recomputed-P 0.7, gain Stealer P0.8): weakest is now by keepScore (P_held × weight × β), not bare recomputed-P — re-derive which is displaced and assert it.
+- **PRESERVE unchanged** (must stay green as written): every threshold/dead-band/sufficiency/role-eligibility/opposite-held-blocks/loss-frees-slot/no-spurious-drop test (the ~:677–765, :782–792, :849–869, :903–967, :969–988 cluster). If any of these breaks, your scoring math is wrong — investigate, don't edit the test to pass.
+- **ADD new tests** for the new behavior:
+  - **gainScore ranking (Appendix-A example 1):** rookie, 0 held, ≥3 eligible gains where the highest raw-P is the LOWEST gainScore (e.g. a Common at high P vs a Rare at lower P) → assert the **top-2 by gainScore** are admitted and the high-P-but-low-value one is `cap_no_displacement` (this proves value beats raw P AND fixes the over-admission bug: assert ≤ `maxTraits` admits).
+  - **recompute-weakest collision fix:** 2 held + 2 gains where, under a single-shot weakest, both gains would record `displaces` the SAME held; assert the 2nd gain instead targets the NEXT weakest (or is blocked) — i.e. no two `displaces` point at one held trait.
+  - **incumbency (Appendix-A example 2):** held Rare (P above its loss bar) vs a Common gain at high P → keepScore(Rare) > gainScore(Common) → Common blocked `cap_no_displacement`.
+  - **real-upgrade breakthrough (example 3):** held near-zero-weight Common + a high-gainScore Rare gain → Rare displaces the junk Common.
+  - **excluded-trait safety:** a gain/duel involving `'Stimulated'` (computeTraitWeight throws) does NOT crash (the wrapper returns the fallback) — and a quick assertion that `computeTraitWeight` resolves for the buildable traits used, proving the fallback is unreachable for them.
+
+**MAKE-OR-BREAK:**
+- The displacement currency is `gainScore`/`keepScore` (`P × weight`, held × β=1.25) at BOTH the opposite-pair-gains duel and the cap duel — raw `probability` is no longer the comparison key anywhere in `reconcileGainProposals`.
+- `getWeakestHeld` is recomputed INSIDE the admission loop after each displacement (the displaced trait is removed from `working`) — two gains can never both record `displaces` the same held trait.
+- `maxTraits` open-slot capping holds: with N held + M gains and 0 losses, total admitted (held kept + gains) never exceeds `maxTraits`. The over-admission path (0 held, 3 gains) now admits exactly `maxTraits`, best-by-gainScore.
+- β, maxTraits are OPTIONAL tuning fields with engine defaults; NO existing tuning literal breaks; the excluded-trait fallback never throws.
+- ZERO new randomness/seed/Date/Math.random. Appendix-A examples 1/2/3/5/6 reproduce deterministically.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npm test` (**FULL suite** — `traitAcquisition` reaches the `franchiseTraitGrantCompute` → `processCompletedGame` partial-mock test files at module load; HIGH transitive-import-mock-break risk. If a `processCompletedGame.*` partial-mock test breaks at module load, fix with a TEST-ONLY mock stub — the A1.5c-4 / T-2 pattern — NEVER production. The Phase-2 traits flag is OFF in those tests, so the sweep is a dark-noop and overlay output is unaffected). Read the FAILED-FILE list: ZERO NEW REDS vs the characterized baseline (`wpaRuntimeBoundary` hard fail; `franchiseManualSmokeFixture` / `GameTrackerLaunchState` solo-pass order-flakes).
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts` → paste pass/fail counts.
+4. `git --no-pager diff --stat` → ONLY `src/engines/traitAcquisition.ts` + `src/engines/__tests__/traitAcquisition.test.ts` (+ a test-only mock stub IF needed). `franchiseTraitGrantCompute.ts` NOT in it; `iv_oracle.json` NOT in it; `traitTierConfig.ts` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing §8B steps / Appendix-A examples / the make-or-break.
+3. The computed `computeTraitWeight` values you used to re-derive the 4 updated tests (show the arithmetic).
+4. Verification output pasted (build, full-suite FAILED-file summary, the focused vitest counts, diff --stat).
+5. "T-5a complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- A PRESERVE-class test (threshold/dead-band/loss/no-spurious-drop) breaks and you cannot trace it to a correct scoring change → STOP, report (do NOT edit the test to pass).
+- Re-deriving an updated test's expected requires data you can't compute from `computeTraitWeight` (e.g. a trait the function can't resolve) → STOP, report the trait + value.
+- Making this work would require touching the measurement/percentile path, the caller, or `traitTierConfig`/oracle → STOP, report.
+- A new RED outside the characterized set you cannot trace to the reconcile change → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-5a ===== -->

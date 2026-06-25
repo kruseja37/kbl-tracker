@@ -10,7 +10,7 @@ import {
   type CanonicalPersonality,
 } from './masterMoraleMatrix';
 import type { HiddenModifiers } from '../types/game';
-import { assignTier } from '../data/traitTierConfig';
+import { assignTier, computeTraitWeight } from '../data/traitTierConfig';
 
 /**
  * §9 / L9b-2 — PURE trait acquisition proposals (TS-1 / TS-5 / TS-12).
@@ -79,6 +79,8 @@ export interface TraitAcquisitionTuning {
   charismaSwing: number;
   gainThreshold: number;
   loseThreshold: number;
+  maxTraits?: number;
+  incumbencyBeta?: number;
 }
 
 interface TraitThresholds {
@@ -96,7 +98,12 @@ export const TRAIT_ACQUISITION_TUNING: TraitAcquisitionTuning = {
   charismaSwing: 0.30,
   gainThreshold: 0.75,
   loseThreshold: 0.35,
+  maxTraits: 2, // §16 sim-tune placeholder
+  incumbencyBeta: 1.25, // β=1.25 RULED
 };
+
+// §16 sim-tune — Common-floor; UNREACHABLE for buildable traits (excluded/unpriced only), proven by test.
+const DEFAULT_TRAIT_WEIGHT_FALLBACK = 0.15;
 
 const NEUTRAL_MODIFIERS: HiddenModifiers = {
   loyalty: 50,
@@ -310,6 +317,7 @@ export function computeTraitAcquisition(
     loseProposals,
     heldNames,
     heldProbabilityByTrait,
+    tuning,
     skipped,
   });
 
@@ -414,16 +422,22 @@ function reconcileGainProposals(args: {
   loseProposals: TraitChangeProposal[];
   heldNames: ReadonlySet<string>;
   heldProbabilityByTrait: ReadonlyMap<string, number>;
+  tuning: TraitAcquisitionTuning;
   skipped: SkippedTrait[];
 }): TraitChangeProposal[] {
   const gainsByName = new Map(args.gainProposals.map((proposal) => [proposal.traitName, proposal]));
   const dropped = new Set<string>();
 
-  // §0.1/§0.8: P is the single comparison currency for displacement. Rank held traits by their
-  // RECOMPUTED P this cycle; fall back to the supplied strength only when a held trait has no
-  // candidate this cycle (and therefore no recomputed P).
+  // §8B: held traits defend by value-weighted, incumbency-boosted recomputed P; fall
+  // back to supplied strength only when no current-cycle held P exists.
   const effectiveHeldStrength = (held: HeldTrait): number =>
     args.heldProbabilityByTrait.get(held.traitName) ?? normalizeHeldStrength(held.strength);
+  const maxTraits = args.tuning.maxTraits ?? 2;
+  const beta = args.tuning.incumbencyBeta ?? 1.25;
+  const gainScore = (proposal: TraitChangeProposal): number =>
+    proposal.probability * traitWeightFor(proposal.traitName);
+  const keepScore = (held: HeldTrait): number =>
+    effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta;
 
   for (const proposal of args.gainProposals) {
     const opposite = TRAIT_OPPOSITES[proposal.traitName];
@@ -440,29 +454,33 @@ function reconcileGainProposals(args: {
       continue;
     }
 
-    const drop = leftGain.probability >= rightGain.probability ? right : left;
+    const drop = gainScore(leftGain) >= gainScore(rightGain) ? right : left;
     dropped.add(drop);
     args.skipped.push({ traitName: drop, reason: 'offsetting_pair_held' });
   }
 
   const lossNames = new Set(args.loseProposals.map((proposal) => proposal.traitName));
-  const heldAfterLosses = args.heldTraits.filter((held) => !lossNames.has(held.traitName));
-  const weakestHeld = getWeakestHeld(heldAfterLosses, effectiveHeldStrength);
-  const needsDisplacement = heldAfterLosses.length >= 2;
+  const working = args.heldTraits.filter((held) => !lossNames.has(held.traitName));
+  const survivingGains = args.gainProposals
+    .filter((proposal) => !dropped.has(proposal.traitName))
+    .sort((a, b) => gainScore(b) - gainScore(a));
+
+  let admittedCount = 0;
   const reconciled: TraitChangeProposal[] = [];
 
-  for (const proposal of args.gainProposals) {
-    if (dropped.has(proposal.traitName)) {
-      continue;
-    }
-
-    if (!needsDisplacement) {
+  for (const proposal of survivingGains) {
+    const occupants = working.length + admittedCount;
+    if (occupants < maxTraits) {
       reconciled.push(proposal);
+      admittedCount++;
       continue;
     }
 
-    if (weakestHeld && proposal.probability > effectiveHeldStrength(weakestHeld)) {
+    const weakestHeld = getWeakestHeld(working, keepScore);
+    if (weakestHeld && gainScore(proposal) > keepScore(weakestHeld)) {
       reconciled.push({ ...proposal, displaces: weakestHeld.traitName });
+      working.splice(working.indexOf(weakestHeld), 1);
+      admittedCount++;
       continue;
     }
 
@@ -470,6 +488,14 @@ function reconcileGainProposals(args: {
   }
 
   return reconciled;
+}
+
+function traitWeightFor(traitName: string): number {
+  try {
+    return computeTraitWeight(traitName);
+  } catch {
+    return DEFAULT_TRAIT_WEIGHT_FALLBACK;
+  }
 }
 
 function getWeakestHeld(

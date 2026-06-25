@@ -14,7 +14,7 @@ import {
   type TraitAcquisitionTuning,
 } from '../traitAcquisition';
 import type { HiddenModifiers } from '../../types/game';
-import { assignTier } from '../../data/traitTierConfig';
+import { assignTier, computeTraitWeight } from '../../data/traitTierConfig';
 
 const FORCE_GAIN_TUNING: TraitAcquisitionTuning = {
   ...TRAIT_ACQUISITION_TUNING,
@@ -791,7 +791,10 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     ]);
   });
 
-  test('when both sides of an opposite pair are gains, only the higher probability survives', () => {
+  test('when both sides of an opposite pair are gains, only the higher gainScore survives', () => {
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Choker')).toBeCloseTo(0.4322222222222223, 10);
+    // §8B: Clutch 0.8 × 0.471111 = 0.376889; Choker 0.9 × 0.432222 = 0.389000.
     const result = computeTraitAcquisition(
       input({
         candidates: [
@@ -811,6 +814,11 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
   });
 
   test('at the two-trait cap, a stronger gain displaces the weakest held trait', () => {
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);
+    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.32666666666666666, 10);
+    // §8B: keep(Clutch)=0.6×0.471111×1.25=0.353333;
+    // keep(Utility)=0.4×0.13×1.25=0.065000; gain(Stealer)=0.8×0.326667=0.261333.
     const result = computeTraitAcquisition(
       input({
         heldTraits: [
@@ -829,11 +837,16 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
   });
 
   test('at the two-trait cap, equal strength is not enough for displacement', () => {
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Rally Starter')).toBeCloseTo(0.5322222222222223, 10);
+    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.32666666666666666, 10);
+    // §8B: weakest keep(Clutch)=0.8×0.471111×1.25=0.471111;
+    // gain(Stealer)=0.8×0.326667=0.261333, so β incumbency blocks equal-P churn.
     const result = computeTraitAcquisition(
       input({
         heldTraits: [
           { traitName: 'Clutch', strength: 0.8 },
-          { traitName: 'Utility', strength: 0.8 },
+          { traitName: 'Rally Starter', strength: 0.8 },
         ],
         candidates: [{ traitName: 'Stealer', score: score('Stealer', 0.8) }],
       }),
@@ -844,6 +857,149 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     expect(result.skipped).toEqual([
       { traitName: 'Stealer', reason: 'cap_no_displacement' },
     ]);
+  });
+
+  test('gainScore ranking admits the top two by value and caps open slots', () => {
+    expect(computeTraitWeight('Cannon Arm')).toBeCloseTo(0.81, 10);
+    expect(computeTraitWeight('Tough Out')).toBeCloseTo(0.5433333333333333, 10);
+    expect(computeTraitWeight('Sprinter')).toBeCloseTo(0.24888888888888888, 10);
+    // Appendix A example 1: Cannon Arm 0.84×0.81=0.680400;
+    // Tough Out 0.75×0.543333=0.407500; Sprinter 0.90×0.248889=0.224000.
+    const result = computeTraitAcquisition(input({
+      candidates: [
+        { traitName: 'Sprinter', score: score('Sprinter', 0.9) },
+        { traitName: 'Tough Out', score: score('Tough Out', 0.75) },
+        { traitName: 'Cannon Arm', score: score('Cannon Arm', 0.84) },
+      ],
+    }));
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Cannon Arm', valence: 'gain', probability: 0.84 },
+      { traitName: 'Tough Out', valence: 'gain', probability: 0.75 },
+    ]);
+    expect(result.proposals).toHaveLength(2);
+    expect(result.skipped).toEqual([
+      { traitName: 'Sprinter', reason: 'cap_no_displacement' },
+    ]);
+  });
+
+  test('recomputes weakest incumbent after each displacement so gains cannot target the same slot', () => {
+    expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Cannon Arm')).toBeCloseTo(0.81, 10);
+    expect(computeTraitWeight('Big Hack')).toBeCloseTo(0.798888888888889, 10);
+    // §8B collision fix: keep(Utility)=0.4×0.13×1.25=0.065000;
+    // keep(Clutch)=0.4×0.471111×1.25=0.235556. Cannon Arm (0.680400)
+    // displaces Utility, then Big Hack (0.663078) recomputes and displaces Clutch.
+    const result = computeTraitAcquisition(input({
+      heldTraits: [
+        { traitName: 'Utility', strength: 0.4 },
+        { traitName: 'Clutch', strength: 0.4 },
+      ],
+      candidates: [
+        { traitName: 'Big Hack', score: score('Big Hack', 0.83) },
+        { traitName: 'Cannon Arm', score: score('Cannon Arm', 0.84) },
+      ],
+    }));
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Cannon Arm', valence: 'gain', displaces: 'Utility' },
+      { traitName: 'Big Hack', valence: 'gain', displaces: 'Clutch' },
+    ]);
+    expect(new Set(result.proposals.map((proposal) => proposal.displaces))).toEqual(
+      new Set(['Utility', 'Clutch']),
+    );
+    expect(result.skipped).toEqual([]);
+  });
+
+  test('incumbency lets a valuable held trait block a high-P common gain', () => {
+    expect(computeTraitWeight('Cannon Arm')).toBeCloseTo(0.81, 10);
+    expect(computeTraitWeight('Big Hack')).toBeCloseTo(0.798888888888889, 10);
+    expect(computeTraitWeight('Sprinter')).toBeCloseTo(0.24888888888888888, 10);
+    // Appendix A example 2: keep(Cannon Arm)=0.55×0.81×1.25=0.556875;
+    // keep(Big Hack)=0.95×0.798889×1.25=0.948681; gain(Sprinter)=0.88×0.248889=0.219022.
+    const result = computeTraitAcquisition(input({
+      heldTraits: [
+        { traitName: 'Cannon Arm', strength: 0.2 },
+        { traitName: 'Big Hack', strength: 0.2 },
+      ],
+      candidates: [
+        { traitName: 'Cannon Arm', score: score('Cannon Arm', 0.55) },
+        { traitName: 'Big Hack', score: score('Big Hack', 0.95) },
+        { traitName: 'Sprinter', score: score('Sprinter', 0.88) },
+      ],
+    }));
+
+    expect(result.proposals).toEqual([]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Cannon Arm', reason: 'dead_band' },
+      { traitName: 'Big Hack', reason: 'dead_band' },
+      { traitName: 'Sprinter', reason: 'cap_no_displacement' },
+    ]);
+  });
+
+  test('a high-gainScore rare trait displaces a near-zero-weight common incumbent', () => {
+    expect(computeTraitWeight('Metal Head')).toBeCloseTo(0, 10);
+    expect(computeTraitWeight('Composed')).toBeCloseTo(0.3077777777777778, 10);
+    expect(computeTraitWeight('K Collector')).toBeCloseTo(0.8322222222222223, 10);
+    // Appendix A example 3: keep(Metal Head)=0.5×0×1.25=0;
+    // keep(Composed)=0.6×0.307778×1.25=0.230833; gain(K Collector)=0.86×0.832222=0.715711.
+    const result = computeTraitAcquisition(
+      input({
+        playerRole: 'pitcher',
+        heldTraits: [
+          { traitName: 'Metal Head', strength: 0.5 },
+          { traitName: 'Composed', strength: 0.6 },
+        ],
+        candidates: [
+          { traitName: 'Metal Head', score: score('Metal Head', 0.5) },
+          { traitName: 'Composed', score: score('Composed', 0.6) },
+          { traitName: 'K Collector', score: score('K Collector', 0.86) },
+        ],
+      }),
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'K Collector', valence: 'gain', displaces: 'Metal Head' },
+    ]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Metal Head', reason: 'dead_band' },
+      { traitName: 'Composed', reason: 'dead_band' },
+    ]);
+  });
+
+  test('excluded-trait weight fallback is safe and buildable traits resolve through computeTraitWeight', () => {
+    const buildableTraits = [
+      'Utility',
+      'Clutch',
+      'Stealer',
+      'Choker',
+      'Big Hack',
+      'Rally Starter',
+      'Butter Fingers',
+      'CON vs LHP',
+      'RBI Zero',
+      'K Collector',
+    ];
+    for (const traitName of buildableTraits) {
+      expect(() => computeTraitWeight(traitName)).not.toThrow();
+    }
+    expect(() => computeTraitWeight('Stimulated')).toThrow(/excluded from adaptive trait weighting/);
+
+    // §8B safe wrapper path: raw compute throws for Stimulated, but scoring uses the
+    // Common-floor fallback, so the cap duel completes instead of crashing.
+    const result = computeTraitAcquisition(input({
+      heldTraits: [
+        { traitName: 'Clutch', strength: 0.8 },
+        { traitName: 'Utility', strength: 0.4 },
+      ],
+      candidates: [{ traitName: 'Stimulated', score: score('Stimulated', 0.9) }],
+    }));
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Stimulated', valence: 'gain', displaces: 'Utility' },
+    ]);
+    expect(result.skipped).toEqual([]);
   });
 
   test('a loss proposal frees a slot, so a gain needs no displacement', () => {
@@ -868,8 +1024,14 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     expect(result.proposals[1].displaces).toBeUndefined();
   });
 
-  // R-E-b (E3): displacement uses the RECOMPUTED P this cycle, not the supplied HeldTrait.strength.
-  test('displacement follows the recomputed P, displacing the held trait with the lower P even when its supplied strength is high', () => {
+  // R-E-b (E3) + §8B: displacement uses recomputed keepScore, not supplied strength or bare P.
+  test('displacement follows recomputed keepScore, not supplied strength or bare recomputed P', () => {
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);
+    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.32666666666666666, 10);
+    // §8B: bare recomputed P says Clutch (0.4) is weaker than Utility (0.7), but
+    // keep(Clutch)=0.4×0.471111×1.25=0.235556 and keep(Utility)=0.7×0.13×1.25=0.113750.
+    // gain(Stealer)=0.8×0.326667=0.261333, so Utility is displaced by keepScore.
     const result = computeTraitAcquisition(
       input({
         heldTraits: [
@@ -889,10 +1051,8 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
       NO_SWING_FORCE_GAIN_TUNING,
     );
 
-    // Old behavior (rank by supplied strength) would have displaced 'Utility' (strength 0.1).
-    // New behavior (rank by recomputed P): Clutch P=0.4 < Utility P=0.7, so Clutch is the weakest.
     expect(result.proposals).toMatchObject([
-      { traitName: 'Stealer', valence: 'gain', displaces: 'Clutch' },
+      { traitName: 'Stealer', valence: 'gain', displaces: 'Utility' },
     ]);
     expect(result.skipped).toEqual([
       { traitName: 'Clutch', reason: 'dead_band' },
