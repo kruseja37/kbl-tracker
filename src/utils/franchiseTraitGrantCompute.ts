@@ -25,7 +25,7 @@ import {
 } from '../engines/traitCandidateBuilder';
 import {
   computeTraitAcquisition,
-  type TraitCandidate,
+  TRAIT_ACQUISITION_TUNING,
 } from '../engines/traitAcquisition';
 import type { HiddenModifiers } from '../types/game';
 import type { PersistedGameState } from './gameStorage';
@@ -63,6 +63,7 @@ import {
 import { checkpointCountForCadence } from '../data/rosterEngineConstants';
 import {
   isCheckpointBoundary,
+  resolvePreviousCheckpointGameNumber,
   type CompletedGameArchiveOptions,
 } from './franchiseCheckpointSweepCompute';
 import { isFranchisePhase2TraitsEnabled } from './franchisePhase2Flags';
@@ -216,7 +217,7 @@ export async function persistDarkTraitGrantForCompletedGame(
     playerId: entry.playerId,
     role: entry.role,
   }));
-  const candidatesByPlayer = traitGrantSeam.computeSeasonTraitCandidates({
+  const candidateInput = {
     players: candidatePlayers,
     atBatEvents: seasonData.atBatEvents,
     betweenPlayEvents: seasonData.betweenPlayEvents,
@@ -234,7 +235,18 @@ export async function persistDarkTraitGrantForCompletedGame(
         .filter((e) => e.role === 'pitcher' && e.grade != null)
         .map((e) => [e.playerId, e.grade as Smb4Grade]),
     ),
-  }, config);
+  };
+  const candidatesByPlayer = traitGrantSeam.computeSeasonTraitCandidates(candidateInput, config);
+  const prevBoundary = resolvePreviousCheckpointGameNumber(gameNumber, totalGames, checkpointCount);
+  const recentByPlayer = (TRAIT_ACQUISITION_TUNING.trendTiltWeight ?? 0) > 0 && prevBoundary > 0
+    ? await computeRecentPercentilesByPlayer({
+        seasonData,
+        candidateInput,
+        config,
+        prevBoundary,
+        currentGameNumber: gameNumber,
+      })
+    : new Map<string, Map<string, number>>();
 
   const rows: FranchiseTraitOverlayRow[] = [];
   const sourceEventId = `trait-grant-${gameNumber}`;
@@ -253,7 +265,10 @@ export async function persistDarkTraitGrantForCompletedGame(
       currentMorale: entry.currentMorale,
       rosterRole: 'unknown',
       heldTraits,
-      candidates: candidates as TraitCandidate[],
+      candidates: attachRecentPercentiles(
+        candidates,
+        recentByPlayer.get(entry.playerId),
+      ),
       seed: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${sourceEventId}`,
     });
 
@@ -284,6 +299,92 @@ export async function persistDarkTraitGrantForCompletedGame(
   }
 
   return { status: 'written', written: rows.length };
+}
+
+async function computeRecentPercentilesByPlayer(args: {
+  seasonData: LoadedSeasonTraitData;
+  candidateInput: Parameters<typeof computeSeasonTraitCandidates>[0];
+  config: ReturnType<typeof deriveAdaptiveStandardsConfig>;
+  prevBoundary: number;
+  currentGameNumber: number;
+}): Promise<Map<string, Map<string, number>>> {
+  const windowGameIds = await resolveTraitGrantWindowGameIds(
+    args.seasonData.games,
+    args.prevBoundary,
+    args.currentGameNumber,
+  );
+  const recentCandidatesByPlayer = traitGrantSeam.computeSeasonTraitCandidates({
+    ...args.candidateInput,
+    atBatEvents: filterEventsByGameId(args.seasonData.atBatEvents, windowGameIds),
+    betweenPlayEvents: filterEventsByGameId(args.seasonData.betweenPlayEvents, windowGameIds),
+    fieldingEvents: filterEventsByGameId(args.seasonData.fieldingEvents, windowGameIds),
+  }, args.config);
+  const recentByPlayer = new Map<string, Map<string, number>>();
+
+  for (const [playerId, candidates] of recentCandidatesByPlayer) {
+    const byTrait = new Map<string, number>();
+    for (const candidate of candidates) {
+      if (candidate.score.sufficient === true && candidate.score.realityPercentile != null) {
+        byTrait.set(candidate.traitName, candidate.score.realityPercentile);
+      }
+    }
+    if (byTrait.size > 0) {
+      recentByPlayer.set(playerId, byTrait);
+    }
+  }
+
+  return recentByPlayer;
+}
+
+async function resolveTraitGrantWindowGameIds(
+  games: readonly GameHeader[],
+  prevBoundary: number,
+  currentGameNumber: number,
+): Promise<Set<string>> {
+  const gameIds = new Set<string>();
+
+  for (const game of games) {
+    if (!game.scheduleGameId) continue;
+
+    try {
+      const scheduledGame = await getScheduledGame(game.scheduleGameId);
+      if (
+        scheduledGame
+        && Number.isInteger(scheduledGame.gameNumber)
+        && scheduledGame.gameNumber > prevBoundary
+        && scheduledGame.gameNumber <= currentGameNumber
+      ) {
+        gameIds.add(game.gameId);
+      }
+    } catch {
+      // non-fatal: unresolved schedule ids stay out of the recent window
+    }
+  }
+
+  return gameIds;
+}
+
+function filterEventsByGameId<T extends { gameId: string }>(
+  events: readonly T[],
+  gameIds: ReadonlySet<string>,
+): T[] {
+  return events.filter((event) => gameIds.has(event.gameId));
+}
+
+function attachRecentPercentiles(
+  candidates: readonly SeasonTraitCandidate[],
+  recentForPlayer: ReadonlyMap<string, number> | undefined,
+): readonly SeasonTraitCandidate[] {
+  if (!recentForPlayer || recentForPlayer.size === 0) {
+    return candidates;
+  }
+
+  return candidates.map((candidate) => {
+    const recentPercentile = recentForPlayer.get(candidate.traitName);
+    return recentPercentile == null
+      ? candidate
+      : { ...candidate, recentPercentile };
+  });
 }
 
 async function loadSeasonTraitData(seasonId: string): Promise<LoadedSeasonTraitData> {
