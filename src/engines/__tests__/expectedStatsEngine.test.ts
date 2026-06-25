@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  EXPECTED_STATS_TUNING,
   expectedAndSignal,
   type ExpectedStatsInput,
+  type ExpectedStatsTuning,
 } from '../expectedStatsEngine';
 import {
   MLB_BASELINE_GAMES,
@@ -33,12 +35,74 @@ const baseInput = (overrides: Partial<ExpectedStatsInput> = {}): ExpectedStatsIn
   ...overrides,
 });
 
+const NEUTRAL_AGE_TUNING: ExpectedStatsTuning = {
+  ...EXPECTED_STATS_TUNING,
+  ageBandFactorByBand: {
+    '18-21': 1.0,
+    '22-24': 1.0,
+    '25-31': 1.0,
+    '32-35': 1.0,
+    '36+': 1.0,
+  },
+};
+
+function expectFiniteNumber(value: number | null | undefined): number {
+  expect(typeof value).toBe('number');
+  expect(Number.isFinite(value)).toBe(true);
+  return value as number;
+}
+
 describe('expectedStatsEngine RA-1 pure expected-stat signal', () => {
   test('anchor identity returns r=0 when actual equals expected', () => {
     const result = expectedAndSignal(baseInput(), MLB_CONFIG);
 
     expect(result.expectedByCat.contactAvoidStrikeoutRate).toBeCloseTo(0.300, 10);
     expect(result.rByCat.contactAvoidStrikeoutRate).toBeCloseTo(0, 10);
+  });
+
+  test('prime age band is neutral against the all-1.0 baseline tuning', () => {
+    const prime = expectedAndSignal(baseInput({ ageBand: '25-31' }), MLB_CONFIG);
+    const baseline = expectedAndSignal(
+      baseInput({ ageBand: '25-31' }),
+      MLB_CONFIG,
+      NEUTRAL_AGE_TUNING,
+    );
+
+    expect(prime.expectedByCat.contactAvoidStrikeoutRate).toBe(
+      baseline.expectedByCat.contactAvoidStrikeoutRate,
+    );
+    expect(prime.rByCat.contactAvoidStrikeoutRate).toBe(
+      baseline.rByCat.contactAvoidStrikeoutRate,
+    );
+  });
+
+  test('young and old age bands lower the expected bar and raise r for the same actual', () => {
+    const prime = expectedAndSignal(baseInput({ ageBand: '25-31' }), MLB_CONFIG);
+    const young = expectedAndSignal(baseInput({ ageBand: '18-21' }), MLB_CONFIG);
+    const old = expectedAndSignal(baseInput({ ageBand: '36+' }), MLB_CONFIG);
+    const primeExpected = expectFiniteNumber(prime.expectedByCat.contactAvoidStrikeoutRate);
+    const youngExpected = expectFiniteNumber(young.expectedByCat.contactAvoidStrikeoutRate);
+    const oldExpected = expectFiniteNumber(old.expectedByCat.contactAvoidStrikeoutRate);
+    const primeR = expectFiniteNumber(prime.rByCat.contactAvoidStrikeoutRate);
+    const youngR = expectFiniteNumber(young.rByCat.contactAvoidStrikeoutRate);
+    const oldR = expectFiniteNumber(old.rByCat.contactAvoidStrikeoutRate);
+
+    expect(youngExpected).toBeLessThan(primeExpected);
+    expect(oldExpected).toBeLessThan(primeExpected);
+    expect(youngR).toBeGreaterThan(primeR);
+    expect(oldR).toBeGreaterThan(primeR);
+  });
+
+  test('equal-factor tail age bands apply the same bar shift', () => {
+    const young = expectedAndSignal(baseInput({ ageBand: '18-21' }), MLB_CONFIG);
+    const old = expectedAndSignal(baseInput({ ageBand: '36+' }), MLB_CONFIG);
+
+    expect(expectFiniteNumber(young.expectedByCat.contactAvoidStrikeoutRate)).toBe(
+      expectFiniteNumber(old.expectedByCat.contactAvoidStrikeoutRate),
+    );
+    expect(expectFiniteNumber(young.rByCat.contactAvoidStrikeoutRate)).toBe(
+      expectFiniteNumber(old.rByCat.contactAvoidStrikeoutRate),
+    );
   });
 
   test('curve-ratio is monotonic: a higher rating raises its own expectation', () => {
@@ -117,10 +181,25 @@ describe('expectedStatsEngine RA-1 pure expected-stat signal', () => {
     expect(result.rByCat.contactAvoidStrikeoutRate).toBeCloseTo(0, 10);
   });
 
-  test('pitchers emit no arm expected value or signal', () => {
-    const result = expectedAndSignal(
+  test('pitchers emit no arm expected value or signal regardless of age band', () => {
+    const young = expectedAndSignal(
       baseInput({
         playerRole: 'pitcher',
+        ageBand: '18-21',
+        curveBlock: 'SP',
+        ratings: { arm: 70 },
+        actualByCat: { armThrowingRate: 0.100 },
+        sampleSizeByCat: { armThrowingRate: 100 },
+        poolMeanByCat: { armThrowingRate: 0.050 },
+        poolSdByCat: { armThrowingRate: 0.010 },
+        poolMeanRating: { arm: 50 },
+      }),
+      MLB_CONFIG,
+    );
+    const old = expectedAndSignal(
+      baseInput({
+        playerRole: 'pitcher',
+        ageBand: '36+',
         curveBlock: 'SP',
         ratings: { arm: 70 },
         actualByCat: { armThrowingRate: 0.100 },
@@ -132,7 +211,9 @@ describe('expectedStatsEngine RA-1 pure expected-stat signal', () => {
       MLB_CONFIG,
     );
 
-    expect(result.expectedByCat.armThrowingRate).toBeNull();
-    expect(result.rByCat.armThrowingRate).toBeNull();
+    expect(young.expectedByCat.armThrowingRate).toBeNull();
+    expect(young.rByCat.armThrowingRate).toBeNull();
+    expect(old.expectedByCat.armThrowingRate).toBeNull();
+    expect(old.rByCat.armThrowingRate).toBeNull();
   });
 });
