@@ -16,7 +16,8 @@ import {
   CHEMISTRY_TARGET_DISTRIBUTION,
   type ChemistryCode,
 } from '../data/chemistryCanonical';
-import { assignTier } from '../data/traitTierConfig';
+import { assignTier, NEGATIVE_TRAIT_FRACTION } from '../data/traitTierConfig';
+import { TRAIT_OPPOSITES } from '../engines/traitAcquisition';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
@@ -354,6 +355,26 @@ export const PROSPECT_PITCHER_TRAIT_POOL = [
   'Specialist',
   'Workhorse',
 ] as const;
+export const PROSPECT_HITTER_NEGATIVE_TRAIT_POOL = [
+  'Choker',
+  'RBI Zero',
+  'Butter Fingers',
+  'Wild Thrower',
+  'Bad Jumps',
+  'Slow Poke',
+  'First Pitch Prayer',
+  'Whiffer',
+  'Injury Prone',
+] as const;
+export const PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL = [
+  'Choker',
+  'Surrounded',
+  'Meltdown',
+  'K Neglector',
+  'BB Prone',
+  'Falls Behind',
+  'Injury Prone',
+] as const;
 export const PROSPECT_TRAIT_CONFLICT_PAIRS = [
   ['Big Hack', 'Little Hack'],
   ['High Pitch', 'Low Pitch'],
@@ -690,11 +711,17 @@ function prospectTraitGenWeight(trait: string): number {
 
 function pickSecondProspectTrait(
   seed: string,
-  traitPool: readonly string[],
+  positivePool: readonly string[],
+  negativePool: readonly string[],
   firstTrait: string,
+  firstTraitNegative: boolean,
 ): string | undefined {
-  const eligible = traitPool.filter((trait) =>
-    trait !== firstTrait && !prospectTraitsConflict(firstTrait, trait),
+  const slot2Negative = !firstTraitNegative && randomUnit(`${seed}:trait2:polarity`) < NEGATIVE_TRAIT_FRACTION;
+  const pool = slot2Negative ? negativePool : positivePool;
+  const eligible = pool.filter((trait) =>
+    trait !== firstTrait &&
+    !prospectTraitsConflict(firstTrait, trait) &&
+    trait !== TRAIT_OPPOSITES[firstTrait],
   );
   return eligible.length > 0
     ? pickWeighted(`${seed}:trait2`, eligible.map((trait) => [trait, prospectTraitGenWeight(trait)]))
@@ -1376,12 +1403,19 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
   const bats = drawProspectBats(seed);
   const throws = drawProspectThrows(seed, bats);
   const traitPool = isPitcher(position) ? PROSPECT_PITCHER_TRAIT_POOL : PROSPECT_HITTER_TRAIT_POOL;
+  const negativePool = isPitcher(position)
+    ? PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL
+    : PROSPECT_HITTER_NEGATIVE_TRAIT_POOL;
   const traitCount = drawProspectTraitCount(seed);
+  const trait1Negative = traitCount >= 1 && randomUnit(`${seed}:trait1:polarity`) < NEGATIVE_TRAIT_FRACTION;
   const trait1 = traitCount >= 1
-    ? pickWeighted(`${seed}:trait1`, traitPool.map((trait) => [trait, prospectTraitGenWeight(trait)]))
+    ? pickWeighted(
+      `${seed}:trait1`,
+      (trait1Negative ? negativePool : traitPool).map((trait) => [trait, prospectTraitGenWeight(trait)]),
+    )
     : undefined;
   const trait2 = traitCount >= 2 && trait1
-    ? pickSecondProspectTrait(seed, traitPool, trait1)
+    ? pickSecondProspectTrait(seed, traitPool, negativePool, trait1, trait1Negative)
     : undefined;
   const traits = [trait1, trait2].filter((trait): trait is string => Boolean(trait));
   let solved: ReturnType<typeof buildRatings> | undefined;

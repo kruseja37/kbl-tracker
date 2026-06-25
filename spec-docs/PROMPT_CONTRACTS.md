@@ -21742,3 +21742,70 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-4a ===== -->
+
+<!-- ===== CONTRACT: T-4b ===== -->
+## T-4b — §5 negative-polarity pass: prospects may spawn with flaws (NEG 0.27)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding a negative-trait polarity roll + new negative trait pools to the prospect generator, on top of T-4a's rarity-weighting. The grade-distribution calibration is the make-or-break.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Each generated trait slot rolls a `NEGATIVE_TRAIT_FRACTION` (0.27) chance to draw a **flaw** (from new role-split negative pools, genWeight-weighted) instead of a positive trait — with no prospect getting two negatives and no contradictory positive+opposite pair — WITHOUT drifting the calibrated §3.2 prospect-grade distribution.
+
+**SOURCE OF TRUTH (VERBATIM):** `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md` §5 ("two passes: (1) **polarity per slot at NEGATIVE_TRAIT_FRACTION = 0.27**; (2) weighted draw within polarity"). **JK RULING 2026-06-25 (DECISIONS_LOG): prospect flaws = YES** (the spec default; severe flaws stay rare automatically via genWeight, no separate guard). Negative tiers + genWeight (Severe 0.15 / Moderate 0.45 / Minor 1.0) are on `assignTier`; the no-2-negatives + opposite-pair constraints come from §4 (`TRAIT_GAIN_LOSS_THRESHOLD_SPEC §4` league caps) + the canonical opposite map.
+
+**GROUNDING (Captain-verified; re-read before editing):**
+- `src/utils/prospectScoutingDraftEngine.ts` (post-T-4a `095717d6`): `buildCandidate` now draws `trait1` via `pickWeighted(`${seed}:trait1`, positivePool.map(t=>[t, prospectTraitGenWeight(t)]))` and `trait2` via `pickSecondProspectTrait(seed, traitPool, trait1)`. `prospectTraitGenWeight(t)` (`try assignTier(t).genWeight catch 1`) + `pickWeighted` (:693) + `prospectTraitsConflict` (:669) + `PROSPECT_TRAIT_CONFLICT_PAIRS` (:356) + `drawProspectTraitCount` (30/50/20) all exist. Positive pools `PROSPECT_HITTER_TRAIT_POOL`(29)/`PROSPECT_PITCHER_TRAIT_POOL`(17) at :306-355. `randomUnit(seed)` (:582-ish) → [0,1).
+- `src/data/traitTierConfig.ts`: `NEGATIVE_TRAIT_FRACTION = 0.27` (:19, currently UNCONSUMED — T-4b is its first consumer). `assignTier(t)` returns `{ polarity, tier, genWeight }`; negative traits classify to MINOR/MODERATE/SEVERE.
+- `src/engines/traitAcquisition.ts`: `TRAIT_OPPOSITES` (exported, frozen `Record<string,string>`) — the canonical opposite map (Clutch↔Choker, Tough Out↔Whiffer, Sprinter↔Slow Poke, Magic Hands↔Butter Fingers, RBI Hero↔RBI Zero, First Pitch Slayer↔First Pitch Prayer, Stealer↔Bad Jumps, etc.). A util importing this engine const is fine.
+- `src/engines/traitRealityScorer.ts`: `isTraitEligibleForRole(trait, role)` (:158) gates by `traitRole` against `'pitcher'|'position'`; UNIVERSAL traits (Choker, Volatile, Injury Prone, Durable, Consistent…) pass both.
+- **Candidate negative pools (Captain-verified each is `polarity:'negative'` in `traitPricing.ts` AND role-eligible — Codex MUST re-verify with the self-validation test; STOP-IF any fails):**
+  - `PROSPECT_HITTER_NEGATIVE_TRAIT_POOL` = `['Choker','RBI Zero','Butter Fingers','Wild Thrower','Bad Jumps','Slow Poke','First Pitch Prayer','Whiffer','Injury Prone']` (9; each `isTraitEligibleForRole(t,'position')`).
+  - `PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL` = `['Choker','Surrounded','Meltdown','K Neglector','BB Prone','Falls Behind','Injury Prone']` (7; each `isTraitEligibleForRole(t,'pitcher')`).
+  - **⚠ `Volatile` DELIBERATELY EXCLUDED:** it is `polarity:'positive'` in `traitPricing.ts:454` (so `assignTier` classifies it POSITIVE / `scoreSmb4Player` would treat it as a bonus, not a flaw) DESPITE living in `traitAcquisition.ts` `NEGATIVE_IMAGE_TRAITS` + the `Consistent↔Volatile` opposite pair — a known cross-module polarity inconsistency (logged as an OPEN-DECISION, NOT fixed here). Do NOT add it to the negative pool; do NOT edit `traitPricing.ts`.
+
+**BUILD (`src/utils/prospectScoutingDraftEngine.ts` + its test):**
+1. Add the two `PROSPECT_*_NEGATIVE_TRAIT_POOL` consts (above). Import `NEGATIVE_TRAIT_FRACTION` from `../data/traitTierConfig` + `TRAIT_OPPOSITES` from `../engines/traitAcquisition`.
+2. In `buildCandidate`, compute `negativePool = isPitcher(position) ? PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL : PROSPECT_HITTER_NEGATIVE_TRAIT_POOL` alongside the positive `traitPool`.
+3. **Slot-1 polarity roll:** `const trait1Negative = traitCount >= 1 && randomUnit(`${seed}:trait1:polarity`) < NEGATIVE_TRAIT_FRACTION;` then draw `trait1` via `pickWeighted(`${seed}:trait1`, (trait1Negative ? negativePool : traitPool).map(t=>[t, prospectTraitGenWeight(t)]))`. (Keep the `:trait1` weight seed UNCHANGED; only the source pool varies.)
+4. **Extend `pickSecondProspectTrait`** signature → `(seed, positivePool, negativePool, firstTrait, firstTraitNegative)`:
+   - **No-2-negatives:** `const slot2Negative = !firstTraitNegative && randomUnit(`${seed}:trait2:polarity`) < NEGATIVE_TRAIT_FRACTION;` `const pool = slot2Negative ? negativePool : positivePool;`
+   - **Eligible** = `pool.filter(t => t !== firstTrait && !prospectTraitsConflict(firstTrait, t) && t !== TRAIT_OPPOSITES[firstTrait])` (the opposite exclusion prevents Tough Out+Whiffer etc.).
+   - `return eligible.length > 0 ? pickWeighted(`${seed}:trait2`, eligible.map(t=>[t, prospectTraitGenWeight(t)])) : undefined;`
+   - Update the one call site in `buildCandidate` to pass `(seed, traitPool, negativePool, trait1, trait1Negative)`.
+5. NO change to `drawProspectTraitCount`, the positive pools, the conflict pairs, `pick`, ratings, or any non-trait draw. The polarity seeds (`:trait1:polarity`/`:trait2:polarity`) are NEW, distinct from every existing seed suffix.
+
+**TEST UPDATES (`src/utils/tests/prospectScoutingDraftEngine.test.ts`):**
+- **Negative-pool self-validation (like T-1's no-orphan check):** for every trait in both negative pools, assert `assignTier(t).polarity === 'negative'` (NEGATIVE tier) AND `isTraitEligibleForRole(t, <role>)` is true. (If this fails for any trait, that trait is wrong — STOP, don't delete the assertion.)
+- **Distribution:** over a large sample (≥20k), assert the slot-1 negative rate is "roughly a quarter" — a SANE BAND `0.20 ≤ rate ≤ 0.32` (NOT a tight ±3pp: the 0.27 target is a §16 sim-tune placeholder and FNV-per-seed bias lands the observed ~0.244 — assert the band, not the point); **no prospect has two negative traits**; **no prospect has a trait + its `TRAIT_OPPOSITES` opposite**; the 30/50/20 trait-COUNT split still holds.
+- **Re-baseline the 2 generation goldens** (now that ~27% of slots draw negatives): the §10 age-isolation hash (`B11_B8_NON_AGE_RNG_PROOF`) + `prospectChemistryRebalance.test.ts` `PRE_REBALANCE_NON_CHEMISTRY_GOLDEN`. Re-baseline ONLY after confirming the AGE fields stay byte-identical (age-isolation intact); report old→new.
+- **MAKE-OR-BREAK — property tests stay green WITHOUT loosening:** the §13 §3.2 grade-distribution (~:743, 40k, ±1.72pp) AND the grade round-trip (~:624). Flaws lower the trait grade-contribution; if the per-prospect rating anchor absorbs it, both hold. If §13 drifts >1.72pp → STOP-IF (do NOT re-baseline the §3.2 target).
+
+**MAKE-OR-BREAK:**
+- Each slot independently rolls 27% negative, EXCEPT slot-2 is forced positive when slot-1 is negative (no 2 negatives); slot-2 never equals trait1, its conflict, or its opposite.
+- Negative draws are genWeight-weighted (severe flaws rare) + role-correct (hitter pool for position, pitcher pool for pitcher); every negative-pool trait verified NEGATIVE + eligible.
+- **§13 grade-distribution stays ≤1.72pp and the round-trip stays green without re-baselining the §3.2 target or loosening tolerances.**
+- Only trait1/trait2 (+ downstream ratings) change; age/chemistry/position draws byte-identical. `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts` untouched. Determinism preserved (all draws seeded).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → full pass/fail (esp. the §13 distribution, the negative-rate + no-2-neg + no-opposite tests, the pool self-validation).
+3. `NODE_ENV= npm test` (FULL suite). Read the FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`franchiseOffseasonGuards.component`/`GameTrackerLaunchState` solo-pass order-flakes — re-run any unexpected red IN ISOLATION).
+4. `git --no-pager diff --stat` → `prospectScoutingDraftEngine.ts` + `prospectScoutingDraftEngine.test.ts` + `prospectChemistryRebalance.test.ts` (golden re-baseline). `iv_oracle.json` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + count.
+2. Each change described, referencing §5 / the make-or-break.
+3. The verified negative pools (each trait's tier + eligibility); the observed negative slot-1 rate; what you confirmed before re-baselining the 2 goldens (age byte-identical); old→new golden values.
+4. Verification output pasted (build, focused vitest incl. §13, full-suite FAILED-file summary, diff --stat).
+5. "T-4b complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- **§13 grade-distribution drifts >1.72pp** OR the round-trip breaks (the anchor can't absorb the flaws) → STOP, report the observed distribution. Do NOT re-baseline the §3.2 target or loosen the tolerance (calibration decision → Captain/JK).
+- A negative-pool trait does NOT resolve a NEGATIVE tier or is NOT role-eligible → STOP, report which (the pool is wrong).
+- The golden diff touches AGE fields → STOP (age-isolation violated).
+- iv_oracle / grade-oracle / traitTierConfig would need editing → STOP.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-4b ===== -->

@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 import { TRAIT_PRICING } from '../../data/traitPricing';
 import { assignTier } from '../../data/traitTierConfig';
+import { TRAIT_OPPOSITES } from '../../engines/traitAcquisition';
+import { isTraitEligibleForRole } from '../../engines/traitRealityScorer';
 import { countTraitPolarity, normalizeTrait, scoreSmb4Player } from '../../engines/smb4GradeEmulator';
 import {
   buildProspectPlayerForPick,
@@ -11,7 +13,9 @@ import {
   generateProspectScoutingDraft,
   gradeDistance,
   PROSPECT_AGE_BANDS,
+  PROSPECT_HITTER_NEGATIVE_TRAIT_POOL,
   PROSPECT_HITTER_TRAIT_POOL,
+  PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL,
   PROSPECT_PITCHER_TRAIT_POOL,
   prospectTraitsConflict,
   prospectSalaryForDraftRound,
@@ -78,8 +82,8 @@ const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
 const SECTION_10_AGE_TOLERANCE = 0.015;
 const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
 const B11_B8_NON_AGE_RNG_PROOF = {
-  length: 29694,
-  hash: '20cf7afb',
+  length: 29700,
+  hash: 'a1951a0a',
 } as const;
 
 const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
@@ -380,6 +384,31 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     }
   });
 
+  test('§5 negative prospect trait pools are negative and role-eligible', () => {
+    const observed = {
+      hitter: [] as Array<{ trait: string; tier: string; roleEligible: boolean }>,
+      pitcher: [] as Array<{ trait: string; tier: string; roleEligible: boolean }>,
+    };
+
+    for (const [poolName, pool, role] of [
+      ['hitter', PROSPECT_HITTER_NEGATIVE_TRAIT_POOL, 'position'],
+      ['pitcher', PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL, 'pitcher'],
+    ] as const) {
+      expect(new Set(pool).size).toBe(pool.length);
+      for (const trait of pool) {
+        const tier = assignTier(trait);
+        const roleEligible = isTraitEligibleForRole(trait, role);
+
+        observed[poolName].push({ trait, tier: tier.tier, roleEligible });
+        expect(tier.polarity).toBe('negative');
+        expect(['MINOR', 'MODERATE', 'SEVERE']).toContain(tier.tier);
+        expect(roleEligible).toBe(true);
+      }
+    }
+
+    console.info('§5 negative prospect trait pools', observed);
+  });
+
   test('generated prospect traits follow 30/50/20 count split with no duplicate or conflict pairs', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,
@@ -396,7 +425,10 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       expect(new Set(traits).size).toBe(traits.length);
       if (traits.length === 2) {
         expect(prospectTraitsConflict(traits[0], traits[1])).toBe(false);
+        expect(TRAIT_OPPOSITES[traits[0]]).not.toBe(traits[1]);
+        expect(TRAIT_OPPOSITES[traits[1]]).not.toBe(traits[0]);
       }
+      expect(traits.filter((trait) => assignTier(trait).polarity === 'negative').length).toBeLessThanOrEqual(1);
     }
 
     const total = output.draftClass.length;
@@ -447,6 +479,56 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(counts.common).toBeGreaterThan(counts.rare * 2);
   }, 120_000);
 
+  test('§5 negative prospect trait polarity draw stays bounded with no two negatives or opposite pairs', () => {
+    const prospects = generateProspectPool({
+      leagueId: 'section-5-negative-trait-polarity',
+      seasonNumber: 1,
+      seed: 'section-5-negative-trait-polarity-seed',
+      teamDraftOrder: BASE_INPUT.teamDraftOrder,
+    }, 20_000);
+    const traitCounts = [0, 0, 0];
+    let slot1Traits = 0;
+    let slot1Negative = 0;
+
+    for (const prospect of prospects) {
+      const traits = [prospect.trait1, prospect.trait2].filter((trait): trait is string => Boolean(trait));
+      const negativeTraits = traits.filter((trait) => assignTier(trait).polarity === 'negative');
+
+      traitCounts[traits.length] += 1;
+      if (prospect.trait1) {
+        slot1Traits += 1;
+        if (assignTier(prospect.trait1).polarity === 'negative') {
+          slot1Negative += 1;
+        }
+      }
+
+      expect(negativeTraits.length).toBeLessThanOrEqual(1);
+      expect(new Set(traits).size).toBe(traits.length);
+      if (traits.length === 2) {
+        expect(prospectTraitsConflict(traits[0], traits[1])).toBe(false);
+        expect(TRAIT_OPPOSITES[traits[0]]).not.toBe(traits[1]);
+        expect(TRAIT_OPPOSITES[traits[1]]).not.toBe(traits[0]);
+      }
+    }
+
+    const slot1NegativeRate = slot1Negative / slot1Traits;
+    const traitCountRates = traitCounts.map((count) => count / prospects.length);
+
+    console.info('§5 negative slot-1 rate', Number(slot1NegativeRate.toFixed(4)));
+    console.info('§5 negative trait-count rates', {
+      zero: Number(traitCountRates[0].toFixed(4)),
+      one: Number(traitCountRates[1].toFixed(4)),
+      two: Number(traitCountRates[2].toFixed(4)),
+    });
+
+    expect(prospects).toHaveLength(20_000);
+    expect(slot1NegativeRate).toBeGreaterThanOrEqual(0.20);
+    expect(slot1NegativeRate).toBeLessThanOrEqual(0.32);
+    for (const [index, target] of SECTION_3_4_TRAIT_COUNT_TARGETS.entries()) {
+      expect(Math.abs(traitCountRates[index] - target)).toBeLessThanOrEqual(SECTION_13_TRAIT_TOLERANCE);
+    }
+  }, 120_000);
+
   test('generated pitchers get pitcher-pool traits and fielders get hitter-pool traits', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,
@@ -454,8 +536,8 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       candidatePoolMultiplier: 5,
       seed: 'section-5-5-position-appropriate-traits-seed',
     });
-    const hitterPool = new Set(PROSPECT_HITTER_TRAIT_POOL);
-    const pitcherPool = new Set(PROSPECT_PITCHER_TRAIT_POOL);
+    const hitterPool = new Set([...PROSPECT_HITTER_TRAIT_POOL, ...PROSPECT_HITTER_NEGATIVE_TRAIT_POOL]);
+    const pitcherPool = new Set([...PROSPECT_PITCHER_TRAIT_POOL, ...PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL]);
     const pitchers = output.draftClass.filter((candidate) => PITCHER_POSITIONS.has(candidate.position));
     const fielders = output.draftClass.filter((candidate) => !PITCHER_POSITIONS.has(candidate.position));
 
@@ -464,12 +546,12 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     for (const candidate of pitchers) {
       const traits = [candidate.trait1, candidate.trait2].filter((trait): trait is string => Boolean(trait));
       expect(traits.every((trait) => pitcherPool.has(trait))).toBe(true);
-      expect(traits.every((trait) => !hitterPool.has(trait))).toBe(true);
+      expect(traits.every((trait) => isTraitEligibleForRole(trait, 'pitcher'))).toBe(true);
     }
     for (const candidate of fielders) {
       const traits = [candidate.trait1, candidate.trait2].filter((trait): trait is string => Boolean(trait));
       expect(traits.every((trait) => hitterPool.has(trait))).toBe(true);
-      expect(traits.every((trait) => !pitcherPool.has(trait))).toBe(true);
+      expect(traits.every((trait) => isTraitEligibleForRole(trait, 'position'))).toBe(true);
     }
   });
 
@@ -792,8 +874,8 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     ) as Record<Section32Grade, number>;
     const traitCounts = [0, 0, 0];
     const positionCounts = new Map<string, number>();
-    const hitterPool = new Set(PROSPECT_HITTER_TRAIT_POOL);
-    const pitcherPool = new Set(PROSPECT_PITCHER_TRAIT_POOL);
+    const hitterPool = new Set([...PROSPECT_HITTER_TRAIT_POOL, ...PROSPECT_HITTER_NEGATIVE_TRAIT_POOL]);
+    const pitcherPool = new Set([...PROSPECT_PITCHER_TRAIT_POOL, ...PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL]);
     let pitcherCount = 0;
     let fielderCount = 0;
 
@@ -829,7 +911,10 @@ describe('shared deterministic prospect/scouting draft engine', () => {
       expect(new Set(traits).size).toBe(traits.length);
       if (traits.length === 2) {
         expect(prospectTraitsConflict(traits[0], traits[1])).toBe(false);
+        expect(TRAIT_OPPOSITES[traits[0]]).not.toBe(traits[1]);
+        expect(TRAIT_OPPOSITES[traits[1]]).not.toBe(traits[0]);
       }
+      expect(traits.filter((trait) => assignTier(trait).polarity === 'negative').length).toBeLessThanOrEqual(1);
 
       gradeCounts[analyzerGrade!] += 1;
       traitCounts[traits.length] += 1;
@@ -843,7 +928,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
         expect(candidate.ratings.junk).toBeGreaterThan(0);
         expect(candidate.ratings.accuracy).toBeGreaterThan(0);
         expect(traits.every((trait) => pitcherPool.has(trait))).toBe(true);
-        expect(traits.every((trait) => !hitterPool.has(trait))).toBe(true);
+        expect(traits.every((trait) => isTraitEligibleForRole(trait, 'pitcher'))).toBe(true);
       } else {
         fielderCount += 1;
         expect(candidate.arsenal).toEqual([]);
@@ -851,7 +936,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
         expect(candidate.ratings.junk).toBe(0);
         expect(candidate.ratings.accuracy).toBe(0);
         expect(traits.every((trait) => hitterPool.has(trait))).toBe(true);
-        expect(traits.every((trait) => !pitcherPool.has(trait))).toBe(true);
+        expect(traits.every((trait) => isTraitEligibleForRole(trait, 'position'))).toBe(true);
       }
     }
 
