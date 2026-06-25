@@ -24,10 +24,10 @@ const baseInput = (overrides: Partial<ExpectedStatsInput> = {}): ExpectedStatsIn
   ageBand: '25-31',
   curveBlock: 'SS',
   ratings: { contact: 50 },
-  actualByCat: { contactAverage: 0.300 },
-  sampleSizeByCat: { contactAverage: 100 },
-  poolMeanByCat: { contactAverage: 0.300 },
-  poolSdByCat: { contactAverage: 0.050 },
+  actualByCat: { contactAvoidStrikeoutRate: 0.300 },
+  sampleSizeByCat: { contactAvoidStrikeoutRate: 100 },
+  poolMeanByCat: { contactAvoidStrikeoutRate: 0.300 },
+  poolSdByCat: { contactAvoidStrikeoutRate: 0.050 },
   poolMeanRating: { contact: 50 },
   peerPoolSize: 6,
   ...overrides,
@@ -37,8 +37,8 @@ describe('expectedStatsEngine RA-1 pure expected-stat signal', () => {
   test('anchor identity returns r=0 when actual equals expected', () => {
     const result = expectedAndSignal(baseInput(), MLB_CONFIG);
 
-    expect(result.expectedByCat.contactAverage).toBeCloseTo(0.300, 10);
-    expect(result.rByCat.contactAverage).toBeCloseTo(0, 10);
+    expect(result.expectedByCat.contactAvoidStrikeoutRate).toBeCloseTo(0.300, 10);
+    expect(result.rByCat.contactAvoidStrikeoutRate).toBeCloseTo(0, 10);
   });
 
   test('curve-ratio is monotonic: a higher rating raises its own expectation', () => {
@@ -73,47 +73,48 @@ describe('expectedStatsEngine RA-1 pure expected-stat signal', () => {
   test('peer-SD z-score clamps at +1 and -1', () => {
     const high = expectedAndSignal(
       baseInput({
-        actualByCat: { contactAverage: 0.400 },
-        poolSdByCat: { contactAverage: 0.020 },
+        actualByCat: { contactAvoidStrikeoutRate: 0.400 },
+        poolSdByCat: { contactAvoidStrikeoutRate: 0.020 },
       }),
       MLB_CONFIG,
     );
     const low = expectedAndSignal(
       baseInput({
-        actualByCat: { contactAverage: 0.100 },
-        poolSdByCat: { contactAverage: 0.020 },
+        actualByCat: { contactAvoidStrikeoutRate: 0.100 },
+        poolSdByCat: { contactAvoidStrikeoutRate: 0.020 },
       }),
       MLB_CONFIG,
     );
 
-    expect(high.rByCat.contactAverage).toBe(1);
-    expect(low.rByCat.contactAverage).toBe(-1);
+    expect(high.rByCat.contactAvoidStrikeoutRate).toBe(1);
+    expect(low.rByCat.contactAvoidStrikeoutRate).toBe(-1);
   });
 
   test('min-sample gate emits no signal below the season-scaled floor', () => {
     const result = expectedAndSignal(
       baseInput({
-        sampleSizeByCat: { contactAverage: 49 },
+        sampleSizeByCat: { contactAvoidStrikeoutRate: 49 },
       }),
       MLB_CONFIG,
     );
 
-    expect(result.expectedByCat.contactAverage).toBeCloseTo(0.300, 10);
-    expect(result.rByCat.contactAverage).toBeNull();
+    expect(result.expectedByCat.contactAvoidStrikeoutRate).toBeCloseTo(0.300, 10);
+    expect(result.rByCat.contactAvoidStrikeoutRate).toBeNull();
   });
 
   test('uses SMB4_BASELINES as the default pool mean path', () => {
+    const contactBaseline = 1 - SMB4_BASELINES.kPerPA;
     const result = expectedAndSignal(
       baseInput({
-        actualByCat: { contactAverage: SMB4_BASELINES.leagueAVG },
+        actualByCat: { contactAvoidStrikeoutRate: contactBaseline },
         poolMeanByCat: undefined,
-        poolSdByCat: { contactAverage: 0.020 },
+        poolSdByCat: { contactAvoidStrikeoutRate: 0.020 },
       }),
       MLB_CONFIG,
     );
 
-    expect(result.expectedByCat.contactAverage).toBeCloseTo(SMB4_BASELINES.leagueAVG, 10);
-    expect(result.rByCat.contactAverage).toBeCloseTo(0, 10);
+    expect(result.expectedByCat.contactAvoidStrikeoutRate).toBeCloseTo(contactBaseline, 10);
+    expect(result.rByCat.contactAvoidStrikeoutRate).toBeCloseTo(0, 10);
   });
 
   test('pitchers emit no arm expected value or signal', () => {

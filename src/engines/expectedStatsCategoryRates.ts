@@ -13,11 +13,8 @@
  * RA-2CQ-2a season counts.
  */
 
-import { calculateFIP } from './pwarCalculator';
 import type { ExpectedStatsCategory } from './expectedStatsEngine';
 import {
-  calcBattingAvg,
-  calcOBP,
   calcSLG,
   type PlayerSeasonBatting,
   type PlayerSeasonFielding,
@@ -59,11 +56,8 @@ function addHitterRates(
 ): void {
   const battingSample = batting?.pa ?? 0;
 
-  setSample(result.sampleSizeByCat, 'powerIso', battingSample);
   setSample(result.sampleSizeByCat, 'powerSlugging', battingSample);
   setSample(result.sampleSizeByCat, 'powerHomeRunRate', battingSample);
-  setSample(result.sampleSizeByCat, 'contactAverage', battingSample);
-  setSample(result.sampleSizeByCat, 'contactOnBase', battingSample);
   setSample(result.sampleSizeByCat, 'contactAvoidStrikeoutRate', battingSample);
   setSample(
     result.sampleSizeByCat,
@@ -74,17 +68,10 @@ function addHitterRates(
   setSample(result.sampleSizeByCat, 'contactQualityRate', batting?.contactQualityTracked ?? 0);
 
   if (batting) {
-    const battingAverage = calcBattingAvg(batting);
     const slugging = calcSLG(batting);
-    const obpDenominator = batting.ab + batting.walks + batting.hitByPitch + batting.sacFlies;
 
     if (batting.ab > 0) {
-      emitActual(result.actualByCat, 'powerIso', slugging - battingAverage);
       emitActual(result.actualByCat, 'powerSlugging', slugging);
-      emitActual(result.actualByCat, 'contactAverage', battingAverage);
-    }
-    if (obpDenominator > 0) {
-      emitActual(result.actualByCat, 'contactOnBase', calcOBP(batting));
     }
     if (batting.pa > 0) {
       emitActual(result.actualByCat, 'powerHomeRunRate', batting.homeRuns / batting.pa);
@@ -147,12 +134,10 @@ function addPitcherRates(
     pitching
       ? pitching.outsRecorded + pitching.hitsAllowed + pitching.walksAllowed + pitching.hitBatters
       : 0;
-  const outsRecorded = pitching?.outsRecorded ?? 0;
 
   setSample(result.sampleSizeByCat, 'pitchingStrikeoutRate', battersFaced);
   setSample(result.sampleSizeByCat, 'pitchingWalkAvoidanceRate', battersFaced);
   setSample(result.sampleSizeByCat, 'pitchingHomeRunSuppressionRate', battersFaced);
-  setSample(result.sampleSizeByCat, 'pitchingFipPrevention', outsRecorded);
   setSample(result.sampleSizeByCat, 'pitchingWeakContactRate', pitching?.weakContactTracked ?? 0);
 
   if (!pitching) {
@@ -171,23 +156,6 @@ function addPitcherRates(
       'pitchingHomeRunSuppressionRate',
       1 - (pitching.homeRunsAllowed / battersFaced),
     );
-  }
-
-  const ip = pitching.outsRecorded / 3;
-  if (ip > 0) {
-    const fip = calculateFIP({
-      ip,
-      strikeouts: pitching.strikeouts,
-      walks: pitching.walksAllowed,
-      hitByPitch: pitching.hitBatters,
-      homeRunsAllowed: pitching.homeRunsAllowed,
-      gamesStarted: pitching.gamesStarted,
-      gamesAppeared: pitching.games,
-    });
-
-    if (fip > 0) {
-      emitActual(result.actualByCat, 'pitchingFipPrevention', 1 / fip);
-    }
   }
 
   const weakContactTracked = pitching.weakContactTracked ?? 0;

@@ -5,7 +5,6 @@ import {
   type CategoryRateResult,
 } from '../expectedStatsCategoryRates';
 import type { ExpectedStatsCategory } from '../expectedStatsEngine';
-import { SMB4_PITCHING_BASELINES } from '../pwarCalculator';
 import type {
   PlayerSeasonBatting,
   PlayerSeasonFielding,
@@ -13,11 +12,8 @@ import type {
 } from '../../utils/seasonStorage';
 
 const HITTER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
-  'powerIso',
   'powerSlugging',
   'powerHomeRunRate',
-  'contactAverage',
-  'contactOnBase',
   'contactAvoidStrikeoutRate',
   'contactQualityRate',
   'speedStealTripleRate',
@@ -30,7 +26,6 @@ const PITCHER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
   'pitchingStrikeoutRate',
   'pitchingWalkAvoidanceRate',
   'pitchingHomeRunSuppressionRate',
-  'pitchingFipPrevention',
   'pitchingWeakContactRate',
 ];
 
@@ -156,22 +151,16 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       }),
     });
 
-    expect(result.actualByCat.powerIso).toBeCloseTo(0.200, 10);
     expect(result.actualByCat.powerSlugging).toBeCloseTo(0.500, 10);
     expect(result.actualByCat.powerHomeRunRate).toBeCloseTo(3 / 120, 10);
-    expect(result.actualByCat.contactAverage).toBeCloseTo(0.300, 10);
-    expect(result.actualByCat.contactOnBase).toBeCloseTo(47 / 120, 10);
     expect(result.actualByCat.contactAvoidStrikeoutRate).toBeCloseTo(1 - (20 / 120), 10);
     expect(result.actualByCat.speedStealTripleRate).toBeCloseTo(10 / 120, 10);
     expect(result.actualByCat.fieldingFieldingPct).toBeCloseTo(75 / 80, 10);
     expect(result.actualByCat.fieldingRangeRate).toBeCloseTo(75 / 25, 10);
 
     expect(result.sampleSizeByCat).toEqual({
-      powerIso: 120,
       powerSlugging: 120,
       powerHomeRunRate: 120,
-      contactAverage: 120,
-      contactOnBase: 120,
       contactAvoidStrikeoutRate: 120,
       contactQualityRate: 0,
       speedStealTripleRate: 10,
@@ -239,21 +228,15 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       }),
     });
     const battersFaced = 90 + 24 + 9 + 3;
-    const ip = 90 / 3;
-    const expectedFip =
-      ((13 * 4) + (3 * (9 + 3)) - (2 * 36)) / ip +
-      SMB4_PITCHING_BASELINES.fipConstant;
 
     expect(result.actualByCat.pitchingStrikeoutRate).toBeCloseTo(36 / battersFaced, 10);
     expect(result.actualByCat.pitchingWalkAvoidanceRate).toBeCloseTo(1 - (9 / battersFaced), 10);
     expect(result.actualByCat.pitchingHomeRunSuppressionRate).toBeCloseTo(1 - (4 / battersFaced), 10);
-    expect(result.actualByCat.pitchingFipPrevention).toBeCloseTo(1 / expectedFip, 10);
 
     expect(result.sampleSizeByCat).toEqual({
       pitchingStrikeoutRate: battersFaced,
       pitchingWalkAvoidanceRate: battersFaced,
       pitchingHomeRunSuppressionRate: battersFaced,
-      pitchingFipPrevention: 90,
       pitchingWeakContactRate: 0,
     });
   });
@@ -267,11 +250,8 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
 
     expect(result.actualByCat).toEqual({});
     expect(result.sampleSizeByCat).toEqual({
-      powerIso: 0,
       powerSlugging: 0,
       powerHomeRunRate: 0,
-      contactAverage: 0,
-      contactOnBase: 0,
       contactAvoidStrikeoutRate: 0,
       contactQualityRate: 0,
       speedStealTripleRate: 0,

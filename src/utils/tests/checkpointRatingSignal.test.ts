@@ -13,18 +13,18 @@ import type {
   ExpectedStatsRatingKey,
 } from '../../engines/expectedStatsEngine';
 
-const categoryRate = (contactAverage?: number, sampleSize = 100) => ({
+const categoryRate = (contactAvoidStrikeoutRate?: number, sampleSize = 100) => ({
   actualByCat:
-    typeof contactAverage === 'number'
-      ? { contactAverage }
+    typeof contactAvoidStrikeoutRate === 'number'
+      ? { contactAvoidStrikeoutRate }
       : {},
-  sampleSizeByCat: { contactAverage: sampleSize },
+  sampleSizeByCat: { contactAvoidStrikeoutRate: sampleSize },
 });
 
 const member = (
   playerId: string,
   poolKey: RatingsPoolKey,
-  contactAverage = 0.280,
+  contactAvoidStrikeoutRate = 0.280,
   contactRating = 60,
 ): CheckpointSignalMember => ({
   playerId,
@@ -32,7 +32,7 @@ const member = (
   ageBand: '25-31',
   ratings: { contact: contactRating },
   poolKey,
-  categoryRates: categoryRate(contactAverage),
+  categoryRates: categoryRate(contactAvoidStrikeoutRate),
 });
 
 const categoryRateFor = (
@@ -70,7 +70,7 @@ const qualifyingContactPeers = (
     ratedCategoryMember(
       `${poolKey}-contact-peer-${i}`,
       poolKey,
-      'contactAverage',
+      'contactAvoidStrikeoutRate',
       'contact',
       0.245 + i * 0.010,
       sampleSize,
@@ -198,11 +198,11 @@ describe('checkpointRatingSignal RA-2c-1', () => {
 
   test('RA-2c-2a flat floors suppress starter contact below 10 PA and allow it at 10', () => {
     const belowFloor = [
-      ratedCategoryMember('target', 'middleIF', 'contactAverage', 'contact', 0.330, 9),
+      ratedCategoryMember('target', 'middleIF', 'contactAvoidStrikeoutRate', 'contact', 0.330, 9),
       ...qualifyingContactPeers('middleIF', 6, 10),
     ];
     const atFloor = [
-      ratedCategoryMember('target', 'middleIF', 'contactAverage', 'contact', 0.330, 10),
+      ratedCategoryMember('target', 'middleIF', 'contactAvoidStrikeoutRate', 'contact', 0.330, 10),
       ...qualifyingContactPeers('middleIF', 6, 10),
     ];
 
@@ -212,11 +212,11 @@ describe('checkpointRatingSignal RA-2c-1', () => {
 
   test('RA-2c-2a flat floors use the 5 PA bench contact floor for benchIF members', () => {
     const aboveBenchFloor = [
-      ratedCategoryMember('bench-target', 'benchIF', 'contactAverage', 'contact', 0.330, 6),
+      ratedCategoryMember('bench-target', 'benchIF', 'contactAvoidStrikeoutRate', 'contact', 0.330, 6),
       ...qualifyingContactPeers('benchIF', 6, 5),
     ];
     const belowBenchFloor = [
-      ratedCategoryMember('bench-target', 'benchIF', 'contactAverage', 'contact', 0.330, 4),
+      ratedCategoryMember('bench-target', 'benchIF', 'contactAvoidStrikeoutRate', 'contact', 0.330, 4),
       ...qualifyingContactPeers('benchIF', 6, 5),
     ];
 

@@ -41,14 +41,11 @@ interface ExpectedStatsCategoryMeta {
 }
 
 export const EXPECTED_STATS_CATEGORY_META = {
-  // RATINGS_ADJUSTMENT_SPEC §3B: Power = ISO / SLG / HR-rate.
-  powerIso: { ratingKey: 'power', attr: 'POW', basis: 'season', defaultCurveBlock: 'SS' },
+  // RATINGS_ADJUSTMENT_SPEC §3B: Power = SLG / HR-rate.
   powerSlugging: { ratingKey: 'power', attr: 'POW', basis: 'season', defaultCurveBlock: 'SS' },
   powerHomeRunRate: { ratingKey: 'power', attr: 'POW', basis: 'season', defaultCurveBlock: 'SS' },
 
-  // Contact = AVG / OBP / K%; K is exposed as avoidance so higher is better.
-  contactAverage: { ratingKey: 'contact', attr: 'CON', basis: 'season', defaultCurveBlock: 'SS' },
-  contactOnBase: { ratingKey: 'contact', attr: 'CON', basis: 'season', defaultCurveBlock: 'SS' },
+  // Contact = K% avoidance + quality; K is exposed as avoidance so higher is better.
   contactAvoidStrikeoutRate: { ratingKey: 'contact', attr: 'CON', basis: 'season', defaultCurveBlock: 'SS' },
   // RA-2CQ: quality-of-contact rate (good/tracked). basis:'none' => fixed min-sample floor of 10 (JK 2026-06-24, count early on balls-in-play).
   contactQualityRate: { ratingKey: 'contact', attr: 'CON', basis: 'none', defaultCurveBlock: 'SS' },
@@ -70,7 +67,6 @@ export const EXPECTED_STATS_CATEGORY_META = {
   pitchingWeakContactRate: { ratingKey: 'junk', attr: 'JNK', basis: 'combined', defaultCurveBlock: 'SP' },
   pitchingHomeRunSuppressionRate: { ratingKey: 'junk', attr: 'JNK', basis: 'combined', defaultCurveBlock: 'SP' },
   pitchingWalkAvoidanceRate: { ratingKey: 'accuracy', attr: 'ACC', basis: 'combined', defaultCurveBlock: 'SP' },
-  pitchingFipPrevention: { ratingKey: 'accuracy', attr: 'ACC', basis: 'combined', defaultCurveBlock: 'SP' },
 } as const satisfies Record<string, ExpectedStatsCategoryMeta>;
 
 export type ExpectedStatsCategory = keyof typeof EXPECTED_STATS_CATEGORY_META;
@@ -84,24 +80,17 @@ export const EXPECTED_STATS_CATEGORIES = Object.keys(
 ) as ExpectedStatsCategory[];
 
 export const SMB4_EXPECTED_STATS_BASELINES: Partial<Record<ExpectedStatsCategory, number>> = {
-  powerIso: SMB4_BASELINES.leagueSLG - SMB4_BASELINES.leagueAVG,
   powerSlugging: SMB4_BASELINES.leagueSLG,
   powerHomeRunRate: SMB4_BASELINES.hrPerPA,
-  contactAverage: SMB4_BASELINES.leagueAVG,
-  contactOnBase: SMB4_BASELINES.leagueOBP,
   contactAvoidStrikeoutRate: 1 - SMB4_BASELINES.kPerPA,
   pitchingStrikeoutRate: SMB4_BASELINES.kPerPA,
   pitchingHomeRunSuppressionRate: 1 - SMB4_BASELINES.hrPerPA,
   pitchingWalkAvoidanceRate: 1 - SMB4_BASELINES.bbPerPA,
-  pitchingFipPrevention: 1 / SMB4_BASELINES.leagueFIP,
 };
 
 const ONE_BY_CATEGORY: Record<ExpectedStatsCategory, number> = {
-  powerIso: 1,
   powerSlugging: 1,
   powerHomeRunRate: 1,
-  contactAverage: 1,
-  contactOnBase: 1,
   contactAvoidStrikeoutRate: 1,
   contactQualityRate: 1,
   speedStealTripleRate: 1,
@@ -114,7 +103,6 @@ const ONE_BY_CATEGORY: Record<ExpectedStatsCategory, number> = {
   pitchingWeakContactRate: 1,
   pitchingHomeRunSuppressionRate: 1,
   pitchingWalkAvoidanceRate: 1,
-  pitchingFipPrevention: 1,
 };
 
 export interface ExpectedStatsTuning {

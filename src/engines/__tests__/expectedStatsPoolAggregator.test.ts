@@ -11,10 +11,10 @@ import {
 } from '../expectedStatsEngine';
 import type { CategoryRateResult } from '../expectedStatsCategoryRates';
 
-const categoryRate = (contactAverage?: number): CategoryRateResult => ({
+const categoryRate = (contactAvoidStrikeoutRate?: number): CategoryRateResult => ({
   actualByCat:
-    typeof contactAverage === 'number'
-      ? { contactAverage }
+    typeof contactAvoidStrikeoutRate === 'number'
+      ? { contactAvoidStrikeoutRate }
       : {},
   sampleSizeByCat: {},
 });
@@ -43,10 +43,10 @@ describe('expectedStatsPoolAggregator RA-2b', () => {
       ],
     });
 
-    expect(result.poolMeanByCat.contactAverage).toBeCloseTo(0.2875, 10);
-    expect(result.peerPoolSize.contactAverage).toBe(4);
-    expect(result.peerValuesByCat.contactAverage).toEqual([0.250, 0.275, 0.300, 0.325]);
-    expect(result.poolSdByCat.contactAverage).toBeCloseTo(
+    expect(result.poolMeanByCat.contactAvoidStrikeoutRate).toBeCloseTo(0.2875, 10);
+    expect(result.peerPoolSize.contactAvoidStrikeoutRate).toBe(4);
+    expect(result.peerValuesByCat.contactAvoidStrikeoutRate).toEqual([0.250, 0.275, 0.300, 0.325]);
+    expect(result.poolSdByCat.contactAvoidStrikeoutRate).toBeCloseTo(
       winsorizedStandardDeviation([0.250, 0.275, 0.300, 0.325]) ?? -1,
       10,
     );
@@ -60,9 +60,9 @@ describe('expectedStatsPoolAggregator RA-2b', () => {
       spreadReference: spreadValues.map((value) => categoryRate(value)),
     });
 
-    expect(result.poolMeanByCat.contactAverage).toBeCloseTo(0.300, 10);
-    expect(result.peerPoolSize.contactAverage).toBe(2);
-    expect(result.poolSdByCat.contactAverage).toBeCloseTo(
+    expect(result.poolMeanByCat.contactAvoidStrikeoutRate).toBeCloseTo(0.300, 10);
+    expect(result.peerPoolSize.contactAvoidStrikeoutRate).toBe(2);
+    expect(result.poolSdByCat.contactAvoidStrikeoutRate).toBeCloseTo(
       winsorizedStandardDeviation(spreadValues) ?? -1,
       10,
     );
@@ -78,7 +78,7 @@ describe('expectedStatsPoolAggregator RA-2b', () => {
     const pool = aggregatePoolStats({
       members: [0.250, 0.300, 0.275, 0.325, 0.290, 0.285].map((value) => categoryRate(value)),
     });
-    const poolMean = pool.poolMeanByCat.contactAverage;
+    const poolMean = pool.poolMeanByCat.contactAvoidStrikeoutRate;
 
     expect(poolMean).toBeDefined();
     const result = expectedAndSignal({
@@ -86,8 +86,8 @@ describe('expectedStatsPoolAggregator RA-2b', () => {
       ageBand: '25-31',
       curveBlock: 'SS',
       ratings: { contact: 60 },
-      actualByCat: { contactAverage: poolMean },
-      sampleSizeByCat: { contactAverage: 100 },
+      actualByCat: { contactAvoidStrikeoutRate: poolMean },
+      sampleSizeByCat: { contactAvoidStrikeoutRate: 100 },
       poolMeanByCat: pool.poolMeanByCat,
       poolSdByCat: pool.poolSdByCat,
       peerValuesByCat: pool.peerValuesByCat,
@@ -95,6 +95,6 @@ describe('expectedStatsPoolAggregator RA-2b', () => {
       peerPoolSize: pool.peerPoolSize,
     });
 
-    expect(result.expectedByCat.contactAverage).toBeCloseTo(poolMean ?? 0, 10);
+    expect(result.expectedByCat.contactAvoidStrikeoutRate).toBeCloseTo(poolMean ?? 0, 10);
   });
 });

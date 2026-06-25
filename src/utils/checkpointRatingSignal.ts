@@ -63,11 +63,8 @@ const CHECKPOINT_EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
 
 /** RA-2c-2a flat per-category sample floors (Gate 1 == Gate 2). §16 sim-tunable. DECISIONS_LOG 2026-06-24. */
 export const CHECKPOINT_SAMPLE_FLOORS: Record<ExpectedStatsCategory, { starter: number; bench: number }> = {
-  powerIso: { starter: 10, bench: 5 },
   powerSlugging: { starter: 10, bench: 5 },
   powerHomeRunRate: { starter: 10, bench: 5 },
-  contactAverage: { starter: 10, bench: 5 },
-  contactOnBase: { starter: 10, bench: 5 },
   contactAvoidStrikeoutRate: { starter: 10, bench: 5 },
   contactQualityRate: { starter: 10, bench: 10 },
   speedStealTripleRate: { starter: 2, bench: 2 },
@@ -80,7 +77,6 @@ export const CHECKPOINT_SAMPLE_FLOORS: Record<ExpectedStatsCategory, { starter: 
   pitchingWeakContactRate: { starter: 10, bench: 10 },
   pitchingHomeRunSuppressionRate: { starter: 10, bench: 10 },
   pitchingWalkAvoidanceRate: { starter: 10, bench: 10 },
-  pitchingFipPrevention: { starter: 10, bench: 10 },
 };
 
 /** Fork D §4:85 ladder. Each entry: ordered rungs of progressively-wider pools; rung 0 = position-pure. Sim-tunable §16. */

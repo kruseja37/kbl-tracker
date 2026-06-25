@@ -21259,3 +21259,49 @@ Use high reasoning effort. Think step-by-step. Ground every cited file:line by r
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: RA-12b ===== -->
+
+<!-- ===== CONTRACT: CAT-MIGRATE ===== -->
+## CAT-MIGRATE — drop the 4 worksheet-retired box-score expected-stats categories (one-model cleanup, part 3)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript surgeon dropping retired rating-signal categories across a few engine files + their tests, in lockstep. You do NOT add features or new categories.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Remove exactly 4 worksheet-retired box-score categories — `powerIso`, `contactAverage`, `contactOnBase`, `pitchingFipPrevention` — from the live expected-stats category set and EVERY map/emitter/test keyed on them, leaving the SMB4-native + retained measures as the only rating signals. **KEEP `powerHomeRunRate` (do NOT drop it — JK ruled 2026-06-24).**
+
+**SOURCE OF TRUTH:** `spec-docs/DECISIONS_LOG.md` 2026-06-24 #1(a) "drop the worksheet-retired box-score categories from the live ratings blend" + 2026-06-24 "keep HR-rate in the category migration" (4-drop, KEEP `powerHomeRunRate`). `RATINGS_MEASUREMENT_WORKSHEET.md`.
+
+**SURVIVOR CHECK (verified by the Captain — every rating keeps ≥1 category after the 4-drop):** power → `powerSlugging` + `powerHomeRunRate` (2); contact → `contactAvoidStrikeoutRate` + `contactQualityRate` (2); accuracy → `pitchingWalkAvoidanceRate` (1); all other ratings untouched. A rating with ZERO categories is silently dropped from the equal-weight signal blend — so dropping EXACTLY these 4 (never a 5th) is the make-or-break.
+
+**DELETE the 4 categories from EVERY keyed location (lockstep):**
+1. `src/engines/expectedStatsEngine.ts`: the 4 entries in `EXPECTED_STATS_CATEGORY_META` (~:45/:50/:51/:73) — edit this FIRST (it defines the `ExpectedStatsCategory` union; the build then forces the rest). Then the 4 keys in `ONE_BY_CATEGORY` (TOTAL `Record`, ~:100/:103/:104/:117) and the 4 keys in `SMB4_EXPECTED_STATS_BASELINES` (~:87/:90/:91/:96).
+2. `src/utils/checkpointRatingSignal.ts`: the 4 keys in `CHECKPOINT_SAMPLE_FLOORS` (TOTAL `Record`, ~:66/:69/:70/:83).
+3. `src/engines/expectedStatsCategoryRates.ts`: the `setSample`/`emitActual` emitters for all 4 (~:62/:82 powerIso, :65/:84 contactAverage, :66/:87 contactOnBase, :155/:189 pitchingFipPrevention) AND the now-orphaned FIP computation block (the `const fip = calculateFIP({...})` ~:178 feeding the pitchingFipPrevention emitter) AND the now-unused `import { calculateFIP } from './pwarCalculator'` (~:16). Leave the OTHER emitters (powerSlugging, powerHomeRunRate, contactAvoidStrikeoutRate, contactQualityRate, etc.) intact.
+
+**UPDATE the 3 tests (they use the dropped categories as sample fixtures):**
+- `src/engines/__tests__/expectedStatsCategoryRates.test.ts`: DELETE the assertions/inputs that specifically test the DROPPED emitters (`actualByCat.powerIso`, `actualByCat.contactOnBase`, `actualByCat.pitchingFipPrevention`, and their list/sample entries ~:16/:20/:33/:159/:163/:170/:174/:250/:256/:270/:274). Those emitters no longer exist.
+- `src/utils/tests/checkpointRatingSignal.test.ts` AND `src/engines/__tests__/expectedStatsEngine.test.ts`: these use `contactAverage` as a GENERIC contact SAMPLE category (not the thing under test). REPOINT every `contactAverage` to the surviving sibling `contactAvoidStrikeoutRate` (same `ratingKey:'contact'`, `basis:'season'`, same curve) — rename the category key only, preserve the numeric fixtures + assertion structure intact. (If any test uses `powerIso`/`contactOnBase`/`pitchingFipPrevention` as a generic sample, repoint similarly: powerIso→powerSlugging, contactOnBase→contactAvoidStrikeoutRate, pitchingFipPrevention→pitchingWalkAvoidanceRate.)
+
+**EXPECTED OUTPUT:** No `powerIso`/`contactAverage`/`contactOnBase`/`pitchingFipPrevention` anywhere in `src/` or `test-utils/` (outside comments). `powerHomeRunRate` and all native/retained categories intact. Every rating keeps ≥1 category.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0 (the TOTAL `Record` types force every map drop; `noUnusedLocals` forces the `calculateFIP` import removal).
+2. `NODE_ENV= npm test` (FULL suite — REQUIRED; the dropped categories are reached build-dark via the checkpoint sweep + seeded in fixtures). Read the FAILED-FILE list, not the exit code: ZERO NEW REDS vs the characterized baseline (hard fail `wpaRuntimeBoundary`; order-flakes `franchiseManualSmokeFixture`/`GameTrackerLaunchState` pass solo).
+3. `grep -rn "powerIso\|contactAverage\|contactOnBase\|pitchingFipPrevention" src/ test-utils/` → zero hits (outside comments).
+4. `grep -rn "powerHomeRunRate" src/engines/expectedStatsEngine.ts` → still present (NOT dropped).
+5. `git --no-pager diff --stat` → only the 3 engine files + 3 test files; `iv_oracle.json` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing the survivor check / the make-or-break.
+3. Verification output pasted (build, vitest FAILED-file summary, both greps, diff --stat).
+4. "CAT-MIGRATE complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP with a precise reason is a SUCCESS):**
+- Dropping a category would leave any rating with ZERO surviving categories (i.e. you were about to drop a 5th, or a survivor was miscounted) → STOP, report.
+- A dropped category is referenced somewhere not listed above (a golden case, RA-2 wiring, another fixture) that you cannot cleanly repoint to a surviving sibling → STOP, report the site.
+- `iv_oracle.json` or any frozen artifact would change → STOP.
+- Never summarize/batch; report every changed path including test edits.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: CAT-MIGRATE ===== -->
