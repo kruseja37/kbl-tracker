@@ -105,8 +105,9 @@ function addHitterRates(
   }
 
   const chances = fielding ? fielding.putouts + fielding.assists + fielding.errors : 0;
+  const difficultyFieldingOpportunities = fielding?.difficultyFieldingOpportunities ?? 0;
   setSample(result.sampleSizeByCat, 'fieldingFieldingPct', chances);
-  setSample(result.sampleSizeByCat, 'fieldingRangeRate', chances);
+  setSample(result.sampleSizeByCat, 'fieldingRangeRate', difficultyFieldingOpportunities);
 
   if (fielding) {
     if (chances > 0) {
@@ -116,11 +117,11 @@ function addHitterRates(
         (fielding.putouts + fielding.assists) / chances,
       );
     }
-    if (fielding.games > 0) {
+    if (difficultyFieldingOpportunities > 0) {
       emitActual(
         result.actualByCat,
         'fieldingRangeRate',
-        (fielding.putouts + fielding.assists) / fielding.games,
+        (fielding.difficultyWeightedConversion ?? 0) / difficultyFieldingOpportunities,
       );
     }
   }

@@ -148,6 +148,8 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
         putouts: 40,
         assists: 35,
         errors: 5,
+        difficultyWeightedConversion: 2.25,
+        difficultyFieldingOpportunities: 5,
       }),
     });
 
@@ -156,7 +158,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
     expect(result.actualByCat.contactAvoidStrikeoutRate).toBeCloseTo(1 - (20 / 120), 10);
     expect(result.actualByCat.speedStealTripleRate).toBeCloseTo(10 / 120, 10);
     expect(result.actualByCat.fieldingFieldingPct).toBeCloseTo(75 / 80, 10);
-    expect(result.actualByCat.fieldingRangeRate).toBeCloseTo(75 / 25, 10);
+    expect(result.actualByCat.fieldingRangeRate).toBeCloseTo(2.25 / 5, 10);
 
     expect(result.sampleSizeByCat).toEqual({
       powerSlugging: 120,
@@ -166,7 +168,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       speedStealTripleRate: 10,
       speedBaserunningRate: 0,
       fieldingFieldingPct: 80,
-      fieldingRangeRate: 80,
+      fieldingRangeRate: 5,
     });
   });
 

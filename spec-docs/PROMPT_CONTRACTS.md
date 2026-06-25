@@ -21305,3 +21305,55 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: CAT-MIGRATE ===== -->
+
+<!-- ===== CONTRACT: NATIVE-WIRE ===== -->
+## NATIVE-WIRE — wire the SMB4-native difficulty-fielding signal into the live category set (one-model cleanup, part 4)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript surgeon wiring an existing build-dark aggregator into the season rollup + repointing one rating category. Additive only. You do NOT add new categories, do NOT bump any DB version.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Make the `fieldingRangeRate` rating signal come from the SMB4-native MEASURED difficulty-weighted fielding conversion (the existing build-dark `aggregateDifficultyFielding`) instead of the box-score `(putouts+assists)/games`, by accruing the aggregator's output into two additive `PlayerSeasonFielding` fields on the live completed-game path and repointing the category's source.
+
+**SOURCE OF TRUTH:** `spec-docs/DECISIONS_LOG.md` 2026-06-24 #1(a) "finish wiring the new SMB4-native measures for Power/Speed/Fielding" + `RATINGS_MEASUREMENT_WORKSHEET.md` §9 (fielding = measured play-type difficulty ladder). Power-native is OUT OF SCOPE (blocked on A1.5b-2); Speed-native is already wired (RA-2c-3) — this ticket is FIELDING only.
+
+**GROUNDING (verified by the Captain — re-read before editing):**
+- `aggregateDifficultyFielding(events: FieldingEvent[])` (`src/engines/difficultyFieldingAggregator.ts:59`) returns `Record<playerId, Record<position, DifficultyFieldingAggregate>>`; each aggregate has `weightedConversion` + `difficultyOpportunities` (+ a `difficultyWeightedRate` gated at `MIN_DIFFICULTY_OPPORTUNITIES=5`). It keys off the STAMPED `event.playerId`/`event.position` (field-leak safe). Build-dark today (no live consumer).
+- `aggregateFieldingStats` (`src/utils/seasonAggregator.ts:388`) already loads `fieldingEvents` at `:392` and builds per-player `ofMap`/`catcherMap` BEFORE the write loop, then accrues per-player season fields in the `updated: PlayerSeasonFielding` object (`:425-440`, e.g. `caughtStealingAgainst: (seasonStats.caughtStealingAgainst ?? 0) + (catcherMap.get(playerId)?.cs ?? 0)`). This is the EXACT pattern to mirror (A1.5c-4).
+- `PlayerSeasonFielding` (`src/utils/seasonStorage.ts:145`) + `createInitialFieldingStats` (`:277`) — additive optional fields `caughtStealingAgainst?`/`stolenBasesAllowed?` were added by RA-8 with NO DB bump; same precedent here.
+- `fieldingRangeRate` emitter (`src/engines/expectedStatsCategoryRates.ts`): `setSample(..., 'fieldingRangeRate', chances)` (~:109) + `emitActual(..., 'fieldingRangeRate', (putouts+assists)/games)` (~:121-126). `fieldingFieldingPct` is a SEPARATE category — leave it alone.
+
+**BUILD (additive only):**
+1. `src/utils/seasonStorage.ts`: add two additive optional fields to `PlayerSeasonFielding` after `stolenBasesAllowed?` — `difficultyWeightedConversion?: number` (Σ ladder weight on converted difficulty plays) and `difficultyFieldingOpportunities?: number` (count of difficulty plays). Seed both `0` in `createInitialFieldingStats`. NO other field, NO store change, NO `TRACKER_DB_VERSION` bump.
+2. `src/utils/seasonAggregator.ts`: `import { aggregateDifficultyFielding } from '../engines/difficultyFieldingAggregator'`. Before the `:419` write loop, build a per-player `difficultyMap: Map<string, { weightedConversion: number; difficultyOpportunities: number }>` by calling `aggregateDifficultyFielding(fieldingEvents)` (reuse the array already loaded at `:392` — do NOT add a new loader) and SUMMING each player's position buckets into one per-player total. In the `updated` object (`:425-440`), accrue `difficultyWeightedConversion: (seasonStats.difficultyWeightedConversion ?? 0) + (difficultyMap.get(playerId)?.weightedConversion ?? 0)` and `difficultyFieldingOpportunities: (seasonStats.difficultyFieldingOpportunities ?? 0) + (difficultyMap.get(playerId)?.difficultyOpportunities ?? 0)`.
+3. `src/engines/expectedStatsCategoryRates.ts`: repoint ONLY `fieldingRangeRate` — change its `setSample` source from `chances` to `fielding?.difficultyFieldingOpportunities ?? 0`, and its `emitActual` from `(putouts+assists)/games` to `difficultyWeightedConversion / difficultyFieldingOpportunities` gated on `difficultyFieldingOpportunities > 0`. Leave `fieldingFieldingPct` (and its `chances` sample) UNCHANGED.
+4. `src/engines/__tests__/expectedStatsCategoryRates.test.ts`: update the `fieldingRangeRate` assertion (`:159` `toBeCloseTo(75/25)`) + its fielding fixture (`:169`/`:260`) so it provides the new fields and asserts `difficultyWeightedConversion / difficultyFieldingOpportunities` with the sample = `difficultyFieldingOpportunities`. Keep `fieldingFieldingPct` assertions intact.
+5. If a `seasonAggregator` test asserts the fielding accrual, extend it to cover the two new fields (mirror the catcher-CS test).
+
+**MAKE-OR-BREAK:**
+- `fieldingRangeRate` now sources from the difficulty-weighted rate; `fieldingFieldingPct` untouched; no parallel/duplicate Fielding category added.
+- The two new fields are additive optional, seeded 0, with NO `TRACKER_DB_VERSION` bump — `franchiseSeasonLedgerStorage.test.ts` (store-list + version pin) MUST stay green. If you believe a version bump is required → STOP and report (do NOT bump).
+- Field-leak safe: accrue by the STAMPED `event.playerId` via `aggregateDifficultyFielding`; reuse the `fieldingEvents` already loaded at `:392`.
+- SEASON-ONLY (career parity deferred, consistent with A1.5c). Do NOT touch `careerStorage`.
+- Transitive-import-mock watch: if adding the `aggregateDifficultyFielding` import breaks a `processCompletedGame.*` partial-mock test at module-load, fix it with a TEST-ONLY mock stub (the A1.5c-4 / RA-2CQ-2b pattern) — do NOT change production.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npm test` (FULL suite — REQUIRED: seasonAggregator is reachable from processCompletedGame + the store-list/version pin). Read the FAILED-FILE list, not the exit code: ZERO NEW REDS vs the characterized baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState` solo-pass).
+3. `grep -rn "TRACKER_DB_VERSION" src/utils/trackerDb.ts` → unchanged value (state it).
+4. `git --no-pager diff --stat` → only the files above; `iv_oracle.json` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing the make-or-break.
+3. Verification output pasted (build, vitest FAILED-file summary, TRACKER_DB_VERSION value, diff --stat).
+4. "NATIVE-WIRE complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- Wiring requires a `TRACKER_DB_VERSION` bump or a new store → STOP, report.
+- The fielding events at `:392` are not actually `FieldingEvent[]` carrying `specialPlayType`/`success`/`playerId`/`position` (the aggregator's inputs) → STOP, report.
+- A new RED appears outside the characterized set you cannot trace to the fielding-source change → STOP, report.
+- Never summarize/batch; report every changed path including test edits.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: NATIVE-WIRE ===== -->

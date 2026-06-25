@@ -107,6 +107,7 @@ function fieldingEvent(
   sequence: number,
   playerId: string,
   playType: FieldingEvent['playType'],
+  overrides: Partial<FieldingEvent> = {},
 ): FieldingEvent {
   return {
     fieldingEventId: `${gameId}-fielding-${sequence}`,
@@ -128,6 +129,7 @@ function fieldingEvent(
     },
     success: true,
     runsPreventedOrAllowed: playType === 'base_save' ? 1 : 0,
+    ...overrides,
   };
 }
 
@@ -243,8 +245,8 @@ describe('season aggregator outfield arm capture', () => {
     await expect(
       aggregateGameToSeason(
         gameState('of-arm-game-1', [
-          fieldingEvent('of-arm-game-1', 1, 'player-x', 'outfield_assist'),
-          fieldingEvent('of-arm-game-1', 2, 'player-x', 'outfield_assist'),
+          fieldingEvent('of-arm-game-1', 1, 'player-x', 'outfield_assist', { specialPlayType: 'Diving' }),
+          fieldingEvent('of-arm-game-1', 2, 'player-x', 'outfield_assist', { specialPlayType: 'Leaping' }),
           fieldingEvent('of-arm-game-1', 3, 'player-y', 'base_save'),
         ]),
         { seasonId, detectMilestones: false },
@@ -254,8 +256,8 @@ describe('season aggregator outfield arm capture', () => {
     await expect(
       aggregateGameToSeason(
         gameState('of-arm-game-2', [
-          fieldingEvent('of-arm-game-2', 1, 'player-x', 'outfield_assist'),
-          fieldingEvent('of-arm-game-2', 2, 'player-y', 'base_save'),
+          fieldingEvent('of-arm-game-2', 1, 'player-x', 'outfield_assist', { specialPlayType: 'Missed Dive', success: false }),
+          fieldingEvent('of-arm-game-2', 2, 'player-y', 'base_save', { specialPlayType: 'Over Shoulder' }),
         ]),
         { seasonId, detectMilestones: false },
       ),
@@ -266,8 +268,12 @@ describe('season aggregator outfield arm capture', () => {
 
     expect(playerX.outfieldAssists).toBe(3);
     expect(playerX.baserunnersHeld).toBe(0);
+    expect(playerX.difficultyWeightedConversion).toBeCloseTo(1.25, 10);
+    expect(playerX.difficultyFieldingOpportunities).toBe(3);
     expect(playerY.outfieldAssists).toBe(0);
     expect(playerY.baserunnersHeld).toBe(2);
+    expect(playerY.difficultyWeightedConversion).toBeCloseTo(0.25, 10);
+    expect(playerY.difficultyFieldingOpportunities).toBe(1);
   });
 
   test('leaves outfield arm fields at zero when the game has no matching FieldingEvent rows', async () => {
@@ -283,6 +289,8 @@ describe('season aggregator outfield arm capture', () => {
     const playerZ = await getOrCreateFieldingStats(seasonId, 'player-z', 'Player Z', 'away');
     expect(playerZ.outfieldAssists).toBe(0);
     expect(playerZ.baserunnersHeld).toBe(0);
+    expect(playerZ.difficultyWeightedConversion).toBe(0);
+    expect(playerZ.difficultyFieldingOpportunities).toBe(0);
   });
 });
 

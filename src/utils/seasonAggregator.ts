@@ -27,6 +27,7 @@ import {
 } from './milestoneAggregator';
 import { SMB4_DEFAULT_GAMES, type MilestoneConfig } from './milestoneDetector';
 import { extractContactQualityTag, tallyContactQualityByPlayer } from '../engines/contactQualityAggregator';
+import { aggregateDifficultyFielding } from '../engines/difficultyFieldingAggregator';
 import { aggregateUbrFromEvents, type UbrRunnerAggregate } from '../engines/ubrAggregator';
 import {
   MLB_BASELINE_GAMES,
@@ -415,6 +416,20 @@ async function aggregateFieldingStats(
     catcherMap.set(catcherId, entry);
   }
 
+  const difficultyMap = new Map<string, { weightedConversion: number; difficultyOpportunities: number }>();
+  const difficultyAggregates = aggregateDifficultyFielding(fieldingEvents);
+  for (const [playerId, positionAggregates] of Object.entries(difficultyAggregates)) {
+    let weightedConversion = 0;
+    let difficultyOpportunities = 0;
+
+    for (const aggregate of Object.values(positionAggregates)) {
+      weightedConversion += aggregate.weightedConversion;
+      difficultyOpportunities += aggregate.difficultyOpportunities;
+    }
+
+    difficultyMap.set(playerId, { weightedConversion, difficultyOpportunities });
+  }
+
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
     // Player name and team carried through from PersistedGameState
     const playerName = gameStats.playerName || playerId;
@@ -436,6 +451,8 @@ async function aggregateFieldingStats(
       baserunnersHeld: (seasonStats.baserunnersHeld ?? 0) + (ofMap.get(playerId)?.held ?? 0),
       caughtStealingAgainst: (seasonStats.caughtStealingAgainst ?? 0) + (catcherMap.get(playerId)?.cs ?? 0),
       stolenBasesAllowed: (seasonStats.stolenBasesAllowed ?? 0) + (catcherMap.get(playerId)?.sb ?? 0),
+      difficultyWeightedConversion: (seasonStats.difficultyWeightedConversion ?? 0) + (difficultyMap.get(playerId)?.weightedConversion ?? 0),
+      difficultyFieldingOpportunities: (seasonStats.difficultyFieldingOpportunities ?? 0) + (difficultyMap.get(playerId)?.difficultyOpportunities ?? 0),
       // Note: DP, position-specific stats would need more tracking
     };
 

@@ -161,6 +161,8 @@ export interface PlayerSeasonFielding {
   baserunnersHeld?: number;
   caughtStealingAgainst?: number; // catcher: runners thrown out stealing (populated by a later writer ticket; A1.5c-4 reads)
   stolenBasesAllowed?: number;    // catcher: SB allowed (populated by a later writer ticket; A1.5c-4 reads)
+  difficultyWeightedConversion?: number; // Σ ladder weight on converted difficulty plays (NATIVE-WIRE)
+  difficultyFieldingOpportunities?: number; // count of measured difficulty plays (NATIVE-WIRE)
 
   // By position (games at each position)
   gamesByPosition: Record<string, number>;
@@ -297,6 +299,8 @@ export function createInitialFieldingStats(
     baserunnersHeld: 0,
     caughtStealingAgainst: 0,
     stolenBasesAllowed: 0,
+    difficultyWeightedConversion: 0,
+    difficultyFieldingOpportunities: 0,
     gamesByPosition: {},
     putoutsByPosition: {},
     assistsByPosition: {},
