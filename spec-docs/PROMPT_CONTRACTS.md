@@ -22594,3 +22594,39 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** the default case is NOT byte-identical (→ STOP, the blend is leaking into the no-recent path); the recent pass would need its OWN pool stats / a re-aggregation of the pool (→ STOP — pool stays cumulative-calibrated); the change requires touching the sweep's window-scan / a new aggregation / new persistence (→ STOP — that is RA-9b, out of scope); `expectedStatsEngine`/`expectedStatsCategoryRates` math must change (→ STOP); a trait-engine import is required (→ STOP, lane disjointness); a full-suite red appears outside the characterized set that 2 fix-iters can't clear (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-ratings-c` worktree before editing.
 <!-- ===== END CONTRACT: RA-9a ===== -->
+
+<!-- ===== CONTRACT: DT-FIX-2 ===== -->
+## DT-FIX-2 — JK ruling 4: Volatile = POSITIVE image valence (NEGATIVE→POSITIVE_IMAGE flip + ripple)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer flipping `Volatile`'s IMAGE (fame/narrative/morale) valence from negative to positive, and reconciling the image-axis ripple in the same diff. Build-dark; no DB bump.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL:** Apply JK's 2026-06-25 ruling 4 (DECISIONS_LOG "DT-x refinement rulings"): **`Volatile` = high-variance/high-ceiling = a POSITIVE image trait.** Move `'Volatile'` from `NEGATIVE_IMAGE_TRAITS` to `POSITIVE_IMAGE_TRAITS` in `src/engines/traitAcquisition.ts`, and fix every image-axis consumer/test that asserts Volatile-negative, in the SAME diff. Its PRICING stays positive (already is) — do NOT touch pricing.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md` 2026-06-25 "DT-x refinement rulings" part 4; `CURRENT_STATE.md` LIVE HEADER top block ("Volatile = POSITIVE — keep pricing, move NEGATIVE→POSITIVE_IMAGE_TRAITS"). The pricing is already `polarity: 'positive'` in `traitPricing.ts:454` (the ruling KEEPS it) — the inconsistency being fixed is that the IMAGE axis still treated Volatile as negative.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read before editing):**
+- **The flip:** `traitAcquisition.ts` — `POSITIVE_IMAGE_TRAITS` set (`:146-209`), `NEGATIVE_IMAGE_TRAITS` set (`:211-233`) contains `'Volatile'` at `:222`. Move `'Volatile'` out of NEGATIVE and into POSITIVE (place near `'Consistent'` at `:169` — the two are an opposite pair, both now positive, matching `traitPricing.ts` which already flags both positive). `getImageValence` (`:674-678`) reads these sets → returns `'positive'` for Volatile after the move. The `['Consistent', 'Volatile']` OPPOSITE_PAIRS entry (`:332`) is a valence-NEUTRAL pairing — do NOT change it.
+- **Ripple = IMAGE/fame/narrative/morale axis ONLY.** Grep `getImageValence`/`imageValence` consumers (fame, narrative, morale, the image-driver path) AND every test/fixture that asserts Volatile's image valence or image-driven effect is negative. Fix those to positive in this diff. Known surfaces to check: `src/engines/__tests__/traitAcquisition.test.ts` (imageValence assertions), `src/utils/tests/franchiseTraitGrantCompute.test.ts` (imageValence fixtures), any franchise narrative/fame test referencing a Volatile player's image outcome. If a franchise/fame/narrative golden MOVES because Volatile is now positive, that is the INTENDED ripple — update the golden to the new positive-valence expectation (NOT a regression to revert). Only an UNRELATED failure is a regression.
+- **OUT OF SCOPE — do NOT touch (Captain-verified these are DEAD / separate axes):**
+  - `traitPricing.ts:454` — already `polarity: 'positive'`. Leave it (the ruling's "keep positive pricing").
+  - `salaryCalculator.ts:294` `SEVERE_NEGATIVE_TRAITS` (contains Volatile) — its only consumer is `calculateTraitModifier` (`:617`), which is **`@deprecated` — "live salary path uses traitModifier=1.0"** (DEAD). Leave it AND its test (`salaryCalculator.test.ts:294` "Volatile is severe negative") UNCHANGED — flipping a dead list is out of scope and would needlessly churn salary tests.
+  - `ovrCalculator.ts:289/303` (Volatile in strongNegative/moderateNegative buckets) — Captain-verified UNCONSUMED (no live import of the buckets). Leave unchanged.
+  - `traitRealityScorer.ts:117` (UNIVERSAL_TRAITS) — a role-classification list (role-agnostic), NOT a valence. Leave unchanged.
+  - `traitInteractionMatrix.ts:805` (Volatile `mojoTransitionRate` factor 1.25, "faster BOTH ways") — a neutral gameplay effect, not a sign. Leave unchanged.
+  - `traitCandidateBuilder.ts:1354` (the DT-E Volatile EARN signal) — unchanged.
+
+**MAKE-OR-BREAK:** `getImageValence('Volatile') === 'positive'` after the move (was `'negative'`); the image-axis ripple (fame/narrative/morale tests + fixtures asserting Volatile-negative) is reconciled to positive in the SAME diff; pricing/salary-dead-list/OVR-dead-list/scorer/interaction-matrix/earn-signal all UNTOUCHED; no DB bump. Primary file = `traitAcquisition.ts` + its tests; plus only the image-axis fixtures/tests that genuinely assert Volatile's image valence.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → exit 0.
+2. `NODE_ENV= npm run build` → exit 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/utils/tests/franchiseTraitGrantCompute.test.ts` → full pass.
+4. `NODE_ENV= npm test` (FULL suite — traitAcquisition/image valence feeds franchise trait-grant + fame/narrative) → FAILED-file list: ZERO NEW REDS vs the characterized baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake solo-pass; watch `AwardsWatchlist`/`franchiseOffseasonGuards.component`). Distinguish intended Volatile-valence golden moves (update them) from unrelated reds (STOP).
+5. `git --no-pager diff --stat` → `traitAcquisition.ts` + the image-axis tests/fixtures only. NO `traitPricing.ts`, NO `salaryCalculator.ts`, NO `ovrCalculator.ts`, NO `traitRealityScorer.ts`, NO `traitInteractionMatrix.ts`, NO `traitCandidateBuilder.ts`, NO `trackerDb.ts`, NO `iv_oracle.json`.
+
+**FORMAT:** (1) files+lines; (2) the set move, the grep of image-axis consumers + which tests/fixtures changed and why, explicit confirmation the dead salary/OVR lists + pricing + scorer + interaction-matrix were NOT touched; (3) verification output (tsc, build, focused, full-suite FAILED-file summary, diff --stat); (4) "DT-FIX-2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the flip requires editing `traitPricing.ts` / `salaryCalculator.ts` / `ovrCalculator.ts` (→ STOP — out of scope, those are intentionally untouched per Captain grounding); a non-image-axis test breaks that does NOT trace to Volatile's valence (→ STOP, real regression); a DB bump/store is needed (→ STOP); a full-suite red outside the characterized set that 2 fix-iters can't clear and isn't an intended Volatile golden (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: DT-FIX-2 ===== -->
