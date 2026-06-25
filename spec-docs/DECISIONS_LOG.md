@@ -7,6 +7,10 @@
 
 ## June 2026
 
+### 2026-06-24 (attended Hybrid via `/kbl-captain`): Priority-1 ratings cleanup — keep HR-rate in the category migration
+
+Resuming the v1 functional build with the one-model ratings cleanup (RA-12 + the worksheet-retired box-score category drop), JK ruled the one genuine fork. **Drop the 4 clearly-retired box-score categories** (`powerIso`, `contactAverage`, `contactOnBase`, `pitchingFipPrevention`) from the live expected-stats set, but **KEEP `powerHomeRunRate` (HR-rate)** as Power's second leg for now. Rationale: Power's native-SMB4 replacement (park-adjusted carry × exit-velo) is BLOCKED behind A1.5b-2 (the EnrichmentPanel SVG re-derivation + JK browser sign-off), so dropping HR-rate too would leave Power resting on SLG alone with no native signal available — every other rating has a native or retained leg, Power would be the only thin one. Keeping HR-rate means no rating goes thin in the interim; restore the native carry measure (and reconsider the 5th drop) when A1.5b-2 ships. Grounding `wf_2a88b63d-c15` (6 readers + synthesis) verified every rating keeps ≥1 surviving category under the 4-drop, and that the per-rating signal is an equal-weight mean of finite categories (a rating with zero surviving categories is silently omitted — so the 4-drop set is the safe boundary).
+
 ### 2026-06-24 (attended, dedicated session): LANE-MERGE EXECUTED — `codex/mode1-v1-b` → `codex/franchise-v1-next`
 
 The lane-merge ruled in the path-forward entry below (Captain/Opus owns it) was executed in a dedicated session with JK present, per the safety protocol (assess conflicts → side branch → full gate → JK confirm → fast-forward; branch-only, never push). Result: **`codex/franchise-v1-next` fast-forwarded to `87a59ec0`** — the entire Mode-1 build (auction + prospect-gen + scout + draft-freeze + draft-morale + GM entity + roster board) now lives on the living-season branch alongside the L/D-stack.
