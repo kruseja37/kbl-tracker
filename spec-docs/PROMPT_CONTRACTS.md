@@ -21402,3 +21402,59 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: L9b-2-cleanup ===== -->
+
+<!-- ===== CONTRACT: T-1 ===== -->
+## T-1 — derived trait value/scarcity weight (traits rebuild foundation)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer building a pure, build-dark data/derivation module — the shared trait-value foundation the rest of the traits rebuild consumes. NO consumer wiring (later tickets do that).
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Create `src/data/traitTierConfig.ts` exposing the §6 tunable constants + a DERIVED per-trait `traitWeight` (80% value rank + 20% scarcity) + tier assignment, so valuable traits can later be made harder to gain / stickier to lose. Pure, no live caller.
+
+**SOURCE OF TRUTH (VERBATIM):** `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md` §2 (the formula) + §6 (the config block, reproduce it). FORK-A RULED 2026-06-24 = FREEZE one league's ranking for v1 (the inputs ARE the frozen XBL-L2 league; no per-league recompute).
+```
+valueNorm    = rank-normalize(|trait $ value|) over in-scope traits   -> 0..1   (RANK, not raw-$ min-max)
+scarcityNorm = SCARCITY_FROM_MAX_USES[maxUses]                        -> 0..1
+traitWeight  = 0.8 * valueNorm + 0.2 * scarcityNorm                   -> 0..1
+```
+
+**GROUNDING (Captain-verified via a read-only investigation — trust these, they reproduce the spec figures to the dollar):**
+- **$-VALUE method:** a trait's $-value = `computeIV(baselinePlayer).raw.traits` (the trait-layer marginal; `src/engines/ivEngine.ts`), priced against a UNIFORM-50-ratings baseline player at the trait's natural single-position block: hitter traits (non-zero POW/CON/SPD/FLD/ARM deltas) → a SINGLE hitter position block (e.g. `'C'` — single-position, NOT the composite IF/OF block); pitcher traits (VEL/JNK/ACC deltas) → `'SP'`. **The 3 Two-Way traits are a SPECIAL CASE** — their value is the kbl two-way usage-unlock (`twoWayTraitComponent`, `ivEngine.ts:527`), an intentional outlier that tops the ranking either way; price them via the unlock (or assign them ELITE directly with the override). **VERIFIED ANCHORS (must reproduce to the dollar):** Metal Head `+$14`, Meltdown `−$308`, RBI Zero `−$2,364` (single-position hitter block — NOT the composite IF/OF block which gives −2,370). Memoize (compute once).
+- **MAX USES (frozen, from workbook 'Traits' col T = "TEAM MAX USES"; distribution {0:3,1:62,2:5,3:4,9:1} VERIFIED):** embed this `TRAIT_MAX_USES: Record<string,number>` literal (STRIPPED names), with a header comment citing the workbook + `scripts/extract-iv-data.py` col T as the regenerator:
+  `0`: Two Way (C), Two Way (IF), Two Way (OF). `9`: Metal Head. `2`: Base Rounder, Bunter, Clutch, Sprinter, Stealer. `3`: Composed, Consistent, Durable, Utility. ALL OTHERS = `1` (every other trait in `TRAIT_PRICING`).
+- **IN-SCOPE set = 73** = the 75 `TRAIT_PRICING` names MINUS the 2 excluded (`Sign Stealer`, `Stimulated`). `valueNorm` ranks over these 73. The tiers apply to the earnable subset but the weight is computed over the in-scope 73.
+- **⚠ NAME GOTCHA:** every runtime name (`TRAIT_PRICING.name`, `BUILDABLE_TRAITS`, `CANONICAL_TRAIT_NAMES`) is SUFFIX-STRIPPED (`'Two Way (IF)'`, `'Sign Stealer'`). The §6 config as written uses SUFFIXED keys (`'Two Way (IF) (+)'`, `['Sign Stealer (+)','Stimulated (+)']`). **Store ALL keys STRIPPED** (or normalize-strip ` (+)`/` (-)` at every lookup) so they actually match. The MAX USES table is already stripped above.
+
+**BUILD — new `src/data/traitTierConfig.ts`:**
+1. The §6 constants reproduced VERBATIM but with STRIPPED keys: `TRAIT_TIERS_POSITIVE` (COMMON/UNCOMMON/RARE/ELITE bands), `TRAIT_TIERS_NEGATIVE` (MINOR/MODERATE/SEVERE absDollar bands), `TRAIT_WEIGHT_BLEND = {valuePart:0.8, scarcityPart:0.2}`, `SCARCITY_FROM_MAX_USES = {0:1.0,1:0.55,2:0.30,3:0.15,9:0.0}`, `NEGATIVE_TRAIT_FRACTION = 0.27`, `ELITE_GEN_FLOOR = 0.05`, `TRAIT_OVERRIDES` (stripped keys: `'Two Way (IF)'`/`'Two Way (OF)'`/`'Two Way (C)'` → `{genWeight:0.04}`), `TRAIT_ADAPTIVE_EXCLUDED = ['Sign Stealer','Stimulated']`. Flag the threshold/genWeight numbers `// §16 sim-tune placeholder`.
+2. `TRAIT_MAX_USES` (the frozen literal above).
+3. `computeTraitDollarValue(name): number` — the memoized IV-marginal method above.
+4. `computeTraitWeight(name): number` — `0.8 * rankNormalize(|$value|, over the in-scope 73) + 0.2 * SCARCITY_FROM_MAX_USES[maxUses ?? 1]`. `rankNormalize` = (rank of |$value| ascending) / (73 − 1) ∈ [0,1].
+5. `assignTier(name)` — POSITIVE traits bucket by `traitWeight` (weightMin bands); NEGATIVE traits bucket by `|$value|` (absDollarMin bands); polarity from `TRAIT_PRICING`; apply `TRAIT_OVERRIDES`.
+6. NO consumer wiring. Do NOT edit `traitAcquisition.ts`/`traitCandidateBuilder.ts` (T-2/T-4/T-5 consume this later).
+
+**MAKE-OR-BREAK:**
+- The 3 anchors reproduce to the dollar (Metal Head +14, Meltdown −308, RBI Zero −2,364). If your baseline can't, you picked the wrong block — fix it (single-position hitter block, uniform-50).
+- Every `TRAIT_OVERRIDES`/`TRAIT_ADAPTIVE_EXCLUDED` key + every `TRAIT_MAX_USES` key resolves to a real STRIPPED `TRAIT_PRICING.name` (no orphan keys from the suffix gotcha).
+- `iv_oracle.json` byte-unchanged; do NOT regenerate `traitPricing.ts`; `computeIV` is read-only.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. NEW unit test `src/data/__tests__/traitTierConfig.test.ts`: assert the 3 anchor $-values; MAX USES distribution `{0:3,1:62,2:5,3:4,9:1}`; in-scope count 73; no-orphan-key (every override/excluded/maxUses key ∈ stripped `TRAIT_PRICING` names); Two-Way → ELITE tier; Metal Head → COMMON; a Severe negative (RBI Zero) → SEVERE.
+3. `NODE_ENV= npm test` (FULL suite — new module imports `computeIV`/`TRAIT_PRICING`; confirm no transitive break). Read the FAILED-FILE list: ZERO NEW REDS (characterized: `wpaRuntimeBoundary` hard + `franchiseManualSmokeFixture`/`GameTrackerLaunchState` solo-pass).
+4. `git --no-pager diff --stat` → only the new `traitTierConfig.ts` + its test; `iv_oracle.json` NOT in it; `traitPricing.ts` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each piece described, referencing §2/§6 / the make-or-break.
+3. Verification output pasted (build, the anchor test, vitest FAILED-file summary, diff --stat).
+4. "T-1 complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- After 2 honest tries the IV-marginal baseline cannot reproduce the 3 anchor $-values → STOP, report your computed values + the baseline you used (the Captain will resolve the block construction).
+- Reproducing the values would require regenerating `traitPricing.ts` or touching `iv_oracle.json` → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-1 ===== -->
