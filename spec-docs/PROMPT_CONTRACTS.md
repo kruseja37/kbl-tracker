@@ -21357,3 +21357,48 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: NATIVE-WIRE ===== -->
+
+<!-- ===== CONTRACT: L9b-2-cleanup ===== -->
+## L9b-2-cleanup — remove Noodle Arm from the EARNABLE trait set (traits rebuild, ticket 0)
+
+**ROUTE:** Codex (gpt-5.5) | high reasoning effort
+**ROLE:** You are a precise TypeScript surgeon removing one cut trait from the earnable pipeline. You do NOT add traits or change measurement logic.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Make `Noodle Arm` no longer EARNABLE via the trait gain/loss engine — remove it from `BUILDABLE_TRAITS` and stop emitting its reality signal — while keeping it a valid CANONICAL trait (a player can still hold/generate it) and preserving the `Cannon Arm ↔ Noodle Arm` mutual exclusion.
+
+**SOURCE OF TRUTH:** `spec-docs/TRAIT_MEASUREMENT_SPEC.md §0.6:110` + `§29` ("Noodle Arm: CUT from v1 → dormant — no clean reality signal; ARM-rating-alone is single-rating §0.0; OF-assist/runner-advance proxies are conflated"; "47 earnable v1 traits") + `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md:138` ("Noodle Arm: DELETE from BUILDABLE_TRAITS — building a dropped trait on the rejected proxy; separate cleanup, not protection"). JK ruling 2026-06-18.
+
+**GROUNDING (Captain-verified — re-read before editing):**
+- `BUILDABLE_TRAITS` (`src/engines/traitCandidateBuilder.ts:42`) currently contains `'Noodle Arm'` (`:56`); the builder also emits its signal at `:959` (`addRawSignal(raw, playerId, 'Noodle Arm', { signalValue: -rate, sampleSize: games })`, the negative of the Cannon Arm OF-assist rate one line above).
+- `createSymmetricOpposites` (`traitAcquisition.ts:504`) guards on `CANONICAL_TRAIT_NAMES` (`:510`), NOT `BUILDABLE_TRAITS` — so the `['Cannon Arm','Noodle Arm']` OPPOSITE_PAIRS entry (`:217`) STAYS VALID after removal (Noodle Arm is a canonical SMB4 trait). Do NOT touch OPPOSITE_PAIRS or CANONICAL_TRAIT_NAMES.
+- `POSITION_ONLY_TRAITS` (`traitRealityScorer.ts:112`) lists `Noodle Arm` as a Fielding role-classification. The dormant trait `Stimulated` stays in `UNIVERSAL_TRAITS` (`:118`) — i.e. dormant traits legitimately STAY in their role-classification list. `CUT_TRAITS` (`:121`) is for FULLY-cut traits (Sign Stealer) only; Noodle Arm is DORMANT, not cut.
+
+**BUILD:**
+1. `src/engines/traitCandidateBuilder.ts`: remove `'Noodle Arm'` from `BUILDABLE_TRAITS` (`:56`). Remove the `addRawSignal(... 'Noodle Arm' ...)` emitter (`:959`); leave the `'Cannon Arm'` emitter one line above intact.
+2. KEEP `'Cannon Arm'` buildable; KEEP the `['Cannon Arm','Noodle Arm']` OPPOSITE_PAIRS entry; KEEP `Noodle Arm` in `CANONICAL_TRAIT_NAMES` and in `POSITION_ONLY_TRAITS` (dormant, parallels `Stimulated`). Do NOT add it to `CUT_TRAITS`.
+3. Update any test that asserts `Noodle Arm` is buildable / produces a signal / counts the buildable set (expect ~`BUILDABLE_TRAITS.length` to drop by 1 → the spec's 47 earnable). DO NOT weaken a test to pass — repoint the assertion to the new reality (Noodle Arm dormant; Cannon Arm still buildable; mutual exclusion intact).
+
+**MAKE-OR-BREAK:**
+- After this, `Noodle Arm` is NOT in `BUILDABLE_TRAITS` and has NO signal emitter, but IS still in `CANONICAL_TRAIT_NAMES` + OPPOSITE_PAIRS (so a held/generated Noodle Arm is displaced by a Cannon Arm gain — the "can't have both" invariant holds), and `createSymmetricOpposites` does NOT throw.
+- `Cannon Arm` stays buildable with its signal intact. No other trait's buildable status changes.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npm test` (FULL suite — `BUILDABLE_TRAITS` is a shared array consumed by the checkpoint sweep + many fixtures; a scoped run can miss a consumer). Read the FAILED-FILE list: ZERO NEW REDS vs the characterized baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState` solo-pass).
+3. `grep -rn "'Noodle Arm'" src/engines/traitCandidateBuilder.ts` → zero (gone from builder); `grep -rn "Cannon Arm.*Noodle Arm\|Noodle Arm.*Cannon Arm" src/engines/traitAcquisition.ts` → still present (opposite pair kept).
+4. `git --no-pager diff --stat` → only `traitCandidateBuilder.ts` + the test(s) it required; no `iv_oracle.json`.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing the spec cut / make-or-break.
+3. Verification output pasted (build, vitest FAILED-file summary, greps, diff --stat).
+4. "L9b-2-cleanup complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- Removing Noodle Arm from BUILDABLE requires touching OPPOSITE_PAIRS/CANONICAL_TRAIT_NAMES or makes `createSymmetricOpposites` throw → STOP, report (this should NOT happen per the grounding).
+- A new RED appears outside the characterized set that you cannot trace to Noodle Arm's removal → STOP, report.
+- Never summarize/batch; report every changed path including test edits.
+
+Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: L9b-2-cleanup ===== -->

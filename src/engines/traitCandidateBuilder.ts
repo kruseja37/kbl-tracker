@@ -53,7 +53,6 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Pinch Perfect',
   'Butter Fingers',
   'Cannon Arm',
-  'Noodle Arm',
   'Durable',
   'Injury Prone',
   // R1-a: clean outcome-proxy traits (TRAIT_MEASUREMENT_SPEC §0.6). Build-dark.
@@ -956,7 +955,6 @@ function addArmSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): voi
     const rate = games > 0 ? arm / games : 0;
     // v1 approximation: no per-outfield-throw opportunity denominator exists.
     addRawSignal(raw, playerId, 'Cannon Arm', { signalValue: rate, sampleSize: games });
-    addRawSignal(raw, playerId, 'Noodle Arm', { signalValue: -rate, sampleSize: games });
   }
 }
 

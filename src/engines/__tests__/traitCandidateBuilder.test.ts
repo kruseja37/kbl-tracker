@@ -193,7 +193,6 @@ describe('BUILDABLE_TRAITS', () => {
       'Pinch Perfect',
       'Butter Fingers',
       'Cannon Arm',
-      'Noodle Arm',
       'Durable',
       'Injury Prone',
       // R1-a: clean outcome-proxy traits.
@@ -455,13 +454,13 @@ describe('direct-source signals', () => {
     expect(candidate(result, 'b1', 'Butter Fingers')?.signalValue).toBeCloseTo(2 / 3, 10);
   });
 
-  it('computes Cannon Arm and Noodle Arm as inverted OF-arm activity per game', () => {
+  it('computes Cannon Arm from OF-arm activity per game while leaving dormant Noodle Arm unemitted', () => {
     const result = computeSeasonTraitCandidates(baseInput({
       players: players(['b1'], 'position'),
       seasonFieldingByPlayer: new Map([['b1', { outfieldAssists: 2, baserunnersHeld: 4, games: 12 }]]),
     }));
     expect(candidate(result, 'b1', 'Cannon Arm')?.signalValue).toBeCloseTo(0.5, 10);
-    expect(candidate(result, 'b1', 'Noodle Arm')?.signalValue).toBeCloseTo(-0.5, 10);
+    expect(candidate(result, 'b1', 'Noodle Arm')).toBeUndefined();
   });
 
   it('computes Durable and Injury Prone from injury rate and gates zero-game rows', () => {
