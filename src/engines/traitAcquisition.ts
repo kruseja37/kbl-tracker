@@ -195,6 +195,12 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Low Pitch',
   'Inside Pitch',
   'Outside Pitch',
+  // DT-C1 / §0.6b row C: positive valence (priced positive). §0.7 assigns
+  // NO personality driver → NO IMAGE_DRIVER_SETS entry (neutral/universal tilt,
+  // §16/§0.7 documented default, OPEN-DECISION-for-JK). NO opposite pair (Bad
+  // Ball Hitter stands alone; Easy Target↔Mind Gamer are a separate
+  // discipline-axis pair, out of scope).
+  'Bad Ball Hitter',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([

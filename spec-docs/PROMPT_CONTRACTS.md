@@ -22171,3 +22171,77 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: DT-B ===== -->
+
+<!-- ===== CONTRACT: DT-C1 ===== -->
+## DT-C1 — Bad Ball Hitter earnable (chase hit-rate; dormant-trait wave, Group C part 1)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding ONE build-dark chase-rate aggregator + its earn-wiring, cloning the DT-B pitch-location pattern for the hitter trait **Bad Ball Hitter**. Surgical, additive; the only behavior change is Bad Ball Hitter becoming earnable (flag-gated). This is the CHASE half of DT-C — the fielder/rating-gate traits (Magic Hands / Dive Wizard) are a SEPARATE ticket (DT-C2); do NOT build them here.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Make the hitter trait **Bad Ball Hitter** EARNABLE in-season from the **chase success rate** = hits-on-chase ÷ (hits-on-chase + outs-on-chase) over the user-tagged chased at-bats (`enrichment.chased === true`) — add a per-batter aggregator mirroring DT-B's `addPitchLocationSignals`, add `'Bad Ball Hitter'` to `BUILDABLE_TRAITS`, and add it to the positive image set. Build-dark (flag-gated grant path); fires only on user-tagged chase data.
+
+**SOURCE OF TRUTH:** `TRAIT_MEASUREMENT_SPEC §0.6b` row C (Bad Ball Hitter, hitter, `hits-on-chase ÷ (hits + outs-on-chase)` [outs-denominator = anti-game], input `enrichment.chased` + outcome). `DECISIONS_LOG 2026-06-25` group C ("unusual hit-rate on CHASES ... counterbalanced by outs-while-chasing so a player can't game it by always chasing"; difficulty Bad Ball Hitter RARE 0.82). `V1_BUILD_QUEUE A-W3.5 / 4D-W2`. The build template = DT-B (`2596b2c8`, `addPitchLocationSignals`).
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read each before editing):**
+- The clone template = `addPitchLocationSignals` (`src/engines/traitCandidateBuilder.ts:803-858`) — per-batterId buckets, one pass over `sortAtBats(input.atBatEvents).filter((e) => !undoneAt(e))`, emit via `addRawSignal(raw, batterId, traitName, { signalValue, sampleSize })` when sampleSize > 0, deterministic `[...map.keys()].sort()`. DT-C1 mirrors this exactly, keyed on `enrichment.chased`.
+- Capture field: `AtBatEvent.enrichment.chased?: boolean` (`src/utils/eventLog.ts:410`), set ONLY via the EnrichmentPanel chase button (manual/sparse-by-intent, like pitchLocation). The chase button is offered on swing results (batted outs/hits + swinging-K) and NOT on called-strike/BB/IBB/HBP — so a chased AB resolves to a hit or an out in practice.
+- REUSE the EXISTING tested 7-class partition (do NOT redefine): `classifyPitchOutcome(result)` (exported, `traitCandidateBuilder.ts:371`) → `PitchOutcomeClass` (`:320`) ∈ {K,BB,HR,SINGLE,BIGHIT,OUT,NEUTRAL}, exhaustive over `AtBatResult`. Hit classes {HR,SINGLE,BIGHIT} = exactly `HIT_RESULTS` {1B,2B,3B,HR,ITPHR,GRD}; out classes {K,OUT} = strikeouts + batted outs {GO,FO,FLO,LO,PO,DP,TP}; {BB,NEUTRAL} (NEUTRAL = SF,SAC,HBP,E,FC) are EXCLUDED from both numerator and denominator (anti-game intent counts clear hits vs clear outs; walks can't be chased anyway).
+- `'Bad Ball Hitter'` is ALREADY canonical (`traitRealityScorer.ts:102` POSITION_ONLY_TRAITS → CANONICAL_TRAIT_NAMES), priced (`traitPricing.ts:40`, polarity positive, chemistry Crafty), role=position/hitter, difficulty RARE 0.82 via `assignTier` (`TRAIT_MAX_USES['Bad Ball Hitter']=1`). It is NOT in `BUILDABLE_TRAITS` (the gap DT-C1 closes). So DT-C1 does NOT touch traitRealityScorer/traitPricing/traitTierConfig.
+- `BUILDABLE_TRAITS` (`traitCandidateBuilder.ts:42-135`) currently ends at `'Outside Pitch'` (`:134`, DT-B); canonical guard at `:137-141` throws on a non-canonical name (Bad Ball Hitter passes). The candidate pipeline loops `for traitName of BUILDABLE_TRAITS` with `basis:'none'` → the rate valve `minSampleRate:10` (`traitRealityScorer.ts:65`) keeps it dormant until `sampleSize ≥ 10`.
+- Image valence: `'Bad Ball Hitter'` is NOT in `POSITIVE_IMAGE_TRAITS` (`traitAcquisition.ts:146-...`) today. `TRAIT_MEASUREMENT_SPEC §0.7` assigns NO personality driver for it. So add it to `POSITIVE_IMAGE_TRAITS` (positive valence — it is positively priced) and do NOT add an `IMAGE_DRIVER_SETS` entry (neutral/universal tilt, the documented §16/§0.7 default — a no-inference choice; logged OPEN-DECISION-for-JK). Do NOT add ANY `OPPOSITE_PAIRS` entry — Bad Ball Hitter stands alone (its discipline-axis neighbors Easy Target / Mind Gamer are a SEPARATE pair, OUT of scope per DECISIONS_LOG 2026-06-25).
+- The at-bat key is `atBat.batterId`. Emit unconditionally by batterId (role filtering for position-only Bad Ball Hitter happens downstream in `computeSeasonTraitCandidates` via `isTraitEligibleForRole`, exactly like `addPitchLocationSignals`).
+
+**BUILD:**
+1. `src/engines/traitCandidateBuilder.ts`:
+   (a) Add `function addChaseSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void`:
+       - Per-`batterId` counters `{ hits: number; outs: number }`.
+       - One pass over `sortAtBats(input.atBatEvents).filter((e) => !undoneAt(e))`. For each AB with `atBat.enrichment?.chased === true`: `const cls = classifyPitchOutcome(atBat.result);` then if `cls === 'HR' || cls === 'SINGLE' || cls === 'BIGHIT'` → `hits += 1`; else if `cls === 'K' || cls === 'OUT'` → `outs += 1`; else (`BB`/`NEUTRAL`) → skip (count neither).
+       - After the pass, deterministically (`[...map.keys()].sort()`), for each batter with `denom = hits + outs > 0`: `addRawSignal(raw, batterId, 'Bad Ball Hitter', { signalValue: hits / (hits + outs), sampleSize: hits + outs })`.
+   (b) Wire `addChaseSignals(input, raw);` into `buildRawSignals` immediately AFTER the `addPitchLocationSignals(input, raw);` call (`:1636`), with a one-line comment: `// DT-C1 — Bad Ball Hitter chase hit-rate (TRAIT_MEASUREMENT_SPEC §0.6b row C).`
+   (c) Append `'Bad Ball Hitter'` to `BUILDABLE_TRAITS` AFTER `'Outside Pitch'` (`:134`), in a commented block:
+       ```
+       // DT-C1 (TRAIT_MEASUREMENT_SPEC §0.6b row C): chase hit-rate earn-signal
+       // (hits-on-chase / (hits + outs-on-chase) over enrichment.chased ABs);
+       // hitter-only; dormant until ≥10 chased hit-or-out ABs (rate-basis valve).
+       'Bad Ball Hitter',
+       ```
+2. `src/engines/traitAcquisition.ts`:
+   (a) Add `'Bad Ball Hitter'` to `POSITIVE_IMAGE_TRAITS`, in a commented block: "**DT-C1 / §0.6b row C: positive valence (priced positive). §0.7 assigns NO personality driver → NO `IMAGE_DRIVER_SETS` entry (neutral/universal tilt, §16/§0.7 documented default, OPEN-DECISION-for-JK). NO opposite pair (Bad Ball Hitter stands alone; Easy Target↔Mind Gamer are a separate discipline-axis pair, out of scope).**" Do NOT touch `IMAGE_DRIVER_SETS`, `NEGATIVE_IMAGE_TRAITS`, or `OPPOSITE_PAIRS`.
+
+**DO NOT (this ticket):** touch `traitRealityScorer.ts`, `traitPricing.ts`, `traitTierConfig.ts`, `prospectScoutingDraftEngine.ts` (source), `franchiseTraitGrantCompute.ts`, `traitInteractionMatrix.ts`, `effectiveRatings.ts`; build Magic Hands / Dive Wizard / the rating-gate plumbing (that is DT-C2); modify `classifyPitchOutcome` / `HIT_RESULTS` / the 7-class partition; touch Easy Target's `kRate` signal; bump `TRACKER_DB_VERSION`; touch `iv_oracle.json`.
+
+**TEST (add describe blocks; don't weaken existing):**
+`src/engines/__tests__/traitCandidateBuilder.test.ts`:
+- **Golden list:** append `'Bad Ball Hitter'` to `expect(BUILDABLE_TRAITS).toEqual([...])` (currently ends `'Outside Pitch'`) AFTER `'Outside Pitch'`, same order (62→63). Canonical-names test stays green.
+- **Earnable + anti-game denominator (make-or-break):** a hitter with chased ABs that are a mix of hits and outs → `'Bad Ball Hitter'` candidate with `signalValue = hits/(hits+outs)` (pin an EXACT value, e.g. 7 chased hits + 3 chased outs → 0.7, sampleSize 10). A hitter who chases a LOT but makes outs has a LOW rate (the outs-denominator). A chased strikeout counts as an out (denominator). A hitter with NO chased ABs → NO Bad Ball Hitter candidate.
+- **Exclusions:** chased ABs classified NEUTRAL (`E`,`FC`,`SF`,`SAC`,`HBP`) count toward NEITHER numerator nor denominator; un-chased ABs (no `enrichment.chased`) are ignored; undone ABs excluded.
+- **Min-sample valve:** 9 chased hit-or-out ABs → candidate exists but `score.sufficient===false`; 10 (use ≥2-3 hitters so the peer pool is well-defined) → `score.sufficient===true` with finite `realityPercentile`.
+- **Role filter:** a PITCHER-role player keyed as batter never produces a Bad Ball Hitter candidate.
+`src/engines/__tests__/traitAcquisition.test.ts`:
+- **Image valence:** `'Bad Ball Hitter'` resolves `imageValence==='positive'`; it has NO `IMAGE_DRIVER_SETS` entry so its personality tilt is neutral (Competitive/Egotistical/Tough/Timid all `imageAxisTilt===1`). If `POSITIVE_IMAGE_TRAITS` is golden-pinned, update that golden.
+
+**MAKE-OR-BREAK:**
+- Bad Ball Hitter earns from chased data, valve-gated (≥10 chased hit-or-out ABs), percentile vs hitter peers; the outs-on-chase denominator means chasing-and-missing LOWERS the rate (un-gameable); untagged-data players produce none → no change to any existing untagged test.
+- `classifyPitchOutcome`/`HIT_RESULTS`/the partition reused UNCHANGED. No new import; NO DB bump; `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts`/`traitRealityScorer.ts` untouched. No fielder/rating code (that is DT-C2).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → full pass.
+3. `NODE_ENV= npm test` (FULL suite — this engine is in the `franchiseTraitGrantCompute`→`processCompletedGame` chain; scoped runs miss transitive-mock-break). FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` solo-pass order-flakes — re-run any unexpected red IN ISOLATION). If a franchise/L-SIM/award golden shifts because a fixture carries tagged chase data → STOP and report (do NOT re-baseline a soul/L-SIM golden).
+4. `git --no-pager diff --stat` → exactly `traitCandidateBuilder.ts` + `traitAcquisition.ts` + `traitCandidateBuilder.test.ts` + `traitAcquisition.test.ts`. `iv_oracle.json` NOT present.
+
+**FORMAT:**
+1. Files changed (exact paths) + line counts.
+2. The chase aggregator (hit/out classify via classifyPitchOutcome, NEUTRAL/BB excluded); the BUILDABLE add; the positive valence (no driver, no opposite); confirmation no shared-partition change + no fielder/rating code.
+3. Verification output (build exit, focused vitest, full-suite FAILED-file summary, `diff --stat`).
+4. "DT-C1 complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- `'Bad Ball Hitter'` is non-canonical (the `:137-141` guard throws / `traitRole` returns null) → STOP, report.
+- A franchise/L-SIM/award golden shifts (a fixture carries tagged chase data) → STOP, report; do NOT re-baseline a soul-layer/L-SIM golden.
+- A full-suite red appears that is NOT in the characterized/flake set and does not pass in isolation → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: DT-C1 ===== -->

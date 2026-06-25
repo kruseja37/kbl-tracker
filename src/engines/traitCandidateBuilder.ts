@@ -132,6 +132,10 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Low Pitch',
   'Inside Pitch',
   'Outside Pitch',
+  // DT-C1 (TRAIT_MEASUREMENT_SPEC §0.6b row C): chase hit-rate earn-signal
+  // (hits-on-chase / (hits + outs-on-chase) over enrichment.chased ABs);
+  // hitter-only; dormant until ≥10 chased hit-or-out ABs (rate-basis valve).
+  'Bad Ball Hitter',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -854,6 +858,44 @@ function addPitchLocationSignals(input: SeasonTraitCandidateInput, raw: RawSigna
         sampleSize: bucket.sampleSize,
       });
     }
+  }
+}
+
+function addChaseSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  interface ChaseBucket { hits: number; outs: number; }
+
+  const chaseBuckets = new Map<string, ChaseBucket>();
+
+  const getChaseBucket = (batterId: string): ChaseBucket => {
+    let bucket = chaseBuckets.get(batterId);
+    if (!bucket) {
+      bucket = { hits: 0, outs: 0 };
+      chaseBuckets.set(batterId, bucket);
+    }
+    return bucket;
+  };
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    if (atBat.enrichment?.chased !== true) continue;
+
+    const outcomeClass = classifyPitchOutcome(atBat.result);
+    const bucket = getChaseBucket(atBat.batterId);
+    if (outcomeClass === 'HR' || outcomeClass === 'SINGLE' || outcomeClass === 'BIGHIT') {
+      bucket.hits += 1;
+    } else if (outcomeClass === 'K' || outcomeClass === 'OUT') {
+      bucket.outs += 1;
+    }
+  }
+
+  for (const batterId of [...chaseBuckets.keys()].sort()) {
+    const bucket = chaseBuckets.get(batterId);
+    if (!bucket) continue;
+    const sampleSize = bucket.hits + bucket.outs;
+    if (sampleSize <= 0) continue;
+    addRawSignal(raw, batterId, 'Bad Ball Hitter', {
+      signalValue: bucket.hits / sampleSize,
+      sampleSize,
+    });
   }
 }
 
@@ -1634,6 +1676,8 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addPitchTypeSignals(input, raw);
   // DT-B — per-pitch-LOCATION net-quality (TRAIT_MEASUREMENT_SPEC §0.6b row B; reuses the T-9a hitter scorer).
   addPitchLocationSignals(input, raw);
+  // DT-C1 — Bad Ball Hitter chase hit-rate (TRAIT_MEASUREMENT_SPEC §0.6b row C).
+  addChaseSignals(input, raw);
   return raw;
 }
 

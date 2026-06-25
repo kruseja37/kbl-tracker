@@ -217,6 +217,10 @@ const DTB_PITCH_LOCATION_TRAITS = [
   'Outside Pitch',
 ] as const;
 
+const DTC1_CHASE_TRAITS = [
+  'Bad Ball Hitter',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -307,6 +311,8 @@ describe('BUILDABLE_TRAITS', () => {
       'Low Pitch',
       'Inside Pitch',
       'Outside Pitch',
+      // DT-C1: Bad Ball Hitter chase hit-rate earn-signal.
+      'Bad Ball Hitter',
     ]);
   });
 
@@ -2449,6 +2455,142 @@ describe('traitCandidateBuilder DT-B pitch-location signals', () => {
     expect(candidate(result, 'pitcher-bat', 'High Pitch')).toBeUndefined();
     expect(candidate(result, 'pitcher-bat', 'Inside Pitch')).toBeUndefined();
     expect(candidate(result, 'pitcher-bat', 'Outside Pitch')).toBeUndefined();
+  });
+});
+
+describe('traitCandidateBuilder DT-C1 Bad Ball Hitter chase signals', () => {
+  it('makes Bad Ball Hitter buildable only from tagged chase data and uses hits over hits plus outs', () => {
+    for (const traitName of DTC1_CHASE_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['h-good', 'h-chases-outs', 'h-peer', 'h-plain'], 'position'),
+      atBatEvents: [
+        ...repeat(7, () => atBat({ batterId: 'h-good', result: '1B', outsAfter: 0, enrichment: { chased: true } })),
+        ...repeat(2, () => atBat({ batterId: 'h-good', result: 'GO', outsAfter: 1, enrichment: { chased: true } })),
+        atBat({ batterId: 'h-good', result: 'K', outsAfter: 1, enrichment: { chased: true } }),
+        ...repeat(2, () => atBat({ batterId: 'h-chases-outs', result: '2B', outsAfter: 0, enrichment: { chased: true } })),
+        ...repeat(7, () => atBat({ batterId: 'h-chases-outs', result: 'FO', outsAfter: 1, enrichment: { chased: true } })),
+        atBat({ batterId: 'h-chases-outs', result: 'K', outsAfter: 1, enrichment: { chased: true } }),
+        ...repeat(5, () => atBat({ batterId: 'h-peer', result: 'HR', outsAfter: 0, enrichment: { chased: true } })),
+        ...repeat(5, () => atBat({ batterId: 'h-peer', result: 'LO', outsAfter: 1, enrichment: { chased: true } })),
+        ...repeat(10, () => atBat({ batterId: 'h-plain', result: 'HR', outsAfter: 0 })),
+      ],
+    }));
+
+    const good = candidate(result, 'h-good', 'Bad Ball Hitter');
+    const chasesOuts = candidate(result, 'h-chases-outs', 'Bad Ball Hitter');
+    const peer = candidate(result, 'h-peer', 'Bad Ball Hitter');
+
+    expect(good).toBeDefined();
+    expect(good?.signalValue).toBeCloseTo(0.7, 10);
+    expect(good?.sampleSize).toBe(10);
+    expect(good?.score.sufficient).toBe(true);
+    expect(chasesOuts?.signalValue).toBeCloseTo(0.2, 10);
+    expect(chasesOuts?.sampleSize).toBe(10);
+    expect(peer?.signalValue).toBeCloseTo(0.5, 10);
+    expect((chasesOuts?.signalValue ?? 1) < (peer?.signalValue ?? 0)).toBe(true);
+    expect(candidate(result, 'h-plain', 'Bad Ball Hitter')).toBeUndefined();
+  });
+
+  it('excludes neutral, walk, unchased, and undone at-bats from the chase denominator', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        atBat({ batterId: 'h-chase', result: 'HR', outsAfter: 0, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'GO', outsAfter: 1, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'E', outsAfter: 0, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'FC', outsAfter: 1, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'SF', outsAfter: 1, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'SAC', outsAfter: 1, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'HBP', outsAfter: 0, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'BB', outsAfter: 0, enrichment: { chased: true } }),
+        atBat({ batterId: 'h-chase', result: 'HR', outsAfter: 0 }),
+        atBat({ batterId: 'h-chase', result: 'K', outsAfter: 1, enrichment: { chased: true }, undoneAt: 1 }),
+      ],
+    }));
+
+    expect(raw.get('h-chase')?.get('Bad Ball Hitter')).toEqual({ signalValue: 0.5, sampleSize: 2 });
+  });
+
+  it('gates Bad Ball Hitter at the rate min-sample boundary', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['h-thin', 'h-full', 'h-peer-low', 'h-peer-mid'], 'position'),
+      atBatEvents: [
+        ...repeat(9, () => atBat({
+          batterId: 'h-thin',
+          result: 'HR',
+          outsAfter: 0,
+          enrichment: { chased: true },
+        })),
+        ...repeat(8, () => atBat({
+          batterId: 'h-full',
+          result: 'HR',
+          outsAfter: 0,
+          enrichment: { chased: true },
+        })),
+        ...repeat(2, () => atBat({
+          batterId: 'h-full',
+          result: 'GO',
+          outsAfter: 1,
+          enrichment: { chased: true },
+        })),
+        ...repeat(4, () => atBat({
+          batterId: 'h-peer-low',
+          result: '1B',
+          outsAfter: 0,
+          enrichment: { chased: true },
+        })),
+        ...repeat(6, () => atBat({
+          batterId: 'h-peer-low',
+          result: 'FO',
+          outsAfter: 1,
+          enrichment: { chased: true },
+        })),
+        ...repeat(6, () => atBat({
+          batterId: 'h-peer-mid',
+          result: '2B',
+          outsAfter: 0,
+          enrichment: { chased: true },
+        })),
+        ...repeat(4, () => atBat({
+          batterId: 'h-peer-mid',
+          result: 'K',
+          outsAfter: 1,
+          enrichment: { chased: true },
+        })),
+      ],
+    }));
+    const thin = candidate(result, 'h-thin', 'Bad Ball Hitter');
+    const full = candidate(result, 'h-full', 'Bad Ball Hitter');
+
+    expect(thin).toBeDefined();
+    expect(thin?.sampleSize).toBe(9);
+    expect(thin?.score.sufficient).toBe(false);
+    expect(thin?.score.sufficiency).not.toBe('sufficient');
+    expect(full).toBeDefined();
+    expect(full?.sampleSize).toBe(10);
+    expect(full?.score.sufficient).toBe(true);
+    expect(full?.score.realityPercentile).not.toBeNull();
+    expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
+  });
+
+  it('keeps Bad Ball Hitter behind position-role eligibility', () => {
+    const input = baseInput({
+      players: [{ playerId: 'pitcher-bat', role: 'pitcher' }],
+      atBatEvents: repeat(10, () => atBat({
+        batterId: 'pitcher-bat',
+        pitcherId: 'opp',
+        result: 'HR',
+        outsAfter: 0,
+        enrichment: { chased: true },
+      })),
+    });
+    const raw = buildRawSignals(input);
+    const result = computeSeasonTraitCandidates(input);
+
+    expect(raw.get('pitcher-bat')?.get('Bad Ball Hitter')).toBeDefined();
+    expect(candidate(result, 'pitcher-bat', 'Bad Ball Hitter')).toBeUndefined();
   });
 });
 

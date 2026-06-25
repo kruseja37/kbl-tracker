@@ -877,6 +877,26 @@ describe('traitAcquisition DT-B pitch-location image defaults', () => {
   );
 });
 
+describe('traitAcquisition DT-C1 Bad Ball Hitter image default', () => {
+  test('Bad Ball Hitter is positive with no personality driver or opposite-pair tilt', () => {
+    const ambitious = proposalFor('Bad Ball Hitter', {
+      playerRole: 'position',
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const competitive = proposalFor('Bad Ball Hitter', { playerRole: 'position', personality: 'Competitive' });
+    const egotistical = proposalFor('Bad Ball Hitter', { playerRole: 'position', personality: 'Egotistical' });
+    const tough = proposalFor('Bad Ball Hitter', { playerRole: 'position', personality: 'Tough' });
+    const timid = proposalFor('Bad Ball Hitter', { playerRole: 'position', personality: 'Timid' });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(competitive.factors.imageAxisTilt).toBe(1);
+    expect(egotistical.factors.imageAxisTilt).toBe(1);
+    expect(tough.factors.imageAxisTilt).toBe(1);
+    expect(timid.factors.imageAxisTilt).toBe(1);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');
