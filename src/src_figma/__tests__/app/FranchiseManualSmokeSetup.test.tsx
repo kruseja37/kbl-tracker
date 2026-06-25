@@ -74,6 +74,9 @@ describe('FranchiseManualSmokeSetup', () => {
     expect(screen.getByText('Manual Smoke 1')).toBeInTheDocument();
     expect(screen.getByText(/MLB 22\/22 · FARM 10\/10 · Scouts 1\/1/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /open franchise setup/i })).toHaveAttribute('href', '/franchise/setup');
-    expect(screen.getByRole('link', { name: /inspect draft readiness/i })).toHaveAttribute('href', '/league-builder/draft');
+    expect(screen.getByRole('link', { name: /inspect draft readiness/i })).toHaveAttribute(
+      'href',
+      '/league-builder/draft?leagueId=manual-smoke-v1-league',
+    );
   });
 });

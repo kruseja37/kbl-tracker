@@ -203,10 +203,10 @@ describe('LeagueBuilder Component', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/league-builder/rosters');
     });
 
-    test('DRAFT card navigates to draft page', () => {
+    test('DRAFT card routes the first auction league to the farm auction page', () => {
       render(<LeagueBuilder />);
       fireEvent.click(screen.getByText('DRAFT'));
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/draft');
+      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/farm-auction-draft?leagueId=league-1');
     });
 
     test('MLB DRAFT card navigates to leagues list for league-specific draft routing', () => {

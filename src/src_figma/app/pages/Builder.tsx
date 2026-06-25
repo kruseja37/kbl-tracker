@@ -52,6 +52,8 @@ import {
   type Smb4TeamProfileLevels,
 } from "../../../engines/smb4TeamProfileEngine";
 import { generateHometown } from "../../../data/usCities";
+import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
+import { farmDraftRouteForLeague } from "../utils/draftRouting";
 import type {
   Chemistry,
   Grade,
@@ -912,12 +914,14 @@ function BuilderPlayerTable({
 }
 
 function LeagueBuilderPanel() {
+  const { leagues } = useLeagueBuilderData();
+  const farmDraftPath = leagues[0] ? farmDraftRouteForLeague(leagues[0]) : "/league-builder/draft";
   const modules = [
     { title: "Leagues", icon: Database, to: "/league-builder/leagues", color: "#CC44CC" },
     { title: "Teams", icon: Users, to: "/league-builder/teams", color: "#5599FF" },
     { title: "Players", icon: User, to: "/league-builder/players", color: "#3366FF" },
     { title: "Rosters", icon: Folder, to: "/league-builder/rosters", color: "#0066FF" },
-    { title: "Draft", icon: Shuffle, to: "/league-builder/draft", color: "#7733DD" },
+    { title: "Draft", icon: Shuffle, to: farmDraftPath, color: "#7733DD" },
     { title: "Rules", icon: Settings, to: "/league-builder/rules", color: "#DD0000" },
   ];
 

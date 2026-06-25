@@ -30,6 +30,7 @@ import {
   deleteRulesPreset,
   getTeamRoster,
   saveTeamRoster,
+  clearTeamRoster,
   deleteTeamRoster,
   getRegisteredPool as getRegisteredPoolFromStorage,
   getMlbDraftSession as getMlbDraftSessionFromStorage,
@@ -126,6 +127,7 @@ export interface UseLeagueBuilderDataReturn {
   // Roster operations
   getRoster: (teamId: string) => Promise<TeamRoster | null>;
   updateRoster: (roster: TeamRoster) => Promise<TeamRoster>;
+  clearRoster: (teamId: string, leagueId?: string) => Promise<TeamRoster>;
   removeRoster: (teamId: string) => Promise<void>;
 
   // SMB4 Database Seeding
@@ -508,6 +510,18 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     }
   }, []);
 
+  const clearRoster = useCallback(async (teamId: string, leagueId?: string) => {
+    try {
+      const cleared = await clearTeamRoster(teamId, leagueId);
+      await refresh();
+      return cleared;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to clear roster';
+      setError(message);
+      throw err;
+    }
+  }, [refresh]);
+
   const removeRoster = useCallback(async (teamId: string) => {
     try {
       await deleteTeamRoster(teamId);
@@ -607,6 +621,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     // Roster operations
     getRoster,
     updateRoster,
+    clearRoster,
     removeRoster,
 
     // SMB4 Database Seeding

@@ -18,6 +18,7 @@ import {
   X,
   Check,
   AlertTriangle,
+  Eraser,
   MapPin,
   Building2,
   ChevronDown,
@@ -249,6 +250,7 @@ export function LeagueBuilderTeams() {
     createTeam,
     updateTeam,
     removeTeam,
+    clearRoster,
   } = useLeagueBuilderData();
 
   // UI State
@@ -257,6 +259,7 @@ export function LeagueBuilderTeams() {
   const [formData, setFormData] = useState<TeamFormData>(() => createDefaultFormData());
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [clearingRosterId, setClearingRosterId] = useState<string | null>(null);
   const [isCapIdentityOpen, setIsCapIdentityOpen] = useState(true);
   const [isFarmCapIdentityOpen, setIsFarmCapIdentityOpen] = useState(true);
   const [isHeritageFactsOpen, setIsHeritageFactsOpen] = useState(true);
@@ -612,6 +615,22 @@ export function LeagueBuilderTeams() {
       setDeleteConfirmId(null);
     } catch (err) {
       console.error("Failed to delete team:", err);
+    }
+  };
+
+  const handleClearRoster = async (team: Team) => {
+    const confirmed = window.confirm(
+      `Clear all MLB and farm roster slots for ${team.name}? Players stay in the league pool as free agents.`,
+    );
+    if (!confirmed) return;
+
+    setClearingRosterId(team.id);
+    try {
+      await clearRoster(team.id);
+    } catch (err) {
+      console.error("Failed to clear team roster:", err);
+    } finally {
+      setClearingRosterId(null);
     }
   };
 
@@ -992,6 +1011,16 @@ export function LeagueBuilderTeams() {
                   <div className="text-[10px] text-[#D4A020] text-center mb-2">
                     MGR {getAssignedManagerName(team)}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => handleClearRoster(team)}
+                    disabled={clearingRosterId === team.id}
+                    className="mx-auto mb-2 flex items-center gap-1 border-2 border-[#FFD27A]/70 bg-[#4A6844] px-2 py-1 text-[10px] font-bold uppercase text-[#FFD27A] transition hover:bg-[#5A8352] disabled:opacity-60"
+                    title="Clear MLB and farm rosters"
+                  >
+                    <Eraser className="w-3 h-3" />
+                    {clearingRosterId === team.id ? "Clearing..." : "Clear rosters"}
+                  </button>
 
                   {/* League badges */}
                   {teamLeagues.length > 0 && (

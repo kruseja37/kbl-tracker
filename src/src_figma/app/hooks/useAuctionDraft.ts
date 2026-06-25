@@ -379,9 +379,12 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       .filter((team): team is Team => Boolean(team));
     if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
 
+    for (const team of nextLeagueTeams) {
+      await leagueData.clearRoster(team.id, leagueId);
+    }
+
     await regenerateAndPersistLeaguePoolAxes(leagueId);
-    const existingPool = await leagueData.getRegisteredPool(leagueId);
-    const pool = existingPool ?? await leagueData.registerLeaguePool(leagueId);
+    const pool = await leagueData.registerLeaguePool(leagueId);
     if (pool.players.length === 0) throw new Error("RegisteredPool has no players for this league.");
 
     const teams = await buildAuctionTeams({

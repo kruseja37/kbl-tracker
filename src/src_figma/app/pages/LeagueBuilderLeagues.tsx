@@ -21,8 +21,10 @@ import {
   X,
   Check,
   AlertTriangle,
+  Eraser,
 } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate } from "../../hooks/useLeagueBuilderData";
+import { draftRouteForLeague } from "../utils/draftRouting";
 import {
   BALANCE_MODE_DEFAULT,
   CHECKPOINT_CADENCE_DEFAULT,
@@ -31,8 +33,13 @@ import {
 import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
-import { deleteAuctionSession, getLeagueDraftFormat } from "../../../utils/leagueBuilderStorage";
+import { deleteAuctionSession } from "../../../utils/leagueBuilderStorage";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
+
+export {
+  draftRouteForFormat,
+  draftRouteForLeague,
+} from "../utils/draftRouting";
 
 // ============================================
 // TYPES
@@ -96,16 +103,6 @@ function formatCheckpointCadence(value: CheckpointCadence | undefined): string {
   return CHECKPOINT_CADENCE_OPTIONS.find((option) => option.value === (value ?? CHECKPOINT_CADENCE_DEFAULT))?.label ?? "Standard";
 }
 
-export function draftRouteForFormat(format: LeagueTemplate["draftFormat"]): "/league-builder/snake-draft" | "/league-builder/auction-draft" {
-  return getLeagueDraftFormat({ draftFormat: format }) === "snake"
-    ? "/league-builder/snake-draft"
-    : "/league-builder/auction-draft";
-}
-
-export function draftRouteForLeague(league: Pick<LeagueTemplate, "id" | "draftFormat">): string {
-  return `${draftRouteForFormat(league.draftFormat)}?leagueId=${encodeURIComponent(league.id)}`;
-}
-
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -123,6 +120,7 @@ export function LeagueBuilderLeagues() {
     removeLeague,
     duplicateLeague,
     registerLeaguePool,
+    clearRoster,
   } = useLeagueBuilderData();
 
   // UI State
@@ -132,6 +130,7 @@ export function LeagueBuilderLeagues() {
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [registeringPoolId, setRegisteringPoolId] = useState<string | null>(null);
+  const [clearingRosterLeagueId, setClearingRosterLeagueId] = useState<string | null>(null);
   const [registeredPoolResult, setRegisteredPoolResult] = useState<RegisteredPool | null>(null);
   const showCheckpointCadenceControl = isFranchisePhase2L13Enabled();
 
@@ -246,6 +245,24 @@ export function LeagueBuilderLeagues() {
       console.error("Failed to register pool:", err);
     } finally {
       setRegisteringPoolId(null);
+    }
+  };
+
+  const handleClearLeagueRosters = async (league: LeagueTemplate) => {
+    const confirmed = window.confirm(
+      `Clear MLB and farm rosters for all ${league.teamIds.length} teams in ${league.name}? Players remain in this league pool as free agents.`,
+    );
+    if (!confirmed) return;
+
+    setClearingRosterLeagueId(league.id);
+    try {
+      for (const teamId of league.teamIds) {
+        await clearRoster(teamId, league.id);
+      }
+    } catch (err) {
+      console.error("Failed to clear league rosters:", err);
+    } finally {
+      setClearingRosterLeagueId(null);
     }
   };
 
@@ -390,6 +407,19 @@ export function LeagueBuilderLeagues() {
                         <Database className="w-4 h-4" />
                       )}
                       <span className="text-xs font-bold">Register Pool</span>
+                    </button>
+
+                    {/* Clear Rosters */}
+                    <button
+                      onClick={() => handleClearLeagueRosters(league)}
+                      disabled={clearingRosterLeagueId === league.id}
+                      className="px-3 py-2 bg-[#4A6844] hover:bg-[#5A8352] border-[3px] border-[#FFD27A]/70 text-[#FFD27A] transition disabled:opacity-60 flex items-center gap-2"
+                      title="Clear all team rosters for this league"
+                    >
+                      <Eraser className="w-4 h-4" />
+                      <span className="text-xs font-bold">
+                        {clearingRosterLeagueId === league.id ? "Clearing..." : "Clear Rosters"}
+                      </span>
                     </button>
 
                     {/* Draft */}

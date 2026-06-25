@@ -1452,6 +1452,83 @@ export async function saveTeamRoster(roster: TeamRoster): Promise<TeamRoster> {
   });
 }
 
+export function createEmptyTeamRoster(teamId: string): TeamRoster {
+  return {
+    teamId,
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    depthChart: createEmptyDepthChart(),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+    lastModified: nowISO(),
+  };
+}
+
+async function clearTeamAssignmentsFromPlayers(teamId: string, leagueId?: string): Promise<void> {
+  const players = await getAllPlayers();
+
+  for (const player of players) {
+    let changed = false;
+    const nextAssignments = (player.leagueAssignments ?? []).map((assignment) => {
+      if (assignment.teamId !== teamId) return assignment;
+      if (leagueId && assignment.leagueId !== leagueId) return assignment;
+      if (!assignment.teamId && assignment.rosterStatus === 'FREE_AGENT') return assignment;
+
+      changed = true;
+      return {
+        ...assignment,
+        teamId: '',
+        rosterStatus: 'FREE_AGENT' as const,
+      };
+    });
+
+    if (!changed) continue;
+    await savePlayer({
+      ...player,
+      leagueAssignments: nextAssignments,
+    });
+  }
+}
+
+export async function clearTeamRoster(teamId: string, leagueId?: string): Promise<TeamRoster> {
+  const existing = await getTeamRoster(teamId);
+  const base = existing ?? createEmptyTeamRoster(teamId);
+  const cleared: TeamRoster = {
+    ...base,
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    depthChart: createEmptyDepthChart(),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+  };
+
+  const saved = await saveTeamRoster(cleared);
+  await clearTeamAssignmentsFromPlayers(teamId, leagueId);
+  return saved;
+}
+
 export async function deleteTeamRoster(teamId: string): Promise<void> {
   const db = await initLeagueBuilderDatabase();
 

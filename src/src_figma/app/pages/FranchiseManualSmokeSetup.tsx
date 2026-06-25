@@ -96,7 +96,10 @@ export function FranchiseManualSmokeSetup() {
               <Link className="border border-[#81B29A] px-3 py-2 text-[10px] uppercase text-[#A7F3C1]" to="/franchise/setup">
                 Open Franchise Setup
               </Link>
-              <Link className="border border-[#A9BCD0] px-3 py-2 text-[10px] uppercase text-[#D8E7FF]" to="/league-builder/draft">
+              <Link
+                className="border border-[#A9BCD0] px-3 py-2 text-[10px] uppercase text-[#D8E7FF]"
+                to={`/league-builder/draft?leagueId=${encodeURIComponent(FRANCHISE_MANUAL_SMOKE_LEAGUE_ID)}`}
+              >
                 Inspect Draft Readiness
               </Link>
             </div>

@@ -18,6 +18,11 @@ import {
   type StartupProspectBoardCandidate,
 } from "../../../utils/leagueBuilderStartupFarmDraft";
 import type { LeagueBuilderScoutProfile } from "../../../utils/leagueBuilderStorage";
+import {
+  farmDraftRouteForLeague,
+  leagueIdFromSearch,
+  resolveInitialLeagueId,
+} from "../utils/draftRouting";
 
 function hasAssignment(player: Player, leagueId: string, teamId: string, rosterStatus: "MLB" | "FARM"): boolean {
   return Boolean(player.leagueAssignments?.some((assignment) =>
@@ -48,17 +53,23 @@ export function LeagueBuilderDraft() {
   const [draftView, setDraftView] = useState<LeagueBuilderStartupDraftView | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
-      setActiveLeagueId(leagues[0].id);
+      setActiveLeagueId(resolveInitialLeagueId(leagues, requestedLeagueId));
     }
-  }, [activeLeagueId, leagues]);
+  }, [activeLeagueId, leagues, requestedLeagueId]);
 
   const activeLeague = useMemo(
     () => leagues.find((league) => league.id === activeLeagueId) ?? null,
     [activeLeagueId, leagues],
   );
+
+  useEffect(() => {
+    if (!activeLeague || activeLeague.draftFormat === "snake") return;
+    navigate(farmDraftRouteForLeague(activeLeague), { replace: true });
+  }, [activeLeague, navigate]);
 
   const leagueTeams = useMemo(() => {
     if (!activeLeague?.teamIds?.length) return [];

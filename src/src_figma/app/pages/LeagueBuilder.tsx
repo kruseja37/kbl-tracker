@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Database, Users, User, Folder, Shuffle, Settings, ArrowLeft, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
+import { farmDraftRouteForLeague } from "../utils/draftRouting";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
   const { leagues, teams, players, rulesPresets, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
+  const defaultFarmDraftRoute = leagues[0] ? farmDraftRouteForLeague(leagues[0]) : "/league-builder/draft";
 
   const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | null>(null);
   const [seedResult, setSeedResult] = useState<{ source: string; teams: number; players: number } | null>(null);
@@ -208,7 +210,7 @@ export function LeagueBuilder() {
             description="Farm prospect draft"
             count="Configure"
             color="#7733DD"
-            onClick={() => navigate("/league-builder/draft")}
+            onClick={() => navigate(defaultFarmDraftRoute)}
           />
 
           <ModuleCard

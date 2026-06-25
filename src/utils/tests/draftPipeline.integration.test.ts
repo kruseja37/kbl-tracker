@@ -35,6 +35,8 @@ import { registerLeaguePoolForLeague } from '../leagueBuilderPoolRegistration';
 import { buildFarmAuctionSession } from '../farmAuctionSession';
 import {
   clearAllLeagueBuilderData,
+  clearTeamRoster,
+  createEmptyTeamRoster,
   createAuctionSessionId,
   createFarmAuctionSessionId,
   deleteAuctionSession,
@@ -77,38 +79,6 @@ const MLB_AUCTION_SEED = 'draft-pipeline-mlb-auction-seed';
 const FARM_AUCTION_SEED = 'draft-pipeline-farm-auction-seed';
 const CREATED_FRANCHISE_IDS: string[] = [];
 
-function emptyRoster(teamId: string): TeamRoster {
-  return {
-    teamId,
-    mlbRoster: [],
-    farmRoster: [],
-    lineupWithDH: [],
-    lineupWithoutDH: [],
-    startingRotation: [],
-    longRelievers: [],
-    closingPitcher: '',
-    setupPitchers: [],
-    depthChart: {
-      C: [],
-      '1B': [],
-      '2B': [],
-      SS: [],
-      '3B': [],
-      LF: [],
-      CF: [],
-      RF: [],
-      DH: [],
-      SP: [],
-      RP: [],
-      CP: [],
-    },
-    pinchHitOrder: [],
-    pinchRunOrder: [],
-    defensiveSubOrder: [],
-    lastModified: '2026-06-24T00:00:00.000Z',
-  };
-}
-
 function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSession {
   if (!result.ok) throw new Error(`Auction transition rejected: ${result.reason}`);
   return result.session as CpuShillAuctionSession;
@@ -150,7 +120,48 @@ async function driveHotSeatAuctionToCompletion(
   return { session, surfacedLots };
 }
 
-async function seedDraftLeagueWithRealMlbPlayers(): Promise<void> {
+function expectRosterToBeEmpty(roster: TeamRoster | null): void {
+  expect(roster).toMatchObject({
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+  });
+  expect(roster?.depthChart).toEqual(createEmptyTeamRoster(roster?.teamId ?? 'empty').depthChart);
+}
+
+async function assignPlayerToLeague(
+  player: Player,
+  assignment: NonNullable<Player['leagueAssignments']>[number],
+): Promise<void> {
+  await savePlayer({
+    ...player,
+    leagueAssignments: [
+      ...(player.leagueAssignments ?? []).filter((candidate) => candidate.leagueId !== assignment.leagueId),
+      assignment,
+    ],
+  });
+}
+
+async function removePlayerFromLeague(player: Player, leagueId: string): Promise<void> {
+  await savePlayer({
+    ...player,
+    leagueAssignments: (player.leagueAssignments ?? []).filter((assignment) => assignment.leagueId !== leagueId),
+  });
+}
+
+async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
+  addedFreeAgentId: string;
+  removedRosterPlayerId: string;
+  initialRosterPlayerIdsByTeamId: Record<string, string[]>;
+}> {
   await seedFromMLBDatabase(true);
   await saveLeagueTemplate({
     id: LEAGUE_ID,
@@ -164,6 +175,7 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<void> {
     balanceMode: 'taxed',
   });
 
+  const initialRosterPlayerIdsByTeamId: Record<string, string[]> = {};
   for (const teamId of TEAM_IDS) {
     const team = await getTeam(teamId);
     if (!team) throw new Error(`Seeded MLB team ${teamId} was not found.`);
@@ -172,7 +184,25 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<void> {
       leagueIds: Array.from(new Set([...(team.leagueIds ?? []), LEAGUE_ID])),
       controlledBy: teamId === TEAM_IDS[0] ? 'human' : 'ai',
     });
-    await saveTeamRoster(emptyRoster(teamId));
+
+    const seededRoster = await getTeamRoster(teamId);
+    const seededMlbRoster = seededRoster?.mlbRoster ?? [];
+    expect(seededMlbRoster.length).toBeGreaterThanOrEqual(22);
+    const selectedRosterIds = seededMlbRoster.slice(0, 22);
+    initialRosterPlayerIdsByTeamId[teamId] = selectedRosterIds;
+
+    await saveTeamRoster({
+      ...(seededRoster ?? createEmptyTeamRoster(teamId)),
+      mlbRoster: selectedRosterIds,
+      farmRoster: [],
+    });
+
+    for (const playerId of selectedRosterIds) {
+      const player = await getPlayer(playerId);
+      if (!player) throw new Error(`Seeded roster player ${playerId} was not found.`);
+      await assignPlayerToLeague(player, { leagueId: LEAGUE_ID, teamId, rosterStatus: 'MLB' });
+    }
+
     await saveScoutProfile({
       id: `${teamId}-draft-pipeline-scout`,
       leagueId: LEAGUE_ID,
@@ -186,22 +216,52 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<void> {
     });
   }
 
-  const realPlayers = (await getAllPlayers())
+  const initialRosterPlayerIds = new Set(Object.values(initialRosterPlayerIdsByTeamId).flat());
+  const allRealPlayers = (await getAllPlayers())
     .filter((player) => player.sourceDatabase === 'SMB4')
-    .sort((left, right) => left.id.localeCompare(right.id))
-    .slice(0, TEAM_IDS.length * 22);
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const addedFreeAgent = allRealPlayers.find((player) => !initialRosterPlayerIds.has(player.id));
+  if (!addedFreeAgent) throw new Error('No non-roster real SMB4 player was available for pool curation.');
+  const removedRosterPlayerId = initialRosterPlayerIdsByTeamId[TEAM_IDS[0]][0];
 
-  expect(realPlayers).toHaveLength(TEAM_IDS.length * 22);
+  expect(initialRosterPlayerIds.has(addedFreeAgent.id)).toBe(false);
 
-  for (const player of realPlayers) {
-    await savePlayer({
-      ...player,
-      leagueAssignments: [
-        ...(player.leagueAssignments ?? []).filter((assignment) => assignment.leagueId !== LEAGUE_ID),
-        { leagueId: LEAGUE_ID, teamId: '', rosterStatus: 'FREE_AGENT' },
-      ],
-    });
+  await assignPlayerToLeague(addedFreeAgent, {
+    leagueId: LEAGUE_ID,
+    teamId: '',
+    rosterStatus: 'FREE_AGENT',
+  });
+  const removedRosterPlayer = await getPlayer(removedRosterPlayerId);
+  if (!removedRosterPlayer) throw new Error(`Removed roster player ${removedRosterPlayerId} was not found.`);
+  await removePlayerFromLeague(removedRosterPlayer, LEAGUE_ID);
+
+  await expect(getPlayer(addedFreeAgent.id)).resolves.toEqual(
+    expect.objectContaining({
+      leagueAssignments: expect.arrayContaining([
+        expect.objectContaining({ leagueId: LEAGUE_ID, teamId: '', rosterStatus: 'FREE_AGENT' }),
+      ]),
+    }),
+  );
+  await expect(getPlayer(removedRosterPlayerId)).resolves.toEqual(
+    expect.objectContaining({
+      leagueAssignments: expect.not.arrayContaining([
+        expect.objectContaining({ leagueId: LEAGUE_ID }),
+      ]),
+    }),
+  );
+
+  for (const teamId of TEAM_IDS) {
+    const roster = await getTeamRoster(teamId);
+    expect(roster?.mlbRoster.length).toBeGreaterThan(0);
+    await clearTeamRoster(teamId, LEAGUE_ID);
+    expectRosterToBeEmpty(await getTeamRoster(teamId));
   }
+
+  return {
+    addedFreeAgentId: addedFreeAgent.id,
+    removedRosterPlayerId,
+    initialRosterPlayerIdsByTeamId,
+  };
 }
 
 function makeFranchiseConfig(): FranchiseConfig {
@@ -263,11 +323,13 @@ async function runDraftPipeline(): Promise<{
   franchisePlayerCount: number;
   franchiseTeamCount: number;
   franchiseFarmRecordCount: number;
+  addedFreeAgentId: string;
+  removedRosterPlayerId: string;
 }> {
-  await seedDraftLeagueWithRealMlbPlayers();
+  const curatedFixture = await seedDraftLeagueWithRealMlbPlayers();
 
   for (const teamId of TEAM_IDS) {
-    await expect(getTeamRoster(teamId)).resolves.toMatchObject({ mlbRoster: [], farmRoster: [] });
+    expectRosterToBeEmpty(await getTeamRoster(teamId));
   }
 
   const staleComplete = initAuctionSession({
@@ -293,6 +355,10 @@ async function runDraftPipeline(): Promise<{
   });
 
   const pool = await registerLeaguePoolForLeague(LEAGUE_ID);
+  const poolIds = pool.players.map((player) => player.id);
+  expect(poolIds).toHaveLength(TEAM_IDS.length * 22);
+  expect(poolIds).toContain(curatedFixture.addedFreeAgentId);
+  expect(poolIds).not.toContain(curatedFixture.removedRosterPlayerId);
   await deleteAuctionSession(LEAGUE_ID, MLB_AUCTION_SEASON);
   await expect(getAuctionSession(LEAGUE_ID, MLB_AUCTION_SEASON)).resolves.toBeNull();
 
@@ -337,6 +403,15 @@ async function runDraftPipeline(): Promise<{
   expect(mlbSurfacedLots).toBeGreaterThan(0);
   expect(completedMlbSession.saleCount).toBeGreaterThan(0);
   expect(completedMlbSession.results.filter((result) => result.disposition === 'SOLD')).toHaveLength(TEAM_IDS.length * 22);
+  expect(completedMlbSession.results).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        playerId: curatedFixture.addedFreeAgentId,
+        disposition: 'SOLD',
+      }),
+    ]),
+  );
+  expect(completedMlbSession.results.map((result) => result.playerId)).not.toContain(curatedFixture.removedRosterPlayerId);
   await commitCompletedMlbAuctionSessionToLeagueRosters({
     leagueId: LEAGUE_ID,
     session: completedMlbSession,
@@ -469,6 +544,18 @@ async function runDraftPipeline(): Promise<{
   expect(franchiseTeams).toHaveLength(TEAM_IDS.length);
   expect(franchisePlayers).toHaveLength(TEAM_IDS.length * 32);
   expect(farmRecords).toHaveLength(TEAM_IDS.length * 10);
+  expect(franchisePlayers.map((player) => player.id)).toEqual(
+    expect.arrayContaining([
+      curatedFixture.addedFreeAgentId,
+      ...completedMlbSession.results
+        .filter((result) => result.disposition === 'SOLD')
+        .map((result) => result.playerId),
+      ...completedFarmSession.results
+        .filter((result) => result.disposition === 'SOLD')
+        .map((result) => result.playerId),
+    ]),
+  );
+  expect(franchisePlayers.map((player) => player.id)).not.toContain(curatedFixture.removedRosterPlayerId);
   expect(storedConfig?.rosterRequirements).toMatchObject({
     validationStatus: 'passed',
     teamCounts: rosterCounts,
@@ -489,6 +576,8 @@ async function runDraftPipeline(): Promise<{
     franchisePlayerCount: franchisePlayers.length,
     franchiseTeamCount: franchiseTeams.length,
     franchiseFarmRecordCount: farmRecords.length,
+    addedFreeAgentId: curatedFixture.addedFreeAgentId,
+    removedRosterPlayerId: curatedFixture.removedRosterPlayerId,
   };
 }
 

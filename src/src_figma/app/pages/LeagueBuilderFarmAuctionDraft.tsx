@@ -11,6 +11,11 @@ import {
 import { AuctionCoachBanner } from "../components/AuctionCoachBanner";
 import { LongPressReveal } from "../components/LongPressReveal";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
+import {
+  farmDraftRouteForLeague,
+  leagueIdFromSearch,
+  resolveInitialLeagueId,
+} from "../utils/draftRouting";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
@@ -214,12 +219,13 @@ export function LeagueBuilderFarmAuctionDraft() {
   const [bidIncrement, setBidIncrement] = useState(1000);
   const [bidAmount, setBidAmount] = useState("");
   const loadedKeyRef = useRef<string | null>(null);
+  const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
 
   useEffect(() => {
     if (!activeLeagueId && leagueData.leagues.length > 0) {
-      setActiveLeagueId(leagueData.leagues[0].id);
+      setActiveLeagueId(resolveInitialLeagueId(leagueData.leagues, requestedLeagueId));
     }
-  }, [activeLeagueId, leagueData.leagues]);
+  }, [activeLeagueId, leagueData.leagues, requestedLeagueId]);
 
   useEffect(() => {
     if (!activeLeagueId) return;
@@ -233,6 +239,11 @@ export function LeagueBuilderFarmAuctionDraft() {
     () => leagueData.leagues.find((league) => league.id === activeLeagueId) ?? null,
     [activeLeagueId, leagueData.leagues],
   );
+
+  useEffect(() => {
+    if (!activeLeague || activeLeague.draftFormat !== "snake") return;
+    navigate(farmDraftRouteForLeague(activeLeague), { replace: true });
+  }, [activeLeague, navigate]);
 
   const leagueTeams = useMemo(() => {
     if (!activeLeague?.teamIds?.length) return [];
