@@ -2954,3 +2954,19 @@ Second concurrent round on the two-lane topology (main trait wave + `codex/ratin
 **LANE C STATUS:** A2.5 (`72bfaf46`) + RA-5 (`8c3c19ea`) DONE on `codex/ratings-finish-c`. Remaining ratings-finish candidates: re-grade-per-checkpoint, RA-9 (trend), RA-11, V8 (park→WAR).
 
 **➡ RESUME (both lanes): MAIN = DT-F (bespoke traits incl. Metal-Head=PITCHER protective) — the LAST DT-x ticket** → then T-3 (trend + SP/RP split, coordinates with DT-D on Noodle Arm) / T-6 (position-mismatch protection-only) → T-7 (EOS). **LANE C = the next ratings-finish ticket** (ground from `V1_BUILD_QUEUE` + `RATINGS_*`; pick the next build-dark/no-DB-bump/self-contained one — re-grade-per-checkpoint or RA-9 trend likely next).
+
+---
+
+## 2026-06-25 (attended, session-end) — JK RULINGS on the 4 DT-x OPEN-DECISIONS → DT-FIX-1 + DT-FIX-2 QUEUED
+
+JK reviewed the 4 open decisions surfaced by the dormant-trait wave (full detail = DECISIONS_LOG 2026-06-25 "DT-x refinement rulings"):
+1. **Web-gem set (DT-C2):** ADD `Robbed HR` → `{Diving, Leaping, Sliding, Robbed HR}` (reverses the v1-exclude default).
+2. **Error-trait cohort (DT-D):** WIDEN to ALL fielders (league-wide pool, 0-rate emitted for clean fielders, like `addArmSignals`) — reverses the error-makers-only conservative default.
+3. **Wild Thrower scope (DT-D):** THROWING-only (drop `fielding` — Butter Fingers owns muffs).
+4. **Volatile valence (DT-E):** Volatile is POSITIVE — keep pricing, FIX THE LABEL (move `Volatile` `NEGATIVE_IMAGE_TRAITS`→`POSITIVE_IMAGE_TRAITS`). ⚠ pre-existing-wiring flip → scope the ripple (grep all valence consumers + existing tests, fix in the same diff).
+
+**QUEUED (run on `codex/franchise-v1-next` BEFORE DT-F — same trait files):**
+- **DT-FIX-1** = rulings 1+2+3, all in `traitCandidateBuilder.ts` (`WEB_GEM_PLAY_TYPES` += Robbed HR; `addErrorSignals` widen pool to all fielders + Wild Thrower throwing-only) + the DT-C2/DT-D tests. Build-dark, no DB bump, FULL-suite gate (builder feeds processCompletedGame).
+- **DT-FIX-2** = ruling 4, `traitAcquisition.ts` (Volatile → positive image) + ripple grounding (grep `NEGATIVE_IMAGE_TRAITS`/Volatile-valence consumers in fame/narrative/morale + existing tests). Build-dark, no DB bump.
+
+Not decisions (no-action confirmed): A2.5/RA-5 §16 age magnitudes = sim-tune placeholders; Dive Wizard driver = none. **NEXT main-branch order: DT-FIX-1 → DT-FIX-2 → DT-F. Lane C continues independently (next ratings-finish ticket).**

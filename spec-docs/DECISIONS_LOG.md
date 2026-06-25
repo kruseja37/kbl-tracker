@@ -7,6 +7,16 @@
 
 ## June 2026
 
+### 2026-06-25 (attended Hybrid via `/kbl-captain`, session-end): DT-x refinement rulings — web-gem set, error-trait cohort, Wild Thrower scope, Volatile valence
+
+JK reviewed the 4 OPEN-DECISIONS the dormant-trait wave surfaced this session (DT-C2 `44ababfb` / DT-D `6d88b228` / DT-E `2a44cc2a`, all build-dark, committed). Rulings (each = a follow-up edit to already-committed build-dark code; queued, NOT built in the saturated session):
+1. **Web-gem set (Magic Hands / Dive Wizard — DT-C2):** ADD `Robbed HR` → web-gem set = `{Diving, Leaping, Sliding, Robbed HR}`. Robbing a HR at the wall is the signature defensive highlight + the in-app `GEM_PLAY_TYPES` already includes it. (`Over Shoulder` / `Wall Catch` still excluded.) Reverses the DT-C2 conservative default. → edit `WEB_GEM_PLAY_TYPES` in `traitCandidateBuilder.ts` + tests.
+2. **Error-trait cohort (Wild Thrower / Noodle Arm — DT-D):** WIDEN the peer pool from error-makers-only to ALL fielders (league-wide) — emit a 0-rate signal for every fielder with games (iterate `gamesByPlayer`/`seasonFieldingByPlayer` like `addArmSignals`) so the true league-leader stands out (matches the "league-leader earns" §0.6b reading). Reverses the DT-D conservative default. → edit `addErrorSignals` + tests.
+3. **Wild Thrower scope (DT-D):** THROWING errors ONLY — drop `'fielding'` from Wild Thrower's numerator (Butter Fingers already owns fielding muffs; no double-count; matches the name). Noodle Arm stays `mental`-only. → edit the `addErrorSignals` type partition + tests.
+4. **Volatile valence (DT-E):** Volatile is POSITIVE, not negative — KEEP the positive pricing, FIX THE LABEL: move `Volatile` from `NEGATIVE_IMAGE_TRAITS` to `POSITIVE_IMAGE_TRAITS` in `traitAcquisition.ts` (high-variance = high-ceiling = an exciting/positive trait). ⚠ PRE-EXISTING-wiring flip (Volatile was negative-image before this session) → the implementer MUST grep ALL Volatile-valence consumers (fame / narrative / morale / image) + existing tests and update them in the SAME diff; scope the ripple before building.
+
+Queued as **DT-FIX-1** (rulings 1-3, `traitCandidateBuilder.ts`) + **DT-FIX-2** (ruling 4, `traitAcquisition.ts`, ripple-scoped), to run on `codex/franchise-v1-next` BEFORE DT-F (same trait files). Build-dark; no DB bump. *(Not decisions — confirmed no-action: A2.5/RA-5 §16 age magnitudes = sim-tune placeholders; Dive Wizard personality driver = none/neutral.)*
+
 ### 2026-06-25 (attended Hybrid via `/kbl-captain`): DORMANT-TRAIT ENABLEMENT — JK ruled the proxy for ~22 of the 27 not-earnable traits (the "dormant trait wave")
 
 Following the inventory + the capture-exists/threshold-exists/logic-missing clarification (DECISIONS_LOG entry below + `TRAIT_DETECTION_SCOPE_AUDIT.md` 2026-06-25 table), JK supplied the measurement method for nearly every dormant trait. **These fill the empty §0.6 proxy rows; difficulty is already auto-derived (assignTier); the only build is the signal + min-sample valve (opt-in — fires only on user-tagged data).** All build-dark (live post-D13). Captain to verify each signal's data source exists before contracting, design the A/B scoring formula, and sequence the build wave (template = elite pitches / T-9).
