@@ -13,6 +13,7 @@ import {
   generateProspectScoutingDraft,
   gradeDistance,
   PROSPECT_AGE_BANDS,
+  PROSPECT_ELITE_PITCH_TRAITS,
   PROSPECT_HITTER_NEGATIVE_TRAIT_POOL,
   PROSPECT_HITTER_TRAIT_POOL,
   PROSPECT_PITCHER_NEGATIVE_TRAIT_POOL,
@@ -409,6 +410,21 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     console.info('§5 negative prospect trait pools', observed);
   });
 
+  test('T-4c Elite-pitch traits are exactly the pitcher-pool mutual-exclusion group', () => {
+    const pitcherPool = new Set(PROSPECT_PITCHER_TRAIT_POOL);
+
+    expect(PROSPECT_ELITE_PITCH_TRAITS.size).toBe(8);
+    for (const trait of PROSPECT_ELITE_PITCH_TRAITS) {
+      expect(pitcherPool.has(trait)).toBe(true);
+    }
+  });
+
+  test('T-4c Elite-pitch conflicts only block a second Elite pitch', () => {
+    expect(prospectTraitsConflict('Elite 4F', 'Elite SB')).toBe(true);
+    expect(prospectTraitsConflict('Elite 4F', 'Cannon Arm')).toBe(false);
+    expect(prospectTraitsConflict('Cannon Arm', 'K Collector')).toBe(false);
+  });
+
   test('generated prospect traits follow 30/50/20 count split with no duplicate or conflict pairs', () => {
     const output = generateProspectScoutingDraft({
       ...BASE_INPUT,
@@ -526,6 +542,22 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(slot1NegativeRate).toBeLessThanOrEqual(0.32);
     for (const [index, target] of SECTION_3_4_TRAIT_COUNT_TARGETS.entries()) {
       expect(Math.abs(traitCountRates[index] - target)).toBeLessThanOrEqual(SECTION_13_TRAIT_TOLERANCE);
+    }
+  }, 120_000);
+
+  test('T-4c generated prospects never hold two Elite-pitch traits', () => {
+    const prospects = generateProspectPool({
+      leagueId: 't4c-elite-pitch-mutual-exclusion',
+      seasonNumber: 1,
+      seed: 't4c-elite-pitch-mutual-exclusion-seed',
+      teamDraftOrder: BASE_INPUT.teamDraftOrder,
+    }, 20_000);
+
+    expect(prospects).toHaveLength(20_000);
+    for (const prospect of prospects) {
+      const traits = [prospect.trait1, prospect.trait2].filter((trait): trait is string => Boolean(trait));
+
+      expect(traits.filter((trait) => PROSPECT_ELITE_PITCH_TRAITS.has(trait)).length).toBeLessThanOrEqual(1);
     }
   }, 120_000);
 

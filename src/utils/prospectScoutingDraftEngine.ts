@@ -355,6 +355,17 @@ export const PROSPECT_PITCHER_TRAIT_POOL = [
   'Specialist',
   'Workhorse',
 ] as const;
+const PROSPECT_ELITE_PITCH_TRAIT_NAMES = [
+  'Elite 2F',
+  'Elite 4F',
+  'Elite CB',
+  'Elite CF',
+  'Elite CH',
+  'Elite FK',
+  'Elite SB',
+  'Elite SL',
+] as const;
+export const PROSPECT_ELITE_PITCH_TRAITS = new Set<string>(PROSPECT_ELITE_PITCH_TRAIT_NAMES);
 export const PROSPECT_HITTER_NEGATIVE_TRAIT_POOL = [
   'Choker',
   'RBI Zero',
@@ -691,6 +702,10 @@ export function rebalanceProspectChemistryToTarget(
 export function prospectTraitsConflict(left: string, right: string): boolean {
   return PROSPECT_TRAIT_CONFLICT_PAIRS.some(([first, second]) =>
     (left === first && right === second) || (left === second && right === first),
+  ) || (
+    left !== right &&
+    PROSPECT_ELITE_PITCH_TRAITS.has(left) &&
+    PROSPECT_ELITE_PITCH_TRAITS.has(right)
   );
 }
 

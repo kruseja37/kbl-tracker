@@ -21809,3 +21809,55 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-4b ===== -->
+
+<!-- ===== CONTRACT: T-4c ===== -->
+## T-4c — generated prospects: at most ONE Elite-pitch trait
+
+**ROUTE:** Codex (gpt-5.5) | high reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding one mutual-exclusion rule to the prospect generator's conflict predicate. Small, surgical.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** A generated prospect may never hold two Elite-pitch traits (no Elite 4F + Elite SB) — treat the 8 Elite-pitch traits as a single mutual-exclusion group in the generator's `prospectTraitsConflict`, so the second trait slot can't draw another Elite pitch when the first is one.
+
+**SOURCE OF TRUTH:** JK ruling 2026-06-25 (DECISIONS_LOG): "a player may hold at most ONE Elite-pitch trait." This ticket is the GENERATION side only (the in-season EARNING side is T-9, since elite pitches become earnable). The 8 Elite-pitch traits: `Elite 2F, Elite 4F, Elite CB, Elite CF, Elite CH, Elite FK, Elite SB, Elite SL` — all in `PROSPECT_PITCHER_TRAIT_POOL`.
+
+**GROUNDING (Captain-verified post-T-4b `ac4280b1`; re-read before editing):**
+- `src/utils/prospectScoutingDraftEngine.ts`: `prospectTraitsConflict(left, right)` (~:669) currently `PROSPECT_TRAIT_CONFLICT_PAIRS.some(...)`. It is used in `pickSecondProspectTrait`'s slot-2 eligibility filter (so extending it auto-applies there) AND in the test's 30/50/20 conflict assertion. `PROSPECT_PITCHER_TRAIT_POOL` (~:337-355) contains exactly the 8 `Elite *` traits. `ELITE_TRAIT_TO_PITCH` map exists (~:401-410) but is for arsenal linkage, not needed here.
+- grep its usages first (`prospectTraitsConflict`): confirm the only consumers are `pickSecondProspectTrait` + tests, so the rule applies exactly where intended (slot-2 exclusion).
+
+**BUILD (`src/utils/prospectScoutingDraftEngine.ts` + its test):**
+1. Add `export const PROSPECT_ELITE_PITCH_TRAITS = new Set(['Elite 2F','Elite 4F','Elite CB','Elite CF','Elite CH','Elite FK','Elite SB','Elite SL'] as const);` (or a frozen array + a Set). VERIFY each is a member of `PROSPECT_PITCHER_TRAIT_POOL` (a test assertion — STOP-IF any isn't).
+2. Extend `prospectTraitsConflict`: `return PROSPECT_TRAIT_CONFLICT_PAIRS.some(...) || (left !== right && PROSPECT_ELITE_PITCH_TRAITS.has(left) && PROSPECT_ELITE_PITCH_TRAITS.has(right));`. No other change — `pickSecondProspectTrait` already excludes conflicting traits, so slot-2 will now skip a second Elite pitch.
+
+**TEST UPDATES (`src/utils/tests/prospectScoutingDraftEngine.test.ts`):**
+- Membership: every trait in `PROSPECT_ELITE_PITCH_TRAITS` ∈ `PROSPECT_PITCHER_TRAIT_POOL`; the set has 8.
+- Predicate: `prospectTraitsConflict('Elite 4F','Elite SB') === true`; `prospectTraitsConflict('Elite 4F','Cannon Arm') === false` (an Elite pitch doesn't conflict with a non-Elite); a non-Elite pair still behaves (`prospectTraitsConflict('Cannon Arm','K Collector') === false`).
+- Distribution: over a large sample (≥20k), **no prospect holds two Elite-pitch traits** (`traits.filter(t => PROSPECT_ELITE_PITCH_TRAITS.has(t)).length <= 1`). The existing 30/50/20 + no-2-neg + no-opposite assertions stay green.
+- **Re-baseline the 2 generation goldens** (§10 `B11_B8_NON_AGE_RNG_PROOF` hash + `prospectChemistryRebalance.test.ts` `PRE_REBALANCE_NON_CHEMISTRY_GOLDEN`) IF they shift — some prospects that previously rolled a 2nd Elite pitch now get a different slot-2 trait. Re-baseline ONLY after confirming the age fields stay byte-identical; report old→new.
+- **§13 §3.2 grade-distribution (~40k, ±1.72pp) MUST stay green WITHOUT loosening** (this is a tiny trait re-mix; the anchor absorbs it). If it drifts >1.72pp → STOP-IF (do NOT re-baseline the §3.2 target).
+
+**MAKE-OR-BREAK:**
+- Two Elite-pitch traits conflict; a generated 2-trait prospect can never be two Elite pitches. Slot-1 may still be an Elite pitch (unconstrained); only the 2nd is blocked.
+- A non-Elite trait paired with an Elite pitch is NOT blocked; existing conflict pairs + opposites + no-2-neg all still hold.
+- §13 stays ≤1.72pp without target re-baseline. `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts` untouched.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → full pass/fail (esp. the no-2-Elite + §13 tests).
+3. `NODE_ENV= npm test` (FULL suite). FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` solo-pass flakes — re-run any unexpected red IN ISOLATION).
+4. `git --no-pager diff --stat` → `prospectScoutingDraftEngine.ts` + `prospectScoutingDraftEngine.test.ts` (+ `prospectChemistryRebalance.test.ts` if its golden shifted). `iv_oracle.json` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + count.
+2. The change described; whether the goldens shifted (old→new) + what you confirmed (age byte-identical).
+3. Verification output (build, focused vitest incl. §13 + no-2-Elite, full-suite FAILED-file summary, diff --stat).
+4. "T-4c complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- An `PROSPECT_ELITE_PITCH_TRAITS` member is NOT in `PROSPECT_PITCHER_TRAIT_POOL` → STOP, report.
+- §13 drifts >1.72pp → STOP, report (do NOT re-baseline the §3.2 target).
+- `prospectTraitsConflict` has consumers beyond `pickSecondProspectTrait` + tests that the elite rule would wrongly affect → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-4c ===== -->
