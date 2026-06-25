@@ -213,3 +213,24 @@ The audit found a HIGH defect my live test had masked: pool membership had TWO s
 **Re-verification after fixes:** build exit 0; full suite 8205 passed / 1 failed (only the pre-existing `wpaRuntimeBoundary`); integration test green (incl. the new rostered-remove + locked-feed proofs); **live DB-level confirmation** on a 30-team MLB league — auto-import reconciled all 660 rostered players, removing a rostered player held through the lock (locked snapshot = 659, not 660), and the sufficiency gate flipped to "need 1 more" / blocked Start.
 
 **Remaining:** commit (branch-only) → JK manual sign-off on real data. (Minor note: auto-import on a 30-team league reconciles ~660 players on first open — a few seconds; negligible for typical small leagues.)
+
+---
+
+## 13. FEEDBACK ROUND (JK, 2026-06-25) — 5 commits, all branch-only on codex/draft-pipeline-fix
+
+| # | Item | Commit | Status |
+|---|---|---|---|
+| 1 | Draft Setup position filter: drop DH (0 players), add SP/RP (~59) | 2e149303 | done |
+| 2 | Players-page menus: scrub DH + TWO-WAY (DH = lineup slot; TWO-WAY = trait) | 7b4777f1 | done |
+| 3 | **Option B** — MLB team budget scales with the actual pool (was a fixed per-tier cap). `cap = max(maxIV/starBudgetShare, meanIV×22) × tierShift`; reproduces the published caps within ~0.1% on the stock pool, drops when stars are removed. Demo'd live: 88-pool $1,139,268 → minus top-5 $999,771 (−12%). | 60392efc | done |
+| 4 | **SP/RP swingmen can start** — rotation backfill when pure SP < 5 (default bullpen); + fixed depth-chart bug (swingmen were filed at DH). | 2d47be68 | done |
+| 5 | **Edit a player from Draft Setup** (AUTH-4: Codex built, Opus audited) — focus panel + edit modal; value + canonical grade (scoreSmb4Player) recompute live from ratings; Save persists the derived grade. | 1550e4a1 | done |
+
+**Diagnosis (not a code change):** the "lots of DH players" JK saw is STALE browser data — the current seed produces ZERO DH (convertPlayer only rewrites pitchers, never to DH; the former Yankees DH is now LF). A re-import on the real server clears it.
+
+**OPEN-DECISIONS for JK:**
+- (Edit feature) Editing an IN-POOL player while the pool is LOCKED moves the live IV but not the frozen auction snapshot → divergence. Block edit when locked, or auto-re-register on save? (Defaulted to: editing allowed; flagged.)
+- (Option B) The cap tracks the pool MEAN IV (the binding roster-branch). Removing a few of 88 moves it modestly; a genuinely weaker/stronger pool moves it more. If JK wants the very top end weighted more heavily, switch the roster-branch toward a sum-of-top-rosterable formula (tunable).
+- (SP/RP) Rotation target hardcoded to a 5-man staff for the backfill; confirm.
+
+**Gate (cumulative):** build exit 0; full suite zero-new-reds (only the pre-existing `wpaRuntimeBoundary` characterized red + the `franchiseManualSmokeFixture`/`franchiseOffseasonGuards` order-flakes, all confirmed solo-passing).
