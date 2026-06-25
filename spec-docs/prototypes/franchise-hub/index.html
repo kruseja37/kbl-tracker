@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KBL · Franchise Hub — Premium Retro redesign prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{
+  --field-top:#2f4128; --field-bot:#1a2417;
+  --panel:#33442C; --panel-raised:#3C5236; --inset:#212C1C;
+  --hairline:rgba(232,232,216,.10); --hairline-strong:rgba(232,232,216,.20);
+  --text:#E8E8D8; --muted:rgba(232,232,216,.62); --faint:rgba(232,232,216,.40);
+  --gold:#C4A853; --gold-bright:#FFD27A;
+  --win:#9DFFB0; --win-fill:#3E9D5A; --loss:#FF8C8C; --loss-fill:#A3483D; --info:#7FB0E8;
+  --home:#7FB0E8; --away:#E8C07F;
+  --font-char:'Press Start 2P',monospace;
+  --font-num:'SF Mono','JetBrains Mono',ui-monospace,monospace;
+  --font-body:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  --r-card:16px; --r-ctl:10px;
+  --shadow-card:0 1px 0 rgba(255,255,255,.05) inset, 0 2px 6px rgba(0,0,0,.35), 0 14px 34px rgba(0,0,0,.30);
+  --shadow-hard:3px 3px 0 rgba(0,0,0,.70); --bw:1px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font-body); color:var(--text); line-height:1.5; -webkit-font-smoothing:antialiased;
+  background:radial-gradient(1200px 600px at 50% -10%, var(--field-top) 0%, rgba(47,65,40,0) 60%), linear-gradient(180deg,#243020 0%, var(--field-bot) 100%);
+  min-height:100vh;}
+.num{font-family:var(--font-num); font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+.char{font-family:var(--font-char)}
+.eyebrow{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.muted{color:var(--muted)} .faint{color:var(--faint)} .gold{color:var(--gold-bright)} .win{color:var(--win)} .loss{color:var(--loss)} .info{color:var(--info)}
+.row{display:flex; align-items:center; gap:12px} .spacer{flex:1}
+
+/* shell */
+.hub{max-width:1200px; margin:0 auto; padding:18px 22px 60px}
+.appbar{display:flex; align-items:center; gap:16px; padding:14px 18px; border-radius:var(--r-card); border:var(--bw) solid var(--hairline);
+  background:linear-gradient(180deg, rgba(60,82,54,.5), rgba(33,44,28,.4)); box-shadow:var(--shadow-card); margin-bottom:14px}
+.teammark{width:42px;height:42px;border-radius:12px;background:linear-gradient(160deg,#caa84f,#7c5a1f);display:grid;place-items:center;
+  font-family:var(--font-char);font-size:15px;color:#231c08;box-shadow:var(--shadow-card)}
+.leagueid b{font-size:17px;font-weight:750;display:block}
+.leagueid span{font-size:12px;color:var(--muted)}
+.phaseseg{display:inline-flex;background:var(--inset);border:var(--bw) solid var(--hairline);border-radius:999px;padding:4px;gap:3px;margin-left:auto}
+.phaseseg button{appearance:none;border:none;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:650;padding:8px 14px;border-radius:999px;cursor:pointer}
+.phaseseg button.on{background:var(--panel-raised);color:var(--text);box-shadow:var(--shadow-card)}
+.tabstrip{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;border-bottom:var(--bw) solid var(--hairline);padding-bottom:0}
+.tab-btn{appearance:none;border:none;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:650;
+  padding:11px 15px;border-radius:var(--r-ctl) var(--r-ctl) 0 0;cursor:pointer;position:relative;display:flex;align-items:center;gap:7px}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.on{color:var(--text);background:linear-gradient(180deg,rgba(196,168,83,.14),rgba(196,168,83,0))}
+.tab-btn.on::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:3px;border-radius:3px;background:var(--gold-bright)}
+.tab-btn .badge{font-family:var(--font-num);font-size:10px;background:var(--loss-fill);color:#fff;border-radius:999px;padding:1px 6px}
+.tab-btn.faint{color:var(--faint);opacity:.7}
+
+/* cards */
+.card{background:var(--panel);border:var(--bw) solid var(--hairline);border-radius:var(--r-card);padding:18px;box-shadow:var(--shadow-card)}
+.card.raised{background:linear-gradient(180deg,#43593b,#374c31)}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--inset);border:var(--bw) solid var(--hairline);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--text)}
+.pos{font-family:var(--font-num);font-weight:700;font-size:11px;color:#cfe6c4;background:rgba(126,176,232,.14);border:var(--bw) solid rgba(126,176,232,.3);border-radius:7px;padding:2px 7px}
+.btn{appearance:none;cursor:pointer;font-family:var(--font-body);font-weight:650;border-radius:var(--r-ctl);border:var(--bw) solid var(--hairline-strong);background:var(--panel-raised);color:var(--text);padding:10px 15px;font-size:13.5px;transition:transform .08s,filter .15s}
+.btn:hover{filter:brightness(1.08)} .btn:active{transform:scale(.97)}
+.btn.gold{background:linear-gradient(180deg,#d9bf63,#c4a853);color:#231c08;border-color:#e9d488;box-shadow:var(--shadow-hard);font-weight:750}
+.section-title{font-size:13px;font-weight:700;letter-spacing:.04em}
+
+/* tabs */
+.tabpane{display:none;animation:fade .35s} .tabpane.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ===== TODAY'S GAME (cockpit) ===== */
+.cockpit{display:grid;grid-template-columns:1.6fr 1fr;gap:18px}
+@media(max-width:920px){.cockpit{grid-template-columns:1fr}}
+.matchup{position:relative;overflow:hidden;background:linear-gradient(180deg,#445b3c,#33442c);border:var(--bw) solid var(--hairline-strong);border-radius:20px;padding:24px;box-shadow:var(--shadow-card)}
+.matchup::before{content:"";position:absolute;inset:0;background:radial-gradient(500px 200px at 50% -30%,rgba(196,168,83,.16),transparent 70%);pointer-events:none}
+.mteams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;margin-bottom:18px}
+.mteam{text-align:center}
+.mlogo{width:64px;height:64px;border-radius:18px;margin:0 auto 10px;display:grid;place-items:center;font-family:var(--font-char);font-size:18px;color:#1a2014;box-shadow:var(--shadow-card)}
+.mteam.away .mlogo{background:linear-gradient(160deg,#e8c07f,#b08a3f)} .mteam.home .mlogo{background:linear-gradient(160deg,#8fb6e6,#4f79b0)}
+.mteam .nm{font-weight:750;font-size:16px} .mteam .rec{font-family:var(--font-num);font-size:13px;color:var(--muted);margin-top:2px}
+.mteam .last5{display:flex;gap:3px;justify-content:center;margin-top:8px}
+.pip{width:9px;height:9px;border-radius:3px} .pip.w{background:var(--win-fill)} .pip.l{background:var(--loss-fill)}
+.vs{font-family:var(--font-char);font-size:13px;color:var(--gold-bright)}
+.mmeta{text-align:center;color:var(--muted);font-size:12.5px;margin-bottom:18px}
+.bigplay{width:100%;font-family:var(--font-char);font-size:17px;padding:20px;border-radius:14px;border:none;cursor:pointer;
+  background:linear-gradient(180deg,#e6cd6e,#c4a853);color:#231c08;box-shadow:var(--shadow-hard);transition:transform .08s}
+.bigplay:active{transform:scale(.98)}
+.simrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;justify-content:center}
+.simrow .btn{font-size:12.5px;padding:9px 13px}
+.gesture{display:none;align-items:center;gap:7px;font-size:12px;color:var(--gold-bright);background:rgba(196,168,83,.10);border:var(--bw) solid rgba(196,168,83,.3);border-radius:999px;padding:5px 11px;margin-top:12px}
+body.help-on .gesture{display:inline-flex}
+.progressbar{height:9px;border-radius:999px;background:rgba(0,0,0,.3);overflow:hidden;margin:10px 0}
+.progressbar i{display:block;height:100%;background:linear-gradient(90deg,var(--win-fill),var(--gold))}
+.miniscore{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:var(--bw) solid var(--hairline);font-size:13px}
+.miniscore:last-child{border-bottom:none}
+.miniscore .sc{font-family:var(--font-num);font-weight:700;margin-left:auto}
+.standpos{font-family:var(--font-char);font-size:16px;color:var(--gold-bright)}
+
+/* ===== TEAM HUB (roster + lineup) ===== */
+.teamhub{display:grid;grid-template-columns:1fr 1.1fr;gap:18px}
+@media(max-width:920px){.teamhub{grid-template-columns:1fr}}
+.lineuprow{display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:10px;border:var(--bw) solid transparent;cursor:grab;transition:background .12s}
+.lineuprow:hover{background:var(--inset)} .lineuprow.dragging{opacity:.5;background:var(--inset);border-color:var(--gold)}
+.lineuprow .hdl{color:var(--faint);letter-spacing:-2px;font-size:15px;cursor:grab}
+.lineuprow .ord{font-family:var(--font-num);font-weight:700;color:var(--gold-bright);width:18px}
+.lineuprow .nm{font-weight:650;font-size:14px} .lineuprow .stat{margin-left:auto;font-family:var(--font-num);font-size:12.5px;color:var(--muted)}
+.payrollbar{height:26px;border-radius:8px;background:rgba(0,0,0,.3);position:relative;overflow:hidden;border:var(--bw) solid var(--hairline);margin:10px 0}
+.payrollbar i{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--win-fill),var(--gold));border-radius:8px}
+.payrollbar .cap{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--loss)}
+.rtable{width:100%;border-collapse:collapse;font-size:13px}
+.rtable th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:8px 8px;border-bottom:var(--bw) solid var(--hairline)}
+.rtable td{padding:9px 8px;border-bottom:var(--bw) solid var(--hairline)}
+.rtable tr:last-child td{border-bottom:none}
+.rtable tr:hover td{background:var(--inset)}
+.rtable .n{font-family:var(--font-num);font-weight:700;text-align:right}
+.war{font-family:var(--font-num);font-weight:700} .war.hi{color:var(--win)} .war.mid{color:var(--gold-bright)}
+
+/* ===== STANDINGS ===== */
+.toggle2{display:inline-flex;background:var(--inset);border:var(--bw) solid var(--hairline);border-radius:999px;padding:4px;gap:3px;margin-bottom:14px}
+.toggle2 button{appearance:none;border:none;background:transparent;color:var(--muted);font:inherit;font-size:12.5px;font-weight:650;padding:8px 16px;border-radius:999px;cursor:pointer}
+.toggle2 button.on{background:var(--panel-raised);color:var(--text);box-shadow:var(--shadow-card)}
+.stable{width:100%;border-collapse:collapse}
+.stable th{text-align:right;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:9px 10px;border-bottom:var(--bw) solid var(--hairline)}
+.stable th:first-child,.stable td:first-child{text-align:left}
+.stable td{padding:11px 10px;border-bottom:var(--bw) solid var(--hairline);font-family:var(--font-num);font-size:13.5px}
+.stable tr.you td{background:rgba(196,168,83,.10)}
+.stable tr:hover td{background:var(--inset);cursor:pointer}
+.stable .team{font-family:var(--font-body);font-weight:650;display:flex;align-items:center;gap:10px}
+.tdot{width:12px;height:12px;border-radius:4px}
+.rd{display:inline-flex;align-items:center;gap:6px}
+.rdbar{width:46px;height:7px;border-radius:999px;background:rgba(0,0,0,.3);position:relative;overflow:hidden}
+.rdbar i{position:absolute;top:0;bottom:0;border-radius:999px}
+
+/* ===== LEADERS ===== */
+.leadgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.leadgrid{grid-template-columns:1fr}}
+.leadcard .lhead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.leaditem{display:flex;align-items:center;gap:12px;padding:10px 6px;border-bottom:var(--bw) solid var(--hairline)}
+.leaditem:last-child{border-bottom:none}
+.leadrank{font-family:var(--font-char);font-size:12px;color:var(--faint);width:18px}
+.leaditem.top .leadrank{color:var(--gold-bright)}
+.leaditem .nm{font-weight:650;font-size:13.5px} .leaditem .v{margin-left:auto;font-family:var(--font-num);font-weight:700;font-size:15px}
+.leadbar{height:5px;border-radius:999px;background:var(--gold);margin-top:5px}
+
+/* ===== NEWS (Tootwhistle Times) ===== */
+.filters{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.fchip{appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:650;padding:8px 14px;border-radius:999px;border:var(--bw) solid var(--hairline-strong);background:var(--inset);color:var(--muted)}
+.fchip.on{background:linear-gradient(180deg,#d9bf63,#c4a853);color:#231c08;border-color:#e9d488}
+.lead{background:linear-gradient(180deg,#43593b,#33442c);border:var(--bw) solid var(--hairline-strong);border-radius:var(--r-card);padding:22px;margin-bottom:16px;box-shadow:var(--shadow-card)}
+.lead .cat{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:6px;background:var(--loss-fill);color:#fff;margin-bottom:10px}
+.lead h2{font-family:var(--font-char);font-size:19px;line-height:1.4;margin:0 0 10px;color:#fff;text-shadow:2px 2px 0 rgba(0,0,0,.4)}
+.lead p{margin:0;color:var(--text);font-size:14.5px} .lead .by{margin-top:12px;color:var(--muted);font-size:12px}
+.newsgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.newsgrid{grid-template-columns:1fr}}
+.ncard{background:var(--panel);border:var(--bw) solid var(--hairline);border-radius:var(--r-card);padding:16px;box-shadow:var(--shadow-card);cursor:pointer;transition:transform .1s}
+.ncard:hover{transform:translateY(-2px)}
+.ncat{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;border-radius:5px;margin-bottom:9px}
+.ncat.league{background:rgba(126,176,232,.2);color:var(--info)} .ncat.team{background:rgba(62,157,90,.2);color:var(--win)} .ncat.trade{background:rgba(196,168,83,.2);color:var(--gold-bright)}
+.ncard h3{font-size:15px;margin:0 0 7px;line-height:1.3} .ncard .ex{font-size:13px;color:var(--muted);margin:0} .ncard .by{margin-top:10px;font-size:11.5px;color:var(--faint)}
+
+/* help + corner controls */
+.help{display:none} body.help-on .help{display:inline}
+.help-b{display:none} body.help-on .help-b{display:block}
+.draghandle{color:var(--faint)}
+.cornerctl{position:fixed;top:14px;right:16px;z-index:80;display:flex;gap:8px;align-items:center}
+.lookseg{display:inline-flex;background:rgba(0,0,0,.4);border:1px solid var(--hairline);border-radius:999px;padding:3px}
+.lookseg button{appearance:none;border:none;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:650;padding:6px 12px;border-radius:999px;cursor:pointer}
+.lookseg button.on{background:linear-gradient(180deg,#4a6440,#3c5236);color:var(--text);box-shadow:var(--shadow-card)}
+.helpbtn{appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;border:1px solid var(--hairline-strong);background:rgba(0,0,0,.35);color:var(--muted)}
+body.help-on .helpbtn{background:linear-gradient(180deg,#d9bf63,#c4a853);color:#231c08;border-color:#e9d488}
+.helpbtn .led{width:8px;height:8px;border-radius:999px;background:var(--faint)} body.help-on .helpbtn .led{background:#231c08}
+.helpnote{display:none} body.help-on .helpnote{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:11px 16px;border-radius:12px;background:rgba(196,168,83,.10);border:1px solid rgba(196,168,83,.3);font-size:13px;color:var(--gold-bright)}
+
+/* EDGY skin */
+body.edgy .appbar,body.edgy .card,body.edgy .matchup,body.edgy .lead,body.edgy .ncard,body.edgy .chip,body.edgy .pos,
+body.edgy .btn,body.edgy .teammark,body.edgy .mlogo,body.edgy .tab-btn,body.edgy .phaseseg,body.edgy .phaseseg button,
+body.edgy .toggle2,body.edgy .toggle2 button,body.edgy .fchip,body.edgy .lookseg,body.edgy .lookseg button,body.edgy .helpbtn,
+body.edgy .bigplay,body.edgy .payrollbar,body.edgy .progressbar,body.edgy .lineuprow,body.edgy .helpnote,body.edgy .gesture{border-radius:3px!important}
+body.edgy .appbar,body.edgy .card,body.edgy .matchup,body.edgy .lead{border-width:2px!important;box-shadow:6px 6px 0 rgba(0,0,0,.5)!important}
+body.edgy .ncard,body.edgy .chip,body.edgy .pos,body.edgy .teammark,body.edgy .mlogo{border-width:2px!important;box-shadow:2px 2px 0 rgba(0,0,0,.45)!important}
+body.edgy .matchup{background:#3b5031!important;border-color:var(--gold)!important}
+body.edgy .bigplay,body.edgy .btn.gold,body.edgy .fchip.on{box-shadow:4px 4px 0 rgba(0,0,0,.8)!important;border:2px solid #2a2208!important}
+body.edgy .leagueid b,body.edgy .section-title,body.edgy .eyebrow{color:var(--gold-bright)!important}
+body.edgy .tab-btn.on::after{height:4px!important}
+body.edgy .mteam .nm,body.edgy .lead h2{text-shadow:3px 3px 0 rgba(0,0,0,.55)!important}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="cornerctl">
+  <div class="lookseg" id="lookseg"><button class="on" data-look="soft">Soft</button><button data-look="edgy">Edgy</button></div>
+  <button class="helpbtn" id="helpbtn"><span class="led"></span> Help</button>
+</div>
+
+<div class="hub">
+  <header class="appbar">
+    <div class="teammark">PC</div>
+    <div class="leagueid"><b>Page Capitals</b><span>Kruse Baseball League · Season 3 · Week 9</span></div>
+    <div class="phaseseg">
+      <button class="on">Regular</button><button>Playoffs</button><button>Offseason</button>
+    </div>
+  </header>
+
+  <nav class="tabstrip" id="tabstrip">
+    <button class="tab-btn on" data-tab="today">Today's Game</button>
+    <button class="tab-btn" data-tab="team">Team Hub</button>
+    <button class="tab-btn" data-tab="standings">Standings</button>
+    <button class="tab-btn" data-tab="leaders">Leaders</button>
+    <button class="tab-btn" data-tab="news">The Tootwhistle Times</button>
+    <button class="tab-btn faint" disabled>Schedule</button>
+    <button class="tab-btn faint" disabled>Awards</button>
+    <button class="tab-btn faint" disabled>Museum</button>
+  </nav>
+
+  <!-- ===================== TODAY'S GAME ===================== -->
+  <section class="tabpane on" data-tab="today">
+    <div class="helpnote">🎙 This is your season cockpit — your next game is front and center. Tap <b>Play Ball</b> to track it, or sim ahead. Swipe right anywhere to advance a day.</div>
+    <div class="cockpit">
+      <div class="matchup">
+        <div class="eyebrow" style="text-align:center;margin-bottom:14px">Tonight · Game 81 of 162</div>
+        <div class="mteams">
+          <div class="mteam away">
+            <div class="mlogo">RR</div><div class="nm">River Rats</div><div class="rec num">44–36</div>
+            <div class="last5"><span class="pip w"></span><span class="pip l"></span><span class="pip w"></span><span class="pip w"></span><span class="pip l"></span></div>
+          </div>
+          <div class="vs">@</div>
+          <div class="mteam home">
+            <div class="mlogo">PC</div><div class="nm">Page Capitals</div><div class="rec num">48–32</div>
+            <div class="last5"><span class="pip w"></span><span class="pip w"></span><span class="pip w"></span><span class="pip l"></span><span class="pip w"></span></div>
+          </div>
+        </div>
+        <div class="mmeta">Caldwell Park · Night · your <b class="win">4-game</b> home win streak</div>
+        <button class="bigplay">▶  PLAY BALL</button>
+        <div class="simrow">
+          <button class="btn">Sim this game</button>
+          <button class="btn">Sim the week</button>
+          <button class="btn">Sim to the break</button>
+        </div>
+        <div style="text-align:center"><span class="gesture">⇆ swipe right to advance a day · left to peek the schedule</span></div>
+      </div>
+
+      <aside style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="row"><div class="section-title">Your season</div><div class="spacer"></div><div class="standpos">2nd · East</div></div>
+          <div class="progressbar"><i style="width:50%"></i></div>
+          <div class="row"><span class="num muted" style="font-size:12.5px">81 of 162</span><span class="spacer"></span><span class="num" style="font-size:12.5px">2.0 GB · +58 run diff</span></div>
+          <p class="help-b muted" style="font-size:12.5px;margin:10px 0 0">Win 9 of your next 12 and you take the division. The bar fills as the season plays out.</p>
+        </div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:8px">Around the league · tonight</div>
+          <div class="miniscore">Brass Monkeys <span class="pos">vs</span> Sand Gnats <span class="sc">7–3 <span class="win">F</span></span></div>
+          <div class="miniscore">Dust Devils <span class="pos">vs</span> Tidewater <span class="sc muted">8:05</span></div>
+          <div class="miniscore">Iron Birds <span class="pos">vs</span> Mudcats <span class="sc">2–1 <span class="info">5th</span></span></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===================== TEAM HUB ===================== -->
+  <section class="tabpane" data-tab="team">
+    <div class="helpnote">🎙 Set your team here. <b>Drag</b> the ⠿ handles to reorder your lineup and rotation. Long-press a player for sub / trade / cut. The payroll bar shows where you sit against the cap.</div>
+    <div class="teamhub">
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="row"><div class="section-title">Batting order</div><div class="spacer"></div>
+            <button class="btn" style="padding:7px 12px;font-size:12px">Auto</button>
+            <button class="btn gold" style="padding:7px 12px;font-size:12px">Save</button></div>
+          <div id="lineup" style="margin-top:8px">
+            <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">1</span><span class="pos">CF</span><span class="nm">Dash Okoye</span><span class="stat">.312 · 28 SB</span></div>
+            <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">2</span><span class="pos">SS</span><span class="nm">Pax Flext</span><span class="stat">.298 · .871 OPS</span></div>
+            <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">3</span><span class="pos">1B</span><span class="nm">Hank Drake</span><span class="stat">.305 · 31 HR</span></div>
+            <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">4</span><span class="pos">LF</span><span class="nm">Lars Stad</span><span class="stat">.276 · 38 HR</span></div>
+            <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">5</span><span class="pos">C</span><span class="nm">Cy Vane</span><span class="stat">.281 · 24 HR</span></div>
+            <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">6</span><span class="pos">3B</span><span class="nm">Milo Ruiz</span><span class="stat">.269 · 19 HR</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:6px">Rotation</div>
+          <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">SP1</span><span class="nm">Rafa Fenomeno</span><span class="stat">2.41 ERA · 11–3</span></div>
+          <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">SP2</span><span class="nm">Blake Bolt</span><span class="stat">3.10 ERA · 9–5</span></div>
+          <div class="lineuprow" draggable="true"><span class="hdl">⠿</span><span class="ord">CP</span><span class="nm">Milo Reyes</span><span class="stat">1.88 ERA · 22 SV</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="card">
+          <div class="row"><div class="section-title">Payroll</div><div class="spacer"></div><div class="standpos" style="font-size:13px">#2 of 12</div></div>
+          <div class="payrollbar"><i style="width:78%"></i><div class="cap" style="left:88%"></div></div>
+          <div class="row"><span class="num gold" style="font-size:16px;font-weight:700">$4.31M</span><span class="muted" style="font-size:12px">spent</span><span class="spacer"></span><span class="num muted" style="font-size:12.5px">cap $4.90M</span></div>
+          <p class="help-b muted" style="font-size:12.5px;margin:10px 0 0">The red line is the luxury-tax threshold. You're under it — room to add at the deadline.</p>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:6px"><div class="section-title">Roster</div><div class="spacer"></div><span class="chip">sort: WAR ▾</span></div>
+          <table class="rtable">
+            <thead><tr><th>Player</th><th>Pos</th><th style="text-align:right">WAR</th><th style="text-align:right">Salary</th></tr></thead>
+            <tbody>
+              <tr><td>Rafa Fenomeno</td><td><span class="pos">SP</span></td><td class="n"><span class="war hi">5.8</span></td><td class="n muted">$1.20M</td></tr>
+              <tr><td>Dash Okoye</td><td><span class="pos">CF</span></td><td class="n"><span class="war hi">5.1</span></td><td class="n muted">$0.96M</td></tr>
+              <tr><td>Hank Drake</td><td><span class="pos">1B</span></td><td class="n"><span class="war hi">4.4</span></td><td class="n muted">$0.84M</td></tr>
+              <tr><td>Pax Flext</td><td><span class="pos">SS</span></td><td class="n"><span class="war mid">3.6</span></td><td class="n muted">$0.53M</td></tr>
+              <tr><td>Milo Reyes</td><td><span class="pos">CP</span></td><td class="n"><span class="war mid">2.9</span></td><td class="n muted">$0.41M</td></tr>
+              <tr><td>Lars Stad</td><td><span class="pos">LF</span></td><td class="n"><span class="war mid">2.7</span></td><td class="n muted">$0.61M</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== STANDINGS ===================== -->
+  <section class="tabpane" data-tab="standings">
+    <div class="helpnote">🎙 League standings. Tap any team to expand its recent form. GB = games behind the leader; the bar shows run differential (green = scoring more than allowed).</div>
+    <div class="toggle2"><button class="on">Eastern</button><button>Western</button></div>
+    <div class="card">
+      <table class="stable">
+        <thead><tr><th>Team</th><th>W</th><th>L</th><th>GB</th><th>Run diff</th></tr></thead>
+        <tbody>
+          <tr><td><span class="team"><span class="tdot" style="background:#c9533a"></span>Brass Monkeys</span></td><td>50</td><td>30</td><td>—</td><td><span class="rd"><span class="rdbar"><i style="left:50%;width:38%;background:var(--win-fill)"></i></span>+71</span></td></tr>
+          <tr class="you"><td><span class="team"><span class="tdot" style="background:#caa84f"></span>Page Capitals</span></td><td>48</td><td>32</td><td>2.0</td><td><span class="rd"><span class="rdbar"><i style="left:50%;width:31%;background:var(--win-fill)"></i></span>+58</span></td></tr>
+          <tr><td><span class="team"><span class="tdot" style="background:#5f8bbf"></span>River Rats</span></td><td>44</td><td>36</td><td>6.0</td><td><span class="rd"><span class="rdbar"><i style="left:50%;width:14%;background:var(--win-fill)"></i></span>+22</span></td></tr>
+          <tr><td><span class="team"><span class="tdot" style="background:#7a9c5a"></span>Sand Gnats</span></td><td>39</td><td>41</td><td>11.0</td><td><span class="rd"><span class="rdbar"><i style="right:50%;width:9%;background:var(--loss-fill)"></i></span>−13</span></td></tr>
+          <tr><td><span class="team"><span class="tdot" style="background:#9c6a44"></span>Mudcats</span></td><td>33</td><td>47</td><td>17.0</td><td><span class="rd"><span class="rdbar"><i style="right:50%;width:28%;background:var(--loss-fill)"></i></span>−49</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== LEADERS ===================== -->
+  <section class="tabpane" data-tab="leaders">
+    <div class="helpnote">🎙 League leaders, batting and pitching. Your players are highlighted in gold. Tap a category to see the full top ten.</div>
+    <div class="leadgrid">
+      <div class="card leadcard">
+        <div class="lhead"><div class="section-title">Batting · Home runs</div><div class="spacer"></div><span class="chip">tap to expand</span></div>
+        <div class="leaditem top"><span class="leadrank">1</span><div style="flex:1"><div class="nm gold">Lars Stad · PC</div><div class="leadbar" style="width:100%"></div></div><span class="v">38</span></div>
+        <div class="leaditem"><span class="leadrank">2</span><div style="flex:1"><div class="nm">Boomer Vance · BM</div><div class="leadbar" style="width:92%"></div></div><span class="v">35</span></div>
+        <div class="leaditem"><span class="leadrank">3</span><div style="flex:1"><div class="nm gold">Hank Drake · PC</div><div class="leadbar" style="width:82%"></div></div><span class="v">31</span></div>
+        <div class="leaditem"><span class="leadrank">4</span><div style="flex:1"><div class="nm">Tito Marsh · RR</div><div class="leadbar" style="width:74%"></div></div><span class="v">28</span></div>
+      </div>
+      <div class="card leadcard">
+        <div class="lhead"><div class="section-title">Pitching · ERA</div><div class="spacer"></div><span class="chip">tap to expand</span></div>
+        <div class="leaditem top"><span class="leadrank">1</span><div style="flex:1"><div class="nm">Cole Vesper · BM</div><div class="leadbar" style="width:100%"></div></div><span class="v">2.18</span></div>
+        <div class="leaditem"><span class="leadrank">2</span><div style="flex:1"><div class="nm gold">Rafa Fenomeno · PC</div><div class="leadbar" style="width:94%"></div></div><span class="v">2.41</span></div>
+        <div class="leaditem"><span class="leadrank">3</span><div style="flex:1"><div class="nm">Sol Park · DD</div><div class="leadbar" style="width:86%"></div></div><span class="v">2.77</span></div>
+        <div class="leaditem"><span class="leadrank">4</span><div style="flex:1"><div class="nm">Gus Hale · TW</div><div class="leadbar" style="width:80%"></div></div><span class="v">2.95</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== NEWS ===================== -->
+  <section class="tabpane" data-tab="news">
+    <div class="helpnote">🎙 The Tootwhistle Times — your league's beat reporter. Filter to league-wide or just your club. Tap any story to read the full piece.</div>
+    <div class="filters">
+      <button class="fchip on">All</button><button class="fchip">League-wide</button><button class="fchip">Your club</button>
+    </div>
+    <div class="lead">
+      <span class="cat">Headline</span>
+      <h2>CAPITALS RIDE FENOMENO TO FOURTH STRAIGHT AT HOME</h2>
+      <p>Rafa Fenomeno carried a no-hitter into the seventh as Page surged to within two of the division-leading Monkeys. "We can smell first place," the skipper said.</p>
+      <div class="by">By the Tootwhistle desk · Season 3, Week 9</div>
+    </div>
+    <div class="newsgrid">
+      <div class="ncard"><span class="ncat trade">Trade buzz</span><h3>Capitals scouting bullpen help before the deadline</h3><p class="ex">With $0.59M under the tax line, Page is "kicking tires" on a setup arm.</p><div class="by">Beat report · 2 days ago</div></div>
+      <div class="ncard"><span class="ncat league">League-wide</span><h3>Monkeys' Vesper makes the case for Cy Young</h3><p class="ex">A 2.18 ERA and a 14-strikeout gem have the Brass ace atop every ballot.</p><div class="by">League notebook · 3 days ago</div></div>
+      <div class="ncard"><span class="ncat team">Your club</span><h3>Okoye's 28 steals quietly leading the league</h3><p class="ex">The leadoff man has been a menace; opponents are throwing over more than ever.</p><div class="by">Beat report · 4 days ago</div></div>
+      <div class="ncard"><span class="ncat league">League-wide</span><h3>Mudcats sell early, ship veterans for prospects</h3><p class="ex">A 17-game deficit has the cellar club looking to next season already.</p><div class="by">League notebook · 5 days ago</div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* look + help toggles */
+document.querySelectorAll('#lookseg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#lookseg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); document.body.classList.toggle('edgy', b.dataset.look==='edgy');
+}));
+document.getElementById('helpbtn').addEventListener('click',()=>document.body.classList.toggle('help-on'));
+
+/* tab switching */
+document.querySelectorAll('.tab-btn:not([disabled])').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  const k=t.dataset.tab;
+  document.querySelectorAll('.tabpane').forEach(p=>p.classList.toggle('on', p.dataset.tab===k));
+  window.scrollTo({top:0,behavior:'smooth'});
+}));
+
+/* news filter chips */
+document.querySelectorAll('.fchip').forEach(c=>c.addEventListener('click',()=>{
+  document.querySelectorAll('.fchip').forEach(x=>x.classList.remove('on')); c.classList.add('on');
+}));
+document.querySelectorAll('.toggle2 button, .phaseseg button').forEach(g=>g.addEventListener('click',()=>{
+  g.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on')); g.classList.add('on');
+}));
+
+/* lineup drag-to-reorder (HTML5) */
+let dragEl=null;
+document.querySelectorAll('#lineup .lineuprow').forEach(r=>{
+  r.addEventListener('dragstart',()=>{dragEl=r; r.classList.add('dragging');});
+  r.addEventListener('dragend',()=>{dragEl=null; r.classList.remove('dragging'); renumber();});
+  r.addEventListener('dragover',e=>{e.preventDefault();
+    const c=document.getElementById('lineup'); const after=[...c.querySelectorAll('.lineuprow:not(.dragging)')]
+      .find(el=>e.clientY <= el.getBoundingClientRect().top + el.offsetHeight/2);
+    if(!dragEl) return; if(after) c.insertBefore(dragEl, after); else c.appendChild(dragEl);
+  });
+});
+function renumber(){document.querySelectorAll('#lineup .lineuprow .ord').forEach((o,i)=>o.textContent=i+1);}
+</script>
+</body>
+</html>
