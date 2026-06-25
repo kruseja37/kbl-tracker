@@ -7,7 +7,9 @@ import {
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
+  T3_DERIVATION_INPUTS,
   TIER_CAPS,
+  TIER_SHIFTS,
   type LuxuryCapRow,
   type ModStat,
   type TierKey,
@@ -276,13 +278,35 @@ export function derivePickValueChart(ivsDesc: number[]): PickValue[] {
     .map((value, index) => ({ pick: index + 1, value }));
 }
 
+const MLB_ROSTER_SLOTS_PER_TEAM = 22;
+
+/**
+ * Option B — pool-relative MLB team budget (JK ruling 2026-06-25). Instead of a static per-tier
+ * dollar table, the cap scales with the ACTUAL pool's objective IVs, so the money-to-talent ratio
+ * stays constant however the pool is curated: removing stars lowers the mean → lowers the cap; a
+ * richer pool raises it. The tier (juiced/standard/nerfed) is the multiplier. Mirrors the farm
+ * wallet's pool-relative approach (computeFarmTierCap). Reproduces the static TIER_CAPS within
+ * ~0.1% on the stock 440-player pool (poolMean 54854 × 22 ≈ the juiced cap), so standard pools
+ * behave as before while curated pools now move the budget. Luxury caps stay tier-fixed (separate
+ * rating-concentration lever).
+ */
+export function computePoolTierCap(ivs: number[], tier: TierKey): number {
+  const finite = ivs.filter((iv) => Number.isFinite(iv));
+  if (finite.length === 0) return TIER_CAPS[tier].tierCap; // degenerate pool → static fallback
+  const maxIV = Math.max(...finite);
+  const meanIV = finite.reduce((sum, iv) => sum + iv, 0) / finite.length;
+  const starBranch = maxIV / T3_DERIVATION_INPUTS.starBudgetShare;
+  const rosterBranch = meanIV * MLB_ROSTER_SLOTS_PER_TEAM;
+  return Math.round(Math.max(starBranch, rosterBranch) * TIER_SHIFTS[tier].scale);
+}
+
 export function registerPool(cfg: PoolConfig): RegisteredPool {
   return {
     leagueId: cfg.leagueId,
     tier: cfg.tier,
     balanceMode: cfg.balanceMode,
     players: cfg.players,
-    tierCap: TIER_CAPS[cfg.tier].tierCap,
+    tierCap: computePoolTierCap(cfg.players.map((player) => player.iv), cfg.tier),
     luxuryCaps: LUXURY_CAP_TABLES[cfg.tier],
     pickValueChart: derivePickValueChart(cfg.players.map((player) => player.iv)),
     totalSlots: cfg.totalSlots,

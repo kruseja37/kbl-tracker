@@ -9,6 +9,7 @@ import {
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
+  T3_DERIVATION_INPUTS,
   TIER_CAPS,
   type LuxuryCapRow,
   type ModStat,
@@ -23,6 +24,7 @@ import {
   buildSnakeOrder,
   cheapestFillCost,
   composeIdentity,
+  computePoolTierCap,
   derivePickValueChart,
   identityCapShift,
   luxuryTax,
@@ -491,7 +493,8 @@ describe('registerPool T8b assembler', () => {
     { id: 'low', iv: 10_000, salary: 11_000 },
   ];
 
-  test('assembles tier caps and luxury caps from tier parameters for each tier', () => {
+  test('assembles a pool-relative tier cap (Option B) + tier-fixed luxury caps for each tier', () => {
+    const ivs = players.map((player) => player.iv);
     for (const tier of tiers) {
       const pool = registerPool({
         leagueId: `league-${tier}`,
@@ -501,9 +504,31 @@ describe('registerPool T8b assembler', () => {
         players,
       });
 
-      expect(pool.tierCap).toBe(TIER_CAPS[tier].tierCap);
-      expect(pool.luxuryCaps).toBe(LUXURY_CAP_TABLES[tier]);
+      // Option B: the cap is derived from the ACTUAL pool's IVs, scaled by tier — not the static table.
+      expect(pool.tierCap).toBe(computePoolTierCap(ivs, tier));
+      expect(pool.luxuryCaps).toBe(LUXURY_CAP_TABLES[tier]); // luxury caps stay tier-fixed
       expect(pool.tier).toBe(tier);
+    }
+    // The tier is the multiplier: juiced > standard > nerfed for the same pool.
+    expect(computePoolTierCap(ivs, 'juiced')).toBeGreaterThan(computePoolTierCap(ivs, 'standard'));
+    expect(computePoolTierCap(ivs, 'standard')).toBeGreaterThan(computePoolTierCap(ivs, 'nerfed'));
+  });
+
+  test('pool-relative cap tracks pool talent: removing the top player lowers the cap', () => {
+    const full = computePoolTierCap(players.map((player) => player.iv), 'standard');
+    const lighter = computePoolTierCap(
+      players.filter((player) => player.id !== 'top').map((player) => player.iv),
+      'standard',
+    );
+    expect(lighter).toBeLessThan(full);
+  });
+
+  test('pool-relative cap reproduces the published TIER_CAPS within ~0.1% on the stock-mean pool', () => {
+    const stockMeanPool = Array.from({ length: 12 }, () => T3_DERIVATION_INPUTS.poolMeanIV);
+    for (const tier of tiers) {
+      const cap = computePoolTierCap(stockMeanPool, tier);
+      const drift = Math.abs(cap - TIER_CAPS[tier].tierCap) / TIER_CAPS[tier].tierCap;
+      expect(drift).toBeLessThan(0.01);
     }
   });
 
