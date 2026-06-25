@@ -138,7 +138,7 @@ describe('LeagueBuilder Component', () => {
     test('renders MLB DRAFT module card', () => {
       render(<LeagueBuilder />);
       expect(screen.getByText('MLB DRAFT')).toBeInTheDocument();
-      expect(screen.getByText('22-man registered-pool draft')).toBeInTheDocument();
+      expect(screen.getByText('Build the pool, see IV, lock, and draft')).toBeInTheDocument();
     });
 
     test('renders RULES module card', () => {
@@ -209,10 +209,12 @@ describe('LeagueBuilder Component', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/league-builder/farm-auction-draft?leagueId=league-1');
     });
 
-    test('MLB DRAFT card navigates to leagues list for league-specific draft routing', () => {
+    test('MLB DRAFT card navigates to the Draft Setup screen', () => {
       render(<LeagueBuilder />);
       fireEvent.click(screen.getByText('MLB DRAFT'));
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/leagues');
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.stringContaining('/league-builder/draft-setup'),
+      );
     });
 
     test('RULES card navigates to rules page', () => {

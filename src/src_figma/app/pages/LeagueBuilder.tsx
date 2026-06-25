@@ -216,10 +216,10 @@ export function LeagueBuilder() {
           <ModuleCard
             icon={<Shuffle className="w-8 h-8" />}
             title="MLB DRAFT"
-            description="22-man registered-pool draft"
-            count="Draft"
+            description="Build the pool, see IV, lock, and draft"
+            count="Setup"
             color="#3B7DD8"
-            onClick={() => navigate("/league-builder/leagues")}
+            onClick={() => navigate(leagues[0] ? `/league-builder/draft-setup?leagueId=${leagues[0].id}` : "/league-builder/draft-setup")}
           />
 
           <ModuleCard

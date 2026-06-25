@@ -11,8 +11,6 @@ import { useNavigate } from "react-router";
 import {
   ArrowLeft,
   User,
-  UserPlus,
-  UserMinus,
   Search,
   Plus,
   Trash2,
@@ -216,7 +214,6 @@ export function LeagueBuilderPlayers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState<string>("ALL");
   const [teamFilter, setTeamFilter] = useState<string>("ALL");
-  const [leagueActionPlayerId, setLeagueActionPlayerId] = useState<string | null>(null);
 
   // Override state for context tabs
   const [editorTab, setEditorTab] = useState<EditorTab>('base');
@@ -247,10 +244,6 @@ export function LeagueBuilderPlayers() {
     return player.leagueAssignments.find((assignment) => assignment.leagueId === activeLeagueId)
       ?? player.leagueAssignments[0];
   }, [activeLeagueId]);
-
-  const isInActiveLeague = useCallback((player: Player) => (
-    Boolean(activeLeagueId && player.leagueAssignments?.some((assignment) => assignment.leagueId === activeLeagueId))
-  ), [activeLeagueId]);
 
   /** ALL league IDs for tab rendering — player's existing assignments + all known leagues */
   const playerLeagueIds = useMemo(() => {
@@ -640,30 +633,6 @@ export function LeagueBuilderPlayers() {
     }
   };
 
-  const toggleActiveLeagueAssignment = async (player: Player) => {
-    if (!activeLeagueId) return;
-    setLeagueActionPlayerId(player.id);
-    try {
-      const existingAssignments = player.leagueAssignments ?? [];
-      const isAssigned = existingAssignments.some((assignment) => assignment.leagueId === activeLeagueId);
-      const leagueAssignments = isAssigned
-        ? existingAssignments.filter((assignment) => assignment.leagueId !== activeLeagueId)
-        : [
-            ...existingAssignments,
-            { leagueId: activeLeagueId, teamId: "", rosterStatus: "FREE_AGENT" as RosterStatus },
-          ];
-
-      await updatePlayer({
-        ...player,
-        leagueAssignments,
-      });
-    } catch (err) {
-      console.error("Failed to update league pool assignment:", err);
-    } finally {
-      setLeagueActionPlayerId(null);
-    }
-  };
-
   const toggleArsenal = (pitch: PitchType) => {
     const newArsenal = formData.arsenal.includes(pitch)
       ? formData.arsenal.filter(p => p !== pitch)
@@ -919,19 +888,6 @@ export function LeagueBuilderPlayers() {
                     <td className="p-3 text-center text-xs">{player.bats}/{player.throws}</td>
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => toggleActiveLeagueAssignment(player)}
-                          disabled={!activeLeagueId || leagueActionPlayerId === player.id}
-                          className={`px-2 py-1.5 border-2 transition flex items-center gap-1 text-[10px] font-bold uppercase ${
-                            isInActiveLeague(player)
-                              ? "bg-[#4A6844] hover:bg-[#5A8352] border-[#FFD27A] text-[#FFD27A]"
-                              : "bg-[#3B7DD8] hover:bg-[#4B8DE8] border-[#E8E8D8]/70 text-[#E8E8D8]"
-                          } disabled:opacity-60`}
-                          title={isInActiveLeague(player) ? "Remove from this league" : "Add to this league"}
-                        >
-                          {isInActiveLeague(player) ? <UserMinus className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
-                          {isInActiveLeague(player) ? "Remove" : "Add"}
-                        </button>
                         <button
                           onClick={() => openEditModal(player)}
                           className="p-1.5 bg-[#5A8352] hover:bg-[#6A9362] border-2 border-[#E8E8D8]/50 transition"

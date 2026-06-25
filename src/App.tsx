@@ -115,6 +115,11 @@ const LeagueBuilderFarmAuctionDraft = lazy(() =>
     default: module.LeagueBuilderFarmAuctionDraft,
   })),
 );
+const LeagueBuilderDraftSetup = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderDraftSetup").then((module) => ({
+    default: module.LeagueBuilderDraftSetup,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -294,6 +299,10 @@ function App() {
         <Route
           path="/league-builder/rosters"
           element={<LeagueBuilderRosters />}
+        />
+        <Route
+          path="/league-builder/draft-setup"
+          element={<LeagueBuilderDraftSetup />}
         />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route

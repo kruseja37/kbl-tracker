@@ -40,7 +40,7 @@ function toPitcherRole(position: Player['primaryPosition']): PlayerForSalary['pi
     : 'SP';
 }
 
-function toSalaryPlayer(player: Player): PlayerForSalary {
+export function toSalaryPlayer(player: Player): PlayerForSalary {
   const isPitcher = player.primaryPosition === 'SP'
     || player.primaryPosition === 'RP'
     || player.primaryPosition === 'CP'

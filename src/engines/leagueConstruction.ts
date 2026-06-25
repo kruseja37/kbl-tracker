@@ -40,6 +40,15 @@ export type RegisteredPool = {
   pickValueChart: PickValue[];
   totalSlots: number;
   poolSurplusWarning: boolean;
+  /**
+   * Draft-pool lock (Draft Setup redesign, 2026-06-25). When true, the pool's
+   * membership + per-player IV are frozen: this exact snapshot is what the auction
+   * consumes, and pool add/remove is rejected until the pool is unlocked. Additive +
+   * optional → no kbl-league-builder DB version bump (schemaless at the record level).
+   * Set by lockLeaguePool / cleared by unlockLeaguePool (leagueBuilderPoolBuilder.ts).
+   */
+  locked?: boolean;
+  lockedAt?: number;
 };
 export type TradeVerdict = {
   balanced: boolean;

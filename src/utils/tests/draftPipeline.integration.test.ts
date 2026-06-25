@@ -32,6 +32,15 @@ import {
   MLB_AUCTION_SEASON,
 } from '../leagueBuilderAuctionPipeline';
 import { registerLeaguePoolForLeague } from '../leagueBuilderPoolRegistration';
+import {
+  addPlayersToLeaguePool,
+  evaluatePoolSufficiency,
+  importRosteredPlayersToLeaguePool,
+  isPlayerInLeaguePool,
+  lockLeaguePool,
+  removePlayersFromLeaguePool,
+  unlockLeaguePool,
+} from '../leagueBuilderPoolBuilder';
 import { buildFarmAuctionSession } from '../farmAuctionSession';
 import {
   clearAllLeagueBuilderData,
@@ -44,6 +53,7 @@ import {
   getAuctionSession,
   getAuctionSessionById,
   getPlayer,
+  getRegisteredPool,
   getTeam,
   getTeamRoster,
   saveAuctionSession,
@@ -625,5 +635,80 @@ describe('draft pipeline integration', () => {
     expect(first.franchisePlayerCount).toBe(TEAM_IDS.length * 32);
     expect(first.franchiseTeamCount).toBe(TEAM_IDS.length);
     expect(first.franchiseFarmRecordCount).toBe(TEAM_IDS.length * 10);
+  }, 30_000);
+
+  test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {
+    const { addedFreeAgentId, removedCuratedPlayerId, initialRosterPlayerIdsByTeamId } =
+      await seedDraftLeagueWithRealMlbPlayers();
+    const mlbSlots = TEAM_IDS.length * 22;
+
+    // Pool mode (a): import the players rostered on the league's branded teams (4 × 22 = 88).
+    const importedCount = await importRosteredPlayersToLeaguePool(LEAGUE_ID);
+    expect(importedCount).toBe(mlbSlots);
+
+    // Live in/out membership: 88 imported + the 1 free agent already curated at seed = 89.
+    const inPoolAfterImport = (await getAllPlayers()).filter((player) =>
+      isPlayerInLeaguePool(player, LEAGUE_ID),
+    );
+    expect(inPoolAfterImport).toHaveLength(mlbSlots + 1);
+    expect(inPoolAfterImport.map((player) => player.id)).toContain(addedFreeAgentId);
+    expect(inPoolAfterImport.map((player) => player.id)).not.toContain(removedCuratedPlayerId);
+
+    // Registration parity: the bulk-built pool reproduces the proven 89-id contract.
+    const registered = await registerLeaguePoolForLeague(LEAGUE_ID);
+    expect(new Set(registered.players.map((player) => player.id)).size).toBe(registered.players.length);
+    expect(registered.players).toHaveLength(mlbSlots + 1);
+    // Every entry carries a finite IV — the auction's hard precondition.
+    expect(registered.players.every((player) => Number.isFinite(player.iv))).toBe(true);
+
+    // Sufficiency: 89 pool vs 88 MLB slots → meets the floor with a small surplus.
+    const sufficiency = evaluatePoolSufficiency(registered.players.length, TEAM_IDS.length);
+    expect(sufficiency.mlbSlots).toBe(mlbSlots);
+    expect(sufficiency.meetsFloor).toBe(true);
+    expect(sufficiency.surplus).toBe(1);
+
+    // Bulk add/remove round-trips through registration (removed-curated player is off-roster).
+    await addPlayersToLeaguePool([removedCuratedPlayerId], LEAGUE_ID);
+    expect((await registerLeaguePoolForLeague(LEAGUE_ID)).players).toHaveLength(mlbSlots + 2);
+    await removePlayersFromLeaguePool([removedCuratedPlayerId], LEAGUE_ID);
+    expect((await registerLeaguePoolForLeague(LEAGUE_ID)).players).toHaveLength(mlbSlots + 1);
+
+    // Removing a ROSTERED player must STICK: registration unions team rosters, so removal must
+    // also pull the player off the roster or it would reappear in the locked snapshot.
+    const rosteredId = initialRosterPlayerIdsByTeamId[TEAM_IDS[0]][0];
+    expect(rosteredId).toBeTruthy();
+    await removePlayersFromLeaguePool([rosteredId], LEAGUE_ID);
+    const afterRosteredRemove = await registerLeaguePoolForLeague(LEAGUE_ID);
+    expect(afterRosteredRemove.players).toHaveLength(mlbSlots); // 89 → 88, did NOT bounce back
+    expect(afterRosteredRemove.players.map((player) => player.id)).not.toContain(rosteredId);
+    // Restore the pool to 89 for the lock assertions below (re-add as an explicit assignment).
+    await addPlayersToLeaguePool([rosteredId], LEAGUE_ID);
+    expect((await registerLeaguePoolForLeague(LEAGUE_ID)).players).toHaveLength(mlbSlots + 1);
+
+    // Lock: freezes membership + IV and stamps the lock.
+    const locked = await lockLeaguePool(LEAGUE_ID);
+    expect(locked.locked).toBe(true);
+    expect(typeof locked.lockedAt).toBe('number');
+    expect(locked.lockedAt as number).toBeGreaterThan(0);
+    expect(locked.players).toHaveLength(mlbSlots + 1);
+    expect((await getRegisteredPool(LEAGUE_ID))?.locked).toBe(true);
+
+    // The LOCKED snapshot is what the auction consumes (useAuctionDraft prefers it): it must feed
+    // buildAuctionPlayers cleanly — same membership, every IV finite (the auction's hard guard).
+    const lockedSnapshot = await getRegisteredPool(LEAGUE_ID);
+    const auctionPlayers = buildAuctionPlayers(lockedSnapshot!);
+    expect(auctionPlayers).toHaveLength(lockedSnapshot!.players.length);
+    expect(auctionPlayers.every((player) => Number.isFinite(player.iv))).toBe(true);
+
+    // Lock is enforced at the data layer — pool edits are rejected until unlocked.
+    await expect(addPlayersToLeaguePool([removedCuratedPlayerId], LEAGUE_ID)).rejects.toThrow(/locked/i);
+    await expect(removePlayersFromLeaguePool([addedFreeAgentId], LEAGUE_ID)).rejects.toThrow(/locked/i);
+    expect((await getRegisteredPool(LEAGUE_ID))?.players).toHaveLength(mlbSlots + 1);
+
+    // Unlock re-opens the pool for editing.
+    const unlocked = await unlockLeaguePool(LEAGUE_ID);
+    expect(unlocked?.locked).toBe(false);
+    await expect(addPlayersToLeaguePool([removedCuratedPlayerId], LEAGUE_ID)).resolves.toBeUndefined();
+    expect((await registerLeaguePoolForLeague(LEAGUE_ID)).players).toHaveLength(mlbSlots + 2);
   }, 30_000);
 });

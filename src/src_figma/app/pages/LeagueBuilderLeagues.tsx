@@ -21,25 +21,16 @@ import {
   X,
   Check,
   AlertTriangle,
-  Eraser,
 } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate } from "../../hooks/useLeagueBuilderData";
-import { draftRouteForLeague } from "../utils/draftRouting";
 import {
   BALANCE_MODE_DEFAULT,
   CHECKPOINT_CADENCE_DEFAULT,
   type CheckpointCadence,
 } from "../../../data/rosterEngineConstants";
-import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
+import type { BalanceMode } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
-import { deleteAuctionSession } from "../../../utils/leagueBuilderStorage";
-import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
-
-export {
-  draftRouteForFormat,
-  draftRouteForLeague,
-} from "../utils/draftRouting";
 
 // ============================================
 // TYPES
@@ -119,8 +110,6 @@ export function LeagueBuilderLeagues() {
     updateLeague,
     removeLeague,
     duplicateLeague,
-    registerLeaguePool,
-    clearRoster,
   } = useLeagueBuilderData();
 
   // UI State
@@ -129,9 +118,6 @@ export function LeagueBuilderLeagues() {
   const [formData, setFormData] = useState<LeagueFormData>(DEFAULT_FORM_DATA);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [registeringPoolId, setRegisteringPoolId] = useState<string | null>(null);
-  const [clearingRosterLeagueId, setClearingRosterLeagueId] = useState<string | null>(null);
-  const [registeredPoolResult, setRegisteredPoolResult] = useState<RegisteredPool | null>(null);
   const showCheckpointCadenceControl = isFranchisePhase2L13Enabled();
 
   // Set default rules preset when data loads
@@ -235,37 +221,6 @@ export function LeagueBuilderLeagues() {
     }
   };
 
-  const handleRegisterPool = async (leagueId: string) => {
-    setRegisteringPoolId(leagueId);
-    try {
-      const pool = await registerLeaguePool(leagueId);
-      await deleteAuctionSession(leagueId, MLB_AUCTION_SEASON);
-      setRegisteredPoolResult(pool);
-    } catch (err) {
-      console.error("Failed to register pool:", err);
-    } finally {
-      setRegisteringPoolId(null);
-    }
-  };
-
-  const handleClearLeagueRosters = async (league: LeagueTemplate) => {
-    const confirmed = window.confirm(
-      `Clear MLB and farm rosters for all ${league.teamIds.length} teams in ${league.name}? Players remain in this league pool as free agents.`,
-    );
-    if (!confirmed) return;
-
-    setClearingRosterLeagueId(league.id);
-    try {
-      for (const teamId of league.teamIds) {
-        await clearRoster(teamId, league.id);
-      }
-    } catch (err) {
-      console.error("Failed to clear league rosters:", err);
-    } finally {
-      setClearingRosterLeagueId(null);
-    }
-  };
-
   const toggleTeam = (teamId: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -317,24 +272,6 @@ export function LeagueBuilderLeagues() {
           <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
             <span className="text-red-200">{error}</span>
-          </div>
-        )}
-
-        {registeredPoolResult && (
-          <div className="bg-[#4A6844] border-4 border-[#E8E8D8] p-4 mb-6 flex items-start gap-3">
-            <Check className="w-5 h-5 text-[#9DFF7A] mt-0.5" />
-            <div>
-              <div className="font-bold">Pool Registered</div>
-              <div className="text-sm text-[#E8E8D8]/80">
-                {formatTier(registeredPoolResult.tier)} tier · Cap ${registeredPoolResult.tierCap.toLocaleString()} ·{" "}
-                {registeredPoolResult.players.length} players
-              </div>
-              {registeredPoolResult.poolSurplusWarning && (
-                <div className="text-sm text-[#FFD166] mt-1">
-                  Surplus warning: pool is above 120% of roster slots.
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -394,39 +331,11 @@ export function LeagueBuilderLeagues() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* Register Pool */}
+                    {/* Draft Setup */}
                     <button
-                      onClick={() => handleRegisterPool(league.id)}
-                      disabled={registeringPoolId === league.id}
-                      className="px-3 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8]/70 transition disabled:opacity-60 flex items-center gap-2"
-                      title="Register pool"
-                    >
-                      {registeringPoolId === league.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Database className="w-4 h-4" />
-                      )}
-                      <span className="text-xs font-bold">Register Pool</span>
-                    </button>
-
-                    {/* Clear Rosters */}
-                    <button
-                      onClick={() => handleClearLeagueRosters(league)}
-                      disabled={clearingRosterLeagueId === league.id}
-                      className="px-3 py-2 bg-[#4A6844] hover:bg-[#5A8352] border-[3px] border-[#FFD27A]/70 text-[#FFD27A] transition disabled:opacity-60 flex items-center gap-2"
-                      title="Clear all team rosters for this league"
-                    >
-                      <Eraser className="w-4 h-4" />
-                      <span className="text-xs font-bold">
-                        {clearingRosterLeagueId === league.id ? "Clearing..." : "Clear Rosters"}
-                      </span>
-                    </button>
-
-                    {/* Draft */}
-                    <button
-                      onClick={() => navigate(draftRouteForLeague(league))}
+                      onClick={() => navigate(`/league-builder/draft-setup?leagueId=${league.id}`)}
                       className="px-3 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-[3px] border-[#E8E8D8]/70 transition flex items-center gap-2"
-                      title="Draft league"
+                      title="Draft setup"
                     >
                       <Shuffle className="w-4 h-4" />
                       <span className="text-xs font-bold">Draft</span>

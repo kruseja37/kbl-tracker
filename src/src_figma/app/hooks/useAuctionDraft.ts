@@ -380,7 +380,13 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     if (nextLeagueTeams.length === 0) throw new Error("Selected league has no teams.");
 
     await regenerateAndPersistLeaguePoolAxes(leagueId);
-    const pool = await leagueData.registerLeaguePool(leagueId);
+    // Draft Setup redesign: prefer the LOCKED pool snapshot. A locked pool is the exact
+    // membership + IV the user reviewed and froze, so consume it as-is instead of
+    // re-registering. Unlocked (legacy/direct-entry) → register now, as before.
+    const existingPool = await leagueData.getRegisteredPool(leagueId);
+    const pool = existingPool?.locked
+      ? existingPool
+      : await leagueData.registerLeaguePool(leagueId);
     if (pool.players.length === 0) throw new Error("RegisteredPool has no players for this league.");
 
     for (const team of nextLeagueTeams) {
