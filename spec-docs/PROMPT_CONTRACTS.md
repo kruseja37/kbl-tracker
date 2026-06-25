@@ -22982,3 +22982,56 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** a trackerDb bump is needed (→ STOP); an `iv_oracle.json` byte change (→ STOP); the builder cannot read `TRAIT_REALITY_SCORER_TUNING.minPeerPool` without a circular import (→ duplicate the literal `3` with a `// === traitRealityScorer minPeerPool` comment, NOT a stop); a NON-trait franchise/L-SIM fixture regresses outside the characterized set (→ STOP, that means something live shifted and the grant isn't dark); the only way to make a test pass is to weaken it rather than re-baseline a legitimately-split percentile (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: T-3a ===== -->
+
+<!-- ===== CONTRACT: T-3b-1 ===== -->
+## T-3b-1 — trend-tilt ENGINE seam for trait acquisition (default-identity, build-dark; §4A trend factor)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding ONE multiplicative tilt term to the trait-acquisition probability, mirroring the RA-9a engine-seam precedent. Build-dark / default-identity (weight 0 → byte-identical). This is the ENGINE half of the §4A trend factor; the SWEEP that supplies the recent signal is the separate T-3b-2 ticket — DO NOT touch `franchiseTraitGrantCompute.ts` here.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (§4A RULED 2026-06-22):** add a "moderate, bounded, multiplicative" trend tilt to the gain/keep probability — recent form (since last checkpoint) vs the season aggregate eases gain + resists loss when trending UP, eases loss + resists gain when trending DOWN. T-3b-1 builds the ENGINE term, default-INERT (weight 0, no recent signal supplied yet) so it is byte-identical until T-3b-2 supplies the recent percentile and the Simulation Gate sets the weight.
+
+**SOURCE OF TRUTH:** `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §4A:53` ("Trend factor — RULED: moderate. A multiplicative tilt from recent form (since the last checkpoint) vs the aggregate… Moderate, bounded multiplier (sim-tunable). Neutral at checkpoint 1.") + `:62` ("a new multiplicative term in `buildProposalBase`"). Magnitude is §16-SILENT → default weight 0. Precedent = RA-9a (`ratingsDevelopment` trend-tilt, `trendTiltWeight` default 0, identity unless recent finite AND weight>0) — NOTE RA-9a is on the unmerged lane C, so CLONE the discipline, do not import.
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `buildProposalBase` (`traitAcquisition.ts:438-497`): every tilt is a factor ~1.0 multiplied into `clamp01(args.realityPercentile × ambitionTilt × resilienceTilt × imageAxisTilt × moraleFactor × rosterRoleFactor × charismaTilt × resiliencePositiveTilt)` (`:471-480`); the parallel `factors` record is at `:487-495`. `clamp` and `clamp01` are already in-module (used at `:130`/`:471`).
+- `computeTraitAcquisition` (`:366-415`): per candidate, `realityPercentile = clamp01(candidate.score.realityPercentile)` (`:388`) then `buildProposalBase({ traitName, realityPercentile, modifiers, morale, rosterRole, imagePersonalities, tuning })` (`:389-397`). The gain test is `probability >= gainThreshold` (`:404`), loss is `probability <= loseThreshold` (`:409`) — BOTH valence-blind.
+- `TraitCandidate` (`:27`) = `{ traitName; score: TraitRealityScore }`. `TraitAcquisitionTuning` (`:77-88`) has REQUIRED swings + OPTIONAL `maxTraits?`/`incumbencyBeta?`. `TRAIT_ACQUISITION_TUNING` (`:96-107`). `TraitChangeProposal.factors` (`:46-54`).
+- Direction is UNIFORM across valence (make-or-break): negative-trait signals are built as BADNESS rates (Whiffer=K-rate etc.) and `getPercentile` is monotone, so high percentile = "more of the trait" = GAIN for BOTH polarities; the gain/loss comparison never branches on valence. Therefore ONE tilt on `realityPercentile` (recentP>aggregateP raises P) is spec-correct for positives (eases gain) AND negatives (recentP>aggregateP = doing the bad thing more lately = correctly eases gaining the flaw / resists losing it). NO per-valence branch.
+
+**BUILD (`traitAcquisition.ts` only):**
+1. `TraitCandidate` (`:27`): add optional `recentPercentile?: number` (the recent-window reality percentile for that trait; absent → no trend).
+2. `TraitAcquisitionTuning` (`:77-88`): add optional `trendTiltWeight?: number` (mirror the `maxTraits?` optional pattern).
+3. `TRAIT_ACQUISITION_TUNING` (`:96-107`): add `trendTiltWeight: 0, // §16 sim-tune placeholder — Simulation Gate owns the magnitude`.
+4. `TraitChangeProposal.factors` (`:46-54`): add `trendTilt: number;`.
+5. `buildProposalBase`: add `recentPercentile?: number` to the `args` type (`:438-446`); compute
+   ```
+   const trendTiltWeight = args.tuning.trendTiltWeight ?? 0;
+   const trendTilt = (typeof args.recentPercentile === 'number' && Number.isFinite(args.recentPercentile) && trendTiltWeight > 0)
+     ? 1 + clamp(args.recentPercentile - args.realityPercentile, -1, 1) * trendTiltWeight
+     : 1;
+   ```
+   multiply `trendTilt` into the `clamp01(...)` product (`:471-480`, append as the last factor) and add `trendTilt` to the returned `factors` object (`:487-495`).
+6. `computeTraitAcquisition` (`:389-397`): pass `recentPercentile: candidate.recentPercentile != null ? clamp01(candidate.recentPercentile) : undefined` into the `buildProposalBase` call.
+
+**MAKE-OR-BREAK:** `trendTilt === 1` (exact identity) whenever `trendTiltWeight === 0` (the default) OR `recentPercentile` is absent/non-finite ⇒ EVERY proposal `probability` + `factors` (except the new always-1 `trendTilt` key) byte-identical to today ⇒ build-dark. The tilt multiplies `realityPercentile` in the SAME `clamp01` product as the existing tilts; the delta `recentPercentile − realityPercentile` is clamped to `[-1, 1]`; ONE tilt, uniform across valence (no positive/negative branch). NO `franchiseTraitGrantCompute.ts` change (T-3b-2 supplies the recent signal). NO DB bump, NO oracle/pricing/tier/scorer touch.
+
+**TEST (`src/engines/__tests__/traitAcquisition.test.ts`):**
+- **Default-identity (the build-dark proof):** a candidate WITH `recentPercentile` set but tuning at the default (`trendTiltWeight` unset/0) → `probability` and the other `factors` are byte-identical to the same candidate with NO `recentPercentile`; `factors.trendTilt === 1`.
+- **Eases gain when hot:** with an explicit `trendTiltWeight: 0.5` tuning + `recentPercentile > realityPercentile` → `probability` is HIGHER than the no-recent baseline (and `factors.trendTilt > 1`); the exact value = `clamp01(base × (1 + (recentP − aggregateP) × 0.5))`.
+- **Eases loss when cold:** `recentPercentile < realityPercentile` + weight 0.5 → `probability` LOWER, `factors.trendTilt < 1`.
+- **Clamp:** `recentPercentile − realityPercentile` beyond ±1 is clamped (use 0 vs 1 extremes).
+- **Recent absent → identity** (`factors.trendTilt === 1`).
+- If any existing test asserts `proposal.factors` exhaustively via `toEqual`, ADD `trendTilt: 1` to it (a legitimate additive update, NOT a weakening).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/engines/__tests__/traitCandidateBuilder.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `traitAcquisition.ts` is in the `franchiseTraitGrantCompute`→`processCompletedGame` import chain) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist` order-flakes, solo-pass to confirm). A franchise/L-SIM fixture moving → STOP (the default MUST be inert/byte-identical).
+5. `git --no-pager diff --stat` → `traitAcquisition.ts` + its test ONLY. No `franchiseTraitGrantCompute.ts`, no `traitCandidateBuilder.ts`, no `iv_oracle.json`/pricing/tier/scorer, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) the `trendTilt` term + the tuning field + the `recentPercentile` thread + the factors-type change, confirm identity-at-default + uniform-across-valence + no caller/DB/oracle touch; (3) verification output; (4) "T-3b-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the default is NOT byte-identical (a franchise/L-SIM fixture moves with weight 0 — → STOP, the tilt is leaking); the trend would need a per-valence branch (→ STOP and report — the uniform-direction grounding says it must NOT); a DB bump / oracle touch is needed (→ STOP); `franchiseTraitGrantCompute.ts` must change (→ STOP, that is T-3b-2). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: T-3b-1 ===== -->
