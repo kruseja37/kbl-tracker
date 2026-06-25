@@ -16,7 +16,7 @@ import {
   CHEMISTRY_TARGET_DISTRIBUTION,
   type ChemistryCode,
 } from '../data/chemistryCanonical';
-import { assignTier, NEGATIVE_TRAIT_FRACTION } from '../data/traitTierConfig';
+import { assignTier, ELITE_PITCH_TRAITS, NEGATIVE_TRAIT_FRACTION } from '../data/traitTierConfig';
 import { TRAIT_OPPOSITES } from '../engines/traitAcquisition';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 import type { Position } from '../types/game';
@@ -355,17 +355,7 @@ export const PROSPECT_PITCHER_TRAIT_POOL = [
   'Specialist',
   'Workhorse',
 ] as const;
-const PROSPECT_ELITE_PITCH_TRAIT_NAMES = [
-  'Elite 2F',
-  'Elite 4F',
-  'Elite CB',
-  'Elite CF',
-  'Elite CH',
-  'Elite FK',
-  'Elite SB',
-  'Elite SL',
-] as const;
-export const PROSPECT_ELITE_PITCH_TRAITS = new Set<string>(PROSPECT_ELITE_PITCH_TRAIT_NAMES);
+export const PROSPECT_ELITE_PITCH_TRAITS = ELITE_PITCH_TRAITS;
 export const PROSPECT_HITTER_NEGATIVE_TRAIT_POOL = [
   'Choker',
   'RBI Zero',

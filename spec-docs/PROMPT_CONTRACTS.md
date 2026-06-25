@@ -22005,3 +22005,87 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-9b ===== -->
+
+<!-- ===== CONTRACT: T-9c ===== -->
+## T-9c — engine-side max-1 Elite-pitch mutual-exclusion + shared ELITE_PITCH_TRAITS const (the wave template, part c — closes T-9)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding a group-exclusion rule to the in-season trait gain/loss reconciler + consolidating the elite-pitch trait set into one shared const. Surgical, build-dark.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** A player may hold AT MOST ONE Elite-`<pitch>` trait at any time — extend the "max 1 elite pitch" rule (already enforced in GENERATION by T-4c) to the IN-SEASON gain engine: in `reconcileGainProposals`, treat the 8 Elite-pitch traits as a single mutual-exclusion GROUP; and replace the two duplicated 8-name elite-pitch lists with ONE shared canonical `ELITE_PITCH_TRAITS` const.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md` 2026-06-25 ("the 'max 1 Elite-pitch per player' rule (T-4c) now ALSO applies to the gain/loss engine ... the elite-pitch group becomes a mutual-exclusion set in `reconcileGainProposals`"). `TRAIT_MEASUREMENT_SPEC §0.6b`. T-4c (`7956eee9`) enforced it in generation only.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read each before editing):**
+- `src/engines/traitAcquisition.ts`: `reconcileGainProposals` (`:522-594`). Structure: (1) opposite-pair-held duel `:545-551` (drop a gain whose opposite is held); (2) opposite-pair gain duel `:553-563` (between two opposite gains, drop the lower `gainScore`); (3) `const lossNames = ...` `:565`, `working = heldTraits − losses` `:566`, `survivingGains = gains.filter(!dropped).sort(gainScore desc)` `:567-569`; (4) cap loop `:574-591` (admit up to `maxTraits`, else displace weakest held if `gainScore > keepScore`). `gainScore(p) = p.probability * traitWeightFor(p.traitName)` `:540`. `dropped: Set<string>` `:532` — a name added here is filtered out of `survivingGains`. `args.heldNames: ReadonlySet<string>` (held trait names), `args.gainProposals: TraitChangeProposal[]` (each has `.traitName`, `.probability`).
+- `SkippedTrait.reason` (`:58-68`) is a CLOSED union — you must ADD the new reason member.
+- `src/data/traitTierConfig.ts`: low-level data module — imports ONLY `ivEngine` + `traitPricing` (`:1-2`); exports `assignTier`/`computeTraitWeight`/`NEGATIVE_TRAIT_FRACTION`/etc. Both `traitAcquisition.ts:13` and `prospectScoutingDraftEngine.ts:19` ALREADY import from it → adding `ELITE_PITCH_TRAITS` here is ACYCLIC (verified: traitTierConfig does NOT import either engine).
+- `src/utils/prospectScoutingDraftEngine.ts`: `PROSPECT_ELITE_PITCH_TRAIT_NAMES` (`:358-367`) + `export const PROSPECT_ELITE_PITCH_TRAITS = new Set(...)` (`:368`). Consumers: `prospectTraitsConflict` (`:707-708`), the test (`:416` `.size===8`, `:560`). grep `PROSPECT_ELITE_PITCH_TRAITS` + `PROSPECT_ELITE_PITCH_TRAIT_NAMES` for ALL usages before refactoring.
+
+**BUILD:**
+1. **Shared const (`src/data/traitTierConfig.ts`):** add `export const ELITE_PITCH_TRAITS: ReadonlySet<string> = new Set(['Elite 2F','Elite 4F','Elite CB','Elite CF','Elite CH','Elite FK','Elite SB','Elite SL']);` (the canonical 8). A test asserts `.size === 8` + every member is canonical (`CANONICAL_TRAIT_NAMES`/`TRAIT_PRICING`).
+2. **Refactor the generator (`src/utils/prospectScoutingDraftEngine.ts`):** import `ELITE_PITCH_TRAITS` from `'../data/traitTierConfig'`; make `export const PROSPECT_ELITE_PITCH_TRAITS = ELITE_PITCH_TRAITS;` (back-compat alias — SAME reference, so `prospectTraitsConflict` + the existing tests stay green). Remove the now-redundant local `PROSPECT_ELITE_PITCH_TRAIT_NAMES` ONLY if it has no OTHER consumer (grep first; if it's used elsewhere, keep it but assert it equals the shared set in a test). Do NOT change `prospectTraitsConflict`'s behavior.
+3. **Engine mutual-exclusion (`src/engines/traitAcquisition.ts`):**
+   - Import `ELITE_PITCH_TRAITS` (add to the `:13` traitTierConfig import).
+   - Add `'elite_pitch_excluded'` to the `SkippedTrait.reason` union (`:60-68`).
+   - In `reconcileGainProposals`, INSERT a group-exclusion pass **immediately AFTER `const lossNames = ...` (`:565`) and BEFORE `survivingGains` (`:567`)** (so a held elite that is being LOST this cycle frees the slot):
+     ```
+     // §0.6b / T-9c: at most ONE Elite-pitch trait per player (mirrors T-4c
+     // generation). Held elite (not being lost) DEFENDS — drop all elite-pitch
+     // gains; else among elite-pitch gains keep only the highest gainScore.
+     const heldEliteStaying = [...args.heldNames].filter(
+       (n) => ELITE_PITCH_TRAITS.has(n) && !lossNames.has(n));
+     const eliteGains = args.gainProposals.filter(
+       (p) => ELITE_PITCH_TRAITS.has(p.traitName) && !dropped.has(p.traitName));
+     const dropElite = (p) => { dropped.add(p.traitName);
+       args.skipped.push({ traitName: p.traitName, reason: 'elite_pitch_excluded' }); };
+     if (heldEliteStaying.length >= 1) {
+       eliteGains.forEach(dropElite);                 // held elite defends its slot
+     } else if (eliteGains.length >= 2) {
+       [...eliteGains]
+         .sort((a, b) => gainScore(b) - gainScore(a)  // highest gainScore wins,
+           || a.traitName.localeCompare(b.traitName)) // deterministic tiebreak
+         .slice(1).forEach(dropElite);                // drop the rest
+     }
+     ```
+   - The cap loop is UNCHANGED — `survivingGains` already filters `!dropped.has(...)`, so the excluded elites are naturally absent.
+
+**DESIGN DEFAULT (Captain/AUTH-4 — flag as OPEN-DECISION, do NOT ask):** "held elite DEFENDS" (a held Elite pitch is never displaced by a same-group GAIN) is the conservative default — it mirrors the opposite-pair-held rule (`:545-551`, unconditional, no score comparison) and can't strip a held trait. The alternative (§8B-style: a dominant new elite DISPLACES a weak held elite via `gainScore > keepScore`, like the cap loop) is a tuning question for JK. The loss-frees-slot path (a held elite being LOST this cycle lets a new one in) is handled by `!lossNames.has(n)`.
+
+**DO NOT (this ticket):** touch `traitCandidateBuilder.ts` (T-9a/b — its local `ELITE_PITCH_CODES`/`ELITE_PITCH_BY_CODE` are pitch-CODE-keyed, a different shape; leave them), `traitRealityScorer.ts`, `traitPricing.ts`, `iv_oracle.json`; change `prospectTraitsConflict` behavior; bump `TRACKER_DB_VERSION`.
+
+**TEST (`src/engines/__tests__/traitAcquisition.test.ts` + `traitTierConfig`/`prospectScoutingDraftEngine` tests as needed):**
+- **Shared const:** `ELITE_PITCH_TRAITS.size === 8`; every member canonical; `PROSPECT_ELITE_PITCH_TRAITS === ELITE_PITCH_TRAITS` (same reference) so the generator test (`prospectScoutingDraftEngine.test.ts:416/560`) stays green.
+- **Held defends:** a pitcher HOLDS 'Elite SL' and a high-P 'Elite 4F' GAIN is proposed → 'Elite 4F' is dropped (`skipped` has it with reason `'elite_pitch_excluded'`); 'Elite SL' is NOT in the reconciled gains (it's held, untouched). A NON-elite gain in the same cycle is unaffected.
+- **Gains contest (none held):** two elite GAINS ('Elite 4F' high P, 'Elite SB' lower P), no elite held, slots available → only the higher-`gainScore` ('Elite 4F') is admitted; 'Elite SB' skipped `'elite_pitch_excluded'`. Pin the winner via the real `gainScore` (probability × `computeTraitWeight`); make P's distinct enough that the weight can't flip it (or assert against the computed scores).
+- **Loss frees the slot:** a pitcher HOLDS 'Elite SL' which is in `loseProposals` (being lost) + a 'Elite 4F' GAIN → 'Elite 4F' is ADMITTED (not dropped), because the held elite is leaving.
+- **Determinism:** two elite gains with EQUAL gainScore → the alphabetically-first wins (stable).
+- **Single elite gain, none held:** admitted normally (no exclusion).
+- Verify the existing `reconcileGainProposals` tests (opposite-pair, cap, displacement) stay GREEN unchanged (the new pass only touches elite-pitch names).
+
+**MAKE-OR-BREAK:**
+- After reconcile, the player's held ∪ admitted-gain elite-pitch count is ≤ 1. Held elite defends; among competing elite gains the strongest wins; a held elite being lost frees the slot.
+- `PROSPECT_ELITE_PITCH_TRAITS` is now the shared `ELITE_PITCH_TRAITS` (one source of truth); `prospectTraitsConflict` + its tests unchanged. NO non-elite trait behavior changes (opposite-pairs / cap / displacement intact).
+- `iv_oracle.json`/`traitPricing.ts`/`traitCandidateBuilder.ts` untouched; NO DB bump.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/utils/tests/prospectScoutingDraftEngine.test.ts` → full pass (the new exclusion tests + the unchanged generation tests).
+3. `NODE_ENV= npm test` (FULL suite — `reconcileGainProposals` imports into the `franchiseTraitGrantCompute`→`processCompletedGame` chain). FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` solo-pass order-flakes — re-run any unexpected red IN ISOLATION).
+4. `git --no-pager diff --stat` → `traitTierConfig.ts` + `traitAcquisition.ts` + `prospectScoutingDraftEngine.ts` + the touched test files. `iv_oracle.json`/`traitCandidateBuilder.ts` NOT present.
+
+**FORMAT:**
+1. Files changed (exact paths) + line counts.
+2. The shared const + the engine pass described; whether `PROSPECT_ELITE_PITCH_TRAIT_NAMES` was removable; confirmation the held-defends + loss-frees-slot + gains-contest behaviors are tested.
+3. Verification output (build, focused vitest, full-suite FAILED-file summary, diff --stat).
+4. "T-9c complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- Making `ELITE_PITCH_TRAITS` in `traitTierConfig.ts` introduces a circular import (build/tsc error) → STOP, report (do NOT relocate to a new file without flagging).
+- A non-elite `reconcileGainProposals` test (opposite-pair / cap / displacement) goes red → STOP, report (the new pass must be elite-pitch-scoped only).
+- A full-suite red appears that is NOT in the characterized/flake set and does not pass in isolation → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-9c ===== -->

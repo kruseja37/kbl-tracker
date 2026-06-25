@@ -18,6 +18,16 @@ export const TRAIT_WEIGHT_BLEND = { valuePart: 0.8, scarcityPart: 0.2 } as const
 export const SCARCITY_FROM_MAX_USES = { 0: 1.0, 1: 0.55, 2: 0.30, 3: 0.15, 9: 0.0 } as const;
 export const NEGATIVE_TRAIT_FRACTION = 0.27; // §16 sim-tune placeholder
 export const ELITE_GEN_FLOOR = 0.05; // Two-Way stays possible, never excluded. §16 sim-tune placeholder
+export const ELITE_PITCH_TRAITS: ReadonlySet<string> = new Set([
+  'Elite 2F',
+  'Elite 4F',
+  'Elite CB',
+  'Elite CF',
+  'Elite CH',
+  'Elite FK',
+  'Elite SB',
+  'Elite SL',
+]);
 
 export type PositiveTraitTier = keyof typeof TRAIT_TIERS_POSITIVE;
 export type NegativeTraitTier = keyof typeof TRAIT_TIERS_NEGATIVE;

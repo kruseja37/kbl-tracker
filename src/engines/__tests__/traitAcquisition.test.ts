@@ -994,6 +994,116 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     ]);
   });
 
+  test('T-9c held Elite-pitch trait defends its slot while non-Elite gains are unaffected', () => {
+    const result = computeTraitAcquisition(
+      input({
+        playerRole: 'pitcher',
+        heldTraits: [{ traitName: 'Elite SL', strength: 0.2 }],
+        candidates: [
+          { traitName: 'Elite 4F', score: score('Elite 4F', 0.99) },
+          { traitName: 'K Collector', score: score('K Collector', 0.95) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'K Collector', valence: 'gain', probability: 0.95 },
+    ]);
+    expect(result.proposals.some((proposal) => proposal.traitName === 'Elite SL')).toBe(false);
+    expect(result.skipped).toEqual([
+      { traitName: 'Elite 4F', reason: 'elite_pitch_excluded' },
+    ]);
+  });
+
+  test('T-9c competing Elite-pitch gains keep only the highest gainScore', () => {
+    const elite4FScore = 0.99 * computeTraitWeight('Elite 4F');
+    const eliteSBScore = 0.83 * computeTraitWeight('Elite SB');
+    expect(elite4FScore).toBeGreaterThan(eliteSBScore);
+
+    const result = computeTraitAcquisition(
+      input({
+        playerRole: 'pitcher',
+        candidates: [
+          { traitName: 'Elite SB', score: score('Elite SB', 0.83) },
+          { traitName: 'Elite 4F', score: score('Elite 4F', 0.99) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Elite 4F', valence: 'gain', probability: 0.99 },
+    ]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Elite SB', reason: 'elite_pitch_excluded' },
+    ]);
+  });
+
+  test('T-9c an Elite-pitch loss frees the group slot for a new Elite-pitch gain', () => {
+    const result = computeTraitAcquisition(
+      input({
+        playerRole: 'pitcher',
+        heldTraits: [{ traitName: 'Elite SL', strength: 0.9 }],
+        candidates: [
+          { traitName: 'Elite SL', score: score('Elite SL', 0.01) },
+          { traitName: 'Elite 4F', score: score('Elite 4F', 0.99) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Elite SL', valence: 'lose' },
+      { traitName: 'Elite 4F', valence: 'gain' },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
+  test('T-9c equal-gainScore Elite-pitch gains use alphabetical deterministic tiebreak', () => {
+    const elite2FWeight = computeTraitWeight('Elite 2F');
+    const eliteCFWeight = computeTraitWeight('Elite CF');
+    const elite2FProbability = eliteCFWeight * 1.2;
+    const eliteCFProbability = elite2FWeight * 1.2;
+
+    expect(elite2FProbability).toBeGreaterThanOrEqual(assignTier('Elite 2F').gainThreshold);
+    expect(eliteCFProbability).toBeGreaterThanOrEqual(assignTier('Elite CF').gainThreshold);
+    expect(elite2FProbability * elite2FWeight).toBe(eliteCFProbability * eliteCFWeight);
+
+    const result = computeTraitAcquisition(
+      input({
+        playerRole: 'pitcher',
+        candidates: [
+          { traitName: 'Elite CF', score: score('Elite CF', eliteCFProbability) },
+          { traitName: 'Elite 2F', score: score('Elite 2F', elite2FProbability) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Elite 2F', valence: 'gain', probability: elite2FProbability },
+    ]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Elite CF', reason: 'elite_pitch_excluded' },
+    ]);
+  });
+
+  test('T-9c a single Elite-pitch gain with no held Elite-pitch trait is admitted normally', () => {
+    const result = computeTraitAcquisition(
+      input({
+        playerRole: 'pitcher',
+        candidates: [{ traitName: 'Elite 4F', score: score('Elite 4F', 0.99) }],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Elite 4F', valence: 'gain', probability: 0.99 },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
   test('at the two-trait cap, a stronger gain displaces the weakest held trait', () => {
     expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
     expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);

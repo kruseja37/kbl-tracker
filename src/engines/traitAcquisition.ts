@@ -10,7 +10,7 @@ import {
   type CanonicalPersonality,
 } from './masterMoraleMatrix';
 import type { HiddenModifiers } from '../types/game';
-import { assignTier, computeTraitWeight, type TraitTier } from '../data/traitTierConfig';
+import { assignTier, computeTraitWeight, ELITE_PITCH_TRAITS, type TraitTier } from '../data/traitTierConfig';
 
 /**
  * §9 / L9b-2 — PURE trait acquisition proposals (TS-1 / TS-5 / TS-12).
@@ -64,6 +64,7 @@ export interface SkippedTrait {
     | 'thin_peer_pool'
     | 'dead_band'
     | 'offsetting_pair_held'
+    | 'elite_pitch_excluded'
     | 'cap_no_displacement'
     | 'likelihood_not_fired';
 }
@@ -563,6 +564,29 @@ function reconcileGainProposals(args: {
   }
 
   const lossNames = new Set(args.loseProposals.map((proposal) => proposal.traitName));
+  // §0.6b / T-9c: at most ONE Elite-pitch trait per player (mirrors T-4c
+  // generation). Held elite (not being lost) DEFENDS; otherwise the strongest
+  // same-cycle elite gain wins.
+  const heldEliteStaying = [...args.heldNames].filter(
+    (name) => ELITE_PITCH_TRAITS.has(name) && !lossNames.has(name),
+  );
+  const eliteGains = args.gainProposals.filter(
+    (proposal) => ELITE_PITCH_TRAITS.has(proposal.traitName) && !dropped.has(proposal.traitName),
+  );
+  const dropElite = (proposal: TraitChangeProposal): void => {
+    dropped.add(proposal.traitName);
+    args.skipped.push({ traitName: proposal.traitName, reason: 'elite_pitch_excluded' });
+  };
+
+  if (heldEliteStaying.length >= 1) {
+    eliteGains.forEach(dropElite);
+  } else if (eliteGains.length >= 2) {
+    [...eliteGains]
+      .sort((a, b) => gainScore(b) - gainScore(a) || a.traitName.localeCompare(b.traitName))
+      .slice(1)
+      .forEach(dropElite);
+  }
+
   const working = args.heldTraits.filter((held) => !lossNames.has(held.traitName));
   const survivingGains = args.gainProposals
     .filter((proposal) => !dropped.has(proposal.traitName))

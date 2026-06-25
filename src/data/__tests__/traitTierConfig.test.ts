@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { TRAIT_PRICING } from '../traitPricing';
 import {
+  ELITE_PITCH_TRAITS,
   IN_SCOPE_TRAIT_NAMES,
   TRAIT_ADAPTIVE_EXCLUDED,
   TRAIT_MAX_USES,
@@ -46,6 +47,25 @@ describe('traitTierConfig T-1 derived trait value/scarcity foundation', () => {
     }
 
     expect(new Set(Object.keys(TRAIT_MAX_USES))).toEqual(canonicalNames);
+  });
+
+  test('T-9c shared Elite-pitch trait set is canonical', () => {
+    const canonicalNames = new Set(TRAIT_PRICING.map((entry) => entry.name));
+
+    expect([...ELITE_PITCH_TRAITS]).toEqual([
+      'Elite 2F',
+      'Elite 4F',
+      'Elite CB',
+      'Elite CF',
+      'Elite CH',
+      'Elite FK',
+      'Elite SB',
+      'Elite SL',
+    ]);
+    expect(ELITE_PITCH_TRAITS.size).toBe(8);
+    for (const trait of ELITE_PITCH_TRAITS) {
+      expect(canonicalNames.has(trait), trait).toBe(true);
+    }
   });
 
   test('assigns representative positive and negative tiers from value/scarcity derivation', () => {

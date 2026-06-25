@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 import { TRAIT_PRICING } from '../../data/traitPricing';
-import { assignTier } from '../../data/traitTierConfig';
+import { assignTier, ELITE_PITCH_TRAITS } from '../../data/traitTierConfig';
 import { TRAIT_OPPOSITES } from '../../engines/traitAcquisition';
 import { isTraitEligibleForRole } from '../../engines/traitRealityScorer';
 import { countTraitPolarity, normalizeTrait, scoreSmb4Player } from '../../engines/smb4GradeEmulator';
@@ -413,6 +413,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
   test('T-4c Elite-pitch traits are exactly the pitcher-pool mutual-exclusion group', () => {
     const pitcherPool = new Set(PROSPECT_PITCHER_TRAIT_POOL);
 
+    expect(PROSPECT_ELITE_PITCH_TRAITS).toBe(ELITE_PITCH_TRAITS);
     expect(PROSPECT_ELITE_PITCH_TRAITS.size).toBe(8);
     for (const trait of PROSPECT_ELITE_PITCH_TRAITS) {
       expect(pitcherPool.has(trait)).toBe(true);
