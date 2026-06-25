@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { activeTraitNames } from '../effectiveRatings';
 import {
   BUILDABLE_TRAITS,
+  FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT,
   HITTER_PITCH_OUTCOME_WEIGHTS,
   PITCHER_PITCH_OUTCOME_WEIGHTS,
   PITCH_OUTCOME_CLASSES,
@@ -15,13 +16,14 @@ import {
   type SeasonTraitCandidateInput,
   type SeasonTraitPlayer,
 } from '../traitCandidateBuilder';
-import { CANONICAL_TRAIT_NAMES } from '../traitRealityScorer';
+import { CANONICAL_TRAIT_NAMES, type TraitRealityScore } from '../traitRealityScorer';
 import { computeTraitAcquisition } from '../traitAcquisition';
 import { calculateWOBA } from '../bwarCalculator';
 import type { Smb4Grade } from '../smb4GradeEmulator';
 import type { EffectiveRatingsPlayer, GameContext } from '../effectiveRatings';
 import type { AtBatEvent, BetweenPlayEvent, ErrorAttribution, FieldingEvent, RunnerState } from '../../utils/eventLog';
 import type { AtBatResult } from '../../types/game';
+import { computeTraitWeight } from '../../data/traitTierConfig';
 
 const noRunners: RunnerState = { first: null, second: null, third: null };
 
@@ -208,6 +210,17 @@ function candidate(map: Map<string, SeasonTraitCandidate[]>, playerId: string, t
 
 function players(ids: string[], role: SeasonTraitPlayer['role']): SeasonTraitPlayer[] {
   return ids.map((playerId) => ({ playerId, role }));
+}
+
+function acquisitionScore(traitName: string, realityPercentile: number): TraitRealityScore {
+  return {
+    traitName,
+    realityPercentile,
+    sufficient: true,
+    sufficiency: 'sufficient',
+    scaledMinSample: 10,
+    peerPoolSize: 10,
+  };
 }
 
 function repeat(count: number, fn: (index: number) => AtBatEvent): AtBatEvent[] {
@@ -625,16 +638,116 @@ describe('direct-source signals', () => {
     expect(candidate(result, 'b1', 'Bad Jumps')?.signalValue).toBeCloseTo(1 / 3, 10);
   });
 
-  it('computes Butter Fingers as error or failed-fielding rate', () => {
-    const result = computeSeasonTraitCandidates(baseInput({
-      players: players(['b1'], 'position'),
+  it('computes Butter Fingers from missed gems plus fielding errors over the shared hands denominator', () => {
+    const raw = buildRawSignals(baseInput({
       fieldingEvents: [
-        fielding({ playerId: 'b1', playType: 'error', success: false }),
-        fielding({ playerId: 'b1', playType: 'putout', success: false }),
-        fielding({ playerId: 'b1', playType: 'putout', success: true }),
+        fielding({ playerId: 'b1', specialPlayType: 'Diving', success: true }),
+        fielding({ playerId: 'b1', specialPlayType: 'Missed Dive', success: false }),
+        fielding({ playerId: 'b1', specialPlayType: 'Failed Robbery', success: false }),
+        fielding({ playerId: 'b1', specialPlayType: 'Routine', success: true }),
+      ],
+      atBatEvents: [
+        runnerError('fielding', ['b1']),
       ],
     }));
-    expect(candidate(result, 'b1', 'Butter Fingers')?.signalValue).toBeCloseTo(2 / 3, 10);
+
+    const butter = raw.get('b1')?.get('Butter Fingers');
+    expect(butter?.signalValue).toBeCloseTo((1 + FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT + 1) / 4, 10);
+    expect(butter?.sampleSize).toBe(4);
+  });
+
+  it('emits near-zero Butter Fingers for made-gem fielders and high Butter Fingers for flubbers', () => {
+    const raw = buildRawSignals(baseInput({
+      fieldingEvents: [
+        ...webGemChances('gem-machine', 5, 5),
+        ...webGemChances('flubber', 1, 5),
+      ],
+    }));
+
+    expect(raw.get('gem-machine')?.get('Butter Fingers')).toEqual({ signalValue: 0, sampleSize: 5 });
+    expect(raw.get('flubber')?.get('Butter Fingers')).toEqual({ signalValue: 4 / 5, sampleSize: 5 });
+  });
+
+  it('dedups a missed gem and fielding error on the same at-bat, with missed gem winning', () => {
+    const raw = buildRawSignals(baseInput({
+      fieldingEvents: [
+        fielding({
+          playerId: 'fielder',
+          atBatEventId: 'ab-dedup',
+          specialPlayType: 'Missed Dive',
+          success: false,
+        }),
+      ],
+      atBatEvents: [
+        atBat({
+          eventId: 'ab-dedup',
+          runnerOutcomes: [
+            {
+              runnerId: 'r1',
+              runnerName: 'Runner 1',
+              fromBase: 'first',
+              toBase: 'second',
+              errorAttributions: [{ type: 'fielding', fielderIds: ['fielder'] }],
+            },
+          ],
+        }),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Butter Fingers')).toEqual({ signalValue: 1, sampleSize: 1 });
+  });
+
+  it('counts between-play fielding errors without an at-bat join as standalone hands errors', () => {
+    const raw = buildRawSignals(baseInput({
+      fieldingEvents: [
+        fielding({
+          playerId: 'fielder',
+          atBatEventId: 'ab-miss',
+          specialPlayType: 'Missed Dive',
+          success: false,
+        }),
+      ],
+      betweenPlayEvents: [
+        errorAdvance([{ type: 'fielding', fielderIds: ['fielder'] }]),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Butter Fingers')).toEqual({ signalValue: 1, sampleSize: 2 });
+  });
+
+  it('ignores throwing and mental errors for Butter Fingers', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        runnerError('throwing', ['fielder']),
+        runnerError('mental', ['fielder']),
+        runnerError('fielding', ['fielder']),
+      ],
+      betweenPlayEvents: [
+        errorAdvance([{ type: 'throwing', fielderIds: ['fielder'] }]),
+        errorAdvance([{ type: 'mental', fielderIds: ['fielder'] }]),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Butter Fingers')).toEqual({ signalValue: 1, sampleSize: 1 });
+  });
+
+  it('weights failed robberies lighter while keeping them in the shared denominator', () => {
+    const raw = buildRawSignals(baseInput({
+      fielderRatingsByPlayer: new Map([['fielder', { fielding: 60, arm: 90 }]]),
+      fieldingEvents: [
+        fielding({ playerId: 'fielder', specialPlayType: 'Diving', success: true }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Robbed HR', success: true }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Failed Robbery', success: false }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Failed Robbery', success: false }),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Magic Hands')).toEqual({ signalValue: 2 / 4, sampleSize: 4 });
+    expect(raw.get('fielder')?.get('Dive Wizard')).toEqual({ signalValue: 2 / 4, sampleSize: 4 });
+    expect(raw.get('fielder')?.get('Butter Fingers')).toEqual({
+      signalValue: (2 * FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT) / 4,
+      sampleSize: 4,
+    });
   });
 
   it('computes Cannon Arm from OF-arm activity per game while emitting zero-rate error traits without attributions', () => {
@@ -3271,8 +3384,8 @@ function webGemChances(playerId: string, webGems: number, chances: number): Fiel
   return Array.from({ length: chances }, (_, index) => fielding({
     playerId,
     playerName: playerId,
-    specialPlayType: index < webGems ? gemTypes[index % gemTypes.length] : 'Routine',
-    success: true,
+    specialPlayType: index < webGems ? gemTypes[index % gemTypes.length] : 'Missed Dive',
+    success: index < webGems,
   }));
 }
 
@@ -3302,6 +3415,24 @@ describe('traitCandidateBuilder DT-C2 web-gem fielding signals', () => {
     expect(magic?.sampleSize).toBe(10);
     expect(magic?.score.sufficient).toBe(true);
     expect(candidate(result, 'fielder', 'Dive Wizard')).toBeUndefined();
+  });
+
+  it('narrows the Magic Hands denominator to made gems, missed gems, and fielding errors', () => {
+    const raw = buildRawSignals(baseInput({
+      fielderRatingsByPlayer: new Map([['fielder', { fielding: 60, arm: 90 }]]),
+      fieldingEvents: [
+        ...webGemChances('fielder', 3, 5),
+        ...Array.from({ length: 10 }, () => fielding({
+          playerId: 'fielder',
+          playerName: 'fielder',
+          specialPlayType: 'Routine',
+          success: true,
+        })),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Magic Hands')).toEqual({ signalValue: 3 / 5, sampleSize: 5 });
+    expect(raw.get('fielder')?.get('Dive Wizard')).toEqual({ signalValue: 3 / 5, sampleSize: 5 });
   });
 
   it('applies strict rating gates at signal emission and allows Magic Hands plus Dive Wizard to co-hold', () => {
@@ -3429,12 +3560,12 @@ describe('traitCandidateBuilder DT-C2 web-gem fielding signals', () => {
     expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
   });
 
-  it('counts made Diving/Leaping/Sliding/Robbed HR plays and skips failed or undone fielding events', () => {
+  it('counts made Diving/Leaping/Sliding/Robbed HR plays and missed spectacular attempts while skipping undone events', () => {
     const raw = buildRawSignals(baseInput({
       fielderRatingsByPlayer: new Map([['fielder', { fielding: 60, arm: 90 }]]),
       fieldingEvents: [
         fielding({ playerId: 'fielder', specialPlayType: 'Diving', success: true }),
-        fielding({ playerId: 'fielder', specialPlayType: 'Leaping', success: false }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Missed Leap', success: false }),
         fielding({ playerId: 'fielder', specialPlayType: 'Robbed HR', success: true }),
         fielding({ playerId: 'fielder', specialPlayType: 'Sliding', success: true, undoneAt: 1 } as Partial<FieldingEvent>),
       ],
@@ -3442,6 +3573,53 @@ describe('traitCandidateBuilder DT-C2 web-gem fielding signals', () => {
 
     expect(raw.get('fielder')?.get('Magic Hands')).toEqual({ signalValue: 2 / 3, sampleSize: 3 });
     expect(raw.get('fielder')?.get('Dive Wizard')).toEqual({ signalValue: 2 / 3, sampleSize: 3 });
+  });
+
+  it('feeds Magic Hands and Butter Fingers into the existing opposite-pair duel so only one gain survives', () => {
+    expect(computeTraitWeight('Magic Hands')).toBeGreaterThan(0);
+    expect(computeTraitWeight('Butter Fingers')).toBeGreaterThan(0);
+    expect(1 * computeTraitWeight('Magic Hands')).toBeGreaterThan(0.9 * computeTraitWeight('Butter Fingers'));
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'Relaxed',
+      heldTraits: [],
+      candidates: [
+        { traitName: 'Magic Hands', score: acquisitionScore('Magic Hands', 1) },
+        { traitName: 'Butter Fingers', score: acquisitionScore('Butter Fingers', 0.9) },
+      ],
+    });
+
+    expect(acquisition.proposals).toMatchObject([
+      { traitName: 'Magic Hands', valence: 'gain' },
+    ]);
+    expect(acquisition.skipped).toEqual([
+      { traitName: 'Butter Fingers', reason: 'offsetting_pair_held' },
+    ]);
+  });
+
+  it('blocks either hands trait when the opposite trait is already held', () => {
+    const butterBlocked = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'Relaxed',
+      heldTraits: [{ traitName: 'Magic Hands', strength: 0.8 }],
+      candidates: [{ traitName: 'Butter Fingers', score: acquisitionScore('Butter Fingers', 1) }],
+    });
+    const magicBlocked = computeTraitAcquisition({
+      playerRole: 'position',
+      personality: 'Relaxed',
+      heldTraits: [{ traitName: 'Butter Fingers', strength: 0.8 }],
+      candidates: [{ traitName: 'Magic Hands', score: acquisitionScore('Magic Hands', 1) }],
+    });
+
+    expect(butterBlocked.proposals).toEqual([]);
+    expect(butterBlocked.skipped).toEqual([
+      { traitName: 'Butter Fingers', reason: 'offsetting_pair_held' },
+    ]);
+    expect(magicBlocked.proposals).toEqual([]);
+    expect(magicBlocked.skipped).toEqual([
+      { traitName: 'Magic Hands', reason: 'offsetting_pair_held' },
+    ]);
   });
 });
 

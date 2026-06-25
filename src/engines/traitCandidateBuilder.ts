@@ -33,7 +33,7 @@ import type {
   FieldingEvent,
   RunnerState,
 } from '../utils/eventLog';
-import type { AtBatResult } from '../types/game';
+import type { AtBatResult, SpecialPlayType } from '../types/game';
 import { isOut } from '../types/game';
 import { getPercentile } from './percentile';
 import { calculateWOBA } from './bwarCalculator';
@@ -143,8 +143,9 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Magic Hands',
   'Dive Wizard',
   // DT-D (TRAIT_MEASUREMENT_SPEC §0.6b row D): error-attribution earn-signals
-  // from playerId-keyed errorAttributions (NOT enrichment.errors): throwing +
-  // fielding errors → Wild Thrower; mental errors → Noodle Arm.
+  // from playerId-keyed errorAttributions (NOT enrichment.errors): throwing
+  // errors → Wild Thrower; fielding errors → Butter Fingers; mental errors →
+  // Noodle Arm.
   'Wild Thrower',
   'Noodle Arm',
   // DT-E (TRAIT_MEASUREMENT_SPEC §0.6b row E): mojo-change-rate earn-signals.
@@ -347,7 +348,18 @@ const HIT_RESULTS: ReadonlySet<AtBatResult> = new Set([
 
 // §0.6b row C web-gem set; Robbed HR INCLUDED per JK 2026-06-25.
 // Over Shoulder / Wall Catch remain excluded for v1.
-const WEB_GEM_PLAY_TYPES: ReadonlySet<string> = new Set(['Diving', 'Leaping', 'Sliding', 'Robbed HR']);
+const WEB_GEM_PLAY_TYPES: ReadonlySet<SpecialPlayType> = new Set(['Diving', 'Leaping', 'Sliding', 'Robbed HR']);
+
+// BF-MH / JK 2026-06-26: missed spectacular attempts share the hands denominator.
+const MISSED_GEM_PLAY_TYPES: ReadonlySet<SpecialPlayType> = new Set([
+  'Missed Dive',
+  'Missed Leap',
+  'Failed Robbery',
+]);
+
+// §16 sim-tune default / JK 2026-06-26: a failed robbery dings the fielder less
+// than a routine missed dive because most of the blame belongs to the pitcher.
+export const FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT = 0.5;
 
 const ELITE_PITCH_CODES = ['4F', '2F', 'CF', 'CB', 'CH', 'FK', 'SB', 'SL'] as const;
 type ElitePitchCode = (typeof ELITE_PITCH_CODES)[number];
@@ -944,37 +956,115 @@ function addChaseSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
   }
 }
 
-function addWebGemSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
-  interface WebGemBucket { webGems: number; chances: number; }
+interface FieldingHandsBucket {
+  madeGems: number;
+  missedGems: number;
+  failedRobberies: number;
+  fieldingErrors: number;
+}
 
-  const chancesByFielder = new Map<string, WebGemBucket>();
+function fieldingHandsDedupKey(atBatEventId: string, playerId: string): string {
+  return `${atBatEventId}|${playerId}`;
+}
+
+function buildFieldingHandsBuckets(input: SeasonTraitCandidateInput): Map<string, FieldingHandsBucket> {
+  const bucketByFielder = new Map<string, FieldingHandsBucket>();
+  const missedGemKeys = new Set<string>();
+  const activeAtBatIds = new Set(
+    sortAtBats(input.atBatEvents)
+      .filter((event) => !undoneAt(event))
+      .map((event) => event.eventId),
+  );
+
+  const bucketFor = (playerId: string): FieldingHandsBucket => {
+    const bucket = bucketByFielder.get(playerId) ?? {
+      madeGems: 0,
+      missedGems: 0,
+      failedRobberies: 0,
+      fieldingErrors: 0,
+    };
+    bucketByFielder.set(playerId, bucket);
+    return bucket;
+  };
 
   for (const event of input.fieldingEvents.filter((item) => !fieldingUndoneAt(item))) {
-    const bucket = chancesByFielder.get(event.playerId) ?? { webGems: 0, chances: 0 };
-    bucket.chances += 1;
-    if (event.success && event.specialPlayType && WEB_GEM_PLAY_TYPES.has(event.specialPlayType)) {
-      bucket.webGems += 1;
+    const specialPlayType = event.specialPlayType ?? undefined;
+    const bucket = bucketFor(event.playerId);
+
+    if (event.success && specialPlayType && WEB_GEM_PLAY_TYPES.has(specialPlayType)) {
+      bucket.madeGems += 1;
     }
-    chancesByFielder.set(event.playerId, bucket);
+
+    if (specialPlayType && MISSED_GEM_PLAY_TYPES.has(specialPlayType)) {
+      bucket.missedGems += 1;
+      if (specialPlayType === 'Failed Robbery') {
+        bucket.failedRobberies += 1;
+      }
+      if (event.atBatEventId) {
+        missedGemKeys.add(fieldingHandsDedupKey(event.atBatEventId, event.playerId));
+      }
+    }
   }
 
-  for (const playerId of [...chancesByFielder.keys()].sort()) {
-    const bucket = chancesByFielder.get(playerId);
-    if (!bucket || bucket.chances <= 0) continue;
+  const countFieldingError = (attribution: ErrorAttribution, atBatEventId?: string): void => {
+    if (attribution.type !== 'fielding') return;
+    for (const playerId of attribution.fielderIds ?? []) {
+      if (atBatEventId && missedGemKeys.has(fieldingHandsDedupKey(atBatEventId, playerId))) {
+        continue;
+      }
+      bucketFor(playerId).fieldingErrors += 1;
+    }
+  };
 
-    const ratings = input.fielderRatingsByPlayer?.get(playerId);
-    if (!ratings) continue;
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    for (const runnerOutcome of atBat.runnerOutcomes ?? []) {
+      for (const attribution of runnerOutcome.errorAttributions ?? []) {
+        countFieldingError(attribution, atBat.eventId);
+      }
+    }
+  }
 
-    const signal = {
-      signalValue: bucket.webGems / bucket.chances,
-      sampleSize: bucket.chances,
+  for (const event of sortBetweenPlayEvents(input.betweenPlayEvents).filter((item) => !undoneAt(item))) {
+    const linkedAtBatEventId = event.linkedEventId && activeAtBatIds.has(event.linkedEventId)
+      ? event.linkedEventId
+      : undefined;
+    for (const attribution of event.errorAttributions ?? []) {
+      countFieldingError(attribution, linkedAtBatEventId);
+    }
+  }
+
+  return bucketByFielder;
+}
+
+function addFieldingHandsSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const bucketByFielder = buildFieldingHandsBuckets(input);
+
+  for (const playerId of [...bucketByFielder.keys()].sort()) {
+    const bucket = bucketByFielder.get(playerId);
+    if (!bucket) continue;
+    const denominator = bucket.madeGems + bucket.missedGems + bucket.fieldingErrors;
+    if (denominator <= 0) continue;
+
+    const gemSignal = {
+      signalValue: bucket.madeGems / denominator,
+      sampleSize: denominator,
     };
-    if (ratings.fielding < 80) {
-      addRawSignal(raw, playerId, 'Magic Hands', signal);
+    const ratings = input.fielderRatingsByPlayer?.get(playerId);
+    if (ratings?.fielding !== undefined && ratings.fielding < 80) {
+      addRawSignal(raw, playerId, 'Magic Hands', gemSignal);
     }
-    if (ratings.arm > 80) {
-      addRawSignal(raw, playerId, 'Dive Wizard', signal);
+    if (ratings?.arm !== undefined && ratings.arm > 80) {
+      addRawSignal(raw, playerId, 'Dive Wizard', gemSignal);
     }
+
+    const weightedMisses =
+      bucket.missedGems
+      - bucket.failedRobberies
+      + bucket.failedRobberies * FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT;
+    addRawSignal(raw, playerId, 'Butter Fingers', {
+      signalValue: (weightedMisses + bucket.fieldingErrors) / denominator,
+      sampleSize: denominator,
+    });
   }
 }
 
@@ -1340,23 +1430,6 @@ function addStealSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
     const pitcherSuccessRate = acc.successes / acc.sampleSize;
     addRawSignal(raw, pitcherId, 'Easy Jumps', { signalValue: pitcherSuccessRate, sampleSize: acc.sampleSize });
     addRawSignal(raw, pitcherId, 'Pick Officer', { signalValue: 1 - pitcherSuccessRate, sampleSize: acc.sampleSize });
-  }
-}
-
-function addButterFingersSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
-  const chances = new Map<string, Accumulator>();
-  for (const event of input.fieldingEvents.filter((item) => !fieldingUndoneAt(item))) {
-    const acc = chances.get(event.playerId) ?? { successes: 0, sampleSize: 0 };
-    acc.sampleSize += 1;
-    if (event.playType === 'error' || event.success === false) acc.successes += 1;
-    chances.set(event.playerId, acc);
-  }
-  for (const [playerId, acc] of chances) {
-    if (acc.sampleSize <= 0) continue;
-    addRawSignal(raw, playerId, 'Butter Fingers', {
-      signalValue: acc.successes / acc.sampleSize,
-      sampleSize: acc.sampleSize,
-    });
   }
 }
 
@@ -1952,7 +2025,7 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addBaseRounderSignals(input, raw);
   addBaseJoggerSignals(input, raw);
   addStealSignals(input, raw);
-  addButterFingersSignals(input, raw);
+  addFieldingHandsSignals(input, raw);
   addErrorSignals(input, raw);
   addArmSignals(input, raw);
   // R1-b2 — Bunter (SAC volume per PA), Crossed Up (passed balls per batters-faced),
@@ -1978,8 +2051,6 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addPitchLocationSignals(input, raw);
   // DT-C1 — Bad Ball Hitter chase hit-rate (TRAIT_MEASUREMENT_SPEC §0.6b row C).
   addChaseSignals(input, raw);
-  // DT-C2 — web-gem rate with rating-gated cohort filters (TRAIT_MEASUREMENT_SPEC §0.6b row C).
-  addWebGemSignals(input, raw);
   // DT-E — mojo-change rate and inverse rate (TRAIT_MEASUREMENT_SPEC §0.6b row E).
   addMojoSignals(input, raw);
   return raw;
