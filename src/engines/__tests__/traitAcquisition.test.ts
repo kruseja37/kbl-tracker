@@ -1002,6 +1002,27 @@ describe('traitAcquisition DT-F1 Wild Thing negative image valence', () => {
   });
 });
 
+describe('traitAcquisition DT-F2 Workhorse positive image valence', () => {
+  test('Workhorse is positive with no personality image driver', () => {
+    const ambitious = proposalFor('Workhorse', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const fragile = proposalFor('Workhorse', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+    const competitive = proposalFor('Workhorse', { playerRole: 'pitcher', personality: 'Competitive' });
+    const egotistical = proposalFor('Workhorse', { playerRole: 'pitcher', personality: 'Egotistical' });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(fragile.factors.resilienceTilt).toBe(1);
+    expect(competitive.factors.imageAxisTilt).toBe(1);
+    expect(egotistical.factors.imageAxisTilt).toBe(1);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');

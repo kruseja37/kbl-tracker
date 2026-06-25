@@ -209,6 +209,9 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   // Ball Hitter stands alone; Easy Target↔Mind Gamer are a separate
   // discipline-axis pair, out of scope).
   'Bad Ball Hitter',
+  // DT-F2 / §0.6b row F: Workhorse is ELITE IP/game and positive. No
+  // IMAGE_DRIVER_SETS entry — neutral/universal positive tilt only.
+  'Workhorse',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([

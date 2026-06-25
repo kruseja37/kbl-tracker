@@ -156,6 +156,9 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // opportunity set; Wild Thing counts wild_pitch + WP_K over pitcher BF.
   'Base Jogger',
   'Wild Thing',
+  // DT-F2 (TRAIT_MEASUREMENT_SPEC §0.6b row F): Workhorse is pitcher-only,
+  // ELITE IP/game, compared inside SP/RP cohorts via poolTraitKey.
+  'Workhorse',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -190,6 +193,13 @@ export interface SeasonTraitCandidateInput {
   betweenPlayEvents: readonly BetweenPlayEvent[];
   fieldingEvents: readonly FieldingEvent[];
   seasonFieldingByPlayer: ReadonlyMap<string, { outfieldAssists?: number; baserunnersHeld?: number; games?: number }>;
+  /**
+   * DT-F2 (Workhorse) — OPTIONAL season pitching totals keyed by playerId.
+   * Workhorse emits IP/game = (outsRecorded / 3) / games for pitcher-role players
+   * with games > 0. The same row also supplies gamesStarted for the local SP/RP
+   * peer-pool split: any gamesStarted > 0 => SP cohort, otherwise RP cohort.
+   */
+  seasonPitchingByPlayer?: ReadonlyMap<string, { outsRecorded: number; games: number; gamesStarted: number }>;
   injuryCountsByPlayer: ReadonlyMap<string, number>;
   gamesByPlayer: ReadonlyMap<string, number>;
   /**
@@ -1767,12 +1777,18 @@ function twoWayVariantForPitcher(playerId: string): TwoWayVariant {
 }
 
 /**
- * PRE-ACT-TRAITS-1: canonicalize any of the 3 Two Way variants to a single 'Two Way'
- * family key so all two-way pitchers share ONE peer pool (wOBA percentiled vs ALL
- * two-way pitchers regardless of assigned variant). Every other trait keys on itself.
+ * PRE-ACT-TRAITS-1 / DT-F2: trait-specific peer-pool folding. Two Way canonicalizes
+ * the C/IF/OF variants to one 'Two Way' family. Workhorse folds to local SP/RP
+ * cohorts by gamesStarted (>0 => SP, otherwise RP). Every other trait keys on
+ * itself.
  */
-function poolTraitKey(traitName: string): string {
-  return (TWO_WAY_VARIANTS as readonly string[]).includes(traitName) ? 'Two Way' : traitName;
+function poolTraitKey(traitName: string, playerId: string, input: SeasonTraitCandidateInput): string {
+  if ((TWO_WAY_VARIANTS as readonly string[]).includes(traitName)) return 'Two Way';
+  if (traitName === 'Workhorse') {
+    const starts = input.seasonPitchingByPlayer?.get(playerId)?.gamesStarted ?? 0;
+    return starts > 0 ? 'Workhorse|SP' : 'Workhorse|RP';
+  }
+  return traitName;
 }
 
 function addTwoWaySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
@@ -1860,6 +1876,21 @@ function addTwoWaySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): 
   }
 }
 
+function addWorkhorseSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const seasonPitching = input.seasonPitchingByPlayer;
+  if (!seasonPitching || seasonPitching.size === 0) return;
+
+  for (const player of input.players) {
+    if (player.role !== 'pitcher') continue;
+    const row = seasonPitching.get(player.playerId);
+    if (!row || row.games <= 0) continue;
+    addRawSignal(raw, player.playerId, 'Workhorse', {
+      signalValue: (row.outsRecorded / 3) / row.games,
+      sampleSize: row.games,
+    });
+  }
+}
+
 function addDurabilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const playerIds = new Set<string>([
     ...input.gamesByPlayer.keys(),
@@ -1895,6 +1926,7 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addBunterSignals(input, raw);
   addCrossedUpSignals(input, raw);
   addWildThingSignals(input, raw);
+  addWorkhorseSignals(input, raw);
   addUtilitySignals(input, raw);
   // R2 — First-Pitch pair (count-family is folded into addOutcomeRateSignals) +
   // the 6 handedness splits (DORMANT until the handedness maps are threaded in).
@@ -1922,16 +1954,16 @@ function roleKey(role: PlayerRole, traitName: string): string {
   return `${role}|${traitName}`;
 }
 
-function buildPeerPools(players: readonly SeasonTraitPlayer[], raw: RawSignalMap): Map<string, number[]> {
+function buildPeerPools(input: SeasonTraitCandidateInput, raw: RawSignalMap): Map<string, number[]> {
   const pools = new Map<string, number[]>();
-  for (const player of [...players].sort((a, b) => a.playerId.localeCompare(b.playerId))) {
+  for (const player of [...input.players].sort((a, b) => a.playerId.localeCompare(b.playerId))) {
     const byTrait = raw.get(player.playerId);
     if (!byTrait) continue;
     for (const traitName of BUILDABLE_TRAITS) {
       if (!isTraitEligibleForRole(traitName, player.role)) continue;
       const signal = byTrait.get(traitName);
       if (!signal || signal.sampleSize <= 0) continue;
-      const key = roleKey(player.role, poolTraitKey(traitName));
+      const key = roleKey(player.role, poolTraitKey(traitName, player.playerId, input));
       pools.set(key, pools.get(key) ?? []);
       pools.get(key)?.push(signal.signalValue);
     }
@@ -1949,7 +1981,7 @@ export function computeSeasonTraitCandidates(
   config: AdaptiveStandardsConfig = DEFAULT_ADAPTIVE_STANDARDS_CONFIG,
 ): Map<string, SeasonTraitCandidate[]> {
   const raw = buildRawSignals(input);
-  const peerPools = buildPeerPools(input.players, raw);
+  const peerPools = buildPeerPools(input, raw);
   const results = new Map<string, SeasonTraitCandidate[]>();
   const sortedPlayers = [...input.players].sort((a, b) => a.playerId.localeCompare(b.playerId));
 
@@ -1966,7 +1998,7 @@ export function computeSeasonTraitCandidates(
           playerRole: player.role,
           signalValue: signal.signalValue,
           sampleSize: signal.sampleSize,
-          peerValues: peerPools.get(roleKey(player.role, poolTraitKey(traitName))) ?? [],
+          peerValues: peerPools.get(roleKey(player.role, poolTraitKey(traitName, player.playerId, input))) ?? [],
           basis: 'none',
         }, config);
         // Emit the L9b-2 seam shape ({ traitName, score }) + raw debug fields.

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getSeasonInjuryCountsByPlayer: vi.fn(),
   getAllFieldingStats: vi.fn(),
   getSeasonBattingStats: vi.fn(),
+  getSeasonPitchingStats: vi.fn(),
   syncEngine: {
     isSuppressed: vi.fn(() => false),
     upsert: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('../seasonStorage', () => ({
   getSeasonMetadata: mocks.getSeasonMetadata,
   getAllFieldingStats: mocks.getAllFieldingStats,
   getSeasonBattingStats: mocks.getSeasonBattingStats,
+  getSeasonPitchingStats: mocks.getSeasonPitchingStats,
 }));
 
 vi.mock('../eventLog', async () => {
@@ -235,6 +237,9 @@ function seedCheckpointReads(gameNumber = 20, metadataOverrides: Record<string, 
   mocks.getSeasonBattingStats.mockResolvedValue([
     { playerId: 'player-alpha', games: 12 },
   ]);
+  mocks.getSeasonPitchingStats.mockResolvedValue([
+    { playerId: 'player-alpha', games: 9, gamesStarted: 3, outsRecorded: 54 },
+  ]);
 }
 
 function stubTraitPipeline(): void {
@@ -421,6 +426,9 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
   test('threads roster handedness, position, and pitcher grade into computeSeasonTraitCandidates maps', async () => {
     setFranchisePhase2TraitsEnabledForTests(true);
     seedCheckpointReads();
+    mocks.getSeasonPitchingStats.mockResolvedValue([
+      { playerId: 'player-pitcher', games: 9, gamesStarted: 3, outsRecorded: 54 },
+    ]);
 
     const pitcherGrade = SMB4_FULL_GRADE_SCALE[3]; // 'A-' — a valid Smb4Grade
     vi.spyOn(traitGrantSeam, 'resolveTraitGrantRoster').mockResolvedValue([
@@ -500,5 +508,14 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(input.pitcherGradeByPlayer?.has('player-batter')).toBe(false);
     expect(input.pitcherGradeByPlayer?.get('player-pitcher')).toBe(pitcherGrade);
     expect(input.pitcherGradeByPlayer?.size).toBe(1);
+
+    // seasonPitchingByPlayer carries the Workhorse input rows from season pitching stats.
+    expect(input.seasonPitchingByPlayer).toBeInstanceOf(Map);
+    expect(input.seasonPitchingByPlayer?.get('player-pitcher')).toEqual({
+      outsRecorded: 54,
+      games: 9,
+      gamesStarted: 3,
+    });
+    expect(input.seasonPitchingByPlayer?.size).toBe(1);
   });
 });

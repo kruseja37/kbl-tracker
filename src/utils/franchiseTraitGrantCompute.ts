@@ -69,6 +69,7 @@ import { isFranchisePhase2TraitsEnabled } from './franchisePhase2Flags';
 import {
   getAllFieldingStats,
   getSeasonBattingStats,
+  getSeasonPitchingStats,
 } from './seasonStorage';
 import { getSeasonMetadata } from './seasonStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
@@ -107,6 +108,7 @@ interface LoadedSeasonTraitData {
   betweenPlayEvents: BetweenPlayEvent[];
   fieldingEvents: FieldingEvent[];
   seasonFieldingByPlayer: Map<string, { outfieldAssists?: number; baserunnersHeld?: number; games?: number }>;
+  seasonPitchingByPlayer: Map<string, { outsRecorded: number; games: number; gamesStarted: number }>;
   injuryCountsByPlayer: Map<string, number>;
   gamesByPlayer: Map<string, number>;
 }
@@ -220,6 +222,7 @@ export async function persistDarkTraitGrantForCompletedGame(
     betweenPlayEvents: seasonData.betweenPlayEvents,
     fieldingEvents: seasonData.fieldingEvents,
     seasonFieldingByPlayer: seasonData.seasonFieldingByPlayer,
+    seasonPitchingByPlayer: seasonData.seasonPitchingByPlayer,
     injuryCountsByPlayer: seasonData.injuryCountsByPlayer,
     gamesByPlayer: seasonData.gamesByPlayer,
     batterHandByPlayer: new Map(roster.map((e) => [e.playerId, e.bats])),
@@ -297,12 +300,14 @@ async function loadSeasonTraitData(seasonId: string): Promise<LoadedSeasonTraitD
   const atBatEvents = eventTriples.flatMap(([events]) => events);
   const betweenPlayEvents = eventTriples.flatMap(([, events]) => events);
   const fieldingEvents = eventTriples.flatMap(([, , events]) => events);
-  const [injuryCountsByPlayer, fieldingStats, battingStats] = await Promise.all([
+  const [injuryCountsByPlayer, fieldingStats, battingStats, pitchingStats] = await Promise.all([
     getSeasonInjuryCountsByPlayer(seasonId),
     getAllFieldingStats(seasonId),
     getSeasonBattingStats(seasonId),
+    getSeasonPitchingStats(seasonId),
   ]);
   const seasonFieldingByPlayer = new Map<string, { outfieldAssists?: number; baserunnersHeld?: number; games?: number }>();
+  const seasonPitchingByPlayer = new Map<string, { outsRecorded: number; games: number; gamesStarted: number }>();
   const gamesByPlayer = new Map<string, number>();
 
   for (const row of fieldingStats) {
@@ -318,12 +323,21 @@ async function loadSeasonTraitData(seasonId: string): Promise<LoadedSeasonTraitD
     gamesByPlayer.set(row.playerId, Math.max(gamesByPlayer.get(row.playerId) ?? 0, row.games ?? 0));
   }
 
+  for (const row of pitchingStats) {
+    seasonPitchingByPlayer.set(row.playerId, {
+      outsRecorded: row.outsRecorded,
+      games: row.games,
+      gamesStarted: row.gamesStarted,
+    });
+  }
+
   return {
     games,
     atBatEvents,
     betweenPlayEvents,
     fieldingEvents,
     seasonFieldingByPlayer,
+    seasonPitchingByPlayer,
     injuryCountsByPlayer,
     gamesByPlayer,
   };

@@ -303,6 +303,10 @@ const DTF1_BESPOKE_TRAITS = [
   'Wild Thing',
 ] as const;
 
+const DTF2_BESPOKE_TRAITS = [
+  'Workhorse',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -407,6 +411,8 @@ describe('BUILDABLE_TRAITS', () => {
       // DT-F1: bespoke grounded earn-signals.
       'Base Jogger',
       'Wild Thing',
+      // DT-F2: Workhorse IP/game earn-signal.
+      'Workhorse',
     ]);
   });
 
@@ -1843,6 +1849,76 @@ describe('DT-F1 Wild Thing (wild pitches plus WP_K per batters-faced)', () => {
     }));
 
     expect(candidate(result, 'p1', 'Wild Thing')).toBeUndefined();
+  });
+});
+
+describe('DT-F2 Workhorse (IP/game with SP/RP peer-pool split)', () => {
+  it('is registered as a buildable canonical trait', () => {
+    for (const traitName of DTF2_BESPOKE_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+  });
+
+  it('computes Workhorse as innings pitched per game from season pitching totals', () => {
+    const raw = buildRawSignals(baseInput({
+      players: players(['p-workhorse'], 'pitcher'),
+      seasonPitchingByPlayer: new Map([
+        ['p-workhorse', { outsRecorded: 54, games: 9, gamesStarted: 9 }],
+      ]),
+    }));
+
+    expect(raw.get('p-workhorse')?.get('Workhorse')).toEqual({
+      signalValue: 2,
+      sampleSize: 9,
+    });
+  });
+
+  it('percentiles starters and relievers in separate Workhorse peer pools', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['sp-top', 'sp-mid', 'sp-low', 'rp-top', 'rp-mid', 'rp-low'], 'pitcher'),
+      seasonPitchingByPlayer: new Map([
+        ['sp-top', { outsRecorded: 216, games: 12, gamesStarted: 12 }], // 6.0 IP/G
+        ['sp-mid', { outsRecorded: 162, games: 12, gamesStarted: 12 }], // 4.5 IP/G
+        ['sp-low', { outsRecorded: 72, games: 12, gamesStarted: 12 }], // 2.0 IP/G
+        ['rp-top', { outsRecorded: 54, games: 12, gamesStarted: 0 }], // 1.5 IP/G
+        ['rp-mid', { outsRecorded: 36, games: 12, gamesStarted: 0 }], // 1.0 IP/G
+        ['rp-low', { outsRecorded: 18, games: 12, gamesStarted: 0 }], // 0.5 IP/G
+      ]),
+    }));
+    const starter = candidate(result, 'sp-top', 'Workhorse');
+    const reliever = candidate(result, 'rp-top', 'Workhorse');
+
+    expect(starter).toBeDefined();
+    expect(starter?.signalValue).toBeCloseTo(6, 10);
+    expect(starter?.score.peerPoolSize).toBe(3);
+    expect(starter?.score.sufficient).toBe(true);
+    expect(starter?.score.realityPercentile).toBeCloseTo(1, 10);
+
+    expect(reliever).toBeDefined();
+    expect(reliever?.signalValue).toBeCloseTo(1.5, 10);
+    expect(reliever?.score.peerPoolSize).toBe(3);
+    expect(reliever?.score.sufficient).toBe(true);
+    expect(reliever?.score.realityPercentile).toBeCloseTo(1, 10);
+  });
+
+  it('keeps Workhorse dormant for zero games and out of the position pool', () => {
+    const input = baseInput({
+      players: [
+        { playerId: 'zero-games', role: 'pitcher' },
+        { playerId: 'position-player', role: 'position' },
+      ],
+      seasonPitchingByPlayer: new Map([
+        ['zero-games', { outsRecorded: 54, games: 0, gamesStarted: 1 }],
+        ['position-player', { outsRecorded: 216, games: 12, gamesStarted: 12 }],
+      ]),
+    });
+    const raw = buildRawSignals(input);
+    const result = computeSeasonTraitCandidates(input);
+
+    expect(raw.get('zero-games')?.get('Workhorse')).toBeUndefined();
+    expect(raw.get('position-player')?.get('Workhorse')).toBeUndefined();
+    expect(candidate(result, 'zero-games', 'Workhorse')).toBeUndefined();
+    expect(candidate(result, 'position-player', 'Workhorse')).toBeUndefined();
   });
 });
 

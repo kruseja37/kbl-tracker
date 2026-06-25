@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   getEffectivePlayer: vi.fn(),
   getSeasonMetadata: vi.fn(),
   saveSeasonMetadata: vi.fn(),
+  getSeasonPitchingStats: vi.fn(),
   calculateAndPersistSeasonWAR: vi.fn(),
   calculateAndPersistFranchiseTrueValueForSeason: vi.fn(),
   calculateAndPersistProjectedFranchiseDesignationsForSeason: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock('../playerOverrides', () => ({
 vi.mock('../seasonStorage', () => ({
   getSeasonMetadata: mocks.getSeasonMetadata,
   saveSeasonMetadata: mocks.saveSeasonMetadata,
+  getSeasonPitchingStats: mocks.getSeasonPitchingStats,
 }));
 
 vi.mock('../../src_figma/app/engines/warOrchestrator', () => ({
@@ -191,6 +193,7 @@ describe('processCompletedGame True Value snapshot capture', () => {
     mocks.getEffectivePlayer.mockResolvedValue(null);
     mocks.getSeasonMetadata.mockResolvedValue({ seasonId: scope.seasonId, gamesPerTeam: 32 });
     mocks.saveSeasonMetadata.mockResolvedValue(undefined);
+    mocks.getSeasonPitchingStats.mockResolvedValue([]);
     mocks.calculateAndPersistSeasonWAR.mockResolvedValue(undefined);
     mocks.calculateAndPersistFranchiseTrueValueForSeason.mockResolvedValue(trueValueResult([
       {
