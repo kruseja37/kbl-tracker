@@ -327,9 +327,9 @@ const HIT_RESULTS: ReadonlySet<AtBatResult> = new Set([
   'GRD',
 ]);
 
-// §0.6b row C web-gem set; Robbed HR / Over Shoulder EXCLUDED for v1
-// (OPEN-DECISION; the app's GEM_PLAY_TYPES includes Robbed HR).
-const WEB_GEM_PLAY_TYPES: ReadonlySet<string> = new Set(['Diving', 'Leaping', 'Sliding']);
+// §0.6b row C web-gem set; Robbed HR INCLUDED per JK 2026-06-25.
+// Over Shoulder / Wall Catch remain excluded for v1.
+const WEB_GEM_PLAY_TYPES: ReadonlySet<string> = new Set(['Diving', 'Leaping', 'Sliding', 'Robbed HR']);
 
 const ELITE_PITCH_CODES = ['4F', '2F', 'CF', 'CB', 'CH', 'FK', 'SB', 'SL'] as const;
 type ElitePitchCode = (typeof ELITE_PITCH_CODES)[number];
@@ -1299,7 +1299,7 @@ function addErrorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
       const entry = counts.get(playerId) ?? { wildThrower: 0, mental: 0 };
       if (attribution.type === 'mental') {
         entry.mental += 1;
-      } else if (attribution.type === 'fielding' || attribution.type === 'throwing') {
+      } else if (attribution.type === 'throwing') {
         entry.wildThrower += 1;
       }
       counts.set(playerId, entry);
@@ -1320,9 +1320,16 @@ function addErrorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
     }
   }
 
-  for (const [playerId, entry] of [...counts.entries()].sort(([left], [right]) => left.localeCompare(right))) {
-    const games = input.gamesByPlayer.get(playerId) ?? 0;
+  const playerIds = new Set<string>([
+    ...input.seasonFieldingByPlayer.keys(),
+    ...input.gamesByPlayer.keys(),
+  ]);
+
+  for (const playerId of [...playerIds].sort((left, right) => left.localeCompare(right))) {
+    const fielding = input.seasonFieldingByPlayer.get(playerId);
+    const games = fielding?.games ?? input.gamesByPlayer.get(playerId) ?? 0;
     if (games <= 0) continue;
+    const entry = counts.get(playerId) ?? { wildThrower: 0, mental: 0 };
     addRawSignal(raw, playerId, 'Wild Thrower', {
       signalValue: entry.wildThrower / games,
       sampleSize: games,

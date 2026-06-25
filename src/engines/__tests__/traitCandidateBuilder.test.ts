@@ -604,13 +604,16 @@ describe('direct-source signals', () => {
     expect(candidate(result, 'b1', 'Butter Fingers')?.signalValue).toBeCloseTo(2 / 3, 10);
   });
 
-  it('computes Cannon Arm from OF-arm activity per game while leaving Noodle Arm dormant without error attributions', () => {
+  it('computes Cannon Arm from OF-arm activity per game while emitting zero-rate error traits without attributions', () => {
     const result = computeSeasonTraitCandidates(baseInput({
       players: players(['b1'], 'position'),
       seasonFieldingByPlayer: new Map([['b1', { outfieldAssists: 2, baserunnersHeld: 4, games: 12 }]]),
     }));
     expect(candidate(result, 'b1', 'Cannon Arm')?.signalValue).toBeCloseTo(0.5, 10);
-    expect(candidate(result, 'b1', 'Noodle Arm')).toBeUndefined();
+    expect(candidate(result, 'b1', 'Wild Thrower')?.signalValue).toBe(0);
+    expect(candidate(result, 'b1', 'Wild Thrower')?.sampleSize).toBe(12);
+    expect(candidate(result, 'b1', 'Noodle Arm')?.signalValue).toBe(0);
+    expect(candidate(result, 'b1', 'Noodle Arm')?.sampleSize).toBe(12);
   });
 
   it('computes Durable and Injury Prone from injury rate and gates zero-game rows', () => {
@@ -668,9 +671,9 @@ describe('traitCandidateBuilder DT-D error-attribution signals', () => {
     }));
 
     expect(raw.get('fielder')?.get('Noodle Arm')).toEqual({ signalValue: 0.2, sampleSize: 10 });
-    expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0.2, sampleSize: 10 });
-    expect(raw.get('ghost-position-only')?.get('Noodle Arm')).toBeUndefined();
-    expect(raw.get('ghost-position-only')?.get('Wild Thrower')).toBeUndefined();
+    expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
+    expect(raw.get('ghost-position-only')?.get('Noodle Arm')).toEqual({ signalValue: 0, sampleSize: 10 });
+    expect(raw.get('ghost-position-only')?.get('Wild Thrower')).toEqual({ signalValue: 0, sampleSize: 10 });
     expect(raw.get('no-games')?.get('Noodle Arm')).toBeUndefined();
   });
 
@@ -680,11 +683,33 @@ describe('traitCandidateBuilder DT-D error-attribution signals', () => {
         ['f1', 10],
         ['f2', 10],
       ]),
-      atBatEvents: [runnerError('fielding', ['f1', 'f2'])],
+      atBatEvents: [runnerError('throwing', ['f1', 'f2'])],
     }));
 
     expect(raw.get('f1')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
     expect(raw.get('f2')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
+  });
+
+  it('emits zero-rate error traits for clean fielders across the league-wide cohort', () => {
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([['games-only', 10]]),
+      seasonFieldingByPlayer: new Map([['season-only', { games: 8 }]]),
+    }));
+
+    expect(raw.get('games-only')?.get('Wild Thrower')).toEqual({ signalValue: 0, sampleSize: 10 });
+    expect(raw.get('games-only')?.get('Noodle Arm')).toEqual({ signalValue: 0, sampleSize: 10 });
+    expect(raw.get('season-only')?.get('Wild Thrower')).toEqual({ signalValue: 0, sampleSize: 8 });
+    expect(raw.get('season-only')?.get('Noodle Arm')).toEqual({ signalValue: 0, sampleSize: 8 });
+  });
+
+  it('credits fielding-type attributions to neither Wild Thrower nor Noodle Arm', () => {
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([['fielder', 10]]),
+      atBatEvents: [runnerError('fielding', ['fielder'])],
+    }));
+
+    expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0, sampleSize: 10 });
+    expect(raw.get('fielder')?.get('Noodle Arm')).toEqual({ signalValue: 0, sampleSize: 10 });
   });
 
   it('excludes undone at-bat and between-play error attributions', () => {
@@ -705,7 +730,7 @@ describe('traitCandidateBuilder DT-D error-attribution signals', () => {
       ],
       betweenPlayEvents: [
         errorAdvance([{ type: 'throwing', fielderIds: ['fielder'] }]),
-        errorAdvance([{ type: 'fielding', fielderIds: ['fielder'] }], { undoneAt: 1 }),
+        errorAdvance([{ type: 'throwing', fielderIds: ['fielder'] }], { undoneAt: 1 }),
       ],
     }));
 
@@ -713,8 +738,8 @@ describe('traitCandidateBuilder DT-D error-attribution signals', () => {
     expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
   });
 
-  it('emits neither error trait when only position-keyed enrichment errors exist', () => {
-    const result = computeSeasonTraitCandidates(baseInput({
+  it('emits zero-rate error traits when only position-keyed enrichment errors exist', () => {
+    const input = baseInput({
       players: players(['fielder'], 'position'),
       gamesByPlayer: new Map([['fielder', 10]]),
       atBatEvents: [
@@ -725,10 +750,14 @@ describe('traitCandidateBuilder DT-D error-attribution signals', () => {
           },
         }),
       ],
-    }));
+    });
+    const raw = buildRawSignals(input);
+    const result = computeSeasonTraitCandidates(input);
 
-    expect(candidate(result, 'fielder', 'Noodle Arm')).toBeUndefined();
-    expect(candidate(result, 'fielder', 'Wild Thrower')).toBeUndefined();
+    expect(raw.get('fielder')?.get('Noodle Arm')).toEqual({ signalValue: 0, sampleSize: 10 });
+    expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0, sampleSize: 10 });
+    expect(candidate(result, 'fielder', 'Noodle Arm')?.signalValue).toBe(0);
+    expect(candidate(result, 'fielder', 'Wild Thrower')?.signalValue).toBe(0);
   });
 
   it('uses games as the denominator and sample-size valve for mental-error Noodle Arm', () => {
@@ -3090,7 +3119,7 @@ describe('traitCandidateBuilder DT-C2 web-gem fielding signals', () => {
     expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
   });
 
-  it('counts only made Diving/Leaping/Sliding plays, excludes non-gem special plays, and skips undone fielding events', () => {
+  it('counts made Diving/Leaping/Sliding/Robbed HR plays and skips failed or undone fielding events', () => {
     const raw = buildRawSignals(baseInput({
       fielderRatingsByPlayer: new Map([['fielder', { fielding: 60, arm: 90 }]]),
       fieldingEvents: [
@@ -3101,8 +3130,8 @@ describe('traitCandidateBuilder DT-C2 web-gem fielding signals', () => {
       ],
     }));
 
-    expect(raw.get('fielder')?.get('Magic Hands')).toEqual({ signalValue: 1 / 3, sampleSize: 3 });
-    expect(raw.get('fielder')?.get('Dive Wizard')).toEqual({ signalValue: 1 / 3, sampleSize: 3 });
+    expect(raw.get('fielder')?.get('Magic Hands')).toEqual({ signalValue: 2 / 3, sampleSize: 3 });
+    expect(raw.get('fielder')?.get('Dive Wizard')).toEqual({ signalValue: 2 / 3, sampleSize: 3 });
   });
 });
 
