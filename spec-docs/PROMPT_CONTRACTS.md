@@ -23078,3 +23078,68 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** the default is NOT byte-identical (a franchise/L-SIM fixture moves with weight 0 — → STOP, the recent path is leaking; it MUST be guarded off when dark); the window gameId→gameNumber map can't be built from `getScheduledGame` (→ STOP and report — do NOT fall back to event ordering/timestamps without flagging it); a DB bump / new store / oracle touch is needed (→ STOP); `traitAcquisition.ts` or `franchiseCheckpointSweepCompute.ts` must change (→ STOP — T-3b-1 owns the engine, the boundary helpers are read-only). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: T-3b-2 ===== -->
+
+<!-- ===== CONTRACT: T-6a ===== -->
+## T-6a — position-mismatch protection (protect + flag, don't prevent) — engine half (§8C; build-dark)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding the §8C position-mismatch protection to the trait-acquisition engine (additive to the §8B slot-duel). Build-dark (trait pipeline `isFranchisePhase2TraitsEnabled()`-gated); no DB bump. This is the ENGINE half; the scout-draft-flag + Roster-Analyzer-flag consumers are the separate T-6b ticket — DO NOT build them here.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (§8C RULED 2026-06-22):** an infielder who HOLDS an arm trait (Cannon Arm) accrues an artificial ~0 arm signal (outfield-assists-only, no IF signal) → today the engine would propose an unfair LOSS that can't be re-earned at that position. FIX: for a (trait × position) combo in a canonical mismatch map, (a) the absent signal does NOT drive self-loss (treat as no-signal/dormant), and (b) boost the held trait's keepScore so a competing trait only RARELY displaces it (much harder, NOT impossible — a genuinely far-stronger trait can still break through). Protect + flag; do NOT build the IF-signal cure.
+
+**SOURCE OF TRUTH:** `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8C:127-141`. The map (`:133`): "v1: the arm family — Cannon Arm — at **1B/2B/3B/SS** only; catcher REMOVED (measurable via CS); DH gone." Protect (`:134`): "(a) the artificial/absent signal does NOT drive self-loss (treat it as no-signal → dormant…); (b) a strong keepScore boost / much-higher displacement bar so a competing trait only rarely bumps it. It CAN still be displaced by a genuinely far-stronger trait." Build (`:141`): "a (trait→producing-positions) map + the mismatch set (one data table); in the acquisition engine, suppress signal-driven loss + boost keepScore for mismatch combos (additive to §8B); No event-schema/trackerDb bump… the trait analog of the salary `POSITION_MULTIPLIERS`."
+
+**⚠ SUPERSEDED SPEC LINE — DO NOT FOLLOW IT:** `§8C:138` says "Noodle Arm: DELETE from BUILDABLE_TRAITS." That line (dated 2026-06-22) is **SUPERSEDED** by the DT-D ruling (`DECISIONS_LOG.md` 2026-06-25): Noodle Arm was RE-ADDED + reinterpreted as a MENTAL-error trait (`traitCandidateBuilder.ts` `addErrorSignals`, `traitAcquisition.ts:243-245`). **T-6a does NOT delete Noodle Arm and does NOT touch `addErrorSignals` / `traitCandidateBuilder.ts` at all.** Noodle Arm is unrelated to the arm-signal mismatch (the map is Cannon Arm only).
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `computeTraitAcquisition` (`traitAcquisition.ts:352-436`): per candidate, the lose branch is `if (isHeld && proposalBase.probability <= thresholds.loseThreshold) { rawProposals.push({ ...proposalBase, valence: 'lose' }); continue; }` (`:409-412`); the gain branch is `:404-407`; the dead-band skip is `:414`. `reconcileGainProposals` is called at `:422-430`.
+- `reconcileGainProposals` (`:587-682`): `keepScore = (held) => effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta` (`:607-608`, β=1.25); the displacement duel is `if (weakestHeld && gainScore(proposal) > keepScore(weakestHeld)) { …displaces… }` (`:670-676`). Boosting keepScore raises the bar a gain must clear.
+- `TraitAcquisitionInput` (`:29-38`) does NOT carry the player's primary position today. `SkippedTrait.reason` union is at `:58-69`.
+- The caller `franchiseTraitGrantCompute.ts` already has `entry.primaryPosition` (used at `:230` to build `primaryPositionByPlayer`); the `computeTraitAcquisition` call is at `:249-258` (T-3b-2 added `candidates: attachRecentPercentiles(...)` there — leave that intact).
+- `Cannon Arm` is a `POSITION_ONLY` trait (`traitRealityScorer.ts:112`), so a position player can hold it. Confirm the roster `primaryPosition` string format (e.g. `'1B'`/`'2B'`/`'3B'`/`'SS'`) matches the map keys before finalizing — read how `entry.primaryPosition` is produced.
+
+**BUILD:**
+1. `traitAcquisition.ts`:
+   a. NEW exported `const POSITION_MISMATCH_UNREGAINABLE: Record<string, ReadonlySet<string>> = { 'Cannon Arm': new Set(['1B', '2B', '3B', 'SS']) };` (§8C:133; comment cite). Plus a module helper `function isPositionMismatchProtected(traitName: string, primaryPosition?: string): boolean { return primaryPosition != null && (POSITION_MISMATCH_UNREGAINABLE[traitName]?.has(primaryPosition) ?? false); }`.
+   b. NEW exported `const POSITION_MISMATCH_KEEP_BOOST = 3; // §16 sim-tune placeholder — "much harder to lose, NOT impossible" (§8C:134); a far-stronger gain can still displace`.
+   c. Add `primaryPosition?: string;` to `TraitAcquisitionInput` (`:29-38`).
+   d. Add `'position_mismatch_protected'` to the `SkippedTrait.reason` union (`:58-69`).
+   e. Lose branch (`:409-412`): wrap the loss in the mismatch check —
+      ```
+      if (isHeld && proposalBase.probability <= thresholds.loseThreshold) {
+        if (isPositionMismatchProtected(traitName, input.primaryPosition)) {
+          skipped.push({ traitName, reason: 'position_mismatch_protected' });
+        } else {
+          rawProposals.push({ ...proposalBase, valence: 'lose' });
+        }
+        continue;
+      }
+      ```
+   f. Pass `primaryPosition: input.primaryPosition` into the `reconcileGainProposals({...})` args (`:422-430`).
+   g. `reconcileGainProposals`: add `primaryPosition?: string;` to its args type (`:587-595`); change `keepScore` (`:607-608`) to multiply by the boost for protected held traits —
+      ```
+      const keepScore = (held: HeldTrait): number => {
+        const base = effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta;
+        return isPositionMismatchProtected(held.traitName, args.primaryPosition) ? base * POSITION_MISMATCH_KEEP_BOOST : base;
+      };
+      ```
+2. `franchiseTraitGrantCompute.ts`: add `primaryPosition: entry.primaryPosition` to the `computeTraitAcquisition({...})` call args (`:249-258`) — `entry.primaryPosition` already exists.
+
+**MAKE-OR-BREAK:** NON-mismatch cases BYTE-IDENTICAL — `isPositionMismatchProtected` returns false for every (trait, position) not in the map (and when `primaryPosition` is absent), so the lose-gate + keepScore are unchanged for all but a held `Cannon Arm` at `1B/2B/3B/SS`. A protected held trait is NOT proposed for loss (skipped `position_mismatch_protected`) AND its keepScore is ×`POSITION_MISMATCH_KEEP_BOOST` (higher displacement bar) — but a far-stronger gain whose `gainScore` still exceeds the boosted keepScore CAN displace it (not impossible). Noodle Arm + `addErrorSignals` + `traitCandidateBuilder.ts` UNTOUCHED. NO DB bump, NO oracle/pricing/tier/scorer touch.
+
+**TEST (`src/engines/__tests__/traitAcquisition.test.ts`):**
+- **Protect-loss:** a player whose `primaryPosition` is `'SS'` HOLDING `Cannon Arm` with a below-loseThreshold arm percentile → NO `'lose'` proposal (skipped `position_mismatch_protected`). CONTROL: the SAME below-threshold `Cannon Arm` held by a `primaryPosition: 'CF'` (outfield) player → STILL a `'lose'` proposal (CF is not a mismatch). And `primaryPosition` absent → still a `'lose'` (back-compat).
+- **keepScore boost (higher displacement bar):** an `SS` holding `Cannon Arm` at the `maxTraits` cap; a competing COMMON gain whose `gainScore` would exceed the UN-boosted keepScore but NOT the boosted one → BLOCKED (`cap_no_displacement`), Cannon Arm holds. A genuinely far-stronger gain whose `gainScore` exceeds even the boosted keepScore → STILL displaces Cannon Arm (proves "not impossible").
+- **Non-mismatch byte-identical:** a non-Cannon-Arm held trait, or Cannon Arm held by an OF player, behaves exactly as before (regression guard).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/utils/tests/franchiseTraitGrantCompute.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `traitAcquisition.ts`/`franchiseTraitGrantCompute.ts` are in the `processCompletedGame` chain) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`franchiseOffseasonGuards.component`/`AwardsWatchlist` order-flakes, solo-pass to confirm). A franchise/L-SIM fixture moving → STOP (only a held Cannon-Arm-at-IF case should change anything).
+5. `git --no-pager diff --stat` → `traitAcquisition.ts` + `franchiseTraitGrantCompute.ts` + `traitAcquisition.test.ts` ONLY. No `traitCandidateBuilder.ts` (Noodle Arm/addErrorSignals untouched), no `iv_oracle.json`/pricing/tier/scorer, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) the map + helper + boost const, the lose-suppress + keepScore-boost + primaryPosition thread, confirm non-mismatch byte-identical + Noodle-Arm-untouched + no DB/oracle touch + far-stronger-gain-still-displaces; (3) verification output; (4) "T-6a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** you are tempted to delete Noodle Arm / edit `addErrorSignals` (→ STOP — §8C:138 is SUPERSEDED by DT-D; do NOT); the roster `primaryPosition` string format does NOT match `'1B'/'2B'/'3B'/'SS'` (→ STOP and report the actual format, do NOT guess a mapping); a non-mismatch franchise/L-SIM fixture regresses (→ STOP, the protection is leaking beyond the map); a DB bump / oracle touch is needed (→ STOP); the boost would make a protected trait truly un-displaceable by ANY gain (→ STOP — §8C:134 requires a far-stronger gain can still break through). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: T-6a ===== -->
