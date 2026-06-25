@@ -963,6 +963,29 @@ describe('traitAcquisition DT-D Noodle Arm mental-error valence', () => {
   });
 });
 
+describe('traitAcquisition DT-FIX-2 Volatile positive image valence', () => {
+  test('Volatile is positive with no image driver and keeps the Consistent opposite pair', () => {
+    const ambitious = proposalFor('Volatile', {
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const fragile = proposalFor('Volatile', {
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+    const highMorale = proposalFor('Volatile', { currentMorale: 100 });
+    const timid = proposalFor('Volatile', { personality: 'Timid' });
+    const egotistical = proposalFor('Volatile', { personality: 'Egotistical' });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(fragile.factors.resilienceTilt).toBe(1);
+    expect(highMorale.factors.moraleFactor).toBeGreaterThan(1);
+    expect(timid.factors.imageAxisTilt).toBe(1);
+    expect(egotistical.factors.imageAxisTilt).toBe(1);
+    expect(TRAIT_OPPOSITES['Volatile']).toBe('Consistent');
+    expect(TRAIT_OPPOSITES['Consistent']).toBe('Volatile');
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');

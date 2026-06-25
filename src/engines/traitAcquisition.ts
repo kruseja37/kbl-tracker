@@ -167,6 +167,9 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Tough Out',
   'Bunter',
   'Consistent',
+  // DT-FIX-2 / JK ruling 4: Volatile is high-variance/high-ceiling positive
+  // image. The Consistent↔Volatile opposite pair remains valence-neutral.
+  'Volatile',
   'Cannon Arm',
   'Durable',
   // R1-b1 (§0.7): Big/Little Hack enter BUILDABLE_TRAITS — both positive valence.
@@ -219,7 +222,6 @@ const NEGATIVE_IMAGE_TRAITS = new Set([
   'Slow Poke',
   'Base Jogger',
   'Whiffer',
-  'Volatile',
   'Injury Prone',
   // R1-a (§0.7): K Neglector enters BUILDABLE_TRAITS — negative valence + low-charisma lean.
   'K Neglector',
