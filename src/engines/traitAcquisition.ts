@@ -10,6 +10,7 @@ import {
   type CanonicalPersonality,
 } from './masterMoraleMatrix';
 import type { HiddenModifiers } from '../types/game';
+import { assignTier } from '../data/traitTierConfig';
 
 /**
  * §9 / L9b-2 — PURE trait acquisition proposals (TS-1 / TS-5 / TS-12).
@@ -76,6 +77,11 @@ export interface TraitAcquisitionTuning {
   moraleSwing: number;
   rosterSwing: number;
   charismaSwing: number;
+  gainThreshold: number;
+  loseThreshold: number;
+}
+
+interface TraitThresholds {
   gainThreshold: number;
   loseThreshold: number;
 }
@@ -244,6 +250,7 @@ export function computeTraitAcquisition(
   const imagePersonalities = resolveImagePersonalities(input.personality);
   const rawProposals: TraitChangeProposal[] = [];
   const heldProbabilityByTrait = new Map<string, number>();
+  const thresholdsByTrait = new Map<string, TraitThresholds>();
 
   for (const candidate of input.candidates) {
     const traitName = candidate.traitName;
@@ -282,12 +289,13 @@ export function computeTraitAcquisition(
     if (isHeld) {
       heldProbabilityByTrait.set(traitName, proposalBase.probability);
     }
-    if (!isHeld && proposalBase.probability >= tuning.gainThreshold) {
+    const thresholds = thresholdsForTrait(traitName, tuning, thresholdsByTrait);
+    if (!isHeld && proposalBase.probability >= thresholds.gainThreshold) {
       rawProposals.push({ ...proposalBase, valence: 'gain' });
       continue;
     }
 
-    if (isHeld && proposalBase.probability <= tuning.loseThreshold) {
+    if (isHeld && proposalBase.probability <= thresholds.loseThreshold) {
       rawProposals.push({ ...proposalBase, valence: 'lose' });
       continue;
     }
@@ -370,6 +378,34 @@ function buildProposalBase(args: {
       resiliencePositiveTilt,
     },
   };
+}
+
+function thresholdsForTrait(
+  traitName: string,
+  tuning: TraitAcquisitionTuning,
+  cache: Map<string, TraitThresholds>,
+): TraitThresholds {
+  const cached = cache.get(traitName);
+  if (cached) {
+    return cached;
+  }
+
+  let thresholds: TraitThresholds;
+  try {
+    const tier = assignTier(traitName);
+    thresholds = {
+      gainThreshold: tier.gainThreshold,
+      loseThreshold: tier.lossThreshold,
+    };
+  } catch {
+    thresholds = {
+      gainThreshold: tuning.gainThreshold,
+      loseThreshold: tuning.loseThreshold,
+    };
+  }
+
+  cache.set(traitName, thresholds);
+  return thresholds;
 }
 
 function reconcileGainProposals(args: {

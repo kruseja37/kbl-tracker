@@ -14,6 +14,7 @@ import {
   type TraitAcquisitionTuning,
 } from '../traitAcquisition';
 import type { HiddenModifiers } from '../../types/game';
+import { assignTier } from '../../data/traitTierConfig';
 
 const FORCE_GAIN_TUNING: TraitAcquisitionTuning = {
   ...TRAIT_ACQUISITION_TUNING,
@@ -75,7 +76,7 @@ function proposalFor(
 ) {
   const result = computeTraitAcquisition(
     input({
-      candidates: [{ traitName, score: score(traitName, 0.5) }],
+      candidates: [{ traitName, score: score(traitName, 1) }],
       ...overrides,
     }),
     tuning,
@@ -93,8 +94,8 @@ describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
     });
 
     expect(proposal.imageValence).toBe('neutral');
-    expect(proposal.probability).toBeCloseTo(0.5, 10);
-    expect(proposal.realityPercentile).toBeCloseTo(0.5, 10);
+    expect(proposal.probability).toBeCloseTo(1, 10);
+    expect(proposal.realityPercentile).toBeCloseTo(1, 10);
     expect(proposal.factors).toEqual({
       ambitionTilt: 1,
       resilienceTilt: 1,
@@ -107,10 +108,10 @@ describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
   });
 
   test('ambition boosts positive-image probability and low ambition suppresses it', () => {
-    const high = proposalFor('Clutch', {
+    const high = proposalFor('Base Rounder', {
       modifiers: { ...neutralModifiers, ambition: 100 },
     });
-    const low = proposalFor('Clutch', {
+    const low = proposalFor('Base Rounder', {
       modifiers: { ...neutralModifiers, ambition: 0 },
     });
 
@@ -159,8 +160,14 @@ describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
   });
 
   test('canonical image-driver personality boosts matching traits', () => {
-    const tough = proposalFor('Clutch', { personality: 'Tough' });
-    const relaxed = proposalFor('Clutch', { personality: 'Relaxed' });
+    const tough = proposalFor('Base Rounder', {
+      personality: 'Tough',
+      candidates: [{ traitName: 'Base Rounder', score: score('Base Rounder', 0.7) }],
+    });
+    const relaxed = proposalFor('Base Rounder', {
+      personality: 'Relaxed',
+      candidates: [{ traitName: 'Base Rounder', score: score('Base Rounder', 0.7) }],
+    });
 
     expect(tough.factors.imageAxisTilt).toBeCloseTo(1.25, 10);
     expect(relaxed.factors.imageAxisTilt).toBe(1);
@@ -668,25 +675,66 @@ describe('traitAcquisition R1-b3 / PRE-ACT-TRAITS-1 (Two Way C/IF/OF family — 
 
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
+    const tier = assignTier('CON vs LHP');
+    expect(tier.tier).toBe('UNCOMMON');
+    expect(tier.gainThreshold).toBe(0.70);
+
     const result = computeTraitAcquisition(input({
-      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.75) }],
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', tier.gainThreshold) }],
     }));
 
     expect(result.proposals).toMatchObject([
-      { traitName: 'CON vs LHP', valence: 'gain', probability: 0.75 },
+      { traitName: 'CON vs LHP', valence: 'gain', probability: tier.gainThreshold },
     ]);
     expect(result.skipped).toEqual([]);
   });
 
   test('hysteresis emits a loss for a held trait at or below the lose threshold', () => {
+    const tier = assignTier('CON vs LHP');
+    expect(tier.lossThreshold).toBe(0.30);
+
     const heldTraits: HeldTrait[] = [{ traitName: 'CON vs LHP', strength: 0.5 }];
     const result = computeTraitAcquisition(input({
       heldTraits,
-      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.35) }],
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', tier.lossThreshold) }],
     }));
 
     expect(result.proposals).toMatchObject([
-      { traitName: 'CON vs LHP', valence: 'lose', probability: 0.35 },
+      { traitName: 'CON vs LHP', valence: 'lose', probability: tier.lossThreshold },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
+  test('negative Severe traits use badness percentile thresholds without inversion', () => {
+    const tier = assignTier('RBI Zero');
+    expect(tier.tier).toBe('SEVERE');
+    expect(tier.gainThreshold).toBe(0.78);
+    expect(tier.lossThreshold).toBe(0.18);
+
+    const gain = computeTraitAcquisition(input({
+      candidates: [{ traitName: 'RBI Zero', score: score('RBI Zero', tier.gainThreshold) }],
+    }));
+    const lose = computeTraitAcquisition(input({
+      heldTraits: [{ traitName: 'RBI Zero', strength: 0.5 }],
+      candidates: [{ traitName: 'RBI Zero', score: score('RBI Zero', tier.lossThreshold) }],
+    }));
+
+    expect(gain.proposals).toMatchObject([
+      { traitName: 'RBI Zero', valence: 'gain', probability: tier.gainThreshold },
+    ]);
+    expect(lose.proposals).toMatchObject([
+      { traitName: 'RBI Zero', valence: 'lose', probability: tier.lossThreshold },
+    ]);
+  });
+
+  test('adaptive-excluded traits fall back to the flat tuning thresholds', () => {
+    const result = computeTraitAcquisition(input({
+      candidates: [{ traitName: 'Stimulated', score: score('Stimulated', TRAIT_ACQUISITION_TUNING.gainThreshold) }],
+    }));
+
+    expect(() => assignTier('Stimulated')).toThrow(/excluded from adaptive trait weighting/);
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Stimulated', valence: 'gain', probability: TRAIT_ACQUISITION_TUNING.gainThreshold },
     ]);
     expect(result.skipped).toEqual([]);
   });
@@ -785,9 +833,9 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
       input({
         heldTraits: [
           { traitName: 'Clutch', strength: 0.8 },
-          { traitName: 'Utility', strength: 0.6 },
+          { traitName: 'Utility', strength: 0.8 },
         ],
-        candidates: [{ traitName: 'Stealer', score: score('Stealer', 0.6) }],
+        candidates: [{ traitName: 'Stealer', score: score('Stealer', 0.8) }],
       }),
       NO_SWING_FORCE_GAIN_TUNING,
     );
@@ -831,11 +879,11 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
           { traitName: 'Utility', strength: 0.1 },
         ],
         candidates: [
-          // Each held trait re-scores this cycle; both land in the dead band (> loseThreshold 0.35,
-          // < gainThreshold 0) so neither is lost — they only matter for displacement ranking.
+          // Each held trait re-scores this cycle; both land in the dead band for their tier,
+          // so neither is lost — they only matter for displacement ranking.
           { traitName: 'Clutch', score: score('Clutch', 0.4) },
           { traitName: 'Utility', score: score('Utility', 0.7) },
-          { traitName: 'Stealer', score: score('Stealer', 0.5) },
+          { traitName: 'Stealer', score: score('Stealer', 0.8) },
         ],
       }),
       NO_SWING_FORCE_GAIN_TUNING,
@@ -863,14 +911,14 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
         ],
         candidates: [
           { traitName: 'Clutch', score: score('Clutch', 0.6) },
-          { traitName: 'Stealer', score: score('Stealer', 0.5) },
+          { traitName: 'Stealer', score: score('Stealer', 0.8) },
         ],
       }),
       NO_SWING_FORCE_GAIN_TUNING,
     );
 
     // Effective strengths: Clutch=0.6 (recomputed P), Utility=0.2 (supplied fallback).
-    // Weakest = Utility; gain Stealer P=0.5 > 0.2 → displaces Utility.
+    // Weakest = Utility; gain Stealer P=0.8 > 0.2 → displaces Utility.
     expect(result.proposals).toMatchObject([
       { traitName: 'Stealer', valence: 'gain', displaces: 'Utility' },
     ]);
@@ -887,7 +935,7 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
           { traitName: 'Utility', strength: 0.9 },
         ],
         candidates: [
-          // Recomputed P 0.3 ≤ loseThreshold 0.35 → lost regardless of supplied strength 0.9.
+          // Recomputed P 0.3 ≤ Clutch's tier loss threshold → lost regardless of supplied strength 0.9.
           { traitName: 'Clutch', score: score('Clutch', 0.3) },
         ],
       }),
@@ -939,4 +987,3 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     expect(result.skipped).toEqual([]);
   });
 });
-

@@ -21458,3 +21458,50 @@ traitWeight  = 0.8 * valueNorm + 0.2 * scarcityNorm                   -> 0..1
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-1 ===== -->
+
+<!-- ===== CONTRACT: T-2 ===== -->
+## T-2 — widen the flat gain/lose threshold to the 7-tier per-trait lookup (traits rebuild)
+
+**ROUTE:** Codex (gpt-5.5) | high reasoning effort
+**ROLE:** You are a precise TypeScript engineer swapping a flat scalar threshold for a per-trait tier lookup at exactly two comparison points. No new measurement logic, no new wiring.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Replace the single flat `gainThreshold 0.75` / `loseThreshold 0.35` in the trait acquisition engine with the per-trait tier thresholds from T-1's `assignTier`, so a trait's value tier sets how good you must be to earn it and how bad to lose it.
+
+**SOURCE OF TRUTH:** `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md` §3 (the 4 positive + 3 negative tiers), §4 (threshold semantics + the negative inversion), §7 ("the in-season threshold seam is already a tuning arg — widen scalar→tier-lookup, swap the 2 comparisons, NO new wiring"). The tier tables + `assignTier` were BUILT in T-1 (`src/data/traitTierConfig.ts`, `7e0e62ed`).
+
+**GROUNDING (Captain-verified — re-read before editing):**
+- The flat thresholds live in `TRAIT_ACQUISITION_TUNING` (`traitAcquisition.ts:91-92`, `gainThreshold:0.75`/`loseThreshold:0.35`). The two comparisons are at `:285` (`!isHeld && proposalBase.probability >= tuning.gainThreshold` → gain) and `:290` (`isHeld && proposalBase.probability <= tuning.loseThreshold` → lose). `proposalBase` carries `traitName` + the tilted `probability` (P).
+- **Negative signals are already BADNESS-oriented** (verified: Whiffer = K-rate, Slow Poke = DP-rate, RBI Zero = zero-RBI rate, Choker = unfavorable rate, Butter Fingers = error rate — every one "higher signal = more of the flaw"; the scorer ranks high-signal → high-percentile). So the comparison DIRECTION is uniform for positives and negatives — there is NO 1−P flip at the comparison. The polarity is handled entirely by which tier table `assignTier` returns (positive → weight tier; negative → |$| tier), and the negative tier's `gainThreshold`/`lossThreshold` are defined on the badness percentile (= P for negatives).
+- `assignTier(traitName)` returns `{ gainThreshold, lossThreshold, ... }` per trait (already polarity-aware).
+
+**BUILD (`src/engines/traitAcquisition.ts` + its test):**
+1. Import `assignTier` from `../data/traitTierConfig`.
+2. At the two comparisons (~:285/:290), replace `tuning.gainThreshold`/`tuning.loseThreshold` with `assignTier(traitName).gainThreshold` / `assignTier(traitName).lossThreshold` for the current candidate's trait. Memoize per-trait within the call if cheap, or rely on `assignTier`'s internal cache. Keep the comparison DIRECTION exactly (gain `>=`, lose `<=`).
+3. KEEP `TRAIT_ACQUISITION_TUNING.gainThreshold`/`loseThreshold` as the FALLBACK for any trait `assignTier` cannot resolve (wrap in try/catch or guard — should never fire since `BUILDABLE_TRAITS ⊂ TRAIT_PRICING`, but keep the engine total). Do NOT delete the constants.
+4. Update `traitAcquisition.test.ts`: tests that assert the flat 0.75/0.35 behavior must be repointed to the per-trait tier thresholds for the specific traits they use (look up the trait's tier — e.g. a Rare trait gains at 0.82 / loses at 0.22; a Common at 0.55/0.30; a Severe negative at 0.78/0.18). DO NOT weaken — assert the NEW per-trait thresholds.
+
+**MAKE-OR-BREAK:**
+- The two comparisons read per-trait tier thresholds from `assignTier`; positives bucket by traitWeight, negatives by |$|; the comparison direction is unchanged.
+- No 1−P inversion is introduced (negatives are already badness-oriented). If you find a BUILDABLE negative trait whose signal is GOODNESS-oriented (high = less flaw, would need inversion) → STOP and report it (the Captain will rule on the inversion).
+- The flat tuning fallback is preserved for unresolvable traits; the engine never throws on an unknown trait.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npm test` (FULL suite — `traitAcquisition` → `traitTierConfig` → `ivEngine` import chain reaches the `franchiseTraitGrantCompute` checkpoint sweep on the `processCompletedGame` path; transitive-import-mock risk + the sweep tests). If a `processCompletedGame.*` partial-mock test breaks at module-load, fix with a TEST-ONLY mock stub (the A1.5c-4 pattern), not production. Read the FAILED-FILE list: ZERO NEW REDS (characterized: `wpaRuntimeBoundary` hard + `franchiseManualSmokeFixture`/`GameTrackerLaunchState` solo-pass).
+3. `git --no-pager diff --stat` → only `traitAcquisition.ts` + its test (+ a test-only mock stub if needed); `iv_oracle.json` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing §3/§4/§7 / the make-or-break.
+3. Verification output pasted (build, vitest FAILED-file summary, diff --stat).
+4. "T-2 complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- A buildable negative trait has a goodness-oriented signal needing a 1−P inversion → STOP, report.
+- Swapping the threshold requires touching the measurement/percentile path (it must NOT) → STOP, report.
+- A new RED outside the characterized set you cannot trace to the threshold change → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-2 ===== -->
