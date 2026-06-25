@@ -7,6 +7,21 @@
 
 ## June 2026
 
+### 2026-06-26 (attended Hybrid via `/kbl-captain`): Park→WAR (V8) — §9.D re-confirmed; build the SEED-park→WAR wiring
+
+**Context:** the v1 audit listed "V8 park→WAR" as an OPEN/conflicted question. A grounded + adversarially-verified investigation (`wf_2355914a-e2e`, 6 agents) found **it is NOT a live conflict** — it is a snapshot artifact. The apparent disagreement (STADIUM_ANALYTICS §1.0 "park factors preview-only / defer WAR consumers" vs the Mode-1 vision §8.8 "stadium depth v1-critical, WAR consumes park") is about two DIFFERENT factor types: §1.0 defers only the **ADAPTIVE (archive-derived/measured)** layer; **SEED/STATIC (geometry-derived)** factors were always permitted. **§9.D already ruled this IN** ("v1 WAR consumes seed/static park factors; adaptive stay deferred", committed `a9584566` 2026-06-20, ratified DECISIONS_LOG 2026-06-23/24). The audit that re-listed V8 "open" (`V1_DELTA_AUDIT_FINDINGS`) anchored on a roadmap boundary captured **54 minutes BEFORE** the §9.D commit → it physically never saw the resolution (verifier confirmed via commit timestamps).
+
+**JK ruling 2026-06-26 (attended):** **§9.D STANDS — v1 WAR uses the simple built-in (seed/geometry) park factors; the measured/adaptive ones wait.** Build the full seed-park→WAR wiring (Option 1) as a near-term ratings-lane ticket. JK accepts the interim hitter-side approximation (below).
+
+**Scope of the build (V8 = "park→WAR seed wiring"; small, build-dark-safe, Lane-C-disjoint):**
+- **bWAR:** thread seed park factors into `calculateBWAR` (the consumption branch already exists at `bwarCalculator.ts:229-243` but is DEAD — every live caller passes park-blind args; callers `warOrchestrator.ts:216` / `useWARCalculations.ts:208` / the Simplified season path). **Keep the homePA-only scoping** (`:239-240`) — the genuine double-count hazard is a per-park adjustment stacked on the already-park-blended league wOBA baseline (0.329); homePA-scoping contains it.
+- **pWAR:** ADD an `options.parkFactor` to `calculatePWAR` (none today, `pwarCalculator.ts:289-296`) and call the already-built `applyPitcherParkFactor` (`:537`), park-adjusting FIP BEFORE the leagueFIP−pitcherFIP diff (`:324`→`:329`). This side is net-new param threading (greenfield call-site), not a flip-on.
+- Wire the 40%-of-season activation gate (`parkFactorDeriver.ts:129`); seed factors derive from geometry on the fly (`:78-93`).
+- **NO frozen-oracle touch, NO `TRACKER_DB_VERSION` bump, NO new store.** Touches only WAR call-sites/engines + tests. Does NOT double-count with RA-7/A2.5 (that park-adjusts the ratings PRODUCTION signal, a different quantity; WAR is computed from counting stats — verified zero rating/grade/checkpoint refs in the WAR orchestrator).
+- **ADAPTIVE layer stays deferred** (the `adaptiveParkFactorPersistenceAllowed`/`parkAdjustedWarAllowed` records-store flags stay false; they have ZERO WAR-engine consumers so the seed wiring neither reads nor flips them — a policy-consistency nit to reconcile later, not a blocker).
+
+**⚠ Known interim approximation (JK accepted):** the bWAR park leg needs home-vs-road plate-appearance counts; `homePA` is **never populated** in any live path (only the type field + the engine's own `Math.floor(pa/2)` fallback) → the bWAR adjustment runs on a 50/50 home/road guess until the separate **§9.D data-retention item** lands (durably persist per-game batted-ball + handedness; an OWED GameTracker/stats-lane item). The pWAR park leg is exact. All build-dark → no live effect until the flag flip, by which point the data item may have landed.
+
 ### 2026-06-25 (attended Hybrid via `/kbl-captain`, session-end): DT-x refinement rulings — web-gem set, error-trait cohort, Wild Thrower scope, Volatile valence
 
 JK reviewed the 4 OPEN-DECISIONS the dormant-trait wave surfaced this session (DT-C2 `44ababfb` / DT-D `6d88b228` / DT-E `2a44cc2a`, all build-dark, committed). Rulings (each = a follow-up edit to already-committed build-dark code; queued, NOT built in the saturated session):
