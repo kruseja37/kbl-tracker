@@ -363,7 +363,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
 
   // Get real data from existing hooks
   const seasonData = useSeasonData(seasonId);
-  const seasonStats = useSeasonStats(seasonId);
+  const seasonStats = useSeasonStats(seasonId, { franchiseId });
 
   // Relationship engine — wired here so it's available throughout franchise UI
   const relationshipData = useRelationshipData();

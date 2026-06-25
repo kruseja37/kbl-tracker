@@ -1315,7 +1315,7 @@ export function TeamHubContent() {
   const franchiseId = franchiseData.franchiseConfig?.franchiseId;
   const seasonNumber = franchiseData.seasonNumber || 1;
   const seasonId = getSeasonIdForScope(franchiseId, seasonNumber);
-  const seasonStats = useSeasonStats(seasonId);
+  const seasonStats = useSeasonStats(seasonId, { franchiseId });
 
   // Build team → W-L record lookup from real standings (case-insensitive)
   const teamRecordMap = useMemo(() => {

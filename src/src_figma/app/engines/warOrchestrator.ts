@@ -22,6 +22,7 @@ import {
   type BattingStatsForWAR,
   type BWARResult,
   createDefaultLeagueContext,
+  type ParkFactors,
   SMB4_BASELINES,
 } from '../../../types/war';
 import type { PitchingStatsForWAR } from '../../../engines/pwarCalculator';
@@ -37,11 +38,17 @@ import {
   getSeasonBattingStats,
   getSeasonPitchingStats,
   getAllFieldingStats,
+  getSeasonMetadata,
   updateBattingStats,
   updatePitchingStats,
 } from '../../../utils/seasonStorage';
 import type { CompetitionType } from '../../../utils/gameStorage';
 import { getFieldingEventsForScope } from '../../../utils/eventLog';
+import { getAllFranchiseTeams } from '../../../utils/franchisePlayerStorage';
+import {
+  getDerivedParkFactorsIfAvailable,
+  isParkFactorAdjustmentActive,
+} from '../../../engines/parkFactorDeriver';
 
 // ============================================
 // TYPES
@@ -68,6 +75,14 @@ export interface PlayerWARSummary {
   isPitcher: boolean;
 }
 
+export interface WARParkFactorContext {
+  franchiseId?: string | null;
+  homeTeamId?: string | null;
+  stadiumName?: string | null;
+  parkFactors?: ParkFactors | null;
+  gamesPlayed?: number | null;
+}
+
 // ============================================
 // STAT MAPPING: Season Storage → Calculator Input
 // ============================================
@@ -76,7 +91,18 @@ export interface PlayerWARSummary {
  * Map PlayerSeasonBatting → BattingStatsForWAR
  * Direct field-for-field mapping (types align well).
  */
+type PlayerSeasonBattingWithHomeSplit = PlayerSeasonBatting & {
+  homePA?: number;
+  roadPA?: number;
+};
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function mapBattingStats(stats: PlayerSeasonBatting): BattingStatsForWAR {
+  const homeAwareStats = stats as PlayerSeasonBattingWithHomeSplit;
+
   return {
     pa: stats.pa,
     ab: stats.ab,
@@ -94,6 +120,9 @@ function mapBattingStats(stats: PlayerSeasonBatting): BattingStatsForWAR {
     gidp: stats.gidp,
     stolenBases: stats.stolenBases,
     caughtStealing: stats.caughtStealing,
+    homePA: optionalFiniteNumber(homeAwareStats.homePA),
+    roadPA: optionalFiniteNumber(homeAwareStats.roadPA),
+    teamId: stats.teamId,
   };
 }
 
@@ -141,6 +170,60 @@ function inferCompetitionTypeForScope(scopeId: string): CompetitionType | undefi
   return 'franchise';
 }
 
+function seedParkFactorsFromStoredOrDerived(
+  stadiumName?: string | null,
+  parkFactors?: ParkFactors | null,
+): ParkFactors | undefined {
+  if (parkFactors?.source === 'SEED') return parkFactors;
+  return getDerivedParkFactorsIfAvailable(stadiumName ?? undefined);
+}
+
+function pitcherParkFactorFromSeed(parkFactors: ParkFactors | undefined): number | undefined {
+  if (!parkFactors) return undefined;
+  return parkFactors.homeRuns ?? parkFactors.overall;
+}
+
+function fallbackGamesPlayed(
+  allBatting: PlayerSeasonBatting[],
+  allPitching: PlayerSeasonPitching[],
+): number {
+  return Math.max(
+    0,
+    ...allBatting.map((stats) => stats.games),
+    ...allPitching.map((stats) => stats.games),
+  );
+}
+
+async function buildSeedParkFactorsByTeamId(
+  parkContext: WARParkFactorContext | undefined,
+): Promise<Map<string, ParkFactors>> {
+  const byTeamId = new Map<string, ParkFactors>();
+  const fallbackParkFactors = seedParkFactorsFromStoredOrDerived(
+    parkContext?.stadiumName,
+    parkContext?.parkFactors,
+  );
+
+  if (!fallbackParkFactors) return byTeamId;
+
+  if (parkContext?.franchiseId) {
+    try {
+      const teams = await getAllFranchiseTeams(parkContext.franchiseId);
+      for (const team of teams) {
+        const seedParkFactors = seedParkFactorsFromStoredOrDerived(team.stadium, team.parkFactors);
+        if (seedParkFactors) byTeamId.set(team.id, seedParkFactors);
+      }
+    } catch (error) {
+      console.warn(`[WAR] seed park factors unavailable for franchise ${parkContext.franchiseId}:`, error);
+    }
+  }
+
+  if (parkContext?.homeTeamId && !byTeamId.has(parkContext.homeTeamId)) {
+    byTeamId.set(parkContext.homeTeamId, fallbackParkFactors);
+  }
+
+  return byTeamId;
+}
+
 // ============================================
 // MAIN ORCHESTRATOR
 // ============================================
@@ -161,13 +244,15 @@ export async function calculateAndPersistSeasonWAR(
   seasonId: string,
   seasonGames: number,
   participantIds: string[],
-  playerPositions: Map<string, string>
+  playerPositions: Map<string, string>,
+  parkContext?: WARParkFactorContext
 ): Promise<PlayerWARSummary[]> {
   // Load ALL season stats (not just participants - needed for context)
-  const [allBatting, allPitching, allFielding] = await Promise.all([
+  const [allBatting, allPitching, allFielding, seasonMetadata] = await Promise.all([
     getSeasonBattingStats(seasonId),
     getSeasonPitchingStats(seasonId),
     getAllFieldingStats(seasonId),
+    getSeasonMetadata(seasonId).catch(() => null),
   ]);
 
   // Index by playerId for fast lookup
@@ -189,6 +274,14 @@ export async function calculateAndPersistSeasonWAR(
   // Create league contexts
   const leagueContext = createDefaultLeagueContext(seasonId, seasonGames);
   const pitchingContext = createDefaultPitchingContext(seasonId, seasonGames);
+  const gamesPlayedForParkGate =
+    optionalFiniteNumber(parkContext?.gamesPlayed) ??
+    optionalFiniteNumber(seasonMetadata?.gamesPlayed) ??
+    fallbackGamesPlayed(allBatting, allPitching);
+  const parkFactorsActive = isParkFactorAdjustmentActive(gamesPlayedForParkGate, seasonGames);
+  const seedParkFactorsByTeamId = parkFactorsActive
+    ? await buildSeedParkFactorsByTeamId(parkContext)
+    : new Map<string, ParkFactors>();
   const inferredCompetitionType = inferCompetitionTypeForScope(seasonId);
   const scopedFieldingEvents = await getFieldingEventsForScope({
     statsScopeId: seasonId,
@@ -213,7 +306,13 @@ export async function calculateAndPersistSeasonWAR(
     // Calculate bWAR
     let bwarResult: BWARResult | null = null;
     try {
-      bwarResult = calculateBWAR(battingInput, leagueContext);
+      const parkFactors = seedParkFactorsByTeamId.get(batting.teamId);
+      bwarResult = parkFactors
+        ? calculateBWAR(battingInput, leagueContext, {
+            parkFactors,
+            batterHand: 'S',
+          })
+        : calculateBWAR(battingInput, leagueContext);
     } catch (e) {
       console.warn(`[WAR] bWAR calc failed for ${batting.playerName}:`, e);
     }
@@ -292,7 +391,10 @@ export async function calculateAndPersistSeasonWAR(
 
     let pwarResult: PWARResult | null = null;
     try {
-      pwarResult = calculatePWAR(pitchingInput, pitchingContext);
+      const parkFactor = pitcherParkFactorFromSeed(seedParkFactorsByTeamId.get(pitching.teamId));
+      pwarResult = parkFactor === undefined
+        ? calculatePWAR(pitchingInput, pitchingContext)
+        : calculatePWAR(pitchingInput, pitchingContext, { parkFactor });
     } catch (e) {
       console.warn(`[WAR] pWAR calc failed for ${pitching.playerName}:`, e);
     }

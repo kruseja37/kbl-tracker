@@ -272,10 +272,15 @@ export function calculateBWAR(
  */
 export function calculateBWARSimplified(
   stats: BattingStatsForWAR,
-  seasonGames: number
+  seasonGames: number,
+  options: {
+    parkFactors?: ParkFactors;
+    stadiumName?: string;
+    batterHand?: 'L' | 'R' | 'S';
+  } = {}
 ): BWARResult {
   const context = createDefaultLeagueContext('default', seasonGames);
-  return calculateBWAR(stats, context);
+  return calculateBWAR(stats, context, options);
 }
 
 // ============================================
