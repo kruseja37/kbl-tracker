@@ -2041,6 +2041,109 @@ describe('DT-F2 Workhorse (IP/game with SP/RP peer-pool split)', () => {
   });
 });
 
+describe('T-3a pitcher SP/RP peer-pool split', () => {
+  function pitcherKRateAtBats(pitcherId: string, strikeouts: number): AtBatEvent[] {
+    return repeat(10, (index) => atBat({
+      pitcherId,
+      batterId: `${pitcherId}-batter-${index}`,
+      result: index < strikeouts ? 'K' : 'GO',
+      outsAfter: 1,
+    }));
+  }
+
+  function pitchingRows(rows: Array<readonly [string, number]>): SeasonTraitCandidateInput['seasonPitchingByPlayer'] {
+    return new Map(rows.map(([playerId, gamesStarted]) => [
+      playerId,
+      { outsRecorded: 30, games: 10, gamesStarted },
+    ]));
+  }
+
+  it('percentiles a second pitcher trait inside separate starter and reliever cohorts', () => {
+    const cohort = [
+      ['sp-high', 9, 10],
+      ['sp-mid', 5, 10],
+      ['sp-low', 1, 10],
+      ['rp-high', 3, 0],
+      ['rp-mid', 2, 0],
+      ['rp-low', 1, 0],
+    ] as const;
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(cohort.map(([playerId]) => playerId), 'pitcher'),
+      atBatEvents: cohort.flatMap(([playerId, strikeouts]) => pitcherKRateAtBats(playerId, strikeouts)),
+      seasonPitchingByPlayer: pitchingRows(cohort.map(([playerId, , gamesStarted]) => [playerId, gamesStarted] as const)),
+    }));
+    const starter = candidate(result, 'sp-mid', 'K Collector');
+    const reliever = candidate(result, 'rp-high', 'K Collector');
+
+    expect(starter?.signalValue).toBeCloseTo(0.5, 10);
+    expect(starter?.score.peerPoolSize).toBe(3);
+    expect(starter?.score.sufficient).toBe(true);
+    expect(starter?.score.realityPercentile).toBeCloseTo(2 / 3, 10);
+    expect(starter?.score.realityPercentile).not.toBeCloseTo(5 / 6, 10);
+
+    expect(reliever?.signalValue).toBeCloseTo(0.3, 10);
+    expect(reliever?.score.peerPoolSize).toBe(3);
+    expect(reliever?.score.sufficient).toBe(true);
+    expect(reliever?.score.realityPercentile).toBeCloseTo(1, 10);
+    expect(reliever?.score.realityPercentile).not.toBeCloseTo(4 / 6, 10);
+  });
+
+  it('falls starter pitcher-trait cohorts below the min-peer valve back to the full pitcher pool', () => {
+    const cohort = [
+      ['sp-high', 9, 10],
+      ['sp-mid', 5, 10],
+      ['rp-high', 4, 0],
+      ['rp-mid', 3, 0],
+      ['rp-low', 2, 0],
+      ['rp-bottom', 1, 0],
+    ] as const;
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(cohort.map(([playerId]) => playerId), 'pitcher'),
+      atBatEvents: cohort.flatMap(([playerId, strikeouts]) => pitcherKRateAtBats(playerId, strikeouts)),
+      seasonPitchingByPlayer: pitchingRows(cohort.map(([playerId, , gamesStarted]) => [playerId, gamesStarted] as const)),
+    }));
+    const starter = candidate(result, 'sp-mid', 'K Collector');
+    const reliever = candidate(result, 'rp-high', 'K Collector');
+
+    expect(starter?.signalValue).toBeCloseTo(0.5, 10);
+    expect(starter?.score.peerPoolSize).toBe(6);
+    expect(starter?.score.sufficient).toBe(true);
+    expect(starter?.score.realityPercentile).toBeCloseTo(5 / 6, 10);
+    expect(starter?.score.realityPercentile).not.toBeCloseTo(1 / 2, 10);
+
+    expect(reliever?.signalValue).toBeCloseTo(0.4, 10);
+    expect(reliever?.score.peerPoolSize).toBe(4);
+    expect(reliever?.score.sufficient).toBe(true);
+    expect(reliever?.score.realityPercentile).toBeCloseTo(1, 10);
+    expect(reliever?.score.realityPercentile).not.toBeCloseTo(4 / 6, 10);
+  });
+
+  it('leaves hitter position-trait peer pools unchanged', () => {
+    const cohort = [
+      ['h-low', 1],
+      ['h-mid', 5],
+      ['h-high', 9],
+    ] as const;
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(cohort.map(([playerId]) => playerId), 'position'),
+      atBatEvents: cohort.flatMap(([playerId, strikeouts]) => (
+        repeat(10, (index) => atBat({
+          batterId: playerId,
+          pitcherId: `${playerId}-pitcher-${index}`,
+          result: index < strikeouts ? 'K' : 'GO',
+          outsAfter: 1,
+        }))
+      )),
+    }));
+    const hitter = candidate(result, 'h-mid', 'Whiffer');
+
+    expect(hitter?.signalValue).toBeCloseTo(0.5, 10);
+    expect(hitter?.score.peerPoolSize).toBe(3);
+    expect(hitter?.score.sufficient).toBe(true);
+    expect(hitter?.score.realityPercentile).toBeCloseTo(2 / 3, 10);
+  });
+});
+
 describe('DT-F3 Metal Head (KP/NUT pitcher-victim events per batters-faced)', () => {
   it('is registered as a buildable canonical trait', () => {
     for (const traitName of DTF3_BESPOKE_TRAITS) {
