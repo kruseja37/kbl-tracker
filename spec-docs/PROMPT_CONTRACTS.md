@@ -22416,3 +22416,96 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 **FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):** the change needs an additive rating term in `ratingsDevelopment.ts` (→ STOP, that's RA-5); any file beyond `expectedStatsEngine.ts`+test required (→ STOP, seam not plumbed); a DB bump/new store needed (→ STOP); the prime-band path is NOT byte-identical (→ STOP, regression); a full-suite red outside the characterized set (→ STOP). Never summarize/batch; report every changed path. Use xhigh reasoning effort; ground every cited file:line by reading it in the `kbl-ratings-c` worktree before you edit.
 <!-- ===== END CONTRACT: A2.5 ===== -->
+
+<!-- ===== CONTRACT: DT-E ===== -->
+## DT-E — Volatile + Consistent earnable (mojo-change-rate signal; dormant-trait wave, Group E)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding a build-dark mojo-volatility aggregator that makes two UNIVERSAL traits earnable. Surgical, additive; only behavior change is Volatile/Consistent becoming earnable (flag-gated, dormant until mojo-change data is present). Mirror DT-D's `addErrorSignals` + the EXISTING injury aggregator.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL:** Add `addMojoSignals` over `input.betweenPlayEvents`, emitting **Volatile** (mojo-changes per game) and **Consistent** (the inverse) per player, wire both into `BUILDABLE_TRAITS`. NO traitAcquisition change (opposite pair + image valence already wired). Build-dark, no DB bump.
+
+**SOURCE OF TRUTH:** `TRAIT_MEASUREMENT_SPEC §0.6b` row E (line 131): "Volatile/Consistent · universal · MANY mojo changes → Volatile · FEW → Consistent · mojo-change events". `DECISIONS_LOG 2026-06-25` entry E: Volatile = MANY relative mojo changes, Consistent = FEW; signal = count/rate of a player's mojo changes.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read before editing):**
+- **THE MAKE-OR-BREAK — the mojo time-series EXISTS, is persisted, and is already threaded into the builder input (so build-dark, NO DB bump).** `'mojo_change'` is a `BetweenPlayEventType` (`eventLog.ts:465`); the event carries `playerStateChange?: { playerId; stateType: 'mojo'|'fitness'|'injury'; previousValue; newValue }` (`eventLog.ts:598-601`). `franchiseTraitGrantCompute.ts:288-298` flatMaps ALL between-play events (unfiltered) into `seasonData.betweenPlayEvents`, fed to the builder (`:220`). `SeasonTraitCandidateInput.betweenPlayEvents` is `readonly BetweenPlayEvent[]` importing the same `eventLog` type.
+- **CLOSEST PRECEDENT = the EXISTING injury aggregator in this file (`traitCandidateBuilder.ts:1809-1813`):** it filters `event.type !== 'injury' || event.playerStateChange?.stateType !== 'injury'` then reads `event.playerStateChange.playerId`. DT-E mirrors this EXACTLY for mojo: `event.type === 'mojo_change' && event.playerStateChange?.stateType === 'mojo'`, key by `playerStateChange.playerId`. Also mirror DT-D's `addErrorSignals` per-game-rate shape (count ÷ `input.gamesByPlayer`, `sampleSize = games`).
+- **Trait status:** `'Volatile'` + `'Consistent'` are canonical UNIVERSAL traits (`traitRealityScorer.ts:117`) → `isTraitEligibleForRole` true for BOTH roles (emit for every playerId, hitter + pitcher). Priced (`traitPricing.ts:124` Consistent, `:454` Volatile). NOT in `BUILDABLE_TRAITS` (the gap; grep-confirmed `addMojoSignals`/'Volatile'/'Consistent' absent from the builder today). `assignTier` auto-difficulty.
+- **Acquisition ALREADY WIRED (do NOT touch `traitAcquisition.ts`):** `OPPOSITE_PAIRS` contains `['Consistent','Volatile']` (`:332`); `Consistent` in `POSITIVE_IMAGE_TRAITS` (`:169`), `Volatile` in `NEGATIVE_IMAGE_TRAITS` (`:222`). No edit needed. (`TRAIT_MEASUREMENT_SPEC:176`'s stale-entry note is informational only.)
+
+**BUILD:**
+1. `src/engines/traitCandidateBuilder.ts`:
+   (a) `function addMojoSignals(input, raw): void`: iterate `sortBetweenPlayEvents(input.betweenPlayEvents).filter((e) => !undoneAt(e))`; count, per `playerStateChange.playerId`, events where `event.type === 'mojo_change' && event.playerStateChange?.stateType === 'mojo' && playerStateChange.previousValue !== playerStateChange.newValue` (real transitions only). Then per player with `games = input.gamesByPlayer.get(playerId) ?? 0 > 0`, deterministic sort: `addRawSignal(raw, playerId, 'Volatile', { signalValue: changes/games, sampleSize: games })` and `addRawSignal(raw, playerId, 'Consistent', { signalValue: -(changes/games), sampleSize: games })` (inverse = NEGATE the rate — rank-safe since percentile is rank-only; mirrors the Whiffer/Tough-Out inverse convention).
+   (b) Register `addMojoSignals(input, raw);` in `buildRawSignals` after `addWebGemSignals`/`addErrorSignals` (`~:1757-1781`), `// DT-E` comment.
+   (c) Append `'Volatile'`, `'Consistent'` to `BUILDABLE_TRAITS` in a `// DT-E` block citing §0.6b row E.
+
+**DO NOT (this ticket):** touch `traitAcquisition.ts` (already wired), `traitRealityScorer.ts`, `src/data/traitPricing.ts` (NOTE a pre-existing inconsistency — both Volatile AND Consistent are flagged `polarity:'positive'` in traitPricing while acquisition treats Volatile as negative-image; this is OUT OF SCOPE for DT-E — do NOT touch pricing, just flag it as an OPEN-DECISION), `traitTierConfig.ts`, `prospectScoutingDraftEngine.ts`; bump `TRACKER_DB_VERSION`; touch `iv_oracle.json`; import from `src/src_figma/app`.
+
+**TEST (`src/engines/__tests__/traitCandidateBuilder.test.ts`):**
+- Golden: append `'Volatile'`,`'Consistent'` to the `BUILDABLE_TRAITS` `toEqual` list (67→69) AFTER the DT-D traits.
+- A player with N mojo_change events (real transitions) over G games → Volatile signalValue N/G, Consistent -(N/G), both sampleSize G.
+- Opposite-direction: 2 players, the one with MORE changes ranks HIGHER on Volatile and LOWER on Consistent after peer-percentile (assert the percentile ordering flips between the two traits).
+- Dormancy: 0 mojo_change events OR games=0 → no signal (or valve-gated to no candidate).
+- Filter: a no-op mojo_change (`previousValue===newValue`) and an undone event are NOT counted; a `fitness`/`injury` stateType event is NOT counted.
+- Universal role: BOTH a hitter and a pitcher with mojo changes get the signals.
+
+**MAKE-OR-BREAK:** reads `betweenPlayEvents` filtered to `type==='mojo_change'` + `stateType==='mojo'` + real transition, keyed to `playerStateChange.playerId`, games-denominated; Consistent = negated Volatile rate; UNIVERSAL (both roles); NO traitAcquisition/pricing touch; NO DB bump.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → full pass.
+3. `NODE_ENV= npm test` (FULL suite — builder feeds processCompletedGame). FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake solo-pass — re-run unexpected reds IN ISOLATION).
+4. `git --no-pager diff --stat` → exactly `traitCandidateBuilder.ts` + its test. `iv_oracle.json` NOT present.
+
+**FORMAT:** (1) files+lines; (2) addMojoSignals (source, filter, games rate, inverse), BUILDABLE 2, confirmation NO acquisition/pricing/tier/DB change; (3) verification output; (4) "DT-E complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** mojo_change not present in a completed-game fixture's betweenPlayEvents (→ STOP); a BUILDABLE length/canonical pin trips (→ STOP, surface it); a needed pricing/acquisition change (→ STOP, flag the polarity inconsistency, don't fix here); a DB bump needed (→ STOP); a full-suite red outside the characterized/flake set (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line before editing.
+<!-- ===== END CONTRACT: DT-E ===== -->
+
+<!-- ===== CONTRACT: RA-5 ===== -->
+## RA-5 — §5 age-CURVE gravity term in ratings development (ratings-finish lane C; build-dark)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding a deterministic, performance-independent age-gravity additive term to the checkpoint ratings-development MOVE (distinct from A2.5's expected-bar shift). Build-dark behind the Phase-2 flag; engine + sweep threading only.
+**BRANCH:** `codex/ratings-finish-c` (worktree `/Users/johnkruse/Projects/kbl-ratings-c`). Branch-only — do NOT commit/push. (A2.5 `72bfaf46` is already on this branch — `ExpectedStatsAgeBand`/`ageToExpectedStatsBand` are present.)
+
+**GOAL:** Add an `ageCurveSlopeByBand` (per-band) + per-attribute steepness to `RatingsDevelopmentTuning`, and inside `computeCheckpointRatingDevelopment` add `ageGravity = slope[ageBand] × attrMultiplier(ratingKey)` to the signed move BEFORE the existing cap/dampener/clamp; thread `ageBand` from the sweep. Prime band 25-31 = 0 (neutral, byte-identical). Build-dark, no DB bump.
+
+**SOURCE OF TRUTH:** `RATINGS_ADJUSTMENT_SPEC §5` (lines 96-110): 5-band age-curve slope table, per-attribute realism (speed/fielding/arm decline faster — line 107), and the calibration constraint (line 110: old-age benefit-of-doubt must NOT fully cancel the band's decline — net, an average aging player still trends gently down). A2.5 (`72bfaf46`) is the §6A bar-shift; RA-5 is the §5 CURVE — they act on DIFFERENT stages (signal vs move) → no double-count (§5 line 110 "why both").
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read before editing):**
+- **THE MAKE-OR-BREAK — RA-5 is the MOVE path, NOT the signal path; and must keep the hard-pinned tuning test green.** A2.5 multiplies `expected` in `expectedStatsEngine.ts` (the over-expectation SIGNAL `r`). RA-5 adds a performance-INDEPENDENT gravity delta inside `computeCheckpointRatingDevelopment` (`ratingsDevelopment.ts:107`), AFTER `r`/the morale-scaled move. Do NOT touch `expectedStatsEngine.ts`. The `RATINGS_DEVELOPMENT_TUNING` `toEqual` pin (`ratingsDevelopment.test.ts` ~:40-52) must still pass → prime-band default = 0 so default/absent-band cases are byte-identical.
+- **Anchors:** `RatingsDevelopmentTuning` interface (`ratingsDevelopment.ts:31`); `RATINGS_DEVELOPMENT_TUNING` const (`:44`); `CheckpointRatingDevelopmentInput` (`:57`); `computeRawRatingDelta` (`:87`); `computeCheckpointRatingDevelopment` (`:107`). Sweep: imports `computeCheckpointRatingDevelopment` (`franchiseCheckpointSweepCompute.ts:24`) + `ExpectedStatsAgeBand` (`:66`); `CheckpointRosterEntry` (`:127`); `ageToExpectedStatsBand` (`:267`); the dev call (`:482`). **NOTE — `ageBand: ageToExpectedStatsBand(player.age)` is ALREADY computed at `:366`** (for the expected-stats path). VERIFY whether `ageBand` is already a field on `CheckpointRosterEntry`: if YES, just thread `entry.ageBand` into the dev-call input; if NO, add it + populate from `ageToExpectedStatsBand(player.age)` (the derivation already exists). Do NOT duplicate.
+- **Build-dark + no-DB:** `ageBand` is derived on-the-fly from `player.age` (no persisted field); the dev path is gated behind the Phase-2 checkpoint flag; `TRACKER_DB_VERSION` stays 25.
+- **L10 neutrality:** `franchiseL10SweepCompute.ts` shares the tuning struct and passes NO ageBand → the absent-band=0 rule keeps L10 output IDENTICAL. STOP-IF L10 output changes.
+
+**BUILD:**
+1. `src/engines/ratingsDevelopment.ts`:
+   (a) Extend `RatingsDevelopmentTuning` (`:31`) with `ageCurveSlopeByBand: Record<ExpectedStatsAgeBand, number>` (import `ExpectedStatsAgeBand` from `./expectedStatsEngine`) + a per-attribute steepness map (e.g. `ageSteepnessByRatingKey`).
+   (b) Add §16 defaults to `RATINGS_DEVELOPMENT_TUNING` (`:44`): 18-21 (+), 22-24 (+ mild), 25-31 = 0 (neutral), 32-35 (− mild), 36+ (− steep); per-attr 1.0 power/contact, >1 placeholder speed/fielding/arm. Small placeholders that do NOT dominate the performance move; comment `§16`.
+   (c) Add optional `ageBand?: ExpectedStatsAgeBand` to `CheckpointRatingDevelopmentInput` (`:57`); undefined → treat as prime ('25-31' / 0 gravity).
+   (d) In `computeCheckpointRatingDevelopment` (`:107`), compute `ageGravity = tuning.ageCurveSlopeByBand[input.ageBand ?? '25-31'] × attrSteepness(ratingKey)` and add it to the signed move BEFORE the existing maxAbsDelta cap / dampener / 0-99 clamp (shares the same governors). Keep it OUT of `computeRawRatingDelta` so the morale-multiplier tests stay exact.
+2. `src/utils/franchiseCheckpointSweepCompute.ts`:
+   (a) Ensure `ageBand` is on `CheckpointRosterEntry` (add if missing; populate from `ageToExpectedStatsBand(player.age)` — already done at `:366` if present).
+   (b) Pass `ageBand: entry.ageBand` into the `computeCheckpointRatingDevelopment(...)` input (`:482`).
+
+**DO NOT:** touch `expectedStatsEngine.ts` (A2.5's bar-shift — double-count); change `franchiseL10SweepCompute.ts` output; import any trait-engine file (Lane C stays disjoint); bump `TRACKER_DB_VERSION`; add a store; touch `iv_oracle.json`.
+
+**TEST:**
+`src/engines/__tests__/ratingsDevelopment.test.ts`: update the `RATINGS_DEVELOPMENT_TUNING` `toEqual` (~:41) to include the new fields; prove prime/undefined band adds EXACTLY 0 (existing exact-value assertions unchanged); 18-21 adds positive gravity at performanceSignal=0; 36+ adds negative; speed/fielding/arm steeper than power/contact; the age term passes through cap+clamp+dampener.
+`src/utils/tests/franchiseCheckpointSweepCompute.test.ts`: a 38-yo member gets negative gravity through the (dark) dev call, a 20-yo positive, a 28-yo (prime) byte-identical to pre-RA-5; confirm L10 path unaffected.
+
+**MAKE-OR-BREAK:** age gravity is an additive MOVE term (not A2.5's expected bar-shift), prime=0 byte-identical, shares cap/clamp/dampener, threaded from the sweep's derived ageBand; L10 neutral; no DB bump; only the 4 files change.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → exit 0.
+2. `NODE_ENV= npm run build` → exit 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/ratingsDevelopment.test.ts src/engines/__tests__/expectedStatsEngine.test.ts src/utils/tests/franchiseCheckpointSweepCompute.test.ts` → full pass.
+4. `NODE_ENV= npm test` (FULL suite — the sweep feeds processCompletedGame) → FAILED-file list: ZERO NEW REDS vs the characterized baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake solo-pass). A prime-age fixture or an L10 fixture moving → STOP (regression).
+5. `git --no-pager diff --stat` → exactly `ratingsDevelopment.ts` + `franchiseCheckpointSweepCompute.ts` + their 2 test files. `expectedStatsEngine.ts` NOT present; `iv_oracle.json` NOT present.
+
+**FORMAT:** (1) files+lines; (2) the age-gravity term + where it adds (move, before cap/clamp), the ageBand threading, confirmation prime=0 byte-identical + NO expectedStatsEngine/L10/trait touch + NO DB bump; (3) verification output (tsc, build, focused, full-suite FAILED-file summary, diff --stat); (4) "RA-5 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the build needs to edit `expectedStatsEngine.ts` (→ STOP, that's A2.5 double-count); the `RATINGS_DEVELOPMENT_TUNING` toEqual can't pass with prime-neutral defaults (→ STOP, the term is leaking into default cases); `franchiseL10SweepCompute` output changes (→ STOP); a trait-engine import is required (→ STOP, lane disjointness); a DB bump/store needed (→ STOP); a full-suite red outside the characterized set (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-ratings-c` worktree before editing.
+<!-- ===== END CONTRACT: RA-5 ===== -->
