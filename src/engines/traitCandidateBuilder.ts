@@ -147,6 +147,10 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // fielding errors → Wild Thrower; mental errors → Noodle Arm.
   'Wild Thrower',
   'Noodle Arm',
+  // DT-E (TRAIT_MEASUREMENT_SPEC §0.6b row E): mojo-change-rate earn-signals.
+  // Volatile = many real mojo transitions per game; Consistent = inverse rate.
+  'Volatile',
+  'Consistent',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -1330,6 +1334,34 @@ function addErrorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
   }
 }
 
+function addMojoSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const changesByPlayer = new Map<string, number>();
+
+  for (const event of sortBetweenPlayEvents(input.betweenPlayEvents).filter((item) => !undoneAt(item))) {
+    const playerStateChange = event.playerStateChange;
+    if (event.type !== 'mojo_change' || playerStateChange?.stateType !== 'mojo') continue;
+    if (playerStateChange.previousValue === playerStateChange.newValue) continue;
+
+    const playerId = playerStateChange.playerId;
+    changesByPlayer.set(playerId, (changesByPlayer.get(playerId) ?? 0) + 1);
+  }
+
+  for (const [playerId, changes] of [...changesByPlayer.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const games = input.gamesByPlayer.get(playerId) ?? 0;
+    if (games <= 0) continue;
+
+    const rate = changes / games;
+    addRawSignal(raw, playerId, 'Volatile', {
+      signalValue: rate,
+      sampleSize: games,
+    });
+    addRawSignal(raw, playerId, 'Consistent', {
+      signalValue: -rate,
+      sampleSize: games,
+    });
+  }
+}
+
 function addArmSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const playerIds = new Set<string>([
     ...input.seasonFieldingByPlayer.keys(),
@@ -1781,6 +1813,8 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addChaseSignals(input, raw);
   // DT-C2 — web-gem rate with rating-gated cohort filters (TRAIT_MEASUREMENT_SPEC §0.6b row C).
   addWebGemSignals(input, raw);
+  // DT-E — mojo-change rate and inverse rate (TRAIT_MEASUREMENT_SPEC §0.6b row E).
+  addMojoSignals(input, raw);
   return raw;
 }
 

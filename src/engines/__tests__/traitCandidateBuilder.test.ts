@@ -113,6 +113,30 @@ function errorAdvance(attributions: ErrorAttribution[], overrides: Partial<Betwe
   } as unknown as BetweenPlayEvent;
 }
 
+function mojoChange(
+  playerId: string,
+  previousValue: string | number,
+  newValue: string | number,
+  overrides: Partial<BetweenPlayEvent> = {},
+): BetweenPlayEvent {
+  bpIndex += 1;
+  return {
+    eventId: `bp-${bpIndex}`,
+    gameId: 'g1',
+    timestamp: bpIndex,
+    eventIndex: bpIndex,
+    type: 'mojo_change',
+    playerStateChange: {
+      playerId,
+      playerName: playerId,
+      stateType: 'mojo',
+      previousValue,
+      newValue,
+    },
+    ...overrides,
+  } as unknown as BetweenPlayEvent;
+}
+
 function runnerError(type: ErrorAttribution['type'], fielderIds: string[]): AtBatEvent {
   return atBat({
     runnerOutcomes: [{
@@ -256,6 +280,11 @@ const DTD_ERROR_TRAITS = [
   'Noodle Arm',
 ] as const;
 
+const DTE_MOJO_TRAITS = [
+  'Volatile',
+  'Consistent',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -354,6 +383,9 @@ describe('BUILDABLE_TRAITS', () => {
       // DT-D: error-attribution earn-signals.
       'Wild Thrower',
       'Noodle Arm',
+      // DT-E: mojo-change-rate earn-signals.
+      'Volatile',
+      'Consistent',
     ]);
   });
 
@@ -730,6 +762,127 @@ describe('traitCandidateBuilder DT-D error-attribution signals', () => {
     expect(full?.score.sufficient).toBe(true);
     expect(full?.score.realityPercentile).not.toBeNull();
     expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
+  });
+});
+
+describe('traitCandidateBuilder DT-E mojo-change signals', () => {
+  it('makes Volatile and Consistent buildable from real mojo-change rate per game', () => {
+    for (const traitName of DTE_MOJO_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([['hitter', 4]]),
+      betweenPlayEvents: [
+        mojoChange('hitter', 0, 1),
+        mojoChange('hitter', 1, 2),
+        mojoChange('hitter', 2, 3),
+      ],
+    }));
+
+    expect(raw.get('hitter')?.get('Volatile')).toEqual({ signalValue: 0.75, sampleSize: 4 });
+    expect(raw.get('hitter')?.get('Consistent')).toEqual({ signalValue: -0.75, sampleSize: 4 });
+  });
+
+  it('ranks more mojo changes higher for Volatile and lower for Consistent', () => {
+    const mojoChanges = (playerId: string, count: number): BetweenPlayEvent[] => (
+      Array.from({ length: count }, (_, index) => mojoChange(playerId, index, index + 1))
+    );
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['fewer', 'middle', 'more'], 'position'),
+      gamesByPlayer: new Map([
+        ['fewer', 10],
+        ['middle', 10],
+        ['more', 10],
+      ]),
+      betweenPlayEvents: [
+        ...mojoChanges('fewer', 1),
+        ...mojoChanges('middle', 3),
+        ...mojoChanges('more', 5),
+      ],
+    }));
+
+    const fewerVolatile = candidate(result, 'fewer', 'Volatile');
+    const moreVolatile = candidate(result, 'more', 'Volatile');
+    const fewerConsistent = candidate(result, 'fewer', 'Consistent');
+    const moreConsistent = candidate(result, 'more', 'Consistent');
+
+    expect(fewerVolatile?.score.sufficient).toBe(true);
+    expect(moreVolatile?.score.sufficient).toBe(true);
+    expect(fewerConsistent?.score.sufficient).toBe(true);
+    expect(moreConsistent?.score.sufficient).toBe(true);
+    expect(moreVolatile?.score.realityPercentile ?? 0).toBeGreaterThan(fewerVolatile?.score.realityPercentile ?? 0);
+    expect(moreConsistent?.score.realityPercentile ?? 0).toBeLessThan(fewerConsistent?.score.realityPercentile ?? 0);
+  });
+
+  it('keeps mojo traits dormant with zero mojo-change events or zero games', () => {
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([
+        ['quiet', 10],
+        ['zero-games', 0],
+      ]),
+      betweenPlayEvents: [
+        mojoChange('zero-games', 0, 1),
+      ],
+    }));
+
+    expect(raw.get('quiet')?.get('Volatile')).toBeUndefined();
+    expect(raw.get('quiet')?.get('Consistent')).toBeUndefined();
+    expect(raw.get('zero-games')?.get('Volatile')).toBeUndefined();
+    expect(raw.get('zero-games')?.get('Consistent')).toBeUndefined();
+  });
+
+  it('excludes no-op, undone, fitness-state, and injury-state events', () => {
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([['ignored', 10]]),
+      betweenPlayEvents: [
+        mojoChange('ignored', 1, 1),
+        mojoChange('ignored', 1, 2, { undoneAt: 1 }),
+        mojoChange('ignored', 'FIT', 'WELL', {
+          playerStateChange: {
+            playerId: 'ignored',
+            playerName: 'ignored',
+            stateType: 'fitness',
+            previousValue: 'FIT',
+            newValue: 'WELL',
+          },
+        }),
+        mojoChange('ignored', 'healthy', 'injured', {
+          playerStateChange: {
+            playerId: 'ignored',
+            playerName: 'ignored',
+            stateType: 'injury',
+            previousValue: 'healthy',
+            newValue: 'injured',
+          },
+        }),
+      ],
+    }));
+
+    expect(raw.get('ignored')?.get('Volatile')).toBeUndefined();
+    expect(raw.get('ignored')?.get('Consistent')).toBeUndefined();
+  });
+
+  it('emits mojo signals for both position players and pitchers', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [
+        { playerId: 'hitter', role: 'position' },
+        { playerId: 'pitcher', role: 'pitcher' },
+      ],
+      gamesByPlayer: new Map([
+        ['hitter', 10],
+        ['pitcher', 10],
+      ]),
+      betweenPlayEvents: [
+        mojoChange('hitter', 0, 1),
+        mojoChange('pitcher', 0, 1),
+      ],
+    }));
+
+    expect(candidate(result, 'hitter', 'Volatile')).toBeDefined();
+    expect(candidate(result, 'hitter', 'Consistent')).toBeDefined();
+    expect(candidate(result, 'pitcher', 'Volatile')).toBeDefined();
+    expect(candidate(result, 'pitcher', 'Consistent')).toBeDefined();
   });
 });
 
