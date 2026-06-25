@@ -153,6 +153,10 @@ describe('processCompletedGame WAR season metadata gate', () => {
       37,
       ['batter-1'],
       expect.any(Map),
+      expect.objectContaining({
+        franchiseId: 'franchise-a',
+        homeTeamId: 'team-b',
+      }),
     );
     await expect(getSeasonMetadata('war-metadata-season-37')).resolves.toMatchObject({
       gamesPerTeam: 37,
@@ -182,6 +186,10 @@ describe('processCompletedGame WAR season metadata gate', () => {
       28,
       ['batter-1'],
       expect.any(Map),
+      expect.objectContaining({
+        franchiseId: 'franchise-a',
+        homeTeamId: 'team-b',
+      }),
     );
   });
 });

@@ -34,7 +34,10 @@ import { getFranchisePlayer } from './franchisePlayerStorage';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from './franchiseAdaptiveStandards';
 import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
-import { calculateAndPersistSeasonWAR } from '../src_figma/app/engines/warOrchestrator';
+import {
+  calculateAndPersistSeasonWAR,
+  type WARParkFactorContext,
+} from '../src_figma/app/engines/warOrchestrator';
 import {
   calculateAndPersistFranchiseTrueValueForSeason,
   type FranchiseTrueValueRow,
@@ -257,7 +260,13 @@ async function persistSeasonWarAfterAggregation(
 
   const participantIds = getParticipantIds(gameState);
   const playerPositions = await buildWarPlayerPositions(gameState, participantIds, leagueId);
-  await calculateAndPersistSeasonWAR(seasonId, seasonGames, participantIds, playerPositions);
+  await calculateAndPersistSeasonWAR(
+    seasonId,
+    seasonGames,
+    participantIds,
+    playerPositions,
+    buildWarParkFactorContext(gameState, archiveOptions),
+  );
   return {
     seasonId,
     statsScopeId: seasonId,
@@ -276,6 +285,18 @@ function getCompletedGameFranchiseId(
     (competitionType === 'franchise' ? competitionId : null) ??
     null
   );
+}
+
+function buildWarParkFactorContext(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): WARParkFactorContext {
+  return {
+    franchiseId: getCompletedGameFranchiseId(gameState, archiveOptions),
+    homeTeamId: gameState.homeTeamId,
+    stadiumName: gameState.stadiumName ?? null,
+    parkFactors: archiveOptions?.context?.parkFactors ?? gameState.parkFactors ?? null,
+  };
 }
 
 async function persistTrueValueAfterWar(

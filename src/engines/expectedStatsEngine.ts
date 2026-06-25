@@ -122,6 +122,8 @@ export interface ExpectedStatsTuning {
    * ratified peer-SD z-score: (actual - expected) / peerSD.
    */
   normalizationScaleByCat: Record<ExpectedStatsCategory, number>;
+  /** §16 sim-tune age fairness bar-shift. Prime band stays neutral. */
+  ageBandFactorByBand: Record<ExpectedStatsAgeBand, number>;
 }
 
 export const EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
@@ -130,6 +132,13 @@ export const EXPECTED_STATS_TUNING: ExpectedStatsTuning = {
   minSampleRate: 10,
   minPeerPool: 3,
   normalizationScaleByCat: ONE_BY_CATEGORY,
+  ageBandFactorByBand: {
+    '18-21': 0.92,
+    '22-24': 0.96,
+    '25-31': 1.00,
+    '32-35': 0.96,
+    '36+': 0.92,
+  },
 };
 
 export interface ExpectedStatsInput {
@@ -168,7 +177,7 @@ export function expectedAndSignal(
 
   for (const category of EXPECTED_STATS_CATEGORIES) {
     const meta = EXPECTED_STATS_CATEGORY_META[category];
-    const expected = expectedForCategory(input, category, meta);
+    const expected = expectedForCategory(input, category, meta, tuning);
     expectedByCat[category] = expected;
 
     if (input.playerRole === 'pitcher' && meta.ratingKey === 'arm') {
@@ -204,6 +213,7 @@ function expectedForCategory(
   input: ExpectedStatsInput,
   category: ExpectedStatsCategory,
   meta: ExpectedStatsCategoryMeta,
+  tuning: ExpectedStatsTuning,
 ): number | null {
   if (input.playerRole === 'pitcher' && meta.ratingKey === 'arm') {
     return null;
@@ -230,7 +240,13 @@ function expectedForCategory(
     return null;
   }
 
-  return poolMeanProd * playerCurve / poolCurve;
+  const baseExpected = poolMeanProd * playerCurve / poolCurve;
+  const ageBandFactor = finiteOrNull(tuning.ageBandFactorByBand[input.ageBand]);
+  if (ageBandFactor === null) {
+    return null;
+  }
+
+  return baseExpected * ageBandFactor;
 }
 
 function resolveCurve(

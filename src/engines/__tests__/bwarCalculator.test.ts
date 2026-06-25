@@ -20,6 +20,7 @@ import {
 import {
   type BattingStatsForWAR,
   createDefaultLeagueContext,
+  type ParkFactors,
   SMB4_BASELINES,
 } from '../../types/war';
 
@@ -45,6 +46,30 @@ function createTestStats(overrides: Partial<BattingStatsForWAR> = {}): BattingSt
     gidp: 5,
     stolenBases: 3,
     caughtStealing: 1,
+    ...overrides,
+  };
+}
+
+function createSeedParkFactors(overrides: Partial<ParkFactors> = {}): ParkFactors {
+  return {
+    stadiumId: 'seed-park',
+    stadiumName: 'Seed Park',
+    overall: 1,
+    runs: 1,
+    homeRuns: 1,
+    hits: 1,
+    doubles: 1,
+    triples: 1,
+    strikeouts: 1,
+    walks: 1,
+    leftHandedHR: 1,
+    rightHandedHR: 1,
+    leftHandedAVG: 1,
+    rightHandedAVG: 1,
+    gamesIncluded: 0,
+    lastUpdated: 'seed',
+    confidence: 'LOW',
+    source: 'SEED',
     ...overrides,
   };
 }
@@ -325,6 +350,69 @@ describe('calculateBWAR', () => {
     expect(result).toHaveProperty('bWAR');
     expect(result).toHaveProperty('plateAppearances');
     expect(result).toHaveProperty('seasonGames');
+  });
+
+  test('neutral park factor is byte-identical to park-blind bWAR', () => {
+    const stats = createTestStats({ homePA: 80 });
+    const context = createDefaultLeagueContext('test', 48);
+
+    const parkBlind = calculateBWAR(stats, context);
+    const neutralPark = calculateBWAR(stats, context, {
+      parkFactors: createSeedParkFactors(),
+      batterHand: 'R',
+    });
+
+    expect(neutralPark).toEqual(parkBlind);
+  });
+
+  test('hitter-friendly seed park reduces home-PA-scoped bWAR credit', () => {
+    const stats = createTestStats({ pa: 200, homePA: 80 });
+    const context = createDefaultLeagueContext('test', 48);
+    const hitterPark = createSeedParkFactors({
+      runs: 1.2,
+      leftHandedHR: 1.2,
+      rightHandedHR: 1.2,
+      leftHandedAVG: 1.2,
+      rightHandedAVG: 1.2,
+    });
+
+    const parkBlind = calculateBWAR(stats, context);
+    const adjusted = calculateBWAR(stats, context, {
+      parkFactors: hitterPark,
+      batterHand: 'R',
+    });
+
+    expect(adjusted.parkAdjustment).toBeLessThan(0);
+    expect(adjusted.battingRuns).toBeLessThan(parkBlind.battingRuns);
+    expect(adjusted.bWAR).toBeLessThan(parkBlind.bWAR);
+  });
+
+  test('park adjustment scopes to homePA and falls back to floor(pa / 2)', () => {
+    const context = createDefaultLeagueContext('test', 48);
+    const hitterPark = createSeedParkFactors({
+      runs: 1.2,
+      leftHandedHR: 1.2,
+      rightHandedHR: 1.2,
+      leftHandedAVG: 1.2,
+      rightHandedAVG: 1.2,
+    });
+
+    const explicitHome = calculateBWAR(createTestStats({ pa: 201, homePA: 40 }), context, {
+      parkFactors: hitterPark,
+      batterHand: 'R',
+    });
+    const fallbackHome = calculateBWAR(createTestStats({ pa: 201 }), context, {
+      parkFactors: hitterPark,
+      batterHand: 'R',
+    });
+    const explicitFallbackEquivalent = calculateBWAR(createTestStats({ pa: 201, homePA: 100 }), context, {
+      parkFactors: hitterPark,
+      batterHand: 'R',
+    });
+
+    expect(Math.abs(fallbackHome.parkAdjustment)).toBeGreaterThan(Math.abs(explicitHome.parkAdjustment));
+    expect(fallbackHome.parkAdjustment).toBeCloseTo(explicitFallbackEquivalent.parkAdjustment, 10);
+    expect(fallbackHome.bWAR).toBeCloseTo(explicitFallbackEquivalent.bWAR, 10);
   });
 });
 

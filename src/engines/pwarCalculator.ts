@@ -113,6 +113,11 @@ export interface PitchingLeagueContext {
   calibrationConfidence: number;  // 0-1
 }
 
+export interface PWARCalculationOptions {
+  useLeverageAdjustment?: boolean;
+  parkFactor?: number;
+}
+
 // ============================================
 // FIP CALCULATION
 // ============================================
@@ -289,11 +294,9 @@ export function getPitcherRunsPerWin(
 export function calculatePWAR(
   stats: PitchingStatsForWAR,
   context: PitchingLeagueContext,
-  options: {
-    useLeverageAdjustment?: boolean;
-  } = {}
+  options: PWARCalculationOptions = {}
 ): PWARResult {
-  const { useLeverageAdjustment = true } = options;
+  const { useLeverageAdjustment = true, parkFactor = DEFAULT_PARK_FACTOR } = options;
   const { ip, gamesStarted, gamesAppeared, saves = 0, holds = 0, averageLeverageIndex } = stats;
 
   // NaN guard: if any numeric input is NaN, return zero result
@@ -321,8 +324,9 @@ export function calculatePWAR(
     };
   }
 
-  // Step 1: Calculate FIP
-  const pitcherFIP = calculateFIP(stats, context.fipConstant);
+  // Step 1: Calculate FIP, then park-adjust before league comparison.
+  const rawPitcherFIP = calculateFIP(stats, context.fipConstant);
+  const pitcherFIP = applyPitcherParkFactor(rawPitcherFIP, parkFactor);
   const leagueFIP = context.leagueFIP;
 
   // Step 2: FIP difference (positive = better than average)
@@ -375,7 +379,8 @@ export function calculatePWAR(
  */
 export function calculatePWARSimplified(
   stats: PitchingStatsForWAR,
-  seasonGames: number = SMB4_PITCHING_BASELINES.gamesPerTeam
+  seasonGames: number = SMB4_PITCHING_BASELINES.gamesPerTeam,
+  options: PWARCalculationOptions = {}
 ): PWARResult {
   const context: PitchingLeagueContext = {
     seasonId: 'default',
@@ -386,7 +391,7 @@ export function calculatePWARSimplified(
     calibrationConfidence: 1.0,
   };
 
-  return calculatePWAR(stats, context);
+  return calculatePWAR(stats, context, options);
 }
 
 // ============================================

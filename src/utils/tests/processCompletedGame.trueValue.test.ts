@@ -211,6 +211,10 @@ describe('processCompletedGame True Value persistence gate', () => {
       32,
       ['batter-1', 'pitcher-1'],
       expect.any(Map),
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        homeTeamId: 'team-b',
+      }),
     );
     expect(mocks.calculateAndPersistFranchiseTrueValueForSeason).toHaveBeenCalledWith({
       franchiseId: 'franchise-1',
