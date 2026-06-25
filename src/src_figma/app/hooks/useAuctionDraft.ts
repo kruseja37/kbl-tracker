@@ -10,8 +10,6 @@ import {
   passLoneSurvivorOut,
   recordBid,
   surfaceNextPlayer,
-  type AuctionPlayer,
-  type AuctionTeamInput,
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
 import { computeAuctionTeamProjectedTaxWithCaps } from "../../../engines/auctionLuxuryTax";
@@ -23,12 +21,18 @@ import {
 } from "../../../engines/cpuShillBidding";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
 import type { LuxuryCapRow } from "../../../data/tierParams";
-import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import {
   createAuctionSessionId,
   getAuctionSession,
   saveAuctionSession,
 } from "../../../utils/leagueBuilderStorage";
+import {
+  buildAuctionPlayers,
+  buildAuctionTeams,
+  commitCompletedMlbAuctionSessionToLeagueRosters,
+  computeIvPercentiles,
+  MLB_AUCTION_SEASON,
+} from "../../../utils/leagueBuilderAuctionPipeline";
 import { regenerateAndPersistLeaguePoolAxes } from "../../../utils/leaguePoolAxisRegenPersist";
 import {
   toConstructionPlayer,
@@ -41,9 +45,13 @@ import {
 } from "../../hooks/useLeagueBuilderData";
 
 export { getCurrentBidderTeamId } from "../../../engines/auctionStateMachine";
+export {
+  buildAuctionPlayers,
+  buildAuctionTeams,
+  computeIvPercentiles,
+  MLB_AUCTION_SEASON,
+} from "../../../utils/leagueBuilderAuctionPipeline";
 
-const MLB_AUCTION_ROSTER_SLOTS = 22;
-const MLB_AUCTION_SEASON = 1;
 const MAX_CPU_AUTO_ADVANCE_STEPS = 400;
 
 type AuctionDraftContext = {
@@ -99,37 +107,6 @@ export function teamDisplayName(team: Team | null | undefined): string {
 export function playerDisplayName(player: Player | null | undefined): string {
   if (!player) return "Unknown Player";
   return `${player.firstName} ${player.lastName}`.trim() || player.id;
-}
-
-export function computeIvPercentiles(poolPlayers: readonly RegisteredPool["players"][number][]): Map<string, number> {
-  const sorted = [...poolPlayers].sort((left, right) => left.iv - right.iv || left.id.localeCompare(right.id));
-  const denominator = Math.max(1, sorted.length - 1);
-  const firstIndexByIv = new Map<number, number>();
-
-  sorted.forEach((player, index) => {
-    if (!firstIndexByIv.has(player.iv)) firstIndexByIv.set(player.iv, index);
-  });
-
-  return new Map(
-    poolPlayers.map((player) => [
-      player.id,
-      sorted.length <= 1 ? 100 : ((firstIndexByIv.get(player.iv) ?? 0) / denominator) * 100,
-    ]),
-  );
-}
-
-export function buildAuctionPlayers(pool: RegisteredPool): AuctionPlayer[] {
-  const percentiles = computeIvPercentiles(pool.players);
-  return pool.players.map((player) => {
-    if (!Number.isFinite(player.iv)) {
-      throw new Error(`RegisteredPool player ${player.id} has no finite IV.`);
-    }
-    return {
-      playerId: player.id,
-      iv: player.iv,
-      ivPercentile: percentiles.get(player.id) ?? 0,
-    };
-  });
 }
 
 function buildAuctionLuxuryTaxContext(input: {
@@ -193,37 +170,6 @@ export function applyAuctionLuxuryTaxForLot(
       };
     }),
   };
-}
-
-export async function buildAuctionTeams(input: {
-  leagueTeams: readonly Team[];
-  pool: RegisteredPool;
-  getRoster: UseLeagueBuilderDataReturn["getRoster"];
-}): Promise<AuctionTeamInput[]> {
-  const poolById = new Map(input.pool.players.map((player) => [player.id, player]));
-
-  return Promise.all(
-    input.leagueTeams.map(async (team) => {
-      const roster = await input.getRoster(team.id);
-      const mlbRosterIds = roster?.mlbRoster ?? [];
-      const committedRoster = mlbRosterIds
-        .map((playerId) => {
-          const poolPlayer = poolById.get(playerId);
-          return poolPlayer ? { playerId, salary: poolPlayer.salary } : null;
-        })
-        .filter((assignment): assignment is { playerId: string; salary: number } => assignment !== null);
-      const committedSalaries = committedRoster.reduce((sum, assignment) => sum + assignment.salary, 0);
-
-      return {
-        teamId: team.id,
-        budgetRemaining: Math.max(0, input.pool.tierCap - committedSalaries),
-        rosterSlotsRemaining: Math.max(0, MLB_AUCTION_ROSTER_SLOTS - mlbRosterIds.length),
-        minSalary: LEAGUE_MINIMUM_SALARY,
-        projectedTax: 0,
-        roster: committedRoster,
-      };
-    }),
-  );
 }
 
 export function deriveCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
@@ -303,6 +249,12 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       seed: nextSession.config.nominationOrderSeed,
       session: nextSession,
     });
+    if (nextSession.state === "AUCTION_COMPLETE" && nextSession.saleCount > 0) {
+      await commitCompletedMlbAuctionSessionToLeagueRosters({
+        leagueId: nextContext.leagueId,
+        session: nextSession,
+      });
+    }
     return nextSession;
   }, []);
 
@@ -392,6 +344,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       .filter((team): team is Team => Boolean(team)) ?? [];
     setContext(nextContext);
     if (!row) {
+      taxContextRef.current = null;
+      return null;
+    }
+    if (row.session.state === "AUCTION_COMPLETE" && row.session.saleCount === 0 && row.session.results.length === 0) {
       taxContextRef.current = null;
       return null;
     }

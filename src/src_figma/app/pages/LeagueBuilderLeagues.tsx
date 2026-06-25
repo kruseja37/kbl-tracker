@@ -31,7 +31,8 @@ import {
 import type { BalanceMode, RegisteredPool } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
-import { getLeagueDraftFormat } from "../../../utils/leagueBuilderStorage";
+import { deleteAuctionSession, getLeagueDraftFormat } from "../../../utils/leagueBuilderStorage";
+import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 
 // ============================================
 // TYPES
@@ -239,6 +240,7 @@ export function LeagueBuilderLeagues() {
     setRegisteringPoolId(leagueId);
     try {
       const pool = await registerLeaguePool(leagueId);
+      await deleteAuctionSession(leagueId, MLB_AUCTION_SEASON);
       setRegisteredPoolResult(pool);
     } catch (err) {
       console.error("Failed to register pool:", err);
