@@ -10,6 +10,7 @@ import { registerPool, type RegisteredPool } from '../engines/leagueConstruction
 import {
   getAllPlayers,
   getLeagueTemplate,
+  getTeamRoster,
   saveRegisteredPool,
   type Player,
 } from './leagueBuilderStorage';
@@ -85,9 +86,25 @@ export async function registerLeaguePoolForLeague(leagueId: string): Promise<Reg
   if (!league) throw new Error('League not found');
 
   const allPlayers = await getAllPlayers();
-  const leaguePlayers = allPlayers.filter((player) =>
-    player.leagueAssignments?.some((assignment) => assignment.leagueId === league.id)
-  );
+  const poolPlayerIds = new Set<string>();
+  const playerById = new Map(allPlayers.map((player) => [player.id, player]));
+
+  for (const player of allPlayers) {
+    if (player.leagueAssignments?.some((assignment) => assignment.leagueId === league.id)) {
+      poolPlayerIds.add(player.id);
+    }
+  }
+
+  for (const teamId of league.teamIds) {
+    const roster = await getTeamRoster(teamId);
+    for (const playerId of [...(roster?.mlbRoster ?? []), ...(roster?.farmRoster ?? [])]) {
+      if (playerById.has(playerId)) {
+        poolPlayerIds.add(playerId);
+      }
+    }
+  }
+
+  const leaguePlayers = allPlayers.filter((player) => poolPlayerIds.has(player.id));
 
   const registeredPool = registerPool({
     leagueId: league.id,

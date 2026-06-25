@@ -74,7 +74,7 @@ import { clearAllSchedules } from '../scheduleStorage';
 import { deleteSeasonMetadata } from '../seasonStorage';
 
 const LEAGUE_ID = 'draft-pipeline-integration-league';
-const TEAM_IDS = ['yankees', 'dodgers'] as const;
+const TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
 const MLB_AUCTION_SEED = 'draft-pipeline-mlb-auction-seed';
 const FARM_AUCTION_SEED = 'draft-pipeline-farm-auction-seed';
 const CREATED_FRANCHISE_IDS: string[] = [];
@@ -159,7 +159,7 @@ async function removePlayerFromLeague(player: Player, leagueId: string): Promise
 
 async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   addedFreeAgentId: string;
-  removedRosterPlayerId: string;
+  removedCuratedPlayerId: string;
   initialRosterPlayerIdsByTeamId: Record<string, string[]>;
 }> {
   await seedFromMLBDatabase(true);
@@ -200,7 +200,11 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
     for (const playerId of selectedRosterIds) {
       const player = await getPlayer(playerId);
       if (!player) throw new Error(`Seeded roster player ${playerId} was not found.`);
-      await assignPlayerToLeague(player, { leagueId: LEAGUE_ID, teamId, rosterStatus: 'MLB' });
+      expect(player.leagueAssignments ?? []).toEqual(
+        expect.not.arrayContaining([
+          expect.objectContaining({ leagueId: LEAGUE_ID }),
+        ]),
+      );
     }
 
     await saveScoutProfile({
@@ -219,21 +223,27 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   const initialRosterPlayerIds = new Set(Object.values(initialRosterPlayerIdsByTeamId).flat());
   const allRealPlayers = (await getAllPlayers())
     .filter((player) => player.sourceDatabase === 'SMB4')
-    .sort((left, right) => left.id.localeCompare(right.id));
-  const addedFreeAgent = allRealPlayers.find((player) => !initialRosterPlayerIds.has(player.id));
-  if (!addedFreeAgent) throw new Error('No non-roster real SMB4 player was available for pool curation.');
-  const removedRosterPlayerId = initialRosterPlayerIdsByTeamId[TEAM_IDS[0]][0];
+    .filter((player) => !initialRosterPlayerIds.has(player.id))
+    .sort((left, right) => right.salary - left.salary || left.id.localeCompare(right.id));
+  const [addedFreeAgent, removedCuratedPlayer] = allRealPlayers;
+  if (!addedFreeAgent || !removedCuratedPlayer) {
+    throw new Error('At least two non-roster real SMB4 players are required for pool curation.');
+  }
 
   expect(initialRosterPlayerIds.has(addedFreeAgent.id)).toBe(false);
+  expect(initialRosterPlayerIds.has(removedCuratedPlayer.id)).toBe(false);
 
   await assignPlayerToLeague(addedFreeAgent, {
     leagueId: LEAGUE_ID,
     teamId: '',
     rosterStatus: 'FREE_AGENT',
   });
-  const removedRosterPlayer = await getPlayer(removedRosterPlayerId);
-  if (!removedRosterPlayer) throw new Error(`Removed roster player ${removedRosterPlayerId} was not found.`);
-  await removePlayerFromLeague(removedRosterPlayer, LEAGUE_ID);
+  await assignPlayerToLeague(removedCuratedPlayer, {
+    leagueId: LEAGUE_ID,
+    teamId: '',
+    rosterStatus: 'FREE_AGENT',
+  });
+  await removePlayerFromLeague(removedCuratedPlayer, LEAGUE_ID);
 
   await expect(getPlayer(addedFreeAgent.id)).resolves.toEqual(
     expect.objectContaining({
@@ -242,7 +252,7 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
       ]),
     }),
   );
-  await expect(getPlayer(removedRosterPlayerId)).resolves.toEqual(
+  await expect(getPlayer(removedCuratedPlayer.id)).resolves.toEqual(
     expect.objectContaining({
       leagueAssignments: expect.not.arrayContaining([
         expect.objectContaining({ leagueId: LEAGUE_ID }),
@@ -253,13 +263,11 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   for (const teamId of TEAM_IDS) {
     const roster = await getTeamRoster(teamId);
     expect(roster?.mlbRoster.length).toBeGreaterThan(0);
-    await clearTeamRoster(teamId, LEAGUE_ID);
-    expectRosterToBeEmpty(await getTeamRoster(teamId));
   }
 
   return {
     addedFreeAgentId: addedFreeAgent.id,
-    removedRosterPlayerId,
+    removedCuratedPlayerId: removedCuratedPlayer.id,
     initialRosterPlayerIdsByTeamId,
   };
 }
@@ -323,14 +331,12 @@ async function runDraftPipeline(): Promise<{
   franchisePlayerCount: number;
   franchiseTeamCount: number;
   franchiseFarmRecordCount: number;
+  registeredPoolSize: number;
   addedFreeAgentId: string;
-  removedRosterPlayerId: string;
+  removedCuratedPlayerId: string;
 }> {
   const curatedFixture = await seedDraftLeagueWithRealMlbPlayers();
-
-  for (const teamId of TEAM_IDS) {
-    expectRosterToBeEmpty(await getTeamRoster(teamId));
-  }
+  const rosterPoolPlayerIds = Object.values(curatedFixture.initialRosterPlayerIdsByTeamId).flat();
 
   const staleComplete = initAuctionSession({
     teams: TEAM_IDS.map((teamId) => ({
@@ -356,9 +362,19 @@ async function runDraftPipeline(): Promise<{
 
   const pool = await registerLeaguePoolForLeague(LEAGUE_ID);
   const poolIds = pool.players.map((player) => player.id);
-  expect(poolIds).toHaveLength(TEAM_IDS.length * 22);
+  expect(new Set(poolIds).size).toBe(poolIds.length);
+  expect(rosterPoolPlayerIds).toHaveLength(TEAM_IDS.length * 22);
+  expect(poolIds).toHaveLength((TEAM_IDS.length * 22) + 1);
+  expect(poolIds.length).toBeGreaterThanOrEqual(TEAM_IDS.length * 22);
+  expect(poolIds).toEqual(expect.arrayContaining(rosterPoolPlayerIds));
   expect(poolIds).toContain(curatedFixture.addedFreeAgentId);
-  expect(poolIds).not.toContain(curatedFixture.removedRosterPlayerId);
+  expect(poolIds).not.toContain(curatedFixture.removedCuratedPlayerId);
+
+  for (const teamId of TEAM_IDS) {
+    await clearTeamRoster(teamId, LEAGUE_ID);
+    expectRosterToBeEmpty(await getTeamRoster(teamId));
+  }
+
   await deleteAuctionSession(LEAGUE_ID, MLB_AUCTION_SEASON);
   await expect(getAuctionSession(LEAGUE_ID, MLB_AUCTION_SEASON)).resolves.toBeNull();
 
@@ -411,7 +427,7 @@ async function runDraftPipeline(): Promise<{
       }),
     ]),
   );
-  expect(completedMlbSession.results.map((result) => result.playerId)).not.toContain(curatedFixture.removedRosterPlayerId);
+  expect(completedMlbSession.results.map((result) => result.playerId)).not.toContain(curatedFixture.removedCuratedPlayerId);
   await commitCompletedMlbAuctionSessionToLeagueRosters({
     leagueId: LEAGUE_ID,
     session: completedMlbSession,
@@ -555,15 +571,14 @@ async function runDraftPipeline(): Promise<{
         .map((result) => result.playerId),
     ]),
   );
-  expect(franchisePlayers.map((player) => player.id)).not.toContain(curatedFixture.removedRosterPlayerId);
+  expect(franchisePlayers.map((player) => player.id)).not.toContain(curatedFixture.removedCuratedPlayerId);
   expect(storedConfig?.rosterRequirements).toMatchObject({
     validationStatus: 'passed',
     teamCounts: rosterCounts,
   });
-  expect(Object.values(rosterCounts)).toEqual([
-    { MLB: 22, FARM: 10 },
-    { MLB: 22, FARM: 10 },
-  ]);
+  expect(Object.values(rosterCounts)).toEqual(
+    Array.from({ length: TEAM_IDS.length }, () => ({ MLB: 22, FARM: 10 })),
+  );
 
   return {
     mlbSoldPlayerIds: completedMlbSession.results
@@ -576,8 +591,9 @@ async function runDraftPipeline(): Promise<{
     franchisePlayerCount: franchisePlayers.length,
     franchiseTeamCount: franchiseTeams.length,
     franchiseFarmRecordCount: farmRecords.length,
+    registeredPoolSize: pool.players.length,
     addedFreeAgentId: curatedFixture.addedFreeAgentId,
-    removedRosterPlayerId: curatedFixture.removedRosterPlayerId,
+    removedCuratedPlayerId: curatedFixture.removedCuratedPlayerId,
   };
 }
 
