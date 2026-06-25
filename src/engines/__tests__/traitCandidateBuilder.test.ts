@@ -100,6 +100,19 @@ function passedBall(pitcherId: string, overrides: Partial<BetweenPlayEvent> = {}
   } as unknown as BetweenPlayEvent;
 }
 
+function wildPitch(pitcherId: string, overrides: Partial<BetweenPlayEvent> = {}): BetweenPlayEvent {
+  bpIndex += 1;
+  return {
+    eventId: `bp-${bpIndex}`,
+    gameId: 'g1',
+    timestamp: bpIndex,
+    eventIndex: bpIndex,
+    type: 'wild_pitch',
+    wildPitchOrPassedBall: { wpOrPb: 'wild_pitch', pitcherId },
+    ...overrides,
+  } as unknown as BetweenPlayEvent;
+}
+
 function errorAdvance(attributions: ErrorAttribution[], overrides: Partial<BetweenPlayEvent> = {}): BetweenPlayEvent {
   bpIndex += 1;
   return {
@@ -285,6 +298,11 @@ const DTE_MOJO_TRAITS = [
   'Consistent',
 ] as const;
 
+const DTF1_BESPOKE_TRAITS = [
+  'Base Jogger',
+  'Wild Thing',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -386,6 +404,9 @@ describe('BUILDABLE_TRAITS', () => {
       // DT-E: mojo-change-rate earn-signals.
       'Volatile',
       'Consistent',
+      // DT-F1: bespoke grounded earn-signals.
+      'Base Jogger',
+      'Wild Thing',
     ]);
   });
 
@@ -1549,6 +1570,67 @@ describe('R1-b1 Base Rounder (advancing beyond the forced minimum)', () => {
   });
 });
 
+describe('DT-F1 Base Jogger (reverse Base Rounder predicate over the same chances)', () => {
+  function ro(runnerId: string, fromBase: 'batter' | 'first' | 'second' | 'third', toBase: 'first' | 'second' | 'third' | 'home' | 'out' | 'end') {
+    return { runnerId, runnerName: runnerId.toUpperCase(), fromBase, toBase };
+  }
+
+  it('is registered as a buildable canonical trait', () => {
+    for (const traitName of DTF1_BESPOKE_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+  });
+
+  it('scores forced-minimum and thrown-out runners as successes, but extra-base advances as non-successes', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: [
+        // On a 1B, r1 is forced to 2nd; exactly 2nd is a Base Jogger success.
+        atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'second')] }),
+        // A throw-out trying to stretch is a Base Jogger success and Base Rounder non-success.
+        atBat({ batterId: 'b1', result: '1B', outsAfter: 1, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'out')] }),
+        // Taking the extra base is a Base Jogger non-success and Base Rounder success.
+        atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')] }),
+      ],
+    }));
+
+    expect(candidate(result, 'r1', 'Base Jogger')?.signalValue).toBeCloseTo(2 / 3, 10);
+    expect(candidate(result, 'r1', 'Base Jogger')?.sampleSize).toBe(3);
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(1 / 3, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(3);
+  });
+
+  it('excludes held end runners from both Base Jogger and Base Rounder denominators', () => {
+    const on1B: RunnerState = { first: { runnerId: 'r1', runnerName: 'R1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['r1'], 'position'),
+      atBatEvents: [
+        // Held runners are explicitly not opportunities for either trait.
+        ...repeat(3, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'end')] })),
+        // These two are the only chances: one Base Jogger success, one Base Rounder success.
+        atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'second')] }),
+        atBat({ batterId: 'b1', result: '1B', outsAfter: 0, runners: on1B, runnerOutcomes: [ro('r1', 'first', 'third')] }),
+      ],
+    }));
+
+    expect(candidate(result, 'r1', 'Base Jogger')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'r1', 'Base Jogger')?.sampleSize).toBe(2);
+    expect(candidate(result, 'r1', 'Base Rounder')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'r1', 'Base Rounder')?.sampleSize).toBe(2);
+  });
+
+  it('keeps Base Jogger out of the pitcher pool (position-only)', () => {
+    const on1B: RunnerState = { first: { runnerId: 'pr1', runnerName: 'PR1', responsiblePitcherId: 'p1' }, second: null, third: null };
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pr1', role: 'pitcher' }],
+      atBatEvents: repeat(5, () => atBat({ batterId: 'b1', result: '1B', outsAfter: 1, runners: on1B, runnerOutcomes: [ro('pr1', 'first', 'out')] })),
+    }));
+
+    expect(candidate(result, 'pr1', 'Base Jogger')).toBeUndefined();
+  });
+});
+
 describe('R1-b1 L9b-2 seam (new traits feed computeTraitAcquisition)', () => {
   it('emits Big Hack / Base Rounder / Distractor in the { traitName, score } shape the acquisition combiner consumes', () => {
     const on1B: RunnerState = { first: { runnerId: 'b1', runnerName: 'B1', responsiblePitcherId: 'p1' }, second: null, third: null };
@@ -1708,6 +1790,59 @@ describe('R1-b2 Crossed Up (passed balls per batters-faced, attributed to the pi
     // Undone PB excluded (1 live PB) and undone PA excluded (BF = 10, not 11): 1/10.
     expect(candidate(result, 'p1', 'Crossed Up')?.signalValue).toBeCloseTo(0.1, 10);
     expect(candidate(result, 'p1', 'Crossed Up')?.sampleSize).toBe(10);
+  });
+});
+
+describe('DT-F1 Wild Thing (wild pitches plus WP_K per batters-faced)', () => {
+  it('computes Wild Thing as wild_pitch events plus WP_K at-bats over pitcher BF', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1'], 'pitcher'),
+      atBatEvents: [
+        ...repeat(8, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+        ...repeat(2, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'WP_K', outsAfter: 1 })),
+      ],
+      // 2 wild pitches + 2 WP_K = 4 wildness events over 10 BF. The passed ball
+      // sibling must not count toward Wild Thing.
+      betweenPlayEvents: [wildPitch('p1'), wildPitch('p1'), passedBall('p1')],
+    }));
+
+    expect(candidate(result, 'p1', 'Wild Thing')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'p1', 'Wild Thing')?.sampleSize).toBe(10);
+  });
+
+  it('keys wild pitches to the matching pitcher and excludes undone events and at-bats', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p1', 'p2'], 'pitcher'),
+      atBatEvents: [
+        atBat({ pitcherId: 'p1', batterId: 'opp', result: 'WP_K', outsAfter: 1, undoneAt: 1 }),
+        ...repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+        ...repeat(9, () => atBat({ pitcherId: 'p2', batterId: 'opp', result: 'GO', outsAfter: 1 })),
+        atBat({ pitcherId: 'p2', batterId: 'opp', result: 'WP_K', outsAfter: 1 }),
+      ],
+      betweenPlayEvents: [
+        wildPitch('p1'),
+        wildPitch('p1', { undoneAt: 1 } as Partial<BetweenPlayEvent>),
+        wildPitch('p2'),
+        passedBall('p2'),
+      ],
+    }));
+
+    // p1: undone WP_K and undone wild pitch excluded => 1/10.
+    expect(candidate(result, 'p1', 'Wild Thing')?.signalValue).toBeCloseTo(0.1, 10);
+    expect(candidate(result, 'p1', 'Wild Thing')?.sampleSize).toBe(10);
+    // p2: one WP_K + one wild_pitch, passed ball ignored => 2/10.
+    expect(candidate(result, 'p2', 'Wild Thing')?.signalValue).toBeCloseTo(0.2, 10);
+    expect(candidate(result, 'p2', 'Wild Thing')?.sampleSize).toBe(10);
+  });
+
+  it('keeps Wild Thing out of the position pool (pitcher-only role eligibility)', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'p1', role: 'position' }],
+      atBatEvents: repeat(10, () => atBat({ pitcherId: 'p1', batterId: 'opp', result: 'WP_K', outsAfter: 1 })),
+      betweenPlayEvents: [wildPitch('p1'), wildPitch('p1')],
+    }));
+
+    expect(candidate(result, 'p1', 'Wild Thing')).toBeUndefined();
   });
 });
 

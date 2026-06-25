@@ -223,6 +223,9 @@ const NEGATIVE_IMAGE_TRAITS = new Set([
   'Base Jogger',
   'Whiffer',
   'Injury Prone',
+  // DT-F1 (§0.6b row F): Wild Thing is a negative pitcher trait with no
+  // personality image driver; it keeps the default universal negative tilt.
+  'Wild Thing',
   // R1-a (§0.7): K Neglector enters BUILDABLE_TRAITS — negative valence + low-charisma lean.
   'K Neglector',
   // R2 (§0.7): the count-family NEGATIVE pair (BB Prone / Falls Behind — high

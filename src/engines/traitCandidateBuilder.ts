@@ -151,6 +151,11 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // Volatile = many real mojo transitions per game; Consistent = inverse rate.
   'Volatile',
   'Consistent',
+  // DT-F1 (TRAIT_MEASUREMENT_SPEC §0.6b row F): bespoke grounded earn-signals.
+  // Base Jogger reverses Base Rounder's advancement predicate over the same
+  // opportunity set; Wild Thing counts wild_pitch + WP_K over pitcher BF.
+  'Base Jogger',
+  'Wild Thing',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -1234,6 +1239,57 @@ function addBaseRounderSignals(input: SeasonTraitCandidateInput, raw: RawSignalM
   addAccumulatorSignals(raw, accumulators);
 }
 
+/**
+ * DT-F1 — Base Jogger (TRAIT_MEASUREMENT_SPEC §0.6b row F). This is a separate
+ * accumulator over the EXACT Base Rounder opportunity set: every recorded
+ * advancement or throw-out is a chance, while `toBase:'end'` is excluded. The
+ * only flipped logic is the success predicate: a Base Jogger success is failing
+ * to advance beyond the forced minimum, including being thrown out stretching.
+ */
+function addBaseJoggerSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const accumulators = new Map<string, Map<string, Accumulator>>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    if (!Array.isArray(atBat.runnerOutcomes)) continue;
+    const bases: BaseBooleans = {
+      first: !!atBat.runners.first,
+      second: !!atBat.runners.second,
+      third: !!atBat.runners.third,
+    };
+
+    for (const entry of atBat.runnerOutcomes) {
+      const { runnerId, fromBase, toBase } = entry;
+
+      // Opportunity iff a recorded advancement OR a throw-out; a held 'end' is
+      // not a chance. This must match Base Rounder exactly.
+      const isChance = toBase !== 'end';
+      if (!isChance) continue;
+
+      let forcedMinOrdinal: number;
+      if (fromBase === 'batter') {
+        forcedMinOrdinal = batterEntitledOrdinal(atBat.result);
+      } else {
+        const currentOrdinal = BASE_ORDINAL[fromBase];
+        if (isRunnerForced(fromBase, atBat.result, bases, atBat.outs)) {
+          const forcedTo = getMinimumAdvancement(fromBase, atBat.result, bases, atBat.outs);
+          forcedMinOrdinal = forcedTo ? BASE_ORDINAL[forcedTo] : currentOrdinal;
+        } else {
+          // Not forced => the minimum is to stay put.
+          forcedMinOrdinal = currentOrdinal;
+        }
+      }
+
+      const reachedRealBase = toBase !== 'out';
+      const toBaseOrdinal = reachedRealBase ? BASE_ORDINAL[toBase] : 0;
+      const success = !reachedRealBase || toBaseOrdinal <= forcedMinOrdinal;
+
+      addOpportunity(accumulators, runnerId, 'Base Jogger', success);
+    }
+  }
+
+  addAccumulatorSignals(raw, accumulators);
+}
+
 type StolenBasePayload = NonNullable<BetweenPlayEvent['stolenBase']> & {
   runnerId?: string;
   isSuccessful?: boolean;
@@ -1443,6 +1499,41 @@ function addCrossedUpSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap
     const pb = passedBalls.get(pitcherId) ?? 0;
     addRawSignal(raw, pitcherId, 'Crossed Up', {
       signalValue: pb / bf,
+      sampleSize: bf,
+    });
+  }
+}
+
+/**
+ * DT-F1 — Wild Thing (TRAIT_MEASUREMENT_SPEC §0.6b row F). Wildness is pitcher-
+ * keyed over the same BF denominator as Crossed Up, with two disjoint numerator
+ * sources: between-play `wild_pitch` events and at-bat `WP_K` results. We count
+ * all logged wild_pitch events, regardless of runnersAdvanced population.
+ */
+function addWildThingSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const battersFaced = new Map<string, number>();
+  const wildEvents = new Map<string, number>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    battersFaced.set(atBat.pitcherId, (battersFaced.get(atBat.pitcherId) ?? 0) + 1);
+    if (atBat.result === 'WP_K') {
+      wildEvents.set(atBat.pitcherId, (wildEvents.get(atBat.pitcherId) ?? 0) + 1);
+    }
+  }
+
+  for (const event of sortBetweenPlayEvents(input.betweenPlayEvents).filter((item) => !undoneAt(item))) {
+    const payload = event.wildPitchOrPassedBall;
+    if (payload?.wpOrPb !== 'wild_pitch') continue;
+    const pitcherId = payload.pitcherId;
+    if (!pitcherId) continue;
+    wildEvents.set(pitcherId, (wildEvents.get(pitcherId) ?? 0) + 1);
+  }
+
+  for (const [pitcherId, bf] of battersFaced) {
+    if (bf <= 0) continue;
+    const wildness = wildEvents.get(pitcherId) ?? 0;
+    addRawSignal(raw, pitcherId, 'Wild Thing', {
+      signalValue: wildness / bf,
       sampleSize: bf,
     });
   }
@@ -1794,6 +1885,7 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   // until the E1 grade map is threaded in).
   addAceExterminatorSignals(input, raw);
   addBaseRounderSignals(input, raw);
+  addBaseJoggerSignals(input, raw);
   addStealSignals(input, raw);
   addButterFingersSignals(input, raw);
   addErrorSignals(input, raw);
@@ -1802,6 +1894,7 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   // Utility (fielding perf at a non-primary position).
   addBunterSignals(input, raw);
   addCrossedUpSignals(input, raw);
+  addWildThingSignals(input, raw);
   addUtilitySignals(input, raw);
   // R2 — First-Pitch pair (count-family is folded into addOutcomeRateSignals) +
   // the 6 handedness splits (DORMANT until the handedness maps are threaded in).

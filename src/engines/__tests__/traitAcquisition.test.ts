@@ -986,6 +986,22 @@ describe('traitAcquisition DT-FIX-2 Volatile positive image valence', () => {
   });
 });
 
+describe('traitAcquisition DT-F1 Wild Thing negative image valence', () => {
+  test('Wild Thing is negative with no personality image driver', () => {
+    const fragile = proposalFor('Wild Thing', {
+      playerRole: 'pitcher',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+    const timid = proposalFor('Wild Thing', { playerRole: 'pitcher', personality: 'Timid' });
+    const droopy = proposalFor('Wild Thing', { playerRole: 'pitcher', personality: 'Droopy' });
+
+    expect(fragile.imageValence).toBe('negative');
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+    expect(timid.factors.imageAxisTilt).toBe(1);
+    expect(droopy.factors.imageAxisTilt).toBe(1);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');
