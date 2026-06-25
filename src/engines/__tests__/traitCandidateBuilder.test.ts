@@ -221,6 +221,11 @@ const DTC1_CHASE_TRAITS = [
   'Bad Ball Hitter',
 ] as const;
 
+const DTC2_WEB_GEM_TRAITS = [
+  'Magic Hands',
+  'Dive Wizard',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -313,6 +318,9 @@ describe('BUILDABLE_TRAITS', () => {
       'Outside Pitch',
       // DT-C1: Bad Ball Hitter chase hit-rate earn-signal.
       'Bad Ball Hitter',
+      // DT-C2: web-gem fielding earn-signals with rating-gated cohorts.
+      'Magic Hands',
+      'Dive Wizard',
     ]);
   });
 
@@ -2591,6 +2599,185 @@ describe('traitCandidateBuilder DT-C1 Bad Ball Hitter chase signals', () => {
 
     expect(raw.get('pitcher-bat')?.get('Bad Ball Hitter')).toBeDefined();
     expect(candidate(result, 'pitcher-bat', 'Bad Ball Hitter')).toBeUndefined();
+  });
+});
+
+function webGemChances(playerId: string, webGems: number, chances: number): FieldingEvent[] {
+  const gemTypes = ['Diving', 'Leaping', 'Sliding'] as const;
+  return Array.from({ length: chances }, (_, index) => fielding({
+    playerId,
+    playerName: playerId,
+    specialPlayType: index < webGems ? gemTypes[index % gemTypes.length] : 'Routine',
+    success: true,
+  }));
+}
+
+describe('traitCandidateBuilder DT-C2 web-gem fielding signals', () => {
+  it('makes Magic Hands and Dive Wizard buildable only from fielder-keyed web-gem data plus ratings', () => {
+    for (const traitName of DTC2_WEB_GEM_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['fielder', 'peer-low', 'peer-mid'], 'position'),
+      fielderRatingsByPlayer: new Map([
+        ['fielder', { fielding: 60, arm: 70 }],
+        ['peer-low', { fielding: 65, arm: 70 }],
+        ['peer-mid', { fielding: 70, arm: 70 }],
+      ]),
+      fieldingEvents: [
+        ...webGemChances('fielder', 3, 10),
+        ...webGemChances('peer-low', 1, 10),
+        ...webGemChances('peer-mid', 2, 10),
+      ],
+    }));
+
+    const magic = candidate(result, 'fielder', 'Magic Hands');
+    expect(magic).toBeDefined();
+    expect(magic?.signalValue).toBeCloseTo(0.3, 10);
+    expect(magic?.sampleSize).toBe(10);
+    expect(magic?.score.sufficient).toBe(true);
+    expect(candidate(result, 'fielder', 'Dive Wizard')).toBeUndefined();
+  });
+
+  it('applies strict rating gates at signal emission and allows Magic Hands plus Dive Wizard to co-hold', () => {
+    const input = baseInput({
+      players: players([
+        'fielding-only',
+        'arm-only',
+        'both',
+        'fielding-boundary',
+        'arm-boundary',
+        'absent-ratings',
+      ], 'position'),
+      fielderRatingsByPlayer: new Map([
+        ['fielding-only', { fielding: 60, arm: 70 }],
+        ['arm-only', { fielding: 85, arm: 90 }],
+        ['both', { fielding: 60, arm: 90 }],
+        ['fielding-boundary', { fielding: 80, arm: 90 }],
+        ['arm-boundary', { fielding: 60, arm: 80 }],
+      ]),
+      fieldingEvents: [
+        ...webGemChances('fielding-only', 2, 10),
+        ...webGemChances('arm-only', 2, 10),
+        ...webGemChances('both', 2, 10),
+        ...webGemChances('fielding-boundary', 2, 10),
+        ...webGemChances('arm-boundary', 2, 10),
+        ...webGemChances('absent-ratings', 2, 10),
+      ],
+    });
+    const raw = buildRawSignals(input);
+    const result = computeSeasonTraitCandidates(input);
+
+    expect(raw.get('fielding-only')?.has('Magic Hands')).toBe(true);
+    expect(raw.get('fielding-only')?.has('Dive Wizard')).toBe(false);
+    expect(candidate(result, 'fielding-only', 'Magic Hands')).toBeDefined();
+    expect(candidate(result, 'fielding-only', 'Dive Wizard')).toBeUndefined();
+
+    expect(raw.get('arm-only')?.has('Magic Hands')).toBe(false);
+    expect(raw.get('arm-only')?.has('Dive Wizard')).toBe(true);
+    expect(candidate(result, 'arm-only', 'Magic Hands')).toBeUndefined();
+    expect(candidate(result, 'arm-only', 'Dive Wizard')).toBeDefined();
+
+    expect(raw.get('both')?.has('Magic Hands')).toBe(true);
+    expect(raw.get('both')?.has('Dive Wizard')).toBe(true);
+    expect(candidate(result, 'both', 'Magic Hands')).toBeDefined();
+    expect(candidate(result, 'both', 'Dive Wizard')).toBeDefined();
+
+    expect(raw.get('fielding-boundary')?.has('Magic Hands')).toBe(false);
+    expect(raw.get('fielding-boundary')?.has('Dive Wizard')).toBe(true);
+    expect(candidate(result, 'fielding-boundary', 'Magic Hands')).toBeUndefined();
+    expect(candidate(result, 'fielding-boundary', 'Dive Wizard')).toBeDefined();
+
+    expect(raw.get('arm-boundary')?.has('Magic Hands')).toBe(true);
+    expect(raw.get('arm-boundary')?.has('Dive Wizard')).toBe(false);
+    expect(candidate(result, 'arm-boundary', 'Magic Hands')).toBeDefined();
+    expect(candidate(result, 'arm-boundary', 'Dive Wizard')).toBeUndefined();
+
+    expect(raw.get('absent-ratings')?.has('Magic Hands')).toBe(false);
+    expect(raw.get('absent-ratings')?.has('Dive Wizard')).toBe(false);
+    expect(candidate(result, 'absent-ratings', 'Magic Hands')).toBeUndefined();
+    expect(candidate(result, 'absent-ratings', 'Dive Wizard')).toBeUndefined();
+  });
+
+  it('keeps web-gem traits dormant when the fielder ratings map is omitted', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['fielder'], 'position'),
+      fieldingEvents: webGemChances('fielder', 10, 10),
+    }));
+
+    expect(candidate(result, 'fielder', 'Magic Hands')).toBeUndefined();
+    expect(candidate(result, 'fielder', 'Dive Wizard')).toBeUndefined();
+  });
+
+  it('filters the Magic Hands comparison cohort before percentiling so elite fielders do not bury sub-80 overperformers', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['overperformer', 'eligible-low', 'eligible-mid', 'elite-glove'], 'position'),
+      fielderRatingsByPlayer: new Map([
+        ['overperformer', { fielding: 60, arm: 70 }],
+        ['eligible-low', { fielding: 65, arm: 70 }],
+        ['eligible-mid', { fielding: 75, arm: 70 }],
+        ['elite-glove', { fielding: 90, arm: 70 }],
+      ]),
+      fieldingEvents: [
+        ...webGemChances('overperformer', 6, 10),
+        ...webGemChances('eligible-low', 2, 10),
+        ...webGemChances('eligible-mid', 4, 10),
+        ...webGemChances('elite-glove', 10, 10),
+      ],
+    }));
+
+    const overperformer = candidate(result, 'overperformer', 'Magic Hands');
+    expect(candidate(result, 'elite-glove', 'Magic Hands')).toBeUndefined();
+    expect(overperformer).toBeDefined();
+    expect(overperformer?.score.peerPoolSize).toBe(3);
+    expect(overperformer?.score.sufficient).toBe(true);
+    expect(overperformer?.score.realityPercentile).toBeCloseTo(1, 10);
+  });
+
+  it('gates web-gem traits at the rate min-sample boundary', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['thin', 'full', 'peer-low', 'peer-mid'], 'position'),
+      fielderRatingsByPlayer: new Map([
+        ['thin', { fielding: 60, arm: 70 }],
+        ['full', { fielding: 60, arm: 70 }],
+        ['peer-low', { fielding: 65, arm: 70 }],
+        ['peer-mid', { fielding: 70, arm: 70 }],
+      ]),
+      fieldingEvents: [
+        ...webGemChances('thin', 9, 9),
+        ...webGemChances('full', 5, 10),
+        ...webGemChances('peer-low', 2, 10),
+        ...webGemChances('peer-mid', 8, 10),
+      ],
+    }));
+    const thin = candidate(result, 'thin', 'Magic Hands');
+    const full = candidate(result, 'full', 'Magic Hands');
+
+    expect(thin).toBeDefined();
+    expect(thin?.sampleSize).toBe(9);
+    expect(thin?.score.sufficient).toBe(false);
+    expect(thin?.score.sufficiency).not.toBe('sufficient');
+    expect(full).toBeDefined();
+    expect(full?.sampleSize).toBe(10);
+    expect(full?.score.sufficient).toBe(true);
+    expect(full?.score.realityPercentile).not.toBeNull();
+    expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
+  });
+
+  it('counts only made Diving/Leaping/Sliding plays, excludes non-gem special plays, and skips undone fielding events', () => {
+    const raw = buildRawSignals(baseInput({
+      fielderRatingsByPlayer: new Map([['fielder', { fielding: 60, arm: 90 }]]),
+      fieldingEvents: [
+        fielding({ playerId: 'fielder', specialPlayType: 'Diving', success: true }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Leaping', success: false }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Robbed HR', success: true }),
+        fielding({ playerId: 'fielder', specialPlayType: 'Sliding', success: true, undoneAt: 1 } as Partial<FieldingEvent>),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Magic Hands')).toEqual({ signalValue: 1 / 3, sampleSize: 3 });
+    expect(raw.get('fielder')?.get('Dive Wizard')).toEqual({ signalValue: 1 / 3, sampleSize: 3 });
   });
 });
 

@@ -149,6 +149,11 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Rally Starter',
   'Pinch Perfect',
   'Magic Hands',
+  // DT-C2 / §0.6b row C: positive valence (priced positive). §0.7 assigns
+  // NO Dive Wizard personality driver → NO IMAGE_DRIVER_SETS entry
+  // (neutral/universal tilt, OPEN-DECISION-for-JK). Magic Hands remains wired
+  // separately; no Magic Hands↔Dive Wizard opposite pair because they co-hold.
+  'Dive Wizard',
   'Rally Stopper',
   'Stealer',
   'Sprinter',

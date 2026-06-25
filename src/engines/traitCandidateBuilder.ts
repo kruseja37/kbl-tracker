@@ -136,6 +136,11 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // (hits-on-chase / (hits + outs-on-chase) over enrichment.chased ABs);
   // hitter-only; dormant until ≥10 chased hit-or-out ABs (rate-basis valve).
   'Bad Ball Hitter',
+  // DT-C2 (TRAIT_MEASUREMENT_SPEC §0.6b row C): fielder web-gem rate
+  // earn-signals; gated at signal emission by fielding/arm ratings so peer pools
+  // are rating-eligible cohorts only.
+  'Magic Hands',
+  'Dive Wizard',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -180,6 +185,14 @@ export interface SeasonTraitCandidateInput {
    * that derives primary position is a deferred step, NOT part of this ticket).
    */
   primaryPositionByPlayer?: ReadonlyMap<string, string>;
+  /**
+   * DT-C2 (Magic Hands / Dive Wizard) — OPTIONAL. The fielder's current SMB4
+   * fielding + arm ratings keyed by playerId. These are cohort filters, applied
+   * at signal emission: fielding < 80 emits Magic Hands; arm > 80 emits Dive
+   * Wizard. When absent or a fielder is missing, both web-gem traits stay
+   * dormant for that fielder.
+   */
+  fielderRatingsByPlayer?: ReadonlyMap<string, { fielding: number; arm: number }>;
   /**
    * R2 (handedness splits) — OPTIONAL. The throwing hand ('L'|'R') of each pitcher
    * keyed by pitcherId, used to bucket the position batter's CON/POW splits and to
@@ -303,6 +316,10 @@ const HIT_RESULTS: ReadonlySet<AtBatResult> = new Set([
   'ITPHR',
   'GRD',
 ]);
+
+// §0.6b row C web-gem set; Robbed HR / Over Shoulder EXCLUDED for v1
+// (OPEN-DECISION; the app's GEM_PLAY_TYPES includes Robbed HR).
+const WEB_GEM_PLAY_TYPES: ReadonlySet<string> = new Set(['Diving', 'Leaping', 'Sliding']);
 
 const ELITE_PITCH_CODES = ['4F', '2F', 'CF', 'CB', 'CH', 'FK', 'SB', 'SL'] as const;
 type ElitePitchCode = (typeof ELITE_PITCH_CODES)[number];
@@ -896,6 +913,40 @@ function addChaseSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
       signalValue: bucket.hits / sampleSize,
       sampleSize,
     });
+  }
+}
+
+function addWebGemSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  interface WebGemBucket { webGems: number; chances: number; }
+
+  const chancesByFielder = new Map<string, WebGemBucket>();
+
+  for (const event of input.fieldingEvents.filter((item) => !fieldingUndoneAt(item))) {
+    const bucket = chancesByFielder.get(event.playerId) ?? { webGems: 0, chances: 0 };
+    bucket.chances += 1;
+    if (event.success && event.specialPlayType && WEB_GEM_PLAY_TYPES.has(event.specialPlayType)) {
+      bucket.webGems += 1;
+    }
+    chancesByFielder.set(event.playerId, bucket);
+  }
+
+  for (const playerId of [...chancesByFielder.keys()].sort()) {
+    const bucket = chancesByFielder.get(playerId);
+    if (!bucket || bucket.chances <= 0) continue;
+
+    const ratings = input.fielderRatingsByPlayer?.get(playerId);
+    if (!ratings) continue;
+
+    const signal = {
+      signalValue: bucket.webGems / bucket.chances,
+      sampleSize: bucket.chances,
+    };
+    if (ratings.fielding < 80) {
+      addRawSignal(raw, playerId, 'Magic Hands', signal);
+    }
+    if (ratings.arm > 80) {
+      addRawSignal(raw, playerId, 'Dive Wizard', signal);
+    }
   }
 }
 
@@ -1678,6 +1729,8 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addPitchLocationSignals(input, raw);
   // DT-C1 — Bad Ball Hitter chase hit-rate (TRAIT_MEASUREMENT_SPEC §0.6b row C).
   addChaseSignals(input, raw);
+  // DT-C2 — web-gem rate with rating-gated cohort filters (TRAIT_MEASUREMENT_SPEC §0.6b row C).
+  addWebGemSignals(input, raw);
   return raw;
 }
 

@@ -90,6 +90,8 @@ export interface TraitGrantRosterEntry {
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
   primaryPosition: string;
+  fielding: number;
+  arm: number;
   grade?: Smb4Grade;
 }
 
@@ -132,6 +134,8 @@ export async function resolveTraitGrantRoster(
       bats: player.bats,
       throws: player.throws,
       primaryPosition: player.primaryPosition,
+      fielding: player.fielding,
+      arm: player.arm,
       grade: isPitcher
         ? scoreSmb4Player({
             primaryPosition: player.primaryPosition,
@@ -221,6 +225,7 @@ export async function persistDarkTraitGrantForCompletedGame(
     batterHandByPlayer: new Map(roster.map((e) => [e.playerId, e.bats])),
     pitcherHandByPlayer: new Map(roster.map((e) => [e.playerId, e.throws])),
     primaryPositionByPlayer: new Map(roster.map((e) => [e.playerId, e.primaryPosition])),
+    fielderRatingsByPlayer: new Map(roster.map((e) => [e.playerId, { fielding: e.fielding, arm: e.arm }])),
     pitcherGradeByPlayer: new Map(
       roster
         .filter((e) => e.role === 'pitcher' && e.grade != null)

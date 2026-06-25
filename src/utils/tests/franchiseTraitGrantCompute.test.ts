@@ -52,6 +52,11 @@ import {
   type TraitGrantScope,
 } from '../franchiseTraitGrantCompute';
 import {
+  deleteFranchiseDatabase,
+  saveFranchisePlayer,
+  saveFranchiseTeam,
+} from '../franchisePlayerStorage';
+import {
   getFranchiseTraitOverlaysByScope,
   resetFranchiseTraitOverlaysForTests,
 } from '../franchiseTraitOverlayStorage';
@@ -62,8 +67,10 @@ import type {
   SeasonTraitCandidateInput,
 } from '../../engines/traitCandidateBuilder';
 import { SMB4_FULL_GRADE_SCALE } from '../../engines/smb4GradeEmulator';
+import type { Player, Team } from '../leagueBuilderStorage';
 
 const DB_NAME = 'kbl-tracker';
+const ROSTER_DB_FRANCHISE_ID = 'franchise-trait-roster-ratings';
 const scope: TraitGrantScope = {
   franchiseId: 'franchise-trait-grants',
   seasonId: 'season-trait-grants',
@@ -120,6 +127,60 @@ function candidate(
     signalValue: realityPercentile,
     sampleSize: 20,
   };
+}
+
+function makeTeam(overrides: Partial<Team> = {}): Team {
+  return {
+    id: 'team-trait-ratings',
+    name: 'Trait Ratings',
+    abbreviation: 'TRR',
+    location: 'Trait City',
+    nickname: 'Ratings',
+    colors: { primary: '#111111', secondary: '#eeeeee' },
+    stadium: 'Trait Park',
+    leagueIds: ['league-trait-ratings'],
+    createdDate: '2026-06-25T00:00:00.000Z',
+    lastModified: '2026-06-25T00:00:00.000Z',
+    ...overrides,
+  } as Team;
+}
+
+function makePlayer(overrides: Partial<Player> = {}): Player {
+  return {
+    id: 'fielder-ratings',
+    firstName: 'Field',
+    lastName: 'Rating',
+    gender: 'M',
+    age: 26,
+    bats: 'R',
+    throws: 'R',
+    primaryPosition: 'CF',
+    power: 50,
+    contact: 50,
+    speed: 50,
+    fielding: 64,
+    arm: 88,
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
+    arsenal: [],
+    overallGrade: 'C',
+    personality: 'Competitive',
+    chemistry: 'Competitive',
+    morale: 50,
+    mojo: 'Normal',
+    fame: 0,
+    salary: 0,
+    leagueAssignments: [{
+      leagueId: 'league-trait-ratings',
+      teamId: 'team-trait-ratings',
+      rosterStatus: 'MLB',
+    }],
+    createdDate: '2026-06-25T00:00:00.000Z',
+    lastModified: '2026-06-25T00:00:00.000Z',
+    isCustom: true,
+    ...overrides,
+  } as Player;
 }
 
 function seedCheckpointReads(gameNumber = 20, metadataOverrides: Record<string, unknown> = {}): void {
@@ -188,6 +249,8 @@ function stubTraitPipeline(): void {
       bats: 'R',
       throws: 'R',
       primaryPosition: 'CF',
+      fielding: 72,
+      arm: 83,
     } satisfies TraitGrantRosterEntry,
   ]);
   vi.spyOn(traitGrantSeam, 'computeSeasonTraitCandidates').mockReturnValue(new Map([
@@ -221,6 +284,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     vi.clearAllMocks();
     resetFranchiseTraitOverlaysForTests();
     await deleteDatabase(DB_NAME);
+    await deleteFranchiseDatabase(ROSTER_DB_FRANCHISE_ID);
     setFranchisePhase2TraitsEnabledForTests(null);
   });
 
@@ -228,6 +292,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     setFranchisePhase2TraitsEnabledForTests(null);
     resetFranchiseTraitOverlaysForTests();
     await deleteDatabase(DB_NAME);
+    await deleteFranchiseDatabase(ROSTER_DB_FRANCHISE_ID);
   });
 
   test('flag off returns dark-noop without loading schedule, season, events, roster, or overlays', async () => {
@@ -330,6 +395,29 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(secondRows).toEqual(firstRows);
   });
 
+  test('resolveTraitGrantRoster carries player fielding and arm ratings onto roster entries', async () => {
+    await saveFranchiseTeam(ROSTER_DB_FRANCHISE_ID, makeTeam());
+    await saveFranchisePlayer(ROSTER_DB_FRANCHISE_ID, makePlayer({
+      id: 'fielder-ratings',
+      fielding: 64,
+      arm: 88,
+    }));
+
+    const roster = await traitGrantSeam.resolveTraitGrantRoster({
+      franchiseId: ROSTER_DB_FRANCHISE_ID,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+    });
+
+    expect(roster).toHaveLength(1);
+    expect(roster[0]).toMatchObject({
+      playerId: 'fielder-ratings',
+      role: 'position',
+      fielding: 64,
+      arm: 88,
+    });
+  });
+
   test('threads roster handedness, position, and pitcher grade into computeSeasonTraitCandidates maps', async () => {
     setFranchisePhase2TraitsEnabledForTests(true);
     seedCheckpointReads();
@@ -346,6 +434,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'L',
         throws: 'R',
         primaryPosition: '2B',
+        fielding: 64,
+        arm: 76,
         // position players carry no grade
       },
       {
@@ -358,6 +448,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'S',
         throws: 'L',
         primaryPosition: 'SP',
+        fielding: 51,
+        arm: 90,
         grade: pitcherGrade,
       },
     ] satisfies TraitGrantRosterEntry[]);
@@ -396,6 +488,12 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(input.primaryPositionByPlayer?.get('player-batter')).toBe('2B');
     expect(input.primaryPositionByPlayer?.get('player-pitcher')).toBe('SP');
     expect(input.primaryPositionByPlayer?.size).toBe(2);
+
+    // fielderRatingsByPlayer carries every roster player's fielding/arm ratings for DT-C2's emission gate.
+    expect(input.fielderRatingsByPlayer).toBeInstanceOf(Map);
+    expect(input.fielderRatingsByPlayer?.get('player-batter')).toEqual({ fielding: 64, arm: 76 });
+    expect(input.fielderRatingsByPlayer?.get('player-pitcher')).toEqual({ fielding: 51, arm: 90 });
+    expect(input.fielderRatingsByPlayer?.size).toBe(2);
 
     // pitcherGradeByPlayer carries the Smb4Grade for pitcher-role entries and omits position players.
     expect(input.pitcherGradeByPlayer).toBeInstanceOf(Map);

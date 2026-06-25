@@ -897,6 +897,28 @@ describe('traitAcquisition DT-C1 Bad Ball Hitter image default', () => {
   });
 });
 
+describe('traitAcquisition DT-C2 Dive Wizard image default', () => {
+  test('Dive Wizard is positive with no personality driver and no Magic Hands opposite pair', () => {
+    const ambitious = proposalFor('Dive Wizard', {
+      playerRole: 'position',
+      modifiers: { ...neutralModifiers, ambition: 100 },
+    });
+    const competitive = proposalFor('Dive Wizard', { playerRole: 'position', personality: 'Competitive' });
+    const egotistical = proposalFor('Dive Wizard', { playerRole: 'position', personality: 'Egotistical' });
+    const tough = proposalFor('Dive Wizard', { playerRole: 'position', personality: 'Tough' });
+    const timid = proposalFor('Dive Wizard', { playerRole: 'position', personality: 'Timid' });
+
+    expect(ambitious.imageValence).toBe('positive');
+    expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+    expect(competitive.factors.imageAxisTilt).toBe(1);
+    expect(egotistical.factors.imageAxisTilt).toBe(1);
+    expect(tough.factors.imageAxisTilt).toBe(1);
+    expect(timid.factors.imageAxisTilt).toBe(1);
+    expect(TRAIT_OPPOSITES['Dive Wizard']).toBeUndefined();
+    expect(TRAIT_OPPOSITES['Magic Hands']).toBe('Butter Fingers');
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');
