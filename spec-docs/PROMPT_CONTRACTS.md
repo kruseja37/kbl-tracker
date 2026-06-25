@@ -22878,3 +22878,60 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** the Failed-Robbery union member cascades into a DB/enum-index/shape change or a sprawling rewrite (→ fall back to grouped-miss per JK, document it); a miss event would have to be a `base_save` (→ STOP, held-count inflation); a made-gem or box-score/held fixture changes for a NON-miss play (→ STOP, regression); a `TRACKER_DB_VERSION` bump / new store is needed (→ STOP); a trait engine must change (→ STOP, that's the follow-up); a full-suite red outside the characterized set that 2 fix-iters can't clear (→ STOP/SET-ASIDE). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing — ESPECIALLY confirm the chosen miss playType does not inflate the held/box-score counts.
 <!-- ===== END CONTRACT: CAP-MISS ===== -->
+
+<!-- ===== CONTRACT: BF-MH ===== -->
+## BF-MH — Butter Fingers ⇄ Magic Hands diametrically-opposed fielding counter-trait pair (build-dark)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer reworking the fielding "hands" signals into a shared opposed framework. Build-dark (trait pipeline `isFranchisePhase2TraitsEnabled()`-gated); no DB bump.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (JK ruling 2026-06-26 + the adversarially-verified design pass):** make Magic Hands and Butter Fingers a DIAMETRICALLY-OPPOSED pair over a SHARED fielding event set. Now buildable because CAP-MISS (`41cb5a66`) persists missed spectacular attempts.
+- **Magic Hands** (good hands) = MADE spectacular catches / (made + missed spectacular attempts + fielding errors).
+- **Butter Fingers** (bad hands) = (MISSED spectacular attempts [Failed Robbery weighted LIGHTER per JK] + FIELDING errors) / (same denominator).
+- **Dive Wizard** rides the Magic Hands made-gem signal (arm>80 gate).
+- Fielding errors = `ErrorAttribution.type==='fielding'` ONLY (NOT throwing/mental — those stay Wild Thrower/Noodle Arm).
+- never-both is enforced by the EXISTING `OPPOSITE_PAIRS ['Magic Hands','Butter Fingers']` acquisition duel (no change needed there).
+
+**SOURCE OF TRUTH:** DECISIONS_LOG 2026-06-26 "Butter Fingers ⇄ Magic Hands"; the design pass `wf_6ddb6bc2-53e`; JK nuance 2026-06-26 (failed robbery dings the fielder LESS — mainly the pitcher's fault).
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `WEB_GEM_PLAY_TYPES` (`traitCandidateBuilder.ts:350`) = `{Diving, Leaping, Sliding, Robbed HR}` (the MADE-gem set). ADD a sibling `MISSED_GEM_PLAY_TYPES = {Missed Dive, Missed Leap, Failed Robbery}` (the misses CAP-MISS now persists; `'Failed Robbery'` is now a first-class SpecialPlayType).
+- `addWebGemSignals` (`:947`): TODAY `bucket.chances` = ALL non-undone FieldingEvents (`:954`), `bucket.webGems` = `success && specialPlayType ∈ WEB_GEM_PLAY_TYPES`; emits Magic Hands (fielding<80) / Dive Wizard (arm>80) via `fielderRatingsByPlayer`. **REWORK** the denominator to the SHARED set (see below); keep the rating gates + `fielderRatingsByPlayer` seam unchanged.
+- `addButterFingersSignals` (`:1346`): TODAY counts `playType==='error' || success===false` over ALL FieldingEvents / all chances. **REPLACE** with the shared-bucket Butter Fingers formula (below) — stop reading the untyped `FieldingEvent.playType==='error'` (it can't separate fielding from throwing/mental).
+- Fielding-error source = `addErrorSignals`' pattern (`:1363-1390`): iterate `runnerOutcome.errorAttributions` (`:1380`) + `event.errorAttributions` (betweenPlayEvents, `:1387`), count `attribution.type==='fielding'` keyed to `attribution.fielderIds`. The `'fielding'` type is already reserved for this (DT-FIX-1 routes it to neither Wild Thrower nor Noodle Arm).
+- Dedup join key = `FieldingEvent.atBatEventId` (`eventLog.ts:734`) + playerId. A missed-spectacular FieldingEvent and a fielding-error ErrorAttribution on the SAME (atBatEventId, fielder) are ONE underlying play → count ONCE; **missed-gem WINS** (it's the spectacular-attempt classification). The error attribution carries the atBatEventId (it lives on the at-bat's runnerOutcomes / a betweenPlayEvent — confirm the atBatEventId is reachable for the dedup; if a betweenPlay error has no atBatEventId join, count it as a standalone fielding error).
+- `OPPOSITE_PAIRS ['Magic Hands','Butter Fingers']` (`traitAcquisition.ts:337`) — UNCHANGED (the never-both backstop).
+
+**BUILD (one shared pass, refactor `addWebGemSignals` to populate both made + missed + error counts):**
+1. Per fielder, over non-undone FieldingEvents: `madeGems` += `success && specialPlayType ∈ WEB_GEM_PLAY_TYPES`; `missedGems` += `specialPlayType ∈ MISSED_GEM_PLAY_TYPES` (track separately a `failedRobberies` subtotal); record the `(atBatEventId, playerId)` of every missed-gem for dedup.
+2. `fieldingErrors` per fielder = count of `ErrorAttribution.type==='fielding'` keyed to `fielderIds`, **EXCLUDING** any whose `(atBatEventId, playerId)` already counted as a missed-gem (dedup; missed-gem wins).
+3. `denominator = madeGems + missedGems + fieldingErrors` (deduped). Skip fielders with `denominator <= 0`.
+4. **Magic Hands** = `madeGems / denominator` (emit if `ratings.fielding < 80`). **Dive Wizard** = `madeGems / denominator` (emit if `ratings.arm > 80`). (Rating gate + `fielderRatingsByPlayer` absent→dormant unchanged.)
+5. **Butter Fingers** = `(missedGems − failedRobberies + failedRobberies × FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT + fieldingErrors) / denominator`. Add an exported `FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT = 0.5` (§16 sim-tune default — a failed robbery dings half as much as a routine missed dive; comment `§16`/JK 2026-06-26; flag for JK). No rating gate on Butter Fingers (whole cohort).
+6. Update the stale header comment (`traitCandidateBuilder.ts:145-147` — the "throwing + fielding errors → Wild Thrower" line is WRONG post-DT-FIX-1; fielding → Butter Fingers).
+7. NO change to `OPPOSITE_PAIRS` / `BUILDABLE_TRAITS` (Magic Hands/Dive Wizard/Butter Fingers already buildable). NO DB bump. NO trait-acquisition valence change (Magic Hands/Dive Wizard positive, Butter Fingers negative — already set).
+
+**OPEN-DECISIONS (documented defaults — flag for JK):** `FAILED_ROBBERY_BUTTER_FINGERS_WEIGHT = 0.5` (JK said "less damaging"; magnitude is a §16 sim-tune default — 0 = no ding, 1 = full ding); a failed robbery STAYS in the denominator (dilutes Magic Hands — it was a spectacular attempt that didn't land). Dedup of between-play fielding errors lacking an atBatEventId join = counted standalone.
+
+**TEST (`traitCandidateBuilder.test.ts`; the DT-C2 web-gem tests WILL move — the denominator narrows from all-chances to spectacular-attempts+errors → UPDATE them to the new expected rates, this is INTENDED):**
+- Magic Hands = made/(made+missed+fielding-errors): a fielder with 3 made + 2 missed + 0 errors over (formerly 10 routine chances) → now 3/5, not 3/10. Update the DT-C2 fixtures/expectations.
+- Butter Fingers = (missed[failed-rob-lighter] + fielding-errors)/denominator; a made-gem machine has ~0 Butter Fingers, a flubber has high Butter Fingers.
+- **never-both:** propose both for one player → the OPPOSITE_PAIRS duel drops the loser; hold one → the other is blocked (the duel test, the real guarantee — NOT "rates sum to 1").
+- **dedup:** a missed dive that is ALSO a fielding error on the same at-bat counts ONCE (denominator + Butter Fingers numerator each +1, not +2).
+- **fielding-errors-only:** a throwing or mental error does NOT count toward Butter Fingers (only `type==='fielding'`).
+- **failed-robbery lighter:** a fielder with N failed robberies has a Butter Fingers numerator contribution of `N × 0.5` (not N), and the failed robberies still dilute Magic Hands (in the denominator).
+- made-gem classification unchanged (a successful Diving/Robbed HR is still a made gem).
+
+**MAKE-OR-BREAK:** Magic Hands + Butter Fingers share ONE denominator (made gems + missed gems + deduped fielding-errors); Magic Hands = made/denom, Butter Fingers = (missed[failed-rob ×0.5] + fielding-errors)/denom; fielding-errors via `ErrorAttribution.type==='fielding'` (NOT the untyped FieldingEvent error, NOT throwing/mental), deduped per (atBatEventId,fielder) with missed-gem winning; never-both via the existing duel; no DB bump; no trait-acquisition/registry change. Files: `traitCandidateBuilder.ts` + tests.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — feeds processCompletedGame; the denominator change can hide in integration/franchise/L-SIM fixtures) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake). A DT-C2 web-gem golden moving to the new denominator is EXPECTED (update it); a NON-fielding-trait franchise/L-SIM fixture moving → STOP (regression).
+5. `git --no-pager diff --stat` → `traitCandidateBuilder.ts` + its test ONLY. No `traitAcquisition.ts` (OPPOSITE_PAIRS/valence unchanged), no `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts`/`traitRealityScorer.ts`, no `trackerDb.ts`, no extractor.
+
+**FORMAT:** (1) files+lines; (2) the shared bucket (made/missed/fielding-error counts + the dedup), the Magic Hands/Dive Wizard/Butter Fingers formulas, the failed-robbery weight constant, the DT-C2 test updates + why, confirm never-both-via-duel + no DB/acquisition/registry touch; (3) verification output; (4) "BF-MH complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the fielding-error atBatEventId↔missed-gem dedup can't be done (→ STOP, double-count risk on exactly the plays the ruling cares about); a throwing/mental error leaks into Butter Fingers (→ STOP, must be `type==='fielding'` only); never-both could be cleared (a player qualifies for BOTH through the duel — → STOP, re-check the duel); a DB bump / acquisition / registry change is needed (→ STOP); a NON-fielding franchise/L-SIM fixture regresses outside the characterized set (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: BF-MH ===== -->
