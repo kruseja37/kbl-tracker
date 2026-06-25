@@ -169,6 +169,7 @@ function entry(overrides: Partial<CheckpointRosterEntry> = {}): CheckpointRoster
     modifiers: neutralModifiers,
     playerMorale: 50,
     teamFanMorale: 50,
+    ageBand: '25-31',
     signalByRatingKey,
     sampleByRatingKey,
     createdAt: '2026-06-18T00:00:00.000Z',
@@ -390,6 +391,73 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         createdAt: shifter.createdAt,
       },
     ]);
+  });
+
+  test('age gravity writes negative old and positive young neutral-signal overlays', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-old-38', 'player-young-20']),
+      pitchers: new Set(),
+    });
+    const old = entry({
+      playerId: 'player-old-38',
+      ageBand: '36+',
+      signalByRatingKey: { power: 0 },
+      teamFanMorale: 20,
+    });
+    const young = entry({
+      playerId: 'player-young-20',
+      ageBand: '18-21',
+      signalByRatingKey: { power: 0 },
+      teamFanMorale: 80,
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([old, young]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 2 });
+    expect(rows.map((row) => [row.playerId, row.delta]).sort()).toEqual([
+      ['player-old-38', -1],
+      ['player-young-20', 1],
+    ]);
+  });
+
+  test('prime-age sweep remains byte-identical to omitted age-band development', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-prime-28']),
+      pitchers: new Set(),
+    });
+    const prime = entry({
+      playerId: 'player-prime-28',
+      ageBand: '25-31',
+      signalByRatingKey: { power: 1 },
+      teamFanMorale: 80,
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([prime]);
+    const preRa5Dev = computeCheckpointRatingDevelopment(
+      {
+        ratingKey: 'power',
+        baseRatingValue: prime.baseRatings.power,
+        performanceSignal: 1,
+        playerMorale: prime.playerMorale,
+        teamFanMorale: prime.teamFanMorale,
+        personality: prime.personality,
+        modifiers: prime.modifiers,
+        confidence: 1,
+      },
+      CHECKPOINT_DEV_TUNING,
+    );
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(preRa5Dev.rawDelta).toBe(3);
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].playerId).toBe('player-prime-28');
+    expect(rows[0].delta).toBe(preRa5Dev.appliedDelta);
   });
 
   test('confidence dead-band blocks thin checkpoint samples but lets full samples shift', async () => {
@@ -637,6 +705,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     const playerIds = ['hitter-tv', 'farm-no-tv', 'peer-1', 'peer-2', 'peer-3', 'peer-4'];
     const hitters = playerIds.map((id, index) => player({
       id,
+      age: index === 0 ? 38 : index === 1 ? 20 : 28,
       primaryPosition: 'SS',
       personality: index === 0 ? 'Spirited' : 'Relaxed',
       morale: index === 0 ? 64 : 50,
@@ -738,6 +807,8 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     const members = signalSpy.mock.calls[0][0];
     expect(members.map((member) => member.playerId).sort()).toEqual([...playerIds].sort());
     expect(members.find((member) => member.playerId === 'hitter-tv')?.poolKey).toBe('middleIF');
+    expect(members.find((member) => member.playerId === 'hitter-tv')?.ageBand).toBe('36+');
+    expect(members.find((member) => member.playerId === 'farm-no-tv')?.ageBand).toBe('18-21');
     expect(members.find((member) => member.playerId === 'farm-no-tv')?.poolKey).toBe('middleIF');
     expect(buildFranchiseEffectivePositionReport).toHaveBeenCalledWith({
       franchiseId: scope.franchiseId,
@@ -761,6 +832,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
       playerId: 'hitter-tv',
       teamId: 'team-a',
       isPitcher: false,
+      ageBand: '36+',
       baseRatings: {
         power: 48,
         contact: 50,
@@ -794,5 +866,12 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     const source = readFileSync('src/utils/franchiseCheckpointSweepCompute.ts', 'utf8');
 
     expect(source).not.toMatch(/Math\.random|Date\.now|new Date\(|indexedDB\.open/);
+  });
+
+  test('L10 sweep remains age-neutral and does not call rating development', () => {
+    const source = readFileSync('src/utils/franchiseL10SweepCompute.ts', 'utf8');
+
+    expect(source).not.toMatch(/ageBand\s*:/);
+    expect(source).not.toMatch(/computeCheckpointRatingDevelopment/);
   });
 });

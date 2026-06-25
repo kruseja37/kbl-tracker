@@ -133,6 +133,7 @@ export interface CheckpointRosterEntry {
   modifiers: Pick<HiddenModifiers, 'loyalty' | 'ambition' | 'resilience'>;
   playerMorale: number;
   teamFanMorale: number;
+  ageBand: ExpectedStatsAgeBand;
   signalByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   createdAt: string | null;
@@ -322,6 +323,7 @@ export async function resolveCheckpointRoster(
     teamId: string | null;
     isPitcher: boolean;
     baseRatings: Record<string, number>;
+    ageBand: ExpectedStatsAgeBand;
     member: CheckpointSignalMember;
     sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   }> = [];
@@ -329,6 +331,7 @@ export async function resolveCheckpointRoster(
   for (const player of players) {
     const isPitcher = getPlayerIsPitcher(player);
     const role = isPitcher ? 'pitcher' : 'hitter';
+    const ageBand = ageToExpectedStatsBand(player.age);
     const effectivePosition =
       effectivePositionReport.playerPositions[player.id]?.effectivePosition ?? player.primaryPosition;
     const startsShare = effectivePositionReport.playerPositions[player.id]?.startsShare ?? null;
@@ -360,10 +363,11 @@ export async function resolveCheckpointRoster(
       teamId: teamIdByPlayerId.get(player.id) ?? null,
       isPitcher,
       baseRatings,
+      ageBand,
       member: {
         playerId: player.id,
         role,
-        ageBand: ageToExpectedStatsBand(player.age),
+        ageBand,
         ratings: baseRatings as Partial<Record<ExpectedStatsRatingKey, number>>,
         poolKey,
         categoryRates,
@@ -375,7 +379,7 @@ export async function resolveCheckpointRoster(
   const signalMap = computeCheckpointRatingSignals(memberEntries.map((entry) => entry.member));
   const roster: CheckpointRosterEntry[] = [];
 
-  for (const { player, teamId, isPitcher, baseRatings, sampleByRatingKey } of memberEntries) {
+  for (const { player, teamId, isPitcher, baseRatings, ageBand, sampleByRatingKey } of memberEntries) {
     if (teamId && !teamFanMoraleByTeamId.has(teamId)) {
       teamFanMoraleByTeamId.set(
         teamId,
@@ -400,6 +404,7 @@ export async function resolveCheckpointRoster(
       },
       playerMorale: player.morale,
       teamFanMorale: teamId ? await teamFanMoraleByTeamId.get(teamId)! : 50,
+      ageBand,
       signalByRatingKey: signalMap.get(player.id) ?? {},
       sampleByRatingKey,
       createdAt: trueValueRowsByPlayerId.get(player.id)?.computedAt ?? null,
@@ -484,6 +489,7 @@ export async function persistDarkCheckpointSweepForCompletedGame(
           ratingKey,
           baseRatingValue,
           performanceSignal: signal,
+          ageBand: entry.ageBand,
           playerMorale: entry.playerMorale,
           teamFanMorale: entry.teamFanMorale,
           personality: entry.personality,

@@ -1,6 +1,7 @@
 import { applyFanMoraleDampener } from './fanMoraleDampener';
 import type { FanDampenerResult } from './fanMoraleDampener';
 import type { CanonicalPersonality } from './masterMoraleMatrix';
+import type { ExpectedStatsAgeBand, ExpectedStatsRatingKey } from './expectedStatsEngine';
 import type { HiddenModifiers } from '../types/game';
 
 /**
@@ -38,6 +39,8 @@ export interface RatingsDevelopmentTuning {
   moraleMultiplierMax: number;
   shiftThreshold: number;
   maxAbsDelta: number;
+  ageCurveSlopeByBand: Record<ExpectedStatsAgeBand, number>;
+  ageSteepnessByRatingKey: Record<ExpectedStatsRatingKey, number>;
 }
 
 // §16 SIM-TUNE placeholders — shape locked, numbers owned by the Simulation Gate.
@@ -52,12 +55,32 @@ export const RATINGS_DEVELOPMENT_TUNING: RatingsDevelopmentTuning = {
   moraleMultiplierMax: 1.5,
   shiftThreshold: 0.75,
   maxAbsDelta: 6,
+  // §16 age-curve gravity placeholders: prime band is neutral; young/old tails pull the move.
+  ageCurveSlopeByBand: {
+    '18-21': 0.8,
+    '22-24': 0.35,
+    '25-31': 0,
+    '32-35': -0.35,
+    '36+': -0.8,
+  },
+  // §16 realism multipliers: speed/fielding/arm age faster than bat-to-ball tools.
+  ageSteepnessByRatingKey: {
+    power: 1,
+    contact: 1,
+    speed: 1.25,
+    fielding: 1.2,
+    arm: 1.25,
+    velocity: 1.1,
+    junk: 1,
+    accuracy: 1,
+  },
 };
 
 export interface CheckpointRatingDevelopmentInput {
   ratingKey: string;
   baseRatingValue: number;
   performanceSignal: number;
+  ageBand?: ExpectedStatsAgeBand;
   confidence?: number;
   playerMorale: number;
   teamFanMorale: number;
@@ -115,7 +138,11 @@ export function computeCheckpointRatingDevelopment(
     },
     tuning,
   );
-  const cappedRaw = clamp(rawDelta, -tuning.maxAbsDelta, tuning.maxAbsDelta);
+  const ageGravity =
+    tuning.ageCurveSlopeByBand[input.ageBand ?? '25-31'] *
+    ageSteepnessForRatingKey(input.ratingKey, tuning);
+  const signedMove = rawDelta + ageGravity;
+  const cappedRaw = clamp(signedMove, -tuning.maxAbsDelta, tuning.maxAbsDelta);
   const confidenceScaled = cappedRaw * clamp(input.confidence ?? 1, 0, 1);
   const dampener = applyFanMoraleDampener(
     confidenceScaled,
@@ -137,7 +164,7 @@ export function computeCheckpointRatingDevelopment(
 
   return {
     ratingKey: input.ratingKey,
-    rawDelta,
+    rawDelta: signedMove,
     dampenedDelta,
     appliedDelta,
     proposedRating,
@@ -148,6 +175,16 @@ export function computeCheckpointRatingDevelopment(
       ? `ratings_development.shift_${direction}`
       : `ratings_development.no_shift_${direction}`,
   };
+}
+
+function ageSteepnessForRatingKey(
+  ratingKey: string,
+  tuning: RatingsDevelopmentTuning,
+): number {
+  if (Object.prototype.hasOwnProperty.call(tuning.ageSteepnessByRatingKey, ratingKey)) {
+    return tuning.ageSteepnessByRatingKey[ratingKey as ExpectedStatsRatingKey];
+  }
+  return 1;
 }
 
 function clamp(amount: number, min: number, max: number): number {
