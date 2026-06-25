@@ -187,6 +187,14 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Elite SL',
   'Fastball Hitter',
   'Off-Speed Hitter',
+  // DT-B / §16 sim-tune default (Captain, AUTH-4): spec §0.7 does NOT assign
+  // drivers for these 4; mirror K Collector / the T-9b pitch traits.
+  // Personality is a ≤±20% TILT, never a gate (§0.8) — the per-zone reality
+  // signal is primary.
+  'High Pitch',
+  'Low Pitch',
+  'Inside Pitch',
+  'Outside Pitch',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([
@@ -271,6 +279,14 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   'Elite SL': ['COMPETITIVE', 'EGOTISTICAL'],
   'Fastball Hitter': ['COMPETITIVE', 'EGOTISTICAL'],
   'Off-Speed Hitter': ['COMPETITIVE', 'EGOTISTICAL'],
+  // DT-B / §16 sim-tune default (Captain, AUTH-4): spec §0.7 does NOT assign
+  // drivers for these 4; mirror K Collector / the T-9b pitch traits.
+  // Personality is a ≤±20% TILT, never a gate (§0.8) — the per-zone reality
+  // signal is primary.
+  'High Pitch': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Low Pitch': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Inside Pitch': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Outside Pitch': ['COMPETITIVE', 'EGOTISTICAL'],
 };
 
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);
@@ -284,6 +300,12 @@ const RESILIENCE_POSITIVE_TRAITS = new Set(['Composed', 'Gets Ahead']);
 
 const OPPOSITE_PAIRS: readonly (readonly [string, string])[] = [
   ['First Pitch Slayer', 'First Pitch Prayer'],
+  // DT-B / §0.6b row B: pitch-location opposite pairs — earn-side
+  // mutual-exclusion (mirrors the generation conflict list
+  // `prospectScoutingDraftEngine.ts:381-382`). Feeds TRAIT_OPPOSITES + the
+  // reconcileGainProposals duels; NO new pass needed.
+  ['High Pitch', 'Low Pitch'],
+  ['Inside Pitch', 'Outside Pitch'],
   ['Cannon Arm', 'Noodle Arm'],
   ['Clutch', 'Choker'],
   ['RBI Hero', 'RBI Zero'],

@@ -125,6 +125,13 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   'Elite SL',
   'Fastball Hitter',
   'Off-Speed Hitter',
+  // DT-B (TRAIT_MEASUREMENT_SPEC §0.6b row B): per-pitch-LOCATION net-quality
+  // earn-signals (reuses the T-9a hitter scorer over enrichment.pitchLocation);
+  // hitter-only; dormant until ≥10 tagged ABs in that zone (rate-basis valve).
+  'High Pitch',
+  'Low Pitch',
+  'Inside Pitch',
+  'Outside Pitch',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -788,6 +795,63 @@ function addPitchTypeSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap
       addRawSignal(raw, batterId, 'Off-Speed Hitter', {
         signalValue: buckets.OS.sum / buckets.OS.sampleSize,
         sampleSize: buckets.OS.sampleSize,
+      });
+    }
+  }
+}
+
+function addPitchLocationSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  type PitchLocationBucketKey = 'LOW' | 'HIGH' | 'INSIDE' | 'OUTSIDE';
+  interface NetBucket { sum: number; sampleSize: number; }
+  type HitterLocationBuckets = Record<PitchLocationBucketKey, NetBucket>;
+
+  const locationBuckets = new Map<string, HitterLocationBuckets>();
+  const bucketKeys: readonly PitchLocationBucketKey[] = ['LOW', 'HIGH', 'INSIDE', 'OUTSIDE'];
+  const traitByBucket: Record<PitchLocationBucketKey, string> = {
+    LOW: 'Low Pitch',
+    HIGH: 'High Pitch',
+    INSIDE: 'Inside Pitch',
+    OUTSIDE: 'Outside Pitch',
+  };
+
+  const getHitterBuckets = (batterId: string): HitterLocationBuckets => {
+    let buckets = locationBuckets.get(batterId);
+    if (!buckets) {
+      buckets = {
+        LOW: { sum: 0, sampleSize: 0 },
+        HIGH: { sum: 0, sampleSize: 0 },
+        INSIDE: { sum: 0, sampleSize: 0 },
+        OUTSIDE: { sum: 0, sampleSize: 0 },
+      };
+      locationBuckets.set(batterId, buckets);
+    }
+    return buckets;
+  };
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const zone = atBat.enrichment?.pitchLocation;
+    let bucketKey: PitchLocationBucketKey | null = null;
+    if (zone === 'low') bucketKey = 'LOW';
+    if (zone === 'high') bucketKey = 'HIGH';
+    if (zone === 'inside') bucketKey = 'INSIDE';
+    if (zone === 'outside') bucketKey = 'OUTSIDE';
+    if (!bucketKey) continue;
+
+    const outcomeClass = classifyPitchOutcome(atBat.result);
+    const bucket = getHitterBuckets(atBat.batterId)[bucketKey];
+    bucket.sum += HITTER_PITCH_OUTCOME_WEIGHTS[outcomeClass];
+    bucket.sampleSize += 1;
+  }
+
+  for (const batterId of [...locationBuckets.keys()].sort()) {
+    const buckets = locationBuckets.get(batterId);
+    if (!buckets) continue;
+    for (const bucketKey of bucketKeys) {
+      const bucket = buckets[bucketKey];
+      if (bucket.sampleSize <= 0) continue;
+      addRawSignal(raw, batterId, traitByBucket[bucketKey], {
+        signalValue: bucket.sum / bucket.sampleSize,
+        sampleSize: bucket.sampleSize,
       });
     }
   }
@@ -1568,6 +1632,8 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addDurabilitySignals(input, raw);
   // T-9a — per-pitch-type net-quality (INERT until T-9b adds the 10 traits to BUILDABLE_TRAITS).
   addPitchTypeSignals(input, raw);
+  // DT-B — per-pitch-LOCATION net-quality (TRAIT_MEASUREMENT_SPEC §0.6b row B; reuses the T-9a hitter scorer).
+  addPitchLocationSignals(input, raw);
   return raw;
 }
 

@@ -854,6 +854,29 @@ describe('traitAcquisition T-9b pitch-type image defaults', () => {
   );
 });
 
+describe('traitAcquisition DT-B pitch-location image defaults', () => {
+  test.each(['High Pitch', 'Low Pitch', 'Inside Pitch', 'Outside Pitch'])(
+    '%s is positive and mirrors the K Collector COMPETITIVE/EGOTISTICAL image drivers',
+    (traitName) => {
+      const ambitious = proposalFor(traitName, {
+        playerRole: 'position',
+        modifiers: { ...neutralModifiers, ambition: 100 },
+      });
+      const competitive = proposalFor(traitName, { playerRole: 'position', personality: 'Competitive' });
+      const egotistical = proposalFor(traitName, { playerRole: 'position', personality: 'Egotistical' });
+      const tough = proposalFor(traitName, { playerRole: 'position', personality: 'Tough' });
+      const timid = proposalFor(traitName, { playerRole: 'position', personality: 'Timid' });
+
+      expect(ambitious.imageValence).toBe('positive');
+      expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+      expect(competitive.factors.imageAxisTilt).toBeGreaterThan(1);
+      expect(egotistical.factors.imageAxisTilt).toBeGreaterThan(1);
+      expect(tough.factors.imageAxisTilt).toBe(1);
+      expect(timid.factors.imageAxisTilt).toBe(1);
+    },
+  );
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');
@@ -991,6 +1014,55 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     ]);
     expect(result.skipped).toEqual([
       { traitName: 'Clutch', reason: 'offsetting_pair_held' },
+    ]);
+  });
+
+  test('DT-B held pitch-location opposite blocks a gain proposal', () => {
+    const result = computeTraitAcquisition(input({
+      heldTraits: [{ traitName: 'Low Pitch', strength: 0.4 }],
+      candidates: [{ traitName: 'High Pitch', score: score('High Pitch', 0.95) }],
+    }));
+
+    expect(result.proposals).toEqual([]);
+    expect(result.skipped).toEqual([
+      { traitName: 'High Pitch', reason: 'offsetting_pair_held' },
+    ]);
+  });
+
+  test('DT-B competing pitch-location gains keep only the higher gainScore', () => {
+    expect(0.92 * computeTraitWeight('High Pitch')).toBeGreaterThan(0.84 * computeTraitWeight('Low Pitch'));
+    expect(0.91 * computeTraitWeight('Outside Pitch')).toBeGreaterThan(0.83 * computeTraitWeight('Inside Pitch'));
+
+    const highLow = computeTraitAcquisition(
+      input({
+        candidates: [
+          { traitName: 'High Pitch', score: score('High Pitch', 0.92) },
+          { traitName: 'Low Pitch', score: score('Low Pitch', 0.84) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+    const insideOutside = computeTraitAcquisition(
+      input({
+        candidates: [
+          { traitName: 'Inside Pitch', score: score('Inside Pitch', 0.83) },
+          { traitName: 'Outside Pitch', score: score('Outside Pitch', 0.91) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(highLow.proposals).toMatchObject([
+      { traitName: 'High Pitch', valence: 'gain', probability: 0.92 },
+    ]);
+    expect(highLow.skipped).toEqual([
+      { traitName: 'Low Pitch', reason: 'offsetting_pair_held' },
+    ]);
+    expect(insideOutside.proposals).toMatchObject([
+      { traitName: 'Outside Pitch', valence: 'gain', probability: 0.91 },
+    ]);
+    expect(insideOutside.skipped).toEqual([
+      { traitName: 'Inside Pitch', reason: 'offsetting_pair_held' },
     ]);
   });
 

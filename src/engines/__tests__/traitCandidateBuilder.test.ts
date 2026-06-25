@@ -210,6 +210,13 @@ const T9B_PITCH_TYPE_TRAITS = [
   'Off-Speed Hitter',
 ] as const;
 
+const DTB_PITCH_LOCATION_TRAITS = [
+  'High Pitch',
+  'Low Pitch',
+  'Inside Pitch',
+  'Outside Pitch',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -295,6 +302,11 @@ describe('BUILDABLE_TRAITS', () => {
       'Elite SL',
       'Fastball Hitter',
       'Off-Speed Hitter',
+      // DT-B: per-pitch-location net-quality earn-signals.
+      'High Pitch',
+      'Low Pitch',
+      'Inside Pitch',
+      'Outside Pitch',
     ]);
   });
 
@@ -2296,6 +2308,147 @@ describe('T-9a pitch-type net-quality raw signals (build-dark)', () => {
     expect(candidate(tagged, 'p1', 'Elite 4F')).toBeDefined();
     expect(candidate(tagged, 'h1', 'Fastball Hitter')).toBeDefined();
     expect([...untagged.values()].flat().filter((item) => pitchTraitSet.has(item.traitName))).toEqual([]);
+  });
+});
+
+describe('traitCandidateBuilder DT-B pitch-location signals', () => {
+  it('makes the 4 pitch-location traits buildable candidates only when tagged location data exists', () => {
+    for (const traitName of DTB_PITCH_LOCATION_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+
+    const tagged = computeSeasonTraitCandidates(baseInput({
+      players: players(['h-low', 'h-high', 'h-inside', 'h-outside', 'h-plain'], 'position'),
+      atBatEvents: [
+        ...repeat(10, () => atBat({ batterId: 'h-low', result: 'HR', outsAfter: 0, enrichment: { pitchLocation: 'low' } })),
+        ...repeat(10, () => atBat({ batterId: 'h-high', result: '2B', outsAfter: 0, enrichment: { pitchLocation: 'high' } })),
+        ...repeat(10, () => atBat({ batterId: 'h-inside', result: '1B', outsAfter: 0, enrichment: { pitchLocation: 'inside' } })),
+        ...repeat(10, () => atBat({ batterId: 'h-outside', result: 'BB', outsAfter: 0, enrichment: { pitchLocation: 'outside' } })),
+        ...repeat(10, () => atBat({ batterId: 'h-plain', result: 'HR', outsAfter: 0 })),
+      ],
+    }));
+    const untagged = computeSeasonTraitCandidates(baseInput({
+      players: players(['h-low', 'h-high', 'h-inside', 'h-outside', 'h-plain'], 'position'),
+      atBatEvents: repeat(10, () => atBat({ batterId: 'h-plain', result: 'HR', outsAfter: 0 })),
+    }));
+    const locationTraitSet = new Set<string>(DTB_PITCH_LOCATION_TRAITS);
+
+    expect(candidate(tagged, 'h-low', 'Low Pitch')).toBeDefined();
+    expect(candidate(tagged, 'h-high', 'High Pitch')).toBeDefined();
+    expect(candidate(tagged, 'h-inside', 'Inside Pitch')).toBeDefined();
+    expect(candidate(tagged, 'h-outside', 'Outside Pitch')).toBeDefined();
+    expect(candidate(tagged, 'h-plain', 'Low Pitch')).toBeUndefined();
+    expect(candidate(tagged, 'h-plain', 'High Pitch')).toBeUndefined();
+    expect(candidate(tagged, 'h-plain', 'Inside Pitch')).toBeUndefined();
+    expect(candidate(tagged, 'h-plain', 'Outside Pitch')).toBeUndefined();
+    expect([...untagged.values()].flat().filter((item) => locationTraitSet.has(item.traitName))).toEqual([]);
+  });
+
+  it('keeps pitch-location buckets separated per zone for the same batter', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        atBat({ batterId: 'h-zone', result: 'HR', outsAfter: 0, enrichment: { pitchLocation: 'low' } }),
+        atBat({ batterId: 'h-zone', result: '2B', outsAfter: 0, enrichment: { pitchLocation: 'low' } }),
+        atBat({ batterId: 'h-zone', result: '1B', outsAfter: 0, enrichment: { pitchLocation: 'low' } }),
+        atBat({ batterId: 'h-zone', result: 'BB', outsAfter: 0, enrichment: { pitchLocation: 'low' } }),
+        atBat({ batterId: 'h-zone', result: 'K', outsAfter: 1, enrichment: { pitchLocation: 'low' } }),
+        atBat({ batterId: 'h-zone', result: 'K', outsAfter: 1, enrichment: { pitchLocation: 'high' } }),
+        atBat({ batterId: 'h-zone', result: 'HR', outsAfter: 0, enrichment: { pitchLocation: 'inside' } }),
+        atBat({ batterId: 'h-zone', result: 'HR', outsAfter: 0, enrichment: { pitchLocation: 'inside' } }),
+        ...repeat(3, () => atBat({ batterId: 'h-zone', result: 'GO', outsAfter: 1, enrichment: { pitchLocation: 'outside' } })),
+      ],
+    }));
+
+    expect(raw.get('h-zone')?.get('Low Pitch')).toEqual({ signalValue: 5.5 / 5, sampleSize: 5 });
+    expect(raw.get('h-zone')?.get('High Pitch')).toEqual({ signalValue: -1, sampleSize: 1 });
+    expect(raw.get('h-zone')?.get('Inside Pitch')).toEqual({ signalValue: 3, sampleSize: 2 });
+    expect(raw.get('h-zone')?.get('Outside Pitch')).toEqual({ signalValue: 0, sampleSize: 3 });
+  });
+
+  it('skips outOfZone and undefined pitch-location tags', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        atBat({ batterId: 'h-skip', result: 'HR', outsAfter: 0, enrichment: { pitchLocation: 'outOfZone' } }),
+        atBat({ batterId: 'h-skip', result: 'HR', outsAfter: 0 }),
+        atBat({ batterId: 'h-skip', result: 'HR', outsAfter: 0, enrichment: {} }),
+      ],
+    }));
+
+    for (const traitName of DTB_PITCH_LOCATION_TRAITS) {
+      expect(raw.get('h-skip')?.get(traitName)).toBeUndefined();
+    }
+  });
+
+  it('gates pitch-location traits at the rate min-sample boundary per zone', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['h-thin', 'h-full', 'h-peer-low', 'h-peer-mid'], 'position'),
+      atBatEvents: [
+        ...repeat(9, () => atBat({
+          batterId: 'h-thin',
+          result: 'HR',
+          outsAfter: 0,
+          enrichment: { pitchLocation: 'low' },
+        })),
+        ...repeat(10, (index) => atBat({
+          batterId: 'h-full',
+          result: index < 8 ? 'HR' : 'GO',
+          outsAfter: index < 8 ? 0 : 1,
+          enrichment: { pitchLocation: 'low' },
+        })),
+        ...repeat(10, (index) => atBat({
+          batterId: 'h-peer-low',
+          result: index < 5 ? 'HR' : 'GO',
+          outsAfter: index < 5 ? 0 : 1,
+          enrichment: { pitchLocation: 'low' },
+        })),
+        ...repeat(10, (index) => atBat({
+          batterId: 'h-peer-mid',
+          result: index < 7 ? 'HR' : 'GO',
+          outsAfter: index < 7 ? 0 : 1,
+          enrichment: { pitchLocation: 'low' },
+        })),
+      ],
+    }));
+    const thin = candidate(result, 'h-thin', 'Low Pitch');
+    const full = candidate(result, 'h-full', 'Low Pitch');
+
+    expect(thin).toBeDefined();
+    expect(thin?.sampleSize).toBe(9);
+    expect(thin?.score.sufficient).toBe(false);
+    expect(thin?.score.sufficiency).not.toBe('sufficient');
+    expect(full).toBeDefined();
+    expect(full?.sampleSize).toBe(10);
+    expect(full?.score.sufficient).toBe(true);
+    expect(full?.score.realityPercentile).not.toBeNull();
+    expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
+  });
+
+  it('keeps pitch-location traits behind position-role eligibility', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [{ playerId: 'pitcher-bat', role: 'pitcher' }],
+      atBatEvents: repeat(10, () => atBat({
+        batterId: 'pitcher-bat',
+        pitcherId: 'opp',
+        result: 'HR',
+        outsAfter: 0,
+        enrichment: { pitchLocation: 'low' },
+      })),
+    }));
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: repeat(10, () => atBat({
+        batterId: 'pitcher-bat',
+        pitcherId: 'opp',
+        result: 'HR',
+        outsAfter: 0,
+        enrichment: { pitchLocation: 'low' },
+      })),
+    }));
+
+    expect(raw.get('pitcher-bat')?.get('Low Pitch')).toBeDefined();
+    expect(candidate(result, 'pitcher-bat', 'Low Pitch')).toBeUndefined();
+    expect(candidate(result, 'pitcher-bat', 'High Pitch')).toBeUndefined();
+    expect(candidate(result, 'pitcher-bat', 'Inside Pitch')).toBeUndefined();
+    expect(candidate(result, 'pitcher-bat', 'Outside Pitch')).toBeUndefined();
   });
 });
 

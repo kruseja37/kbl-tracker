@@ -22089,3 +22089,85 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-9c ===== -->
+
+<!-- ===== CONTRACT: DT-B ===== -->
+## DT-B — pitch-LOCATION net-quality hitter traits earnable (dormant-trait wave, Group B)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding ONE build-dark signal aggregator + its earn-wiring, cloning the T-9a/b pitch-TYPE pattern for the 4 pitch-LOCATION hitter traits. Surgical, additive; the only behavior change is the 4 new traits becoming earnable (flag-gated) + their opposite-pair mutual-exclusion on the earn path.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Make the 4 hitter traits **High Pitch / Low Pitch / Inside Pitch / Outside Pitch** EARNABLE in-season from the **net-outcome** of the user-tagged at-bats (`enrichment.pitchLocation` ∈ low/high/inside/outside) — add a per-zone aggregator mirroring the HITTER half of T-9a's `addPitchTypeSignals`, add the 4 to `BUILDABLE_TRAITS`, wire their personality image-valence (K-Collector mirror), AND register the two opposite-pairs (High↔Low, Inside↔Outside) in the earn-side `OPPOSITE_PAIRS` so a player cannot earn both halves of a pair. Build-dark (flag-gated grant path); fires only on user-tagged location data.
+
+**SOURCE OF TRUTH:** `TRAIT_MEASUREMENT_SPEC §0.6b` row B (the 4 location traits, hitter-role, net-outcome on `enrichment.pitchLocation`, header "build template = elite pitches (T-9)"). `DECISIONS_LOG 2026-06-25` group B (tagging is SPARSE-BY-INTENT — every tagged AB is a signal; read the OUTCOME CONTEXT; difficulty pitch-location RARE 0.82, already derived via `assignTier`). `V1_BUILD_QUEUE A-W3.5 / 4D-W2` ("reuses the A net-outcome scorer"). The reused scorer = T-9a (`a7932007`).
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read each before editing):**
+- The clone source = `addPitchTypeSignals` (`src/engines/traitCandidateBuilder.ts:710-794`). DT-B mirrors ONLY its HITTER half (per-`batterId` buckets → `addRawSignal`). The pitcher side (Elite-`<pitch>`) has NO location analog — §0.6b row B is HITTER-ONLY (unlike Group A, which has both pitcher + hitter). Reuse the in-file exported `classifyPitchOutcome` (`:364`) + `HITTER_PITCH_OUTCOME_WEIGHTS` (`:354-362`, `{HR:3.0,BIGHIT:2.0,SINGLE:1.0,BB:0.5,OUT:0,NEUTRAL:0,K:-1.0}`) + the 7-class partition (`PITCH_OUTCOME_RESULTS_BY_CLASS` `:325-333`) VERBATIM — do NOT redefine and do NOT modify them (they are SHARED with T-9a; changing them changes Fastball/Off-Speed Hitter too). Reuse in-file `sortAtBats`/`undoneAt`/`addRawSignal` (`:572`). NO new import.
+- Capture field: `AtBatEvent.enrichment.pitchLocation?: 'low'|'high'|'inside'|'outside'|'outOfZone'` (`src/utils/eventLog.ts:438`). It is MANUAL/sparse (set only via EnrichmentPanel; NEVER auto-populated) — that is by design (sparse-by-intent). The 5th value `'outOfZone'` has NO matching trait (it belongs to the stock `Bad Ball Hitter`, OUT of scope) → SKIP `'outOfZone'` AND `undefined`.
+- The 4 trait names are canonical + position-only + priced + difficulty-assigned ALREADY: `traitRealityScorer.ts:106` (`POSITION_ONLY_TRAITS`: `'Low Pitch','High Pitch','Inside Pitch','Outside Pitch'` → `traitRole`='position', hitter-only), `traitPricing.ts` (High `:244` / Inside `:256` / Low `:280` / Outside `:322`), `traitTierConfig.ts` `assignTier` → RARE 0.82 (`TRAIT_MAX_USES` has all 4 = 1). So DT-B does NOT touch traitRealityScorer/traitPricing/traitTierConfig. EXACT canonical strings (NO "Hitter"/other suffix): `'High Pitch'`, `'Low Pitch'`, `'Inside Pitch'`, `'Outside Pitch'`.
+- `BUILDABLE_TRAITS` (`traitCandidateBuilder.ts:42-128`) currently ends at `'Off-Speed Hitter'` (`:127`); the canonical guard at `:130-134` throws on a non-canonical name. The candidate pipeline loops `for traitName of BUILDABLE_TRAITS` (`buildPeerPools`, `computeSeasonTraitCandidates`) with `basis:'none'` → the rate valve `minSampleRate:10` (`traitRealityScorer.ts:65`) keeps a trait dormant until `sampleSize ≥ 10`. `poolTraitKey` is identity for these (NOT a Two-Way family) — no change.
+- Image valence: T-9b put its 10 traits in `POSITIVE_IMAGE_TRAITS` + `IMAGE_DRIVER_SETS` each `= ['COMPETITIVE','EGOTISTICAL']` (mirror `K Collector`). The 4 location traits are in NONE of the image sets today (personality tilt silently resolves neutral). grep `POSITIVE_IMAGE_TRAITS`/`IMAGE_DRIVER_SETS` for current line numbers.
+- EARN-SIDE OPPOSITE-PAIR EXCLUSION — **THE CORRECTION (the resume note was wrong that "existing duels handle it"):** the in-season exclusion lives in `OPPOSITE_PAIRS` (`traitAcquisition.ts:285-300`, 14 pairs) → `TRAIT_OPPOSITES` (`:302`, symmetric) consumed in `reconcileGainProposals` (held-offsets-gain `:546-552` + same-cycle duel `:554-564`). The pitch-location pairs are ABSENT there (only the GENERATION list `prospectScoutingDraftEngine.ts:381-382` has them). So TODAY a player could EARN both 'High Pitch' AND 'Low Pitch'. Register the 2 pairs in `OPPOSITE_PAIRS` to fix this — NO new pass (unlike T-9c's elite-pitch group; the existing duel loops already handle pairwise opposites). Captain-verified SAFE across ALL `TRAIT_OPPOSITES` consumers: `reconcileGainProposals` (gains the wanted exclusion), generation `prospectScoutingDraftEngine.ts:729` (redundant with the existing PROSPECT conflict list → no behavior change), and the symmetry test `traitAcquisition.test.ts:1420` (stays green; the 4 are canonical + symmetric).
+- The at-bat key for hitter traits is `atBat.batterId` (mirror the T-9a hitter buckets, keyed by `batterId`); each AB has `result: AtBatResult`.
+
+**BUILD:**
+1. `src/engines/traitCandidateBuilder.ts`:
+   (a) Add `function addPitchLocationSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void` modeled on the HITTER half of `addPitchTypeSignals`:
+       - Per-`batterId` buckets, one per zone: `{ LOW, HIGH, INSIDE, OUTSIDE }`, each `{ sum: 0, sampleSize: 0 }`.
+       - One pass over `sortAtBats(input.atBatEvents).filter((e) => !undoneAt(e))`. Read `const zone = atBat.enrichment?.pitchLocation`. Map ONLY {low→LOW, high→HIGH, inside→INSIDE, outside→OUTSIDE}; `continue` for `undefined` and `'outOfZone'` (no trait).
+       - `const outcomeClass = classifyPitchOutcome(atBat.result);` then `bucket.sum += HITTER_PITCH_OUTCOME_WEIGHTS[outcomeClass];` `bucket.sampleSize += 1;`
+       - After the pass, deterministically (`[...map.keys()].sort()`), for each batter emit per zone with `sampleSize > 0`: `addRawSignal(raw, batterId, '<Zone> Pitch', { signalValue: bucket.sum / bucket.sampleSize, sampleSize: bucket.sampleSize })`. Zone→trait: LOW→`'Low Pitch'`, HIGH→`'High Pitch'`, INSIDE→`'Inside Pitch'`, OUTSIDE→`'Outside Pitch'`.
+       - sampleSize = tagged-AB count per zone-bucket (the min-sample valve input).
+   (b) Wire `addPitchLocationSignals(input, raw);` into `buildRawSignals` immediately AFTER the `addPitchTypeSignals(input, raw);` call (`:1570`), with a one-line comment: `// DT-B — per-pitch-LOCATION net-quality (TRAIT_MEASUREMENT_SPEC §0.6b row B; reuses the T-9a hitter scorer).`
+   (c) Append the 4 to `BUILDABLE_TRAITS` AFTER `'Off-Speed Hitter'` (`:127`), in a commented block:
+       ```
+       // DT-B (TRAIT_MEASUREMENT_SPEC §0.6b row B): per-pitch-LOCATION net-quality
+       // earn-signals (reuses the T-9a hitter scorer over enrichment.pitchLocation);
+       // hitter-only; dormant until ≥10 tagged ABs in that zone (rate-basis valve).
+       'High Pitch', 'Low Pitch', 'Inside Pitch', 'Outside Pitch',
+       ```
+2. `src/engines/traitAcquisition.ts`:
+   (a) Add the SAME 4 names to `POSITIVE_IMAGE_TRAITS` and `IMAGE_DRIVER_SETS` each `= ['COMPETITIVE','EGOTISTICAL']` (the K-Collector / T-9b mirror), in a commented block: "**§16 sim-tune default (Captain, AUTH-4): spec §0.7 does NOT assign drivers for these 4; mirror K Collector / the T-9b pitch traits. Personality is a ≤±20% TILT, never a gate (§0.8) — the per-zone reality signal is primary.**"
+   (b) Add 2 entries to `OPPOSITE_PAIRS` (`:285-300`): `['High Pitch', 'Low Pitch']` and `['Inside Pitch', 'Outside Pitch']`, with a comment: "DT-B / §0.6b row B: pitch-location opposite pairs — earn-side mutual-exclusion (mirrors the generation conflict list `prospectScoutingDraftEngine.ts:381-382`). Feeds `TRAIT_OPPOSITES` + the `reconcileGainProposals` duels; NO new pass needed." Do NOT add an elite-pitch-style bespoke group pass; do NOT touch the `reconcileGainProposals` body, `NEGATIVE_IMAGE_TRAITS`, or the T-9c elite-pitch block.
+
+**DO NOT (this ticket):** touch `traitRealityScorer.ts`, `traitPricing.ts`, `traitTierConfig.ts`, `prospectScoutingDraftEngine.ts` (source — only its TEST may need the new pair), `franchiseTraitGrantCompute.ts`, `effectiveRatings.ts`, the T-9a/b/c code (`addPitchTypeSignals`, `ELITE_PITCH_*`, the elite-pitch reconcile pass); modify `HITTER_PITCH_OUTCOME_WEIGHTS`/`classifyPitchOutcome`/the 7-class partition; add a 5th `'outOfZone'` trait; bump `TRACKER_DB_VERSION`; touch `iv_oracle.json`.
+
+**TEST (add describe blocks; don't weaken existing):**
+`src/engines/__tests__/traitCandidateBuilder.test.ts`:
+- **Golden list:** append the 4 to `expect(BUILDABLE_TRAITS).toEqual([...])` (currently ends `'Off-Speed Hitter'` `:297`) AFTER `'Off-Speed Hitter'`, SAME order as the array (58→62). The canonical-names test stays green.
+- **Earnable:** a hitter with ≥10 ABs tagged `pitchLocation:'low'` → a `'Low Pitch'` candidate exists (raw signal defined); ditto high→`'High Pitch'`, inside→`'Inside Pitch'`, outside→`'Outside Pitch'`. A hitter with NO tagged location ABs → NONE of the 4. (Use the in-file `atBat`/`baseInput`/`repeat`/`candidate` helpers; `atBat` takes `enrichment:{ pitchLocation:'low' }`.)
+- **Per-zone separation:** a single batter tagged in MULTIPLE zones → each zone's signal has its OWN sampleSize (zones don't pool); arithmetic = `Σ HITTER weights / n` for that zone (pin one exact value, e.g. a known mix in 'low').
+- **Skip outOfZone + undefined:** ABs tagged `'outOfZone'` and ABs with no pitchLocation contribute to NONE of the 4 buckets.
+- **Min-sample valve (make-or-break):** a hitter with **9** tagged 'low' ABs → `'Low Pitch'` candidate exists but `score.sufficient===false`; **10** tagged 'low' ABs (use ≥2-3 hitters so the peer pool is well-defined) → `score.sufficient===true` with finite `realityPercentile`.
+- **Role filter:** a PITCHER-role player keyed as batter never produces any of the 4 location candidates.
+`src/engines/__tests__/traitAcquisition.test.ts`:
+- **Image valence (clone the T-9b block):** for each of the 4, `imageValence==='positive'`, the Competitive/Egotistical tilt `>1`, Tough/Timid `===1` (playerRole 'position'). If `POSITIVE_IMAGE_TRAITS`/`IMAGE_DRIVER_SETS` are golden-pinned, update those goldens.
+- **Earn-side opposite-pair exclusion (NEW):** (i) a hitter HOLDS `'Low Pitch'` and a `'High Pitch'` GAIN is proposed → `'High Pitch'` dropped with reason `'offsetting_pair_held'`; (ii) `'High Pitch'` + `'Low Pitch'` both GAINED same cycle (none held) → the lower-`gainScore` one dropped (`'offsetting_pair_held'`); ditto Inside/Outside. The existing opposite-pair tests + `'TRAIT_OPPOSITES is symmetric...'` (`:1420`) stay GREEN.
+`src/utils/tests/prospectScoutingDraftEngine.test.ts`: verify the generation opposite-trait assertions (`:445`/`:526`/`:947`) stay green (generation already excludes High/Low via the PROSPECT conflict list; adding to TRAIT_OPPOSITES is consistent) — only edit if a golden actually needs it.
+
+**MAKE-OR-BREAK:**
+- The 4 location traits are earnable from tagged data, valve-gated (≥10 tagged ABs PER ZONE), per-zone separated, percentile-ranked vs hitter peers; untagged-data players produce none → no change to any existing untagged test.
+- A player cannot EARN both halves of a pitch-location pair (the new `OPPOSITE_PAIRS` entries feed the existing duels — verified across all `TRAIT_OPPOSITES` consumers).
+- `HITTER_PITCH_OUTCOME_WEIGHTS`/`classifyPitchOutcome` reused UNCHANGED (Fastball/Off-Speed Hitter behavior identical). No new import; NO DB bump; `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts`/`traitRealityScorer.ts` untouched.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts src/utils/tests/prospectScoutingDraftEngine.test.ts` → full pass.
+3. `NODE_ENV= npm test` (FULL suite — this engine is in the `franchiseTraitGrantCompute`→`processCompletedGame` chain; scoped runs miss transitive-mock-break). FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` solo-pass order-flakes — re-run any unexpected red IN ISOLATION). If a franchise/L-SIM/award golden shifts because a fixture carries tagged location data → STOP and report (do NOT re-baseline a soul/L-SIM golden).
+4. `git --no-pager diff --stat` → exactly `traitCandidateBuilder.ts` + `traitAcquisition.ts` + `traitCandidateBuilder.test.ts` + `traitAcquisition.test.ts` (+ `prospectScoutingDraftEngine.test.ts` only if a generation golden needed the new pair). `iv_oracle.json` NOT present.
+
+**FORMAT:**
+1. Files changed (exact paths) + line counts.
+2. The aggregator (hitter-only, 4 zones, `'outOfZone'` skipped); the BUILDABLE 4; the image-valence default; the 2 `OPPOSITE_PAIRS` entries; confirmation NO new pass + NO shared-weight change.
+3. Verification output (build exit, focused vitest, full-suite FAILED-file summary, `diff --stat`).
+4. "DT-B complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- Any of the 4 names is non-canonical (the `:130-134` guard throws / `traitRole` returns null) → STOP, report.
+- Adding to `OPPOSITE_PAIRS` changes a GENERATION or display behavior beyond the earn-path exclusion (an existing non-trait test goes red and is not a known flake) → STOP, report.
+- A franchise/L-SIM/award golden shifts (a fixture carries tagged location data) → STOP, report; do NOT re-baseline a soul-layer/L-SIM golden.
+- A full-suite red appears that is NOT in the characterized/flake set and does not pass in isolation → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: DT-B ===== -->
