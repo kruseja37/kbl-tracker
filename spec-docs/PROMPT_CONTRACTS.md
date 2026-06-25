@@ -22321,3 +22321,98 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: DT-C2 ===== -->
+
+<!-- ===== CONTRACT: DT-D ===== -->
+## DT-D — Wild Thrower + Noodle Arm earnable (error-attribution signals; dormant-trait wave, Group D)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding a build-dark error-rate fielding aggregator that makes two NEGATIVE position traits earnable. Surgical, additive; the only behavior change is Wild Thrower / Noodle Arm becoming earnable (flag-gated, dormant until error data is tagged). Mirror the DT-C2 (`44ababfb`) wave template exactly.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Add a new `addErrorSignals` aggregator over the persisted error-attribution stream that emits **Wild Thrower** (rate of `throwing`+`fielding` errors attributed to a fielder) and **Noodle Arm** (rate of `mental` errors attributed to a fielder) — both per the fielder's games — wire both into `BUILDABLE_TRAITS`, add Noodle Arm to `NEGATIVE_IMAGE_TRAITS`, build-dark, no DB bump.
+
+**SOURCE OF TRUTH:** `TRAIT_MEASUREMENT_SPEC §0.6b` rows D (Wild Thrower = throwing/fielding errors rate vs peers; Noodle Arm RE-ADDED = MENTAL errors, league-leader). `DECISIONS_LOG 2026-06-25` Group-D ruling: Wild Thrower ~1-line BUILDABLE add; **Noodle Arm RE-ADDED + REINTERPRETED to mental errors** (the prior L9b-2-cleanup `c92e8619` cut Noodle Arm's arm/OF-assist proxy — that proxy is NOT resurrected; Noodle Arm now earns ONLY from the mental-error signal). Build template = DT-C2 + the existing `addButterFingersSignals`/`addArmSignals` precedents.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read every anchor before editing):**
+- **THE MAKE-OR-BREAK — error source is the playerId-keyed `errorAttributions` stream, NOT `enrichment.errors[]`.** `enrichment.errors[]` (`eventLog.ts:430`) is position-keyed `{position:1-9, type}` with **NO playerId** (and its one live writer hardcodes `type:'fielding'`) → it cannot credit a fielder and the signal would never fire. The CORRECT source is `ErrorAttribution` (`eventLog.ts:501-505`): `{ type: 'fielding'|'throwing'|'mental'; fielderIds?: string[]; positions?: number[] }`, carried on `atBatEvent.runnerOutcomes[].errorAttributions[]` (`eventLog.ts:396`) AND `betweenPlayEvent.errorAttributions[]` (`eventLog.ts:620`) — PROVEN live-written with `type`+`fielderIds` (`useGameState.ts:8561-8600`, `fieldingEventExtractor.ts:203/270`). Read `errorAttributions[].fielderIds`, filter by `type`.
+- **Denominator precedent = `addArmSignals` (`traitCandidateBuilder.ts:1284-1296`):** uses `games = fielding?.games ?? input.gamesByPlayer.get(playerId) ?? 0` as the rate denominator; `input.gamesByPlayer` (`:179`) is already in the input. Use the SAME games denominator. `sampleSize = games` (the min-sample valve gates dormant until enough games logged).
+- **Negative-rate sign precedent = `addButterFingersSignals` (`:1267`):** a negative fielding trait; numerator = error count, NO inversion (higher rate → the negative trait fires). Mirror its sign/rate exactly; do NOT invert. Wild Thrower + Noodle Arm are NEGATIVE traits and the downstream scorer already knows their valence.
+- **`addArmSignals` (`:1284`) now emits ONLY `'Cannon Arm'`** (Noodle Arm proxy was cut) — do NOT touch it; do NOT re-add Noodle Arm there.
+- **Trait status:** `'Wild Thrower'` + `'Noodle Arm'` are canonical + POSITION-classified (`traitRealityScorer.ts:112-113` POSITION_ONLY) + priced (`traitPricing.ts:310` Noodle Arm, `:472` Wild Thrower) → NO scorer/pricing/tier touch. Neither is in `BUILDABLE_TRAITS` (the gap). `assignTier` auto-difficulty (ASSERT whatever tier it returns; don't hardcode).
+- **Image valence (`traitAcquisition.ts`):** `'Wild Thrower'` is ALREADY in `NEGATIVE_IMAGE_TRAITS` (`:215`) with `IMAGE_DRIVER_SETS['Wild Thrower']=['TIMID','DROOPY']` (`:244`) → Wild Thrower needs NO traitAcquisition change beyond BUILDABLE. `'Noodle Arm'` is ABSENT from the image sets → ADD to `NEGATIVE_IMAGE_TRAITS`; §0.7 names no driver → NO `IMAGE_DRIVER_SETS` entry (universal negative tilt, like Injury Prone — documented default). `OPPOSITE_PAIRS ['Cannon Arm','Noodle Arm']` (`:320`) ALREADY present → do NOT touch (mutual exclusion intact).
+- **Plumbing:** `atBatEvents`/`betweenPlayEvents` already threaded into the builder input (`franchiseTraitGrantCompute.ts:219-228`); NO new seam, NO DB bump (`trackerDb.ts:17` = v25).
+
+**BUILD:**
+1. `src/engines/traitCandidateBuilder.ts`:
+   (a) Add `function addErrorSignals(input, raw): void`: iterate non-undone `atBatEvents` (collect `runnerOutcomes[].errorAttributions[]`) AND non-undone `betweenPlayEvents` (collect `errorAttributions[]`). For each attribution, for each `playerId` in `fielderIds ?? []`: `type==='mental'` → that player's mental-error count++ ; `type==='throwing'||type==='fielding'` → that player's wild-thrower-error count++. Then per player with `games = input.gamesByPlayer.get(playerId) ?? 0 > 0`: `addRawSignal(raw, playerId, 'Wild Thrower', { signalValue: wtErrors/games, sampleSize: games })` and `addRawSignal(raw, playerId, 'Noodle Arm', { signalValue: mentalErrors/games, sampleSize: games })`. Deterministic key order (sort). (Confirm the exact `undoneAt`/`sortAtBats` helpers used by the neighboring aggregators and reuse them.)
+   (b) Wire `addErrorSignals(input, raw);` into `buildRawSignals` alongside the other `add*Signals` calls (near `addButterFingersSignals` / `addArmSignals`, ~`:1710`).
+   (c) Append `'Wild Thrower'`, `'Noodle Arm'` to `BUILDABLE_TRAITS` (`:42`) in a `// DT-D` block citing §0.6b row D.
+2. `src/engines/traitAcquisition.ts`: add `'Noodle Arm'` to `NEGATIVE_IMAGE_TRAITS` (`// DT-D`). Do NOT add an `IMAGE_DRIVER_SETS` entry for Noodle Arm. Do NOT touch Wild Thrower, `OPPOSITE_PAIRS`, or `POSITIVE_IMAGE_TRAITS`.
+
+**DO NOT (this ticket):** read `enrichment.errors[]` as the mental-error source (position-keyed, no playerId — STOP-IF); re-add Noodle Arm to `addArmSignals` (resurrects the cut proxy); touch `traitRealityScorer.ts`, `src/data/traitPricing.ts`, `src/data/traitTierConfig.ts`, `prospectScoutingDraftEngine.ts`; bump `TRACKER_DB_VERSION`; touch `iv_oracle.json`; import from `src/src_figma/app`.
+
+**TEST (add describe blocks; don't weaken existing):**
+`src/engines/__tests__/traitCandidateBuilder.test.ts`:
+- Golden: append `'Wild Thrower'`,`'Noodle Arm'` to the `BUILDABLE_TRAITS` `toEqual([...])` list (65→67) AFTER the DT-C2 traits.
+- Mental error → emits `'Noodle Arm'` keyed to the `fielderIds` player; throwing/fielding error → emits `'Wild Thrower'`; both from `runnerOutcomes[].errorAttributions[]` AND `betweenPlayEvents[].errorAttributions[]`.
+- Rate arithmetic pinned: e.g. 2 mental errors over 10 games → Noodle Arm signalValue 0.2, sampleSize 10.
+- No error attributions → neither signal (dormant). Undone events excluded. Min-sample valve: games below the rate valve → `sufficient===false`; at/above → sufficient + finite percentile (≥2-3 peers for a pool).
+- Multiple fielderIds on one attribution → each credited.
+`src/engines/__tests__/traitAcquisition.test.ts`: Noodle Arm `imageValence==='negative'`; Cannon Arm↔Noodle Arm opposite pair still blocks co-hold (`TRAIT_OPPOSITES['Noodle Arm']==='Cannon Arm'`); Wild Thrower unchanged.
+
+**MAKE-OR-BREAK:** the signal reads `errorAttributions[].fielderIds` filtered by `type` (mental→Noodle Arm, throwing+fielding→Wild Thrower), keyed to the fielder, games-denominated, valve-gated; NEGATIVE sign mirrors `addButterFingersSignals` (no inversion); Noodle Arm re-added ONLY via the mental-error signal (NOT the cut arm proxy); no DB bump; oracle/scorer/pricing/tier untouched.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → full pass.
+3. `NODE_ENV= npm test` (FULL suite — the builder feeds `processCompletedGame`). FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake, solo-pass — re-run any unexpected red IN ISOLATION). A franchise/L-SIM/award golden shift → STOP, report.
+4. `git --no-pager diff --stat` → exactly `traitCandidateBuilder.ts` + `traitAcquisition.ts` + the 2 test files. `iv_oracle.json` NOT present.
+
+**FORMAT:** (1) files+line counts; (2) the addErrorSignals aggregator (errorAttributions source, type partition, games denominator, negative sign), the BUILDABLE 2 + Noodle Arm negative valence, confirmation NO addArmSignals/scorer/pricing/tier change + NO enrichment.errors source + NO DB bump; (3) verification output; (4) "DT-D complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):** mental errors not distinguishable+playerId-attributable in `errorAttributions` (→ STOP); `'Wild Thrower'`/`'Noodle Arm'` non-canonical (BUILDABLE guard throws) (→ STOP); a needed scorer/pricing/tier change (→ STOP); a DB bump needed (→ STOP); a full-suite red outside the characterized/flake set that doesn't pass in isolation (→ STOP). Never summarize/batch; report every changed path. Use xhigh reasoning effort; ground every cited file:line by reading it before you edit.
+<!-- ===== END CONTRACT: DT-D ===== -->
+
+<!-- ===== CONTRACT: A2.5 ===== -->
+## A2.5 — §6A age MODIFIER into expected-stats (ratings-finish lane C opener; build-dark bar-shift)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding a deterministic age-band MULTIPLICATIVE shift on the EXPECTED bar inside the (already-built, dark-gated) expected-stats engine. Engine-internal only; the seam (`ageBand`) is already plumbed but currently ignored — this ticket consumes it. Surgical, additive, build-dark.
+**BRANCH:** `codex/ratings-finish-c` (worktree `/Users/johnkruse/Projects/kbl-ratings-c`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Add an `ageBandFactorByBand` tuning knob and multiply the per-category `expected` value by the player's age-band factor BEFORE the over-expectation ratio `r` is computed — prime band 25-31 = 1.0 (byte-identical to today), young/old bands < 1.0 (a lower bar = easier to exceed = larger positive signal) — so the inert `ageBand` input becomes consumed, build-dark.
+
+**SOURCE OF TRUTH:** `RATINGS_ADJUSTMENT_SPEC §6A` + `§4` (age modifier "shifts the expected bar… it is NOT a co-equal second comparison," and is SECONDARY to the position-group calibration). The age-CURVE gravity term (§5) is SEPARATE downstream work (RA-5 in `ratingsDevelopment.ts`) — this ticket is the bar-shift MODIFIER ONLY. Magnitudes are `§16` sim-tune placeholders.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read every anchor before editing):**
+- **THE MAKE-OR-BREAK — shift the EXPECTED bar (the denominator side of the gap), NOT an additive rating delta.** The factor multiplies `expected` inside `expectedForCategory` (`expectedStatsEngine.ts:203`, return ~`:233`) BEFORE `r` is computed (~`:197`), nowhere else. An additive age term on the rating delta would (a) double-count the §5 age-curve gravity RA-5 will add, and (b) violate the "shifts the bar / secondary to position group" ruling → STOP-IF.
+- **The seam is already plumbed + INERT:** `ExpectedStatsAgeBand` union (`:24`); `ageBand: ExpectedStatsAgeBand` on the engine input (`:137`) — currently UNCONSUMED (verify via grep that `input.ageBand` is read nowhere before this change). It flows `player.age → ageToExpectedStatsBand → checkpoint sweep → checkpointRatingSignal → expectedStatsEngine`.
+- **Tuning override pattern:** `ExpectedStatsTuning` interface (`:108-125`); `EXPECTED_STATS_TUNING` const (`:127-133`); the engine entry takes `tuning: ExpectedStatsTuning = EXPECTED_STATS_TUNING` (`:164`). `CHECKPOINT_EXPECTED_STATS_TUNING` (in `checkpointRatingSignal.ts`) spreads `...EXPECTED_STATS_TUNING` so it INHERITS the new field automatically (no edit there).
+- **Build-dark guarantee:** the only consumer chain is gated behind `FRANCHISE_PHASE2_CHECKPOINT_ENABLED_DEFAULT=false` (`franchisePhase2Flags.ts:37`, sweep guard `franchiseCheckpointSweepCompute.ts:422`) → the diff cannot change live behavior. NO DB bump; `FranchiseRatingsOverlayRow` shape untouched.
+- **Structural-no-signal guard:** the pitcher-arm category returns `null` `r` (engine `:174-177/:208-210`) — unaffected by `ageBand`; assert it stays null.
+
+**BUILD:**
+1. `src/engines/expectedStatsEngine.ts`:
+   (a) Add `ageBandFactorByBand: Record<ExpectedStatsAgeBand, number>` to the `ExpectedStatsTuning` interface (`:108-125`) and to `EXPECTED_STATS_TUNING` (`:127-133`) with the §16 default `{'18-21':0.92,'22-24':0.96,'25-31':1.00,'32-35':0.96,'36+':0.92}` (prime neutral; symmetric mild benefit-of-doubt at the tails — sim-tune knobs; comment `§16`).
+   (b) In `expectedForCategory` (`:203-234`), after computing the base `expected` (`~:233`), multiply by `tuning.ageBandFactorByBand[input.ageBand]` before returning. Add a `tuning` param to `expectedForCategory` (it currently takes input/category/meta) and forward it from the call site (`~:171`). Keep prime-band factor EXACTLY 1.0 so the 25-31 path is byte-identical.
+**DO NOT:** touch `ratingsDevelopment.ts`, `franchiseCheckpointSweepCompute.ts`, `checkpointRatingSignal.ts`, any storage row, or add an additive age term to the rating; bump `TRACKER_DB_VERSION`; add a store; touch `iv_oracle.json`. If the change needs ANY file beyond `expectedStatsEngine.ts` + its test → STOP (the seam was not actually plumbed).
+
+**TEST (`src/engines/__tests__/expectedStatsEngine.test.ts`; don't weaken existing):**
+- No-regression pin: prime band `'25-31'` produces the SAME `expected`/`r` as a baseline tuning with factor 1.0 (existing cases all use `'25-31'` → stay green).
+- Monotonic bar-shift: a young/old band lowers `expected` and RAISES `r` for the same `actual`.
+- Symmetry: `'18-21'` vs `'36+'` at equal factor produce equal bar-shift.
+- Pitcher arm category still returns `null` `r` regardless of `ageBand`.
+
+**MAKE-OR-BREAK:** a single multiplicative factor on `expected` (bar-shift, prime=1.0 byte-identical), consumed from the already-plumbed `ageBand`; NOT an additive rating delta (no §5 double-count); build-dark (flag-gated chain); NO DB bump; only `expectedStatsEngine.ts` + its test change.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → exit 0.
+2. `NODE_ENV= npm run build` → exit 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsEngine.test.ts src/utils/tests/checkpointRatingSignal.test.ts src/engines/__tests__/expectedStatsCategoryRates.test.ts` → full pass (prime-age inheritors stay green).
+4. `NODE_ENV= npm test` (FULL suite) → FAILED-FILE list: ZERO NEW REDS vs the characterized baseline in `spec-docs/CURRENT_STATE.md` (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake solo-pass). A prime-age fixture moving → STOP (regression).
+5. `git --no-pager diff --stat` → exactly `expectedStatsEngine.ts` + `expectedStatsEngine.test.ts`. `iv_oracle.json` NOT present.
+
+**FORMAT:** (1) files+line counts; (2) the age factor knob + where it multiplies `expected` (before `r`), confirmation prime=1.0 byte-identical + NO ratingsDevelopment/sweep/signal/storage touch + NO DB bump; (3) verification output (tsc, build, focused, full-suite FAILED-file summary, diff --stat); (4) "A2.5 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):** the change needs an additive rating term in `ratingsDevelopment.ts` (→ STOP, that's RA-5); any file beyond `expectedStatsEngine.ts`+test required (→ STOP, seam not plumbed); a DB bump/new store needed (→ STOP); the prime-band path is NOT byte-identical (→ STOP, regression); a full-suite red outside the characterized set (→ STOP). Never summarize/batch; report every changed path. Use xhigh reasoning effort; ground every cited file:line by reading it in the `kbl-ratings-c` worktree before you edit.
+<!-- ===== END CONTRACT: A2.5 ===== -->
