@@ -27,11 +27,13 @@ import {
   savePlayer,
   saveRegisteredPool,
   saveTeamRoster,
+  type Grade,
   type Player,
 } from './leagueBuilderStorage';
 import { MLB_AUCTION_ROSTER_SLOTS } from './leagueBuilderAuctionPipeline';
 import { POOL_SURPLUS_MAX } from '../data/rosterEngineConstants';
 import type { RegisteredPool } from '../engines/leagueConstruction';
+import { scoreSmb4Player, type Smb4Grade } from '../engines/smb4GradeEmulator';
 
 /** A player is IN the league pool iff it carries an assignment for that league. */
 export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean {
@@ -44,6 +46,71 @@ export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean 
  */
 export function computePlayerIv(player: Player): number {
   return calculateIvBaseSalary(toSalaryPlayer(player)).ivBase;
+}
+
+function smb4GradeToPlayerGrade(grade: Smb4Grade): Grade {
+  switch (grade) {
+    case 'S':
+      return 'S';
+    case 'A+':
+      return 'A+';
+    case 'A':
+      return 'A';
+    case 'A-':
+      return 'A-';
+    case 'B+':
+      return 'B+';
+    case 'B':
+      return 'B';
+    case 'B-':
+      return 'B-';
+    case 'C+':
+      return 'C+';
+    case 'C':
+      return 'C';
+    case 'C-':
+      return 'C-';
+    case 'D+':
+      return 'D+';
+    case 'D':
+      return 'D';
+    case 'D-':
+      return 'D-';
+    case 'E+':
+    case 'E':
+    case 'E-':
+    case 'F':
+      return 'D-';
+    default: {
+      const exhaustive: never = grade;
+      return exhaustive;
+    }
+  }
+}
+
+/** Canonical live grade for League Builder records, derived from the SMB4 grader. */
+export function computePlayerGrade(player: Player): Grade {
+  return smb4GradeToPlayerGrade(
+    scoreSmb4Player({
+      name: `${player.firstName} ${player.lastName}`.trim(),
+      age: player.age,
+      primaryPosition: player.primaryPosition,
+      secondaryPosition: player.secondaryPosition,
+      bats: player.bats,
+      throws: player.throws,
+      power: player.power,
+      contact: player.contact,
+      speed: player.speed,
+      fielding: player.fielding,
+      arm: player.arm,
+      velocity: player.velocity,
+      junk: player.junk,
+      accuracy: player.accuracy,
+      arsenal: player.arsenal,
+      trait1: player.trait1,
+      trait2: player.trait2,
+    }).grade,
+  );
 }
 
 /** Throws if the league's pool is locked — membership is frozen until unlocked. */

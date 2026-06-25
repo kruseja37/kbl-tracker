@@ -21682,3 +21682,44 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-5b ===== -->
+
+<!-- ===== CONTRACT: EDIT-FROM-DRAFT-1 ===== -->
+## CONTRACT: EDIT-FROM-DRAFT-1 — edit player from the Draft Setup screen (grade auto-derived)
+
+**ROUTE:** worktree `/Users/johnkruse/Projects/kbl-draftfix`, branch `codex/draft-pipeline-fix`.
+**ROLE:** Builder (Codex). Build a UI feature. Branch-only; do NOT commit/push (sandboxed .git — the Captain commits + gates).
+
+**GOAL (JK ruling 2026-06-25, "build it now with grade auto-calculated from ratings"):**
+On the Draft Setup screen, let the user click any player row (IN-POOL or AVAILABLE pane) to FOCUS that player. Show a detail panel below the two panes with the player's identity + ratings + DERIVED letter grade + DERIVED IV, and an **"Edit Player"** button that opens a compact modal to edit the profile. On Save, persist via the hook's `updatePlayer`, with the letter grade AUTO-DERIVED from the (possibly edited) ratings via the CANONICAL model, then `refresh()` so the IV + grade reflect the new profile on the row + panel. This also lets the user disambiguate duplicate players (different ratings/grades) by inspecting them.
+
+**SOURCE OF TRUTH (re-read each at point of use; do not trust this summary blindly):**
+- Target screen: `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (the two-pane Draft Setup you are extending). It already has: the IN-POOL/AVAILABLE `Pane` + `Row` components, bulk multi-select (checkbox/row toggle), `computePlayerIv` for IN-pool IV, the `useLeagueBuilderData` hook (which exposes `updatePlayer` + `refresh`), and `formatMoney`.
+- **Canonical grade = `scoreSmb4Player` (`src/engines/smb4GradeEmulator.ts`), NOT the 3:3:2:1:1 `gradeEngine`** (memory: the IV uses scoreSmb4Player; grade must match its basis). `Smb4PlayerInput` (smb4GradeEmulator.ts:25-46) has ALL-optional fields: name, age, primaryPosition, secondaryPosition, bats, throws, power, contact, speed, fielding, arm, velocity, junk, accuracy, arsenal, trait1, trait2. scoreSmb4Player picks hitter vs pitcher fields internally by position. Reference caller: `src/utils/franchiseTraitGrantCompute.ts:135-146` (`scoreSmb4Player({primaryPosition, bats, throws, velocity, junk, accuracy, trait1, trait2}).grade`). **Add a helper `computePlayerGrade(player: Player): Grade` to `src/utils/leagueBuilderPoolBuilder.ts` (additive, next to `computePlayerIv`)** that passes the player's identity/position/ratings/traits/arsenal to scoreSmb4Player and returns `.grade`. The `.grade` is a `Smb4Grade`; **confirm it is assignable/mappable to `Player['overallGrade']` (the `Grade` type from gradeEngine); if the scales diverge, map it explicitly** (do NOT force an unsafe cast — STOP-IF below).
+- Live IV = `computePlayerIv(player)` (already exported from `leagueBuilderPoolBuilder.ts`).
+- Persist = `updatePlayer` from `useLeagueBuilderData` (→ savePlayer, trackChanges); then `refresh()`. Both already used in the Draft Setup page.
+- Player shape + editable fields: `src/utils/leagueBuilderStorage.ts` `Player` type. Editable in the modal: identity (firstName, lastName, age, bats L/R/S, throws L/R), position (primaryPosition + optional secondaryPosition — use the canonical draftable set already in this file's `POSITION_OPTIONS` minus "All"), and ratings — show the HITTER set (power, contact, speed, fielding, arm) OR the PITCHER set (velocity, junk, accuracy) based on whether primaryPosition is a pitcher role (SP, RP, CP, SP/RP). **overallGrade is DERIVED (display-only, recomputed live as ratings change) — NEVER a manual input.**
+- The Players-page editor (`LeagueBuilderPlayers.tsx`, openEditModal / modal JSX / handleSave) is a FIELD-SET reference only — it is coupled to that page (override tabs, league context). Do NOT import or reuse it. Build a SELF-CONTAINED compact modal (in the Draft Setup file, or one new sibling component file), base profile fields only.
+- Theme: match `LeagueBuilderDraftSetup.tsx`'s retro styling (bg `#2d3d2f`, panels `#556B55`/`#4A6844`, text `#E8E8D8`, accents `#5A8352`/`#C4A853`/`#3B7DD8`, thick borders, `shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]`). Reuse the existing Pane/Row visual language for the panel + modal.
+
+**CONSTRAINTS — edit ONLY these:**
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (the panel + modal + focus state + the row affordance).
+- `src/utils/leagueBuilderPoolBuilder.ts` (ADD `computePlayerGrade` only — additive).
+- OPTIONAL: ONE new component file for the modal (e.g. `src/src_figma/app/pages/DraftSetupPlayerEditModal.tsx`) if cleaner than inline.
+- OPTIONAL: extend the modal/grade with a small unit test (e.g. `computePlayerGrade` returns a valid Grade) — additive test only.
+- **DO NOT TOUCH:** `src/utils/leagueBuilderStorage.ts` (cross-branch overlap; not needed), `src/data/playerDatabase.ts` + `spec-docs/reference/iv_oracle.json` (FROZEN, read-only), the auction/franchise pipeline, `src/engines/smb4GradeEmulator.ts` / `ivEngine.ts` (read-only). No TRACKER_DB_VERSION / kbl-league-builder DB bump (none needed).
+- **Preserve bulk-select + lock/unlock/Start Draft.** The focus/edit interaction must NOT break multi-select. Recommended: clicking a row's body FOCUSES it (shows the panel) while a dedicated checkbox toggles selection — OR keep row-toggle for selection and add a small per-row "edit"/info icon (stop propagation) that focuses+opens. Pick the cleaner one but KEEP bulk add/remove working exactly as now.
+
+**EXPECTED OUTPUT:**
+1. A focused-player detail panel below the panes: name, position(s), age, B/T, ratings, DERIVED grade, DERIVED IV (formatMoney), + "Edit Player" button.
+2. A compact self-contained edit modal: editable identity/position/ratings; grade + IV recompute LIVE from the in-modal ratings (display-only); Save → `updatePlayer` (with overallGrade = computePlayerGrade(edited)) → `refresh()`; Cancel closes without saving.
+3. `computePlayerGrade` helper in leagueBuilderPoolBuilder.ts (canonical scoreSmb4Player grade).
+4. Bulk select + lock/start unaffected.
+
+**VERIFICATION (Codex self-check):** `NODE_ENV= npm run build` exits 0; the modal shows the correct hitter/pitcher rating set; computePlayerGrade returns a valid Grade and the Smb4Grade→Grade mapping is confirmed (state the result in your summary). The Captain runs the full vitest gate + a browser check.
+
+**FORMAT:** Concise summary — files changed; the grade-helper approach + the Smb4Grade→Grade compatibility result; the focus/edit-vs-bulk-select interaction you chose; any STOP-IF hit.
+
+**FAILURE PROTOCOL (STOP-IF):** (a) `Smb4Grade` not cleanly assignable/mappable to `Player['overallGrade']` → STOP, report (no unsafe cast). (b) The feature would require editing `leagueBuilderStorage.ts` or any FROZEN file → STOP. (c) Bulk-select can't be preserved alongside focus/edit → STOP, describe.
+
+**Use xhigh reasoning effort.**
+<!-- ===== END CONTRACT: EDIT-FROM-DRAFT-1 ===== -->

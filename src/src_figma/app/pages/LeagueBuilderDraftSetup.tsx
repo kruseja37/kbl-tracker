@@ -12,6 +12,8 @@ import {
   Loader2,
   ChevronRight,
   ChevronLeft,
+  Pencil,
+  X,
 } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 import {
@@ -25,11 +27,12 @@ import {
   importRosteredPlayersToLeaguePool,
   isPlayerInLeaguePool,
   computePlayerIv,
+  computePlayerGrade,
   lockLeaguePool,
   unlockLeaguePool,
   evaluatePoolSufficiency,
 } from "../../../utils/leagueBuilderPoolBuilder";
-import type { Player } from "../../../utils/leagueBuilderStorage";
+import type { Player, Position } from "../../../utils/leagueBuilderStorage";
 import type { RegisteredPool } from "../../../engines/leagueConstruction";
 
 function formatMoney(value: number | null | undefined): string {
@@ -43,7 +46,105 @@ function playerName(player: Player): string {
 
 // Draftable primary positions only (JK ruling + DECISIONS_LOG: "DH removed ENTIRELY, DH is a
 // lineup slot only"; TWO-WAY is a trait, not a position). Pitchers carry the combined SP/RP role.
-const POSITION_OPTIONS = ["All", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "SP/RP", "RP", "CP"];
+const DRAFTABLE_POSITION_OPTIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "SP/RP", "RP", "CP"] as const;
+const POSITION_OPTIONS = ["All", ...DRAFTABLE_POSITION_OPTIONS] as const;
+const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
+
+type DraftablePosition = (typeof DRAFTABLE_POSITION_OPTIONS)[number];
+
+type PlayerEditForm = {
+  firstName: string;
+  lastName: string;
+  age: string;
+  bats: Player["bats"];
+  throws: Player["throws"];
+  primaryPosition: DraftablePosition;
+  secondaryPosition: DraftablePosition | "";
+  power: string;
+  contact: string;
+  speed: string;
+  fielding: string;
+  arm: string;
+  velocity: string;
+  junk: string;
+  accuracy: string;
+};
+
+const HITTER_RATINGS = [
+  { key: "power", label: "POW" },
+  { key: "contact", label: "CON" },
+  { key: "speed", label: "SPD" },
+  { key: "fielding", label: "FLD" },
+  { key: "arm", label: "ARM" },
+] as const;
+
+const PITCHER_RATINGS = [
+  { key: "velocity", label: "VEL" },
+  { key: "junk", label: "JNK" },
+  { key: "accuracy", label: "ACC" },
+] as const;
+
+function isPitcherPosition(position: string | undefined): boolean {
+  return Boolean(position && PITCHER_POSITION_SET.has(position));
+}
+
+function isDraftablePosition(position: string | undefined): position is DraftablePosition {
+  return Boolean(position && DRAFTABLE_POSITION_OPTIONS.includes(position as DraftablePosition));
+}
+
+function clampInt(value: string, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function playerToEditForm(player: Player): PlayerEditForm {
+  return {
+    firstName: player.firstName,
+    lastName: player.lastName,
+    age: player.age.toString(),
+    bats: player.bats,
+    throws: player.throws,
+    primaryPosition: isDraftablePosition(player.primaryPosition) ? player.primaryPosition : "C",
+    secondaryPosition: isDraftablePosition(player.secondaryPosition) ? player.secondaryPosition : "",
+    power: player.power.toString(),
+    contact: player.contact.toString(),
+    speed: player.speed.toString(),
+    fielding: player.fielding.toString(),
+    arm: player.arm.toString(),
+    velocity: player.velocity.toString(),
+    junk: player.junk.toString(),
+    accuracy: player.accuracy.toString(),
+  };
+}
+
+function buildEditedPlayer(player: Player, form: PlayerEditForm): Player {
+  const edited: Player = {
+    ...player,
+    firstName: form.firstName.trim(),
+    lastName: form.lastName.trim(),
+    age: clampInt(form.age, player.age, 18, 50),
+    bats: form.bats,
+    throws: form.throws,
+    primaryPosition: form.primaryPosition as Position,
+    secondaryPosition: form.secondaryPosition ? (form.secondaryPosition as Position) : undefined,
+    power: clampInt(form.power, player.power, 0, 99),
+    contact: clampInt(form.contact, player.contact, 0, 99),
+    speed: clampInt(form.speed, player.speed, 0, 99),
+    fielding: clampInt(form.fielding, player.fielding, 0, 99),
+    arm: clampInt(form.arm, player.arm, 0, 99),
+    velocity: clampInt(form.velocity, player.velocity, 0, 99),
+    junk: clampInt(form.junk, player.junk, 0, 99),
+    accuracy: clampInt(form.accuracy, player.accuracy, 0, 99),
+  };
+  return { ...edited, overallGrade: computePlayerGrade(edited) };
+}
+
+function positionLabel(player: Player): string {
+  return player.secondaryPosition
+    ? `${player.primaryPosition} / ${player.secondaryPosition}`
+    : player.primaryPosition;
+}
 
 export function LeagueBuilderDraftSetup() {
   const navigate = useNavigate();
@@ -55,6 +156,7 @@ export function LeagueBuilderDraftSetup() {
     isLoading,
     error,
     getRegisteredPool,
+    updatePlayer,
     refresh,
   } = useLeagueBuilderData();
 
@@ -98,11 +200,17 @@ export function LeagueBuilderDraftSetup() {
   const [availSearch, setAvailSearch] = useState("");
   const [inPosition, setInPosition] = useState("All");
   const [availPosition, setAvailPosition] = useState("All");
+  const [focusedPlayerId, setFocusedPlayerId] = useState<string | null>(null);
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Reset selections whenever the league or membership changes.
   useEffect(() => {
     setInSelected(new Set());
     setAvailSelected(new Set());
+    setFocusedPlayerId(null);
+    setEditingPlayer(null);
   }, [activeLeagueId]);
 
   const inPoolPlayers = useMemo(
@@ -114,12 +222,26 @@ export function LeagueBuilderDraftSetup() {
     [players, activeLeagueId],
   );
 
+  const focusedPlayer = useMemo(
+    () => players.find((p) => p.id === focusedPlayerId) ?? null,
+    [players, focusedPlayerId],
+  );
+
+  useEffect(() => {
+    if (focusedPlayerId && !focusedPlayer) setFocusedPlayerId(null);
+  }, [focusedPlayerId, focusedPlayer]);
+
   // Live IV per pooled player (same calc as registration → identical to the locked value).
   const ivById = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of inPoolPlayers) map.set(p.id, computePlayerIv(p));
     return map;
   }, [inPoolPlayers]);
+
+  // Note: the AVAILABLE rows show each player's STORED overallGrade (cheap, and canonical for
+  // seeded data — an edit persists the freshly-derived grade). Deriving the canonical grade for
+  // the whole list every render is far too heavy (scoreSmb4Player × hundreds), so the live
+  // derived grade is computed only for the ONE focused player (panel) and in the edit modal.
 
   const inFiltered = useMemo(() => {
     const q = inSearch.trim().toLowerCase();
@@ -210,6 +332,29 @@ export function LeagueBuilderDraftSetup() {
     if (!league || !locked || !sufficiency.meetsFloor) return;
     navigate(draftRouteForLeague(league));
   };
+
+  const handleSaveEditedPlayer = useCallback(
+    async (updatedPlayer: Player) => {
+      setEditSaving(true);
+      setEditError(null);
+      try {
+        const playerWithDerivedGrade = {
+          ...updatedPlayer,
+          overallGrade: computePlayerGrade(updatedPlayer),
+        };
+        const saved = await updatePlayer(playerWithDerivedGrade);
+        await refresh();
+        if (activeLeagueId) await refreshPool(activeLeagueId);
+        setFocusedPlayerId(saved.id);
+        setEditingPlayer(null);
+      } catch (err) {
+        setEditError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [activeLeagueId, refresh, refreshPool, updatePlayer],
+  );
 
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
     const next = new Set(set);
@@ -307,8 +452,10 @@ export function LeagueBuilderDraftSetup() {
                   rightLabel={formatMoney(ivById.get(p.id))}
                   rightTitle="IV"
                   checked={inSelected.has(p.id)}
+                  focused={focusedPlayerId === p.id}
                   disabled={locked}
                   onToggle={() => toggle(inSelected, setInSelected, p.id)}
+                  onFocus={() => setFocusedPlayerId(p.id)}
                 />
               ))}
               {inFiltered.length === 0 && <Empty label="No players in the pool." />}
@@ -347,8 +494,10 @@ export function LeagueBuilderDraftSetup() {
                   rightLabel={p.overallGrade}
                   rightTitle="Grade"
                   checked={availSelected.has(p.id)}
+                  focused={focusedPlayerId === p.id}
                   disabled={locked}
                   onToggle={() => toggle(availSelected, setAvailSelected, p.id)}
+                  onFocus={() => setFocusedPlayerId(p.id)}
                 />
               ))}
               {availFiltered.length > 500 && (
@@ -359,6 +508,16 @@ export function LeagueBuilderDraftSetup() {
               {availFiltered.length === 0 && <Empty label="No available players match." />}
             </Pane>
           </div>
+
+          {focusedPlayer && (
+            <FocusedPlayerPanel
+              player={focusedPlayer}
+              onEdit={() => {
+                setEditError(null);
+                setEditingPlayer(focusedPlayer);
+              }}
+            />
+          )}
 
           {/* Sufficiency + import */}
           <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -419,9 +578,288 @@ export function LeagueBuilderDraftSetup() {
             )}
             {busy && <Loader2 className="w-5 h-5 animate-spin text-[#E8E8D8]/70" />}
           </div>
+
+          {editingPlayer && (
+            <DraftSetupPlayerEditModal
+              player={editingPlayer}
+              saving={editSaving}
+              error={editError}
+              onCancel={() => {
+                if (editSaving) return;
+                setEditError(null);
+                setEditingPlayer(null);
+              }}
+              onSave={handleSaveEditedPlayer}
+            />
+          )}
         </>
       )}
     </Shell>
+  );
+}
+
+function FocusedPlayerPanel({ player, onEdit }: { player: Player; onEdit: () => void }) {
+  const grade = computePlayerGrade(player);
+  const iv = computePlayerIv(player);
+  const ratings = isPitcherPosition(player.primaryPosition) ? PITCHER_RATINGS : HITTER_RATINGS;
+
+  return (
+    <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <div>
+          <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853] mb-1">FOCUSED PLAYER</div>
+          <div className="text-xl font-bold text-[#E8E8D8]" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
+            {playerName(player)}
+          </div>
+          <div className="text-sm text-[#E8E8D8]/70">
+            {positionLabel(player)} · Age {player.age} · B/T {player.bats}/{player.throws}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
+        >
+          <Pencil className="w-4 h-4" /> Edit Player
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <StatBlock label="GRADE" value={grade} />
+        <StatBlock label="IV" value={formatMoney(iv)} />
+        <StatBlock label="POSITION" value={positionLabel(player)} />
+        <StatBlock label="TRAITS" value={[player.trait1, player.trait2].filter(Boolean).join(" / ") || "None"} />
+      </div>
+
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {ratings.map((rating) => (
+          <div key={rating.key} className="bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2">
+            <div className="text-[10px] font-bold tracking-wider text-[#E8E8D8]/50">{rating.label}</div>
+            <div className="text-lg font-bold text-[#E8E8D8]">{player[rating.key]}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2 min-w-0">
+      <div className="text-[10px] font-bold tracking-wider text-[#E8E8D8]/50">{label}</div>
+      <div className="text-sm font-bold text-[#E8E8D8] truncate">{value}</div>
+    </div>
+  );
+}
+
+function DraftSetupPlayerEditModal({
+  player,
+  saving,
+  error,
+  onCancel,
+  onSave,
+}: {
+  player: Player;
+  saving: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSave: (player: Player) => Promise<void>;
+}) {
+  const [form, setForm] = useState<PlayerEditForm>(() => playerToEditForm(player));
+
+  useEffect(() => {
+    setForm(playerToEditForm(player));
+  }, [player]);
+
+  const previewPlayer = useMemo(() => buildEditedPlayer(player, form), [player, form]);
+  const previewIv = useMemo(() => computePlayerIv(previewPlayer), [previewPlayer]);
+  const isPitcher = isPitcherPosition(form.primaryPosition);
+  const visibleRatings = isPitcher ? PITCHER_RATINGS : HITTER_RATINGS;
+  const inputClass = "w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] px-3 py-2 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none";
+  const numericInputClass = `${inputClass} text-center font-bold`;
+
+  const updateForm = <K extends keyof PlayerEditForm>(field: K, value: PlayerEditForm[K]) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveDisabled = saving || !form.firstName.trim() || !form.lastName.trim();
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-[#556B55] border-[6px] border-[#C4A853] text-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+        <div className="flex items-center justify-between gap-4 p-4 border-b-4 border-[#4A6844]">
+          <div>
+            <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853] mb-1">EDIT PLAYER</div>
+            <div className="text-xl font-bold">{playerName(previewPlayer)}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="p-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] active:scale-95"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {error && (
+            <div className="bg-red-900/50 border-4 border-red-500 p-3 text-sm text-red-100">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">First Name</span>
+              <input
+                value={form.firstName}
+                onChange={(event) => updateForm("firstName", event.target.value)}
+                className={inputClass}
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Last Name</span>
+              <input
+                value={form.lastName}
+                onChange={(event) => updateForm("lastName", event.target.value)}
+                className={inputClass}
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Age</span>
+              <input
+                type="number"
+                min={18}
+                max={50}
+                value={form.age}
+                onChange={(event) => updateForm("age", event.target.value)}
+                className={numericInputClass}
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Bats</span>
+              <select
+                value={form.bats}
+                onChange={(event) => updateForm("bats", event.target.value as Player["bats"])}
+                className={inputClass}
+              >
+                <option value="R">R</option>
+                <option value="L">L</option>
+                <option value="S">S</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Throws</span>
+              <select
+                value={form.throws}
+                onChange={(event) => updateForm("throws", event.target.value as Player["throws"])}
+                className={inputClass}
+              >
+                <option value="R">R</option>
+                <option value="L">L</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Grade</span>
+              <div className="bg-[#3a4d3c] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
+                {previewPlayer.overallGrade}
+              </div>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">IV</span>
+              <div className="bg-[#3a4d3c] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
+                {formatMoney(previewIv)}
+              </div>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Primary Position</span>
+              <select
+                value={form.primaryPosition}
+                onChange={(event) => {
+                  const primaryPosition = event.target.value as DraftablePosition;
+                  setForm((current) => ({
+                    ...current,
+                    primaryPosition,
+                    secondaryPosition: current.secondaryPosition === primaryPosition ? "" : current.secondaryPosition,
+                  }));
+                }}
+                className={inputClass}
+              >
+                {DRAFTABLE_POSITION_OPTIONS.map((position) => (
+                  <option key={position} value={position}>
+                    {position}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Secondary Position</span>
+              <select
+                value={form.secondaryPosition}
+                onChange={(event) => updateForm("secondaryPosition", event.target.value as PlayerEditForm["secondaryPosition"])}
+                className={inputClass}
+              >
+                <option value="">None</option>
+                {DRAFTABLE_POSITION_OPTIONS.filter((position) => position !== form.primaryPosition).map((position) => (
+                  <option key={position} value={position}>
+                    {position}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div>
+            <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-2">
+              {isPitcher ? "Pitching Ratings" : "Hitting Ratings"}
+            </div>
+            <div className={`grid gap-3 ${isPitcher ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-5"}`}>
+              {visibleRatings.map((rating) => (
+                <label key={rating.key} className="block">
+                  <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">{rating.label}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={form[rating.key]}
+                    onChange={(event) => updateForm(rating.key, event.target.value)}
+                    className={numericInputClass}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 p-4 border-t-4 border-[#4A6844]">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="px-5 py-2 bg-[#4A6844] hover:bg-[#3F5A3A] disabled:opacity-40 border-[3px] border-[#E8E8D8]/60 font-bold"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void onSave(previewPlayer)}
+            disabled={saveDisabled}
+            className="flex items-center gap-2 px-5 py-2 bg-[#3B7DD8] hover:bg-[#3366CC] disabled:opacity-40 border-[3px] border-[#E8E8D8] font-bold"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -520,37 +958,57 @@ function Row({
   rightLabel,
   rightTitle,
   checked,
+  focused,
   disabled,
   onToggle,
+  onFocus,
 }: {
   player: Player;
   rightLabel: string;
   rightTitle: string;
   checked: boolean;
+  focused: boolean;
   disabled: boolean;
   onToggle: () => void;
+  onFocus: () => void;
 }) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onFocus();
+  };
+
   return (
-    <button
-      onClick={onToggle}
-      disabled={disabled}
-      className={`w-full flex items-center gap-2 px-2 py-1.5 text-left border-b border-[#4A6844] text-sm transition ${
-        checked ? "bg-[#5A8352]" : "hover:bg-[#4A6844]"
-      } disabled:cursor-default`}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onFocus}
+      onKeyDown={handleKeyDown}
+      className={`w-full flex items-center gap-2 px-2 py-1.5 text-left border-b border-[#4A6844] text-sm transition cursor-pointer ${
+        focused ? "bg-[#C4A853]/20 outline outline-2 outline-[#C4A853] -outline-offset-2" : checked ? "bg-[#5A8352]" : "hover:bg-[#4A6844]"
+      }`}
     >
-      <span
-        className={`w-4 h-4 border-2 flex items-center justify-center shrink-0 ${
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle();
+        }}
+        disabled={disabled}
+        aria-pressed={checked}
+        aria-label={`${checked ? "Deselect" : "Select"} ${playerName(player)}`}
+        className={`w-4 h-4 border-2 flex items-center justify-center shrink-0 disabled:opacity-40 ${
           checked ? "bg-[#C4A853] border-[#E8E8D8]" : "border-[#E8E8D8]/50"
         }`}
       >
         {checked && <Check className="w-3 h-3 text-[#1A1A1A]" />}
-      </span>
+      </button>
       <span className="flex-1 truncate text-[#E8E8D8]">{playerName(player)}</span>
       <span className="w-10 text-xs text-[#E8E8D8]/60">{player.primaryPosition}</span>
       <span className="w-24 text-right text-xs font-bold text-[#E8E8D8]" title={rightTitle}>
         {rightLabel}
       </span>
-    </button>
+    </div>
   );
 }
 
