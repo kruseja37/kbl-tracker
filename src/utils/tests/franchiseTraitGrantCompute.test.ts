@@ -289,6 +289,9 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
       createdAtGameNumber: 20,
       createdAt: new Date(atBatTimestamp).toISOString(),
     });
+    expect(traitGrantSeam.computeTraitAcquisition).toHaveBeenCalledWith(expect.objectContaining({
+      seed: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:player-alpha:trait-grant-20`,
+    }));
   });
 
   test('frequent cadence from season metadata makes game 10 of 100 a trait checkpoint', async () => {

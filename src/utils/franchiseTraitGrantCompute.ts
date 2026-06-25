@@ -246,6 +246,7 @@ export async function persistDarkTraitGrantForCompletedGame(
       rosterRole: 'unknown',
       heldTraits,
       candidates: candidates as TraitCandidate[],
+      seed: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${sourceEventId}`,
     });
 
     for (const proposal of acquisition.proposals) {

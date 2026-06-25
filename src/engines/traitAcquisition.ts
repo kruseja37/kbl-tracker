@@ -10,13 +10,14 @@ import {
   type CanonicalPersonality,
 } from './masterMoraleMatrix';
 import type { HiddenModifiers } from '../types/game';
-import { assignTier, computeTraitWeight } from '../data/traitTierConfig';
+import { assignTier, computeTraitWeight, type TraitTier } from '../data/traitTierConfig';
 
 /**
  * §9 / L9b-2 — PURE trait acquisition proposals (TS-1 / TS-5 / TS-12).
  *
  * This engine consumes L9b-1 reality scores and emits proposal objects only. It
- * never queries storage, mutates players, writes trait slots, or randomizes.
+ * never queries storage, mutates players, writes trait slots, or uses ambient
+ * randomness; §8B seeded likelihood rolls are opt-in via input.seed.
  * L9b-3 owns confirmation/write-back.
  */
 export type RosterRole = 'bench' | 'starter' | 'unknown';
@@ -33,6 +34,7 @@ export interface TraitAcquisitionInput {
   rosterRole?: RosterRole;
   heldTraits: readonly HeldTrait[];
   candidates: readonly TraitCandidate[];
+  seed?: string;
 }
 
 export interface TraitChangeProposal {
@@ -62,7 +64,8 @@ export interface SkippedTrait {
     | 'thin_peer_pool'
     | 'dead_band'
     | 'offsetting_pair_held'
-    | 'cap_no_displacement';
+    | 'cap_no_displacement'
+    | 'likelihood_not_fired';
 }
 
 export interface TraitAcquisitionResult {
@@ -102,8 +105,35 @@ export const TRAIT_ACQUISITION_TUNING: TraitAcquisitionTuning = {
   incumbencyBeta: 1.25, // β=1.25 RULED
 };
 
+// §16 sim-tune placeholder — shape (monotonic in margin, tier-hardness) locked; constants tunable.
+export const TRAIT_FIRING_CURVE = {
+  base: 0.15,
+  slope: 0.80,
+  floor: 0.05,
+  ceil: 0.97,
+  tierHardness: {
+    ELITE: 0.10,
+    RARE: 0.05,
+    UNCOMMON: 0.02,
+    COMMON: 0,
+    SEVERE: 0.10,
+    MODERATE: 0.05,
+    MINOR: 0,
+  },
+} as const;
+
 // §16 sim-tune — Common-floor; UNREACHABLE for buildable traits (excluded/unpriced only), proven by test.
 const DEFAULT_TRAIT_WEIGHT_FALLBACK = 0.15;
+
+export function firingProbability(normalizedMargin: number, tier?: TraitTier): number {
+  return clamp(
+    TRAIT_FIRING_CURVE.base
+      + TRAIT_FIRING_CURVE.slope * clamp01(normalizedMargin)
+      - (TRAIT_FIRING_CURVE.tierHardness[tier ?? 'COMMON'] ?? 0),
+    TRAIT_FIRING_CURVE.floor,
+    TRAIT_FIRING_CURVE.ceil,
+  );
+}
 
 const NEUTRAL_MODIFIERS: HiddenModifiers = {
   loyalty: 50,
@@ -310,9 +340,13 @@ export function computeTraitAcquisition(
     skipped.push({ traitName, reason: 'dead_band' });
   }
 
-  const loseProposals = rawProposals.filter((proposal) => proposal.valence === 'lose');
+  const firingProposals = input.seed != null && input.seed !== ''
+    ? applyLikelihoodRoll(rawProposals, input.seed, thresholdsByTrait, tuning, skipped)
+    : rawProposals;
+
+  const loseProposals = firingProposals.filter((proposal) => proposal.valence === 'lose');
   const reconciledGains = reconcileGainProposals({
-    gainProposals: rawProposals.filter((proposal) => proposal.valence === 'gain'),
+    gainProposals: firingProposals.filter((proposal) => proposal.valence === 'gain'),
     heldTraits: input.heldTraits,
     loseProposals,
     heldNames,
@@ -386,6 +420,49 @@ function buildProposalBase(args: {
       resiliencePositiveTilt,
     },
   };
+}
+
+function applyLikelihoodRoll(
+  rawProposals: readonly TraitChangeProposal[],
+  seed: string,
+  thresholdsByTrait: ReadonlyMap<string, TraitThresholds>,
+  tuning: TraitAcquisitionTuning,
+  skipped: SkippedTrait[],
+): TraitChangeProposal[] {
+  const firing: TraitChangeProposal[] = [];
+
+  for (const proposal of rawProposals) {
+    const thresholds = thresholdsByTrait.get(proposal.traitName) ?? {
+      gainThreshold: tuning.gainThreshold,
+      loseThreshold: tuning.loseThreshold,
+    };
+    let tier: TraitTier | undefined;
+    try {
+      tier = assignTier(proposal.traitName).tier;
+    } catch {
+      tier = undefined;
+    }
+
+    const normalizedMargin = proposal.valence === 'gain'
+      ? clamp01(
+        (proposal.probability - thresholds.gainThreshold)
+        / Math.max(1 - thresholds.gainThreshold, 1e-9),
+      )
+      : clamp01(
+        (thresholds.loseThreshold - proposal.probability)
+        / Math.max(thresholds.loseThreshold, 1e-9),
+      );
+    const fireProb = firingProbability(normalizedMargin, tier);
+    const draw = fnv1aUnit(`${seed}:${proposal.traitName}:${proposal.valence}`);
+
+    if (draw < fireProb) {
+      firing.push(proposal);
+    } else {
+      skipped.push({ traitName: proposal.traitName, reason: 'likelihood_not_fired' });
+    }
+  }
+
+  return firing;
 }
 
 function thresholdsForTrait(
@@ -561,6 +638,15 @@ function clamp01(value: number): number {
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
+}
+
+function fnv1aUnit(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return (hash >>> 0) / 0xffffffff;
 }
 
 function createSymmetricOpposites(

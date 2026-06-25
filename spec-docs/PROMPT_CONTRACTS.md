@@ -21610,3 +21610,75 @@ Use high reasoning effort. Think step-by-step. Ground every cited file:line by r
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-5a ===== -->
+
+<!-- ===== CONTRACT: T-5b ===== -->
+## T-5b — §8B seeded firing roll (eligibility → probabilistic firing; + caller seed wiring)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding a seeded, reproducible probability roll on top of the deterministic trait-acquisition engine (T-5a landed it), and threading the seed in from the one production caller. Engine + its test + the one caller + the caller test only.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Clearing a gain/loss threshold should make a trait merely **eligible**; whether it actually fires this checkpoint is a **seeded, reproducible** probability that scales with how far past the threshold the signal is (and is slightly harder for higher tiers) — so a borderline qualifier may wait a checkpoint while a standout almost always fires, and the same season replays identically.
+
+**SOURCE OF TRUTH (VERBATIM):** `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md` §8B step 2 ("Roll the seeded likelihood per eligible gain/loss → the firing set"), the **"Likelihood — RULED" paragraph (lines 107)** ("a **seeded** probability that scales with the **margin past the threshold** (and tier — higher tiers slightly harder)… Loss is symmetric… Seeded-deterministic (same seed → same outcome; reproducible for L-SIM/tests). Exact curve = sim-tune placeholder; **shape = monotonic in margin**"), and Appendix-A example 4 (lines 152, illustrative calibration: Rare bar 0.82 at P 0.83 ≈ "20%", at P 0.95 ≈ "85%"; a Common at P 0.90 fires "near-certainly"). **The exact curve constants are §16 sim-tune placeholders — shape (monotonic in margin, tier-hardness) is what's locked; the Appendix anchors are illustrative, NOT hard test targets.**
+
+**GROUNDING (Captain-verified by reading the post-T-5a committed source `5519c9c7` — re-read before editing; lines are current):**
+- `src/engines/traitAcquisition.ts` (post-T-5a) — the engine is PURE/no-seed today (docstring ":19–20" says it "never randomizes"; T-5b changes that ONLY when a seed is supplied):
+  - `TraitAcquisitionInput` interface **:28–36** — add an optional `seed?: string`.
+  - `SkippedTrait.reason` union **:58–65** — add `'likelihood_not_fired'`.
+  - `computeTraitAcquisition` candidate loop builds `rawProposals` (gain push **:300–301** `proposalBase.probability >= thresholds.gainThreshold`; lose push **:305–306** `<= thresholds.loseThreshold`). The per-trait thresholds are computed in-loop by `thresholdsForTrait` (memoized into the local `thresholdsByTrait` map). After the loop, **:313** `const loseProposals = rawProposals.filter(lose)` then **:314** `reconcileGainProposals({ gainProposals: rawProposals.filter(gain), … })`.
+  - **INSERT POINT** = between the loop end (~:311) and the `loseProposals` split (:313): transform `rawProposals` → the firing subset, THEN split + reconcile on the subset.
+  - `assignTier(traitName)` (from `../data/traitTierConfig`, already imported) returns `{ tier, gainThreshold, lossThreshold, … }`; it THROWS for excluded/unpriced traits (wrap in try/catch — same pattern as `thresholdsForTrait` :390-ish). `clamp01`/`clamp` private helpers exist (~:531/:535).
+- **Seed source (Captain-verified, zero new plumbing):** `src/utils/franchiseTraitGrantCompute.ts` — `sourceEventId = `trait-grant-${gameNumber}`` is defined at **:232** (the checkpoint marker: stable within a checkpoint via the `isCheckpointBoundary` gate :188, distinct across checkpoints). The `computeTraitAcquisition` call is at **:241** inside `for (const entry of roster)`; `scope.franchiseId`/`scope.seasonId`/`scope.statsScopeId`/`entry.playerId`/`sourceEventId` are ALL in scope there (they already build the overlay id at :253). NO `leagueId` needed (trait weights are FORK-A-frozen per-league for v1).
+- **FNV-1a→[0,1) precedent (mirror, don't import):** `src/engines/scoutValueRange.ts:55–62` (`hash=0x811c9dc5; hash ^= c; hash = Math.imul(hash,0x01000193) >>> 0; return (hash>>>0)/0xffffffff`) and `src/engines/relationshipIntensity.ts:74–84`. Each engine keeps its OWN private copy — add a private `fnv1aUnit` to `traitAcquisition.ts`, do NOT cross-import.
+- **Test-safety (Captain-verified):** `src/utils/tests/franchiseTraitGrantCompute.test.ts` STUBS `traitGrantSeam.computeTraitAcquisition` via `vi.spyOn(...).mockReturnValue(...)` (`stubTraitPipeline` ~:179/:196) → the real roll is NOT exercised there; its "two runs … write identical rows" determinism test (~:311) stays green (the stub ignores the added `seed` input field). The Phase-2 traits flag is OFF in the `processCompletedGame.*` partial-mock tests → the sweep is a dark-noop → overlay output unaffected.
+
+**BUILD:**
+1. **`TraitAcquisitionInput.seed?: string`** (optional). **`SkippedTrait.reason` += `'likelihood_not_fired'`**.
+2. **Private `fnv1aUnit(seed: string): number`** in `traitAcquisition.ts`, mirroring `scoutValueRange.ts:55–62` exactly (FNV-1a 32-bit, `/0xffffffff` → [0,1]). NO `Math.random`/`Date`.
+3. **Exported `firingProbability(normalizedMargin: number, tier?: TraitTier): number`** = `clamp(TRAIT_FIRING_CURVE.base + TRAIT_FIRING_CURVE.slope * clamp01(normalizedMargin) - (TRAIT_FIRING_CURVE.tierHardness[tier ?? 'COMMON'] ?? 0), TRAIT_FIRING_CURVE.floor, TRAIT_FIRING_CURVE.ceil)`. Add `export const TRAIT_FIRING_CURVE = { base: 0.15, slope: 0.80, floor: 0.05, ceil: 0.97, tierHardness: { ELITE: 0.10, RARE: 0.05, UNCOMMON: 0.02, COMMON: 0, SEVERE: 0.10, MODERATE: 0.05, MINOR: 0 } } as const;` — flag the WHOLE thing `// §16 sim-tune placeholder — shape (monotonic in margin, tier-hardness) locked; constants tunable`. (Import `TraitTier` type from `../data/traitTierConfig`.)
+4. **Private `applyLikelihoodRoll(rawProposals, seed, thresholdsByTrait, tuning, skipped)`** that returns the firing subset:
+   - For each proposal: thresholds = `thresholdsByTrait.get(traitName)` (already computed in-loop; fall back to `{ gainThreshold: tuning.gainThreshold, loseThreshold: tuning.loseThreshold }`). tier via `try { assignTier(traitName).tier } catch { undefined }`.
+   - `normalizedMargin` = gain → `clamp01((p.probability - gainThreshold) / Math.max(1 - gainThreshold, 1e-9))`; lose → `clamp01((loseThreshold - p.probability) / Math.max(loseThreshold, 1e-9))`.
+   - `fireProb = firingProbability(normalizedMargin, tier)`; `draw = fnv1aUnit(`${seed}:${p.traitName}:${p.valence}`)`.
+   - `draw < fireProb` → keep in the firing set; else `skipped.push({ traitName: p.traitName, reason: 'likelihood_not_fired' })`.
+5. **Wire it into `computeTraitAcquisition`** at the insert point — **OPT-IN via seed presence**: `const firing = (input.seed != null && input.seed !== '') ? applyLikelihoodRoll(rawProposals, input.seed, thresholdsByTrait, tuning, skipped) : rawProposals;` then split `loseProposals`/gains off `firing` and reconcile as today. **Absent seed ⇒ rawProposals pass through untouched ⇒ the 72 T-5a tests stay green by construction.**
+6. **Caller wiring** `src/utils/franchiseTraitGrantCompute.ts` — at the `computeTraitAcquisition` input object (**:241–249**) add `seed: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${sourceEventId}`,`. Nothing else in that file changes (no new import/export).
+
+**TEST UPDATES (`traitAcquisition.test.ts` + a light check in `franchiseTraitGrantCompute.test.ts`):**
+- `firingProbability` unit tests: **monotonic** (margin 0 ≤ 0.5 ≤ 1 ⇒ non-decreasing fireProb at a fixed tier); **tier-hardness ordering** (ELITE < COMMON at the same margin); **bounded** to `[floor, ceil]`; margin clamps (negative → floor-ish, >1 → ceil-ish).
+- **Seeded determinism:** the SAME input+seed run twice ⇒ byte-identical `proposals` (and `skipped`).
+- **Opt-in:** the SAME input WITHOUT a seed fires every eligible proposal (= T-5a behavior) — pick a borderline-margin eligible gain and assert it IS proposed with no seed; then with a seed whose `fnv1aUnit(...) >= fireProb` it is instead `skipped` with `'likelihood_not_fired'` (compute the actual draw for your chosen seed/trait, show the arithmetic, choose a seed that lands on each side — a high-margin standout should fire under almost any seed; a tiny-margin qualifier can be made to miss).
+- **Loss symmetry:** a held trait at/just-below its loss bar with a seed that draws high ⇒ NOT lost (`likelihood_not_fired`, stays held), proving loss is rolled too.
+- **The 72 existing T-5a tests stay GREEN unchanged** (none passes a seed). Do NOT edit them.
+- `franchiseTraitGrantCompute.test.ts`: confirm it stays green (the seam stub ignores the new `seed` input). OPTIONAL: assert via the existing spy that `computeTraitAcquisition` was called with an input carrying a non-empty `seed` string — only if cheap; do NOT restructure the stub.
+
+**MAKE-OR-BREAK:**
+- Roll is **opt-in via seed presence** — absent/empty seed ⇒ rawProposals untouched ⇒ every existing T-5a test green with zero edits.
+- **Seeded-deterministic**: identical (input, seed) ⇒ identical output, every run. Source-grep proves NO `Math.random` / `Date.now` / `new Date` anywhere in the engine.
+- `firingProbability` is **monotonic in margin** and **tier-ordered** (higher tier ⇒ ≤ fireProb at equal margin), bounded to the curve floor/ceil.
+- Both GAINS and LOSSES are rolled (loss symmetric); a non-fired loss leaves the trait held (it's filtered out of `loseProposals` ⇒ not in `lossNames` ⇒ stays in `working`).
+- The caller passes a seed built from `franchiseId:seasonId:statsScopeId:playerId:sourceEventId` (checkpoint-stable). No new import/export in `franchiseTraitGrantCompute.ts`.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npm test` (**FULL suite** — engine + the `franchiseTraitGrantCompute` → `processCompletedGame` partial-mock chain; transitive-import-mock-break risk on the caller edit. If a `processCompletedGame.*` partial-mock test breaks at module load, fix with a TEST-ONLY mock stub — the T-2/A1.5c-4 pattern — NEVER production). Read the FAILED-FILE list: ZERO NEW REDS vs the characterized baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` + `AwardsWatchlist` + `GameTrackerLaunchState` solo-pass order-flakes — re-run any unexpected red IN ISOLATION; solo-pass ⇒ benign flake, NOT a regression).
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/utils/tests/franchiseTraitGrantCompute.test.ts` → paste counts.
+4. `NODE_ENV= grep -rnE "Math\.random|Date\.now|new Date" src/engines/traitAcquisition.ts` → MUST be empty.
+5. `git --no-pager diff --stat` → ONLY `src/engines/traitAcquisition.ts`, `src/engines/__tests__/traitAcquisition.test.ts`, `src/utils/franchiseTraitGrantCompute.ts` (+ `franchiseTraitGrantCompute.test.ts` if you added the optional assert; + a test-only mock stub IF needed). `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing §8B step 2 / the Likelihood para / the make-or-break.
+3. The seed string + the computed `fnv1aUnit` draw(s) you used to land the fire/miss tests (show the arithmetic).
+4. Verification output pasted (build, full-suite FAILED-file summary, the focused vitest counts, the empty randomness grep, diff --stat).
+5. "T-5b complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- A T-5a test breaks (it must NOT — they pass no seed) → STOP, report (your opt-in gate is wrong).
+- The seed identifiers aren't actually in scope at `franchiseTraitGrantCompute.ts:241` (they are — re-read) → STOP, report.
+- A new RED outside the characterized set that solo-passes is a flake (note it + continue); a new RED that solo-FAILS and traces to this change → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-5b ===== -->

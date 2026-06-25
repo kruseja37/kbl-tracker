@@ -7,8 +7,10 @@ import {
 } from '../traitRealityScorer';
 import {
   TRAIT_ACQUISITION_TUNING,
+  TRAIT_FIRING_CURVE,
   TRAIT_OPPOSITES,
   computeTraitAcquisition,
+  firingProbability,
   type HeldTrait,
   type TraitAcquisitionInput,
   type TraitAcquisitionTuning,
@@ -69,6 +71,15 @@ function input(overrides: Partial<TraitAcquisitionInput> = {}): TraitAcquisition
   };
 }
 
+function fnv1aUnitForTest(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return (hash >>> 0) / 0xffffffff;
+}
+
 function proposalFor(
   traitName: string,
   overrides: Partial<TraitAcquisitionInput> = {},
@@ -85,6 +96,133 @@ function proposalFor(
   expect(result.proposals).toHaveLength(1);
   return result.proposals[0];
 }
+
+describe('traitAcquisition §8B seeded firing likelihood', () => {
+  test('firingProbability is monotonic by margin, tier-harder, bounded, and margin-clamped', () => {
+    const commonAtZero = firingProbability(0, 'COMMON');
+    const commonAtHalf = firingProbability(0.5, 'COMMON');
+    const commonAtOne = firingProbability(1, 'COMMON');
+
+    expect(commonAtZero).toBeGreaterThanOrEqual(TRAIT_FIRING_CURVE.floor);
+    expect(commonAtZero).toBeLessThanOrEqual(commonAtHalf);
+    expect(commonAtHalf).toBeLessThanOrEqual(commonAtOne);
+    expect(commonAtOne).toBeLessThanOrEqual(TRAIT_FIRING_CURVE.ceil);
+
+    expect(firingProbability(0.5, 'ELITE')).toBeLessThan(firingProbability(0.5, 'RARE'));
+    expect(firingProbability(0.5, 'RARE')).toBeLessThan(firingProbability(0.5, 'UNCOMMON'));
+    expect(firingProbability(0.5, 'UNCOMMON')).toBeLessThan(firingProbability(0.5, 'COMMON'));
+
+    expect(firingProbability(-1, 'ELITE')).toBe(TRAIT_FIRING_CURVE.floor);
+    expect(firingProbability(2, 'COMMON')).toBe(firingProbability(1, 'COMMON'));
+    expect(firingProbability(2, 'COMMON')).toBeCloseTo(0.95, 12);
+
+    for (const margin of [-10, 0, 0.5, 1, 10]) {
+      for (const tier of ['ELITE', 'RARE', 'UNCOMMON', 'COMMON', 'SEVERE', 'MODERATE', 'MINOR'] as const) {
+        const probability = firingProbability(margin, tier);
+        expect(probability).toBeGreaterThanOrEqual(TRAIT_FIRING_CURVE.floor);
+        expect(probability).toBeLessThanOrEqual(TRAIT_FIRING_CURVE.ceil);
+      }
+    }
+  });
+
+  test('same input and seed produce byte-identical proposals and skipped rows', () => {
+    const seededInput = input({
+      seed: 't5b-2',
+      candidates: [
+        { traitName: 'CON vs LHP', score: score('CON vs LHP', 0.71) },
+        { traitName: 'Sprinter', score: score('Sprinter', 0.95) },
+      ],
+    });
+
+    const first = computeTraitAcquisition(seededInput);
+    const second = computeTraitAcquisition(seededInput);
+
+    expect(JSON.stringify(second.proposals)).toBe(JSON.stringify(first.proposals));
+    expect(JSON.stringify(second.skipped)).toBe(JSON.stringify(first.skipped));
+    expect(first.proposals).toMatchObject([
+      { traitName: 'Sprinter', valence: 'gain', probability: 0.95 },
+    ]);
+    expect(first.skipped).toContainEqual({
+      traitName: 'CON vs LHP',
+      reason: 'likelihood_not_fired',
+    });
+  });
+
+  test('seeded roll is opt-in: unseeded eligible gain fires, but a high draw can defer it', () => {
+    const tier = assignTier('CON vs LHP');
+    expect(tier.tier).toBe('UNCOMMON');
+    expect(tier.gainThreshold).toBe(0.70);
+
+    const borderlineProbability = 0.71;
+    const normalizedMargin = (borderlineProbability - tier.gainThreshold)
+      / (1 - tier.gainThreshold);
+    const fireProb = firingProbability(normalizedMargin, tier.tier);
+    const missSeed = 't5b-2';
+    const fireSeed = 't5b-0';
+    const missDraw = fnv1aUnitForTest(`${missSeed}:CON vs LHP:gain`);
+    const fireDraw = fnv1aUnitForTest(`${fireSeed}:CON vs LHP:gain`);
+
+    expect(normalizedMargin).toBeCloseTo(0.03333333333333336, 12);
+    expect(fireProb).toBeCloseTo(0.1566666666666667, 12);
+    expect(missDraw).toBeCloseTo(0.3151148346520762, 12);
+    expect(fireDraw).toBeCloseTo(0.031117576880175055, 12);
+    expect(missDraw).toBeGreaterThanOrEqual(fireProb);
+    expect(fireDraw).toBeLessThan(fireProb);
+
+    const borderlineInput = input({
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', borderlineProbability) }],
+    });
+    const unseeded = computeTraitAcquisition(borderlineInput);
+    const seededMiss = computeTraitAcquisition({ ...borderlineInput, seed: missSeed });
+    const seededFire = computeTraitAcquisition({ ...borderlineInput, seed: fireSeed });
+    const highMargin = computeTraitAcquisition(input({
+      seed: missSeed,
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 1) }],
+    }));
+
+    expect(unseeded.proposals).toMatchObject([
+      { traitName: 'CON vs LHP', valence: 'gain', probability: borderlineProbability },
+    ]);
+    expect(unseeded.skipped).toEqual([]);
+    expect(seededMiss.proposals).toEqual([]);
+    expect(seededMiss.skipped).toEqual([
+      { traitName: 'CON vs LHP', reason: 'likelihood_not_fired' },
+    ]);
+    expect(seededFire.proposals).toMatchObject([
+      { traitName: 'CON vs LHP', valence: 'gain', probability: borderlineProbability },
+    ]);
+    expect(highMargin.proposals).toMatchObject([
+      { traitName: 'CON vs LHP', valence: 'gain', probability: 1 },
+    ]);
+  });
+
+  test('losses use the same seeded likelihood roll and a missed loss leaves the held trait intact', () => {
+    const tier = assignTier('CON vs LHP');
+    expect(tier.lossThreshold).toBe(0.30);
+
+    const heldProbability = 0.29;
+    const normalizedMargin = (tier.lossThreshold - heldProbability) / tier.lossThreshold;
+    const fireProb = firingProbability(normalizedMargin, tier.tier);
+    const seed = 't5b-0';
+    const draw = fnv1aUnitForTest(`${seed}:CON vs LHP:lose`);
+
+    expect(normalizedMargin).toBeCloseTo(0.03333333333333336, 12);
+    expect(fireProb).toBeCloseTo(0.1566666666666667, 12);
+    expect(draw).toBeCloseTo(0.2940758311408748, 12);
+    expect(draw).toBeGreaterThanOrEqual(fireProb);
+
+    const result = computeTraitAcquisition(input({
+      seed,
+      heldTraits: [{ traitName: 'CON vs LHP', strength: 0.5 }],
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', heldProbability) }],
+    }));
+
+    expect(result.proposals).toEqual([]);
+    expect(result.skipped).toEqual([
+      { traitName: 'CON vs LHP', reason: 'likelihood_not_fired' },
+    ]);
+  });
+});
 
 describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
   test('neutral inputs leave probability equal to the reality percentile', () => {
