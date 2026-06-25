@@ -73,10 +73,10 @@ Every ball in play is characterized in 3 dimensions from data we already capture
 ### CONTACT (hitter)
 **Squared-up rate (exit-velo, launch-agnostic) − weak/pop/whiff**, + the **approach** term (capped): chase-avoidance, called-K-take, first-pitch productivity (`pitchCount==1`). Drops raw AVG (BABIP-inverted). The contactType grades quality regardless of count, so approach isn't double-graded.
 
-### SPEED — needs the UBR aggregator (zero new capture)
-**SB% = SB/(SB+CS)** (gated ≥~5 att) + **extra-base take-rate** via `calculateUBR` (built+tested but **never called** → UBR=0 today; only the RunnerSubEntry→AdvancementStats aggregator is missing) + **BEAT_THROW** (beat-out infield hit = out-of-box speed vs the IF arm). 3B/ITPHR legs route here. Drops raw SB-count / 3B-as-power. **Confound (disclose):** SB% saturates near 100% (user-as-manager rarely sends slow runners → measures send-discipline) → lean on UBR.
+### SPEED — UBR aggregator now WIRED (RA-2c-3; zero new capture)
+**SB% = SB/(SB+CS)** (gated ≥~5 att) + **extra-base take-rate** — now WIRED as `speedBaserunningRate` (RA-2c-3: `aggregateUbrFromEvents` accrues per-game `extraBasesTaken`/`advancementOpportunities` into the season row → the adapter emits the rate, gated ≥2 speed events; the standalone `calculateUBR` WAR-runs path stays separately speed-estimated) + **BEAT_THROW** (beat-out infield hit = out-of-box speed vs the IF arm). 3B/ITPHR legs route here. Drops raw SB-count / 3B-as-power. **Confound (disclose):** SB% saturates near 100% (user-as-manager rarely sends slow runners → measures send-discipline) → lean on UBR.
 
-### FIELDING — difficulty is MEASURED, not inferred (deep play-type data; needs the *ByPosition aggregator)
+### FIELDING — difficulty is MEASURED, not inferred (deep play-type data; difficulty-fielding aggregator wired into `fieldingRangeRate` by NATIVE-WIRE)
 **Difficulty-weighted conversion rate** = Σ over the fielder's plays of `(made ? +w : −0 [non-conversion])` ÷ opportunities, where **`w` = the EXPLICIT play-type ladder** (user-tagged per play, `eventLog.ts:415-423` `FieldingPlayType`), NOT an inferred/subjective difficulty. This obsoletes the old confirm-prompt — **the enrichment IS the difficulty signal.** The play type tells us *how hard*; the precise **x/y + spray-inferred fielder** adds *how much ground he covered* (range) — together a fuller picture than either alone.
 
 **Play-type difficulty ladder (RULED JK — §16 magnitudes):**
