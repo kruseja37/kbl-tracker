@@ -50,8 +50,10 @@ import { FAME_TIER_LABEL, type FameTier } from "../../../types/reporter";
 // CONSTANTS
 // ============================================
 
-const PRIMARY_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
-const SECONDARY_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
+// Canonical draftable positions: 8 fielders + the 4 pitcher roles (SP/RP is one combined role).
+// DH is a lineup slot only and TWO-WAY is a trait, not a position (DECISIONS_LOG) — both removed.
+const PRIMARY_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'];
+const SECONDARY_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP'];
 const GRADES: Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'];
 const PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
