@@ -264,6 +264,7 @@ export async function persistDarkTraitGrantForCompletedGame(
       modifiers: entry.modifiers,
       currentMorale: entry.currentMorale,
       rosterRole: 'unknown',
+      primaryPosition: entry.primaryPosition,
       heldTraits,
       candidates: attachRecentPercentiles(
         candidates,
