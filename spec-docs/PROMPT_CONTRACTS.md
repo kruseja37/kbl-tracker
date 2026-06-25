@@ -22711,3 +22711,80 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** the recent path can't reuse `toExpectedStatsCategoryRates` (→ STOP, semantics drift); a new store / DB bump is needed (→ STOP); the design persists windowed stats or mutates a store (→ STOP, must be pure/read-only); the hitter fielding cats can't be sourced from events (→ leave unpopulated per the documented default, do NOT fabricate); a trait engine must be touched (→ STOP, Lane C); live overlays change at the committed `trendTiltWeight=0` (→ STOP, build-dark byte-identity violated); a full-suite red outside the characterized set 2 fix-iters can't clear (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-ratings-c` worktree before editing.
 <!-- ===== END CONTRACT: RA-9b ===== -->
+
+<!-- ===== CONTRACT: DT-F2 ===== -->
+## DT-F2 — Workhorse earnable (ELITE IP-per-game, SP/RP pool-split via poolTraitKey)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding the Workhorse earn-signal — the only DT-F trait needing a NEW season-pitching data load + a per-role (SP/RP) peer-pool split. Build-dark; no DB bump.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL:** Make `Workhorse` EARNABLE: an ELITE trait for a pitcher with relatively-high innings-pitched-per-game, ranked against SAME-ROLE peers (starters vs starters, relievers vs relievers). Canonical + pitcher-only + difficulty auto-derived already exist; missing = the signal-builder + a season-pitching input load + the SP/RP pool split + BUILDABLE + positive valence. (DECISIONS_LOG 2026-06-25 row F; JK 2026-06-26 ruled the SP/RP split = a LOCAL Two-Way-style `poolTraitKey` fold now.)
+
+**SOURCE OF TRUTH:** DECISIONS_LOG 2026-06-25 row F (Workhorse = ELITE, IP/game, role-split vs peers) + JK 2026-06-26 (local poolTraitKey fold).
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- **Data source (NEW load):** `getSeasonPitchingStats(seasonId)` (`seasonStorage.ts:449`) → `PlayerSeasonPitching` with `outsRecorded` (`:102`, IP=outsRecorded/3), `gamesStarted` (`:101`), `games`. NOT currently loaded by `loadSeasonTraitData` (`franchiseTraitGrantCompute.ts:286`, which loads only batting + fielding). ADD it (mirror the `seasonFieldingByPlayer` pattern): import `getSeasonPitchingStats` (near `:71`), load in `loadSeasonTraitData`, build a `seasonPitchingByPlayer: Map<string, { outsRecorded: number; games: number; gamesStarted: number }>`, add to `LoadedSeasonTraitData` (`~:109`), thread into the `computeSeasonTraitCandidates({...})` call (`:217-229`).
+- **Input field:** add optional `seasonPitchingByPlayer?` to `SeasonTraitCandidateInput` (`traitCandidateBuilder.ts:182-235`) — same optional-Map shape as `seasonFieldingByPlayer`.
+- **Signal:** `addWorkhorseSignals` — per pitcher with `games > 0`: `signalValue = (outsRecorded / 3) / games` (IP per game), `sampleSize = games`. Wire into `buildRawSignals`.
+- **SP/RP pool split (the make-or-break) = LOCAL `poolTraitKey` fold, mirroring Two Way (`:1713-1756`, `poolTraitKey` overrides `traitName` in `buildPeerPools`' pool key).** For Workhorse ONLY, set the pool key to `Workhorse|SP` when `gamesStarted > 0` else `Workhorse|RP`, so SP pitchers percentile against SP and RP against RP (an SP's ~6 IP/G and an RP's ~1.5 IP/G never share a pool). Follow the EXACT seam Two Way uses (do NOT change `buildPeerPools`' general shape — use the per-trait `poolTraitKey` override). Confirm from source how Two Way registers its `poolTraitKey` and replicate that registration for Workhorse with the role suffix.
+- **Valence:** `Workhorse` is ABSENT from the image sets → add to `POSITIVE_IMAGE_TRAITS` (`traitAcquisition.ts`) with NO `IMAGE_DRIVER_SETS` entry (neutral tilt, §16 default — ELITE/positive). Add to `BUILDABLE_TRAITS`.
+- **⚠ Transitive-mock-break (the known gotcha):** adding `getSeasonPitchingStats` to `loadSeasonTraitData` puts a new import into the `processCompletedGame` transitive graph → a partial-mock test may break at module-load (`No "getSeasonPitchingStats" export on the mock`). FIX = add a test-only mock stub in the affected test file(s); do NOT alter the production import to dodge it. FULL-suite gate to catch it.
+- **No DB bump** (reuse existing stores; v25). No oracle/pricing/tier/scorer change (Workhorse already canonical/priced/tiered).
+
+**OPEN-DECISIONS (documented defaults):** SP threshold = `gamesStarted > 0` (any start → SP cohort); §16 — flag. Workhorse positive valence, no driver (§16).
+
+**TEST (`traitCandidateBuilder.test.ts` + the affected `franchiseTraitGrantCompute`/processCompletedGame mock test):**
+- BUILDABLE membership += Workhorse.
+- `addWorkhorseSignals`: a pitcher with outsRecorded=54 (18 IP) over 9 games → 2.0 IP/G; SP vs RP pooled SEPARATELY (an SP at 6 IP/G and an RP at 1.5 IP/G each rank top of THEIR pool — assert via `poolTraitKey` producing distinct pools / each as a candidate); pitcher-role filtered; games=0 dormant.
+- Add the test-only `getSeasonPitchingStats` mock stub where the full suite needs it.
+
+**MAKE-OR-BREAK:** Workhorse = IP/game from a NEW `seasonPitchingByPlayer` load, SP/RP split via the LOCAL `poolTraitKey` fold (mirroring Two Way, NOT a `buildPeerPools` rewrite), BUILDABLE + positive valence; the new data load gets a test-only mock stub (not a production dodge); no DB bump, no oracle/pricing/tier/scorer touch. Files: `traitCandidateBuilder.ts` + `traitAcquisition.ts` + `franchiseTraitGrantCompute.ts` + tests.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — new load in the processCompletedGame graph) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake). A `No "getSeasonPitchingStats" export` mock break is the EXPECTED transitive-mock issue → fix with a test-only stub, NOT a production change.
+5. `git --no-pager diff --stat` → `traitCandidateBuilder.ts` + `traitAcquisition.ts` + `franchiseTraitGrantCompute.ts` + tests. No `iv_oracle.json`, no `traitPricing.ts`/`traitTierConfig.ts`/`traitRealityScorer.ts`, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) the new load + input field, addWorkhorseSignals (IP/G), the poolTraitKey SP/RP fold (how it mirrors Two Way), the mock-stub fix, valence, confirm no DB/oracle/pricing/tier touch; (3) verification output; (4) "DT-F2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the SP/RP split would require materially changing `buildPeerPools`' general shape rather than a per-trait `poolTraitKey` override (→ STOP, confirm the approach); a DB bump/store is needed (→ STOP); the new load can't be mock-stubbed and breaks the full suite irreparably in 2 fix-iters (→ STOP/SET-ASIDE); oracle/pricing/tier touched (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing — ESPECIALLY confirm the Two Way `poolTraitKey` registration mechanism before replicating it.
+<!-- ===== END CONTRACT: DT-F2 ===== -->
+
+<!-- ===== CONTRACT: V8 ===== -->
+## V8 — park→WAR SEED wiring (thread geometry park factors into bWAR + pWAR; §9.D-blessed, build-dark-safe)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer wiring the EXISTING seed/geometry park factors into the WAR pipeline (the consumption code already exists but is disconnected). NO oracle touch, NO DB bump, NO new store.
+**BRANCH:** `codex/ratings-finish-c` (worktree `/Users/johnkruse/Projects/kbl-ratings-c`). Branch-only — do NOT commit/push. *(The WAR-engine files are identical to MAIN; this is Lane-C-disjoint from RA-9's ratings-dev files and from the trait lane.)*
+
+**GOAL:** Make WAR consume SEED (geometry-derived) park factors (DECISIONS_LOG 2026-06-26 / §9.D re-confirmed). The bWAR consumption branch already exists but every caller passes park-blind args; pWAR has the helper but no param. Wire both. Adaptive/measured factors stay DEFERRED.
+
+**SOURCE OF TRUTH:** DECISIONS_LOG 2026-06-26 "Park→WAR (V8)"; the adversarially-verified investigation `wf_2355914a-e2e`. `RATINGS_ADJUSTMENT_SPEC`/`STADIUM_ANALYTICS_SPEC` (seed factors permitted; adaptive deferred).
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- **bWAR (consumption branch exists, dead):** `applyParkFactorToWRAA`-style fn at `bwarCalculator.ts:126-137` — `parkAdjustment = (leagueRunsPerPA − parkFactor·leagueRunsPerPA) · homePA`, takes `homePA` (`:132`) + `parkFactor` (`:133`); handedness via `getEffectiveParkFactor` (`:104-110`, `clampParkFactors`). **Thread the seed park factor + homePA into `calculateBWAR`'s options at its caller(s)** (`warOrchestrator.ts` `calculateBWAR` call ~`:216`; `useWARCalculations.ts:208`; the Simplified season path). **KEEP the homePA-only scoping** (the double-count guard — the league wOBA baseline 0.329 already blends all parks, so only home-park PA get the per-park delta).
+- **pWAR (param is net-new):** `calculatePWAR` options today = only `useLeverageAdjustment` (`pwarCalculator.ts:292-296`). ADD `options.parkFactor` and call the already-built `applyPitcherParkFactor` (`:537-544`, `adjustedFIP = rawFIP / parkFactor`, clamped) — **park-adjust FIP BEFORE the leagueFIP − pitcherFIP diff**. Thread the seed factor from the same caller(s).
+- **Seed factors (no oracle/store):** derive on the fly from geometry — `buildFromPark(park)` (`parkFactorDeriver.ts:78→122`, `source:'SEED'`). Wire the 40%-of-season activation gate if present (`parkFactorDeriver.ts` activation). Park context is already on the at-bat enrichment (`parkContext.parkFactors`) — confirm the live source the orchestrator can read.
+- **⚠ INTERIM APPROXIMATION (JK accepted):** `homePA` is never populated in any live path (only the type field + the engine's own `Math.floor(pa/2)` fallback) → the bWAR adjustment runs on a 50/50 home/road split until the separate data-retention item lands. Wire it to USE `homePA` where available and FALL BACK to `floor(pa/2)` (the existing fallback) — do NOT fabricate a home/road split. The pWAR leg is exact.
+- **Double-count safety (verified):** WAR reads ONLY counting stats (`mapBattingStats`/`mapPitchingStats` in `warOrchestrator.ts` — zero rating/grade/checkpoint refs), so this does NOT double-count with RA-7/A2.5 (which park-adjust the ratings signal, a different quantity). Run-environment/runsPerWin has no park term. The ONLY double-count vector is park-vs-league-baseline, contained by the homePA-only scoping (bWAR) + FIP-before-diff (pWAR).
+- **DO NOT** touch `iv_oracle.json`/`ivEngine`; bump `TRACKER_DB_VERSION`; add a store; build the ADAPTIVE/measured home-road factor engine (deferred); flip the deliberately-false `adaptiveParkFactorPersistenceAllowed`/`parkAdjustedWarAllowed` records-store flags (they have zero WAR-engine consumers — leave them); touch any ratings-dev file (RA-9 lane) or trait engine.
+
+**MAKE-OR-BREAK:** seed park factors flow into BOTH bWAR (homePA-scoped, fallback `floor(pa/2)`) and pWAR (new `parkFactor` option → `applyPitcherParkFactor`, FIP-adjusted before the league diff); no double-count (homePA-scope + FIP-before-diff + WAR-reads-counting-stats-only); seed-only (adaptive deferred); NO oracle/DB/store touch. Touches WAR call-sites/engines (`warOrchestrator.ts`, `useWARCalculations.ts`, `bwarCalculator.ts`, `pwarCalculator.ts`, `parkFactorDeriver.ts` if the gate needs it) + tests.
+
+**TEST (engine-level, before any flag/live):**
+- `pwarCalculator` test: `parkFactor < 1` (pitcher park) lowers adjustedFIP → raises pWAR; `parkFactor = 1` → byte-identical to today (default); the adjust happens before the leagueFIP diff.
+- `bwarCalculator` test: a hitter's park (`parkFactor > 1`) reduces home-PA wRAA credit; `parkFactor = 1` → byte-identical; only homePA scoped; `floor(pa/2)` fallback when homePA absent.
+- `warOrchestrator`/`useWARCalculations`: with a seeded park, bWAR + pWAR shift in the right direction; with no park context, byte-identical to today (no regression for park-less games).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/bwarCalculator.test.ts src/engines/__tests__/pwarCalculator.test.ts src/engines/__tests__/warOrchestrator.test.ts` (+ any useWARCalculations test) → pass.
+4. `NODE_ENV= npm test` (FULL — WAR runs at game-end via processCompletedGame) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard). ⚠ WAR is LIVE (not flag-gated) — a park-less game MUST stay byte-identical (parkFactor defaults to 1 / no park context → no change); any existing WAR golden MOVING for a park-less fixture → STOP (regression).
+5. `git --no-pager diff --stat` → WAR engines/call-sites + tests only. No `iv_oracle.json`, no `trackerDb.ts`, no ratings-dev file (`ratingsDevelopment.ts`/`checkpointRatingSignal.ts`/`franchiseCheckpointSweepCompute.ts`/`checkpointWindowedCategoryRates.ts`), no trait engine.
+
+**FORMAT:** (1) files+lines; (2) the bWAR thread (homePA-scoped + fallback), the pWAR new param + applyPitcherParkFactor (FIP-before-diff), the seed-factor source, confirm park-less byte-identical + no double-count + adaptive-deferred + no oracle/DB; (3) verification output; (4) "V8 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** a park-less game is NOT byte-identical (→ STOP, the default must be parkFactor=1/no-op); the wiring requires the ADAPTIVE engine or persisting park factors (→ STOP, deferred); a frozen oracle / DB bump / new store is needed (→ STOP); homePA must be fabricated rather than fallback-`floor(pa/2)` (→ STOP, use the existing fallback); a ratings-dev or trait file must change (→ STOP, lane disjointness); a full-suite WAR golden moves for a park-less fixture (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-ratings-c` worktree before editing.
+<!-- ===== END CONTRACT: V8 ===== -->
