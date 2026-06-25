@@ -191,6 +191,11 @@ export async function persistDarkTraitGrantForCompletedGame(
     };
   }
 
+  // T-7 (§8 EOS): the end-of-season trait grant is simply the FINAL 20%-grid
+  // checkpoint — the last game (gameNumber === totalGames) is ALWAYS a checkpoint
+  // boundary (isCheckpointBoundary, test-pinned), so the season-end trait pass runs
+  // here as "one more checkpoint" with the same thresholds. There is NO separate EOS
+  // event / Trait-Wheel-Spin (deprecated for v1; see TRAIT_GAIN_LOSS_THRESHOLD_SPEC §8).
   const checkpointCount = checkpointCountForCadence(seasonMetadata?.checkpointCadence);
   if (!isCheckpointBoundary(gameNumber, totalGames, checkpointCount)) {
     return { status: 'not-checkpoint', written: 0 };
