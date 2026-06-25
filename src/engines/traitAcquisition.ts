@@ -173,6 +173,19 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   'Composed',
   'Gets Ahead',
   'First Pitch Slayer',
+  // T-9b (§16 sim-tune default, Captain/AUTH-4): spec §0.7 does NOT assign
+  // drivers for these 10; mirror K Collector. Personality is a ≤±20% TILT,
+  // NEVER a gate (§0.8) — the per-pitch reality signal is primary.
+  'Elite 4F',
+  'Elite 2F',
+  'Elite CF',
+  'Elite CB',
+  'Elite CH',
+  'Elite FK',
+  'Elite SB',
+  'Elite SL',
+  'Fastball Hitter',
+  'Off-Speed Hitter',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([
@@ -244,6 +257,19 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   'Falls Behind': ['TIMID'],
   'First Pitch Slayer': ['COMPETITIVE', 'EGOTISTICAL'],
   'First Pitch Prayer': ['TIMID', 'DROOPY'],
+  // T-9b (§16 sim-tune default, Captain/AUTH-4): spec §0.7 does NOT assign
+  // drivers for these 10; mirror K Collector. Personality is a ≤±20% TILT,
+  // NEVER a gate (§0.8) — the per-pitch reality signal is primary.
+  'Elite 4F': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite 2F': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite CF': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite CB': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite CH': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite FK': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite SB': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Elite SL': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Fastball Hitter': ['COMPETITIVE', 'EGOTISTICAL'],
+  'Off-Speed Hitter': ['COMPETITIVE', 'EGOTISTICAL'],
 };
 
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);

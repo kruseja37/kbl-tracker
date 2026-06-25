@@ -811,6 +811,49 @@ describe('traitAcquisition R1-b3 / PRE-ACT-TRAITS-1 (Two Way C/IF/OF family — 
   });
 });
 
+describe('traitAcquisition T-9b pitch-type image defaults', () => {
+  const pitchTypeTraits = [
+    ['Elite 4F', 'pitcher'],
+    ['Elite 2F', 'pitcher'],
+    ['Elite CF', 'pitcher'],
+    ['Elite CB', 'pitcher'],
+    ['Elite CH', 'pitcher'],
+    ['Elite FK', 'pitcher'],
+    ['Elite SB', 'pitcher'],
+    ['Elite SL', 'pitcher'],
+    ['Fastball Hitter', 'position'],
+    ['Off-Speed Hitter', 'position'],
+  ] as const satisfies readonly (readonly [string, PlayerRole])[];
+
+  test.each(pitchTypeTraits)(
+    '%s is positive and mirrors the K Collector COMPETITIVE/EGOTISTICAL image drivers',
+    (traitName, playerRole) => {
+      const ambitious = proposalFor(traitName, {
+        playerRole,
+        modifiers: { ...neutralModifiers, ambition: 100 },
+      });
+      const competitive = proposalFor(traitName, { playerRole, personality: 'Competitive' });
+      const egotistical = proposalFor(traitName, { playerRole, personality: 'Egotistical' });
+
+      expect(ambitious.imageValence).toBe('positive');
+      expect(ambitious.factors.ambitionTilt).toBeGreaterThan(1);
+      expect(competitive.factors.imageAxisTilt).toBeGreaterThan(1);
+      expect(egotistical.factors.imageAxisTilt).toBeGreaterThan(1);
+    },
+  );
+
+  test.each(pitchTypeTraits)(
+    '%s image driver does not cross into TOUGH/TIMID',
+    (traitName, playerRole) => {
+      const tough = proposalFor(traitName, { playerRole, personality: 'Tough' });
+      const timid = proposalFor(traitName, { playerRole, personality: 'Timid' });
+
+      expect(tough.factors.imageAxisTilt).toBe(1);
+      expect(timid.factors.imageAxisTilt).toBe(1);
+    },
+  );
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');

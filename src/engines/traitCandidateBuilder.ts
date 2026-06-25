@@ -112,6 +112,19 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // until the E1 grade join (`pitcherGradeByPlayer`) is fed — the grade-freshness
   // hook is a deferred step, NOT this ticket. Position-role. Build-dark.
   'Ace Exterminator',
+  // T-9b (TRAIT_MEASUREMENT_SPEC §0.6b): per-pitch-type net-quality earn-signals
+  // (T-9a aggregator). Pitcher Elite-<pitch> + position Fastball/Off-Speed Hitter;
+  // dormant until ≥10 tagged ABs of that pitch (rate-basis minSampleRate valve).
+  'Elite 4F',
+  'Elite 2F',
+  'Elite CF',
+  'Elite CB',
+  'Elite CH',
+  'Elite FK',
+  'Elite SB',
+  'Elite SL',
+  'Fastball Hitter',
+  'Off-Speed Hitter',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {

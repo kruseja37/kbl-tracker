@@ -21941,3 +21941,67 @@ Use high reasoning effort. Think step-by-step. Ground every cited file:line by r
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-9a ===== -->
+
+<!-- ===== CONTRACT: T-9b ===== -->
+## T-9b — wire the 10 pitch-type traits into BUILDABLE + personality image-valence (the wave template, part b)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer turning the T-9a build-dark pitch-type signals INTO earnable trait candidates by adding the 10 traits to the buildable set + the personality image layer. Additive, surgical, build-dark (the whole trait-grant path is flag-gated).
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Make the 8 `Elite <pitch>` traits + `Fastball Hitter` + `Off-Speed Hitter` EARNABLE in-season: add them to `BUILDABLE_TRAITS` (so the T-9a raw signals get scored/peer-percentiled and become candidates, gated by the existing min-sample valve), and wire their personality image-valence mirroring `K Collector`. Stays build-dark (flag-gated grant path); fires only on user-tagged pitch data.
+
+**SOURCE OF TRUTH:** T-9a (`a7932007`, already committed — the `addPitchTypeSignals` aggregator + the 10 raw signals exist build-dark). `TRAIT_MEASUREMENT_SPEC §0.6b` (the 10 are earnable). `§0.8` (personality is a TILT ~0.8–1.2, never a gate; default ×1.0). The image-driver assignment for these 10 is **a documented §16 conservative default (spec §0.7 does NOT list them)** — mirror `K Collector`.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read each before editing):**
+- `src/engines/traitCandidateBuilder.ts`: `BUILDABLE_TRAITS` (`:42-115`) ends with `'Ace Exterminator'` (`:114`). It is currently 48 names. The candidate pipeline (`buildPeerPools` `:1395`, `computeSeasonTraitCandidates` `:1417`) loops `for traitName of BUILDABLE_TRAITS` and scores each eligible signal via `computeTraitRealityScore(..., basis:'none')` → the rate-basis valve `minSampleRate:10` (`traitRealityScorer.ts:65`) keeps a trait DORMANT until `sampleSize ≥ 10`. `poolTraitKey` (`:1257`) is identity for all 10 (NOT Two Way) — no change. T-9a already emits the 10 signals; this ticket just admits them to the loop.
+- `src/engines/traitRealityScorer.ts`: the 10 are ALREADY canonical (`TRAIT_PRICING`, Captain-verified each appears once) + role-classified — all 8 `Elite <pitch>` ∈ `PITCHER_ONLY_TRAITS` (`:89-97`); `Fastball Hitter`/`Off-Speed Hitter` ∈ `POSITION_ONLY_TRAITS` (`:105`). So `traitRole` returns 'pitcher'/'position' and `isTraitEligibleForRole` admits them for the matching role ONLY. **VERIFY by re-reading; do NOT add anything to traitRealityScorer.ts.**
+- `src/engines/traitAcquisition.ts`: `POSITIVE_IMAGE_TRAITS` (`:145-176`), `NEGATIVE_IMAGE_TRAITS` (`:178-199`), `IMAGE_DRIVER_SETS` (`:201-247`). The mirror: `K Collector` ∈ POSITIVE (`:156`) + `IMAGE_DRIVER_SETS['K Collector']=['COMPETITIVE','EGOTISTICAL']` (`:221`); `Ace Exterminator` identical (`:155`/`:220`). None of the 10 are in any of the three sets today.
+- `src/engines/__tests__/traitCandidateBuilder.test.ts`: the golden `expect(BUILDABLE_TRAITS).toEqual([...])` (`:230-287`) mirrors the array, ending with `'Ace Exterminator'` (`:286`). The T-9a test **`'keeps the 10 pitch-type traits out of BUILDABLE_TRAITS and candidate output'`** (the `tagged === plain` INERT proof) WILL NOW BE FALSE once the 10 enter BUILDABLE — you MUST convert it (see TEST below).
+
+**BUILD:**
+1. `src/engines/traitCandidateBuilder.ts` — append the 10 to `BUILDABLE_TRAITS` AFTER `'Ace Exterminator'` (`:114`), in a commented block:
+   ```
+   // T-9b (TRAIT_MEASUREMENT_SPEC §0.6b): per-pitch-type net-quality earn-signals
+   // (T-9a aggregator). Pitcher Elite-<pitch> + position Fastball/Off-Speed Hitter;
+   // dormant until ≥10 tagged ABs of that pitch (rate-basis minSampleRate valve).
+   'Elite 4F', 'Elite 2F', 'Elite CF', 'Elite CB', 'Elite CH', 'Elite FK', 'Elite SB', 'Elite SL',
+   'Fastball Hitter', 'Off-Speed Hitter',
+   ```
+   (Use the EXACT 8 elite names; order is free but keep it stable + matching the golden list.)
+2. `src/engines/traitAcquisition.ts` — add the SAME 10 to `POSITIVE_IMAGE_TRAITS` (all positive valence) and `IMAGE_DRIVER_SETS` each `= ['COMPETITIVE', 'EGOTISTICAL']` (the K-Collector / Ace-Exterminator mirror), in a commented block noting: "**§16 sim-tune default (Captain, AUTH-4): spec §0.7 does NOT assign drivers for these 10; mirror K Collector. Personality is a ≤±20% TILT, NEVER a gate (§0.8) — the per-pitch reality signal is primary.**" Do NOT touch `NEGATIVE_IMAGE_TRAITS` or `OPPOSITE_PAIRS`/`TRAIT_OPPOSITES` (the elite-pitch max-1 mutual-exclusion is T-9c).
+
+**DO NOT (this ticket):** touch `traitRealityScorer.ts`, `traitPricing.ts`, `traitTierConfig.ts`, `prospectScoutingDraftEngine.ts`, `franchiseTraitGrantCompute.ts`, `reconcileGainProposals`; add any opposite-pair / mutual-exclusion (that's T-9c); bump `TRACKER_DB_VERSION`; touch `iv_oracle.json`.
+
+**TEST (`src/engines/__tests__/traitCandidateBuilder.test.ts` + `src/engines/__tests__/traitAcquisition.test.ts` if it pins the image sets):**
+- **Golden list:** add the SAME 10 names to the `expect(BUILDABLE_TRAITS).toEqual([...])` golden (`:230-287`) after `'Ace Exterminator'`, IN THE SAME ORDER as the array (48→58). The `'uses only canonical trait names'` test (`:290`) stays green (all 10 are canonical — confirm).
+- **CONVERT the T-9a INERT test** (`'keeps the 10 pitch-type traits out of BUILDABLE_TRAITS and candidate output'`): it asserted `BUILDABLE_TRAITS` does NOT contain them + `tagged === plain`. Both are now FALSE. REWRITE it to the EARNABLE proof: the 10 ARE in `BUILDABLE_TRAITS`; a pitcher with ≥10 tagged `4F` ABs now PRODUCES an `'Elite 4F'` candidate; a hitter with ≥10 tagged fastball ABs produces a `'Fastball Hitter'` candidate; a player with NO tagged pitch ABs produces NONE of the 10 (so untagged-data players are unaffected — the build-dark-for-untagged property). Keep the existing `buildRawSignals`/`atBat`/`repeat` helpers.
+- **Min-sample valve (NEW test — the make-or-break):** a pitcher with **9** tagged `4F` ABs → the `'Elite 4F'` candidate exists but `candidate.score.sufficient === false` (`sufficiency !== 'sufficient'`); a pitcher with **10** tagged `4F` ABs (peer pool present) → `candidate.score.sufficient === true` with a finite `realityPercentile`. (Confirms the valve gates the dormant signal at the documented `minSampleRate:10` boundary.) Use distinct synthetic players so a peer pool exists; if a single-player pool makes the percentile degenerate, add ≥2 pitchers with tagged 4F so the percentile is well-defined.
+- **Role eligibility:** a POSITION player is never emitted an `'Elite 4F'` candidate even if keyed as a pitcher in some AB; a PITCHER is never emitted `'Fastball Hitter'` (role filter). Assert via `computeSeasonTraitCandidates`.
+- If `traitAcquisition.test.ts` pins `POSITIVE_IMAGE_TRAITS`/`IMAGE_DRIVER_SETS` contents or counts, update those goldens to include the 10 (positive + ['COMPETITIVE','EGOTISTICAL']). Grep first.
+
+**MAKE-OR-BREAK:**
+- The 10 traits are now earnable candidates: tagged pitch data → scored, peer-percentiled, valve-gated (≥10 tagged ABs). Untagged-data players still produce NONE of the 10 (no behavior change for any existing untagged test).
+- `traitRole`/`isTraitEligibleForRole` already return the right role (re-verified) → pitcher-only elites, position-only hitter traits.
+- Personality is a tilt only; no gate. `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts`/`prospectScoutingDraftEngine.ts` untouched; NO DB bump.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → full pass (golden 58, the converted earnable test, the valve test).
+3. `NODE_ENV= npm test` (FULL suite — BUILDABLE feeds `franchiseTraitGrantCompute`→`processCompletedGame`). FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` solo-pass order-flakes — re-run any unexpected red IN ISOLATION). **If a franchise/L-SIM fixture shifts because it carries tagged pitch data → STOP and report (do NOT re-baseline a soul/L-SIM golden).**
+4. `git --no-pager diff --stat` → `traitCandidateBuilder.ts` + `traitAcquisition.ts` + `traitCandidateBuilder.test.ts` (+ `traitAcquisition.test.ts` if its image golden shifted). `iv_oracle.json` NOT present.
+
+**FORMAT:**
+1. Files changed (exact paths) + line counts.
+2. The 10 added to BUILDABLE + the image-valence default; whether traitAcquisition.test.ts needed a golden update; confirmation the converted INERT test now proves earnability + the valve boundary.
+3. Verification output (build, focused vitest, full-suite FAILED-file summary, diff --stat).
+4. "T-9b complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- Any of the 10 is NOT canonical (`traitRole` returns null for it) → STOP, report (the trait would silently never fire).
+- A franchise/L-SIM/award golden shifts (a fixture carries tagged pitch data) → STOP, report; do NOT re-baseline a soul-layer/L-SIM golden.
+- A full-suite red appears that is NOT in the characterized/flake set and does not pass in isolation → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-9b ===== -->

@@ -197,7 +197,7 @@ const ALL_AT_BAT_RESULTS: readonly AtBatResult[] = [
   'GRD',
 ];
 
-const T9A_DORMANT_PITCH_TRAITS = [
+const T9B_PITCH_TYPE_TRAITS = [
   'Elite 4F',
   'Elite 2F',
   'Elite CF',
@@ -284,6 +284,17 @@ describe('BUILDABLE_TRAITS', () => {
       'Two Way (OF)',
       // R3: Ace Exterminator (reached-base rate vs A−+ opposing pitchers).
       'Ace Exterminator',
+      // T-9b: per-pitch-type net-quality earn-signals.
+      'Elite 4F',
+      'Elite 2F',
+      'Elite CF',
+      'Elite CB',
+      'Elite CH',
+      'Elite FK',
+      'Elite SB',
+      'Elite SL',
+      'Fastball Hitter',
+      'Off-Speed Hitter',
     ]);
   });
 
@@ -2255,39 +2266,36 @@ describe('T-9a pitch-type net-quality raw signals (build-dark)', () => {
     expect(raw.get('b-tag')?.get('Off-Speed Hitter')).toBeUndefined();
   });
 
-  it('keeps the 10 pitch-type traits out of BUILDABLE_TRAITS and candidate output', () => {
-    for (const traitName of T9A_DORMANT_PITCH_TRAITS) {
-      expect(BUILDABLE_TRAITS).not.toContain(traitName);
+  it('makes the 10 pitch-type traits buildable candidates only when tagged pitch data exists', () => {
+    for (const traitName of T9B_PITCH_TYPE_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
     }
 
-    const baseEvents = repeat(12, (index) => atBat({
-      pitcherId: 'p1',
-      batterId: 'b1',
-      result: index < 6 ? 'K' : 'GO',
-    }));
-    const taggedEvents = baseEvents.map((event, index) => ({
-      ...event,
-      enrichment: { ...(event.enrichment ?? {}), pitchType: index % 2 === 0 ? '4F' : 'SL' },
-    }));
+    const taggedEvents = ['1', '2', '3'].flatMap((suffix, playerIndex) => (
+      repeat(10, (index) => atBat({
+        pitcherId: `p${suffix}`,
+        batterId: `h${suffix}`,
+        result: index < 7 - playerIndex ? 'K' : 'GO',
+        enrichment: { pitchType: '4F' },
+      }))
+    ));
     const playersUnderTest: SeasonTraitPlayer[] = [
-      { playerId: 'p1', role: 'pitcher' },
-      { playerId: 'b1', role: 'position' },
+      ...players(['p1', 'p2', 'p3'], 'pitcher'),
+      ...players(['h1', 'h2', 'h3'], 'position'),
     ];
-    const plain = computeSeasonTraitCandidates(baseInput({
-      players: playersUnderTest,
-      atBatEvents: baseEvents,
-    }));
     const tagged = computeSeasonTraitCandidates(baseInput({
       players: playersUnderTest,
       atBatEvents: taggedEvents,
     }));
-    const raw = buildRawSignals(baseInput({ atBatEvents: taggedEvents }));
-    const dormantPitchTraitSet = new Set<string>(T9A_DORMANT_PITCH_TRAITS);
+    const untagged = computeSeasonTraitCandidates(baseInput({
+      players: playersUnderTest,
+      atBatEvents: taggedEvents.map((event) => ({ ...event, enrichment: undefined })),
+    }));
+    const pitchTraitSet = new Set<string>(T9B_PITCH_TYPE_TRAITS);
 
-    expect(raw.get('p1')?.get('Elite 4F')).toBeDefined();
-    expect(raw.get('b1')?.get('Fastball Hitter')).toBeDefined();
-    expect(tagged).toEqual(plain);
-    expect([...tagged.values()].flat().filter((item) => dormantPitchTraitSet.has(item.traitName))).toEqual([]);
+    expect(candidate(tagged, 'p1', 'Elite 4F')).toBeDefined();
+    expect(candidate(tagged, 'h1', 'Fastball Hitter')).toBeDefined();
+    expect([...untagged.values()].flat().filter((item) => pitchTraitSet.has(item.traitName))).toEqual([]);
   });
 });
 
@@ -2334,6 +2342,76 @@ describe('role eligibility, peer pools, valve, and determinism', () => {
     }));
     expect(candidate(result, 'b1', 'Clutch')?.score.realityPercentile).toBeNull();
     expect(candidate(result, 'b1', 'Clutch')?.score.sufficiency).not.toBe('sufficient');
+  });
+
+  it('gates pitch-type traits at the rate min-sample boundary', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['p-thin', 'p-full', 'p-peer-low', 'p-peer-mid'], 'pitcher'),
+      atBatEvents: [
+        ...repeat(9, (index) => atBat({
+          pitcherId: 'p-thin',
+          batterId: `h-thin-${index}`,
+          result: 'K',
+          enrichment: { pitchType: '4F' },
+        })),
+        ...repeat(10, (index) => atBat({
+          pitcherId: 'p-full',
+          batterId: `h-full-${index}`,
+          result: index < 8 ? 'K' : 'GO',
+          enrichment: { pitchType: '4F' },
+        })),
+        ...repeat(10, (index) => atBat({
+          pitcherId: 'p-peer-low',
+          batterId: `h-low-${index}`,
+          result: index < 5 ? 'K' : 'GO',
+          enrichment: { pitchType: '4F' },
+        })),
+        ...repeat(10, (index) => atBat({
+          pitcherId: 'p-peer-mid',
+          batterId: `h-mid-${index}`,
+          result: index < 7 ? 'K' : 'GO',
+          enrichment: { pitchType: '4F' },
+        })),
+      ],
+    }));
+    const thin = candidate(result, 'p-thin', 'Elite 4F');
+    const full = candidate(result, 'p-full', 'Elite 4F');
+
+    expect(thin).toBeDefined();
+    expect(thin?.sampleSize).toBe(9);
+    expect(thin?.score.sufficient).toBe(false);
+    expect(thin?.score.sufficiency).not.toBe('sufficient');
+    expect(full).toBeDefined();
+    expect(full?.sampleSize).toBe(10);
+    expect(full?.score.sufficient).toBe(true);
+    expect(full?.score.realityPercentile).not.toBeNull();
+    expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
+  });
+
+  it('keeps pitch-type traits behind role eligibility', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: [
+        { playerId: 'position-throwing', role: 'position' },
+        { playerId: 'pitcher-hitting', role: 'pitcher' },
+      ],
+      atBatEvents: repeat(10, (index) => atBat({
+        pitcherId: 'position-throwing',
+        batterId: 'pitcher-hitting',
+        result: index < 6 ? 'K' : 'GO',
+        enrichment: { pitchType: '4F' },
+      })),
+    }));
+    const raw = buildRawSignals(baseInput({ atBatEvents: repeat(10, (index) => atBat({
+      pitcherId: 'position-throwing',
+      batterId: 'pitcher-hitting',
+      result: index < 6 ? 'K' : 'GO',
+      enrichment: { pitchType: '4F' },
+    })) }));
+
+    expect(raw.get('position-throwing')?.get('Elite 4F')).toBeDefined();
+    expect(raw.get('pitcher-hitting')?.get('Fastball Hitter')).toBeDefined();
+    expect(candidate(result, 'position-throwing', 'Elite 4F')).toBeUndefined();
+    expect(candidate(result, 'pitcher-hitting', 'Fastball Hitter')).toBeUndefined();
   });
 
   it('returns a stable sorted map and deterministic contents across calls', () => {
