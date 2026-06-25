@@ -49,12 +49,16 @@ import {
   getSeasonPitchingStats,
 } from './seasonStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
-import { getGameEvents, getGameHeadersForScope } from './eventLog';
+import { getGameEvents, getGameHeadersForScope, type AtBatEvent } from './eventLog';
 import { buildFranchiseEffectivePositionReport } from './franchiseEffectivePosition';
 import {
   toExpectedStatsCategoryRates,
   type CategoryRateResult,
 } from '../engines/expectedStatsCategoryRates';
+import {
+  aggregateCheckpointWindowedCategoryRates,
+  type CheckpointWindowedCategoryRateMaps,
+} from '../engines/checkpointWindowedCategoryRates';
 import {
   classifyRatingsPoolKey,
   computeCheckpointRatingSignals,
@@ -135,6 +139,7 @@ export interface CheckpointRosterEntry {
   teamFanMorale: number;
   ageBand: ExpectedStatsAgeBand;
   signalByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
+  recentSignalByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   sampleByRatingKey: Partial<Record<ExpectedStatsRatingKey, number>>;
   createdAt: string | null;
 }
@@ -230,8 +235,16 @@ export async function resolveWindowActivePlayerIds(
   prevBoundaryGameNumber: number,
   currentGameNumber: number,
 ): Promise<{ hitters: Set<string>; pitchers: Set<string> }> {
-  const hitters = new Set<string>();
-  const pitchers = new Set<string>();
+  const events = await resolveWindowAtBatEvents(scope, prevBoundaryGameNumber, currentGameNumber);
+  return activePlayerIdsFromWindowEvents(events);
+}
+
+export async function resolveWindowAtBatEvents(
+  scope: FranchiseRatingsOverlayScopeInput,
+  prevBoundaryGameNumber: number,
+  currentGameNumber: number,
+): Promise<AtBatEvent[]> {
+  const events: AtBatEvent[] = [];
   const headers = await getGameHeadersForScope({
     seasonId: scope.seasonId,
     statsScopeId: scope.statsScopeId,
@@ -255,11 +268,22 @@ export async function resolveWindowActivePlayerIds(
       continue;
     }
 
-    const events = await getGameEvents(header.gameId);
-    for (const event of events) {
-      hitters.add(event.batterId);
-      pitchers.add(event.pitcherId);
-    }
+    events.push(...await getGameEvents(header.gameId));
+  }
+
+  return events;
+}
+
+function activePlayerIdsFromWindowEvents(
+  events: readonly AtBatEvent[],
+): { hitters: Set<string>; pitchers: Set<string> } {
+  const hitters = new Set<string>();
+  const pitchers = new Set<string>();
+
+  for (const event of events) {
+    if (event.undoneAt) continue;
+    hitters.add(event.batterId);
+    pitchers.add(event.pitcherId);
   }
 
   return { hitters, pitchers };
@@ -282,6 +306,9 @@ function mapByPlayerId<T extends { playerId: string }>(rows: readonly T[]): Map<
 export async function resolveCheckpointRoster(
   scope: FranchiseRatingsOverlayScopeInput,
   _gameState: PersistedGameState,
+  options?: {
+    recentCategoryRatesByPlayerId?: CheckpointWindowedCategoryRateMaps;
+  },
 ): Promise<CheckpointRosterEntry[]> {
   const leagueId = (await getAllFranchiseTeams(scope.franchiseId))[0]?.leagueIds?.[0];
   if (!leagueId) return [];
@@ -357,6 +384,10 @@ export async function resolveCheckpointRoster(
       pitching: pitchingByPlayerId.get(player.id),
       fielding: fieldingByPlayerId.get(player.id),
     });
+    const recentCategoryRates =
+      role === 'pitcher'
+        ? options?.recentCategoryRatesByPlayerId?.pitchers.get(player.id)
+        : options?.recentCategoryRatesByPlayerId?.hitters.get(player.id);
 
     memberEntries.push({
       player,
@@ -371,14 +402,17 @@ export async function resolveCheckpointRoster(
         ratings: baseRatings as Partial<Record<ExpectedStatsRatingKey, number>>,
         poolKey,
         categoryRates,
+        recentCategoryRates,
       },
       sampleByRatingKey: sampleByRatingKeyFromCategoryRates(categoryRates),
     });
   }
 
-  const signalMap = computeCheckpointRatingSignals(
+  const signalMaps = computeCheckpointRatingSignals(
     memberEntries.map((entry) => entry.member),
-  ).cumulative;
+  );
+  const signalMap = signalMaps.cumulative;
+  const recentSignalMap = signalMaps.recent;
   const roster: CheckpointRosterEntry[] = [];
 
   for (const { player, teamId, isPitcher, baseRatings, ageBand, sampleByRatingKey } of memberEntries) {
@@ -408,6 +442,7 @@ export async function resolveCheckpointRoster(
       teamFanMorale: teamId ? await teamFanMoraleByTeamId.get(teamId)! : 50,
       ageBand,
       signalByRatingKey: signalMap.get(player.id) ?? {},
+      recentSignalByRatingKey: recentSignalMap.get(player.id) ?? {},
       sampleByRatingKey,
       createdAt: trueValueRowsByPlayerId.get(player.id)?.computedAt ?? null,
     });
@@ -419,6 +454,7 @@ export async function resolveCheckpointRoster(
 export const checkpointSweepSeam = {
   resolveCheckpointRoster,
   resolveWindowActivePlayerIds,
+  resolveWindowAtBatEvents,
 };
 
 export async function persistDarkCheckpointSweepForCompletedGame(
@@ -458,12 +494,26 @@ export async function persistDarkCheckpointSweepForCompletedGame(
     return { status: 'not-checkpoint', written: 0 };
   }
 
-  const roster = await checkpointSweepSeam.resolveCheckpointRoster(scope, gameState);
+  const prevBoundaryGameNumber = resolvePreviousCheckpointGameNumber(gameNumber, totalGames, checkpointCount);
+  const recentCategoryRatesByPlayerId =
+    prevBoundaryGameNumber > 0
+      ? aggregateCheckpointWindowedCategoryRates(
+          await checkpointSweepSeam.resolveWindowAtBatEvents(
+            scope,
+            prevBoundaryGameNumber,
+            gameNumber,
+          ),
+        )
+      : undefined;
+  const roster = await checkpointSweepSeam.resolveCheckpointRoster(
+    scope,
+    gameState,
+    { recentCategoryRatesByPlayerId },
+  );
   if (roster.length === 0) {
     return { status: 'dark-noop', written: 0, reason: 'Empty checkpoint roster.' };
   }
 
-  const prevBoundaryGameNumber = resolvePreviousCheckpointGameNumber(gameNumber, totalGames, checkpointCount);
   const windowActive = await checkpointSweepSeam.resolveWindowActivePlayerIds(
     scope,
     prevBoundaryGameNumber,
@@ -497,6 +547,7 @@ export async function persistDarkCheckpointSweepForCompletedGame(
           personality: entry.personality,
           modifiers: entry.modifiers,
           confidence: ratingConfidence(ratingKey, entry.sampleByRatingKey[ratingKey] ?? 0, totalGames),
+          recentSignal: entry.recentSignalByRatingKey[ratingKey],
         },
         CHECKPOINT_DEV_TUNING,
       );
