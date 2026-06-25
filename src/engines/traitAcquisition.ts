@@ -229,6 +229,9 @@ const NEGATIVE_IMAGE_TRAITS = new Set([
   'BB Prone',
   'Falls Behind',
   'First Pitch Prayer',
+  // DT-D (§0.6b row D): Noodle Arm is re-added as a mental-error negative
+  // trait. No IMAGE_DRIVER_SETS entry: universal negative tilt only.
+  'Noodle Arm',
 ]);
 
 const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]>> = {

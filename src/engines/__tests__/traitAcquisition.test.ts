@@ -919,6 +919,50 @@ describe('traitAcquisition DT-C2 Dive Wizard image default', () => {
   });
 });
 
+describe('traitAcquisition DT-D Noodle Arm mental-error valence', () => {
+  test('Noodle Arm is negative with no image driver and keeps the Cannon Arm opposite pair', () => {
+    const fragile = proposalFor('Noodle Arm', {
+      playerRole: 'position',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+    const timid = proposalFor('Noodle Arm', { playerRole: 'position', personality: 'Timid' });
+    const droopy = proposalFor('Noodle Arm', { playerRole: 'position', personality: 'Droopy' });
+
+    expect(fragile.imageValence).toBe('negative');
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+    expect(timid.factors.imageAxisTilt).toBe(1);
+    expect(droopy.factors.imageAxisTilt).toBe(1);
+    expect(TRAIT_OPPOSITES['Noodle Arm']).toBe('Cannon Arm');
+    expect(TRAIT_OPPOSITES['Cannon Arm']).toBe('Noodle Arm');
+  });
+
+  test('Cannon Arm held blocks a Noodle Arm gain proposal', () => {
+    const result = computeTraitAcquisition(input({
+      heldTraits: [{ traitName: 'Cannon Arm', strength: 0.8 }],
+      candidates: [{ traitName: 'Noodle Arm', score: score('Noodle Arm', 0.9) }],
+    }), FORCE_GAIN_TUNING);
+
+    expect(result.proposals).toEqual([]);
+    expect(result.skipped).toEqual([
+      { traitName: 'Noodle Arm', reason: 'offsetting_pair_held' },
+    ]);
+  });
+
+  test('Wild Thrower remains negative with its existing TIMID/DROOPY image driver', () => {
+    const fragile = proposalFor('Wild Thrower', {
+      playerRole: 'position',
+      modifiers: { ...neutralModifiers, resilience: 0 },
+    });
+    const timid = proposalFor('Wild Thrower', { playerRole: 'position', personality: 'Timid' });
+    const droopy = proposalFor('Wild Thrower', { playerRole: 'position', personality: 'Droopy' });
+
+    expect(fragile.imageValence).toBe('negative');
+    expect(fragile.factors.resilienceTilt).toBeGreaterThan(1);
+    expect(timid.factors.imageAxisTilt).toBeGreaterThan(1);
+    expect(droopy.factors.imageAxisTilt).toBeGreaterThan(1);
+  });
+});
+
 describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () => {
   test('hysteresis emits a gain at or above the gain threshold', () => {
     const tier = assignTier('CON vs LHP');

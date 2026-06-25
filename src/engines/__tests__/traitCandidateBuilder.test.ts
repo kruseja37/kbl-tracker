@@ -20,7 +20,7 @@ import { computeTraitAcquisition } from '../traitAcquisition';
 import { calculateWOBA } from '../bwarCalculator';
 import type { Smb4Grade } from '../smb4GradeEmulator';
 import type { EffectiveRatingsPlayer, GameContext } from '../effectiveRatings';
-import type { AtBatEvent, BetweenPlayEvent, FieldingEvent, RunnerState } from '../../utils/eventLog';
+import type { AtBatEvent, BetweenPlayEvent, ErrorAttribution, FieldingEvent, RunnerState } from '../../utils/eventLog';
 import type { AtBatResult } from '../../types/game';
 
 const noRunners: RunnerState = { first: null, second: null, third: null };
@@ -98,6 +98,31 @@ function passedBall(pitcherId: string, overrides: Partial<BetweenPlayEvent> = {}
     wildPitchOrPassedBall: { wpOrPb: 'passed_ball', pitcherId },
     ...overrides,
   } as unknown as BetweenPlayEvent;
+}
+
+function errorAdvance(attributions: ErrorAttribution[], overrides: Partial<BetweenPlayEvent> = {}): BetweenPlayEvent {
+  bpIndex += 1;
+  return {
+    eventId: `bp-${bpIndex}`,
+    gameId: 'g1',
+    timestamp: bpIndex,
+    eventIndex: bpIndex,
+    type: 'runner_advance',
+    errorAttributions: attributions,
+    ...overrides,
+  } as unknown as BetweenPlayEvent;
+}
+
+function runnerError(type: ErrorAttribution['type'], fielderIds: string[]): AtBatEvent {
+  return atBat({
+    runnerOutcomes: [{
+      runnerId: 'r1',
+      runnerName: 'Runner 1',
+      fromBase: 'first',
+      toBase: 'second',
+      errorAttributions: [{ type, fielderIds }],
+    }],
+  });
 }
 
 let fieldingIndex = 0;
@@ -226,6 +251,11 @@ const DTC2_WEB_GEM_TRAITS = [
   'Dive Wizard',
 ] as const;
 
+const DTD_ERROR_TRAITS = [
+  'Wild Thrower',
+  'Noodle Arm',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -321,6 +351,9 @@ describe('BUILDABLE_TRAITS', () => {
       // DT-C2: web-gem fielding earn-signals with rating-gated cohorts.
       'Magic Hands',
       'Dive Wizard',
+      // DT-D: error-attribution earn-signals.
+      'Wild Thrower',
+      'Noodle Arm',
     ]);
   });
 
@@ -539,7 +572,7 @@ describe('direct-source signals', () => {
     expect(candidate(result, 'b1', 'Butter Fingers')?.signalValue).toBeCloseTo(2 / 3, 10);
   });
 
-  it('computes Cannon Arm from OF-arm activity per game while leaving dormant Noodle Arm unemitted', () => {
+  it('computes Cannon Arm from OF-arm activity per game while leaving Noodle Arm dormant without error attributions', () => {
     const result = computeSeasonTraitCandidates(baseInput({
       players: players(['b1'], 'position'),
       seasonFieldingByPlayer: new Map([['b1', { outfieldAssists: 2, baserunnersHeld: 4, games: 12 }]]),
@@ -558,6 +591,145 @@ describe('direct-source signals', () => {
     expect(candidate(result, 'b1', 'Durable')?.signalValue).toBeCloseTo(-0.1, 10);
     expect(candidate(result, 'b2', 'Injury Prone')?.score.realityPercentile).toBeNull();
     expect(candidate(result, 'b2', 'Injury Prone')?.score.sufficiency).toBe('thin_sample');
+  });
+});
+
+describe('traitCandidateBuilder DT-D error-attribution signals', () => {
+  it('makes Wild Thrower and Noodle Arm buildable from playerId-keyed error attributions', () => {
+    for (const traitName of DTD_ERROR_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([
+        ['fielder', 10],
+        ['ghost-position-only', 10],
+      ]),
+      atBatEvents: [
+        atBat({
+          runnerOutcomes: [
+            {
+              runnerId: 'r1',
+              runnerName: 'Runner 1',
+              fromBase: 'first',
+              toBase: 'second',
+              errorAttributions: [{ type: 'mental', fielderIds: ['fielder'] }],
+            },
+            {
+              runnerId: 'r2',
+              runnerName: 'Runner 2',
+              fromBase: 'second',
+              toBase: 'third',
+              errorAttributions: [{ type: 'fielding', fielderIds: ['fielder'] }],
+            },
+          ],
+          enrichment: {
+            errors: [{ position: 6, type: 'mental' }],
+          },
+        }),
+      ],
+      betweenPlayEvents: [
+        errorAdvance([{ type: 'throwing', fielderIds: ['fielder'] }]),
+        errorAdvance([{ type: 'mental', fielderIds: ['fielder'] }]),
+        errorAdvance([{ type: 'mental', fielderIds: ['no-games'] }]),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Noodle Arm')).toEqual({ signalValue: 0.2, sampleSize: 10 });
+    expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0.2, sampleSize: 10 });
+    expect(raw.get('ghost-position-only')?.get('Noodle Arm')).toBeUndefined();
+    expect(raw.get('ghost-position-only')?.get('Wild Thrower')).toBeUndefined();
+    expect(raw.get('no-games')?.get('Noodle Arm')).toBeUndefined();
+  });
+
+  it('credits every fielderId listed on one attribution', () => {
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([
+        ['f1', 10],
+        ['f2', 10],
+      ]),
+      atBatEvents: [runnerError('fielding', ['f1', 'f2'])],
+    }));
+
+    expect(raw.get('f1')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
+    expect(raw.get('f2')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
+  });
+
+  it('excludes undone at-bat and between-play error attributions', () => {
+    const raw = buildRawSignals(baseInput({
+      gamesByPlayer: new Map([['fielder', 10]]),
+      atBatEvents: [
+        runnerError('mental', ['fielder']),
+        atBat({
+          undoneAt: 1,
+          runnerOutcomes: [{
+            runnerId: 'r2',
+            runnerName: 'Runner 2',
+            fromBase: 'first',
+            toBase: 'second',
+            errorAttributions: [{ type: 'mental', fielderIds: ['fielder'] }],
+          }],
+        }),
+      ],
+      betweenPlayEvents: [
+        errorAdvance([{ type: 'throwing', fielderIds: ['fielder'] }]),
+        errorAdvance([{ type: 'fielding', fielderIds: ['fielder'] }], { undoneAt: 1 }),
+      ],
+    }));
+
+    expect(raw.get('fielder')?.get('Noodle Arm')).toEqual({ signalValue: 0.1, sampleSize: 10 });
+    expect(raw.get('fielder')?.get('Wild Thrower')).toEqual({ signalValue: 0.1, sampleSize: 10 });
+  });
+
+  it('emits neither error trait when only position-keyed enrichment errors exist', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['fielder'], 'position'),
+      gamesByPlayer: new Map([['fielder', 10]]),
+      atBatEvents: [
+        atBat({
+          batterId: 'b1',
+          enrichment: {
+            errors: [{ position: 6, type: 'mental' }],
+          },
+        }),
+      ],
+    }));
+
+    expect(candidate(result, 'fielder', 'Noodle Arm')).toBeUndefined();
+    expect(candidate(result, 'fielder', 'Wild Thrower')).toBeUndefined();
+  });
+
+  it('uses games as the denominator and sample-size valve for mental-error Noodle Arm', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['thin', 'full', 'peer-zero', 'peer-mid'], 'position'),
+      gamesByPlayer: new Map([
+        ['thin', 9],
+        ['full', 10],
+        ['peer-zero', 10],
+        ['peer-mid', 10],
+      ]),
+      atBatEvents: [
+        runnerError('mental', ['thin']),
+        runnerError('mental', ['full']),
+        runnerError('mental', ['full']),
+        runnerError('throwing', ['peer-zero']),
+        runnerError('mental', ['peer-mid']),
+      ],
+    }));
+
+    const thin = candidate(result, 'thin', 'Noodle Arm');
+    const full = candidate(result, 'full', 'Noodle Arm');
+
+    expect(thin).toBeDefined();
+    expect(thin?.sampleSize).toBe(9);
+    expect(thin?.score.sufficient).toBe(false);
+    expect(thin?.score.sufficiency).not.toBe('sufficient');
+    expect(full).toBeDefined();
+    expect(full?.signalValue).toBeCloseTo(0.2, 10);
+    expect(full?.sampleSize).toBe(10);
+    expect(full?.score.sufficient).toBe(true);
+    expect(full?.score.realityPercentile).not.toBeNull();
+    expect(Number.isFinite(full?.score.realityPercentile)).toBe(true);
   });
 });
 

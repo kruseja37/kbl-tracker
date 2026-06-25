@@ -29,6 +29,7 @@ import {
 import type {
   AtBatEvent,
   BetweenPlayEvent,
+  ErrorAttribution,
   FieldingEvent,
   RunnerState,
 } from '../utils/eventLog';
@@ -141,6 +142,11 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // are rating-eligible cohorts only.
   'Magic Hands',
   'Dive Wizard',
+  // DT-D (TRAIT_MEASUREMENT_SPEC §0.6b row D): error-attribution earn-signals
+  // from playerId-keyed errorAttributions (NOT enrichment.errors): throwing +
+  // fielding errors → Wild Thrower; mental errors → Noodle Arm.
+  'Wild Thrower',
+  'Noodle Arm',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -1281,6 +1287,49 @@ function addButterFingersSignals(input: SeasonTraitCandidateInput, raw: RawSigna
   }
 }
 
+function addErrorSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const counts = new Map<string, { wildThrower: number; mental: number }>();
+
+  const countAttribution = (attribution: ErrorAttribution): void => {
+    for (const playerId of attribution.fielderIds ?? []) {
+      const entry = counts.get(playerId) ?? { wildThrower: 0, mental: 0 };
+      if (attribution.type === 'mental') {
+        entry.mental += 1;
+      } else if (attribution.type === 'fielding' || attribution.type === 'throwing') {
+        entry.wildThrower += 1;
+      }
+      counts.set(playerId, entry);
+    }
+  };
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    for (const runnerOutcome of atBat.runnerOutcomes ?? []) {
+      for (const attribution of runnerOutcome.errorAttributions ?? []) {
+        countAttribution(attribution);
+      }
+    }
+  }
+
+  for (const event of sortBetweenPlayEvents(input.betweenPlayEvents).filter((item) => !undoneAt(item))) {
+    for (const attribution of event.errorAttributions ?? []) {
+      countAttribution(attribution);
+    }
+  }
+
+  for (const [playerId, entry] of [...counts.entries()].sort(([left], [right]) => left.localeCompare(right))) {
+    const games = input.gamesByPlayer.get(playerId) ?? 0;
+    if (games <= 0) continue;
+    addRawSignal(raw, playerId, 'Wild Thrower', {
+      signalValue: entry.wildThrower / games,
+      sampleSize: games,
+    });
+    addRawSignal(raw, playerId, 'Noodle Arm', {
+      signalValue: entry.mental / games,
+      sampleSize: games,
+    });
+  }
+}
+
 function addArmSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const playerIds = new Set<string>([
     ...input.seasonFieldingByPlayer.keys(),
@@ -1708,6 +1757,7 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addBaseRounderSignals(input, raw);
   addStealSignals(input, raw);
   addButterFingersSignals(input, raw);
+  addErrorSignals(input, raw);
   addArmSignals(input, raw);
   // R1-b2 — Bunter (SAC volume per PA), Crossed Up (passed balls per batters-faced),
   // Utility (fielding perf at a non-primary position).
