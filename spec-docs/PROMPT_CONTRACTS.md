@@ -22788,3 +22788,46 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** a park-less game is NOT byte-identical (→ STOP, the default must be parkFactor=1/no-op); the wiring requires the ADAPTIVE engine or persisting park factors (→ STOP, deferred); a frozen oracle / DB bump / new store is needed (→ STOP); homePA must be fabricated rather than fallback-`floor(pa/2)` (→ STOP, use the existing fallback); a ratings-dev or trait file must change (→ STOP, lane disjointness); a full-suite WAR golden moves for a park-less fixture (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-ratings-c` worktree before editing.
 <!-- ===== END CONTRACT: V8 ===== -->
+
+<!-- ===== CONTRACT: DT-F3 ===== -->
+## DT-F3 — Metal Head earnable (pitcher comebacker/nut-shot VICTIM protective trait)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding the Metal Head earn-signal — a clean signal-builder (NO new data load; the source is already in `input.atBatEvents`). Build-dark; no DB bump.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push. **SERIALIZES after DT-F2 (same files).**
+
+**GOAL:** Make `Metal Head` EARNABLE: a PITCHER protective/toughness trait for the pitcher who is the VICTIM of killed-pitcher (comebacker) + nut-shot events. The league-leading victim earns a chance at it (protection against those future fitness/mojo hits). Canonical + pitcher-only + difficulty auto-derived already exist; missing = the signal-builder + BUILDABLE + positive valence. (DECISIONS_LOG 2026-06-25 row F — Metal Head = PITCHER, NOT a batter trait.)
+
+**SOURCE OF TRUTH:** DECISIONS_LOG 2026-06-25 row F. Data-source DEFINITIVELY traced 2026-06-26 (the first grounding's fame-event claim was WRONG; corrected below).
+
+**GROUNDING (Captain-verified 2026-06-26 via a dedicated trace agent; the persistence chain is proven end-to-end):**
+- **Source = `AtBatEvent.enrichment.modifiers` (`string[]`, `eventLog.ts:440`) containing `'KILLED_PITCHER'` and/or `'NUT_SHOT'`.** Chain: KP/NUT tap → manual `InjuryPrompt` → on COMPLETE, `appendModifierToAtBatEvent` (`GameTracker.tsx:4263-4309`) appends the modifier to `enrichment.modifiers` (`:4275`) → `updateAtBatEvent` (`eventLog.ts:1267`) merges enrichment + persists to the `AT_BAT_EVENTS` store (`:1331`). Durable, confirmation-gated (opt-in/sparse — only persists if the user completes the prompt; acceptable, exactly like the pitch-type/location/chase enrichment traits).
+- **Victim-pitcher key = `atBat.pitcherId` (`eventLog.ts:221`)** — the pitcher on the mound for that at-bat = the comebacker/nut-shot victim. Already in scope in the builder loop.
+- **NO new input thread:** `loadSeasonTraitData` (`franchiseTraitGrantCompute.ts:286`) already loads every game's persisted at-bats via `getGameEvents` → `atBatEvents` (with modifiers intact) → passed as `input.atBatEvents` (`:219`) = the SAME field every `add*Signals` reads. Mirror `addPitchTypeSignals` (reads `atBat.enrichment?.pitchType`) / `addWildThingSignals` (keys BF by `atBat.pitcherId`).
+- **⚠ STOP-IF you reach for a fame event:** KILLED_PITCHER/NUT_SHOT_VICTIM fame events may ALSO be emitted, but the fame stream is NOT threaded into the trait builder → building from fame would need a whole new load. Use the enrichment path (needs none). The `onConfirm(pitcherId, …)` signature belongs to the PitchCountModal, a DIFFERENT modal — do NOT key off it.
+
+**BUILD:**
+- `addMetalHeadSignals(input, raw)` in `traitCandidateBuilder.ts`: build a per-pitcher `battersFaced` map from non-undone `atBatEvents` keyed by `atBat.pitcherId` (mirror `addCrossedUpSignals`/`addWildThingSignals` `:1482-1485`); build a per-pitcher `victimEvents` count = non-undone at-bats whose `enrichment?.modifiers` includes `'KILLED_PITCHER'` OR `'NUT_SHOT'`, keyed to `atBat.pitcherId` — **count ONCE per at-bat even if both modifiers are present** (documented default; the trait is "recovers from getting drilled," one drilling per AB). `signalValue = victimEvents / battersFaced`, `sampleSize = battersFaced`; skip `BF <= 0`. Wire into `buildRawSignals`.
+- Add `'Metal Head'` to `BUILDABLE_TRAITS` (`:43-159`; CANONICAL guard passes — it's already canonical).
+- `traitAcquisition.ts`: add `'Metal Head'` to `POSITIVE_IMAGE_TRAITS` (protective/positive; NO `IMAGE_DRIVER_SETS` entry — neutral tilt, §16 default).
+- **No new data load; no registry/oracle/pricing/tier/scorer change; `TRACKER_DB_VERSION` stays 25.**
+
+**OPEN-DECISIONS (documented defaults):** count-once-per-AB when both KP+NUT on one at-bat (default; flag); denominator = batters-faced (per-AB events ⇒ BF, not games); Metal Head positive valence, no driver.
+
+**TEST (`traitCandidateBuilder.test.ts` + `traitAcquisition.test.ts` if it pins Metal Head valence):**
+- BUILDABLE membership += Metal Head.
+- `addMetalHeadSignals`: a pitcher with K at-bats carrying KILLED_PITCHER/NUT_SHOT modifiers over N batters-faced → K/N; an at-bat with BOTH modifiers counts ONCE; undone at-bats excluded; at-bats with other/no modifiers don't count; keyed to the pitcher (`atBat.pitcherId`), not the batter; pitcher-role filtered.
+- (If applicable) `Metal Head` imageValence === 'positive'.
+
+**MAKE-OR-BREAK:** Metal Head reads `enrichment.modifiers` ∋ KILLED_PITCHER/NUT_SHOT keyed to `atBat.pitcherId` over a BF denominator (count-once-per-AB), from the EXISTING `atBatEvents` input (no new load); BUILDABLE + positive valence; no registry/oracle/pricing/tier/DB touch. Files: `traitCandidateBuilder.ts` + `traitAcquisition.ts` + tests.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — feeds processCompletedGame via franchiseTraitGrantCompute) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture` order-flake).
+5. `git --no-pager diff --stat` → `traitCandidateBuilder.ts` + `traitAcquisition.ts` + tests ONLY. No `franchiseTraitGrantCompute.ts`, no `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts`/`traitRealityScorer.ts`, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) addMetalHeadSignals (enrichment.modifiers ∋ KP/NUT, pitcherId key, BF denom, count-once), BUILDABLE + valence, confirm no-new-load + no registry/oracle/pricing/tier/DB touch; (3) verification output; (4) "DT-F3 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the build reaches for a fame-event source / a new input load (→ STOP — use `enrichment.modifiers`, no load needed); `enrichment.modifiers` turns out NOT to carry KP/NUT on the persisted at-bat (→ STOP, re-verify — the trace says it does); a registry/pricing/tier/scorer/oracle/DB edit is required (→ STOP); a full-suite red outside the characterized set 2 fix-iters can't clear (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: DT-F3 ===== -->
