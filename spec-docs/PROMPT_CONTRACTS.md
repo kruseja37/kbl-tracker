@@ -22935,3 +22935,50 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** the fielding-error atBatEventId↔missed-gem dedup can't be done (→ STOP, double-count risk on exactly the plays the ruling cares about); a throwing/mental error leaks into Butter Fingers (→ STOP, must be `type==='fielding'` only); never-both could be cleared (a player qualifies for BOTH through the duel — → STOP, re-check the duel); a DB bump / acquisition / registry change is needed (→ STOP); a NON-fielding franchise/L-SIM fixture regresses outside the characterized set (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: BF-MH ===== -->
+
+<!-- ===== CONTRACT: T-3a ===== -->
+## T-3a — SP/RP cohort split for pitcher-trait percentiles + min-peer fallback (§4A; build-dark)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer generalizing the existing per-trait peer-pool fold. Build-dark (trait pipeline `isFranchisePhase2TraitsEnabled()`-gated); no DB bump. This is the SP/RP half of T-3 (the trend factor is the separate T-3b ticket — DO NOT touch `traitAcquisition.ts`/`buildProposalBase` here).
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (§4A RULED 2026-06-22):** percentile pitcher-role traits within SEPARATE SP-vs-RP cohorts (so short-burst reliever rate stats aren't ranked against starter workloads), with a fallback to the FULL pitcher pool when a split cohort is below the min-peer-pool valve. The fold MECHANISM already exists (DT-F2 did it for Workhorse only) — generalize it to every pitcher-role trait except the Two Way family-fold, and add the missing min-peer fallback.
+
+**SOURCE OF TRUTH:** `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §4A:55-62` — "separate SP vs RP cohorts: pitching-trait percentiles rank starters vs starters and relievers (SP/RP-with-no-starts + RP + CP) vs relievers… Fall back to the full pitcher pool when a league's SP or RP cohort is below the min-peer-pool valve." Build directive `:62`: "SP/RP split = filter the peer-pool construction in the candidate builder/caller by pitcher sub-role (gamesStarted) with the min-peer-pool fallback." Two-Way EXCEPTION `:57`: Two Way percentiles vs the WHOLE pitcher pool (the Shohei case) — Two Way is intentionally NOT SP/RP-split.
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `poolTraitKey(traitName, playerId, input)` (`traitCandidateBuilder.ts:1892-1899`): TODAY special-cases Two Way (→`'Two Way'` family) FIRST, then Workhorse (→`'Workhorse|SP'`/`'Workhorse|RP'` by `input.seasonPitchingByPlayer?.get(playerId)?.gamesStarted ?? 0` `> 0`), else returns the bare `traitName`.
+- `roleKey(role, name)` (`:2059-2061`) = `` `${role}|${name}` ``. `buildPeerPools` builds with `roleKey(player.role, poolTraitKey(...))` (`:2072`); `computeSeasonTraitCandidates` READS with the IDENTICAL expression (`:2107`). **MAKE-OR-BREAK: both sides must use the same key — generalize `poolTraitKey` ONCE and both stay in lock-step.**
+- Scorer min-peer valve: `TRAIT_REALITY_SCORER_TUNING.minPeerPool = 3` (`traitRealityScorer.ts:60-67`, already `export`ed); enforced at `:261` `if (peerPoolSize < tuning.minPeerPool) return fail('thin_peer_pool')` where `peerPoolSize = input.peerValues.length` (`:243`, INCLUDES the player being scored). The scorer FAILS a thin pool — it does NOT fall back. So the §4A fallback MUST live in the BUILDER.
+- `PITCHER_ONLY_TRAITS` (`traitRealityScorer.ts:89-97`) is the pitcher-role set (Gets Ahead, Falls Behind, Composed, BB Prone, K Collector, K Neglector, Rally Stopper, Surrounded, Meltdown, Specialist, Reverse Splits, Pick Officer, Easy Jumps, Wild Thing, Metal Head, Crossed Up, Workhorse, Two Way (C/IF/OF), Elite 4F/2F/CF/FK/SL/CB/CH/SB). It is NOT exported today.
+- `TWO_WAY_VARIANTS` (`traitCandidateBuilder.ts:1873`) = `['Two Way (C)','Two Way (IF)','Two Way (OF)']`.
+- `seasonPitchingByPlayer` (with `gamesStarted`) is passed in BOTH paths (same `input` object; `franchiseTraitGrantCompute.ts:225`). SP = `gamesStarted > 0`; RP = otherwise.
+
+**BUILD:**
+1. `traitRealityScorer.ts:89` — add `export` to `const PITCHER_ONLY_TRAITS` (additive; no other change).
+2. `traitCandidateBuilder.ts`:
+   a. Import `PITCHER_ONLY_TRAITS` and `TRAIT_REALITY_SCORER_TUNING` from `'./traitRealityScorer'` (extend the existing import block at `:13-17`).
+   b. Add `const SP_RP_SPLIT_TRAITS = new Set(PITCHER_ONLY_TRAITS.filter((t) => !(TWO_WAY_VARIANTS as readonly string[]).includes(t)));` (near `TWO_WAY_VARIANTS`, after it). This INCLUDES Workhorse (its key stays byte-identical under the general fold) and EXCLUDES the 3 Two Way variants.
+   c. Generalize `poolTraitKey`: keep the Two Way early-return FIRST; REPLACE the `traitName === 'Workhorse'` branch with `if (SP_RP_SPLIT_TRAITS.has(traitName)) { const starts = input.seasonPitchingByPlayer?.get(playerId)?.gamesStarted ?? 0; return starts > 0 ? \`${traitName}|SP\` : \`${traitName}|RP\`; }`. (Workhorse → `'Workhorse|SP'`/`'Workhorse|RP'` exactly as before.)
+   d. `buildPeerPools` (`:2063-2078`): after pushing the signal value into the split key `roleKey(player.role, poolTraitKey(...))`, ALSO push it into the combined fallback key `roleKey(player.role, traitName)` (the BARE trait name) **only when `SP_RP_SPLIT_TRAITS.has(traitName)`** (so the combined whole-pitcher pool exists for fallback; the guard prevents double-counting non-split traits whose split key already equals the bare key).
+   e. `computeSeasonTraitCandidates` (`:2102-2107`): compute `const splitKey = roleKey(player.role, poolTraitKey(traitName, player.playerId, input));` `let peerValues = peerPools.get(splitKey) ?? [];` then `if (SP_RP_SPLIT_TRAITS.has(traitName) && peerValues.length < TRAIT_REALITY_SCORER_TUNING.minPeerPool) { peerValues = peerPools.get(roleKey(player.role, traitName)) ?? peerValues; }` and pass `peerValues` as `peerValues` to `computeTraitRealityScore`.
+
+**MAKE-OR-BREAK:** both call sites compute the split key via the SAME `poolTraitKey`; the combined fallback key is `roleKey(role, traitName)` (bare trait = today's key); fallback fires iff `splitPool.length < minPeerPool (3)` — matching the scorer's exact `peerValues.length < 3` enforcement (length includes self, both sides); Two Way unchanged (whole-pitcher family pool); Workhorse key byte-identical; non-pitcher/non-split traits untouched (no combined push, no fallback). NO DB bump; NO change to the scorer logic (only the export), acquisition, pricing, tier config, or oracle.
+
+**TEST (`src/engines/__tests__/traitCandidateBuilder.test.ts`):**
+- **Existing Workhorse SP/RP test (`:1995-2021`, 3 SP + 3 RP cohorts) MUST STAY GREEN** — each cohort = 3 (== minPeerPool, NOT `< 3`) → no fallback → split pools retained → `peerPoolSize: 3` unchanged.
+- NEW: mirror the SP/RP split for a SECOND pitcher trait that emits a real signal (e.g. `K Collector` or `Wild Thing`) — 3 SP + 3 RP pitchers, assert the starter is percentiled vs starters only (`peerPoolSize: 3`) and the reliever vs relievers only (`peerPoolSize: 3`), with the cohorts having different value ranges so a split vs combined percentile would differ.
+- NEW min-peer fallback: a split pitcher trait with 2 SP + 4 RP (SP cohort = 2 `< 3`) → the 2 SP players FALL BACK to the combined whole-pitcher pool (peerPoolSize = 6) and are percentiled against all 6; the RP cohort (4 `≥ 3`) keeps its split pool (peerPoolSize = 4). Prove the SP fallback percentile equals the combined-pool percentile.
+- NEW: a hitter/position trait is unaffected (same pool/percentile as before the change) — regression guard.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts src/engines/__tests__/traitAcquisition.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — feeds `franchiseTraitGrantCompute`→`processCompletedGame`, the transitive-mock-break canary lives in the 6 GameTracker `processCompletedGame`-mock tests) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist` order-flakes, solo-pass to confirm). A pitcher-trait unit-test percentile that legitimately moves to a split cohort is EXPECTED (re-baseline it, do NOT weaken). A NON-trait franchise/L-SIM fixture moving → STOP (regression — the trait grant is build-dark, nothing live should shift).
+5. `git --no-pager diff --stat` → `traitCandidateBuilder.ts` + `traitRealityScorer.ts` (export-only) + the one test file. No `traitAcquisition.ts`, no `iv_oracle.json`/`traitPricing.ts`/`traitTierConfig.ts`, no `trackerDb.ts`, no extractor.
+
+**FORMAT:** (1) files+lines; (2) the generalized `poolTraitKey` fold + the `SP_RP_SPLIT_TRAITS` set derivation, the `buildPeerPools` combined-key push, the `computeSeasonTraitCandidates` fallback lookup, the new + re-baselined tests + why, confirm Workhorse/Two Way unchanged + no DB/scorer/acquisition/registry touch; (3) verification output; (4) "T-3a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** a trackerDb bump is needed (→ STOP); an `iv_oracle.json` byte change (→ STOP); the builder cannot read `TRAIT_REALITY_SCORER_TUNING.minPeerPool` without a circular import (→ duplicate the literal `3` with a `// === traitRealityScorer minPeerPool` comment, NOT a stop); a NON-trait franchise/L-SIM fixture regresses outside the characterized set (→ STOP, that means something live shifted and the grant isn't dark); the only way to make a test pass is to weaken it rather than re-baseline a legitimately-split percentile (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: T-3a ===== -->
