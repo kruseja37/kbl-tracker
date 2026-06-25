@@ -383,4 +383,43 @@ These are the open-UX calls I made; all are reversible and flagged for JK's revi
 
 ---
 
-*End of design. The clickable prototype is the visual realization of this spec and the build target.*
+---
+
+## 11. Build status (this session — branch `codex/auction-draft-ux-rehaul`)
+
+**DONE + verified:**
+- **Design + rationale** — this doc.
+- **Clickable prototype** of all five surfaces — `spec-docs/prototypes/auction-draft/index.html` (+ 6
+  screenshot proofs: setup, MLB stage, carryover, farm covered, farm revealed, summary).
+- **Real React, build-green, non-destructive:**
+  - `src/src_figma/styles/auction-theme.css` — the `--auc-*` token layer + three type voices +
+    component classes, scoped under `.auc-root` (no leak). Imported by `main.tsx`. No DB touch.
+  - `src/src_figma/app/components/auction/AuctionStage.tsx` — the unified MLB+farm stage as a pure
+    view component driven by `AuctionStageVM`, intent via optional callbacks.
+  - `src/src_figma/app/pages/AuctionStagePreview.tsx` + route `/__preview/auction-stage` — mock-fed,
+    runnable in-app without a seeded auction.
+- **Gate evidence:** `tsc -b && vite build` → **exit 0**. Live render at `/__preview/auction-stage`
+  for both MLB and farm tiers with **zero console errors** (`react-mlb.png`, `react-farm.png`). The
+  existing auction pages and **all tests are untouched → branch stays green** (no new reds introduced).
+
+## 12. Remaining — GREENLIGHT-GATED (the production swap + test rewrite)
+
+Deliberately deferred until JK approves the design direction, because it is the destructive part
+(repointing live routes + rewriting frozen tests). The path is mechanical from here:
+
+1. **Adapter** — map `useAuctionDraft` / `useFarmAuctionDraft` session state → `AuctionStageVM`
+   (session → lot; `auctionMaxBid` → ceiling; `DraftRosterBoard` data → board; lot results → log).
+   This is the only real new logic; everything it reads already exists (§7).
+2. **Swap** — `LeagueBuilderAuctionDraft` / `LeagueBuilderFarmAuctionDraft` render `<AuctionStage>` fed
+   by the adapter; the begin/bid/pass/claim/resolve/advance handlers stay wired to the same hooks.
+3. **New surfaces** — Setup, Carryover handoff, Draft-summary recap as pages composing existing seams.
+4. **Copy + tests** — rewrite the voice; update the page/coach tests to the new strings (JK ruling),
+   keeping the behavioral assertions (begin→bid→pass→sold; farm value stays fogged until press; no
+   IV/ratings/filter-sort leak).
+5. **Gate** — `npm run build` exit 0 · `vitest run` zero-new-reds (the lineage's one characterized red
+   is `wpaRuntimeBoundary`) · live screenshot on JK's real data (isolated port, not :5173).
+
+---
+
+*End of design. The clickable prototype + the live `/__preview/auction-stage` route are the visual
+realization of this spec and the build target.*
