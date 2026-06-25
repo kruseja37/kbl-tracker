@@ -41,7 +41,9 @@ function playerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim();
 }
 
-const POSITION_OPTIONS = ["All", "C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "DH", "SP", "RP", "CP"];
+// Draftable primary positions only (JK ruling + DECISIONS_LOG: "DH removed ENTIRELY, DH is a
+// lineup slot only"; TWO-WAY is a trait, not a position). Pitchers carry the combined SP/RP role.
+const POSITION_OPTIONS = ["All", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "SP/RP", "RP", "CP"];
 
 export function LeagueBuilderDraftSetup() {
   const navigate = useNavigate();
