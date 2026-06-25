@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+const dir = '/Users/johnkruse/Projects/kbl-tracker--auction-ux/spec-docs/prototypes/auction-draft/';
+const url = 'file://' + dir + 'index.html';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1280, height: 920 }, deviceScaleFactor: 2 });
+await p.goto(url, { waitUntil: 'networkidle', timeout: 15000 }).catch(() => p.goto(url));
+await p.waitForTimeout(700);
+await p.click('.step[data-screen="farm"]');
+await p.waitForTimeout(300);
+await p.evaluate(() => document.getElementById('scout').classList.add('revealed'));
+await p.waitForTimeout(300);
+await p.screenshot({ path: dir + 'screen-farm-revealed.png', fullPage: true });
+await b.close();
+console.log('reshot farm-revealed');
