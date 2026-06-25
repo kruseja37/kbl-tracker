@@ -2300,20 +2300,19 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[], sourceData?: Rec
   // Use source PlayerData role to distinguish rotation SP from bullpen SP
   const getSourceRole = (id: string) => sourceData?.[id]?.role;
 
-  // SP/RP swingmen default to the bullpen but BACKFILL the rotation when pure starters fall short
-  // of a 5-man staff (JK ruling 2026-06-25 — "SP/RPs need the option to start"). Pure SP fill the
-  // rotation first; remaining swingmen relieve.
-  const ROTATION_TARGET = 5;
+  // SMB4 uses a 4-man rotation. Pure SP fill the rotation first; SP/RP swingmen backfill and
+  // overflow to long relief. This mirrors the "SP/RPs need the option to start" ruling (2026-06-25).
+  const ROTATION_SIZE = 4;
   const pureStarters = pitchers
     .filter((player) => player.primaryPosition === 'SP' && getSourceRole(player.id) !== 'BULLPEN')
     .map((player) => player.id);
   const swingmen = pitchers
     .filter((player) => player.primaryPosition === 'SP/RP')
     .map((player) => player.id);
-  const swingmenStarting = swingmen.slice(0, Math.max(0, ROTATION_TARGET - pureStarters.length));
-  const swingmenRelieving = swingmen.slice(swingmenStarting.length);
-  const startingRotation = [...pureStarters, ...swingmenStarting];
-  const longRelievers = swingmenRelieving;
+  const rotationCandidates = [...pureStarters, ...swingmen];
+  const startingRotation = rotationCandidates.slice(0, ROTATION_SIZE);
+  const startingSet = new Set(startingRotation);
+  const longRelievers = rotationCandidates.filter((id) => !startingSet.has(id));
   const closingPitcher = pitchers.find((player) => player.primaryPosition === 'CP')?.id || '';
   const assignedIds = new Set([...startingRotation, ...longRelievers, closingPitcher].filter(Boolean));
   const setupPitchers = pitchers

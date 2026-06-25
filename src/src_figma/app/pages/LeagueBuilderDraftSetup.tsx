@@ -34,6 +34,9 @@ import {
 } from "../../../utils/leagueBuilderPoolBuilder";
 import type { Player, Position } from "../../../utils/leagueBuilderStorage";
 import type { RegisteredPool } from "../../../engines/leagueConstruction";
+import { TRAIT_PRICING } from "../../../data/traitPricing";
+
+const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
@@ -68,6 +71,8 @@ type PlayerEditForm = {
   velocity: string;
   junk: string;
   accuracy: string;
+  trait1: string;
+  trait2: string;
 };
 
 const HITTER_RATINGS = [
@@ -115,6 +120,8 @@ function playerToEditForm(player: Player): PlayerEditForm {
     velocity: player.velocity.toString(),
     junk: player.junk.toString(),
     accuracy: player.accuracy.toString(),
+    trait1: player.trait1 ?? "",
+    trait2: player.trait2 ?? "",
   };
 }
 
@@ -136,6 +143,8 @@ function buildEditedPlayer(player: Player, form: PlayerEditForm): Player {
     velocity: clampInt(form.velocity, player.velocity, 0, 99),
     junk: clampInt(form.junk, player.junk, 0, 99),
     accuracy: clampInt(form.accuracy, player.accuracy, 0, 99),
+    trait1: form.trait1 || undefined,
+    trait2: form.trait2 || undefined,
   };
   return { ...edited, overallGrade: computePlayerGrade(edited) };
 }
@@ -835,6 +844,38 @@ function DraftSetupPlayerEditModal({
                   />
                 </label>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-2">Traits</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Trait 1</span>
+                <select
+                  value={form.trait1}
+                  onChange={(event) => updateForm("trait1", event.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">None</option>
+                  {ALL_TRAIT_NAMES.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Trait 2</span>
+                <select
+                  value={form.trait2}
+                  onChange={(event) => updateForm("trait2", event.target.value)}
+                  className={inputClass}
+                >
+                  <option value="">None</option>
+                  {ALL_TRAIT_NAMES.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
         </div>
