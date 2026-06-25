@@ -280,6 +280,88 @@ const HIT_RESULTS: ReadonlySet<AtBatResult> = new Set([
   'GRD',
 ]);
 
+const ELITE_PITCH_CODES = ['4F', '2F', 'CF', 'CB', 'CH', 'FK', 'SB', 'SL'] as const;
+type ElitePitchCode = (typeof ELITE_PITCH_CODES)[number];
+
+const ELITE_PITCH_BY_CODE: Record<string, string> = {
+  '4F': 'Elite 4F',
+  '2F': 'Elite 2F',
+  CF: 'Elite CF',
+  CB: 'Elite CB',
+  CH: 'Elite CH',
+  FK: 'Elite FK',
+  SB: 'Elite SB',
+  SL: 'Elite SL',
+};
+
+const FASTBALL_PITCH_CODES = new Set<string>(['4F', '2F', 'CF']);
+const OFFSPEED_PITCH_CODES = new Set<string>(['SL', 'CB', 'CH', 'FK', 'SB']);
+
+export type PitchOutcomeClass = 'K' | 'BB' | 'HR' | 'SINGLE' | 'BIGHIT' | 'OUT' | 'NEUTRAL';
+
+export const PITCH_OUTCOME_CLASSES: readonly PitchOutcomeClass[] = [
+  'K',
+  'BB',
+  'HR',
+  'SINGLE',
+  'BIGHIT',
+  'OUT',
+  'NEUTRAL',
+];
+
+export const PITCH_OUTCOME_RESULTS_BY_CLASS: Record<PitchOutcomeClass, readonly AtBatResult[]> = {
+  K: [...STRIKEOUT_RESULTS],
+  BB: ['BB', 'IBB'],
+  HR: [...HOME_RUN_RESULTS],
+  SINGLE: ['1B'],
+  BIGHIT: ['2B', '3B', 'GRD'],
+  OUT: ['GO', 'FO', 'FLO', 'LO', 'PO', 'DP', 'TP'],
+  NEUTRAL: ['SF', 'SAC', 'HBP', 'E', 'FC'],
+};
+
+const PITCH_OUTCOME_CLASS_BY_RESULT = new Map<AtBatResult, PitchOutcomeClass>(
+  PITCH_OUTCOME_CLASSES.flatMap((outcomeClass) => (
+    PITCH_OUTCOME_RESULTS_BY_CLASS[outcomeClass].map((result) => [result, outcomeClass] as const)
+  )),
+);
+
+// Section 16 sim-tune defaults. SF/SAC/HBP fold to NEUTRAL until RBI/runner
+// context is wired; downstream peer-percentiles make magnitudes secondary to
+// monotonicity and HR-as-heaviest on each side.
+export const PITCHER_PITCH_OUTCOME_WEIGHTS: Record<PitchOutcomeClass, number> = {
+  K: 1.0,
+  OUT: 0.3,
+  NEUTRAL: 0,
+  BB: -1.0,
+  SINGLE: -2.0,
+  BIGHIT: -2.0,
+  HR: -3.0,
+};
+
+export const HITTER_PITCH_OUTCOME_WEIGHTS: Record<PitchOutcomeClass, number> = {
+  HR: 3.0,
+  BIGHIT: 2.0,
+  SINGLE: 1.0,
+  BB: 0.5,
+  OUT: 0,
+  NEUTRAL: 0,
+  K: -1.0,
+};
+
+export function classifyPitchOutcome(result: AtBatResult): PitchOutcomeClass {
+  const outcomeClass = PITCH_OUTCOME_CLASS_BY_RESULT.get(result);
+  if (!outcomeClass) {
+    throw new Error(`Unclassified pitch outcome: ${result}`);
+  }
+  return outcomeClass;
+}
+
+function isElitePitchCode(code: string | undefined): code is ElitePitchCode {
+  return typeof code === 'string'
+    && code.length > 0
+    && Object.prototype.hasOwnProperty.call(ELITE_PITCH_BY_CODE, code);
+}
+
 // R1-b1: AB = PA − (BB + IBB + HBP + SF + SAC) — the non-AB plate appearances.
 const NON_AB_RESULTS: ReadonlySet<AtBatResult> = new Set([
   'BB',
@@ -609,6 +691,92 @@ function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalM
     addRawSignal(raw, pitcherId, 'Falls Behind', { signalValue: walkRate, sampleSize: counts.pa });
     addRawSignal(raw, pitcherId, 'Composed', { signalValue: 1 - walkRate, sampleSize: counts.pa });
     addRawSignal(raw, pitcherId, 'Gets Ahead', { signalValue: 1 - walkRate, sampleSize: counts.pa });
+  }
+}
+
+function addPitchTypeSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  interface NetBucket { sum: number; sampleSize: number; }
+  interface HitterPitchBuckets {
+    FB: NetBucket;
+    OS: NetBucket;
+  }
+
+  const pitcherBuckets = new Map<string, Map<ElitePitchCode, NetBucket>>();
+  const hitterBuckets = new Map<string, HitterPitchBuckets>();
+
+  const getPitcherBucket = (pitcherId: string, code: ElitePitchCode): NetBucket => {
+    let byCode = pitcherBuckets.get(pitcherId);
+    if (!byCode) {
+      byCode = new Map();
+      pitcherBuckets.set(pitcherId, byCode);
+    }
+    let bucket = byCode.get(code);
+    if (!bucket) {
+      bucket = { sum: 0, sampleSize: 0 };
+      byCode.set(code, bucket);
+    }
+    return bucket;
+  };
+
+  const getHitterBuckets = (batterId: string): HitterPitchBuckets => {
+    let buckets = hitterBuckets.get(batterId);
+    if (!buckets) {
+      buckets = {
+        FB: { sum: 0, sampleSize: 0 },
+        OS: { sum: 0, sampleSize: 0 },
+      };
+      hitterBuckets.set(batterId, buckets);
+    }
+    return buckets;
+  };
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    const code = atBat.enrichment?.pitchType;
+    if (!isElitePitchCode(code)) continue;
+
+    const outcomeClass = classifyPitchOutcome(atBat.result);
+    const pitcherBucket = getPitcherBucket(atBat.pitcherId, code);
+    pitcherBucket.sum += PITCHER_PITCH_OUTCOME_WEIGHTS[outcomeClass];
+    pitcherBucket.sampleSize += 1;
+
+    const hitterBucket = FASTBALL_PITCH_CODES.has(code)
+      ? getHitterBuckets(atBat.batterId).FB
+      : OFFSPEED_PITCH_CODES.has(code)
+        ? getHitterBuckets(atBat.batterId).OS
+        : null;
+    if (!hitterBucket) continue;
+    hitterBucket.sum += HITTER_PITCH_OUTCOME_WEIGHTS[outcomeClass];
+    hitterBucket.sampleSize += 1;
+  }
+
+  for (const pitcherId of [...pitcherBuckets.keys()].sort()) {
+    const byCode = pitcherBuckets.get(pitcherId);
+    if (!byCode) continue;
+    for (const code of ELITE_PITCH_CODES) {
+      const bucket = byCode.get(code);
+      if (!bucket || bucket.sampleSize <= 0) continue;
+      addRawSignal(raw, pitcherId, ELITE_PITCH_BY_CODE[code], {
+        signalValue: bucket.sum / bucket.sampleSize,
+        sampleSize: bucket.sampleSize,
+      });
+    }
+  }
+
+  for (const batterId of [...hitterBuckets.keys()].sort()) {
+    const buckets = hitterBuckets.get(batterId);
+    if (!buckets) continue;
+    if (buckets.FB.sampleSize > 0) {
+      addRawSignal(raw, batterId, 'Fastball Hitter', {
+        signalValue: buckets.FB.sum / buckets.FB.sampleSize,
+        sampleSize: buckets.FB.sampleSize,
+      });
+    }
+    if (buckets.OS.sampleSize > 0) {
+      addRawSignal(raw, batterId, 'Off-Speed Hitter', {
+        signalValue: buckets.OS.sum / buckets.OS.sampleSize,
+        sampleSize: buckets.OS.sampleSize,
+      });
+    }
   }
 }
 
@@ -1357,7 +1525,7 @@ function addDurabilitySignals(input: SeasonTraitCandidateInput, raw: RawSignalMa
   }
 }
 
-function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
+export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   const raw: RawSignalMap = new Map();
   addAtBatSignals(input, raw);
   addOutcomeRateSignals(input, raw);
@@ -1385,6 +1553,8 @@ function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap {
   // seeded deterministically (twoWayVariantForPitcher); all 3 pool as ONE family.
   addTwoWaySignals(input, raw);
   addDurabilitySignals(input, raw);
+  // T-9a — per-pitch-type net-quality (INERT until T-9b adds the 10 traits to BUILDABLE_TRAITS).
+  addPitchTypeSignals(input, raw);
   return raw;
 }
 

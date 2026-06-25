@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { activeTraitNames } from '../effectiveRatings';
 import {
   BUILDABLE_TRAITS,
+  HITTER_PITCH_OUTCOME_WEIGHTS,
+  PITCHER_PITCH_OUTCOME_WEIGHTS,
+  PITCH_OUTCOME_CLASSES,
+  PITCH_OUTCOME_RESULTS_BY_CLASS,
+  buildRawSignals,
+  classifyPitchOutcome,
   computeSeasonTraitCandidates,
   reconstructAtBatContext,
   type AtBatContextRunningState,
@@ -161,6 +167,48 @@ function fnv1a(value: string): number {
 function expectedTwoWayVariant(playerId: string): (typeof TWO_WAY_VARIANTS_TEST)[number] {
   return TWO_WAY_VARIANTS_TEST[fnv1a(playerId) % 3];
 }
+
+const ALL_AT_BAT_RESULTS: readonly AtBatResult[] = [
+  '1B',
+  '2B',
+  '3B',
+  'HR',
+  'ITPHR',
+  'BB',
+  'IBB',
+  'K',
+  'Kc',
+  'Ꝁ',
+  'GO',
+  'FO',
+  'FLO',
+  'LO',
+  'PO',
+  'DP',
+  'TP',
+  'SF',
+  'SAC',
+  'HBP',
+  'E',
+  'FC',
+  'D3K',
+  'WP_K',
+  'PB_K',
+  'GRD',
+];
+
+const T9A_DORMANT_PITCH_TRAITS = [
+  'Elite 4F',
+  'Elite 2F',
+  'Elite CF',
+  'Elite CB',
+  'Elite CH',
+  'Elite FK',
+  'Elite SB',
+  'Elite SL',
+  'Fastball Hitter',
+  'Off-Speed Hitter',
+] as const;
 
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
@@ -2067,6 +2115,179 @@ describe('R1-b3 / PRE-ACT-TRAITS-1 Two Way C/IF/OF family (pitcher batting wOBA 
     const skip = acquisition.skipped.find((s) => s.traitName === variant);
     expect(skip?.reason).not.toBe('ineligible_role');
     expect(skip?.reason).not.toBe('unknown_trait');
+  });
+});
+
+describe('T-9a pitch-type net-quality raw signals (build-dark)', () => {
+  it('classifies every AtBatResult into exactly one of the seven outcome classes', () => {
+    expect(ALL_AT_BAT_RESULTS).toHaveLength(26);
+    expect(PITCH_OUTCOME_CLASSES).toEqual(['K', 'BB', 'HR', 'SINGLE', 'BIGHIT', 'OUT', 'NEUTRAL']);
+
+    const seen = new Set<AtBatResult>();
+    for (const outcomeClass of PITCH_OUTCOME_CLASSES) {
+      const members = PITCH_OUTCOME_RESULTS_BY_CLASS[outcomeClass];
+      expect(members.length).toBeGreaterThan(0);
+      for (const result of members) {
+        expect(seen.has(result)).toBe(false);
+        seen.add(result);
+        expect(classifyPitchOutcome(result)).toBe(outcomeClass);
+      }
+    }
+
+    for (const result of ALL_AT_BAT_RESULTS) {
+      expect(classifyPitchOutcome(result)).toBeDefined();
+    }
+    expect([...seen].sort()).toEqual([...ALL_AT_BAT_RESULTS].sort());
+  });
+
+  it('pins the section-16 pitcher and hitter pitch-outcome weight tables', () => {
+    expect(PITCHER_PITCH_OUTCOME_WEIGHTS).toEqual({
+      K: 1.0,
+      OUT: 0.3,
+      NEUTRAL: 0,
+      BB: -1.0,
+      SINGLE: -2.0,
+      BIGHIT: -2.0,
+      HR: -3.0,
+    });
+    expect(HITTER_PITCH_OUTCOME_WEIGHTS).toEqual({
+      HR: 3.0,
+      BIGHIT: 2.0,
+      SINGLE: 1.0,
+      BB: 0.5,
+      OUT: 0,
+      NEUTRAL: 0,
+      K: -1.0,
+    });
+    expect(PITCHER_PITCH_OUTCOME_WEIGHTS.HR).toBeLessThan(PITCHER_PITCH_OUTCOME_WEIGHTS.SINGLE);
+    expect(PITCHER_PITCH_OUTCOME_WEIGHTS.HR).toBeLessThan(PITCHER_PITCH_OUTCOME_WEIGHTS.BB);
+    expect(HITTER_PITCH_OUTCOME_WEIGHTS.HR).toBeGreaterThan(HITTER_PITCH_OUTCOME_WEIGHTS.BIGHIT);
+  });
+
+  it('emits separate pitcher net-quality averages per elite pitch code', () => {
+    const events = [
+      ...repeat(3, (index) => atBat({ pitcherId: 'p1', batterId: `b4f-k-${index}`, result: 'K', enrichment: { pitchType: '4F' } })),
+      ...repeat(2, (index) => atBat({ pitcherId: 'p1', batterId: `b4f-go-${index}`, result: 'GO', enrichment: { pitchType: '4F' } })),
+      atBat({ pitcherId: 'p1', batterId: 'b4f-bb', result: 'BB', enrichment: { pitchType: '4F' } }),
+      ...repeat(2, (index) => atBat({ pitcherId: 'p1', batterId: `b4f-1b-${index}`, result: '1B', enrichment: { pitchType: '4F' } })),
+      ...repeat(2, (index) => atBat({ pitcherId: 'p1', batterId: `b4f-hr-${index}`, result: 'HR', enrichment: { pitchType: '4F' } })),
+      ...repeat(2, (index) => atBat({ pitcherId: 'p1', batterId: `bsl-k-${index}`, result: 'K', enrichment: { pitchType: 'SL' } })),
+      ...repeat(3, (index) => atBat({ pitcherId: 'p1', batterId: `bsl-go-${index}`, result: 'GO', enrichment: { pitchType: 'SL' } })),
+      atBat({ pitcherId: 'p1', batterId: 'bsl-bb', result: 'BB', enrichment: { pitchType: 'SL' } }),
+      ...repeat(2, (index) => atBat({ pitcherId: 'p1', batterId: `bsl-2b-${index}`, result: '2B', enrichment: { pitchType: 'SL' } })),
+      ...repeat(2, (index) => atBat({ pitcherId: 'p1', batterId: `bsl-hr-${index}`, result: 'HR', enrichment: { pitchType: 'SL' } })),
+    ];
+    const raw = buildRawSignals(baseInput({ atBatEvents: events }));
+
+    const fourSeam = raw.get('p1')?.get('Elite 4F');
+    expect(fourSeam?.sampleSize).toBe(10);
+    expect(fourSeam?.signalValue).toBeCloseTo(-7.4 / 10, 10);
+
+    const slider = raw.get('p1')?.get('Elite SL');
+    expect(slider?.sampleSize).toBe(10);
+    expect(slider?.signalValue).toBeCloseTo(-8.1 / 10, 10);
+  });
+
+  it('applies the HR-allowed debit as the heaviest pitcher-side outcome', () => {
+    const allGrounders = repeat(10, (index) => atBat({
+      pitcherId: 'p-go',
+      batterId: `b-go-${index}`,
+      result: 'GO',
+      enrichment: { pitchType: '4F' },
+    }));
+    const oneHomer = repeat(10, (index) => atBat({
+      pitcherId: 'p-hr',
+      batterId: `b-hr-${index}`,
+      result: index === 0 ? 'HR' : 'GO',
+      enrichment: { pitchType: '4F' },
+    }));
+    const raw = buildRawSignals(baseInput({ atBatEvents: [...allGrounders, ...oneHomer] }));
+    const baseScore = raw.get('p-go')?.get('Elite 4F')?.signalValue;
+    const swappedScore = raw.get('p-hr')?.get('Elite 4F')?.signalValue;
+
+    expect(baseScore).toBeCloseTo(0.3, 10);
+    expect(swappedScore).toBeCloseTo(-0.03, 10);
+    expect((swappedScore ?? 0) - (baseScore ?? 0)).toBeCloseTo((-3.0 - 0.3) / 10, 10);
+  });
+
+  it('emits hitter fastball and off-speed net-outcome averages from only their pitch-code buckets', () => {
+    const events = [
+      atBat({ batterId: 'h1', pitcherId: 'p-fb-1', result: 'HR', enrichment: { pitchType: '4F' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-fb-2', result: '2B', enrichment: { pitchType: '2F' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-fb-3', result: '1B', enrichment: { pitchType: 'CF' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-fb-4', result: 'BB', enrichment: { pitchType: '4F' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-fb-5', result: 'GO', enrichment: { pitchType: 'CF' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-fb-6', result: 'K', enrichment: { pitchType: '2F' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-os-1', result: 'HR', enrichment: { pitchType: 'SL' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-os-2', result: 'GRD', enrichment: { pitchType: 'CB' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-os-3', result: '3B', enrichment: { pitchType: 'CH' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-os-4', result: 'IBB', enrichment: { pitchType: 'FK' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-os-5', result: 'FO', enrichment: { pitchType: 'SB' } }),
+      atBat({ batterId: 'h1', pitcherId: 'p-os-6', result: 'K', enrichment: { pitchType: 'SL' } }),
+    ];
+    const raw = buildRawSignals(baseInput({ atBatEvents: events }));
+
+    const fastball = raw.get('h1')?.get('Fastball Hitter');
+    expect(fastball?.sampleSize).toBe(6);
+    expect(fastball?.signalValue).toBeCloseTo(5.5 / 6, 10);
+
+    const offspeed = raw.get('h1')?.get('Off-Speed Hitter');
+    expect(offspeed?.sampleSize).toBe(6);
+    expect(offspeed?.signalValue).toBeCloseTo(6.5 / 6, 10);
+    expect(HITTER_PITCH_OUTCOME_WEIGHTS.HR).toBe(3.0);
+  });
+
+  it('ignores untagged, unknown-pitch, empty-pitch, and undone at-bats', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        atBat({ pitcherId: 'p-tag', batterId: 'b-tag', result: 'GO', enrichment: { pitchType: '4F' } }),
+        atBat({ pitcherId: 'p-tag', batterId: 'b-tag', result: 'HR' }),
+        atBat({ pitcherId: 'p-tag', batterId: 'b-tag', result: 'HR', enrichment: { pitchType: 'CUT' } }),
+        atBat({ pitcherId: 'p-tag', batterId: 'b-tag', result: 'K', enrichment: { pitchType: '' } }),
+        atBat({ pitcherId: 'p-tag', batterId: 'b-tag', result: 'HR', enrichment: { pitchType: '4F' }, undoneAt: 1 }),
+        atBat({ pitcherId: 'p-tag', batterId: 'b-tag', result: 'K', enrichment: { pitchType: 'SL' }, undoneAt: 1 }),
+      ],
+    }));
+
+    expect(raw.get('p-tag')?.get('Elite 4F')).toEqual({ signalValue: 0.3, sampleSize: 1 });
+    expect(raw.get('p-tag')?.get('Elite SL')).toBeUndefined();
+    expect(raw.get('b-tag')?.get('Fastball Hitter')).toEqual({ signalValue: 0, sampleSize: 1 });
+    expect(raw.get('b-tag')?.get('Off-Speed Hitter')).toBeUndefined();
+  });
+
+  it('keeps the 10 pitch-type traits out of BUILDABLE_TRAITS and candidate output', () => {
+    for (const traitName of T9A_DORMANT_PITCH_TRAITS) {
+      expect(BUILDABLE_TRAITS).not.toContain(traitName);
+    }
+
+    const baseEvents = repeat(12, (index) => atBat({
+      pitcherId: 'p1',
+      batterId: 'b1',
+      result: index < 6 ? 'K' : 'GO',
+    }));
+    const taggedEvents = baseEvents.map((event, index) => ({
+      ...event,
+      enrichment: { ...(event.enrichment ?? {}), pitchType: index % 2 === 0 ? '4F' : 'SL' },
+    }));
+    const playersUnderTest: SeasonTraitPlayer[] = [
+      { playerId: 'p1', role: 'pitcher' },
+      { playerId: 'b1', role: 'position' },
+    ];
+    const plain = computeSeasonTraitCandidates(baseInput({
+      players: playersUnderTest,
+      atBatEvents: baseEvents,
+    }));
+    const tagged = computeSeasonTraitCandidates(baseInput({
+      players: playersUnderTest,
+      atBatEvents: taggedEvents,
+    }));
+    const raw = buildRawSignals(baseInput({ atBatEvents: taggedEvents }));
+    const dormantPitchTraitSet = new Set<string>(T9A_DORMANT_PITCH_TRAITS);
+
+    expect(raw.get('p1')?.get('Elite 4F')).toBeDefined();
+    expect(raw.get('b1')?.get('Fastball Hitter')).toBeDefined();
+    expect(tagged).toEqual(plain);
+    expect([...tagged.values()].flat().filter((item) => dormantPitchTraitSet.has(item.traitName))).toEqual([]);
   });
 });
 

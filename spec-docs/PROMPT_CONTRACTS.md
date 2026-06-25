@@ -21861,3 +21861,83 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-4c ===== -->
+
+<!-- ===== CONTRACT: T-9a ===== -->
+## T-9a — per-pitch-type NET-QUALITY aggregator (the dormant-trait wave template, part a)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer adding ONE pure, build-dark signal-aggregator function to the trait candidate builder. Surgical, additive, zero behavior change to any existing trait.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Add a per-pitch-type **net-outcome** aggregator that, over the user-tagged at-bats (`enrichment.pitchType`), emits a build-dark reality signal per pitcher for each of the 8 **Elite-`<pitch>`** traits and per hitter for **Fastball Hitter** / **Off-Speed Hitter** — wired into `buildRawSignals` but INERT (the 10 traits are NOT yet in `BUILDABLE_TRAITS`, so nothing scores them and EVERY existing trait's output is byte-identical). This is the aggregator only; BUILDABLE wiring + the personality image-valence is T-9b; the engine max-1 mutual-exclusion is T-9c.
+
+**SOURCE OF TRUTH:** `TRAIT_MEASUREMENT_SPEC.md` §0.6b (the finalized dormant-trait matrix) + `DECISIONS_LOG.md` 2026-06-25 (the NET-OUTCOME scoring ruling). The §0.6b NET-OUTCOME rule (per pitch-bucket, averaged over the user-tagged ABs, min-sample-gated, percentile vs role peers — the percentile happens DOWNSTREAM in `computeTraitRealityScore`, so this function emits the RAW net score, NOT a pre-percentiled value, mirroring `addOutcomeRateSignals`):
+- **PITCHER (Elite-`<pitch>`), higher = more elite:** K **+** · batted-out mild **+** · BB **−** · hit-allowed (non-HR) **−−** · **HR-allowed −−− (heaviest)**.
+- **HITTER (Fastball/Off-Speed), higher = better:** HR **+++** · big hit **++** · single **+** · BB mild **+** · out **0** · K **−**.
+
+**GROUNDING (Captain-verified from source 2026-06-25; re-read each before editing):**
+- `src/engines/traitCandidateBuilder.ts`: `SeasonTraitCandidateInput` (`atBatEvents: readonly AtBatEvent[]`, `players: readonly SeasonTraitPlayer[]` where `SeasonTraitPlayer = { playerId, role: 'pitcher'|'position' }`). `RawSignalMap = Map<playerId, Map<traitName, {signalValue, sampleSize}>>`. `addRawSignal(raw, playerId, traitName, {signalValue, sampleSize})` (:477). `buildRawSignals(input)` (:1360) is the single fan-out that calls every `addXxxSignals`; the LAST call today is `addDurabilitySignals` (:1387). The model to mirror is `addOutcomeRateSignals` (:563) — one pass over `sortAtBats(input.atBatEvents).filter(e => !undoneAt(e))`, accumulate per id, emit `addRawSignal`. `undoneAt`/`sortAtBats` are in-file helpers; reuse them. NO new import is needed.
+- Outcome sets already defined in-file: `STRIKEOUT_RESULTS` (:259 — K/Kc/Ꝁ/D3K/WP_K/PB_K), `HOME_RUN_RESULTS` (:272 — HR/ITPHR), `HIT_RESULTS` (:274 — 1B/2B/3B/HR/ITPHR/GRD). Walks = `result === 'BB' || result === 'IBB'`. REUSE these.
+- `enrichment.pitchType?: string` lives on `AtBatEvent.enrichment` (`src/utils/eventLog.ts:407` block, field at :437). An at-bat is "tagged" iff `atBat.enrichment?.pitchType` is a non-empty string that is one of the 8 known codes (ignore any unknown string).
+- The 8 pitch codes ↔ Elite traits (canonical, from `prospectScoutingDraftEngine.ts:412` `ELITE_TRAIT_TO_PITCH`): `4F→Elite 4F, 2F→Elite 2F, CF→Elite CF, CB→Elite CB, CH→Elite CH, FK→Elite FK, SB→Elite SB, SL→Elite SL`. **Fastball = {4F,2F,CF}; Off-Speed = {SL,CB,CH,FK,SB}** (`prospectScoutingDraftEngine.ts:407-408`). Define these LOCALLY in `traitCandidateBuilder.ts` (do NOT import from the generator — the shared-const consolidation is T-9c).
+- `AtBatResult` full union (`src/types/game.ts:13`): `1B|2B|3B|HR|ITPHR|BB|IBB|K|Kc|Ꝁ|GO|FO|FLO|LO|PO|DP|TP|SF|SAC|HBP|E|FC|D3K|WP_K|PB_K|GRD`.
+
+**BUILD (`src/engines/traitCandidateBuilder.ts`):**
+1. Add local constants near the other outcome sets:
+   - `ELITE_PITCH_BY_CODE: Record<string,string>` = the 8 code→trait pairs above (only the 8 codes are keys).
+   - `FASTBALL_PITCH_CODES = new Set(['4F','2F','CF'])`, `OFFSPEED_PITCH_CODES = new Set(['SL','CB','CH','FK','SB'])`.
+   - A NET-OUTCOME class partition over `AtBatResult`. Define exactly SEVEN classes and map every union member to ONE (exhaustive — assert in a test):
+     - `K` = `STRIKEOUT_RESULTS` (K,Kc,Ꝁ,D3K,WP_K,PB_K)
+     - `BB` = {BB,IBB}
+     - `HR` = `HOME_RUN_RESULTS` (HR,ITPHR)
+     - `SINGLE` = {1B}
+     - `BIGHIT` = {2B,3B,GRD}
+     - `OUT` (batted-ball out) = {GO,FO,FLO,LO,PO,DP,TP}
+     - `NEUTRAL` = {SF,SAC,HBP,E,FC}  (productive outs / reach-on-error / HBP / fielder's choice — weight 0 on both sides)
+   - Two §16-sim-tune weight tables (export them so the test can pin the arithmetic), keyed by class:
+     - `PITCHER_PITCH_OUTCOME_WEIGHTS` = `{K:+1.0, OUT:+0.3, NEUTRAL:0, BB:-1.0, SINGLE:-2.0, BIGHIT:-2.0, HR:-3.0}` (non-HR hit = −2; HR = −3 heaviest).
+     - `HITTER_PITCH_OUTCOME_WEIGHTS` = `{HR:+3.0, BIGHIT:+2.0, SINGLE:+1.0, BB:+0.5, OUT:0, NEUTRAL:0, K:-1.0}`.
+   - Comment that the weights + the SF/SAC/HBP→NEUTRAL fold (RBI/runner-context deferred) are §16 sim-tune defaults; the downstream peer-percentile makes the absolute magnitudes non-critical (only monotonicity + HR-as-heaviest matters).
+2. Add `function addPitchTypeSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void`:
+   - One pass over `sortAtBats(input.atBatEvents).filter(e => !undoneAt(e))`. For each at-bat, read `code = atBat.enrichment?.pitchType`; skip if not one of the 8 known codes.
+   - Classify the at-bat result once (`classifyPitchOutcome(result)`).
+   - **Pitcher side:** accumulate into a per-`atBat.pitcherId`, per-`code` bucket: `sum += PITCHER_PITCH_OUTCOME_WEIGHTS[class]`, `n += 1`. (Emit keyed by `pitcherId` UNCONDITIONALLY — role filtering is downstream, exactly like `addOutcomeRateSignals` emits 'K Collector' for every pitcherId.)
+   - **Hitter side:** classify the code as Fastball / Off-Speed; accumulate into a per-`atBat.batterId`, per-bucket('FB'|'OS') tally with the HITTER weights.
+   - After the pass, emit: for each (pitcherId, code) with `n>0` → `addRawSignal(raw, pitcherId, ELITE_PITCH_BY_CODE[code], { signalValue: sum/n, sampleSize: n })`. For each batterId → `addRawSignal(raw, batterId, 'Fastball Hitter', {signalValue: fbSum/fbN, sampleSize: fbN})` when `fbN>0`, and `'Off-Speed Hitter'` when `osN>0`. **sampleSize = the count of TAGGED ABs in that bucket** (this is the min-sample valve input; the downstream rate-basis gate `minSampleRate:10` keeps the trait dormant until ≥10 tagged ABs).
+   - Iterate emission in a DETERMINISTIC order (sort ids; iterate codes in a fixed array order) so output is stable.
+3. Wire `addPitchTypeSignals(input, raw);` into `buildRawSignals` as the LAST call (after `addDurabilitySignals`). Add a one-line comment: "T-9a — per-pitch-type net-quality (INERT until T-9b adds the 10 traits to BUILDABLE_TRAITS)."
+
+**DO NOT (this ticket):** add anything to `BUILDABLE_TRAITS`; touch `traitRealityScorer.ts`, `traitAcquisition.ts`, `traitPricing.ts`, `traitTierConfig.ts`, `prospectScoutingDraftEngine.ts`, `franchiseTraitGrantCompute.ts`; bump `TRACKER_DB_VERSION`; touch `iv_oracle.json`.
+
+**TEST (`src/engines/__tests__/traitCandidateBuilder.test.ts` — ADD a describe block, don't weaken existing):**
+- **Exhaustiveness:** every `AtBatResult` union member maps to exactly one outcome class (iterate a literal array of all 26 members; assert `classifyPitchOutcome` returns a defined class for each; assert the 7 class-sets are pairwise disjoint and cover all 26).
+- **Pitcher arithmetic:** build synthetic `atBatEvents` for one pitcher with N≥10 ABs all tagged `pitchType:'4F'` with a known mix (e.g. some K, some GO, some BB, some 1B, some HR) → assert the emitted `Elite 4F` signal `signalValue === (Σ weights)/N` and `sampleSize === N` (pin the exact number). A second pitch type (`'SL'`→`Elite SL`) for the same pitcher buckets separately. HR present → assert it pulled the score down the most (swap one GO→HR, score drops by `(−3.0 − 0.3)/N`).
+- **Hitter arithmetic:** synthetic batter with tagged `4F` and `SL` ABs → assert `Fastball Hitter` aggregates ONLY the {4F,2F,CF} ABs and `Off-Speed Hitter` ONLY the {SL,CB,CH,FK,SB} ABs, with the exact net average + sampleSize. HR is the best (+3).
+- **Untagged ABs ignored:** ABs with no `enrichment.pitchType` (or an unknown code) contribute to NO pitch-type signal (sampleSize counts only tagged ABs). Undone ABs excluded.
+- **BUILD-DARK invariant (make-or-break):** the 10 new trait names are NOT in `BUILDABLE_TRAITS` (assert `BUILDABLE_TRAITS` does not include any of them), so `computeSeasonTraitCandidates` output contains NO candidate with those names — and is byte-identical for existing traits. (The existing test file's BUILDABLE-count / per-trait assertions must pass UNCHANGED.)
+
+**MAKE-OR-BREAK:**
+- Zero behavior change to any EXISTING trait: `addPitchTypeSignals` only writes NEW (id, 'Elite *'/'Fastball Hitter'/'Off-Speed Hitter') entries into `raw`; since none are in `BUILDABLE_TRAITS`, `buildPeerPools` + `computeSeasonTraitCandidates` (both loop `for traitName of BUILDABLE_TRAITS`) never read them. Existing `traitCandidateBuilder.test.ts` passes unchanged.
+- Net score is monotonic the right way (pitcher: more K/outs & fewer BB/hits/HR ⇒ higher; hitter: more HR/hits ⇒ higher) and HR is the single heaviest term on each side.
+- sampleSize = tagged-AB count per bucket (the valve input). No new import; no DB bump; `iv_oracle.json` untouched.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/engines/__tests__/traitCandidateBuilder.test.ts` → full pass count (new block + all prior tests green).
+3. `NODE_ENV= npm test` (FULL suite — this engine is in the `processCompletedGame` import chain; scoped runs miss transitive-mock-break). Read the FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`GameTrackerLaunchState`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` solo-pass order-flakes — re-run any unexpected red IN ISOLATION to prove it's a flake).
+4. `git --no-pager diff --stat` → exactly `src/engines/traitCandidateBuilder.ts` + `src/engines/__tests__/traitCandidateBuilder.test.ts`. `iv_oracle.json` NOT present.
+
+**FORMAT:**
+1. Files changed (exact paths) + line counts.
+2. The aggregator + weight tables described; the exhaustive class partition; confirmation that no trait was added to BUILDABLE.
+3. Verification output (build exit, focused vitest count, full-suite FAILED-file summary, `diff --stat`).
+4. "T-9a complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- The `AtBatResult` union has a member you cannot classify into exactly one of the 7 classes → STOP, report it (do NOT guess).
+- Adding `addPitchTypeSignals` changes ANY existing trait's candidate output (an existing test goes red and it's not a known flake) → STOP, report (the build-dark invariant is violated).
+- A full-suite red appears that is NOT in the characterized/flake set and does not pass in isolation → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-9a ===== -->
