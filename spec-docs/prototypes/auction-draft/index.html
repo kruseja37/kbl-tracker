@@ -39,7 +39,8 @@ body{
 
 /* ---- shell ---- */
 .app{max-width:1240px; margin:0 auto; padding:26px 24px 60px}
-.topbar{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px}
+.topbar{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px; padding-right:230px}
+@media(max-width:1100px){.topbar{padding-right:0}}
 .wordmark{font-family:var(--font-char); font-size:15px; color:var(--gold-bright);
   text-shadow:2px 2px 0 rgba(0,0,0,.6); letter-spacing:.02em}
 .wordmark small{display:block; font-family:var(--font-body); font-size:11px; letter-spacing:.16em;
@@ -250,9 +251,58 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
 .rankbadge{font-family:var(--font-char); font-size:20px; color:var(--gold-bright)}
 .footer-note{margin-top:30px; font-size:11.5px; color:var(--faint); text-align:center}
 @media(prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+
+/* ===== HELP layer (minimized text by default; toggle reveals the teaching copy) ===== */
+.help{display:none}
+body.help-on .help{display:inline}
+.help-b{display:none}
+body.help-on .help-b{display:block}
+.help-coach{display:none}
+body.help-on .help-coach{display:flex}
+.gesture{display:none; align-items:center; gap:7px; font-size:12px; color:var(--gold-bright);
+  background:rgba(196,168,83,.10); border:1px solid rgba(196,168,83,.3); border-radius:999px; padding:5px 11px; margin-top:12px}
+body.help-on .gesture{display:inline-flex}
+.draghandle{color:var(--faint); cursor:grab; user-select:none; letter-spacing:-2px}
+
+/* corner controls (look + help toggles, top-right) */
+.cornerctl{position:fixed; top:14px; right:16px; z-index:80; display:flex; gap:8px; align-items:center}
+.lookseg{display:inline-flex; background:rgba(0,0,0,.4); border:1px solid var(--hairline); border-radius:999px; padding:3px}
+.lookseg button{appearance:none; border:none; background:transparent; color:var(--muted); font:inherit; font-size:12px; font-weight:650;
+  padding:6px 12px; border-radius:999px; cursor:pointer}
+.lookseg button.on{background:linear-gradient(180deg,#4a6440,#3c5236); color:var(--text); box-shadow:var(--shadow-card)}
+.helpbtn{appearance:none; cursor:pointer; font:inherit; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:7px;
+  padding:7px 13px; border-radius:999px; border:1px solid var(--hairline-strong); background:rgba(0,0,0,.35); color:var(--muted)}
+body.help-on .helpbtn{background:linear-gradient(180deg,#d9bf63,#c4a853); color:#231c08; border-color:#e9d488}
+.helpbtn .led{width:8px;height:8px;border-radius:999px;background:var(--faint)}
+body.help-on .helpbtn .led{background:#231c08}
+
+/* ===== EDGY skin (JK option 2: sharp corners + hard offset depth + bolder borders, draft-setup energy) ===== */
+body.edgy .frame,body.edgy .card,body.edgy .lot,body.edgy .move,body.edgy .highbid,body.edgy .statusbar,
+body.edgy .coach,body.edgy .briefcard,body.edgy .scout,body.edgy .chip,body.edgy .pos,body.edgy .preset,
+body.edgy .bid,body.edgy .letgo,body.edgy .slot,body.edgy .step,body.edgy .seg,body.edgy .lookseg,
+body.edgy .helpbtn,body.edgy .meter,body.edgy .meter i,body.edgy .rangebar,body.edgy .gtrack,body.edgy .toggle,
+body.edgy .tag,body.edgy .gesture,body.edgy .lookseg button{border-radius:3px!important}
+body.edgy .frame,body.edgy .card,body.edgy .lot,body.edgy .move{border-width:2px!important; box-shadow:6px 6px 0 rgba(0,0,0,.55)!important}
+body.edgy .lot{background:#3b5031!important; border-color:var(--gold)!important}
+body.edgy .card.raised{background:#3c5236!important}
+body.edgy .briefcard,body.edgy .highbid,body.edgy .scout,body.edgy .slot,body.edgy .chip,body.edgy .pos,
+body.edgy .preset{border-width:2px!important; box-shadow:2px 2px 0 rgba(0,0,0,.45)!important}
+body.edgy .bid{box-shadow:5px 5px 0 rgba(0,0,0,.85)!important; border:2px solid #2a2208!important}
+body.edgy .move{border-color:var(--gold)!important}
+body.edgy .name{text-shadow:3px 3px 0 rgba(0,0,0,.6)!important}
+body.edgy .eyebrow,body.edgy .walletline .lab{color:var(--gold-bright)!important}
+body.edgy .step.active,body.edgy .lookseg button.on{box-shadow:3px 3px 0 rgba(0,0,0,.7)!important}
 </style>
 </head>
 <body>
+<div class="cornerctl">
+  <div class="lookseg" id="lookseg">
+    <button class="on" data-look="soft">Soft</button>
+    <button data-look="edgy">Edgy</button>
+  </div>
+  <button class="helpbtn" id="helpbtn"><span class="led"></span> Help</button>
+</div>
+
 <div class="app">
   <div class="topbar">
     <div class="wordmark">KBL AUCTION DRAFT<small>Premium-retro redesign · clickable prototype</small></div>
@@ -343,8 +393,9 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
                 <div class="valueline">
                   <div class="eyebrow">Worth (IV)</div>
                   <div class="big num">~$144,000</div>
-                  <div class="muted" style="font-size:12.5px">advisory — values are public in the majors</div>
+                  <div class="muted help" style="font-size:12.5px">advisory — values are public in the majors</div>
                 </div>
+                <div class="gesture">⇆ swipe right to bid · left to let him go</div>
                 <div class="highbid" id="highbid">
                   <div class="eyebrow">High bid</div>
                   <div class="row" style="margin-top:6px">
@@ -365,7 +416,7 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
               <div><div class="lab">Most you can bid</div><div class="v num">$66,000</div></div>
               <div><div class="lab">Slots left</div><div class="v num">9</div></div>
             </div>
-            <div class="ceiling">Capped at $66k so you can still fill your last 9 slots at the minimum. Raises above it are off the table.</div>
+            <div class="ceiling help-b">Capped at $66k so you can still fill your last 9 slots at the minimum. Raises above it are off the table.</div>
             <div class="presets" id="presets">
               <button class="preset" data-inc="5000">+$5k</button>
               <button class="preset" data-inc="10000">+$10k</button>
@@ -412,7 +463,7 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
         </div>
       </div>
 
-      <div class="coach">
+      <div class="coach help-coach">
         <div class="mic">🎙</div>
         <div class="txt">He'd plug your <b>rotation hole</b> — and remember, pass and he's gone for good.</div>
         <div class="x" onclick="this.parentElement.style.display='none'">×</div>
@@ -470,14 +521,14 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
                 <span class="chip">🤝 Team-First</span>
                 <span class="chip">Age 19</span>
               </div>
-              <p class="sub" style="margin:2px 0 0">True value is in the fog. Your scout's read is yours alone — keep it covered.</p>
+              <p class="sub help-b" style="margin:2px 0 0">True value is in the fog. Your scout's read is yours alone — keep it covered.</p>
 
               <div class="scout" id="scout">
                 <div class="cover" id="scoutcover">
                   <span class="lk">🔒</span><span>Press &amp; hold to see your scout's read</span>
                 </div>
                 <div class="body">
-                  <div class="eyebrow">Scout's price range <span class="faint" style="text-transform:none;letter-spacing:0">— narrow band = confident</span></div>
+                  <div class="eyebrow">Scout's price range <span class="faint help" style="text-transform:none;letter-spacing:0">— narrow band = confident</span></div>
                   <div class="range">
                     <div class="rangebar"><i style="left:30%; right:42%"></i><div class="mid" style="left:46%"></div></div>
                     <div class="row" style="margin-top:6px"><span class="num muted" style="font-size:12px">$22k</span><span class="spacer"></span><span class="num gold" style="font-size:13px">~$31k</span><span class="spacer"></span><span class="num muted" style="font-size:12px">$40k</span></div>
@@ -486,7 +537,7 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
                     <div><div class="eyebrow">Grade</div><div class="gval num">55</div></div>
                     <div class="gtrack"><div class="pin" style="left:62%"></div></div>
                   </div>
-                  <div class="conf">Confidence: <b class="win">High</b> — Okafor scouts infielders; this is right in his lane.</div>
+                  <div class="conf">Confidence: <b class="win">High</b><span class="help"> — Okafor scouts infielders; this is right in his lane.</span></div>
                 </div>
               </div>
 
@@ -503,7 +554,8 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
               <div><div class="lab">Most you can bid</div><div class="v num">$31,000</div></div>
               <div><div class="lab">Farm slots left</div><div class="v num">6</div></div>
             </div>
-            <div class="ceiling">Bid against your scout's range, not a number you can see. Over the band looks like an overpay — and your kid will feel it.</div>
+            <div class="ceiling help-b">Bid against your scout's range, not a number you can see. Over the band looks like an overpay — and your kid will feel it.</div>
+            <div class="gesture">⇆ swipe to bid or pass · 🔒 hold the card to read your scout</div>
             <div class="presets">
               <button class="preset">+$1k</button><button class="preset sel">+$5k</button><button class="preset">+$10k</button>
               <span class="chip num" style="margin-left:auto">your bid · $29,000</span>
@@ -529,7 +581,7 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
             </div>
             <div class="needline">Komuro is a <b>2B/SS</b> — exactly the up-the-middle hole your scout flagged.</div>
           </div>
-          <div class="coach" style="margin-top:16px">
+          <div class="coach help-coach" style="margin-top:16px">
             <div class="mic">🎙</div><div class="txt">Right in your need — but he's a <b>relaxed, team-first</b> kid. Overpay and he won't sulk; reach too far and your wallet will.</div>
           </div>
         </div>
@@ -583,6 +635,15 @@ details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--mute
 </div>
 
 <script>
+/* look toggle (soft / edgy) */
+document.querySelectorAll('#lookseg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#lookseg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  document.body.classList.toggle('edgy', b.dataset.look==='edgy');
+}));
+/* help toggle (minimized text -> teaching layer) */
+document.getElementById('helpbtn').addEventListener('click',()=>document.body.classList.toggle('help-on'));
+
 const steps=[...document.querySelectorAll('.step')];
 const screens=[...document.querySelectorAll('.screen')];
 function show(name){
