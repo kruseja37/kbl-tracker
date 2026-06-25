@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../../data/nameDatabase';
 import { TRAIT_PRICING } from '../../data/traitPricing';
+import { assignTier } from '../../data/traitTierConfig';
 import { countTraitPolarity, normalizeTrait, scoreSmb4Player } from '../../engines/smb4GradeEmulator';
 import {
   buildProspectPlayerForPick,
@@ -77,8 +78,8 @@ const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
 const SECTION_10_AGE_TOLERANCE = 0.015;
 const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
 const B11_B8_NON_AGE_RNG_PROOF = {
-  length: 29668,
-  hash: '333c18a6',
+  length: 29694,
+  hash: '20cf7afb',
 } as const;
 
 const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
@@ -406,6 +407,45 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(counts[2] / total).toBeGreaterThan(0.15);
     expect(counts[2] / total).toBeLessThan(0.25);
   });
+
+  test('§5 positive prospect trait selection is rarity-weighted by genWeight', () => {
+    const commonTrait = 'Base Rounder';
+    const rareTrait = 'Cannon Arm';
+    const commonTier = assignTier(commonTrait);
+    const rareTier = assignTier(rareTrait);
+    const prospects = generateProspectPool({
+      leagueId: 'section-5-positive-trait-rarity-weighting',
+      seasonNumber: 1,
+      seed: 'section-5-positive-trait-rarity-weighting-seed',
+      teamDraftOrder: BASE_INPUT.teamDraftOrder,
+    }, 20_000);
+    const counts = { common: 0, rare: 0 };
+
+    expect(commonTier.tier).toBe('COMMON');
+    expect(rareTier.tier).toBe('RARE');
+    expect(commonTier.genWeight).toBeGreaterThan(rareTier.genWeight);
+
+    for (const prospect of prospects) {
+      if (PITCHER_POSITIONS.has(prospect.primaryPosition)) {
+        continue;
+      }
+      for (const trait of [prospect.trait1, prospect.trait2]) {
+        if (trait === commonTrait) counts.common += 1;
+        if (trait === rareTrait) counts.rare += 1;
+      }
+    }
+
+    console.info('§5 positive trait rarity counts', {
+      [commonTrait]: counts.common,
+      [rareTrait]: counts.rare,
+      commonGenWeight: commonTier.genWeight,
+      rareGenWeight: rareTier.genWeight,
+    });
+
+    expect(prospects).toHaveLength(20_000);
+    expect(counts.rare).toBeGreaterThan(0);
+    expect(counts.common).toBeGreaterThan(counts.rare * 2);
+  }, 120_000);
 
   test('generated pitchers get pitcher-pool traits and fielders get hitter-pool traits', () => {
     const output = generateProspectScoutingDraft({

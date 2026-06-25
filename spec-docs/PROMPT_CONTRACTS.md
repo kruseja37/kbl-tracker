@@ -21682,3 +21682,63 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: T-5b ===== -->
+
+<!-- ===== CONTRACT: T-4a ===== -->
+## T-4a — §5 rarity-weighted POSITIVE prospect trait generation (swap uniform → genWeight-weighted)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript engineer replacing a uniform random trait pick with a genWeight-weighted draw in the prospect generator, reusing the existing weighted-draw primitive. POSITIVE pools only — the negative-polarity pass (NEG 0.27) is a SEPARATE follow-up (T-4b); do NOT add negatives here.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Generated prospects should draw their trait(s) **weighted by rarity** (`genWeight`, low for valuable traits) instead of uniformly — so Cannon Arm / Elite pitches stop appearing as often as Metal Head — WITHOUT disturbing the calibrated §3.2 prospect-grade distribution.
+
+**SOURCE OF TRUTH (VERBATIM):** `spec-docs/TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md` §5 ("Replaces the current uniform pick. `genWeight = (1 − traitWeight)` (per-tier values in §3). Selection = weighted random over the eligible pool… two passes: (1) polarity per slot at NEGATIVE_TRAIT_FRACTION = 0.27; (2) weighted draw within polarity."). **T-4a builds ONLY the weighted draw within the POSITIVE polarity (pass 2 for positives).** The polarity roll + negative pools (pass 1) are T-4b. `genWeight` is the per-tier value already on `assignTier(trait).genWeight` (COMMON 1.0 / UNCOMMON 0.5 / RARE 0.18 / ELITE 0.05; Two-Way override 0.04).
+
+**GROUNDING (Captain-verified by reading the source — re-read before editing):**
+- `src/utils/prospectScoutingDraftEngine.ts`:
+  - `buildCandidate` (~:1360-1448) is the generator. `traitPool = isPitcher(position) ? PROSPECT_PITCHER_TRAIT_POOL : PROSPECT_HITTER_TRAIT_POOL` (:1367); `trait1 = traitCount >= 1 ? pick(`${seed}:trait1`, traitPool) : undefined` (:1369); `trait2 = … pickSecondProspectTrait(seed, traitPool, trait1)` (:1370-1371). traitCount from `drawProspectTraitCount` (30/50/20 for 0/1/2). trait1/trait2 flow into the candidate (:1442-1443) AND into `buildRatings` (~:1398-1399) — **ratings are anchored per-prospect to the target grade GIVEN the traits**, which is why the §3.2 distribution should survive a trait re-mix (this is the make-or-break to confirm).
+  - `pick<T>(seed, values)` (:610) = UNIFORM. **`pickWeighted<T extends string>(seed, weights: Array<[T, number]>)` (:693-701) ALREADY EXISTS** — deterministic weighted draw via `randomUnit(seed)`. REUSE it (do NOT write a new RNG).
+  - `pickSecondProspectTrait(seed, traitPool, firstTrait)` (:682-690) filters `trait !== firstTrait && !prospectTraitsConflict(firstTrait, trait)` then UNIFORM `pick`. `prospectTraitsConflict` (:669) checks `PROSPECT_TRAIT_CONFLICT_PAIRS` (:356-361).
+  - Pools `PROSPECT_HITTER_TRAIT_POOL` (29) / `PROSPECT_PITCHER_TRAIT_POOL` (17) at :306-355 — ALL POSITIVE, already exclude Sign Stealer/Stimulated. Keep them AS-IS (no expansion — Two-Way-in-generation is deferred).
+- `src/data/traitTierConfig.ts`: `assignTier(name).genWeight` resolves for ALL 46 pool traits (Captain+agent-verified — none throw). Suffix-normalized internally.
+- **Seed isolation (verified):** each draw uses a distinct seed suffix (`:trait1`, `:trait2`, `:age:band`, `:position`, chemistry, ratings) → changing the trait draw perturbs ONLY trait1/trait2 (and the ratings that anchor off them), NOT chemistry/age/position draws.
+
+**BUILD (`src/utils/prospectScoutingDraftEngine.ts` + its test):**
+1. Import `assignTier` from `../data/traitTierConfig`. Add a module-private `prospectTraitGenWeight(trait: string): number` = `try { return assignTier(trait).genWeight; } catch { return 1; }` (Common-floor default; dead for the curated pools, kept total). 
+2. **trait1:** replace `pick(`${seed}:trait1`, traitPool)` with `pickWeighted(`${seed}:trait1`, traitPool.map((t) => [t, prospectTraitGenWeight(t)]))`. (Build the `[trait, weight]` array in the fixed pool order for determinism.)
+3. **trait2:** in `pickSecondProspectTrait`, after the existing eligibility filter (`!== firstTrait && !prospectTraitsConflict`), replace the uniform `pick(`${seed}:trait2`, eligible)` with `pickWeighted(`${seed}:trait2`, eligible.map((t) => [t, prospectTraitGenWeight(t)]))`. Keep the `eligible.length > 0 ? … : undefined` guard. (Pass the weight fn in or compute inline.)
+4. **NO negatives, NO new pools, NO polarity roll** (that's T-4b). NO change to `drawProspectTraitCount`, the pools, conflict pairs, `pick`, or any non-trait draw.
+
+**TEST UPDATES (`src/utils/tests/prospectScoutingDraftEngine.test.ts`):**
+- **Determinism tests pass UNCHANGED** ("same seed produces identical draft output" ~:234 compares two runs → still identical since `pickWeighted` is seed-deterministic; do NOT edit).
+- **§10 age-isolation golden snapshot (~:912, `fnv1aHex` hash literal e.g. `333c18a6`):** this hashes the non-age generated output, which now changes because trait1/trait2 distribution changed. RE-BASELINE the hash literal — but ONLY after confirming via a scratch check that the diff vs the old output is confined to trait1/trait2 (+ the ratings that anchor off them), i.e. the AGE fields are byte-identical (the test's actual purpose — age-isolation — still holds). State in your report what you confirmed. (This is a test golden that legitimately moves with the feature — NOT the frozen `iv_oracle.json`.)
+- **Property tests MUST stay green WITHOUT loosening** (make-or-break): the 30/50/20 count split (~:382), pool membership (~:410), grade round-trip (~:624), and especially **§13 "reproduces §3.2 analyzer-grade distribution within 1.72pp + §3.4 trait sanity" (~:743, 40k sample)**. If §13 still passes, the rating anchoring absorbed the trait re-mix and the grade calibration is intact. If it FAILS, see STOP-IF.
+- ADD one test: a large sample shows the trait-frequency distribution is now **rarity-weighted** — a COMMON-genWeight trait (e.g. Metal Head in the pitcher pool, or a Common hitter trait) appears materially MORE often than a RARE-genWeight one (e.g. Cannon Arm), confirming the weighting is live (assert the common's count > the rare's by a clear margin over N≥10k).
+
+**MAKE-OR-BREAK:**
+- trait1 + trait2 draw via `pickWeighted` keyed on `assignTier().genWeight`; uniform `pick` no longer selects traits (it may still be used elsewhere — leave those).
+- **§13 grade-distribution stays within 1.72pp WITHOUT re-baselining the §3.2 target or loosening the tolerance** — proves the per-prospect rating anchor absorbs the trait re-mix.
+- Only trait1/trait2 (+ their downstream ratings) change; age/chemistry/position draws byte-identical (the §10 golden re-baseline is trait-driven only).
+- `iv_oracle.json` / `traitPricing.ts` / `traitTierConfig.ts` untouched. NO negatives generated (pools unchanged).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npx vitest run src/utils/tests/prospectScoutingDraftEngine.test.ts` → paste full pass/fail (esp. the §13 distribution test + the new weighting test).
+3. `NODE_ENV= npm test` (FULL suite — generator feeds league-builder/auction paths). Read the FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`GameTrackerLaunchState` solo-pass order-flakes — re-run any unexpected red IN ISOLATION).
+4. `git --no-pager diff --stat` → only `prospectScoutingDraftEngine.ts` + its test. `iv_oracle.json` NOT in it.
+
+**FORMAT:**
+1. Files changed (exact paths) + count.
+2. Each change described, referencing §5 / the make-or-break.
+3. What you confirmed about the §10 golden (age fields byte-identical) before re-baselining its hash; the old→new hash values.
+4. Verification output pasted (build, the focused vitest incl. §13, full-suite FAILED-file summary, diff --stat).
+5. "T-4a complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP is a SUCCESS):**
+- **§13 grade-distribution drifts beyond 1.72pp** (the rating anchor does NOT absorb the trait re-mix) → STOP, report the observed distribution + drift. Do NOT re-baseline the §3.2 target or loosen the tolerance (that is a calibration decision for the Captain/JK).
+- The §10 golden diff touches AGE fields (not just trait/rating) → STOP, report (age-isolation would be violated).
+- Weighting requires touching `iv_oracle.json` / the grade oracle / `traitTierConfig` → STOP, report.
+- Never summarize/batch; report every changed path.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: T-4a ===== -->

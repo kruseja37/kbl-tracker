@@ -16,6 +16,7 @@ import {
   CHEMISTRY_TARGET_DISTRIBUTION,
   type ChemistryCode,
 } from '../data/chemistryCanonical';
+import { assignTier } from '../data/traitTierConfig';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
@@ -679,6 +680,14 @@ function drawProspectTraitCount(seed: string): 0 | 1 | 2 {
   return 2;
 }
 
+function prospectTraitGenWeight(trait: string): number {
+  try {
+    return assignTier(trait).genWeight;
+  } catch {
+    return 1;
+  }
+}
+
 function pickSecondProspectTrait(
   seed: string,
   traitPool: readonly string[],
@@ -687,7 +696,9 @@ function pickSecondProspectTrait(
   const eligible = traitPool.filter((trait) =>
     trait !== firstTrait && !prospectTraitsConflict(firstTrait, trait),
   );
-  return eligible.length > 0 ? pick(`${seed}:trait2`, eligible) : undefined;
+  return eligible.length > 0
+    ? pickWeighted(`${seed}:trait2`, eligible.map((trait) => [trait, prospectTraitGenWeight(trait)]))
+    : undefined;
 }
 
 function pickWeighted<T extends string>(seed: string, weights: Array<[T, number]>): T {
@@ -1366,7 +1377,9 @@ function buildCandidate(input: ProspectScoutingDraftInput, index: number): Gener
   const throws = drawProspectThrows(seed, bats);
   const traitPool = isPitcher(position) ? PROSPECT_PITCHER_TRAIT_POOL : PROSPECT_HITTER_TRAIT_POOL;
   const traitCount = drawProspectTraitCount(seed);
-  const trait1 = traitCount >= 1 ? pick(`${seed}:trait1`, traitPool) : undefined;
+  const trait1 = traitCount >= 1
+    ? pickWeighted(`${seed}:trait1`, traitPool.map((trait) => [trait, prospectTraitGenWeight(trait)]))
+    : undefined;
   const trait2 = traitCount >= 2 && trait1
     ? pickSecondProspectTrait(seed, traitPool, trait1)
     : undefined;
