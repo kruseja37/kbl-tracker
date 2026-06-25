@@ -60,6 +60,20 @@
 | A3.5 | **T-6** | position-mismatch protect+flag; delete Noodle Arm | **AFTER A2.2 (RA-8 catcher CS)** |
 | A3.6 | T-7 | EOS supersede (deprecate Trait Wheel Spin; EOS = one more checkpoint) | last |
 
+### A-W3.5 — Lane 4D-W2 DORMANT-TRAIT ENABLEMENT (NEW, JK-ruled 2026-06-25; matrix = `TRAIT_MEASUREMENT_SPEC §0.6b`, rulings = `DECISIONS_LOG` 2026-06-25)
+> Moves **25** previously-dormant traits → earnable. Capture + difficulty (`assignTier`) already exist; each group = **write the signal builder + min-sample valve + BUILDABLE wiring** (template = T-9 elite pitches). ALL build-dark, **opt-in** (fires only on user-tagged data), **FULL suite** (the candidate builder feeds `franchiseTraitGrantCompute`→`processCompletedGame` mock-load). Status: T-4c generation-side max-1 Elite-pitch DONE (`7956eee9`).
+
+| Wave | Ticket | What | Notes / gate |
+|---|---|---|---|
+| 4D-W2 | **T-9 (A pitch-type)** — START HERE (template) | per-pitch net-quality aggregator (K+ / BB− / hit−− / **HR−−−**) from `enrichment.pitchType`, on-the-fly from at-bat events **(NO DB bump)** → wire 8 Elite pitches + Fastball{4F,2F,CF}/Off-Speed{rest} Hitter into `BUILDABLE_TRAITS` + per-pitch reality signal + min-sample valve + **engine-side max-1 Elite-pitch mutual-exclusion** in `reconcileGainProposals` | grounded `wf_54f5c51e-b82`; SPLIT a (aggregator) / b (signal+BUILDABLE) / c (engine max-1 + shared `ELITE_PITCH_TRAITS` const, refactor T-4c's set to import it) |
+| 4D-W2 | **DT-B (pitch-location)** | net-outcome on `enrichment.pitchLocation` (low/high/inside/outside) tagged ABs → High/Low/Inside/Outside Pitch (hitter) | reuses the A net-outcome scorer |
+| 4D-W2 | **DT-C (diving/chase)** | Magic Hands (web-gem + **fielding<80**) · Dive Wizard (web-gem + **arm>80**, co-holdable) · Bad Ball Hitter (hits-on-chase ÷ hits+outs-on-chase) | ⚠ NEW **rating-gate** mechanism (engine is performance-only today) |
+| 4D-W2 | **DT-D (errors)** | Wild Thrower (throwing errors) · **Noodle Arm RE-ADDED** = mental errors (`enrichment.errors[] type:'mental'`, league-leader) | reverses the §0.6 Noodle-Arm cut |
+| 4D-W2 | **DT-E (mojo)** | Volatile (many mojo changes) / Consistent (few) | confirm `mojoEngine`/team-hub exposes a per-player change count |
+| 4D-W2 | **DT-F (bespoke)** | Base Jogger (REVERSE `addBaseRounderSignals`) · Metal Head (**pitcher**-victim of KP/nut-shot, protective) · Wild Thing (WP-advance + `WP_K`) · Workhorse (IP/game, ELITE, SP/RP-split) | Metal Head: verify the pitcher-keyed enrichment KP/nut-shot field at build |
+
+> **CUT (no work):** Sign Stealer, Stimulated. **A/B scoring formula** ratified (DECISIONS_LOG 2026-06-25 / §0.6b). **Note:** A-W3 (T-1/T-2/T-4/T-5) is DONE this session; T-3/T-6/T-7 still pending — **T-6 (position-mismatch) now coordinates with DT-D** (both touch the arm/Noodle-Arm story).
+
 ### A-W4 — Branch-A L-SIM pre-gate
 Run the soul-invariant L-SIM after A-W1 + A-W2 + A-W3 land (it now also exercises the new development/trait checkpoints). The **final full-matrix gate** is post-merge (see CONVERGENCE).
 

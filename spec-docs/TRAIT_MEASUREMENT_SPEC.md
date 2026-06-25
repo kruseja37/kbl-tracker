@@ -109,6 +109,34 @@
 
 *(**DORMANT-v1 / not earnable:** **Noodle Arm** — CUT (no clean reality signal: ARM-rating-alone is single-rating §0.0; OF-assist/runner-advance proxies are conflated — a low rate ≠ weak arm; re-add only if throw-velocity or per-throw fielder attribution is captured). **Stimulated** — mojo auto-derivation unbuilt. **Sign Stealer** — CUT. The 24 correctly-dormant traits gate on still-missing inputs — see TRAIT_DETECTION_SCOPE_AUDIT.md.)*
 
+### 0.6b DORMANT-TRAIT ENABLEMENT MATRIX (JK-ruled 2026-06-25 — the "dormant-trait wave"; full rulings + scoring in `DECISIONS_LOG.md` 2026-06-25)
+
+The **25** traits below were previously dormant (blank rows — see `TRAIT_DETECTION_SCOPE_AUDIT.md` 2026-06-25: their **capture field + difficulty already exist**; only the **signal builder + min-sample valve** remain). Difficulty is auto-derived by `assignTier`. ALL build-dark, **opt-in** (fire only on user-tagged data), **min-sample-gated** (dormant until enough tagged events → never fires on noise, zero forced clicking). Build template = elite pitches (**T-9**). Sequence/queue = `V1_BUILD_QUEUE.md` Lane 4D-W2.
+
+**NET-OUTCOME SCORING (groups A + B — per pitch-bucket, averaged over the user-tagged ABs, min-sample-gated, percentile vs role peers; the selective tagging of good AND bad outcomes IS the signal):**
+- **HITTER** (Fastball/Off-Speed/High/Low/Inside/Outside): **HR +++** · big hit ++ · single/RBI + · BB mild + · out 0 · **K −**
+- **PITCHER** (Elite-`<pitch>`): **K +** · out mild + · **BB −** · hit-allowed −− · **HR-allowed −−−** (heaviest; a HR off the pitch is the opposite of elite)
+
+| Grp | Trait(s) | Role | Proxy (signal) | Input field |
+|---|---|---|---|---|
+| **A** | Elite 2F/4F/CB/CF/CH/FK/SB/SL (8) | pitcher | net-quality on that pitch (K+ / BB− / hit−− / **HR−−−**), pct vs pitcher peers | `enrichment.pitchType` |
+| **A** | Fastball Hitter | hitter | net-outcome on **{4F,2F,CF}**-tagged pitches, pct vs hitter peers | `enrichment.pitchType` |
+| **A** | Off-Speed Hitter | hitter | net-outcome on **{FK,CB,SL,CH,SB}**-tagged pitches | `enrichment.pitchType` |
+| **B** | High / Low / Inside / Outside Pitch (4) | hitter | net-outcome on pitches tagged in that zone (big hits/Ks/BBs/RBIs incl. SF + RBI-GO) | `enrichment.pitchLocation` |
+| **C** | Magic Hands | fielder | web-gem (diving/leaping/sliding) plays · **GATE: fielding rating < 80** | `enrichment.fieldingPlayType` + ratings |
+| **C** | Dive Wizard | fielder | web-gem plays · **GATE: arm rating > 80** (CAN co-hold Magic Hands; firing-roll decides slots) | `enrichment.fieldingPlayType` + ratings |
+| **C** | Bad Ball Hitter | hitter | hits-on-chase ÷ (hits + **outs**-on-chase) [outs-denominator = anti-game] | `enrichment.chased` + outcome |
+| **D** | Wild Thrower | position | throwing/fielding errors, rate vs peers | `enrichment.errors[]` |
+| **D** | Noodle Arm (RE-ADDED) | position | **MENTAL** errors, league-leader earns (reverses the §0.6 cut; now mental-error, NOT arm) | `enrichment.errors[] type:'mental'` |
+| **E** | Volatile / Consistent (2) | universal | MANY mojo changes → Volatile · FEW → Consistent | mojo-change events (`mojoEngine` / `BetweenPlayEvent` `mojo_change`) |
+| **F** | Base Jogger | position | **REVERSE Base Rounder** (deep hits→single / fewer bases than expected) | `runnerOutcomes` (reuse `addBaseRounderSignals`) |
+| **F** | Metal Head | **pitcher** | the **pitcher-VICTIM** of killed-pitcher (fitness↓) + nut-shot (mojo↓), league-leader → **PROTECTIVE** | enrichment KP/nut-shot buttons (pitcher-keyed) |
+| **F** | Wild Thing | pitcher | wild pitches advancing runners + D3K_WP, rate vs pitcher peers | `betweenPlayEvents` WP + `WP_K` |
+| **F** | Workhorse | pitcher | high IP/game (**ELITE** tier), role-split SP/RP vs peers | IP = `outsRecorded`/3 + appearances |
+
+**CUT (no re-add):** **Sign Stealer**, **Stimulated**.
+**Build forks (settle as the wave builds):** C's **rating-gate** (arm/fielding thresholds) is a NEW trait-engine mechanism (engine is performance-only today). Metal Head's exact pitcher-keyed enrichment field — verify at build (JK: it's an enrichment-panel button tied to the pitcher). Mojo-change source — confirm `mojoEngine`/team-hub exposes a per-player change count.
+
 ### 0.7 CODE DELTAS THE BUILD MUST APPLY (`src/engines/traitAcquisition.ts` — code is narrower than §0.6)
 
 The acquisition engine's `POSITIVE_IMAGE_TRAITS` / `NEGATIVE_IMAGE_TRAITS` / `IMAGE_DRIVER_SETS` are narrower than

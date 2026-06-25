@@ -1,78 +1,16 @@
-HANDOFF_NEEDED — AUTH-4 Mode-1 PARALLEL build lane (independent of the chemistry/trait/prospect/draft rework)
+next_ticket: T-9 (DORMANT-TRAIT ENABLEMENT WAVE template — elite pitches EARNABLE; SPLIT T-9a/b/c). Then DT-B/C/D/E/F (the rest of the 25-trait wave). Full wave = V1_BUILD_QUEUE.md A-W3.5 (4D-W2); finalized matrix = TRAIT_MEASUREMENT_SPEC §0.6b; rulings = DECISIONS_LOG 2026-06-25.
+branch: codex/franchise-v1-next (worktree /Users/johnkruse/Projects/kbl-tracker). Single combined v1 tree. Last code commit = 7956eee9 (T-4c); HEAD = the 2026-06-25 session-close docs commit.
 
-⚠ THIS IS THE PARALLEL LANE BATON. An ATTENDED thread (JK live) is concurrently reworking the
-chemistry / trait / prospect-generator / draft-guide cluster on branch `codex/mode1-v1` in the
-`/Users/johnkruse/Projects/kbl-mode1` worktree. To avoid the #1 failure (two workers on one branch),
-THIS lane runs on a SEPARATE branch + worktree and must NEVER touch `codex/mode1-v1` or the owned files below.
+resume_note: AUTH-4 attended-Hybrid captain loop (Codex builds → Opus audits the REAL diff, builder≠auditor → independent build+suite gate → commit branch-only BY PATH, NEVER push → log). SOLE WORKER — claim this baton FIRST: `mv HANDOFF_NEEDED HANDOFF_DONE_$(date -u +%Y%m%dT%H%M%SZ)`; a 2nd worker finding no HANDOFF_NEEDED stands down. Confirm sole worker (`pgrep -lf "codex exec"` empty + no other claude building this branch).
 
-next_ticket: RB-17 (deprecate playerMorale.ts — isolated cleanup, ZERO overlap), then RB-15 (resume = persist
-farm DTOs/storylines), then RB-10 (CPU shill ↔ CPU-team split + dissolve). Pick the first that grounds cleanly;
-SKIP any ticket whose grounding shows it must touch an OWNED file (below) and move to the next.
+READ IN ORDER on resume: spec-docs/AUTONOMOUS_RUN_LOG.md (live ledger — newest block has the T-4c DONE + the wave RESUME-HERE) · CURRENT_STATE.md LIVE HEADER (top block, 2026-06-25) · DECISIONS_LOG.md (2026-06-25 entries: prospect-flaws=YES, elite-pitch-earnable, the DORMANT-TRAIT WAVE rulings incl. the A/B NET-OUTCOME scoring [pitcher K+/BB−/hit−−/HR−−− ; hitter HR+++/.../K−] + the Metal-Head-is-PITCHER correction) · TRAIT_MEASUREMENT_SPEC §0.6b (the FINALIZED 25-trait matrix) · V1_BUILD_QUEUE A-W3.5.
 
-YOUR BRANCH / WORKTREE (do NOT use the attended thread's kbl-mode1 / codex/mode1-v1):
-- BUILD here: /Users/johnkruse/Projects/kbl-mode1-b  [branch codex/mode1-v1-b]  (forked off codex/mode1-v1 @ 956fd15d)
-  - Its node_modules is being `npm install`ed now (log /tmp/mode1b-npm-install.log); confirm it finished before gating.
-- Docs/contracts/ledger: /Users/johnkruse/Projects/kbl-tracker [codex/franchise-v1-next] — BUT the attended thread
-  is ALSO committing docs there. To avoid a docs-branch race: write your contract for each ticket to PROMPT_CONTRACTS.md
-  and commit it, but KEEP YOUR LEDGER NOTES in a clearly-separate WAVE block and `git pull --rebase`-free (single repo,
-  same branch) — COORDINATE: stage ONLY your contract/ledger lines BY PATH, and if a docs commit races, retry the commit
-  (do not force). If docs-branch contention is painful, write your per-ticket notes into a NEW file
-  `spec-docs/PARALLEL_LANE_LOG.md` (yours alone) instead of AUTONOMOUS_RUN_LOG.md to fully decouple.
+THIS SESSION DONE (all branch-only / Opus-audited-real-diff / independent-gate / ZERO-NEW-REDS / NO DB bump): T-5a 5519c9c7 + T-5b 10aff46c (🎉 T-5 = full §8B slot-duel + seeded firing) · T-4a 095717d6 (rarity-weighted generation) · T-4b ac4280b1 (flaws/negative-polarity) · T-4c 7956eee9 (generation max-1 Elite-pitch). Gate baseline: build 0; FULL suite = wpaRuntimeBoundary (hard) + franchiseManualSmokeFixture (order-flake) ONLY = zero-new-reds (also-watch solo-pass flakes: AwardsWatchlist, franchiseOffseasonGuards.component). trackerDb v25 (NO bump).
 
-⛔ OWNED BY THE ATTENDED THREAD — DO NOT EDIT (these are the chemistry/trait/prospect/draft cluster in flux):
-  src/data/rosterEngineConstants.ts (POTENCY_SCALE) · src/data/traitPricing.ts · src/data/chemistryCanonical.ts ·
-  src/engines/ivEngine.ts · src/engines/effectiveRatings.ts · src/engines/chemistryFitValue.ts ·
-  src/engines/farmArchetypeProfile.ts · src/engines/scoutValueRange.ts · src/engines/scoutPriceOpinion.ts ·
-  src/engines/smb4PlayerGenerator.ts · src/engines/smb4TeamProfileEngine.ts · src/utils/prospectScoutingDraftEngine.ts ·
-  src/utils/rosterAnalyzerDraftAdapter.ts · src/engines/rosterAnalyzerEngine.ts ·
-  src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx · LeagueBuilderAuctionDraft.tsx · LeagueBuilderTeams.tsx
-  ⚠ src/utils/leagueBuilderStorage.ts is SHARED (both lanes may touch it) — if your ticket needs it, touch ONLY your
-    ticket's section, keep edits minimal + additive, and expect a later merge reconcile.
-⛔ FORBIDDEN TICKETS (the attended cluster): RB-9 (a/b/c — scout-as-bridge + roster board + farm archetype),
-  RB-11 (scout-privacy UI), RB-13 (format-picker — touches LeagueBuilderTeams), RB-14 (prospect POSITION_POOL),
-  RB-16 (sim-tune — depends on chemistry/trait magnitudes). RB-12 (guided UX) touches the auction pages → also SKIP.
+T-9 PLAN (grounded wf_54f5c51e-b82; data-verified wf_wh9in5sah): T-9a = per-pitch aggregator (count K/BB/hit/HR by enrichment.pitchType, ON-THE-FLY from the season at-bat events the trait sweep already loads — NO trackerDb bump; do NOT follow the recon's DB-migration suggestion). T-9b = wire 8 elites + Fastball{4F,2F,CF}/Off-Speed{rest} Hitter into BUILDABLE_TRAITS + the per-pitch NET-QUALITY reality signal (§0.6b) + min-sample valve (traitRealityScorer sufficiency — dormant until enough TAGGED ABs) + image-valence wiring mirroring K Collector. T-9c = engine-side max-1 Elite-pitch mutual-exclusion in reconcileGainProposals + a shared canonical ELITE_PITCH const (refactor T-4c's PROSPECT_ELITE_PITCH_TRAITS to import it). FULL suite (candidate builder feeds franchiseTraitGrantCompute→processCompletedGame mock-load — transitive-mock-break risk; fix with a test-only mock stub if a partial-mock test breaks at load). Elite tiers (assignTier-verified): Elite 4F ELITE 0.92 · most RARE 0.82 · Elite FK UNCOMMON 0.70.
 
-ELIGIBLE TICKETS (independent — safe for this lane), per AUCTION_REBUILD_PLAN.md:
-- RB-17 (cleanup): deprecate the DEAD `playerMorale.ts` — retire PERSONALITY_BASELINES/getBaselineMorale/
-  getPlaceholderMorale; PRESERVE + PORT the 4 display helpers (toSuperscript/getMoraleColor/getMoraleState/
-  getMoraleDisplay) to a `src_figma` UI util; then delete the dead file + `src/components/GameTracker/PlayerNameWithMorale.tsx`
-  + its test. Sole importer is the UNROUTED PlayerNameWithMorale (grounded 2026-06-21). ZERO cluster overlap.
-- RB-15 (persistence, small): switch farm resume from regenerate-on-seed to persist the DTOs+storylines (additive, no DB bump).
-  ⚠ touches farm session persistence — GROUND it does NOT require editing LeagueBuilderFarmAuctionDraft.tsx (owned); if it does, SKIP.
-- RB-10 (rework): separate pure-pressure CPU shills (dissolve-to-pool / exclude-from-league) from opt-in CPU-controlled
-  franchise teams (§5). Touches cpuShillBidding.ts + team-control — NOT the owned files; OK.
+OPEN FORKS for the wave (surface to JK — attended-Hybrid): C's rating-gate (arm>80 / fielding<80 for Dive Wizard/Magic Hands) is a NEW trait-engine mechanism (engine is performance-only today); Metal Head's exact pitcher-keyed enrichment KP/nut-shot field (JK: it's an enrichment-panel button tied to the pitcher — verify the field); mojo-change source (confirm mojoEngine/team-hub exposes a per-player change count).
 
-ORIENT FIRST (read, do NOT trust summaries): AUTONOMOUS_RUN_LOG.md WAVE 73–74 (RB-9 arc) + the latest waves;
-CURRENT_STATE live header; AUTONOMOUS_RUN_PROTOCOL.md (AUTH-4 + the 4 safety walls); SESSION_RULES.md (incl. the
-pending-pen lesson: EMBED spec text INLINE in contracts + scope STOP-IF to `src/…` anchors — the V2 specs are NOT in
-the worktree). AUCTION_REBUILD_PLAN.md (your eligible ticket rows). Restate phase/last/next, then PROCEED (AUTH-4 = standing go).
-
-PER-TICKET LOOP (same as the main loop, on YOUR branch): GROUND at source → CONTRACT to PROMPT_CONTRACTS.md
-(markers `<!-- ===== CONTRACT: <ID> ===== -->`, embed spec inline, STOP-IF scoped to src/ anchors, "Use xhigh") →
-commit the contract → DISPATCH Codex (run_in_background + dangerouslyDisableSandbox), worktree = /Users/johnkruse/Projects/kbl-mode1-b:
-  export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
-  { sed -n '/<!-- ===== CONTRACT: <ID> /,/<!-- ===== END CONTRACT: <ID> /p' \
-      /Users/johnkruse/Projects/kbl-tracker/spec-docs/PROMPT_CONTRACTS.md \
-    | NODE_ENV= ~/.local/bin/codex exec -C /Users/johnkruse/Projects/kbl-mode1-b --skip-git-repo-check \
-      -s workspace-write -c model_reasoning_effort=xhigh -o /tmp/codex-<id>.out - ; echo "CODEX_EXIT=$?" ; } \
-    > /tmp/codex-<id>.log 2>&1
-  (xhigh — NOT very-high. macOS has no `timeout`; rely on run_in_background. Ignore the benign mode2-pilot skill-load
-   ERROR line. Scan for ACTUAL 400/error, not the echoed STOP-IF.)
-AUDIT the real diff (git -C /Users/johnkruse/Projects/kbl-mode1-b --no-pager diff; builder≠auditor — never trust the paste);
-only contracted files; frozen IV oracle (spec-docs/reference/iv_oracle.json) untouched; NONE of the OWNED files above changed.
-GATE: cd /Users/johnkruse/Projects/kbl-mode1-b && export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" \
-  && NODE_ENV= npx tsc -b ; echo "TSC=$?" ; NODE_ENV= npx vitest run > /tmp/<id>-suite.log 2>&1
-  then read the FAILED-FILE LIST (not the RC). COMMIT branch-only to codex/mode1-v1-b (NEVER push), co-author trailer
-  "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>". LOG a WAVE bullet (see docs-branch note above).
-
-SUITE BASELINE (codex/mode1-v1 @ 956fd15d, your fork point): FULL suite ~496 files (494 pass / 1 hard fail), 8059 tests.
-The ONLY characterized hard fail = `wpaRuntimeBoundary.test.ts`. `GameTrackerLaunchState.test.tsx` + `AwardsWatchlist.test.tsx`
-are INTERMITTENT ORDER-FLAKES (pass SOLO) — verify solo, don't count. ZERO-NEW-REDS = only wpaRuntimeBoundary hard-fails after your ticket.
-
-caffeinate: held by the attended session (harmless if doubled). node ~/.nvm/versions/node/v20.20.0/bin (prefix NODE_ENV=).
-codex ~/.local/bin/codex (xhigh).
-
-SOLO-WORKER FOR THIS LANE: claim THIS baton FIRST — `mv HANDOFF_NEEDED HANDOFF_DONE_$(date -u +%Y%m%dT%H%M%SZ)_parallel`
-then confirm you are the only worker ON codex/mode1-v1-b (`git -C /Users/johnkruse/Projects/kbl-mode1-b branch --show-current`;
-`pgrep -lf "codex exec"`). The ATTENDED thread on codex/mode1-v1 is EXPECTED + fine (different branch). One worker per branch:
-you own codex/mode1-v1-b; the attended thread owns codex/mode1-v1. Never build on codex/mode1-v1.
+DISPATCH: write contract to PROMPT_CONTRACTS.md (markers <!-- ===== CONTRACT: <id> ===== --> … <!-- ===== END CONTRACT: <id> ===== -->), then:
+  sed -n '/<!-- ===== CONTRACT: <id> /,/<!-- ===== END CONTRACT: <id> /p' /Users/johnkruse/Projects/kbl-tracker/spec-docs/PROMPT_CONTRACTS.md | NODE_ENV= ~/.local/bin/codex exec -C /Users/johnkruse/Projects/kbl-tracker --skip-git-repo-check -s workspace-write -c model_reasoning_effort=xhigh -o /tmp/codex-<id>.out -
+  Bash run_in_background:true + dangerouslyDisableSandbox:true. macOS has no `timeout`; rely on run_in_background. model_reasoning_effort ∈ high|xhigh — NEVER very-high (400, Codex never runs, zero file changes — check the .out for ERROR/400). Pipe via stdin (-), never a temp file. Commit trailer: Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>. caffeinate PID 84474 holds the Mac awake.

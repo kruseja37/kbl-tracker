@@ -238,6 +238,7 @@ B1–B5/B7/B9 DONE in kbl-mode1 (analyzer-anchored generate-score-correct + dist
 
 ### 4D — Trait gain/loss · `TRAIT_GAIN_LOSS_THRESHOLD_SPEC` · worktree: **franchise-v1-next**
 Mostly EXTENDS already-built seams (`traitRealityScorer`/`traitCandidateBuilder`/`traitAcquisition`/`franchiseTraitGrantCompute`→`processCompletedGame.ts:643`).
+> **🔄 2026-06-25:** 4D-W1 (T-1/T-2/T-4a-c/T-5a-b) **DONE** this session. **NEW 4D-W2 = DORMANT-TRAIT ENABLEMENT** — JK ruled the proxy for **25** previously-dormant traits (elite pitches + Fastball/Off-Speed Hitter, pitch-location, diving/chase, errors incl. Noodle-Arm-re-added-as-mental-errors, mojo, bespoke) → matrix `TRAIT_MEASUREMENT_SPEC §0.6b`, queue `V1_BUILD_QUEUE A-W3.5`, rulings `DECISIONS_LOG 2026-06-25`. Capture + difficulty already exist; only signal-builders remain (template = T-9). Sign Stealer + Stimulated CUT.
 - **T-1 scale** 80%-value/20%-scarcity `traitWeight` (derived/recomputable) (§2).
 - **T-2 tiers** 4 positive + 3 negative, grouped+tunable, per-trait overrides (§3).
 - **T-3 measurement** trend factor (new term in `buildProposalBase`) + SP/RP cohort split with min-peer-pool fallback (§4A).
