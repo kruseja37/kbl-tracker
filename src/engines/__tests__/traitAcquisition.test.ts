@@ -242,6 +242,7 @@ describe('traitAcquisition combiner (VI.0 / TS-1)', () => {
       rosterRoleFactor: 1,
       charismaTilt: 1,
       resiliencePositiveTilt: 1,
+      trendTilt: 1,
     });
   });
 
@@ -468,12 +469,13 @@ describe('traitAcquisition R-E-a latent-bug fixes + dormant tilts (§0.6/§0.7/�
     expect(resilientClutch.factors.resiliencePositiveTilt).toBe(1);
   });
 
-  // (f) the factors object now carries both new keys.
-  test('factors object includes charismaTilt and resiliencePositiveTilt', () => {
+  // (f) the factors object now carries the additive tilt keys.
+  test('factors object includes charismaTilt, resiliencePositiveTilt, and trendTilt', () => {
     const proposal = proposalFor('CON vs LHP');
 
     expect(proposal.factors).toHaveProperty('charismaTilt');
     expect(proposal.factors).toHaveProperty('resiliencePositiveTilt');
+    expect(proposal.factors).toHaveProperty('trendTilt');
     expect(Object.keys(proposal.factors).sort()).toEqual([
       'ambitionTilt',
       'charismaTilt',
@@ -482,7 +484,99 @@ describe('traitAcquisition R-E-a latent-bug fixes + dormant tilts (§0.6/§0.7/�
       'resiliencePositiveTilt',
       'resilienceTilt',
       'rosterRoleFactor',
+      'trendTilt',
     ]);
+  });
+});
+
+describe('traitAcquisition T-3b-1 trendTilt (§4A)', () => {
+  const TREND_TUNING: TraitAcquisitionTuning = {
+    ...FORCE_GAIN_TUNING,
+    trendTiltWeight: 0.5,
+  };
+
+  test('default trendTiltWeight keeps a recentPercentile candidate byte-identical except the new trendTilt key', () => {
+    const baseline = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8) }],
+    }, FORCE_GAIN_TUNING);
+    const withRecent = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8), recentPercentile: 1 }],
+    }, FORCE_GAIN_TUNING);
+    const { trendTilt: baselineTrendTilt, ...baselineFactors } = baseline.factors;
+    const { trendTilt, ...withRecentFactors } = withRecent.factors;
+
+    expect(withRecent.probability).toBe(baseline.probability);
+    expect(withRecentFactors).toEqual(baselineFactors);
+    expect(baselineTrendTilt).toBe(1);
+    expect(trendTilt).toBe(1);
+  });
+
+  test('hot recent percentile raises gain probability with the exact multiplicative tilt', () => {
+    const baseline = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8) }],
+    }, TREND_TUNING);
+    const hot = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8), recentPercentile: 1 }],
+    }, TREND_TUNING);
+    const expectedTilt = 1 + (1 - 0.8) * TREND_TUNING.trendTiltWeight!;
+
+    expect(baseline.factors.trendTilt).toBe(1);
+    expect(hot.factors.trendTilt).toBeCloseTo(expectedTilt, 12);
+    expect(hot.factors.trendTilt).toBeGreaterThan(1);
+    expect(hot.probability).toBeGreaterThan(baseline.probability);
+    expect(hot.probability).toBeCloseTo(baseline.probability * expectedTilt, 12);
+  });
+
+  test('cold recent percentile lowers held-trait probability and eases loss', () => {
+    const heldTraits: HeldTrait[] = [{ traitName: 'CON vs LHP', strength: 0.5 }];
+    const baseline = proposalFor('CON vs LHP', {
+      heldTraits,
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.3) }],
+    }, TREND_TUNING);
+    const cold = proposalFor('CON vs LHP', {
+      heldTraits,
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.3), recentPercentile: 0.1 }],
+    }, TREND_TUNING);
+    const expectedTilt = 1 + (0.1 - 0.3) * TREND_TUNING.trendTiltWeight!;
+
+    expect(baseline.valence).toBe('lose');
+    expect(cold.valence).toBe('lose');
+    expect(cold.factors.trendTilt).toBeCloseTo(expectedTilt, 12);
+    expect(cold.factors.trendTilt).toBeLessThan(1);
+    expect(cold.probability).toBeLessThan(baseline.probability);
+    expect(cold.probability).toBeCloseTo(baseline.probability * expectedTilt, 12);
+  });
+
+  test('trend delta is clamped to the 0-vs-1 extremes before applying weight', () => {
+    const hotClamp = proposalFor('Stimulated', {
+      candidates: [{ traitName: 'Stimulated', score: score('Stimulated', -1), recentPercentile: 2 }],
+    }, TREND_TUNING);
+    const coldClamp = proposalFor('Stimulated', {
+      candidates: [{ traitName: 'Stimulated', score: score('Stimulated', 2), recentPercentile: -1 }],
+    }, TREND_TUNING);
+
+    expect(hotClamp.realityPercentile).toBe(0);
+    expect(hotClamp.factors.trendTilt).toBe(1.5);
+    expect(coldClamp.realityPercentile).toBe(1);
+    expect(coldClamp.factors.trendTilt).toBe(0.5);
+    expect(coldClamp.probability).toBe(0.5);
+  });
+
+  test('absent and non-finite recentPercentile keep trendTilt at identity even when weight is enabled', () => {
+    const baseline = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8) }],
+    }, TREND_TUNING);
+    const absent = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8) }],
+    }, TREND_TUNING);
+    const nonFinite = proposalFor('CON vs LHP', {
+      candidates: [{ traitName: 'CON vs LHP', score: score('CON vs LHP', 0.8), recentPercentile: Number.NaN }],
+    }, TREND_TUNING);
+
+    expect(absent.factors.trendTilt).toBe(1);
+    expect(nonFinite.factors.trendTilt).toBe(1);
+    expect(absent.probability).toBe(baseline.probability);
+    expect(nonFinite.probability).toBe(baseline.probability);
   });
 });
 

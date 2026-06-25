@@ -24,7 +24,7 @@ export type RosterRole = 'bench' | 'starter' | 'unknown';
 export type TraitValence = 'positive' | 'negative' | 'neutral';
 
 export interface HeldTrait { traitName: string; strength: number; }
-export interface TraitCandidate { traitName: string; score: TraitRealityScore; }
+export interface TraitCandidate { traitName: string; score: TraitRealityScore; recentPercentile?: number; }
 
 export interface TraitAcquisitionInput {
   playerRole: PlayerRole;
@@ -51,6 +51,7 @@ export interface TraitChangeProposal {
     rosterRoleFactor: number;
     charismaTilt: number;
     resiliencePositiveTilt: number;
+    trendTilt: number;
   };
   displaces?: string;
 }
@@ -85,6 +86,7 @@ export interface TraitAcquisitionTuning {
   loseThreshold: number;
   maxTraits?: number;
   incumbencyBeta?: number;
+  trendTiltWeight?: number;
 }
 
 interface TraitThresholds {
@@ -104,6 +106,7 @@ export const TRAIT_ACQUISITION_TUNING: TraitAcquisitionTuning = {
   loseThreshold: 0.35,
   maxTraits: 2, // §16 sim-tune placeholder
   incumbencyBeta: 1.25, // β=1.25 RULED
+  trendTiltWeight: 0, // §16 sim-tune placeholder — Simulation Gate owns the magnitude
 };
 
 // §16 sim-tune placeholder — shape (monotonic in margin, tier-hardness) locked; constants tunable.
@@ -389,6 +392,9 @@ export function computeTraitAcquisition(
     const proposalBase = buildProposalBase({
       traitName,
       realityPercentile,
+      recentPercentile: typeof candidate.recentPercentile === 'number' && Number.isFinite(candidate.recentPercentile)
+        ? clamp01(candidate.recentPercentile)
+        : undefined,
       modifiers,
       morale,
       rosterRole,
@@ -438,6 +444,7 @@ export function computeTraitAcquisition(
 function buildProposalBase(args: {
   traitName: string;
   realityPercentile: number;
+  recentPercentile?: number;
   modifiers: HiddenModifiers;
   morale: number;
   rosterRole: RosterRole;
@@ -468,6 +475,14 @@ function buildProposalBase(args: {
   const resiliencePositiveTilt = RESILIENCE_POSITIVE_TRAITS.has(args.traitName)
     ? 1 + centered(args.modifiers.resilience, 0, 100) * args.tuning.resilienceSwing
     : 1;
+  const trendTiltWeight = args.tuning.trendTiltWeight ?? 0;
+  const trendTilt = (
+    typeof args.recentPercentile === 'number'
+    && Number.isFinite(args.recentPercentile)
+    && trendTiltWeight > 0
+  )
+    ? 1 + clamp(args.recentPercentile - args.realityPercentile, -1, 1) * trendTiltWeight
+    : 1;
   const probability = clamp01(
     args.realityPercentile
     * ambitionTilt
@@ -476,7 +491,8 @@ function buildProposalBase(args: {
     * moraleFactor
     * rosterRoleFactor
     * charismaTilt
-    * resiliencePositiveTilt,
+    * resiliencePositiveTilt
+    * trendTilt,
   );
 
   return {
@@ -492,6 +508,7 @@ function buildProposalBase(args: {
       rosterRoleFactor,
       charismaTilt,
       resiliencePositiveTilt,
+      trendTilt,
     },
   };
 }
