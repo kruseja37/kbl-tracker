@@ -29,6 +29,7 @@ export type SpecialPlayType =
   | 'Over Shoulder'
   | 'Wall Catch'
   | 'Robbed HR'
+  | 'Failed Robbery'
   | 'Beat Runner'
   | 'Beat Throw'
   | 'Missed Dive'

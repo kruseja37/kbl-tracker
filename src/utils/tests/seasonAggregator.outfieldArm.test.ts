@@ -276,6 +276,29 @@ describe('season aggregator outfield arm capture', () => {
     expect(playerY.difficultyFieldingOpportunities).toBe(1);
   });
 
+  test('does not count a persisted spectacular miss as a held baserunner', async () => {
+    const seasonId = 'of-arm-miss-season';
+
+    await expect(
+      aggregateGameToSeason(
+        gameState('of-arm-miss-game', [
+          fieldingEvent('of-arm-miss-game', 1, 'player-x', 'putout', {
+            difficulty: '50-50',
+            specialPlayType: 'Missed Dive',
+            success: false,
+          }),
+        ]),
+        { seasonId, detectMilestones: false },
+      ),
+    ).resolves.toMatchObject({ success: true });
+
+    const playerX = await getOrCreateFieldingStats(seasonId, 'player-x', 'Player X', 'away');
+
+    expect(playerX.baserunnersHeld).toBe(0);
+    expect(playerX.difficultyWeightedConversion).toBe(0);
+    expect(playerX.difficultyFieldingOpportunities).toBe(1);
+  });
+
   test('leaves outfield arm fields at zero when the game has no matching FieldingEvent rows', async () => {
     const seasonId = 'of-arm-empty-season';
 

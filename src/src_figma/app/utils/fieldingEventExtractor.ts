@@ -108,7 +108,7 @@ function applySavedRunCredit(events: FieldingEvent[], savedRun?: boolean): Field
     return events;
   }
 
-  const creditIndex = events.findIndex((event) => event.playType === 'putout');
+  const creditIndex = events.findIndex((event) => event.playType === 'putout' && event.success !== false);
   const targetIndex = creditIndex >= 0 ? creditIndex : 0;
 
   return events.map((event, index) =>
@@ -121,14 +121,15 @@ function applySavedRunCredit(events: FieldingEvent[], savedRun?: boolean): Field
 function normalizeSavedBasesSpecialPlayType(
   specialPlayType: FieldingEvent['specialPlayType'] | null | undefined,
 ): FieldingEvent['specialPlayType'] | null | undefined {
-  switch (specialPlayType) {
-    case 'Missed Dive':
-      return 'Diving';
-    case 'Missed Leap':
-      return 'Leaping';
-    default:
-      return specialPlayType;
-  }
+  return specialPlayType;
+}
+
+function isMissedSpectacularAttempt(fieldingPlayType: PlayData['fieldingPlayType']): boolean {
+  return (
+    fieldingPlayType === 'missed_dive' ||
+    fieldingPlayType === 'missed_leap' ||
+    fieldingPlayType === 'failed_robbery'
+  );
 }
 
 function resolveSpecialPlayCredit(
@@ -374,6 +375,8 @@ export function extractFieldingEvents(
   const specialPlayType = playData.fieldingPlayType
     ? mapFieldingPlayTypeToSpecialPlayType(playData.fieldingPlayType)
     : null;
+  const isMissedAttempt = isMissedSpectacularAttempt(playData.fieldingPlayType);
+  const defaultSpecialPlayType = isMissedAttempt ? null : specialPlayType;
   const zone = mapSpraySectorToZone(playData.spraySector);
   const finalizeEvents = (events: FieldingEvent[]) =>
     appendRunnerOutcomeErrors(
@@ -411,6 +414,7 @@ export function extractFieldingEvents(
     sequenceIdx: number,
     overrideDifficulty?: FieldingEvent['difficulty'],
     overrideSpecialPlayType?: FieldingEvent['specialPlayType'] | null,
+    overrideSuccess?: boolean,
   ): FieldingEvent => {
     const defender = resolveDefender(positionNum);
     return {
@@ -426,14 +430,17 @@ export function extractFieldingEvents(
       difficulty: overrideDifficulty || difficulty,
       specialPlayType:
         overrideSpecialPlayType ??
-        resolveSpecialPlayCredit(playData, specialPlayType, positionNum, {
+        resolveSpecialPlayCredit(playData, defaultSpecialPlayType, positionNum, {
           isPrimarySequenceEvent: sequenceIdx === 0,
         }),
       ballInPlay,
-      success: playType !== 'error',
+      success: overrideSuccess ?? (playType !== 'error'),
       runsPreventedOrAllowed: 0, // Would need LI integration for real values
     };
   };
+
+  const makeMissedSpectacularAttemptEvent = (positionNum: number, sequenceIdx: number): FieldingEvent =>
+    makeEvent(positionNum, 'putout', sequenceIdx, difficulty, specialPlayType, false);
 
   // ============================================
   // ROUTE BY PLAY TYPE
@@ -461,6 +468,11 @@ export function extractFieldingEvents(
     const events: FieldingEvent[] = [];
     const seq = playData.fieldingSequence;
 
+    if (isMissedAttempt && seq.length > 0) {
+      events.push(makeMissedSpectacularAttemptEvent(seq[0], 0));
+      return finalizeEvents(events);
+    }
+
     if (
       seq.length > 0 &&
       (playData.fieldingPlayType === 'robbed_hr' || playData.fieldingPlayType === 'wall')
@@ -476,13 +488,17 @@ export function extractFieldingEvents(
     const outType = playData.outType || 'GO';
     const seq = playData.fieldingSequence;
 
+    if (isMissedAttempt && seq.length > 0) {
+      events.push(makeMissedSpectacularAttemptEvent(seq[0], events.length));
+    }
+
     // Strikeouts: no fielding event (not a ball in play)
     // Exception: D3K with catcher involved (seq includes position 2)
     if (outType === 'K' || outType === 'Kc') {
       // D3K: catcher (2) throwing to first baseman (3)
       if (seq.length >= 2 && seq[0] === 2) {
-        events.push(makeEvent(2, 'assist', 0)); // Catcher assist
-        events.push(makeEvent(seq[seq.length - 1], 'putout', 1)); // 1B putout
+        events.push(makeEvent(2, 'assist', events.length)); // Catcher assist
+        events.push(makeEvent(seq[seq.length - 1], 'putout', events.length)); // 1B putout
       }
       return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
@@ -491,13 +507,13 @@ export function extractFieldingEvents(
     if (outType === 'DP' || playData.dpType) {
       if (seq.length >= 2) {
         // First fielder = starter (assist)
-        events.push(makeEvent(seq[0], 'assist', 0));
+        events.push(makeEvent(seq[0], 'assist', events.length));
         // Middle fielder(s) = pivot (double_play_pivot, which counts as assist)
         for (let i = 1; i < seq.length - 1; i++) {
-          events.push(makeEvent(seq[i], 'double_play_pivot', i));
+          events.push(makeEvent(seq[i], 'double_play_pivot', events.length));
         }
         // Last fielder = putout
-        events.push(makeEvent(seq[seq.length - 1], 'putout', seq.length - 1));
+        events.push(makeEvent(seq[seq.length - 1], 'putout', events.length));
       }
       return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
@@ -507,9 +523,9 @@ export function extractFieldingEvents(
       // Same structure as DP — assists for all but last, putout for last
       if (seq.length >= 2) {
         for (let i = 0; i < seq.length - 1; i++) {
-          events.push(makeEvent(seq[i], 'assist', i));
+          events.push(makeEvent(seq[i], 'assist', events.length));
         }
-        events.push(makeEvent(seq[seq.length - 1], 'putout', seq.length - 1));
+        events.push(makeEvent(seq[seq.length - 1], 'putout', events.length));
       }
       return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
@@ -518,10 +534,10 @@ export function extractFieldingEvents(
     if (outType === 'SF') {
       if (seq.length > 0) {
         // Fielder who caught it gets putout
-        events.push(makeEvent(seq[seq.length - 1], 'putout', 0));
+        events.push(makeEvent(seq[seq.length - 1], 'putout', events.length));
         // If there's a throw, earlier fielders get assists
         for (let i = 0; i < seq.length - 1; i++) {
-          events.push(makeEvent(seq[i], 'assist', i + 1));
+          events.push(makeEvent(seq[i], 'assist', events.length));
         }
       }
       return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
@@ -532,11 +548,11 @@ export function extractFieldingEvents(
       // FC: runner out at another base. First fielder fields, last records putout
       if (seq.length >= 2) {
         for (let i = 0; i < seq.length - 1; i++) {
-          events.push(makeEvent(seq[i], 'assist', i));
+          events.push(makeEvent(seq[i], 'assist', events.length));
         }
-        events.push(makeEvent(seq[seq.length - 1], 'putout', seq.length - 1));
+        events.push(makeEvent(seq[seq.length - 1], 'putout', events.length));
       } else if (seq.length === 1) {
-        events.push(makeEvent(seq[0], 'putout', 0));
+        events.push(makeEvent(seq[0], 'putout', events.length));
       }
       return finalizeEvents(applySavedRunCredit(events, playData.savedRun));
     }
@@ -549,21 +565,27 @@ export function extractFieldingEvents(
 
     if (seq.length === 1) {
       // Unassisted out (e.g., fly ball caught)
-      events.push(makeEvent(seq[0], 'putout', 0));
+      events.push(makeEvent(seq[0], 'putout', events.length));
     } else {
       // Multiple fielders: first N-1 get assists, last gets putout
       for (let i = 0; i < seq.length - 1; i++) {
-        events.push(makeEvent(seq[i], 'assist', i));
+        events.push(makeEvent(seq[i], 'assist', events.length));
       }
-      events.push(makeEvent(seq[seq.length - 1], 'putout', seq.length - 1));
+      events.push(makeEvent(seq[seq.length - 1], 'putout', events.length));
     }
 
     // Check for outfield assists (outfielder throws out a runner)
     // If first fielder is outfielder (7/8/9) and there are subsequent fielders
     if (seq.length >= 2 && seq[0] >= 7 && seq[0] <= 9) {
       // Upgrade the first event from 'assist' to 'outfield_assist'
-      if (events.length > 0 && events[0].playType === 'assist') {
-        events[0] = { ...events[0], playType: 'outfield_assist' };
+      const starterAssistIndex = events.findIndex(
+        (event) =>
+          event.playType === 'assist' &&
+          event.success !== false &&
+          event.position === positionFromNumber(seq[0]),
+      );
+      if (starterAssistIndex >= 0) {
+        events[starterAssistIndex] = { ...events[starterAssistIndex], playType: 'outfield_assist' };
       }
     }
 
@@ -572,6 +594,11 @@ export function extractFieldingEvents(
 
   if (playData.type === 'hit') {
     const events: FieldingEvent[] = [];
+
+    if (isMissedAttempt && playData.fieldingSequence.length > 0) {
+      events.push(makeMissedSpectacularAttemptEvent(playData.fieldingSequence[0], 0));
+      return finalizeEvents(events);
+    }
 
     if (playData.savedRun && playData.fieldingSequence.length > 0) {
       events.push(

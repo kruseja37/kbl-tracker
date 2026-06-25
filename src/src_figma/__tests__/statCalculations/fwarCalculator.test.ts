@@ -218,9 +218,10 @@ describe('Difficulty Multipliers Constants', () => {
     expect(DIFFICULTY_MULTIPLIERS.beatThrow).toBe(0.0);
   });
 
-  test('missedDive and missedLeap are zero-credit difficulty markers', () => {
+  test('missedDive, missedLeap, and failedRobbery are zero-credit difficulty markers', () => {
     expect(DIFFICULTY_MULTIPLIERS.missedDive).toBe(0.0);
     expect(DIFFICULTY_MULTIPLIERS.missedLeap).toBe(0.0);
+    expect(DIFFICULTY_MULTIPLIERS.failedRobbery).toBe(0.0);
   });
 
   test('prefers persisted special play type over coarse difficulty buckets', () => {
@@ -282,6 +283,39 @@ describe('Difficulty Multipliers Constants', () => {
     expect(converted.type).toBe('starPlay');
     expect(converted.difficulty).toBe('diving');
     expect(calculateEventValue(converted)).toBeGreaterThan(0);
+  });
+
+  test('converts persisted failed robbery misses into zero-value non-star putout credit', () => {
+    const persisted: PersistedFieldingEvent = {
+      fieldingEventId: 'game-1_3_fe_0',
+      gameId: 'game-1',
+      atBatEventId: 'game-1_3',
+      sequence: 0,
+      playerId: 'player-9',
+      playerName: 'Riley Right',
+      position: 'RF',
+      teamId: 'TEAM-H',
+      playType: 'putout',
+      difficulty: 'spectacular',
+      specialPlayType: 'Failed Robbery',
+      ballInPlay: {
+        trajectory: 'fly',
+        zone: 9,
+        velocity: 'medium',
+        fielderIds: ['player-9'],
+        primaryFielderId: 'player-9',
+      },
+      success: false,
+      runsPreventedOrAllowed: 0,
+    };
+
+    const converted = convertPersistedToCalculatorEvent(persisted);
+    const summary = calculateGameFWAR([converted], 48);
+
+    expect(converted.type).toBe('putout');
+    expect(converted.difficulty).toBe('failedRobbery');
+    expect(calculateEventValue(converted)).toBe(0);
+    expect(summary.starPlays).toBe(0);
   });
 });
 

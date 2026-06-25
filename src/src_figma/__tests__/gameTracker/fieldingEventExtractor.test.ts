@@ -206,7 +206,7 @@ describe('extractFieldingEvents', () => {
     expect(events[1].specialPlayType).toBe('Diving');
   });
 
-  it('[M3-2-fix] emits a defensive base-save event for saved-bases hits', () => {
+  it('[M3-2-fix] persists a saved-run missed dive as a failed non-base-save attempt', () => {
     const playData: PlayData = {
       type: 'hit',
       hitType: '1B',
@@ -235,6 +235,153 @@ describe('extractFieldingEvents', () => {
       playerId: 'home-cf-8',
       playerName: 'Casey Center',
       position: 'CF',
+      playType: 'putout',
+      specialPlayType: 'Missed Dive',
+      success: false,
+      runsPreventedOrAllowed: 0,
+    });
+  });
+
+  it('persists a plain-hit missed leap as a failed non-base-save attempt', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '2B',
+      fieldingSequence: [7],
+      exitType: 'Fly Ball',
+      spraySector: 'Left',
+      fieldingPlayType: 'missed_leap',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4d',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4d_18',
+      atBatEventIndex: 18,
+      defendersByPosition: {
+        LF: { playerId: 'home-lf-7', playerName: 'Lou Left' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      atBatEventId: 'game-4d_18',
+      fieldingEventId: 'game-4d_18_fe_0',
+      playerId: 'home-lf-7',
+      playerName: 'Lou Left',
+      position: 'LF',
+      playType: 'putout',
+      specialPlayType: 'Missed Leap',
+      success: false,
+      runsPreventedOrAllowed: 0,
+    });
+  });
+
+  it('persists a missed spectacular attempt alongside the recorded out', () => {
+    const playData: PlayData = {
+      type: 'out',
+      outType: 'FO',
+      fieldingSequence: [8, 4],
+      exitType: 'Fly Ball',
+      spraySector: 'Center',
+      fieldingPlayType: 'missed_dive',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4e',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4e_19',
+      atBatEventIndex: 19,
+      defendersByPosition: {
+        CF: { playerId: 'home-cf-8', playerName: 'Casey Center' },
+        '2B': { playerId: 'home-2b-4', playerName: 'Ben Turn' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(3);
+    expect(events[0]).toMatchObject({
+      fieldingEventId: 'game-4e_19_fe_0',
+      playerId: 'home-cf-8',
+      playType: 'putout',
+      specialPlayType: 'Missed Dive',
+      success: false,
+    });
+    expect(events[1]).toMatchObject({
+      fieldingEventId: 'game-4e_19_fe_1',
+      playerId: 'home-cf-8',
+      playType: 'outfield_assist',
+      specialPlayType: null,
+      success: true,
+    });
+    expect(events[2]).toMatchObject({
+      fieldingEventId: 'game-4e_19_fe_2',
+      playerId: 'home-2b-4',
+      playType: 'putout',
+      specialPlayType: null,
+      success: true,
+    });
+  });
+
+  it('persists failed robbery as a first-class failed spectacular attempt', () => {
+    const playData: PlayData = {
+      type: 'hr',
+      hitType: 'HR',
+      fieldingSequence: [9],
+      exitType: 'Fly Ball',
+      spraySector: 'Right',
+      fieldingPlayType: 'failed_robbery',
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4f',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4f_20',
+      atBatEventIndex: 20,
+      defendersByPosition: {
+        RF: { playerId: 'home-rf-9', playerName: 'Riley Right' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      fieldingEventId: 'game-4f_20_fe_0',
+      playerId: 'home-rf-9',
+      position: 'RF',
+      playType: 'putout',
+      difficulty: 'spectacular',
+      specialPlayType: 'Failed Robbery',
+      success: false,
+    });
+  });
+
+  it('keeps made saved-run diving gems on the existing base-save path', () => {
+    const playData: PlayData = {
+      type: 'hit',
+      hitType: '1B',
+      fieldingSequence: [8],
+      exitType: 'Line Drive',
+      spraySector: 'Center',
+      fieldingPlayType: 'diving',
+      savedRun: true,
+    };
+    const context: FieldingExtractionContext = {
+      gameId: 'game-4g',
+      defensiveTeamId: 'TEAM-H',
+      atBatEventId: 'game-4g_21',
+      atBatEventIndex: 21,
+      defendersByPosition: {
+        CF: { playerId: 'home-cf-8', playerName: 'Casey Center' },
+      },
+    };
+
+    const events = extractFieldingEvents(playData, context);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      fieldingEventId: 'game-4g_21_fe_0',
+      playerId: 'home-cf-8',
       playType: 'base_save',
       specialPlayType: 'Diving',
       success: true,

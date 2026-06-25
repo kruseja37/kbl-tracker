@@ -93,6 +93,7 @@ export const DIFFICULTY_MULTIPLIERS = {
   beatThrow: 0.0,
   missedDive: 0.0,
   missedLeap: 0.0,
+  failedRobbery: 0.0,
 } as const;
 
 /**
@@ -133,7 +134,8 @@ export type Difficulty =
   | 'beatRunner'
   | 'beatThrow'
   | 'missedDive'
-  | 'missedLeap';
+  | 'missedLeap'
+  | 'failedRobbery';
 
 /**
  * A single fielding event
@@ -233,7 +235,7 @@ export function calculatePutoutValue(
 ): number {
   const baseValue = FIELDING_RUN_VALUES.putout[putoutType] || 0.03;
   const posMod = POSITION_MODIFIERS.putout[position] || 1.0;
-  const diffMod = DIFFICULTY_MULTIPLIERS[difficulty] || 1.0;
+  const diffMod = DIFFICULTY_MULTIPLIERS[difficulty] ?? 1.0;
 
   return baseValue * posMod * diffMod;
 }
@@ -389,7 +391,16 @@ export function calculateGameFWAR(
     plays++;
 
     if (event.type === 'error') errors++;
-    if (event.type === 'starPlay' || (event.difficulty && event.difficulty !== 'routine')) {
+    if (
+      event.type === 'starPlay' ||
+      (
+        event.difficulty &&
+        event.difficulty !== 'routine' &&
+        event.difficulty !== 'missedDive' &&
+        event.difficulty !== 'missedLeap' &&
+        event.difficulty !== 'failedRobbery'
+      )
+    ) {
       starPlays++;
     }
   }
@@ -585,6 +596,7 @@ export function getStarPlayFameBonus(difficulty: Difficulty): number {
     beatThrow: 0,
     missedDive: 0,
     missedLeap: 0,
+    failedRobbery: 0,
   };
   return fameValues[difficulty] || 0;
 }
@@ -645,6 +657,8 @@ export function mapPersistedSpecialPlayType(
     case 'Robbed HR':
     case 'Robbery Attempt':
       return 'robbedHR';
+    case 'Failed Robbery':
+      return 'failedRobbery';
     case 'Beat Runner':
       return 'beatRunner';
     case 'Beat Throw':

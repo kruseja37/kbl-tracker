@@ -126,6 +126,23 @@ describe('aggregateDifficultyFielding A1.5c-1', () => {
     });
   });
 
+  test('Failed Robbery is a MAX opportunity with zero credit when missed', () => {
+    expect(mapPersistedSpecialPlayType('Failed Robbery')).toBe('failedRobbery');
+
+    const result = aggregateDifficultyFielding([
+      fieldingEvent({ specialPlayType: 'Failed Robbery', difficulty: 'spectacular', success: false }),
+    ]);
+
+    expect(result.p1.CF).toMatchObject({
+      weightedConversion: 0,
+      difficultyOpportunities: 1,
+      difficultyConversions: 0,
+      routinePlays: 0,
+      totalPlays: 1,
+      difficultyWeightedRate: null,
+    });
+  });
+
   test('Beat Runner and Beat Throw are close-play arm signals, not range opportunities', () => {
     const result = aggregateDifficultyFielding([
       fieldingEvent({ specialPlayType: 'Beat Runner' }),

@@ -26,6 +26,7 @@ type DifficultyLadderKey = Difficulty | 'null';
 
 export const DIFFICULTY_CONVERSION_LADDER = {
   robbedHR: { tier: 'MAX', weight: 1, isDifficultyOpportunity: true },
+  failedRobbery: { tier: 'MAX', weight: 1, isDifficultyOpportunity: true },
   diving: { tier: 'HIGH', weight: 0.75, isDifficultyOpportunity: true },
   sliding: { tier: 'HIGH', weight: 0.75, isDifficultyOpportunity: true },
   missedDive: { tier: 'HIGH', weight: 0.75, isDifficultyOpportunity: true },
