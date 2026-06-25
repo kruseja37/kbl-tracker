@@ -7,6 +7,18 @@
 
 ## June 2026
 
+### 2026-06-26 (attended Hybrid via `/kbl-captain`): Butter Fingers ⇄ Magic Hands — diametrically-opposed FIELDING counter-trait pair
+
+**JK ruling:** Butter Fingers is the **counter-trait to Magic Hands** — they must be scored over the SAME fielding event set and count in **diametrically opposed ways**, so a Magic Hands qualifier CANNOT also be a Butter Fingers qualifier.
+- **Magic Hands** (+ / good hands) = SUCCESSFUL spectacular catches (the web-gem plays — diving/leaping/sliding/robbed-HR).
+- **Butter Fingers** (− / bad hands) = MISSED spectacular catches **+ FIELDING errors** — explicitly **NOT throwing or mental errors** (those stay with Wild Thrower [throwing, per DT-FIX-1] and Noodle Arm [mental]).
+- Rationale (JK): a player who attempts many spectacular catches and MISSES them is proving he deserves Butter Fingers AND putting himself out of the running for Magic Hands. Because the two count complementarily over the shared event set, qualifying for one excludes the other.
+- **Dive Wizard** (the arm-gated, arm>80 variant that rides the same web-gem signal) inherits the same spectacular-catch quality — the opposed framework applies to the shared web-gem rate.
+
+**Implication (current state):** TODAY both Magic Hands and Butter Fingers use an ALL-fielding-events denominator (a routine putout dilutes both), so they are only directionally — not diametrically — opposed; and Butter Fingers currently counts ANY failed fielding play / `playType==='error'` (it does not yet separate fielding-vs-throwing/mental errors, and does not yet credit/debit MISSED spectacular catches as a distinct thing). The redesign tightens both to the opposed spectacular-attempt + fielding-error event set.
+
+**Build (queued as a MAIN trait ticket, serializes after DT-F2/DT-F3; build-dark, no DB bump):** rework `addWebGemSignals` (Magic Hands/Dive Wizard) + `addButterFingersSignals` so they share the opposed event framework: Magic Hands = made gems / (made gems + missed gems + fielding errors); Butter Fingers = (missed gems + fielding errors) / (same denominator) — complementary numerators ⇒ inverted percentile ⇒ never-both. Fielding-vs-throwing/mental error separation per the DT-FIX-1 partition. **Implementation grounding in progress** (`wf_*`): the data-model crux is how a missed spectacular catch vs a fielding error is recorded on `FieldingEvent` (and whether a missed-dive-that's-also-an-error double-counts) — exact denominator + dedup pinned from source before the contract. (Connects to DT-FIX-1's "Butter Fingers owns muffs" + the fielding/throwing/mental three-way error split.)
+
 ### 2026-06-26 (attended Hybrid via `/kbl-captain`): Park→WAR (V8) — §9.D re-confirmed; build the SEED-park→WAR wiring
 
 **Context:** the v1 audit listed "V8 park→WAR" as an OPEN/conflicted question. A grounded + adversarially-verified investigation (`wf_2355914a-e2e`, 6 agents) found **it is NOT a live conflict** — it is a snapshot artifact. The apparent disagreement (STADIUM_ANALYTICS §1.0 "park factors preview-only / defer WAR consumers" vs the Mode-1 vision §8.8 "stadium depth v1-critical, WAR consumes park") is about two DIFFERENT factor types: §1.0 defers only the **ADAPTIVE (archive-derived/measured)** layer; **SEED/STATIC (geometry-derived)** factors were always permitted. **§9.D already ruled this IN** ("v1 WAR consumes seed/static park factors; adaptive stay deferred", committed `a9584566` 2026-06-20, ratified DECISIONS_LOG 2026-06-23/24). The audit that re-listed V8 "open" (`V1_DELTA_AUDIT_FINDINGS`) anchored on a roadmap boundary captured **54 minutes BEFORE** the §9.D commit → it physically never saw the resolution (verifier confirmed via commit timestamps).
