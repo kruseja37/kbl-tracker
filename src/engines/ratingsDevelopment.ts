@@ -39,6 +39,7 @@ export interface RatingsDevelopmentTuning {
   moraleMultiplierMax: number;
   shiftThreshold: number;
   maxAbsDelta: number;
+  trendTiltWeight: number;
   ageCurveSlopeByBand: Record<ExpectedStatsAgeBand, number>;
   ageSteepnessByRatingKey: Record<ExpectedStatsRatingKey, number>;
 }
@@ -55,6 +56,7 @@ export const RATINGS_DEVELOPMENT_TUNING: RatingsDevelopmentTuning = {
   moraleMultiplierMax: 1.5,
   shiftThreshold: 0.75,
   maxAbsDelta: 6,
+  trendTiltWeight: 0,
   // §16 age-curve gravity placeholders: prime band is neutral; young/old tails pull the move.
   ageCurveSlopeByBand: {
     '18-21': 0.8,
@@ -80,6 +82,7 @@ export interface CheckpointRatingDevelopmentInput {
   ratingKey: string;
   baseRatingValue: number;
   performanceSignal: number;
+  recentSignal?: number;
   ageBand?: ExpectedStatsAgeBand;
   confidence?: number;
   playerMorale: number;
@@ -131,9 +134,16 @@ export function computeCheckpointRatingDevelopment(
   input: CheckpointRatingDevelopmentInput,
   tuning: RatingsDevelopmentTuning = RATINGS_DEVELOPMENT_TUNING,
 ): CheckpointRatingDevelopmentResult {
+  const trendTiltWeight = clamp(tuning.trendTiltWeight, 0, 1);
+  const effectiveSignal =
+    typeof input.recentSignal === 'number' &&
+    Number.isFinite(input.recentSignal) &&
+    trendTiltWeight > 0
+      ? (1 - trendTiltWeight) * input.performanceSignal + trendTiltWeight * input.recentSignal
+      : input.performanceSignal;
   const rawDelta = computeRawRatingDelta(
     {
-      performanceSignal: input.performanceSignal,
+      performanceSignal: effectiveSignal,
       playerMorale: input.playerMorale,
     },
     tuning,

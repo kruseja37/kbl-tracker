@@ -41,6 +41,12 @@ export interface CheckpointSignalMember {
   ratings: Partial<Record<ExpectedStatsRatingKey, number>>;
   poolKey: RatingsPoolKey;
   categoryRates: CategoryRateResult;
+  recentCategoryRates?: CategoryRateResult;
+}
+
+export interface CheckpointRatingSignalMaps {
+  cumulative: Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>;
+  recent: Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>;
 }
 
 const HITTER_POOLS: RatingsPoolKey[] = ['C', 'cornerIF', 'middleIF', 'cornerOF', 'CF', 'benchIF', 'benchOF'];
@@ -209,15 +215,16 @@ function sampleFloorRole(poolKey: RatingsPoolKey): 'starter' | 'bench' {
   return poolKey === 'benchIF' || poolKey === 'benchOF' ? 'bench' : 'starter';
 }
 
-function gateCategoryRatesByFlatSampleFloor(
-  member: CheckpointSignalMember,
-): CheckpointSignalMember {
-  const role = sampleFloorRole(member.poolKey);
+function gateCategoryRatesByFlatSampleFloorForPoolKey(
+  categoryRates: CategoryRateResult,
+  poolKey: RatingsPoolKey,
+): CategoryRateResult {
+  const role = sampleFloorRole(poolKey);
   const gatedActualByCat: Partial<Record<ExpectedStatsCategory, number>> = {};
 
   for (const category of EXPECTED_STATS_CATEGORIES) {
-    const actual = member.categoryRates.actualByCat[category];
-    const sample = member.categoryRates.sampleSizeByCat[category];
+    const actual = categoryRates.actualByCat[category];
+    const sample = categoryRates.sampleSizeByCat[category];
     const floor = CHECKPOINT_SAMPLE_FLOORS[category][role];
     if (
       typeof actual === 'number' &&
@@ -231,17 +238,47 @@ function gateCategoryRatesByFlatSampleFloor(
   }
 
   return {
-    ...member,
-    categoryRates: {
-      actualByCat: gatedActualByCat,
-      sampleSizeByCat: member.categoryRates.sampleSizeByCat,
-    },
+    actualByCat: gatedActualByCat,
+    sampleSizeByCat: categoryRates.sampleSizeByCat,
   };
+}
+
+function gateCategoryRatesByFlatSampleFloor(
+  member: CheckpointSignalMember,
+): CheckpointSignalMember {
+  return {
+    ...member,
+    categoryRates: gateCategoryRatesByFlatSampleFloorForPoolKey(member.categoryRates, member.poolKey),
+    recentCategoryRates: member.recentCategoryRates
+      ? gateCategoryRatesByFlatSampleFloorForPoolKey(member.recentCategoryRates, member.poolKey)
+      : undefined,
+  };
+}
+
+function computeSignalForRates(
+  member: CheckpointSignalMember,
+  categoryRates: CategoryRateResult,
+  cached: PoolSignalCache,
+): Partial<Record<ExpectedStatsRatingKey, number>> {
+  const { rByCat } = expectedAndSignal({
+    playerRole: member.role,
+    ageBand: member.ageBand,
+    ratings: member.ratings,
+    actualByCat: categoryRates.actualByCat,
+    sampleSizeByCat: categoryRates.sampleSizeByCat,
+    poolMeanByCat: cached.stats.poolMeanByCat,
+    poolSdByCat: cached.stats.poolSdByCat,
+    peerValuesByCat: cached.stats.peerValuesByCat,
+    peerPoolSize: cached.stats.peerPoolSize,
+    poolMeanRating: cached.poolMeanRating,
+  }, undefined, CHECKPOINT_EXPECTED_STATS_TUNING);
+
+  return blendSignalsByRatingKey(rByCat);
 }
 
 export function computeCheckpointRatingSignals(
   members: readonly CheckpointSignalMember[],
-): Map<string, Partial<Record<ExpectedStatsRatingKey, number>>> {
+): CheckpointRatingSignalMaps {
   const gatedMembers = members.map(gateCategoryRatesByFlatSampleFloor);
   const poolCache = new Map<RatingsPoolKey, PoolSignalCache>();
   const distinctPoolKeys = new Set<RatingsPoolKey>(gatedMembers.map((member) => member.poolKey));
@@ -259,29 +296,21 @@ export function computeCheckpointRatingSignals(
     });
   }
 
-  const result = new Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>();
+  const cumulative = new Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>();
+  const recent = new Map<string, Partial<Record<ExpectedStatsRatingKey, number>>>();
   for (const member of gatedMembers) {
     const cached = poolCache.get(member.poolKey);
     if (!cached) {
-      result.set(member.playerId, {});
+      cumulative.set(member.playerId, {});
+      if (member.recentCategoryRates) recent.set(member.playerId, {});
       continue;
     }
 
-    const { rByCat } = expectedAndSignal({
-      playerRole: member.role,
-      ageBand: member.ageBand,
-      ratings: member.ratings,
-      actualByCat: member.categoryRates.actualByCat,
-      sampleSizeByCat: member.categoryRates.sampleSizeByCat,
-      poolMeanByCat: cached.stats.poolMeanByCat,
-      poolSdByCat: cached.stats.poolSdByCat,
-      peerValuesByCat: cached.stats.peerValuesByCat,
-      peerPoolSize: cached.stats.peerPoolSize,
-      poolMeanRating: cached.poolMeanRating,
-    }, undefined, CHECKPOINT_EXPECTED_STATS_TUNING);
-
-    result.set(member.playerId, blendSignalsByRatingKey(rByCat));
+    cumulative.set(member.playerId, computeSignalForRates(member, member.categoryRates, cached));
+    if (member.recentCategoryRates) {
+      recent.set(member.playerId, computeSignalForRates(member, member.recentCategoryRates, cached));
+    }
   }
 
-  return result;
+  return { cumulative, recent };
 }

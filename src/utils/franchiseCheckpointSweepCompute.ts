@@ -376,7 +376,9 @@ export async function resolveCheckpointRoster(
     });
   }
 
-  const signalMap = computeCheckpointRatingSignals(memberEntries.map((entry) => entry.member));
+  const signalMap = computeCheckpointRatingSignals(
+    memberEntries.map((entry) => entry.member),
+  ).cumulative;
   const roster: CheckpointRosterEntry[] = [];
 
   for (const { player, teamId, isPitcher, baseRatings, ageBand, sampleByRatingKey } of memberEntries) {

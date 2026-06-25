@@ -48,6 +48,7 @@ describe('ratingsDevelopment L8a pure engine', () => {
       moraleMultiplierMax: 1.5,
       shiftThreshold: 0.75,
       maxAbsDelta: 6,
+      trendTiltWeight: 0,
       ageCurveSlopeByBand: {
         '18-21': 0.8,
         '22-24': 0.35,
@@ -78,6 +79,84 @@ describe('ratingsDevelopment L8a pure engine', () => {
     expect(normalizePerformanceSignal(-scale * 2)).toBe(-1);
     expect(normalizePerformanceSignal(scale / 2)).toBe(0.5);
     expect(normalizePerformanceSignal(-scale / 2)).toBe(-0.5);
+  });
+
+  test('omitted recentSignal preserves the cumulative signal even when trend tilt is configured', () => {
+    const input: CheckpointRatingDevelopmentInput = {
+      ...baseCheckpointInput,
+      performanceSignal: 0.4,
+      teamFanMorale: 80,
+    };
+    const baseline = computeCheckpointRatingDevelopment(input);
+    const configuredTilt = computeCheckpointRatingDevelopment(
+      input,
+      withTuning({ trendTiltWeight: 0.5 }),
+    );
+
+    expect(configuredTilt).toEqual(baseline);
+  });
+
+  test('trendTiltWeight zero ignores a supplied recentSignal', () => {
+    const input: CheckpointRatingDevelopmentInput = {
+      ...baseCheckpointInput,
+      performanceSignal: -0.4,
+      teamFanMorale: 20,
+    };
+    const baseline = computeCheckpointRatingDevelopment(input);
+    const withRecent = computeCheckpointRatingDevelopment({
+      ...input,
+      recentSignal: 1,
+    });
+
+    expect(withRecent).toEqual(baseline);
+  });
+
+  test('positive trendTiltWeight blends cumulative and recent signals before raw delta', () => {
+    const tuning = withTuning({ trendTiltWeight: 0.25 });
+    const cumulativeOnly = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        performanceSignal: -0.2,
+        teamFanMorale: 80,
+      },
+      tuning,
+    );
+    const blended = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        performanceSignal: -0.2,
+        recentSignal: 1,
+        teamFanMorale: 80,
+      },
+      tuning,
+    );
+    const effectiveSignal = (1 - tuning.trendTiltWeight) * -0.2 + tuning.trendTiltWeight * 1;
+
+    expect(blended.rawDelta).toBeCloseTo(tuning.baseDeltaScale * effectiveSignal, 12);
+    expect(blended.rawDelta).toBeGreaterThan(cumulativeOnly.rawDelta);
+    expect(blended.dampenedDelta).toBe(blended.rawDelta);
+  });
+
+  test('blended signal still respects the [-1, 1] signal clamp and maxAbsDelta', () => {
+    const capTuning = withTuning({
+      baseDeltaScale: 20,
+      maxAbsDelta: 6,
+      trendTiltWeight: 0.75,
+    });
+    const result = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        performanceSignal: 1,
+        recentSignal: 5,
+        teamFanMorale: 80,
+      },
+      capTuning,
+    );
+
+    expect(result.rawDelta).toBe(20);
+    expect(result.dampenedDelta).toBe(6);
+    expect(result.proposedRating).toBe(56);
+    expect(result.appliedDelta).toBe(6);
   });
 
   test('computes zero and neutral-morale raw deltas from base scale exactly', () => {
