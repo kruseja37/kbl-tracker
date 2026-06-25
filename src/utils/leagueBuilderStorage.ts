@@ -2260,6 +2260,14 @@ function buildDepthChart(players: Player[]): DepthChart {
       continue;
     }
 
+    // SP/RP swingmen are eligible for BOTH pitching roles — never DH (no SP/RP depth bucket exists,
+    // so the generic branch below would otherwise dump them at DH). JK ruling 2026-06-25.
+    if (player.primaryPosition === 'SP/RP') {
+      depthChart.SP.push(player.id);
+      depthChart.RP.push(player.id);
+      continue;
+    }
+
     if (player.primaryPosition in depthChart) {
       depthChart[player.primaryPosition as keyof DepthChart].push(player.id);
     } else {
@@ -2292,12 +2300,20 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[], sourceData?: Rec
   // Use source PlayerData role to distinguish rotation SP from bullpen SP
   const getSourceRole = (id: string) => sourceData?.[id]?.role;
 
-  const startingRotation = pitchers
+  // SP/RP swingmen default to the bullpen but BACKFILL the rotation when pure starters fall short
+  // of a 5-man staff (JK ruling 2026-06-25 — "SP/RPs need the option to start"). Pure SP fill the
+  // rotation first; remaining swingmen relieve.
+  const ROTATION_TARGET = 5;
+  const pureStarters = pitchers
     .filter((player) => player.primaryPosition === 'SP' && getSourceRole(player.id) !== 'BULLPEN')
     .map((player) => player.id);
-  const longRelievers = pitchers
+  const swingmen = pitchers
     .filter((player) => player.primaryPosition === 'SP/RP')
     .map((player) => player.id);
+  const swingmenStarting = swingmen.slice(0, Math.max(0, ROTATION_TARGET - pureStarters.length));
+  const swingmenRelieving = swingmen.slice(swingmenStarting.length);
+  const startingRotation = [...pureStarters, ...swingmenStarting];
+  const longRelievers = swingmenRelieving;
   const closingPitcher = pitchers.find((player) => player.primaryPosition === 'CP')?.id || '';
   const assignedIds = new Set([...startingRotation, ...longRelievers, closingPitcher].filter(Boolean));
   const setupPitchers = pitchers
