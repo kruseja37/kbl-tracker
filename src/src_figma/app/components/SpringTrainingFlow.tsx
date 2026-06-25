@@ -2,8 +2,7 @@
  * Spring Training Flow Component
  * Per Ralph Framework NEW-002 (GAP-038)
  *
- * Shows roster overview with projected development changes
- * using the agingEngine for rating projections.
+ * Shows roster age overview for spring training.
  */
 
 import { useMemo, useState } from "react";
@@ -11,104 +10,16 @@ import { useOffseasonData } from "@/hooks/useOffseasonData";
 import {
   getCareerPhase,
   getCareerPhaseDisplayName,
-  calculateRatingChange,
   type CareerPhase,
 } from "../../../engines/agingEngine";
-import { Sunrise, TrendingUp, TrendingDown, Minus, CheckCircle } from "lucide-react";
-
-interface ProjectedChange {
-  attribute: string;
-  current: number;
-  projected: number;
-  change: number;
-}
+import { Sunrise, CheckCircle } from "lucide-react";
 
 interface PlayerProjection {
   playerId: string;
   name: string;
   position: string;
   age: number;
-  isPitcher: boolean;
   careerPhase: CareerPhase;
-  projectedChanges: ProjectedChange[];
-}
-
-function calculateProjectedChanges(player: {
-  age: number;
-  isPitcher: boolean;
-  power?: number;
-  contact?: number;
-  speed?: number;
-  velocity?: number;
-  junk?: number;
-  accuracy?: number;
-}): ProjectedChange[] {
-  const changes: ProjectedChange[] = [];
-  const nextAge = player.age + 1;
-
-  if (player.isPitcher) {
-    if (player.velocity !== undefined) {
-      const velChange = calculateRatingChange(player.velocity, nextAge);
-      changes.push({
-        attribute: "VEL",
-        current: player.velocity,
-        projected: player.velocity + velChange,
-        change: velChange,
-      });
-    }
-
-    if (player.junk !== undefined) {
-      const jnkChange = calculateRatingChange(player.junk, nextAge);
-      changes.push({
-        attribute: "JNK",
-        current: player.junk,
-        projected: player.junk + jnkChange,
-        change: jnkChange,
-      });
-    }
-
-    if (player.accuracy !== undefined) {
-      const accChange = calculateRatingChange(player.accuracy, nextAge);
-      changes.push({
-        attribute: "ACC",
-        current: player.accuracy,
-        projected: player.accuracy + accChange,
-        change: accChange,
-      });
-    }
-  } else {
-    if (player.power !== undefined) {
-      const powChange = calculateRatingChange(player.power, nextAge);
-      changes.push({
-        attribute: "POW",
-        current: player.power,
-        projected: player.power + powChange,
-        change: powChange,
-      });
-    }
-
-    if (player.contact !== undefined) {
-      const conChange = calculateRatingChange(player.contact, nextAge);
-      changes.push({
-        attribute: "CON",
-        current: player.contact,
-        projected: player.contact + conChange,
-        change: conChange,
-      });
-    }
-
-    if (player.speed !== undefined) {
-      const spdChange = calculateRatingChange(player.speed, nextAge);
-      changes.push({
-        attribute: "SPD",
-        current: player.speed,
-        projected: player.speed + spdChange,
-        change: spdChange,
-      });
-    }
-  }
-
-  return changes;
 }
 
 function getPhaseColor(phase: string): string {
@@ -135,14 +46,13 @@ export function SpringTrainingFlow({ onComplete }: SpringTrainingFlowProps) {
   const [selectedTeam, setSelectedTeam] = useState<string>("ALL");
   const [isCompleted, setIsCompleted] = useState(false);
 
-  // Calculate projections for all players
+  // Build roster age display for all players.
   const playerProjections: PlayerProjection[] = useMemo(() => {
     if (!players) return [];
 
     return players
       .filter((p) => selectedTeam === "ALL" || p.teamId === selectedTeam)
       .map((player) => {
-        const isPitcher = player.position === "SP" || player.position === "RP";
         const nextAge = player.age + 1;
 
         return {
@@ -150,18 +60,7 @@ export function SpringTrainingFlow({ onComplete }: SpringTrainingFlowProps) {
           name: player.name,
           position: player.position,
           age: player.age,
-          isPitcher,
           careerPhase: getCareerPhase(nextAge),
-          projectedChanges: calculateProjectedChanges({
-            age: player.age,
-            isPitcher,
-            power: player.power,
-            contact: player.contact,
-            speed: player.speed,
-            velocity: player.velocity,
-            junk: player.junk,
-            accuracy: player.accuracy,
-          }),
         };
       });
   }, [players, selectedTeam]);
@@ -200,7 +99,7 @@ export function SpringTrainingFlow({ onComplete }: SpringTrainingFlowProps) {
           <h2 className="text-lg text-[#E8E8D8] font-bold">SPRING TRAINING</h2>
         </div>
         <p className="text-xs text-[#E8E8D8]/80">
-          Review projected player development for the upcoming season
+          Spring-training development is now handled continuously by the season engine.
         </p>
       </div>
 
@@ -255,7 +154,7 @@ export function SpringTrainingFlow({ onComplete }: SpringTrainingFlowProps) {
       {/* Player List */}
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4 max-h-[400px] overflow-y-auto">
         <div className="text-xs text-[#E8E8D8]/60 mb-3">
-          PROJECTED DEVELOPMENT ({playerProjections.length} players)
+          ROSTER AGE OUTLOOK ({playerProjections.length} players)
         </div>
 
         {playerProjections.length === 0 ? (
@@ -287,48 +186,8 @@ export function SpringTrainingFlow({ onComplete }: SpringTrainingFlowProps) {
                   </div>
                 </div>
 
-                {/* Projected Changes */}
-                <div className="flex gap-2 flex-wrap">
-                  {player.projectedChanges.map((pc) => (
-                    <div
-                      key={pc.attribute}
-                      className="flex items-center gap-1 bg-[#2A3424] px-2 py-1 rounded"
-                    >
-                      <span className="text-[8px] text-[#E8E8D8]/60">{pc.attribute}</span>
-                      <span className="text-[10px] text-[#E8E8D8]/80">{pc.current}</span>
-                      <span className="text-[8px] text-[#E8E8D8]/40">→</span>
-                      <span
-                        className="text-[10px] font-bold"
-                        style={{
-                          color:
-                            pc.change > 0
-                              ? "#22c55e"
-                              : pc.change < 0
-                              ? "#ef4444"
-                              : "#94a3b8",
-                        }}
-                      >
-                        {pc.projected}
-                      </span>
-                      {pc.change !== 0 && (
-                        <span
-                          className="flex items-center"
-                          style={{
-                            color: pc.change > 0 ? "#22c55e" : "#ef4444",
-                          }}
-                        >
-                          {pc.change > 0 ? (
-                            <TrendingUp className="w-3 h-3" />
-                          ) : (
-                            <TrendingDown className="w-3 h-3" />
-                          )}
-                        </span>
-                      )}
-                      {pc.change === 0 && (
-                        <Minus className="w-3 h-3 text-[#94a3b8]" />
-                      )}
-                    </div>
-                  ))}
+                <div className="bg-[#2A3424] px-3 py-2 rounded text-[10px] text-[#E8E8D8]/70">
+                  Development updates are handled continuously by the season engine.
                 </div>
               </div>
             ))}

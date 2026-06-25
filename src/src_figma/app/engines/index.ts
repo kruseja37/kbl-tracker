@@ -295,25 +295,20 @@ export {
 export {
   // Types/Constants
   CareerPhase,
-  type AgingResult,
   type AgeDisplayInfo,
   type DevelopmentPotential,
-  type BatchAgingResult,
 
   // Core functions
   getCareerPhase,
   getCareerPhaseDisplayName,
   getCareerPhaseColor,
-  calculateRatingChange,
   calculateRetirementProbability,
   shouldRetire,
-  processEndOfSeasonAging,
   getYearsRemainingEstimate,
 
   // Figma helpers
   getAgeDisplayInfo,
   calculateDevelopmentPotential,
   getUpsideColor,
-  processTeamAging,
   formatRetirementRisk,
 } from './agingIntegration';

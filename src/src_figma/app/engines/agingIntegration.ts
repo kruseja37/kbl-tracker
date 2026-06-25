@@ -2,38 +2,32 @@
  * Aging Integration for Figma GameTracker
  * Per Ralph Framework S-F005, S-F006
  *
- * Integrates the legacy agingEngine into the Figma codebase.
- * Handles player aging, development, and retirement.
+ * Integrates aging display helpers into the Figma codebase.
+ * Handles player age, development-potential display, and retirement display.
  */
 
 // Import from legacy agingEngine
 import {
   // Types/Constants
   CareerPhase,
-  type AgingResult,
 
   // Functions
   getCareerPhase,
   getCareerPhaseDisplayName,
   getCareerPhaseColor,
-  calculateRatingChange,
   calculateRetirementProbability,
   shouldRetire,
-  processEndOfSeasonAging,
   getYearsRemainingEstimate,
 } from '../../../engines/agingEngine';
 
 // Re-export all
 export {
   CareerPhase,
-  type AgingResult,
   getCareerPhase,
   getCareerPhaseDisplayName,
   getCareerPhaseColor,
-  calculateRatingChange,
   calculateRetirementProbability,
   shouldRetire,
-  processEndOfSeasonAging,
   getYearsRemainingEstimate,
 };
 
@@ -192,67 +186,6 @@ export function getUpsideColor(upside: DevelopmentPotential['upside']): string {
     case 'DECLINING': return '#dc2626';  // Red
     default: return '#6b7280';  // Gray
   }
-}
-
-/**
- * Batch process aging for multiple players
- */
-export interface BatchAgingResult {
-  playerResults: Map<string, AgingResult>;
-  retirements: string[];  // Player IDs who retired
-  totalRatingChange: number;
-  averageRatingChange: number;
-}
-
-/**
- * Process aging for a batch of players
- *
- * NOTE: The legacy processEndOfSeasonAging expects ratings as Record<string, number>
- * (e.g., { power: 75, contact: 80, speed: 60 }), not a single overallRating number.
- * This wrapper accepts overallRating for convenience and wraps it.
- */
-export function processTeamAging(
-  players: Array<{
-    playerId: string;
-    currentAge: number;
-    overallRating: number;
-    ratings?: Record<string, number>;  // Optional: full ratings breakdown
-    fame?: number;
-    performanceModifier?: number;
-  }>
-): BatchAgingResult {
-  const playerResults = new Map<string, AgingResult>();
-  const retirements: string[] = [];
-  let totalRatingChange = 0;
-
-  for (const player of players) {
-    // Use full ratings if provided, otherwise wrap overallRating
-    const ratingsToUse = player.ratings ?? { overall: player.overallRating };
-
-    const result = processEndOfSeasonAging(
-      player.currentAge,
-      ratingsToUse,
-      player.fame || 0,
-      player.performanceModifier || 0
-    );
-
-    playerResults.set(player.playerId, result);
-
-    // Sum up all rating changes from the result
-    const totalChange = result.ratingChanges.reduce((sum, rc) => sum + rc.change, 0);
-    totalRatingChange += totalChange;
-
-    if (result.shouldRetire) {
-      retirements.push(player.playerId);
-    }
-  }
-
-  return {
-    playerResults,
-    retirements,
-    totalRatingChange,
-    averageRatingChange: players.length > 0 ? totalRatingChange / players.length : 0,
-  };
 }
 
 /**

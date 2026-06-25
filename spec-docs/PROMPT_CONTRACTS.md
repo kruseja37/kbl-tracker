@@ -21205,3 +21205,57 @@ Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by 
 
 Use high reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
 <!-- ===== END CONTRACT: RA-12a ===== -->
+
+<!-- ===== CONTRACT: RA-12b ===== -->
+## RA-12b — retire the Model-C aging random-walk (one-model cleanup, part 2)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** You are a precise TypeScript/React surgeon retiring a legacy rating-mutation path across several files while preserving all display. You do NOT add features.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push.
+
+**GOAL (one sentence):** Remove the "Model C" aging RANDOM-WALK that computes player rating changes (`calculateRatingChange` / `processEndOfSeasonAging` / `PHASE_CONFIGS`) and every usage of it, so the over-expectation checkpoint engine (Model A) is the ONLY thing that changes player ratings — while keeping ALL age / career-phase / retirement-risk DISPLAY fully live.
+
+**SOURCE OF TRUTH:** `spec-docs/DECISIONS_LOG.md` 2026-06-24 "path-forward rulings" #1(b) — RA-12: retire Model C (`agingEngine` random-walk) UI usage so Model A is the ONLY rating-mutation engine; must land before the offseason flag flips. (RA-12a already removed Model B.)
+
+**GROUNDING (verified by the Captain in this worktree — re-read before editing):**
+- The random-walk is dark/orphaned everywhere: `SpringTrainingFlow.tsx` (the only rendered consumer of `calculateRatingChange`) PERSISTS NOTHING (just `onComplete?.()`) and is gated behind `FRANCHISE_V1_OFFSEASON_EXECUTION_ENABLED=false`; the mutation hook `src/src_figma/app/hooks/useAgingData.ts` has ZERO live importers; `processEndOfSeasonAging`/`processTeamAging` have no live consumers.
+- The LIVE display path is `useOffseasonData.ts:281` → `src/hooks/useAgingData.ts` `getPlayerAgingInfo` + `getRetirementCandidates` (pure display: career phase, retirement probability) — these do NOT touch the random-walk. That same file ALSO has a dead `processSeasonEnd` method that DOES call `processEndOfSeasonAging` but is NOT destructured by any consumer.
+
+**DELETE (the random-walk rating-projection — Model C):**
+1. `src/engines/agingEngine.ts`: `calculateRatingChange` (~:115), `PHASE_CONFIGS` (the random-walk config), `processEndOfSeasonAging` (~:212), and the `AgingResult` interface (~:204) — verify by grep that no KEPT display path uses `AgingResult` before deleting it.
+2. `src/src_figma/app/hooks/useAgingData.ts`: DELETE THE WHOLE FILE (orphaned mutation hook: `processPlayerAging`/`processAllAging`) — confirm by grep that only its own test imports it; delete that test too: `src/src_figma/__tests__/hooks/useAgingData.test.ts`.
+3. `src/hooks/useAgingData.ts`: remove `processSeasonEnd` (the method, the `SeasonAgingResult` interface, the `UseAgingDataReturn.processSeasonEnd` declaration, and the now-dead `processEndOfSeasonAging` + `AgingResult` imports). KEEP `getPlayerAgingInfo`, `getRetirementCandidates`, the `getCareerPhase`/`getCareerPhaseDisplayName`/`getCareerPhaseColor` re-exports, `calculateRetirementProbability`/`getYearsRemainingEstimate` usage, and `PlayerAgingInfo`.
+4. `src/src_figma/app/components/SpringTrainingFlow.tsx`: remove the `calculateRatingChange`-based per-rating projection block and the `calculateRatingChange` import; render a THIN placeholder (reuse the file's existing styling) stating spring-training development is now handled continuously by the season engine — the component must still render valid JSX and still call `onComplete?.()` from its existing control. Keep any `getCareerPhase`/`getCareerPhaseDisplayName` display usage if present.
+5. `src/src_figma/app/engines/agingIntegration.ts` + `src/src_figma/app/engines/index.ts` (barrel): remove the re-exports / wrapper definitions of the DELETED symbols (`calculateRatingChange`, `processEndOfSeasonAging`, `processTeamAging`, `AgingResult`). KEEP the display re-exports.
+6. `src/src_figma/__tests__/apiContracts/agingEngine.contract.test.ts`: remove ONLY the assertions that pin the deleted signatures; keep the rest green.
+
+**KEEP LIVE (must not break):**
+- `useOffseasonData.ts` → `src/hooks/useAgingData.ts` `getPlayerAgingInfo`/`getRetirementCandidates` (age badges, retirement candidates, career-phase chips, retirement risk).
+- `src/src_figma/app/components/RetirementFlow.tsx` — DO NOT TOUCH (it has its own LOCAL `calculateRetirementProbability`, unrelated).
+- `src/engines/agingEngine.ts` display helpers: `CareerPhase`, `getCareerPhase`, `getCareerPhaseDisplayName`, `getCareerPhaseColor`, `calculateRetirementProbability`, `shouldRetire`, `getYearsRemainingEstimate`.
+- `src/utils/seasonEndProcessor.ts` — DO NOT TOUCH (different `processSeasonEnd`, no aging import).
+
+**METHOD:** After the deletions, the build runs `noUnusedLocals` and will flag any dangling IMPORT of a removed symbol — fix every one. Leaving an EXPORTED display helper that is now unused (e.g. in `agingIntegration.ts`) is acceptable — do NOT expand scope chasing transitively-unused exports.
+
+**EXPECTED OUTPUT:** No `calculateRatingChange` / `processEndOfSeasonAging` / `PHASE_CONFIGS` anywhere in `src/`; the orphaned mutation hook + its test gone; `src/hooks/useAgingData.ts` keeps its display API; SpringTrainingFlow a thin placeholder; all age/retirement DISPLAY live.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npm run build` → exit 0.
+2. `NODE_ENV= npm test` (FULL suite — core-engine + barrel ripple insurance). Read the FAILED-FILE list, not the exit code: confirm ZERO NEW REDS vs the characterized baseline (the only hard fail is `wpaRuntimeBoundary`; `franchiseManualSmokeFixture`/`GameTrackerLaunchState` are solo-passing order-flakes).
+3. `grep -rn "calculateRatingChange\|processEndOfSeasonAging\|PHASE_CONFIGS" src/` → zero hits (outside any comment).
+4. `git --no-pager diff --stat` → only the files listed above.
+
+**FORMAT:**
+1. Files changed (exact paths) + total changed-path count.
+2. Each change described, referencing RA-12 / the make-or-break.
+3. Verification output pasted (build exit, vitest FAILED-file summary, grep, diff --stat).
+4. "RA-12b complete" OR "BLOCKED: <exact reason>".
+
+**FAILURE PROTOCOL / STOP-IF (a correct STOP with a precise reason is a SUCCESS):**
+- A LIVE (non-test, non-dark) consumer of the random-walk that PERSISTS a rating change exists that this grounding missed → STOP, report it (do not rewrite a live persist path).
+- Removing the random-walk would break the kept display API or RetirementFlow → STOP.
+- A new RED appears outside the characterized set that you cannot trace to a removed signature you should have updated → STOP and report.
+- Never summarize/batch; report every changed path including trivial test edits.
+
+Use xhigh reasoning effort. Think step-by-step. Ground every cited file:line by reading it in this worktree before you edit.
+<!-- ===== END CONTRACT: RA-12b ===== -->

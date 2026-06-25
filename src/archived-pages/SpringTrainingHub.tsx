@@ -3,7 +3,6 @@
  * Per Ralph Framework S-E001
  *
  * Features:
- * - View roster with projected development changes
  * - Shows career phase for each player
  * - Complete phase to proceed to schedule generation
  */
@@ -13,7 +12,6 @@ import {
   getCareerPhase,
   getCareerPhaseDisplayName,
   getCareerPhaseColor,
-  calculateRatingChange,
 } from '../engines/agingEngine';
 
 interface PlayerProjection {
@@ -22,7 +20,6 @@ interface PlayerProjection {
   position: string;
   age: number;
   isPitcher: boolean;
-  // Current ratings
   power?: number;
   contact?: number;
   speed?: number;
@@ -37,78 +34,6 @@ interface SpringTrainingHubProps {
   onComplete: () => void;
 }
 
-interface ProjectedChange {
-  attribute: string;
-  current: number;
-  projected: number;
-  change: number;
-}
-
-function calculateProjectedChanges(player: PlayerProjection): ProjectedChange[] {
-  const changes: ProjectedChange[] = [];
-  const nextAge = player.age + 1;
-
-  if (player.isPitcher) {
-    if (player.velocity !== undefined) {
-      const change = calculateRatingChange(player.velocity, nextAge);
-      changes.push({
-        attribute: 'VEL',
-        current: player.velocity,
-        projected: player.velocity + change,
-        change,
-      });
-    }
-    if (player.junk !== undefined) {
-      const change = calculateRatingChange(player.junk, nextAge);
-      changes.push({
-        attribute: 'JNK',
-        current: player.junk,
-        projected: player.junk + change,
-        change,
-      });
-    }
-    if (player.accuracy !== undefined) {
-      const change = calculateRatingChange(player.accuracy, nextAge);
-      changes.push({
-        attribute: 'ACC',
-        current: player.accuracy,
-        projected: player.accuracy + change,
-        change,
-      });
-    }
-  } else {
-    if (player.power !== undefined) {
-      const change = calculateRatingChange(player.power, nextAge);
-      changes.push({
-        attribute: 'POW',
-        current: player.power,
-        projected: player.power + change,
-        change,
-      });
-    }
-    if (player.contact !== undefined) {
-      const change = calculateRatingChange(player.contact, nextAge);
-      changes.push({
-        attribute: 'CON',
-        current: player.contact,
-        projected: player.contact + change,
-        change,
-      });
-    }
-    if (player.speed !== undefined) {
-      const change = calculateRatingChange(player.speed, nextAge);
-      changes.push({
-        attribute: 'SPD',
-        current: player.speed,
-        projected: player.speed + change,
-        change,
-      });
-    }
-  }
-
-  return changes;
-}
-
 export default function SpringTrainingHub({
   players,
   teamName,
@@ -118,7 +43,6 @@ export default function SpringTrainingHub({
     return players.map((player) => ({
       ...player,
       careerPhase: getCareerPhase(player.age + 1),
-      projectedChanges: calculateProjectedChanges(player),
     }));
   }, [players]);
 
@@ -201,39 +125,10 @@ export default function SpringTrainingHub({
               </div>
             </div>
 
-            {/* Projected Changes */}
             <div style={styles.projectionsRow}>
-              {player.projectedChanges.map((pc) => (
-                <div key={pc.attribute} style={styles.projectionItem}>
-                  <span style={styles.projectionLabel}>{pc.attribute}</span>
-                  <span style={styles.projectionCurrent}>{pc.current}</span>
-                  <span style={styles.projectionArrow}>→</span>
-                  <span
-                    style={{
-                      ...styles.projectionValue,
-                      color:
-                        pc.change > 0
-                          ? '#22c55e'
-                          : pc.change < 0
-                          ? '#ef4444'
-                          : '#94a3b8',
-                    }}
-                  >
-                    {pc.projected}
-                  </span>
-                  {pc.change !== 0 && (
-                    <span
-                      style={{
-                        ...styles.projectionChange,
-                        color: pc.change > 0 ? '#22c55e' : '#ef4444',
-                      }}
-                    >
-                      ({pc.change > 0 ? '+' : ''}
-                      {pc.change})
-                    </span>
-                  )}
-                </div>
-              ))}
+              <div style={styles.projectionItem}>
+                Spring-training development is handled continuously by the season engine.
+              </div>
             </div>
           </div>
         ))}

@@ -3,8 +3,6 @@
  * Per Ralph Framework S-F005, S-F006
  *
  * Features:
- * - Young players improve
- * - Old players decline
  * - Retirement probability calculated
  * - Max age enforced (49)
  */
@@ -23,36 +21,6 @@ export type CareerPhase = (typeof CareerPhase)[keyof typeof CareerPhase];
 const DEVELOPMENT_END = 24;
 const PRIME_END = 32;
 const MAX_AGE = 49;
-
-// Rating change configuration
-interface RatingChangeConfig {
-  minChange: number;
-  maxChange: number;
-  declineChance: number; // 0-1, chance of decline in this phase
-}
-
-const PHASE_CONFIGS: Record<CareerPhase, RatingChangeConfig> = {
-  [CareerPhase.DEVELOPMENT]: {
-    minChange: -1,
-    maxChange: 5,
-    declineChance: 0.1, // 10% chance of decline
-  },
-  [CareerPhase.PRIME]: {
-    minChange: -2,
-    maxChange: 2,
-    declineChance: 0.3, // 30% chance of decline
-  },
-  [CareerPhase.DECLINE]: {
-    minChange: -5,
-    maxChange: 1,
-    declineChance: 0.8, // 80% chance of decline
-  },
-  [CareerPhase.FORCED_RETIREMENT]: {
-    minChange: 0,
-    maxChange: 0,
-    declineChance: 1,
-  },
-};
 
 // Retirement probability by age
 const RETIREMENT_BASE_PROBABILITY: Record<number, number> = {
@@ -110,44 +78,6 @@ export function getCareerPhaseColor(phase: CareerPhase): string {
 }
 
 /**
- * Calculate rating change for end of season
- */
-export function calculateRatingChange(
-  currentRating: number,
-  age: number,
-  performanceModifier: number = 0 // -1 to 1, based on season performance
-): number {
-  const phase = getCareerPhase(age);
-  const config = PHASE_CONFIGS[phase];
-
-  if (phase === CareerPhase.FORCED_RETIREMENT) {
-    return 0;
-  }
-
-  // Determine if declining or improving
-  const randomRoll = Math.random();
-  const isDecline = randomRoll < config.declineChance;
-
-  let change: number;
-  if (isDecline) {
-    // Decline: negative change
-    change = Math.floor(
-      Math.random() * (Math.abs(config.minChange) + 1)
-    ) * -1;
-  } else {
-    // Improvement: positive change
-    change = Math.floor(Math.random() * (config.maxChange + 1));
-  }
-
-  // Apply performance modifier
-  change += Math.round(performanceModifier * 2);
-
-  // Ensure rating stays in valid range
-  const newRating = Math.max(1, Math.min(99, currentRating + change));
-  return newRating - currentRating;
-}
-
-/**
  * Calculate retirement probability for a player
  */
 export function calculateRetirementProbability(
@@ -196,59 +126,6 @@ export function shouldRetire(
 ): boolean {
   const probability = calculateRetirementProbability(age, overallRating, fame);
   return Math.random() < probability;
-}
-
-/**
- * Process end of season aging for a player
- */
-export interface AgingResult {
-  newAge: number;
-  ratingChanges: { attribute: string; change: number }[];
-  shouldRetire: boolean;
-  retirementProbability: number;
-  phase: CareerPhase;
-}
-
-export function processEndOfSeasonAging(
-  currentAge: number,
-  ratings: Record<string, number>,
-  fame: number = 0,
-  performanceModifier: number = 0
-): AgingResult {
-  const newAge = currentAge + 1;
-  const phase = getCareerPhase(newAge);
-
-  // Calculate overall rating for retirement check
-  const ratingValues = Object.values(ratings);
-  const overallRating =
-    ratingValues.length > 0
-      ? Math.round(ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length)
-      : 50;
-
-  // Calculate rating changes for each attribute
-  const ratingChanges: { attribute: string; change: number }[] = [];
-  for (const [attribute, currentValue] of Object.entries(ratings)) {
-    const change = calculateRatingChange(currentValue, newAge, performanceModifier);
-    if (change !== 0) {
-      ratingChanges.push({ attribute, change });
-    }
-  }
-
-  // Check retirement
-  const retirementProbability = calculateRetirementProbability(
-    newAge,
-    overallRating,
-    fame
-  );
-  const retiring = shouldRetire(newAge, overallRating, fame);
-
-  return {
-    newAge,
-    ratingChanges,
-    shouldRetire: retiring,
-    retirementProbability,
-    phase,
-  };
 }
 
 /**
