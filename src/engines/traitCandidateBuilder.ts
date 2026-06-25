@@ -159,6 +159,9 @@ export const BUILDABLE_TRAITS: readonly string[] = [
   // DT-F2 (TRAIT_MEASUREMENT_SPEC §0.6b row F): Workhorse is pitcher-only,
   // ELITE IP/game, compared inside SP/RP cohorts via poolTraitKey.
   'Workhorse',
+  // DT-F3 (TRAIT_MEASUREMENT_SPEC §0.6b row F): Metal Head is pitcher-only
+  // protective toughness, earned from KP/NUT victim events over pitcher BF.
+  'Metal Head',
 ];
 
 for (const traitName of BUILDABLE_TRAITS) {
@@ -1550,6 +1553,37 @@ function addWildThingSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap
 }
 
 /**
+ * DT-F3 — Metal Head (TRAIT_MEASUREMENT_SPEC §0.6b row F). Pitcher-victim
+ * protective toughness from confirmed comebacker / nut-shot enrichment
+ * modifiers. Source is the existing at-bat input thread:
+ * `atBat.enrichment?.modifiers` containing KILLED_PITCHER or NUT_SHOT. Credit is
+ * keyed to `atBat.pitcherId` (the pitcher on the mound / victim), not the batter.
+ * Numerator counts once per at-bat even if both modifiers are present;
+ * denominator is pitcher BF = non-undone at-bats where that pitcher appears.
+ */
+function addMetalHeadSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
+  const battersFaced = new Map<string, number>();
+  const victimEvents = new Map<string, number>();
+
+  for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    battersFaced.set(atBat.pitcherId, (battersFaced.get(atBat.pitcherId) ?? 0) + 1);
+    const modifiers = atBat.enrichment?.modifiers ?? [];
+    if (modifiers.includes('KILLED_PITCHER') || modifiers.includes('NUT_SHOT')) {
+      victimEvents.set(atBat.pitcherId, (victimEvents.get(atBat.pitcherId) ?? 0) + 1);
+    }
+  }
+
+  for (const [pitcherId, bf] of battersFaced) {
+    if (bf <= 0) continue;
+    const victimCount = victimEvents.get(pitcherId) ?? 0;
+    addRawSignal(raw, pitcherId, 'Metal Head', {
+      signalValue: victimCount / bf,
+      sampleSize: bf,
+    });
+  }
+}
+
+/**
  * R1-b2 — Utility (TRAIT_MEASUREMENT_SPEC §0.9). Fielding performance at a
  * NON-primary position. For each non-undone `fieldingEvent` whose `playerId` has
  * a primary position in `primaryPositionByPlayer` AND whose `event.position` is
@@ -1926,6 +1960,7 @@ export function buildRawSignals(input: SeasonTraitCandidateInput): RawSignalMap 
   addBunterSignals(input, raw);
   addCrossedUpSignals(input, raw);
   addWildThingSignals(input, raw);
+  addMetalHeadSignals(input, raw);
   addWorkhorseSignals(input, raw);
   addUtilitySignals(input, raw);
   // R2 — First-Pitch pair (count-family is folded into addOutcomeRateSignals) +

@@ -212,6 +212,9 @@ const POSITIVE_IMAGE_TRAITS = new Set([
   // DT-F2 / §0.6b row F: Workhorse is ELITE IP/game and positive. No
   // IMAGE_DRIVER_SETS entry — neutral/universal positive tilt only.
   'Workhorse',
+  // DT-F3 / §0.6b row F: Metal Head is protective/toughness positive. No
+  // IMAGE_DRIVER_SETS entry — neutral/universal positive tilt only.
+  'Metal Head',
 ]);
 
 const NEGATIVE_IMAGE_TRAITS = new Set([

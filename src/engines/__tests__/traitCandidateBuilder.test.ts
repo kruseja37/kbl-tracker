@@ -307,6 +307,10 @@ const DTF2_BESPOKE_TRAITS = [
   'Workhorse',
 ] as const;
 
+const DTF3_BESPOKE_TRAITS = [
+  'Metal Head',
+] as const;
+
 const probe: EffectiveRatingsPlayer = {
   id: 'probe',
   traits: [
@@ -413,6 +417,8 @@ describe('BUILDABLE_TRAITS', () => {
       'Wild Thing',
       // DT-F2: Workhorse IP/game earn-signal.
       'Workhorse',
+      // DT-F3: Metal Head KP/NUT pitcher-victim earn-signal.
+      'Metal Head',
     ]);
   });
 
@@ -1919,6 +1925,99 @@ describe('DT-F2 Workhorse (IP/game with SP/RP peer-pool split)', () => {
     expect(raw.get('position-player')?.get('Workhorse')).toBeUndefined();
     expect(candidate(result, 'zero-games', 'Workhorse')).toBeUndefined();
     expect(candidate(result, 'position-player', 'Workhorse')).toBeUndefined();
+  });
+});
+
+describe('DT-F3 Metal Head (KP/NUT pitcher-victim events per batters-faced)', () => {
+  it('is registered as a buildable canonical trait', () => {
+    for (const traitName of DTF3_BESPOKE_TRAITS) {
+      expect(BUILDABLE_TRAITS).toContain(traitName);
+    }
+  });
+
+  it('computes Metal Head from KILLED_PITCHER and NUT_SHOT modifiers over pitcher BF', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        atBat({
+          pitcherId: 'p-victim',
+          batterId: 'b-delivered',
+          result: 'GO',
+          enrichment: { modifiers: ['KILLED_PITCHER'] },
+        }),
+        atBat({
+          pitcherId: 'p-victim',
+          batterId: 'b-delivered',
+          result: 'GO',
+          enrichment: { modifiers: ['NUT_SHOT'] },
+        }),
+        atBat({
+          pitcherId: 'p-victim',
+          batterId: 'b-delivered',
+          result: 'GO',
+          enrichment: { modifiers: ['KILLED_PITCHER', 'NUT_SHOT'] },
+        }),
+        atBat({
+          pitcherId: 'p-victim',
+          batterId: 'b-delivered',
+          result: 'GO',
+          enrichment: { modifiers: ['KILLED_PITCHER'] },
+          undoneAt: 1,
+        }),
+        atBat({
+          pitcherId: 'p-victim',
+          batterId: 'b-delivered',
+          result: 'GO',
+          enrichment: { modifiers: ['ifr'] },
+        }),
+        atBat({
+          pitcherId: 'p-victim',
+          batterId: 'b-delivered',
+          result: 'GO',
+        }),
+      ],
+    }));
+
+    expect(raw.get('p-victim')?.get('Metal Head')).toEqual({
+      signalValue: 3 / 5,
+      sampleSize: 5,
+    });
+    expect(raw.get('b-delivered')?.get('Metal Head')).toBeUndefined();
+  });
+
+  it('keys Metal Head by each at-bat pitcherId and emits zero-rate BF rows when no victim event exists', () => {
+    const raw = buildRawSignals(baseInput({
+      atBatEvents: [
+        ...repeat(4, () => atBat({ pitcherId: 'p1', batterId: 'b1', result: 'GO' })),
+        atBat({ pitcherId: 'p1', batterId: 'b1', result: 'GO', enrichment: { modifiers: ['NUT_SHOT'] } }),
+        ...repeat(3, () => atBat({ pitcherId: 'p2', batterId: 'b1', result: 'GO' })),
+      ],
+    }));
+
+    expect(raw.get('p1')?.get('Metal Head')).toEqual({
+      signalValue: 1 / 5,
+      sampleSize: 5,
+    });
+    expect(raw.get('p2')?.get('Metal Head')).toEqual({
+      signalValue: 0,
+      sampleSize: 3,
+    });
+  });
+
+  it('keeps Metal Head out of the position pool (pitcher-only role eligibility)', () => {
+    const input = baseInput({
+      players: [{ playerId: 'p-victim', role: 'position' }],
+      atBatEvents: repeat(10, () => atBat({
+        pitcherId: 'p-victim',
+        batterId: 'b-delivered',
+        result: 'GO',
+        enrichment: { modifiers: ['KILLED_PITCHER'] },
+      })),
+    });
+    const raw = buildRawSignals(input);
+    const result = computeSeasonTraitCandidates(input);
+
+    expect(raw.get('p-victim')?.get('Metal Head')).toBeDefined();
+    expect(candidate(result, 'p-victim', 'Metal Head')).toBeUndefined();
   });
 });
 
