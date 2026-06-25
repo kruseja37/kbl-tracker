@@ -14,6 +14,26 @@ persist on the live path — the exact gap list FINDING-150 called for, before a
 
 ---
 
+## ⏱ 2026-06-25 STATUS REFRESH + the "what's actually missing" clarification (JK Q&A, attended `/kbl-captain`)
+
+This Jun-18 doc's **34 wrongly-dormant** are now **mostly BUILT** (the R-E→R1→R2→R3 expansion + L9b + T-1..T-5 this session pushed `BUILDABLE_TRAITS` 16→**48** earnable). The live earnable-vs-dormant set is now (Captain-extracted from `BUILDABLE_TRAITS` vs `TRAIT_PRICING`, 2026-06-25): **48 earnable / 27 not-earnable.**
+
+**THE KEY CLARIFICATION (corrects the loose "gate on missing inputs" framing for groups A–C):** for the enrichment-gated dormant traits the **capture input ALREADY EXISTS** as an optional `AtBatEvent.enrichment` field — it is NOT a "go build the capture" problem. What is missing is the **measurement LOGIC** (the `§0.6` proxy row + the `traitCandidateBuilder` signal that reads the field). And — verified by running `assignTier` 2026-06-25 — **the gain/loss DIFFICULTY is ALSO already present** for every priced dormant trait (the T-1/T-2 value-tier system derives a threshold from each trait's $-value). So the ONLY gap is the signal.
+
+| Group | Capture field (exists?) | Difficulty/threshold (assignTier) | Signal logic (§0.6 row + builder) |
+|---|---|---|---|
+| **A pitch-type** (8 elite pitches + Fastball/Off-Speed Hitter, 10) | ✓ `enrichment.pitchType` (`eventLog.ts:437`) | ✓ Elite 4F ELITE 0.92 · most RARE 0.82 · Elite FK/Fastball/Off-Speed UNCOMMON 0.70 | ✗ EMPTY |
+| **B pitch-location** (High/Low/Inside/Outside Pitch, 4) | ✓ `enrichment.pitchLocation: 'low'\|'high'\|'inside'\|'outside'\|'outOfZone'` (`eventLog.ts:438`) | ✓ all RARE 0.82 | ✗ EMPTY |
+| **C difficulty/chase** (Magic Hands, Dive Wizard, Bad Ball Hitter, 3) | ✓ `FieldingEvent.difficulty` + `enrichment.chased` | ✓ Magic Hands/Dive Wizard COMMON 0.55 · Bad Ball Hitter RARE 0.82 | ✗ EMPTY |
+| **D miss** (Wild Thrower, 1) | ✓ FieldingEvent error (already auto-tracked) | ✓ MODERATE 0.65 (neg) | ✗ EMPTY — a genuine slip (signal exists, never added to BUILDABLE) |
+| **E mojo** (Consistent, Volatile, 2) | ✗ mojo auto-derivation UNBUILT (genuine missing input) | ✓ Consistent COMMON 0.55 · Volatile UNCOMMON 0.70 | ✗ EMPTY |
+| **F bespoke** (Base Jogger, Metal Head, Wild Thing, Workhorse, 4) | ✗ no clean SMB4 signal | ✓ derived (Workhorse ELITE 0.92 · Wild Thing SEVERE 0.78 · …) | ✗ no viable proxy |
+| **G cut** (Sign Stealer, Stimulated, Noodle Arm, 3) | — | Sign Stealer/Stimulated THROW (excluded from weighting); Noodle Arm derives MODERATE | deliberately cut/parked |
+
+**Net:** groups **A+B+C (17 traits)** are NOT blocked on capture or difficulty — both exist — only on **writing the proxy logic** (the elite-pitch/T-9 shape, repeated; opt-in + min-sample-gated). **D (Wild Thrower)** is a 1-line BUILDABLE add (signal already auto-tracked). **E/F/G** need real new work or are intentional. **PENDING: JK is providing the per-group tracking methods (the proxy definitions) → fill the §0.6 rows → move A–C earnable.**
+
+---
+
 ## HEADLINE
 
 The candidate builder (`BUILDABLE_TRAITS`) emits **16** traits. **~34 more are buildable now** —
