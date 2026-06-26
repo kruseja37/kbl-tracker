@@ -4,6 +4,18 @@
 > Branch: `codex/draft-pipeline-fix` (worktree kbl-draftfix). Date: 2026-06-26. Owner rulings: JK.
 > Detailed docs this links to: `FRANCHISE_SETUP_TO_SEASON_ROADMAP.md`, `ARCHETYPE_BALANCE_SIM_RESULTS.md`.
 
+## 0. RESUME POINT (handoff 2026-06-26)
+**Branch `codex/draft-pipeline-fix`** is SHARED: the UI/UX thread is building the screens here (archetype picker, Draft Setup hub, season-rules — the `feat(draft-ui)` commits); the **draft-pipeline/optimizer lane owns** engine/data/spec-docs (`src/data/historicalArchetypes.ts`, `src/engines/archetypeBalanceSimulator.ts`). Manager-WPA + situational-advisor UI is the OTHER thread (`experiment/manager-wpa-window`). Tree clean.
+
+**DONE this session:** draft-setup redesign (shuttle/lock/edit/4-man rotation/traits/Option-B budget); **archetype balance simulator** (EV-flatness gate); **15 historical archetypes LOCKED + validated across 3 tiers** (`historicalArchetypes.ts`); the **keystone-optimizer interface contract confirmed** (6 answers appended to `MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` in the main tree); pool-strength analysis (strength is NOT a balance risk — weaker pools are MORE balanced; composition IS the risk); fielding-corrected-true-value plan; derived chemistry-potency design.
+
+**NEXT (draft-pipeline lane — build the keystone optimizer):**
+1. **Pool-feasibility check** (start here) — point the roster-builder (`archetypeBalanceSimulator`'s `buildBestRoster`) at a LOCKED pool; report per-archetype support vs starve; emit the "add ~N [type] players to activate [archetype]" prompt. Resolve the OPEN tier question (does picking a tier weaken player RATINGS or only the budget) as part of this — stock SML pool is juiced.
+2. **Fielding-corrected true-value** — own the `effectiveRatings`/`playerDatabase` shared edits (un-pin potency from L2 → DERIVED chemistry-potency recomputed on ANY roster move; wire the fielding-corrected true value — canonical IV stays FROZEN; price web gems both ways).
+3. **The two contract functions** — `evaluateScoutMove` + `optimizeLineupVsStarter` (pure, deterministic, win-value units, fielding-corrected yardstick, optional matchup-substrate seam shaped in now). Per `MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md`.
+
+**Startup ritual for the new thread:** read this brief → `FRANCHISE_SETUP_TO_SEASON_ROADMAP.md` → `ARCHETYPE_BALANCE_SIM_RESULTS.md` → `MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (main tree). Open items also: matchup substrate (shared build, interface TBD), shill count + divisions scope, pipeline seam-fixes (§5/§7).
+
 ## 1. Where we are
 We redesigned the Mode-1 Draft Setup and went deep on **team archetypes**. Net: the team-archetype system is now grounded in **real historical team identities**, **sim-balanced** so a league of them is dynamic but fair, and we identified a **keystone roster-optimizer** that pays off across the whole franchise arc (pre-draft → draft → in-season). Plus a precise fix for the fielding-undervaluation risk.
 
