@@ -740,6 +740,17 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
       },
     },
   },
+  'kbl-franchise-home-park-rivals': {
+    version: 1,
+    stores: {
+      homeParkRivals: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'by_scope', keyPath: 'scopeKey' },
+        ],
+      },
+    },
+  },
   'kbl-transactions': {
     version: 2,
     stores: {
