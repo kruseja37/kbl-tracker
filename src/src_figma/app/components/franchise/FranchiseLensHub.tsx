@@ -106,15 +106,31 @@ export interface FameVM {
   immortalityLabel: string;     // "Local", "Immortal", …
   channels: { label: string; value: number }[];  // wpa_spine / iconic_event / status / defensive / role_player
 }
+export interface FormStateVM { label: string; tone?: "up" | "down" | "flat" }   // mojo / fitness chip
+export interface MakeupModVM { label: string; value: number }                    // hidden modifier 0–99
+export interface CareerAwardVM { label: string; count: number }
+export interface MilestoneVM { label: string; detail?: string; achieved: boolean; atLabel?: string }
+export interface MoraleSourceVM { label: string; value: number }                 // signed morale contribution
 export interface PlayerDetailVM {
   age?: number; bats?: string; throws?: string; grade?: string; bio?: string;
+  nickname?: string;
+  careerPhase?: string;         // "Prime" / "Decline" … (agingEngine)
+  retirementNote?: string;
+  mojo?: FormStateVM;
+  fitness?: FormStateVM;
+  personality?: string;         // the canonical personality
+  modifiers?: MakeupModVM[];    // loyalty / ambition / resilience / charisma
   valueTrend?: ValuePointVM[];
   ratings?: RatingBarVM[];      // base→current (mergeRatingsOverlays)
   spray?: SprayRoleVM[];        // this player's own spray — batting (where he hits) / pitching (contact off him) / fielding
   traitsCurrent?: string[];
   traitTimeline?: TraitTimelineVM[];
+  moraleSources?: MoraleSourceVM[];  // morale ledger source breakdown
   ties?: TieVM[];
   fame?: FameVM;
+  careerLine?: { label: string; value: string }[];   // career totals
+  careerAwards?: CareerAwardVM[];
+  milestones?: MilestoneVM[];
   designationEffect?: string;
 }
 
@@ -1040,13 +1056,22 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
           <div className="dnum fen-chalk">{player.number ?? ""}</div>
           <div className="dident">
             <div className="dname fen-chalk fen-y">{player.name}</div>
+            {d?.nickname ? <div className="dnick">"{d.nickname}"</div> : null}
             <div className="dmeta">{[player.position, d?.age ? `age ${d.age}` : null, d?.bats && d?.throws ? `B/T ${d.bats}/${d.throws}` : null, d?.grade ? `grade ${d.grade}` : null].filter(Boolean).join(" · ")}</div>
             <div className="dbadges">
               {player.designation ? <span className={`fen-rbadge${player.designation.kind === "albatross" ? " alb" : ""}`}>{player.designation.label}</span> : null}
+              {d?.careerPhase ? <span className="dphase">{d.careerPhase}</span> : null}
               {player.war !== undefined ? <span className="dwar">WAR {player.war.toFixed(1)}</span> : null}
             </div>
           </div>
         </div>
+        {(d?.mojo || d?.fitness || d?.retirementNote) ? (
+          <div className="fen-dform">
+            {d?.mojo ? <span className={`chip ${d.mojo.tone ?? "flat"}`}>Mojo · {d.mojo.label}</span> : null}
+            {d?.fitness ? <span className={`chip ${d.fitness.tone ?? "flat"}`}>Fitness · {d.fitness.label}</span> : null}
+            {d?.retirementNote ? <span className="chip warn">{d.retirementNote}</span> : null}
+          </div>
+        ) : null}
         {d?.designationEffect ? <div className="fen-deffect fen-help-b">{d.designationEffect}</div> : null}
         {d?.bio ? <div className="fen-dbio">{d.bio}</div> : null}
 
@@ -1059,6 +1084,18 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
         {d?.valueTrend && d.valueTrend.length > 1 ? <DrawerSection title="Value trend" hint="True Value by checkpoint"><ValueSparkline points={d.valueTrend} /></DrawerSection> : null}
         {d?.ratings && d.ratings.length ? <DrawerSection title="Ratings" hint="bar = now · tick = draft-day"><RatingBars ratings={d.ratings} /></DrawerSection> : null}
         {d?.spray && d.spray.length ? <DrawerSection title="Spray chart" hint={d.spray[0]?.role === "pitching" ? "contact off him" : "where he hits"}><SprayPanel spray={d.spray} /></DrawerSection> : null}
+        {(d?.personality || (d?.modifiers && d.modifiers.length)) ? (
+          <DrawerSection title="Makeup" hint="personality + hidden makeup">
+            {d?.personality ? <div className="fen-personality">{d.personality}</div> : null}
+            {d?.modifiers && d.modifiers.length ? (
+              <div className="fen-mods">
+                {d.modifiers.map((mo, i) => (
+                  <div className="fen-mod" key={i}><span className="ml">{mo.label}</span><span className="mbar"><span className="fill" style={{ width: `${mo.value}%` }} /></span><span className="mv fen-chalk">{mo.value}</span></div>
+                ))}
+              </div>
+            ) : null}
+          </DrawerSection>
+        ) : null}
         {(d?.traitsCurrent?.length || d?.traitTimeline?.length) ? (
           <DrawerSection title="Traits">
             {d?.traitsCurrent && d.traitsCurrent.length ? <div className="fen-traitchips">{d.traitsCurrent.map((t, i) => <span className="chip" key={i}>{t}</span>)}</div> : null}
@@ -1082,6 +1119,13 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
               <span className={`big fen-chalk ${moraleClass(m.value)}`}>{m.value} <span className="ar">{arrow(m.trend)}</span></span>
               {m.arc ? <span className="arc">{m.arc}</span> : null}
             </div>
+            {d?.moraleSources && d.moraleSources.length ? (
+              <div className="fen-msources">
+                {d.moraleSources.map((src, i) => (
+                  <div className="src" key={i}><span className="sl">{src.label}</span><span className={`sv ${src.value >= 0 ? "up" : "dn"}`}>{src.value >= 0 ? "+" : ""}{src.value}</span></div>
+                ))}
+              </div>
+            ) : null}
             {m.history.length ? m.history.map((h, i) => (
               <div className="fen-entry" key={i}><span className={`d ${h.delta >= 0 ? "up" : "dn"}`}>{h.delta >= 0 ? "+" : ""}{h.delta}</span><span><span className="rs">{h.reason}</span><br /><span className="wk">{h.week}</span></span></div>
             )) : <div className="fen-entry"><span className="rs fen-muted">No recorded swings yet this season.</span></div>}
@@ -1090,6 +1134,29 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
 
         {d?.ties && d.ties.length ? <DrawerSection title="Ties" hint="clubhouse relationships"><TiesList ties={d.ties} /></DrawerSection> : null}
         {d?.fame ? <DrawerSection title="Fame"><FameBlock fame={d.fame} /></DrawerSection> : null}
+        {(d?.careerLine && d.careerLine.length) || (d?.careerAwards && d.careerAwards.length) ? (
+          <DrawerSection title="Career" hint="across all seasons">
+            {d?.careerLine && d.careerLine.length ? (
+              <div className="fen-career">
+                {d.careerLine.map((c, i) => (<div className="cl" key={i}><div className="v fen-chalk">{c.value}</div><div className="l">{c.label}</div></div>))}
+              </div>
+            ) : null}
+            {d?.careerAwards && d.careerAwards.length ? (
+              <div className="fen-careeraw">{d.careerAwards.map((a, i) => (<span className="aw" key={i}>{a.label} ×{a.count}</span>))}</div>
+            ) : null}
+          </DrawerSection>
+        ) : null}
+        {d?.milestones && d.milestones.length ? (
+          <DrawerSection title="Milestones">
+            {d.milestones.map((ms, i) => (
+              <div className={`fen-ms${ms.achieved ? " got" : ""}`} key={i}>
+                <span className="ck">{ms.achieved ? "★" : "○"}</span>
+                <span className="mt">{ms.label}{ms.detail ? <span className="md"> · {ms.detail}</span> : null}</span>
+                {ms.atLabel ? <span className="ma">{ms.atLabel}</span> : null}
+              </div>
+            ))}
+          </DrawerSection>
+        ) : null}
 
         {!d ? <div className="fen-empty">Full dossier fills in as the season runs.</div> : null}
       </div>

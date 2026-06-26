@@ -26,8 +26,12 @@ no takeover UI.
 
 ---
 
-## Bucket 1 — The deeper player dossier  *(player-level depth — JK's stated priority)*
+## Bucket 1 — The deeper player dossier  *(player-level depth — JK's stated priority)* ✅ BUILT
 Opens from the drawer; add tabs/sections so the dossier is the true home of per-player depth.
+**BUILT 2026-06-26** (mock-fed): nickname + career-phase badge + form chips (mojo/fitness) in the header;
+a **Makeup** section (personality + the 4 hidden modifiers as bars); a morale **source breakdown** in the
+ledger; a **Career** card (totals + awards-won chips); a **Milestones** section (achieved ★ vs on-the-chase
+○). Mocked on Fenomeno (rising) + Stad (decline). Role-morale (deferred) left for the soul-layer pass.
 
 | Surface | What it shows | Status | Surfaced? | Source (file) |
 |---|---|---|---|---|
