@@ -23337,3 +23337,119 @@ The representative SIM values (spec line 206: `startBar 0.25, γ=2, δ≈1`) are
 
 **FAILURE PROTOCOL / STOP-IF:** the gate would touch mentorship/clubhouse_rift or any non-trade_demand family → STOP; you reach for `Math.random` or a new RNG → STOP (hard `wouldRequest` gate; if a probabilistic gate is truly wanted, use `franchiseL10DeterministicRoll` with a `:roster:trade_demand:propensity` seed suffix — but DEFAULT to the boolean gate); a `TRACKER_DB_VERSION` bump or a persisted field is needed → STOP (that's A1.3b); you're tempted to add the flashpoint tax / TRADE_DEMAND morale emitter / persisted demander → STOP (A1.3b); `computeTradeRequestPropensity` needs an input not in scope → STOP and report (all inputs verified available); a non-L10 fixture regresses → STOP. Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: A1.3a ===== -->
+
+<!-- ===== CONTRACT: A1.3b ===== -->
+# CONTRACT A1.3b — trade-demand FULL (persisted demander store + §13 flashpoint tax + one-shot TRADE_DEMAND morale)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push (the Captain commits).
+**ROLE:** You are the builder. Build to this contract EXACTLY. Use **xhigh** reasoning effort.
+
+## GOAL
+Make a `trade_demand` random event do something real downstream — the §13 "tooth #2" mechanism. Today (after A1.3a) the L10 engine only *emits* a gated `trade_demand` overlay; nothing persists the demander or taxes the team. This ticket:
+1. Persists a **confirmed trade-demander** to a NEW trackerDb store (JK-AUTHORIZED `TRACKER_DB_VERSION` bump v25→v26).
+2. Fills the flashpoint-decay seam so a confirmed demander **bleeds fan morale every game via the existing compounding tax** (same machinery as a locked Albatross).
+3. Emits a **one-shot `TRADE_DEMAND` morale consequence** at the confirmation game (mirrors how a locked Albatross fires both `ALBATROSS_LOCKED` once AND the ongoing flashpoint tax).
+
+**Everything is BUILD-DARK** behind the existing default-OFF Phase-2 flags (`isFranchisePhase2L10Enabled`, `isFranchisePhase2FlashpointEnabled`, `isFranchisePhase2MoraleEnabled`). With all flags at their OFF defaults, NOTHING is written, NO behavior changes — the only non-dark change is the additive, empty new store created by the DB upgrade.
+
+## SOURCE OF TRUTH
+- Spec §13 tooth #2 (FRANCHISE_V1_LIVING_SEASON_SPEC.md:227): "A turned-on player (a locked Albatross, a trade-demander) who stays *bleeds* fan morale slowly every game — not a cliff, a compounding tax." §10:186 lists `trade demand (low loyalty + low morale)` as a roster random event.
+- The Albatross analogue (the pattern to MIRROR): membership lives in a designation store (`franchiseDesignationRows`), the per-game tax accumulator is `franchiseFlashpointDecay`, and the one-shot morale event `ALBATROSS_LOCKED` is emitted in `persistDesignationMoraleConsequencesAfterTrueValue` (`processCompletedGame.ts:423-471`). Trade-demand is the SAME shape: a new membership store + the SHARED flashpoint accumulator + a one-shot `TRADE_DEMAND` morale event.
+
+## GROUND ANCHORS (re-read before editing — verified by the Captain from source 2026-06-26; the HANDOFF's older line numbers are stale, USE THESE)
+- `src/engines/flashpointDecay.ts:21` — `FlashpointKind = 'albatross' | 'trade_demander' | null` ALREADY includes `trade_demander`; `computeFlashpointGameTax` (`:74`) ALREADY handles it (shared tax base — no engine change needed).
+- `src/utils/franchiseFlashpointDecayCompute.ts:95` — the SEAM: `// SEAM (still empty): L10/L13 trade-demander fills 'trade_demander'.` in `resolveTurnedOnPlayers` (`:63-97`). `teamIds` (the completed game's home+away) is already computed at `:67-73`. Albatross is added per-team at `:90-92`.
+- `src/utils/franchiseFlashpointDecayStorage.ts` — the storage-module template to CLONE (store `franchiseFlashpointDecay`, keyPath `['franchiseId','seasonId','statsScopeId','playerId']`, `by_scope` index, save/get/getByScope/getRow/delete/clear/reset + syncEngine.upsert).
+- `src/utils/franchiseL10SweepCompute.ts:177-242` — `persistDarkL10ForCompletedGame`: builds `candidates` (each player candidate carries `teamId`, `:143-153`), computes `report.events`, writes overlay rows. `report.events[i]` carries `targetId`/`targetKind`/`eventType` (a `trade_demand` event = `eventType:'trade_demand'`, `targetKind:'player'`, `targetId`=playerId). `createdAt` (deterministic ISO) computed at `:200`. `gameNumber` at `:186`.
+- `src/utils/processCompletedGame.ts:1130-1136` — the L10 sweep call site (gated `isFranchisePhase2L10Enabled`). The new one-shot morale step is inserted RIGHT AFTER this block (after `:1136`).
+- `src/utils/processCompletedGame.ts:387-471` — `designationEventToMoraleEvent` + `persistDesignationMoraleConsequencesAfterTrueValue` — the EXACT morale-apply pattern to clone: `composeMoraleConsequence({type}, personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), currentPlayerMorale, currentFanMorale)` → `applyFranchiseMoraleMatrixConsequence({franchiseId,seasonId,statsScopeId,seasonNumber,playerId,teamId,consequence,sourceEventId,timestamp})`. `currentMoraleValue` helper at `:413`. All imports (`composeMoraleConsequence`, `applyFranchiseMoraleMatrixConsequence`, `getFranchisePlayer`, `resolveHiddenModifiers`, `currentMoraleValue`, `isFranchisePhase2MoraleEnabled`) already present in the file.
+- `src/engines/masterMoraleMatrix.ts:407` — `TRADE_DEMAND: row(EVENT_DELTA.tradeDemandSelf /* -3 */, EVENT_DELTA.tradeSalaryDumpFan, [touch('clubhouse', EVENT_DELTA.smallTeammateDrop)], 'player.trade_demand')` — the matrix row ALREADY EXISTS (`MasterMoraleEventType` includes `'TRADE_DEMAND'` at `:32`). Just emit it; do NOT edit the matrix.
+
+## THE 5 FORKS — DOCUMENTED DEFAULTS (build EXACTLY these; the Captain ruled them under AUTH-4)
+1. **Demander source-of-truth** → a NEW dedicated store `franchiseTradeDemandState` (the Albatross-designation analogue), written by the L10 dark sweep, read by the flashpoint seam + the one-shot morale step. (NOT the L10 overlay store — that is a generic pending-event log; a dedicated per-player membership store mirrors `franchiseDesignationRows` and is cheap to query per-team.)
+2. **flashpoint-tax vs one-shot-morale vs both** → **BOTH** (mirrors Albatross: `ALBATROSS_LOCKED` one-shot + ongoing tax). The one-shot fires ONCE at the confirmation game; the compounding flashpoint tax accrues every subsequent game the demander's team plays. No double-count (initial event vs ongoing-unresolved bleed — identical to Albatross).
+3. **albatross↔trade_demander row-key collision** → in `resolveTurnedOnPlayers`, dedupe by `playerId` with **albatross-precedence**: if a player is already in `turnedOnPlayers` (as albatross), do NOT add a second `trade_demander` entry. (The flashpoint store row is keyed by playerId with a single `flashpointKind`; two same-key entries would collide. The tax base is shared, so albatross-precedence loses no magnitude.)
+4. **resolution/counter-reset** → v1 has NO trade-execution UI, so NO auto-resolution: a confirmed demander stays `status:'active'` for the season; the row carries a `status: 'active' | 'resolved'` field as the documented SEAM for a later resolution/trade ticket (which will set `'resolved'` + reset the flashpoint counter). The L10 demander write is IDEMPOTENT — if the player is already a demander, do NOT overwrite `confirmedAtGameNumber`/`confirmedAtIso` (so the one-shot fires exactly once).
+5. **intensity source** → the flashpoint tax AND the `TRADE_DEMAND` matrix delta are intensity-INDEPENDENT (shared tax base matching Albatross; fixed matrix delta). Intensity only governs WHETHER L10 fires `trade_demand` (already handled upstream by the sweep's `'standard'` dial + the A1.3a propensity gate). Do NOT record intensity on the demander row.
+
+## EXPECTED OUTPUT — build these parts (and ONLY these files)
+
+### Part 1 — new store + DB bump + ALL registrations (the safety-critical spine — get this byte-right)
+- **`src/utils/trackerDb.ts`**: bump `TRACKER_DB_VERSION` `25`→`26` (line 17). In `onupgradeneeded`, after the v25 `franchiseRelationshipEdges` block (`:453-465`), add a guarded v26 block:
+  ```
+  // v26 / A1.3b: dark confirmed trade-demander membership store (§13 tooth #2).
+  // Written by the L10 dark sweep when a trade_demand event fires; read by the
+  // flashpoint-decay seam + the one-shot TRADE_DEMAND morale step. Empty until L10 is on.
+  if (!db.objectStoreNames.contains('franchiseTradeDemandState')) {
+    const tradeDemandStore = db.createObjectStore('franchiseTradeDemandState', {
+      keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+    });
+    tradeDemandStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], { unique: false });
+  }
+  ```
+- **`src/utils/franchiseTradeDemandStorage.ts`** (NEW): clone `franchiseFlashpointDecayStorage.ts` exactly (same helpers/promise wrappers/syncEngine pattern). Export `FRANCHISE_TRADE_DEMAND_STORE_NAME = 'franchiseTradeDemandState'`, types:
+  ```
+  export interface FranchiseTradeDemandScopeInput { franchiseId: string; seasonId: string; statsScopeId: string; }
+  export interface FranchiseTradeDemandRow extends FranchiseTradeDemandScopeInput {
+    playerId: string;
+    teamId: string;
+    status: 'active' | 'resolved';
+    confirmedAtGameNumber: number;
+    confirmedAtCheckpoint: string;
+    confirmedAtIso: string;
+  }
+  ```
+  and functions `resetFranchiseTradeDemandForTests`, `clearFranchiseTradeDemandForTests`, `initFranchiseTradeDemandDatabase`, `saveFranchiseTradeDemandRows`, `upsertFranchiseTradeDemandRow`, `deleteFranchiseTradeDemandForScope`, `getFranchiseTradeDemandRowsByScope`, `getFranchiseTradeDemandRow` (mirror the flashpoint storage signatures/sort-by-playerId).
+- **`src/utils/backupRestore.ts`**: (a) in the `trackerStores` registry (`:69`), add a `franchiseTradeDemandState` entry — `{ keyPath: ['franchiseId','seasonId','statsScopeId','playerId'], indexes: [{ name: 'by_scope', keyPath: ['franchiseId','seasonId','statsScopeId'] }], optional: true }` (place it near the other franchise stores, e.g. after `franchiseRelationshipEdges`/before `franchiseL10Overlays` — ordering inside the object is cosmetic, but it MUST be present). (b) Bump `STATIC_DATABASE_SCHEMAS['kbl-tracker'].version` `25`→`26` (`:366`). ⚠ The parity test `backupRestore.franchiseParity.test.ts:320-328` asserts `Object.keys(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores)` EQUALS `db.objectStoreNames` — so this registration is MANDATORY or that test goes RED.
+- **`src/utils/syncConfig.ts`**: in `SYNC_REGISTRY['kbl-tracker']` (`:10-`), add `franchiseTradeDemandState: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],` (so the store syncs like flashpoint/fame).
+
+### Part 2 — L10 sweep writes the confirmed demander (the membership write)
+- **`src/utils/franchiseL10SweepCompute.ts`** `persistDarkL10ForCompletedGame` (`:177-242`): after the overlay rows are written (after `:239`), build `const teamIdByPlayerId = new Map(candidates.filter(c => c.kind === 'player' && c.teamId).map(c => [c.id, c.teamId as string]));` then for each `event` in `report.events` where `event.eventType === 'trade_demand' && event.targetKind === 'player'`: resolve `teamId = teamIdByPlayerId.get(event.targetId)`; if no teamId, skip. Read the existing row via `getFranchiseTradeDemandRow(scope, event.targetId)`; if it already exists, do NOTHING (idempotent — keep first confirmation). If absent, `upsertFranchiseTradeDemandRow({ franchiseId, seasonId, statsScopeId, playerId: event.targetId, teamId, status: 'active', confirmedAtGameNumber: gameNumber, confirmedAtCheckpoint: String(gameNumber), confirmedAtIso: createdAt })`. Keep this inside the existing L10-flag gate (the whole function is already gated). Expose the write through the existing `l10SweepSeam` object OR a small local helper so the test can assert it. Do NOT change overlay-row behavior.
+
+### Part 3 — flashpoint seam fill (the §13 compounding tax)
+- **`src/utils/franchiseFlashpointDecayCompute.ts`** `resolveTurnedOnPlayers` (`:63-97`): at the SEAM (`:95`), replace the empty comment with: read `await getFranchiseTradeDemandRowsByScope(scope)`, filter to `row.status === 'active' && teamIds.includes(row.teamId)`, and for each push `{ playerId: row.playerId, kind: 'trade_demander' }` — BUT skip any `playerId` already present in `turnedOnPlayers` (albatross-precedence; track a `Set<string>` of already-added playerIds populated from the albatross loop). Import `getFranchiseTradeDemandRowsByScope` from `./franchiseTradeDemandStorage`. The rest of the compute (tax accumulation, re-entry guard) is UNCHANGED — `trade_demander` flows through `computeFlashpointGameTax` exactly like albatross.
+
+### Part 4 — one-shot TRADE_DEMAND morale emitter
+- **`src/utils/processCompletedGame.ts`**: add an exported `persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions)` modeled on `persistDesignationMoraleConsequencesAfterTrueValue` (`:423-471`) + the Channel-A persister gating. It: early-returns unless `isFranchisePhase2MoraleEnabled()`; resolves this game's gameNumber (clone the `resolveL10GameNumber` schedule-lookup approach OR reuse an existing checkpoint resolver — must be deterministic, no wall-clock); reads `getFranchiseTradeDemandRowsByScope(trueValueScope)`, filters to `row.status === 'active' && row.confirmedAtGameNumber === thisGameNumber` (the demanders NEWLY confirmed THIS game); for each, loads `getFranchisePlayer`, current player+fan morale via `currentMoraleValue`, `composeMoraleConsequence({ type: 'TRADE_DEMAND' }, player?.personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), currentPlayerMorale, currentFanMorale)`, then `applyFranchiseMoraleMatrixConsequence({ ...scope, seasonNumber: trueValueScope.seasonNumber, playerId: row.playerId, teamId: row.teamId, consequence, sourceEventId: ['trade-demand', franchiseId, seasonId, statsScopeId, row.playerId, row.confirmedAtCheckpoint].join(':'), timestamp: row.confirmedAtIso })`. Wrap per-row in try/catch with a `console.warn('[MoraleMatrix] trade-demand event skipped:', error)` (match the designation catch). Import `getFranchiseTradeDemandRowsByScope`.
+- Call it in the pipeline RIGHT AFTER the L10 block (after `:1136`), unconditionally inside a `try/catch` (it self-gates on the morale flag), matching the Channel-A/B call style:
+  ```
+  try {
+    await persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+  } catch (e) {
+    console.warn('[MoraleMatrix] dark trade-demand morale write skipped for completed game ' + gameState.gameId + ':', e);
+  }
+  ```
+
+### Part 5 — version-pin + parity tests (these MUST be updated or they go RED — that is EXPECTED, not a regression)
+- **`src/utils/tests/franchiseSeasonLedgerStorage.test.ts`**: add `'franchiseTradeDemandState',` to `expectedTrackerStores` (between `'franchiseSeasonSummaries'` and `'franchiseTraitOverlays'`, `:45-46` — keep the array alphabetical); change `expect(TRACKER_DB_VERSION).toBe(25)` (`:278`)→`toBe(26)`; change `expect(db.version).toBe(25)` (`:298`)→`toBe(26)`.
+- **`src/src_figma/__tests__/franchiseMode/franchiseInitializer.test.ts:468`**: `expect(TRACKER_DB_VERSION).toBe(25)`→`toBe(26)`.
+- **`src/utils/tests/franchiseRelationshipEdgesStorage.test.ts:316`**: `expect(db.version).toBe(25)`→`toBe(26)`.
+- **`src/utils/tests/backupRestore.franchiseParity.test.ts`**: the structural-alignment test (`:320`) auto-passes once Part 1 is correct. ADD coverage proving the new store round-trips: declare a `tradeDemandRow` fixture, add `'franchiseTradeDemandState'` to the `seedFranchiseEconomyRows` transaction store list (`:251-265`) + a `tx.objectStore('franchiseTradeDemandState').put(tradeDemandRow)` (`:269-280`), and add `expect(backup.databases[TRACKER_DB_NAME].franchiseTradeDemandState).toEqual([tradeDemandRow]);` to the round-trip test (`:345-356`).
+
+### Part 6 — focused new tests (prove the make-or-break)
+- New `src/utils/tests/franchiseTradeDemandStorage.test.ts` (clone the flashpoint storage test): save/get round-trip, getByScope sort, scope isolation, version is 26 + store exists.
+- Extend `src/utils/tests/franchiseL10SweepCompute.test.ts`: with the L10 flag ON, a fired `trade_demand` event writes ONE `franchiseTradeDemandState` row (status active, correct teamId/gameNumber/iso); a second sweep for the same player does NOT overwrite `confirmedAtGameNumber` (idempotent); existing overlay-row assertions still pass.
+- Extend `src/utils/tests/franchiseFlashpointDecayCompute.test.ts`: with a seeded active demander on a playing team, `resolveTurnedOnPlayers` returns a `trade_demander` entry and the compute accrues the tax; a player who is BOTH an Albatross AND a demander yields exactly ONE entry with `kind:'albatross'` (precedence); a demander whose team is NOT in the completed game is excluded.
+
+## CONSTRAINTS
+- Branch `codex/franchise-v1-next` ONLY. Do NOT commit, do NOT push. The Captain commits by path.
+- Touch ONLY: `src/utils/trackerDb.ts`, `src/utils/franchiseTradeDemandStorage.ts` (NEW), `src/utils/backupRestore.ts`, `src/utils/syncConfig.ts`, `src/utils/franchiseL10SweepCompute.ts`, `src/utils/franchiseFlashpointDecayCompute.ts`, `src/utils/processCompletedGame.ts`, and the 4 existing test files + 1 new test file listed above. Do NOT touch any FROZEN oracle (`spec-docs/reference/iv_oracle.json`, golden snapshots), the `flashpointDecay.ts`/`masterMoraleMatrix.ts` engines (read-only — they already support what you need), or any UI/component file.
+- Do NOT flip any Phase-2 flag. Everything stays build-dark.
+- Determinism: no `Math.random`, no `Date.now()`, no wall-clock. Timestamps come from the persisted `confirmedAtIso` / event-derived ISO only.
+- Keep hitter/albatross/overlay byte-paths identical when the new code path is inactive (empty demander store → flashpoint seam adds nothing; morale flag off → emitter no-ops; L10 flag off → no demander writes).
+
+## VERIFICATION (run locally; report the exact output)
+- `NODE_ENV= npm run build` → exit 0 (tsc clean).
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseTradeDemandStorage.test.ts src/utils/tests/franchiseL10SweepCompute.test.ts src/utils/tests/franchiseFlashpointDecayCompute.test.ts src/utils/tests/franchiseSeasonLedgerStorage.test.ts src/utils/tests/backupRestore.franchiseParity.test.ts src/utils/tests/franchiseRelationshipEdgesStorage.test.ts src/src_figma/__tests__/franchiseMode/franchiseInitializer.test.ts` → all green.
+- Report every changed/created path (`git status --porcelain`) + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself.
+
+## FORMAT
+Report: (1) each file changed + a one-line what/why; (2) the build result; (3) the focused vitest summary (passed/failed counts + any failed file names); (4) confirmation that no Phase-2 flag was flipped and no forbidden file was touched.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP, do not improvise)
+- STOP-IF the new store cannot be registered in `backupRestore.ts` without the structural-parity test failing for a reason OTHER than "add the store" (i.e. if the registry shape doesn't match — report it).
+- STOP-IF `composeMoraleConsequence`/`applyFranchiseMoraleMatrixConsequence` signatures do NOT match the designation-path usage at `processCompletedGame.ts:437-466` (re-read; do not guess a different shape).
+- STOP-IF filling the flashpoint seam changes the ALBATROSS byte-path (the albatross-only tests must stay green unchanged).
+- STOP-IF you cannot make the L10 demander write idempotent without overwriting `confirmedAtGameNumber`.
+- A correct BLOCK is GOOD. Do NOT widen scope, do NOT touch extra files, do NOT flip a flag to "make it work."
+<!-- ===== END CONTRACT: A1.3b ===== -->
