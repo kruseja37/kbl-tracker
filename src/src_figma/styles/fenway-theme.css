@@ -299,6 +299,25 @@
 .fen-recap .rh { font-size: 12px; color: #3a352a; }
 @media (max-width: 600px) { .fen-recap { grid-template-columns: 1fr; gap: 2px; } }
 
+/* the league wire (all event types) */
+.fen-wire { margin-top: 18px; border-top: 2px solid var(--fen-navy); padding-top: 12px; position: relative; z-index: 2; }
+.fen-wire-h { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 9px; }
+.fen-wire-h .lite { color: #4a4536; letter-spacing: 0; }
+.fen-wireitem { display: grid; grid-template-columns: 78px 1fr auto; align-items: baseline; gap: 12px; padding: 5px 0; border-bottom: 1px dotted rgba(29, 45, 68, 0.22); }
+.fen-wireitem:last-child { border-bottom: none; }
+.fen-wireitem .ty { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-navy); background: rgba(29, 45, 68, 0.12); border-radius: 3px; padding: 2px 6px; text-align: center; }
+.fen-wireitem.bad .ty { color: #fff; background: var(--fen-marquee); }
+.fen-wireitem.good .ty { color: #fff; background: #2f6d3f; }
+.fen-wireitem .tx { font-size: 12.5px; color: #23201a; }
+.fen-wireitem .wn { font-size: 10.5px; color: #6a5f48; text-transform: uppercase; letter-spacing: 0.04em; }
+@media (max-width: 600px) { .fen-wireitem { grid-template-columns: 1fr; gap: 2px; } }
+
+/* the reporter's desk (colophon) */
+.fen-desk { margin-top: 18px; border-top: 1px solid var(--fen-navy); padding-top: 12px; position: relative; z-index: 2; }
+.fen-desk .dh { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #4a4536; }
+.fen-desk .dm { font-size: 12.5px; color: #23201a; margin-top: 3px; }
+.fen-desk .dn { font-size: 12.5px; color: #4a4536; font-style: italic; margin-top: 5px; }
+
 /* ===== Standings & Races (league tab — all chalk, your club yellow, rival red) ===== */
 .fen-sr { display: flex; flex-direction: column; gap: 26px; }
 .fen-sr-sect { }

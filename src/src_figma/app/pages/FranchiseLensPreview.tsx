@@ -740,6 +740,17 @@ const HUB: Record<string, HubVM> = {
         { date: "Wk 8 · Sat", away: "PC", home: "BM", awayScore: 8, homeScore: 3, headline: "Page bats erupt to split the set", win: "away" },
         { date: "Wk 8 · Fri", away: "SG", home: "PC", awayScore: 1, homeScore: 9, headline: "Drake's grand slam buries the Gnats", win: "home" },
       ],
+      wire: [
+        { type: "Call-up", text: "Capitals promote SP Abe Krell from the farm.", when: "today", tone: "good" },
+        { type: "Trade", text: "Page kicks tires on a setup arm before the deadline.", when: "2d", tone: "neutral" },
+        { type: "Milestone", text: "Lars Stad clubs career home run #214.", when: "4d", tone: "good" },
+        { type: "Streak", text: "Monkeys run their win streak to four.", when: "1d", tone: "neutral" },
+        { type: "Injury", text: "Sand Gnats lose CF Jojo Fields to a hamstring, ~2 weeks.", when: "3d", tone: "bad" },
+        { type: "Award", text: "Cole Vesper named Pitcher of the Month.", when: "2d", tone: "good" },
+        { type: "Firing", text: "Harbor Bandits part ways with their manager after an 0–7 skid.", when: "5d", tone: "bad" },
+        { type: "Feud", text: "Clubhouse tension flares between two River Rats starters.", when: "6d", tone: "bad" },
+      ],
+      desk: { name: "J. Tate", tier: "Veteran beat writer", accuracy: 88, corrections: 2, note: "Calls the Capitals straight — a homer, but a fair one." },
     },
     pulse: {
       fanMorale: { value: 62, trend: "up", history: [
@@ -814,7 +825,12 @@ const HUB: Record<string, HubVM> = {
       { date: "Wk 9 · Wed", away: "CC", home: "BM", awayScore: 0, homeScore: 1, headline: "Vesper's 14 K's win a 1–0 duel", win: "home" },
       { date: "Wk 9 · Tue", away: "CC", home: "BM", awayScore: 2, homeScore: 6, headline: "Vance goes deep twice", win: "home" },
       { date: "Wk 8 · Sun", away: "PC", home: "BM", awayScore: 6, homeScore: 7, headline: "Monkeys outlast Page in a slugfest", win: "home" },
-    ] },
+    ], wire: [
+      { type: "Streak", text: "Brass Monkeys' win streak hits four.", when: "1d", tone: "neutral" },
+      { type: "Award", text: "Cole Vesper named Pitcher of the Month.", when: "2d", tone: "good" },
+      { type: "Milestone", text: "Boomer Vance reaches 30 home runs.", when: "3d", tone: "good" },
+      { type: "Firing", text: "Harbor Bandits fire their skipper amid a freefall.", when: "5d", tone: "bad" },
+    ], desk: { name: "D. Hale", tier: "Rising beat writer", accuracy: 81, corrections: 4, note: "Writing a coronation — careful, the season's not over." } },
     pulse: { fanMorale: { value: 71, trend: "up", history: [{ delta: 5, reason: "First place clinched the week", week: "Week 8" }] }, payrollLabel: "$6.10M · 22", clubhouseLabel: "Confident", clubhouseAvg: 64, standingLabel: "50–30 · 1st East" },
     roster: [
       { id: "b1", number: "9", position: "SP", name: "Cole Vesper", war: 6.2, salary: 1_500_000, trueValue: 1_700_000, valueGap: 200_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 78, state: "Locked in · ▲ rising", trend: "up", history: [{ delta: 6, reason: "14-strikeout gem", week: "Week 8" }] } },
@@ -872,7 +888,12 @@ const HUB: Record<string, HubVM> = {
       { date: "Wk 9 · Tue", away: "RR", home: "PC", awayScore: 3, homeScore: 4, headline: "Walk-off sinks River Rats", win: "home" },
       { date: "Wk 8 · Sun", away: "SG", home: "RR", awayScore: 5, homeScore: 2, headline: "Gnats hand the Rats a fourth straight loss", win: "away" },
       { date: "Wk 8 · Sat", away: "SG", home: "RR", awayScore: 1, homeScore: 7, headline: "Park's three hits snap the skid briefly", win: "home" },
-    ] },
+    ], wire: [
+      { type: "Injury", text: "River Rats LF Gus Hale day-to-day with a sore wrist.", when: "2d", tone: "bad" },
+      { type: "Feud", text: "Tension simmers in a restless Rats clubhouse.", when: "4d", tone: "bad" },
+      { type: "Trade", text: "\"We're not sellers yet,\" the GM insists.", when: "4d", tone: "neutral" },
+      { type: "Streak", text: "The skid reaches four before a brief stop.", when: "1d", tone: "bad" },
+    ], desk: { name: "G. Ruiz", tier: "Veteran beat writer", accuracy: 90, corrections: 1, note: "Frustrated for the fans — and it shows in the copy." } },
     pulse: { fanMorale: { value: 49, trend: "down", history: [{ delta: -6, reason: "Fell out of the wild-card spot", week: "Week 8" }] }, payrollLabel: "$4.30M · 22", clubhouseLabel: "Restless", clubhouseAvg: 47, standingLabel: "44–36 · 3rd East" },
     roster: [
       { id: "r1", number: "2", position: "2B", name: "Sol Park", war: 3.8, salary: 680_000, trueValue: 710_000, valueGap: 30_000, morale: { value: 52, state: "Steady", trend: "flat", history: [] } },

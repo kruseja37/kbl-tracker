@@ -90,15 +90,17 @@ advice: call-up ▲ / send-down ▼ / watch), and **Wants Out** (trade demands w
 | **Trade demands** ✅ BUILT | which players want out (severity) | 🟡 | Y | `tradeRequestGeneration.ts` |
 | **Trades ledger** | recent trades + the beat-reporter reaction story | 🟢 | N (→ widened newspaper) | `tradeEngine.ts:12` |
 
-## Bucket 6 — The newspaper, widened  *(all the story types + the reporter himself)*
-The Tootwhistle tab shows GAME_RECAP + the recap stream. The backend has **12 more event types** with
-adapters already written (L10–L13) but no home.
+## Bucket 6 — The newspaper, widened  *(all the story types + the reporter himself)* ✅ BUILT
+**BUILT 2026-06-26** (mock-fed): **The Wire** — a league news feed of all the other `SeasonNewsItem` event
+types (call-up/trade/milestone/streak/injury/award/firing/feud), each with a color-coded type tag
+(good=green, bad=red, neutral=navy) + timestamp; and a **reporter's-desk colophon** ("from the desk of
+[name] · tier · NN% accurate · N corrections"). All inside `.fen-paper` (the Moms typewriter voice).
 
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **League News feed** | all `SeasonNewsItem` by type: trade reaction, call-up, injury, milestone, streak, playoff race, manager change, award result, relationship flare | 🟢 adapters | N | `narrativeEngine.ts:77`, `franchiseL10–L13*NewsAdapter.ts` |
-| **Reporter dossier** | the beat writer's reputation (Rookie→Legendary), accuracy, credibility, retractions | 🟢 | N | `narrativeEngine.ts:35,376` |
-| **Per-story confidence/retraction** | "speculating" badge; a retraction when he's wrong | 🟢 | partial | `narrativeEngine.ts:151,665` |
+| **League News feed (The Wire)** ✅ BUILT | all `SeasonNewsItem` types: trade, call-up, injury, milestone, streak, manager change, award, relationship flare | 🟢 adapters | Y | `narrativeEngine.ts:77`, `franchiseL10–L13*NewsAdapter.ts` |
+| **Reporter dossier (the desk)** ✅ BUILT | the beat writer's tier + accuracy + corrections | 🟢 | Y | `narrativeEngine.ts:35,376` |
+| **Per-story confidence/retraction** | "speculating" badge; a retraction when he's wrong | 🟢 | partial (corrections count shown) | `narrativeEngine.ts:151,665` |
 
 ## Bucket 7 — The clubhouse soul, made visible  *(mostly 🟡 — build the homes)*
 | Surface | What it shows | Status | Surfaced? | Source |

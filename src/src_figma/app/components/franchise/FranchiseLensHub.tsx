@@ -71,6 +71,8 @@ export interface GameRecapVM {
   headline: string;              // GameStory.headline
   win?: "home" | "away";         // which side won (bolds the winner)
 }
+export interface WireItemVM { type: string; text: string; when?: string; tone?: "good" | "bad" | "neutral" }
+export interface ReporterDeskVM { name: string; tier: string; accuracy: number; corrections: number; note?: string }
 export interface NewsVM {
   editionLabel: string;
   volumeLabel: string;
@@ -78,6 +80,8 @@ export interface NewsVM {
   lead?: { kicker: string; headline: string; body: string; byline: string; dramaticWeight?: number };
   stories: NewsStoryVM[];        // ranked by dramaticWeight (the view sorts)
   recaps?: GameRecapVM[];        // the per-game recap stream (GameStory)
+  wire?: WireItemVM[];           // the league wire — all the other SeasonNewsItem event types
+  desk?: ReporterDeskVM;         // the beat writer's reputation/accuracy
 }
 
 export interface MoraleHistoryVM {
@@ -594,6 +598,25 @@ function NewspaperTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
                 <div className="rh">{r.headline}</div>
               </div>
             ))}
+          </div>
+        ) : null}
+        {news.wire && news.wire.length ? (
+          <div className="fen-wire">
+            <div className="fen-wire-h">The Wire <span className="lite fen-help">· around the league</span></div>
+            {news.wire.map((w, i) => (
+              <div className={`fen-wireitem ${w.tone ?? "neutral"}`} key={i}>
+                <span className="ty">{w.type}</span>
+                <span className="tx">{w.text}</span>
+                {w.when ? <span className="wn">{w.when}</span> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {news.desk ? (
+          <div className="fen-desk">
+            <div className="dh">From the desk of {news.desk.name}</div>
+            <div className="dm">{news.desk.tier} · {news.desk.accuracy}% accurate · {news.desk.corrections} correction{news.desk.corrections === 1 ? "" : "s"} this season</div>
+            {news.desk.note ? <div className="dn">"{news.desk.note}"</div> : null}
           </div>
         ) : null}
       </div>
