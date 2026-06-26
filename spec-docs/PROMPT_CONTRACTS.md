@@ -24354,3 +24354,42 @@ Report: (1) files changed + one-line what; (2) build result; (3) test result (or
 - STOP-IF `controlledTeams` / `StandingEntry` / `UseFranchiseDataReturn` / the `:3193` render shapes differ from the anchors — re-read.
 - STOP-IF coloring the standings forces touching the award races or a file outside the listed set. A correct BLOCK is GOOD. Do NOT build races-red, do NOT reuse `--franchise-loss`, do NOT push.
 <!-- ===== END CONTRACT: HPR-B1 ===== -->
+
+<!-- ===== CONTRACT: HPR-B2 ===== -->
+# CONTRACT HPR-B2 — RACES rival-red (award data + AwardsWatchlist; step 2b) — USER-VISIBLE
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (step 2b — award RACES only)
+Widen the award data to carry each candidate's team, then color the rival team's players RED in the franchise-hub award races (`AwardsWatchlist`). Purely ADDITIVE to the award row/candidate shape (no behavior/ordering change). Do NOT touch the rival engine/store/tap, the standings (shipped 2a), the all-star board, or fan-morale (step 3). USER-VISIBLE → JK browser sign-off for the visual.
+
+## GROUND ANCHORS (Captain-verified via grounding 2026-06-26 — re-read before building)
+- **Types** `src/utils/franchiseAwardsStorage.ts`: `FranchiseAwardCandidate` (`:33-37`) = `{playerId, score, marginToWinner}` (NO teamId). `FranchiseAwardRow` (`:44-54`) = `{...scope, category, winnerPlayerId, candidates, goldGloveSplit?, managerActualWins?, managerExpectedWins?, voteWeight, finalized, computedAt}` (NO winnerTeamId).
+- **Builder** `src/utils/franchiseAwardsEngine.ts`: `buildAwardRow(params)` (`:380-414`) maps `params.candidates` (each `{row: FranchiseValueInputRow; score; trueValueScore}`) to `FranchiseAwardCandidate`, extracting `candidate.row.playerId` (`:394-400`). **The team is ALREADY in hand**: `FranchiseValueInputRow.currentTeamId: string | null` (`src/utils/franchiseValueInputs.ts:80`). `categoryCandidateRows` (`:314-378`) supplies the rows with `currentTeamId`. `winnerPlayerId` is set in `buildAwardRow` — derive `winnerTeamId` from the candidate row whose `playerId === winnerPlayerId`.
+- **Award store** `franchiseAwardsRows` in **`kbl-tracker`** (`trackerDb.ts:360-366`, keyPath `[franchiseId,seasonId,statsScopeId,category]`). IndexedDB is schema-agnostic for object props → adding fields needs NO version bump. **⚠ `kbl-tracker` IS in the L-SIM `DUMP_DATABASES`, and season-finalize persists award rows (`computeAndPersistFranchiseWarAwards`), so adding fields RE-BAKES the L-SIM season baseline (benign uniform additive delta — the Captain will run the season, verify the delta is only the new fields, and commit the regenerated baselines).**
+- **UI** `src/src_figma/app/components/AwardsWatchlist.tsx`: loads rows via `getFranchiseAwardRowsByScope` (`:106-110`); winner name at `:199` (`resolveName(row, row.winnerPlayerId)`), candidate name at `:255` (`resolveName(row, candidate.playerId)`); uses the `text-[var(--franchise-text)]` idiom. Mounted from `FranchiseHome.tsx:1474-1479` (props `{franchiseId, seasonId, statsScopeId, seasonNumber}`). `FranchiseHome` has `rivalTeamId` in scope (`:3135` reads `useFranchiseDataContext().rivalTeamId`). The `--franchise-rival` token (`#E5484D`) exists (shipped 2a).
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseAwardsStorage.ts`** — add `teamId: string | null;` to `FranchiseAwardCandidate` (`:37`); add `winnerTeamId: string | null;` to `FranchiseAwardRow` (`:54`-area).
+2. **`src/utils/franchiseAwardsEngine.ts`** — in `buildAwardRow` (`:394-400`), add `teamId: candidate.row.currentTeamId ?? null` to each mapped candidate; compute `winnerTeamId` = the `currentTeamId` of the candidate row whose `playerId === winnerPlayerId` (`?? null` if no winner/row), and include it on the returned row. If a SEPARATE manager-award build path exists (MOY) that constructs `FranchiseAwardCandidate`/rows without a player `currentTeamId`, set `teamId`/`winnerTeamId` to `null` there (managers are not rival-team players). Do NOT change any scoring/ordering/winner logic — additive fields only.
+3. **`src/src_figma/app/components/AwardsWatchlist.tsx`** — add an optional prop `rivalTeamId?: string | null` to its props (PREFER a prop over `useFranchiseDataContext()` — avoids any out-of-provider mount risk). Color the WINNER name red when `row.winnerTeamId && row.winnerTeamId === rivalTeamId`, and each CANDIDATE name red when `candidate.teamId && candidate.teamId === rivalTeamId`, via the conditional `text-[var(--franchise-rival)]` vs `text-[var(--franchise-text)]` swap (mirror the standings pattern). Default (no prop / null) ⇒ no red.
+4. **`src/src_figma/app/pages/FranchiseHome.tsx`** — pass `rivalTeamId={franchiseData.rivalTeamId}` to the `<AwardsWatchlist .../>` mount (`:1474-1479`). (`franchiseData` / the context rivalTeamId is already available in the hub render scope — confirm the mount site has it; if the mount is outside where `rivalTeamId` is read, read it from `useFranchiseDataContext()` at the mount.)
+5. **Tests** — update any award tests that assert the EXACT `FranchiseAwardCandidate`/`FranchiseAwardRow` shape (grep `franchiseAwardsEngine`/`franchiseAwards` tests for `toEqual`/`toMatchObject` on candidates/rows) to include the new fields; add a focused assertion that a player-award candidate carries the builder-resolved `teamId` and the row carries `winnerTeamId`. If AwardsWatchlist has a render test, optionally assert the rival prop drives the red class (only if a harness exists — do not invent one).
+
+## CONSTRAINTS
+- Touch ONLY: `franchiseAwardsStorage.ts`, `franchiseAwardsEngine.ts`, `AwardsWatchlist.tsx`, `FranchiseHome.tsx`, + award test files. Do NOT touch the rival engine/store/tap, standings, all-star, fanMoraleEngine, flags, or trackerDb schema (no version bump — additive object props only).
+- ADDITIVE only: no award scoring/ordering/winner/finalization change; `teamId`/`winnerTeamId` are new nullable fields. Old persisted rows without them coexist (null) until re-baked.
+- Dark-safe-ish: when `rivalTeamId` is null (flag off / no rival), no race name turns red. The teamId data-layer add is always-on (additive, harmless) — only the COLORING is rival-gated.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run` over the award + AwardsWatchlist test files (report which) → green. Report `git status --porcelain`. (The Captain runs the AUTHORITATIVE FULL suite + the L-SIM season — **EXPECT a re-bake**: the award rows gain teamId/winnerTeamId; the Captain verifies the digest delta is ONLY those fields and commits the regenerated `lsim-h2-baseline-checkpoint-*.json`. JK does the browser sign-off for the red.)
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) test result; (4) confirmation: only the listed files touched; teamId/winnerTeamId are ADDITIVE (no scoring/ordering change); coloring is rival-gated (null ⇒ no red); no engine/store/tap/standings/all-star/morale/flag/trackerDb-schema change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the award types / `buildAwardRow` / `FranchiseValueInputRow.currentTeamId` / AwardsWatchlist shapes differ from the anchors — re-read.
+- STOP-IF adding the fields requires a trackerDb VERSION bump or changes award scoring/winner selection — report it (it must NOT). A correct BLOCK is GOOD. Do NOT touch morale/standings/all-star, do NOT push.
+<!-- ===== END CONTRACT: HPR-B2 ===== -->
