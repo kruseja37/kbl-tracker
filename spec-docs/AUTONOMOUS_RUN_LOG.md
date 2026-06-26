@@ -3151,3 +3151,16 @@ NEW pure `src/src_figma/app/engines/reporter/franchiseL3MatrixNewsAdapter.ts` (+
 **⚠ FLAGGED FOR JK (browser/LLM-pending, NOT built — the "reporter words" half):** the live LLM emission seam (mirror `franchiseHonorEmission.ts`: flag-gate → load `SeasonEmissionConfig` → `shouldEmitSeasonNews` → dedupe → load reporter → adapter → `generateSeasonNewsTake` [LLM] → `persistSeasonNewsItem`), the `processCompletedGame` wiring of the matrix-consequence stream, and a new `isFranchisePhase2L4bEnabled` flag. This is JK's browser/LLM sign-off domain (same posture as the AWARD_RESULT news nod that stays live-pending).
 
 **➡ NEXT: A1.5d STADIUM RECORDS** — own db `kbl-franchise-stadium-records`, new `isFranchisePhase2StadiumRecordsEnabled` flag (NOT a trackerDb bump); §4 catalog + the 6 living-season hops + §8 stat-display. Then return to re-grade + RA-7 once JK rules their OPEN-DECISIONS.
+
+---
+
+## 🏁 SESSION TALLY (2026-06-26, UNATTENDED AUTH-4 `/kbl-captain`) — 3 features shipped; handed off at a clean seam before A1.5d
+
+**3 features SHIPPED** (all `codex/franchise-v1-next`, branch-only / Codex-built / Opus-audited-the-REAL-diff / Opus-ran-the-INDEPENDENT-authoritative-FULL-suite / ZERO-NEW-REDS / build-dark):
+- **A1.3b `c87ff779`** — trade-demand FULL + the JK-authorized trackerDb v25→v26 bump (new `franchiseTradeDemandState` store + §13 flashpoint tax seam-fill [albatross-precedence] + one-shot `TRADE_DEMAND` morale; every bump touchpoint registered — trackerDb/backupRestore-registry+version/syncConfig + 3 version-pin tests + the structural-parity round-trip).
+- **A1.4 / L12-6 data-layer `bcf12d0a`** — the `allStarSelections` career-counter write-path (new 4th sub-step in `runFranchiseAllStarLockPayouts`, type-routed SP/RP→pitching else batting, idempotent via the parent lock-once; UI surfacing flagged for JK).
+- **A1.5 / L4b deterministic core `fee76d37`** — pure matrix-sourced season-take news adapter (reuses `'SEASON_SUMMARY'`, dormant like L10/L11; the live LLM emission flagged for JK).
+
+Suite moved 8378→8392 passing across the session; trackerDb v26; the only fails throughout = `wpaRuntimeBoundary` (hard) + `franchiseManualSmokeFixture` (order-flake, solo-passed every time). Every ticket: contract committed FIRST, grounded from source, make-or-break Captain-RE-verified, gated on the Captain's OWN full suite, committed BY PATH.
+
+**HANDOFF (clean seam — nothing in flight):** wrote `HANDOFF_NEEDED` for **A1.5d STADIUM RECORDS** scoped hop-by-hop (hop-1 DETECT first; deps A1.5a/A1.5b verified MET; the §4 catalog + §5 hops + §8 display all mapped with file anchors; hops 3/4 carry exhaustive-Record touches; §8 + the LLM reporter half are JK-browser-pending). After A1.5d the queue is JK-DECISION-BLOCKED (re-grade store + RA-7 park-adjust OPEN-DECISIONS). Handed off rather than start a 6-hop multi-subsystem hot-path ticket at the tail of a long session.
