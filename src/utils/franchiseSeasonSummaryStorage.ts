@@ -47,6 +47,13 @@ import {
   buildFranchiseStadiumFoundationReport,
   type FranchiseStadiumFoundationReport,
 } from './franchiseStadiumFoundation';
+import { isFranchisePhase2StadiumRecordsEnabled } from './franchisePhase2Flags';
+import {
+  FRANCHISE_STADIUM_RECORD_TYPE_POLARITY,
+  listFranchiseStadiumRecords,
+  type FranchiseStadiumRecord,
+  type FranchiseStadiumRecordType,
+} from './franchiseStadiumRecordsStorage';
 import {
   getFranchiseAwardRowsByScope,
   type FranchiseAwardRow,
@@ -64,6 +71,24 @@ export interface FranchiseSeasonSummaryPlaceholder {
   status: 'placeholder';
   reason: string;
 }
+
+export interface FranchiseSeasonSummaryStadiumRecord {
+  stadiumId: string;
+  stadiumName: string | null;
+  recordType: FranchiseStadiumRecordType;
+  recordKey: string;
+  value: number;
+  valueLabel: string;
+  polarity: 1 | -1 | 0;
+  leaderTeamIds: string[];
+  leaderPlayerIds: string[];
+  leaderPlayerNames: string[];
+  evidenceSummary: string;
+}
+
+export type FranchiseSeasonSummaryStadiumRecords =
+  | FranchiseSeasonSummaryPlaceholder
+  | { status: 'present'; generatedAt: number; records: FranchiseSeasonSummaryStadiumRecord[] };
 
 export interface FranchiseSeasonSummaryScheduleGame {
   id: string;
@@ -199,6 +224,7 @@ export interface FranchiseSeasonSummary {
   fanMorale: FranchiseSeasonSummaryPlaceholder;
   narrative: FranchiseSeasonSummaryPlaceholder;
   parkFactors: FranchiseSeasonSummaryPlaceholder;
+  stadiumRecords?: FranchiseSeasonSummaryStadiumRecords;
 }
 
 function deepClone<T>(value: T): T {
@@ -598,6 +624,22 @@ function toCompletedGameSnapshot(game: CompletedGameRecord): FranchiseSeasonSumm
   };
 }
 
+function toStadiumRecordSnapshot(record: FranchiseStadiumRecord): FranchiseSeasonSummaryStadiumRecord {
+  return {
+    stadiumId: record.stadiumId,
+    stadiumName: record.stadiumName,
+    recordType: record.recordType,
+    recordKey: record.recordKey,
+    value: record.value,
+    valueLabel: record.valueLabel,
+    polarity: FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[record.recordType],
+    leaderTeamIds: deepClone(record.leaderTeamIds),
+    leaderPlayerIds: deepClone(record.leaderPlayerIds),
+    leaderPlayerNames: deepClone(record.leaderPlayerNames),
+    evidenceSummary: record.evidenceSummary,
+  };
+}
+
 async function resolvePlayoff(
   franchiseId: string,
   seasonNumber: number,
@@ -717,6 +759,21 @@ export async function buildFranchiseSeasonSummary(params: {
     awardRows,
     designationRows,
   });
+  let stadiumRecords: FranchiseSeasonSummaryStadiumRecords | undefined;
+  if (isFranchisePhase2StadiumRecordsEnabled()) {
+    // Franchise invariant: stadium records are scoped statsScopeId === seasonId === getFranchiseSeasonId.
+    const records = await listFranchiseStadiumRecords({
+      franchiseId: params.franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber: params.seasonNumber,
+    });
+    stadiumRecords = {
+      status: 'present',
+      generatedAt: now,
+      records: records.map(toStadiumRecordSnapshot),
+    };
+  }
 
   return {
     id: seasonId,
@@ -777,6 +834,7 @@ export async function buildFranchiseSeasonSummary(params: {
     fanMorale: placeholder('Fan morale is not finalized in Mode 2 v1 and global prototype data is excluded from persisted summaries.'),
     narrative: placeholder('Narrative/news recaps are currently generated from completed games at display time.'),
     parkFactors: placeholder('Park-factor and adaptive-standard season summaries are not yet persisted by franchise season.'),
+    ...(stadiumRecords ? { stadiumRecords } : {}),
   };
 }
 

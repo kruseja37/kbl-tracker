@@ -24210,3 +24210,30 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF the optional `stadiumRecords` field cannot be added without a required-field break on existing `FranchiseSeasonSummary` constructors — report it.
 - A correct BLOCK is GOOD. Do NOT build the UI surfacing / placeholder-when-off / hop-6 / §8, do NOT bump the DB, do NOT push.
 <!-- ===== END CONTRACT: A1.5d-hop5 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop5-fix ===== -->
+# CONTRACT A1.5d-hop5-fix — harden the Almanac park-record read scope (fix-iter #1)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Apply EXACTLY this small hardening. Use **high** reasoning effort.
+
+## WHY (Captain adversarial-review + source-trace, 2026-06-26)
+An adversarial review flagged that deliverable A (the Almanac park-record derivation in `src/utils/almanacNarrativeArchive.ts`) derives the records read-scope's `statsScopeId` from a matching `CompletedGameRecord`'s `statsScopeId` field — a fragile indirection that could (in theory) diverge from the scope the records were WRITTEN under. A source trace PROVED the franchise invariant: records are written with `statsScopeId === seasonId === getFranchiseSeasonId(franchiseId, seasonNumber)` — `persistSeasonWarAfterAggregation` returns `{ seasonId, statsScopeId: seasonId }` (`processCompletedGame.ts:275-278`); the canonical handoff sets `statsScopeId: seasonId` (`franchisePersistenceContract.ts:79-85`); the completed game's stored `seasonId`/`statsScopeId` coincide. So for the ONLY flow that produces franchise stadium records, the current code is CORRECT — but we will HARDEN it to read `statsScopeId` from the invariant directly (matching deliverable B, which already uses `statsScopeId: seasonId`), removing the scopeGame-`statsScopeId` dependency, and PIN it with a regression test.
+
+## EXPECTED OUTPUT (3 small changes; NO behavior change for the happy path)
+1. **`src/utils/almanacNarrativeArchive.ts`** — in the park-record branch of `listAlmanacNarrativeArchive`, change the `listFranchiseStadiumRecords` read `statsScopeId` from `scopeGame.statsScopeId ?? filters.statsScopeId ?? filters.seasonId` to **`filters.statsScopeId ?? filters.seasonId`** (drop the `scopeGame.statsScopeId` term). KEEP everything else identical — the `scopeGame` is still found (it supplies `seasonNumber`, which the filters lack, and confirms the franchise+season has games). Add a one-line comment above the read: `// Franchise invariant (verified): records are written with statsScopeId === seasonId === getFranchiseSeasonId, so the read scope uses the franchise seasonId — NOT the completed game's statsScopeId field (which is not the records' scope source).`
+2. **`src/utils/franchiseSeasonSummaryStorage.ts`** — add a one-line comment above the `listFranchiseStadiumRecords` call in `buildFranchiseSeasonSummary` (the `statsScopeId: seasonId` read): `// Franchise invariant: stadium records are scoped statsScopeId === seasonId === getFranchiseSeasonId.` NO code change here (the read is already correct).
+3. **`src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts`** — ADD ONE regression test: seed the standing record under the canonical `scope` (statsScopeId === seasonId, as the existing helper does), but seed the COMPLETED GAME with a DIVERGENT `statsScopeId` (e.g. `{ ...completedGame(), statsScopeId: 'divergent-stats-scope' }`) while keeping its `seasonId` === `scope.seasonId` and a valid `seasonNumber`. Flag ON. Assert `listAlmanacNarrativeArchive({ franchiseId: scope.franchiseId, seasonId: scope.seasonId })` STILL returns the `park-record` entry (id `park-record:${record.identityKey}`). (This proves the read scope is derived from the franchise seasonId invariant, NOT the game's `statsScopeId` — the pre-hardening code would have returned zero here.)
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/almanacNarrativeArchive.ts`, `src/utils/franchiseSeasonSummaryStorage.ts` (comment only), `src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts`. Do NOT touch any other file, no flag/DB/storage-source change.
+- Build-dark preserved; flag-off behavior byte-identical. No new imports needed.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts src/utils/tests/almanacNarrativeArchive.test.ts src/utils/tests/franchiseSeasonSummaryStadiumRecords.test.ts` → all green (incl. the new divergent-statsScopeId regression test). Report `git status --porcelain` + the vitest summary.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF dropping `scopeGame.statsScopeId` would break the existing happy-path test (it must not — under the invariant the value is identical). 
+- STOP-IF the regression test passes WITHOUT the code change (means the change is a no-op — re-check the test seeds a genuinely divergent game `statsScopeId`). A correct BLOCK is GOOD. Do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop5-fix ===== -->
