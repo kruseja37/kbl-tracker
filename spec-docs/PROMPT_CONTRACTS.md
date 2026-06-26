@@ -23502,3 +23502,88 @@ Report: (1) files changed + one-line what/why; (2) build result; (3) focused vit
 - STOP-IF you cannot route pitcher-vs-hitter from `selection.position` alone (it should be sufficient: SP/RP = pitcher).
 - A correct BLOCK is GOOD. Do NOT widen scope, do NOT touch the UI, do NOT flip a flag.
 <!-- ===== END CONTRACT: A1.4-CTR ===== -->
+
+<!-- ===== CONTRACT: A1.5-L4b ===== -->
+# CONTRACT A1.5 / L4b (DETERMINISTIC CORE) — matrix-sourced season-take news adapter (pure, dormant)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push (the Captain commits).
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (read first)
+L4b = "the reporter narrates L3 master-morale-matrix events as season takes over the L4a bus." Per the spec rule (FRANCHISE_V1_LIVING_SEASON_SPEC §M): **"The matrix is the math (deterministic — *what* happens); the reporter is the words (generated — *how* it is told). The language model never decides an outcome; it only narrates one the matrix already decided."** This ticket builds ONLY the **deterministic "math" half** — a PURE adapter that maps a SIGNIFICANT matrix consequence into a `SeasonNewsEvent` (the input the reporter narrates). The **"words" half — the live LLM emission** (`generateSeasonNewsTake` → `callClaudeMessages`), the `processCompletedGame` wiring, and any new flag — is OUT OF SCOPE (it is inherently LLM/browser-pending, JK's sign-off domain). This mirrors the EXISTING L10/L11 adapters, which are pure + dormant (no production caller yet). Do NOT call the LLM, do NOT wire into `processCompletedGame`, do NOT add a flag, do NOT touch `seasonNewsGenerator.ts`/`reporterIntensity.ts`/`narrativeEngine.ts`.
+
+## GOAL
+Create `src/src_figma/app/engines/reporter/franchiseL3MatrixNewsAdapter.ts` — a PURE, deterministic, dormant adapter that turns a significant master-morale-matrix consequence into a `SeasonNewsEvent`. Build-dark by construction (no caller, no LLM, no I/O, no wall-clock, no randomness).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **Template to MIRROR exactly:** `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts` (pure function, SIM-tuned dramatic-weight const, input interface, `clamp` helper, returns a `SeasonNewsEvent`, header comment documenting PURE + DARK/ORPHANED-PENDING). Read it in full and copy its structure/comment conventions.
+- `SeasonNewsEvent` (`src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:11-19`) = `{ franchiseId: string; seasonId: string; seasonNumber: number; eventType: NarrativeEventType; subjectIds: string[]; facts: Record<string, unknown>; dramaticWeight: number }`. **Do NOT mint `id`/`createdAt`** — those belong to the live reporter downstream (same as L11).
+- `NarrativeEventType` (`src/engines/narrativeEngine.ts:77-91`) ALREADY contains `'SEASON_SUMMARY'` — **REUSE IT** for the matrix season-take (it is the natural fit for a season-level morale take, and reusing it AVOIDS touching the exhaustive `hedgingModifier: Record<NarrativeEventType, number>` at `narrativeEngine.ts:592`). Do NOT add a new `NarrativeEventType`.
+- The adapter INPUT is the matrix consequence's deterministic ground truth. `ResolvedMoraleConsequence` (`src/engines/masterMoraleMatrix.ts:63-76`) carries the fields to read: `eventType` (the `MasterMoraleEventType`), `personality`, `selfPlayerMoraleDelta`, `teamFanMoraleDelta`, `totalPlayerMoraleDelta`, `reason`, `isNeutral`. (Define your OWN flat input interface carrying these + identity — do NOT import `ResolvedMoraleConsequence` to avoid coupling; mirror how L11 defines `FranchiseManagerChangeNewsInput`.)
+
+## EXPECTED OUTPUT — `src/src_figma/app/engines/reporter/franchiseL3MatrixNewsAdapter.ts` (NEW)
+- Header comment mirroring L11's (PURE: no LLM/network/IO/wall-clock/randomness, fully synchronous, deeply-equal output for equal input; DARK/ORPHANED-PENDING: no production caller, does not invoke the live reporter or wire into any emission path; facts are lifted verbatim, never fabricated; `id`/`createdAt` minted downstream). Note that the post-D13/browser emission seam is where a caller will eventually plug this in.
+- A SIM-tuned placeholder const (mirror `L11_NEWS_DRAMATIC_WEIGHT`'s "conservative placeholder, §16 Simulation-Gate-owned" framing):
+  ```
+  export const L4B_MATRIX_NEWS_TUNING = {
+    /** §16 placeholder — the line between per-play morale noise and a season-level take (abs morale points). */
+    seasonTakeSignificanceThreshold: 5,
+    base: 0.35,
+    magnitudeScale: 0.35,
+    /** §16 placeholder — magnitude denominator that maps an abs morale delta onto [0..1]. */
+    magnitudeDenominator: 10,
+  } as const;
+  ```
+- An input interface:
+  ```
+  export interface FranchiseMatrixMoraleNewsInput {
+    franchiseId: string;
+    seasonId: string;
+    seasonNumber: number;
+    matrixEventType: string;      // the MasterMoraleEventType
+    personality: string;          // CanonicalPersonality
+    playerId: string;
+    teamId: string;
+    selfPlayerMoraleDelta: number;
+    teamFanMoraleDelta: number;
+    totalPlayerMoraleDelta: number;
+    reason: string;
+    isNeutral: boolean;
+    sourceEventId: string;        // the matrix event source key (idempotency anchor downstream)
+  }
+  ```
+- The pure builder, returning `SeasonNewsEvent | null` (null = below the season-take bar → no take):
+  ```
+  export function buildFranchiseMatrixMoraleSeasonNewsEvent(
+    input: FranchiseMatrixMoraleNewsInput,
+  ): SeasonNewsEvent | null
+  ```
+  Logic: `const magnitude = Math.max(Math.abs(input.totalPlayerMoraleDelta), Math.abs(input.teamFanMoraleDelta));` SKIP (return null) when `input.isNeutral || magnitude < L4B_MATRIX_NEWS_TUNING.seasonTakeSignificanceThreshold` (a neutral or sub-threshold matrix tick is per-play noise, not a season take). Otherwise `dramaticWeight = clamp(base + magnitudeScale * clamp(magnitude / magnitudeDenominator, 0, 1), 0, 1)` (a local pure `clamp`, mirror L11). Return `{ franchiseId, seasonId, seasonNumber, eventType: 'SEASON_SUMMARY' as NarrativeEventType, subjectIds: [input.playerId, input.teamId], facts: { matrixEventType, personality, selfPlayerMoraleDelta, teamFanMoraleDelta, totalPlayerMoraleDelta, reason: input.reason, sourceEventId: input.sourceEventId }, dramaticWeight }`.
+- **DEFAULTS-TAKEN (document in the header comment):** (1) reuse the existing `'SEASON_SUMMARY'` NarrativeEventType (no new type → no exhaustive-Record touch); (2) the significance threshold + dramatic-weight numbers are §16 sim-tune placeholders (the line between per-play noise and a season take — JK/Sim-Gate tunes later); (3) the adapter is DORMANT (the live LLM emission + the `processCompletedGame` wiring + an `isFranchisePhase2L4bEnabled` flag are the browser/LLM-pending "reporter words" half, FLAGGED for JK — NOT built here).
+
+## EXPECTED OUTPUT — `src/src_figma/app/engines/reporter/__tests__/franchiseL3MatrixNewsAdapter.test.ts` (NEW; match the existing adapter test location/naming — verify where `franchiseL11ManagerChangeNewsAdapter.test.ts` lives and co-locate)
+- A significant matrix consequence → a `SeasonNewsEvent` with the exact expected `eventType:'SEASON_SUMMARY'`, `subjectIds`, `facts`, and `dramaticWeight` (pin the arithmetic).
+- A sub-threshold magnitude → `null` (no season take).
+- `isNeutral: true` → `null` (even if magnitude is high — neutral takes are not narrated).
+- Determinism: the same input called twice produces a deeply-equal event (`toEqual`).
+- Dramatic weight scales with magnitude (a bigger delta → a larger, still-clamped weight).
+
+## CONSTRAINTS
+- Touch ONLY the 2 NEW files above. Do NOT modify any existing file — not `narrativeEngine.ts` (no new NarrativeEventType), not `seasonNewsGenerator.ts`, not `processCompletedGame.ts`, not `franchisePhase2Flags.ts`, not any other adapter, not any oracle.
+- PURE: no `callClaudeMessages`/LLM, no IndexedDB/storage, no `Date.now()`/`new Date()`, no `Math.random()`/`crypto`. Fully synchronous (the builder is NOT async).
+- No flag, no DB, no wiring. Dormant by construction (the only callers are the test).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0 (tsc clean — confirms the `'SEASON_SUMMARY'` reuse + `SeasonNewsEvent` shape typecheck).
+- Focused: `NODE_ENV= npx vitest run src/src_figma/app/engines/reporter/__tests__/franchiseL3MatrixNewsAdapter.test.ts` (adjust path to where you placed it) → green.
+- Report `git status --porcelain` (only the 2 new files) + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself.
+
+## FORMAT
+Report: (1) the 2 new files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation that NO existing file was modified, no LLM/IO/randomness/wall-clock is used, and `'SEASON_SUMMARY'` was reused (no new NarrativeEventType).
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `'SEASON_SUMMARY'` is somehow not assignable to `SeasonNewsEvent.eventType` (re-read `NarrativeEventType`).
+- STOP-IF building the pure adapter requires modifying ANY existing file (it must be fully self-contained — if a type import forces an edit elsewhere, report it).
+- STOP-IF the `SeasonNewsEvent` shape differs from the anchor (re-read `seasonNewsGenerator.ts:11-19`).
+- A correct BLOCK is GOOD. Do NOT add the LLM emission, the flag, or the processCompletedGame wiring — those are explicitly out of scope (JK browser-pending).
+<!-- ===== END CONTRACT: A1.5-L4b ===== -->
