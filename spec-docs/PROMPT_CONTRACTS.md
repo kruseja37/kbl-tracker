@@ -21844,3 +21844,111 @@ FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
 
 **Use high reasoning effort. Think step-by-step.**
 <!-- ===== END CONTRACT: POOL-FEAS-1 ===== -->
+
+<!-- ===== CONTRACT: TRUEVAL-1 — derived chemistry-trait potency primitive (keystone optimizer step 2a) ===== -->
+## TRUEVAL-1 — derived chemistry-trait potency primitive (keystone optimizer step 2a)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. This is the FOUNDATION (step 2a) for the optimizer's fielding-corrected "true value"; it is
+BUILD-DARK (no production wiring in this ticket).
+
+GOAL:
+Build a pure, deterministic primitive that, given a team roster's chemistry mix, derives each of a player's traits to a
+chemistry-potency tier (L1/L2/L3) and the value-adjustment FACTOR relative to the L2 "fit" baseline the frozen IV is
+founded on. (JK ruling: L1 = default/lowest every trait gets; L2 = a chemistry "fit" = the level the frozen IV prices
+at; L3 = max fit, rare. So the factor is RELATIVE to L2 = 1.0.)
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Trait → chemistry + polarity: `src/data/traitPricing.ts` (each trait entry has `chemistry: ChemistryType` and
+  `polarity: 'positive' | 'negative'`; `ChemistryType = 'Competitive'|'Crafty'|'Disciplined'|'Scholarly'|'Spirited'`).
+  Find the exported trait array/registry and build a name→{chemistry, polarity} lookup from it.
+- Chemistry canon + normalize: `src/data/chemistryCanonical.ts` (`normalizeToChemistryCode`, `ChemistryCode`).
+- Player chemistry field: `src/data/playerDatabase.ts:66` (`chemistry: string`, codes SPI/DIS/CMP/SCH/CRA; rows carry
+  full names e.g. 'SPIRITED' — ALWAYS pass through `normalizeToChemistryCode`).
+- Potency scale: `src/data/rosterEngineConstants.ts` `POTENCY_SCALE` (positives {L1:0.5,L2:1.0,L3:3.0}; standardInverted
+  {L1:3.0,L2:1.0,L3:0.5}) + `PotencyTier` type. (L3=3.0 is canonical/workbook-correct, JK 2026-06-22 — do NOT change it.)
+- Threshold prototype (REUSE THE PATTERN, NOT THE NUMBERS): `src/engines/chemistryFitValue.ts` `chemistryFitTier` uses
+  4/8 (a farm-auction sim-tune, off-by-one). This primitive MUST use the CANONICAL 3/7 (JK-ruled 2026-06-22):
+  L1 = 0–2 shared, L2 = 3–6, L3 = ≥7.
+- Counting prototype: `LeagueBuilderFarmAuctionDraft.tsx` `rosterChemistryCountsForTeamId` (the existing pattern that
+  counts a roster by chemistry code).
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/derivedTraitPotency.ts` + `src/engines/__tests__/derivedTraitPotency.test.ts`.
+- Do NOT edit any existing file (import read-only). If you must edit one → STOP and report.
+- Pure / deterministic: NO Date.now/Math.random/fs/DOM/IndexedDB in the engine. (Test may read fixtures.)
+- Do NOT touch the frozen oracle, `ivEngine.ts`, `rosterEngineConstants.ts`, `chemistryFitValue.ts`, `traitPricing.ts`,
+  `playerDatabase.ts`, `effectiveRatings.ts`.
+
+EXPECTED OUTPUT — `derivedTraitPotency.ts` exports (signatures verbatim):
+```ts
+export const POTENCY_L2_MIN = 3;   // ≥3 shared-chemistry players → L2 "fit"
+export const POTENCY_L3_MIN = 7;   // ≥7 → L3 "max fit"
+export function derivedPotencyTier(sharedChemistryCount: number): PotencyTier; // L1:0–2, L2:3–6, L3:≥7
+
+export type RosterChemistryCounts = Partial<Record<ChemistryCode, number>>;
+export function countRosterChemistry(roster: { chemistry: string }[]): RosterChemistryCounts;
+
+export interface TraitPotency {
+  trait: string;
+  chemistry: ChemistryType;
+  polarity: 'positive' | 'negative';
+  sharedCount: number;          // roster players whose chemistry == this trait's chemistry
+  tier: PotencyTier;
+  factor: number;               // value vs the L2 baseline (L2 → 1.0); positive: POTENCY_SCALE.positives[tier];
+                                // negative: POTENCY_SCALE.standardInverted[tier]
+}
+/** For each known trait name, its potency tier+factor given the roster chemistry counts. Unknown trait names
+ *  (not in traitPricing) are OMITTED from the result (do not throw). Order preserves input traitNames. */
+export function traitPotencies(traitNames: string[], counts: RosterChemistryCounts): TraitPotency[];
+```
+
+ALGORITHM:
+- `derivedPotencyTier(n)`: n≥7 → 'L3'; n≥3 → 'L2'; else 'L1'. (Clamp negative/NaN n to 0.)
+- `countRosterChemistry(roster)`: for each player, `normalizeToChemistryCode(player.chemistry)` → increment that code's
+  count. Skip entries that don't normalize.
+- `traitPotencies(traitNames, counts)`: for each name, look up {chemistry, polarity} in traitPricing; if unknown, skip.
+  `code = normalizeToChemistryCode(trait.chemistry)`; `sharedCount = counts[code] ?? 0`; `tier =
+  derivedPotencyTier(sharedCount)`; `factor = polarity === 'positive' ? POTENCY_SCALE.positives[tier] :
+  POTENCY_SCALE.standardInverted[tier]`.
+
+DOCUMENTED ASSUMPTIONS (write as code comments; these are flagged build-dark defaults, not yet JK-ratified — spec
+CHEMISTRY_TRAIT_POTENCY_VALUATION_SPEC §2.6 marks the denominator UNKNOWN):
+- The roster passed in is the team's FULL active roster (the roster-construction context); chemistry self-counts (a
+  player's own chemistry contributes to its traits' shared count). Both are retunable in Mode-2.
+
+TESTS (`derivedTraitPotency.test.ts`):
+1. `derivedPotencyTier`: 0,1,2→L1; 3,4,5,6→L2; 7,8,20→L3; -1/NaN→L1.
+2. `countRosterChemistry`: a mixed roster (full-name + code inputs) → correct per-code counts via normalize.
+3. A POSITIVE trait (look one up from traitPricing, e.g. a Scholarly positive) on a roster with ≥7 of its chemistry →
+   tier L3, factor 3.0; with exactly 3 → L2, factor 1.0; with ≤2 → L1, factor 0.5.
+4. A NEGATIVE trait → inverted: ≥7 shared → L3 factor 0.5; ≤2 shared → L1 factor 3.0; 3–6 → L2 factor 1.0.
+5. Unknown trait name → omitted (not thrown); known names preserve input order.
+6. Determinism: two calls on identical inputs are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/derivedTraitPotency.test.ts
+```
+tsc 0 errors; vitest all-pass.
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output; 4) "TRUEVAL-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `POTENCY_SCALE` / `PotencyTier` not exported from `rosterEngineConstants.ts`, or `normalizeToChemistryCode` /
+  `ChemistryCode` not from `chemistryCanonical.ts`, or traitPricing has no per-trait `chemistry`+`polarity` you can look
+  up by name → STOP, report the actual export surface (do NOT invent a trait→chemistry map).
+- (b) Implementation would require editing any existing file → STOP, report.
+- (c) `POTENCY_SCALE` positives.L3 is NOT 3.0 (i.e. the constant differs from this contract) → STOP, report the actual
+  value (do not assume).
+- Never invent a constant; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: TRUEVAL-1 ===== -->
