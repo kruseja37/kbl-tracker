@@ -465,7 +465,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
 
     await initializeFranchise(franchiseConfig);
 
-    expect(TRACKER_DB_VERSION).toBe(25);
+    expect(TRACKER_DB_VERSION).toBe(26);
     expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
       'franchise-1',
       expect.objectContaining({

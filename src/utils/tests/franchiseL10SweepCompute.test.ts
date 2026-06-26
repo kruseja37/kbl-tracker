@@ -70,6 +70,10 @@ import {
   getFranchiseL10OverlaysByScope,
   resetFranchiseL10OverlaysForTests,
 } from '../franchiseL10OverlayStorage';
+import {
+  getFranchiseTradeDemandRow,
+  resetFranchiseTradeDemandForTests,
+} from '../franchiseTradeDemandStorage';
 import { setFranchisePhase2L10EnabledForTests } from '../franchisePhase2Flags';
 import type { PersistedGameState } from '../gameStorage';
 import type { Player } from '../leagueBuilderStorage';
@@ -198,6 +202,7 @@ describe('persistDarkL10ForCompletedGame', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     resetFranchiseL10OverlaysForTests();
+    resetFranchiseTradeDemandForTests();
     await deleteDatabase(DB_NAME);
     setFranchisePhase2L10EnabledForTests(null);
   });
@@ -205,6 +210,7 @@ describe('persistDarkL10ForCompletedGame', () => {
   afterEach(async () => {
     setFranchisePhase2L10EnabledForTests(null);
     resetFranchiseL10OverlaysForTests();
+    resetFranchiseTradeDemandForTests();
     await deleteDatabase(DB_NAME);
   });
 
@@ -376,6 +382,49 @@ describe('persistDarkL10ForCompletedGame', () => {
         probability: event.probability,
       });
     }
+  });
+
+  test('trade_demand events persist one active demander row without overwriting first confirmation', async () => {
+    setFranchisePhase2L10EnabledForTests(true);
+    seedCheckpointReads();
+    stubCandidates(SEEDED_CANDIDATES);
+    vi.spyOn(l10SweepSeam, 'computeFranchiseL10Events').mockReturnValue({
+      events: [
+        {
+          family: 'roster',
+          eventType: 'trade_demand',
+          targetId: 'player-bravo',
+          targetKind: 'player',
+          valence: 'negative',
+          magnitude: 1,
+          probability: 1,
+          seed: 123,
+        },
+      ],
+    });
+
+    const first = await persistDarkL10ForCompletedGame(gameState, scope);
+    const afterFirst = await getFranchiseTradeDemandRow(scope, 'player-bravo');
+
+    expect(first).toEqual({ status: 'written', written: 1 });
+    expect(afterFirst).toEqual({
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      playerId: 'player-bravo',
+      teamId: 'team-away',
+      status: 'active',
+      confirmedAtGameNumber: 20,
+      confirmedAtCheckpoint: '20',
+      confirmedAtIso: new Date(atBatTimestamp).toISOString(),
+    });
+
+    seedCheckpointReads(21);
+    const second = await persistDarkL10ForCompletedGame(gameState, scope);
+    const afterSecond = await getFranchiseTradeDemandRow(scope, 'player-bravo');
+
+    expect(second).toEqual({ status: 'written', written: 1 });
+    expect(afterSecond).toEqual(afterFirst);
   });
 
   test('two runs with the same seeded state write identical rows', async () => {

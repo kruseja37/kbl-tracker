@@ -18,6 +18,12 @@ import {
   getFranchiseFlashpointDecayRow,
   resetFranchiseFlashpointDecayForTests,
 } from '../franchiseFlashpointDecayStorage';
+import {
+  clearFranchiseTradeDemandForTests,
+  resetFranchiseTradeDemandForTests,
+  saveFranchiseTradeDemandRows,
+  type FranchiseTradeDemandRow,
+} from '../franchiseTradeDemandStorage';
 import { setFranchisePhase2FlashpointEnabledForTests } from '../franchisePhase2Flags';
 import { syncEngine } from '../syncEngine';
 
@@ -61,6 +67,19 @@ function albatrossDesignation(
       previousPlayerId: null,
       note: null,
     },
+    ...overrides,
+  };
+}
+
+function tradeDemandRow(overrides: Partial<FranchiseTradeDemandRow> = {}): FranchiseTradeDemandRow {
+  return {
+    ...scope,
+    playerId: 'player-trade-demand',
+    teamId: 'team-b',
+    status: 'active',
+    confirmedAtGameNumber: 1,
+    confirmedAtCheckpoint: '1',
+    confirmedAtIso: '2026-06-18T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -112,6 +131,7 @@ describe('franchise dark flashpoint-decay compute', () => {
   beforeEach(async () => {
     resetFranchiseFlashpointDecayForTests();
     resetFranchiseDesignationDatabaseForTests();
+    resetFranchiseTradeDemandForTests();
     await deleteDatabase('kbl-tracker');
     vi.spyOn(syncEngine, 'isSuppressed').mockReturnValue(true);
   });
@@ -120,8 +140,10 @@ describe('franchise dark flashpoint-decay compute', () => {
     vi.restoreAllMocks();
     setFranchisePhase2FlashpointEnabledForTests(null);
     await clearFranchiseDesignationDatabaseForTests();
+    await clearFranchiseTradeDemandForTests();
     await clearFranchiseFlashpointDecayForTests();
     resetFranchiseDesignationDatabaseForTests();
+    resetFranchiseTradeDemandForTests();
     resetFranchiseFlashpointDecayForTests();
   });
 
@@ -140,7 +162,7 @@ describe('franchise dark flashpoint-decay compute', () => {
   test('flag-ON but seam empty (no turned-on source until L7/L10/L13) STILL writes nothing', async () => {
     setFranchisePhase2FlashpointEnabledForTests(true);
 
-    // No active|locked Albatross row is seeded; trade-demander stays empty until L10/L13.
+    // No active|locked Albatross row or active trade-demander row is seeded.
     const result = await persistDarkFlashpointDecayForCompletedGame(gameState(), scope);
 
     expect(result.status).toBe('dark-noop');
@@ -221,6 +243,51 @@ describe('franchise dark flashpoint-decay compute', () => {
     await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([
       { playerId: 'away-locked', kind: 'albatross' },
     ]);
+  });
+
+  test('the live seam resolves active trade-demanders on a playing team and compute accrues the shared tax', async () => {
+    setFranchisePhase2FlashpointEnabledForTests(true);
+    await saveFranchiseTradeDemandRows([
+      tradeDemandRow({ playerId: 'home-demander', teamId: 'team-b' }),
+    ]);
+
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([
+      { playerId: 'home-demander', kind: 'trade_demander' },
+    ]);
+
+    const result = await persistDarkFlashpointDecayForCompletedGame(gameState(), scope);
+    const row = await getFranchiseFlashpointDecayRow(scope, 'home-demander');
+
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(row).toMatchObject({
+      playerId: 'home-demander',
+      flashpointKind: 'trade_demander',
+      consecutiveGamesUnresolved: 1,
+      lastGameTax: -0.5,
+      accumulatedFanMoraleTax: -0.5,
+      updatedAtCheckpoint: 'flashpoint-game-1',
+    });
+  });
+
+  test('the live seam gives Albatross precedence when the same player is also a trade-demander', async () => {
+    await saveFranchiseDesignationRows([
+      albatrossDesignation({ playerId: 'dual-player', teamId: 'team-b', status: 'active' }),
+    ]);
+    await saveFranchiseTradeDemandRows([
+      tradeDemandRow({ playerId: 'dual-player', teamId: 'team-b' }),
+    ]);
+
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([
+      { playerId: 'dual-player', kind: 'albatross' },
+    ]);
+  });
+
+  test('the live seam excludes active trade-demanders whose team is not in the completed game', async () => {
+    await saveFranchiseTradeDemandRows([
+      tradeDemandRow({ playerId: 'idle-demander', teamId: 'team-c' }),
+    ]);
+
+    await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([]);
   });
 
   test('flag-ON with a real active Albatross designation writes one dark albatross row for the holder', async () => {

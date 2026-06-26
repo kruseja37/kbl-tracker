@@ -80,6 +80,7 @@ import {
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
 import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpointSweepCompute';
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
+import { getFranchiseTradeDemandRowsByScope } from './franchiseTradeDemandStorage';
 import { persistDarkRelationshipFormationForCompletedGame } from './franchiseRelationshipFormationCompute';
 import { persistDarkRelationshipIntensityForCompletedGame } from './franchiseRelationshipIntensityCompute';
 import { persistDarkRelationshipMoraleForCompletedGame } from './franchiseRelationshipMoraleCompute';
@@ -563,6 +564,102 @@ export type PersistDarkFanMoraleChannelResult = {
   written: number;
   reason?: string;
 };
+
+async function resolveTradeDemandGameNumber(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<number | null> {
+  const scheduleGameId = archiveOptions?.context?.scheduleGameId ?? gameState.scheduleGameId;
+  if (!scheduleGameId) return null;
+
+  try {
+    const scheduledGame = await getScheduledGame(scheduleGameId);
+    if (scheduledGame && Number.isInteger(scheduledGame.gameNumber) && scheduledGame.gameNumber > 0) {
+      return scheduledGame.gameNumber;
+    }
+  } catch {
+    // Non-fatal: unresolved schedule ids dark-noop instead of blocking game completion.
+  }
+
+  return null;
+}
+
+export async function persistDarkTradeDemandMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<PersistDarkFanMoraleChannelResult> {
+  if (!isFranchisePhase2MoraleEnabled()) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Phase-2 morale disabled; TRADE_DEMAND matrix consequence not written.',
+    };
+  }
+
+  const thisGameNumber = await resolveTradeDemandGameNumber(gameState, archiveOptions);
+  if (thisGameNumber == null) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Unresolved league game number; cannot place a TRADE_DEMAND morale consequence.',
+    };
+  }
+
+  const rows = await getFranchiseTradeDemandRowsByScope(trueValueScope);
+  const newlyConfirmedRows = rows.filter(
+    (row) => row.status === 'active' && row.confirmedAtGameNumber === thisGameNumber,
+  );
+  if (newlyConfirmedRows.length === 0) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'No newly confirmed trade-demand rows for this game.',
+    };
+  }
+
+  let written = 0;
+  for (const row of newlyConfirmedRows) {
+    try {
+      const player = await getFranchisePlayer(row.franchiseId, row.playerId);
+      const currentPlayerMorale = await currentMoraleValue(row, 'player', row.playerId, player?.morale ?? 50);
+      const currentFanMorale = await currentMoraleValue(row, 'team-fan', row.teamId, 50);
+      const consequence = composeMoraleConsequence(
+        { type: 'TRADE_DEMAND' },
+        player?.personality,
+        resolveHiddenModifiers(player?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+
+      const result = await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: row.franchiseId,
+        seasonId: row.seasonId,
+        statsScopeId: row.statsScopeId,
+        seasonNumber: trueValueScope.seasonNumber,
+        playerId: row.playerId,
+        teamId: row.teamId,
+        consequence,
+        sourceEventId: [
+          'trade-demand',
+          row.franchiseId,
+          row.seasonId,
+          row.statsScopeId,
+          row.playerId,
+          row.confirmedAtCheckpoint,
+        ].join(':'),
+        timestamp: row.confirmedAtIso,
+      });
+      if (result.applied.length > 0) {
+        written += 1;
+      }
+    } catch (error) {
+      console.warn('[MoraleMatrix] trade-demand event skipped:', error);
+    }
+  }
+
+  return { status: 'written', written };
+}
 
 const STORE_BACKED_DESIGNATION_TYPES: FranchiseDesignationType[] = [
   'TEAM_MVP',
@@ -1133,6 +1230,11 @@ export async function processCompletedGame(
           } catch (e) {
             console.warn('[L10] dark random-event sweep skipped for completed game ' + gameState.gameId + ':', e);
           }
+        }
+        try {
+          await persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+        } catch (e) {
+          console.warn('[MoraleMatrix] dark trade-demand morale write skipped for completed game ' + gameState.gameId + ':', e);
         }
         if (isFranchisePhase2L11Enabled()) {
           try {

@@ -22,6 +22,7 @@ import {
   resetFranchiseRelationshipEdgesForTests,
   type RelationshipEdgeRow,
 } from '../franchiseRelationshipEdgesStorage';
+import { FRANCHISE_TRADE_DEMAND_STORE_NAME } from '../franchiseTradeDemandStorage';
 import {
   exportAllData,
   KBL_BACKUP_VERSION,
@@ -307,19 +308,19 @@ describe('franchise relationship edges storage', () => {
     expect(source).not.toMatch(/Date\.now|Math\.random/);
   });
 
-  test('v24 to v25 migration adds relationship edges without losing prior tracker stores or data', async () => {
+  test('v24 to v26 migration adds relationship edges and trade-demand state without losing prior tracker stores or data', async () => {
     const { currentGameRow, allStarRosterRow } = await seedLegacyV24TrackerDb();
     resetFranchiseRelationshipEdgesForTests();
 
     const db = await initFranchiseRelationshipEdgeDatabase();
 
-    expect(db.version).toBe(25);
+    expect(db.version).toBe(26);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(
-      [...legacyV24TrackerStores, FRANCHISE_RELATIONSHIP_EDGES_STORE_NAME].sort(),
+      [...legacyV24TrackerStores, FRANCHISE_RELATIONSHIP_EDGES_STORE_NAME, FRANCHISE_TRADE_DEMAND_STORE_NAME].sort(),
     );
 
     const tx = db.transaction(
-      ['currentGame', 'franchiseAllStarRosters', FRANCHISE_RELATIONSHIP_EDGES_STORE_NAME],
+      ['currentGame', 'franchiseAllStarRosters', FRANCHISE_RELATIONSHIP_EDGES_STORE_NAME, FRANCHISE_TRADE_DEMAND_STORE_NAME],
       'readonly',
     );
     await expect(requestToPromise(tx.objectStore('currentGame').get('current'))).resolves.toEqual(currentGameRow);
@@ -329,6 +330,9 @@ describe('franchise relationship edges storage', () => {
     const relationshipEdgeStore = tx.objectStore(FRANCHISE_RELATIONSHIP_EDGES_STORE_NAME);
     expect(relationshipEdgeStore.keyPath).toBe('id');
     expect(Array.from(relationshipEdgeStore.indexNames)).toEqual(['by_pair', 'by_scope']);
+    const tradeDemandStore = tx.objectStore(FRANCHISE_TRADE_DEMAND_STORE_NAME);
+    expect(tradeDemandStore.keyPath).toEqual(['franchiseId', 'seasonId', 'statsScopeId', 'playerId']);
+    expect(Array.from(tradeDemandStore.indexNames)).toEqual(['by_scope']);
     await transactionToPromise(tx);
   });
 
