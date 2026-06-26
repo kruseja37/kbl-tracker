@@ -48,9 +48,9 @@ ledger; a **Career** card (totals + awards-won chips); a **Milestones** section 
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
 | **Schedule tab** ✅ BUILT | upcoming fixtures (date/opp, next = Play Ball) + recent results w/ scores (W yellow / L red); trade-deadline banner | 🟢 | Y | `scheduleStorage.ts:29` |
-| **Almanac — league leaders** | batting (AVG/HR/RBI/SB/OPS/WAR) + pitching (ERA/W/K/WHIP/SV/WAR) leaderboards w/ category picker | 🟢 | N (stub) | `seasonStorage.ts:43,93` |
+| **Almanac — league leaders** ✅ BUILT | batting (AVG/HR/RBI/SB/WAR) + pitching (ERA/W/K/SV/WAR) leaderboards, top-3 each, you-yellow/rival-red | 🟢 | Y | `seasonStorage.ts:43,93` |
 | **Almanac — records explorer** | single-season + all-time records by stat | 🟢/🟡 | N | `museumStorage.ts` |
-| **Almanac — trophy case** | champions, past award winners, retired jerseys | 🟢 | partial (Museum) | `museumStorage.ts`, offseason awards |
+| **Almanac — trophy case** ✅ BUILT | champions + past award winners + franchise record (you-highlight) | 🟢 | Y | `museumStorage.ts`, offseason awards |
 | **Almanac — history/facts** | retrosheet/SABR tidbits, player/team history | 🟡 | N | `reporter.ts:199` |
 
 ## Bucket 3 — Awards, in full
@@ -127,6 +127,20 @@ adapters already written (L10–L13) but no home.
 10. Bucket 8 — the tentpole takeovers (firing → ceremony → rebrand) + the random-event confirm takeover.
 
 **Then** — the real-data adapter (GREENLIGHT-GATED), swapping mock → live across everything above.
+
+## Cross-branch: home-park rivalry (Captain feature on `franchise-v1-next`, 2026-06-26)
+The Captain shipped a **home-park rivalry** on `franchise-v1-next` (build-dark behind
+`isFranchisePhase2StadiumRecordsEnabled`): each team's rival = the opposing team that owns its home park
+this season (most wins there; park-records break ties; directional; sticky; per-season). Read via
+`getHomeParkRival(scope, teamId) → { rivalTeamId }`. `useFranchiseData` now exposes `lensTeamId =
+controlledTeams[0]?.teamId` + `rivalTeamId` on `UseFranchiseDataReturn` / `FranchiseDataContext`.
+**This is exactly the lens seam the new hub's real-data adapter consumes** — `lensTeamId` → `active.id`,
+`rivalTeamId` → `active.rivalId` (the new hub already renders rival = `--fen-marquee` red everywhere). The
+new hub goes RICHER than red text: (1) banner already names the rival ⚔; (2) **Stadium-tab home-park-rival
+callout** — "this season [rival] owns [your park] · N wins here" tying rivalry → the park records / House of
+Horrors (BUILD when wiring real data); (3) player-level RIVALRY edges in the drawer Ties. No file overlap —
+the Captain's rivalry touches the LEGACY hub (`FranchiseHome.tsx` / `AwardsWatchlist.tsx` /
+`useFranchiseData.ts` / `franchise-theme.css`), none of which this branch touches.
 
 ## Build notes
 - Keep every new surface's VM **field-aligned to the live type** (file:line above) so the adapter stays a

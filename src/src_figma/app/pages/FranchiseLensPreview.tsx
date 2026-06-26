@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   FranchiseLensHub,
   type ActiveTeamVM,
+  type AlmanacVM,
   type HubVM,
   type PlayerDetailVM,
   type SprayDepth,
@@ -135,6 +136,72 @@ const LEAGUE: StandingsRacesVM = {
       { position: "CF", teamId: "SG", teamAbbr: "SG", name: "Jojo Fields", note: "fan favorite left off" },
     ],
   },
+};
+
+/* League-wide leaderboards + trophy case (shared; the lens highlights you/rival).
+ * Real adapter: getSeasonBattingStats / getSeasonPitchingStats → leaders;
+ * museum + offseason awards → trophy case. */
+const ALMANAC: AlmanacVM = {
+  battingLeaders: [
+    { stat: "AVG", entries: [
+      { rank: 1, name: "D. Okoye", teamId: "PC", teamAbbr: "PC", value: ".321" },
+      { rank: 2, name: "B. Vance", teamId: "BM", teamAbbr: "BM", value: ".308" },
+      { rank: 3, name: "T. Crowe", teamId: "ST", teamAbbr: "ST", value: ".299" },
+    ] },
+    { stat: "Home Runs", entries: [
+      { rank: 1, name: "B. Vance", teamId: "BM", teamAbbr: "BM", value: "31" },
+      { rank: 2, name: "T. Crowe", teamId: "ST", teamAbbr: "ST", value: "24" },
+      { rank: 3, name: "H. Drake", teamId: "PC", teamAbbr: "PC", value: "22" },
+    ] },
+    { stat: "RBI", entries: [
+      { rank: 1, name: "B. Vance", teamId: "BM", teamAbbr: "BM", value: "92" },
+      { rank: 2, name: "H. Drake", teamId: "PC", teamAbbr: "PC", value: "78" },
+      { rank: 3, name: "T. Crowe", teamId: "ST", teamAbbr: "ST", value: "71" },
+    ] },
+    { stat: "Stolen Bases", entries: [
+      { rank: 1, name: "D. Okoye", teamId: "PC", teamAbbr: "PC", value: "28" },
+      { rank: 2, name: "S. Park", teamId: "RR", teamAbbr: "RR", value: "19" },
+      { rank: 3, name: "K. Bowman", teamId: "CC", teamAbbr: "CC", value: "17" },
+    ] },
+    { stat: "WAR", entries: [
+      { rank: 1, name: "B. Vance", teamId: "BM", teamAbbr: "BM", value: "6.4" },
+      { rank: 2, name: "D. Okoye", teamId: "PC", teamAbbr: "PC", value: "6.1" },
+      { rank: 3, name: "T. Crowe", teamId: "ST", teamAbbr: "ST", value: "5.7" },
+    ] },
+  ],
+  pitchingLeaders: [
+    { stat: "ERA", entries: [
+      { rank: 1, name: "C. Vesper", teamId: "BM", teamAbbr: "BM", value: "2.18" },
+      { rank: 2, name: "R. Fenomeno", teamId: "PC", teamAbbr: "PC", value: "2.74" },
+      { rank: 3, name: "M. Roan", teamId: "DV", teamAbbr: "DV", value: "3.01" },
+    ] },
+    { stat: "Wins", entries: [
+      { rank: 1, name: "C. Vesper", teamId: "BM", teamAbbr: "BM", value: "15" },
+      { rank: 2, name: "R. Fenomeno", teamId: "PC", teamAbbr: "PC", value: "13" },
+      { rank: 3, name: "M. Roan", teamId: "DV", teamAbbr: "DV", value: "12" },
+    ] },
+    { stat: "Strikeouts", entries: [
+      { rank: 1, name: "C. Vesper", teamId: "BM", teamAbbr: "BM", value: "214" },
+      { rank: 2, name: "R. Fenomeno", teamId: "PC", teamAbbr: "PC", value: "188" },
+      { rank: 3, name: "M. Roan", teamId: "DV", teamAbbr: "DV", value: "171" },
+    ] },
+    { stat: "Saves", entries: [
+      { rank: 1, name: "M. Reyes", teamId: "PC", teamAbbr: "PC", value: "24" },
+      { rank: 2, name: "S. Knox", teamId: "DV", teamAbbr: "DV", value: "21" },
+      { rank: 3, name: "M. Childs", teamId: "ST", teamAbbr: "ST", value: "18" },
+    ] },
+    { stat: "WAR", entries: [
+      { rank: 1, name: "C. Vesper", teamId: "BM", teamAbbr: "BM", value: "6.6" },
+      { rank: 2, name: "R. Fenomeno", teamId: "PC", teamAbbr: "PC", value: "5.9" },
+      { rank: 3, name: "M. Roan", teamId: "DV", teamAbbr: "DV", value: "5.4" },
+    ] },
+  ],
+  trophyCase: [
+    { label: "Reigning champs", holder: "Brass Monkeys", teamId: "BM" },
+    { label: "Last season MVP", holder: "Boomer Vance · BM", teamId: "BM" },
+    { label: "Last season Cy Young", holder: "Cole Vesper · BM", teamId: "BM" },
+    { label: "Franchise wins record", holder: "Page Capitals · 104", teamId: "PC" },
+  ],
 };
 
 /* Per-club ballparks. The real adapter feeds these from
@@ -496,6 +563,7 @@ const DETAIL_STAD: PlayerDetailVM = {
 const HUB: Record<string, HubVM> = {
   PC: {
     standings: LEAGUE,
+    almanac: ALMANAC,
     stadium: STADIUM_PC,
     schedule: {
       deadlineNote: "Trade deadline in 6 games — Page is a buyer.",
@@ -588,6 +656,7 @@ const HUB: Record<string, HubVM> = {
   },
   BM: {
     standings: LEAGUE,
+    almanac: ALMANAC,
     stadium: STADIUM_BM,
     schedule: {
       upcoming: [
@@ -627,6 +696,7 @@ const HUB: Record<string, HubVM> = {
   },
   RR: {
     standings: LEAGUE,
+    almanac: ALMANAC,
     stadium: STADIUM_RR,
     schedule: {
       deadlineNote: "Trade deadline in 6 games — sellers? The GM says not yet.",

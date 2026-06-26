@@ -339,6 +339,25 @@
 .fen-snub.you .nm { color: var(--fen-yellow); }
 .fen-snub.rival .nm { color: var(--fen-marquee); }
 
+/* ===== Almanac tab (league leaders + trophy case) ===== */
+.fen-almanac-sect2 { margin-top: 24px; }
+.fen-lb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(188px, 1fr)); gap: 14px; }
+.fen-lb { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 5px; padding: 11px 13px; }
+.fen-lb-stat { font-family: var(--fen-chalk-font); font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.28); padding-bottom: 6px; }
+.fen-lb-row { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: baseline; gap: 8px; padding: 3px 0; }
+.fen-lb-row .rk { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); text-align: center; }
+.fen-lb-row .nm { font-family: var(--fen-chalk-font); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-lb-row .tm { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-lb-row .vl { font-family: var(--fen-chalk-font); font-size: 15px; text-align: right; }
+.fen-lb-row.you .nm, .fen-lb-row.you .vl { color: var(--fen-yellow); }
+.fen-lb-row.rival .nm, .fen-lb-row.rival .vl { color: var(--fen-marquee); }
+.fen-trophies { display: grid; grid-template-columns: repeat(auto-fit, minmax(204px, 1fr)); gap: 12px; }
+.fen-trophy { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 3px solid var(--fen-ash); border-radius: 5px; padding: 11px 13px; }
+.fen-trophy.you { border-left-color: var(--fen-yellow); background: rgba(242, 192, 65, 0.06); }
+.fen-trophy .tl { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-trophy .th { font-family: var(--fen-chalk-font); font-size: 17px; margin-top: 4px; }
+.fen-trophy.you .th { color: var(--fen-yellow); }
+
 /* ===== Schedule tab ===== */
 .fen-sched-deadline { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-yellow); background: rgba(242, 192, 65, 0.1); border: 1px solid rgba(242, 192, 65, 0.3); border-radius: 5px; padding: 8px 14px; margin-bottom: 18px; }
 .fen-sched-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }

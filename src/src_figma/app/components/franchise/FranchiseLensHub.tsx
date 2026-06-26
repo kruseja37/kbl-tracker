@@ -258,6 +258,16 @@ export interface ScheduleVM {
   deadlineNote?: string;
 }
 
+/* ===== Almanac (league-wide — leaders + trophy case) ===== */
+export interface LeaderEntryVM { rank: number; name: string; teamId: string; teamAbbr: string; value: string }
+export interface LeaderboardVM { stat: string; entries: LeaderEntryVM[] }
+export interface TrophyVM { label: string; holder: string; teamId?: string }
+export interface AlmanacVM {
+  battingLeaders: LeaderboardVM[];
+  pitchingLeaders: LeaderboardVM[];
+  trophyCase?: TrophyVM[];
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
@@ -266,6 +276,7 @@ export interface HubVM {
   standings?: StandingsRacesVM;
   stadium?: StadiumVM;
   schedule?: ScheduleVM;
+  almanac?: AlmanacVM;
   checkpoint?: CheckpointVM;
   loading?: boolean;
   emptyNote?: string;
@@ -368,6 +379,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
               <StadiumTab hub={hub} active={active} />
             ) : tab === "Schedule" ? (
               <ScheduleTab hub={hub} active={active} />
+            ) : tab === "Almanac" ? (
+              <AlmanacTab hub={hub} active={active} />
             ) : (
               <div className="fen-empty">"{tab}" comes next.</div>
             )}
@@ -1179,6 +1192,56 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
         {!d ? <div className="fen-empty">Full dossier fills in as the season runs.</div> : null}
       </div>
     </>
+  );
+}
+
+/* ===== Almanac (league tab) ===== */
+function Leaderboard({ board, active }: { board: LeaderboardVM; active: ActiveTeamVM }) {
+  return (
+    <div className="fen-lb">
+      <div className="fen-lb-stat">{board.stat}</div>
+      {board.entries.map((e) => {
+        const tone = teamTone(e.teamId, active);
+        return (
+          <div className={`fen-lb-row${tone}`} key={e.rank + e.name}>
+            <span className="rk">{e.rank}</span>
+            <span className="nm fen-chalk">{e.name}</span>
+            <span className="tm">{e.teamAbbr}</span>
+            <span className="vl fen-chalk">{e.value}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AlmanacTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const a = hub.almanac;
+  if (!a) return <div className="fen-empty">The almanac is bare this early in the season.</div>;
+  return (
+    <div className="fen-almanac">
+      <div className="fen-sectlab">Batting Leaders <span className="lite fen-help">· your club in yellow, the rival in red</span></div>
+      <div className="fen-lb-grid">
+        {a.battingLeaders.map((b, i) => <Leaderboard key={i} board={b} active={active} />)}
+      </div>
+      <div className="fen-sectlab fen-almanac-sect2">Pitching Leaders</div>
+      <div className="fen-lb-grid">
+        {a.pitchingLeaders.map((b, i) => <Leaderboard key={i} board={b} active={active} />)}
+      </div>
+      {a.trophyCase && a.trophyCase.length ? (
+        <>
+          <div className="fen-sectlab fen-almanac-sect2">The Trophy Case</div>
+          <div className="fen-trophies">
+            {a.trophyCase.map((t, i) => (
+              <div className={`fen-trophy${t.teamId === active.id ? " you" : ""}`} key={i}>
+                <div className="tl">{t.label}</div>
+                <div className="th fen-chalk">{t.holder}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 
