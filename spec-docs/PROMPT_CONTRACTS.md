@@ -22065,3 +22065,128 @@ FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
 
 **Use high reasoning effort. Think step-by-step.**
 <!-- ===== END CONTRACT: TRUEVAL-2 ===== -->
+
+<!-- ===== CONTRACT: SCOUT-1 — evaluateScoutMove (keystone optimizer step 3a, win-value keep-in scorer) ===== -->
+## SCOUT-1 — evaluateScoutMove (keystone optimizer step 3a, win-value keep-in scorer)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. BUILD-DARK (no production wiring; the manager lane swaps it in at its scorer call-site).
+
+GOAL:
+Build the pure, deterministic, headless **win-value keep-in scorer** the manager-WPA lane's Rung-2 needs: given an
+in-game decision context, score each candidate vs the incumbent in projected **kbl-WPA** (NOT auction dollars), say
+whether a meaningfully better move exists, and how much better. Yardstick = the fielding-corrected **true value**
+(`trueValue.ts`), converted to win-value with leverage intrinsic — per SITUATIONAL_ADVISOR_AND_OPTIMAL_LINEUP_DEEPDIVE.md
+§"Two direct ties" lines 215-222 ("that fielding-corrected true value IS the win-value yardstick the advisor should
+use instead of raw auction IV"; the 3:2:1 manager METRIC itself stays uncorrected — real-WPA based).
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Interface shapes + 6 guarantees + 6 answers: `${MAIN}/spec-docs/MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (MAIN =
+  /Users/johnkruse/Projects/kbl-tracker). Leverage = RAW/intrinsic (Answer 1); optimizer owns thresholdKblWpa (Answer
+  2); tiebreak = candidateName.localeCompare then candidateId (Answer 6); completeness — never throw/null (Guarantee 4).
+- Scorer pipeline to REUSE (do NOT duplicate): `src/engines/subRecommendations.ts` `scoreEffectiveRatingsIv`
+  (lines ~131-158: effectiveRatings → IVPlayerInput → computeIV().kblIV) and `recommendSubs` (ranking + confidence
+  tiers high≥×2 / medium≥×1.25 / low>threshold). Import `effectiveRatings` (`src/engines/effectiveRatings.ts`),
+  `computeIV` (`src/engines/ivEngine.ts`), `trueValue` (`src/engines/trueValue.ts`, already committed — TRUEVAL-2),
+  `OptimalLineupCandidate` (`src/utils/optimalLineup.ts`) as the ScoutPlayer alias.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/scoutMove.ts` + `src/engines/__tests__/scoutMove.test.ts`.
+- Do NOT edit any existing file (import read-only). If you must edit one → STOP, report.
+- Pure / deterministic / headless: NO Date.now/Math.random/fs/DOM/IndexedDB/window. Same context in → byte-identical out.
+- Do NOT touch the frozen oracle, ivEngine, trueValue, or any manager-WPA file (managerWpaGameState etc.).
+
+EXPECTED OUTPUT — `scoutMove.ts` exports (shapes verbatim from the interface contract; ScoutPlayer = OptimalLineupCandidate):
+```ts
+export type ScoutPlayer = OptimalLineupCandidate;
+export interface ScoutDecisionContext {
+  decisionType: 'pitcher_change' | 'pinch_hit' | 'defensive_replacement';   // the kind of keep-in being scored
+  gameId?: string;
+  inning: number; half: 'top' | 'bottom'; outs: number; totalInnings: number;
+  leverageIndex: number;                              // intrinsic — the scout scales win-value by it, no separate multiplier
+  count?: { balls: number; strikes: number };
+  basesOccupied: { first: boolean; second: boolean; third: boolean };
+  scoreDifferentialForFieldingTeam: number;
+  battingTeamId: string; fieldingTeamId: string;
+  incumbent: ScoutPlayer; candidates: ScoutPlayer[];
+  opposingPitcher?: ScoutPlayer; opposingBatter?: ScoutPlayer;
+}
+export interface ScoutCandidateScore { candidateId: string; candidateName: string; kblWpaGain: number; justification: string; }
+export interface ScoutMoveEvaluation {
+  evaluationId: string; decisionType: ScoutDecisionContext['decisionType'];
+  incumbentPlayerId: string; bestCandidateId: string | null; bestCandidateName: string | null;
+  bestMoveKblWpaGain: number;          // >= 0 WHEN recommend===true
+  recommend: boolean; thresholdKblWpa: number; recommendationStrength: 'high' | 'medium' | 'low';
+  rankedCandidates: ScoutCandidateScore[];   // element 0 == best
+  justification: string; algorithmVersion: string; optimizerConstantsVersion: string;
+}
+export function evaluateScoutMove(ctx: ScoutDecisionContext): ScoutMoveEvaluation;
+```
+EXPORT the versioned constants (conservative PROVISIONAL v1, Mode-2 calibrated — same posture as TRUEVAL-2):
+`ALGORITHM_VERSION='scout-1.0.0'`, `OPTIMIZER_CONSTANTS_VERSION='scout-consts-1.0.0'`,
+`SCOUT_DECISION_WPA_DIVISOR` (converts a true-value DELTA in IV-$ to a per-decision win-value, BEFORE leverage; pick a
+conservative value so a typical strong upgrade in average leverage yields a small WPA like ~0.01-0.05 — document the
+reasoning), and `SCOUT_THRESHOLD_KBL_WPA: Record<decisionType, number>` (the per-type recommend bar in WPA units).
+
+ALGORITHM (per player = incumbent or candidate):
+1. Build a GameContext from ctx (opposingHand from opposingPitcher?.throws else infer from half; playingPosition from
+   the player's position; inning; the base/out/score fields) and a PlayerState from the ScoutPlayer's mojo/fitness —
+   REUSE the exact assembly `scoreEffectiveRatingsIv` uses (read it; mirror it; do not invent a new mapping).
+2. `kblIV = computeIV(effectiveRatings(player, state, gameCtx)).kblIV`.
+3. `tv = trueValue({ kblIV, traits: [], fielding: <player FLD>, isPitcher: decisionType==='pitcher_change' }, {}).trueValue`.
+   **Pass `traits: []` and empty counts on purpose:** the keep-in context carries no full team roster, so chemistry
+   potency is NOT applied here (kblIV already prices traits at the L2 "fit"); only the FIELDING correction applies in v1.
+   Document this as a flagged v1 limitation (chemistry potency lights up in optimizeLineupVsStarter, which has the roster).
+4. Per candidate: `kblWpaGain = (tv(candidate) - tv(incumbent)) / SCOUT_DECISION_WPA_DIVISOR * ctx.leverageIndex` (signed).
+5. Rank candidates by kblWpaGain desc; tiebreak candidateName.localeCompare then candidateId. element0 = best.
+6. `thresholdKblWpa = SCOUT_THRESHOLD_KBL_WPA[ctx.decisionType]`. `bestMoveKblWpaGain = rankedCandidates[0]?.kblWpaGain ?? 0`.
+   `recommend = bestMoveKblWpaGain > thresholdKblWpa`. (So bestMoveKblWpaGain >= 0 whenever recommend — Guarantee 3.)
+7. `recommendationStrength`: 'high' if gain ≥ threshold*2, 'medium' if ≥ threshold*1.25, else 'low'.
+8. `bestCandidateId/Name` = rankedCandidates[0]'s (null only if candidates empty). `incumbentPlayerId` = incumbent id.
+9. `evaluationId` = DETERMINISTIC from context: `\`${ctx.gameId ?? 'nogame'}:${ctx.inning}:${ctx.half}:${ctx.outs}:${ctx.decisionType}:${incumbent id}\``
+   (no random/time). `justification` = deterministic human string. Stamp algorithmVersion/optimizerConstantsVersion.
+10. COMPLETENESS (Guarantee 4): never throw, never return null; empty candidates → recommend:false,
+    bestCandidateId:null, bestMoveKblWpaGain:0, rankedCandidates:[].
+
+TESTS (`scoutMove.test.ts`):
+1. A clearly-better candidate (much higher fielding / ratings than incumbent, defensive_replacement, leverageIndex>1)
+   → bestMoveKblWpaGain > 0, recommend true, rankedCandidates[0] is that candidate.
+2. No better option (all candidates worse than incumbent) → recommend false, bestMoveKblWpaGain ≤ 0, rankedCandidates
+   still populated (Guarantee 4), bestCandidateId = the least-bad (non-null).
+3. Sign/Guarantee 3: whenever recommend===true, bestMoveKblWpaGain >= 0.
+4. Leverage intrinsic: the SAME candidate vs incumbent at leverageIndex 2.0 yields ~2× the kblWpaGain of leverageIndex
+   1.0 (linear in leverage, no separate multiplier).
+5. Fielding yardstick: for a defensive_replacement, a glove-up candidate (higher FLD, equal bat) scores a positive gain
+   driven by the fielding correction (prove the true-value fielding term moves it).
+6. decisionType=pitcher_change → isPitcher path (fielding correction 0 in trueValue); a velocity/junk/accuracy upgrade
+   still scores a positive gain via kblIV.
+7. Tiebreak: two candidates with identical scores rank by candidateName.localeCompare then candidateId — deterministic.
+8. Completeness: empty candidates[] → no throw; recommend false, bestCandidateId null.
+9. Determinism: two calls on identical ctx are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/scoutMove.test.ts src/engines/__tests__/trueValue.test.ts
+```
+tsc 0; vitest all-pass (trueValue stays green — proves no regression to the consumed yardstick).
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output; 4) "SCOUT-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `trueValue`/`TrueValueInput` not exported from `trueValue.ts` with the TRUEVAL-2 shape, or `effectiveRatings`/
+  `computeIV`/`OptimalLineupCandidate` not importable as documented, or `scoreEffectiveRatingsIv`'s GameContext/state
+  assembly cannot be mirrored from source → STOP, report the actual surface (do NOT invent a parallel scorer).
+- (b) Implementation would require editing any existing file, or importing/using a manager-WPA runtime file
+  (managerWpaGameState etc.) → STOP, report.
+- (c) Determinism cannot be met without Date.now/Math.random (e.g. evaluationId) → STOP (it CAN — derive from ctx).
+- Never invent a constant beyond those named; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: SCOUT-1 ===== -->
