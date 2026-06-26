@@ -40,6 +40,16 @@ const HUB: Record<string, HubVM> = {
       ],
       nextGame: { awayName: "River Rats", awayAbbr: "RR", awayRecord: "44–36", homeName: "Page Capitals", homeAbbr: "PC", homeRecord: "48–32", pulse: (<>Clubhouse <b>buzzing</b> · fans <b style={{ color: "#F2C041" }}>62 ▲</b> · 2.0 back of 1st</>) },
     },
+    news: {
+      editionLabel: "Season 3 · Week 9", volumeLabel: "Vol. III — No. 61", priceLabel: "Price: Two Bits",
+      lead: { kicker: "Pennant Race", headline: "CAPITALS RIDE FENOMENO TO FOURTH STRAIGHT", body: "Rafa Fenomeno carried a no-hitter into the seventh as Page surged within two of the division-leading Monkeys, sending a sellout crowd home hoarse and happy.", byline: "By J. Tate" },
+      stories: [
+        { category: "Trade buzz", headline: "Capitals scouting bullpen help before the deadline", excerpt: "With room under the tax line, Page is \"kicking tires\" on a setup arm.", byline: "Beat report · 2 days ago" },
+        { category: "Clubhouse", headline: "Stad's frustration boils over after another benching", excerpt: "The veteran left fielder wants a clearer role — or a ticket out of town.", byline: "Beat report · 3 days ago" },
+        { category: "On the field", headline: "Okoye's 28 steals quietly lead the league", excerpt: "The leadoff man has been a menace; teams are throwing over more than ever.", byline: "Beat report · 4 days ago" },
+        { category: "The race", headline: "MVP ballots starting to swing Okoye's way", excerpt: "Two big nights vault the center fielder into the top three.", byline: "League notebook · 5 days ago" },
+      ],
+    },
     pulse: {
       fanMorale: { value: 62, trend: "up", history: [
         { delta: 6, reason: "Walk-off win over the rival", week: "Week 8" },
@@ -78,6 +88,10 @@ const HUB: Record<string, HubVM> = {
       ],
       nextGame: { awayName: "Page Capitals", awayAbbr: "PC", awayRecord: "48–32", homeName: "Brass Monkeys", homeAbbr: "BM", homeRecord: "50–30", pulse: (<>Clubhouse <b>confident</b> · fans <b style={{ color: "#F2C041" }}>71 ▲</b> · 1st in the East</>) },
     },
+    news: { editionLabel: "Season 3 · Week 9", volumeLabel: "Vol. III — No. 61", lead: { kicker: "Coronation", headline: "VESPER STAKES HIS CY YOUNG CLAIM AS MONKEYS ROLL", body: "A fourteen-strikeout gem dropped the ace's ERA to 2.18 and pushed the magic number into single digits.", byline: "By D. Hale" }, stories: [
+      { category: "The race", headline: "Magic number down to nine in the East", excerpt: "First place is all but wrapped up.", byline: "League notebook · 1 day ago" },
+      { category: "Clubhouse", headline: "A confident room eyes the postseason", excerpt: "The Brass are loose, healthy, and rolling.", byline: "Beat report · 3 days ago" },
+    ] },
     pulse: { fanMorale: { value: 71, trend: "up", history: [{ delta: 5, reason: "First place clinched the week", week: "Week 8" }] }, clubhouseLabel: "Confident", clubhouseAvg: 64, standingLabel: "50–30 · 1st East" },
     roster: [
       { id: "b1", number: "9", position: "SP", name: "Cole Vesper", war: 6.2, salary: 1_500_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 78, state: "Locked in · ▲ rising", trend: "up", history: [{ delta: 6, reason: "14-strikeout gem", week: "Week 8" }] } },
@@ -94,6 +108,10 @@ const HUB: Record<string, HubVM> = {
       ],
       nextGame: { awayName: "Sand Gnats", awayAbbr: "SG", awayRecord: "39–41", homeName: "River Rats", homeAbbr: "RR", homeRecord: "44–36", pulse: (<>Clubhouse <b>restless</b> · fans <b style={{ color: "#CC3433" }}>49 ▼</b> · 6.0 back</>) },
     },
+    news: { editionLabel: "Season 3 · Week 9", volumeLabel: "Vol. III — No. 61", lead: { kicker: "Slump", headline: "RATS SLIDE OUT OF THE WILD-CARD PICTURE", body: "A four-game skid has the front office fielding calls and the clubhouse pressing.", byline: "By G. Ruiz" }, stories: [
+      { category: "Clubhouse", headline: "Hale's 0-for-18 weighs on a restless room", excerpt: "The left fielder is pressing as the losses mount.", byline: "Beat report · 2 days ago" },
+      { category: "Front office", headline: "\"We're not sellers yet,\" GM insists", excerpt: "For now, River Rats are holding — but the deadline looms.", byline: "Beat report · 4 days ago" },
+    ] },
     pulse: { fanMorale: { value: 49, trend: "down", history: [{ delta: -6, reason: "Fell out of the wild-card spot", week: "Week 8" }] }, clubhouseLabel: "Restless", clubhouseAvg: 47, standingLabel: "44–36 · 3rd East" },
     roster: [
       { id: "r1", number: "2", position: "2B", name: "Sol Park", war: 3.8, salary: 680_000, morale: { value: 52, state: "Steady", trend: "flat", history: [] } },

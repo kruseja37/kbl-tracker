@@ -61,6 +61,15 @@ export interface SeasonHomeVM {
   nextGame?: NextGameVM;
 }
 
+export interface NewsStoryVM { category: string; headline: string; excerpt: string; byline: string }
+export interface NewsVM {
+  editionLabel: string;
+  volumeLabel: string;
+  priceLabel?: string;
+  lead?: { kicker: string; headline: string; body: string; byline: string };
+  stories: NewsStoryVM[];
+}
+
 export interface MoraleHistoryVM {
   delta: number;
   reason: string;
@@ -95,6 +104,7 @@ export interface PulseVM {
 
 export interface HubVM {
   home?: SeasonHomeVM;
+  news?: NewsVM;
   pulse: PulseVM;
   roster: PlayerRowVM[];
   loading?: boolean;
@@ -137,6 +147,7 @@ function Money({ value, className }: { value: number; className?: string }) {
 export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: FranchiseLensHubProps) {
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
+  const [helpOn, setHelpOn] = useState(false);
 
   const identityStyle = {
     ["--fen-tp" as string]: active.primary,
@@ -144,11 +155,10 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
   } as React.CSSProperties;
 
   return (
-    <div className="fen-root">
+    <div className={`fen-root${helpOn ? " help-on" : ""}`}>
       <div className="fen-wrap">
-        {/* lens picker */}
+        {/* lens picker — team names up top, clickable (no label needed) */}
         <div className="fen-lens">
-          <span className="lab">Lens</span>
           {teams.map((t) => (
             <button
               key={t.id}
@@ -174,12 +184,12 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
                 <button key={t} type="button" className={`fen-tab${tab === t ? " on" : ""}`} onClick={() => setTab(t)}>{t}</button>
               ))}
               {LEAGUE_TABS.map((t) => (
-                <button key={t} type="button" className="fen-tab league" onClick={() => setTab(t)}>{t}·league</button>
+                <button key={t} type="button" className="fen-tab league" onClick={() => setTab(t)}>{t}<span className="fen-help">·league</span></button>
               ))}
             </div>
 
             {tab === "The Clubhouse" ? (
-              <SeasonHome active={active} hub={hub} />
+              <SeasonHome hub={hub} />
             ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
@@ -187,12 +197,15 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
                 openMorale={openMorale}
                 setOpenMorale={setOpenMorale}
               />
+            ) : tab === "Tootwhistle Times" ? (
+              <NewspaperTab hub={hub} active={active} />
             ) : (
               <div className="fen-empty">"{tab}" comes next.</div>
             )}
           </div>
         </div>
       </div>
+      <button type="button" className="fen-helpbtn" onClick={() => setHelpOn((v) => !v)}>? Help</button>
     </div>
   );
 }
@@ -247,15 +260,14 @@ function Banner({ active }: { active: ActiveTeamVM }) {
   );
 }
 
-function SeasonHome({ hub }: { active: ActiveTeamVM; hub: HubVM }) {
+function SeasonHome({ hub }: { hub: HubVM }) {
   const home = hub.home;
   if (!home) return <div className="fen-empty">The clubhouse is quiet — no season underway yet.</div>;
   return (
     <>
-      <div className="fen-sectlab">The Clubhouse <span className="lite">· what the season's about right now</span></div>
       {home.leadStory ? (
         <div className="fen-lead">
-          <div className="wt">lead story</div>
+          <div className="wt fen-help-b">lead story</div>
           <div className="kick">{home.leadStory.kicker}</div>
           <h2>{home.leadStory.headline}</h2>
           <p>{home.leadStory.body}</p>
@@ -264,13 +276,13 @@ function SeasonHome({ hub }: { active: ActiveTeamVM; hub: HubVM }) {
       ) : null}
       <div className="fen-homegrid">
         <div>
-          <div className="fen-sectlab">Needs you now <span className="lite">· ranked by impact</span></div>
+          <div className="fen-sectlab">Needs you now <span className="lite fen-help">· ranked by impact</span></div>
           <div className="fen-icards">
             {home.impactCards.map((c, i) => (
               <button type="button" className={`fen-icard ${c.kind}`} key={i}>
                 <span className="ic">{c.icon}</span>
                 <div className="bd"><div className="t">{c.title}</div><div className="d">{c.detail}</div></div>
-                {c.cta ? <span className="go">{c.cta} →</span> : null}
+                {c.cta ? <span className="go fen-help">{c.cta} →</span> : null}
               </button>
             ))}
           </div>
@@ -291,8 +303,47 @@ function SeasonHome({ hub }: { active: ActiveTeamVM; hub: HubVM }) {
           </div>
         ) : null}
       </div>
-      <div className="fen-calm">Your <b>roster</b>, the <b>farm</b>, <b>stadium</b>, <b>standings &amp; races</b>, the <b>Almanac</b> — all a tap away. The home only shows what's earned its place today.</div>
+      <div className="fen-calm fen-help-b">Your <b>roster</b>, the <b>farm</b>, <b>stadium</b>, <b>standings &amp; races</b>, the <b>Almanac</b> — all a tap away. The home only shows what's earned its place today.</div>
     </>
+  );
+}
+
+function NewspaperTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const news = hub.news;
+  const reporter = active.reporter?.name;
+  if (!news) return <div className="fen-empty">No dispatches from the beat yet this season.</div>;
+  return (
+    <div className="fen-paper">
+      <div className="fen-masthead">
+        <div className="name">The Tootwhistle Times</div>
+        <div className="subm">{active.name} · {news.editionLabel}</div>
+      </div>
+      <div className="fen-dateline">
+        <span>{news.volumeLabel}</span>
+        {reporter ? <span>{reporter}, beat writer</span> : null}
+        <span>{news.priceLabel ?? "Price: Two Bits"}</span>
+      </div>
+      <div className="pbody">
+        {news.lead ? (
+          <div className="fen-lead2">
+            <div className="kick">{news.lead.kicker}</div>
+            <h2>{news.lead.headline}</h2>
+            <p>{news.lead.body}</p>
+            <div className="by">{news.lead.byline}</div>
+          </div>
+        ) : null}
+        <div className="fen-newsgrid">
+          {news.stories.map((s, i) => (
+            <div className="fen-ncard" key={i}>
+              <span className="fen-ncat">{s.category}</span>
+              <h3>{s.headline}</h3>
+              <p className="ex">{s.excerpt}</p>
+              <div className="by">{s.byline}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -318,7 +369,7 @@ function RosterTab({
             <button type="button" className="fen-metric" onClick={() => setOpenMorale(openMorale === "fan" ? null : "fan")}>
               <div className="ml">Fan morale</div>
               <div className={`mv fen-chalk ${moraleClass(fan.value)}`}>{fan.value} <span style={{ fontSize: 15 }}>{arrow(fan.trend)}</span></div>
-              <div className="tap">tap for the log</div>
+              <div className="tap fen-help-b">tap for the log</div>
             </button>
             {openMorale === "fan" && (
               <MoralePopover
@@ -429,7 +480,7 @@ function MoralePopover({
             <span><span className="rs">{h.reason}</span><br /><span className="wk">{h.week}</span></span>
           </div>
         ))}
-        <div className="foot">Tap a player's name for the full clubhouse card.</div>
+        <div className="foot fen-help-b">Tap a player's name for the full clubhouse card.</div>
       </div>
     </>
   );
