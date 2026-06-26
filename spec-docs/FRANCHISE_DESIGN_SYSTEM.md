@@ -61,7 +61,7 @@ stat line.
 | | |
 |---|---|
 | **Look** | An **aged "Green Monster" manual scoreboard** — green steel, infield-dirt wood frame, road-gray rivets, weathered grain/stains/vignette. |
-| **Type — two voices** | **Chalk** (`chalk.otf`) for titles, scores, standings numbers (the board). **Mom's Typewriter** (`moms-typewriter.ttf`) for reporter/newspaper copy + small labels (the words). |
+| **Type — two voices** | **Real chalk** (`Chalkduster`, macOS system face; falls back to `Tox Typewriter` → Courier) for EVERY board label, score, standings number, and button — it reads as hand-chalked, not typewritten (JK ruling 2026-06-26). **Mom's Typewriter** (`moms-typewriter.ttf`) for reporter/newspaper copy ONLY (the words). *(`chalk.otf` stays rejected — childish scrawl.)* |
 | **Palette** | The official KBL **eight** only. **Dominant trio:** Wrigley Green (board) · chalk-white (text) · Scoreboard Yellow (focus/active). **Accents only:** Marquee Red (rival/alert/negative), Umpire Navy (night/recess), Dark Cream + Ash Wood (newsprint/placards), Road Gray (rivets), Infield Dirt (frame). |
 | **Money** | **Option B** — a small typewriter `$`/`k`/`M` with chalk digits (the ornate chalk `$` was too busy). |
 | **Team color** | **Banner only.** The board itself stays white & yellow chalk: **your club = yellow** (like the live half-inning), **rival = red**, everyone else = white. No team-color tints/washes on the board. |

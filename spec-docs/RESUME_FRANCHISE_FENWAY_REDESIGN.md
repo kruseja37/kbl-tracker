@@ -25,9 +25,12 @@
 ## Locked rules (JK-approved — do not drift)
 - **Look:** aged "Green Monster" scoreboard. Palette = official KBL 8 (`color_palette.md`); dominant
   trio = Wrigley Green board + chalk-white + scoreboard-yellow; cream/navy/red/etc = accents only.
-- **Two fonts, by voice:** **Tox Typewriter** (the board) for EVERY label, number, and clickable
-  surface; **Mom's Typewriter** ONLY for the reporter's words (the Season Home lead story + the
-  Tootwhistle Times). *(Not chalk.otf — that's the childish scrawl JK rejected.)*
+- **Two fonts, by voice:** **Chalkduster** (real chalk — JK ruling 2026-06-26) for EVERY board label,
+  number, and clickable surface, so the board reads as hand-chalked, NOT typewritten; **Mom's Typewriter**
+  ONLY for the reporter's words (the Season Home lead story + the Tootwhistle Times). The board font is the
+  single CSS var `--fen-chalk-font` (Chalkduster → Tox Typewriter → Courier fallback; Chalkduster is a
+  macOS system face). *(Still NOT chalk.otf — that's the childish scrawl JK rejected; Tox is now just the
+  off-Mac fallback, no longer the primary board font.)*
 - **Team color = banner only.** The board stays white/yellow chalk: your club yellow (like the live
   half-inning), rival red, others white. No team-color washes on the board.
 - **Money = option B:** small typewriter `$`/`k`/`M` + chalk digits.
