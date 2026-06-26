@@ -1,7 +1,12 @@
 # Draft + Archetype + Scout — UI build notes & progress
 
-> The UI/UX build that folds in `FRANCHISE_SETUP_TO_SEASON_ROADMAP.md` §7. Branch
-> `codex/draft-pipeline-fix` (worktree kbl-draftfix). Style/foundation reference:
+> The UI/UX build that folds in `FRANCHISE_SETUP_TO_SEASON_ROADMAP.md` §7.
+> **Build worktree: `/Users/johnkruse/Projects/kbl-draft-ui` on branch
+> `codex/draft-setup-ui`** (forked off `codex/draft-pipeline-fix` 2026-06-26 to
+> isolate from the concurrent engine thread, which keeps `kbl-draftfix` /
+> `codex/draft-pipeline-fix`). Merge this UI branch into draft-pipeline-fix at
+> wire-up time. The first 3 UI commits landed on draft-pipeline-fix before the
+> split, so they're in both histories. Style/foundation reference:
 > `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (neo-brutalist KBL look —
 > Tailwind, hard borders + offset shadows, `#4A6844` green / `#C4A853` gold /
 > `#E8E8D8` cream). Building NON-DESTRUCTIVE previews first (`/__preview/*`);
