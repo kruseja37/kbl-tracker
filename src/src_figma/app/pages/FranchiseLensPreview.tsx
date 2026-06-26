@@ -428,10 +428,27 @@ const HUB: Record<string, HubVM> = {
   PC: {
     standings: LEAGUE,
     stadium: STADIUM_PC,
+    checkpoint: {
+      number: 3, label: "Checkpoint 3 of 5", pctLabel: "the 60% mark",
+      players: [
+        { id: "p1", name: "Rafa Fenomeno", position: "SP",
+          ratingChanges: [{ label: "Velocity", from: 76, to: 79 }, { label: "Junk", from: 71, to: 74 }],
+          traitChanges: [{ valence: "gain", trait: "Magic Hands", displaces: "Butter Fingers" }] },
+        { id: "p2", name: "Dash Okoye", position: "CF",
+          ratingChanges: [{ label: "Speed", from: 88, to: 90 }, { label: "Contact", from: 79, to: 81 }],
+          traitChanges: [] },
+        { id: "p4", name: "Lars Stad", position: "LF",
+          ratingChanges: [{ label: "Power", from: 72, to: 70 }, { label: "Contact", from: 63, to: 61 }],
+          traitChanges: [{ valence: "lose", trait: "Clutch" }] },
+        { id: "p5", name: "Cy Vane", position: "C",
+          ratingChanges: [{ label: "Fielding", from: 58, to: 55 }],
+          traitChanges: [{ valence: "gain", trait: "Butter Fingers", displaces: "Cannon Arm" }] },
+      ],
+    },
     home: {
       leadStory: { kicker: "The Arc · Season 3, Week 9", headline: "FENOMENO TAKES THE LEAP — ARM CLIMBING TOWARD AN A", body: "Five starts, one earned run. The kid the Capitals stole in the draft is pitching his way up the grades in real time — and Thursday's checkpoint may make it official. \"He doesn't pitch like a B anymore,\" the skipper admitted.", byline: "By J. Tate, Tootwhistle Times" },
       impactCards: [
-        { kind: "dated", icon: "🔔", title: "Ratings checkpoint in 2 games", detail: "The league's about to shift — you'll get a change-log to enter into SMB4. Twenty percent down.", cta: "opens at the break" },
+        { kind: "dated", icon: "🔔", title: "Ratings checkpoint — ready to enter", detail: "The league just shifted: four of your players changed. Tap to enter the new numbers into SMB4.", cta: "open the worklist", action: "checkpoint" },
         { kind: "crisis", icon: "⚠️", title: "Lars Stad — morale cratering (38 ▼)", detail: "Benched again, and the Times floated a trade. He wants out; a move may be coming.", cta: "see the ledger" },
         { kind: "good", icon: "▲", title: "Okoye climbs to #2 in the MVP race", detail: "Two big nights and your center fielder is in the conversation.", cta: "the races" },
       ],

@@ -47,6 +47,7 @@ export interface ImpactCardVM {
   title: string;
   detail: string;
   cta?: string;
+  action?: "checkpoint";       // a clickable impact card that opens a moment-driven takeover
 }
 
 export interface NextGameVM {
@@ -209,6 +210,23 @@ export interface StadiumVM {
   records?: StadiumRecordVM[];                   // the house-of-horrors catalog
 }
 
+/* ===== Checkpoint confirmation worklist (the moment-driven transcription takeover) ===== */
+export interface RatingChangeVM { label: string; from: number; to: number }
+export interface TraitChangeVM { valence: "gain" | "lose"; trait: string; displaces?: string }
+export interface CheckpointPlayerVM {
+  id: string;
+  name: string;
+  position: string;
+  ratingChanges: RatingChangeVM[];
+  traitChanges: TraitChangeVM[];
+}
+export interface CheckpointVM {
+  number: number;            // 1–5 (every 20%)
+  label: string;             // "Checkpoint 3 of 5"
+  pctLabel?: string;         // "the 60% mark"
+  players: CheckpointPlayerVM[];
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
@@ -216,6 +234,7 @@ export interface HubVM {
   roster: PlayerRowVM[];
   standings?: StandingsRacesVM;
   stadium?: StadiumVM;
+  checkpoint?: CheckpointVM;
   loading?: boolean;
   emptyNote?: string;
 }
@@ -257,6 +276,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
   const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
+  const [openCheckpoint, setOpenCheckpoint] = useState(false);
   const [helpOn, setHelpOn] = useState(false);
 
   const identityStyle = {
@@ -299,7 +319,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
             </div>
 
             {tab === "The Clubhouse" ? (
-              <SeasonHome hub={hub} />
+              <SeasonHome hub={hub} onAction={(a) => { if (a === "checkpoint") setOpenCheckpoint(true); }} />
             ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
@@ -322,6 +342,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
       </div>
       <button type="button" className="fen-helpbtn" onClick={() => setHelpOn((v) => !v)}>? Help</button>
       {openPlayer ? <PlayerDrawer player={openPlayer} onClose={() => setOpenPlayer(null)} /> : null}
+      {openCheckpoint && hub.checkpoint ? <CheckpointTakeover cp={hub.checkpoint} onClose={() => setOpenCheckpoint(false)} /> : null}
     </div>
   );
 }
@@ -376,7 +397,7 @@ function Banner({ active }: { active: ActiveTeamVM }) {
   );
 }
 
-function SeasonHome({ hub }: { hub: HubVM }) {
+function SeasonHome({ hub, onAction }: { hub: HubVM; onAction?: (action: string) => void }) {
   const home = hub.home;
   if (!home) return <div className="fen-empty">The clubhouse is quiet — no season underway yet.</div>;
   return (
@@ -395,10 +416,10 @@ function SeasonHome({ hub }: { hub: HubVM }) {
           <div className="fen-sectlab">Needs you now <span className="lite fen-help">· ranked by impact</span></div>
           <div className="fen-icards">
             {home.impactCards.map((c, i) => (
-              <button type="button" className={`fen-icard ${c.kind}`} key={i}>
+              <button type="button" className={`fen-icard ${c.kind}${c.action ? " act" : ""}`} key={i} onClick={() => c.action && onAction?.(c.action)}>
                 <span className="ic">{c.icon}</span>
                 <div className="bd"><div className="t">{c.title}</div><div className="d">{c.detail}</div></div>
-                {c.cta ? <span className="go fen-help">{c.cta} →</span> : null}
+                {c.cta ? <span className={`go${c.action ? "" : " fen-help"}`}>{c.cta} →</span> : null}
               </button>
             ))}
           </div>
@@ -1073,6 +1094,71 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
         {!d ? <div className="fen-empty">Full dossier fills in as the season runs.</div> : null}
       </div>
     </>
+  );
+}
+
+/* ===== Checkpoint confirmation worklist (moment-driven takeover) ===== */
+function CheckpointTakeover({ cp, onClose }: { cp: CheckpointVM; onClose: () => void }) {
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setDone((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const total = cp.players.length;
+  const entered = done.size;
+  const allDone = total > 0 && entered >= total;
+  return (
+    <div className="fen-cp" role="dialog" aria-label={cp.label}>
+      <div className="fen-cp-panel fen-aged">
+        <div className="fen-content">
+          <div className="fen-cp-head">
+            <div>
+              <div className="fen-cp-kick">⚠ The league just shifted</div>
+              <h2 className="fen-chalk fen-y">{cp.label}</h2>
+              <div className="fen-cp-sub">Type each <b>new number</b> into SMB4, then check the player off. {cp.pctLabel ? `Fired at ${cp.pctLabel}.` : ""}</div>
+            </div>
+            <button type="button" className="fen-cp-x" onClick={onClose} aria-label="Close">×</button>
+          </div>
+          <div className="fen-cp-prog">
+            <span className="bar"><span className="fill" style={{ width: `${total ? Math.round((entered / total) * 100) : 0}%` }} /></span>
+            <span className="lab fen-chalk">{entered} of {total} entered</span>
+          </div>
+          <div className="fen-cp-grid">
+            {cp.players.map((pl) => {
+              const ok = done.has(pl.id);
+              return (
+                <div className={`fen-cp-card${ok ? " ok" : ""}`} key={pl.id}>
+                  <div className="ph">
+                    <span className="pos">{pl.position}</span>
+                    <span className="nm fen-chalk">{pl.name}</span>
+                    <button type="button" className={`chk${ok ? " on" : ""}`} onClick={() => toggle(pl.id)}>{ok ? "✓ entered" : "mark entered"}</button>
+                  </div>
+                  <div className="changes">
+                    {pl.ratingChanges.map((r, i) => {
+                      const d = r.to - r.from;
+                      return (
+                        <div className="rc" key={i}>
+                          <span className="rl">{r.label}</span>
+                          <span className="rf">{r.from}</span><span className="ar">→</span><span className="rt fen-y">{r.to}</span>
+                          <span className={`dl ${d >= 0 ? "up" : "dn"}`}>{d >= 0 ? "▲" : "▼"}{Math.abs(d)}</span>
+                        </div>
+                      );
+                    })}
+                    {pl.traitChanges.map((t, i) => (
+                      <div className={`tc ${t.valence}`} key={i}>
+                        <span className="ar">{t.valence === "gain" ? "＋" : "－"}</span>
+                        <span>{t.valence === "gain" ? "Gain" : "Lose"} <b className={t.valence === "gain" ? "fen-y" : ""}>{t.trait}</b>{t.displaces ? ` (replaces ${t.displaces})` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="fen-cp-foot">
+            <button type="button" className="fen-cp-allbtn" onClick={() => setDone(new Set(cp.players.map((p) => p.id)))}>Mark all entered</button>
+            <button type="button" className="fen-cp-donebtn" onClick={onClose}>{allDone ? "All set — close" : "Close for now"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

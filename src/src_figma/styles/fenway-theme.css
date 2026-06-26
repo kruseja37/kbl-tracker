@@ -503,6 +503,56 @@
 .fen-fame .ch .cv { font-family: var(--fen-chalk-font); font-size: 13px; text-align: right; }
 
 @media (max-width: 520px) { .fen-drawer { width: 100vw; } }
+
+/* an impact card that opens a takeover reads as actionable (not help-gated) */
+.fen-icard.act { cursor: pointer; border-left-color: var(--fen-yellow); }
+.fen-icard.act:hover { background: rgba(242, 192, 65, 0.08); }
+.fen-icard.act .go { color: var(--fen-yellow); }
+
+/* ===== Checkpoint confirmation worklist (the takeover that SHOUTS) ===== */
+.fen-cp { position: fixed; inset: 0; z-index: 80; background: rgba(12, 18, 14, 0.82); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 28px 18px; animation: fen-cp-in 0.2s ease; }
+@keyframes fen-cp-in { from { opacity: 0; } to { opacity: 1; } }
+.fen-cp-panel { position: relative; width: 980px; max-width: 100%; background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green) 26%, var(--fen-green-dk)); border: 2px solid var(--fen-yellow); border-radius: 8px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 4px 16px rgba(0, 0, 0, 0.4); padding: 22px 26px 26px; }
+.fen-cp-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+.fen-cp-head h2 { font-family: var(--fen-chalk-font); font-size: 30px; margin: 2px 0 4px; line-height: 1; }
+.fen-cp-kick { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-marquee); }
+.fen-cp-sub { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); }
+.fen-cp-sub b { color: var(--fen-yellow); }
+.fen-cp-x { margin-left: auto; background: none; border: none; color: var(--fen-chalk-faint); font-size: 26px; line-height: 1; cursor: pointer; }
+.fen-cp-x:hover { color: var(--fen-chalk); }
+.fen-cp-prog { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.fen-cp-prog .bar { flex: 1; height: 10px; background: rgba(0, 0, 0, 0.32); border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-cp-prog .bar .fill { display: block; height: 100%; background: var(--fen-yellow); border-radius: 4px; transition: width 0.18s ease; }
+.fen-cp-prog .lab { font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); white-space: nowrap; }
+.fen-cp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (max-width: 720px) { .fen-cp-grid { grid-template-columns: 1fr; } }
+.fen-cp-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-cp-card.ok { border-left-color: var(--fen-yellow); opacity: 0.62; }
+.fen-cp-card .ph { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.fen-cp-card .ph .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); background: rgba(0, 0, 0, 0.22); border-radius: 4px; padding: 2px 7px; }
+.fen-cp-card .ph .nm { font-family: var(--fen-chalk-font); font-size: 19px; }
+.fen-cp-card .ph .chk { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 11px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.18); border-radius: 999px; padding: 4px 11px; }
+.fen-cp-card .ph .chk.on { color: var(--fen-navy); background: var(--fen-yellow); border-color: var(--fen-yellow); }
+.fen-cp-card .changes { display: flex; flex-direction: column; gap: 4px; }
+.fen-cp-card .rc { display: grid; grid-template-columns: 64px 30px 16px 36px 1fr; align-items: baseline; gap: 6px; font-family: var(--fen-chalk-font); }
+.fen-cp-card .rc .rl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-cp-card .rc .rf { font-size: 15px; color: var(--fen-chalk-soft); text-align: right; }
+.fen-cp-card .rc .ar { font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-cp-card .rc .rt { font-size: 19px; }
+.fen-cp-card .rc .dl { font-size: 11px; }
+.fen-cp-card .rc .dl.up { color: var(--fen-yellow); }
+.fen-cp-card .rc .dl.dn { color: var(--fen-marquee); }
+.fen-cp-card .tc { display: flex; gap: 7px; align-items: baseline; font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); margin-top: 2px; }
+.fen-cp-card .tc .ar { font-size: 13px; }
+.fen-cp-card .tc.gain .ar { color: var(--fen-yellow); }
+.fen-cp-card .tc.lose .ar { color: var(--fen-marquee); }
+.fen-cp-card .tc b { color: var(--fen-chalk); }
+.fen-cp-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, 0.3); }
+.fen-cp-allbtn, .fen-cp-donebtn { font-family: var(--fen-chalk-font); font-size: 13px; cursor: pointer; border-radius: 5px; padding: 9px 16px; }
+.fen-cp-allbtn { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.18); color: var(--fen-chalk-soft); }
+.fen-cp-allbtn:hover { color: var(--fen-chalk); }
+.fen-cp-donebtn { background: linear-gradient(180deg, #f0d26a, #cba23f); border: 2px solid #2a2208; color: var(--fen-navy); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6); }
+
 @media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
 
 /* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.

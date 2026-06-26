@@ -85,17 +85,27 @@
   winner bold · one-line headline). All inside `.fen-paper` so it stays in the reporter's Moms typewriter.
   VMs: `NewsStoryVM.dramaticWeight` + `GameRecapVM`; mock-fed per team. Build-green, zero console errors.
 
-## What's NEXT (the build order, from the Data Surface Map §3)
-1. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
-   when the franchise team flips the Phase-2 flags. The **Checkpoint Confirmation worklist** (SMB4
-   transcription) is its own moment-driven takeover. (NOTE: morale ledger, ties, fame, trait/value
-   development are ALREADY surfaced in the Player drawer + Roster + Clubhouse — what's left here is the
-   **checkpoint-confirmation takeover** and the morale-crisis/firing/rebrand *moment* takeovers.)
-2. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
-   needs `:franchiseId`; `getAllFranchiseTeams`, `calculateStandings`, morale via `franchiseMoraleState`).
-   Stadium: `buildFranchiseStadiumFoundationReport`→spray rows, seed `ParkFactors`→factor box,
-   stadium-records catalog→House of Horrors. Drawer: the six adapters. Tootwhistle: `SeasonNewsItem`
-   (sort by `dramaticWeight`) for stories + `GameStory` for the recap stream.
+- **Checkpoint Confirmation worklist** (`CheckpointTakeover` in `FranchiseLensHub.tsx`): the moment-driven
+  transcription takeover that SHOUTS — a full-screen yellow-bordered panel fired from the Clubhouse
+  checkpoint impact card (`ImpactCardVM.action: "checkpoint"`). Header ("⚠ the league just shifted ·
+  Checkpoint N of 5") + a progress bar, then a 2-up grid of per-player change cards: each rating `from→to`
+  with the **new value in yellow = what to type into SMB4** (▲/▼ delta), plus trait gains/losses (+ what
+  each gain replaces), a per-player "mark entered" check that advances progress, and a "mark all / close"
+  footer. VMs: `CheckpointVM`/`CheckpointPlayerVM`/`RatingChangeVM`/`TraitChangeVM`; the overlay maps from
+  the `pending` ratings/trait overlays grouped by `sourceEventId = "checkpoint-{n}"`. Mock-fed on PC
+  (4 players; cross-consistent with the drawers). Build-green, zero console errors.
+
+## What's NEXT
+1. **The tentpole takeovers** (lower priority, narrative): manager **firing**, the **rebrand** circuit-
+   breaker (fan morale floor → relocate/reset), and the **season-end ceremony**. Same takeover pattern as
+   the checkpoint worklist. (Morale ledger, ties, fame, development are ALL already surfaced in the
+   drawer/roster/clubhouse + the checkpoint takeover — these tentpoles are what remain of the moment layer.)
+2. **The real-data adapter** (swap mock → live) — GREENLIGHT-GATED: wiring map in
+   `FRANCHISE_LENS_DATA_WIRING.md` (route needs `:franchiseId`; `getAllFranchiseTeams`,
+   `calculateStandings`, morale via `franchiseMoraleState`). Stadium: `buildFranchiseStadiumFoundationReport`
+   →spray rows, seed `ParkFactors`→factor box, records catalog→House of Horrors. Drawer: the six adapters.
+   Tootwhistle: `SeasonNewsItem` (sort by `dramaticWeight`) + `GameStory` recaps. Checkpoint: the pending
+   overlays grouped by checkpoint id.
    For Standings & Races specifically: `calculateStandings`→divisions, `computeFranchiseAwardsPreview`→
    races (`candidates[].marginToWinner`), `getFranchiseAllStarRoster`→board (wire the 4 stubbed getters).
 
