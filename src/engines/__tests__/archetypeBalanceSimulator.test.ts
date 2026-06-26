@@ -91,35 +91,51 @@ describe('archetype balance simulator — workbook baseline', () => {
     expect(inBand).toBeGreaterThanOrEqual(30);
   });
 
-  it('finds the balanced boost:nerf ratio for Defense First (elite defense + worse rotation)', () => {
+  it('balances Defense First by funding a full rotation nerf with a speed boost', () => {
     const pool = loadPool();
     const baseSet = workbookArchetypes().filter((a) => a.name !== 'Lazer Guns' && a.name !== 'Defense First');
 
-    // Fixed defense boost (Big D fractions); sweep the rotation nerf scale k (fraction of 'Rotation
-    // Boost') to find where the sim reads ~0% — that k is the value-balanced trade.
-    const bigD = { 'hitters/FLD': 0.239316, 'hitters/ARM': 0.088496 };
-    const rotNerf = { VEL: 0.2, JNK: 0.192308, ACC: 0.173077 };
+    // Standard-tier caps these shifts apply to (room = fraction × cap — the engine-faithful numbers).
+    const STD = { FLD: 584.7, ARM: 570.0, SPD: 588.9, RVEL: 260.4, RJNK: 252.3, RACC: 285.3 };
+    const fFLD = 0.239316; // Big D fielding boost
+    const fARM = 0.088496; // Big D arm boost
+    const fRVEL = 0.2;
+    const fRJNK = 0.192308;
+    const fRACC = 0.173077; // full 'Rotation Boost' nerf
+
+    const r = (frac: number, cap: number) => Math.round(frac * cap);
     // eslint-disable-next-line no-console
-    console.log('\n=== Defense First sweep (fixed defense boost, varying rotation nerf), standard tier ===');
-    for (const k of [0, 0.3, 0.5, 0.7, 1.0]) {
-      const cand: SimArchetype = {
-        name: 'DefenseFirst',
-        rawShift: {
-          ...bigD,
-          'rotation/VEL': -rotNerf.VEL * k,
-          'rotation/JNK': -rotNerf.JNK * k,
-          'rotation/ACC': -rotNerf.ACC * k,
-        },
-      };
-      const report = runBalanceSim(pool, [...baseSet, cand], 'standard', 0.1);
-      const row = report.results.find((r) => r.name === 'DefenseFirst')!;
-      const dev = (row.totalIv - report.meanIv) / report.meanIv;
-      const nerfPct = (rotNerf.JNK * k * 100).toFixed(0);
-      // eslint-disable-next-line no-console
-      console.log(
-        `rotation nerf ×${k.toFixed(1)} (junk −${nerfPct}%)  →  dev ${(dev * 100).toFixed(1).padStart(6)}%   ` +
-          `tax $${Math.round(row.totalTax).toLocaleString().padStart(9)}   solvent ${row.solvent ? 'yes' : 'NO'}`,
-      );
+    console.log(
+      `\n=== Defense First: FIXED boost FLD +${r(fFLD, STD.FLD)} (+${(fFLD * 100).toFixed(0)}%), ARM +${r(fARM, STD.ARM)} (+${(fARM * 100).toFixed(0)}%); ` +
+        `FIXED rotation nerf VEL −${r(fRVEL, STD.RVEL)} JNK −${r(fRJNK, STD.RJNK)} ACC −${r(fRACC, STD.RACC)} ` +
+        `(total −${r(fRVEL, STD.RVEL) + r(fRJNK, STD.RJNK) + r(fRACC, STD.RACC)}). Sweeping SPEED boost: ===`,
+    );
+    // Which funding boost can actually offset the rotation nerf? Test each hitter stat at +10/+20%.
+    const fund: Array<{ key: string; label: string }> = [
+      { key: 'hitters/SPD', label: 'speed' },
+      { key: 'hitters/POW', label: 'power' },
+      { key: 'hitters/CON', label: 'contact' },
+      { key: 'hitters/FLD', label: 'fielding(more)' },
+    ];
+    for (const f of fund) {
+      for (const amt of [0.1, 0.2]) {
+        const rawShift: Record<string, number> = {
+          'hitters/FLD': fFLD,
+          'hitters/ARM': fARM,
+          'rotation/VEL': -fRVEL,
+          'rotation/JNK': -fRJNK,
+          'rotation/ACC': -fRACC,
+        };
+        rawShift[f.key] = (rawShift[f.key] ?? 0) + amt;
+        const report = runBalanceSim(pool, [...baseSet, { name: 'DefenseFirst', rawShift }], 'standard', 0.1);
+        const row = report.results.find((r2) => r2.name === 'DefenseFirst')!;
+        const dev = (row.totalIv - report.meanIv) / report.meanIv;
+        // eslint-disable-next-line no-console
+        console.log(
+          `+${f.label.padEnd(14)} +${(amt * 100).toFixed(0)}%  →  dev ${(dev * 100).toFixed(1).padStart(6)}%   ` +
+            `tax $${Math.round(row.totalTax).toLocaleString().padStart(9)}   solvent ${row.solvent ? 'yes' : 'NO'}`,
+        );
+      }
     }
     expect(pool.length).toBe(440);
   });
