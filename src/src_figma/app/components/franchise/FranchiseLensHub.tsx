@@ -29,6 +29,36 @@ export interface ActiveTeamVM {
   secondary: string;
   rivalName?: string;
   seasonLabel?: string;
+  /** branding / culture */
+  archetype?: string;           // the GM's draft-setup team identity, e.g. "Power Club"
+  ballparkNickname?: string;    // e.g. "The Yard"
+  gmName?: string;
+  managerName?: string;
+  managerStyle?: string;
+  scoutName?: string;
+  scoutSpecialty?: string;
+  reporter?: { name: string; mood?: string; avatar?: "fedora" | "headset" | "cap" };
+}
+
+export interface ImpactCardVM {
+  kind: "crisis" | "dated" | "good" | "info";
+  icon: string;
+  title: string;
+  detail: string;
+  cta?: string;
+}
+
+export interface NextGameVM {
+  awayName: string; awayAbbr: string; awayRecord: string;
+  homeName: string; homeAbbr: string; homeRecord: string;
+  meta?: string;
+  pulse?: React.ReactNode;
+}
+
+export interface SeasonHomeVM {
+  leadStory?: { kicker: string; headline: string; body: string; byline: string };
+  impactCards: ImpactCardVM[];
+  nextGame?: NextGameVM;
 }
 
 export interface MoraleHistoryVM {
@@ -64,6 +94,7 @@ export interface PulseVM {
 }
 
 export interface HubVM {
+  home?: SeasonHomeVM;
   pulse: PulseVM;
   roster: PlayerRowVM[];
   loading?: boolean;
@@ -78,8 +109,8 @@ export interface FranchiseLensHubProps {
   onBack?: () => void;
 }
 
-const TABS = ["Today's Game", "Roster", "Stats", "Tootwhistle", "Stadium", "Museum"] as const;
-const LEAGUE_TABS = ["Standings", "Schedule", "Leaders"] as const;
+const TABS = ["The Clubhouse", "Roster", "Stadium", "Tootwhistle Times"] as const;
+const LEAGUE_TABS = ["Standings & Races", "Schedule", "Almanac"] as const;
 
 function moraleClass(v: number): string {
   if (v >= 60) return "hi";
@@ -104,7 +135,7 @@ function Money({ value, className }: { value: number; className?: string }) {
 }
 
 export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: FranchiseLensHubProps) {
-  const [tab, setTab] = useState<string>("Roster");
+  const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
 
   const identityStyle = {
@@ -131,18 +162,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
           ))}
         </div>
 
-        {/* identity banner (team colors) */}
-        <div className="fen-ident" style={identityStyle}>
-          <div className="fen-mark">{active.abbr}</div>
-          <div>
-            <div className="nm">{active.name}</div>
-            <div className="rec">{active.recordLabel}</div>
-          </div>
-          <div className="right">
-            {active.seasonLabel ?? ""}
-            {active.rivalName ? <> &nbsp;·&nbsp; Rival: <b>{active.rivalName} ⚔</b></> : null}
-          </div>
-        </div>
+        {/* identity banner (team colors + branding/culture) */}
+        <Banner active={active} />
         <div className="fen-colorbar" style={identityStyle} />
 
         {/* board + tabs */}
@@ -157,7 +178,9 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
               ))}
             </div>
 
-            {tab === "Roster" ? (
+            {tab === "The Clubhouse" ? (
+              <SeasonHome active={active} hub={hub} />
+            ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
                 hub={hub}
@@ -165,12 +188,111 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
                 setOpenMorale={setOpenMorale}
               />
             ) : (
-              <div className="fen-empty">"{tab}" comes next — slice 1 is the team lens + Roster.</div>
+              <div className="fen-empty">"{tab}" comes next.</div>
             )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function avatarGlyph(a?: "fedora" | "headset" | "cap"): string {
+  return a === "headset" ? "🎧" : a === "cap" ? "🧢" : "🎩";
+}
+
+function Banner({ active }: { active: ActiveTeamVM }) {
+  const style = {
+    ["--fen-tp" as string]: active.primary,
+    ["--fen-ts" as string]: active.secondary,
+  } as React.CSSProperties;
+  const crew: { l: string; v: string }[] = [];
+  if (active.gmName) crew.push({ l: "GM", v: active.gmName });
+  if (active.managerName) crew.push({ l: "Mgr", v: active.managerName + (active.managerStyle ? ` · ${active.managerStyle}` : "") });
+  if (active.scoutName || active.scoutSpecialty) {
+    crew.push({ l: "Scout", v: active.scoutName ? `${active.scoutName}${active.scoutSpecialty ? ` · ${active.scoutSpecialty}` : ""}` : active.scoutSpecialty! });
+  }
+  const meta = [
+    active.recordLabel,
+    active.ballparkNickname ? `"${active.ballparkNickname}"` : null,
+    active.rivalName ? `Rival: ${active.rivalName} ⚔` : null,
+  ].filter(Boolean).join("  ·  ");
+  return (
+    <div className="fen-ident" style={style}>
+      <div className="fen-mark">{active.abbr}</div>
+      <div>
+        <div className="fen-id-main">
+          <span className="nm">{active.name}</span>
+          {active.archetype ? <span className="fen-archetype">{active.archetype}</span> : null}
+        </div>
+        <div className="fen-id-meta">{meta}</div>
+      </div>
+      <div className="fen-crewside">
+        {active.reporter ? (
+          <div className="fen-reporter">
+            <div className="fen-ravatar">{avatarGlyph(active.reporter.avatar)}</div>
+            <div className="rt">
+              <div className="rn">{active.reporter.name} · beat writer</div>
+              {active.reporter.mood ? <div className="rm">mood: {active.reporter.mood}</div> : null}
+            </div>
+          </div>
+        ) : null}
+        {crew.length > 0 ? (
+          <div className="fen-crew">
+            {crew.map((c, i) => <span key={c.l}>{i > 0 ? "  ·  " : ""}<b>{c.l}</b> {c.v}</span>)}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SeasonHome({ hub }: { active: ActiveTeamVM; hub: HubVM }) {
+  const home = hub.home;
+  if (!home) return <div className="fen-empty">The clubhouse is quiet — no season underway yet.</div>;
+  return (
+    <>
+      <div className="fen-sectlab">The Clubhouse <span className="lite">· what the season's about right now</span></div>
+      {home.leadStory ? (
+        <div className="fen-lead">
+          <div className="wt">lead story</div>
+          <div className="kick">{home.leadStory.kicker}</div>
+          <h2>{home.leadStory.headline}</h2>
+          <p>{home.leadStory.body}</p>
+          <div className="by">{home.leadStory.byline}</div>
+        </div>
+      ) : null}
+      <div className="fen-homegrid">
+        <div>
+          <div className="fen-sectlab">Needs you now <span className="lite">· ranked by impact</span></div>
+          <div className="fen-icards">
+            {home.impactCards.map((c, i) => (
+              <button type="button" className={`fen-icard ${c.kind}`} key={i}>
+                <span className="ic">{c.icon}</span>
+                <div className="bd"><div className="t">{c.title}</div><div className="d">{c.detail}</div></div>
+                {c.cta ? <span className="go">{c.cta} →</span> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+        {home.nextGame ? (
+          <div>
+            <div className="fen-sectlab">Tonight</div>
+            <div className="fen-nextgame">
+              <div className="fen-mteams">
+                <div className="fen-mt"><div className="lg">{home.nextGame.awayAbbr}</div><div className="nm">{home.nextGame.awayName}</div><div className="rc">{home.nextGame.awayRecord}</div></div>
+                <div className="fen-vs">@</div>
+                <div className="fen-mt you"><div className="lg">{home.nextGame.homeAbbr}</div><div className="nm">{home.nextGame.homeName}</div><div className="rc">{home.nextGame.homeRecord}</div></div>
+              </div>
+              <button type="button" className="fen-bigplay">▶  PLAY BALL</button>
+              <div className="fen-simrow"><button type="button" className="fen-simbtn">Sim this game</button><button type="button" className="fen-simbtn">Sim the week</button></div>
+              {home.nextGame.pulse ? <div className="fen-gpulse">{home.nextGame.pulse}</div> : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="fen-calm">Your <b>roster</b>, the <b>farm</b>, <b>stadium</b>, <b>standings &amp; races</b>, the <b>Almanac</b> — all a tap away. The home only shows what's earned its place today.</div>
+    </>
   );
 }
 

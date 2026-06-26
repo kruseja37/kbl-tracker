@@ -21,13 +21,25 @@ const PICKER: TeamPickerVM[] = [
 ];
 
 const ACTIVE: Record<string, ActiveTeamVM> = {
-  PC: { id: "PC", name: "Page Capitals", abbr: "PC", recordLabel: "48–32 · 2nd, Eastern", primary: "#6E2440", secondary: "#E3C099", rivalName: "Brass Monkeys", seasonLabel: "Season 3 · Week 9" },
-  BM: { id: "BM", name: "Brass Monkeys", abbr: "BM", recordLabel: "50–30 · 1st, Eastern", primary: "#B06A1E", secondary: "#2A2A2A", rivalName: "Page Capitals", seasonLabel: "Season 3 · Week 9" },
-  RR: { id: "RR", name: "River Rats", abbr: "RR", recordLabel: "44–36 · 3rd, Eastern", primary: "#2E5E8C", secondary: "#B0B7BC", rivalName: "Sand Gnats", seasonLabel: "Season 3 · Week 9" },
+  PC: { id: "PC", name: "Page Capitals", abbr: "PC", recordLabel: "48–32 · 2nd, Eastern", primary: "#6E2440", secondary: "#E3C099", rivalName: "Brass Monkeys", seasonLabel: "Season 3 · Week 9",
+    archetype: "Power Club", ballparkNickname: "The Yard", gmName: "The Architect", managerName: "B. Cole", managerStyle: "Balanced", scoutName: "M. Okafor", scoutSpecialty: "infielders", reporter: { name: "J. Tate", mood: "loving this run", avatar: "fedora" } },
+  BM: { id: "BM", name: "Brass Monkeys", abbr: "BM", recordLabel: "50–30 · 1st, Eastern", primary: "#B06A1E", secondary: "#2A2A2A", rivalName: "Page Capitals", seasonLabel: "Season 3 · Week 9",
+    archetype: "Pitching & Defense", ballparkNickname: "The Foundry", gmName: "C. Diaz", managerName: "R. Vance", managerStyle: "Aggressive", scoutName: "P. Nunn", scoutSpecialty: "arms", reporter: { name: "D. Hale", mood: "writing a coronation", avatar: "headset" } },
+  RR: { id: "RR", name: "River Rats", abbr: "RR", recordLabel: "44–36 · 3rd, Eastern", primary: "#2E5E8C", secondary: "#B0B7BC", rivalName: "Sand Gnats", seasonLabel: "Season 3 · Week 9",
+    archetype: "Speed & Glove", ballparkNickname: "The Levee", gmName: "T. Webb", managerName: "S. Park", managerStyle: "Small-ball", scoutName: "L. Boyd", scoutSpecialty: "speed", reporter: { name: "G. Ruiz", mood: "frustrated for the fans", avatar: "cap" } },
 };
 
 const HUB: Record<string, HubVM> = {
   PC: {
+    home: {
+      leadStory: { kicker: "The Arc · Season 3, Week 9", headline: "FENOMENO TAKES THE LEAP — ARM CLIMBING TOWARD AN A", body: "Five starts, one earned run. The kid the Capitals stole in the draft is pitching his way up the grades in real time — and Thursday's checkpoint may make it official. \"He doesn't pitch like a B anymore,\" the skipper admitted.", byline: "By J. Tate, Tootwhistle Times" },
+      impactCards: [
+        { kind: "dated", icon: "🔔", title: "Ratings checkpoint in 2 games", detail: "The league's about to shift — you'll get a change-log to enter into SMB4. Twenty percent down.", cta: "opens at the break" },
+        { kind: "crisis", icon: "⚠️", title: "Lars Stad — morale cratering (38 ▼)", detail: "Benched again, and the Times floated a trade. He wants out; a move may be coming.", cta: "see the ledger" },
+        { kind: "good", icon: "▲", title: "Okoye climbs to #2 in the MVP race", detail: "Two big nights and your center fielder is in the conversation.", cta: "the races" },
+      ],
+      nextGame: { awayName: "River Rats", awayAbbr: "RR", awayRecord: "44–36", homeName: "Page Capitals", homeAbbr: "PC", homeRecord: "48–32", pulse: (<>Clubhouse <b>buzzing</b> · fans <b style={{ color: "#F2C041" }}>62 ▲</b> · 2.0 back of 1st</>) },
+    },
     pulse: {
       fanMorale: { value: 62, trend: "up", history: [
         { delta: 6, reason: "Walk-off win over the rival", week: "Week 8" },
@@ -58,6 +70,14 @@ const HUB: Record<string, HubVM> = {
     ],
   },
   BM: {
+    home: {
+      leadStory: { kicker: "Season 3, Week 9", headline: "VESPER MAKES HIS CY YOUNG CASE AS MONKEYS PULL AWAY", body: "A 2.18 ERA and a fourteen-strikeout gem have the Brass ace atop every ballot — and the East comfortably in hand.", byline: "By D. Hale, Tootwhistle Times" },
+      impactCards: [
+        { kind: "good", icon: "🏆", title: "Magic number down to nine", detail: "First place is nearly clinched in the East.", cta: "the races" },
+        { kind: "dated", icon: "🔔", title: "Ratings checkpoint in 2 games", detail: "A league-wide development sweep is coming up.", cta: "opens at the break" },
+      ],
+      nextGame: { awayName: "Page Capitals", awayAbbr: "PC", awayRecord: "48–32", homeName: "Brass Monkeys", homeAbbr: "BM", homeRecord: "50–30", pulse: (<>Clubhouse <b>confident</b> · fans <b style={{ color: "#F2C041" }}>71 ▲</b> · 1st in the East</>) },
+    },
     pulse: { fanMorale: { value: 71, trend: "up", history: [{ delta: 5, reason: "First place clinched the week", week: "Week 8" }] }, clubhouseLabel: "Confident", clubhouseAvg: 64, standingLabel: "50–30 · 1st East" },
     roster: [
       { id: "b1", number: "9", position: "SP", name: "Cole Vesper", war: 6.2, salary: 1_500_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 78, state: "Locked in · ▲ rising", trend: "up", history: [{ delta: 6, reason: "14-strikeout gem", week: "Week 8" }] } },
@@ -66,6 +86,14 @@ const HUB: Record<string, HubVM> = {
     ],
   },
   RR: {
+    home: {
+      leadStory: { kicker: "Season 3, Week 9", headline: "RATS SLIP OUT OF THE WILD-CARD PICTURE", body: "A four-game skid has dropped River Rats below the line, and the front office is fielding calls. \"We're not sellers yet,\" the GM insisted — for now.", byline: "By G. Ruiz, Tootwhistle Times" },
+      impactCards: [
+        { kind: "crisis", icon: "⚠️", title: "Gus Hale — 0-for-18 and pressing", detail: "Your left fielder's morale is sliding with the slump.", cta: "see the ledger" },
+        { kind: "info", icon: "🔻", title: "Two games back of the wild card", detail: "The next homestand matters.", cta: "standings" },
+      ],
+      nextGame: { awayName: "Sand Gnats", awayAbbr: "SG", awayRecord: "39–41", homeName: "River Rats", homeAbbr: "RR", homeRecord: "44–36", pulse: (<>Clubhouse <b>restless</b> · fans <b style={{ color: "#CC3433" }}>49 ▼</b> · 6.0 back</>) },
+    },
     pulse: { fanMorale: { value: 49, trend: "down", history: [{ delta: -6, reason: "Fell out of the wild-card spot", week: "Week 8" }] }, clubhouseLabel: "Restless", clubhouseAvg: 47, standingLabel: "44–36 · 3rd East" },
     roster: [
       { id: "r1", number: "2", position: "2B", name: "Sol Park", war: 3.8, salary: 680_000, morale: { value: 52, state: "Steady", trend: "flat", history: [] } },
