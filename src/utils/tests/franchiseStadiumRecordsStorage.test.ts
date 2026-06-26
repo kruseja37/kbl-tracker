@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { ParkFactors } from '../../types/war';
 import type { AtBatEvent, FieldingEvent } from '../eventLog';
 import type { CompletedGameRecord } from '../gameStorage';
+import type { KblWpaPlayerTotal } from '../kblWpaAttribution';
 import {
   buildFranchiseStadiumFoundationReport,
 } from '../franchiseStadiumFoundation';
 import {
+  FRANCHISE_STADIUM_RECORD_TYPE_POLARITY,
   clearFranchiseStadiumRecordsDatabaseForTests,
   getFranchiseStadiumRecord,
   listFranchiseStadiumRecords,
@@ -157,6 +159,22 @@ function fieldingEvent(overrides: Partial<FieldingEvent> = {}): FieldingEvent {
     },
     success: true,
     runsPreventedOrAllowed: 0,
+    ...overrides,
+  };
+}
+
+function playerWpaTotal(overrides: Partial<KblWpaPlayerTotal> = {}): KblWpaPlayerTotal {
+  return {
+    playerId: 'player-1',
+    playerName: 'Player One',
+    teamId: 'team-away',
+    totalWpa: 0,
+    battingWpa: 0,
+    pitchingWpa: 0,
+    catchingWpa: 0,
+    fieldingWpa: 0,
+    baserunningWpa: 0,
+    managingWpa: 0,
     ...overrides,
   };
 }
@@ -555,6 +573,468 @@ describe('franchise stadium records storage', () => {
       recordKey: 'leader',
     })).toBeNull();
     expect(report.sprayCharts.summary.fieldingRows).toBe(0);
+  });
+
+  test('farthest right-handed home run sets then overtakes from inline completed game events', async () => {
+    const firstGame = completedGame({
+      atBatEvents: [
+        atBat({
+          eventId: 'hr-450',
+          result: 'HR',
+          wpa: 0,
+          batterId: 'batter-a',
+          batterName: 'Batter A',
+          batterContext: { playerId: 'batter-a', playerName: 'Batter A', handedness: 'R' },
+          enrichment: { hrDistance: 450 },
+        }),
+      ],
+    });
+    const secondGame = completedGame({
+      gameId: 'game-2',
+      atBatEvents: [
+        atBat({
+          eventId: 'hr-460',
+          gameId: 'game-2',
+          result: 'HR',
+          wpa: 0,
+          batterId: 'batter-b',
+          batterName: 'Batter B',
+          batterContext: { playerId: 'batter-b', playerName: 'Batter B', handedness: 'R' },
+          enrichment: { hrDistance: 460 },
+        }),
+      ],
+    });
+
+    const firstResult = await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [firstGame],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [firstGame],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    expect(firstResult.changes).toEqual(expect.arrayContaining([
+      {
+        stadiumId: 'apple-field',
+        recordType: 'farthest-hr-rhb',
+        recordKey: 'leader',
+        changeKind: 'set',
+        priorValue: null,
+        priorLeaderPlayerIds: [],
+        newValue: 450,
+        newLeaderPlayerIds: ['batter-a'],
+      },
+    ]));
+
+    const secondResult = await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [secondGame],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [secondGame],
+      timestamp: '2026-01-02T00:00:00.000Z',
+    });
+    expect(secondResult.changes.filter((change) => change.recordType === 'farthest-hr-rhb')).toEqual([
+      {
+        stadiumId: 'apple-field',
+        recordType: 'farthest-hr-rhb',
+        recordKey: 'leader',
+        changeKind: 'overtake',
+        priorValue: 450,
+        priorLeaderPlayerIds: ['batter-a'],
+        newValue: 460,
+        newLeaderPlayerIds: ['batter-b'],
+      },
+    ]);
+  });
+
+  test('switch hitters and blank distances are excluded from farthest home run but still count home run records', async () => {
+    const game = completedGame({
+      atBatEvents: [
+        atBat({
+          eventId: 'switch-hr',
+          result: 'HR',
+          wpa: 0,
+          batterId: 'switch-batter',
+          batterName: 'Switch Batter',
+          pitcherId: 'pitcher-allowed',
+          pitcherName: 'Pitcher Allowed',
+          batterContext: { playerId: 'switch-batter', playerName: 'Switch Batter', handedness: 'S' },
+          enrichment: { hrDistance: 480 },
+        }),
+        atBat({
+          eventId: 'blank-distance-hr',
+          result: 'ITPHR',
+          wpa: 0,
+          batterId: 'blank-distance-batter',
+          batterName: 'Blank Distance Batter',
+          pitcherId: 'pitcher-allowed',
+          pitcherName: 'Pitcher Allowed',
+          timestamp: 102,
+          batterContext: { playerId: 'blank-distance-batter', playerName: 'Blank Distance Batter', handedness: 'R' },
+          enrichment: {},
+        }),
+      ],
+    });
+
+    await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [game],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [game],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'farthest-hr-rhb',
+      recordKey: 'leader',
+    })).toBeNull();
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'farthest-hr-lhb',
+      recordKey: 'leader',
+    })).toBeNull();
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'most-hr-here-season',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: 1,
+      leaderPlayerIds: ['blank-distance-batter', 'switch-batter'],
+      evidenceIds: ['blank-distance-hr', 'switch-hr'],
+    });
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'most-hr-allowed-pitcher',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: 2,
+      leaderPlayerIds: ['pitcher-allowed'],
+      leaderPlayerNames: ['Pitcher Allowed'],
+    });
+  });
+
+  test('cumulative WPA records split position and pitcher contributions from inline player totals', async () => {
+    const game = completedGame({
+      playerWpaTotals: [
+        playerWpaTotal({
+          playerId: 'two-way',
+          playerName: 'Two Way',
+          teamId: 'team-away',
+          totalWpa: 2,
+          battingWpa: 0.5,
+          pitchingWpa: 1.5,
+        }),
+        playerWpaTotal({
+          playerId: 'low-position',
+          playerName: 'Low Position',
+          teamId: 'team-home',
+          totalWpa: -0.8,
+          battingWpa: -0.8,
+          pitchingWpa: 0,
+        }),
+        playerWpaTotal({
+          playerId: 'low-pitcher',
+          playerName: 'Low Pitcher',
+          teamId: 'team-home',
+          totalWpa: -0.2,
+          battingWpa: 0,
+          pitchingWpa: -0.4,
+        }),
+      ],
+    });
+
+    await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [game],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [game],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'highest-cumulative-wpa-position',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: 0.5,
+      leaderPlayerIds: ['two-way'],
+    });
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'highest-cumulative-wpa-pitcher',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: 1.5,
+      leaderPlayerIds: ['two-way'],
+    });
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'lowest-cumulative-wpa-position',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: -0.8,
+      leaderPlayerIds: ['low-position'],
+    });
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'lowest-cumulative-wpa-pitcher',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: -0.4,
+      leaderPlayerIds: ['low-pitcher'],
+    });
+  });
+
+  test('cumulative WPA records exclude zero-impact players from each WPA dimension', async () => {
+    const game = completedGame({
+      playerWpaTotals: [
+        playerWpaTotal({
+          playerId: 'position-high',
+          playerName: 'Position High',
+          teamId: 'team-away',
+          totalWpa: 0.6,
+          battingWpa: 0.6,
+          pitchingWpa: 0,
+        }),
+        playerWpaTotal({
+          playerId: 'position-low',
+          playerName: 'Position Low',
+          teamId: 'team-away',
+          totalWpa: 0.2,
+          battingWpa: 0.2,
+          pitchingWpa: 0,
+        }),
+        playerWpaTotal({
+          playerId: 'pure-pitcher',
+          playerName: 'Pure Pitcher',
+          teamId: 'team-home',
+          totalWpa: 1,
+          battingWpa: 0,
+          pitchingWpa: 1,
+        }),
+        playerWpaTotal({
+          playerId: 'pitcher-high',
+          playerName: 'Pitcher High',
+          teamId: 'team-home',
+          totalWpa: 0.7,
+          battingWpa: 0,
+          pitchingWpa: 0.7,
+        }),
+        playerWpaTotal({
+          playerId: 'pitcher-low',
+          playerName: 'Pitcher Low',
+          teamId: 'team-home',
+          totalWpa: 0.3,
+          battingWpa: 0,
+          pitchingWpa: 0.3,
+        }),
+        playerWpaTotal({
+          playerId: 'pure-hitter',
+          playerName: 'Pure Hitter',
+          teamId: 'team-away',
+          totalWpa: 0.9,
+          battingWpa: 0.9,
+          pitchingWpa: 0,
+        }),
+      ],
+    });
+
+    await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [game],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [game],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    const lowestPosition = await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'lowest-cumulative-wpa-position',
+      recordKey: 'leader',
+    });
+    expect(lowestPosition).toMatchObject({
+      value: 0.2,
+      leaderPlayerIds: ['position-low'],
+    });
+    expect(lowestPosition?.leaderPlayerIds).not.toContain('pure-pitcher');
+
+    const lowestPitcher = await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'lowest-cumulative-wpa-pitcher',
+      recordKey: 'leader',
+    });
+    expect(lowestPitcher).toMatchObject({
+      value: 0.3,
+      leaderPlayerIds: ['pitcher-low'],
+    });
+    expect(lowestPitcher?.leaderPlayerIds).not.toContain('pure-hitter');
+  });
+
+  test('single-play WPA swing records use batter attribution and skip absent negative swings', async () => {
+    const mixedGame = completedGame({
+      atBatEvents: [
+        atBat({
+          eventId: 'positive-swing',
+          result: 'HR',
+          wpa: 0.321,
+          batterId: 'positive-batter',
+          batterName: 'Positive Batter',
+          inning: 5,
+          halfInning: 'BOTTOM',
+        }),
+        atBat({
+          eventId: 'negative-swing',
+          result: 'DP',
+          wpa: -0.222,
+          batterId: 'negative-batter',
+          batterName: 'Negative Batter',
+          timestamp: 102,
+          inning: 6,
+          halfInning: 'TOP',
+        }),
+      ],
+    });
+
+    await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [mixedGame],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [mixedGame],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'largest-positive-wpa-swing',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: 0.321,
+      leaderPlayerIds: ['positive-batter'],
+      evidenceIds: ['positive-swing'],
+      evidenceSummary: expect.stringContaining('inning 5 BOTTOM'),
+    });
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'largest-negative-wpa-swing',
+      recordKey: 'leader',
+    })).toMatchObject({
+      value: -0.222,
+      leaderPlayerIds: ['negative-batter'],
+      evidenceIds: ['negative-swing'],
+      evidenceSummary: expect.stringContaining('DP'),
+    });
+
+    await clearFranchiseStadiumRecordsDatabaseForTests();
+    const allPositiveGame = completedGame({
+      gameId: 'game-positive-only',
+      atBatEvents: [
+        atBat({
+          eventId: 'positive-only',
+          gameId: 'game-positive-only',
+          result: '1B',
+          wpa: 0.111,
+          batterId: 'only-positive-batter',
+          batterName: 'Only Positive Batter',
+        }),
+      ],
+    });
+    await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [allPositiveGame],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [allPositiveGame],
+      timestamp: '2026-01-02T00:00:00.000Z',
+    });
+
+    expect(await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'largest-negative-wpa-swing',
+      recordKey: 'leader',
+    })).toBeNull();
+  });
+
+  test('single-play WPA swing records keep equal positive swings as silent co-leaders', async () => {
+    const game = completedGame({
+      atBatEvents: [
+        atBat({
+          eventId: 'positive-tie-a',
+          result: 'HR',
+          wpa: 0.25,
+          batterId: 'tie-batter-a',
+          batterName: 'Tie Batter A',
+          batterTeamId: 'team-away',
+          inning: 3,
+          halfInning: 'TOP',
+        }),
+        atBat({
+          eventId: 'positive-tie-b',
+          result: '2B',
+          wpa: 0.25,
+          batterId: 'tie-batter-b',
+          batterName: 'Tie Batter B',
+          batterTeamId: 'team-home',
+          timestamp: 102,
+          inning: 4,
+          halfInning: 'BOTTOM',
+        }),
+        atBat({
+          eventId: 'positive-lower',
+          result: '1B',
+          wpa: 0.1,
+          batterId: 'lower-batter',
+          batterName: 'Lower Batter',
+          timestamp: 103,
+        }),
+      ],
+    });
+
+    const result = await upsertFranchiseStadiumRecordsFromFoundationReport(foundation({
+      completedGames: [game],
+      atBatEvents: [],
+      fieldingEvents: [],
+    }), {
+      completedGames: [game],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    const record = await getFranchiseStadiumRecord({
+      ...scope,
+      stadiumId: 'apple-field',
+      recordType: 'largest-positive-wpa-swing',
+      recordKey: 'leader',
+    });
+    expect(record).toMatchObject({
+      value: 0.25,
+      leaderPlayerIds: ['tie-batter-a', 'tie-batter-b'],
+      evidenceIds: ['positive-tie-a', 'positive-tie-b'],
+    });
+    expect(result.changes.some((change) => change.recordType === 'largest-positive-wpa-swing')).toBe(false);
+  });
+
+  test('stadium record polarity map exposes fame-bearing signs while existing records stay neutral', () => {
+    expect(FRANCHISE_STADIUM_RECORD_TYPE_POLARITY['farthest-hr-rhb']).toBe(1);
+    expect(FRANCHISE_STADIUM_RECORD_TYPE_POLARITY['most-hr-allowed-pitcher']).toBe(-1);
+    expect(FRANCHISE_STADIUM_RECORD_TYPE_POLARITY['highest-team-runs-game']).toBe(0);
   });
 
   test('rerunning storage is idempotent for the same stadium record identity', async () => {

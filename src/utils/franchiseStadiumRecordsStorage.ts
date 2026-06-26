@@ -16,7 +16,38 @@ export type FranchiseStadiumRecordType =
   | 'most-pitching-spray-events-pitcher'
   | 'most-fielding-spray-events-fielder'
   | 'no-hitter'
-  | 'perfect-game';
+  | 'perfect-game'
+  | 'farthest-hr-rhb'
+  | 'farthest-hr-lhb'
+  | 'most-hr-here-season'
+  | 'most-hr-allowed-pitcher'
+  | 'highest-cumulative-wpa-position'
+  | 'lowest-cumulative-wpa-position'
+  | 'highest-cumulative-wpa-pitcher'
+  | 'lowest-cumulative-wpa-pitcher'
+  | 'largest-positive-wpa-swing'
+  | 'largest-negative-wpa-swing';
+
+export const FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<FranchiseStadiumRecordType, 1 | -1 | 0> = {
+  'highest-team-runs-game': 0,
+  'highest-combined-runs-game': 0,
+  'largest-run-differential-game': 0,
+  'most-batting-spray-events-player': 0,
+  'most-pitching-spray-events-pitcher': 0,
+  'most-fielding-spray-events-fielder': 0,
+  'no-hitter': 0,
+  'perfect-game': 0,
+  'farthest-hr-rhb': 1,
+  'farthest-hr-lhb': 1,
+  'most-hr-here-season': 1,
+  'most-hr-allowed-pitcher': -1,
+  'highest-cumulative-wpa-position': 1,
+  'lowest-cumulative-wpa-position': -1,
+  'highest-cumulative-wpa-pitcher': 1,
+  'lowest-cumulative-wpa-pitcher': -1,
+  'largest-positive-wpa-swing': 1,
+  'largest-negative-wpa-swing': -1,
+};
 
 export interface FranchiseStadiumRecordPolicies {
   adaptiveParkFactorPersistenceAllowed: false;
@@ -525,6 +556,343 @@ function sprayCandidates(rows: FranchiseSprayChartRow[]): RecordCandidate[] {
   return candidates;
 }
 
+type StadiumEvent = NonNullable<CompletedGameRecord['atBatEvents']>[number] & {
+  sourceGameId: string;
+};
+
+type StadiumWpaRow = NonNullable<CompletedGameRecord['playerWpaTotals']>[number] & {
+  sourceGameId: string;
+};
+
+interface PlayerAggregate {
+  playerId: string;
+  playerName: string;
+  teamIds: string[];
+  sourceGameIds: string[];
+  evidenceIds: string[];
+  value: number;
+}
+
+function isHomeRunResult(result: string): boolean {
+  return result === 'HR' || result === 'ITPHR';
+}
+
+function finiteNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function playerAggregate(
+  map: Map<string, PlayerAggregate>,
+  playerId: string,
+  playerName: string,
+  teamId: string,
+): PlayerAggregate {
+  const existing = map.get(playerId);
+  if (existing) {
+    if (hasText(teamId)) existing.teamIds.push(teamId);
+    return existing;
+  }
+  const aggregate: PlayerAggregate = {
+    playerId,
+    playerName,
+    teamIds: hasText(teamId) ? [teamId] : [],
+    sourceGameIds: [],
+    evidenceIds: [],
+    value: 0,
+  };
+  map.set(playerId, aggregate);
+  return aggregate;
+}
+
+function leadersByValue(
+  aggregates: Iterable<PlayerAggregate>,
+  value: number,
+): PlayerAggregate[] {
+  return Array.from(aggregates).filter((aggregate) => aggregate.value === value);
+}
+
+function candidateFromAggregates(input: {
+  stadiumId: string;
+  stadiumName: string | null;
+  recordType: FranchiseStadiumRecordType;
+  value: number;
+  valueLabel: string;
+  leaders: PlayerAggregate[];
+  evidenceSummary: string;
+}): RecordCandidate {
+  return {
+    stadiumId: input.stadiumId,
+    stadiumName: input.stadiumName,
+    recordType: input.recordType,
+    recordKey: 'leader',
+    value: input.value,
+    valueLabel: input.valueLabel,
+    leaderTeamIds: input.leaders.flatMap((leader) => leader.teamIds),
+    leaderPlayerIds: input.leaders.map((leader) => leader.playerId),
+    leaderPlayerNames: input.leaders.map((leader) => leader.playerName),
+    sourceGameIds: input.leaders.flatMap((leader) => leader.sourceGameIds),
+    evidenceIds: input.leaders.flatMap((leader) => leader.evidenceIds),
+    evidenceSummary: input.evidenceSummary,
+  };
+}
+
+function pushFarthestHrCandidate(
+  candidates: RecordCandidate[],
+  stadiumId: string,
+  stadiumName: string | null,
+  events: StadiumEvent[],
+  handedness: 'R' | 'L',
+  recordType: 'farthest-hr-rhb' | 'farthest-hr-lhb',
+): void {
+  const hrEvents = events.filter((event) =>
+    isHomeRunResult(event.result) &&
+    event.batterContext?.handedness === handedness &&
+    typeof event.enrichment?.hrDistance === 'number' &&
+    Number.isFinite(event.enrichment.hrDistance),
+  );
+  if (hrEvents.length === 0) return;
+
+  const maxDistance = Math.max(...hrEvents.map((event) => event.enrichment!.hrDistance!));
+  const leaders = hrEvents.filter((event) => event.enrichment!.hrDistance === maxDistance);
+  candidates.push({
+    stadiumId,
+    stadiumName,
+    recordType,
+    recordKey: 'leader',
+    value: maxDistance,
+    valueLabel: `${maxDistance} ft`,
+    leaderTeamIds: leaders.map((event) => event.batterTeamId),
+    leaderPlayerIds: leaders.map((event) => event.batterId),
+    leaderPlayerNames: leaders.map((event) => event.batterName),
+    sourceGameIds: leaders.map((event) => event.sourceGameId),
+    evidenceIds: leaders.map((event) => event.eventId),
+    evidenceSummary: `Farthest ${handedness === 'R' ? 'right-handed' : 'left-handed'} home run at ${stadiumName ?? stadiumId}: ${maxDistance} ft.`,
+  });
+}
+
+function pushHomeRunCountCandidates(
+  candidates: RecordCandidate[],
+  stadiumId: string,
+  stadiumName: string | null,
+  events: StadiumEvent[],
+): void {
+  const batterCounts = new Map<string, PlayerAggregate>();
+  const pitcherCounts = new Map<string, PlayerAggregate>();
+  for (const event of events) {
+    if (!isHomeRunResult(event.result)) continue;
+    if (hasText(event.batterId)) {
+      const batter = playerAggregate(batterCounts, event.batterId, event.batterName, event.batterTeamId);
+      batter.value += 1;
+      batter.sourceGameIds.push(event.sourceGameId);
+      batter.evidenceIds.push(event.eventId);
+    }
+    if (hasText(event.pitcherId)) {
+      const pitcher = playerAggregate(pitcherCounts, event.pitcherId, event.pitcherName, event.pitcherTeamId);
+      pitcher.value += 1;
+      pitcher.sourceGameIds.push(event.sourceGameId);
+      pitcher.evidenceIds.push(event.eventId);
+    }
+  }
+
+  if (batterCounts.size > 0) {
+    const maxCount = Math.max(...Array.from(batterCounts.values()).map((aggregate) => aggregate.value));
+    candidates.push(candidateFromAggregates({
+      stadiumId,
+      stadiumName,
+      recordType: 'most-hr-here-season',
+      value: maxCount,
+      valueLabel: `${maxCount} HR${maxCount === 1 ? '' : 's'}`,
+      leaders: leadersByValue(batterCounts.values(), maxCount),
+      evidenceSummary: `Most home runs hit at ${stadiumName ?? stadiumId}: ${maxCount}.`,
+    }));
+  }
+
+  if (pitcherCounts.size > 0) {
+    const maxCount = Math.max(...Array.from(pitcherCounts.values()).map((aggregate) => aggregate.value));
+    candidates.push(candidateFromAggregates({
+      stadiumId,
+      stadiumName,
+      recordType: 'most-hr-allowed-pitcher',
+      value: maxCount,
+      valueLabel: `${maxCount} HR${maxCount === 1 ? '' : 's'} allowed`,
+      leaders: leadersByValue(pitcherCounts.values(), maxCount),
+      evidenceSummary: `Most home runs allowed at ${stadiumName ?? stadiumId}: ${maxCount}.`,
+    }));
+  }
+}
+
+function pushCumulativeWpaCandidates(
+  candidates: RecordCandidate[],
+  stadiumId: string,
+  stadiumName: string | null,
+  wpaRows: StadiumWpaRow[],
+): void {
+  if (wpaRows.length === 0) return;
+
+  const positionWpa = new Map<string, PlayerAggregate>();
+  const pitcherWpa = new Map<string, PlayerAggregate>();
+  for (const row of wpaRows) {
+    if (!hasText(row.playerId)) continue;
+    const position = playerAggregate(positionWpa, row.playerId, row.playerName, row.teamId);
+    position.value += finiteNumber(row.totalWpa) - finiteNumber(row.pitchingWpa);
+    position.sourceGameIds.push(row.sourceGameId);
+    position.evidenceIds.push(`${row.sourceGameId}:${row.playerId}:position-wpa`);
+
+    const pitcher = playerAggregate(pitcherWpa, row.playerId, row.playerName, row.teamId);
+    pitcher.value += finiteNumber(row.pitchingWpa);
+    pitcher.sourceGameIds.push(row.sourceGameId);
+    pitcher.evidenceIds.push(`${row.sourceGameId}:${row.playerId}:pitching-wpa`);
+  }
+
+  const positionEligible = Array.from(positionWpa.values()).filter((aggregate) => aggregate.value !== 0);
+  if (positionEligible.length > 0) {
+    const positionValues = positionEligible.map((aggregate) => aggregate.value);
+    const highest = Math.max(...positionValues);
+    const lowest = Math.min(...positionValues);
+    candidates.push(candidateFromAggregates({
+      stadiumId,
+      stadiumName,
+      recordType: 'highest-cumulative-wpa-position',
+      value: highest,
+      valueLabel: `${highest.toFixed(3)} position WPA`,
+      leaders: leadersByValue(positionEligible, highest),
+      evidenceSummary: `Highest cumulative position-player WPA at ${stadiumName ?? stadiumId}: ${highest.toFixed(3)}.`,
+    }));
+    candidates.push(candidateFromAggregates({
+      stadiumId,
+      stadiumName,
+      recordType: 'lowest-cumulative-wpa-position',
+      value: lowest,
+      valueLabel: `${lowest.toFixed(3)} position WPA`,
+      leaders: leadersByValue(positionEligible, lowest),
+      evidenceSummary: `Lowest cumulative position-player WPA at ${stadiumName ?? stadiumId}: ${lowest.toFixed(3)}.`,
+    }));
+  }
+
+  const pitcherEligible = Array.from(pitcherWpa.values()).filter((aggregate) => aggregate.value !== 0);
+  if (pitcherEligible.length > 0) {
+    const pitcherValues = pitcherEligible.map((aggregate) => aggregate.value);
+    const highest = Math.max(...pitcherValues);
+    const lowest = Math.min(...pitcherValues);
+    candidates.push(candidateFromAggregates({
+      stadiumId,
+      stadiumName,
+      recordType: 'highest-cumulative-wpa-pitcher',
+      value: highest,
+      valueLabel: `${highest.toFixed(3)} pitching WPA`,
+      leaders: leadersByValue(pitcherEligible, highest),
+      evidenceSummary: `Highest cumulative pitching WPA at ${stadiumName ?? stadiumId}: ${highest.toFixed(3)}.`,
+    }));
+    candidates.push(candidateFromAggregates({
+      stadiumId,
+      stadiumName,
+      recordType: 'lowest-cumulative-wpa-pitcher',
+      value: lowest,
+      valueLabel: `${lowest.toFixed(3)} pitching WPA`,
+      leaders: leadersByValue(pitcherEligible, lowest),
+      evidenceSummary: `Lowest cumulative pitching WPA at ${stadiumName ?? stadiumId}: ${lowest.toFixed(3)}.`,
+    }));
+  }
+}
+
+function swingEvidenceSummary(
+  event: StadiumEvent,
+  stadiumId: string,
+  stadiumName: string | null,
+): string {
+  return `${event.batterName} ${event.result} (inning ${event.inning} ${event.halfInning}, WPA ${event.wpa.toFixed(3)}) at ${stadiumName ?? stadiumId}`;
+}
+
+function pushSinglePlayWpaCandidates(
+  candidates: RecordCandidate[],
+  stadiumId: string,
+  stadiumName: string | null,
+  events: StadiumEvent[],
+): void {
+  const eventsWithWpa = events.filter((event) => Number.isFinite(event.wpa));
+  if (eventsWithWpa.length === 0) return;
+
+  const maxWpa = Math.max(...eventsWithWpa.map((event) => event.wpa));
+  if (maxWpa > 0) {
+    const leaders = eventsWithWpa.filter((event) => event.wpa === maxWpa);
+    candidates.push({
+      stadiumId,
+      stadiumName,
+      recordType: 'largest-positive-wpa-swing',
+      recordKey: 'leader',
+      value: maxWpa,
+      valueLabel: `${maxWpa.toFixed(3)} WPA`,
+      leaderTeamIds: leaders.map((event) => event.batterTeamId),
+      leaderPlayerIds: leaders.map((event) => event.batterId),
+      leaderPlayerNames: leaders.map((event) => event.batterName),
+      sourceGameIds: leaders.map((event) => event.sourceGameId),
+      evidenceIds: leaders.map((event) => event.eventId),
+      evidenceSummary: swingEvidenceSummary(leaders[0], stadiumId, stadiumName),
+    });
+  }
+
+  const minWpa = Math.min(...eventsWithWpa.map((event) => event.wpa));
+  if (minWpa < 0) {
+    const leaders = eventsWithWpa.filter((event) => event.wpa === minWpa);
+    candidates.push({
+      stadiumId,
+      stadiumName,
+      recordType: 'largest-negative-wpa-swing',
+      recordKey: 'leader',
+      value: minWpa,
+      valueLabel: `${minWpa.toFixed(3)} WPA`,
+      leaderTeamIds: leaders.map((event) => event.batterTeamId),
+      leaderPlayerIds: leaders.map((event) => event.batterId),
+      leaderPlayerNames: leaders.map((event) => event.batterName),
+      sourceGameIds: leaders.map((event) => event.sourceGameId),
+      evidenceIds: leaders.map((event) => event.eventId),
+      evidenceSummary: swingEvidenceSummary(leaders[0], stadiumId, stadiumName),
+    });
+  }
+}
+
+function fameBearingCandidates(
+  scope: FranchiseStadiumRecordsScopeInput,
+  completedGames: CompletedGameRecord[],
+  blockers: string[],
+): RecordCandidate[] {
+  const stadiumGames = new Map<string, CompletedGameRecord[]>();
+  for (const game of completedGames) {
+    if (!sameScope(scope, game)) {
+      blockers.push(`Stadium record skipped for game ${game.gameId}: completed game scope mismatch.`);
+      continue;
+    }
+    if (!gameIsComplete(game)) continue;
+    if (!hasText(game.stadiumId)) {
+      blockers.push(`Stadium record skipped for game ${game.gameId}: non-empty stadium id is required.`);
+      continue;
+    }
+    const games = stadiumGames.get(game.stadiumId) ?? [];
+    games.push(game);
+    stadiumGames.set(game.stadiumId, games);
+  }
+
+  const candidates: RecordCandidate[] = [];
+  for (const [stadiumId, games] of stadiumGames.entries()) {
+    const stadiumName = games.find((game) => hasText(game.stadiumName))?.stadiumName ?? null;
+    const events = games.flatMap((game) =>
+      (game.atBatEvents ?? [])
+        .filter((event) => !event.undoneAt)
+        .map((event) => ({ ...event, sourceGameId: game.gameId })),
+    );
+    const wpaRows = games.flatMap((game) =>
+      (game.playerWpaTotals ?? []).map((row) => ({ ...row, sourceGameId: game.gameId })),
+    );
+
+    pushFarthestHrCandidate(candidates, stadiumId, stadiumName, events, 'R', 'farthest-hr-rhb');
+    pushFarthestHrCandidate(candidates, stadiumId, stadiumName, events, 'L', 'farthest-hr-lhb');
+    pushHomeRunCountCandidates(candidates, stadiumId, stadiumName, events);
+    pushCumulativeWpaCandidates(candidates, stadiumId, stadiumName, wpaRows);
+    pushSinglePlayWpaCandidates(candidates, stadiumId, stadiumName, events);
+  }
+  return candidates;
+}
+
 function buildCandidatesFromFoundation(
   report: FranchiseStadiumFoundationReport,
   completedGames: CompletedGameRecord[],
@@ -533,6 +901,7 @@ function buildCandidatesFromFoundation(
   return [
     ...scoreRecordCandidates(report.scope, completedGames, blockers),
     ...sprayCandidates(report.sprayCharts.rows),
+    ...fameBearingCandidates(report.scope, completedGames, blockers),
   ];
 }
 
