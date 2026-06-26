@@ -48,14 +48,14 @@ body{background:radial-gradient(900px 500px at 50% -10%,#243024,rgba(20,29,22,0)
 .content{position:relative;z-index:3}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid rgba(0,0,0,.32);margin-bottom:16px}
 .tab{font-family:var(--f-chalk);font-size:17px;background:none;border:none;cursor:pointer;color:var(--chalk-soft);padding:7px 12px}
-.tab.on{color:var(--chalk);border-bottom:3px solid var(--tp)}
+.tab.on{color:var(--chalk);border-bottom:3px solid var(--yellow)}
 .tab.league{opacity:.6}
 
 /* Today's Game matchup */
 .matchup{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:18px;margin:6px 0}
 .mteam{text-align:center} .mlogo{width:54px;height:54px;border-radius:14px;margin:0 auto 8px;display:grid;place-items:center;font-family:var(--f-chalk);font-size:15px;box-shadow:0 2px 6px rgba(0,0,0,.5)}
 .mteam .nm{font-family:var(--f-chalk);font-size:22px} .mteam .rec{font-family:var(--f-type);font-size:12px;color:var(--chalk-soft);margin-top:2px}
-.mteam.you .nm{position:relative} .mteam.you .nm::after{content:"";position:absolute;left:18%;right:18%;bottom:-5px;height:3px;background:var(--tp);border-radius:2px}
+.mteam.you .nm{color:var(--yellow);text-shadow:0 0 2px rgba(242,192,65,.3),0 1px 0 rgba(0,0,0,.3)}
 .bigscore{font-family:var(--f-chalk);font-size:50px} .vs{font-family:var(--f-chalk);font-size:20px;color:var(--yellow)}
 .mmeta{text-align:center;font-family:var(--f-type);font-size:12px;color:var(--chalk-soft);margin-top:8px}
 
@@ -66,7 +66,11 @@ body{background:radial-gradient(900px 500px at 50% -10%,#243024,rgba(20,29,22,0)
 .srow{display:contents}
 .stand .tm{font-family:var(--f-chalk);font-size:21px;display:flex;align-items:center;gap:10px;padding-left:8px}
 .stand .tm .dot{width:13px;height:13px;border-radius:3px}
-.stand .v{font-family:var(--f-chalk);font-size:21px;text-align:center} .stand .v.gb{color:var(--chalk-soft)}
+.stand .v{font-family:var(--f-chalk);font-size:21px;text-align:center;color:var(--chalk)} .stand .v.gb{color:var(--chalk-soft)}
+.stand .tm.you,.stand .v.you{color:var(--yellow);text-shadow:0 0 2px rgba(242,192,65,.28),0 1px 0 rgba(0,0,0,.3)}
+.stand .v.gb.you{color:var(--yellow)}
+.stand .tm.riv{color:var(--marquee)}
+.stand .tm.oth{color:var(--chalk)}
 .youwrap{grid-column:1/-1;height:0}
 .stand .line{grid-column:1/-1;height:1px;background:rgba(0,0,0,.24)}
 .stand .r{color:var(--marquee)}
@@ -95,9 +99,9 @@ body{background:radial-gradient(900px 500px at 50% -10%,#243024,rgba(20,29,22,0)
   <div class="board first aged"><div class="content">
     <div class="tabs"><button class="tab on">Today's Game</button><button class="tab">Roster</button><button class="tab">Stats</button><button class="tab">Tootwhistle</button><button class="tab league">Standings·league</button></div>
     <div class="matchup">
-      <div class="mteam"><div class="mlogo" id="awayLogo" style="background:#B06A1E;color:#2A2A2A">BM</div><div class="nm chalk" id="awayName">Brass Monkeys</div><div class="rec">50–30</div></div>
+      <div class="mteam"><div class="mlogo" id="awayLogo" style="background:#2b332d;color:#ECE8DA">BM</div><div class="nm chalk" id="awayName">Brass Monkeys</div><div class="rec">50–30</div></div>
       <div style="text-align:center"><div class="bigscore chalk" id="score">—</div><div class="eyebrow" id="gstate">Tonight · 7:05</div></div>
-      <div class="mteam you"><div class="mlogo" id="homeLogo" style="background:var(--ts);color:var(--tp)">PC</div><div class="nm chalk" id="homeName">Page Capitals</div><div class="rec">48–32</div></div>
+      <div class="mteam you"><div class="mlogo" id="homeLogo" style="background:#2b332d;color:#F2C041">PC</div><div class="nm chalk" id="homeName">Page Capitals</div><div class="rec">48–32</div></div>
     </div>
     <div class="mmeta">Caldwell Park · the rival's in town — first place on the line</div>
   </div></div>
@@ -110,7 +114,7 @@ body{background:radial-gradient(900px 500px at 50% -10%,#243024,rgba(20,29,22,0)
     </div>
   </div></div>
 
-  <div class="note"><b>Team colors in the lens:</b> the field stays the old green ballpark, but <b>your club now wears its own colors</b> — the identity banner, the team mark, the underline on your side of the matchup, and your standings row all take the team's primary/secondary. Switch the lens (top-left) and the whole hub re-skins to that club — a genuinely different feel per team. Scoreboard-yellow steps back to pure scoreboard duty (the division leader, totals, the current inning); the <b class="r" style="color:var(--marquee)">rival stays red</b>. It's "your team, at Fenway."</div>
+  <div class="note"><b>Team color, kept to the banner:</b> the board itself stays an aged scoreboard — green, in <b>white &amp; yellow chalk</b>. Your club's colors live only in the <b>identity banner up top</b> (and its little mark) — that's the team-oriented texture. Down on the board it reads like any old scoreboard: <b>your club is in yellow chalk</b> (the way the live half-inning glows), the <b class="r" style="color:var(--marquee)">rival is in red</b>, everyone else is white. Switch the lens (top-left) and the banner re-skins to that club. A team's colors flying above an old green scoreboard — not a classroom blackboard.</div>
 </div>
 <script>
 const TEAMS={
@@ -139,17 +143,17 @@ function setTeam(k){
   document.getElementById('homeName').textContent=t.name;
   document.getElementById('homeLogo').textContent=t.abbr;
   document.getElementById('awayName').textContent=rv.name;
-  const al=document.getElementById('awayLogo'); al.textContent=rv.abbr; al.style.background=rv.tp; al.style.color=rv.ts;
+  const al=document.getElementById('awayLogo'); al.textContent=rv.abbr; al.style.background='#2b332d'; al.style.color='#ECE8DA';
   // standings rebuild
   const s=document.getElementById('stand');
   s.querySelectorAll('.srowwrap,.linex,.youtint').forEach(e=>e.remove());
   let html='';
-  STAND.forEach((r,i)=>{
-    const you=r.k===k;
-    const tint=you?`<div style="position:relative;grid-column:1/-1;height:0"><div class="rowtint" style="top:-4px"></div></div>`:'';
-    html+=tint;
-    html+=`<div class="tm ${you?'youclub':''}"><span class="dot" style="background:${r.dot}"></span>${r.n}</div>`+
-      `<div class="v">${r.w}</div><div class="v">${r.l}</div><div class="v gb ${r.first?'y':''}">${r.gb}</div><div class="v" style="font-size:16px">${r.last}</div>`+
+  const rivalName=(TEAMS[k].rival||'').replace(' ⚔','');
+  STAND.forEach((r)=>{
+    const you=r.k===k; const isRival=r.n===rivalName;
+    const cls=you?'you':(isRival?'riv':'oth');
+    html+=`<div class="tm ${cls}">${r.n}</div>`+
+      `<div class="v ${cls}">${r.w}</div><div class="v ${cls}">${r.l}</div><div class="v gb ${you?'you':''}">${r.gb}</div><div class="v ${cls}" style="font-size:16px">${r.last}</div>`+
       `<div class="line"></div>`;
   });
   // wipe everything after header line then append
