@@ -23924,3 +23924,85 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF the `FranchiseStadiumRecordChange` / polarity-map / fame-row shapes differ from the anchors (re-read `franchiseStadiumRecordsStorage.ts:31-99` / `franchiseFameRecordsStorage.ts:16-27`).
 - A correct BLOCK is GOOD. Do NOT build hops 3-6, do NOT add a new MoraleEventType/NarrativeEventType, do NOT flip a flag default, do NOT push.
 <!-- ===== END CONTRACT: A1.5d-hop2 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop3 ===== -->
+# CONTRACT A1.5d-hop3 — stadium-record FAN-MORALE buzz (PARK_RECORD_SET, §5.3+§6+§7, build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-3 — the home-crowd fan buzz when a park record is set/taken. Consumes hop-2's `stadiumChanges` (the `FranchiseStadiumRecordChange[]` already surfaced in `processCompletedGame`). Build ONLY: (a) a new `PARK_RECORD_SET` MasterMoraleEventType + its matrix row, and (b) a build-dark dark writer that, per stadium-record change whose new SOLE holder is on the stadium's HOME team, fires a fan-morale buzz for that home team. Do NOT build the §7 home-park-RIVALRY 2× mechanism (separate later slice). Do NOT touch `narrativeEngine.ts` (the STADIUM_RECORD NarrativeEventType is hop-4). Do NOT add a reporter/almanac/rivalry hop. Do NOT flip any flag default. No DB change.
+
+## GOAL
+§5.3 + §7: when a `FranchiseStadiumRecordChange` fires AND its new sole holder is on the stadium's HOME team, the HOME team's FANS get a morale lift (§16 = the existing PLAYER_MILESTONE fan delta) via a new `PARK_RECORD_SET` matrix event. §6 DOUBLE-COUNT GUARD (make-or-break): the row's SELF delta is 0 — the holder's self-pride already moved via hop-2's fame-heat→morale bridge; PARK_RECORD_SET carries ONLY fan + teammate deltas. A VISITOR who sets a record here earns his fame (hop-2) but NO home-crowd buzz. No negative to the overtaken team's fans in v1. Build-dark: default flags OFF ⇒ byte-identical.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **The matrix exhaustiveness guard = EXACTLY ONE touch point:** `PLAYER_EVENT_BASE_TABLE` (`src/engines/masterMoraleMatrix.ts:301`) `satisfies Record<MasterMoraleEventType, BaseMoraleConsequence>` (`:420`). Adding the union member WITHOUT the table row fails `tsc` (good); both edits required.
+- **Union:** `PlayerCentricMoraleEventType` ends at `'CAPTAIN_SLUMP'` (`masterMoraleMatrix.ts:36`); `MasterMoraleEventType = FanMoraleEventType | PlayerCentricMoraleEventType` (`:38`). Add `| 'PARK_RECORD_SET'` after `'CAPTAIN_SLUMP'`.
+- **Row helper** (`:579`): `row(selfPlayerMoraleDelta, teamFanMoraleDelta, otherTouched: OtherTouchedBase[], reason)`. `touch(relation, delta)` (`:593`).
+- **Clone PLAYER_MILESTONE** (`:347-349`): `row(EVENT_DELTA.clutchHitSelf, EVENT_DELTA.playerMilestoneFan, [touch('teammate', EVENT_DELTA.smallTeammateLift)], 'achievement.player_milestone')`.
+- **EVENT_DELTA** (`:102`): `neutral: 0` (`:103`), `playerMilestoneFan: 4` (`:129`), `smallTeammateLift: 1` (`:167`).
+- **composeMoraleConsequence** (`:461`): `composeMoraleConsequence(event: MoraleMatrixEvent, personality, modifiers, currentPlayerMorale, currentFanMorale)`. A plain matrix event is `{ type: '<MasterMoraleEventType>' }` — the trade-demand sibling uses `composeMoraleConsequence({ type: 'TRADE_DEMAND' }, …)` (`processCompletedGame.ts:630-636`). **USE `{ type: 'PARK_RECORD_SET' }` — NOT `{ kind: 'event', … }`.**
+- **The sibling dark writer to MIRROR:** `persistDarkTradeDemandMoraleForCompletedGame` (`processCompletedGame.ts:589-665`) — gate → per-row: `getFranchisePlayer` → `currentMoraleValue(scope,'player',…)` + `currentMoraleValue(scope,'team-fan',teamId,…)` → `composeMoraleConsequence({type},…,resolveHiddenModifiers(player?.hiddenPersonalityModifiers),…)` → `applyFranchiseMoraleMatrixConsequence({franchiseId,seasonId,statsScopeId,seasonNumber,playerId,teamId,consequence,sourceEventId,timestamp})` in try/catch.
+- **Holder→team:** `sourceTeamIdForFameMorale(gameState, holderId, player)` (`processCompletedGame.ts:479`). **Checkpoint:** `fameMoraleSourceCheckpoint(gameState, archiveOptions)` (`:497`). Both are local fns in `processCompletedGame.ts` — reuse directly.
+- **Stadium→home team:** `getFranchiseConfig(scope.franchiseId)?.stadiums` is `FranchiseTeamStadiumSnapshot[]` (`types/franchise.ts:54`); `.find(s => s.stadiumId === change.stadiumId)?.teamId`. ⚠ `getFranchiseConfig` is **NOT yet imported** in `processCompletedGame.ts` — add `import { getFranchiseConfig } from './franchiseManager';`.
+- **The change shape** (`franchiseStadiumRecordsStorage.ts:90`): `{ stadiumId, recordType, recordKey, changeKind:'set'|'overtake', priorValue, priorLeaderPlayerIds, newValue, newLeaderPlayerIds }`. Sole holder ⇒ `newLeaderPlayerIds.length === 1`.
+- **Wiring:** `stadiumChanges` captured at `processCompletedGame.ts:1169`; fame block `:1178-1190`; flashpoint block `:1191`. Insert the new call between `:1190` and `:1191` (after fame, before flashpoint).
+- **Flag:** `isFranchisePhase2MoraleEnabled` (already imported `:69`). `applyFranchiseMoraleMatrixConsequence` re-checks it (`franchiseMoraleState.ts:498`) and dedups by `sourceEventId` (`:406`).
+
+## EXPECTED OUTPUT
+1. **`src/engines/masterMoraleMatrix.ts`** (2 edits):
+   - Add `| 'PARK_RECORD_SET'` to `PlayerCentricMoraleEventType` (after `'CAPTAIN_SLUMP'`).
+   - Add to `PLAYER_EVENT_BASE_TABLE` (before the `satisfies` at `:420`): `PARK_RECORD_SET: row(EVENT_DELTA.neutral, EVENT_DELTA.playerMilestoneFan, [touch('teammate', EVENT_DELTA.smallTeammateLift)], 'achievement.park_record_set'),` — **self-delta = `EVENT_DELTA.neutral` (0, the §6 guard), fan = `playerMilestoneFan` (4), teammate = `smallTeammateLift` (1).**
+2. **`src/utils/processCompletedGame.ts`**:
+   - Add `import { getFranchiseConfig } from './franchiseManager';`.
+   - New `export async function persistDarkParkRecordMoraleForCompletedGame(gameState: PersistedGameState, scope: PersistedTrueValueScope, stadiumChanges: FranchiseStadiumRecordChange[], archiveOptions?: CompletedGameArchiveOptions): Promise<void>` mirroring the trade-demand sibling:
+     - if `!isFranchisePhase2MoraleEnabled()` → return.
+     - `const config = await getFranchiseConfig(scope.franchiseId); if (!config) return;`
+     - `const checkpoint = fameMoraleSourceCheckpoint(gameState, archiveOptions);`
+     - for each `change` of `stadiumChanges`:
+       - `if (change.newLeaderPlayerIds.length !== 1) continue;` `const holderId = change.newLeaderPlayerIds[0];`
+       - `const homeTeamId = config.stadiums?.find(s => s.stadiumId === change.stadiumId)?.teamId; if (!homeTeamId) continue;`
+       - `const player = await getFranchisePlayer(scope.franchiseId, holderId);`
+       - `const holderTeamId = sourceTeamIdForFameMorale(gameState, holderId, player); if (holderTeamId !== homeTeamId) continue;` (visitor ⇒ no buzz)
+       - `const currentPlayerMorale = await currentMoraleValue(scope, 'player', holderId, player?.morale ?? 50);`
+       - `const currentFanMorale = await currentMoraleValue(scope, 'team-fan', homeTeamId, 50);`
+       - `const consequence = composeMoraleConsequence({ type: 'PARK_RECORD_SET' }, player?.personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), currentPlayerMorale, currentFanMorale);`
+       - `const sourceEventId = ['park-record-set', scope.franchiseId, scope.seasonId, scope.statsScopeId, checkpoint, change.stadiumId, change.recordType, change.recordKey, change.changeKind, holderId].join(':');`
+       - `await applyFranchiseMoraleMatrixConsequence({ franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, seasonNumber: scope.seasonNumber, playerId: holderId, teamId: homeTeamId, consequence, sourceEventId, timestamp: String(gameState.savedAt ?? gameState.gameId) });`
+     - wrap the per-change body in try/catch with `console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e)` (per-change, so one bad change doesn't drop the rest — OR a single outer try/catch matching the sibling; mirror the sibling's granularity).
+   - Insert the call after the fame block (`:1190`), before the flashpoint block (`:1191`):
+     ```
+     if (isFranchisePhase2MoraleEnabled()) {
+       try {
+         await persistDarkParkRecordMoraleForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
+       } catch (e) {
+         console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e);
+       }
+     }
+     ```
+3. **`src/utils/tests/processCompletedGame.parkRecordMorale.test.ts`** (NEW): unit-test `persistDarkParkRecordMoraleForCompletedGame` with the morale flag toggled via `setFranchisePhase2MoraleEnabledForTests` + mocks (mirror the trade-demand test if one exists, else the fameMorale test). Pin: (a) flag OFF → no `applyFranchiseMoraleMatrixConsequence` call; (b) flag ON, home-team sole holder → ONE apply with `teamId === homeTeamId`, `playerId === holderId`, the `park-record-set:…` sourceEventId, and a PARK_RECORD_SET consequence whose `selfPlayerMoraleDelta === 0` + `teamFanMoraleDelta === 4`; (c) VISITOR holder (holderTeamId ≠ homeTeamId) → no apply; (d) tie (`newLeaderPlayerIds.length > 1`) → no apply; (e) idempotency — a 2nd identical invocation does not double-apply (same sourceEventId deduped).
+4. **`test-utils/lsim/falsification.ts`**: add a falsification entry proving the `PARK_RECORD_SET` row is non-neutral (composing it yields a non-zero `teamFanMoraleDelta`), OR (simpler) leave falsification to the existing matrix coverage if a matrix-row sanity test already exists — confirm via grep; do NOT weaken any invariant.
+
+## CONSTRAINTS
+- Touch ONLY: `src/engines/masterMoraleMatrix.ts`, `src/utils/processCompletedGame.ts`, `src/utils/tests/processCompletedGame.parkRecordMorale.test.ts` (NEW), and (if needed) `test-utils/lsim/falsification.ts`. Do NOT touch `narrativeEngine.ts` / `franchiseStadiumRecordsStorage.ts` / `franchiseFameCompute.ts` / `franchiseMoraleState.ts` / any flag default / any oracle / the trackerDb.
+- Build-dark: default flags OFF ⇒ byte-identical (the writer early-returns; the new matrix row is inert unless `PARK_RECORD_SET` is composed, which only the new flag-gated writer does).
+- Determinism: no `Date.now()`/`Math.random()`/`crypto` (timestamp from `gameState.savedAt ?? gameState.gameId`, mirroring the bridge).
+- §6 guard: self-delta MUST be `EVENT_DELTA.neutral` (0). Do NOT give the holder a second self-morale swing.
+- ⚠ TRANSITIVE-IMPORT-MOCK-BREAK: adding `import { getFranchiseConfig }` to `processCompletedGame.ts` may break partial `./franchiseManager` mocks in some processCompletedGame test files at module-load. If a test file fails to COLLECT with "No getFranchiseConfig export on the ../franchiseManager mock", add `getFranchiseConfig: vi.fn().mockResolvedValue(null)` to that file's `franchiseManager` mock (test-only stub). The FULL suite is the gate.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/processCompletedGame.parkRecordMorale.test.ts` + any masterMoraleMatrix test → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (processCompletedGame chokepoint + the exhaustive-Record touch + transitive-mock-break risk) + L-SIM (smoke + season + falsification).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the listed files touched, narrativeEngine UNTOUCHED, self-delta 0, compose uses `{ type: 'PARK_RECORD_SET' }`, visitor/tie skipped, distinct sourceEventId, no flag-default/DB change, default flags → byte-identical.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the matrix `satisfies Record<MasterMoraleEventType,…>` / `row`/`touch`/`EVENT_DELTA` / `composeMoraleConsequence` shapes differ from the anchors (re-read).
+- STOP-IF `MoraleMatrixEvent` does NOT accept `{ type: 'PARK_RECORD_SET' }` once the union member is added (re-read `masterMoraleMatrix.ts:80`).
+- STOP-IF resolving the home team forces a change to a forbidden file.
+- A correct BLOCK is GOOD. Do NOT build the §7 rivalry-2× / reporter / almanac / rivalry-edge hops, do NOT add a NarrativeEventType, do NOT flip a flag default, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop3 ===== -->
