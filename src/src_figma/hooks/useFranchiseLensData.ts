@@ -87,22 +87,31 @@ import {
   type AwardWinner,
   type ChampionshipRecord,
 } from "../../utils/museumStorage";
+import { listSeasonNewsItemsForFranchiseSeason } from "../../utils/seasonNewsStorage";
+import { listGameStoriesForFranchiseSeason } from "../../utils/gameStoriesStorage";
+import { listReporters } from "../../utils/reporterStorage";
+import type { BeatReporter, GameStory, SeasonNewsItem } from "../../types/reporter";
 import type { StoredFranchiseConfig } from "../../types/franchise";
 import type {
   ActiveTeamVM,
   AlmanacVM,
+  CheckpointPlayerVM,
+  CheckpointVM,
   FameVM,
   FormStateVM,
+  GameRecapVM,
   HubVM,
   LeaderboardVM,
   LeaderEntryVM,
   MakeupModVM,
   MoraleHistoryVM,
+  NewsVM,
   PlayerDetailVM,
   PlayerMoraleVM,
   PlayerRowVM,
   PulseVM,
   RatingBarVM,
+  RatingChangeVM,
   ScheduleGameVM,
   ScheduleVM,
   SprayRoleVM,
@@ -112,6 +121,7 @@ import type {
   TeamPickerVM,
   TieType,
   TieVM,
+  TraitChangeVM,
   TraitTimelineVM,
   TrophyVM,
   ValuePointVM,
@@ -141,6 +151,9 @@ interface RawData {
   traitOverlays: FranchiseTraitOverlayRow[];
   relationshipEdges: RelationshipEdgeRow[];
   fameRecords: FranchiseFameRecordRow[];
+  seasonNews: SeasonNewsItem[];
+  gameStories: GameStory[];
+  reporters: BeatReporter[];
 }
 
 export interface UseFranchiseLensDataReturn {
@@ -626,6 +639,153 @@ function buildAlmanacVM(
   };
 }
 
+/* ===== Phase 4: newsroom (Tootwhistle) + checkpoint takeover ===== */
+function eventTone(eventType: string): "good" | "bad" | "neutral" {
+  const t = eventType.toUpperCase();
+  if (/INJUR|FIRING|ALBATROSS|FEUD|SLUMP|DEMAND|BUST|RETIRE|SNUB/.test(t)) return "bad";
+  if (/MILESTONE|AWARD|STREAK|CALL_?UP|MVP|CHAMP|BREAKOUT|HOT|ACE/.test(t)) return "good";
+  return "neutral";
+}
+
+function prettyEvent(eventType: string): string {
+  return String(eventType).replace(/_/g, " ").toLowerCase();
+}
+
+function buildRecaps(
+  stories: GameStory[],
+  schedule: ScheduledGame[],
+  teamMeta: Map<string, TeamMeta>,
+): GameRecapVM[] {
+  const scheduleById = new Map(schedule.map((game) => [game.id, game]));
+  return [...stories]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 12)
+    .map((story) => {
+      const scheduled = story.scheduleGameId ? scheduleById.get(story.scheduleGameId) : undefined;
+      const recap: GameRecapVM = {
+        date: story.gameDate,
+        away: teamMeta.get(scheduled?.awayTeamId ?? story.opponentTeamId ?? "")?.abbr ?? "—",
+        home: teamMeta.get(scheduled?.homeTeamId ?? story.teamId)?.abbr ?? "—",
+        headline: story.headline,
+      };
+      if (scheduled?.result) {
+        recap.awayScore = scheduled.result.awayScore;
+        recap.homeScore = scheduled.result.homeScore;
+        recap.win = scheduled.result.winningTeamId === scheduled.homeTeamId ? "home" : "away";
+      }
+      return recap;
+    });
+}
+
+function buildNewsVM(
+  news: SeasonNewsItem[],
+  stories: GameStory[],
+  reporter: BeatReporter | undefined,
+  teamMeta: Map<string, TeamMeta>,
+  schedule: ScheduledGame[],
+  seasonNumber: number,
+): NewsVM | undefined {
+  const sorted = [...news].sort((a, b) => b.dramaticWeight - a.dramaticWeight);
+  const lead = sorted[0];
+  const rest = lead ? sorted.slice(1) : [];
+  const byline = reporter ? reporter.name : "the Tootwhistle desk";
+  const recaps = buildRecaps(stories, schedule, teamMeta);
+
+  if (!lead && rest.length === 0 && recaps.length === 0) return undefined;
+
+  return {
+    editionLabel: "The Tootwhistle Times",
+    volumeLabel: `Season ${seasonNumber}`,
+    lead: lead
+      ? {
+          kicker: prettyEvent(lead.eventType),
+          headline: lead.headline,
+          body: lead.body,
+          byline,
+          dramaticWeight: lead.dramaticWeight,
+        }
+      : undefined,
+    stories: rest.slice(0, 8).map((item) => ({
+      category: prettyEvent(item.eventType),
+      headline: item.headline,
+      excerpt: item.body,
+      byline,
+      dramaticWeight: item.dramaticWeight,
+    })),
+    wire: rest.slice(0, 14).map((item) => ({
+      type: prettyEvent(item.eventType),
+      text: item.headline,
+      tone: eventTone(item.eventType),
+    })),
+    recaps: recaps.length ? recaps : undefined,
+  };
+}
+
+function buildCheckpointVM(
+  ratingsOverlays: FranchiseRatingsOverlayRow[],
+  traitOverlays: FranchiseTraitOverlayRow[],
+  players: Player[],
+): CheckpointVM | undefined {
+  const pendingRatings = ratingsOverlays.filter((row) => row.confirmationStatus === "pending");
+  const pendingTraits = traitOverlays.filter((row) => row.confirmationStatus === "pending");
+  if (pendingRatings.length === 0 && pendingTraits.length === 0) return undefined;
+
+  const checkpointNumber = (sourceEventId: string | undefined): number | null => {
+    const match = /checkpoint-(\d+)/i.exec(sourceEventId ?? "");
+    return match ? Number(match[1]) : null;
+  };
+  const numbers = [...pendingRatings, ...pendingTraits]
+    .map((row) => checkpointNumber(row.sourceEventId))
+    .filter((value): value is number => value != null);
+  if (numbers.length === 0) return undefined;
+  const number = Math.max(...numbers);
+  const sourceId = `checkpoint-${number}`;
+
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const byPlayer = new Map<string, { ratingChanges: RatingChangeVM[]; traitChanges: TraitChangeVM[] }>();
+  const ensure = (playerId: string) => {
+    const existing = byPlayer.get(playerId) ?? { ratingChanges: [], traitChanges: [] };
+    byPlayer.set(playerId, existing);
+    return existing;
+  };
+
+  for (const row of pendingRatings.filter((r) => r.sourceEventId === sourceId)) {
+    const player = playerById.get(row.playerId);
+    if (!player) continue;
+    const base = (player as unknown as Record<string, number>)[row.ratingKey] ?? 0;
+    ensure(row.playerId).ratingChanges.push({
+      label: RATING_LABELS[row.ratingKey] ?? row.ratingKey,
+      from: base,
+      to: base + row.delta,
+    });
+  }
+  for (const row of pendingTraits.filter((r) => r.sourceEventId === sourceId)) {
+    ensure(row.playerId).traitChanges.push({
+      valence: row.valence,
+      trait: row.traitName,
+      displaces: row.displacesTraitName ?? undefined,
+    });
+  }
+
+  const cpPlayers: CheckpointPlayerVM[] = [...byPlayer.entries()].map(([playerId, changes]) => {
+    const player = playerById.get(playerId);
+    return {
+      id: playerId,
+      name: player ? `${player.firstName} ${player.lastName}`.trim() : playerId,
+      position: player?.primaryPosition ?? "",
+      ratingChanges: changes.ratingChanges,
+      traitChanges: changes.traitChanges,
+    };
+  });
+
+  return {
+    number,
+    label: `Checkpoint ${number} of 5`,
+    pctLabel: `the ${number * 20}% mark`,
+    players: cpPlayers,
+  };
+}
+
 function buildReturn(
   raw: RawData | null,
   viewedTeamId: string | undefined,
@@ -667,6 +827,9 @@ function buildReturn(
     traitOverlays,
     relationshipEdges,
     fameRecords,
+    seasonNews,
+    gameStories,
+    reporters,
   } = raw;
 
   const teamMeta = new Map<string, TeamMeta>(
@@ -767,6 +930,8 @@ function buildReturn(
     managerName: activeTeam.managerName,
   };
 
+  const activeReporter = reporters.find((reporter) => reporter.teamId === activeTeam.id);
+
   const hub: HubVM = {
     pulse: buildPulse(teamPlayers, activeTeam.id, fanSnapshot, standings),
     roster,
@@ -774,6 +939,8 @@ function buildReturn(
     stadium: buildStadiumVM(activeTeam),
     schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
     almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, championships, awards),
+    news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
+    checkpoint: buildCheckpointVM(ratingsOverlays, traitOverlays, players),
     loading: false,
   };
 
@@ -833,6 +1000,11 @@ export function useFranchiseLensData(
         const traitOverlays = await getFranchiseTraitOverlaysByScope(scope).catch(() => []);
         const relationshipEdges = await getFranchiseRelationshipEdgesByScope(scope).catch(() => []);
         const fameRecords = await getFranchiseFameRecordRowsByScope(scope).catch(() => []);
+        // Phase-4 newsroom: franchise-season news + per-game recaps + the beat reporters. Empty/null
+        // until the living season writes them; the Tootwhistle tab fills on a real played save.
+        const seasonNews = await listSeasonNewsItemsForFranchiseSeason(franchiseId, seasonId).catch(() => []);
+        const gameStories = await listGameStoriesForFranchiseSeason(franchiseId, seasonId).catch(() => []);
+        const reporters = await listReporters({ franchiseId }).catch((): BeatReporter[] => []);
         if (cancelled) return;
         setRaw({
           config,
@@ -849,6 +1021,9 @@ export function useFranchiseLensData(
           traitOverlays: traitOverlays ?? [],
           relationshipEdges: relationshipEdges ?? [],
           fameRecords: fameRecords ?? [],
+          seasonNews: seasonNews ?? [],
+          gameStories: gameStories ?? [],
+          reporters: reporters ?? [],
         });
         setIsLoading(false);
       } catch (caught) {
