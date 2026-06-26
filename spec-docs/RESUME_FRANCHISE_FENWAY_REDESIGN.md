@@ -45,20 +45,26 @@
   Home: lead story + ranked impact cards + next-game cockpit), **Roster** (designations + WAR + Salary +
   **True Value + Net gap** + Morale ledger popover + payroll chip), **Tootwhistle Times** (newspaper),
   the bottom **Help** toggle, and the two-voice font split.
+- **Standings & Races** tab (`StandingsRacesTab` in `FranchiseLensHub.tsx`): division standings (full
+  `TeamStanding` row — W/L/PCT/GB/L10/streak/run-diff/home/away), the awards races as **gap bars** to the
+  frontrunner (MVP/Cy/ROY), and the **All-Star board** (starters/reserves by position + snubs, snub ties
+  back to the roster morale). All chalk; your club yellow, rival red, others white (id-keyed via
+  `active.rivalId`). VMs field-aligned to the live engine types so the adapter is a clean map; mock-fed
+  by a shared `LEAGUE` const in `FranchiseLensPreview.tsx`. Build-green, zero console errors.
 
 ## What's NEXT (the build order, from the Data Surface Map §3)
-1. **Standings & Races** tab — `calculateStandings`→`TeamStanding` (live) + `AwardsWatchlist` (live) +
-   the All-Star board (wire the 4 stubbed getters to `getFranchiseAllStarRoster`).
-2. **Stadium** tab — port the live `FranchiseStadiumFoundationPanel` (spray charts, real data) from
+1. **Stadium** tab — port the live `FranchiseStadiumFoundationPanel` (spray charts, real data) from
    `TeamHubContent.tsx`. (V2 fame-records are ABSENT here — on `franchise-v1-next`; merge later.)
-3. **Player drawer** — the home for per-player depth (ratings base→current, traits + history, the morale
+2. **Player drawer** — the home for per-player depth (ratings base→current, traits + history, the morale
    reasons-log, ties/relationships, fame, the True-Value sparkline) so the roster table stays clean.
-4. **Tootwhistle live feed** — adapter: lead = top-`dramaticWeight` `SeasonNewsItem`, recaps stream.
-5. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
+3. **Tootwhistle live feed** — adapter: lead = top-`dramaticWeight` `SeasonNewsItem`, recaps stream.
+4. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
    when the franchise team flips the Phase-2 flags. The **Checkpoint Confirmation worklist** (SMB4
    transcription) is its own moment-driven takeover.
-6. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
+5. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
    needs `:franchiseId`; `getAllFranchiseTeams`, `calculateStandings`, morale via `franchiseMoraleState`).
+   For Standings & Races specifically: `calculateStandings`→divisions, `computeFranchiseAwardsPreview`→
+   races (`candidates[].marginToWinner`), `getFranchiseAllStarRoster`→board (wire the 4 stubbed getters).
 
 ## Greenlight-gated (need JK before doing)
 - Swapping the **live** franchise hub / auction pages over to the new design (and rewriting their

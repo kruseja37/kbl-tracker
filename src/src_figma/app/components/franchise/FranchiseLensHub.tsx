@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 /**
  * FranchiseLensHub — the aged-"Green Monster" team-lens franchise hub (redesign,
@@ -28,6 +28,7 @@ export interface ActiveTeamVM {
   primary: string;
   secondary: string;
   rivalName?: string;
+  rivalId?: string;             // for the board's red rival-highlight (id-keyed, robust)
   seasonLabel?: string;
   /** branding / culture */
   archetype?: string;           // the GM's draft-setup team identity, e.g. "Power Club"
@@ -105,11 +106,60 @@ export interface PulseVM {
   payrollLabel?: string;       // e.g. "$5.4M · 22"
 }
 
+/* ===== Standings & Races (league-wide — the lens just highlights you/rival) ===== */
+export interface StandingRowVM {
+  teamId: string;
+  name: string;
+  abbr: string;
+  wins: number;
+  losses: number;
+  winPct: number;            // 0..1 (rendered .XXX, no leading zero)
+  gamesBack: number;         // 0 → division leader (renders "—")
+  lastTenWins: number;       // L10 shows {wins}-{10 − wins}
+  streak: { type: "W" | "L"; count: number };
+  runDiff: number;           // +/-, signed in chalk
+  home: { wins: number; losses: number };
+  away: { wins: number; losses: number };
+}
+export interface StandingsDivisionVM { name: string; rows: StandingRowVM[] }
+
+export interface RaceCandidateVM {
+  teamId: string;
+  teamAbbr: string;
+  name: string;
+  statLine?: string;         // e.g. ".308 · 31 HR · 92 RBI"
+  score: number;             // composite (WAR-led); drives the gap-bar width
+  marginToWinner: number;    // 0 for the frontrunner; how far back otherwise
+}
+export interface AwardRaceVM { category: string; note?: string; candidates: RaceCandidateVM[] }
+
+export interface AllStarPickVM {
+  position: string;          // 'C'..'RF' | 'SP' | 'RP' | 'WILDCARD'
+  teamId: string;
+  teamAbbr: string;
+  name: string;
+  role: "starter" | "reserve";
+}
+export interface AllStarSnubVM { teamId: string; teamAbbr: string; name: string; position: string; note?: string }
+export interface AllStarBoardVM {
+  locked: boolean;
+  lockLabel: string;         // "Rosters locked · 60% mark" or "Ballot locks at game 97 · 17 to go"
+  starters: AllStarPickVM[];
+  reserves: AllStarPickVM[];
+  snubs?: AllStarSnubVM[];
+}
+export interface StandingsRacesVM {
+  divisions: StandingsDivisionVM[];
+  races: AwardRaceVM[];
+  allStar?: AllStarBoardVM;
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
   pulse: PulseVM;
   roster: PlayerRowVM[];
+  standings?: StandingsRacesVM;
   loading?: boolean;
   emptyNote?: string;
 }
@@ -202,6 +252,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
               />
             ) : tab === "Tootwhistle Times" ? (
               <NewspaperTab hub={hub} active={active} />
+            ) : tab === "Standings & Races" ? (
+              <StandingsRacesTab hub={hub} active={active} />
             ) : (
               <div className="fen-empty">"{tab}" comes next.</div>
             )}
@@ -498,6 +550,138 @@ function MoralePopover({
         <div className="foot fen-help-b">Tap a player's name for the full clubhouse card.</div>
       </div>
     </>
+  );
+}
+
+/* ===== Standings & Races (league tab) ===== */
+function teamTone(teamId: string, active: ActiveTeamVM): "" | " you" | " rival" {
+  if (teamId === active.id) return " you";
+  if (active.rivalId && teamId === active.rivalId) return " rival";
+  return "";
+}
+function pct3(p: number): string {
+  return p >= 1 ? "1.000" : p.toFixed(3).replace(/^0/, "");
+}
+function war1(n: number): string {
+  return n.toFixed(1);
+}
+
+function StandingsRacesTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const sr = hub.standings;
+  if (!sr) return <div className="fen-empty">No league standings yet this season.</div>;
+  return (
+    <div className="fen-sr">
+      {/* STANDINGS */}
+      <div className="fen-sr-sect">
+        <div className="fen-sectlab">Standings <span className="lite fen-help">· your club in yellow, the rival in red</span></div>
+        {sr.divisions.map((d) => (
+          <div className="fen-stand" key={d.name}>
+            <div className="fen-stand-div">{d.name}</div>
+            <div className="fen-stand-grid">
+              <div className="h">Team</div><div className="h rt">W</div><div className="h rt">L</div><div className="h rt">PCT</div>
+              <div className="h rt">GB</div><div className="h rt">L10</div><div className="h rt">STRK</div><div className="h rt">RDIFF</div>
+              <div className="h rt">HOME</div><div className="h rt">AWAY</div>
+              <div className="line" />
+              {d.rows.map((r) => {
+                const tone = teamTone(r.teamId, active);
+                return (
+                  <Fragment key={r.teamId}>
+                    <div className={`fen-stand-team fen-chalk${tone}`}><span className="ab">{r.abbr}</span>{r.name}</div>
+                    <div className={`fen-rnumcell${tone}`}>{r.wins}</div>
+                    <div className="fen-rnumcell soft">{r.losses}</div>
+                    <div className={`fen-rnumcell${tone}`}>{pct3(r.winPct)}</div>
+                    <div className="fen-rnumcell soft">{r.gamesBack === 0 ? "—" : r.gamesBack.toFixed(1)}</div>
+                    <div className="fen-rnumcell">{r.lastTenWins}-{10 - r.lastTenWins}</div>
+                    <div className={`fen-rnumcell ${r.streak.type === "W" ? "stw" : "stl"}`}>{r.streak.type}{r.streak.count}</div>
+                    <div className={`fen-rnumcell ${r.runDiff >= 0 ? "pos" : "neg"}`}>{r.runDiff >= 0 ? "+" : "−"}{Math.abs(r.runDiff)}</div>
+                    <div className="fen-rnumcell soft">{r.home.wins}-{r.home.losses}</div>
+                    <div className="fen-rnumcell soft">{r.away.wins}-{r.away.losses}</div>
+                    <div className="line" />
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* RACES */}
+      <div className="fen-sr-sect">
+        <div className="fen-sectlab">The Races <span className="lite fen-help">· the bar shows the gap to the frontrunner</span></div>
+        <div className="fen-races">
+          {sr.races.map((race) => {
+            const lead = race.candidates[0];
+            return (
+              <div className="fen-race" key={race.category}>
+                <div className="fen-race-cat">{race.category}{race.note ? <span className="nt"> · {race.note}</span> : null}</div>
+                {race.candidates.map((c, i) => {
+                  const frac = lead && lead.score > 0 ? c.score / lead.score : 0;
+                  const tone = teamTone(c.teamId, active);
+                  return (
+                    <div className={`fen-race-row${i === 0 ? " lead" : ""}${tone}`} key={c.teamId + c.name}>
+                      <div className="rk">{i + 1}</div>
+                      <div className="who">
+                        <span className="nm fen-chalk">{c.name}</span>
+                        <span className="tm">{c.teamAbbr}{c.statLine ? ` · ${c.statLine}` : ""}</span>
+                      </div>
+                      <div className="bar"><span className="fill" style={{ width: `${Math.max(7, Math.round(frac * 100))}%` }} /></div>
+                      <div className="gap">{i === 0 ? "leads" : `−${war1(c.marginToWinner)}`}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ALL-STAR BOARD */}
+      {sr.allStar ? <AllStarBoard board={sr.allStar} active={active} /> : null}
+    </div>
+  );
+}
+
+function AllStarPickRow({ p, active }: { p: AllStarPickVM; active: ActiveTeamVM }) {
+  const tone = teamTone(p.teamId, active);
+  return (
+    <div className={`fen-asrow${tone}`}>
+      <span className="pos">{p.position === "WILDCARD" ? "WC" : p.position}</span>
+      <span className="nm fen-chalk">{p.name}</span>
+      <span className="tm">{p.teamAbbr}</span>
+    </div>
+  );
+}
+
+function AllStarBoard({ board, active }: { board: AllStarBoardVM; active: ActiveTeamVM }) {
+  return (
+    <div className="fen-sr-sect">
+      <div className="fen-sectlab">All-Star Board <span className="lite fen-help">· {board.lockLabel}</span></div>
+      <div className="fen-allstar">
+        <div className="fen-ascols">
+          <div className="fen-ascol">
+            <div className="fen-ascol-h">Starters <span className="ct">{board.starters.length}</span></div>
+            {board.starters.map((p) => <AllStarPickRow key={p.position + p.name} p={p} active={active} />)}
+          </div>
+          <div className="fen-ascol">
+            <div className="fen-ascol-h">Reserves <span className="ct">{board.reserves.length}</span></div>
+            {board.reserves.map((p) => <AllStarPickRow key={p.position + p.name} p={p} active={active} />)}
+          </div>
+        </div>
+        {board.snubs && board.snubs.length > 0 ? (
+          <div className="fen-snubs">
+            <div className="fen-snub-h">Snubbed <span className="fen-help">· a snub stings the clubhouse</span></div>
+            {board.snubs.map((s) => (
+              <div className={`fen-snub${teamTone(s.teamId, active)}`} key={s.name}>
+                <span className="pos">{s.position}</span>
+                <span className="nm fen-chalk">{s.name}</span>
+                <span className="tm">{s.teamAbbr}</span>
+                {s.note ? <span className="nt">{s.note}</span> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

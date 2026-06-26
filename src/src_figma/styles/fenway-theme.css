@@ -248,6 +248,73 @@
 .fen-ncard .ex { font-family: var(--fen-chalk-font); font-size: 12.5px; color: #3a352a; margin: 0; line-height: 1.45; }
 .fen-ncard .by { font-family: var(--fen-chalk-font); font-size: 10.5px; color: #5a5446; margin-top: 8px; font-style: italic; }
 
+/* ===== Standings & Races (league tab — all chalk, your club yellow, rival red) ===== */
+.fen-sr { display: flex; flex-direction: column; gap: 26px; }
+.fen-sr-sect { }
+
+/* standings table */
+.fen-stand { margin-bottom: 18px; }
+.fen-stand-div { font-family: var(--fen-chalk-font); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-ash); margin: 4px 0 8px; }
+.fen-stand-grid { display: grid; grid-template-columns: minmax(150px, 1.4fr) 40px 40px 58px 48px 56px 52px 62px 64px 64px; gap: 3px 10px; align-items: center; }
+.fen-stand-grid .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 5px; }
+.fen-stand-grid .h.rt { text-align: right; }
+.fen-stand-grid .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.22); }
+.fen-stand-team { font-family: var(--fen-chalk-font); font-size: 18px; display: inline-flex; align-items: baseline; gap: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-stand-team .ab { font-size: 11px; color: var(--fen-chalk-soft); letter-spacing: 0.04em; }
+.fen-stand-team.you { color: var(--fen-yellow); }
+.fen-stand-team.you .ab { color: var(--fen-yellow); opacity: 0.7; }
+.fen-stand-team.rival { color: var(--fen-marquee); }
+.fen-stand-team.rival .ab { color: var(--fen-marquee); opacity: 0.7; }
+/* you/rival tint the W & PCT cells too; +/- run diff and W/L streak keep conventional coloring */
+.fen-stand-grid .fen-rnumcell.you { color: var(--fen-yellow); }
+.fen-stand-grid .fen-rnumcell.rival { color: var(--fen-marquee); }
+.fen-rnumcell.stw { color: var(--fen-chalk); }
+.fen-rnumcell.stl { color: var(--fen-marquee); }
+.fen-rnumcell.pos { color: var(--fen-chalk); }
+.fen-rnumcell.neg { color: var(--fen-marquee); }
+.fen-stand-grid .fen-rnumcell { font-size: 17px; }
+
+/* races — gap bars */
+.fen-races { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 24px; }
+.fen-race { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 5px; padding: 12px 14px; }
+.fen-race-cat { font-family: var(--fen-chalk-font); font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 10px; }
+.fen-race-cat .nt { color: var(--fen-chalk-soft); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.fen-race-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 88px 46px; align-items: center; gap: 9px; padding: 5px 0; }
+.fen-race-row .rk { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; }
+.fen-race-row .who { min-width: 0; }
+.fen-race-row .who .nm { font-family: var(--fen-chalk-font); font-size: 16px; display: block; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-race-row .who .tm { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-race-row .bar { height: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-race-row .bar .fill { display: block; height: 100%; background: var(--fen-chalk-soft); border-radius: 3px; }
+.fen-race-row .gap { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: right; }
+.fen-race-row.lead .gap { color: var(--fen-chalk); }
+.fen-race-row.you .who .nm { color: var(--fen-yellow); }
+.fen-race-row.you .bar .fill { background: var(--fen-yellow); }
+.fen-race-row.you .gap { color: var(--fen-yellow); }
+.fen-race-row.rival .who .nm { color: var(--fen-marquee); }
+.fen-race-row.rival .bar .fill { background: var(--fen-marquee); }
+
+/* all-star board */
+.fen-ascols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+@media (max-width: 760px) { .fen-ascols { grid-template-columns: 1fr; } }
+.fen-ascol-h { font-family: var(--fen-chalk-font); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 7px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.28); padding-bottom: 6px; }
+.fen-ascol-h .ct { font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-asrow { display: grid; grid-template-columns: 42px 1fr auto; align-items: baseline; gap: 10px; padding: 4px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); }
+.fen-asrow .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); background: rgba(0, 0, 0, 0.2); border-radius: 4px; padding: 2px 0; text-align: center; }
+.fen-asrow .nm { font-family: var(--fen-chalk-font); font-size: 16px; }
+.fen-asrow .tm { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-asrow.you .nm { color: var(--fen-yellow); }
+.fen-asrow.rival .nm { color: var(--fen-marquee); }
+.fen-snubs { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.28); }
+.fen-snub-h { font-family: var(--fen-chalk-font); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-bottom: 8px; }
+.fen-snub { display: flex; align-items: baseline; gap: 10px; padding: 4px 0; }
+.fen-snub .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); min-width: 30px; }
+.fen-snub .nm { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-snub .tm { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-snub .nt { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); font-style: italic; margin-left: auto; }
+.fen-snub.you .nm { color: var(--fen-yellow); }
+.fen-snub.rival .nm { color: var(--fen-marquee); }
+
 @media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
 
 /* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.
