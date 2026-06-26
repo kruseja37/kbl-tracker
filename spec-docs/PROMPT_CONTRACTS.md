@@ -23656,3 +23656,70 @@ Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest su
 - STOP-IF adding the field breaks `franchiseSaveSlotManifest.test.ts` or any other consumer of `UpsertFranchiseStadiumRecordsResult`.
 - A correct BLOCK is GOOD. Do NOT add the flag, the tap, or new record types.
 <!-- ===== END CONTRACT: A1.5d-1a ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1b ===== -->
+# CONTRACT A1.5d-1b — stadium-records per-game DETECT tap + the flag (build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+Second slice of A1.5d hop-1. Build ONLY: (a) the new `isFranchisePhase2StadiumRecordsEnabled` flag, and (b) a build-dark per-game DETECT tap that builds the stadium foundation report and upserts records (capturing the `changes[]` hop-1a added, but NOT consuming them). Do NOT build hops 2-6 (fame swap / fan morale / reporter / Almanac / rivalry — those CONSUME `changes[]` later), do NOT add new record types, do NOT load at-bat/fielding events (the spray-event + fame-bearing records come in hop-1c), do NOT touch any UI.
+
+## GOAL
+Wire the existing stadium-records machinery into the live completed-game pipeline, behind a new default-OFF flag. Per game (when the flag is ON), build the franchise-season stadium foundation report from the season's completed games + the franchise stadium snapshots, then upsert the records. `changes[]` (from hop-1a) is surfaced in the result but not yet acted on. With the flag OFF (default), the tap is a zero-cost no-op (no loads). Build-dark.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **Flag pattern to clone:** `src/utils/franchisePhase2Flags.ts` — the L13/L14 block (`:97-114`): `export const FRANCHISE_PHASE2_<X>_ENABLED_DEFAULT = false;` + `let …Override: boolean | null = null;` + `export function isFranchisePhase2<X>Enabled(): boolean { return …Override ?? …DEFAULT; }` + `export function setFranchisePhase2<X>EnabledForTests(enabled: boolean | null): void { …Override = enabled; }`. Add `StadiumRecords` (`isFranchisePhase2StadiumRecordsEnabled`, default false). (L14 is taken — do NOT reuse it.)
+- **The loaders (proven by the de-orphan caller `franchiseSeasonSummaryStorage.ts:656-657,699-700`):** `completedGames = await getRecentGames(1000, { franchiseId, seasonId })` (from `./gameStorage`, `:1059`, returns `CompletedGameRecord[]`); `stadiumSnapshots = (await getFranchiseConfig(franchiseId))?.stadiums ?? []` (`getFranchiseConfig` from `./franchiseManager`, `:341`, returns `StoredFranchiseConfig | null` with `.stadiums: FranchiseTeamStadiumSnapshot[]`). Neither is imported in `processCompletedGame.ts` yet.
+- **The report builder + upsert:** `buildFranchiseStadiumFoundationReport({ franchiseId, seasonId, statsScopeId, seasonNumber, stadiumSnapshots, completedGames })` (`franchiseStadiumFoundation.ts:548`, PURE/sync) → `upsertFranchiseStadiumRecordsFromFoundationReport(report, { completedGames })` (`franchiseStadiumRecordsStorage.ts:527`, now returns `{ records, changes, … }` after hop-1a).
+- **The dark-tap chain** lives inside the `if (trueValueScope)` block of `processCompletedGame` (where `persistDarkFlashpointDecayForCompletedGame` / `persistDarkL10ForCompletedGame` / the L12 `persistFranchiseAllStarRosterForCompletedGame` etc. are each called in their own `if (flag) { try { … } catch {} }`). Place the new stadium tap in that chain (e.g. right after the L12 block), gated by `isFranchisePhase2StadiumRecordsEnabled()`, in a `try/catch` matching the siblings. `trueValueScope` carries `franchiseId`/`seasonId`/`statsScopeId`/`seasonNumber`.
+- **The persister/seam pattern to mirror:** `franchiseL10SweepCompute.ts` exposes an `l10SweepSeam = { … }` indirection so the per-game compute + tests call loaders/builders through one mockable object, and returns a `{ status: 'dark-noop' | 'written'; written: number; reason?: string }` result. Mirror that shape.
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchisePhase2Flags.ts`**: add the `StadiumRecords` flag block (clone L13/L14; default false).
+2. **`src/utils/franchiseStadiumRecordsTap.ts`** (NEW — keep the tap OUT of `processCompletedGame.ts` so it is unit-testable in isolation, mirroring `franchiseL10SweepCompute.ts`):
+   - `export const stadiumRecordsTapSeam = { getRecentGames, getFranchiseConfig, buildFranchiseStadiumFoundationReport, upsertFranchiseStadiumRecordsFromFoundationReport };` (import the four from their modules).
+   - `export type PersistDarkStadiumRecordsResult = { status: 'dark-noop' | 'written'; written: number; changes: number; reason?: string };`
+   - `export async function persistDarkStadiumRecordsForCompletedGame(gameState: PersistedGameState, scope: PersistedTrueValueScope, archiveOptions?: CompletedGameArchiveOptions): Promise<PersistDarkStadiumRecordsResult>`:
+     - if `!isFranchisePhase2StadiumRecordsEnabled()` → return `{ status:'dark-noop', written:0, changes:0, reason:'Phase-2 stadium-records disabled.' }`.
+     - `const completedGames = await stadiumRecordsTapSeam.getRecentGames(1000, { franchiseId: scope.franchiseId, seasonId: scope.seasonId });`
+     - `const config = await stadiumRecordsTapSeam.getFranchiseConfig(scope.franchiseId); const stadiumSnapshots = config?.stadiums ?? [];`
+     - `const report = stadiumRecordsTapSeam.buildFranchiseStadiumFoundationReport({ franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, seasonNumber: scope.seasonNumber, stadiumSnapshots, completedGames });`
+     - `const result = await stadiumRecordsTapSeam.upsertFranchiseStadiumRecordsFromFoundationReport(report, { completedGames });`
+     - return `{ status: result.persisted ? 'written' : 'dark-noop', written: result.records.length, changes: result.changes.length, reason: result.persisted ? undefined : (result.blockers[0] ?? 'No stadium records to persist.') }`.
+     - Determinism: no `Date.now()`/`Math.random()`/wall-clock added (the upsert's existing `timestamp` default is its own concern; do NOT pass a wall-clock timestamp from here). Reuse the exact `CompletedGameArchiveOptions`/`PersistedTrueValueScope`/`PersistedGameState` types the sibling persisters import.
+3. **`src/utils/processCompletedGame.ts`**: import `persistDarkStadiumRecordsForCompletedGame` + `isFranchisePhase2StadiumRecordsEnabled`; in the dark-tap chain (inside `if (trueValueScope)`, e.g. right after the L12 All-Star block), add:
+   ```
+   if (isFranchisePhase2StadiumRecordsEnabled()) {
+     try {
+       await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+     } catch (e) {
+       console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+     }
+   }
+   ```
+4. **`src/utils/tests/franchiseStadiumRecordsTap.test.ts`** (NEW): 
+   - flag OFF (default) → `persistDarkStadiumRecordsForCompletedGame` returns `dark-noop` and calls NONE of the seam loaders (spy `stadiumRecordsTapSeam.getRecentGames` → not called).
+   - flag ON (via `setFranchisePhase2StadiumRecordsEnabledForTests(true)`, reset in afterEach) with the seam mocked: `getRecentGames` → `[oneCompletedGame]`, `getFranchiseConfig` → `{ stadiums: [...] }`, spy `buildFranchiseStadiumFoundationReport` → a stub report, spy `upsertFranchiseStadiumRecordsFromFoundationReport` → `{ records:[r], changes:[c], persisted:true, blockers:[], … }` → assert the result is `{ status:'written', written:1, changes:1 }` and that the upsert was called with the built report.
+   - flag ON but `upsert` returns `persisted:false` (no records) → result `status:'dark-noop'`, `written:0`, `changes:0`.
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/franchisePhase2Flags.ts`, `src/utils/franchiseStadiumRecordsTap.ts` (NEW), `src/utils/processCompletedGame.ts`, `src/utils/tests/franchiseStadiumRecordsTap.test.ts` (NEW). Do NOT touch `franchiseStadiumRecordsStorage.ts`/`franchiseStadiumFoundation.ts` (use their existing exports), any UI, any oracle, any other flag.
+- Build-dark: flag default false → the tap early-returns before any load. No DB change (the stadium db/store + the `changes[]` field already exist).
+- No new record types, no at-bat/fielding event loads, no consumption of `changes[]` (later hops).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsTap.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (this wires into `processCompletedGame` → transitive-mock-break risk).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: flag default false, tap is a no-op when off, only the listed files touched, no new record types / no event loads / changes[] not consumed.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `getRecentGames`/`getFranchiseConfig` signatures differ from the anchors (re-read `gameStorage.ts:1059` / `franchiseManager.ts:341`).
+- STOP-IF `PersistedTrueValueScope` does not expose `franchiseId`/`seasonId`/`statsScopeId`/`seasonNumber` (re-read how the sibling dark taps read the scope).
+- STOP-IF wiring the import/tap forces a change to a forbidden file.
+- A correct BLOCK is GOOD. Do NOT consume `changes[]`, do NOT add fame/morale/reporter, do NOT flip the flag's default.
+<!-- ===== END CONTRACT: A1.5d-1b ===== -->
