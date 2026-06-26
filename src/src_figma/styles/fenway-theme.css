@@ -626,7 +626,10 @@
 
 /* ties */
 .fen-ties { display: flex; flex-direction: column; gap: 7px; }
-.fen-tie { display: grid; grid-template-columns: 24px 1fr 70px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-tie { display: grid; grid-template-columns: 24px 1fr 48px 46px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-tie .mi { font-family: var(--fen-chalk-font); font-size: 12px; text-align: right; white-space: nowrap; }
+.fen-tie .mi.up { color: var(--fen-yellow); }
+.fen-tie .mi.dn { color: var(--fen-marquee); }
 .fen-tie:last-child { border-bottom: none; }
 .fen-tie.pot { opacity: 0.7; }
 .fen-tie .ic { font-size: 16px; text-align: center; }

@@ -102,11 +102,17 @@ types (call-up/trade/milestone/streak/injury/award/firing/feud), each with a col
 | **Reporter dossier (the desk)** ✅ BUILT | the beat writer's tier + accuracy + corrections | 🟢 | Y | `narrativeEngine.ts:35,376` |
 | **Per-story confidence/retraction** | "speculating" badge; a retraction when he's wrong | 🟢 | partial (corrections count shown) | `narrativeEngine.ts:151,665` |
 
-## Bucket 7 — The clubhouse soul, made visible  *(mostly 🟡 — build the homes)*
+## Bucket 7 — The clubhouse soul, made visible  *(mostly 🟡 — build the homes)* ✅ MOSTLY BUILT
+**BUILT 2026-06-26** (mock-fed): the drawer's **Ties** now show each relationship's **per-week morale
+impact** (+2/wk friendship, −4/wk a manager feud, you-yellow/rival-red), and the **designation effect**
+is now an always-visible concrete line with numbers ("★ Ace — +25% leverage weight; clutch counts
+double"). Already-surfaced: morale value + state + source breakdown + reasons-log, fame, designation
+badges. Remaining sliver: captain charisma routing, the team mood-ripples line, the fan dampener.
+
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **Designation effects (real numbers)** | "Fan Favorite +0.5 fan morale/game · +25% positive swings"; Albatross tilt | 🟡 | partial (badge only) | `designationFanMorale.ts:45` |
-| **Relationship morale deltas** | who lifts/drags whom and by how much; reporter-intel confidence/"rumored" | 🟡 | partial (ties shown, no deltas) | `relationshipEngine.ts:81`, edges `:33` |
+| **Designation effects (real numbers)** ✅ BUILT | "★ Ace +25% leverage · clutch ×2", Albatross tilt — concrete effect line | 🟡 | Y | `designationFanMorale.ts:45` |
+| **Relationship morale deltas** ✅ BUILT | who lifts/drags whom & by how much per week; "rumored" potential edges | 🟡 | Y | `relationshipEngine.ts:81`, edges `:33` |
 | **Captain charisma routing** | the Captain badge + "charisma ×2 to teammates · swings ×1.5" | 🟡 | N | `captainMoraleRouter.ts:37` |
 | **Other-touched ripples** | "his walk-off lifted 3 teammates +1" | 🟡 | N | `masterMoraleMatrix.ts:47` |
 | **Fan↔player coupling + dampener** | team euphoria nudging player morale; high morale dampening bad news | 🟡 | N | `masterMoraleMatrix.ts:194`, `fanMoraleDampener.ts:33` |

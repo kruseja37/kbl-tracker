@@ -461,7 +461,7 @@ const STADIUM_RR: StadiumVM = {
 const DETAIL_FENOMENO: PlayerDetailVM = {
   age: 23, bats: "R", throws: "R", grade: "A−",
   bio: "The kid the Capitals stole in the draft — pitching his way up the grades in real time.",
-  designationEffect: "Ace: anchors the rotation — his starts carry extra leverage weight.",
+  designationEffect: "★ Ace — his starts carry +25% leverage weight; the clutch counts double for him.",
   nickname: "The Kid",
   careerPhase: "Development",
   mojo: { label: "Jacked", tone: "up" },
@@ -538,9 +538,9 @@ const DETAIL_FENOMENO: PlayerDetailVM = {
     { valence: "gain", trait: "Workhorse", atGame: 22 },
   ],
   ties: [
-    { partner: "Milo Reyes", type: "MENTORSHIP", intensity: 0.7, sinceGame: 12 },
-    { partner: "Cole Vesper", type: "RIVALRY", intensity: 0.55, sinceGame: 30 },
-    { partner: "Dash Okoye", type: "FRIENDSHIP", intensity: 0.6, sinceGame: 5 },
+    { partner: "Milo Reyes", type: "MENTORSHIP", intensity: 0.7, sinceGame: 12, moraleImpact: 2 },
+    { partner: "Cole Vesper", type: "RIVALRY", intensity: 0.55, sinceGame: 30, moraleImpact: 1 },
+    { partner: "Dash Okoye", type: "FRIENDSHIP", intensity: 0.6, sinceGame: 5, moraleImpact: 2 },
   ],
   fame: {
     heat: 78, immortality: 3, immortalityLabel: "Rising star",
@@ -636,9 +636,9 @@ const DETAIL_STAD: PlayerDetailVM = {
     { valence: "gain", trait: "Mr. Wrong", displaces: "Utility", atGame: 41 },
   ],
   ties: [
-    { partner: "B. Cole (Mgr)", type: "FEUD", intensity: 0.8, sinceGame: 44 },
-    { partner: "Cy Vane", type: "FRIENDSHIP", intensity: 0.5, sinceGame: 8 },
-    { partner: "Front office", type: "HISTORY", intensity: 0.4, sinceGame: 49, potential: true },
+    { partner: "B. Cole (Mgr)", type: "FEUD", intensity: 0.8, sinceGame: 44, moraleImpact: -4 },
+    { partner: "Cy Vane", type: "FRIENDSHIP", intensity: 0.5, sinceGame: 8, moraleImpact: 1 },
+    { partner: "Front office", type: "HISTORY", intensity: 0.4, sinceGame: 49, potential: true, moraleImpact: -1 },
   ],
   fame: {
     heat: 22, immortality: 1, immortalityLabel: "Local",

@@ -103,7 +103,7 @@ export interface RatingBarVM { label: string; base: number; current: number }   
 export interface ValuePointVM { checkpoint: string; value: number }              // True Value sparkline
 export interface TraitTimelineVM { valence: "gain" | "lose"; trait: string; displaces?: string; atGame: number }
 export type TieType = "RIVALRY" | "FEUD" | "MENTORSHIP" | "FRIENDSHIP" | "ROMANCE" | "HISTORY";
-export interface TieVM { partner: string; type: TieType; intensity: number; sinceGame?: number; potential?: boolean }
+export interface TieVM { partner: string; type: TieType; intensity: number; sinceGame?: number; potential?: boolean; moraleImpact?: number }
 export interface FameVM {
   heat: number;
   immortality: number;          // reachFloor 0–5
@@ -1272,6 +1272,7 @@ function TiesList({ ties }: { ties: TieVM[] }) {
             <span className="ty">{TIE_LABEL[t.type]}{t.sinceGame ? ` · since g${t.sinceGame}` : ""}{t.potential ? " · rumored" : ""}</span>
           </div>
           <div className="int"><span className="fill" style={{ width: `${Math.round(t.intensity * 100)}%` }} /></div>
+          {t.moraleImpact !== undefined ? <span className={`mi ${t.moraleImpact >= 0 ? "up" : "dn"}`}>{t.moraleImpact >= 0 ? "+" : ""}{t.moraleImpact}/wk</span> : <span className="mi" />}
         </div>
       ))}
     </div>
@@ -1339,7 +1340,7 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
             {d?.retirementNote ? <span className="chip warn">{d.retirementNote}</span> : null}
           </div>
         ) : null}
-        {d?.designationEffect ? <div className="fen-deffect fen-help-b">{d.designationEffect}</div> : null}
+        {d?.designationEffect ? <div className="fen-deffect">{d.designationEffect}</div> : null}
         {d?.bio ? <div className="fen-dbio">{d.bio}</div> : null}
 
         <div className="fen-decon">
