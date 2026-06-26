@@ -23453,3 +23453,52 @@ Report: (1) each file changed + a one-line what/why; (2) the build result; (3) t
 - STOP-IF you cannot make the L10 demander write idempotent without overwriting `confirmedAtGameNumber`.
 - A correct BLOCK is GOOD. Do NOT widen scope, do NOT touch extra files, do NOT flip a flag to "make it work."
 <!-- ===== END CONTRACT: A1.3b ===== -->
+
+<!-- ===== CONTRACT: A1.4-CTR ===== -->
+# CONTRACT A1.4 / L12-6 (DATA-LAYER ONLY) — `allStarSelections` career-counter write-path
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push (the Captain commits).
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (read first)
+L12-6 is "Almanac/UI surfacing + the `allStarSelections` career counter." Per JK's standing ruling, this ticket builds ONLY the **DATA LAYER** (the career-counter write-path, build-dark). The **UI-surfacing half is OUT OF SCOPE** and stays browser-pending for JK — do NOT touch `AwardsWatchlist.tsx`, `FranchiseHome.tsx`, any standings/All-Star UI, or `AWARD_ORDER`. Those are flagged for a JK browser pass.
+
+## GOAL
+The `allStarSelections` career counter exists on `PlayerCareerBatting` (`careerStorage.ts:72`) and `PlayerCareerPitching` (`careerStorage.ts:130`) but has **NO live writer** (greenfield — only reads/inits). When the dark All-Star roster LOCKS (once per season, at the 60% break), each selected player's career `allStarSelections` must increment by exactly 1. Build-dark behind the existing L12 flag (the lock only happens when `isFranchisePhase2L12Enabled()` is ON — default OFF).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- `src/utils/franchiseAllStarLockPayouts.ts:69-110` — `runFranchiseAllStarLockPayouts({selections, candidates, scope, timestamp})` returns `{ emit, reachFloor, snub }`. It already runs 3 try/catch sub-steps (reachFloor / snub / emit) each via `franchiseAllStarLockPayoutSeam` (`:14-18`). This is the L12-5 honor-ratchet orchestrator — the hook point.
+- `src/utils/franchiseAllStarRosterCompute.ts` — calls `runFranchiseAllStarLockPayouts` ONLY inside the `if (shouldLock)` block, and early-returns `{status:'locked-noop'}` when `existing?.locked` (the lock-once guard). ⇒ the payouts (and thus the counter increment) fire **exactly once per season**. The whole compute is gated by `isFranchisePhase2L12Enabled()`. **Do NOT add any new idempotency guard — the parent lock-once already guarantees once-per-(player,season).**
+- `FranchiseAllStarSelection` (`src/utils/franchiseAllStarRostersStorage.ts:17-22`) = `{ playerId, teamId, position, role, selectionScore? }`. `position` is `'C'..'RF' | 'SP' | 'RP' | 'WILDCARD'`. **Pitcher iff `position === 'SP' || position === 'RP'`; everything else (field positions + WILDCARD) is a hitter.** Both starters AND reserves count as selections (increment ALL of `params.selections`).
+- `src/utils/careerStorage.ts` — `getOrCreateCareerBatting(playerId, playerName, teamId)` (`:313`) → mutate `.allStarSelections` → `updateCareerBatting(stats)` (`:346`); `getOrCreateCareerPitching(playerId, playerName, teamId)` (`:386`) → `updateCareerPitching(stats)` (`:419`). Stores `playerCareerBatting`/`playerCareerPitching` live in trackerDb (`initCareerDatabase` delegates to `getTrackerDb()`, `:30`). The field is already initialized to `0` (`:225`, `:272`). **No DB bump, no schema change — the field + stores already exist.**
+- Read side (for context — do NOT touch): `allStarSelections` is consumed param-threaded by `isHofCaliber(totalWAR, allStarSelections, mvpCyYoungCount)` (`teamMVP.ts:471`); the only `playerCareerStats` map builder is the INACTIVE `src/components/GameTracker/OffseasonFlow.tsx:266` (passes `new Map()`), so there is NO live store-coupled read yet — the counter is a forward-looking deposit. Type-routing (pitcher→pitching record, else→batting record) matches the field living on both interfaces.
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseAllStarLockPayouts.ts`**: add a 4th sub-step to `runFranchiseAllStarLockPayouts`, mirroring the existing reachFloor/snub/emit try/catch shape:
+   - Add the change to the return type: `{ emit, reachFloor, snub, careerSelections }` (a status string).
+   - Add a new seam member `incrementCareerSelections` to `franchiseAllStarLockPayoutSeam` (so the test can spy/mock it), pointing at a new exported helper (below).
+   - Call it in a try/catch: `const result = await franchiseAllStarLockPayoutSeam.incrementCareerSelections(params.selections); careerSelections = result.status;` (default `'error'` on throw).
+   - Write the helper `applyFranchiseAllStarCareerSelections(selections: ReadonlyArray<FranchiseAllStarSelection>): Promise<{ status: string; written: number }>` (in this file or a small new `src/utils/franchiseAllStarCareerSelections.ts` — your call, but if a new file, KEEP IT MINIMAL and import-clean). It iterates `selections`; for each: `isPitcher = selection.position === 'SP' || selection.position === 'RP'`; if pitcher → `const c = await getOrCreateCareerPitching(playerId, playerId /* name fallback: the career record already exists by the 60% lock since the player has season stats; name only matters on create */, teamId); await updateCareerPitching({ ...c, allStarSelections: c.allStarSelections + 1 });` else the batting equivalent. Count `written`. Return `{ status: written > 0 ? 'written' : 'noop', written }`.
+   - DEFAULTS-TAKEN (document in a code comment): (a) type-routing by selected `position` (SP/RP→pitching, else→batting); (b) `playerId` as the getOrCreate `playerName` fallback (record-exists invariant at the 60% lock); (c) reuse the existing `updateCareer*` path (it stamps `lastUpdated` via `Date.now()` — that is the established career-write behavior and is build-dark inert at the default-OFF L12 flag, so the L-SIM default-flag baseline is unaffected).
+2. **`src/utils/tests/franchiseAllStarLockPayouts.test.ts`**: extend it. With a seeded selections list (a starter hitter at e.g. 'C', a reserve hitter at 'WILDCARD', an 'SP' starter, an 'RP' reserve), after `runFranchiseAllStarLockPayouts`: each hitter's career BATTING `allStarSelections` is +1, each pitcher's career PITCHING `allStarSelections` is +1, and the cross-store is untouched (a hitter's pitching record is NOT incremented). Confirm `careerSelections === 'written'`. If practical, add a once-per-season proof: a second `runFranchiseAllStarLockPayouts` would double — but since the PARENT enforces lock-once, instead assert (or comment) that the increment is driven only by the lock-once parent (do not weaken any existing assertion). Pre-seed the career records so getOrCreate returns existing (so the name fallback never materializes).
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/franchiseAllStarLockPayouts.ts`, the test file above, and (optionally) ONE new `src/utils/franchiseAllStarCareerSelections.ts`. Do NOT touch `careerStorage.ts` (use its existing exports), `franchiseAllStarRosterCompute.ts` (the parent already calls the payouts — no change needed; the return-shape widening is internal to the payouts function and its consumer only reads it loosely — VERIFY the caller does not destructure a fixed shape that breaks; if it does, STOP-IF), any UI file, any flag file, or any oracle.
+- Do NOT flip any Phase-2 flag. Build-dark: the increment only fires inside the L12-gated, lock-once parent.
+- Do NOT add a DB bump or schema change (field + stores already exist).
+- No new idempotency guard (parent lock-once suffices).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarLockPayouts.test.ts src/utils/tests/franchiseAllStarRosterCompute.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself (this wires into the processCompletedGame L12 path → transitive-mock-break risk).
+
+## FORMAT
+Report: (1) files changed + one-line what/why; (2) build result; (3) focused vitest summary (passed/failed + any failed file names); (4) confirmation no UI/flag/oracle/DB file was touched and `runFranchiseAllStarLockPayouts`'s caller still compiles.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF widening the `runFranchiseAllStarLockPayouts` return shape breaks its caller in `franchiseAllStarRosterCompute.ts` (if the caller destructures `{emit,reachFloor,snub}` exactly and a 4th key breaks it — report; adding a key to an object return is normally safe, but VERIFY).
+- STOP-IF the career record API does not match (`getOrCreateCareerBatting`/`updateCareerBatting` signatures differ from the anchors — re-read).
+- STOP-IF you cannot route pitcher-vs-hitter from `selection.position` alone (it should be sufficient: SP/RP = pitcher).
+- A correct BLOCK is GOOD. Do NOT widen scope, do NOT touch the UI, do NOT flip a flag.
+<!-- ===== END CONTRACT: A1.4-CTR ===== -->
