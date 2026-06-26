@@ -2,10 +2,10 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { ArrowLeft, Star, Award, Trophy, ChevronDown, CheckCircle, X, TrendingUp, TrendingDown } from "lucide-react";
 import { useOffseasonData, type OffseasonPlayer, type OffseasonTeam } from "../../hooks/useOffseasonData";
 import { useOffseasonState, type AwardWinner } from "../../hooks/useOffseasonState";
-import { getAllManagerSeasonStatsForSeason } from '../../../utils/managerStorage';
-import { calculateMOYVotes, formatMWAR, getMWARRating } from '../../../engines/mwarCalculator';
+import { getFranchiseAwardRow, type FranchiseAwardRow } from "../../../utils/franchiseAwardsStorage";
+import { listManagerProfiles } from "../../../utils/managerIdentityStorage";
 import { formatSalary } from '../../../engines/salaryCalculator';
-import type { ManagerSeasonStats } from '../../../engines/mwarCalculator';
+import type { ManagerProfile } from "../../../types/managerWpa";
 
 // Types
 export type Position = "C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF" | "P" | "DH";
@@ -129,6 +129,45 @@ function abbrevName(name: string): string {
   return `${parts[0][0]}. ${parts.slice(1).join(' ')}`;
 }
 
+function formatManagerAwardNumber(value: number | null | undefined, digits = 1): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
+}
+
+function formatManagerAwardMargin(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  if (value === 0) return "Leader";
+  const formatted = Math.abs(value) >= 1 ? value.toFixed(1) : value.toFixed(3);
+  return value > 0 ? `+${formatted}` : formatted;
+}
+
+function formatManagerAwardSignedWins(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "--";
+  const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1);
+  return value > 0 ? `+${formatted}` : formatted;
+}
+
+type ManagerProfileWithStoredTeam = ManagerProfile & {
+  teamId?: string | null;
+  teamName?: string | null;
+  currentTeamId?: string | null;
+  currentTeamName?: string | null;
+};
+
+function storedManagerTeamLabel(profile: ManagerProfile | undefined): string | null {
+  if (!profile) return null;
+  const stored = profile as ManagerProfileWithStoredTeam;
+  const directLabel =
+    stored.currentTeamName ??
+    stored.teamName ??
+    stored.currentTeamId ??
+    stored.teamId;
+  if (typeof directLabel === "string" && directLabel.trim()) {
+    return directLabel.trim();
+  }
+  return null;
+}
+
 // Convert OffseasonPlayer to local Player type
 export function convertToAwardPlayer(p: OffseasonPlayer, teamShortName: string): Player {
   const isPitcher = ["SP", "RP", "CP"].includes(p.position);
@@ -163,7 +202,9 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
   const [currentSpecialAward, setCurrentSpecialAward] = useState(0);
   const [awards, setAwards] = useState<Award[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [managerSeasonStats, setManagerSeasonStats] = useState<ManagerSeasonStats[]>([]);
+  const [managerAwardRow, setManagerAwardRow] = useState<FranchiseAwardRow | null>(null);
+  const [managerProfiles, setManagerProfiles] = useState<ManagerProfile[]>([]);
+  const [isManagerAwardLoading, setIsManagerAwardLoading] = useState(false);
 
   // Wire to real data
   const {
@@ -173,12 +214,50 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
     hasRealData,
   } = useOffseasonData();
 
-  // Load manager season stats for MOY calculation
+  // Load the finalized live Manager of the Year row from the franchise awards store.
   useEffect(() => {
-    getAllManagerSeasonStatsForSeason(seasonId)
-      .then(stats => setManagerSeasonStats(stats))
-      .catch(err => console.warn('[AwardsCeremony] Failed to load manager stats:', err));
-  }, [seasonId]);
+    let cancelled = false;
+
+    async function loadManagerAward() {
+      if (!franchiseId || !seasonId) {
+        setManagerAwardRow(null);
+        setManagerProfiles([]);
+        setIsManagerAwardLoading(false);
+        return;
+      }
+
+      setIsManagerAwardLoading(true);
+      try {
+        const [awardRow, profiles] = await Promise.all([
+          getFranchiseAwardRow({
+            franchiseId,
+            seasonId,
+            statsScopeId: seasonId,
+            category: "MANAGER_OF_YEAR",
+          }),
+          listManagerProfiles().catch(() => []),
+        ]);
+        if (cancelled) return;
+        setManagerAwardRow(awardRow);
+        setManagerProfiles(profiles);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn("[AwardsCeremony] Failed to load Manager of the Year award:", err);
+        setManagerAwardRow(null);
+        setManagerProfiles([]);
+      } finally {
+        if (!cancelled) {
+          setIsManagerAwardLoading(false);
+        }
+      }
+    }
+
+    loadManagerAward();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [franchiseId, seasonId]);
 
   // Wire to offseason state for persistence
   const offseasonState = useOffseasonState(seasonId, seasonNumber, { franchiseId });
@@ -398,7 +477,13 @@ export function AwardsCeremonyFlow({ onClose, seasonId = 'season-1', seasonNumbe
           {screen === "CY_YOUNG" && <CyYoungScreen league={currentLeague} onContinue={handleContinue} allPlayers={allPlayers} />}
           {screen === "MVP" && <MVPScreen league={currentLeague} onContinue={handleContinue} allPlayers={allPlayers} />}
           {screen === "MANAGER_YEAR" && (
-            <ManagerYearScreen league={currentLeague} onContinue={handleContinue} managerSeasonStats={managerSeasonStats} />
+            <ManagerYearScreen
+              league={currentLeague}
+              onContinue={handleContinue}
+              managerAwardRow={managerAwardRow}
+              managerProfiles={managerProfiles}
+              isLoading={isManagerAwardLoading}
+            />
           )}
           {screen === "SPECIAL_AWARDS" && (
             <SpecialAwardsScreen
@@ -1607,52 +1692,64 @@ function MVPScreen({ league, onContinue, allPlayers = [] }: { league: League; on
 }
 
 // Screen 11: Manager of the Year
-function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { league: League; onContinue: () => void; managerSeasonStats?: ManagerSeasonStats[] }) {
-  // Try to find MOY winner from real data
-  const moyWinner = useMemo(() => {
-    if (managerSeasonStats.length === 0) return null;
+export function ManagerYearScreen({
+  league,
+  onContinue,
+  managerAwardRow,
+  managerProfiles = [],
+  isLoading = false,
+}: {
+  league: League;
+  onContinue: () => void;
+  managerAwardRow?: FranchiseAwardRow | null;
+  managerProfiles?: ManagerProfile[];
+  isLoading?: boolean;
+}) {
+  const managerProfileById = useMemo(
+    () => new Map(managerProfiles.map((profile) => [profile.managerId, profile])),
+    [managerProfiles],
+  );
 
-    // Calculate MOY votes for each manager
-    const managersWithVotes = managerSeasonStats
-      .filter(m => m.gamesPlayed > 0)
-      .map(m => ({
-        stats: m,
-        votes: calculateMOYVotes(
-          { mWAR: m.mWAR, overperformanceWins: m.overperformanceWins },
-          managerSeasonStats.map(ms => ({ mWAR: ms.mWAR, overperformanceWins: ms.overperformanceWins }))
-        ),
-      }))
-      .sort((a, b) => b.votes - a.votes);
+  const winner = useMemo(() => {
+    if (
+      !managerAwardRow ||
+      managerAwardRow.category !== "MANAGER_OF_YEAR" ||
+      managerAwardRow.finalized !== true ||
+      !managerAwardRow.winnerPlayerId
+    ) {
+      return null;
+    }
 
-    return managersWithVotes[0] || null;
-  }, [managerSeasonStats]);
+    const managerId = managerAwardRow.winnerPlayerId;
+    const profile = managerProfileById.get(managerId);
+    const actualWins = managerAwardRow.managerActualWins ?? null;
+    const expectedWins = managerAwardRow.managerExpectedWins ?? null;
+    const winsAboveExpected =
+      typeof actualWins === "number" &&
+      Number.isFinite(actualWins) &&
+      typeof expectedWins === "number" &&
+      Number.isFinite(expectedWins)
+        ? actualWins - expectedWins
+        : null;
 
-  // Use real data if available, else fallback to hardcoded
-  const winner = moyWinner ? (() => {
-    const m = moyWinner.stats;
-    const wins = m.teamRecord.wins;
-    const losses = m.teamRecord.losses;
-    const totalGames = wins + losses;
-    const winPct = totalGames > 0 ? (wins / totalGames).toFixed(3) : '.000';
-    const expectedWins = Math.round(m.expectedWinPct * totalGames);
-    const expectedLosses = totalGames - expectedWins;
-    const overperf = Math.round(m.overperformanceWins);
     return {
-      team: m.teamId,
-      record: `${wins}-${losses}`,
-      winPct: winPct.startsWith('0') ? winPct.slice(1) : winPct,
-      expected: `${expectedWins}-${expectedLosses}`,
-      overperformance: `${overperf >= 0 ? '+' : ''}${overperf} wins`,
-      mwar: m.mWAR,
-      isRealData: true,
+      managerId,
+      name: profile?.displayName ?? managerId,
+      teamLabel: storedManagerTeamLabel(profile),
+      actualWins,
+      expectedWins,
+      winsAboveExpected,
+      candidates: managerAwardRow.candidates,
     };
-  })() : null;
+  }, [managerAwardRow, managerProfileById]);
 
   if (!winner) {
     return (
       <div className="space-y-6 text-center">
         <div className="text-lg text-[#FFD700]">📋 MANAGER OF THE YEAR</div>
-        <div className="text-base text-[#E8E8D8]/60">No manager data — play a season first</div>
+        <div className="text-base text-[#E8E8D8]/60">
+          {isLoading ? "Loading Manager of the Year..." : "Manager of the Year not finalized yet"}
+        </div>
         <button onClick={onContinue} className="w-full bg-[#5A8352] border-[5px] border-[#4A6844] py-4 text-lg text-[#E8E8D8] hover:bg-[#4F7D4B] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
           Continue {league === "AL" ? "to Western League" : "to Special Awards"} →
         </button>
@@ -1682,40 +1779,54 @@ function ManagerYearScreen({ league, onContinue, managerSeasonStats = [] }: { le
           📋
         </div>
 
-        <div className="text-2xl text-[#E8E8D8] mb-2">{winner.team}</div>
-        <div className="text-base text-[#5599FF] mb-6">(Your Team!)</div>
+        <div className="text-2xl text-[#E8E8D8] mb-2">{winner.name}</div>
+        {winner.teamLabel && (
+          <div className="text-base text-[#5599FF] mb-6">{winner.teamLabel}</div>
+        )}
 
         <div className="bg-[#5A8352] border-[5px] border-[#FFD700] p-6 max-w-md mx-auto">
           <div className="text-sm text-[#E8E8D8] mb-4">MANAGERIAL STATS</div>
           <div className="space-y-2 text-sm text-[#E8E8D8]">
             <div className="flex justify-between">
-              <span className="text-[#E8E8D8]/60">Record:</span>
-              <span>{winner.record} ({winner.winPct})</span>
+              <span className="text-[#E8E8D8]/60">Actual Wins:</span>
+              <span>{formatManagerAwardNumber(winner.actualWins)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#E8E8D8]/60">Expected Record:</span>
-              <span>{winner.expected}</span>
+              <span className="text-[#E8E8D8]/60">Expected Wins:</span>
+              <span>{formatManagerAwardNumber(winner.expectedWins)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#E8E8D8]/60">Overperformance:</span>
-              <span className="text-[#5599FF]">{winner.overperformance}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[#E8E8D8]/60">Manager Value:</span>
-              <div className="flex items-center gap-2">
-                <span>{formatMWAR(winner.mwar)}</span>
-                <div className="w-24 bg-[#E8E8D8]/20 h-3 rounded">
-                  <div className="bg-[#5599FF] h-full rounded" style={{ width: `${Math.min(100, Math.max(0, (winner.mwar / 5) * 100))}%` }}></div>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#E8E8D8]/60">Rating:</span>
-              <span className="text-[#FFD700]">{getMWARRating(winner.mwar)}</span>
+              <span className="text-[#E8E8D8]/60">Wins Above Expected:</span>
+              <span className="text-[#5599FF]">{formatManagerAwardSignedWins(winner.winsAboveExpected)}</span>
             </div>
           </div>
         </div>
       </div>
+
+      {winner.candidates.length > 0 && (
+        <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
+          <div className="text-sm text-[#E8E8D8] mb-3">FINAL RACE:</div>
+          <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+            {winner.candidates.map((candidate, index) => {
+              const candidateProfile = managerProfileById.get(candidate.playerId);
+              const candidateName = candidateProfile?.displayName ?? candidate.playerId;
+              return (
+                <div
+                  key={`${candidate.playerId}-${index}`}
+                  className="grid grid-cols-[32px_1fr_auto_auto] items-center gap-2 bg-[#4A6844] px-3 py-2 text-[9px] text-[#E8E8D8]"
+                >
+                  <div className="text-[#FFD700]">#{index + 1}</div>
+                  <div className="min-w-0 truncate">{candidateName}</div>
+                  <div className="text-[#E8E8D8]/70">{formatManagerAwardNumber(candidate.score, 3)}</div>
+                  <div className={candidate.marginToWinner === 0 ? "text-[#FFD700]" : "text-[#E8E8D8]/60"}>
+                    {formatManagerAwardMargin(candidate.marginToWinner)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="bg-[#5A8352] border-[5px] border-[#4A6844] p-4">
         <div className="text-sm text-[#E8E8D8] mb-2">TEAM REWARDS:</div>
