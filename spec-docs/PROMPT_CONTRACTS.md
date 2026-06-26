@@ -23792,3 +23792,44 @@ Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest su
 - STOP-IF the existing `rerunning storage is idempotent` `toHaveLength(3)` test breaks (that would mean a fixture carries inline atBat/WPA data unexpectedly — report it, do NOT weaken the assertion).
 - A correct BLOCK is GOOD. Do NOT consume `changes[]`, do NOT add fame/morale/reporter, do NOT build §8 display, do NOT add a min-sample valve.
 <!-- ===== END CONTRACT: A1.5d-1c ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1c-fix ===== -->
+# CONTRACT A1.5d-1c-fix — two DETECT-correctness fixes in `fameBearingCandidates` (found by adversarial audit)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Apply EXACTLY these two fixes to the already-built A1.5d-1c code. Use **high** reasoning effort.
+
+## CONTEXT
+A1.5d-1c added `fameBearingCandidates` + helpers to `src/utils/franchiseStadiumRecordsStorage.ts` (already on the working tree, NOT committed). The full suite is green (the 2 new test files pass; only the characterized `wpaRuntimeBoundary` + `franchiseManualSmokeFixture` fail). An adversarial audit found two real DETECT-correctness defects the tests don't yet cover. Fix BOTH, in the SAME single production file + its test. Do NOT change anything else, do NOT touch other files, do NOT alter the records that are already correct.
+
+## FIX 1 — pure pitchers must NOT be eligible for the POSITION-player WPA records, and pure position players must NOT be eligible for the PITCHER WPA records (`pushCumulativeWpaCandidates`)
+**Bug:** the function builds BOTH a position aggregate (`totalWpa - pitchingWpa`) and a pitcher aggregate (`pitchingWpa`) for EVERY `playerWpaTotals` row, with no eligibility gate. A pure pitcher has position value `0`; a pure hitter has pitcher value `0`. Those spurious `0`s then compete for the records — e.g. when all real position players are net-positive, a pure pitcher sitting at position-`0` becomes the SOLE `lowest-cumulative-wpa-position` leader (a position record won by someone who never batted); symmetrically a pure hitter at pitcher-`0` can win/co-win `lowest-cumulative-wpa-pitcher`. §4 types these as "position player" vs "pitcher (via `pitchingWpa`)" records.
+**Fix:** when selecting the highest/lowest leaders, restrict each pool to aggregates whose summed value for THAT dimension is non-zero. Concretely: after building `positionWpa`/`pitcherWpa`, compute `const positionEligible = Array.from(positionWpa.values()).filter((a) => a.value !== 0);` and only emit the highest/lowest-position candidates when `positionEligible.length > 0`, taking `Math.max`/`Math.min` + `leadersByValue` over `positionEligible` (NOT the full map). Do the same with `pitcherEligible` for the pitcher records. (Rationale: a player with exactly zero NET contribution in a dimension had no impact there → not eligible for that dimension's record. A two-way player with non-zero in both stays in both. This excludes the pure-pitcher/pure-hitter `0` pollution.) Keep `leadersByValue` exact-equality as-is (see the deferred note — do NOT add epsilon).
+
+## FIX 2 — single-play WPA-swing records must keep TIES as co-leaders (so a tie stays SILENT), not collapse to one arbitrary sole leader (`pushSinglePlayWpaCandidates`)
+**Bug:** the function uses `reduce` to pick exactly ONE `maxEvent`/`minEvent`, so the candidate's `leaderPlayerIds` always has length 1. The `changes[]` detector treats any single leader as a "sole" leader and fires `overtake` when the sole leader differs from the prior — so two plays with EQUAL max `wpa` (across games, on the per-game tap) illegally dethrone the prior holder and fire a fame swap with the SAME value. §5/§12: "ties extend co-leadership silently (only a strict new SOLE holder fires the swap)." Every OTHER record type here already emits all co-leaders (farthest-HR via `=== maxDistance`, counts via `leadersByValue`); the two swing records are the lone exception.
+**Fix:** mirror the farthest-HR co-leader pattern. For the positive swing: `const maxWpa = Math.max(...eventsWithWpa.map((e) => e.wpa)); if (maxWpa > 0) { const leaders = eventsWithWpa.filter((e) => e.wpa === maxWpa); … }` and set `leaderTeamIds`/`leaderPlayerIds`/`leaderPlayerNames`/`sourceGameIds`/`evidenceIds` from ALL `leaders` (map over them), so a genuine tie yields >1 leader → the detector stays silent. For the negative swing use `Math.min` + `< 0` + `e.wpa === minWpa`. `value` = `maxWpa`/`minWpa`. For `evidenceSummary`, build it from the FIRST leader event (`swingEvidenceSummary(leaders[0], …)`) — a single representative play-context string is fine; the make-or-break is the leader LIST. Keep batter attribution (`batterId`/`batterName`/`batterTeamId`).
+
+## EXPECTED OUTPUT
+1. `src/utils/franchiseStadiumRecordsStorage.ts` — the two fixes above; nothing else changes (the 8 existing records, farthest-HR, HR counts, the polarity map, `buildCandidatesFromFoundation` wiring, the changes[] detector — all untouched).
+2. `src/utils/tests/franchiseStadiumRecordsStorage.test.ts` — ADD two tests (keep all existing tests green):
+   - **FIX 1:** a single game whose `playerWpaTotals` has (a) two real position players both net-POSITIVE (e.g. +0.6, +0.2) and (b) a pure pitcher (`battingWpa:0, totalWpa === pitchingWpa`, e.g. totalWpa 1.0 / pitchingWpa 1.0 → position contribution 0). Assert `lowest-cumulative-wpa-position` leader is the smaller-positive POSITION player (NOT the pitcher), and the pitcher is NOT in its `leaderPlayerIds`. Symmetrically include a pure hitter (`pitchingWpa:0`) among net-positive pitchers and assert it is excluded from `lowest-cumulative-wpa-pitcher`.
+   - **FIX 2:** a single game with two at-bat events by DIFFERENT batters with EQUAL positive `wpa` (e.g. both 0.250, the stadium max). Assert the stored `largest-positive-wpa-swing` record has BOTH batters in `leaderPlayerIds` (co-leaders) AND that the upsert `result.changes` contains NO entry for `largest-positive-wpa-swing` (tie → silent, because there is no sole holder). (Reuse the `completedGame()`/`atBat()`/`playerWpaTotal()` fixtures.)
+   - Confirm the existing "cumulative WPA records split position and pitcher contributions" test STILL passes unchanged (the fix does not change its expectations — its low-position/low-pitcher holders have genuinely non-zero contributions).
+
+## CONSTRAINTS
+- Touch ONLY `src/utils/franchiseStadiumRecordsStorage.ts` + `src/utils/tests/franchiseStadiumRecordsStorage.test.ts`. No other file. No DB/flag/foundation/tap/processCompletedGame/oracle touch.
+- Do NOT add epsilon/float-tolerance to `leadersByValue` or the WPA comparisons (deferred to hop-2 as a documented §16 refinement — exact equality matches the existing integer records' pattern).
+- No `Math.random`/`Date.now`/`new Date()`.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsStorage.test.ts` → green (existing + the 2 new tests). The Captain re-runs the AUTHORITATIVE FULL suite.
+
+## FORMAT
+Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only `pushCumulativeWpaCandidates` + `pushSinglePlayWpaCandidates` logic changed, all other records/the polarity map/the changes[] detector untouched, no epsilon added.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF applying either fix would change an EXISTING passing test's expectation (it should not — the existing WPA-split test uses genuinely non-zero holders). If it does, report which test + why before changing it.
+- A correct BLOCK is GOOD.
+<!-- ===== END CONTRACT: A1.5d-1c-fix ===== -->
