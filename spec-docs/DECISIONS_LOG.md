@@ -2746,3 +2746,20 @@ sim-tune dials, none block the build.
   builds (pool-feasibility → fielding-corrected true-value → the two manager-lane contract functions) are dispatched to
   Codex via a contract in `PROMPT_CONTRACTS.md`, preserving cross-model build/audit separation. Pool-feasibility first
   (handoff seam c66d680f). Design spec: `POOL_FEASIBILITY_SPEC.md`.
+
+## 2026-06-26 — Step 2 true-value: chemistry-scale semantics + directional v1 (JK)
+
+- **Chemistry trait-potency scale RESOLVED (no code change).** The live `POTENCY_SCALE` is ALREADY workbook-correct
+  (positives 0.5/1.0/3.0, inverted 3.0/1.0/0.5) — JK corrected 2.0→3.0 on 2026-06-22. A stale "2.0×" comment in
+  `traitInteractionMatrix.ts` (never updated at that correction) misled a mapping agent and produced a false "2 vs 3"
+  question; corrected the comment to match the constant. **JK semantic model:** L1 = the default/lowest every trait
+  gets (no chemistry support); L2 = a chemistry "fit" = the level the frozen IV is founded on (prices at); L3 = max fit,
+  rare. So the optimizer's true-value re-leans each trait vs the L2 "fit" baseline the frozen IV already assumes.
+- **True-value v1 = DIRECTIONAL, not exact (JK ruling 2026-06-26).** `trueValue = frozen kblIV + bounded chemistry lean
+  + conservative fielding nudge`, reducing EXACTLY to kblIV at the neutral baseline (clean additive layer; frozen
+  economy never touched). Magnitudes are conservative PROVISIONAL constants, calibrated empirically in Mode-2 — matches
+  spec D17 ("fit a correction ONLY if data demands / do not overengineer"). *(Rejected: exact per-trait re-pricing
+  through the IV engine now — bigger build, and the precision is un-calibratable until Mode-2 season data exists.)*
+  Built as `derivedTraitPotency.ts` (TRUEVAL-1) + `trueValue.ts` (TRUEVAL-2), build-dark. Documented build-dark
+  assumptions (flagged, retunable, spec §2.6 leaves them open): chemistry counts over the FULL active roster, and a
+  player's chemistry self-counts toward its own traits' potency.
