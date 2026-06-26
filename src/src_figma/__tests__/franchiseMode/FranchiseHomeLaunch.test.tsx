@@ -97,6 +97,9 @@ vi.mock('../../../utils/franchiseSeasonSummaryStorage', () => ({
 vi.mock('../../../utils/franchiseManager', () => ({
   updateFranchiseMetadata: mocks.mockUpdateFranchiseMetadata,
   loadFranchise: mocks.mockLoadFranchise,
+  // A1.5d-1b: the dark stadium-records tap (transitively imported via
+  // processCompletedGame) reads getFranchiseConfig at module-load; stub it.
+  getFranchiseConfig: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../../../utils/careerStorage', () => ({

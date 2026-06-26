@@ -72,6 +72,7 @@ import {
   isFranchisePhase2L11Enabled,
   isFranchisePhase2L12Enabled,
   isFranchisePhase2L13Enabled,
+  isFranchisePhase2StadiumRecordsEnabled,
 } from './franchisePhase2Flags';
 import {
   persistDarkFameRecordsForCompletedGame,
@@ -88,6 +89,7 @@ import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAutoBackstop';
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
 import { persistFranchiseAllStarRosterForCompletedGame } from './franchiseAllStarRosterCompute';
+import { persistDarkStadiumRecordsForCompletedGame } from './franchiseStadiumRecordsTap';
 import type { HiddenModifiers } from '../types/game';
 import { FAME_TUNING } from '../engines/fameModel';
 import {
@@ -119,7 +121,7 @@ type PersistedWarScope = {
   seasonId: string;
   statsScopeId: string;
 };
-type PersistedTrueValueScope = PersistedWarScope & {
+export type PersistedTrueValueScope = PersistedWarScope & {
   franchiseId: string;
   seasonNumber: number;
 };
@@ -1253,6 +1255,13 @@ export async function processCompletedGame(
             await persistFranchiseAllStarRosterForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[L12] dark All-Star roster persist skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2StadiumRecordsEnabled()) {
+          try {
+            await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         try {
