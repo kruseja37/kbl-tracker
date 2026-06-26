@@ -33,7 +33,9 @@
   --fen-tp: #4A5950;
   --fen-ts: #E3C099;
   /* fonts */
-  --fen-chalk-font: 'Chalk', 'Bradley Hand', cursive;
+  /* the board's "chalk" voice = Tox Typewriter, the SAME font the GameTracker uses on
+   * its chalkboard columns (NOT chalk.otf, which is the childish scrawl). */
+  --fen-chalk-font: 'Tox Typewriter', 'Courier New', monospace;
   --fen-type: 'Moms Typewriter', 'Courier New', monospace;
 }
 
