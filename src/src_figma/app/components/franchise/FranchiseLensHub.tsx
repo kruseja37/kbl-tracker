@@ -207,7 +207,11 @@ export interface AwardSlotVM {
   status?: "lead" | "locked";
   dubious?: boolean;         // a negative honor (Bust, Booger Glove) → red accent
 }
+export interface SeasonProgressVM { label: string; pct: number; nextGate?: string }
+export interface PictureSlotVM { teamId: string; teamAbbr: string; name: string; detail: string; tone?: "in" | "hunt" | "out" }
+export interface PlayoffPictureVM { progress?: SeasonProgressVM; leaders: PictureSlotVM[]; wildCard: PictureSlotVM[]; note?: string }
 export interface StandingsRacesVM {
+  picture?: PlayoffPictureVM;   // season progress + magic numbers + wild-card hunt
   divisions: StandingsDivisionVM[];
   races: AwardRaceVM[];
   awards?: AwardSlotVM[];    // the full hardware board (all ~16 categories)
@@ -741,11 +745,46 @@ function war1(n: number): string {
   return n.toFixed(1);
 }
 
+function PictureSlot({ s, active }: { s: PictureSlotVM; active: ActiveTeamVM }) {
+  const tone = teamTone(s.teamId, active);
+  return (
+    <div className={`fen-pic-slot ${s.tone ?? "in"}${tone}`}>
+      <span className="ab fen-chalk">{s.teamAbbr}</span>
+      <span className="nm fen-chalk">{s.name}</span>
+      <span className="dt">{s.detail}</span>
+    </div>
+  );
+}
+
 function StandingsRacesTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
   const sr = hub.standings;
   if (!sr) return <div className="fen-empty">No league standings yet this season.</div>;
   return (
     <div className="fen-sr">
+      {/* PLAYOFF PICTURE — season progress + magic numbers + wild-card */}
+      {sr.picture ? (
+        <div className="fen-sr-sect">
+          {sr.picture.progress ? (
+            <div className="fen-progress">
+              <div className="pr-top"><span className="pl">{sr.picture.progress.label}</span>{sr.picture.progress.nextGate ? <span className="pg">{sr.picture.progress.nextGate}</span> : null}</div>
+              <div className="pr-bar"><span className="fill" style={{ width: `${Math.max(0, Math.min(100, sr.picture.progress.pct))}%` }} /></div>
+            </div>
+          ) : null}
+          <div className="fen-sectlab">Playoff Picture <span className="lite fen-help">· if the season ended today</span></div>
+          <div className="fen-picture">
+            <div className="fen-pic-col">
+              <div className="fen-pic-h">Division Leaders</div>
+              {sr.picture.leaders.map((s, i) => <PictureSlot key={i} s={s} active={active} />)}
+            </div>
+            <div className="fen-pic-col">
+              <div className="fen-pic-h">Wild-Card Hunt</div>
+              {sr.picture.wildCard.map((s, i) => <PictureSlot key={i} s={s} active={active} />)}
+            </div>
+          </div>
+          {sr.picture.note ? <div className="fen-pic-note fen-help-b">{sr.picture.note}</div> : null}
+        </div>
+      ) : null}
+
       {/* STANDINGS */}
       <div className="fen-sr-sect">
         <div className="fen-sectlab">Standings <span className="lite fen-help">· your club in yellow, the rival in red</span></div>

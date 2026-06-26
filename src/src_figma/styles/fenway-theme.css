@@ -276,6 +276,28 @@
 .fen-sr { display: flex; flex-direction: column; gap: 26px; }
 .fen-sr-sect { }
 
+/* season progress + playoff picture */
+.fen-progress { margin-bottom: 16px; }
+.fen-progress .pr-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.fen-progress .pl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
+.fen-progress .pg { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-yellow); }
+.fen-progress .pr-bar { height: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-progress .pr-bar .fill { display: block; height: 100%; background: var(--fen-yellow); border-radius: 4px; }
+.fen-picture { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+@media (max-width: 720px) { .fen-picture { grid-template-columns: 1fr; } }
+.fen-pic-h { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.28); padding-bottom: 6px; }
+.fen-pic-slot { display: grid; grid-template-columns: 34px 1fr auto; align-items: baseline; gap: 9px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); border-left: 3px solid transparent; padding-left: 8px; }
+.fen-pic-slot:last-child { border-bottom: none; }
+.fen-pic-slot.in { border-left-color: var(--fen-yellow); }
+.fen-pic-slot.hunt { border-left-color: var(--fen-ash); }
+.fen-pic-slot.out { border-left-color: rgba(176, 183, 188, 0.4); opacity: 0.72; }
+.fen-pic-slot .ab { font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); }
+.fen-pic-slot .nm { font-family: var(--fen-chalk-font); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-pic-slot .dt { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); white-space: nowrap; }
+.fen-pic-slot.you .nm, .fen-pic-slot.you .ab { color: var(--fen-yellow); }
+.fen-pic-slot.rival .nm, .fen-pic-slot.rival .ab { color: var(--fen-marquee); }
+.fen-pic-note { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-top: 10px; }
+
 /* standings table */
 .fen-stand { margin-bottom: 18px; }
 .fen-stand-div { font-family: var(--fen-chalk-font); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-ash); margin: 4px 0 8px; }

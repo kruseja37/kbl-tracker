@@ -50,6 +50,20 @@ const ACTIVE: Record<string, ActiveTeamVM> = {
  * the active club (yellow) and its rival (red). The real adapter will produce one
  * block from calculateStandings + the awards-preview + getFranchiseAllStarRoster. */
 const LEAGUE: StandingsRacesVM = {
+  picture: {
+    progress: { label: "Season 3 · Week 9 of 20", pct: 45, nextGate: "Ratings checkpoint in 2 games" },
+    leaders: [
+      { teamId: "BM", teamAbbr: "BM", name: "Brass Monkeys", detail: "East · magic 14", tone: "in" },
+      { teamId: "ST", teamAbbr: "ST", name: "Steel Tides", detail: "West · magic 17", tone: "in" },
+    ],
+    wildCard: [
+      { teamId: "PC", teamAbbr: "PC", name: "Page Capitals", detail: "WC1 · +3.0", tone: "in" },
+      { teamId: "DV", teamAbbr: "DV", name: "Delta Vipers", detail: "WC2 · +1.0", tone: "in" },
+      { teamId: "RR", teamAbbr: "RR", name: "River Rats", detail: "2.0 back", tone: "hunt" },
+      { teamId: "CC", teamAbbr: "CC", name: "Cactus Cats", detail: "3.0 back", tone: "hunt" },
+    ],
+    note: "Top two in each division plus two wild cards reach October.",
+  },
   divisions: [
     {
       name: "Eastern",

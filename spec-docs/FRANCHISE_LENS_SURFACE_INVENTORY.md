@@ -66,13 +66,17 @@ you-yellow/rival-red. The 3 marquee races keep their gap-bar treatment above it.
 | **Race fame component** | show the fame nudge inside a close race bar | 🟢 | N | `franchiseRaceStandingScorer.ts:14` |
 | **All-Star lock countdown** | "voting closes in N games" before the 60% lock | 🟢 | N | `franchiseAllStarSelector.ts` |
 
-## Bucket 4 — Standings, widened
+## Bucket 4 — Standings, widened ✅ BUILT (the Playoff Picture)
+**BUILT 2026-06-26** (mock-fed): a season-progress bar (Week N of M · % · next gate) + a "Playoff Picture"
+(division leaders with magic numbers + the wild-card hunt, in/hunt/out tone, you-yellow/rival-red) at the
+top of the Standings & Races tab. Full bracket deferred (not relevant mid-season at 45%).
+
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **Magic number / clinch / elimination** | games to clinch; clinched/eliminated markers | 🟢 derivable | N | `playoffEngine.ts:65` |
-| **Wild-card watch** | the non-division race band | 🟢 | N | standings + games remaining |
-| **Season progress** | "Week 9 / 20 · 45%" + next gate countdown | 🟢/🟡 | N | `useFranchiseData.ts:92`, season-length meta |
-| **Playoff bracket** | seeds, series scores, advancement, home-field | 🟢 | N | `playoffStorage.ts:38` |
+| **Magic number / clinch** ✅ BUILT | division leaders' magic number to clinch | 🟢 derivable | Y | `playoffEngine.ts:65` |
+| **Wild-card watch** ✅ BUILT | the WC holders + the bubble (games up/back) | 🟢 | Y | standings + games remaining |
+| **Season progress** ✅ BUILT | "Week 9 of 20 · 45%" bar + next gate | 🟢/🟡 | Y | `useFranchiseData.ts:92`, season-length meta |
+| **Playoff bracket** | seeds, series scores, advancement, home-field | 🟢 | N (deferred — late-season) | `playoffStorage.ts:38` |
 
 ## Bucket 5 — Roster moves as first-class actions  *(the 22/10)*
 | Surface | What it shows | Status | Surfaced? | Source |
