@@ -317,6 +317,28 @@ const DETAIL_FENOMENO: PlayerDetailVM = {
     { label: "Fielding", base: 55, current: 55 },
     { label: "Arm", base: 60, current: 62 },
   ],
+  spray: [
+    {
+      role: "pitching",
+      dots: mkSpray([
+        ["center", "deep", "HR", 1], ["pull", "deep", "HR", 1],
+        ["center", "medium", "2B", 2], ["oppo", "medium", "2B", 1],
+        ["pull", "shallow", "1B", 2], ["center", "shallow", "1B", 3], ["oppo", "shallow", "1B", 2],
+        ["pull", "infield", "OUT", 5], ["center", "infield", "OUT", 5], ["oppo", "infield", "OUT", 4], ["center", "medium", "OUT", 4], ["pull_center", "deep", "OUT", 3], ["oppo", "deep", "OUT", 2],
+      ]),
+      stats: [{ label: "Balls in play", value: "42" }, { label: "HR allowed", value: "2" }, { label: "Grounders", value: "57%" }],
+      note: "Generates weak contact by the bushel — more than half on the ground, only two balls have left the yard against him.",
+    },
+    {
+      role: "batting",
+      dots: mkSpray([
+        ["center", "shallow", "1B", 2], ["oppo", "shallow", "1B", 1], ["pull", "shallow", "1B", 1],
+        ["pull", "infield", "OUT", 3], ["center", "infield", "OUT", 3], ["oppo", "infield", "OUT", 2], ["center", "shallow", "OUT", 2],
+      ]),
+      stats: [{ label: "At-bats", value: "18" }, { label: "Hits", value: "4" }, { label: "Avg", value: ".222" }],
+      note: "Not helpless with the bat for a pitcher — a few seeing-eye singles up the middle.",
+    },
+  ],
   traitsCurrent: ["Workhorse", "Magic Hands"],
   traitTimeline: [
     { valence: "gain", trait: "Magic Hands", displaces: "Butter Fingers", atGame: 48 },
@@ -355,6 +377,30 @@ const DETAIL_STAD: PlayerDetailVM = {
     { label: "Speed", base: 48, current: 44 },
     { label: "Fielding", base: 55, current: 53 },
     { label: "Arm", base: 60, current: 60 },
+  ],
+  spray: [
+    {
+      role: "batting",
+      dots: mkSpray([
+        ["pull", "deep", "HR", 3], ["pull_center", "deep", "HR", 2], ["center", "deep", "HR", 1],
+        ["pull", "medium", "2B", 3], ["pull_center", "medium", "2B", 2],
+        ["pull", "shallow", "1B", 2], ["center", "shallow", "1B", 2], ["oppo", "shallow", "1B", 1],
+        ["pull", "infield", "OUT", 5], ["pull", "shallow", "OUT", 4], ["center", "medium", "OUT", 4], ["pull_center", "deep", "OUT", 3], ["center", "infield", "OUT", 3],
+      ]),
+      stats: [{ label: "Batted balls", value: "40" }, { label: "Home runs", value: "6" }, { label: "Pull%", value: "58%" }],
+      note: "Dead-pull all the way — when he connects it's into right field, but the bat speed isn't what it was.",
+    },
+    {
+      role: "fielding",
+      dots: mkSpray([
+        ["pull", "medium", "OUT", 3], ["center", "medium", "OUT", 3], ["oppo", "medium", "OUT", 2],
+        ["pull", "deep", "OUT", 2], ["center", "deep", "OUT", 2], ["oppo", "deep", "OUT", 2],
+        ["pull", "shallow", "OUT", 2],
+        ["center", "deep", "ERR", 1], ["pull", "deep", "ERR", 1],
+      ]),
+      stats: [{ label: "Chances", value: "18" }, { label: "Errors", value: "2" }, { label: "Range", value: "−4" }],
+      note: "Range has slipped in left — a couple of catchable balls have fallen, and two clean misplays.",
+    },
   ],
   traitsCurrent: ["Mr. Wrong"],
   traitTimeline: [

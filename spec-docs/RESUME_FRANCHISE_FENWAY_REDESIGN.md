@@ -67,7 +67,9 @@
 - **Player drawer** (`PlayerDrawer` in `FranchiseLensHub.tsx`): opens from a roster name (the name is now a
   button) as a right-side slide-in dossier — identity (pos/age/B-T/grade/designation+effect/WAR/bio),
   economics (salary/True Value/net), a **True-Value sparkline** (rising yellow / falling red), **ratings
-  base→current** bars (fill = now, tick = draft-day, ▲/▼ delta), the **trait timeline** (gain/lose +
+  base→current** bars (fill = now, tick = draft-day, ▲/▼ delta), a **per-player spray chart** (the shared
+  `SprayPanel` — a pitcher's contact-off-him, a batter's own spray, with the batting/pitching/fielding
+  toggle; this is where the player-level depth lives — JK 2026-06-26), the **trait timeline** (gain/lose +
   displaced), the **morale** block (value + state + reasons-log), **ties** (relationship edges with type
   icon + intensity bar + since-game; `potential` = dashed/rumored), and **fame** (heat + a 5-seg
   immortality meter + the channel breakdown). VMs (`PlayerDetailVM` + `RatingBarVM`/`ValuePointVM`/

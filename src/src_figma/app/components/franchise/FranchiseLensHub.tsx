@@ -101,6 +101,7 @@ export interface PlayerDetailVM {
   age?: number; bats?: string; throws?: string; grade?: string; bio?: string;
   valueTrend?: ValuePointVM[];
   ratings?: RatingBarVM[];      // base→current (mergeRatingsOverlays)
+  spray?: SprayRoleVM[];        // this player's own spray — batting (where he hits) / pitching (contact off him) / fielding
   traitsCurrent?: string[];
   traitTimeline?: TraitTimelineVM[];
   ties?: TieVM[];
@@ -791,11 +792,42 @@ function ParkFactor({ label, v }: { label: string; v: number }) {
   );
 }
 
+function SprayPanel({ spray }: { spray: SprayRoleVM[] }) {
+  const [role, setRole] = useState<"batting" | "pitching" | "fielding">(spray[0]?.role ?? "batting");
+  const roleData = spray.find((r) => r.role === role) ?? spray[0];
+  if (!roleData) return null;
+  return (
+    <>
+      {spray.length > 1 ? (
+        <div className="fen-spray-toggle">
+          {spray.map((r) => (
+            <button key={r.role} type="button" className={`fen-spray-tab${role === r.role ? " on" : ""}`} onClick={() => setRole(r.role)}>{r.role}</button>
+          ))}
+        </div>
+      ) : null}
+      {roleData.dots.length === 0 ? (
+        <div className="fen-empty">No {role} spray evidence yet.</div>
+      ) : (
+        <>
+          <SprayField dots={roleData.dots} />
+          <div className="fen-spray-legend">
+            <span className="lg hr">HR</span><span className="lg xbh">2B / 3B</span><span className="lg single">1B</span><span className="lg out">Out</span><span className="lg err">Error</span>
+          </div>
+          <div className="fen-spray-stats">
+            {roleData.stats.map((st, i) => (
+              <div className="st" key={i}><div className="v fen-chalk">{st.value}</div><div className="l">{st.label}</div></div>
+            ))}
+          </div>
+          {roleData.note ? <div className="fen-spray-note fen-help-b">{roleData.note}</div> : null}
+        </>
+      )}
+    </>
+  );
+}
+
 function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
   const s = hub.stadium;
-  const [role, setRole] = useState<"batting" | "pitching" | "fielding">("batting");
   if (!s) return <div className="fen-empty">No ballpark data for {active.name} yet.</div>;
-  const roleData = s.spray.find((r) => r.role === role) ?? s.spray[0];
   return (
     <div className="fen-stadium">
       <div className="fen-stad-head">
@@ -811,27 +843,7 @@ function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
       <div className="fen-stad-grid">
         <div className="fen-stad-spray">
           <div className="fen-sectlab">Spray Chart <span className="lite fen-help">· where balls go at {s.nickname ?? s.name}</span></div>
-          <div className="fen-spray-toggle">
-            {(["batting", "pitching", "fielding"] as const).map((r) => (
-              <button key={r} type="button" className={`fen-spray-tab${role === r ? " on" : ""}`} onClick={() => setRole(r)}>{r}</button>
-            ))}
-          </div>
-          {roleData.dots.length === 0 ? (
-            <div className="fen-empty">No {role} spray evidence yet.</div>
-          ) : (
-            <>
-              <SprayField dots={roleData.dots} />
-              <div className="fen-spray-legend">
-                <span className="lg hr">HR</span><span className="lg xbh">2B / 3B</span><span className="lg single">1B</span><span className="lg out">Out</span><span className="lg err">Error</span>
-              </div>
-              <div className="fen-spray-stats">
-                {roleData.stats.map((st, i) => (
-                  <div className="st" key={i}><div className="v fen-chalk">{st.value}</div><div className="l">{st.label}</div></div>
-                ))}
-              </div>
-              {roleData.note ? <div className="fen-spray-note fen-help-b">{roleData.note}</div> : null}
-            </>
-          )}
+          <SprayPanel spray={s.spray} />
         </div>
 
         <div className="fen-stad-side">
@@ -990,6 +1002,7 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
 
         {d?.valueTrend && d.valueTrend.length > 1 ? <DrawerSection title="Value trend" hint="True Value by checkpoint"><ValueSparkline points={d.valueTrend} /></DrawerSection> : null}
         {d?.ratings && d.ratings.length ? <DrawerSection title="Ratings" hint="bar = now · tick = draft-day"><RatingBars ratings={d.ratings} /></DrawerSection> : null}
+        {d?.spray && d.spray.length ? <DrawerSection title="Spray chart" hint={d.spray[0]?.role === "pitching" ? "contact off him" : "where he hits"}><SprayPanel spray={d.spray} /></DrawerSection> : null}
         {(d?.traitsCurrent?.length || d?.traitTimeline?.length) ? (
           <DrawerSection title="Traits">
             {d?.traitsCurrent && d.traitsCurrent.length ? <div className="fen-traitchips">{d.traitsCurrent.map((t, i) => <span className="chip" key={i}>{t}</span>)}</div> : null}
