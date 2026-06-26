@@ -4,6 +4,11 @@
 **Companion to:** `ROADMAP_TO_V1.md` (status/what) — this doc is the **sequence/when**. Per-item detail lives in the cited specs.
 **Discipline:** Codex-built → Opus-audited (builder≠auditor) → `NODE_ENV= tsc -b` + full suite, zero-new-reds, branch-only. All magnitudes are §16 sim-tune placeholders.
 
+> ## ⚠ STATUS BANNER (2026-06-26 — the inline ✅ below are PARTLY STALE; the LIVE done-truth = `AUTONOMOUS_RUN_LOG.md` newest block + `CURRENT_STATE.md` + `HANDOFF_NEEDED`).
+> **DONE since this doc was written (not all reflected inline):** the ENTIRE trait wave — A-W3 `T-1..T-7` (incl. T-3/T-6/T-7 done 2026-06-26) + A-W3.5 dormant-trait wave `T-9` + `DT-B/C/D/E/F` (+ DT-FIX, BF-MH, CAP-MISS) · the whole `RA-2c` ratings-adjustment arc · `RA-1/RA-5/RA-8/RA-rookie/RA-9/V8/RA-12` · `A1.5a/b/c` · the Mode-1 LANE-MERGE (`87a59ec0`) · the **Lane-C ratings MERGE (`0c2b4a04`, 2026-06-26)** folding A2.5/RA-5/RA-9/V8 into MAIN.
+> **CURRENT PHASE = the BUTTON-UP BUILDOUT** (JK ruled 2026-06-26, attended). Remaining BUILD tail (all build-dark, on MAIN): ratings — **§6A convex curve** (A2.5 remainder), **RA-7** park-adjust, **RA-10** bench-IF/OF split, **RA-11** (standalone per JK), **re-grade-per-checkpoint**; living-season — **A1.3a→A1.3b** trade-demand (A1.3b incl. a JK-authorized trackerDb bump), **A1.4** L12-6, **A1.5** L4b, **A1.5d** stadium records; user-visible (flag for JK sign-off) — **A1.5b-2**, **T-6b**. Then the ship gate-chain (L-SIM final → RB-16 → D12 → D13 → flag-flip → F-141).
+> **⚠ PAUSED — DO NOT TOUCH/MERGE (JK):** the Mode-1 draft + auction-UX side branches `codex/draft-pipeline-fix` + `codex/auction-draft-ux-rehaul` (a first-principles draft-setup + auction UX redesign that SUPERSEDES parts of the B-W scouting/draft items below). The button-up queue is FILE-DISJOINT from them → safe concurrent (partition proof in the ledger). Treat the B-W tickets that those branches rework as SUPERSEDED-pending-JK, not fresh builds.
+
 ## TOPOLOGY — two concurrent branches, one committer each
 - **BRANCH A = living-season** — worktree `/Users/johnkruse/Projects/kbl-tracker`, branch `codex/franchise-v1-next`. Owns: Lane 1 (L-stack tail) + Lane 4A (ratings) + Lane 4D (traits) + the **4E DH removal master** (this is the merge target).
 - **BRANCH B = Mode-1** — worktree `/Users/johnkruse/Projects/kbl-mode1-b`, branch `codex/mode1-v1-b`. Owns: Lane 2 (RB tail + G1) + Lane 4B (prospect) + Lane 4C (scouting).
@@ -55,14 +60,14 @@
 | Order | Ticket | What | Note |
 |---|---|---|---|
 | A3.1 | T-1 / T-2 | 80%-value/20%-scarcity `traitWeight` · 4 pos + 3 neg tiers | foundational |
-| A3.2 | T-3 | trend factor + SP/RP cohort split w/ min-peer fallback (`§4A`) | — |
+| A3.2 | ✅ **T-3 DONE** (SP/RP split `3ecbc6c0` + trend engine `0df09fda` + trend sweep `e3b7e76d`, 2026-06-26) | trend factor + SP/RP cohort split w/ min-peer fallback (`§4A`) — build-dark, zero-new-reds | — |
 | A3.3 | **T-4** | generation weighting `genWeight=1−traitWeight`, neg 0.27, exclude Sign Stealer/Stimulated | **T-4 ⇔ Branch-B B13: build `traitWeight` once, spec-pin** |
 | A3.4 | T-5 | resolution layer: value tiers + incumbency β=1.25 + seeded margin likelihood (`§8B`) | — |
-| A3.5 | **T-6** | position-mismatch protect+flag; delete Noodle Arm | **AFTER A2.2 (RA-8 catcher CS)** |
-| A3.6 | T-7 | EOS supersede (deprecate Trait Wheel Spin; EOS = one more checkpoint) | last |
+| A3.5 | ✅ **T-6a DONE** (`31afa050`, 2026-06-26) | position-mismatch protect (Cannon Arm at IF; suppress self-loss + keepScore boost). ⚠ **Did NOT delete Noodle Arm** — that line is SUPERSEDED by DT-D (re-added as mental-error). **T-6b (scout/analyzer flag display) = the remaining user-visible half**, deferred to a browser-verified pass. | **(RA-8 already done)** |
+| A3.6 | ✅ **T-7 DONE** (`7340ca18`, 2026-06-26) | EOS = one more checkpoint — Captain-verified ALREADY-SATISFIED in engine (final game is always the last grid checkpoint, test-pinned); doc reconciliation + superseded Trait Wheel Spin. No engine change. | last |
 
 ### A-W3.5 — Lane 4D-W2 DORMANT-TRAIT ENABLEMENT (NEW, JK-ruled 2026-06-25; matrix = `TRAIT_MEASUREMENT_SPEC §0.6b`, rulings = `DECISIONS_LOG` 2026-06-25)
-> Moves **25** previously-dormant traits → earnable. Capture + difficulty (`assignTier`) already exist; each group = **write the signal builder + min-sample valve + BUILDABLE wiring** (template = T-9 elite pitches). ALL build-dark, **opt-in** (fires only on user-tagged data), **FULL suite** (the candidate builder feeds `franchiseTraitGrantCompute`→`processCompletedGame` mock-load). Status: T-4c generation-side max-1 Elite-pitch DONE (`7956eee9`).
+> Moves **25** previously-dormant traits → earnable. Capture + difficulty (`assignTier`) already exist; each group = **write the signal builder + min-sample valve + BUILDABLE wiring** (template = T-9 elite pitches). ALL build-dark, **opt-in** (fires only on user-tagged data), **FULL suite** (the candidate builder feeds `franchiseTraitGrantCompute`→`processCompletedGame` mock-load). Status: ✅ **THE WHOLE A-W3.5 DORMANT-TRAIT WAVE IS DONE** (2026-06-26) — T-9 (a `a7932007`/b `6f3fc727`/c `e95aba07`) + DT-B `2596b2c8` + DT-C1 `e33aed1e`/C2 `44ababfb` + DT-D `6d88b228` + DT-E `2a44cc2a` + DT-F1 `1d74050c`/F2 `ed9e003e`/F3 `40cdf4c1` + DT-FIX-1 `22786153`/2 `71727e5b` + BF-MH `80586ce0` + CAP-MISS `41cb5a66`; T-4c gen-side `7956eee9`. All build-dark / zero-new-reds.
 
 | Wave | Ticket | What | Notes / gate |
 |---|---|---|---|
@@ -73,7 +78,7 @@
 | 4D-W2 | **DT-E (mojo)** | Volatile (many mojo changes) / Consistent (few) | confirm `mojoEngine`/team-hub exposes a per-player change count |
 | 4D-W2 | **DT-F (bespoke)** | Base Jogger (REVERSE `addBaseRounderSignals`) · Metal Head (**pitcher**-victim of KP/nut-shot, protective) · Wild Thing (WP-advance + `WP_K`) · Workhorse (IP/game, ELITE, SP/RP-split) | Metal Head: verify the pitcher-keyed enrichment KP/nut-shot field at build |
 
-> **CUT (no work):** Sign Stealer, Stimulated. **A/B scoring formula** ratified (DECISIONS_LOG 2026-06-25 / §0.6b). **Note:** A-W3 (T-1/T-2/T-4/T-5) is DONE this session; T-3/T-6/T-7 still pending — **T-6 (position-mismatch) now coordinates with DT-D** (both touch the arm/Noodle-Arm story).
+> **CUT (no work):** Sign Stealer, Stimulated. **A/B scoring formula** ratified (DECISIONS_LOG 2026-06-25 / §0.6b). **Note:** ✅ A-W3 (T-1/T-2/T-3/T-4/T-5/T-6/T-7) is COMPLETE (2026-06-26). T-6 = T-6a (engine protect, done) + T-6b (scout/analyzer flag display, deferred to a browser pass). Noodle Arm was KEPT (DT-D re-add), not deleted.
 
 ### A-W4 — Branch-A L-SIM pre-gate
 Run the soul-invariant L-SIM after A-W1 + A-W2 + A-W3 land (it now also exercises the new development/trait checkpoints). The **final full-matrix gate** is post-merge (see CONVERGENCE).
