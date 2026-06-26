@@ -1476,6 +1476,7 @@ export function FranchiseHome() {
             seasonId={activeSeasonId}
             statsScopeId={activeSeasonId}
             seasonNumber={currentSeason}
+            rivalTeamId={franchiseData.rivalTeamId}
           />
         )}
         {activeTab === "rosters" && (

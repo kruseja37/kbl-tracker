@@ -45,9 +45,10 @@ function awardRow(overrides: Partial<FranchiseAwardRow> = {}): FranchiseAwardRow
     statsScopeId: scope.statsScopeId,
     category: 'MVP',
     winnerPlayerId: 'player-mvp',
+    winnerTeamId: 'team-a',
     candidates: [
-      { playerId: 'player-mvp', score: 6.5, marginToWinner: 0 },
-      { playerId: 'player-runner-up', score: 5.75, marginToWinner: -0.75 },
+      { playerId: 'player-mvp', teamId: 'team-a', score: 6.5, marginToWinner: 0 },
+      { playerId: 'player-runner-up', teamId: 'team-b', score: 5.75, marginToWinner: -0.75 },
     ],
     goldGloveSplit: null,
     voteWeight: null,
@@ -57,13 +58,14 @@ function awardRow(overrides: Partial<FranchiseAwardRow> = {}): FranchiseAwardRow
   };
 }
 
-function renderWatchlist() {
+function renderWatchlist(rivalTeamId?: string | null) {
   return render(
     <AwardsWatchlist
       franchiseId={scope.franchiseId}
       seasonId={scope.seasonId}
       statsScopeId={scope.statsScopeId}
       seasonNumber={scope.seasonNumber}
+      rivalTeamId={rivalTeamId}
     />,
   );
 }
@@ -87,18 +89,20 @@ describe('AwardsWatchlist', () => {
       awardRow({
         category: 'GOLD_GLOVE',
         winnerPlayerId: 'player-glove',
+        winnerTeamId: 'team-a',
         candidates: [
-          { playerId: 'player-glove', score: 2.9, marginToWinner: 0 },
-          { playerId: 'player-runner-up', score: 2.25, marginToWinner: -0.65 },
+          { playerId: 'player-glove', teamId: 'team-a', score: 2.9, marginToWinner: 0 },
+          { playerId: 'player-runner-up', teamId: 'team-b', score: 2.25, marginToWinner: -0.65 },
         ],
         goldGloveSplit: { fWar: 2.9, totalWar: 4.2 },
       }),
       awardRow({
         category: 'MANAGER_OF_YEAR',
         winnerPlayerId: 'manager-winner',
+        winnerTeamId: null,
         candidates: [
-          { playerId: 'manager-winner', score: 0.875, marginToWinner: 0 },
-          { playerId: 'manager-runner-up', score: 0.7, marginToWinner: -0.175 },
+          { playerId: 'manager-winner', teamId: null, score: 0.875, marginToWinner: 0 },
+          { playerId: 'manager-runner-up', teamId: null, score: 0.7, marginToWinner: -0.175 },
         ],
         managerActualWins: 22,
         managerExpectedWins: 18.4,
@@ -127,9 +131,10 @@ describe('AwardsWatchlist', () => {
       awardRow({
         finalized: false,
         winnerPlayerId: 'player-runner-up',
+        winnerTeamId: 'team-b',
         candidates: [
-          { playerId: 'player-runner-up', score: 4.25, marginToWinner: 0 },
-          { playerId: 'player-mvp', score: 4, marginToWinner: -0.25 },
+          { playerId: 'player-runner-up', teamId: 'team-b', score: 4.25, marginToWinner: 0 },
+          { playerId: 'player-mvp', teamId: 'team-a', score: 4, marginToWinner: -0.25 },
         ],
       }),
     ]);
@@ -143,5 +148,34 @@ describe('AwardsWatchlist', () => {
     expect(mocks.computeFranchiseAwardsPreview).toHaveBeenCalledWith(scope);
     expect(mocks.saveFranchiseAwardRows).not.toHaveBeenCalled();
     expect(mocks.replaceFranchiseAwardRowsForScope).not.toHaveBeenCalled();
+  });
+
+  test('colors rival winners and candidates red only when rivalTeamId is provided', async () => {
+    mocks.getFranchiseAwardRowsByScope.mockResolvedValue([awardRow()]);
+    mocks.computeFranchiseAwardsPreview.mockResolvedValue([]);
+
+    const { rerender } = renderWatchlist('team-b');
+
+    await waitFor(() => expect(screen.getByText('FINALIZED')).toBeInTheDocument());
+    expect(screen.getByTestId('award-winner-MVP').className).toContain('text-[var(--franchise-text)]');
+    const rivalCandidate = screen.getAllByText('Rae Knox')
+      .find((element) => element.className.includes('text-[var(--franchise-rival)]'));
+    expect(rivalCandidate).toBeTruthy();
+
+    rerender(
+      <AwardsWatchlist
+        franchiseId={scope.franchiseId}
+        seasonId={scope.seasonId}
+        statsScopeId={scope.statsScopeId}
+        seasonNumber={scope.seasonNumber}
+        rivalTeamId={null}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('award-winner-MVP').className).toContain('text-[var(--franchise-text)]');
+    });
+    expect(screen.queryAllByText('Rae Knox').some((element) =>
+      element.className.includes('text-[var(--franchise-rival)]'),
+    )).toBe(false);
   });
 });

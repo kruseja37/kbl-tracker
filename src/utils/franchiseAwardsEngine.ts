@@ -386,15 +386,20 @@ function buildAwardRow(params: {
   const winner = params.candidates[0];
   if (!winner) return null;
   const winnerScore = rounded(winner.score);
+  const winnerTeamId = params.candidates.find(
+    (candidate) => candidate.row.playerId === winner.row.playerId,
+  )?.row.currentTeamId ?? null;
 
   return {
     ...params.scope,
     category: params.category,
     winnerPlayerId: winner.row.playerId,
+    winnerTeamId,
     candidates: params.candidates.map((candidate) => {
       const score = rounded(candidate.score);
       return {
         playerId: candidate.row.playerId,
+        teamId: candidate.row.currentTeamId ?? null,
         score,
         marginToWinner: rounded(score - winnerScore),
       };
@@ -524,10 +529,12 @@ function computeFranchiseManagerOfYearFromEligibleInput(
     statsScopeId: input.statsScopeId,
     category: MANAGER_OF_YEAR_CATEGORY,
     winnerPlayerId: winner.managerId,
+    winnerTeamId: null,
     candidates: candidates.map((candidate) => {
       const score = rounded(candidate.score);
       return {
         playerId: candidate.managerId,
+        teamId: null,
         score,
         marginToWinner: rounded(score - winnerScore),
       };

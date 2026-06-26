@@ -44,6 +44,7 @@ interface AwardsWatchlistProps {
   seasonId: string;
   statsScopeId: string;
   seasonNumber: number;
+  rivalTeamId?: string | null;
 }
 
 type AwardsMode = "finalized" | "preview" | "empty";
@@ -80,6 +81,7 @@ export function AwardsWatchlist({
   seasonId,
   statsScopeId,
   seasonNumber,
+  rivalTeamId = null,
 }: AwardsWatchlistProps) {
   const [rows, setRows] = useState<FranchiseAwardRow[]>([]);
   const [mode, setMode] = useState<AwardsMode>("empty");
@@ -197,6 +199,9 @@ export function AwardsWatchlist({
             const row = rowsByCategory.get(category);
             if (!row) return null;
             const winnerName = resolveName(row, row.winnerPlayerId);
+            const winnerNameClass = row.winnerTeamId && row.winnerTeamId === rivalTeamId
+              ? "text-[var(--franchise-rival)]"
+              : "text-[var(--franchise-text)]";
 
             return (
               <article
@@ -213,7 +218,7 @@ export function AwardsWatchlist({
                   </div>
                   <div className="text-right">
                     <div className="text-[8px] uppercase text-[var(--franchise-text)]/55">Winner</div>
-                    <div className="text-[12px] font-bold text-[var(--franchise-text)]" data-testid={`award-winner-${category}`}>
+                    <div className={`text-[12px] font-bold ${winnerNameClass}`} data-testid={`award-winner-${category}`}>
                       {winnerName}
                     </div>
                   </div>
@@ -246,19 +251,25 @@ export function AwardsWatchlist({
                 )}
 
                 <div className="space-y-2">
-                  {row.candidates.map((candidate, index) => (
-                    <div
-                      key={`${category}-${candidate.playerId}`}
-                      className="grid grid-cols-[28px_1fr_auto_auto] items-center gap-2 bg-[var(--franchise-border)] px-3 py-2 text-[9px]"
-                    >
-                      <div className="text-[var(--franchise-gold)]">#{index + 1}</div>
-                      <div className="min-w-0 truncate text-[var(--franchise-text)]">{resolveName(row, candidate.playerId)}</div>
-                      <div className="text-[var(--franchise-text)]/70">{formatScore(candidate.score)}</div>
-                      <div className={candidate.marginToWinner === 0 ? "text-[var(--franchise-gold)]" : "text-[var(--franchise-text)]/60"}>
-                        {formatMargin(candidate.marginToWinner)}
+                  {row.candidates.map((candidate, index) => {
+                    const candidateNameClass = candidate.teamId && candidate.teamId === rivalTeamId
+                      ? "text-[var(--franchise-rival)]"
+                      : "text-[var(--franchise-text)]";
+
+                    return (
+                      <div
+                        key={`${category}-${candidate.playerId}`}
+                        className="grid grid-cols-[28px_1fr_auto_auto] items-center gap-2 bg-[var(--franchise-border)] px-3 py-2 text-[9px]"
+                      >
+                        <div className="text-[var(--franchise-gold)]">#{index + 1}</div>
+                        <div className={`min-w-0 truncate ${candidateNameClass}`}>{resolveName(row, candidate.playerId)}</div>
+                        <div className="text-[var(--franchise-text)]/70">{formatScore(candidate.score)}</div>
+                        <div className={candidate.marginToWinner === 0 ? "text-[var(--franchise-gold)]" : "text-[var(--franchise-text)]/60"}>
+                          {formatMargin(candidate.marginToWinner)}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </article>
             );

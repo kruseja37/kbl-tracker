@@ -522,6 +522,13 @@ describe('franchise WAR awards engine', () => {
     ]);
     expect(first.find((row) => row.category === 'MVP')?.candidates.map((candidate) => candidate.marginToWinner))
       .toEqual([0, -0.2, -0.3, -1.1, -1.6, -1.8]);
+    expect(first.find((row) => row.category === 'MVP')).toMatchObject({
+      winnerPlayerId: 'mvp',
+      winnerTeamId: 'team-a',
+      candidates: expect.arrayContaining([
+        expect.objectContaining({ playerId: 'mvp', teamId: 'team-a' }),
+      ]),
+    });
   });
 
   test('excludes untrusted score-only FARM and sub-peer rows through trusted artifact membership', () => {
@@ -735,9 +742,10 @@ describe('franchise WAR awards engine', () => {
       finalized: false,
     });
     expect(award?.candidates).toEqual([
-      { playerId: 'mgr-b', score: 0.625, marginToWinner: 0 },
-      { playerId: 'mgr-a', score: 0.375, marginToWinner: -0.25 },
+      { playerId: 'mgr-b', teamId: null, score: 0.625, marginToWinner: 0 },
+      { playerId: 'mgr-a', teamId: null, score: 0.375, marginToWinner: -0.25 },
     ]);
+    expect(award?.winnerTeamId).toBeNull();
     expect(award).not.toHaveProperty('fameWeight');
   });
 
@@ -761,8 +769,9 @@ describe('franchise WAR awards engine', () => {
 
     expect(award?.winnerPlayerId).toBe('mgr-only');
     expect(award?.candidates).toEqual([
-      { playerId: 'mgr-only', score: 0.5, marginToWinner: 0 },
+      { playerId: 'mgr-only', teamId: null, score: 0.5, marginToWinner: 0 },
     ]);
+    expect(award?.winnerTeamId).toBeNull();
     expect(award?.managerActualWins).toBe(9);
     expect(award?.managerExpectedWins).toBe(9);
   });

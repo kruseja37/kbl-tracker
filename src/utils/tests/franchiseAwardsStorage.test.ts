@@ -47,9 +47,10 @@ function row(overrides: Partial<FranchiseAwardRow> = {}): FranchiseAwardRow {
     ...scope,
     category: 'MVP',
     winnerPlayerId: 'player-mvp',
+    winnerTeamId: 'team-a',
     candidates: [
-      { playerId: 'player-mvp', score: 10, marginToWinner: 0 },
-      { playerId: 'player-runner-up', score: 8.5, marginToWinner: 1.5 },
+      { playerId: 'player-mvp', teamId: 'team-a', score: 10, marginToWinner: 0 },
+      { playerId: 'player-runner-up', teamId: 'team-b', score: 8.5, marginToWinner: 1.5 },
     ],
     goldGloveSplit: null,
     voteWeight: null,
