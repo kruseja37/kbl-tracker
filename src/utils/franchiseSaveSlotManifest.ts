@@ -724,6 +724,20 @@ export const FRANCHISE_SAVE_SLOT_MANIFEST: FranchiseSaveSlotManifestEntry[] = [
     notes: 'Durable read-only stadium evidence records; adaptive park-factor persistence and park-adjusted WAR/value consumers remain blocked.',
   },
   {
+    id: 'homeParkRivals',
+    domain: 'Home-park rivalry evidence',
+    databaseName: 'kbl-franchise-home-park-rivals',
+    storeName: 'homeParkRivals',
+    ownerKind: 'global-scoped',
+    lifecycle: 'optional',
+    requiredScopeKeys: ['franchiseId', 'seasonId', 'statsScopeId', 'seasonNumber'],
+    supportedEmptyState: true,
+    validationStrategy: 'scoped-record-count',
+    exportResponsibility: 'include',
+    deleteResponsibility: 'delete-scoped',
+    notes: 'Durable read-only home-park rivalry evidence records; downstream rivalry-amplification consumers (charged matchups, player-rivalry edges) remain blocked.',
+  },
+  {
     id: 'milestones',
     domain: 'Milestones',
     databaseName: 'kbl-tracker',
@@ -1340,6 +1354,7 @@ async function collectLifecycleContext(
     ['kbl-franchise-expected-wins-baselines', 'expectedWinsBaselineSnapshots'],
     ['kbl-franchise-morale-daily-snapshots', 'moraleDailySnapshots'],
     ['kbl-franchise-stadium-records', 'stadiumRecords'],
+    ['kbl-franchise-home-park-rivals', 'homeParkRivals'],
   ];
 
   const scannedStores = await Promise.all(
