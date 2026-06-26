@@ -318,6 +318,19 @@
 .fen-race-row.rival .who .nm { color: var(--fen-marquee); }
 .fen-race-row.rival .bar .fill { background: var(--fen-marquee); }
 
+/* the hardware board (all awards) */
+.fen-awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(224px, 1fr)); gap: 10px; }
+.fen-award { display: flex; align-items: center; gap: 11px; background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 3px solid var(--fen-yellow); border-radius: 5px; padding: 10px 12px; }
+.fen-award.bad { border-left-color: var(--fen-marquee); }
+.fen-award .em { font-size: 18px; line-height: 1; }
+.fen-award .bd { min-width: 0; flex: 1; }
+.fen-award .cat { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-award .who { font-family: var(--fen-chalk-font); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-award .who.you { color: var(--fen-yellow); }
+.fen-award .who.rival { color: var(--fen-marquee); }
+.fen-award .who .tm { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-award .st { color: var(--fen-yellow); font-size: 14px; }
+
 /* all-star board */
 .fen-ascols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
 @media (max-width: 760px) { .fen-ascols { grid-template-columns: 1fr; } }

@@ -198,9 +198,19 @@ export interface AllStarBoardVM {
   reserves: AllStarPickVM[];
   snubs?: AllStarSnubVM[];
 }
+export interface AwardSlotVM {
+  category: string;          // "MVP", "Gold Glove", "Bust of the Year"…
+  emblem?: string;
+  frontrunner: string;
+  teamId: string;
+  teamAbbr: string;
+  status?: "lead" | "locked";
+  dubious?: boolean;         // a negative honor (Bust, Booger Glove) → red accent
+}
 export interface StandingsRacesVM {
   divisions: StandingsDivisionVM[];
   races: AwardRaceVM[];
+  awards?: AwardSlotVM[];    // the full hardware board (all ~16 categories)
   allStar?: AllStarBoardVM;
 }
 
@@ -791,6 +801,28 @@ function StandingsRacesTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }
           })}
         </div>
       </div>
+
+      {/* THE HARDWARE — every award's current frontrunner */}
+      {sr.awards && sr.awards.length ? (
+        <div className="fen-sr-sect">
+          <div className="fen-sectlab">The Hardware <span className="lite fen-help">· every award's frontrunner · provisional</span></div>
+          <div className="fen-awards">
+            {sr.awards.map((aw, i) => {
+              const tone = teamTone(aw.teamId, active);
+              return (
+                <div className={`fen-award${aw.dubious ? " bad" : ""}`} key={i}>
+                  <span className="em">{aw.emblem ?? "🏆"}</span>
+                  <div className="bd">
+                    <div className="cat">{aw.category}</div>
+                    <div className={`who fen-chalk${tone}`}>{aw.frontrunner} <span className="tm">{aw.teamAbbr}</span></div>
+                  </div>
+                  {aw.status === "locked" ? <span className="st">★</span> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {/* ALL-STAR BOARD */}
       {sr.allStar ? <AllStarBoard board={sr.allStar} active={active} /> : null}

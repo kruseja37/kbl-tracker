@@ -53,10 +53,15 @@ ledger; a **Career** card (totals + awards-won chips); a **Milestones** section 
 | **Almanac — trophy case** ✅ BUILT | champions + past award winners + franchise record (you-highlight) | 🟢 | Y | `museumStorage.ts`, offseason awards |
 | **Almanac — history/facts** | retrosheet/SABR tidbits, player/team history | 🟡 | N | `reporter.ts:199` |
 
-## Bucket 3 — Awards, in full
+## Bucket 3 — Awards, in full ✅ BUILT (the Hardware board)
+**BUILT 2026-06-26** (mock-fed): a "The Hardware" board on the Standings & Races tab — every award's
+current frontrunner across all ~12 categories (MVP/Cy/ROY/Reliever/Silver Slugger/Gold Glove/Manager/
+Comeback/Kara Kawaguchi/Bench + the dubious **Bust of the Year** & **Booger Glove**, red-accented),
+you-yellow/rival-red. The 3 marquee races keep their gap-bar treatment above it.
+
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **Finalized awards (16 categories)** | season winners — MVP/Cy/ROY/Gold Glove/Silver Slugger/Manager/Reliever/Comeback/Bust/Kara Kawaguchi/Bench/Booger Glove… | 🟢 | N | `franchiseAwardsStorage.ts:16`, `awardEmblems.ts:12` |
+| **Finalized awards (16 categories)** ✅ BUILT | every award's frontrunner — MVP/Cy/ROY/Gold Glove/Silver Slugger/Manager/Reliever/Comeback/Bust/Kara Kawaguchi/Bench/Booger Glove | 🟢 | Y | `franchiseAwardsStorage.ts:16`, `awardEmblems.ts:12` |
 | **More race categories** | extend the gap-bar races beyond MVP/Cy/ROY (Gold Glove, Silver Slugger, Manager, Reliever) | 🟢 | partial | `franchiseAwardsEngine.ts` |
 | **Race fame component** | show the fame nudge inside a close race bar | 🟢 | N | `franchiseRaceStandingScorer.ts:14` |
 | **All-Star lock countdown** | "voting closes in N games" before the 60% lock | 🟢 | N | `franchiseAllStarSelector.ts` |
