@@ -32,13 +32,15 @@ type SaveTeamInput = Parameters<typeof saveTeam>[0];
 
 const LEAGUE_ID = "lens-demo-league";
 
+// `park` is a REAL SMB4 park name so the franchise init derives park factors from the lookup
+// (getDerivedParkFactorsIfAvailable overrides any seed parkFactors by stadium name).
 const DEMO_TEAMS = [
-  { id: "lens-demo-team-1", name: "Boulder Baselines", abbr: "BLD", primary: "#1F6F43", secondary: "#0E2A1A" },
-  { id: "lens-demo-team-2", name: "Denver Longnames", abbr: "DEN", primary: "#2D5BA8", secondary: "#10213F" },
-  { id: "lens-demo-team-3", name: "Apple Field Aces", abbr: "AFA", primary: "#B23B3B", secondary: "#3A1010" },
-  { id: "lens-demo-team-4", name: "Sirloin City Cuts", abbr: "SIR", primary: "#C4A853", secondary: "#3A2F12" },
-  { id: "lens-demo-team-5", name: "Keystone Combine", abbr: "KEY", primary: "#5B3FA8", secondary: "#1E1238" },
-  { id: "lens-demo-team-6", name: "Granite Pitchers", abbr: "GRA", primary: "#3A8E8E", secondary: "#103030" },
+  { id: "lens-demo-team-1", name: "Boulder Baselines", abbr: "BLD", primary: "#1F6F43", secondary: "#0E2A1A", park: "Apple Field", lf: 310, cf: 398, rf: 302 },
+  { id: "lens-demo-team-2", name: "Denver Longnames", abbr: "DEN", primary: "#2D5BA8", secondary: "#10213F", park: "Sakura Hills", lf: 347, cf: 415, rf: 350 },
+  { id: "lens-demo-team-3", name: "Apple Field Aces", abbr: "AFA", primary: "#B23B3B", secondary: "#3A1010", park: "Colonial Plaza", lf: 335, cf: 404, rf: 330 },
+  { id: "lens-demo-team-4", name: "Sirloin City Cuts", abbr: "SIR", primary: "#C4A853", secondary: "#3A2F12", park: "Swagger Center", lf: 330, cf: 408, rf: 325 },
+  { id: "lens-demo-team-5", name: "Keystone Combine", abbr: "KEY", primary: "#5B3FA8", secondary: "#1E1238", park: "Motor Yard", lf: 355, cf: 420, rf: 358 },
+  { id: "lens-demo-team-6", name: "Granite Pitchers", abbr: "GRA", primary: "#3A8E8E", secondary: "#103030", park: "Red Rock Park", lf: 365, cf: 425, rf: 368 },
 ];
 
 function makePlayer(
@@ -104,8 +106,18 @@ async function seedLeagueTeam(team: (typeof DEMO_TEAMS)[number]): Promise<void> 
     location: team.name,
     nickname: team.name,
     colors: { primary: team.primary, secondary: team.secondary },
-    stadium: `${team.name} Park`,
+    stadium: team.park,
     ballparkNickname: `The ${team.abbr} Yard`,
+    stadiumDimensions: {
+      name: team.park,
+      lf: team.lf,
+      cf: team.cf,
+      rf: team.rf,
+      lfWall: "medium",
+      cfWall: "medium",
+      rfWall: "high",
+    },
+    // parkFactors are derived from the real `stadium` name at franchise init — no seed value needed.
     leagueIds: [LEAGUE_ID],
     lineupWithDH: lineupPositions.map((fieldingPosition, index) => ({
       battingOrder: index + 1,

@@ -1,23 +1,35 @@
 /**
  * useFranchiseLensData — the GREENLIGHT-GATED real-data adapter for the aged-Fenway
- * franchise-lens hub (Stream A, Phase 1 spine: teams / active / roster / pulse / standings).
+ * franchise-lens hub (Stream A).
  *
  * Per FRANCHISE_LENS_REALDATA_ADAPTER_PLAN.md: the FranchiseLensHub is a PURE VIEW
  * component fed one `{ teams, active, hub }` bundle. This hook produces that bundle from the
  * real franchise engines/stores (the same reads the legacy hub uses), so the view is unchanged.
  *
- * Phase 1 only. The optional HubVM surfaces (stadium / schedule / almanac / drawer depth /
- * news / moments / checkpoint) are intentionally left undefined here — they render their empty
- * state and get wired in Phases 2-4. With the living-season Phase-2 flags OFF (normal save),
- * the soul surfaces read their real-but-neutral state (morale ~50, no history) — that is CORRECT.
+ * Phase 1 (DONE): teams / active / roster / pulse / standings.
+ * Phase 2 (THIS): stadium identity + park factors, schedule, almanac (leaders + trophy case).
+ *   - Stadium spray/records/aggregates are EVENT-driven (completed-game archive); that event load
+ *     is shared with the Phase-3 player-drawer per-player spray, so it is folded into Phase 3.
+ *     Phase 2 wires the real stadium IDENTITY + FACTORS (off the Team object) + an empty spray shell.
+ * Phases 3-4 (player drawer depth / news / moments / checkpoint): still undefined here.
  *
- * Lens team is pinned to controlledTeams[0] (v1; multi-team selector deferred). The team picker
- * still reframes the VIEWED team via `viewedTeamId`. Rival-red (active.rivalId/rivalName) is left
+ * With the living-season Phase-2 flags OFF (normal save), soul surfaces read their real-but-neutral
+ * state. With a GAMELESS save the schedule/almanac-leaders/spray are legitimately empty until games
+ * are played — CORRECT, not a bug; the surfaces fill against a real played save.
+ *
+ * Lens team is pinned to controlledTeams[0] (v1; multi-team selector deferred). Rival-red is left
  * undefined until this branch rebases onto the trunk's home-park-rivalry seam — degrades gracefully.
  */
 import { useEffect, useMemo, useState } from "react";
 
-import { useSeasonStats } from "../../hooks/useSeasonStats";
+import {
+  useSeasonStats,
+  type BattingLeaderEntry,
+  type BattingSortKey,
+  type PitchingLeaderEntry,
+  type PitchingSortKey,
+  type UseSeasonStatsReturn,
+} from "../../hooks/useSeasonStats";
 import { getFranchiseConfig } from "../../utils/franchiseManager";
 import { getFranchiseSeasonId } from "../../utils/franchisePersistenceContract";
 import {
@@ -41,20 +53,45 @@ import {
   type FranchiseMoraleSnapshot,
 } from "../../utils/franchiseMoraleState";
 import { getPlayerMoraleSpecState } from "../../utils/franchisePlayerMoraleSpecAdapter";
+import {
+  getAllGamesByFranchise,
+  type ScheduledGame,
+} from "../../utils/scheduleStorage";
+import {
+  getAwardWinners,
+  getChampionships,
+  type AwardWinner,
+  type ChampionshipRecord,
+} from "../../utils/museumStorage";
 import type { StoredFranchiseConfig } from "../../types/franchise";
 import type {
   ActiveTeamVM,
+  AlmanacVM,
   HubVM,
+  LeaderboardVM,
+  LeaderEntryVM,
   MoraleHistoryVM,
   PlayerMoraleVM,
   PlayerRowVM,
   PulseVM,
+  ScheduleGameVM,
+  ScheduleVM,
+  SprayRoleVM,
+  StadiumVM,
   StandingRowVM,
   StandingsRacesVM,
   TeamPickerVM,
+  TrophyVM,
 } from "../app/components/franchise/FranchiseLensHub";
 
 const PITCHER_POSITIONS = new Set(["SP", "RP", "CP", "P", "SP/RP"]);
+const WHITE = "#F4F1E4";
+const NAVY = "#1A2433";
+
+interface TeamMeta {
+  abbr: string;
+  name: string;
+}
 
 interface RawData {
   config: StoredFranchiseConfig | null;
@@ -63,6 +100,9 @@ interface RawData {
   standings: TeamStanding[];
   designations: FranchisePlayerDesignationRecord[];
   moraleSnapshots: FranchiseMoraleSnapshot[];
+  schedule: ScheduledGame[];
+  championships: ChampionshipRecord[];
+  awards: AwardWinner[];
 }
 
 export interface UseFranchiseLensDataReturn {
@@ -72,9 +112,6 @@ export interface UseFranchiseLensDataReturn {
   isLoading: boolean;
   error: string | null;
 }
-
-const WHITE = "#F4F1E4";
-const NAVY = "#1A2433";
 
 function isPitcher(player: Player): boolean {
   return PITCHER_POSITIONS.has(player.primaryPosition as string);
@@ -101,16 +138,16 @@ function money(value: number): string {
   return `$${Math.round(value)}`;
 }
 
+function rate3(value: number): string {
+  return value.toFixed(3).replace(/^0\./, ".");
+}
+
 function toMoraleHistory(snapshot: FranchiseMoraleSnapshot | null): MoraleHistoryVM[] {
   if (!snapshot) return [];
   return snapshot.history
     .slice(-6)
     .reverse()
-    .map((entry) => ({
-      delta: Math.round(entry.delta),
-      reason: entry.reason,
-      week: "",
-    }));
+    .map((entry) => ({ delta: Math.round(entry.delta), reason: entry.reason, week: "" }));
 }
 
 function mapDesignation(
@@ -181,11 +218,8 @@ function buildStandingsVM(
         away: standing?.awayRecord ?? { wins: 0, losses: 0 },
       };
     })
-    .sort(
-      (a, b) => b.winPct - a.winPct || b.wins - a.wins || a.name.localeCompare(b.name),
-    );
+    .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || a.name.localeCompare(b.name));
   const groupName = config?.leagueDetails?.name ?? config?.franchiseName ?? "League";
-  // Phase 1: single standings group; division grouping + races/all-star/hardware are Phase 2+.
   return { divisions: [{ name: groupName, rows }], races: [] };
 }
 
@@ -202,11 +236,7 @@ function buildPulse(
   const payroll = teamPlayers.reduce((sum, player) => sum + (Number(player.salary) || 0), 0);
 
   const fanMorale = fanSnapshot
-    ? {
-        value: fanSnapshot.currentValue,
-        trend: "flat" as const,
-        history: toMoraleHistory(fanSnapshot),
-      }
+    ? { value: fanSnapshot.currentValue, trend: "flat" as const, history: toMoraleHistory(fanSnapshot) }
     : undefined;
 
   const ranked = [...standings].sort((a, b) => b.winPct - a.winPct);
@@ -216,11 +246,187 @@ function buildPulse(
 
   return {
     fanMorale,
-    clubhouseLabel:
-      clubhouseAvg != null ? getPlayerMoraleSpecState(clubhouseAvg) : undefined,
+    clubhouseLabel: clubhouseAvg != null ? getPlayerMoraleSpecState(clubhouseAvg) : undefined,
     clubhouseAvg,
     standingLabel,
     payrollLabel: `${money(payroll)} · ${teamPlayers.length}`,
+  };
+}
+
+function deriveArchetype(overall: number): string {
+  // ParkFactors are ratio-scaled (~1.0 = neutral); the UI renders Math.round(v*100).
+  if (overall >= 1.05) return "Bandbox";
+  if (overall <= 0.95) return "Pitcher's Cavern";
+  return "Neutral";
+}
+
+function buildStadiumVM(team: Team): StadiumVM {
+  const pf = team.parkFactors;
+  const dims = team.stadiumDimensions;
+  const factors = pf
+    ? {
+        overall: pf.overall,
+        runs: pf.runs,
+        hr: pf.homeRuns,
+        confidence: pf.confidence,
+        source: pf.source,
+      }
+    : undefined;
+  const emptyRole = (role: SprayRoleVM["role"]): SprayRoleVM => ({
+    role,
+    dots: [],
+    stats: [],
+    note: "Batted-ball data fills as games are played.",
+  });
+  return {
+    name: team.stadium || `${team.name} Park`,
+    nickname: team.ballparkNickname,
+    city: team.location,
+    archetype: pf ? deriveArchetype(pf.overall) : undefined,
+    dims: dims ? { lf: dims.lf, cf: dims.cf, rf: dims.rf } : undefined,
+    factors,
+    // homeParkRival deferred to the home-park-rivalry rebase; aggregates/performers/opponents/records
+    // are event-driven (foundation report) and folded into Phase 3 with the drawer's per-player spray.
+    spray: [emptyRole("batting"), emptyRole("pitching"), emptyRole("fielding")],
+  };
+}
+
+function buildScheduleVM(
+  games: ScheduledGame[],
+  activeTeamId: string,
+  teamMeta: Map<string, TeamMeta>,
+): ScheduleVM | undefined {
+  const teamGames = games.filter(
+    (game) => game.homeTeamId === activeTeamId || game.awayTeamId === activeTeamId,
+  );
+  if (teamGames.length === 0) return undefined;
+
+  const toVM = (game: ScheduledGame): ScheduleGameVM => {
+    const home = game.homeTeamId === activeTeamId;
+    const oppId = home ? game.awayTeamId : game.homeTeamId;
+    const vm: ScheduleGameVM = {
+      date: game.date || `Day ${game.dayNumber}`,
+      opponent: teamMeta.get(oppId)?.abbr ?? oppId,
+      home,
+    };
+    if (game.result) {
+      const teamScore = home ? game.result.homeScore : game.result.awayScore;
+      const oppScore = home ? game.result.awayScore : game.result.homeScore;
+      vm.result = { teamScore, oppScore, win: game.result.winningTeamId === activeTeamId };
+    }
+    return vm;
+  };
+
+  const upcoming = teamGames.filter((game) => !game.result).map(toVM);
+  const recent = teamGames.filter((game) => game.result).map(toVM);
+  if (upcoming[0]) upcoming[0].isNext = true;
+  return { upcoming: upcoming.slice(0, 10), recent: recent.slice(-10).reverse() };
+}
+
+function formatBatting(key: BattingSortKey, entry: BattingLeaderEntry): string {
+  switch (key) {
+    case "avg":
+      return rate3(entry.avg);
+    case "totalWAR":
+      return entry.totalWAR.toFixed(1);
+    case "hr":
+      return String(entry.homeRuns);
+    case "rbi":
+      return String(entry.rbi);
+    case "sb":
+      return String(entry.stolenBases);
+    default:
+      return String((entry as unknown as Record<string, number>)[key] ?? 0);
+  }
+}
+
+function formatPitching(key: PitchingSortKey, entry: PitchingLeaderEntry): string {
+  switch (key) {
+    case "era":
+      return entry.era.toFixed(2);
+    case "pWAR":
+      return entry.pWAR.toFixed(1);
+    case "wins":
+      return String(entry.wins);
+    case "strikeouts":
+      return String(entry.strikeouts);
+    case "saves":
+      return String(entry.saves);
+    default:
+      return String((entry as unknown as Record<string, number>)[key] ?? 0);
+  }
+}
+
+const BATTING_BOARDS: { key: BattingSortKey; label: string }[] = [
+  { key: "avg", label: "AVG" },
+  { key: "hr", label: "HR" },
+  { key: "rbi", label: "RBI" },
+  { key: "sb", label: "SB" },
+  { key: "totalWAR", label: "WAR" },
+];
+const PITCHING_BOARDS: { key: PitchingSortKey; label: string }[] = [
+  { key: "era", label: "ERA" },
+  { key: "wins", label: "W" },
+  { key: "strikeouts", label: "K" },
+  { key: "saves", label: "SV" },
+  { key: "pWAR", label: "WAR" },
+];
+
+function buildAlmanacVM(
+  seasonStats: UseSeasonStatsReturn,
+  statsReady: boolean,
+  teamMeta: Map<string, TeamMeta>,
+  championships: ChampionshipRecord[],
+  awards: AwardWinner[],
+): AlmanacVM | undefined {
+  const battingLeaders: LeaderboardVM[] = [];
+  const pitchingLeaders: LeaderboardVM[] = [];
+
+  if (statsReady) {
+    for (const board of BATTING_BOARDS) {
+      const entries: LeaderEntryVM[] = seasonStats
+        .getBattingLeaders(board.key, 3)
+        .map((entry, index) => ({
+          rank: index + 1,
+          name: entry.playerName,
+          teamId: entry.teamId,
+          teamAbbr: teamMeta.get(entry.teamId)?.abbr ?? entry.teamId,
+          value: formatBatting(board.key, entry),
+        }));
+      if (entries.length) battingLeaders.push({ stat: board.label, entries });
+    }
+    for (const board of PITCHING_BOARDS) {
+      const entries: LeaderEntryVM[] = seasonStats
+        .getPitchingLeaders(board.key, 3)
+        .map((entry, index) => ({
+          rank: index + 1,
+          name: entry.playerName,
+          teamId: entry.teamId,
+          teamAbbr: teamMeta.get(entry.teamId)?.abbr ?? entry.teamId,
+          value: formatPitching(board.key, entry),
+        }));
+      if (entries.length) pitchingLeaders.push({ stat: board.label, entries });
+    }
+  }
+
+  const trophyCase: TrophyVM[] = [
+    ...championships.map((record) => ({
+      label: `${record.year} Champions`,
+      holder: record.champion,
+      teamId: record.championId,
+    })),
+    ...awards.map((award) => ({
+      label: `${award.year} ${award.awardType}`,
+      holder: award.playerName,
+      teamId: award.teamId,
+    })),
+  ];
+
+  if (!battingLeaders.length && !pitchingLeaders.length && !trophyCase.length) return undefined;
+  return {
+    battingLeaders,
+    pitchingLeaders,
+    trophyCase: trophyCase.length ? trophyCase : undefined,
   };
 }
 
@@ -228,8 +434,8 @@ function buildReturn(
   raw: RawData | null,
   viewedTeamId: string | undefined,
   seasonNumber: number,
-  battingWar: Map<string, number>,
-  pitchingWar: Map<string, number>,
+  seasonStats: UseSeasonStatsReturn,
+  statsReady: boolean,
   isLoading: boolean,
   error: string | null,
 ): UseFranchiseLensDataReturn {
@@ -250,7 +456,11 @@ function buildReturn(
     };
   }
 
-  const { config, teams, players, standings, designations, moraleSnapshots } = raw;
+  const { config, teams, players, standings, designations, moraleSnapshots, schedule, championships, awards } = raw;
+
+  const teamMeta = new Map<string, TeamMeta>(
+    teams.map((team) => [team.id, { abbr: team.abbreviation, name: team.name }]),
+  );
 
   const teamPicker: TeamPickerVM[] = teams.map((team) => ({
     id: team.id,
@@ -265,9 +475,18 @@ function buildReturn(
 
   const standingByTeam = new Map(standings.map((standing) => [standing.teamId, standing]));
   const activeStanding = standingByTeam.get(activeTeam.id);
-  const recordLabel = activeStanding
-    ? `${activeStanding.wins}-${activeStanding.losses}`
-    : "0-0";
+  const recordLabel = activeStanding ? `${activeStanding.wins}-${activeStanding.losses}` : "0-0";
+
+  const battingWar = new Map<string, number>();
+  const pitchingWar = new Map<string, number>();
+  if (statsReady) {
+    for (const entry of seasonStats.getBattingLeaders("totalWAR", 1000)) {
+      battingWar.set(entry.playerId, entry.totalWAR);
+    }
+    for (const entry of seasonStats.getPitchingLeaders("pWAR", 1000)) {
+      pitchingWar.set(entry.playerId, entry.pWAR);
+    }
+  }
 
   const playerMoraleById = new Map(
     moraleSnapshots
@@ -298,7 +517,6 @@ function buildReturn(
     recordLabel,
     primary: activeTeam.colors?.primary ?? WHITE,
     secondary: activeTeam.colors?.secondary ?? NAVY,
-    // rival-red deferred until the home-park-rivalry rebase (degrades gracefully).
     rivalName: undefined,
     rivalId: undefined,
     seasonLabel: `Season ${seasonNumber}`,
@@ -311,6 +529,9 @@ function buildReturn(
     pulse: buildPulse(teamPlayers, activeTeam.id, fanSnapshot, standings),
     roster,
     standings: buildStandingsVM(teams, standingByTeam, config),
+    stadium: buildStadiumVM(activeTeam),
+    schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
+    almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, championships, awards),
     loading: false,
   };
 
@@ -358,6 +579,10 @@ export function useFranchiseLensData(
           seasonId,
           seasonNumber,
         );
+        const schedule = await getAllGamesByFranchise(franchiseId, seasonNumber);
+        // Museum (champions / award winners) is global all-time history; empty on a fresh franchise.
+        const championships = await getChampionships().catch(() => []);
+        const awards = await getAwardWinners().catch(() => []);
         if (cancelled) return;
         setRaw({
           config,
@@ -366,6 +591,9 @@ export function useFranchiseLensData(
           standings: standings ?? [],
           designations: designations ?? [],
           moraleSnapshots: moraleSnapshots ?? [],
+          schedule: schedule ?? [],
+          championships: championships ?? [],
+          awards: awards ?? [],
         });
         setIsLoading(false);
       } catch (caught) {
@@ -380,21 +608,12 @@ export function useFranchiseLensData(
   }, [franchiseId, seasonId, seasonNumber]);
 
   const statsReady = !seasonStats.isLoading;
-  return useMemo(() => {
-    const battingWar = new Map<string, number>();
-    const pitchingWar = new Map<string, number>();
-    if (statsReady) {
-      for (const entry of seasonStats.getBattingLeaders("totalWAR", 1000)) {
-        battingWar.set(entry.playerId, entry.totalWAR);
-      }
-      for (const entry of seasonStats.getPitchingLeaders("pWAR", 1000)) {
-        pitchingWar.set(entry.playerId, entry.pWAR);
-      }
-    }
-    return buildReturn(raw, viewedTeamId, seasonNumber, battingWar, pitchingWar, isLoading, error);
-    // seasonStats getters are useCallback-stable; statsReady gates the WAR rebuild.
+  return useMemo(
+    () => buildReturn(raw, viewedTeamId, seasonNumber, seasonStats, statsReady, isLoading, error),
+    // seasonStats getters are useCallback-stable; statsReady gates the stats-derived rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raw, viewedTeamId, seasonNumber, statsReady, isLoading, error]);
+    [raw, viewedTeamId, seasonNumber, statsReady, isLoading, error],
+  );
 }
 
 export default useFranchiseLensData;
