@@ -2,7 +2,10 @@ import type { PersistedGameState } from './gameStorage';
 import { getRecentGames } from './gameStorage';
 import { getFranchiseConfig } from './franchiseManager';
 import { buildFranchiseStadiumFoundationReport } from './franchiseStadiumFoundation';
-import { upsertFranchiseStadiumRecordsFromFoundationReport } from './franchiseStadiumRecordsStorage';
+import {
+  upsertFranchiseStadiumRecordsFromFoundationReport,
+  type FranchiseStadiumRecordChange,
+} from './franchiseStadiumRecordsStorage';
 import { isFranchisePhase2StadiumRecordsEnabled } from './franchisePhase2Flags';
 import type { CompletedGameArchiveOptions } from './franchiseCheckpointSweepCompute';
 import type { PersistedTrueValueScope } from './processCompletedGame';
@@ -18,6 +21,7 @@ export type PersistDarkStadiumRecordsResult = {
   status: 'dark-noop' | 'written';
   written: number;
   changes: number;
+  changeList: FranchiseStadiumRecordChange[];
   reason?: string;
 };
 
@@ -34,6 +38,7 @@ export async function persistDarkStadiumRecordsForCompletedGame(
       status: 'dark-noop',
       written: 0,
       changes: 0,
+      changeList: [],
       reason: 'Phase-2 stadium-records disabled.',
     };
   }
@@ -60,6 +65,7 @@ export async function persistDarkStadiumRecordsForCompletedGame(
     status: result.persisted ? 'written' : 'dark-noop',
     written: result.records.length,
     changes: result.changes.length,
+    changeList: result.changes,
     reason: result.persisted ? undefined : (result.blockers[0] ?? 'No stadium records to persist.'),
   };
 }

@@ -148,6 +148,7 @@ describe('persistDarkStadiumRecordsForCompletedGame', () => {
       status: 'dark-noop',
       written: 0,
       changes: 0,
+      changeList: [],
       reason: 'Phase-2 stadium-records disabled.',
     });
     expect(getRecentGames).not.toHaveBeenCalled();
@@ -177,6 +178,7 @@ describe('persistDarkStadiumRecordsForCompletedGame', () => {
       status: 'written',
       written: 1,
       changes: 1,
+      changeList: [change],
       reason: undefined,
     });
     expect(getRecentGames).toHaveBeenCalledWith(1000, {
@@ -215,6 +217,7 @@ describe('persistDarkStadiumRecordsForCompletedGame', () => {
       status: 'dark-noop',
       written: 0,
       changes: 0,
+      changeList: [],
       reason: 'No stadium records to persist.',
     });
   });

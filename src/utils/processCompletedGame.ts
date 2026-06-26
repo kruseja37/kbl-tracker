@@ -90,6 +90,7 @@ import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAu
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
 import { persistFranchiseAllStarRosterForCompletedGame } from './franchiseAllStarRosterCompute';
 import { persistDarkStadiumRecordsForCompletedGame } from './franchiseStadiumRecordsTap';
+import type { FranchiseStadiumRecordChange } from './franchiseStadiumRecordsStorage';
 import type { HiddenModifiers } from '../types/game';
 import { FAME_TUNING } from '../engines/fameModel';
 import {
@@ -1165,9 +1166,18 @@ export async function processCompletedGame(
         } catch (error) {
           console.warn('[TrueValueSnapshots] failed to persist True Value snapshots for completed game ' + gameState.gameId + ':', error);
         }
+        let stadiumChanges: FranchiseStadiumRecordChange[] = [];
+        if (isFranchisePhase2StadiumRecordsEnabled()) {
+          try {
+            const stadiumResult = await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+            stadiumChanges = stadiumResult.changeList;
+          } catch (e) {
+            console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
         if (isFranchisePhase2FameEnabled()) {
           try {
-            const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+            const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions, stadiumChanges);
             await persistFameMoraleConsequencesAfterFame(
               gameState,
               trueValueScope,
@@ -1255,13 +1265,6 @@ export async function processCompletedGame(
             await persistFranchiseAllStarRosterForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[L12] dark All-Star roster persist skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2StadiumRecordsEnabled()) {
-          try {
-            await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         try {
