@@ -49,7 +49,7 @@ function workbookArchetypes(): SimArchetype[] {
     .map((name) => ({ name, increase: [name], decrease: [] }));
 }
 
-describe('archetype balance simulator — workbook baseline', () => {
+describe('archetype balance simulator — workbook baseline (provenance)', () => {
   it('runs the EV-flatness check on the workbook archetypes (standard tier) and prints the parity table', () => {
     const pool = loadPool();
     const archetypes = workbookArchetypes();
@@ -61,97 +61,20 @@ describe('archetype balance simulator — workbook baseline', () => {
       .sort((a, b) => b.totalIv - a.totalIv);
 
     // eslint-disable-next-line no-console
-    console.log(`\n=== ARCHETYPE BALANCE (tier=standard, budget=$${fmt(report.budget)}, mean roster IV=$${fmt(report.meanIv)}) ===`);
-    // eslint-disable-next-line no-console
-    console.log('archetype'.padEnd(20) + 'totalIV'.padStart(12) + 'dev%'.padStart(9) + 'tax'.padStart(12) + '  solvent');
+    console.log(`\n=== WORKBOOK ARCHETYPE BASELINE (standard, mean roster IV $${fmt(report.meanIv)}) ===`);
     for (const r of rows) {
       // eslint-disable-next-line no-console
-      console.log(
-        r.name.padEnd(20) +
-          `$${fmt(r.totalIv)}`.padStart(12) +
-          `${(r.dev * 100).toFixed(1)}%`.padStart(9) +
-          `$${fmt(r.totalTax)}`.padStart(12) +
-          `  ${r.solvent ? 'yes' : 'NO'}`,
-      );
+      console.log(`${r.name.padEnd(20)} ${(r.dev * 100).toFixed(1).padStart(6)}%   tax $${fmt(r.totalTax).padStart(9)}`);
     }
     // eslint-disable-next-line no-console
-    console.log(`\nmax deviation: ${(report.maxDeviation * 100).toFixed(1)}%   within ±${report.band * 100}% band: ${report.withinBand}`);
-    if (report.outliers.length) {
-      // eslint-disable-next-line no-console
-      console.log('OUTLIERS: ' + report.outliers.map((o) => `${o.name} ${(o.deviation * 100).toFixed(1)}%`).join(', '));
-    }
+    console.log(`max deviation ${(report.maxDeviation * 100).toFixed(1)}%; outliers: ${report.outliers.map((o) => o.name).join(', ') || 'none'}`);
 
-    // Sanity: the sim ran over the real pool and every archetype built a full roster.
+    // Documented baseline: the bulk of the workbook set is flat; only the deep-nerf extremes (Defense
+    // First, Lazer Guns) break — which is why we ship the sim-balanced HISTORICAL set instead (see
+    // historicalArchetypes.test.ts + ARCHETYPE_BALANCE_SIM_RESULTS.md). This test is provenance only.
     expect(pool.length).toBe(440);
     expect(report.results.length).toBe(archetypes.length);
     expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
-    expect(report.budget).toBeGreaterThan(0);
-    // Documented baseline: the bulk of the workbook set is flat; only the deep-nerf extremes break.
-    const inBand = report.results.length - report.outliers.length;
-    expect(inBand).toBeGreaterThanOrEqual(30);
-  });
-
-  it('balances Defense First by funding a full rotation nerf with a speed boost', () => {
-    const pool = loadPool();
-    const baseSet = workbookArchetypes().filter((a) => a.name !== 'Lazer Guns' && a.name !== 'Defense First');
-
-    // Standard-tier caps these shifts apply to (room = fraction × cap — the engine-faithful numbers).
-    const STD = { FLD: 584.7, ARM: 570.0, SPD: 588.9, RVEL: 260.4, RJNK: 252.3, RACC: 285.3 };
-    const fFLD = 0.239316; // Big D fielding boost
-    const fARM = 0.088496; // Big D arm boost
-    const fRVEL = 0.2;
-    const fRJNK = 0.192308;
-    const fRACC = 0.173077; // full 'Rotation Boost' nerf
-
-    const r = (frac: number, cap: number) => Math.round(frac * cap);
-    // eslint-disable-next-line no-console
-    console.log(
-      `\n=== Defense First: FIXED boost FLD +${r(fFLD, STD.FLD)} (+${(fFLD * 100).toFixed(0)}%), ARM +${r(fARM, STD.ARM)} (+${(fARM * 100).toFixed(0)}%); ` +
-        `FIXED rotation nerf VEL −${r(fRVEL, STD.RVEL)} JNK −${r(fRJNK, STD.RJNK)} ACC −${r(fRACC, STD.RACC)} ` +
-        `(total −${r(fRVEL, STD.RVEL) + r(fRJNK, STD.RJNK) + r(fRACC, STD.RACC)}). Sweeping SPEED boost: ===`,
-    );
-    // Which funding boost can actually offset the rotation nerf? Test each hitter stat at +10/+20%.
-    const fund: Array<{ key: string; label: string }> = [
-      { key: 'hitters/SPD', label: 'speed' },
-      { key: 'hitters/POW', label: 'power' },
-      { key: 'hitters/CON', label: 'contact' },
-      { key: 'hitters/FLD', label: 'fielding(more)' },
-    ];
-    for (const f of fund) {
-      for (const amt of [0.1, 0.2]) {
-        const rawShift: Record<string, number> = {
-          'hitters/FLD': fFLD,
-          'hitters/ARM': fARM,
-          'rotation/VEL': -fRVEL,
-          'rotation/JNK': -fRJNK,
-          'rotation/ACC': -fRACC,
-        };
-        rawShift[f.key] = (rawShift[f.key] ?? 0) + amt;
-        const report = runBalanceSim(pool, [...baseSet, { name: 'DefenseFirst', rawShift }], 'standard', 0.1);
-        const row = report.results.find((r2) => r2.name === 'DefenseFirst')!;
-        const dev = (row.totalIv - report.meanIv) / report.meanIv;
-        // eslint-disable-next-line no-console
-        console.log(
-          `+${f.label.padEnd(14)} +${(amt * 100).toFixed(0)}%  →  dev ${(dev * 100).toFixed(1).padStart(6)}%   ` +
-            `tax $${Math.round(row.totalTax).toLocaleString().padStart(9)}   solvent ${row.solvent ? 'yes' : 'NO'}`,
-        );
-      }
-    }
-    expect(pool.length).toBe(440);
-  });
-
-  it('summarises parity across all three tiers (juiced / standard / nerfed)', () => {
-    const pool = loadPool();
-    const archetypes = workbookArchetypes();
-    for (const tier of ['juiced', 'standard', 'nerfed'] as const) {
-      const report = runBalanceSim(pool, archetypes, tier, 0.1);
-      const inBand = report.results.length - report.outliers.length;
-      // eslint-disable-next-line no-console
-      console.log(
-        `\n[${tier}] within ±10%: ${inBand}/${report.results.length}   maxDev ${(report.maxDeviation * 100).toFixed(1)}%   ` +
-          `outliers: ${report.outliers.map((o) => `${o.name} ${(o.deviation * 100).toFixed(0)}%`).join(', ') || 'none'}`,
-      );
-      expect(report.results.length).toBe(archetypes.length);
-    }
+    expect(report.results.length - report.outliers.length).toBeGreaterThanOrEqual(30);
   });
 });

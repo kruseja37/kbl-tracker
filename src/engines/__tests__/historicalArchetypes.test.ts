@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { runBalanceSim, type SimPlayer, type SimArchetype } from '../archetypeBalanceSimulator';
+import { HISTORICAL_ARCHETYPES, archetypeCapShift } from '../../data/historicalArchetypes';
+import type { TierKey } from '../../data/tierParams';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ORACLE_PATH = path.resolve(__dirname, '../../../spec-docs/reference/iv_oracle.json');
@@ -30,58 +32,32 @@ function loadPool(): SimPlayer[] {
   });
 }
 
-// Value-calibrated per-stat unit shift (small for valuable/binding stats, large for cheap ones —
-// the workbook's own calibration direction). A first-pass magnitude; the sim tells us what to tune.
-const U: Record<string, number> = {
-  POW: 0.05, CON: 0.1, SPD: 0.12, FLD: 0.22, ARM: 0.12,
-  ROT_VEL: 0.16, ROT_JNK: 0.3, ROT_ACC: 0.25, PEN_VEL: 0.2, PEN_JNK: 0.35, PEN_ACC: 0.3,
-};
-const KEY: Record<string, string> = {
-  POW: 'hitters/POW', CON: 'hitters/CON', SPD: 'hitters/SPD', FLD: 'hitters/FLD', ARM: 'hitters/ARM',
-  ROT_VEL: 'rotation/VEL', ROT_JNK: 'rotation/JNK', ROT_ACC: 'rotation/ACC',
-  PEN_VEL: 'bullpen/VEL', PEN_JNK: 'bullpen/JNK', PEN_ACC: 'bullpen/ACC',
-};
-function shift(spec: Record<string, number>): Record<string, number> {
-  const rs: Record<string, number> = {};
-  for (const [s, m] of Object.entries(spec)) rs[KEY[s]] = m * U[s];
-  return rs;
-}
+// The canonical set → sim archetypes (custom rawShift profiles).
+const SIM_SET: SimArchetype[] = HISTORICAL_ARCHETYPES.map((a) => ({ name: a.name, rawShift: archetypeCapShift(a) }));
 
-// 16 distinct, deduped historical identities (boost level + / nerf level −; magnitude × unit).
-const HISTORICAL: SimArchetype[] = [
-  { name: "Murderers' Row", rawShift: shift({ POW: 1.5, CON: 1, SPD: -1.5 }) },
-  { name: 'Bomba Squad', rawShift: shift({ POW: 2, CON: -1.5, SPD: -1 }) },
-  { name: 'Bash Brothers', rawShift: shift({ POW: 1.5, ARM: 1, ROT_ACC: -1, PEN_ACC: -1 }) },
-  { name: 'Whiteyball', rawShift: shift({ SPD: 1.5, FLD: 1.5, POW: -2 }) },
-  { name: 'Go-Go Small Ball', rawShift: shift({ CON: 1.5, FLD: 1, POW: -2 }) },
-  { name: 'Dead-Ball Suppressors', rawShift: shift({ ROT_JNK: 1.5, CON: 1, POW: -2, PEN_VEL: -1 }) },
-  { name: 'Billy Ball Burners', rawShift: shift({ SPD: 2, POW: -1.5, ROT_ACC: -1 }) },
-  { name: 'Junkball Surgeons', rawShift: shift({ ROT_ACC: 1.5, ROT_JNK: 1, POW: -1, ROT_VEL: -1 }) },
-  { name: 'Flamethrowers', rawShift: shift({ ROT_VEL: 2, POW: -1, CON: -1 }) },
-  { name: 'Nasty Boys', rawShift: shift({ PEN_VEL: 2, PEN_ACC: -1.5 }) },
-  { name: 'HDH Royals', rawShift: shift({ PEN_ACC: 1.5, SPD: 1, POW: -1.5, ROT_ACC: -1 }) },
-  { name: 'The Opener', rawShift: shift({ PEN_VEL: 1.5, PEN_JNK: 1, ROT_VEL: -1.5, ROT_ACC: -1 }) },
-  { name: 'The Oriole Way', rawShift: shift({ FLD: 1.5, ROT_ACC: 1.5, SPD: -1, PEN_VEL: -1 }) },
-  { name: 'Shift-Era Suppressors', rawShift: shift({ FLD: 1.5, ROT_VEL: 1, CON: -1.5, PEN_ACC: -1 }) },
-  { name: 'Big Red Machine', rawShift: shift({ CON: 1.5, FLD: 1, POW: 0.5, ROT_VEL: -1.5, ROT_ACC: -1 }) },
-];
+describe('historical team archetypes — locked set, all tiers', () => {
+  it('is 15 distinct archetypes', () => {
+    expect(HISTORICAL_ARCHETYPES.length).toBe(15);
+    expect(new Set(HISTORICAL_ARCHETYPES.map((a) => a.id)).size).toBe(15);
+  });
 
-describe('historical team archetypes — first balance pass', () => {
-  it('runs the historical set through the sim and prints the landscape (standard tier)', () => {
+  it('stays within the ±10% parity band across juiced / standard / nerfed, and prints the landscape', () => {
     const pool = loadPool();
-    const report = runBalanceSim(pool, HISTORICAL, 'standard', 0.1);
-    const fmt = (n: number) => Math.round(n).toLocaleString();
-    const rows = report.results
-      .map((r) => ({ ...r, dev: (r.totalIv - report.meanIv) / report.meanIv }))
-      .sort((a, b) => b.dev - a.dev);
-    // eslint-disable-next-line no-console
-    console.log(`\n=== HISTORICAL ARCHETYPES (standard, mean roster IV $${fmt(report.meanIv)}) ===`);
-    for (const r of rows) {
+    for (const tier of ['juiced', 'standard', 'nerfed'] as const satisfies readonly TierKey[]) {
+      const report = runBalanceSim(pool, SIM_SET, tier, 0.1);
+      const inBand = report.results.length - report.outliers.length;
+      const rows = report.results
+        .map((r) => ({ name: r.name, dev: (r.totalIv - report.meanIv) / report.meanIv }))
+        .sort((a, b) => b.dev - a.dev);
       // eslint-disable-next-line no-console
-      console.log(`${r.name.padEnd(24)} dev ${(r.dev * 100).toFixed(1).padStart(6)}%   tax $${fmt(r.totalTax).padStart(9)}   solvent ${r.solvent ? 'yes' : 'NO'}`);
+      console.log(
+        `\n[${tier}] within ±10%: ${inBand}/${report.results.length}   maxDev ${(report.maxDeviation * 100).toFixed(1)}%   ` +
+          (report.outliers.length ? `OUT: ${report.outliers.map((o) => `${o.name} ${(o.deviation * 100).toFixed(0)}%`).join(', ')}` : 'all in band'),
+      );
+      // eslint-disable-next-line no-console
+      console.log('  ' + rows.map((r) => `${r.name} ${(r.dev * 100).toFixed(1)}%`).join('  ·  '));
+      expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
+      expect(report.withinBand).toBe(true);
     }
-    // eslint-disable-next-line no-console
-    console.log(`max deviation ${(report.maxDeviation * 100).toFixed(1)}%   within ±10%: ${report.results.length - report.outliers.length}/${report.results.length}`);
-    expect(report.results.length).toBe(HISTORICAL.length);
   });
 });
