@@ -180,6 +180,11 @@ const FranchiseLensPreview = lazy(() =>
     default: module.FranchiseLensPreview,
   })),
 );
+const FranchiseLensLivePreview = lazy(() =>
+  import("./src_figma/app/pages/FranchiseLensLivePreview").then((module) => ({
+    default: module.FranchiseLensLivePreview,
+  })),
+);
 const PlayerInstanceCardPreview = lazy(() =>
   import("./src_figma/app/pages/PlayerInstanceCardPreview").then((module) => ({
     default: module.PlayerInstanceCardPreview,
@@ -225,6 +230,14 @@ const FranchiseManualSmokeSetup = enableFranchiseManualSmokeSetupRoute
   ? lazy(() =>
       import("./src_figma/app/pages/FranchiseManualSmokeSetup").then((module) => ({
         default: module.FranchiseManualSmokeSetup,
+      })),
+    )
+  : null;
+// Dev/test-only verification harness: seeds a deterministic demo franchise for the real-data lens.
+const FranchiseLensSeed = enableFranchiseManualSmokeSetupRoute
+  ? lazy(() =>
+      import("./src_figma/app/pages/FranchiseLensSeed").then((module) => ({
+        default: module.FranchiseLensSeed,
       })),
     )
   : null;
@@ -345,6 +358,10 @@ function App() {
         <Route path="/__preview/auction-stage" element={<AuctionStagePreview />} />
         <Route path="/__preview/franchise-lens" element={<FranchiseLensPreview />} />
         <Route
+          path="/__preview/franchise-lens/:franchiseId"
+          element={<FranchiseLensLivePreview />}
+        />
+        <Route
           path="/__preview/player-instance-card"
           element={<PlayerInstanceCardPreview />}
         />
@@ -372,6 +389,12 @@ function App() {
           <Route
             path="/__preview/franchise-v1-visual-smoke"
             element={FranchiseV1VisualSmokeSeed ? <FranchiseV1VisualSmokeSeed /> : <NotFound />}
+          />
+        ) : null}
+        {enableFranchiseManualSmokeSetupRoute ? (
+          <Route
+            path="/__preview/franchise-lens-seed"
+            element={FranchiseLensSeed ? <FranchiseLensSeed /> : <NotFound />}
           />
         ) : null}
         {enableFranchiseManualSmokeSetupRoute ? (
