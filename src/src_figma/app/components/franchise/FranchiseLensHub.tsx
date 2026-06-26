@@ -417,7 +417,7 @@ function RosterTab({
       <div className="fen-pulse">
         <div className="club fen-chalk fen-y">
           {active.name}{" "}
-          {hub.pulse.standingLabel ? <span className="fen-muted" style={{ fontFamily: "var(--fen-type)", fontSize: 14 }}>{hub.pulse.standingLabel}</span> : null}
+          {hub.pulse.standingLabel ? <span className="fen-muted" style={{ fontFamily: "var(--fen-chalk-font)", fontSize: 14 }}>{hub.pulse.standingLabel}</span> : null}
         </div>
         {fan ? (
           <div style={{ position: "relative" }}>
