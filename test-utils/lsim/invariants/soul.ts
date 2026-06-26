@@ -7,6 +7,7 @@ import {
 } from '../../../src/engines/relationshipIntensity';
 import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
+import { assignTier } from '../../../src/data/traitTierConfig';
 import { pickRaceSnubVictims } from '../../../src/utils/franchiseRaceSnubMorale';
 import {
   franchiseRelationshipEdgeId,
@@ -946,6 +947,23 @@ function ratingsOverlayValidity(snapshot: LsimStateSnapshot): LsimInvariantResul
   );
 }
 
+// The grant gates each trait on its TIER threshold (traitAcquisition.thresholdsForTrait ->
+// assignTier), NOT the global TRAIT_ACQUISITION_TUNING.{gain,lose}Threshold. So a valid
+// UNCOMMON/MODERATE gain (tier gainThreshold 0.65-0.70) lands in [0.65, 0.75) and must NOT be
+// flagged. Mirror the grant's per-tier fallback exactly so the invariant checks what the grant
+// actually enforces.
+function traitOverlayThresholdsFor(traitName: string): { gain: number; lose: number } {
+  try {
+    const tier = assignTier(traitName);
+    return { gain: tier.gainThreshold, lose: tier.lossThreshold };
+  } catch {
+    return {
+      gain: TRAIT_ACQUISITION_TUNING.gainThreshold,
+      lose: TRAIT_ACQUISITION_TUNING.loseThreshold,
+    };
+  }
+}
+
 function traitTwoSlotNoOffsetHysteresis(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const badPlayers = snapshot.players.filter((player) => {
     const traits = [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait));
@@ -953,15 +971,18 @@ function traitTwoSlotNoOffsetHysteresis(snapshot: LsimStateSnapshot): LsimInvari
     const hasOpposite = traits.some((trait) => TRAIT_OPPOSITES[trait] && traits.includes(TRAIT_OPPOSITES[trait]));
     return traits.length > 2 || hasDuplicate || hasOpposite;
   });
-  const badOverlays = snapshot.traitOverlays.filter((row) =>
-    row.confirmationStatus !== 'pending' ||
-    !isFiniteNumber(row.probability) ||
-    row.probability < 0 ||
-    row.probability > 1 ||
-    (row.valence === 'gain' && row.probability < TRAIT_ACQUISITION_TUNING.gainThreshold) ||
-    (row.valence === 'lose' && row.probability > TRAIT_ACQUISITION_TUNING.loseThreshold) ||
-    (row.valence === 'gain' && TRAIT_OPPOSITES[row.traitName] === row.displacesTraitName),
-  );
+  const badOverlays = snapshot.traitOverlays.filter((row) => {
+    const thresholds = traitOverlayThresholdsFor(row.traitName);
+    return (
+      row.confirmationStatus !== 'pending' ||
+      !isFiniteNumber(row.probability) ||
+      row.probability < 0 ||
+      row.probability > 1 ||
+      (row.valence === 'gain' && row.probability < thresholds.gain) ||
+      (row.valence === 'lose' && row.probability > thresholds.lose) ||
+      (row.valence === 'gain' && TRAIT_OPPOSITES[row.traitName] === row.displacesTraitName)
+    );
+  });
   // CHEAP TIGHTENING: displacement is ATOMIC — at most one displacing resolution (a gain that displaces a held
   // trait) per player per cycle (sourceEventId). (re-evaluate-to-drop is cross-cycle + needs trait LOSSES, which
   // require the generator-adversity decline path → it is a [post-Step-3] COVERAGE_GAPS item.)

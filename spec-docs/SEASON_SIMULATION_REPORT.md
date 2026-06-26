@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 9859795:3f0be15e |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9903513:1c533f0d |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9903513:1c533f0d |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 9396765:2dc07efe |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9459695:9e7cbed6 |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9459695:9e7cbed6 |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -30,13 +30,13 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   "recoveredGroups": 2,
   "recoveredGroupsNetZero": 2,
   "nonZeroRecoveredGroups": 0,
-  "hitDeltaTotal": 260,
+  "hitDeltaTotal": 257,
   "recoveryDeltaTotal": 11,
   "chargedDeltaTotal": 0,
   "chargedPositiveDeltas": 3,
   "chargedNegativeDeltas": 3,
   "recoveredGroupsNetDelta": 0,
-  "ratingsDevelopmentRows": 275,
+  "ratingsDevelopmentRows": 429,
   "moraleToWarLeaks": 0,
   "sampleSourceEventIds": [
     "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-43",
@@ -105,131 +105,123 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
     "IMMORTAL_LEGEND": 1,
     "GLOBAL_SUPERSTAR": 3,
     "NATIONAL_ICON": 1,
-    "REGIONAL_STAR": 6,
+    "REGIONAL_STAR": 5,
     "LOCAL_HERO": 5,
     "UNKNOWN": 11,
-    "POLARIZING": 18,
+    "POLARIZING": 19,
     "NOTORIOUS": 10,
     "DESPISED": 11
   },
   "fameHeatTransitions": {
-    "up": 497,
-    "down": 740
+    "up": 527,
+    "down": 760
   },
   "traitGrantLossCounts": {
-    "gain": 1640,
-    "lose": 10,
+    "gain": 640,
+    "lose": 4,
     "byTrait": {
-      "Bunter": {
-        "gain": 180,
-        "lose": 0
-      },
       "Cannon Arm": {
-        "gain": 112,
+        "gain": 124,
         "lose": 0
-      },
-      "Durable": {
-        "gain": 209,
-        "lose": 4
       },
       "Easy Target": {
-        "gain": 74,
+        "gain": 4,
         "lose": 0
       },
-      "Little Hack": {
-        "gain": 67,
+      "Inside Pitch": {
+        "gain": 7,
         "lose": 0
       },
-      "Mind Gamer": {
-        "gain": 70,
-        "lose": 0
-      },
-      "POW vs LHP": {
-        "gain": 40,
-        "lose": 0
-      },
-      "Rally Starter": {
-        "gain": 38,
-        "lose": 0
-      },
-      "Sprinter": {
-        "gain": 136,
-        "lose": 0
-      },
-      "Tough Out": {
-        "gain": 72,
-        "lose": 1
-      },
-      "Big Hack": {
-        "gain": 52,
-        "lose": 0
-      },
-      "Injury Prone": {
-        "gain": 78,
+      "Outside Pitch": {
+        "gain": 11,
         "lose": 0
       },
       "Noodle Arm": {
-        "gain": 186,
-        "lose": 0
-      },
-      "Slow Poke": {
-        "gain": 44,
+        "gain": 85,
         "lose": 0
       },
       "Whiffer": {
-        "gain": 48,
+        "gain": 17,
         "lose": 0
       },
-      "Choker": {
-        "gain": 28,
+      "Wild Thrower": {
+        "gain": 164,
         "lose": 0
       },
-      "CON vs LHP": {
-        "gain": 63,
+      "Big Hack": {
+        "gain": 22,
+        "lose": 0
+      },
+      "Mind Gamer": {
+        "gain": 17,
+        "lose": 0
+      },
+      "Tough Out": {
+        "gain": 43,
+        "lose": 0
+      },
+      "Rally Starter": {
+        "gain": 8,
+        "lose": 0
+      },
+      "Slow Poke": {
+        "gain": 5,
+        "lose": 0
+      },
+      "Durable": {
+        "gain": 41,
+        "lose": 3
+      },
+      "Injury Prone": {
+        "gain": 8,
         "lose": 0
       },
       "Clutch": {
-        "gain": 28,
-        "lose": 0
-      },
-      "Butter Fingers": {
-        "gain": 14,
+        "gain": 15,
         "lose": 0
       },
       "Composed": {
-        "gain": 12,
+        "gain": 1,
         "lose": 0
       },
       "Crossed Up": {
-        "gain": 30,
-        "lose": 0
-      },
-      "Gets Ahead": {
-        "gain": 12,
+        "gain": 6,
         "lose": 0
       },
       "K Collector": {
-        "gain": 9,
-        "lose": 5
+        "gain": 3,
+        "lose": 1
       },
       "Specialist": {
-        "gain": 10,
+        "gain": 6,
+        "lose": 0
+      },
+      "Workhorse": {
+        "gain": 19,
+        "lose": 0
+      },
+      "POW vs LHP": {
+        "gain": 13,
         "lose": 0
       },
       "Reverse Splits": {
-        "gain": 10,
+        "gain": 5,
         "lose": 0
       },
-      "BB Prone": {
-        "gain": 8,
+      "Wild Thing": {
+        "gain": 6,
+        "lose": 0
+      },
+      "Sprinter": {
+        "gain": 2,
+        "lose": 0
+      },
+      "Choker": {
+        "gain": 3,
         "lose": 0
       },
       "Falls Behind": {
-        "gain": 8,
-        "lose": 0
-      },
-      "K Neglector": {
-        "gain": 2,
+        "gain": 5,
         "lose": 0
       }
     }
@@ -237,7 +229,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   "awardMargins": [
     {
       "category": "CY_YOUNG",
-      "winnerPlayerId": "lsim-team-01-mlb-17-RP",
+      "winnerPlayerId": "lsim-team-03-mlb-17-RP",
       "topMarginToWinner": 0,
       "candidateCount": 12,
       "finalized": true
@@ -273,7 +265,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   ],
   "randomEventFrequencyByFamily": {
     "performance": 47,
-    "roster": 20,
+    "roster": 13,
     "role": 17,
     "trait": 19,
     "pitching": 9,
@@ -288,7 +280,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
       "count": 85
     },
     "teamFan": {
-      "min": 7,
+      "min": 10,
       "max": 99,
       "count": 6
     },
@@ -299,11 +291,11 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
     "count": 5,
     "minLastGameTax": -1.1,
     "maxLastGameTax": -0.55,
-    "totalAccumulatedFanMoraleTax": -22.15,
+    "totalAccumulatedFanMoraleTax": -21.25,
     "byKind": {
       "albatross": {
         "count": 5,
-        "accumulatedFanMoraleTax": -22.15
+        "accumulatedFanMoraleTax": -21.25
       }
     }
   }
