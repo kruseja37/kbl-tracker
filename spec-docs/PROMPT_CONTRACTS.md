@@ -21723,3 +21723,124 @@ On the Draft Setup screen, let the user click any player row (IN-POOL or AVAILAB
 
 **Use xhigh reasoning effort.**
 <!-- ===== END CONTRACT: EDIT-FROM-DRAFT-1 ===== -->
+
+<!-- ===== CONTRACT: POOL-FEAS-1 — pre-draft pool-feasibility check (keystone optimizer step 1) ===== -->
+## POOL-FEAS-1 — pre-draft pool-feasibility check (keystone optimizer step 1)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). You implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files.
+
+GOAL:
+Build the pre-draft pool-feasibility analyzer: point the existing best-roster builder at a LOCKED draft pool and, per
+team archetype, classify support (`supported` | `thin` | `starved`) and emit an "Add ~N [type] players to activate
+[archetype]" prompt when not supported.
+
+SOURCE OF TRUTH:
+`spec-docs/POOL_FEASIBILITY_SPEC.md` (this branch — read it in full first). The operative algorithm is embedded inline
+below so you never need a file off this branch. If the spec doc and this inline text ever disagree, STOP and report.
+
+CONSTRAINTS:
+- CREATE ONLY these two files:
+  - `src/engines/poolFeasibility.ts`
+  - `src/engines/__tests__/poolFeasibility.test.ts`
+- Do NOT edit (import read-only): `src/engines/archetypeBalanceSimulator.ts`, `src/data/historicalArchetypes.ts`,
+  `src/engines/leagueConstruction.ts`, `src/data/tierParams.ts`, `spec-docs/reference/iv_oracle.json`, and any other
+  existing file. If implementation appears to require editing ANY existing file → STOP and report.
+- Pure / headless / deterministic: NO `Date.now()`, `Math.random()`, `fs`, DOM, `window`, IndexedDB inside
+  `poolFeasibility.ts`. (The TEST file may read `iv_oracle.json` via `node:fs` to build pools — mirror the existing
+  `src/engines/__tests__/historicalArchetypes.test.ts` `loadPool()` exactly.)
+- Quote `POOL_FEASIBILITY_SPEC.md` for each non-obvious choice in your report.
+- Work directly in this worktree (no new branches/worktrees).
+
+EXPECTED OUTPUT — `poolFeasibility.ts` exports (signatures verbatim):
+```ts
+export interface FeasibilityShortfall { stat: ArchetypeStat; group: 'hitters'|'rotation'|'bullpen';
+  demand: number; supply: number; needCount: number; binding: boolean; descriptor: string; }
+export interface ArchetypeFeasibility { archetypeId: string; archetypeName: string;
+  support: 'supported'|'thin'|'starved'; built: ArchetypeSimResult;
+  shortfalls: FeasibilityShortfall[]; activationPrompt: string | null; }
+export interface PoolFeasibilityReport { tier: TierKey; budget: number; poolSize: number; results: ArchetypeFeasibility[]; }
+export function analyzePoolFeasibility(lockedPool: SimPlayer[], archetypes: HistoricalArchetype[], tier: TierKey,
+  referencePool?: SimPlayer[]): PoolFeasibilityReport;
+```
+Also EXPORT the tunables: `STRONG_PERCENTILE = 0.67`, `DEMAND_HITTER = 7`, `DEMAND_ROTATION = 3`, `DEMAND_BULLPEN = 3`,
+`BINDING_STATS` (a `Set<ArchetypeStat>` = {POW, CON, ROT_VEL, ROT_JNK, ROT_ACC, PEN_VEL}), and the `DESCRIPTORS`
+stat→phrase map.
+
+ALGORITHM (inline — authoritative, per the spec):
+Per archetype `arch`:
+1. `budget = computePoolTierCap(lockedPool.map(p=>p.iv), tier)`;
+   `built = buildBestRoster(lockedPool, { name: arch.name, rawShift: archetypeCapShift(arch) }, tier, budget)`.
+2. Boosted stats = the keys of `arch.spec` whose multiplier > 0 (equivalently `arch.boosts`). For each boosted stat S:
+   - `group` of S: hitters if S ∈ {POW,CON,SPD,FLD,ARM}, rotation if S ∈ {ROT_*}, bullpen if S ∈ {PEN_*}.
+   - Group membership of a player: hitters = `!isPitcher`; rotation = `role ∈ {SP, 'SP/RP'}`;
+     bullpen = `role ∈ {RP, CP, 'SP/RP'}` (SP/RP counts to both — mirror `isStarter`/`isReliever` in the sim).
+   - The player's S-rating: hitters read `bat.POW/CON/SPD/FLD/ARM`; rotation/bullpen read `pit.VEL/JNK/ACC`
+     (ROT_VEL & PEN_VEL → `pit.VEL`, ROT_JNK & PEN_JNK → `pit.JNK`, ROT_ACC & PEN_ACC → `pit.ACC`).
+   - Threshold = P67 of the S-ratings of `(referencePool ?? lockedPool)` members of S's group, nearest-rank:
+     sort ascending, `idx = clamp(ceil(0.67*n)-1, 0, n-1)`, threshold = `sorted[idx]` (n = group size; if n===0 → threshold 0).
+   - `supply` = count of LOCKED-pool players in S's group with S-rating ≥ threshold.
+   - `demand` = 7 if group hitters, 3 if rotation, 3 if bullpen. `needCount = max(0, demand - supply)`.
+   - `binding = BINDING_STATS.has(S)`. `descriptor = DESCRIPTORS[S]`.
+   - Push a `FeasibilityShortfall` ONLY (so the array isn't noisy) — include every boosted stat row (needCount may be 0)
+     so the diagnostic is complete; classification + prompt use needCount>0.
+3. Sort `shortfalls`: binding true first, then needCount desc, then `stat` ascending (stable, deterministic).
+4. `notFieldable = !built.solvent || built.rosterSize < 22`.
+   `hasBindingShortfall = shortfalls.some(s=>s.binding && s.needCount>0)`;
+   `hasAnyShortfall = shortfalls.some(s=>s.needCount>0)`.
+   `support = notFieldable || hasBindingShortfall ? 'starved' : hasAnyShortfall ? 'thin' : 'supported'`.
+5. `activationPrompt`: `null` if supported; else if `notFieldable` AND no needCount>0 shortfall →
+   `"This pool is too thin to field a full {name} roster — add more players."`; else take the first shortfall with
+   needCount>0 after the sort → `"Add ~{needCount} {descriptor} to activate {name}."`
+6. `results` preserves input `archetypes` order. `report = { tier, budget, poolSize: lockedPool.length, results }`.
+
+DESCRIPTORS: POW="power bats", CON="contact hitters", SPD="speed/baserunning threats", FLD="rangy defenders",
+ARM="strong-armed fielders", ROT_VEL="power starters", ROT_JNK="finesse starters", ROT_ACC="pinpoint command starters",
+PEN_VEL="power relievers", PEN_JNK="junkball relievers", PEN_ACC="pinpoint command relievers".
+
+TESTS (`poolFeasibility.test.ts`) — reuse the `loadPool()` shape from `historicalArchetypes.test.ts`:
+1. Full canonical pool (all 440) + `HISTORICAL_ARCHETYPES`, tier 'standard', referencePool = the same full pool →
+   EVERY archetype `support === 'supported'` and `activationPrompt === null`.
+2. Glove-stripped: from the full pool drop every hitter whose FLD ≥ the full-pool hitter-FLD P67; referencePool = the
+   FULL pool → Whiteyball, Go-Go Small Ball, The Oriole Way each have an FLD shortfall with needCount>0,
+   descriptor "rangy defenders", activationPrompt non-null.
+3. Command-stripped: drop every SP whose ACC ≥ the full-pool rotation-ACC P67; referencePool = full pool → Junkball
+   Surgeons and The Oriole Way flag ROT_ACC with needCount>0 and `support === 'starved'` (binding).
+4. Too-thin pool: any 18-player slice → for at least one archetype `built.rosterSize < 22` ⇒ `support === 'starved'`
+   and the "too thin to field" prompt appears.
+5. Determinism: two `analyzePoolFeasibility(...)` calls on identical inputs are `JSON.stringify`-equal.
+6. Binding-vs-flavor: construct/choose a case where an FLD-only shortfall yields `thin` while an equal-sized POW
+   shortfall yields `starved`.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/poolFeasibility.test.ts src/engines/__tests__/historicalArchetypes.test.ts src/engines/__tests__/archetypeBalanceSimulator.test.ts
+```
+Both must be clean: tsc 0 errors; vitest all-pass (the two existing archetype tests must STAY green — proves no
+regression to the shared engine).
+
+FORMAT (your report):
+1. Files changed (exact paths) + total changed-path count.
+2. Each export + each test, with the `POOL_FEASIBILITY_SPEC.md` clause it implements.
+3. Verification: paste the exact tsc + vitest output (pass counts).
+4. "POOL-FEAS-1 complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `buildBestRoster` / `SimPlayer` / `ArchetypeSimResult` are NOT exported from
+  `src/engines/archetypeBalanceSimulator.ts`, or `archetypeCapShift` / `HISTORICAL_ARCHETYPES` / `ArchetypeStat` not
+  exported from `src/data/historicalArchetypes.ts`, or `computePoolTierCap` not from `src/engines/leagueConstruction.ts`
+  → STOP, report the actual export surface.
+- (b) Implementation would require editing ANY existing file → STOP, report which and why.
+- (c) The full-pool test (Test 1) does NOT come back all-`supported` → STOP, report which archetype/stat broke and the
+  numbers; do NOT loosen the test or the thresholds to force green (that would mask a real algorithm bug).
+- (d) Any existing test regresses → STOP, report.
+- Never summarize/batch around a STOP. Never invent a constant not in this contract.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: POOL-FEAS-1 ===== -->

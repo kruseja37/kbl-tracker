@@ -2730,3 +2730,19 @@ sim-tune dials, none block the build.
   Mode-2 freeze calls it directly (`draftFreezeInputs.ts:81`→`franchiseInitializer.ts:739`); deleting it breaks the
   freeze→Mode-2 morale pipeline. Only `scoutPriceOpinion` (auction-only) is retired. (2) `gradeToTwentyEighty` is
   RELOCATED to a surviving module before `scoutPriceOpinion.ts` is deleted, so the live 20-80 reveal persists.
+
+## 2026-06-26 — Keystone optimizer kickoff: tier ruling + build routing (JK)
+
+- **Tier scales BUDGET ONLY (JK ruling).** Picking a difficulty tier (juiced/standard/nerfed) scales only the team
+  budget (`computePoolTierCap(pool.ivs, tier)`); players keep their stock (juiced-workbook) ratings/IV. This is the
+  canonical absolute-IV architecture (IV spec T12: "player IVs never change with the pool — only the league-environment
+  constants recalibrate"), and it is ALREADY the live behavior — the sim/feasibility read stock ratings; tier enters
+  only via the budget. `TIER_RATING_SCALES` (defined in `tierParams.ts`) stays **dormant/unused** for the sim +
+  feasibility. *Resolves the OPEN line from commit e6488888 ("does picking a tier weaken ratings or only the budget").*
+  *(Rejected: faithful-tier rating-scaling — kept as provenance in ARCHETYPE_BALANCE_SIM_RESULTS, not adopted. Note:
+  the verdict of the pool-feasibility check is composition-driven, so it is tier-robust either way; budget-only is the
+  simpler, canon-aligned choice.)*
+- **Build routing (JK): Codex builds on `codex/draft-pipeline-fix`; Captain (Opus) audits.** The keystone-optimizer
+  builds (pool-feasibility → fielding-corrected true-value → the two manager-lane contract functions) are dispatched to
+  Codex via a contract in `PROMPT_CONTRACTS.md`, preserving cross-model build/audit separation. Pool-feasibility first
+  (handoff seam c66d680f). Design spec: `POOL_FEASIBILITY_SPEC.md`.
