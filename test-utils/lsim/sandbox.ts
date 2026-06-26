@@ -142,6 +142,7 @@ const DB_NAMES_TO_DELETE = [
   // determinism legs (leg 2 inherits leg 1's records -> different detect changes[] ->
   // different fame, breaking same-seed determinism once hop-2 wires records -> fame).
   'kbl-franchise-stadium-records',
+  'kbl-franchise-home-park-rivals',
 ];
 
 function isPitcherPosition(position: Position): boolean {

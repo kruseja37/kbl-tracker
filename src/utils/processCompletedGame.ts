@@ -91,6 +91,7 @@ import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAu
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
 import { persistFranchiseAllStarRosterForCompletedGame } from './franchiseAllStarRosterCompute';
 import { persistDarkStadiumRecordsForCompletedGame } from './franchiseStadiumRecordsTap';
+import { persistDarkHomeParkRivalForCompletedGame } from './franchiseHomeParkRivalTap';
 import type { FranchiseStadiumRecordChange } from './franchiseStadiumRecordsStorage';
 import type { HiddenModifiers } from '../types/game';
 import { FAME_TUNING } from '../engines/fameModel';
@@ -1237,6 +1238,13 @@ export async function processCompletedGame(
             stadiumChanges = stadiumResult.changeList;
           } catch (e) {
             console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2StadiumRecordsEnabled()) {
+          try {
+            await persistDarkHomeParkRivalForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[HomeParkRival] dark home-park rival tap skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         if (isFranchisePhase2FameEnabled()) {
