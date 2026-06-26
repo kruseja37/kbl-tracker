@@ -24006,3 +24006,63 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF resolving the home team forces a change to a forbidden file.
 - A correct BLOCK is GOOD. Do NOT build the §7 rivalry-2× / reporter / almanac / rivalry-edge hops, do NOT add a NarrativeEventType, do NOT flip a flag default, do NOT push.
 <!-- ===== END CONTRACT: A1.5d-hop3 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop4 ===== -->
+# CONTRACT A1.5d-hop4 — stadium-record REPORTER (STADIUM_RECORD PURE news adapter, §5.4, build-dark/dormant)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-4 — the reporter's DETERMINISTIC half for park records. Per [[reporter-adapter-pure-emission-llm-split]]: BUILD ONLY the **PURE deterministic news adapter** (mints a `SeasonNewsEvent` from a stadium-record change; no LLM/IO/wall-clock/randomness; NO production caller — dormant, mirroring `franchiseL3MatrixNewsAdapter`) + the new `STADIUM_RECORD` NarrativeEventType. **FLAG (do NOT build) the LLM emission seam** (`generateSeasonNewsTake`→`callClaudeMessages`, the `processCompletedGame` wiring, the emission flag, the dedup-at-emission) — that's JK's browser/LLM sign-off domain. Do NOT touch `processCompletedGame.ts`, `franchiseStadiumRecordsStorage.ts`, `masterMoraleMatrix.ts`, or any storage. Do NOT build hop-5 (Almanac) / hop-6 (rivalry edge) / §8 display. No flag, no DB change.
+
+## GOAL
+A `FranchiseStadiumRecordChange` → a `SeasonNewsEvent` (eventType `STADIUM_RECORD`) carrying the deterministic facts a reporter LLM will later render: recordType, stadiumName, newValue, oldValue, the dethroned + new holders, batterHand (for HR records), and a `dramaticWeight`. PURE + dormant + build-dark.
+
+## FORK RULING (Captain-decided from grounding): ADD a new `STADIUM_RECORD` NarrativeEventType — do NOT reuse SEASON_SUMMARY.
+The exhaustive touch is exactly 2 trivial compile-enforced edits; reuse would collide with `franchiseL3MatrixNewsAdapter`'s SEASON_SUMMARY and muddy event identity for an Almanac-scoped, fame-bearing event.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **NarrativeEventType union** (`src/engines/narrativeEngine.ts:77-91`, 14 members ending `'RELATIONSHIP_FLARE'`): add `| 'STADIUM_RECORD'`.
+- **hedgingModifier** `Record<NarrativeEventType, number>` (`narrativeEngine.ts:592-607`, EXHAUSTIVE — compile-fails without an entry): add `STADIUM_RECORD: 1.0,` (records are factual, matching MILESTONE/STREAK/AWARD_RESULT/SEASON_SUMMARY = 1.0). **These 2 edits are the ENTIRE narrativeEngine touch.** Do NOT add it to `requiresRetraction`/`highStakesEvents` (`:640`, a plain `NarrativeEventType[]` literal — records are factual, not retraction-prone). Do NOT touch `reporter.ts:151 perEventRate` (`Partial<Record<…>>`, optional).
+- **SeasonNewsEvent** (`src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:10-19`): `{ franchiseId; seasonId; seasonNumber; eventType: NarrativeEventType; subjectIds: string[]; facts: Record<string, unknown>; dramaticWeight: number }`. **No id/createdAt** (minted later by the flagged emission seam).
+- **Clone target** `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts:28-48` — `buildFranchiseAwardSeasonNewsEvent(input): SeasonNewsEvent`: pure, `dramaticWeight = clamp(base[kind] + magnitudeScale*magnitude, 0, 1)`, `facts: {...input.facts, …discriminators}`, no id/createdAt. Mirror this shape exactly.
+- **The change** (`src/utils/franchiseStadiumRecordsStorage.ts:90-99`): `{ stadiumId, recordType, recordKey, changeKind:'set'|'overtake', priorValue:number|null, priorLeaderPlayerIds:string[], newValue:number, newLeaderPlayerIds:string[] }`. (No stadiumName/playContext on the change — see deferred facts.)
+- **Emission seam to FLAG (do NOT build)**: `franchiseRelationshipFlareEmission.ts:66-102` (flag-gate → load config → adapter → `generateSeasonNewsTake` [LLM] → dedup → persist).
+
+## EXPECTED OUTPUT
+1. **`src/engines/narrativeEngine.ts`** (2 edits): add `| 'STADIUM_RECORD'` to the union; add `STADIUM_RECORD: 1.0,` to `hedgingModifier`.
+2. **`src/src_figma/app/engines/reporter/franchiseStadiumRecordNewsAdapter.ts`** (NEW — PURE, clone the L12 adapter):
+   - `export const STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT = { setBase: 0.5, overtakeBase: 0.6, magnitudeScale: 0.25 } as const;` (§16 sim-tune placeholders — documented).
+   - `export interface FranchiseStadiumRecordNewsInput { franchiseId: string; seasonId: string; seasonNumber: number; change: FranchiseStadiumRecordChange; stadiumName?: string | null; triggerPhase?: 'in-season' | 'season-end'; }` (import the change type type-only from `../../../../utils/franchiseStadiumRecordsStorage`).
+   - `export function buildFranchiseStadiumRecordSeasonNewsEvent(input: FranchiseStadiumRecordNewsInput): SeasonNewsEvent` — ALWAYS returns (records are always newsworthy; never null):
+     - `const { change } = input;`
+     - `const base = change.changeKind === 'overtake' ? STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT.overtakeBase : STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT.setBase;`
+     - `const magnitude = change.priorValue == null ? 0.5 : clamp(Math.abs(change.newValue - change.priorValue) / Math.max(Math.abs(change.priorValue), 1), 0, 1);`
+     - `const dramaticWeight = clamp(base + STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT.magnitudeScale * magnitude, 0, 1);`
+     - `const batterHand = change.recordType === 'farthest-hr-rhb' ? 'R' : change.recordType === 'farthest-hr-lhb' ? 'L' : null;`
+     - `subjectIds`: dedup `[...change.newLeaderPlayerIds, ...change.priorLeaderPlayerIds]` (new holders first, no duplicates — use a Set-preserving-order or filter).
+     - return `{ franchiseId, seasonId, seasonNumber, eventType: 'STADIUM_RECORD', subjectIds, facts: { recordType: change.recordType, recordKey: change.recordKey, stadiumId: change.stadiumId, stadiumName: input.stadiumName ?? null, changeKind: change.changeKind, newValue: change.newValue, oldValue: change.priorValue, newHolderIds: change.newLeaderPlayerIds, overtakenHolderIds: change.priorLeaderPlayerIds, batterHand, playContext: null, triggerPhase: input.triggerPhase ?? 'in-season' }, dramaticWeight }`.
+     - Local `clamp(v,min,max)` helper (mirror the L12 adapter). PURE: no LLM/IO/`Date.now`/`Math.random`/`crypto`. Does NOT mint id/createdAt.
+   - Header comment: documents (a) PURE/dormant/build-dark; (b) **`playContext: null` is a documented v1 DEFER** for the single-play-swing records (the exact play lives in `CompletedGameRecord.atBatEvents`, not on the change/record; reconstructing it would break purity — §4 marks it best-effort; a later schema ticket threads it); (c) the dedup key the emission seam will use = `(stadiumId, recordType, recordKey, newValue)` — all present in `facts`; (d) the flagged emission seam (clone `franchiseRelationshipFlareEmission`).
+3. **`src/src_figma/app/engines/reporter/__tests__/franchiseStadiumRecordNewsAdapter.test.ts`** (NEW — mirror the L12 adapter test): pin (a) a `'set'` farthest-hr-rhb change → eventType STADIUM_RECORD, batterHand 'R', oldValue null, the facts verbatim, dramaticWeight === setBase + scale*0.5; (b) an `'overtake'` change with priorValue → oldValue set, overtakenHolderIds populated, dramaticWeight uses overtakeBase + the computed magnitude (pin the arithmetic); (c) a non-HR record (e.g. highest-cumulative-wpa-pitcher) → batterHand null; (d) a swing record (largest-positive-wpa-swing) → playContext null; (e) subjectIds dedup + new-holders-first; (f) NO id/createdAt minted; (g) purity (deeply-equal output for equal input, no throw).
+
+## CONSTRAINTS
+- Touch ONLY: `src/engines/narrativeEngine.ts`, `src/src_figma/app/engines/reporter/franchiseStadiumRecordNewsAdapter.ts` (NEW), `src/src_figma/app/engines/reporter/__tests__/franchiseStadiumRecordNewsAdapter.test.ts` (NEW). Do NOT touch `processCompletedGame.ts` / `franchiseStadiumRecordsStorage.ts` / `masterMoraleMatrix.ts` / `seasonNewsGenerator.ts` / any flag / any storage / the trackerDb.
+- Build-dark + DORMANT: the adapter has NO production caller (exported + unit-tested only, like `franchiseL3MatrixNewsAdapter`). The new NarrativeEventType + hedging entry are inert until the (flagged) emission seam emits a STADIUM_RECORD — which this ticket does NOT build.
+- PURE: no LLM, no IO, no `Date.now`/`Math.random`/`crypto`, fully synchronous, deterministic.
+- Do NOT reuse SEASON_SUMMARY (ruling above). Do NOT add the LLM emission / wiring / flag.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/src_figma/app/engines/reporter/__tests__/franchiseStadiumRecordNewsAdapter.test.ts` + any narrativeEngine test → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (the narrativeEngine exhaustive union touch — a fixture enumerating NarrativeEventType would only fail in a full run).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the 3 listed files touched; STADIUM_RECORD added to the union + hedgingModifier (1.0) ONLY; adapter is PURE + dormant (no caller, no id/createdAt, no LLM/IO/time/random); playContext null (documented defer); SEASON_SUMMARY NOT reused; no emission/wiring/flag/storage/DB change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the NarrativeEventType union / hedgingModifier / SeasonNewsEvent / L12-adapter shapes differ from the anchors (re-read).
+- STOP-IF adding STADIUM_RECORD forces an edit to a file outside the 3 listed (e.g. another exhaustive `Record<NarrativeEventType>` — if found, STOP and report it; do NOT silently edit a forbidden file).
+- A correct BLOCK is GOOD. Do NOT build the emission seam / wiring / flag, do NOT reuse SEASON_SUMMARY, do NOT thread real playContext, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop4 ===== -->
