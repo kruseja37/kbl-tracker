@@ -21952,3 +21952,116 @@ FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
 
 **Use high reasoning effort. Think step-by-step.**
 <!-- ===== END CONTRACT: TRUEVAL-1 ===== -->
+
+<!-- ===== CONTRACT: TRUEVAL-2 — directional fielding-corrected true value (keystone optimizer step 2b) ===== -->
+## TRUEVAL-2 — directional fielding-corrected true value (keystone optimizer step 2b)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. BUILD-DARK (no production wiring in this ticket).
+
+GOAL:
+Build the optimizer's own "true value" — a pure, deterministic, BOUNDED, DIRECTIONAL adjustment layer on top of the
+frozen kblIV, for the optimizer/draft-guide/scout ONLY. It (1) leans value with the player's roster-chemistry potency
+(chemistry-fit traits worth more, unsupported traits/maxed flaws worth less) and (2) corrects fielding (good gloves up,
+bad gloves down — the frozen IV under-prices fielding's mojo payoff, spec D17). v1 is intentionally DIRECTIONAL +
+provisional: the magnitudes are conservative documented constants, calibrated empirically in Mode-2 (JK ruling
+2026-06-26; spec D17 "fit a correction ONLY if data demands / do not overengineer"). The frozen IV/economy is NEVER
+touched — this is a SEPARATE additive value.
+
+SOURCE OF TRUTH (verify anchors against source FIRST):
+- `src/engines/derivedTraitPotency.ts` (TRUEVAL-1, already committed): `traitPotencies(traitNames, counts)` →
+  per-trait `{ trait, chemistry, polarity, sharedCount, tier, factor }` where `factor` is the trait's EFFECT scale vs
+  the L2 baseline (positive: 0.5/1.0/3.0 at L1/L2/L3; negative inverted 3.0/1.0/0.5). Also `RosterChemistryCounts`,
+  `countRosterChemistry`.
+- The frozen kblIV is computed UPSTREAM and passed IN (do NOT import/call `ivEngine`/`computeIV` here — keep this layer
+  decoupled and oracle-free).
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/trueValue.ts` + `src/engines/__tests__/trueValue.test.ts`.
+- Do NOT edit any existing file (import read-only from `derivedTraitPotency`). If you must edit one → STOP, report.
+- Pure / deterministic: NO Date.now/Math.random/fs/DOM. Do NOT import or call `ivEngine.ts` (kblIV is an input).
+- Do NOT touch the frozen oracle or any IV/economy file.
+
+EXPECTED OUTPUT — `trueValue.ts` exports (signatures verbatim):
+```ts
+// Conservative, PROVISIONAL v1 magnitudes — Mode-2 calibration pending (exported so they retune at one site).
+export const CHEM_LEAN_COEF = 0.02;     // kblIV fraction per unit of net signed chemistry lean
+export const CHEM_LEAN_CAP = 0.12;      // ±12% max chemistry swing
+export const FIELDING_COEF = 0.10;      // kblIV fraction per normalized FLD deviation
+export const FIELDING_BASELINE = 50;    // FLD reference (0–99 scale); above → glove credit, below → glove debit
+export const FIELDING_RANGE = 50;       // normalizer: (FLD - BASELINE)/RANGE
+export const FIELDING_CAP = 0.08;       // ±8% max fielding swing
+
+export interface TrueValueInput {
+  kblIV: number;                        // frozen canonical value (passed in; never recomputed here)
+  traits: string[];                     // player trait names
+  fielding: number;                     // player FLD rating (0–99)
+  isPitcher: boolean;                   // pitchers: fielding correction is 0 (mound FLD already priced at usage 1.0)
+}
+export interface TrueValueResult {
+  trueValue: number;                    // kblIV + chemistryAdjustment + fieldingAdjustment (rounded)
+  kblIV: number;                        // passthrough
+  chemistryAdjustment: number;          // signed $, bounded by ±CHEM_LEAN_CAP·kblIV
+  fieldingAdjustment: number;           // signed $, bounded by ±FIELDING_CAP·kblIV (0 for pitchers)
+  netSignedLean: number;                // the raw chemistry lean used (transparency / scout-edge surfacing)
+}
+export function computeTrueValue(input: TrueValueInput, rosterChemistryCounts: RosterChemistryCounts): TrueValueResult;
+```
+
+ALGORITHM:
+- `tp = traitPotencies(input.traits, rosterChemistryCounts)`.
+- Per-trait VALUE lean (note the polarity flip — a dampened FLAW raises value):
+  `signedLean(t) = t.polarity === 'positive' ? (t.factor - 1) : -(t.factor - 1)`.
+  `netSignedLean = Σ signedLean(t)` over tp (0 when no known traits).
+- `chemRaw = CHEM_LEAN_COEF * netSignedLean`; `chemFrac = clamp(chemRaw, -CHEM_LEAN_CAP, +CHEM_LEAN_CAP)`;
+  `chemistryAdjustment = round(input.kblIV * chemFrac)`.
+- Fielding: `fieldFrac = input.isPitcher ? 0 : clamp(FIELDING_COEF * (input.fielding - FIELDING_BASELINE) / FIELDING_RANGE,
+  -FIELDING_CAP, +FIELDING_CAP)`; `fieldingAdjustment = round(input.kblIV * fieldFrac)`.
+- `trueValue = input.kblIV + chemistryAdjustment + fieldingAdjustment`.
+- `round` = `Math.round`. `clamp(x,lo,hi) = Math.max(lo, Math.min(hi, x))`.
+
+DOCUMENT (code comments): all six constants are conservative PROVISIONAL v1 values, Mode-2-calibrated; this layer is
+the optimizer/scout/draft-guide value ONLY and never feeds salary/economy/archetype-balance (those stay on frozen
+kblIV). The price≠true-value gap IS the intended scout edge (bargains = underpriced good gloves; traps = overpriced
+bad gloves).
+
+TESTS (`trueValue.test.ts`):
+1. NEUTRAL invariant: a position player with traits whose chemistries all land L2 (counts 3–6 each) AND fielding ==
+   FIELDING_BASELINE → chemistryAdjustment === 0, fieldingAdjustment === 0, trueValue === kblIV (clean additive layer).
+2. Chemistry boost: a known POSITIVE trait at L3 (its chemistry count ≥7) → netSignedLean > 0, chemistryAdjustment > 0.
+3. Chemistry drag: same positive trait at L1 (count ≤2) → chemistryAdjustment < 0. AND a NEGATIVE trait at L1 (flaw
+   maxed) → chemistryAdjustment < 0; the SAME negative trait at L3 (flaw dampened) → chemistryAdjustment > 0.
+4. Fielding: position player FLD 90 → fieldingAdjustment > 0; FLD 20 → < 0; a PITCHER with FLD 20 → fieldingAdjustment
+   === 0.
+5. Bounds: extreme inputs (many stacked boosted traits; FLD 0 / 99) → |chemFrac| ≤ CHEM_LEAN_CAP and |fieldFrac| ≤
+   FIELDING_CAP (adjustments never exceed the caps × kblIV).
+6. Ranking-fix sanity: an all-bat/no-glove position player (high kblIV e.g. 200000, FLD 15) is DOCKED vs a glove-first
+   player (lower kblIV e.g. 140000, FLD 92) is CREDITED — assert the fielding adjustments have the right signs (the
+   inversion the frozen IV causes is corrected in the right direction).
+7. Determinism: two calls on identical inputs are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/trueValue.test.ts src/engines/__tests__/derivedTraitPotency.test.ts
+```
+tsc 0; vitest all-pass (derivedTraitPotency stays green — proves no regression to the consumed primitive).
+
+FORMAT: 1) files changed + count; 2) each export + test with the clause it implements; 3) exact tsc + vitest output;
+4) "TRUEVAL-2 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `traitPotencies`/`RosterChemistryCounts` not exported from `derivedTraitPotency.ts` with the documented shape →
+  STOP, report the actual surface.
+- (b) Implementation would require editing any existing file, or importing `ivEngine`/`computeIV` → STOP, report.
+- (c) The NEUTRAL invariant (Test 1) does NOT yield trueValue === kblIV → STOP, report the numbers (do not fudge the
+  test; a non-zero adjustment at the neutral baseline means the layer is not cleanly additive — a real bug).
+- Never invent a constant beyond the six above; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: TRUEVAL-2 ===== -->
