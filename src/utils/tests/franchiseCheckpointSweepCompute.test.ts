@@ -163,7 +163,7 @@ function entry(overrides: Partial<CheckpointRosterEntry> = {}): CheckpointRoster
     teamId: overrides.teamId ?? 'team-a',
     isPitcher,
     baseRatings: isPitcher
-      ? { velocity: 50, junk: 50, accuracy: 50 }
+      ? { power: 50, contact: 50, speed: 50, fielding: 50, velocity: 50, junk: 50, accuracy: 50 }
       : { power: 50, contact: 50, speed: 50, fielding: 50, arm: 50 },
     personality: 'RELAXED',
     modifiers: neutralModifiers,
@@ -706,6 +706,27 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(rows.some((row) => row.ratingKey === 'arm')).toBe(false);
   });
 
+  test('pitcher checkpoint writes non-pitching overlays and still never writes arm', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(),
+      pitchers: new Set(['pitcher-non-pitching']),
+    });
+    const pitcher = entry({
+      playerId: 'pitcher-non-pitching',
+      isPitcher: true,
+      signalByRatingKey: { power: 1, contact: 1, speed: 1, fielding: 1, arm: 1 },
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([pitcher]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 4 });
+    expect(rows.map((row) => row.ratingKey).sort()).toEqual(['contact', 'fielding', 'power', 'speed']);
+    expect(rows.some((row) => row.ratingKey === 'arm')).toBe(false);
+  });
+
   test('window-inactive roster entries remain cohort members but write no overlays', async () => {
     setFranchisePhase2CheckpointEnabledForTests(true);
     const inactive = entry({ playerId: 'player-window-inactive', signalByRatingKey: { power: 1 } });
@@ -829,6 +850,203 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
 
     expect(cohortOnlyResult).toEqual({ status: 'written', written: 0 });
     expect(cohortOnlyRows).toEqual([]);
+  });
+
+  test('resolveCheckpointRoster supplies pitcher non-pitching ratings and category rates without arm', async () => {
+    const pitcherId = 'pitcher-sp';
+    vi.mocked(getAllFranchiseTeams).mockResolvedValue([{ id: 'team-a', leagueIds: ['league-1'] } as never]);
+    vi.mocked(getAllFranchisePlayers).mockResolvedValue([
+      player({
+        id: pitcherId,
+        primaryPosition: 'SP',
+        power: 31,
+        contact: 32,
+        speed: 33,
+        fielding: 34,
+        arm: 0,
+        velocity: 72,
+        junk: 68,
+        accuracy: 64,
+        leagueAssignments: [{
+          leagueId: 'league-1',
+          teamId: 'team-a',
+          rosterStatus: 'MLB',
+        }],
+      }),
+    ]);
+    vi.mocked(getPlayerTeamIdForLeague).mockReturnValue('team-a');
+    vi.mocked(getFranchiseTrueValueRows).mockResolvedValue([
+      {
+        ...scope,
+        playerId: pitcherId,
+        valueDelta: 0,
+        computedAt: '2026-06-18T02:00:00.000Z',
+      },
+    ] as never);
+    vi.mocked(getSeasonBattingStats).mockResolvedValue([
+      {
+        seasonId: scope.seasonId,
+        playerId: pitcherId,
+        playerName: pitcherId,
+        teamId: 'team-a',
+        games: 8,
+        pa: 24,
+        ab: 20,
+        hits: 8,
+        singles: 5,
+        doubles: 1,
+        triples: 1,
+        homeRuns: 1,
+        rbi: 0,
+        runs: 0,
+        walks: 3,
+        strikeouts: 4,
+        hitByPitch: 1,
+        sacFlies: 0,
+        sacBunts: 0,
+        stolenBases: 2,
+        caughtStealing: 0,
+        gidp: 0,
+        fameBonuses: 0,
+        fameBoners: 0,
+        fameNet: 0,
+        contactQualityGood: 8,
+        contactQualityTracked: 12,
+        extraBasesTaken: 3,
+        advancementOpportunities: 6,
+        lastUpdated: 1,
+      },
+    ] as never);
+    vi.mocked(getSeasonPitchingStats).mockResolvedValue([
+      {
+        seasonId: scope.seasonId,
+        playerId: pitcherId,
+        playerName: pitcherId,
+        teamId: 'team-a',
+        games: 8,
+        gamesStarted: 8,
+        outsRecorded: 40,
+        hitsAllowed: 12,
+        runsAllowed: 0,
+        earnedRuns: 0,
+        walksAllowed: 4,
+        strikeouts: 15,
+        homeRunsAllowed: 3,
+        hitBatters: 2,
+        wildPitches: 0,
+        wins: 0,
+        losses: 0,
+        saves: 0,
+        holds: 0,
+        blownSaves: 0,
+        qualityStarts: 0,
+        completeGames: 0,
+        shutouts: 0,
+        noHitters: 0,
+        perfectGames: 0,
+        fameBonuses: 0,
+        fameBoners: 0,
+        fameNet: 0,
+        weakContactInduced: 7,
+        weakContactTracked: 14,
+        lastUpdated: 1,
+      },
+    ] as never);
+    vi.mocked(getAllFieldingStats).mockResolvedValue([
+      {
+        seasonId: scope.seasonId,
+        playerId: pitcherId,
+        playerName: pitcherId,
+        teamId: 'team-a',
+        games: 8,
+        putouts: 9,
+        assists: 4,
+        errors: 1,
+        doublePlays: 0,
+        gamesByPosition: { SP: 8 },
+        putoutsByPosition: { SP: 9 },
+        assistsByPosition: { SP: 4 },
+        errorsByPosition: { SP: 1 },
+        difficultyWeightedConversion: 5,
+        difficultyFieldingOpportunities: 10,
+        lastUpdated: 1,
+      },
+    ] as never);
+    vi.mocked(buildFranchiseEffectivePositionReport).mockResolvedValue({
+      playerPositions: {
+        [pitcherId]: { effectivePosition: 'SP', startsShare: null },
+      },
+    } as never);
+    vi.mocked(getFranchiseMoraleSnapshot).mockResolvedValue({ currentValue: 55 } as never);
+    const signalSpy = vi.spyOn(checkpointRatingSignal, 'computeCheckpointRatingSignals');
+
+    const roster = await resolveCheckpointRoster(scope, gameState());
+    const members = signalSpy.mock.calls[0][0];
+    const member = members[0];
+
+    expect(member).toMatchObject({
+      playerId: pitcherId,
+      role: 'pitcher',
+      poolKey: 'SP',
+      ratings: {
+        power: 31,
+        contact: 32,
+        speed: 33,
+        fielding: 34,
+        velocity: 72,
+        junk: 68,
+        accuracy: 64,
+      },
+    });
+    expect('arm' in member.ratings).toBe(false);
+    expect(member.categoryRates.actualByCat.powerSlugging).toBeCloseTo(14 / 20, 10);
+    expect(member.categoryRates.actualByCat.powerHomeRunRate).toBeCloseTo(1 / 24, 10);
+    expect(member.categoryRates.actualByCat.contactAvoidStrikeoutRate).toBeCloseTo(1 - (4 / 24), 10);
+    expect(member.categoryRates.actualByCat.contactQualityRate).toBeCloseTo(8 / 12, 10);
+    expect(member.categoryRates.actualByCat.speedStealTripleRate).toBeCloseTo(3 / 24, 10);
+    expect(member.categoryRates.actualByCat.speedBaserunningRate).toBeCloseTo(3 / 6, 10);
+    expect(member.categoryRates.actualByCat.fieldingFieldingPct).toBeCloseTo(13 / 14, 10);
+    expect(member.categoryRates.actualByCat.fieldingRangeRate).toBeCloseTo(5 / 10, 10);
+    expect(member.categoryRates.actualByCat.pitchingStrikeoutRate).toBeCloseTo(15 / 58, 10);
+    expect(member.categoryRates.actualByCat.pitchingWalkAvoidanceRate).toBeCloseTo(1 - (4 / 58), 10);
+    expect(member.categoryRates.actualByCat.pitchingHomeRunSuppressionRate).toBeCloseTo(1 - (3 / 58), 10);
+    expect(member.categoryRates.actualByCat.pitchingWeakContactRate).toBeCloseTo(7 / 14, 10);
+    expect(member.categoryRates.sampleSizeByCat).toMatchObject({
+      powerSlugging: 24,
+      powerHomeRunRate: 24,
+      contactAvoidStrikeoutRate: 24,
+      contactQualityRate: 12,
+      speedStealTripleRate: 3,
+      speedBaserunningRate: 6,
+      fieldingFieldingPct: 14,
+      fieldingRangeRate: 10,
+      pitchingStrikeoutRate: 58,
+      pitchingWalkAvoidanceRate: 58,
+      pitchingHomeRunSuppressionRate: 58,
+      pitchingWeakContactRate: 14,
+    });
+
+    expect(roster).toHaveLength(1);
+    expect(roster[0].baseRatings).toEqual({
+      power: 31,
+      contact: 32,
+      speed: 33,
+      fielding: 34,
+      velocity: 72,
+      junk: 68,
+      accuracy: 64,
+    });
+    expect('arm' in roster[0].baseRatings).toBe(false);
+    expect(roster[0].sampleByRatingKey).toMatchObject({
+      power: 24,
+      contact: 24,
+      speed: 6,
+      fielding: 14,
+      arm: 0,
+      velocity: 58,
+      junk: 58,
+      accuracy: 58,
+    });
   });
 
   test('resolveCheckpointRoster assembles roster-agnostic classifiable members with RA-2c signals', async () => {

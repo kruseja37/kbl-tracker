@@ -171,6 +171,25 @@ describe('checkpointWindowedCategoryRates RA-9b', () => {
     expect(hitter?.sampleSizeByCat.fieldingRangeRate).toBe(0);
   });
 
+  test('leaves pitcher recent rates pitching-only because RA-11b windowed non-pitching is deferred', () => {
+    const result = aggregateCheckpointWindowedCategoryRates([
+      atBat('pitcher-window-source', 'HR'),
+    ]);
+    const pitcher = result.pitchers.get('pitcher-1');
+
+    expect(pitcher?.actualByCat.pitchingHomeRunSuppressionRate).toBe(0);
+    expect(pitcher?.sampleSizeByCat).toEqual({
+      pitchingStrikeoutRate: 1,
+      pitchingWalkAvoidanceRate: 1,
+      pitchingHomeRunSuppressionRate: 1,
+      pitchingWeakContactRate: 0,
+    });
+    expect(pitcher?.actualByCat.powerSlugging).toBeUndefined();
+    expect(pitcher?.sampleSizeByCat.powerSlugging).toBeUndefined();
+    expect(pitcher?.actualByCat.fieldingFieldingPct).toBeUndefined();
+    expect(pitcher?.sampleSizeByCat.fieldingFieldingPct).toBeUndefined();
+  });
+
   test('source stays pure and routes rates through the shared category adapter and tally helpers', () => {
     const source = readFileSync('src/engines/checkpointWindowedCategoryRates.ts', 'utf8');
 

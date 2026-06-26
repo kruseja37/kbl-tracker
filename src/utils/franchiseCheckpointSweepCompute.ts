@@ -367,6 +367,10 @@ export async function resolveCheckpointRoster(
 
     const baseRatings: Record<string, number> = isPitcher
       ? {
+          power: player.power,
+          contact: player.contact,
+          speed: player.speed,
+          fielding: player.fielding,
           velocity: player.velocity,
           junk: player.junk,
           accuracy: player.accuracy,
