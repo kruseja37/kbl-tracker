@@ -656,6 +656,30 @@ const HUB: Record<string, HubVM> = {
   PC: {
     standings: LEAGUE,
     almanac: ALMANAC,
+    rosterExtras: {
+      capNote: "22/22 active · 10/10 farm · payroll $5.42M, under the line",
+      advice: [
+        { kind: "call-up", text: "Call up SP Abe Krell — he's outpitched two of your five and the pen is thin." },
+        { kind: "send-down", text: "Cy Vane's bat is dragging; a stint down clears a roster spot and his head." },
+        { kind: "watch", text: "Your bench is light on left-handed bats with the deadline looming." },
+      ],
+      tradeDemands: [
+        { name: "Lars Stad", position: "LF", reason: "wants a clearer role — or out", severity: "high" },
+        { name: "Cy Vane", position: "C", reason: "lost the job, sulking", severity: "low" },
+      ],
+      farm: [
+        { id: "f1", position: "SP", name: "Abe Krell", grade: "A−", age: 21, readiness: "MLB-ready", note: "outpitching two starters", callUpReady: true },
+        { id: "f2", position: "RP", name: "Tig Moss", grade: "B+", age: 23, readiness: "MLB-ready", note: "live arm", callUpReady: true },
+        { id: "f3", position: "SS", name: "Junior Voss", grade: "A", age: 19, readiness: "needs a year", note: "the crown jewel" },
+        { id: "f4", position: "CF", name: "Dom Reyes", grade: "B", age: 20, readiness: "needs a year" },
+        { id: "f5", position: "2B", name: "Pim Oda", grade: "B−", age: 22, readiness: "MLB-ready", note: "glove-first depth" },
+        { id: "f6", position: "C", name: "Walt Penn", grade: "C+", age: 24, readiness: "org depth" },
+        { id: "f7", position: "3B", name: "Sal Vex", grade: "B", age: 21, readiness: "raw power" },
+        { id: "f8", position: "1B", name: "Gus Lind", grade: "C", age: 23, readiness: "org filler" },
+        { id: "f9", position: "LF", name: "Rudy Sant", grade: "C+", age: 20, readiness: "raw" },
+        { id: "f10", position: "SP", name: "Ed Kwan", grade: "B−", age: 22, readiness: "a year away" },
+      ],
+    },
     stadium: STADIUM_PC,
     schedule: {
       deadlineNote: "Trade deadline in 6 games — Page is a buyer.",
@@ -749,6 +773,18 @@ const HUB: Record<string, HubVM> = {
   BM: {
     standings: LEAGUE,
     almanac: ALMANAC,
+    rosterExtras: {
+      capNote: "22/22 active · 10/10 farm · payroll $6.10M, near the line",
+      advice: [
+        { kind: "watch", text: "Title window is open — the farm has chips if a contender wants to deal." },
+      ],
+      farm: [
+        { id: "bf1", position: "SP", name: "Cy Renn", grade: "B+", age: 22, readiness: "MLB-ready", note: "trade chip", callUpReady: true },
+        { id: "bf2", position: "OF", name: "Mose Tully", grade: "A−", age: 20, readiness: "needs a year", note: "untouchable" },
+        { id: "bf3", position: "SS", name: "Pax Dunn", grade: "B", age: 21, readiness: "depth" },
+        { id: "bf4", position: "RP", name: "Lou Gere", grade: "B−", age: 24, readiness: "MLB-ready" },
+      ],
+    },
     stadium: STADIUM_BM,
     schedule: {
       upcoming: [
@@ -789,6 +825,22 @@ const HUB: Record<string, HubVM> = {
   RR: {
     standings: LEAGUE,
     almanac: ALMANAC,
+    rosterExtras: {
+      capNote: "22/22 active · 8/10 farm · payroll $4.30M, well under",
+      advice: [
+        { kind: "call-up", text: "Bring up CF Nico Salt — Hale's slump is sinking the lineup." },
+        { kind: "watch", text: "If the skid continues, the deadline may force a sell-off." },
+      ],
+      tradeDemands: [
+        { name: "Gus Hale", position: "LF", reason: "pressing, wants a change of scenery", severity: "low" },
+      ],
+      farm: [
+        { id: "rf1", position: "CF", name: "Nico Salt", grade: "B", age: 21, readiness: "MLB-ready", note: "speed merchant", callUpReady: true },
+        { id: "rf2", position: "SP", name: "Bo Quint", grade: "B−", age: 23, readiness: "MLB-ready" },
+        { id: "rf3", position: "2B", name: "Ty Marsh", grade: "C+", age: 20, readiness: "needs a year" },
+        { id: "rf4", position: "RP", name: "Hal Dorn", grade: "C", age: 24, readiness: "org depth" },
+      ],
+    },
     stadium: STADIUM_RR,
     schedule: {
       deadlineNote: "Trade deadline in 6 games — sellers? The GM says not yet.",

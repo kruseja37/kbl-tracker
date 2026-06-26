@@ -290,11 +290,32 @@ export interface AlmanacVM {
   trophyCase?: TrophyVM[];
 }
 
+/* ===== Roster extras — the farm (22/10), roster advice, trade demands ===== */
+export interface FarmPlayerVM {
+  id: string;
+  position: string;
+  name: string;
+  grade?: string;
+  age?: number;
+  readiness?: string;        // "MLB-ready" / "needs a year" / "raw"
+  note?: string;
+  callUpReady?: boolean;     // the skipper recommends bringing him up
+}
+export interface RosterMoveAdviceVM { kind: "call-up" | "send-down" | "watch"; text: string }
+export interface TradeDemandVM { name: string; position: string; reason: string; severity?: "high" | "low" }
+export interface RosterExtrasVM {
+  farm?: FarmPlayerVM[];
+  advice?: RosterMoveAdviceVM[];
+  tradeDemands?: TradeDemandVM[];
+  capNote?: string;          // "22/22 active · 9/10 farm · under the line"
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
   pulse: PulseVM;
   roster: PlayerRowVM[];
+  rosterExtras?: RosterExtrasVM;
   standings?: StandingsRacesVM;
   stadium?: StadiumVM;
   schedule?: ScheduleVM;
@@ -650,6 +671,63 @@ function RosterTab({
           ))}
         </div>
       )}
+
+      {hub.rosterExtras ? <RosterExtras extras={hub.rosterExtras} /> : null}
+    </>
+  );
+}
+
+function RosterExtras({ extras }: { extras: RosterExtrasVM }) {
+  return (
+    <>
+      {(extras.advice && extras.advice.length) || (extras.tradeDemands && extras.tradeDemands.length) ? (
+        <div className="fen-frontoffice">
+          {extras.advice && extras.advice.length ? (
+            <div className="fen-fo-col">
+              <div className="fen-sectlab">From the Skipper <span className="lite fen-help">· roster advice</span></div>
+              {extras.advice.map((a, i) => (
+                <div className={`fen-advice ${a.kind}`} key={i}>
+                  <span className="ic">{a.kind === "call-up" ? "▲" : a.kind === "send-down" ? "▼" : "•"}</span>
+                  <span className="tx">{a.text}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {extras.tradeDemands && extras.tradeDemands.length ? (
+            <div className="fen-fo-col">
+              <div className="fen-sectlab">Wants Out <span className="lite fen-help">· trade demands</span></div>
+              {extras.tradeDemands.map((t, i) => (
+                <div className={`fen-demand${t.severity === "high" ? " hot" : ""}`} key={i}>
+                  <span className="pos">{t.position}</span>
+                  <span className="nm fen-chalk">{t.name}</span>
+                  <span className="rs">{t.reason}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {extras.farm && extras.farm.length ? (
+        <div className="fen-farm">
+          <div className="fen-sectlab">The Farm <span className="lite fen-help">· the 10 · bring a kid up</span></div>
+          <div className="fen-farm-list">
+            <div className="h">Pos</div><div className="h">Prospect</div><div className="h">Grade</div><div className="h">Readiness</div><div className="h" />
+            <div className="line" />
+            {extras.farm.map((f) => (
+              <Fragment key={f.id}>
+                <div><span className="fen-rpos">{f.position}</span></div>
+                <div className="fen-rname fen-chalk">{f.name}{f.age ? <span className="fen-farm-age"> · {f.age}</span> : null}</div>
+                <div className="fen-farm-grade">{f.grade ?? "—"}</div>
+                <div className="fen-farm-ready">{f.readiness ?? ""}{f.note ? <span className="fen-farm-note fen-help"> · {f.note}</span> : null}</div>
+                <div className="fen-farm-act"><button type="button" className={`fen-callup${f.callUpReady ? "" : " ghost"}`}>▲ Call up</button></div>
+                <div className="line" />
+              </Fragment>
+            ))}
+          </div>
+          {extras.capNote ? <div className="fen-farm-cap fen-help-b">{extras.capNote}</div> : null}
+        </div>
+      ) : null}
     </>
   );
 }

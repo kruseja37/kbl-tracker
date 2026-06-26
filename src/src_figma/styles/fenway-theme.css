@@ -141,6 +141,33 @@
 .fen-morale.mid { color: var(--fen-chalk); }
 .fen-morale:hover { text-decoration: underline dotted; }
 
+/* front office: roster advice + trade demands */
+.fen-frontoffice { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.3); }
+@media (max-width: 720px) { .fen-frontoffice { grid-template-columns: 1fr; } }
+.fen-advice { display: grid; grid-template-columns: 16px 1fr; gap: 9px; align-items: baseline; padding: 5px 0; font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-advice .ic { font-size: 11px; text-align: center; }
+.fen-advice.call-up .ic { color: var(--fen-yellow); }
+.fen-advice.send-down .ic { color: var(--fen-marquee); }
+.fen-advice .tx b { color: var(--fen-chalk); }
+.fen-demand { display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 9px; padding: 5px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); }
+.fen-demand:last-child { border-bottom: none; }
+.fen-demand .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); }
+.fen-demand .nm { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-demand.hot .nm { color: var(--fen-marquee); }
+.fen-demand .rs { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); text-align: right; }
+
+/* the farm (the 10) */
+.fen-farm { margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.3); }
+.fen-farm-list { display: grid; grid-template-columns: 48px 1fr 60px 1.3fr auto; gap: 3px 12px; align-items: center; }
+.fen-farm-list .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 5px; }
+.fen-farm-list .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.2); }
+.fen-farm-age { font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-farm-grade { font-family: var(--fen-chalk-font); font-size: 16px; color: var(--fen-ash); }
+.fen-farm-ready { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-callup { font-family: var(--fen-chalk-font); font-size: 11px; cursor: pointer; border-radius: 4px; padding: 4px 11px; background: linear-gradient(180deg, #f0d26a, #cba23f); border: 2px solid #2a2208; color: var(--fen-navy); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55); white-space: nowrap; }
+.fen-callup.ghost { background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(236, 232, 218, 0.16); color: var(--fen-chalk-soft); box-shadow: none; }
+.fen-farm-cap { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-top: 12px; text-align: center; }
+
 /* money — option B (small typewriter $/k + chalk digits) */
 .fen-money { font-family: var(--fen-chalk-font); display: inline-flex; align-items: baseline; }
 .fen-money .cur { font-family: var(--fen-chalk-font); font-size: 0.46em; color: var(--fen-chalk-soft); margin-right: 0.08em; transform: translateY(-0.12em); }

@@ -78,13 +78,17 @@ top of the Standings & Races tab. Full bracket deferred (not relevant mid-season
 | **Season progress** ✅ BUILT | "Week 9 of 20 · 45%" bar + next gate | 🟢/🟡 | Y | `useFranchiseData.ts:92`, season-length meta |
 | **Playoff bracket** | seeds, series scores, advancement, home-field | 🟢 | N (deferred — late-season) | `playoffStorage.ts:38` |
 
-## Bucket 5 — Roster moves as first-class actions  *(the 22/10)*
+## Bucket 5 — Roster moves as first-class actions  *(the 22/10)* ✅ BUILT
+**BUILT 2026-06-26** (mock-fed): below the 22-man roster — **The Farm** (the 10 prospects: pos/grade/age/
+readiness + a call-up button, MLB-ready ones highlighted gold), **From the Skipper** (roster-analyzer
+advice: call-up ▲ / send-down ▼ / watch), and **Wants Out** (trade demands w/ severity), plus a cap note.
+
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **The farm (10) + call-up/send-down** | the farm roster + drag/confirm move w/ cap+salary enforce | 🟢 | N | rosterAnalyzer, scheduleStorage |
-| **Roster-analyzer advice** | "call up this kid / send this one down" recommendations | 🟢 | N | `rosterAnalyzerEngine.ts` |
-| **Trade demands** | which players want out (loyalty break) | 🟡 | N | `tradeRequestGeneration.ts` |
-| **Trades ledger** | recent trades + the beat-reporter reaction story | 🟢 | N | `tradeEngine.ts:12` |
+| **The farm (10) + call-up/send-down** ✅ BUILT | the farm roster + a call-up affordance per prospect | 🟢 | Y | rosterAnalyzer, scheduleStorage |
+| **Roster-analyzer advice** ✅ BUILT | call-up / send-down / watch recommendations | 🟢 | Y | `rosterAnalyzerEngine.ts` |
+| **Trade demands** ✅ BUILT | which players want out (severity) | 🟡 | Y | `tradeRequestGeneration.ts` |
+| **Trades ledger** | recent trades + the beat-reporter reaction story | 🟢 | N (→ widened newspaper) | `tradeEngine.ts:12` |
 
 ## Bucket 6 — The newspaper, widened  *(all the story types + the reporter himself)*
 The Tootwhistle tab shows GAME_RECAP + the recap stream. The backend has **12 more event types** with
