@@ -23276,3 +23276,64 @@ The representative SIM values (spec line 206: `startBar 0.25, γ=2, δ≈1`) are
 
 **FAILURE PROTOCOL / STOP-IF:** the windowed pitcher path is NOT byte-identical / `addHitterRates(undefined,...)` throws or emits → STOP (fix null-safety); a pitcher develops an arm rating → STOP (§4A forbids it); a `TRACKER_DB_VERSION` bump or `iv_oracle.json` touch is needed → STOP; a LIVE (flag-off) or hitter or pitcher-PITCHING fixture moves → STOP; you cannot reuse `addHitterRates` cleanly and would rewrite the per-category math → STOP and report (the spec wants the hitter-identical decomposition); the pitcher fielding-credit path turns out absent so the FIELD signal self-gates to frozen → that is ACCEPTABLE (the min-sample valve makes it a clean no-op, the intended §4A RP self-gating) — build HIT/RUN/FIELD anyway and NOTE it, do not block. Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: RA-11a ===== -->
+
+<!-- ===== CONTRACT: A1.3a ===== -->
+## CONTRACT: A1.3a — trade-propensity wiring (post-roll gate on L10 trade_demand, CONTAINED)
+
+**ROUTE:** `codex exec -C /Users/johnkruse/Projects/kbl-tracker` (worktree = MAIN, branch `codex/franchise-v1-next`).
+**ROLE:** Builder (Codex). Captain (Opus) audits the REAL diff + runs the authoritative FULL suite himself.
+**Use xhigh reasoning effort.**
+
+**GOAL:** Wire the PRE-BUILT-but-ORPHANED `computeTradeRequestPropensity` engine as a **post-roll gate** on L10 `trade_demand` candidates: a `trade_demand` event fires only if the player's propensity clears the threshold (`wouldRequest`). Thread `loyalty` + `teamId` onto the L10 candidate so the gate has its inputs. This is the **CONTAINED** half — explicitly EXCLUDE A1.3b (the flashpoint tax `computeFlashpointGameTax`, the `TRADE_DEMAND` morale emitter, the persisted 'confirmed demander' source, and the trackerDb bump). Build-dark (L10 is behind the default-OFF Phase-2 L10 flag).
+
+**SOURCE OF TRUTH:** the engine's own contract comment `src/engines/tradeRequestGeneration.ts:14-16` — "L5c emits PROPENSITY only. The WHO-fires roll is L10's seeded job, so this module is pure + deterministic." So L10 owns the seeded cadence roll; propensity is a deterministic content gate. CURRENT_STATE.md:34 (A1.3a contained scope).
+
+**GROUND FIRST (re-read from source — do NOT trust line numbers blindly):**
+- `src/engines/tradeRequestGeneration.ts:77` `computeTradeRequestPropensity(player: TradeRequestPlayer, teamFanMorale: number, intensity: TierKey, config?) => TradeRequestResult`. `TradeRequestPlayer = Pick<HiddenModifiers,'loyalty'> & { id?, personality: CanonicalPersonality, playerMorale: number }`. `TradeRequestResult.wouldRequest = propensity >= config.requestThreshold` (deterministic; NO roll). Pure — consume AS-IS, do NOT change its signature.
+- `src/engines/franchiseL10EventEngine.ts:81-89` `FranchiseL10Candidate` — has `id/kind/role/personality?/playerMorale?/fanMorale?/performanceSignal?`; **lacks `loyalty` + `teamId`** (thread them).
+- `src/engines/franchiseL10EventEngine.ts:181-193` `computeFranchiseL10Events` emit loop: cadence roll `if (roll >= probability) continue;` then `events.push(buildEventCandidate(...))`. `getRosterEvent` (`:331-346`) resolves `trade_demand`/`mentorship`/`clubhouse_rift` via a seeded 1/3 sub-roll. THE gate goes here: after the event is built, if `eventType==='trade_demand'`, apply the propensity gate and `continue` (skip push) on `!wouldRequest`.
+- `src/utils/franchiseL10SweepCompute.ts:126` `teamId` already resolved (non-null guarded `:127`); `:143-151` the player-candidate push — thread `loyalty` (`player.hiddenPersonalityModifiers?.loyalty ?? 50`) + `teamId` here.
+- Confirm `input.intensity`'s type matches the engine's `TierKey` (`'juiced'|'standard'|'nerfed'`); the sweep default is `DEFAULT_L10_INTENSITY='standard'`. If the L10 intensity type differs, map it (do NOT pass a mismatched type).
+- The L10 dark flag: `isFranchisePhase2L10Enabled()` (default false) — the sweep no-ops when off; rows are `confirmationStatus:'pending'`/`applied:false`.
+
+**EXACT CHANGES:**
+1. `franchiseL10EventEngine.ts`: add OPTIONAL `loyalty?: number;` + `teamId?: string;` to `FranchiseL10Candidate` (keep optional so team-kind candidates + existing tests stay valid). Import `computeTradeRequestPropensity` from `./tradeRequestGeneration`. In `computeFranchiseL10Events`, gate ONLY the `trade_demand` event:
+   ```
+   const event = buildEventCandidate(...);
+   if (event.eventType === 'trade_demand') {
+     const propensity = computeTradeRequestPropensity(
+       { id: candidate.id, personality: candidate.personality ?? <a sane CanonicalPersonality default>, playerMorale: candidate.playerMorale ?? config.neutralMorale-or-50, loyalty: candidate.loyalty ?? 50 },
+       candidate.fanMorale ?? 50,
+       input.intensity,
+     );
+     if (!propensity.wouldRequest) continue;   // drop the trade_demand; mentorship/clubhouse_rift untouched
+   }
+   events.push(event);
+   ```
+   (Gate `trade_demand` ONLY — do NOT gate mentorship/clubhouse_rift. The hard `wouldRequest` boolean gate — NO new RNG, NO `Math.random`.)
+2. `franchiseL10SweepCompute.ts`: at the player-candidate push (`:143-151`), add `loyalty: player.hiddenPersonalityModifiers?.loyalty ?? 50` and `teamId` (the `:126` value).
+
+**MAKE-OR-BREAK:**
+- The propensity gate fires ONLY on `trade_demand`; `mentorship`/`clubhouse_rift`/all other families BYTE-IDENTICAL.
+- Hard deterministic gate (`wouldRequest`) — NO `Math.random`, no new roll (the codebase is seeded-RNG-only; the engine is pure).
+- Null-safe: a candidate with no `loyalty` → default 50; no personality → a documented default; `fanMorale ?? 50`. A `team`-kind candidate never reaches the trade_demand gate (roster events are player-scoped) — but the optional fields keep team candidates valid.
+- NOT default-identity ON the trade_demand slice (FEWER trade_demand events fire) — that is INTENDED and SAFE because L10 is dark (default-OFF flag; pending/unapplied rows). Update the engine/sweep tests that assert on `trade_demand`. NO live (flag-off) behavior change.
+- NO `TRACKER_DB_VERSION` bump. NO A1.3b scope (no flashpoint tax, no TRADE_DEMAND morale emitter into processCompletedGame, no persisted demander). NO oracle/pricing/tier touch. Engine signature of `computeTradeRequestPropensity` UNCHANGED.
+
+**TEST (`src/engines/__tests__/franchiseL10EventEngine.test.ts` + `src/utils/tests/franchiseL10SweepCompute.test.ts`):**
+- A high-loyalty, content (high-morale / happy-fan) player whose `trade_demand` sub-roll would fire → the event is DROPPED (`!wouldRequest`).
+- A low-morale, angry-fanbase, low-loyalty player → `trade_demand` SURVIVES (`wouldRequest`).
+- `mentorship` + `clubhouse_rift` outcomes for the SAME candidates are UNCHANGED (regression — the gate is trade_demand-only).
+- A candidate with no `loyalty`/no `hiddenPersonalityModifiers` → gate uses the 50 default, does not crash.
+- The sweep seam test still reconstructs events from the real engine with the threaded fields.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0.  2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/franchiseL10EventEngine.test.ts src/utils/tests/franchiseL10SweepCompute.test.ts src/engines/__tests__/tradeRequestGeneration.test.ts` → pass (tradeRequestGeneration stays green — engine unchanged).
+4. `NODE_ENV= npm test` (FULL — the L10 sweep feeds `processCompletedGame`, transitive partial-mock risk) → FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` order-flakes — solo-pass to confirm). Any NON-L10 fixture moving → STOP. If a `soul.*` L-SIM invariant references `trade_demand`, update it in this diff (per the standing cross-ticket-invariant lesson) — else confirm none does.
+5. `git --no-pager diff --stat` → only `franchiseL10EventEngine.ts` + `franchiseL10SweepCompute.ts` + their test files. No `tradeRequestGeneration.ts` semantics change, no `trackerDb.ts`, no `processCompletedGame.ts`, no `iv_oracle.json`/pricing/tier.
+
+**FORMAT:** (1) files+lines; (2) the candidate-type additions, the trade_demand-only gate, the loyalty/teamId thread, an explicit statement that non-trade_demand families are byte-identical + no Math.random + no DB bump + no A1.3b scope + L10 stays dark; (3) exact verification output; (4) "A1.3a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the gate would touch mentorship/clubhouse_rift or any non-trade_demand family → STOP; you reach for `Math.random` or a new RNG → STOP (hard `wouldRequest` gate; if a probabilistic gate is truly wanted, use `franchiseL10DeterministicRoll` with a `:roster:trade_demand:propensity` seed suffix — but DEFAULT to the boolean gate); a `TRACKER_DB_VERSION` bump or a persisted field is needed → STOP (that's A1.3b); you're tempted to add the flashpoint tax / TRADE_DEMAND morale emitter / persisted demander → STOP (A1.3b); `computeTradeRequestPropensity` needs an input not in scope → STOP and report (all inputs verified available); a non-L10 fixture regresses → STOP. Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: A1.3a ===== -->
