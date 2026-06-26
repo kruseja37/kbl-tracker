@@ -55,5 +55,34 @@ So Defense First resolves to one of: (a) **mild** rotation nerf (~even, subtle i
 ### Tier-generosity lever (JK idea: XBL = nerfed baseline)
 The `scale` parameter makes archetype shift magnitudes tier-dependent (XBL magnitudes = nerfed=1.0; scale standard/juiced up a few %). NOT yet swept — to do: find the max scale that keeps the set in band per tier (more pronounced identities without breaking parity). Note: scaling won't fix the "fielding is inert" issue (cheap at every tier).
 
+## Historical archetype set (the real direction, 2026-06-26)
+
+Pivot (JK): instead of curating the abstract workbook archetypes, build identities from **real historical team-building eras** — vivid, recognizable, and balanced so a league of them is dynamic but fair. An 8-family research pass (`historical-team-archetype-research` workflow) produced 24 sourced candidates → deduped to **15 distinct identities**, encoded as cap profiles with value-calibrated magnitudes, and run through the sim (`historicalArchetypes.test.ts`).
+
+**Result: 15/15 within band, max deviation 5.7%** (standard tier). The set:
+
+| Archetype | Identity (boost → sacrifice) | dev |
+|---|---|---|
+| Murderers' Row ('27 Yankees) | +power +contact → −speed | −0.6% |
+| Bomba Squad ('19 Twins) | +power → −contact −speed | −0.6% |
+| Bash Brothers ('89 A's) | +power +arm → −rotation/bullpen command | +3.3% |
+| Whiteyball ('85 Cardinals) | +speed +defense → −power | −0.6% |
+| Go-Go Small Ball ('59 Sox / '26 Rays) | +contact +defense → −power | −0.6% |
+| Dead-Ball Suppressors ('06 Cubs) | +rotation-junk +contact → −power −bullpen-velo | +0.5% |
+| Billy Ball Burners (Rickey's A's) | +speed → −power −rotation-command | −1.3% |
+| Junkball Surgeons ('95 Braves) | +rotation command+junk → −power −rotation-velo | +3.4% |
+| Flamethrowers ('63 Dodgers) | +rotation velocity → −power −contact | +3.3% |
+| Nasty Boys ('90 Reds) | +bullpen velocity → −bullpen command | −2.2% |
+| HDH Royals ('14 Royals) | +bullpen command +speed → −power −rotation-command | +2.4% |
+| The Opener ('18 Rays) | +bullpen → −rotation | +1.9% |
+| The Oriole Way ('69 Orioles) | +defense +rotation-command → −speed −bullpen-velo | +2.2% |
+| Shift-Era Suppressors ('08 Rays) | +defense +rotation-velo → −contact −bullpen-command | −5.2% |
+| Big Red Machine ('75 Reds) | +contact +defense (+power) → −rotation | −5.7% |
+
+### The reframe — what "balanced + vivid" means here
+Pitching-identity archetypes read slightly strong (+2…+3%), defense/small-ball ones slightly weak (−5%) — which is *realistic* (pitching is king; glove/contact teams are lower raw-ceiling but win on execution + the in-game value the IV engine doesn't price). Note the small-ball cluster (Murderers' Row, Bomba, Whiteyball, Go-Go) all land at the **same** −0.6% — because the IV-maximizer builds the *same* roster for each. **Their identity isn't a strength difference; it's the distinctive team SHAPE the archetype lets you build competitively.** The vividness is in roster/style diversity across a fair league, not IV swings — 15 wildly different viable teams, none dominant. (Dropped: "Strikeout Rotation" — velocity-rotation + weak-bullpen is intrinsically hard to balance and redundant with Flamethrowers.)
+
+Next: fine-tune magnitudes to taste, confirm across juiced/nerfed tiers, then this is the curated set.
+
 ## Caveat
 The roster-builder is a strong heuristic, not a proven optimum. The 31 clustered archetypes are robust; the two outliers are stable across both builder starts (confirming genuine harshness). If we later need to *prove* a tight number for a specific archetype, the builder can be hardened further (random restarts, larger candidate shortlists).
