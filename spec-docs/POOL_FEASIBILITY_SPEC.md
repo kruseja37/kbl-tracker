@@ -87,12 +87,18 @@ export function analyzePoolFeasibility(
    identity-flavor (the IV engine underprices these; a pool can be short without a strength loss — FLD's true-value
    correction is the SEPARATE step-2 build, not this gate).
 5. **Classify.**
-   - `notFieldable = !built.solvent || built.rosterSize < 22`.
+   - `notFieldable = built.rosterSize < 22` — **bodies only**. (Original draft also gated on `!built.solvent`;
+     dropped after audit: the heuristic hill-climb builder leaves rosters $30–$150 over a ~$1.07M budget on
+     convergence, so 5 full-pool archetypes read insolvent-by-pennies with ZERO stat shortfalls — a builder
+     artifact, not a composition gap. The balance sim treats those same rosters as valid (15/15 in band).
+     `built.solvent`/`totalSalary`/`totalTax` stay in the OUTPUT as a diagnostic for the draft-guide/UI to
+     surface budget pressure later; they do NOT drive the support verdict. Feasibility = player TYPES + bodies.)
    - `hasBindingShortfall = shortfalls.some(s => s.binding && s.needCount > 0)`.
    - `hasAnyShortfall = shortfalls.some(s => s.needCount > 0)`.
    - `support = notFieldable || hasBindingShortfall ? 'starved' : hasAnyShortfall ? 'thin' : 'supported'`.
-6. **Activation prompt** (null when supported):
-   - `notFieldable` with no stat shortfall → `"This pool is too thin to field a full {name} roster — add more players."`
+6. **Activation prompt** (null when supported); `notFieldable` takes PRECEDENCE (can't realize any identity
+   without first fielding a team):
+   - `notFieldable` → `"This pool is too thin to field a full {name} roster — add more players."`
    - else take the **top** shortfall (sort: binding desc, needCount desc, stat asc) →
      `"Add ~{needCount} {descriptor} to activate {name}."`
 
