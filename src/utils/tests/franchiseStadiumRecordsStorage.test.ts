@@ -287,6 +287,151 @@ describe('franchise stadium records storage', () => {
     });
   });
 
+  test('upsert reports a set change when a new sole player holder is stored', async () => {
+    const report = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({ eventId: 'at-bat-1', batterId: 'batter-1', batterName: 'Batter One' }),
+        atBat({ eventId: 'at-bat-2', batterId: 'batter-1', batterName: 'Batter One', timestamp: 102 }),
+      ],
+      fieldingEvents: [],
+    });
+
+    const result = await upsertFranchiseStadiumRecordsFromFoundationReport(report, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(result.changes).toEqual(expect.arrayContaining([
+      {
+        stadiumId: 'apple-field',
+        recordType: 'most-batting-spray-events-player',
+        recordKey: 'leader',
+        changeKind: 'set',
+        priorValue: null,
+        priorLeaderPlayerIds: [],
+        newValue: 2,
+        newLeaderPlayerIds: ['batter-1'],
+      },
+    ]));
+  });
+
+  test('upsert reports an overtake change when a different sole player holder takes a record', async () => {
+    const firstReport = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({ eventId: 'at-bat-1', batterId: 'batter-a', batterName: 'Batter A' }),
+      ],
+      fieldingEvents: [],
+    });
+    const secondReport = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({ eventId: 'at-bat-2', batterId: 'batter-b', batterName: 'Batter B' }),
+        atBat({ eventId: 'at-bat-3', batterId: 'batter-b', batterName: 'Batter B', timestamp: 103 }),
+      ],
+      fieldingEvents: [],
+    });
+
+    await upsertFranchiseStadiumRecordsFromFoundationReport(firstReport, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    const result = await upsertFranchiseStadiumRecordsFromFoundationReport(secondReport, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-02T00:00:00.000Z',
+    });
+
+    expect(result.changes.filter((change) => change.recordType === 'most-batting-spray-events-player')).toEqual([
+      {
+        stadiumId: 'apple-field',
+        recordType: 'most-batting-spray-events-player',
+        recordKey: 'leader',
+        changeKind: 'overtake',
+        priorValue: 1,
+        priorLeaderPlayerIds: ['batter-a'],
+        newValue: 2,
+        newLeaderPlayerIds: ['batter-b'],
+      },
+    ]);
+  });
+
+  test('upsert stays silent when the same sole player holder improves a record', async () => {
+    const firstReport = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({ eventId: 'at-bat-1', batterId: 'batter-1', batterName: 'Batter One' }),
+      ],
+      fieldingEvents: [],
+    });
+    const secondReport = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({ eventId: 'at-bat-2', batterId: 'batter-1', batterName: 'Batter One' }),
+        atBat({ eventId: 'at-bat-3', batterId: 'batter-1', batterName: 'Batter One', timestamp: 103 }),
+      ],
+      fieldingEvents: [],
+    });
+
+    await upsertFranchiseStadiumRecordsFromFoundationReport(firstReport, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+    const result = await upsertFranchiseStadiumRecordsFromFoundationReport(secondReport, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-02T00:00:00.000Z',
+    });
+
+    expect(result.changes).toEqual([]);
+  });
+
+  test('upsert stays silent when a player record has tied co-leaders', async () => {
+    const report = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [
+        atBat({
+          eventId: 'at-bat-1',
+          batterId: 'batter-1',
+          batterName: 'Batter One',
+          pitcherId: 'pitcher-1',
+          pitcherName: 'Pitcher One',
+        }),
+        atBat({
+          eventId: 'at-bat-2',
+          batterId: 'batter-2',
+          batterName: 'Batter Two',
+          pitcherId: 'pitcher-2',
+          pitcherName: 'Pitcher Two',
+          timestamp: 102,
+        }),
+      ],
+      fieldingEvents: [],
+    });
+
+    const result = await upsertFranchiseStadiumRecordsFromFoundationReport(report, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(result.changes).toEqual([]);
+  });
+
+  test('upsert stays silent for team-only stadium records without player leaders', async () => {
+    const report = foundation({
+      completedGames: [completedGame()],
+      atBatEvents: [],
+      fieldingEvents: [],
+    });
+
+    const result = await upsertFranchiseStadiumRecordsFromFoundationReport(report, {
+      completedGames: [completedGame()],
+      timestamp: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(result.records.map((record) => record.leaderPlayerIds)).toEqual([[], [], []]);
+    expect(result.changes).toEqual([]);
+  });
+
   test('no-hitter and perfect-game fame events create achievement context records', async () => {
     const game = completedGame({
       fameEvents: [

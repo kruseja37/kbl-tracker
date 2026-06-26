@@ -56,8 +56,20 @@ export interface FranchiseStadiumRecord extends FranchiseStadiumFoundationScope 
 
 export interface FranchiseStadiumRecordsScopeInput extends FranchiseStadiumFoundationScope {}
 
+export interface FranchiseStadiumRecordChange {
+  stadiumId: string;
+  recordType: FranchiseStadiumRecordType;
+  recordKey: string;
+  changeKind: 'set' | 'overtake';
+  priorValue: number | null;
+  priorLeaderPlayerIds: string[];
+  newValue: number;
+  newLeaderPlayerIds: string[];
+}
+
 export interface UpsertFranchiseStadiumRecordsResult {
   records: FranchiseStadiumRecord[];
+  changes: FranchiseStadiumRecordChange[];
   policies: FranchiseStadiumRecordPolicies;
   blockers: string[];
   persisted: boolean;
@@ -549,6 +561,7 @@ export async function upsertFranchiseStadiumRecordsFromFoundationReport(
   const timestamp = options.timestamp ?? nowISO();
   const candidates = buildCandidatesFromFoundation(report, options.completedGames ?? [], blockers);
   const records: FranchiseStadiumRecord[] = [];
+  const changes: FranchiseStadiumRecordChange[] = [];
   for (const candidate of candidates) {
     if (!hasText(candidate.stadiumId)) {
       blockers.push(`Stadium record skipped for ${candidate.recordType}: non-empty stadium id is required.`);
@@ -556,7 +569,22 @@ export async function upsertFranchiseStadiumRecordsFromFoundationReport(
     }
     const identity = identityKey(scope, candidate.stadiumId, candidate.recordType, candidate.recordKey);
     const existing = await getRecordById(recordId(identity));
-    records.push(recordFromCandidate(scope, candidate, timestamp, existing ?? undefined));
+    const newRecord = recordFromCandidate(scope, candidate, timestamp, existing ?? undefined);
+    const newSole = newRecord.leaderPlayerIds.length === 1 ? newRecord.leaderPlayerIds[0] : null;
+    const priorSole = existing && existing.leaderPlayerIds.length === 1 ? existing.leaderPlayerIds[0] : null;
+    if (newSole !== null && newSole !== priorSole) {
+      changes.push({
+        stadiumId: newRecord.stadiumId,
+        recordType: newRecord.recordType,
+        recordKey: newRecord.recordKey,
+        changeKind: existing ? 'overtake' : 'set',
+        priorValue: existing?.value ?? null,
+        priorLeaderPlayerIds: existing?.leaderPlayerIds ?? [],
+        newValue: newRecord.value,
+        newLeaderPlayerIds: newRecord.leaderPlayerIds,
+      });
+    }
+    records.push(newRecord);
   }
 
   if (records.length === 0) {
@@ -573,6 +601,11 @@ export async function upsertFranchiseStadiumRecordsFromFoundationReport(
 
   return {
     records,
+    changes: changes.sort((left, right) =>
+      left.stadiumId.localeCompare(right.stadiumId) ||
+      left.recordType.localeCompare(right.recordType) ||
+      left.recordKey.localeCompare(right.recordKey),
+    ),
     policies,
     blockers,
     persisted: true,
@@ -593,6 +626,7 @@ function emptyResult(
 ): UpsertFranchiseStadiumRecordsResult {
   return {
     records: [],
+    changes: [],
     policies,
     blockers,
     persisted: false,
