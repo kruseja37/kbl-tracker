@@ -47,7 +47,7 @@ ledger; a **Career** card (totals + awards-won chips); a **Milestones** section 
 ## Bucket 2 — The two empty tabs
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **Schedule tab** | upcoming fixtures (date/opp) + recent results w/ scores; trade-deadline & key-date markers | 🟢 | N (stub) | `scheduleStorage.ts:29` |
+| **Schedule tab** ✅ BUILT | upcoming fixtures (date/opp, next = Play Ball) + recent results w/ scores (W yellow / L red); trade-deadline banner | 🟢 | Y | `scheduleStorage.ts:29` |
 | **Almanac — league leaders** | batting (AVG/HR/RBI/SB/OPS/WAR) + pitching (ERA/W/K/WHIP/SV/WAR) leaderboards w/ category picker | 🟢 | N (stub) | `seasonStorage.ts:43,93` |
 | **Almanac — records explorer** | single-season + all-time records by stat | 🟢/🟡 | N | `museumStorage.ts` |
 | **Almanac — trophy case** | champions, past award winners, retired jerseys | 🟢 | partial (Museum) | `museumStorage.ts`, offseason awards |

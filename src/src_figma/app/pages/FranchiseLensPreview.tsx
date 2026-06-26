@@ -497,6 +497,23 @@ const HUB: Record<string, HubVM> = {
   PC: {
     standings: LEAGUE,
     stadium: STADIUM_PC,
+    schedule: {
+      deadlineNote: "Trade deadline in 6 games — Page is a buyer.",
+      upcoming: [
+        { date: "Wk 9 · Thu", opponent: "RR", home: true, isNext: true },
+        { date: "Wk 9 · Fri", opponent: "BM", home: false },
+        { date: "Wk 9 · Sat", opponent: "BM", home: false },
+        { date: "Wk 9 · Sun", opponent: "SG", home: true },
+        { date: "Wk 10 · Tue", opponent: "ST", home: true },
+      ],
+      recent: [
+        { date: "Wk 9 · Wed", opponent: "RR", home: true, result: { teamScore: 5, oppScore: 2, win: true } },
+        { date: "Wk 9 · Tue", opponent: "RR", home: true, result: { teamScore: 4, oppScore: 3, win: true } },
+        { date: "Wk 8 · Sun", opponent: "BM", home: false, result: { teamScore: 6, oppScore: 7, win: false } },
+        { date: "Wk 8 · Sat", opponent: "BM", home: false, result: { teamScore: 8, oppScore: 3, win: true } },
+        { date: "Wk 8 · Fri", opponent: "SG", home: true, result: { teamScore: 9, oppScore: 1, win: true } },
+      ],
+    },
     checkpoint: {
       number: 3, label: "Checkpoint 3 of 5", pctLabel: "the 60% mark",
       players: [
@@ -572,6 +589,19 @@ const HUB: Record<string, HubVM> = {
   BM: {
     standings: LEAGUE,
     stadium: STADIUM_BM,
+    schedule: {
+      upcoming: [
+        { date: "Wk 9 · Thu", opponent: "DV", home: true, isNext: true },
+        { date: "Wk 9 · Fri", opponent: "PC", home: true },
+        { date: "Wk 9 · Sat", opponent: "PC", home: true },
+        { date: "Wk 10 · Tue", opponent: "ST", home: false },
+      ],
+      recent: [
+        { date: "Wk 9 · Wed", opponent: "CC", home: true, result: { teamScore: 1, oppScore: 0, win: true } },
+        { date: "Wk 9 · Tue", opponent: "CC", home: true, result: { teamScore: 6, oppScore: 2, win: true } },
+        { date: "Wk 8 · Sun", opponent: "PC", home: true, result: { teamScore: 7, oppScore: 6, win: true } },
+      ],
+    },
     home: {
       leadStory: { kicker: "Season 3, Week 9", headline: "VESPER MAKES HIS CY YOUNG CASE AS MONKEYS PULL AWAY", body: "A 2.18 ERA and a fourteen-strikeout gem have the Brass ace atop every ballot — and the East comfortably in hand.", byline: "By D. Hale, Tootwhistle Times" },
       impactCards: [
@@ -598,6 +628,20 @@ const HUB: Record<string, HubVM> = {
   RR: {
     standings: LEAGUE,
     stadium: STADIUM_RR,
+    schedule: {
+      deadlineNote: "Trade deadline in 6 games — sellers? The GM says not yet.",
+      upcoming: [
+        { date: "Wk 9 · Thu", opponent: "PC", home: false, isNext: true },
+        { date: "Wk 9 · Fri", opponent: "SG", home: true },
+        { date: "Wk 10 · Tue", opponent: "CC", home: false },
+      ],
+      recent: [
+        { date: "Wk 9 · Wed", opponent: "PC", home: false, result: { teamScore: 2, oppScore: 5, win: false } },
+        { date: "Wk 9 · Tue", opponent: "PC", home: false, result: { teamScore: 3, oppScore: 4, win: false } },
+        { date: "Wk 8 · Sun", opponent: "SG", home: true, result: { teamScore: 2, oppScore: 5, win: false } },
+        { date: "Wk 8 · Sat", opponent: "SG", home: true, result: { teamScore: 7, oppScore: 1, win: true } },
+      ],
+    },
     home: {
       leadStory: { kicker: "Season 3, Week 9", headline: "RATS SLIP OUT OF THE WILD-CARD PICTURE", body: "A four-game skid has dropped River Rats below the line, and the front office is fielding calls. \"We're not sellers yet,\" the GM insisted — for now.", byline: "By G. Ruiz, Tootwhistle Times" },
       impactCards: [

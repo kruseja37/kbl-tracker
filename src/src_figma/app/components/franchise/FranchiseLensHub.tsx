@@ -243,6 +243,21 @@ export interface CheckpointVM {
   players: CheckpointPlayerVM[];
 }
 
+/* ===== Schedule (team-scoped — the club's fixtures + results) ===== */
+export interface ScheduleGameVM {
+  date: string;            // "Wk 9 · Wed"
+  opponent: string;        // abbr
+  home: boolean;           // home (vs) vs away (@)
+  result?: { teamScore: number; oppScore: number; win: boolean };  // present → completed
+  isNext?: boolean;        // the immediate next game
+  note?: string;
+}
+export interface ScheduleVM {
+  upcoming: ScheduleGameVM[];
+  recent: ScheduleGameVM[];
+  deadlineNote?: string;
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
@@ -250,6 +265,7 @@ export interface HubVM {
   roster: PlayerRowVM[];
   standings?: StandingsRacesVM;
   stadium?: StadiumVM;
+  schedule?: ScheduleVM;
   checkpoint?: CheckpointVM;
   loading?: boolean;
   emptyNote?: string;
@@ -350,6 +366,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
               <StandingsRacesTab hub={hub} active={active} />
             ) : tab === "Stadium" ? (
               <StadiumTab hub={hub} active={active} />
+            ) : tab === "Schedule" ? (
+              <ScheduleTab hub={hub} active={active} />
             ) : (
               <div className="fen-empty">"{tab}" comes next.</div>
             )}
@@ -1161,6 +1179,43 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
         {!d ? <div className="fen-empty">Full dossier fills in as the season runs.</div> : null}
       </div>
     </>
+  );
+}
+
+/* ===== Schedule (team tab) ===== */
+function ScheduleRow({ g }: { g: ScheduleGameVM }) {
+  return (
+    <div className={`fen-sgame${g.isNext ? " next" : ""}`}>
+      <div className="sd">{g.date}</div>
+      <div className="sm fen-chalk">{g.home ? "vs" : "@"} {g.opponent}</div>
+      {g.result ? (
+        <div className={`sr ${g.result.win ? "w" : "l"}`}>{g.result.win ? "W" : "L"} {g.result.teamScore}–{g.result.oppScore}</div>
+      ) : g.isNext ? (
+        <button type="button" className="fen-sched-play">▶ Play Ball</button>
+      ) : (
+        <div className="sr soft">{g.note ?? (g.home ? "home" : "away")}</div>
+      )}
+    </div>
+  );
+}
+
+function ScheduleTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const sc = hub.schedule;
+  if (!sc) return <div className="fen-empty">No schedule loaded for {active.name} yet.</div>;
+  return (
+    <div className="fen-sched">
+      {sc.deadlineNote ? <div className="fen-sched-deadline">⚑ {sc.deadlineNote}</div> : null}
+      <div className="fen-sched-grid">
+        <div className="fen-sched-col">
+          <div className="fen-sectlab">Coming Up</div>
+          {sc.upcoming.length ? sc.upcoming.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">Nothing on the docket.</div>}
+        </div>
+        <div className="fen-sched-col">
+          <div className="fen-sectlab">Recent</div>
+          {sc.recent.length ? sc.recent.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">No games played yet.</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
