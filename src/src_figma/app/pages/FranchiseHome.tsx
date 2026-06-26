@@ -3132,6 +3132,7 @@ function StandingsContent() {
   // Get standings from context (real data or mock fallback)
   const franchiseData = useFranchiseDataContext();
   const standings = franchiseData.standings;
+  const rivalTeamId = franchiseData.rivalTeamId;
 
   const currentLeagueStandings = standings[selectedLeague];
 
@@ -3190,7 +3191,7 @@ function StandingsContent() {
                 index % 2 === 0 ? 'bg-[var(--franchise-panel)]/30' : ''
               }`}
             >
-              <div className="text-[10px] text-[var(--franchise-text)]">{teamData.team}</div>
+              <div className={teamData.teamId === rivalTeamId ? 'text-[10px] text-[var(--franchise-rival)]' : 'text-[10px] text-[var(--franchise-text)]'}>{teamData.team}</div>
               <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.wins}</div>
               <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.losses}</div>
               <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.gamesBack}</div>

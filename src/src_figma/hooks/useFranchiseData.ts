@@ -14,6 +14,8 @@ import { calculateStandings, type SeasonMetadata, type TeamStanding as StorageTe
 import { useRelationshipData, type UseRelationshipDataReturn } from '../app/hooks/useRelationshipData';
 import { getFranchiseConfig, loadFranchise } from '../../utils/franchiseManager';
 import { getFranchiseSeasonId } from '../../utils/franchisePersistenceContract';
+import { getHomeParkRival } from '../../utils/franchiseHomeParkRivalStorage';
+import { isFranchisePhase2StadiumRecordsEnabled } from '../../utils/franchisePhase2Flags';
 import { getNextFranchiseGame } from '../../utils/scheduleStorage';
 import { getAllTeams, getAllLeagueTemplates, type LeagueTemplate, type Conference, type Division, type Team as LeagueBuilderTeam } from '../../utils/leagueBuilderStorage';
 import { getAllFranchiseTeams } from '../../utils/franchisePlayerStorage';
@@ -24,6 +26,7 @@ import type { StoredFranchiseConfig } from '../../types/franchise';
 // ============================================
 
 export interface StandingEntry {
+  teamId: string;
   team: string;
   wins: number;
   losses: number;
@@ -84,6 +87,8 @@ export interface UseFranchiseDataReturn {
   // Franchise info
   franchiseConfig: StoredFranchiseConfig | null;
   leagueName: string;
+  lensTeamId: string | null;
+  rivalTeamId: string | null;
 
   // Season info
   seasonNumber: number;
@@ -302,6 +307,8 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
   // Franchise config loaded from IndexedDB
   const [franchiseConfig, setFranchiseConfig] = useState<StoredFranchiseConfig | null>(null);
   const [franchiseLeagueName, setFranchiseLeagueName] = useState<string>('');
+  const [rivalTeamId, setRivalTeamId] = useState<string | null>(null);
+  const lensTeamId = franchiseConfig?.controlledTeams?.[0]?.teamId ?? null;
 
   // Load franchise config when franchiseId changes
   useEffect(() => {
@@ -367,6 +374,39 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
 
   // Relationship engine — wired here so it's available throughout franchise UI
   const relationshipData = useRelationshipData();
+
+  useEffect(() => {
+    if (!franchiseId || !lensTeamId) {
+      setRivalTeamId(null);
+      return;
+    }
+    if (!isFranchisePhase2StadiumRecordsEnabled()) {
+      setRivalTeamId(null);
+      return;
+    }
+    let cancelled = false;
+    async function loadRival() {
+      try {
+        const scope = {
+          franchiseId: franchiseId!,
+          seasonId,
+          statsScopeId: seasonId,
+          seasonNumber: currentSeason,
+        };
+        const row = await getHomeParkRival(scope, lensTeamId!);
+        if (!cancelled) {
+          setRivalTeamId(row?.rivalTeamId ?? null);
+        }
+      } catch (err) {
+        console.error('[useFranchiseData] Failed to load home-park rival:', err);
+        if (!cancelled) {
+          setRivalTeamId(null);
+        }
+      }
+    }
+    loadRival();
+    return () => { cancelled = true; };
+  }, [franchiseId, lensTeamId, seasonId, currentSeason]);
 
   // Compute hasRealData based on whether we have actual stats
   const hasRealData = useMemo(() => {
@@ -494,6 +534,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
       const s = standingsByTeamId.get(teamId);
       if (s) {
         return {
+          teamId,
           team: teamNameMap[teamId] || s.teamName,
           wins: s.wins,
           losses: s.losses,
@@ -503,6 +544,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
       }
       // No game data yet — show 0-0
       return {
+        teamId,
         team: teamNameMap[teamId] || teamId,
         wins: 0,
         losses: 0,
@@ -632,6 +674,8 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     error,
     franchiseConfig,
     leagueName: franchiseLeagueName,
+    lensTeamId,
+    rivalTeamId,
     seasonNumber,
     seasonName,
     currentWeek,

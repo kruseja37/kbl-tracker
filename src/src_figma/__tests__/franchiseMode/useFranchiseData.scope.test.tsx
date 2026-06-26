@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   mockUseRelationshipData: vi.fn(),
   mockGetFranchiseConfig: vi.fn(),
   mockLoadFranchise: vi.fn(),
+  mockGetHomeParkRival: vi.fn(),
+  mockIsFranchisePhase2StadiumRecordsEnabled: vi.fn(),
   mockGetNextFranchiseGame: vi.fn(),
   mockGetAllTeams: vi.fn(),
   mockGetAllLeagueTemplates: vi.fn(),
@@ -33,6 +35,14 @@ vi.mock('../../app/hooks/useRelationshipData', () => ({
 vi.mock('../../../utils/franchiseManager', () => ({
   getFranchiseConfig: mocks.mockGetFranchiseConfig,
   loadFranchise: mocks.mockLoadFranchise,
+}));
+
+vi.mock('../../../utils/franchiseHomeParkRivalStorage', () => ({
+  getHomeParkRival: mocks.mockGetHomeParkRival,
+}));
+
+vi.mock('../../../utils/franchisePhase2Flags', () => ({
+  isFranchisePhase2StadiumRecordsEnabled: mocks.mockIsFranchisePhase2StadiumRecordsEnabled,
 }));
 
 vi.mock('../../../utils/scheduleStorage', () => ({
@@ -109,10 +119,26 @@ describe('useFranchiseData franchise scoped reads', () => {
         mode: 'single',
         playerAssignments: {},
       },
+      controlledTeams: [{ teamId: 'team-a', teamName: 'Copied Apples', controlledBy: 'human' }],
       roster: { mode: 'existing' },
       franchiseName: 'Franchise 1',
       createdAt: 1,
     });
+    mocks.mockGetHomeParkRival.mockResolvedValue({
+      id: 'rival-row',
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      statsScopeId: 'franchise-1-season-1',
+      seasonNumber: 1,
+      homeTeamId: 'team-a',
+      rivalTeamId: 'team-b',
+      rivalWinsAtPark: 3,
+      rivalRecordsHeld: 0,
+      scopeKey: 'franchise-1:franchise-1-season-1:franchise-1-season-1:1',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      updatedAtGameId: 'game-1',
+    });
+    mocks.mockIsFranchisePhase2StadiumRecordsEnabled.mockReturnValue(true);
     mocks.mockLoadFranchise.mockResolvedValue({ leagueName: 'Copied League' });
     mocks.mockGetNextFranchiseGame.mockResolvedValue(null);
     mocks.mockGetAllFranchiseTeams.mockResolvedValue([
@@ -169,6 +195,18 @@ describe('useFranchiseData franchise scoped reads', () => {
 
     expect(result.current.leagueName).toBe('Copied League');
     expect(result.current.standings.Eastern['Division 1'][0].team).toBe('Copied Apples');
+    expect(result.current.standings.Eastern['Division 1'][0].teamId).toBe('team-a');
+    expect(result.current.lensTeamId).toBe('team-a');
+    expect(result.current.rivalTeamId).toBe('team-b');
+    expect(mocks.mockGetHomeParkRival).toHaveBeenCalledWith(
+      {
+        franchiseId: 'franchise-1',
+        seasonId: 'franchise-1-season-1',
+        statsScopeId: 'franchise-1-season-1',
+        seasonNumber: 1,
+      },
+      'team-a',
+    );
     expect(mocks.mockGetAllFranchiseTeams).toHaveBeenCalledWith('franchise-1');
     expect(mocks.mockGetAllTeams).not.toHaveBeenCalled();
     expect(mocks.mockGetAllLeagueTemplates).not.toHaveBeenCalled();
