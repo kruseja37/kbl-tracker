@@ -3248,3 +3248,19 @@ Then hop-3 fan morale (⚠ exhaustive-Record `PARK_RECORD_SET` MasterMoraleEvent
 **Captain recommendation:** a dedicated trait-grant investigation (bisect the introducing commit; reconcile the gate vs the stored probability OR ratify the invariant) BEFORE continuing hops 3-6, so the season anchor can be re-baked. Do NOT weaken the CRITICAL invariant or touch the trait grant unattended — JK/trait-system call.
 
 **➡ NEXT:** hop-3 (fan morale — `PARK_RECORD_SET` MasterMoraleEventType, exhaustive-Record touch) CAN be built on the same cadence, but the canonical season stays RED until the pre-existing trait trip is fixed. Handing off here to surface the pre-existing CRITICAL rather than pile more soul-layer features onto a broken regression anchor unattended.
+
+---
+
+## 2026-06-26 (UNATTENDED AUTH-4 `/kbl-captain`, same session, JK greenlit the fix) — ✅ the PRE-EXISTING trait-trip ROOT-CAUSED + FIXED; season re-baked; hop-2 now FULLY verified
+
+JK asked to go after the pre-existing `soul.trait-two-slot-no-offset-hysteresis` season trip. Captain ran a controlled root-cause → fix → verify cycle (NOT a blind "loop-until-green" — the failing check is a CRITICAL trait-integrity invariant, so the guardrail was: invariant stays the oracle, fix the real root).
+
+**ROOT CAUSE (definitive, traced from source):** the trait grant gates each trait on its **TIER** threshold (`traitAcquisition.thresholdsForTrait → assignTier`; `traitTierConfig.ts`: COMMON 0.55 / UNCOMMON 0.70 / MODERATE 0.65 / RARE 0.82 / ELITE 0.92), but the invariant checked the stored gain probability against the **GLOBAL** `TRAIT_ACQUISITION_TUNING.gainThreshold` (0.75). The 5 flagged gains (Wild Thrower 0.717–0.746 = MODERATE 0.65; Tough Out 0.740 = UNCOMMON 0.70; Noodle Arm = MODERATE 0.65) are all VALID per their tier — the grant correctly admitted them; the invariant false-flagged them (in `[tier, 0.75)`), stopping the season at game 36. Confirmed pre-existing via a pristine-HEAD run (trips identically with hop-2 fully reverted); surfaced now because the recent T-3b trend-tilt pushes more gains into that band. Neither `applyLikelihoodRoll` nor `reconcileGainProposals` mutates probability — the gate and store agree; the invariant simply used the wrong threshold.
+
+**FIX (`514ce366`, correctness — NOT a weakening):** `soul.trait-two-slot-no-offset-hysteresis` now mirrors the grant's per-tier fallback (`assignTier` with a global fallback) → checks exactly what the grant enforces. Still trips a gain below its OWN tier threshold (a new falsification entry proves it: Wild Thrower 0.60 < MODERATE 0.65 trips). **Test-INVARIANT fix only — zero production trait-grant change.** Re-baked the canonical season anchor (`lsim-h2-baseline-checkpoint-*.json`, all 6 cadence checkpoints): **the season now runs the FULL 60g clean — `findings: 0, criticalFindings: 0, stoppedEarly: false, sameSeedByteIdentical: true`** — with A1.5d hop-2 in tree.
+
+**GATE:** season clean 60g (0 findings, sameSeed byte-identical) · falsification **44/44** (incl. the new per-tier threshold-trip entry) · smoke all-CRITICAL-pass. The full suite is unaffected (soul.ts/falsification.ts are L-SIM-only, not in the main discovery). No DB change.
+
+**⇒ A1.5d hop-2 is now FULLY VERIFIED** (build 0 · full suite ZERO-NEW-REDS 8413 · L-SIM season clean 60g WITH hop-2 · smoke · falsification) and the canonical L-SIM season anchor is HEALTHY again (re-baked, reproducible). The committed baselines now reflect current HEAD + hop-2 (fame responds to stadium records) — future runs diff byte-identical against this new anchor.
+
+**➡ NEXT: A1.5d hop-3 (fan morale — `PARK_RECORD_SET` MasterMoraleEventType, exhaustive-Record touch; §6 double-count guard = fan+teammate only, self-delta 0).** The season gate is GREEN again, so hops 3-6 can build + verify against a healthy anchor.
