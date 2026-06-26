@@ -135,6 +135,11 @@ const SeasonRulesPreview = lazy(() =>
     default: module.SeasonRulesPreview,
   })),
 );
+const DraftGuidePreview = lazy(() =>
+  import("./src_figma/app/pages/DraftGuidePreview").then((module) => ({
+    default: module.DraftGuidePreview,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -268,6 +273,7 @@ function App() {
         <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
         <Route path="/__preview/draft-setup" element={<DraftSetupHubPreview />} />
         <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
+        <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
