@@ -140,6 +140,15 @@ const DraftGuidePreview = lazy(() =>
     default: module.DraftGuidePreview,
   })),
 );
+const ScoutPanelPreview = lazy(() =>
+  import("./src_figma/app/pages/ScoutPanelPreview").then((module) => ({ default: module.ScoutPanelPreview })),
+);
+const LineupsTabPreview = lazy(() =>
+  import("./src_figma/app/pages/LineupsTabPreview").then((module) => ({ default: module.LineupsTabPreview })),
+);
+const InGameAdvisorPreview = lazy(() =>
+  import("./src_figma/app/pages/InGameAdvisorPreview").then((module) => ({ default: module.InGameAdvisorPreview })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -274,6 +283,9 @@ function App() {
         <Route path="/__preview/draft-setup" element={<DraftSetupHubPreview />} />
         <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
         <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
+        <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
+        <Route path="/__preview/lineups" element={<LineupsTabPreview />} />
+        <Route path="/__preview/ingame-advisor" element={<InGameAdvisorPreview />} />
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
