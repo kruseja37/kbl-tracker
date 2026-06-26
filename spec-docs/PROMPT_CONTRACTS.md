@@ -23587,3 +23587,72 @@ Report: (1) the 2 new files + one-line what; (2) build result; (3) focused vites
 - STOP-IF the `SeasonNewsEvent` shape differs from the anchor (re-read `seasonNewsGenerator.ts:11-19`).
 - A correct BLOCK is GOOD. Do NOT add the LLM emission, the flag, or the processCompletedGame wiring — those are explicitly out of scope (JK browser-pending).
 <!-- ===== END CONTRACT: A1.5-L4b ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1a ===== -->
+# CONTRACT A1.5d-1a — stadium-records DETECT foundation: `changes[]` on the upsert (pure storage extension)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d (STADIUM RECORDS) is a 6-hop feature; this is the FIRST slice of hop-1 (DETECT). Build ONLY the pure storage-layer `changes[]` extension. Do NOT add the `isFranchisePhase2StadiumRecordsEnabled` flag, do NOT touch `processCompletedGame.ts`, do NOT build the per-game tap, do NOT add new record types, do NOT touch fame/morale/reporter/Almanac/rivalry. Those are later hops (1b → 2..6), explicitly out of scope here.
+
+## GOAL
+`upsertFranchiseStadiumRecordsFromFoundationReport` (`src/utils/franchiseStadiumRecordsStorage.ts:527`) already reads the prior-stored record per candidate (`existing`) and overwrites it with the freshly-recomputed candidate. Extend it to ALSO RETURN a `changes[]` array describing each record that gained a NEW SOLE player holder this upsert (the §5-hop-1 SET/OVERTAKE detection that the later fame/morale/reporter hops will consume). This is a PURE additive change to the return value — what gets STORED is unchanged; existing callers that ignore the new field keep working.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- `src/utils/franchiseStadiumRecordsStorage.ts:527-588` — `upsertFranchiseStadiumRecordsFromFoundationReport`. Its loop (`:552-560`) computes `identity`, reads `existing = await getRecordById(recordId(identity))`, and pushes `recordFromCandidate(scope, candidate, timestamp, existing ?? undefined)`. `recordFromCandidate` (`:279`) takes the candidate's `value`/`leaderPlayerIds` WHOLESALE (only preserves `existing.createdAt`) — so the candidate IS the recomputed season-to-date record; `existing` is the prior game's stored record. That existing-vs-new pair is exactly the SET/OVERTAKE signal.
+- `FranchiseStadiumRecord` (`:32-55`) has `value: number`, `leaderPlayerIds: string[]` (already `uniqueSorted`), `stadiumId`, `recordType: FranchiseStadiumRecordType`, `recordKey: string`.
+- `UpsertFranchiseStadiumRecordsResult` (`:59-72`) — add the new field here + in `emptyResult` (`:590-608`).
+- §5 hop-1 rule (STADIUM_ANALYTICS_SPEC_V2): "New identity = SET; newValue beats a different sole holder = OVERTAKE (priorLeaderPlayerIds = dethroned). Ties extend co-leadership silently (**only a strict new SOLE holder fires the swap**)."
+- Existing test to EXTEND: `src/utils/tests/franchiseStadiumRecordsStorage.test.ts` (already constructs `FranchiseStadiumFoundationReport` fixtures + drives the upsert — reuse those fixtures).
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseStadiumRecordsStorage.ts`**:
+   - Add + export:
+     ```
+     export interface FranchiseStadiumRecordChange {
+       stadiumId: string;
+       recordType: FranchiseStadiumRecordType;
+       recordKey: string;
+       changeKind: 'set' | 'overtake';
+       priorValue: number | null;
+       priorLeaderPlayerIds: string[];
+       newValue: number;
+       newLeaderPlayerIds: string[];
+     }
+     ```
+   - Add `changes: FranchiseStadiumRecordChange[];` to `UpsertFranchiseStadiumRecordsResult` (and return `changes: []` in `emptyResult`).
+   - In the upsert loop, for each `candidate` (after computing `newRecord = recordFromCandidate(...)` and reading `existing`), classify with this EXACT rule (player-sole-holder; team-only records never fire):
+     - `const newSole = newRecord.leaderPlayerIds.length === 1 ? newRecord.leaderPlayerIds[0] : null;`
+     - `const priorSole = existing && existing.leaderPlayerIds.length === 1 ? existing.leaderPlayerIds[0] : null;`
+     - A change fires IFF `newSole !== null && newSole !== priorSole`. (So: new sole holder + no prior record OR prior was a tie OR prior sole holder was someone else → fires. Same sole holder (even if value grew) → SILENT. New record is a tie → SILENT. No player leaders [team-only record] → SILENT.)
+     - `changeKind = existing ? 'overtake' : 'set'` (no existing stored record = SET / new identity; an existing record being taken over by a new sole holder = OVERTAKE).
+     - Push `{ stadiumId: newRecord.stadiumId, recordType: newRecord.recordType, recordKey: newRecord.recordKey, changeKind, priorValue: existing?.value ?? null, priorLeaderPlayerIds: existing?.leaderPlayerIds ?? [], newValue: newRecord.value, newLeaderPlayerIds: newRecord.leaderPlayerIds }`.
+   - Collect the changes across the loop and return them in the result. Order them deterministically (e.g. sort by `stadiumId`, then `recordType`, then `recordKey`) so the output is stable.
+   - Do NOT change what is stored, the blockers logic, or the policy flags. The `changes[]` is purely additive to the return.
+2. **`src/utils/tests/franchiseStadiumRecordsStorage.test.ts`** — extend (reuse the existing foundation-report fixtures):
+   - **SET:** empty store → upsert a report yielding a sole-player record → `result.changes` contains that record with `changeKind:'set'`, `priorValue:null`, `priorLeaderPlayerIds:[]`, the right `newLeaderPlayerIds`.
+   - **OVERTAKE:** upsert report-1 (player A the sole holder), then upsert report-2 (player B the new sole holder, higher value) against the SAME store → the second `result.changes` has `changeKind:'overtake'`, `priorLeaderPlayerIds:[A]`, `newLeaderPlayerIds:[B]`, `priorValue`/`newValue` correct.
+   - **SILENT same-holder:** sole holder A, then A again (higher value) → no change entry for that record.
+   - **SILENT tie:** a record whose `leaderPlayerIds` has 2+ ids → no change entry.
+   - **(if a team-only record fixture exists)** a record with empty `leaderPlayerIds` → no change entry.
+
+## CONSTRAINTS
+- Touch ONLY `src/utils/franchiseStadiumRecordsStorage.ts` + its test. Do NOT touch `franchiseStadiumFoundation.ts`, `processCompletedGame.ts`, `franchisePhase2Flags.ts`, any UI, any oracle. No DB change (the `kbl-franchise-stadium-records` db + store already exist; this adds a return field only, no schema change).
+- Pure/additive: storage behavior (what's persisted) byte-identical; only the return value gains `changes[]`. No `Math.random`, no new wall-clock beyond the existing `timestamp` path.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsStorage.test.ts src/utils/tests/franchiseSaveSlotManifest.test.ts` → green (the save-slot test imports this module — confirm the additive field didn't break it).
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite.
+
+## FORMAT
+Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation that what-gets-STORED is unchanged (only the return gained `changes[]`), and no flag/UI/processCompletedGame/foundation file was touched.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `recordFromCandidate` does NOT take the candidate value wholesale (i.e. if it actually does a max/merge that means `existing.value` could exceed `newRecord.value` — re-read `:279`; if so, the comparison must use the STORED winner, report it).
+- STOP-IF the existing test has no reusable foundation-report fixture to drive sole/tie leaders (report what shape `buildCandidatesFromFoundation` needs).
+- STOP-IF adding the field breaks `franchiseSaveSlotManifest.test.ts` or any other consumer of `UpsertFranchiseStadiumRecordsResult`.
+- A correct BLOCK is GOOD. Do NOT add the flag, the tap, or new record types.
+<!-- ===== END CONTRACT: A1.5d-1a ===== -->
