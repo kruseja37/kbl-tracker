@@ -743,6 +743,54 @@
 .fen-cp-allbtn:hover { color: var(--fen-chalk); }
 .fen-cp-donebtn { background: linear-gradient(180deg, #f0d26a, #cba23f); border: 2px solid #2a2208; color: var(--fen-navy); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6); }
 
+/* the big-moments launcher (Clubhouse) */
+.fen-moments-launch { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
+.fen-moments-launch .lab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-right: 4px; }
+.fen-moments-launch button { font-family: var(--fen-chalk-font); font-size: 12px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(236, 232, 218, 0.16); border-radius: 999px; padding: 5px 12px; }
+.fen-moments-launch button:hover { color: var(--fen-chalk); border-color: var(--fen-yellow); }
+
+/* moment takeover shell sizing + accent borders */
+.fen-moment .fen-cp-panel { width: 660px; }
+.fen-moment.fire .fen-cp-panel { border-color: var(--fen-marquee); }
+.fen-moment.rebrand .fen-cp-panel { border-color: var(--fen-cream); }
+.fen-moment.ceremony .fen-cp-panel { border-color: var(--fen-yellow); }
+.fen-moment.event .fen-cp-panel { border-color: var(--fen-ash); }
+.fen-moment-lead { font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk-soft); margin-bottom: 16px; }
+.fen-moment-lead .rec, .fen-moment-lead .tm { color: var(--fen-chalk-soft); font-size: 12px; }
+.fen-moment-lead b { color: var(--fen-chalk); }
+.fen-moment-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .fen-moment-grid2 { grid-template-columns: 1fr; } }
+.fen-moment-box { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 12px 14px; }
+.fen-moment-box .bh { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 8px; }
+.fen-mrip { display: grid; grid-template-columns: 34px 1fr auto; align-items: baseline; gap: 8px; padding: 4px 0; font-family: var(--fen-chalk-font); }
+.fen-mrip .d { font-size: 15px; text-align: right; }
+.fen-mrip .d.up { color: var(--fen-yellow); }
+.fen-mrip .d.dn { color: var(--fen-marquee); }
+.fen-mrip .nm { font-size: 14px; }
+.fen-mrip .nt { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-mrip.foot { display: block; grid-template-columns: none; font-size: 12px; color: var(--fen-chalk-soft); margin-top: 8px; padding-top: 8px; border-top: 1px dotted rgba(255, 255, 255, 0.1); }
+.fen-moment-new { font-family: var(--fen-chalk-font); font-size: 22px; line-height: 1; margin-bottom: 6px; }
+.fen-moment-note { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); line-height: 1.45; }
+.fen-moment-notes { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); line-height: 1.7; margin-top: 16px; }
+.fen-rebrand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 8px 0; }
+.fen-rebrand .side { text-align: center; }
+.fen-rebrand .side .lab { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-rebrand .side .nm { font-family: var(--fen-chalk-font); font-size: 24px; line-height: 1.05; margin-top: 4px; }
+.fen-rebrand .side.old .nm { color: var(--fen-chalk-soft); text-decoration: line-through; text-decoration-color: rgba(204, 52, 51, 0.6); }
+.fen-rebrand .side .ct { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-top: 3px; }
+.fen-rebrand .arrow { font-family: var(--fen-chalk-font); font-size: 22px; color: var(--fen-yellow); }
+.fen-champ { font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk-soft); margin-bottom: 14px; }
+.fen-champ b { color: var(--fen-yellow); }
+.fen-ceremony { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+@media (max-width: 640px) { .fen-ceremony { grid-template-columns: 1fr; } }
+.fen-cer { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-cer .cat { font-family: var(--fen-chalk-font); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-cer .win { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-cer .win .tm { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-cer.you .win { color: var(--fen-yellow); }
+.fen-moment-take { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-ash); font-style: italic; margin-top: 14px; }
+.fen-moment-take .att { color: var(--fen-chalk-soft); font-style: normal; font-size: 11px; }
+
 @media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
 
 /* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.

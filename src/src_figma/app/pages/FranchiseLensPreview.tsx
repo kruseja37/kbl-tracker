@@ -715,6 +715,46 @@ const HUB: Record<string, HubVM> = {
           traitChanges: [{ valence: "gain", trait: "Butter Fingers", displaces: "Cannon Arm" }] },
       ],
     },
+    moments: {
+      firing: {
+        outgoing: "B. Cole", outgoingRecord: "48–32, but the room's gone quiet",
+        reason: "the clubhouse stopped responding to him.",
+        ripples: [
+          { name: "Lars Stad", delta: 6, note: "relief — his chief antagonist is gone" },
+          { name: "Dash Okoye", delta: -2, note: "liked the old skipper" },
+          { name: "Clubhouse", delta: 3, note: "a collective exhale" },
+        ],
+        fanReaction: "split — some wanted it sooner, some loved Cole.",
+        incoming: "R. Mateo", incomingNote: "the bench coach takes over on an interim basis — a players' manager.",
+      },
+      rebrand: {
+        oldName: "Page Capitals", oldCity: "Caldwell",
+        newName: "Caldwell Cardinals", newCity: "Caldwell", newPark: "Cardinal Park",
+        fanReset: "Fan morale resets to neutral (50) — a clean slate.",
+        fameNote: "Team fame records reset; players keep their personal fame.",
+        designationNote: "Team designations clear; player designations carry over.",
+      },
+      ceremony: {
+        title: "Season 3 — Awards Night",
+        champion: "Brass Monkeys",
+        awards: [
+          { category: "MVP", winner: "Boomer Vance", teamAbbr: "BM" },
+          { category: "Cy Young", winner: "Cole Vesper", teamAbbr: "BM" },
+          { category: "Rookie of the Year", winner: "Rafa Fenomeno", teamAbbr: "PC" },
+          { category: "Manager of the Year", winner: "R. Vance", teamAbbr: "BM" },
+          { category: "Reliever of the Year", winner: "Milo Reyes", teamAbbr: "PC" },
+          { category: "Comeback Player", winner: "Reed Cole", teamAbbr: "ST" },
+        ],
+        note: "Your Capitals took home two — and a Fenomeno ROY to build on.",
+      },
+      event: {
+        kind: "Hot streak — Dash Okoye is locked in",
+        player: "Dash Okoye", teamAbbr: "PC",
+        effect: "His mojo jumps to Jacked for the next series (+ a small ratings bump while it lasts).",
+        reporterTake: "The leadoff man is seeing beachballs — ride it while it's hot.",
+        options: [{ label: "Let it ride", primary: true }, { label: "Ignore" }],
+      },
+    },
     home: {
       leadStory: { kicker: "The Arc · Season 3, Week 9", headline: "FENOMENO TAKES THE LEAP — ARM CLIMBING TOWARD AN A", body: "Five starts, one earned run. The kid the Capitals stole in the draft is pitching his way up the grades in real time — and Thursday's checkpoint may make it official. \"He doesn't pitch like a B anymore,\" the skipper admitted.", byline: "By J. Tate, Tootwhistle Times" },
       impactCards: [

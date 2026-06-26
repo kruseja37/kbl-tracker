@@ -269,6 +269,36 @@ export interface CheckpointVM {
   players: CheckpointPlayerVM[];
 }
 
+/* ===== Tentpole takeovers (the season's big moments) ===== */
+export interface FiringMomentVM {
+  outgoing: string; outgoingRecord: string; reason: string;
+  ripples: { name: string; delta: number; note: string }[];   // clubhouse reactions
+  fanReaction: string;
+  incoming: string; incomingNote: string;
+}
+export interface RebrandMomentVM {
+  oldName: string; oldCity?: string;
+  newName: string; newCity: string; newPark: string;
+  fanReset: string; fameNote: string; designationNote: string;
+}
+export interface CeremonyMomentVM {
+  title: string; champion: string;
+  awards: { category: string; winner: string; teamAbbr: string }[];
+  note?: string;
+}
+export interface EventMomentVM {
+  kind: string; player: string; teamAbbr: string;
+  effect: string;
+  reporterTake?: string;
+  options: { label: string; primary?: boolean }[];
+}
+export interface MomentsVM {
+  firing?: FiringMomentVM;
+  rebrand?: RebrandMomentVM;
+  ceremony?: CeremonyMomentVM;
+  event?: EventMomentVM;
+}
+
 /* ===== Schedule (team-scoped — the club's fixtures + results) ===== */
 export interface ScheduleGameVM {
   date: string;            // "Wk 9 · Wed"
@@ -325,6 +355,7 @@ export interface HubVM {
   schedule?: ScheduleVM;
   almanac?: AlmanacVM;
   checkpoint?: CheckpointVM;
+  moments?: MomentsVM;
   loading?: boolean;
   emptyNote?: string;
 }
@@ -366,7 +397,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
   const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
-  const [openCheckpoint, setOpenCheckpoint] = useState(false);
+  const [openMoment, setOpenMoment] = useState<string | null>(null);
   const [helpOn, setHelpOn] = useState(false);
 
   const identityStyle = {
@@ -409,7 +440,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
             </div>
 
             {tab === "The Clubhouse" ? (
-              <SeasonHome hub={hub} onAction={(a) => { if (a === "checkpoint") setOpenCheckpoint(true); }} />
+              <SeasonHome hub={hub} onAction={(a) => setOpenMoment(a)} />
             ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
@@ -436,7 +467,11 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
       </div>
       <button type="button" className="fen-helpbtn" onClick={() => setHelpOn((v) => !v)}>? Help</button>
       {openPlayer ? <PlayerDrawer player={openPlayer} onClose={() => setOpenPlayer(null)} /> : null}
-      {openCheckpoint && hub.checkpoint ? <CheckpointTakeover cp={hub.checkpoint} onClose={() => setOpenCheckpoint(false)} /> : null}
+      {openMoment === "checkpoint" && hub.checkpoint ? <CheckpointTakeover cp={hub.checkpoint} onClose={() => setOpenMoment(null)} /> : null}
+      {openMoment === "firing" && hub.moments?.firing ? <FiringTakeover m={hub.moments.firing} onClose={() => setOpenMoment(null)} /> : null}
+      {openMoment === "rebrand" && hub.moments?.rebrand ? <RebrandTakeover m={hub.moments.rebrand} onClose={() => setOpenMoment(null)} /> : null}
+      {openMoment === "ceremony" && hub.moments?.ceremony ? <CeremonyTakeover m={hub.moments.ceremony} active={active} onClose={() => setOpenMoment(null)} /> : null}
+      {openMoment === "event" && hub.moments?.event ? <EventTakeover m={hub.moments.event} active={active} onClose={() => setOpenMoment(null)} /> : null}
     </div>
   );
 }
@@ -534,6 +569,16 @@ function SeasonHome({ hub, onAction }: { hub: HubVM; onAction?: (action: string)
           </div>
         ) : null}
       </div>
+      {hub.checkpoint || hub.moments ? (
+        <div className="fen-moments-launch">
+          <span className="lab">The season's big moments</span>
+          {hub.checkpoint ? <button type="button" onClick={() => onAction?.("checkpoint")}>🔔 Checkpoint</button> : null}
+          {hub.moments?.event ? <button type="button" onClick={() => onAction?.("event")}>📋 Event to confirm</button> : null}
+          {hub.moments?.firing ? <button type="button" onClick={() => onAction?.("firing")}>⚠ Manager firing</button> : null}
+          {hub.moments?.rebrand ? <button type="button" onClick={() => onAction?.("rebrand")}>🏟 Rebrand</button> : null}
+          {hub.moments?.ceremony ? <button type="button" onClick={() => onAction?.("ceremony")}>🏆 Season-end</button> : null}
+        </div>
+      ) : null}
       <div className="fen-calm fen-help-b">Your <b>roster</b>, the <b>farm</b>, <b>stadium</b>, <b>standings &amp; races</b>, the <b>Almanac</b> — all a tap away. The home only shows what's earned its place today.</div>
     </>
   );
@@ -1581,6 +1626,102 @@ function CheckpointTakeover({ cp, onClose }: { cp: CheckpointVM; onClose: () => 
         </div>
       </div>
     </div>
+  );
+}
+
+/* ===== Tentpole takeovers (firing / rebrand / ceremony / event) ===== */
+function MomentShell({ accent, kicker, title, onClose, children, footer }: { accent?: string; kicker: string; title: string; onClose: () => void; children: React.ReactNode; footer?: React.ReactNode }) {
+  return (
+    <div className={`fen-cp fen-moment${accent ? " " + accent : ""}`} role="dialog" aria-label={title}>
+      <div className="fen-cp-panel fen-aged">
+        <div className="fen-content">
+          <div className="fen-cp-head">
+            <div>
+              <div className="fen-cp-kick">{kicker}</div>
+              <h2 className="fen-chalk fen-y">{title}</h2>
+            </div>
+            <button type="button" className="fen-cp-x" onClick={onClose} aria-label="Close">×</button>
+          </div>
+          {children}
+          {footer ? <div className="fen-cp-foot">{footer}</div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FiringTakeover({ m, onClose }: { m: FiringMomentVM; onClose: () => void }) {
+  return (
+    <MomentShell accent="fire" kicker="⚠ A change in the dugout" title="You've made a managerial change" onClose={onClose}
+      footer={<><button type="button" className="fen-cp-allbtn" onClick={onClose}>Reconsider</button><button type="button" className="fen-cp-donebtn" onClick={onClose}>Confirm the change</button></>}>
+      <div className="fen-moment-lead">Out: <b className="fen-chalk">{m.outgoing}</b> <span className="rec">({m.outgoingRecord})</span> — {m.reason}</div>
+      <div className="fen-moment-grid2">
+        <div className="fen-moment-box">
+          <div className="bh">Clubhouse ripple</div>
+          {m.ripples.map((r, i) => (
+            <div className="fen-mrip" key={i}><span className={`d ${r.delta >= 0 ? "up" : "dn"}`}>{r.delta >= 0 ? "+" : ""}{r.delta}</span><span className="nm fen-chalk">{r.name}</span><span className="nt">{r.note}</span></div>
+          ))}
+          <div className="fen-mrip foot">Fans: {m.fanReaction}</div>
+        </div>
+        <div className="fen-moment-box">
+          <div className="bh">The interim skipper</div>
+          <div className="fen-moment-new fen-chalk fen-y">{m.incoming}</div>
+          <div className="fen-moment-note">{m.incomingNote}</div>
+        </div>
+      </div>
+    </MomentShell>
+  );
+}
+
+function RebrandTakeover({ m, onClose }: { m: RebrandMomentVM; onClose: () => void }) {
+  return (
+    <MomentShell accent="rebrand" kicker="🏟 A fresh start" title="Relocate & rebrand" onClose={onClose}
+      footer={<><button type="button" className="fen-cp-allbtn" onClick={onClose}>Not yet</button><button type="button" className="fen-cp-donebtn" onClick={onClose}>Make it official</button></>}>
+      <div className="fen-moment-lead">Fan morale has bottomed out. A clean break resets the franchise.</div>
+      <div className="fen-rebrand">
+        <div className="side old"><div className="lab">Was</div><div className="nm fen-chalk">{m.oldName}</div>{m.oldCity ? <div className="ct">{m.oldCity}</div> : null}</div>
+        <div className="arrow">→</div>
+        <div className="side new"><div className="lab">Now</div><div className="nm fen-chalk fen-y">{m.newName}</div><div className="ct">{m.newCity} · {m.newPark}</div></div>
+      </div>
+      <div className="fen-moment-notes">
+        <div>• {m.fanReset}</div>
+        <div>• {m.fameNote}</div>
+        <div>• {m.designationNote}</div>
+      </div>
+    </MomentShell>
+  );
+}
+
+function CeremonyTakeover({ m, active, onClose }: { m: CeremonyMomentVM; active: ActiveTeamVM; onClose: () => void }) {
+  return (
+    <MomentShell accent="ceremony" kicker="🏆 The hardware comes home" title={m.title} onClose={onClose}
+      footer={<button type="button" className="fen-cp-donebtn" onClick={onClose}>Raise the banner</button>}>
+      <div className="fen-champ">Champions: <b className="fen-chalk fen-y">{m.champion}</b></div>
+      <div className="fen-ceremony">
+        {m.awards.map((a, i) => {
+          const you = a.teamAbbr === active.abbr;
+          return (
+            <div className={`fen-cer${you ? " you" : ""}`} key={i}>
+              <span className="cat">{a.category}</span>
+              <span className="win fen-chalk">{a.winner} <span className="tm">{a.teamAbbr}</span></span>
+            </div>
+          );
+        })}
+      </div>
+      {m.note ? <div className="fen-moment-note">{m.note}</div> : null}
+    </MomentShell>
+  );
+}
+
+function EventTakeover({ m, active, onClose }: { m: EventMomentVM; active: ActiveTeamVM; onClose: () => void }) {
+  const you = m.teamAbbr === active.abbr;
+  return (
+    <MomentShell accent="event" kicker="📋 An event needs your call" title={m.kind} onClose={onClose}
+      footer={m.options.map((o, i) => <button type="button" key={i} className={o.primary ? "fen-cp-donebtn" : "fen-cp-allbtn"} onClick={onClose}>{o.label}</button>)}>
+      <div className="fen-moment-lead"><b className={`fen-chalk${you ? " fen-y" : ""}`}>{m.player}</b> <span className="tm">{m.teamAbbr}</span></div>
+      <div className="fen-moment-box"><div className="bh">If you confirm</div><div className="fen-moment-note">{m.effect}</div></div>
+      {m.reporterTake ? <div className="fen-moment-take">"{m.reporterTake}" <span className="att">— the beat</span></div> : null}
+    </MomentShell>
   );
 }
 

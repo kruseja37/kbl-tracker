@@ -16,6 +16,12 @@
 - **Surfaced?** — Y / partial / N against the lens as built (Clubhouse · Roster · Standings&Races · Stadium
   · Player drawer · Tootwhistle · Checkpoint takeover · banner).
 
+## STATUS: all 8 buckets BUILT (mock-fed) 2026-06-26 ✅
+The entire backlog below is now built out on `codex/auction-draft-ux-rehaul` (mock-fed, build-green, zero
+console errors). What remains is **only** the GREENLIGHT-GATED real-data adapter (swap mock → live) and the
+⚪ ABSENT V2 fame-bearing stadium records (on `franchise-v1-next`, merge later). Each bucket's BUILT note
+records what landed.
+
 ## The headline
 What's already surfaced is the spine (standings, 3 awards races, all-star, roster economics, stadium spray,
 the full player dossier, the impact-ranked paper, the checkpoint takeover). What the audit found UNSURFACED
@@ -118,13 +124,16 @@ badges. Remaining sliver: captain charisma routing, the team mood-ripples line, 
 | **Fan↔player coupling + dampener** | team euphoria nudging player morale; high morale dampening bad news | 🟡 | N | `masterMoraleMatrix.ts:194`, `fanMoraleDampener.ts:33` |
 | **Full morale event catalog** | the 40+ player-centric events (clutch hit, rookie breakout, snub, captain big game…) | 🟡 | partial (fan events only) | `masterMoraleMatrix.ts:20` |
 
-## Bucket 8 — The big moments (tentpole takeovers) + stadium curiosities
+## Bucket 8 — The big moments (tentpole takeovers) + stadium curiosities ✅ BUILT
+**BUILT 2026-06-26** (mock-fed): four full-screen moment takeovers sharing the checkpoint-takeover shell,
+launched from a "season's big moments" strip on the Clubhouse. Each accent-bordered.
+
 | Surface | What it shows | Status | Surfaced? | Source |
 |---|---|---|---|---|
-| **Manager firing takeover** | the pressure-release valve: morale ripple + relief bump + news | 🟢 engine | N | `franchiseL11FiringEngine.ts:23` |
-| **Rebrand / relocation takeover** | fan-floor circuit-breaker: rename/relocate + fame reset | 🟡 | N | `franchiseRebrandCascade.ts:19` |
-| **Season-end ceremony / awards night** | the capstone — winners revealed + news | 🟢 (UI exists) | partial | `AwardsCeremonyFlow`, `franchiseL12AwardNewsAdapter.ts` |
-| **Random-event confirmation takeover** | the L10 sweep's 8 event families (hot streak, gain/lose pitch, earn/lose trait, trade demand, stadium change…) confirmed before applying | 🟢 sweep / 🟡 confirm | N | `franchiseL10EventEngine.ts:102` |
+| **Manager firing takeover** ✅ BUILT | the pressure-release valve: outgoing mgr + clubhouse morale ripple (Stad +6 relief) + fan reaction + interim skipper | 🟢 engine | Y | `franchiseL11FiringEngine.ts:23` |
+| **Rebrand / relocation takeover** ✅ BUILT | old→new identity (name/city/park), fan reset to neutral, fame + designation resets | 🟡 | Y | `franchiseRebrandCascade.ts:19` |
+| **Season-end ceremony / awards night** ✅ BUILT | champion + the full awards slate (you-highlight) | 🟢 (UI exists) | Y | `AwardsCeremonyFlow`, `franchiseL12AwardNewsAdapter.ts` |
+| **Random-event confirmation takeover** ✅ BUILT | a single L10 event (hot streak, trade demand…) + its effect + reporter take, confirm/reject before applying | 🟢 sweep / 🟡 confirm | Y | `franchiseL10EventEngine.ts:102` |
 | **Stadium oddity records** ✅ BUILT | longest HR, most HR in a game, longest/marathon game, biggest comeback, blowout… (expanded House of Horrors) | 🟢 | Y | `oddityRecordTracker.ts:17` |
 | **Stadium richness** ✅ BUILT | park **archetype** badge, the **home-park-rival callout** (Captain feature), park **aggregates**, **Best/Worst hitter+pitcher here**, the **visitor ledger** (opponent records) | 🟢/🟡 | Y | `franchiseStadiumFoundation.ts`, `getHomeParkRival`, season stats |
 | **V2 fame-bearing stadium records** | farthest-HR-by-hand / WPA house-of-horrors / clutch-goat | ⚪ ABSENT (on `franchise-v1-next`) | N | — merge later |

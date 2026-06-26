@@ -96,11 +96,19 @@
   (4 players; cross-consistent with the drawers). Build-green, zero console errors.
 
 ## What's NEXT
-1. **The tentpole takeovers** (lower priority, narrative): manager **firing**, the **rebrand** circuit-
-   breaker (fan morale floor → relocate/reset), and the **season-end ceremony**. Same takeover pattern as
-   the checkpoint worklist. (Morale ledger, ties, fame, development are ALL already surfaced in the
-   drawer/roster/clubhouse + the checkpoint takeover — these tentpoles are what remain of the moment layer.)
-2. **The real-data adapter** (swap mock → live) — GREENLIGHT-GATED: wiring map in
+> **2026-06-26 — the ENTIRE surface backlog is now BUILT (mock-fed).** A 5-pass backend audit produced
+> `FRANCHISE_LENS_SURFACE_INVENTORY.md` (the build punch-list); all 8 buckets shipped this session: deeper
+> player dossier (career/milestones/makeup/form/morale-breakdown) + per-player spray charts; the Schedule
+> and Almanac tabs (the two stubs); awards-in-full (The Hardware); the rich Stadium (archetype + home-park
+> rivalry callout + aggregates + best/worst-here + visitor ledger + oddity records); widened standings
+> (season progress + Playoff Picture); roster moves + the farm (22/10 + advice + trade demands); the widened
+> newspaper (The Wire + reporter's desk); the soul layer (relationship morale deltas + concrete designation
+> effects); and the four tentpole takeovers (firing / rebrand / ceremony / random-event confirm) launched
+> from a Clubhouse "big moments" strip, sharing the checkpoint-takeover shell. Build-green throughout, zero
+> console errors. **What remains is ONLY the greenlight-gated real-data adapter** (and the ⚪ ABSENT V2
+> fame-bearing stadium records — merge from `franchise-v1-next` later).
+
+1. **The real-data adapter** (swap mock → live) — GREENLIGHT-GATED: wiring map in
    `FRANCHISE_LENS_DATA_WIRING.md` (route needs `:franchiseId`; `getAllFranchiseTeams`,
    `calculateStandings`, morale via `franchiseMoraleState`). Stadium: `buildFranchiseStadiumFoundationReport`
    →spray rows, seed `ParkFactors`→factor box, records catalog→House of Horrors. Drawer: the six adapters.
