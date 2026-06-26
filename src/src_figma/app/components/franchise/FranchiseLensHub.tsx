@@ -154,12 +154,35 @@ export interface StandingsRacesVM {
   allStar?: AllStarBoardVM;
 }
 
+/* ===== Stadium (team-scoped — the club's ballpark) ===== */
+export type SprayDirection = "pull" | "pull_center" | "center" | "oppo_center" | "oppo" | "foul_left" | "foul_right";
+export type SprayDepth = "infield" | "shallow" | "medium" | "deep";
+export type SprayOutcome = "HR" | "3B" | "2B" | "1B" | "OUT" | "ERR";
+export interface SprayDotVM { direction: SprayDirection; depth: SprayDepth; outcome: SprayOutcome }
+export interface SprayRoleVM {
+  role: "batting" | "pitching" | "fielding";
+  dots: SprayDotVM[];
+  stats: { label: string; value: string }[];   // e.g. "Batted balls 92", "HR 18", "Pull% 44"
+  note?: string;
+}
+export interface StadiumRecordVM { label: string; holder: string; value: string; note?: string }
+export interface StadiumVM {
+  name: string;
+  nickname?: string;
+  city?: string;
+  dims?: { lf: number; cf: number; rf: number };
+  factors?: { overall: number; runs: number; hr: number; confidence: "LOW" | "MEDIUM" | "HIGH"; source?: string };
+  spray: SprayRoleVM[];                          // batting / pitching / fielding
+  records?: StadiumRecordVM[];                   // the house-of-horrors catalog
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
   pulse: PulseVM;
   roster: PlayerRowVM[];
   standings?: StandingsRacesVM;
+  stadium?: StadiumVM;
   loading?: boolean;
   emptyNote?: string;
 }
@@ -254,6 +277,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
               <NewspaperTab hub={hub} active={active} />
             ) : tab === "Standings & Races" ? (
               <StandingsRacesTab hub={hub} active={active} />
+            ) : tab === "Stadium" ? (
+              <StadiumTab hub={hub} active={active} />
             ) : (
               <div className="fen-empty">"{tab}" comes next.</div>
             )}
@@ -680,6 +705,132 @@ function AllStarBoard({ board, active }: { board: AllStarBoardVM; active: Active
             ))}
           </div>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ===== Stadium (team tab) ===== */
+const SPRAY_ANGLE: Record<SprayDirection, number> = {
+  pull: -34, pull_center: -18, center: 0, oppo_center: 18, oppo: 34, foul_left: -54, foul_right: 54,
+};
+const SPRAY_RADIUS: Record<SprayDepth, number> = { infield: 80, shallow: 145, medium: 205, deep: 265 };
+const SPRAY_DOT_R: Record<string, number> = { hr: 5.2, xbh: 4.2, single: 3.6, out: 3, err: 3.6 };
+function sprayPoint(dot: SprayDotVM, i: number): { x: number; y: number } {
+  const a = (SPRAY_ANGLE[dot.direction] * Math.PI) / 180;
+  const r = SPRAY_RADIUS[dot.depth];
+  const jx = ((i * 37) % 17) - 8; // deterministic jitter so stacked balls separate
+  const jy = ((i * 53) % 15) - 7;
+  return { x: 240 + r * Math.sin(a) + jx, y: 330 - r * Math.cos(a) + jy };
+}
+function outcomeClass(o: SprayOutcome): string {
+  return o === "HR" ? "hr" : o === "2B" || o === "3B" ? "xbh" : o === "1B" ? "single" : o === "ERR" ? "err" : "out";
+}
+
+function SprayField({ dots }: { dots: SprayDotVM[] }) {
+  return (
+    <svg className="fen-spray-svg" viewBox="0 0 480 352" role="img" aria-label="Spray chart of batted balls">
+      {/* fair territory + infield dirt */}
+      <path className="fen-spray-grass" d="M240 330 L38 128 Q240 -48 442 128 Z" />
+      <path className="fen-spray-dirt" d="M240 330 L300 270 L240 210 L180 270 Z" />
+      {/* wall arc + foul lines + diamond (chalk) */}
+      <path className="fen-spray-wall" d="M38 128 Q240 -48 442 128" />
+      <line className="fen-spray-line" x1="240" y1="330" x2="38" y2="128" />
+      <line className="fen-spray-line" x1="240" y1="330" x2="442" y2="128" />
+      <path className="fen-spray-diamond" d="M240 330 L300 270 L240 210 L180 270 Z" />
+      <circle className="fen-spray-mound" cx="240" cy="276" r="4" />
+      <circle className="fen-spray-base" cx="240" cy="330" r="3" />
+      <circle className="fen-spray-base" cx="300" cy="270" r="3" />
+      <circle className="fen-spray-base" cx="240" cy="210" r="3" />
+      <circle className="fen-spray-base" cx="180" cy="270" r="3" />
+      {dots.map((d, i) => {
+        const { x, y } = sprayPoint(d, i);
+        const cls = outcomeClass(d.outcome);
+        return <circle key={i} className={`fen-spray-dot ${cls}`} cx={x} cy={y} r={SPRAY_DOT_R[cls]} />;
+      })}
+    </svg>
+  );
+}
+
+function ParkFactor({ label, v }: { label: string; v: number }) {
+  const pct = Math.round(v * 100);
+  const tone = pct > 102 ? " up" : pct < 98 ? " dn" : "";
+  return (
+    <div className="fen-pf">
+      <div className={`pv fen-chalk${tone}`}>{pct}</div>
+      <div className="pl">{label}</div>
+    </div>
+  );
+}
+
+function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const s = hub.stadium;
+  const [role, setRole] = useState<"batting" | "pitching" | "fielding">("batting");
+  if (!s) return <div className="fen-empty">No ballpark data for {active.name} yet.</div>;
+  const roleData = s.spray.find((r) => r.role === role) ?? s.spray[0];
+  return (
+    <div className="fen-stadium">
+      <div className="fen-stad-head">
+        <div className="fen-stad-name fen-chalk fen-y">{s.nickname ? `"${s.nickname}"` : s.name}</div>
+        <div className="fen-stad-sub">{[s.nickname ? s.name : null, s.city].filter(Boolean).join(" · ")}</div>
+        {s.dims ? (
+          <div className="fen-stad-dims">
+            <span><b>LF</b> {s.dims.lf}</span><span><b>CF</b> {s.dims.cf}</span><span><b>RF</b> {s.dims.rf}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="fen-stad-grid">
+        <div className="fen-stad-spray">
+          <div className="fen-sectlab">Spray Chart <span className="lite fen-help">· where balls go at {s.nickname ?? s.name}</span></div>
+          <div className="fen-spray-toggle">
+            {(["batting", "pitching", "fielding"] as const).map((r) => (
+              <button key={r} type="button" className={`fen-spray-tab${role === r ? " on" : ""}`} onClick={() => setRole(r)}>{r}</button>
+            ))}
+          </div>
+          {roleData.dots.length === 0 ? (
+            <div className="fen-empty">No {role} spray evidence yet.</div>
+          ) : (
+            <>
+              <SprayField dots={roleData.dots} />
+              <div className="fen-spray-legend">
+                <span className="lg hr">HR</span><span className="lg xbh">2B / 3B</span><span className="lg single">1B</span><span className="lg out">Out</span><span className="lg err">Error</span>
+              </div>
+              <div className="fen-spray-stats">
+                {roleData.stats.map((st, i) => (
+                  <div className="st" key={i}><div className="v fen-chalk">{st.value}</div><div className="l">{st.label}</div></div>
+                ))}
+              </div>
+              {roleData.note ? <div className="fen-spray-note fen-help-b">{roleData.note}</div> : null}
+            </>
+          )}
+        </div>
+
+        <div className="fen-stad-side">
+          {s.factors ? (
+            <div className="fen-parkbox">
+              <div className="fen-sectlab">Park Factors <span className="lite fen-help">· {(s.factors.source ?? "seed").toLowerCase()} · {s.factors.confidence.toLowerCase()} confidence</span></div>
+              <div className="fen-parkrow">
+                <ParkFactor label="Overall" v={s.factors.overall} />
+                <ParkFactor label="Runs" v={s.factors.runs} />
+                <ParkFactor label="Home runs" v={s.factors.hr} />
+              </div>
+              <div className="fen-park-note fen-help-b">100 = neutral · above favors hitters, below favors pitchers.</div>
+            </div>
+          ) : null}
+          {s.records && s.records.length ? (
+            <div className="fen-recbox">
+              <div className="fen-sectlab">House of Horrors <span className="lite fen-help">· the park record book</span></div>
+              {s.records.map((rec, i) => (
+                <div className="fen-rec" key={i}>
+                  <div className="rl">{rec.label}</div>
+                  <div className="rv fen-chalk">{rec.value}</div>
+                  <div className="rh">{rec.holder}{rec.note ? ` · ${rec.note}` : ""}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );

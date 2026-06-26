@@ -3,9 +3,23 @@ import {
   FranchiseLensHub,
   type ActiveTeamVM,
   type HubVM,
+  type SprayDepth,
+  type SprayDirection,
+  type SprayDotVM,
+  type SprayOutcome,
+  type StadiumVM,
   type StandingsRacesVM,
   type TeamPickerVM,
 } from "../components/franchise/FranchiseLensHub";
+
+/** Expand a compact [direction, depth, outcome, count] spec into spray dots. */
+function mkSpray(spec: Array<[SprayDirection, SprayDepth, SprayOutcome, number]>): SprayDotVM[] {
+  const out: SprayDotVM[] = [];
+  for (const [direction, depth, outcome, n] of spec) {
+    for (let i = 0; i < n; i++) out.push({ direction, depth, outcome });
+  }
+  return out;
+}
 
 /**
  * FranchiseLensPreview — a non-destructive, routable preview of the aged-Fenway
@@ -122,9 +136,168 @@ const LEAGUE: StandingsRacesVM = {
   },
 };
 
+/* Per-club ballparks. The real adapter feeds these from
+ * buildFranchiseStadiumFoundationReport (spray rows + summary), seed ParkFactors,
+ * and the franchise stadium-records catalog. */
+const STADIUM_PC: StadiumVM = {
+  name: "Page Capitals Park", nickname: "The Yard", city: "Caldwell",
+  dims: { lf: 330, cf: 400, rf: 325 },
+  factors: { overall: 1.05, runs: 1.06, hr: 1.10, confidence: "LOW", source: "SEED" },
+  spray: [
+    {
+      role: "batting",
+      dots: mkSpray([
+        ["pull", "deep", "HR", 6], ["pull_center", "deep", "HR", 4], ["center", "deep", "HR", 4], ["oppo_center", "deep", "HR", 2], ["oppo", "deep", "HR", 2],
+        ["pull", "medium", "2B", 4], ["pull_center", "medium", "2B", 3], ["center", "deep", "2B", 2], ["oppo_center", "medium", "2B", 3], ["oppo", "medium", "3B", 2],
+        ["pull", "shallow", "1B", 3], ["pull_center", "shallow", "1B", 3], ["center", "shallow", "1B", 4], ["oppo_center", "shallow", "1B", 3], ["oppo", "shallow", "1B", 3], ["center", "medium", "1B", 2],
+        ["pull", "infield", "OUT", 4], ["center", "infield", "OUT", 3], ["oppo", "infield", "OUT", 3], ["pull", "shallow", "OUT", 3], ["center", "medium", "OUT", 4], ["oppo_center", "deep", "OUT", 3], ["pull_center", "deep", "OUT", 2],
+        ["foul_left", "shallow", "OUT", 2], ["foul_right", "shallow", "OUT", 2],
+      ]),
+      stats: [{ label: "Batted balls", value: "92" }, { label: "Home runs", value: "18" }, { label: "Pulled", value: "44%" }],
+      note: "Power Club through and through — pulls and elevates. Eighteen of ninety-two batted balls left the yard, two-thirds of them to the pull side.",
+    },
+    {
+      role: "pitching",
+      dots: mkSpray([
+        ["pull", "deep", "HR", 2], ["center", "deep", "HR", 3], ["oppo", "deep", "HR", 2],
+        ["center", "medium", "2B", 3], ["oppo_center", "medium", "2B", 2], ["pull", "medium", "2B", 2],
+        ["pull", "shallow", "1B", 3], ["center", "shallow", "1B", 4], ["oppo", "shallow", "1B", 3], ["oppo_center", "shallow", "1B", 2],
+        ["pull", "infield", "OUT", 5], ["center", "infield", "OUT", 4], ["oppo", "infield", "OUT", 4], ["center", "medium", "OUT", 5], ["pull_center", "deep", "OUT", 3], ["oppo", "medium", "OUT", 3],
+      ]),
+      stats: [{ label: "Balls in play", value: "88" }, { label: "HR allowed", value: "7" }, { label: "Grounders", value: "51%" }],
+      note: "The staff lives down in the zone — more than half the contact stays on the infield, and only seven balls have cleared a fence here.",
+    },
+    {
+      role: "fielding",
+      dots: mkSpray([
+        ["pull", "infield", "OUT", 6], ["center", "infield", "OUT", 6], ["oppo", "infield", "OUT", 6], ["pull_center", "infield", "OUT", 4], ["oppo_center", "infield", "OUT", 4],
+        ["pull", "shallow", "OUT", 4], ["center", "shallow", "OUT", 4], ["oppo", "shallow", "OUT", 4],
+        ["center", "medium", "OUT", 4], ["pull", "medium", "OUT", 3], ["oppo", "medium", "OUT", 3],
+        ["pull", "deep", "OUT", 2], ["center", "deep", "OUT", 3], ["oppo", "deep", "OUT", 2],
+        ["pull", "infield", "ERR", 1], ["center", "shallow", "ERR", 1],
+      ]),
+      stats: [{ label: "Plays made", value: "70" }, { label: "Errors", value: "2" }, { label: "Fielding", value: ".971" }],
+      note: "Glove-first club: seventy plays logged at The Yard, only two of them misplayed.",
+    },
+  ],
+  records: [
+    { label: "Most runs, one game", value: "17", holder: "vs Sand Gnats", note: "Week 4" },
+    { label: "Wildest slugfest", value: "29", holder: "PC 17, Gnats 12" },
+    { label: "Biggest blowout", value: "+15", holder: "vs Harbor Bandits" },
+    { label: "Most batted balls", value: "41", holder: "Dash Okoye" },
+    { label: "Most contact faced", value: "38", holder: "Rafa Fenomeno" },
+    { label: "Most plays made", value: "52", holder: "Hank Drake" },
+    { label: "No-hitters", value: "1", holder: "Fenomeno vs River Rats", note: "Week 9" },
+    { label: "Perfect games", value: "—", holder: "none yet at The Yard" },
+  ],
+};
+
+const STADIUM_BM: StadiumVM = {
+  name: "Brass Monkeys Field", nickname: "The Foundry", city: "Steelton",
+  dims: { lf: 345, cf: 410, rf: 340 },
+  factors: { overall: 0.93, runs: 0.91, hr: 0.87, confidence: "MEDIUM", source: "SEED" },
+  spray: [
+    {
+      role: "batting",
+      dots: mkSpray([
+        ["pull", "deep", "HR", 3], ["center", "deep", "HR", 4], ["oppo", "deep", "HR", 2],
+        ["pull", "medium", "2B", 4], ["center", "medium", "2B", 4], ["oppo_center", "deep", "2B", 3],
+        ["pull", "shallow", "1B", 4], ["center", "shallow", "1B", 5], ["oppo", "shallow", "1B", 4], ["oppo_center", "shallow", "1B", 3],
+        ["pull", "infield", "OUT", 4], ["center", "infield", "OUT", 4], ["oppo", "infield", "OUT", 4], ["center", "medium", "OUT", 4], ["pull_center", "deep", "OUT", 3], ["oppo", "deep", "OUT", 3],
+      ]),
+      stats: [{ label: "Batted balls", value: "80" }, { label: "Home runs", value: "9" }, { label: "Pulled", value: "37%" }],
+      note: "The Foundry is a graveyard for fly balls — deep fences swallow drives that leave other yards. Doubles, not homers, are the currency here.",
+    },
+    {
+      role: "pitching",
+      dots: mkSpray([
+        ["center", "deep", "HR", 2], ["pull", "deep", "HR", 1],
+        ["center", "medium", "2B", 2], ["oppo", "medium", "2B", 2],
+        ["pull", "shallow", "1B", 3], ["center", "shallow", "1B", 3], ["oppo", "shallow", "1B", 2],
+        ["pull", "infield", "OUT", 6], ["center", "infield", "OUT", 6], ["oppo", "infield", "OUT", 5], ["center", "medium", "OUT", 5], ["pull_center", "deep", "OUT", 4], ["oppo", "deep", "OUT", 4],
+      ]),
+      stats: [{ label: "Balls in play", value: "85" }, { label: "HR allowed", value: "3" }, { label: "Grounders", value: "55%" }],
+      note: "Best run-prevention park in the league: a stingy staff in front of deep walls. Three home runs allowed all season.",
+    },
+    {
+      role: "fielding",
+      dots: mkSpray([
+        ["pull", "infield", "OUT", 6], ["center", "infield", "OUT", 7], ["oppo", "infield", "OUT", 6], ["pull_center", "infield", "OUT", 5],
+        ["center", "shallow", "OUT", 5], ["pull", "shallow", "OUT", 4], ["oppo", "shallow", "OUT", 4],
+        ["center", "medium", "OUT", 4], ["pull", "deep", "OUT", 3], ["center", "deep", "OUT", 4], ["oppo", "deep", "OUT", 3],
+        ["oppo", "shallow", "ERR", 1],
+      ]),
+      stats: [{ label: "Plays made", value: "76" }, { label: "Errors", value: "1" }, { label: "Fielding", value: ".987" }],
+      note: "Pitching & defense, by the numbers — seventy-six plays, a single error all year.",
+    },
+  ],
+  records: [
+    { label: "Most runs, one game", value: "12", holder: "vs Cactus Cats" },
+    { label: "Lowest-scoring win", value: "1–0", holder: "Vesper, 14 K" },
+    { label: "Biggest blowout", value: "+11", holder: "vs Harbor Bandits" },
+    { label: "Most contact faced", value: "44", holder: "Cole Vesper" },
+    { label: "Most plays made", value: "58", holder: "Tio Marsh" },
+    { label: "No-hitters", value: "1", holder: "Vesper vs Cactus Cats" },
+    { label: "Perfect games", value: "—", holder: "none yet" },
+    { label: "Longest scoreless streak", value: "23 inn", holder: "the staff, Weeks 6–7" },
+  ],
+};
+
+const STADIUM_RR: StadiumVM = {
+  name: "River Rats Stadium", nickname: "The Levee", city: "Marsh Bend",
+  dims: { lf: 335, cf: 405, rf: 330 },
+  factors: { overall: 1.00, runs: 1.01, hr: 0.96, confidence: "LOW", source: "SEED" },
+  spray: [
+    {
+      role: "batting",
+      dots: mkSpray([
+        ["pull", "deep", "HR", 3], ["center", "deep", "HR", 3], ["oppo", "deep", "HR", 1],
+        ["pull", "medium", "2B", 3], ["oppo_center", "deep", "3B", 3], ["center", "deep", "3B", 2], ["pull_center", "medium", "2B", 2],
+        ["pull", "shallow", "1B", 5], ["center", "shallow", "1B", 6], ["oppo", "shallow", "1B", 5], ["oppo_center", "shallow", "1B", 4], ["pull_center", "shallow", "1B", 3],
+        ["pull", "infield", "OUT", 5], ["center", "infield", "OUT", 4], ["oppo", "infield", "OUT", 4], ["center", "medium", "OUT", 3], ["oppo", "deep", "OUT", 3],
+      ]),
+      stats: [{ label: "Batted balls", value: "78" }, { label: "Home runs", value: "9" }, { label: "Triples", value: "5" }],
+      note: "Speed & Glove plays small ball at The Levee — slap singles and leg out triples into the big gaps rather than swing for the seats.",
+    },
+    {
+      role: "pitching",
+      dots: mkSpray([
+        ["pull", "deep", "HR", 3], ["center", "deep", "HR", 3], ["oppo", "deep", "HR", 2],
+        ["center", "medium", "2B", 3], ["pull", "medium", "2B", 3], ["oppo", "deep", "3B", 2],
+        ["pull", "shallow", "1B", 4], ["center", "shallow", "1B", 4], ["oppo", "shallow", "1B", 4],
+        ["pull", "infield", "OUT", 4], ["center", "infield", "OUT", 4], ["oppo", "infield", "OUT", 3], ["center", "medium", "OUT", 4], ["pull_center", "deep", "OUT", 3],
+      ]),
+      stats: [{ label: "Balls in play", value: "82" }, { label: "HR allowed", value: "8" }, { label: "Grounders", value: "46%" }],
+      note: "A middling staff in a fair park — the bats, not the arms, decide River Rats games.",
+    },
+    {
+      role: "fielding",
+      dots: mkSpray([
+        ["pull", "infield", "OUT", 6], ["center", "infield", "OUT", 6], ["oppo", "infield", "OUT", 6], ["pull_center", "infield", "OUT", 4], ["oppo_center", "infield", "OUT", 4],
+        ["center", "shallow", "OUT", 4], ["pull", "shallow", "OUT", 4], ["oppo", "shallow", "OUT", 3],
+        ["center", "medium", "OUT", 4], ["pull", "deep", "OUT", 3], ["oppo", "deep", "OUT", 3], ["center", "deep", "OUT", 3],
+        ["pull", "shallow", "ERR", 1], ["oppo", "infield", "ERR", 1],
+      ]),
+      stats: [{ label: "Plays made", value: "72" }, { label: "Web gems", value: "6" }, { label: "Fielding", value: ".972" }],
+      note: "Rangy gloves cover the big outfield — six highlight-reel grabs and counting.",
+    },
+  ],
+  records: [
+    { label: "Most runs, one game", value: "14", holder: "vs Harbor Bandits" },
+    { label: "Wildest slugfest", value: "26", holder: "RR 14, Bandits 12" },
+    { label: "Most triples, one game", value: "4", holder: "Sol Park & co." },
+    { label: "Most batted balls", value: "39", holder: "Sol Park" },
+    { label: "Most plays made", value: "49", holder: "Sol Park" },
+    { label: "No-hitters", value: "—", holder: "none yet" },
+    { label: "Perfect games", value: "—", holder: "none yet" },
+    { label: "Longest hit streak", value: "18 g", holder: "Sol Park" },
+  ],
+};
+
 const HUB: Record<string, HubVM> = {
   PC: {
     standings: LEAGUE,
+    stadium: STADIUM_PC,
     home: {
       leadStory: { kicker: "The Arc · Season 3, Week 9", headline: "FENOMENO TAKES THE LEAP — ARM CLIMBING TOWARD AN A", body: "Five starts, one earned run. The kid the Capitals stole in the draft is pitching his way up the grades in real time — and Thursday's checkpoint may make it official. \"He doesn't pitch like a B anymore,\" the skipper admitted.", byline: "By J. Tate, Tootwhistle Times" },
       impactCards: [
@@ -175,6 +348,7 @@ const HUB: Record<string, HubVM> = {
   },
   BM: {
     standings: LEAGUE,
+    stadium: STADIUM_BM,
     home: {
       leadStory: { kicker: "Season 3, Week 9", headline: "VESPER MAKES HIS CY YOUNG CASE AS MONKEYS PULL AWAY", body: "A 2.18 ERA and a fourteen-strikeout gem have the Brass ace atop every ballot — and the East comfortably in hand.", byline: "By D. Hale, Tootwhistle Times" },
       impactCards: [
@@ -196,6 +370,7 @@ const HUB: Record<string, HubVM> = {
   },
   RR: {
     standings: LEAGUE,
+    stadium: STADIUM_RR,
     home: {
       leadStory: { kicker: "Season 3, Week 9", headline: "RATS SLIP OUT OF THE WILD-CARD PICTURE", body: "A four-game skid has dropped River Rats below the line, and the front office is fielding calls. \"We're not sellers yet,\" the GM insisted — for now.", byline: "By G. Ruiz, Tootwhistle Times" },
       impactCards: [

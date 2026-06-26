@@ -321,6 +321,72 @@
 .fen-snub.you .nm { color: var(--fen-yellow); }
 .fen-snub.rival .nm { color: var(--fen-marquee); }
 
+/* ===== Stadium tab (chalk spray chart + park factors + record book) ===== */
+.fen-stadium { display: flex; flex-direction: column; gap: 18px; }
+.fen-stad-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.3); }
+.fen-stad-name { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-stad-sub { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-stad-dims { margin-left: auto; display: flex; gap: 16px; font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk); }
+.fen-stad-dims b { color: var(--fen-chalk-soft); font-size: 11px; letter-spacing: 0.06em; margin-right: 3px; }
+
+.fen-stad-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
+@media (max-width: 880px) { .fen-stad-grid { grid-template-columns: 1fr; } }
+
+/* role toggle */
+.fen-spray-toggle { display: inline-flex; gap: 3px; background: rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 3px; margin-bottom: 12px; }
+.fen-spray-tab { font-family: var(--fen-chalk-font); font-size: 13px; text-transform: capitalize; background: none; border: none; cursor: pointer; color: var(--fen-chalk-soft); padding: 5px 14px; border-radius: 4px; }
+.fen-spray-tab:hover { color: var(--fen-chalk); }
+.fen-spray-tab.on { color: var(--fen-navy); background: var(--fen-yellow); }
+
+/* the chalk field */
+.fen-spray-svg { width: 100%; height: auto; display: block; max-width: 520px; margin: 0 auto; }
+.fen-spray-grass { fill: rgba(120, 150, 110, 0.10); }
+.fen-spray-dirt { fill: rgba(156, 86, 66, 0.20); }
+.fen-spray-wall { fill: none; stroke: var(--fen-chalk-soft); stroke-width: 2.4; }
+.fen-spray-line { stroke: var(--fen-chalk-soft); stroke-width: 1.4; }
+.fen-spray-diamond { fill: none; stroke: var(--fen-chalk-soft); stroke-width: 1.4; }
+.fen-spray-mound { fill: none; stroke: var(--fen-chalk-faint); stroke-width: 1.1; }
+.fen-spray-base { fill: var(--fen-chalk); }
+.fen-spray-dot { opacity: 0.9; }
+.fen-spray-dot.hr { fill: var(--fen-marquee); }
+.fen-spray-dot.xbh { fill: var(--fen-yellow); }
+.fen-spray-dot.single { fill: var(--fen-ash); }
+.fen-spray-dot.out { fill: var(--fen-chalk-soft); opacity: 0.6; }
+.fen-spray-dot.err { fill: var(--fen-navy); stroke: var(--fen-chalk-faint); stroke-width: 0.6; }
+
+/* legend */
+.fen-spray-legend { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 10px 0 14px; }
+.fen-spray-legend .lg { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); display: inline-flex; align-items: center; gap: 6px; }
+.fen-spray-legend .lg::before { content: ""; width: 10px; height: 10px; border-radius: 50%; }
+.fen-spray-legend .lg.hr::before { background: var(--fen-marquee); }
+.fen-spray-legend .lg.xbh::before { background: var(--fen-yellow); }
+.fen-spray-legend .lg.single::before { background: var(--fen-ash); }
+.fen-spray-legend .lg.out::before { background: var(--fen-chalk-soft); opacity: 0.6; }
+.fen-spray-legend .lg.err::before { background: var(--fen-navy); box-shadow: 0 0 0 1px var(--fen-chalk-faint); }
+
+/* spray summary stats */
+.fen-spray-stats { display: flex; gap: 22px; justify-content: center; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
+.fen-spray-stats .st { text-align: center; }
+.fen-spray-stats .st .v { font-family: var(--fen-chalk-font); font-size: 26px; line-height: 1; }
+.fen-spray-stats .st .l { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 4px; }
+.fen-spray-note { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; margin-top: 12px; line-height: 1.45; }
+
+/* park factors + record book */
+.fen-stad-side { display: flex; flex-direction: column; gap: 18px; }
+.fen-parkbox, .fen-recbox { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 14px 16px; }
+.fen-parkrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fen-pf { text-align: center; background: rgba(0, 0, 0, 0.2); border-radius: 5px; padding: 10px 6px; }
+.fen-pf .pv { font-family: var(--fen-chalk-font); font-size: 28px; line-height: 1; }
+.fen-pf .pv.up { color: var(--fen-yellow); }
+.fen-pf .pv.dn { color: var(--fen-marquee); }
+.fen-pf .pl { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 5px; }
+.fen-park-note { font-family: var(--fen-chalk-font); font-size: 10.5px; color: var(--fen-chalk-soft); margin-top: 10px; text-align: center; }
+.fen-rec { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 6px 10px; padding: 8px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-rec:last-child { border-bottom: none; }
+.fen-rec .rl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
+.fen-rec .rv { font-family: var(--fen-chalk-font); font-size: 20px; color: var(--fen-yellow); text-align: right; }
+.fen-rec .rh { grid-column: 1 / -1; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+
 @media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
 
 /* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.
