@@ -1,0 +1,16 @@
+import { chromium } from 'playwright';
+const dir = '/Users/johnkruse/Projects/kbl-tracker--auction-ux/spec-docs/prototypes/franchise-lens/';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport:{width:1180,height:980}, deviceScaleFactor:2 });
+const errs=[]; p.on('pageerror',e=>errs.push('PAGEERR:'+e.message));
+await p.goto('http://localhost:4188/__preview/franchise-lens',{waitUntil:'networkidle',timeout:20000});
+await p.waitForTimeout(800);
+await p.screenshot({ path: dir+'react-lens-page.png', fullPage:true });
+await p.evaluate(()=>{const b=[...document.querySelectorAll('.fen-morale')].find(x=>x.textContent.includes('38')); if(b)b.click();});
+await p.waitForTimeout(350);
+await p.screenshot({ path: dir+'react-morale-ledger.png', fullPage:true });
+await p.evaluate(()=>{const bd=document.querySelector('.fen-popbackdrop'); if(bd)bd.click();});
+await p.evaluate(()=>{const c=[...document.querySelectorAll('.fen-teamchip')].find(x=>x.textContent.includes('River Rats')); if(c)c.click();});
+await p.waitForTimeout(450);
+await p.screenshot({ path: dir+'react-lens-river.png', fullPage:true });
+console.log('ERRORS='+JSON.stringify(errs)); await b.close(); console.log('DONE');

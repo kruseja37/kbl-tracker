@@ -175,6 +175,11 @@ const AuctionStagePreview = lazy(() =>
     default: module.AuctionStagePreview,
   })),
 );
+const FranchiseLensPreview = lazy(() =>
+  import("./src_figma/app/pages/FranchiseLensPreview").then((module) => ({
+    default: module.FranchiseLensPreview,
+  })),
+);
 const PlayerInstanceCardPreview = lazy(() =>
   import("./src_figma/app/pages/PlayerInstanceCardPreview").then((module) => ({
     default: module.PlayerInstanceCardPreview,
@@ -338,6 +343,7 @@ function App() {
         {/* Isolated component proof route */}
         <Route path="/__preview/fame-pip" element={<FamePipPreview />} />
         <Route path="/__preview/auction-stage" element={<AuctionStagePreview />} />
+        <Route path="/__preview/franchise-lens" element={<FranchiseLensPreview />} />
         <Route
           path="/__preview/player-instance-card"
           element={<PlayerInstanceCardPreview />}

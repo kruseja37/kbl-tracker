@@ -1,0 +1,160 @@
+/* ============================================================================
+ * fenway-theme.css — KBL "Aged Green Monster" design layer (team-lens hub)
+ * ----------------------------------------------------------------------------
+ * The franchise hub redesign (JK-approved 2026-06-25): an aged Fenway manual
+ * scoreboard. Chalk font for titles/scores/standings numbers; Mom's Typewriter
+ * for reporter content. Palette = official KBL 8 (color_palette.md). Team color
+ * lives ONLY in the identity banner (--fen-tp / --fen-ts, set inline per club);
+ * the board itself stays white & yellow chalk — your club yellow, rival red.
+ *
+ * SCOPED under `.fen-root` so nothing leaks into the rest of the app. Tokens on
+ * :root (resolve in portals too). Fonts 'Chalk' + 'Moms Typewriter' are already
+ * @font-face'd in src/index.css. Tailwind v3 (CSS vars, not @theme).
+ * ========================================================================== */
+
+:root {
+  /* official KBL palette */
+  --fen-green: #4A5950;
+  --fen-green-lit: #586a5f;
+  --fen-green-dk: #3a463f;
+  --fen-green-deep: #2b332d;
+  --fen-green-black: #222a25;
+  --fen-marquee: #CC3433;
+  --fen-yellow: #F2C041;
+  --fen-dirt: #9C5642;
+  --fen-cream: #CBB89C;
+  --fen-navy: #1D2D44;
+  --fen-gray: #B0B7BC;
+  --fen-ash: #E3C099;
+  --fen-chalk: #ECE8DA;
+  --fen-chalk-soft: rgba(236, 232, 218, 0.66);
+  --fen-chalk-faint: rgba(236, 232, 218, 0.4);
+  /* team-lens identity (overridden inline per selected club) */
+  --fen-tp: #4A5950;
+  --fen-ts: #E3C099;
+  /* fonts */
+  --fen-chalk-font: 'Chalk', 'Bradley Hand', cursive;
+  --fen-type: 'Moms Typewriter', 'Courier New', monospace;
+}
+
+.fen-root {
+  font-family: var(--fen-type);
+  color: var(--fen-chalk);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 500px at 50% -10%, #243024 0%, rgba(20, 29, 22, 0) 60%),
+    linear-gradient(180deg, #1d2820, #141c16);
+}
+.fen-wrap { max-width: 1180px; margin: 0 auto; padding: 20px 20px 70px; }
+
+/* type helpers */
+.fen-chalk { font-family: var(--fen-chalk-font); color: var(--fen-chalk); text-shadow: 0 0 1px rgba(236, 232, 218, 0.35), 0 1px 0 rgba(0, 0, 0, 0.25); }
+.fen-y { color: var(--fen-yellow); text-shadow: 0 0 2px rgba(242, 192, 65, 0.3), 0 1px 0 rgba(0, 0, 0, 0.3); }
+.fen-r { color: var(--fen-marquee); text-shadow: 0 0 3px rgba(204, 52, 51, 0.3); }
+.fen-eyebrow { font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-muted { color: var(--fen-chalk-soft); }
+.fen-row { display: flex; align-items: center; gap: 12px; }
+.fen-spacer { flex: 1; }
+
+/* aged texture (grain + stains + vignette). NOTE: no overflow:hidden here — the
+ * grain/stain pseudo-elements are inset:0 (self-contained on square boards), and
+ * clipping would cut off the morale ledger popover that overflows the board. */
+.fen-aged { position: relative; }
+.fen-aged::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0.5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px; }
+.fen-aged::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(150px 90px at 16% 20%, rgba(0, 0, 0, 0.22), transparent 70%),
+    radial-gradient(180px 120px at 84% 72%, rgba(0, 0, 0, 0.2), transparent 72%),
+    radial-gradient(1200px 520px at 50% 50%, transparent 56%, rgba(0, 0, 0, 0.34) 100%); }
+
+/* lens picker */
+.fen-lens { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.fen-lens .lab { font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-teamchip { font-family: var(--fen-chalk-font); font-size: 18px; background: none; border: 2px solid transparent; border-radius: 5px; cursor: pointer; color: var(--fen-chalk-soft); padding: 4px 11px; display: inline-flex; align-items: center; gap: 8px; }
+.fen-teamchip:hover { color: var(--fen-chalk); }
+.fen-teamchip .swab { width: 13px; height: 13px; border-radius: 4px; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.3); }
+.fen-teamchip.sel { color: var(--fen-chalk); }
+
+/* identity banner — wears the team's colors */
+.fen-ident { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 8px 8px 0 0; position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fen-tp) 78%, #222a25), color-mix(in srgb, var(--fen-tp) 52%, #222a25));
+  border: 1px solid rgba(0, 0, 0, 0.4); border-bottom: none; }
+.fen-ident::after { content: ""; position: absolute; inset: 0; mix-blend-mode: multiply; opacity: 0.42;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+.fen-mark { width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; font-family: var(--fen-chalk-font); font-size: 16px; position: relative; z-index: 2;
+  background: var(--fen-ts); color: var(--fen-tp); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 3px color-mix(in srgb, var(--fen-tp) 60%, #000); }
+.fen-ident .nm { font-family: var(--fen-chalk-font); font-size: 28px; position: relative; z-index: 2; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.fen-ident .rec { font-family: var(--fen-type); font-size: 12px; color: rgba(255, 255, 255, 0.8); position: relative; z-index: 2; }
+.fen-ident .right { margin-left: auto; position: relative; z-index: 2; font-family: var(--fen-type); font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.fen-colorbar { height: 5px; background: linear-gradient(90deg, var(--fen-tp) 0 60%, var(--fen-ts) 60% 100%); }
+
+/* board */
+.fen-board { position: relative; padding: 20px 22px; background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green) 28%, var(--fen-green-dk)); border: 1px solid rgba(0, 0, 0, 0.4); box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.45); }
+.fen-board.first { border-radius: 0; }
+.fen-board.rounded { border-radius: 8px; }
+.fen-content { position: relative; z-index: 3; }
+
+/* tabs */
+.fen-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid rgba(0, 0, 0, 0.32); margin-bottom: 16px; }
+.fen-tab { font-family: var(--fen-chalk-font); font-size: 17px; background: none; border: none; cursor: pointer; color: var(--fen-chalk-soft); padding: 7px 12px; }
+.fen-tab:hover { color: var(--fen-chalk); }
+.fen-tab.on { color: var(--fen-chalk); border-bottom: 3px solid var(--fen-yellow); }
+.fen-tab.league { opacity: 0.6; }
+
+/* club pulse */
+.fen-pulse { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid rgba(0, 0, 0, 0.32); }
+.fen-pulse .club { font-family: var(--fen-chalk-font); font-size: 30px; }
+.fen-metric { cursor: pointer; background: none; border: none; text-align: left; padding: 0; }
+.fen-metric .ml { font-family: var(--fen-type); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-metric .mv { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-metric .tap { font-family: var(--fen-type); font-size: 9px; color: var(--fen-chalk-soft); opacity: 0.7; }
+.fen-rivalcall { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 18px; }
+
+/* roster */
+.fen-roster { display: grid; grid-template-columns: 34px 60px 1fr 120px 70px 96px 92px; gap: 2px 12px; align-items: center; }
+.fen-roster .h { font-family: var(--fen-type); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 6px; }
+.fen-roster .h.rt { text-align: right; }
+.fen-roster .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.22); }
+.fen-rnum { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-chalk-soft); }
+.fen-rpos { font-family: var(--fen-type); font-size: 12px; color: var(--fen-ash); text-align: center; background: rgba(0, 0, 0, 0.18); border-radius: 4px; padding: 2px 0; }
+.fen-rname { font-family: var(--fen-chalk-font); font-size: 21px; }
+.fen-rbadge { font-family: var(--fen-type); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-yellow); border-radius: 4px; padding: 2px 7px; justify-self: start; }
+.fen-rbadge.alb { background: var(--fen-gray); }
+.fen-rnumcell { font-family: var(--fen-chalk-font); font-size: 20px; text-align: right; }
+.fen-rnumcell.soft { color: var(--fen-chalk-soft); }
+.fen-morale { font-family: var(--fen-chalk-font); font-size: 22px; text-align: right; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; width: 100%; background: none; border: none; }
+.fen-morale .ar { font-size: 13px; }
+.fen-morale.hi { color: var(--fen-yellow); }
+.fen-morale.lo { color: var(--fen-marquee); }
+.fen-morale.mid { color: var(--fen-chalk); }
+.fen-morale:hover { text-decoration: underline dotted; }
+
+/* money — option B (small typewriter $/k + chalk digits) */
+.fen-money { font-family: var(--fen-chalk-font); display: inline-flex; align-items: baseline; }
+.fen-money .cur { font-family: var(--fen-type); font-size: 0.46em; color: var(--fen-chalk-soft); margin-right: 0.08em; transform: translateY(-0.12em); }
+.fen-money .unit { font-family: var(--fen-type); font-size: 0.46em; color: var(--fen-chalk-soft); margin-left: 0.06em; }
+
+/* morale ledger popover */
+.fen-pop { position: absolute; z-index: 20; width: 340px; background: linear-gradient(180deg, #33403a, #2a342e); border: 2px solid #14110d; border-radius: 4px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.4); padding: 16px 18px; }
+.fen-pop .ph { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid rgba(0, 0, 0, 0.4); padding-bottom: 10px; margin-bottom: 10px; }
+.fen-pop .ph .nm { font-family: var(--fen-chalk-font); font-size: 22px; }
+.fen-pop .ph .st { font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-soft); margin-left: auto; text-transform: uppercase; letter-spacing: 0.08em; }
+.fen-pop .big { font-family: var(--fen-chalk-font); font-size: 40px; line-height: 1; }
+.fen-pop .arc { font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-soft); margin: 2px 0 12px; }
+.fen-entry { display: flex; gap: 11px; align-items: baseline; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-entry:last-child { border-bottom: none; }
+.fen-entry .d { font-family: var(--fen-chalk-font); font-size: 17px; width: 40px; flex: none; text-align: right; }
+.fen-entry .d.up { color: var(--fen-yellow); }
+.fen-entry .d.dn { color: var(--fen-marquee); }
+.fen-entry .rs { font-family: var(--fen-type); font-size: 12px; color: var(--fen-chalk); line-height: 1.35; }
+.fen-entry .wk { font-family: var(--fen-type); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-pop .foot { font-family: var(--fen-type); font-size: 10.5px; color: var(--fen-chalk-soft); margin-top: 10px; text-align: center; opacity: 0.8; }
+.fen-pop .close { position: absolute; top: 8px; right: 10px; background: none; border: none; color: var(--fen-chalk-faint); font-size: 18px; cursor: pointer; line-height: 1; }
+.fen-popbackdrop { position: fixed; inset: 0; z-index: 19; }
+
+/* empty / loading */
+.fen-empty { font-family: var(--fen-type); color: var(--fen-chalk-soft); text-align: center; padding: 40px 20px; font-size: 13px; }
+
+@media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
