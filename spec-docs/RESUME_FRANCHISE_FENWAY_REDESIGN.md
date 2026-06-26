@@ -78,16 +78,24 @@
   contrasting mocks wired (`DETAIL_FENOMENO` rising, `DETAIL_STAD` crisis); players without a `detail` show
   identity + economics + morale. Build-green, zero console errors.
 
+- **Tootwhistle live feed** (`NewspaperTab` in `FranchiseLensHub.tsx`): the paper now **ranks by impact** —
+  the view sorts the secondary stories by `dramaticWeight` (so the biggest story leads the column, not the
+  newest), with a subtle red impact-pip meter per story + a "today's biggest story" tag on the lead; and a
+  new **"Around the League" recap stream** (the per-game `GameStory` recaps — date · matchup w/ scores,
+  winner bold · one-line headline). All inside `.fen-paper` so it stays in the reporter's Moms typewriter.
+  VMs: `NewsStoryVM.dramaticWeight` + `GameRecapVM`; mock-fed per team. Build-green, zero console errors.
+
 ## What's NEXT (the build order, from the Data Surface Map §3)
-1. **Tootwhistle live feed** — adapter: lead = top-`dramaticWeight` `SeasonNewsItem`, recaps stream.
-   (The Tootwhistle tab is already built to mock; this is the dramaticWeight ranking + recap stream.)
-2. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
+1. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
    when the franchise team flips the Phase-2 flags. The **Checkpoint Confirmation worklist** (SMB4
-   transcription) is its own moment-driven takeover.
-3. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
+   transcription) is its own moment-driven takeover. (NOTE: morale ledger, ties, fame, trait/value
+   development are ALREADY surfaced in the Player drawer + Roster + Clubhouse — what's left here is the
+   **checkpoint-confirmation takeover** and the morale-crisis/firing/rebrand *moment* takeovers.)
+2. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
    needs `:franchiseId`; `getAllFranchiseTeams`, `calculateStandings`, morale via `franchiseMoraleState`).
    Stadium: `buildFranchiseStadiumFoundationReport`→spray rows, seed `ParkFactors`→factor box,
-   stadium-records catalog→House of Horrors. Drawer: the six adapters listed above.
+   stadium-records catalog→House of Horrors. Drawer: the six adapters. Tootwhistle: `SeasonNewsItem`
+   (sort by `dramaticWeight`) for stories + `GameStory` for the recap stream.
    For Standings & Races specifically: `calculateStandings`→divisions, `computeFranchiseAwardsPreview`→
    races (`candidates[].marginToWinner`), `getFranchiseAllStarRoster`→board (wire the 4 stubbed getters).
 

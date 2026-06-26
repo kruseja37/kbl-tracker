@@ -254,6 +254,24 @@
 .fen-ncard .ex { font-family: var(--fen-chalk-font); font-size: 12.5px; color: #3a352a; margin: 0; line-height: 1.45; }
 .fen-ncard .by { font-family: var(--fen-chalk-font); font-size: 10.5px; color: #5a5446; margin-top: 8px; font-style: italic; }
 
+/* impact pips (story dramaticWeight, on newsprint) */
+.fen-impact { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 7px; }
+.fen-impact .pip { width: 5px; height: 5px; border-radius: 1px; background: rgba(29, 45, 68, 0.22); }
+.fen-impact .pip.on { background: var(--fen-marquee); }
+
+/* recap stream (per-game GameStory recaps — newspaper box-score column) */
+.fen-recaps { margin-top: 18px; border-top: 2px solid var(--fen-navy); padding-top: 12px; position: relative; z-index: 2; }
+.fen-recaps-h { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 9px; }
+.fen-recaps-h .lite { color: #4a4536; letter-spacing: 0; }
+.fen-recap { display: grid; grid-template-columns: 84px 132px 1fr; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px dotted rgba(29, 45, 68, 0.25); }
+.fen-recap:last-child { border-bottom: none; }
+.fen-recap .rd { font-size: 10.5px; color: #4a4536; text-transform: uppercase; letter-spacing: 0.04em; }
+.fen-recap .rsc { font-size: 13.5px; color: #23201a; display: inline-flex; gap: 6px; align-items: baseline; white-space: nowrap; }
+.fen-recap .rsc .w { font-weight: 700; }
+.fen-recap .rsc .at { color: #6a5f48; font-size: 11px; }
+.fen-recap .rh { font-size: 12px; color: #3a352a; }
+@media (max-width: 600px) { .fen-recap { grid-template-columns: 1fr; gap: 2px; } }
+
 /* ===== Standings & Races (league tab — all chalk, your club yellow, rival red) ===== */
 .fen-sr { display: flex; flex-direction: column; gap: 26px; }
 .fen-sr-sect { }

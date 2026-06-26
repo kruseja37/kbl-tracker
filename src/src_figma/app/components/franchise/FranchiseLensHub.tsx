@@ -62,13 +62,21 @@ export interface SeasonHomeVM {
   nextGame?: NextGameVM;
 }
 
-export interface NewsStoryVM { category: string; headline: string; excerpt: string; byline: string }
+export interface NewsStoryVM { category: string; headline: string; excerpt: string; byline: string; dramaticWeight?: number }
+export interface GameRecapVM {
+  date: string;                  // GameStory.gameDate
+  away: string; home: string;    // matchup (abbr)
+  awayScore?: number; homeScore?: number;
+  headline: string;              // GameStory.headline
+  win?: "home" | "away";         // which side won (bolds the winner)
+}
 export interface NewsVM {
   editionLabel: string;
   volumeLabel: string;
   priceLabel?: string;
-  lead?: { kicker: string; headline: string; body: string; byline: string };
-  stories: NewsStoryVM[];
+  lead?: { kicker: string; headline: string; body: string; byline: string; dramaticWeight?: number };
+  stories: NewsStoryVM[];        // ranked by dramaticWeight (the view sorts)
+  recaps?: GameRecapVM[];        // the per-game recap stream (GameStory)
 }
 
 export interface MoraleHistoryVM {
@@ -416,10 +424,21 @@ function SeasonHome({ hub }: { hub: HubVM }) {
   );
 }
 
+function ImpactPips({ weight }: { weight?: number }) {
+  if (weight === undefined) return null;
+  const lvl = weight >= 0.66 ? 3 : weight >= 0.4 ? 2 : 1;
+  return (
+    <span className="fen-impact" title={`story impact ${Math.round(weight * 100)}/100`}>
+      {[1, 2, 3].map((n) => <span key={n} className={`pip${n <= lvl ? " on" : ""}`} />)}
+    </span>
+  );
+}
+
 function NewspaperTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
   const news = hub.news;
   const reporter = active.reporter?.name;
   if (!news) return <div className="fen-empty">No dispatches from the beat yet this season.</div>;
+  const ranked = [...news.stories].sort((a, b) => (b.dramaticWeight ?? 0) - (a.dramaticWeight ?? 0));
   return (
     <div className="fen-paper">
       <div className="fen-masthead">
@@ -434,22 +453,38 @@ function NewspaperTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
       <div className="pbody">
         {news.lead ? (
           <div className="fen-lead2">
-            <div className="kick">{news.lead.kicker}</div>
+            <div className="kick">{news.lead.kicker}<span className="fen-help"> · today's biggest story</span><ImpactPips weight={news.lead.dramaticWeight} /></div>
             <h2>{news.lead.headline}</h2>
             <p>{news.lead.body}</p>
             <div className="by">{news.lead.byline}</div>
           </div>
         ) : null}
         <div className="fen-newsgrid">
-          {news.stories.map((s, i) => (
+          {ranked.map((s, i) => (
             <div className="fen-ncard" key={i}>
-              <span className="fen-ncat">{s.category}</span>
+              <span className="fen-ncat">{s.category}<ImpactPips weight={s.dramaticWeight} /></span>
               <h3>{s.headline}</h3>
               <p className="ex">{s.excerpt}</p>
               <div className="by">{s.byline}</div>
             </div>
           ))}
         </div>
+        {news.recaps && news.recaps.length ? (
+          <div className="fen-recaps">
+            <div className="fen-recaps-h">Around the League <span className="lite fen-help">· recent games</span></div>
+            {news.recaps.map((r, i) => (
+              <div className="fen-recap" key={i}>
+                <div className="rd">{r.date}</div>
+                <div className="rsc">
+                  <span className={r.win === "away" ? "w" : ""}>{r.away}{r.awayScore !== undefined ? ` ${r.awayScore}` : ""}</span>
+                  <span className="at">@</span>
+                  <span className={r.win === "home" ? "w" : ""}>{r.home}{r.homeScore !== undefined ? ` ${r.homeScore}` : ""}</span>
+                </div>
+                <div className="rh">{r.headline}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
