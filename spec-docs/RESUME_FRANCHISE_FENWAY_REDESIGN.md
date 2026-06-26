@@ -64,18 +64,28 @@
   the records catalog. Per-club mock (`STADIUM_PC/BM/RR`); team-switch reframes everything. Build-green,
   zero console errors. (V2 fame-bearing records still ABSENT here — on `franchise-v1-next`, merge later.)
 
+- **Player drawer** (`PlayerDrawer` in `FranchiseLensHub.tsx`): opens from a roster name (the name is now a
+  button) as a right-side slide-in dossier — identity (pos/age/B-T/grade/designation+effect/WAR/bio),
+  economics (salary/True Value/net), a **True-Value sparkline** (rising yellow / falling red), **ratings
+  base→current** bars (fill = now, tick = draft-day, ▲/▼ delta), the **trait timeline** (gain/lose +
+  displaced), the **morale** block (value + state + reasons-log), **ties** (relationship edges with type
+  icon + intensity bar + since-game; `potential` = dashed/rumored), and **fame** (heat + a 5-seg
+  immortality meter + the channel breakdown). VMs (`PlayerDetailVM` + `RatingBarVM`/`ValuePointVM`/
+  `TraitTimelineVM`/`TieVM`/`FameVM`) field-aligned to `mergeRatingsOverlays` / `FranchiseTrueValueSnapshotRow`
+  / `FranchiseTraitOverlayRow` / morale history / `RelationshipEdgeRow` / `FranchiseFameRecordRow`. Two
+  contrasting mocks wired (`DETAIL_FENOMENO` rising, `DETAIL_STAD` crisis); players without a `detail` show
+  identity + economics + morale. Build-green, zero console errors.
+
 ## What's NEXT (the build order, from the Data Surface Map §3)
-1. **Player drawer** — the home for per-player depth (ratings base→current, traits + history, the morale
-   reasons-log, ties/relationships, fame, the True-Value sparkline) so the roster table stays clean.
-   Opens from a roster name; `StadiumTab`/`StandingsRacesTab` are the build pattern to follow.
-2. **Tootwhistle live feed** — adapter: lead = top-`dramaticWeight` `SeasonNewsItem`, recaps stream.
-3. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
+1. **Tootwhistle live feed** — adapter: lead = top-`dramaticWeight` `SeasonNewsItem`, recaps stream.
+   (The Tootwhistle tab is already built to mock; this is the dramaticWeight ranking + recap stream.)
+2. **Dark surfaces** (morale/ties/designation-effects/development/checkpoint) — build the UI; lights up
    when the franchise team flips the Phase-2 flags. The **Checkpoint Confirmation worklist** (SMB4
    transcription) is its own moment-driven takeover.
-4. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
+3. **Then the real-data adapter** (swap mock → live): wiring map in `FRANCHISE_LENS_DATA_WIRING.md` (route
    needs `:franchiseId`; `getAllFranchiseTeams`, `calculateStandings`, morale via `franchiseMoraleState`).
-   Stadium specifically: `buildFranchiseStadiumFoundationReport`→spray rows (group by role, place by
-   zone/direction/depth), seed `ParkFactors`→the factor box, stadium-records catalog→House of Horrors.
+   Stadium: `buildFranchiseStadiumFoundationReport`→spray rows, seed `ParkFactors`→factor box,
+   stadium-records catalog→House of Horrors. Drawer: the six adapters listed above.
    For Standings & Races specifically: `calculateStandings`→divisions, `computeFranchiseAwardsPreview`→
    races (`candidates[].marginToWinner`), `getFranchiseAllStarRoster`→board (wire the 4 stubbed getters).
 

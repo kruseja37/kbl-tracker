@@ -85,6 +85,29 @@ export interface PlayerMoraleVM {
   history: MoraleHistoryVM[];
 }
 
+/* ===== Player drawer (the per-player depth, opened from a roster name) ===== */
+export interface RatingBarVM { label: string; base: number; current: number }   // 0–99
+export interface ValuePointVM { checkpoint: string; value: number }              // True Value sparkline
+export interface TraitTimelineVM { valence: "gain" | "lose"; trait: string; displaces?: string; atGame: number }
+export type TieType = "RIVALRY" | "FEUD" | "MENTORSHIP" | "FRIENDSHIP" | "ROMANCE" | "HISTORY";
+export interface TieVM { partner: string; type: TieType; intensity: number; sinceGame?: number; potential?: boolean }
+export interface FameVM {
+  heat: number;
+  immortality: number;          // reachFloor 0–5
+  immortalityLabel: string;     // "Local", "Immortal", …
+  channels: { label: string; value: number }[];  // wpa_spine / iconic_event / status / defensive / role_player
+}
+export interface PlayerDetailVM {
+  age?: number; bats?: string; throws?: string; grade?: string; bio?: string;
+  valueTrend?: ValuePointVM[];
+  ratings?: RatingBarVM[];      // base→current (mergeRatingsOverlays)
+  traitsCurrent?: string[];
+  traitTimeline?: TraitTimelineVM[];
+  ties?: TieVM[];
+  fame?: FameVM;
+  designationEffect?: string;
+}
+
 export interface PlayerRowVM {
   id: string;
   number?: string;
@@ -96,6 +119,7 @@ export interface PlayerRowVM {
   valueGap?: number;           // valueDelta = trueValue − salary; + = bargain, − = overpay
   designation?: { label: string; kind: "gold" | "albatross" };
   morale?: PlayerMoraleVM;
+  detail?: PlayerDetailVM;     // the drawer payload (depth lives here so the table stays glanceable)
 }
 
 export interface PulseVM {
@@ -223,6 +247,7 @@ function Money({ value, className }: { value: number; className?: string }) {
 export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: FranchiseLensHubProps) {
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
+  const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
   const [helpOn, setHelpOn] = useState(false);
 
   const identityStyle = {
@@ -272,6 +297,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
                 hub={hub}
                 openMorale={openMorale}
                 setOpenMorale={setOpenMorale}
+                onOpenPlayer={setOpenPlayer}
               />
             ) : tab === "Tootwhistle Times" ? (
               <NewspaperTab hub={hub} active={active} />
@@ -286,6 +312,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
         </div>
       </div>
       <button type="button" className="fen-helpbtn" onClick={() => setHelpOn((v) => !v)}>? Help</button>
+      {openPlayer ? <PlayerDrawer player={openPlayer} onClose={() => setOpenPlayer(null)} /> : null}
     </div>
   );
 }
@@ -428,12 +455,13 @@ function NewspaperTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
 }
 
 function RosterTab({
-  active, hub, openMorale, setOpenMorale,
+  active, hub, openMorale, setOpenMorale, onOpenPlayer,
 }: {
   active: ActiveTeamVM;
   hub: HubVM;
   openMorale: string | null;
   setOpenMorale: (v: string | null) => void;
+  onOpenPlayer: (p: PlayerRowVM) => void;
 }) {
   const fan = hub.pulse.fanMorale;
   return (
@@ -492,7 +520,7 @@ function RosterTab({
           <div className="h">Designation</div><div className="h rt">WAR</div><div className="h rt">Salary</div><div className="h rt">Value</div><div className="h rt">Net</div><div className="h rt">Morale</div>
           <div className="line" />
           {hub.roster.map((p) => (
-            <RosterRow key={p.id} p={p} open={openMorale === p.id} onToggle={() => setOpenMorale(openMorale === p.id ? null : p.id)} />
+            <RosterRow key={p.id} p={p} open={openMorale === p.id} onToggle={() => setOpenMorale(openMorale === p.id ? null : p.id)} onOpen={() => onOpenPlayer(p)} />
           ))}
         </div>
       )}
@@ -500,12 +528,12 @@ function RosterTab({
   );
 }
 
-function RosterRow({ p, open, onToggle }: { p: PlayerRowVM; open: boolean; onToggle: () => void }) {
+function RosterRow({ p, open, onToggle, onOpen }: { p: PlayerRowVM; open: boolean; onToggle: () => void; onOpen: () => void }) {
   return (
     <>
       <div className="fen-rnum">{p.number ?? ""}</div>
       <div><span className="fen-rpos">{p.position}</span></div>
-      <div className="fen-rname fen-chalk">{p.name}</div>
+      <button type="button" className="fen-rname fen-chalk fen-rname-btn" onClick={onOpen}>{p.name}</button>
       <div>{p.designation ? <span className={`fen-rbadge${p.designation.kind === "albatross" ? " alb" : ""}`}>{p.designation.label}</span> : null}</div>
       <div className="fen-rnumcell">{p.war !== undefined ? p.war.toFixed(1) : "—"}</div>
       <div className="fen-rnumcell soft">{p.salary !== undefined ? <Money value={p.salary} /> : "—"}</div>
@@ -833,6 +861,170 @@ function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ===== Player drawer (the per-player dossier) ===== */
+const TIE_ICON: Record<TieType, string> = { RIVALRY: "⚔", FEUD: "💢", MENTORSHIP: "🎓", FRIENDSHIP: "🤝", ROMANCE: "❤", HISTORY: "📜" };
+const TIE_LABEL: Record<TieType, string> = { RIVALRY: "Rivalry", FEUD: "Feud", MENTORSHIP: "Mentor", FRIENDSHIP: "Friends", ROMANCE: "Romance", HISTORY: "History" };
+
+function ValueSparkline({ points }: { points: ValuePointVM[] }) {
+  if (points.length < 2) return null;
+  const w = 360, h = 64, pad = 9;
+  const vals = points.map((p) => p.value);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = max - min || 1;
+  const x = (i: number) => pad + (i / (points.length - 1)) * (w - 2 * pad);
+  const y = (v: number) => pad + (1 - (v - min) / span) * (h - 2 * pad);
+  const d = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(p.value).toFixed(1)}`).join(" ");
+  const up = points[points.length - 1].value >= points[0].value;
+  return (
+    <div className="fen-sparkwrap">
+      <svg className="fen-spark" viewBox={`0 0 ${w} ${h}`}>
+        <path className={`fen-spark-line ${up ? "up" : "dn"}`} d={d} />
+        {points.map((p, i) => <circle key={i} className="fen-spark-dot" cx={x(i)} cy={y(p.value)} r={2.4} />)}
+      </svg>
+      <div className="fen-sparklabs">{points.map((p, i) => <span key={i}>{p.checkpoint}</span>)}</div>
+    </div>
+  );
+}
+
+function RatingBars({ ratings }: { ratings: RatingBarVM[] }) {
+  return (
+    <div className="fen-ratings">
+      {ratings.map((r) => {
+        const delta = r.current - r.base;
+        const clamp = (n: number) => Math.max(0, Math.min(100, n));
+        return (
+          <div className="fen-rating" key={r.label}>
+            <div className="rl">{r.label}</div>
+            <div className="rbar">
+              <span className="fill" style={{ width: `${clamp(r.current)}%` }} />
+              <span className="basetick" style={{ left: `${clamp(r.base)}%` }} />
+            </div>
+            <div className="rv fen-chalk">{r.current}{delta !== 0 ? <span className={`dl ${delta > 0 ? "up" : "dn"}`}>{delta > 0 ? "▲" : "▼"}{Math.abs(delta)}</span> : null}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TiesList({ ties }: { ties: TieVM[] }) {
+  return (
+    <div className="fen-ties">
+      {ties.map((t, i) => (
+        <div className={`fen-tie${t.potential ? " pot" : ""}`} key={i}>
+          <span className="ic">{TIE_ICON[t.type]}</span>
+          <div className="who">
+            <span className="nm fen-chalk">{t.partner}</span>
+            <span className="ty">{TIE_LABEL[t.type]}{t.sinceGame ? ` · since g${t.sinceGame}` : ""}{t.potential ? " · rumored" : ""}</span>
+          </div>
+          <div className="int"><span className="fill" style={{ width: `${Math.round(t.intensity * 100)}%` }} /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FameBlock({ fame }: { fame: FameVM }) {
+  const max = Math.max(...fame.channels.map((c) => c.value)) || 1;
+  return (
+    <div className="fen-fame">
+      <div className="fame-top">
+        <div className="heat"><div className="v fen-chalk fen-y">{fame.heat}</div><div className="l">Fame heat</div></div>
+        <div className="immo">
+          <div className="l">Immortality · {fame.immortalityLabel}</div>
+          <div className="meter">{[1, 2, 3, 4, 5].map((n) => <span key={n} className={`seg${n <= fame.immortality ? " on" : ""}`} />)}</div>
+        </div>
+      </div>
+      <div className="fame-channels">
+        {fame.channels.map((c, i) => (
+          <div className="ch" key={i}>
+            <span className="cl">{c.label}</span>
+            <span className="cbar"><span className="fill" style={{ width: `${Math.round((c.value / max) * 100)}%` }} /></span>
+            <span className="cv fen-chalk">{c.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DrawerSection({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="fen-dsect">
+      <div className="fen-sectlab">{title}{hint ? <span className="lite fen-help"> · {hint}</span> : null}</div>
+      {children}
+    </div>
+  );
+}
+
+function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () => void }) {
+  const d = player.detail;
+  const m = player.morale;
+  return (
+    <>
+      <div className="fen-drawer-back" onClick={onClose} />
+      <div className="fen-drawer" role="dialog" aria-label={`${player.name} dossier`}>
+        <button type="button" className="fen-drawer-x" onClick={onClose} aria-label="Close">×</button>
+        <div className="fen-dhead">
+          <div className="dnum fen-chalk">{player.number ?? ""}</div>
+          <div className="dident">
+            <div className="dname fen-chalk fen-y">{player.name}</div>
+            <div className="dmeta">{[player.position, d?.age ? `age ${d.age}` : null, d?.bats && d?.throws ? `B/T ${d.bats}/${d.throws}` : null, d?.grade ? `grade ${d.grade}` : null].filter(Boolean).join(" · ")}</div>
+            <div className="dbadges">
+              {player.designation ? <span className={`fen-rbadge${player.designation.kind === "albatross" ? " alb" : ""}`}>{player.designation.label}</span> : null}
+              {player.war !== undefined ? <span className="dwar">WAR {player.war.toFixed(1)}</span> : null}
+            </div>
+          </div>
+        </div>
+        {d?.designationEffect ? <div className="fen-deffect fen-help-b">{d.designationEffect}</div> : null}
+        {d?.bio ? <div className="fen-dbio">{d.bio}</div> : null}
+
+        <div className="fen-decon">
+          <div className="e"><div className="l">Salary</div><div className="v fen-chalk">{player.salary !== undefined ? <Money value={player.salary} /> : "—"}</div></div>
+          <div className="e"><div className="l">True Value</div><div className="v fen-chalk">{player.trueValue !== undefined ? <Money value={player.trueValue} /> : "—"}</div></div>
+          <div className="e"><div className="l">Net</div><div className="v fen-chalk">{player.valueGap !== undefined ? <span className={player.valueGap >= 0 ? "fen-net up" : "fen-net dn"}>{player.valueGap >= 0 ? "+" : "−"}<Money value={Math.abs(player.valueGap)} /></span> : "—"}</div></div>
+        </div>
+
+        {d?.valueTrend && d.valueTrend.length > 1 ? <DrawerSection title="Value trend" hint="True Value by checkpoint"><ValueSparkline points={d.valueTrend} /></DrawerSection> : null}
+        {d?.ratings && d.ratings.length ? <DrawerSection title="Ratings" hint="bar = now · tick = draft-day"><RatingBars ratings={d.ratings} /></DrawerSection> : null}
+        {(d?.traitsCurrent?.length || d?.traitTimeline?.length) ? (
+          <DrawerSection title="Traits">
+            {d?.traitsCurrent && d.traitsCurrent.length ? <div className="fen-traitchips">{d.traitsCurrent.map((t, i) => <span className="chip" key={i}>{t}</span>)}</div> : null}
+            {d?.traitTimeline && d.traitTimeline.length ? (
+              <div className="fen-traittl">
+                {d.traitTimeline.map((e, i) => (
+                  <div className={`tl ${e.valence}`} key={i}>
+                    <span className="ar">{e.valence === "gain" ? "▲" : "▼"}</span>
+                    <span className="tx">{e.valence === "gain" ? "Earned" : "Lost"} <b>{e.trait}</b>{e.displaces ? ` (displaced ${e.displaces})` : ""}</span>
+                    <span className="g">g{e.atGame}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </DrawerSection>
+        ) : null}
+
+        {m ? (
+          <DrawerSection title="Morale" hint={m.state}>
+            <div className="fen-dmorale">
+              <span className={`big fen-chalk ${moraleClass(m.value)}`}>{m.value} <span className="ar">{arrow(m.trend)}</span></span>
+              {m.arc ? <span className="arc">{m.arc}</span> : null}
+            </div>
+            {m.history.length ? m.history.map((h, i) => (
+              <div className="fen-entry" key={i}><span className={`d ${h.delta >= 0 ? "up" : "dn"}`}>{h.delta >= 0 ? "+" : ""}{h.delta}</span><span><span className="rs">{h.reason}</span><br /><span className="wk">{h.week}</span></span></div>
+            )) : <div className="fen-entry"><span className="rs fen-muted">No recorded swings yet this season.</span></div>}
+          </DrawerSection>
+        ) : null}
+
+        {d?.ties && d.ties.length ? <DrawerSection title="Ties" hint="clubhouse relationships"><TiesList ties={d.ties} /></DrawerSection> : null}
+        {d?.fame ? <DrawerSection title="Fame"><FameBlock fame={d.fame} /></DrawerSection> : null}
+
+        {!d ? <div className="fen-empty">Full dossier fills in as the season runs.</div> : null}
+      </div>
+    </>
   );
 }
 

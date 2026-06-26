@@ -387,6 +387,104 @@
 .fen-rec .rv { font-family: var(--fen-chalk-font); font-size: 20px; color: var(--fen-yellow); text-align: right; }
 .fen-rec .rh { grid-column: 1 / -1; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
 
+/* ===== Player drawer (the per-player dossier) ===== */
+.fen-rname-btn { background: none; border: none; padding: 0; text-align: left; cursor: pointer; width: 100%; }
+.fen-rname-btn:hover { text-decoration: underline dotted; color: var(--fen-yellow); }
+
+.fen-drawer-back { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.5); }
+.fen-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 71; width: 440px; max-width: 94vw; overflow-y: auto;
+  background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green) 22%, var(--fen-green-dk)); border-left: 1px solid #14110d;
+  box-shadow: -16px 0 50px rgba(0, 0, 0, 0.55), inset 0 4px 16px rgba(0, 0, 0, 0.4); padding: 20px 22px 40px; animation: fen-drawer-in 0.22s ease; }
+@keyframes fen-drawer-in { from { transform: translateX(28px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.fen-drawer-x { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--fen-chalk-faint); font-size: 24px; line-height: 1; cursor: pointer; }
+.fen-drawer-x:hover { color: var(--fen-chalk); }
+
+.fen-dhead { display: flex; gap: 14px; align-items: flex-start; padding-right: 24px; }
+.fen-dhead .dnum { font-family: var(--fen-chalk-font); font-size: 34px; color: var(--fen-chalk-soft); line-height: 1; min-width: 34px; }
+.fen-dhead .dname { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-dhead .dmeta { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 5px; }
+.fen-dhead .dbadges { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
+.fen-dhead .dwar { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-deffect { font-family: var(--fen-chalk-font); font-size: 11.5px; color: var(--fen-yellow); margin-top: 10px; }
+.fen-dbio { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); margin-top: 8px; line-height: 1.45; font-style: italic; }
+
+.fen-decon { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 4px; }
+.fen-decon .e { background: rgba(0, 0, 0, 0.2); border-radius: 5px; padding: 9px 4px; text-align: center; }
+.fen-decon .e .l { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-decon .e .v { font-family: var(--fen-chalk-font); font-size: 18px; margin-top: 3px; }
+
+.fen-dsect { margin-top: 20px; }
+
+/* sparkline */
+.fen-sparkwrap { background: rgba(0, 0, 0, 0.18); border-radius: 6px; padding: 10px 12px; }
+.fen-spark { width: 100%; height: auto; display: block; }
+.fen-spark-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.fen-spark-line.up { stroke: var(--fen-yellow); }
+.fen-spark-line.dn { stroke: var(--fen-marquee); }
+.fen-spark-dot { fill: var(--fen-chalk); }
+.fen-sparklabs { display: flex; justify-content: space-between; font-family: var(--fen-chalk-font); font-size: 9px; color: var(--fen-chalk-soft); margin-top: 4px; }
+
+/* ratings base→current */
+.fen-ratings { display: flex; flex-direction: column; gap: 8px; }
+.fen-rating { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 10px; }
+.fen-rating .rl { font-family: var(--fen-chalk-font); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-rating .rbar { position: relative; height: 9px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-rating .rbar .fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--fen-chalk-soft); border-radius: 3px; }
+.fen-rating .rbar .basetick { position: absolute; top: -2px; width: 2px; height: 13px; background: var(--fen-ash); opacity: 0.8; transform: translateX(-1px); }
+.fen-rating .rv { font-family: var(--fen-chalk-font); font-size: 17px; text-align: right; display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 5px; }
+.fen-rating .rv .dl { font-size: 10px; }
+.fen-rating .rv .dl.up { color: var(--fen-yellow); }
+.fen-rating .rv .dl.dn { color: var(--fen-marquee); }
+
+/* traits */
+.fen-traitchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fen-traitchips .chip { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 3px 10px; }
+.fen-traittl { display: flex; flex-direction: column; gap: 5px; }
+.fen-traittl .tl { display: grid; grid-template-columns: 16px 1fr auto; align-items: baseline; gap: 8px; font-family: var(--fen-chalk-font); font-size: 12px; }
+.fen-traittl .tl .ar { font-size: 11px; }
+.fen-traittl .tl.gain .ar { color: var(--fen-yellow); }
+.fen-traittl .tl.lose .ar { color: var(--fen-marquee); }
+.fen-traittl .tl .tx { color: var(--fen-chalk-soft); }
+.fen-traittl .tl .tx b { color: var(--fen-chalk); }
+.fen-traittl .tl .g { font-size: 10px; color: var(--fen-chalk-soft); }
+
+/* morale block (reuses .fen-entry) */
+.fen-dmorale { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.fen-dmorale .big { font-family: var(--fen-chalk-font); font-size: 38px; line-height: 1; }
+.fen-dmorale .ar { font-size: 16px; }
+.fen-dmorale .arc { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+
+/* ties */
+.fen-ties { display: flex; flex-direction: column; gap: 7px; }
+.fen-tie { display: grid; grid-template-columns: 24px 1fr 70px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-tie:last-child { border-bottom: none; }
+.fen-tie.pot { opacity: 0.7; }
+.fen-tie .ic { font-size: 16px; text-align: center; }
+.fen-tie .who .nm { font-family: var(--fen-chalk-font); font-size: 15px; display: block; line-height: 1.05; }
+.fen-tie .who .ty { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-tie .int { height: 7px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; }
+.fen-tie .int .fill { display: block; height: 100%; background: var(--fen-ash); border-radius: 3px; }
+.fen-tie.pot .int .fill { background: repeating-linear-gradient(90deg, var(--fen-ash) 0 4px, transparent 4px 7px); }
+
+/* fame */
+.fen-fame { background: rgba(0, 0, 0, 0.18); border-radius: 6px; padding: 12px 14px; }
+.fen-fame .fame-top { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
+.fen-fame .heat { text-align: center; }
+.fen-fame .heat .v { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-fame .heat .l { font-family: var(--fen-chalk-font); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); margin-top: 3px; }
+.fen-fame .immo { flex: 1; }
+.fen-fame .immo .l { font-family: var(--fen-chalk-font); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); margin-bottom: 6px; }
+.fen-fame .immo .meter { display: flex; gap: 5px; }
+.fen-fame .immo .meter .seg { flex: 1; height: 9px; background: rgba(0, 0, 0, 0.3); border-radius: 2px; }
+.fen-fame .immo .meter .seg.on { background: var(--fen-yellow); }
+.fen-fame .fame-channels { display: flex; flex-direction: column; gap: 5px; }
+.fen-fame .ch { display: grid; grid-template-columns: 78px 1fr 28px; align-items: center; gap: 8px; }
+.fen-fame .ch .cl { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); text-transform: capitalize; }
+.fen-fame .ch .cbar { height: 7px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; }
+.fen-fame .ch .cbar .fill { display: block; height: 100%; background: var(--fen-chalk-soft); border-radius: 3px; }
+.fen-fame .ch .cv { font-family: var(--fen-chalk-font); font-size: 13px; text-align: right; }
+
+@media (max-width: 520px) { .fen-drawer { width: 100vw; } }
 @media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
 
 /* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.

@@ -3,6 +3,7 @@ import {
   FranchiseLensHub,
   type ActiveTeamVM,
   type HubVM,
+  type PlayerDetailVM,
   type SprayDepth,
   type SprayDirection,
   type SprayDotVM,
@@ -294,6 +295,89 @@ const STADIUM_RR: StadiumVM = {
   ],
 };
 
+/* Two contrasting player dossiers (the drawer payload). The real adapter feeds
+ * these from mergeRatingsOverlays (base→current), FranchiseTrueValueSnapshotRow
+ * (sparkline), FranchiseTraitOverlayRow (timeline), the morale history, the
+ * relationship edges, and FranchiseFameRecordRow. */
+const DETAIL_FENOMENO: PlayerDetailVM = {
+  age: 23, bats: "R", throws: "R", grade: "A−",
+  bio: "The kid the Capitals stole in the draft — pitching his way up the grades in real time.",
+  designationEffect: "Ace: anchors the rotation — his starts carry extra leverage weight.",
+  valueTrend: [
+    { checkpoint: "Draft", value: 980_000 },
+    { checkpoint: "CP1", value: 1_060_000 },
+    { checkpoint: "CP2", value: 1_180_000 },
+    { checkpoint: "CP3", value: 1_310_000 },
+    { checkpoint: "Now", value: 1_460_000 },
+  ],
+  ratings: [
+    { label: "Velocity", base: 72, current: 79 },
+    { label: "Junk", base: 68, current: 74 },
+    { label: "Accuracy", base: 70, current: 71 },
+    { label: "Fielding", base: 55, current: 55 },
+    { label: "Arm", base: 60, current: 62 },
+  ],
+  traitsCurrent: ["Workhorse", "Magic Hands"],
+  traitTimeline: [
+    { valence: "gain", trait: "Magic Hands", displaces: "Butter Fingers", atGame: 48 },
+    { valence: "gain", trait: "Workhorse", atGame: 22 },
+  ],
+  ties: [
+    { partner: "Milo Reyes", type: "MENTORSHIP", intensity: 0.7, sinceGame: 12 },
+    { partner: "Cole Vesper", type: "RIVALRY", intensity: 0.55, sinceGame: 30 },
+    { partner: "Dash Okoye", type: "FRIENDSHIP", intensity: 0.6, sinceGame: 5 },
+  ],
+  fame: {
+    heat: 78, immortality: 3, immortalityLabel: "Rising star",
+    channels: [
+      { label: "wpa spine", value: 34 },
+      { label: "iconic", value: 22 },
+      { label: "status", value: 12 },
+      { label: "defensive", value: 6 },
+      { label: "role", value: 4 },
+    ],
+  },
+};
+
+const DETAIL_STAD: PlayerDetailVM = {
+  age: 31, bats: "L", throws: "L", grade: "C+",
+  bio: "A veteran bat losing his role — and, lately, his cool.",
+  valueTrend: [
+    { checkpoint: "Draft", value: 690_000 },
+    { checkpoint: "CP1", value: 640_000 },
+    { checkpoint: "CP2", value: 560_000 },
+    { checkpoint: "CP3", value: 480_000 },
+    { checkpoint: "Now", value: 420_000 },
+  ],
+  ratings: [
+    { label: "Power", base: 74, current: 70 },
+    { label: "Contact", base: 66, current: 61 },
+    { label: "Speed", base: 48, current: 44 },
+    { label: "Fielding", base: 55, current: 53 },
+    { label: "Arm", base: 60, current: 60 },
+  ],
+  traitsCurrent: ["Mr. Wrong"],
+  traitTimeline: [
+    { valence: "lose", trait: "Clutch", atGame: 41 },
+    { valence: "gain", trait: "Mr. Wrong", displaces: "Utility", atGame: 41 },
+  ],
+  ties: [
+    { partner: "B. Cole (Mgr)", type: "FEUD", intensity: 0.8, sinceGame: 44 },
+    { partner: "Cy Vane", type: "FRIENDSHIP", intensity: 0.5, sinceGame: 8 },
+    { partner: "Front office", type: "HISTORY", intensity: 0.4, sinceGame: 49, potential: true },
+  ],
+  fame: {
+    heat: 22, immortality: 1, immortalityLabel: "Local",
+    channels: [
+      { label: "wpa spine", value: 8 },
+      { label: "iconic", value: 3 },
+      { label: "status", value: 9 },
+      { label: "defensive", value: 1 },
+      { label: "role", value: 1 },
+    ],
+  },
+};
+
 const HUB: Record<string, HubVM> = {
   PC: {
     standings: LEAGUE,
@@ -329,7 +413,7 @@ const HUB: Record<string, HubVM> = {
       { id: "p1", number: "21", position: "SP", name: "Rafa Fenomeno", war: 5.8, salary: 1_200_000, trueValue: 1_460_000, valueGap: 260_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 74, state: "Locked in · ▲ rising", trend: "up", arc: "up from 66 over 3 weeks · baseline 50", history: [
         { delta: 5, reason: "Complete-game shutout", week: "Week 8" },
         { delta: 4, reason: "Named pitcher of the week", week: "Week 7" },
-      ] } },
+      ] }, detail: DETAIL_FENOMENO },
       { id: "p2", number: "7", position: "CF", name: "Dash Okoye", war: 5.1, salary: 960_000, trueValue: 1_310_000, valueGap: 350_000, designation: { label: "MVP", kind: "gold" }, morale: { value: 69, state: "Happy · ▲ rising", trend: "up", history: [
         { delta: 3, reason: "20th stolen base", week: "Week 8" },
       ] } },
@@ -339,7 +423,7 @@ const HUB: Record<string, HubVM> = {
         { delta: -6, reason: "Trade rumor in the Tootwhistle Times", week: "Week 7 · Front office" },
         { delta: 4, reason: "Walk-off homer vs River Rats", week: "Week 6 · On the field" },
         { delta: -7, reason: "Passed over for the All-Star nod", week: "Week 5 · League" },
-      ] } },
+      ] }, detail: DETAIL_STAD },
       { id: "p5", number: "44", position: "C", name: "Cy Vane", war: 0.4, salary: 1_400_000, trueValue: 300_000, valueGap: -1_100_000, designation: { label: "Albatross", kind: "albatross" }, morale: { value: 41, state: "Sulking · ▼ falling", trend: "down", history: [
         { delta: -5, reason: "Lost the starting job", week: "Week 7" },
       ] } },
