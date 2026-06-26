@@ -29,6 +29,7 @@ import {
   resolveExhibitionLeagueId,
 } from './gameStorage';
 import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
+import { getFranchiseConfig } from './franchiseManager';
 import { getEffectivePlayer } from './playerOverrides';
 import { getFranchisePlayer } from './franchisePlayerStorage';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
@@ -664,6 +665,69 @@ export async function persistDarkTradeDemandMoraleForCompletedGame(
   return { status: 'written', written };
 }
 
+export async function persistDarkParkRecordMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  scope: PersistedTrueValueScope,
+  stadiumChanges: FranchiseStadiumRecordChange[],
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<void> {
+  if (!isFranchisePhase2MoraleEnabled()) return;
+
+  const config = await getFranchiseConfig(scope.franchiseId);
+  if (!config) return;
+
+  const checkpoint = fameMoraleSourceCheckpoint(gameState, archiveOptions);
+
+  for (const change of stadiumChanges) {
+    try {
+      if (change.newLeaderPlayerIds.length !== 1) continue;
+      const holderId = change.newLeaderPlayerIds[0];
+      const homeTeamId = config.stadiums?.find((stadium) => stadium.stadiumId === change.stadiumId)?.teamId;
+      if (!homeTeamId) continue;
+
+      const player = await getFranchisePlayer(scope.franchiseId, holderId);
+      const holderTeamId = sourceTeamIdForFameMorale(gameState, holderId, player);
+      if (holderTeamId !== homeTeamId) continue;
+
+      const currentPlayerMorale = await currentMoraleValue(scope, 'player', holderId, player?.morale ?? 50);
+      const currentFanMorale = await currentMoraleValue(scope, 'team-fan', homeTeamId, 50);
+      const consequence = composeMoraleConsequence(
+        { type: 'PARK_RECORD_SET' },
+        player?.personality,
+        resolveHiddenModifiers(player?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+      const sourceEventId = [
+        'park-record-set',
+        scope.franchiseId,
+        scope.seasonId,
+        scope.statsScopeId,
+        checkpoint,
+        change.stadiumId,
+        change.recordType,
+        change.recordKey,
+        change.changeKind,
+        holderId,
+      ].join(':');
+
+      await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: scope.franchiseId,
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        seasonNumber: scope.seasonNumber,
+        playerId: holderId,
+        teamId: homeTeamId,
+        consequence,
+        sourceEventId,
+        timestamp: String(gameState.savedAt ?? gameState.gameId),
+      });
+    } catch (error) {
+      console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', error);
+    }
+  }
+}
+
 const STORE_BACKED_DESIGNATION_TYPES: FranchiseDesignationType[] = [
   'TEAM_MVP',
   'ACE',
@@ -1186,6 +1250,13 @@ export async function processCompletedGame(
             );
           } catch (e) {
             console.warn('[Fame] dark fame compute skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2MoraleEnabled()) {
+          try {
+            await persistDarkParkRecordMoraleForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
+          } catch (e) {
+            console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         if (isFranchisePhase2FlashpointEnabled()) {

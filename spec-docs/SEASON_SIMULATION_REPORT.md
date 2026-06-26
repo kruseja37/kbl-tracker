@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 9396765:2dc07efe |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9459695:9e7cbed6 |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9459695:9e7cbed6 |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 9425360:10944d37 |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9492375:0f21226d |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9492375:0f21226d |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -30,13 +30,13 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
   "recoveredGroups": 2,
   "recoveredGroupsNetZero": 2,
   "nonZeroRecoveredGroups": 0,
-  "hitDeltaTotal": 257,
+  "hitDeltaTotal": 244,
   "recoveryDeltaTotal": 11,
   "chargedDeltaTotal": 0,
   "chargedPositiveDeltas": 3,
   "chargedNegativeDeltas": 3,
   "recoveredGroupsNetDelta": 0,
-  "ratingsDevelopmentRows": 429,
+  "ratingsDevelopmentRows": 427,
   "moraleToWarLeaks": 0,
   "sampleSourceEventIds": [
     "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-43",
@@ -280,7 +280,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
       "count": 85
     },
     "teamFan": {
-      "min": 10,
+      "min": 29,
       "max": 99,
       "count": 6
     },
