@@ -32,5 +32,24 @@ For each archetype, the sim builds the **best-achievable 22-man roster** it can 
 ## Gap-map (play styles covered by a *balanced* option)
 Power, contact, speed, glove/defense, power-pitching, finesse-pitching → all covered and balanced. Thin spots (candidates only if we want more variety): a combined **pitching-and-defense** run-prevention identity (nothing boosts both at once), deeper **bullpen** depth (only one option), a richer **small-ball** identity. The baseline says we don't strictly need many new ones.
 
+## Deriving balanced trades from the value logic (the sim IS the oracle)
+
+The sim builds rosters on the real IV values + real tax curves, so its deviation % **is** the true value-exchange-rate between stats — measured the way the IV engine actually prices talent, not a back-of-envelope ratio. (Proof it matters: by luxury-penalty weighting, the Big D defense boost looks 1.65× *richer* than its rotation nerf, yet the sim correctly shows the team comes out slightly *weak* — paper-math misleads because fielding room is nearly unusable.) The simulator now accepts **custom/tunable archetype profiles** (`rawShift` = fractional cap shifts keyed by `group/stat`) and a uniform **`scale`** lever, so any trade can be dialled continuously to the balanced (~0%) point.
+
+### Defense First (elite defense + worse rotation) — the value finding
+Sweeping the rotation nerf against a fixed Big D defense boost (standard tier):
+
+| Rotation nerf | Defense First dev | Solvent |
+|---|---|---|
+| none (boost only) | −1.6% | yes |
+| ×0.3–0.5 (junk −6…−10%) | +2.3% | yes (0 tax) |
+| ×0.7 (junk −13%) | −1.2% | yes |
+| ×1.0 (junk −19%) | −6.1% | no |
+
+**Finding: elite defense is nearly free in value terms, so it can only "pay for" a SMALL rotation nerf.** The balanced version is *elite defense + mildly worse rotation* (junk ≈ −10%, lands ~0…+2%). A *pronounced* rotation nerf can't be funded by defense alone — you'd either accept a slightly-weak archetype (−6%, still inside the band, a legitimate glove-first identity) or pay for the big pitching sacrifice with a *valuable* boost (power/contact/velocity), not fielding. This is the general principle for authoring trades: **cheap boosts (fielding) buy little; only valuable boosts can fund a real nerf.** The sim tells us which trades are even balanceable.
+
+### Tier-generosity lever (JK idea: XBL = nerfed baseline)
+The `scale` parameter makes archetype shift magnitudes tier-dependent (XBL magnitudes = nerfed=1.0; scale standard/juiced up a few %). NOT yet swept — to do: find the max scale that keeps the set in band per tier (more pronounced identities without breaking parity). Note: scaling won't fix the "fielding is inert" issue (cheap at every tier).
+
 ## Caveat
 The roster-builder is a strong heuristic, not a proven optimum. The 31 clustered archetypes are robust; the two outliers are stable across both builder starts (confirming genuine harshness). If we later need to *prove* a tight number for a specific archetype, the builder can be hardened further (random restarts, larger candidate shortlists).

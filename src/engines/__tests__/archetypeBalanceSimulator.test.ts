@@ -91,6 +91,39 @@ describe('archetype balance simulator — workbook baseline', () => {
     expect(inBand).toBeGreaterThanOrEqual(30);
   });
 
+  it('finds the balanced boost:nerf ratio for Defense First (elite defense + worse rotation)', () => {
+    const pool = loadPool();
+    const baseSet = workbookArchetypes().filter((a) => a.name !== 'Lazer Guns' && a.name !== 'Defense First');
+
+    // Fixed defense boost (Big D fractions); sweep the rotation nerf scale k (fraction of 'Rotation
+    // Boost') to find where the sim reads ~0% — that k is the value-balanced trade.
+    const bigD = { 'hitters/FLD': 0.239316, 'hitters/ARM': 0.088496 };
+    const rotNerf = { VEL: 0.2, JNK: 0.192308, ACC: 0.173077 };
+    // eslint-disable-next-line no-console
+    console.log('\n=== Defense First sweep (fixed defense boost, varying rotation nerf), standard tier ===');
+    for (const k of [0, 0.3, 0.5, 0.7, 1.0]) {
+      const cand: SimArchetype = {
+        name: 'DefenseFirst',
+        rawShift: {
+          ...bigD,
+          'rotation/VEL': -rotNerf.VEL * k,
+          'rotation/JNK': -rotNerf.JNK * k,
+          'rotation/ACC': -rotNerf.ACC * k,
+        },
+      };
+      const report = runBalanceSim(pool, [...baseSet, cand], 'standard', 0.1);
+      const row = report.results.find((r) => r.name === 'DefenseFirst')!;
+      const dev = (row.totalIv - report.meanIv) / report.meanIv;
+      const nerfPct = (rotNerf.JNK * k * 100).toFixed(0);
+      // eslint-disable-next-line no-console
+      console.log(
+        `rotation nerf ×${k.toFixed(1)} (junk −${nerfPct}%)  →  dev ${(dev * 100).toFixed(1).padStart(6)}%   ` +
+          `tax $${Math.round(row.totalTax).toLocaleString().padStart(9)}   solvent ${row.solvent ? 'yes' : 'NO'}`,
+      );
+    }
+    expect(pool.length).toBe(440);
+  });
+
   it('summarises parity across all three tiers (juiced / standard / nerfed)', () => {
     const pool = loadPool();
     const archetypes = workbookArchetypes();

@@ -39,9 +39,32 @@ export interface SimPlayer extends ConstructionPlayer {
 /** A single archetype: one cap-modification name in the increase slot (deep, balanced bundle). */
 export interface SimArchetype {
   name: string;
-  /** increase/decrease modification-name stacks consumed by `shiftLuxuryCaps`. */
-  increase: string[];
-  decrease: string[];
+  /** increase/decrease modification-name stacks consumed by `shiftLuxuryCaps`. Omit when using rawShift. */
+  increase?: string[];
+  decrease?: string[];
+  /**
+   * Optional CUSTOM/tunable profile: fractional cap shifts keyed by `${group}/${stat}` (e.g.
+   * 'hitters/FLD': 0.24, 'rotation/JNK': -0.13). When present it overrides increase/decrease, so a
+   * trade can be dialled continuously to find the balanced (≈0% deviation) boost:nerf ratio.
+   */
+  rawShift?: Record<string, number>;
+  /** Optional uniform scale on all shifts (the tier-generosity lever, D? — XBL=1.0 baseline). */
+  scale?: number;
+}
+
+function archetypeCaps(archetype: SimArchetype, tier: TierKey): LuxuryCapRow[] {
+  const base = LUXURY_CAP_TABLES[tier];
+  const s = archetype.scale ?? 1;
+  if (archetype.rawShift) {
+    return base.map((row) => {
+      const shift = (archetype.rawShift![`${row.group}/${row.stat}`] ?? 0) * s;
+      return { ...row, cap: Math.max(0, row.cap * (1 + shift)) };
+    });
+  }
+  const shifted = shiftLuxuryCaps(base, { increase: archetype.increase ?? [], decrease: archetype.decrease ?? [] });
+  if (s === 1) return shifted;
+  // Scale the shift magnitude uniformly: base.cap * (1 + s*(shifted/base - 1)).
+  return shifted.map((row, i) => ({ ...row, cap: Math.max(0, base[i].cap * (1 + s * (row.cap / base[i].cap - 1))) }));
 }
 
 export interface ArchetypeSimResult {
@@ -249,7 +272,7 @@ export function buildBestRoster(
   tier: TierKey,
   budget: number,
 ): ArchetypeSimResult {
-  const caps = shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], { increase: archetype.increase, decrease: archetype.decrease });
+  const caps = archetypeCaps(archetype, tier);
   const fitScore = makeFitScore(caps, tier);
   const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
 
