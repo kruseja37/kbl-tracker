@@ -23221,3 +23221,58 @@ The representative SIM values (spec line 206: `startBar 0.25, γ=2, δ≈1`) are
 
 **FAILURE PROTOCOL / STOP-IF:** the convex or edge piece CANNOT be made default-identity (any default shifts a value vs today) → STOP; a `TRACKER_DB_VERSION` bump or `iv_oracle.json` touch is needed → STOP; you find this is NOT distinct from A2.5/RA-5 (already built) → STOP and report; the sweep needs a new arg (it should not — `baseRatingValue` already flows) → STOP and report; a non-default franchise/ratings/L-SIM fixture regresses → STOP (defaults are leaking); you are tempted to add the §6A(c) ~25pt safety rail → DON'T (scoped out); `startBar` could be ≥ 1 at any default (division-by-zero) → it must stay `< 1` (default 0). Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: RA-6A-CONVEX ===== -->
+
+<!-- ===== CONTRACT: RA-11a ===== -->
+## CONTRACT: RA-11a — pitcher non-pitching over-expectation signal (§4A, cumulative leg, STANDALONE)
+
+**ROUTE:** `codex exec -C /Users/johnkruse/Projects/kbl-tracker` (worktree = MAIN, branch `codex/franchise-v1-next`).
+**ROLE:** Builder (Codex). Captain (Opus) audits the REAL diff + runs the authoritative FULL suite himself — your paste is never trusted.
+**Use xhigh reasoning effort.**
+
+**GOAL:** Give pitchers an over-expectation development signal for their NON-pitching ratings — **power, contact, speed, fielding (NO arm)** — so a pitcher's batting/fielding can develop at checkpoints, pooled against other pitchers (the existing SP/RP cohort). This is RA-11 **STANDALONE** (JK ruling 2026-06-26: build to the documented §4A assumption now; reconcile with the paused Mode-1 B14 §5.7 at the eventual merge). Build the **CUMULATIVE/primary** leg only; the windowed/recent-trend mirror is DEFERRED to RA-11b (it's doubly-dark and falls back gracefully — see MAKE-OR-BREAK). Fully **build-dark** behind the default-OFF Phase-2 checkpoint flag.
+
+**SOURCE OF TRUTH:** `spec-docs/RATINGS_ADJUSTMENT_SPEC.md` §4A (lines 87-94) + §10 (line 168) + DECISIONS_LOG 2026-06-22 (§4A ruling) / 2026-06-24 (`:316` RA-11/B14 cross-pin). §4A: pitcher non-pitching = **HIT (power+contact) from his batting, RUN (speed) from his baserunning, FIELD (fielding) from his fielding plays — NOT arm** (every pitcher's `arm` is structurally 0; emit NO arm signal). Peer pool keyed SP/RP (ALREADY done in `classifyRatingsPoolKey`).
+
+**GROUND FIRST (re-read from source before editing — do NOT trust this contract's line numbers blindly):**
+- `src/engines/expectedStatsCategoryRates.ts:172-185` — `toExpectedStatsCategoryRates`: the pitcher branch (`else`) calls ONLY `addPitcherRates(result, input.pitching)`, dropping batting/fielding. **THE primary edit.**
+- `src/engines/expectedStatsCategoryRates.ts:52-128` — `addHitterRates(result, batting, fielding)` = the reusable template that emits power/contact/speed/fielding category rates. **Read its EXACT emitted category set** — confirm whether it emits any `arm`-keyed category (the hitter baseRatings includes `arm`); if it does, the pitcher must NOT get an arm signal.
+- `src/utils/franchiseCheckpointSweepCompute.ts:368-379` — the pitcher `baseRatings` object is `{velocity, junk, accuracy}` ONLY. **Secondary edit:** add `power/contact/speed/fielding` (NOT arm) so the engine has pitcher player-ratings to compare the new actual rates against.
+- `src/utils/franchiseCheckpointSweepCompute.ts:381-385` — the sweep ALREADY passes `{role, batting, pitching, fielding}` for every player incl. pitchers (the substrate is at the engine's door).
+- `src/engines/checkpointWindowedCategoryRates.ts` (~line 120) — the WINDOWED/recent aggregator's pitcher map calls `toExpectedStatsCategoryRates({ role: 'pitcher', pitching })` with **NO batting/fielding**. You are NOT editing this file, but your change to the shared `toExpectedStatsCategoryRates` WILL flow through it (see MAKE-OR-BREAK null-safety).
+- `src/utils/checkpointRatingSignal.ts:114-118` — `classifyRatingsPoolKey` already returns SP/RP for pitchers (pool keying done). The engine (`expectedStatsEngine.ts`) is key-agnostic + already null-gates pitcher arm.
+
+**CONSTRAINTS:** branch-only — do NOT commit/push. Edit ONLY `src/engines/expectedStatsCategoryRates.ts` + `src/utils/franchiseCheckpointSweepCompute.ts` + their test files (`src/engines/__tests__/expectedStatsCategoryRates.test.ts`, `src/utils/tests/franchiseCheckpointSweepCompute.test.ts`) + IF needed `src/utils/tests/checkpointRatingSignal.test.ts` / `src/engines/__tests__/checkpointWindowedCategoryRates.test.ts` (the null-safety regression). **NO `TRACKER_DB_VERSION` bump** (all inputs — PlayerSeasonBatting/Fielding, batterRatings — already persist). **FROZEN read-only:** `spec-docs/reference/iv_oracle.json`. Do NOT touch `addPitcherRates`, the hitter path, `classifyRatingsPoolKey`, `expectedStatsEngine.ts`, pricing/tier/salary/IV.
+
+**EXACT CHANGES:**
+1. `expectedStatsCategoryRates.ts` — pitcher branch of `toExpectedStatsCategoryRates`:
+   ```
+   } else {
+     addPitcherRates(result, input.pitching);
+     addHitterRates(result, input.batting, input.fielding); // §4A: pitcher non-pitching power/contact/speed/fielding
+   }
+   ```
+   - **§4A NO-ARM:** ensure NO `arm`-keyed actual rate ends up in a pitcher's result. If `addHitterRates` emits an arm category, exclude it for the pitcher branch (cleanest mechanism your call: a param/flag on `addHitterRates`, or delete the arm key from `result` after the call) — OR rely on the pitcher `baseRatings` omitting `arm` + the engine's existing pitcher-arm null-gate (verify it actually null-gates so no pitcher-arm OVERLAY is ever produced). The MAKE-OR-BREAK is: **a pitcher NEVER develops an arm rating.**
+   - **NULL-SAFETY (make-or-break — see below):** `addHitterRates` MUST be a no-op when `batting`/`fielding` are absent. Confirm/guard: undefined `batting` → emit no power/contact/speed cats; undefined `fielding` → emit no fielding cats. (The hitter windowed path already calls it with `fielding` undefined, so fielding is likely already guarded; BATTING-undefined is the new case the pitcher windowed call introduces.)
+2. `franchiseCheckpointSweepCompute.ts` — pitcher `baseRatings`: add `power, contact, speed, fielding` (NOT `arm`) to the `isPitcher ? {...}` object.
+
+**MAKE-OR-BREAK:**
+- **Flag-OFF byte-identical (live app):** the whole sweep early-returns `dark-noop` when `isFranchisePhase2CheckpointEnabled()` is false (the default) → RA-11a never runs live. Build-dark by inheritance — NO new flag.
+- **The shared-function trap (THE make-or-break):** `toExpectedStatsCategoryRates` is called from BOTH the cumulative sweep path (passes batting+fielding → pitcher now gets the 4 non-pitching rates = the INTENDED new behavior) AND the WINDOWED/recent aggregator (`checkpointWindowedCategoryRates.ts`) pitcher map, which passes `{role:'pitcher', pitching}` with NO batting/fielding. Your change MUST leave the windowed pitcher output BYTE-IDENTICAL (pitching-only) — i.e. `addHitterRates(undefined, undefined)` emits NOTHING. If `addHitterRates` throws or emits on undefined batting, you've broken the recent leg. This null-safe no-op IS the deliberate RA-11b deferral (pitcher recent non-pitching rates stay empty → the dev engine's trend blend falls back to cumulative-only via the existing `recentSignal` finite-gate → graceful, no inconsistency).
+- **Additive only:** the hitter path unchanged; `addPitcherRates` (pitcher PITCHING cats velocity/junk/accuracy) unchanged; only ADD pitcher power/contact/speed/fielding. No category-key collision (hitter `power*/contact*/speed*/fielding*` vs pitcher `pitching*`).
+- NO DB bump, NO oracle touch, NO B14 dependency (standalone per JK), NO leak to salary/IV/live paths.
+
+**TEST:**
+- `expectedStatsCategoryRates.test.ts`: a pitcher input `{role:'pitcher', batting, pitching, fielding}` now yields BOTH the pitching cats (unchanged values) AND power/contact/speed/fielding actual rates (pin the exact rates via the `addHitterRates` math); a pitcher input with NO batting/fielding (`{role:'pitcher', pitching}`) yields **pitching-only** (the windowed no-op — the make-or-break); NO arm-keyed cat for a pitcher; the hitter path is a byte-identical regression.
+- `franchiseCheckpointSweepCompute.test.ts`: with the Phase-2 flag ON, a pitcher checkpoint now produces development overlays for power/contact/speed/fielding (when sample suffices) and NONE for arm; flag OFF → dark-noop (no overlays). Hitter overlays unchanged.
+- If `checkpointWindowedCategoryRates.test.ts` has a pitcher recent-rates assertion, confirm it stays pitching-only (the null-safe no-op).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0.  2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsCategoryRates.test.ts src/engines/__tests__/checkpointWindowedCategoryRates.test.ts src/utils/tests/checkpointRatingSignal.test.ts src/utils/tests/franchiseCheckpointSweepCompute.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — feeds `processCompletedGame` via the sweep, transitive partial-mock risk) → report the FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` order-flakes — solo-pass to confirm). Any LIVE (flag-off) fixture or a hitter/pitching fixture moving → STOP.
+5. `git --no-pager diff --stat` → only `expectedStatsCategoryRates.ts` + `franchiseCheckpointSweepCompute.ts` + the test files. No `iv_oracle.json`/`trackerDb.ts`/salary/IV/`addPitcherRates`-semantics/`classifyRatingsPoolKey` change.
+
+**FORMAT:** (1) files+lines; (2) the pitcher-branch addHitterRates call + no-arm handling + null-safety, the pitcher baseRatings additions, an explicit statement that flag-off is byte-identical + the windowed pitcher path is byte-identical (null-safe no-op) + hitter/pitching paths unchanged + no pitcher-arm development + no DB/oracle; (3) exact verification output; (4) "RA-11a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the windowed pitcher path is NOT byte-identical / `addHitterRates(undefined,...)` throws or emits → STOP (fix null-safety); a pitcher develops an arm rating → STOP (§4A forbids it); a `TRACKER_DB_VERSION` bump or `iv_oracle.json` touch is needed → STOP; a LIVE (flag-off) or hitter or pitcher-PITCHING fixture moves → STOP; you cannot reuse `addHitterRates` cleanly and would rewrite the per-category math → STOP and report (the spec wants the hitter-identical decomposition); the pitcher fielding-credit path turns out absent so the FIELD signal self-gates to frozen → that is ACCEPTABLE (the min-sample valve makes it a clean no-op, the intended §4A RP self-gating) — build HIT/RUN/FIELD anyway and NOTE it, do not block. Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: RA-11a ===== -->
