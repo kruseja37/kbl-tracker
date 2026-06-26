@@ -149,6 +149,18 @@ const LineupsTabPreview = lazy(() =>
 const InGameAdvisorPreview = lazy(() =>
   import("./src_figma/app/pages/InGameAdvisorPreview").then((module) => ({ default: module.InGameAdvisorPreview })),
 );
+const ConstructionRailPreview = lazy(() =>
+  import("./src_figma/app/pages/ConstructionRailPreview").then((module) => ({ default: module.ConstructionRailPreview })),
+);
+const EndOfDraftStaffingPreview = lazy(() =>
+  import("./src_figma/app/pages/EndOfDraftStaffingPreview").then((module) => ({ default: module.EndOfDraftStaffingPreview })),
+);
+const ScoutHirePreview = lazy(() =>
+  import("./src_figma/app/pages/ScoutHirePreview").then((module) => ({ default: module.ScoutHirePreview })),
+);
+const MyTeamsSwitcherPreview = lazy(() =>
+  import("./src_figma/app/pages/MyTeamsSwitcherPreview").then((module) => ({ default: module.MyTeamsSwitcherPreview })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -286,6 +298,10 @@ function App() {
         <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
         <Route path="/__preview/lineups" element={<LineupsTabPreview />} />
         <Route path="/__preview/ingame-advisor" element={<InGameAdvisorPreview />} />
+        <Route path="/__preview/construction-rail" element={<ConstructionRailPreview />} />
+        <Route path="/__preview/staffing" element={<EndOfDraftStaffingPreview />} />
+        <Route path="/__preview/scout-hire" element={<ScoutHirePreview />} />
+        <Route path="/__preview/my-teams" element={<MyTeamsSwitcherPreview />} />
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />

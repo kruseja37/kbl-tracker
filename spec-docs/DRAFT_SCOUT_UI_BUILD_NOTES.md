@@ -12,12 +12,28 @@
 > `#E8E8D8` cream). Building NON-DESTRUCTIVE previews first (`/__preview/*`);
 > wiring to the engine comes later. JK 2026-06-26.
 
-## Built
-- **Archetype picker** (`ArchetypePicker.tsx` + `teamArchetypeCatalog.ts`,
-  preview `/__preview/draft-archetypes`): two-pick MLB/farm model over the 15
-  historical identities; cards show family tag + era + lore + plain
-  +boost→−sacrifice (no magnitudes — still tuning); reserved "strong vs / weak
-  vs" matchup line (empirical, post-Season-1).
+## Built — ALL §7 screens (mock-fed previews) ✅
+| Screen | Route |
+|---|---|
+| Archetype picker (15 identities, MLB+farm two-pick) | `/__preview/draft-archetypes` |
+| Draft Setup hub (seats/GM, ownership, shills, identity) | `/__preview/draft-setup` |
+| Season-rules (custom games/innings, cadence, intensity, conferences) | `/__preview/season-rules` |
+| Draft-guide overlay (afford badge + covered scout read + bargain/trap) | `/__preview/draft-guide` |
+| In-season scout panel (WIN-value recs) | `/__preview/scout-panel` |
+| Lineups tab (vs opp SP, rotation-aware, editable) | `/__preview/lineups` |
+| In-game advisor (separate moment, win-impact) | `/__preview/ingame-advisor` |
+| Construction rail + "this locks your franchise" freeze | `/__preview/construction-rail` |
+| End-of-draft staffing (manager + reporter + recap) | `/__preview/staffing` |
+| Scout-draft hire (pool, specialty, eye) | `/__preview/scout-hire` |
+| "My teams" clubhouse switcher (couch-coop) | `/__preview/my-teams` |
+
+All build-green, zero console errors, neo-brutalist KBL style. Wiring to the
+engines + folding into the live screens (LeagueBuilderDraftSetup, LeagueBuilder
+Rules, FranchiseHome, the auction/farm pages, GameTracker) comes later. The
+archetype display catalog (`teamArchetypeCatalog.ts`) should map key→the engine's
+canonical `src/data/historicalArchetypes.ts` (Codex, committed) at wire-up.
+
+### Notes on the centerpiece
 
 ## Screen list (roadmap §7) — to build
 1. Construction rail + explicit "this locks your franchise" freeze moment.
