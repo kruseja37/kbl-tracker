@@ -23723,3 +23723,72 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF wiring the import/tap forces a change to a forbidden file.
 - A correct BLOCK is GOOD. Do NOT consume `changes[]`, do NOT add fame/morale/reporter, do NOT flip the flag's default.
 <!-- ===== END CONTRACT: A1.5d-1b ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1c ===== -->
+# CONTRACT A1.5d-1c — §4 fame-bearing park-record catalog (DETECT, build-dark, single storage file)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+Third slice of A1.5d hop-1 (DETECT). hop-1a returned `changes[]`; hop-1b wired the per-game tap+flag. This hop ADDS the §4 FAME-BEARING record types to the candidate builder so the records become meaningful — and they automatically flow through hop-1a's existing `changes[]` SET/OVERTAKE detection (no detection change needed). **Build ONLY the record catalog + builder, in ONE production file (`franchiseStadiumRecordsStorage.ts`) + its test.** Do NOT consume `changes[]` (hop-2 fame swap is the first consumer), do NOT touch fame/morale/reporter/Almanac/rivalry, do NOT add a `min-sample` valve, do NOT build §8 display.
+
+## CRITICAL DESIGN — read this first (Captain re-verified every field from source 2026-06-26)
+The handoff suggested "extend the foundation input with `getGameEvents` loads + thread hrDistance/WPA onto `FranchiseSprayChartRow`." **That is UNNECESSARY and is NOT what to build.** Verification: the §4 source data is ALREADY INLINE on the `CompletedGameRecord[]` that the tap passes to the upsert (`upsertFranchiseStadiumRecordsFromFoundationReport(report, { completedGames })`). So compute the §4 records **directly from `options.completedGames`** inside the candidate builder. This touches ONLY `franchiseStadiumRecordsStorage.ts` (+ test) — NO `franchiseStadiumFoundation.ts` change (no read-only-contract bump), NO tap change, NO flag change, NO DB change. It is purely additive: the existing storage tests pass bare `completedGame()` fixtures that carry NO inline `atBatEvents`/`playerWpaTotals`, so they produce ZERO new records and stay green (the `toHaveLength(3)` idempotency test MUST remain 3 — do NOT weaken it).
+
+## GROUND ANCHORS (all Captain-verified from source — re-read at point of use; do NOT re-discover)
+- **`CompletedGameRecord`** (`src/utils/gameStorage.ts:572`): `.atBatEvents?: AtBatEvent[]` (`:626`), `.playerWpaTotals?: KblWpaPlayerTotal[]` (`:624`), `.stadiumId?: string|null` (`:595`), `.stadiumName?: string|null` (`:594`), `.finalScore` (`:601`). Both `atBatEvents` + `playerWpaTotals` are archived inline on each game and returned by `getRecentGames` (the tap's source). They may be `undefined`/`[]` for some games — guard with `?? []`.
+- **`AtBatEvent`** (`src/utils/eventLog.ts:210`): `.result: AtBatResult` (`:226`); `.wpa: number` (`:248`, **batter's-team perspective** — positive = batter helped his team); `.batterId`/`.batterName`/`.batterTeamId` (`:218-220`); `.pitcherId`/`.pitcherName`/`.pitcherTeamId` (`:221-223`); `.batterContext?.handedness?: 'L'|'R'|'S'` (`:322`); `.enrichment?.hrDistance?: number` (`:436`); play context `.inning`/`.halfInning`/`.outs`/`.awayScore`/`.homeScore` (`:231-236`); `.undoneAt?` (`:215`); `.eventId` (`:211`).
+- **HR detection:** `result === 'HR' || result === 'ITPHR'` (`AtBatResult`, `src/types/game.ts:13`; `'HR'`=over-fence, `'ITPHR'`=inside-the-park).
+- **`KblWpaPlayerTotal`** (`src/utils/kblWpaAttribution.ts:57`): `.playerId`/`.playerName`/`.teamId`/`.totalWpa`/`.battingWpa`/`.pitchingWpa` (`:58-63`).
+- **Candidate plumbing** (`src/utils/franchiseStadiumRecordsStorage.ts`): `interface RecordCandidate` (`:86-99`); `buildCandidatesFromFoundation(report, completedGames, blockers)` (`:528`) currently returns `[...scoreRecordCandidates(report.scope, completedGames, blockers), ...sprayCandidates(report.sprayCharts.rows)]`; `scoreRecordCandidates` (`:337`) shows the canonical per-stadium grouping + `sameScope`/`gameIsComplete`/`hasText(game.stadiumId)` guards to REUSE; `recordFromCandidate` (`:291`) + the upsert loop (`:565-588`) do the generic `changes[]` SET/OVERTAKE detection on `leaderPlayerIds.length === 1` — the new records inherit it for free; `candidateSummary` (`:267`) has a safe default branch (set explicit `evidenceSummary` on every new candidate so it is never hit).
+- **No external consumers of `FranchiseStadiumRecordType`** (only this file + the pass-through tap) → adding literals is safe; NO exhaustive switch anywhere breaks.
+- §4 polarity table (STADIUM_ANALYTICS_SPEC_V2 §4): farthest-HR RHB/LHB = +; most-HR-here-season = +; most-HR-**allowed** = −; highest-cum-WPA position/pitcher = +; lowest-cum-WPA position/pitcher = −; largest +single-play-WPA-swing = +; largest −single-play-WPA-swing = −. (Existing run/spray/no-hitter/perfect-game = NOT fame-bearing → polarity 0.)
+
+## EXPECTED OUTPUT — `src/utils/franchiseStadiumRecordsStorage.ts`
+1. **Extend `FranchiseStadiumRecordType`** (`:11`) with the 10 new literals:
+   `'farthest-hr-rhb' | 'farthest-hr-lhb' | 'most-hr-here-season' | 'most-hr-allowed-pitcher' | 'highest-cumulative-wpa-position' | 'lowest-cumulative-wpa-position' | 'highest-cumulative-wpa-pitcher' | 'lowest-cumulative-wpa-pitcher' | 'largest-positive-wpa-swing' | 'largest-negative-wpa-swing'`.
+2. **Add + export** `export const FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<FranchiseStadiumRecordType, 1 | -1 | 0> = { … }` — the 8 existing types → `0`; the 10 new per the §4 table above (+1 / −1). (This is the seam hop-2 reads; unconsumed here.)
+3. **Add a new builder** `function fameBearingCandidates(scope: FranchiseStadiumRecordsScopeInput, completedGames: CompletedGameRecord[], blockers: string[]): RecordCandidate[]`:
+   - Filter to scoped + complete games with a non-empty `stadiumId` (REUSE `sameScope(scope, game)` + `gameIsComplete(game)` + `hasText(game.stadiumId)`; push a blocker + skip on scope/stadium mismatch exactly like `scoreRecordCandidates`). Group games by `game.stadiumId`. `stadiumName` = first game with `hasText(game.stadiumName)` (mirror `:360`).
+   - Per stadium, iterate the stadium's games' `atBatEvents ?? []` (skip `event.undoneAt`) and `playerWpaTotals ?? []`, and emit these candidates (recordKey `'leader'` for all; `value`/`valueLabel`/`leaderTeamIds`/`leaderPlayerIds`/`leaderPlayerNames`/`sourceGameIds`/`evidenceIds`/explicit `evidenceSummary` filled). Emit a candidate ONLY when there is at least one qualifying datum (no qualifying HR → no farthest/most-HR candidate, etc.):
+     - **`farthest-hr-rhb`** / **`farthest-hr-lhb`**: among HRs (HR|ITPHR) with `typeof enrichment.hrDistance === 'number' && Number.isFinite(...)` AND `batterContext.handedness === 'R'` (rhb) / `'L'` (lhb), pick the MAX distance; leader = that batter; `value` = distance (feet). **Switch hitters (`'S'`) and null/undefined handedness are EXCLUDED from BOTH handedness distance records** (per-PA stance is not in the data — documented conservative default). Ties (equal max distance, different batters) → multiple `leaderPlayerIds` (silent at the changes layer).
+     - **`most-hr-here-season`**: count ALL HRs (HR|ITPHR, any handedness, distance irrelevant) per `batterId`; leader(s) = max count; `value` = count.
+     - **`most-hr-allowed-pitcher`** (polarity −): count ALL HRs per `pitcherId`; leader(s) = max count; `value` = count. `leaderTeamIds` = the pitcher's team.
+     - **`highest-cumulative-wpa-position`** / **`lowest-cumulative-wpa-position`**: per playerId, sum `(totalWpa - pitchingWpa)` across the stadium's `playerWpaTotals` rows (the position contribution; a two-way player's pitching is excluded here). Eligible = players with ≥1 row at the stadium. highest = MAX-sum holder; lowest = MIN-sum holder. `value` = the sum (may be negative). (A stadium with ≥1 eligible position-WPA player yields both a highest and a lowest candidate; if only one eligible player, highest==lowest holder is fine — both fire for that sole player.)
+     - **`highest-cumulative-wpa-pitcher`** / **`lowest-cumulative-wpa-pitcher`**: per playerId, sum `pitchingWpa`. Eligible = players with ≥1 row AND a non-zero pitching contribution? — NO, keep it simple: eligible = players with ≥1 `playerWpaTotals` row at the stadium (pitchingWpa defaults 0). highest = MAX, lowest = MIN. (Documented: a pure position player sums pitchingWpa 0; if every eligible player is 0 the holder is still well-defined — pick deterministically by the max/min then `playerId` tiebreak via the existing sole/tie logic.)
+     - **`largest-positive-wpa-swing`** (polarity +) / **`largest-negative-wpa-swing`** (polarity −): over the stadium's at-bat events (`!undoneAt`), pick the play with the MAX `wpa` (positive-swing) and the MIN `wpa` (negative-swing), **batter-attributed** (leader = `batterId`). Emit the positive-swing candidate ONLY if the max `wpa > 0`; the negative-swing ONLY if the min `wpa < 0`. `value` = that play's `wpa`. `evidenceIds` = [that play's `eventId`]; `evidenceSummary` = play context, e.g. `` `${batterName} ${result} (inning ${inning} ${halfInning}, WPA ${wpa.toFixed(3)}) at ${stadiumName ?? stadiumId}` `` (this is the hop-4 reporter's play-context source).
+   - Determinism: when building per-player sums use a `Map` keyed by playerId and resolve ties into multiple `leaderPlayerIds` (do NOT collapse a real tie to one). Sort nothing inside the candidate (the upsert + `recordFromCandidate`/`uniqueSorted` already normalize).
+4. **Wire it in:** `buildCandidatesFromFoundation` (`:528`) returns `[...scoreRecordCandidates(...), ...sprayCandidates(...), ...fameBearingCandidates(report.scope, completedGames, blockers)]`.
+5. Do NOT change `recordFromCandidate`, the upsert loop, the `changes[]` classification, the policy flags, or what is stored. The new records ride the EXISTING machinery.
+
+## EXPECTED OUTPUT — `src/utils/tests/franchiseStadiumRecordsStorage.test.ts` (extend; reuse the `completedGame()`/`atBat()`/`foundation()`/`scope` fixtures at the top)
+Add tests that pass `completedGames` carrying inline `atBatEvents` + `playerWpaTotals` (override the `completedGame()` fixture) so the new records fire, pinning at least:
+- **farthest-hr-rhb SET then OVERTAKE:** game with a RHB HR `hrDistance:450` → `changes` has `farthest-hr-rhb` `set`, leader = that batter, value 450; a second upsert with a different RHB HR `hrDistance:460` → `overtake`, `priorLeaderPlayerIds:[A]`, `newLeaderPlayerIds:[B]`, priorValue 450 / newValue 460.
+- **switch hitter excluded:** an `'S'` HR with a distance does NOT create a farthest-hr record (rhb+lhb absent for that batter) but DOES count toward `most-hr-here-season`.
+- **blank distance:** an HR with `hrDistance: undefined` is ineligible for farthest-hr but counts toward `most-hr-here-season` / `most-hr-allowed-pitcher`.
+- **most-hr-allowed-pitcher** fires with the right pitcher leader + count.
+- **position vs pitcher cumulative WPA split:** a `playerWpaTotals` row with `totalWpa:2, pitchingWpa:1.5` → position contribution `0.5`, pitcher contribution `1.5`; assert the `highest-cumulative-wpa-position` value and the `highest-cumulative-wpa-pitcher` value are computed from the right components; prove a two-way player can hold BOTH; prove `lowest-*` picks the min holder when 2+ players.
+- **single-play swing:** max-wpa play → `largest-positive-wpa-swing` (batter leader, value = wpa, evidenceSummary contains the inning/result); min-wpa (negative) play → `largest-negative-wpa-swing`; an all-positive-WPA stadium yields NO negative-swing record.
+- **polarity map:** assert `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY['farthest-hr-rhb'] === 1`, `['most-hr-allowed-pitcher'] === -1`, `['highest-team-runs-game'] === 0`.
+- **existing tests stay green:** the `rerunning storage is idempotent` test (bare `completedGame()`, no inline atBat/WPA) STILL yields `toHaveLength(3)` — confirm you did NOT have to change it.
+
+## CONSTRAINTS
+- Touch ONLY `src/utils/franchiseStadiumRecordsStorage.ts` + `src/utils/tests/franchiseStadiumRecordsStorage.test.ts`. Do NOT touch `franchiseStadiumFoundation.ts`, the tap, `franchisePhase2Flags.ts`, `processCompletedGame.ts`, any UI, any oracle. No DB change (additive record TYPES only — no schema/store/version change; the `by_identity` index already keys on the new types' identity).
+- No `Math.random`/`Date.now()`/`new Date()` added (the upsert's existing `timestamp` path is untouched). Pure/deterministic builder.
+- Build-dark: the upsert is only called live by the flag-gated tap (default OFF) → zero live behavior change. (The upsert is also called directly by tests — expected.)
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsStorage.test.ts src/utils/tests/franchiseStadiumRecordsTap.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (this module is in the `processCompletedGame` transitive graph via the tap).
+
+## FORMAT
+Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: computed from inline `completedGames` data (NOT foundation/spray-row/getGameEvents); `franchiseStadiumFoundation.ts`/tap/flag/processCompletedGame UNTOUCHED; the idempotency `toHaveLength(3)` test unchanged; 10 new types + polarity map added; `changes[]` detection NOT modified.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF any anchor field is NOT where stated (e.g. `AtBatEvent.wpa` / `.enrichment.hrDistance` / `KblWpaPlayerTotal.pitchingWpa` / `CompletedGameRecord.playerWpaTotals` absent) — re-read and report; do NOT invent a fallback source.
+- STOP-IF building a record forces a change to `franchiseStadiumFoundation.ts`, the tap, the flag, or `processCompletedGame.ts` (it must not — the data is inline on `completedGames`).
+- STOP-IF the existing `rerunning storage is idempotent` `toHaveLength(3)` test breaks (that would mean a fixture carries inline atBat/WPA data unexpectedly — report it, do NOT weaken the assertion).
+- A correct BLOCK is GOOD. Do NOT consume `changes[]`, do NOT add fame/morale/reporter, do NOT build §8 display, do NOT add a min-sample valve.
+<!-- ===== END CONTRACT: A1.5d-1c ===== -->
