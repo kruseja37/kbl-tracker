@@ -2,8 +2,9 @@
  * fenway-theme.css — KBL "Aged Green Monster" design layer (team-lens hub)
  * ----------------------------------------------------------------------------
  * The franchise hub redesign (JK-approved 2026-06-25): an aged Fenway manual
- * scoreboard. Real chalk (Chalkduster) for every board label/score/number/button;
- * Mom's Typewriter for reporter content only. Palette = official KBL 8 (color_palette.md). Team color
+ * scoreboard. Real chalk (Creamy Chalk, bundled, CAPS-ONLY → board renders all-caps)
+ * for every board label/score/number/button; Mom's Typewriter for reporter content
+ * only. Palette = official KBL 8 (color_palette.md). Team color
  * lives ONLY in the identity banner (--fen-tp / --fen-ts, set inline per club);
  * the board itself stays white & yellow chalk — your club yellow, rival red.
  *
@@ -33,12 +34,14 @@
   --fen-tp: #4A5950;
   --fen-ts: #E3C099;
   /* fonts */
-  /* the board's "chalk" voice = REAL chalk (Chalkduster) so the board reads as
+  /* the board's "chalk" voice = REAL chalk (Creamy Chalk) so the board reads as
    * hand-chalked on the Green Monster, not typewritten (JK ruling 2026-06-26: the
-   * board must contrast hard with the reporter's typewriter; chalk.otf is still the
-   * rejected childish scrawl). Chalkduster is a macOS system face; falls back to Tox
-   * Typewriter (the GameTracker chalkboard font) then Courier off-Mac. */
-  --fen-chalk-font: 'Chalkduster', 'Tox Typewriter', 'Courier New', monospace;
+   * board must contrast hard with the reporter's typewriter). Creamy Chalk is a
+   * BUNDLED webfont (@font-face in src/index.css) used board-wide — note it is
+   * CAPS-ONLY (lowercase maps to caps), so the whole board renders all-caps, which
+   * JK approved for the scoreboard feel; digits render cleanly. Falls back to
+   * Chalkduster (macOS) → Tox Typewriter → Courier. chalk.otf stays rejected. */
+  --fen-chalk-font: 'Creamy Chalk', 'Chalkduster', 'Tox Typewriter', 'Courier New', monospace;
   --fen-type: 'Moms Typewriter', 'Courier New', monospace;
 }
 
