@@ -120,6 +120,11 @@ const LeagueBuilderDraftSetup = lazy(() =>
     default: module.LeagueBuilderDraftSetup,
   })),
 );
+const DraftSetupArchetypePreview = lazy(() =>
+  import("./src_figma/app/pages/DraftSetupArchetypePreview").then((module) => ({
+    default: module.DraftSetupArchetypePreview,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -250,6 +255,7 @@ function App() {
       <Routes>
         {/* Main Menu - Figma Design */}
         <Route path="/" element={<AppHome />} />
+        <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
