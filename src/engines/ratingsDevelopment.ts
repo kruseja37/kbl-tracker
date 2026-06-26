@@ -40,11 +40,16 @@ export interface RatingsDevelopmentTuning {
   shiftThreshold: number;
   maxAbsDelta: number;
   trendTiltWeight: number;
+  startBar: number;
+  convexGamma: number;
+  edgeCompressionDelta: number;
   ageCurveSlopeByBand: Record<ExpectedStatsAgeBand, number>;
   ageSteepnessByRatingKey: Record<ExpectedStatsRatingKey, number>;
 }
 
 // §16 SIM-TUNE placeholders — shape locked, numbers owned by the Simulation Gate.
+// §6A representative sim values are startBar 0.25 / gamma 2 / delta 1;
+// v1 defaults stay identity at 0 / 1 / 0 while build-dark.
 export const RATINGS_DEVELOPMENT_TUNING: RatingsDevelopmentTuning = {
   baseDeltaScale: 3,
   // Placeholder: raw TV-delta magnitude that maps to a full +/-1 signal.
@@ -57,6 +62,9 @@ export const RATINGS_DEVELOPMENT_TUNING: RatingsDevelopmentTuning = {
   shiftThreshold: 0.75,
   maxAbsDelta: 6,
   trendTiltWeight: 0,
+  startBar: 0,
+  convexGamma: 1,
+  edgeCompressionDelta: 0,
   // §16 age-curve gravity placeholders: prime band is neutral; young/old tails pull the move.
   ageCurveSlopeByBand: {
     '18-21': 0.8,
@@ -114,11 +122,17 @@ export function computeRawRatingDelta(
   input: { performanceSignal: number; playerMorale: number },
   tuning: RatingsDevelopmentTuning = RATINGS_DEVELOPMENT_TUNING,
 ): number {
-  const performanceSignal = clamp(input.performanceSignal, -1, 1);
+  const r = clamp(input.performanceSignal, -1, 1);
+  const absR = Math.abs(r);
+  const convexSignal =
+    absR < tuning.startBar
+      ? 0
+      : Math.sign(r) *
+        Math.pow((absR - tuning.startBar) / (1 - tuning.startBar), tuning.convexGamma);
   const centeredMorale =
     (clamp(input.playerMorale, 0, 100) - tuning.neutralMorale) / tuning.neutralMorale;
   const moraleMultiplier =
-    performanceSignal >= 0
+    r >= 0
       ? 1 + (centeredMorale * tuning.moraleWeightUp)
       : 1 - (centeredMorale * tuning.moraleWeightDown);
   const clampedMultiplier = clamp(
@@ -127,7 +141,7 @@ export function computeRawRatingDelta(
     tuning.moraleMultiplierMax,
   );
 
-  return tuning.baseDeltaScale * performanceSignal * clampedMultiplier;
+  return tuning.baseDeltaScale * convexSignal * clampedMultiplier;
 }
 
 export function computeCheckpointRatingDevelopment(
@@ -151,7 +165,12 @@ export function computeCheckpointRatingDevelopment(
   const ageGravity =
     tuning.ageCurveSlopeByBand[input.ageBand ?? '25-31'] *
     ageSteepnessForRatingKey(input.ratingKey, tuning);
-  const signedMove = rawDelta + ageGravity;
+  const ratingForEdge = clamp(input.baseRatingValue, 0, 99);
+  const edgeBase =
+    rawDelta >= 0 ? (99 - ratingForEdge) / 99 : ratingForEdge / 99;
+  const edgeFactor = Math.pow(edgeBase, tuning.edgeCompressionDelta);
+  const edgedDelta = rawDelta * edgeFactor;
+  const signedMove = edgedDelta + ageGravity;
   const cappedRaw = clamp(signedMove, -tuning.maxAbsDelta, tuning.maxAbsDelta);
   const confidenceScaled = cappedRaw * clamp(input.confidence ?? 1, 0, 1);
   const dampener = applyFanMoraleDampener(
