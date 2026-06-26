@@ -742,8 +742,8 @@ describe('franchise WAR awards engine', () => {
       finalized: false,
     });
     expect(award?.candidates).toEqual([
-      { playerId: 'mgr-b', teamId: null, score: 0.625, marginToWinner: 0 },
-      { playerId: 'mgr-a', teamId: null, score: 0.375, marginToWinner: -0.25 },
+      { playerId: 'mgr-b', teamId: null, score: 0.75, marginToWinner: 0 },
+      { playerId: 'mgr-a', teamId: null, score: 0.25, marginToWinner: -0.5 },
     ]);
     expect(award?.winnerTeamId).toBeNull();
     expect(award).not.toHaveProperty('fameWeight');

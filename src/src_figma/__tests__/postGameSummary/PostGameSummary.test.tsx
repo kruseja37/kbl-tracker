@@ -662,8 +662,8 @@ describe('PostGameSummary Component', () => {
       const overlay = await screen.findByTestId('manager-wpa-overlay');
       expect(within(overlay).getByText('MANAGER WPA OVERLAY')).toBeInTheDocument();
       expect(within(overlay).getByText('Sox Skipper')).toBeInTheDocument();
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+18.4 pp');
-      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('-5.2 pp');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.0 pp');
+      expect(screen.getByTestId('manager-wpa-total-tigers')).toHaveTextContent('+0.0 pp');
       expect(within(screen.getByTestId('manager-wpa-card-sox')).getByText('2 (1 pending)')).toBeInTheDocument();
       fireEvent.click(
         within(screen.getByTestId('manager-tactical-trace-details-sox')).getByRole(
@@ -737,7 +737,7 @@ describe('PostGameSummary Component', () => {
       expect(dialog).toHaveTextContent('+8.0 pp');
     });
 
-    test('uses only committed managerDecisions and leaves player WPA display unchanged', async () => {
+    test('keeps tactical managerDecisions out of the deployment-only manager total', async () => {
       const { getCompletedGameById } = await import('../../utils/gameStorage');
       vi.mocked(getCompletedGameById).mockResolvedValue({
         ...mockGameData,
@@ -753,7 +753,7 @@ describe('PostGameSummary Component', () => {
       render(<PostGameSummary />);
 
       expect(await screen.findByText('+30.0 pp KBL WPA')).toBeInTheDocument();
-      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+999.9 pp');
+      expect(screen.getByTestId('manager-wpa-total-sox')).toHaveTextContent('+0.0 pp');
     });
 
     test('does not derive manager overlay rows from event-log data when completed game has no committed managerDecisions', async () => {

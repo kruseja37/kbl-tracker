@@ -586,9 +586,7 @@ function deriveManagerTotals(input: GetGamePogAwardSetInput): PogManagerValueTot
         tacticalManagerWpa,
         deploymentWpa,
         lineupDeltaWpa,
-        managerValue: roundWpa(
-          tacticalManagerWpa + deploymentWpa + lineupDeltaWpa,
-        ),
+        managerValue: roundWpa(deploymentWpa),
       };
     })
     .sort(
@@ -647,7 +645,7 @@ function buildBestManagerAward(
     value: winner.managerValue,
     valueLabel: `${formatSignedWpa(winner.managerValue)} Manager Value`,
     explanation:
-      "Best Manager from committed tactical Manager WPA, deployment WPA, and lineup delta WPA.",
+      "Best Manager from deployment WPA.",
     source: "manager_value",
   };
 }

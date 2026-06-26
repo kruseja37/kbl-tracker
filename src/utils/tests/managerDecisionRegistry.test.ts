@@ -110,7 +110,7 @@ describe("manager decision registry", () => {
       resolutionEndpoint: "same_event",
       decisionScope: "non_scoring_note",
       scoringModel: "non_scoring",
-      doubleCountingExclusions: ["active_manager_value"],
+      doubleCountingExclusions: [],
     });
     expect(MANAGER_WPA_SHARE_BY_DECISION_TYPE.defensive_alignment).toBeUndefined();
   });
@@ -230,7 +230,7 @@ describe("manager decision registry", () => {
       horizon: "inning_consequence",
       resolutionEndpoint: "runner_consequence",
       managerShare: 1,
-      doubleCountingExclusions: ["player_kbl_wpa"],
+      doubleCountingExclusions: [],
     });
   });
 });

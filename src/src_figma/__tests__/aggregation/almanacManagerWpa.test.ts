@@ -155,7 +155,7 @@ function createDeploymentStint(
     gameId: overrides.gameId ?? "game-1",
     managerId: overrides.managerId ?? "away-manager",
     teamId: overrides.teamId ?? "away",
-    deploymentRole: overrides.deploymentRole ?? "pinch_hitter_remaining",
+    deploymentRole: overrides.deploymentRole ?? "pinch_hitter_active",
     playerId: "bench-1",
     playerName: "Bench One",
     sourceEventId: "bp-1",
@@ -268,7 +268,7 @@ describe("Almanac Manager WPA aggregation", () => {
       tacticalManagerWpa: 0.2,
       deploymentWpa: 0.03,
       lineupDeltaWpa: 0.075,
-      managerValue: 0.305,
+      managerValue: 0.03,
       decisionCount: 4,
       tacticalDecisionCount: 2,
       deploymentStintCount: 1,
@@ -290,7 +290,7 @@ describe("Almanac Manager WPA aggregation", () => {
       tacticalManagerWpa: -0.12,
       deploymentWpa: 0,
       lineupDeltaWpa: -0.025,
-      managerValue: -0.145,
+      managerValue: 0,
     });
   });
 
@@ -321,6 +321,15 @@ describe("Almanac Manager WPA aggregation", () => {
               managerWpa: 0.1,
             }),
           ],
+          managerDeploymentStints: [
+            createDeploymentStint({
+              stintId: "exh-sirloins:sirloins:deployment",
+              gameId: "exh-sirloins",
+              managerId: sharedProfile.managerId,
+              teamId: "sirloins",
+              managerDeploymentWpa: 0.1,
+            }),
+          ],
         }),
         createGame({
           gameId: "exh-beewolves",
@@ -340,6 +349,15 @@ describe("Almanac Manager WPA aggregation", () => {
               decisionType: "pinch_hitter",
               displayTitle: "Pinch hitter",
               managerWpa: 0.3,
+            }),
+          ],
+          managerDeploymentStints: [
+            createDeploymentStint({
+              stintId: "exh-beewolves:beewolves:deployment",
+              gameId: "exh-beewolves",
+              managerId: sharedProfile.managerId,
+              teamId: "beewolves",
+              managerDeploymentWpa: 0.3,
             }),
           ],
         }),
@@ -388,6 +406,9 @@ describe("Almanac Manager WPA aggregation", () => {
     mockGetAllCompletedGames.mockResolvedValue([
       createGame({
         managerDecisions: [createDecision({ managerWpa: 0.42 })],
+        managerDeploymentStints: [
+          createDeploymentStint({ managerDeploymentWpa: 0.5 }),
+        ],
         managerLineupDeltas: [createLineupDelta({ managerWpa: 0.08 })],
       }),
     ]);
@@ -488,13 +509,13 @@ describe("Almanac Manager WPA aggregation", () => {
     expect(aggregate.tacticalManagerWpa).toBe(0.2);
     expect(aggregate.deploymentWpa).toBe(0.04);
     expect(aggregate.lineupDeltaWpa).toBe(-0.05);
-    expect(aggregate.managerValue).toBe(0.19);
+    expect(aggregate.managerValue).toBe(0.04);
 
     const leaderboards = buildManagerAlmanacLeaderboards([aggregate], 5);
     expect(leaderboards.tacticalManagerWpa[0].value).toBe(0.2);
     expect(leaderboards.deploymentWpa[0].value).toBe(0.04);
     expect(leaderboards.lineupDeltaWpa[0].value).toBe(-0.05);
-    expect(leaderboards.managerValue[0].value).toBe(0.19);
+    expect(leaderboards.managerValue[0].value).toBe(0.04);
   });
 
   test("ignores active or non-numeric deployment stints in manager aggregates", () => {
@@ -559,7 +580,7 @@ describe("Almanac Manager WPA aggregation", () => {
 
     expect(aggregate).toMatchObject({
       tacticalManagerWpa: 0.2,
-      managerValue: 0.2,
+      managerValue: 0,
       decisionCount: 1,
       tacticalDecisionCount: 1,
       resolvedDecisionCount: 1,

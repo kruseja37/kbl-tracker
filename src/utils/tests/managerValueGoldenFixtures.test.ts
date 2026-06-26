@@ -1403,7 +1403,7 @@ describe("Manager Value golden fixtures", () => {
     expect(legacyRows.every((row) => row.description.length > 0)).toBe(true);
   });
 
-  test("leave-pitcher-in resolves the immediate PA and scores only later kept-pitcher deployment", () => {
+  test("leave-pitcher-in resolves the immediate PA while the kept-pitcher tier stays dark", () => {
     const prompt = promptedKeepCurrent({
       eventId: `${GAME_ID}_keep_pitcher_prompt`,
       eventIndex: 20,
@@ -1453,38 +1453,23 @@ describe("Manager Value golden fixtures", () => {
       gameEnded: true,
     });
     const decision = requireDecision(state, "leave_pitcher_in", prompt.eventId);
-    const stint = requireStint(
-      state,
-      (record) => record.deploymentRole === "kept_pitcher_in",
-    );
 
     expect(decision).toMatchObject({
       resolved: true,
       resolvedAtEventId: tacticalPa.eventId,
       teamId: TEAMS.home.teamId,
     });
-    expect(stint).toMatchObject({
-      deploymentRole: "kept_pitcher_in",
-      playerId: "home-starter",
-      managerId: TEAMS.home.managerId,
-      openedAtEventIndex: tacticalPa.eventIndex,
-      tacticalExclusionEventIds: [tacticalPa.eventId],
-      linkedEventIds: [laterPa.eventId],
-    });
-    expect(stint.linkedOutcomes).toEqual([
-      expect.objectContaining({
-        eventId: laterPa.eventId,
-        role: "pitching",
-        weight: 1,
-      }),
-    ]);
-    expect(stint.rawLinkedWpa).not.toBe(0);
+    expect(
+      state.managerDeploymentStints.filter(
+        (record) => record.deploymentRole === "kept_pitcher_in",
+      ),
+    ).toEqual([]);
     expectLayerTotals(state, TEAMS.home.managerId, {
-      deployment: stint.managerDeploymentWpa,
+      deployment: 0,
     });
   });
 
-  test("let-batter-hit creates kept-position-player deployment for later batting, running, and fielding but not pitching", () => {
+  test("let-batter-hit resolves the immediate PA while the kept-position tier stays dark", () => {
     const prompt = promptedKeepCurrent({
       eventId: `${GAME_ID}_let_batter_prompt`,
       eventIndex: 30,
@@ -1632,10 +1617,6 @@ describe("Manager Value golden fixtures", () => {
             (!eventId || credit.eventId === eventId),
         )
         .reduce((sum, credit) => sum + credit.wpa, 0);
-    const stint = requireStint(
-      state,
-      (record) => record.deploymentRole === "kept_position_player_in",
-    );
 
     expect(requireDecision(state, "let_batter_hit", prompt.eventId)).toMatchObject({
       resolved: true,
@@ -1645,44 +1626,14 @@ describe("Manager Value golden fixtures", () => {
     expect(roleTotal("baserunning", laterBaserunning.eventId)).not.toBe(0);
     expect(roleTotal("fielding", laterFielding.eventId)).not.toBe(0);
     expect(roleTotal("pitching", laterPitching.eventId)).not.toBe(0);
-    expect(stint).toMatchObject({
-      deploymentRole: "kept_position_player_in",
-      tacticalExclusionEventIds: [tacticalPa.eventId],
-    });
-    expect(stint.linkedEventIds).toEqual([
-      laterBatting.eventId,
-      laterBaserunning.eventId,
-      laterFielding.eventId,
-    ]);
-    expect(stint.linkedOutcomes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          eventId: laterBatting.eventId,
-          role: "batting",
-          weight: 1,
-        }),
-        expect.objectContaining({
-          eventId: laterBaserunning.eventId,
-          role: "baserunning",
-          weight: 1,
-        }),
-        expect.objectContaining({
-          eventId: laterFielding.eventId,
-          role: "fielding",
-          weight: 0.75,
-        }),
-      ]),
-    );
     expect(
-      stint.linkedOutcomes?.some(
-        (outcome) =>
-          outcome.eventId === laterPitching.eventId &&
-          outcome.role === "pitching",
+      state.managerDeploymentStints.filter(
+        (record) => record.deploymentRole === "kept_position_player_in",
       ),
-    ).toBe(false);
+    ).toEqual([]);
   });
 
-  test("PH to PR chain keeps tactical windows out of later deployment value", () => {
+  test("PH to PR chain lets active deployment stints own their full windows", () => {
     const pinchHit = betweenPlay({
       eventId: `${GAME_ID}_ph`,
       eventIndex: 40,
@@ -1780,7 +1731,7 @@ describe("Manager Value golden fixtures", () => {
     const prDecision = requireDecision(state, "pinch_runner", pinchRun.eventId);
     const phStint = requireStint(
       state,
-      (record) => record.deploymentRole === "pinch_hitter_remaining",
+      (record) => record.deploymentRole === "pinch_hitter_active",
     );
     const prStint = requireStint(
       state,
@@ -1798,20 +1749,18 @@ describe("Manager Value golden fixtures", () => {
     expect(phStint).toMatchObject({
       closeReason: "removed",
       closedAtEventId: pinchRun.eventId,
-      tacticalExclusionEventIds: [phTacticalPa.eventId],
-      linkedEventIds: [],
-      rawLinkedWpa: 0,
+      tacticalExclusionEventIds: [],
+      linkedEventIds: [phTacticalPa.eventId],
+      rawLinkedWpa: 0.35,
     });
     expect(prStint).toMatchObject({
       closeReason: "game_end",
-      tacticalExclusionEventIds: [stealHome.eventId],
-      linkedEventIds: [prLaterPa.eventId],
-      rawLinkedWpa: 0.25,
-      managerDeploymentWpa: 0.05,
+      tacticalExclusionEventIds: [],
+      linkedEventIds: [prLaterPa.eventId, stealHome.eventId],
     });
   });
 
-  test("defensive sub and position-change stints transition after first fielding chances", () => {
+  test("defensive sub and position-change stints include their first fielding chances", () => {
     const defensiveSub = betweenPlay({
       eventId: `${GAME_ID}_def_sub`,
       eventIndex: 50,
@@ -1991,18 +1940,18 @@ describe("Manager Value golden fixtures", () => {
     expect(lfStint).toMatchObject({
       closeReason: "role_change",
       closedAtEventId: positionChange.eventId,
-      tacticalExclusionEventIds: [lfTactical.eventId],
-      linkedEventIds: [lfLater.eventId],
+      tacticalExclusionEventIds: [],
+      linkedEventIds: [lfTactical.eventId, lfLater.eventId],
     });
     expect(cfStint).toMatchObject({
       closeReason: "game_end",
-      openedAtEventIndex: cfTactical.eventIndex,
-      tacticalExclusionEventIds: [cfTactical.eventId],
+      openedAtEventIndex: positionChange.eventIndex,
+      tacticalExclusionEventIds: [],
       linkedEventIds: [cfLater.eventId],
     });
   });
 
-  test("Lineup Delta officiality distinguishes valid benchmarks, exact optimal, display-only snapshots, and batting-order deviations", () => {
+  test("retired Lineup Delta creates no official records but preserves display-only summary inputs", () => {
     const lineupEvents = [
       sparseWpaEvent({
         eventId: `${GAME_ID}_lineup_wpa`,
@@ -2025,16 +1974,9 @@ describe("Manager Value golden fixtures", () => {
         chosenLineupSnapshots: { away: chosen },
         gameEnded: true,
       });
-      const [delta] = awayLineupDeltas(state);
-
-      expect(delta).toMatchObject({
-        decisionType: "lineup_construction",
-        replacementBaselineSource: "optimal_lineup_v2",
-        optimalSnapshotId: optimal.snapshotId,
-        confidence: "high",
-      });
+      expect(awayLineupDeltas(state)).toEqual([]);
       expectLayerTotals(state, TEAMS.away.managerId, {
-        lineup: delta.managerWpa,
+        lineup: 0,
       });
     }
 
@@ -2174,11 +2116,7 @@ describe("Manager Value golden fixtures", () => {
     });
     const orderDeltas = awayLineupDeltas(orderState);
 
-    expect(orderDeltas).toHaveLength(2);
-    expect(new Set(orderDeltas.map((delta) => delta.chosenPlayerId))).toEqual(
-      new Set(["away-leadoff", "away-cf"]),
-    );
-    expect(orderDeltas.every((delta) => delta.confidence === "high")).toBe(true);
+    expect(orderDeltas).toEqual([]);
   });
 
   test("guardrail game keeps high Manager Value records out of player KBL WPA, leaderboard, and POTG paths", () => {
@@ -2301,17 +2239,17 @@ describe("Manager Value golden fixtures", () => {
 
     expect(requireDecision(state, "intentional_walk", ibb.eventId).managerWpa).not.toBe(0);
     expect(requireStint(state, (record) => record.playerId === "away-bench")).toMatchObject({
-      linkedEventIds: [phLater.eventId],
-      managerDeploymentWpa: 0.09,
+      linkedEventIds: [phTactical.eventId, phLater.eventId],
+      managerDeploymentWpa: 0.15,
     });
-    expect(awayLineupDeltas(state)).toHaveLength(1);
+    expect(awayLineupDeltas(state)).toEqual([]);
     expect(layerTotals(state, TEAMS.home.managerId).tactical).not.toBe(0);
     expect(layerTotals(state, TEAMS.away.managerId).deployment).not.toBe(0);
-    expect(layerTotals(state, TEAMS.away.managerId).lineup).not.toBe(0);
+    expect(layerTotals(state, TEAMS.away.managerId).lineup).toBe(0);
 
     const traceRows = expectStableTraceRows(state);
     expect(new Set(traceRows.map((row) => row.layer))).toEqual(
-      new Set(["tactical", "deployment", "lineup"]),
+      new Set(["tactical", "deployment"]),
     );
     expect(
       traceRows.some(

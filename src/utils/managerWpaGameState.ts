@@ -55,31 +55,35 @@ export const MANAGER_DEPLOYMENT_SHARE_BY_ROLE: Record<
   ManagerDeploymentRole,
   number
 > = {
-  pinch_hitter_remaining: 0.15,
-  pinch_runner: 0.2,
-  defensive_position: 0.2,
-  pitcher: 0.15,
-  kept_position_player_in: 0.15,
-  kept_defender_in: 0.15,
-  kept_pitcher_in: 0.15,
-  kept_in: 0.15,
-  manual_deployment: 0.1,
+  pinch_hitter_active: 0.3,
+  pinch_runner: 0.3,
+  defensive_position: 0.3,
+  pitcher: 0.3,
+  manual_deployment: 0.3,
+  untouched_starter: 0.1,
+  kept_position_player_in: 0.2,
+  kept_defender_in: 0.2,
+  kept_pitcher_in: 0.2,
+  kept_in: 0.2,
 };
 export const MANAGER_DEPLOYMENT_CAP_BY_ROLE: Record<
   ManagerDeploymentRole,
   number
 > = {
-  pinch_hitter_remaining: 0.1,
-  pinch_runner: 0.125,
-  defensive_position: 0.15,
+  // Provisional Step 1 cap: intentionally coarse while L-SIM reports binding frequency.
+  pinch_hitter_active: 0.2,
+  pinch_runner: 0.2,
+  defensive_position: 0.2,
   pitcher: 0.2,
-  kept_position_player_in: 0.15,
-  kept_defender_in: 0.15,
-  kept_pitcher_in: 0.15,
-  kept_in: 0.15,
-  manual_deployment: 0.1,
+  manual_deployment: 0.2,
+  untouched_starter: 0.2,
+  kept_position_player_in: 0.2,
+  kept_defender_in: 0.2,
+  kept_pitcher_in: 0.2,
+  kept_in: 0.2,
 };
-export const MANAGER_DEPLOYMENT_TEAM_CAP = 0.5;
+// Provisional Step 1 team cap; whole-game starter windows are expected to bind often.
+export const MANAGER_DEPLOYMENT_TEAM_CAP = 0.6;
 
 export function calculateManagerDeploymentWpa(
   deploymentRole: ManagerDeploymentRole,
@@ -102,39 +106,7 @@ export function getManagerDeploymentCreditWeight(
   deploymentRole: ManagerDeploymentRole,
   creditRole: ManagerDeploymentLinkedOutcomeRole,
 ): number {
-  if (deploymentRole === "kept_position_player_in") {
-    if (creditRole === "batting" || creditRole === "baserunning") return 1;
-    if (creditRole === "fielding") return 0.75;
-    return 0;
-  }
-
-  if (deploymentRole === "kept_defender_in") {
-    return creditRole === "fielding" ? 1 : 0;
-  }
-
-  if (deploymentRole === "kept_pitcher_in") {
-    return creditRole === "pitching" ? 1 : 0;
-  }
-
-  if (deploymentRole === "pitcher") {
-    return creditRole === "pitching" ? 1 : 0;
-  }
-
-  if (deploymentRole === "defensive_position") {
-    return creditRole === "fielding" ? 1 : 0;
-  }
-
-  if (
-    deploymentRole === "pinch_hitter_remaining" ||
-    deploymentRole === "pinch_runner"
-  ) {
-    return creditRole === "batting" ||
-      creditRole === "baserunning" ||
-      creditRole === "fielding"
-      ? 1
-      : 0;
-  }
-
+  void deploymentRole;
   return creditRole === "managing" ? 0 : 1;
 }
 
@@ -230,6 +202,13 @@ export function deriveManagerLineupDeltaSummaries(
 export function deriveManagerLineupDeltaRecords(
   input: DeriveCommittedManagerDecisionStateInput,
 ): ManagerLineupDeltaRecord[] {
+  void input;
+  return [];
+}
+
+function _deriveManagerLineupDeltaRecordsLegacy(
+  input: DeriveCommittedManagerDecisionStateInput,
+): ManagerLineupDeltaRecord[] {
   if (!input.startingLineups) {
     return [];
   }
@@ -323,10 +302,6 @@ export function deriveManagerDeploymentStintRecords(
     .filter((event) => !event.undoneAt && event.gameState)
     .sort((left, right) => left.eventIndex - right.eventIndex);
 
-  if (events.length === 0) {
-    return [];
-  }
-
   const open: OpenDeploymentStint[] = [];
   const closed: OpenDeploymentStint[] = [];
   const promptedOpeningsByEndpointId =
@@ -347,6 +322,29 @@ export function deriveManagerDeploymentStintRecords(
         closedAtEventId: event.eventId,
         closedAtEventIndex: event.eventIndex,
         closeReason: reason,
+      });
+    }
+  };
+
+  const closeStarterStintsForActiveOpening = (
+    opening: OpenDeploymentStint | null,
+    event: BetweenPlayEvent,
+  ) => {
+    if (!opening || opening.deploymentRole === "untouched_starter") return;
+    for (let index = open.length - 1; index >= 0; index--) {
+      const stint = open[index];
+      if (
+        stint.playerId !== opening.playerId ||
+        stint.deploymentRole !== "untouched_starter"
+      ) {
+        continue;
+      }
+      open.splice(index, 1);
+      closed.push({
+        ...stint,
+        closedAtEventId: event.eventId,
+        closedAtEventIndex: event.eventIndex,
+        closeReason: "role_change",
       });
     }
   };
@@ -373,6 +371,8 @@ export function deriveManagerDeploymentStintRecords(
       });
     }
   };
+
+  open.push(...buildUntouchedStarterOpenings(input));
 
   for (const entry of buildDeploymentTimeline(input, events)) {
     if (entry.kind === "at_bat") {
@@ -419,6 +419,7 @@ export function deriveManagerDeploymentStintRecords(
     }
 
     const opening = buildDeploymentOpening(input, event);
+    closeStarterStintsForActiveOpening(opening, event);
     if (opening && !hasOpenDeploymentForPlayer(open, opening)) {
       open.push(opening);
     }
@@ -569,6 +570,35 @@ export function deriveManagerDeploymentStintRecords(
   return [...scoredClosedStints, ...activeStints];
 }
 
+function buildUntouchedStarterOpenings(
+  input: DeriveCommittedManagerDecisionStateInput,
+): OpenDeploymentStint[] {
+  const firstEvent = earliestCommittedEvent(input);
+  const openedAtEventIndex =
+    firstEvent?.eventIndex !== undefined ? firstEvent.eventIndex - 1 : -1;
+
+  return (["away", "home"] as const).flatMap((side) => {
+    const teamId = side === "away" ? input.awayTeamId : input.homeTeamId;
+    const sourceEventId = `${input.gameId}:game_start:${side}`;
+    const lineup = input.startingLineups?.[side] ?? [];
+    const starters = buildStarterEntries(lineup, input.startingPitchers?.[side]);
+
+    return starters.map((starter) => ({
+      stintId: `${input.gameId}:${side}:deployment:untouched_starter:${starter.playerId}`,
+      gameId: input.gameId,
+      managerId: resolveManagerId(teamId, input),
+      teamId,
+      deploymentRole: "untouched_starter" as const,
+      playerId: starter.playerId,
+      playerName: starter.playerName,
+      trackedPosition: starter.defensivePosition,
+      sourceEventId,
+      openedAtEventIndex,
+      tacticalExclusionEventIds: [],
+    }));
+  });
+}
+
 function buildDeploymentOpening(
   input: DeriveCommittedManagerDecisionStateInput,
   event: BetweenPlayEvent,
@@ -616,7 +646,7 @@ function buildDeploymentOpening(
   });
 
   const teamId =
-    role === "pinch_hitter_remaining" || role === "pinch_runner"
+    role === "pinch_hitter_active" || role === "pinch_runner"
       ? offensiveTeamIdForHalf(event.gameState.halfInning, input)
       : defensiveTeamIdForHalf(event.gameState.halfInning, input);
 
@@ -642,21 +672,11 @@ function deploymentActivationWindowForEvent(input: {
   playerId: string;
   trackedPosition?: string;
 }): DeploymentActivationWindow {
-  const { event, playerId, role } = input;
-
-  if (role === "pinch_runner") {
-    return pinchRunnerActivationWindow(input.input, event, playerId);
-  }
-
-  const endpoint = immediateDeploymentTacticalEndpoint(input);
-  if (!endpoint) {
-    return { openedAtEventIndex: event.eventIndex };
-  }
-
-  return {
-    openedAtEventIndex: endpoint.eventIndex,
-    tacticalExclusionEventIds: [endpoint.eventId],
-  };
+  void input.input;
+  void input.role;
+  void input.playerId;
+  void input.trackedPosition;
+  return { openedAtEventIndex: input.event.eventIndex };
 }
 
 function immediateDeploymentTacticalEndpoint(input: {
@@ -679,7 +699,7 @@ function immediateDeploymentTacticalEndpoint(input: {
     );
   }
 
-  if (role === "pinch_hitter_remaining") {
+  if (role === "pinch_hitter_active") {
     return atBatEvents.find(
       (candidate) =>
         candidate.eventIndex > event.eventIndex &&
@@ -747,6 +767,15 @@ function pinchRunnerActivationWindow(
 }
 
 function groupPromptedKeepCurrentDeploymentOpenings(
+  input: DeriveCommittedManagerDecisionStateInput,
+  events: BetweenPlayEvent[],
+): Map<string, OpenDeploymentStint[]> {
+  void input;
+  void events;
+  return new Map();
+}
+
+function _groupPromptedKeepCurrentDeploymentOpeningsLegacy(
   input: DeriveCommittedManagerDecisionStateInput,
   events: BetweenPlayEvent[],
 ): Map<string, OpenDeploymentStint[]> {
@@ -1133,7 +1162,7 @@ function confidenceForLineupDelta(
 function deploymentRoleForSubstitution(
   subType: NonNullable<BetweenPlayEvent["substitution"]>["subType"],
 ): ManagerDeploymentRole | null {
-  if (subType === "pinch_hit") return "pinch_hitter_remaining";
+  if (subType === "pinch_hit") return "pinch_hitter_active";
   if (subType === "pinch_run") return "pinch_runner";
   if (subType === "defensive_replacement" || subType === "position_change") {
     return "defensive_position";
@@ -1170,15 +1199,39 @@ function latestCommittedEvent(
   ].sort((left, right) => right.eventIndex - left.eventIndex)[0];
 }
 
+function earliestCommittedEvent(
+  input: DeriveCommittedManagerDecisionStateInput,
+): { eventId: string; eventIndex: number } | undefined {
+  return [
+    ...input.atBatEvents.map((event) => ({
+      eventId: event.eventId,
+      eventIndex: event.eventIndex,
+    })),
+    ...(input.betweenPlayEvents ?? []).map((event) => ({
+      eventId: event.eventId,
+      eventIndex: event.eventIndex,
+    })),
+  ].sort((left, right) => left.eventIndex - right.eventIndex)[0];
+}
+
 function buildEventIndexById(
   input: DeriveCommittedManagerDecisionStateInput,
 ): Map<string, number> {
-  return new Map([
-    ...input.atBatEvents.map((event) => [event.eventId, event.eventIndex] as const),
-    ...(input.betweenPlayEvents ?? []).map(
-      (event) => [event.eventId, event.eventIndex] as const,
-    ),
-  ]);
+  const eventIndexById = new Map<string, number>();
+  for (const event of input.atBatEvents) {
+    if (event.eventId) {
+      eventIndexById.set(event.eventId, event.eventIndex);
+    }
+    if (!event.eventId && event.batterId) {
+      eventIndexById.set(`archived-at-bat-${event.batterId}`, event.eventIndex);
+    }
+  }
+  for (const event of input.betweenPlayEvents ?? []) {
+    if (event.eventId) {
+      eventIndexById.set(event.eventId, event.eventIndex);
+    }
+  }
+  return eventIndexById;
 }
 
 function groupFieldingEventsByAtBat(
@@ -1197,76 +1250,9 @@ function findTacticalExclusionEventIds(
   stint: OpenDeploymentStint,
   input: DeriveCommittedManagerDecisionStateInput,
 ): string[] {
-  const promptedEndpointEventIds = findPromptedTacticalEndpointEventIds(
-    stint,
-    input,
-  );
-
-  if (stint.tacticalExclusionEventIds) {
-    return uniqueStrings([
-      ...stint.tacticalExclusionEventIds,
-      ...promptedEndpointEventIds,
-    ]);
-  }
-
-  const afterOpen = input.atBatEvents
-    .filter((event) => event.eventIndex > stint.openedAtEventIndex)
-    .sort((left, right) => left.eventIndex - right.eventIndex);
-
-  if (stint.deploymentRole === "pitcher") {
-    return uniqueStrings([
-      ...firstEventId(afterOpen.find((event) => event.pitcherId === stint.playerId)),
-      ...promptedEndpointEventIds,
-    ]);
-  }
-
-  if (stint.deploymentRole === "pinch_hitter_remaining") {
-    return uniqueStrings([
-      ...firstEventId(afterOpen.find((event) => event.batterId === stint.playerId)),
-      ...promptedEndpointEventIds,
-    ]);
-  }
-
-  if (stint.deploymentRole === "pinch_runner") {
-    return uniqueStrings([
-      ...findPinchRunnerTacticalExclusionEventIds(stint, input),
-      ...promptedEndpointEventIds,
-    ]);
-  }
-
-  if (stint.deploymentRole === "defensive_position") {
-    const firstFieldingAtBat = afterOpen.find((event) =>
-      (input.fieldingEvents ?? []).some(
-        (fieldingEvent) =>
-          fieldingEvent.atBatEventId === event.eventId &&
-          fieldingEvent.playerId === stint.playerId &&
-          (!stint.trackedPosition ||
-            fieldingEvent.position === stint.trackedPosition),
-      ),
-    );
-    return uniqueStrings([
-      ...firstEventId(firstFieldingAtBat),
-      ...promptedEndpointEventIds,
-    ]);
-  }
-
-  if (stint.deploymentRole === "kept_defender_in") {
-    const firstFieldingAtBat = afterOpen.find((event) =>
-      (input.fieldingEvents ?? []).some(
-        (fieldingEvent) =>
-          fieldingEvent.atBatEventId === event.eventId &&
-          fieldingEvent.playerId === stint.playerId &&
-          (!stint.trackedPosition ||
-            fieldingEvent.position === stint.trackedPosition),
-      ),
-    );
-    return uniqueStrings([
-      ...firstEventId(firstFieldingAtBat),
-      ...promptedEndpointEventIds,
-    ]);
-  }
-
-  return promptedEndpointEventIds;
+  void stint;
+  void input;
+  return [];
 }
 
 function findPromptedTacticalEndpointEventIds(
@@ -1368,7 +1354,7 @@ function buildDeploymentTimeline(
       .filter((event) => !event.undoneAt)
       .map((event) => ({
         kind: "at_bat" as const,
-        eventId: event.eventId,
+        eventId: timelineEventIdForAtBat(input.gameId, event),
         eventIndex: event.eventIndex,
         atBat: event,
       })),
@@ -1384,6 +1370,12 @@ function buildDeploymentTimeline(
       (left.kind === right.kind ? 0 : left.kind === "between_play" ? -1 : 1) ||
       left.eventId.localeCompare(right.eventId),
   );
+}
+
+function timelineEventIdForAtBat(gameId: string, event: AtBatEvent): string {
+  if (event.eventId) return event.eventId;
+  if (event.batterId) return `archived-at-bat-${event.batterId}`;
+  return `${gameId}:at_bat:${event.eventIndex}`;
 }
 
 function isTerminalRunnerOutcome(
@@ -1483,8 +1475,9 @@ function isCreditLinkedToDeploymentStint(input: {
   }
 
   if (
-    stint.deploymentRole === "defensive_position" ||
-    stint.deploymentRole === "kept_defender_in"
+    credit.role === "fielding" &&
+    (stint.deploymentRole === "defensive_position" ||
+      stint.deploymentRole === "kept_defender_in")
   ) {
     return (fieldingEventsByAtBat.get(credit.eventId) ?? []).some(
       (fieldingEvent) =>

@@ -7,6 +7,7 @@ import {
   logBetweenPlayEvent,
   logFieldingEvent,
   type AtBatEvent,
+  type BetweenPlayEvent,
   type FieldingEvent,
   type RunnerState,
 } from '../../src/utils/eventLog';
@@ -25,6 +26,9 @@ import type { AtBatResult } from '../../src/types/game';
 import type { Player } from '../../src/utils/leagueBuilderStorage';
 import { computeLsimDistributions, type LsimDistributions } from './distributions';
 import { forceAllPhase2FlagsOn, type ForcedPhase2Flags } from './flags';
+import { deriveKblWpaCredits } from '../../src/utils/kblWpaAttribution';
+import { deriveCommittedManagerDecisionState } from '../../src/utils/managerWpaGameState';
+import { getGamePogAwardSet } from '../../src/utils/pogAwards';
 import {
   getSoulInvariantChecks,
   REQUIRED_L12_MERIT_CATEGORIES,
@@ -80,8 +84,36 @@ export interface LsimSeasonRunSummary {
   invariantResults: Record<string, { pass: number; fail: number; tag: 'CRITICAL' | 'INVESTIGATE' }>;
   findings: LsimRunFinding[];
   distributions: LsimDistributions;
+  managerWpaProof: LsimManagerWpaProof;
   finalSnapshot: LsimStateSnapshot;
   checkpointFiles: string[];
+}
+
+export interface LsimManagerWpaTeamCapSample {
+  gameId: string;
+  teamId: string;
+  preCapManagerWpa: number;
+  postCapManagerWpa: number;
+  teamScale: number;
+  bound: boolean;
+}
+
+export interface LsimManagerWpaProof {
+  managerTotalCount: number;
+  deploymentOnlyTotals: boolean;
+  zeroRetiredLayerTotals: boolean;
+  noNaN: boolean;
+  playerNonManagingWpa: number;
+  stintRawLinkedWpa: number;
+  rawCoverageDelta: number;
+  teamCoverageMaxAbsDelta: number;
+  teamCoverageFailures: number;
+  rawCoveragePass: boolean;
+  teamGames: number;
+  teamCapBindings: number;
+  teamCapBindingFraction: number;
+  teamCapSamples: LsimManagerWpaTeamCapSample[];
+  detail: string;
 }
 
 export interface LsimDeterminismSummary {
@@ -106,6 +138,12 @@ const DEFAULT_CHECKPOINT_EVERY = 10;
 const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), 'test-utils/lsim/results');
 const EMPTY_RUNNER_STATE: RunnerState = { first: null, second: null, third: null };
 const EVENT_RESULTS: AtBatResult[] = ['1B', '2B', 'HR', 'K', 'BB', 'FO', 'GO', 'SF'];
+
+interface SeededSyntheticEventLog {
+  atBatEvents: AtBatEvent[];
+  betweenPlayEvents: BetweenPlayEvent[];
+  fieldingEvents: FieldingEvent[];
+}
 
 function seededRandom(seed: string): () => number {
   let hash = 2166136261;
@@ -171,8 +209,11 @@ async function seedSyntheticEventLog(
   context: LsimSandboxContext,
   synthetic: LsimSyntheticCompletedGame,
   gameNumber: number,
-): Promise<void> {
+): Promise<SeededSyntheticEventLog> {
   const game = synthetic.gameState;
+  const atBatEvents: AtBatEvent[] = [];
+  const betweenPlayEvents: BetweenPlayEvent[] = [];
+  const fieldingEvents: FieldingEvent[] = [];
   const playerById = new Map(context.teamSeeds.flatMap((seed) =>
     [...seed.mlbPlayers, ...seed.farmPlayers].map((player) => [player.id, player] as const),
   ));
@@ -235,6 +276,7 @@ async function seedSyntheticEventLog(
       fieldingTeamName: game.homeTeamName,
       pitcher: homeStarter,
       lineup: game.awayLineupState?.lineup ?? [],
+      fieldingLineup: game.homeLineupState?.lineup ?? [],
     },
     {
       halfInning: 'BOTTOM' as const,
@@ -244,6 +286,7 @@ async function seedSyntheticEventLog(
       fieldingTeamName: game.awayTeamName,
       pitcher: awayStarter,
       lineup: game.homeLineupState?.lineup ?? [],
+      fieldingLineup: game.awayLineupState?.lineup ?? [],
     },
   ];
 
@@ -255,6 +298,8 @@ async function seedSyntheticEventLog(
       const runsScored = result === 'HR' ? [batter.playerId] : [];
       const awayScore = Math.floor((eventIndex - 1) / 3);
       const homeScore = Math.floor((eventIndex - 1) / 4);
+      const fieldingLineupEntry = half.fieldingLineup[(lineupIndex + 3) % half.fieldingLineup.length];
+      const defensiveFielderId = fieldingLineupEntry?.playerId ?? half.pitcher.pitcherId;
       const atBatEvent: AtBatEvent = {
         eventId: `${game.gameId}-ab-${String(eventIndex).padStart(2, '0')}`,
         gameId: game.gameId,
@@ -292,8 +337,8 @@ async function seedSyntheticEventLog(
               trajectory: result === 'FO' || result === 'SF' ? 'fly' : 'ground',
               zone: (eventIndex % 6) + 1,
               velocity: eventIndex % 2 === 0 ? 'hard' : 'medium',
-              fielderIds: [half.lineup[(lineupIndex + 3) % half.lineup.length]?.playerId ?? batter.playerId],
-              primaryFielderId: half.lineup[(lineupIndex + 3) % half.lineup.length]?.playerId ?? batter.playerId,
+              fielderIds: [defensiveFielderId],
+              primaryFielderId: defensiveFielderId,
             }
           : null,
         fameEvents: [],
@@ -338,17 +383,17 @@ async function seedSyntheticEventLog(
         editHistory: [],
       };
       await logAtBatEvent(atBatEvent);
+      atBatEvents.push(atBatEvent);
 
       if (atBatEvent.ballInPlay) {
-        const fielderId = atBatEvent.ballInPlay.primaryFielderId;
-        const fielder = playerById.get(fielderId);
+        const fielder = playerById.get(defensiveFielderId);
         const fieldingEvent: FieldingEvent = {
           fieldingEventId: `${atBatEvent.eventId}-fielding`,
           gameId: game.gameId,
           atBatEventId: atBatEvent.eventId,
           sequence: 1,
-          playerId: fielderId,
-          playerName: fielder ? playerName(fielder) : fielderId,
+          playerId: defensiveFielderId,
+          playerName: fielder ? playerName(fielder) : defensiveFielderId,
           position: (fielder?.primaryPosition ?? 'CF') as FieldingEvent['position'],
           teamId: half.fieldingTeamId,
           playType: eventIndex % 5 === 0 ? 'outfield_assist' : 'putout',
@@ -359,6 +404,7 @@ async function seedSyntheticEventLog(
           runsPreventedOrAllowed: eventIndex % 6 === 0 ? 1 : 0,
         };
         await logFieldingEvent(fieldingEvent);
+        fieldingEvents.push(fieldingEvent);
       }
 
       eventIndex += 1;
@@ -367,7 +413,7 @@ async function seedSyntheticEventLog(
 
   if (gameNumber % 7 === 0) {
     const injured = context.teamSeeds[gameNumber % context.teamSeeds.length].positionPlayers[gameNumber % 9];
-    await logBetweenPlayEvent({
+    const injuryEvent: BetweenPlayEvent = {
       eventId: `${game.gameId}-injury-${gameNumber}`,
       gameId: game.gameId,
       seasonId: context.ids.seasonId,
@@ -398,8 +444,84 @@ async function seedSyntheticEventLog(
       },
       version: 1,
       editHistory: [],
-    });
+    };
+    await logBetweenPlayEvent(injuryEvent);
+    betweenPlayEvents.push(injuryEvent);
   }
+
+  return { atBatEvents, betweenPlayEvents, fieldingEvents };
+}
+
+function hydrateSyntheticManagerWpa(
+  synthetic: LsimSyntheticCompletedGame,
+  seededLog: SeededSyntheticEventLog,
+): void {
+  const game = synthetic.gameState;
+  const awayStarter = game.pitcherGameStats.find((row) => row.teamId === game.awayTeamId && row.isStarter) ?? game.pitcherGameStats[0];
+  const homeStarter = game.pitcherGameStats.find((row) => row.teamId === game.homeTeamId && row.isStarter) ?? game.pitcherGameStats[game.pitcherGameStats.length - 1];
+  const startingLineups = {
+    away: (game.awayLineupState?.lineup ?? []).map((entry) => ({
+      playerId: entry.playerId,
+      playerName: entry.playerName,
+      position: entry.position,
+      battingOrder: entry.battingOrder,
+    })),
+    home: (game.homeLineupState?.lineup ?? []).map((entry) => ({
+      playerId: entry.playerId,
+      playerName: entry.playerName,
+      position: entry.position,
+      battingOrder: entry.battingOrder,
+    })),
+  };
+  const managerState = deriveCommittedManagerDecisionState({
+    gameId: game.gameId,
+    atBatEvents: seededLog.atBatEvents,
+    betweenPlayEvents: seededLog.betweenPlayEvents,
+    fieldingEvents: seededLog.fieldingEvents,
+    startingLineups,
+    startingPitchers: {
+      away: { playerId: awayStarter.pitcherId, playerName: awayStarter.pitcherName },
+      home: { playerId: homeStarter.pitcherId, playerName: homeStarter.pitcherName },
+    },
+    awayTeamId: game.awayTeamId,
+    homeTeamId: game.homeTeamId,
+    awayManagerId: `${game.awayTeamId}:manager`,
+    homeManagerId: `${game.homeTeamId}:manager`,
+    totalInnings: game.totalInnings,
+    useGhostRunner: game.useGhostRunner,
+    extraInningRunner: game.extraInningRunner,
+    extraInningRunnerDelay: game.extraInningRunnerDelay,
+    gameEnded: true,
+  });
+  const kblWpaCredits = deriveKblWpaCredits({
+    atBatEvents: seededLog.atBatEvents,
+    betweenPlayEvents: seededLog.betweenPlayEvents,
+    fieldingEvents: seededLog.fieldingEvents,
+    totalInnings: game.totalInnings,
+    useGhostRunner: game.useGhostRunner,
+    extraInningRunner: game.extraInningRunner,
+    extraInningRunnerDelay: game.extraInningRunnerDelay,
+    awayTeamId: game.awayTeamId,
+    homeTeamId: game.homeTeamId,
+    startingLineups,
+  });
+  const pogAwardSet = getGamePogAwardSet({
+    kblWpaCredits,
+    playerStats: game.playerStats,
+    pitcherGameStats: game.pitcherGameStats,
+    managerDecisions: managerState.managerDecisions,
+    managerDeploymentStints: managerState.managerDeploymentStints,
+    managerLineupDeltas: managerState.managerLineupDeltas,
+    eventLogAvailable: true,
+  });
+
+  game.managerDecisions = managerState.managerDecisions;
+  game.managerDeploymentStints = managerState.managerDeploymentStints;
+  game.managerLineupDeltas = managerState.managerLineupDeltas;
+  game.managerLineupDeltaSummaries = managerState.managerLineupDeltaSummaries;
+  game.managerRecommendationWatches = managerState.managerRecommendationWatches;
+  game.playerWpaTotals = pogAwardSet.playerTotals;
+  game.managerWpaTotals = pogAwardSet.managerTotals;
 }
 
 function deriveLastGameDelta(
@@ -760,6 +882,128 @@ async function runPersistenceProof(): Promise<LsimPersistenceProof> {
   };
 }
 
+function roundProofWpa(value: number, places = 6): number {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
+
+function roundManagerWpa(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function deriveManagerWpaProof(
+  completedGames: LsimStateSnapshot['completedGames'],
+): LsimManagerWpaProof {
+  const managerTotals = completedGames.flatMap((game) => game.managerWpaTotals ?? []);
+  const stints = completedGames.flatMap((game) => game.managerDeploymentStints ?? []);
+  const deploymentOnlyTotals = managerTotals.every(
+    (total) => roundProofWpa(total.managerValue) === roundProofWpa(total.deploymentWpa),
+  );
+  const zeroRetiredLayerTotals = managerTotals.every(
+    (total) =>
+      roundProofWpa(total.tacticalManagerWpa) === 0 &&
+      roundProofWpa(total.lineupDeltaWpa) === 0,
+  );
+  const noNaN = finitePath({ managerTotals, stints }) === null;
+  const playerNonManagingWpa = roundProofWpa(
+    completedGames.reduce(
+      (gameSum, game) =>
+        gameSum +
+        (game.playerWpaTotals ?? []).reduce(
+          (sum, total) => sum + total.totalWpa - total.managingWpa,
+          0,
+        ),
+      0,
+    ),
+  );
+  const stintRawLinkedWpa = roundProofWpa(
+    stints.reduce((sum, stint) => sum + stint.rawLinkedWpa, 0),
+  );
+  const rawCoverageDelta = roundProofWpa(stintRawLinkedWpa - playerNonManagingWpa);
+
+  const teamCapRows: LsimManagerWpaTeamCapSample[] = [];
+  const teamCoverageDeltas: number[] = [];
+  for (const game of completedGames) {
+    const rawByTeam = new Map<string, { player: number; stint: number }>();
+    for (const total of game.playerWpaTotals ?? []) {
+      const current = rawByTeam.get(total.teamId) ?? { player: 0, stint: 0 };
+      current.player += total.totalWpa - total.managingWpa;
+      rawByTeam.set(total.teamId, current);
+    }
+    for (const stint of game.managerDeploymentStints ?? []) {
+      const current = rawByTeam.get(stint.teamId) ?? { player: 0, stint: 0 };
+      current.stint += stint.rawLinkedWpa;
+      rawByTeam.set(stint.teamId, current);
+    }
+    for (const sums of rawByTeam.values()) {
+      teamCoverageDeltas.push(roundProofWpa(sums.stint - sums.player));
+    }
+
+    const teamSums = new Map<string, { pre: number; post: number }>();
+    for (const stint of game.managerDeploymentStints ?? []) {
+      const current = teamSums.get(stint.teamId) ?? { pre: 0, post: 0 };
+      current.pre += clamp(
+        roundManagerWpa(stint.rawLinkedWpa * stint.managerShare),
+        -stint.cap,
+        stint.cap,
+      );
+      current.post += stint.managerDeploymentWpa;
+      teamSums.set(stint.teamId, current);
+    }
+    for (const [teamId, sums] of teamSums.entries()) {
+      const preCapManagerWpa = roundProofWpa(sums.pre);
+      const postCapManagerWpa = roundProofWpa(sums.post);
+      const teamScale =
+        Math.abs(preCapManagerWpa) > 0
+          ? roundProofWpa(Math.abs(postCapManagerWpa / preCapManagerWpa))
+          : 1;
+      teamCapRows.push({
+        gameId: game.gameId,
+        teamId,
+        preCapManagerWpa,
+        postCapManagerWpa,
+        teamScale,
+        bound: teamScale < 0.9999,
+      });
+    }
+  }
+
+  const teamCapBindings = teamCapRows.filter((row) => row.bound).length;
+  const teamGames = teamCapRows.length;
+  const teamCapBindingFraction =
+    teamGames > 0 ? roundProofWpa(teamCapBindings / teamGames) : 0;
+  const teamCoverageMaxAbsDelta = roundProofWpa(
+    teamCoverageDeltas.reduce((max, delta) => Math.max(max, Math.abs(delta)), 0),
+  );
+  const teamCoverageFailures = teamCoverageDeltas.filter((delta) => Math.abs(delta) > 0.0001).length;
+
+  return {
+    managerTotalCount: managerTotals.length,
+    deploymentOnlyTotals,
+    zeroRetiredLayerTotals,
+    noNaN,
+    playerNonManagingWpa,
+    stintRawLinkedWpa,
+    rawCoverageDelta,
+    teamCoverageMaxAbsDelta,
+    teamCoverageFailures,
+    rawCoveragePass:
+      Math.abs(rawCoverageDelta) <= 0.0001 && teamCoverageFailures === 0,
+    teamGames,
+    teamCapBindings,
+    teamCapBindingFraction,
+    teamCapSamples: [
+      ...teamCapRows.filter((row) => row.bound).slice(0, 8),
+      ...teamCapRows.filter((row) => !row.bound).slice(0, 4),
+    ],
+    detail: `rawLinked=${stintRawLinkedWpa}; playerNonManaging=${playerNonManagingWpa}; delta=${rawCoverageDelta}; teamCoverageMaxAbsDelta=${teamCoverageMaxAbsDelta}; teamCoverageFailures=${teamCoverageFailures}; teamCapBindings=${teamCapBindings}/${teamGames}`,
+  };
+}
+
 function deferredInvariants(): LsimDeferredInvariant[] {
   return [
     {
@@ -856,7 +1100,8 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
       if (runInvariantChecks && relationshipRecoveryBreakEdgeId === null && previous.relationshipEdges.length > 0) {
         relationshipRecoveryBreakEdgeId = await breakRelationshipCoRosteringForRecovery(context, previous, synthetic);
       }
-      await seedSyntheticEventLog(context, synthetic, gameNumber);
+      const seededLog = await seedSyntheticEventLog(context, synthetic, gameNumber);
+      hydrateSyntheticManagerWpa(synthetic, seededLog);
       const processOptions = {
         ...context.processOptions,
         currentGame: gameNumber,
@@ -990,6 +1235,7 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
       invariantResults,
       findings,
       distributions: computeLsimDistributions(finalSnapshot),
+      managerWpaProof: deriveManagerWpaProof(finalSnapshot.completedGames),
       finalSnapshot,
       checkpointFiles,
     };
@@ -1077,6 +1323,7 @@ export function summarizeH2SuiteForConsole(summary: LsimH2SuiteSummary): string 
     },
     determinism: summary.determinism,
     distributions: summary.baseline.distributions,
+    managerWpaProof: summary.baseline.managerWpaProof,
     deferred: summary.deferred.map((entry) => entry.name),
     lsimIds: L_SIM_IDS,
   });
