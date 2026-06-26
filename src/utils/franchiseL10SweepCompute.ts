@@ -143,10 +143,12 @@ export async function resolveL10Candidates(
     playerCandidates.push({
       id: player.id,
       kind: 'player',
+      teamId,
       role: getPlayerIsPitcher(player) ? 'pitcher' : 'position',
       personality: normalizePersonality(player.personality),
       playerMorale: player.morale,
       fanMorale: await teamFanMoraleByTeamId.get(teamId)!,
+      loyalty: player.hiddenPersonalityModifiers?.loyalty ?? 50,
       performanceSignal,
     });
   }

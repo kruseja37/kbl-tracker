@@ -7,6 +7,12 @@ const mocks = vi.hoisted(() => ({
   getSeasonMetadata: vi.fn(),
   getSeasonGames: vi.fn(),
   getGameEvents: vi.fn(),
+  getAllFranchisePlayers: vi.fn(),
+  getAllFranchiseTeams: vi.fn(),
+  getPlayerRosterStatusForLeague: vi.fn(),
+  getPlayerTeamIdForLeague: vi.fn(),
+  getFranchiseTrueValueRows: vi.fn(),
+  getFranchiseMoraleSnapshot: vi.fn(),
   syncEngine: {
     isSuppressed: vi.fn(() => false),
     upsert: vi.fn(),
@@ -31,6 +37,24 @@ vi.mock('../eventLog', async () => {
   };
 });
 
+vi.mock('../franchisePlayerStorage', () => ({
+  getAllFranchisePlayers: mocks.getAllFranchisePlayers,
+  getAllFranchiseTeams: mocks.getAllFranchiseTeams,
+}));
+
+vi.mock('../leagueBuilderStorage', () => ({
+  getPlayerRosterStatusForLeague: mocks.getPlayerRosterStatusForLeague,
+  getPlayerTeamIdForLeague: mocks.getPlayerTeamIdForLeague,
+}));
+
+vi.mock('../franchiseTrueValueStorage', () => ({
+  getFranchiseTrueValueRows: mocks.getFranchiseTrueValueRows,
+}));
+
+vi.mock('../franchiseMoraleState', () => ({
+  getFranchiseMoraleSnapshot: mocks.getFranchiseMoraleSnapshot,
+}));
+
 vi.mock('../syncEngine', () => ({
   syncEngine: mocks.syncEngine,
 }));
@@ -38,6 +62,7 @@ vi.mock('../syncEngine', () => ({
 import {
   persistDarkL10ForCompletedGame,
   l10SweepSeam,
+  resolveL10Candidates,
   type L10SweepScope,
 } from '../franchiseL10SweepCompute';
 import { computeFranchiseL10Events, type FranchiseL10Candidate } from '../../engines/franchiseL10EventEngine';
@@ -47,6 +72,7 @@ import {
 } from '../franchiseL10OverlayStorage';
 import { setFranchisePhase2L10EnabledForTests } from '../franchisePhase2Flags';
 import type { PersistedGameState } from '../gameStorage';
+import type { Player } from '../leagueBuilderStorage';
 
 const DB_NAME = 'kbl-tracker';
 const scope: L10SweepScope = {
@@ -89,6 +115,8 @@ const SEEDED_CANDIDATES: FranchiseL10Candidate[] = [
     personality: 'EGOTISTICAL',
     playerMorale: 100,
     fanMorale: 20,
+    loyalty: 100,
+    teamId: 'team-home',
     performanceSignal: 1,
   },
   {
@@ -98,6 +126,8 @@ const SEEDED_CANDIDATES: FranchiseL10Candidate[] = [
     personality: 'COMPETITIVE',
     playerMorale: 10,
     fanMorale: 20,
+    loyalty: 0,
+    teamId: 'team-away',
     performanceSignal: -0.8,
   },
   {
@@ -189,6 +219,82 @@ describe('persistDarkL10ForCompletedGame', () => {
     expect(mocks.getSeasonMetadata).not.toHaveBeenCalled();
     expect(candidateSpy).not.toHaveBeenCalled();
     expect(await getFranchiseL10OverlaysByScope(scope)).toEqual([]);
+  });
+
+  test('resolveL10Candidates threads teamId, loyalty, and neutral loyalty default from player storage', async () => {
+    const players = [
+      {
+        id: 'player-with-hidden',
+        primaryPosition: 'SS',
+        personality: 'JOLLY',
+        morale: 44,
+        hiddenPersonalityModifiers: {
+          loyalty: 12,
+          ambition: 30,
+          resilience: 40,
+          charisma: 50,
+        },
+      },
+      {
+        id: 'player-without-hidden',
+        primaryPosition: 'SP',
+        personality: 'RELAXED',
+        morale: 33,
+      },
+      {
+        id: 'farm-skip',
+        primaryPosition: 'CF',
+        personality: 'TOUGH',
+        morale: 55,
+      },
+    ] as unknown as Player[];
+    mocks.getAllFranchiseTeams.mockResolvedValue([{ id: 'team-root', leagueIds: ['league-one'] }]);
+    mocks.getAllFranchisePlayers.mockResolvedValue(players);
+    mocks.getFranchiseTrueValueRows.mockResolvedValue([
+      { playerId: 'player-with-hidden', valueDelta: 200000 },
+      { playerId: 'player-without-hidden', valueDelta: -100000 },
+    ]);
+    mocks.getPlayerRosterStatusForLeague.mockImplementation((player: Player) => (
+      player.id === 'farm-skip' ? 'FARM' : 'MLB'
+    ));
+    mocks.getPlayerTeamIdForLeague.mockImplementation((player: Player) => (
+      player.id === 'player-with-hidden' ? 'team-alpha' : 'team-beta'
+    ));
+    mocks.getFranchiseMoraleSnapshot.mockImplementation(async (
+      _scope: unknown,
+      _kind: unknown,
+      teamId: string,
+    ) => ({
+      currentValue: teamId === 'team-alpha' ? 22 : 66,
+    }));
+
+    const candidates = await resolveL10Candidates(scope);
+    const withHidden = candidates.find((candidate) => candidate.id === 'player-with-hidden');
+    const withoutHidden = candidates.find((candidate) => candidate.id === 'player-without-hidden');
+
+    expect(withHidden).toMatchObject({
+      kind: 'player',
+      role: 'position',
+      personality: 'JOLLY',
+      playerMorale: 44,
+      fanMorale: 22,
+      teamId: 'team-alpha',
+      loyalty: 12,
+    });
+    expect(withoutHidden).toMatchObject({
+      kind: 'player',
+      role: 'pitcher',
+      personality: 'RELAXED',
+      playerMorale: 33,
+      fanMorale: 66,
+      teamId: 'team-beta',
+      loyalty: 50,
+    });
+    expect(candidates.some((candidate) => candidate.id === 'farm-skip')).toBe(false);
+    expect(candidates.filter((candidate) => candidate.kind === 'team').map((candidate) => candidate.id).sort()).toEqual([
+      'team-alpha',
+      'team-beta',
+    ]);
   });
 
   test('Q5: continuous cadence — flag on, a non-20%-boundary game still fires and writes rows', async () => {

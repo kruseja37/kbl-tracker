@@ -1,5 +1,6 @@
 import type { TierKey } from '../data/tierParams';
 import type { CanonicalPersonality } from './masterMoraleMatrix';
+import { computeTradeRequestPropensity } from './tradeRequestGeneration';
 
 /**
  * L10-1 random-event selection engine (pure, build-dark).
@@ -81,10 +82,12 @@ export const FRANCHISE_L10_EVENT_TUNING: FranchiseL10EventTuning = {
 export interface FranchiseL10Candidate {
   id: string;
   kind: 'player' | 'team';
+  teamId?: string;
   role?: 'pitcher' | 'position';
   personality?: CanonicalPersonality;
   playerMorale?: number;
   fanMorale?: number;
+  loyalty?: number;
   performanceSignal?: number;
 }
 
@@ -154,6 +157,10 @@ const TEAM_ROLL_SPECS: readonly FranchiseL10RollSpec[] = [
   { family: 'team', eventType: 'stadium_change', seedSuffix: 'stadium_change', teamSuppressed: true },
 ];
 
+const DEFAULT_TRADE_REQUEST_PERSONALITY: CanonicalPersonality = 'COMPETITIVE';
+const DEFAULT_TRADE_REQUEST_MORALE = 50;
+const DEFAULT_TRADE_REQUEST_LOYALTY = 50;
+
 const POSITIVE_EVENT_TYPE: Partial<Record<FranchiseL10EventFamily, string>> = {
   performance: 'hot_streak',
   pitching: 'gain_pitch',
@@ -188,7 +195,12 @@ export function computeFranchiseL10Events(
         continue;
       }
 
-      events.push(buildEventCandidate(candidate, spec, input.seedBase, probabilityResult.probability, roll, config));
+      const event = buildEventCandidate(candidate, spec, input.seedBase, probabilityResult.probability, roll, config);
+      if (event.eventType === 'trade_demand' && !passesTradeRequestGate(candidate, input.intensity)) {
+        continue;
+      }
+
+      events.push(event);
     }
   }
 
@@ -279,6 +291,19 @@ function buildEventCandidate(
     probability,
     seed: roll,
   };
+}
+
+function passesTradeRequestGate(candidate: FranchiseL10Candidate, intensity: TierKey): boolean {
+  return computeTradeRequestPropensity(
+    {
+      id: candidate.id,
+      personality: candidate.personality ?? DEFAULT_TRADE_REQUEST_PERSONALITY,
+      playerMorale: candidate.playerMorale ?? DEFAULT_TRADE_REQUEST_MORALE,
+      loyalty: candidate.loyalty ?? DEFAULT_TRADE_REQUEST_LOYALTY,
+    },
+    candidate.fanMorale ?? DEFAULT_TRADE_REQUEST_MORALE,
+    intensity,
+  ).wouldRequest;
 }
 
 function getValence(
