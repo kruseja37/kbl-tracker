@@ -56,27 +56,27 @@ const HUB: Record<string, HubVM> = {
         { delta: -4, reason: "Three-game skid on the road", week: "Week 6" },
         { delta: 8, reason: "Signed a fan-favorite at the deadline", week: "Week 5" },
       ] },
-      clubhouseLabel: "Buzzing", clubhouseAvg: 58, standingLabel: "48–32 · 2nd East",
+      payrollLabel: "$5.42M · 22", clubhouseLabel: "Buzzing", clubhouseAvg: 58, standingLabel: "48–32 · 2nd East",
     },
     roster: [
-      { id: "p1", number: "21", position: "SP", name: "Rafa Fenomeno", war: 5.8, salary: 1_200_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 74, state: "Locked in · ▲ rising", trend: "up", arc: "up from 66 over 3 weeks · baseline 50", history: [
+      { id: "p1", number: "21", position: "SP", name: "Rafa Fenomeno", war: 5.8, salary: 1_200_000, trueValue: 1_460_000, valueGap: 260_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 74, state: "Locked in · ▲ rising", trend: "up", arc: "up from 66 over 3 weeks · baseline 50", history: [
         { delta: 5, reason: "Complete-game shutout", week: "Week 8" },
         { delta: 4, reason: "Named pitcher of the week", week: "Week 7" },
       ] } },
-      { id: "p2", number: "7", position: "CF", name: "Dash Okoye", war: 5.1, salary: 960_000, designation: { label: "MVP", kind: "gold" }, morale: { value: 69, state: "Happy · ▲ rising", trend: "up", history: [
+      { id: "p2", number: "7", position: "CF", name: "Dash Okoye", war: 5.1, salary: 960_000, trueValue: 1_310_000, valueGap: 350_000, designation: { label: "MVP", kind: "gold" }, morale: { value: 69, state: "Happy · ▲ rising", trend: "up", history: [
         { delta: 3, reason: "20th stolen base", week: "Week 8" },
       ] } },
-      { id: "p3", number: "3", position: "1B", name: "Hank Drake", war: 4.4, salary: 840_000, morale: { value: 53, state: "Steady", trend: "flat", history: [] } },
-      { id: "p4", number: "28", position: "LF", name: "Lars Stad", war: 2.7, salary: 610_000, morale: { value: 38, state: "Frustrated · ▼ falling", trend: "down", arc: "down from 51 over 3 weeks · baseline 50", history: [
+      { id: "p3", number: "3", position: "1B", name: "Hank Drake", war: 4.4, salary: 840_000, trueValue: 770_000, valueGap: -70_000, morale: { value: 53, state: "Steady", trend: "flat", history: [] } },
+      { id: "p4", number: "28", position: "LF", name: "Lars Stad", war: 2.7, salary: 610_000, trueValue: 420_000, valueGap: -190_000, morale: { value: 38, state: "Frustrated · ▼ falling", trend: "down", arc: "down from 51 over 3 weeks · baseline 50", history: [
         { delta: -9, reason: "Benched against a lefty in the opener", week: "Week 8 · Mgr decision" },
         { delta: -6, reason: "Trade rumor in the Tootwhistle Times", week: "Week 7 · Front office" },
         { delta: 4, reason: "Walk-off homer vs River Rats", week: "Week 6 · On the field" },
         { delta: -7, reason: "Passed over for the All-Star nod", week: "Week 5 · League" },
       ] } },
-      { id: "p5", number: "44", position: "C", name: "Cy Vane", war: 0.4, salary: 1_400_000, designation: { label: "Albatross", kind: "albatross" }, morale: { value: 41, state: "Sulking · ▼ falling", trend: "down", history: [
+      { id: "p5", number: "44", position: "C", name: "Cy Vane", war: 0.4, salary: 1_400_000, trueValue: 300_000, valueGap: -1_100_000, designation: { label: "Albatross", kind: "albatross" }, morale: { value: 41, state: "Sulking · ▼ falling", trend: "down", history: [
         { delta: -5, reason: "Lost the starting job", week: "Week 7" },
       ] } },
-      { id: "p6", number: "11", position: "CP", name: "Milo Reyes", war: 2.9, salary: 410_000, designation: { label: "Fan Fav", kind: "gold" }, morale: { value: 66, state: "Happy · ▲ rising", trend: "up", history: [] } },
+      { id: "p6", number: "11", position: "CP", name: "Milo Reyes", war: 2.9, salary: 410_000, trueValue: 660_000, valueGap: 250_000, designation: { label: "Fan Fav", kind: "gold" }, morale: { value: 66, state: "Happy · ▲ rising", trend: "up", history: [] } },
     ],
   },
   BM: {
@@ -92,11 +92,11 @@ const HUB: Record<string, HubVM> = {
       { category: "The race", headline: "Magic number down to nine in the East", excerpt: "First place is all but wrapped up.", byline: "League notebook · 1 day ago" },
       { category: "Clubhouse", headline: "A confident room eyes the postseason", excerpt: "The Brass are loose, healthy, and rolling.", byline: "Beat report · 3 days ago" },
     ] },
-    pulse: { fanMorale: { value: 71, trend: "up", history: [{ delta: 5, reason: "First place clinched the week", week: "Week 8" }] }, clubhouseLabel: "Confident", clubhouseAvg: 64, standingLabel: "50–30 · 1st East" },
+    pulse: { fanMorale: { value: 71, trend: "up", history: [{ delta: 5, reason: "First place clinched the week", week: "Week 8" }] }, payrollLabel: "$6.10M · 22", clubhouseLabel: "Confident", clubhouseAvg: 64, standingLabel: "50–30 · 1st East" },
     roster: [
-      { id: "b1", number: "9", position: "SP", name: "Cole Vesper", war: 6.2, salary: 1_500_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 78, state: "Locked in · ▲ rising", trend: "up", history: [{ delta: 6, reason: "14-strikeout gem", week: "Week 8" }] } },
-      { id: "b2", number: "24", position: "RF", name: "Boomer Vance", war: 4.9, salary: 1_100_000, designation: { label: "MVP", kind: "gold" }, morale: { value: 70, state: "Happy", trend: "flat", history: [] } },
-      { id: "b3", number: "5", position: "SS", name: "Tio Marsh", war: 3.3, salary: 720_000, morale: { value: 55, state: "Steady", trend: "flat", history: [] } },
+      { id: "b1", number: "9", position: "SP", name: "Cole Vesper", war: 6.2, salary: 1_500_000, trueValue: 1_700_000, valueGap: 200_000, designation: { label: "★ Ace", kind: "gold" }, morale: { value: 78, state: "Locked in · ▲ rising", trend: "up", history: [{ delta: 6, reason: "14-strikeout gem", week: "Week 8" }] } },
+      { id: "b2", number: "24", position: "RF", name: "Boomer Vance", war: 4.9, salary: 1_100_000, trueValue: 1_250_000, valueGap: 150_000, designation: { label: "MVP", kind: "gold" }, morale: { value: 70, state: "Happy", trend: "flat", history: [] } },
+      { id: "b3", number: "5", position: "SS", name: "Tio Marsh", war: 3.3, salary: 720_000, trueValue: 640_000, valueGap: -80_000, morale: { value: 55, state: "Steady", trend: "flat", history: [] } },
     ],
   },
   RR: {
@@ -112,10 +112,10 @@ const HUB: Record<string, HubVM> = {
       { category: "Clubhouse", headline: "Hale's 0-for-18 weighs on a restless room", excerpt: "The left fielder is pressing as the losses mount.", byline: "Beat report · 2 days ago" },
       { category: "Front office", headline: "\"We're not sellers yet,\" GM insists", excerpt: "For now, River Rats are holding — but the deadline looms.", byline: "Beat report · 4 days ago" },
     ] },
-    pulse: { fanMorale: { value: 49, trend: "down", history: [{ delta: -6, reason: "Fell out of the wild-card spot", week: "Week 8" }] }, clubhouseLabel: "Restless", clubhouseAvg: 47, standingLabel: "44–36 · 3rd East" },
+    pulse: { fanMorale: { value: 49, trend: "down", history: [{ delta: -6, reason: "Fell out of the wild-card spot", week: "Week 8" }] }, payrollLabel: "$4.30M · 22", clubhouseLabel: "Restless", clubhouseAvg: 47, standingLabel: "44–36 · 3rd East" },
     roster: [
-      { id: "r1", number: "2", position: "2B", name: "Sol Park", war: 3.8, salary: 680_000, morale: { value: 52, state: "Steady", trend: "flat", history: [] } },
-      { id: "r2", number: "17", position: "LF", name: "Gus Hale", war: 2.1, salary: 540_000, morale: { value: 44, state: "Frustrated · ▼ falling", trend: "down", history: [{ delta: -5, reason: "0-for-18 cold streak", week: "Week 8" }] } },
+      { id: "r1", number: "2", position: "2B", name: "Sol Park", war: 3.8, salary: 680_000, trueValue: 710_000, valueGap: 30_000, morale: { value: 52, state: "Steady", trend: "flat", history: [] } },
+      { id: "r2", number: "17", position: "LF", name: "Gus Hale", war: 2.1, salary: 540_000, trueValue: 410_000, valueGap: -130_000, morale: { value: 44, state: "Frustrated · ▼ falling", trend: "down", history: [{ delta: -5, reason: "0-for-18 cold streak", week: "Week 8" }] } },
     ],
   },
 };

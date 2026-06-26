@@ -91,6 +91,8 @@ export interface PlayerRowVM {
   name: string;
   war?: number;
   salary?: number;
+  trueValue?: number;          // the instance value that drifts as he develops (FranchiseTrueValueRow.trueValue)
+  valueGap?: number;           // valueDelta = trueValue − salary; + = bargain, − = overpay
   designation?: { label: string; kind: "gold" | "albatross" };
   morale?: PlayerMoraleVM;
 }
@@ -100,6 +102,7 @@ export interface PulseVM {
   clubhouseLabel?: string;
   clubhouseAvg?: number;
   standingLabel?: string;
+  payrollLabel?: string;       // e.g. "$5.4M · 22"
 }
 
 export interface HubVM {
@@ -390,6 +393,12 @@ function RosterTab({
             {hub.pulse.clubhouseAvg !== undefined ? <div className="tap">avg morale {hub.pulse.clubhouseAvg}</div> : null}
           </div>
         ) : null}
+        {hub.pulse.payrollLabel ? (
+          <div className="fen-metric" style={{ cursor: "default" }}>
+            <div className="ml">Payroll</div>
+            <div className="mv fen-chalk">{hub.pulse.payrollLabel}</div>
+          </div>
+        ) : null}
         {active.rivalName ? (
           <div className="fen-rivalcall">Rival: <span className="fen-r">{active.rivalName} ⚔</span></div>
         ) : null}
@@ -403,7 +412,7 @@ function RosterTab({
       ) : (
         <div className="fen-roster">
           <div className="h">#</div><div className="h">Pos</div><div className="h">Player</div>
-          <div className="h">Designation</div><div className="h rt">WAR</div><div className="h rt">Salary</div><div className="h rt">Morale</div>
+          <div className="h">Designation</div><div className="h rt">WAR</div><div className="h rt">Salary</div><div className="h rt">Value</div><div className="h rt">Net</div><div className="h rt">Morale</div>
           <div className="line" />
           {hub.roster.map((p) => (
             <RosterRow key={p.id} p={p} open={openMorale === p.id} onToggle={() => setOpenMorale(openMorale === p.id ? null : p.id)} />
@@ -423,6 +432,12 @@ function RosterRow({ p, open, onToggle }: { p: PlayerRowVM; open: boolean; onTog
       <div>{p.designation ? <span className={`fen-rbadge${p.designation.kind === "albatross" ? " alb" : ""}`}>{p.designation.label}</span> : null}</div>
       <div className="fen-rnumcell">{p.war !== undefined ? p.war.toFixed(1) : "—"}</div>
       <div className="fen-rnumcell soft">{p.salary !== undefined ? <Money value={p.salary} /> : "—"}</div>
+      <div className="fen-rnumcell">{p.trueValue !== undefined ? <Money value={p.trueValue} /> : "—"}</div>
+      <div className="fen-rnumcell">
+        {p.valueGap !== undefined ? (
+          <span className={p.valueGap >= 0 ? "fen-net up" : "fen-net dn"}>{p.valueGap >= 0 ? "+" : "−"}<Money value={Math.abs(p.valueGap)} /></span>
+        ) : "—"}
+      </div>
       <div style={{ position: "relative" }}>
         {p.morale ? (
           <>

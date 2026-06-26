@@ -115,7 +115,9 @@
 .fen-rivalcall { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 18px; }
 
 /* roster */
-.fen-roster { display: grid; grid-template-columns: 34px 60px 1fr 120px 70px 96px 92px; gap: 2px 12px; align-items: center; }
+.fen-roster { display: grid; grid-template-columns: 26px 48px 1fr 92px 50px 78px 80px 78px 84px; gap: 2px 10px; align-items: center; }
+.fen-net.up { color: var(--fen-yellow); }
+.fen-net.dn { color: var(--fen-marquee); }
 .fen-roster .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 6px; }
 .fen-roster .h.rt { text-align: right; }
 .fen-roster .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.22); }
