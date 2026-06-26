@@ -40,7 +40,7 @@
 }
 
 .fen-root {
-  font-family: var(--fen-type);
+  font-family: var(--fen-chalk-font);
   color: var(--fen-chalk);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
@@ -54,7 +54,7 @@
 .fen-chalk { font-family: var(--fen-chalk-font); color: var(--fen-chalk); text-shadow: 0 0 1px rgba(236, 232, 218, 0.35), 0 1px 0 rgba(0, 0, 0, 0.25); }
 .fen-y { color: var(--fen-yellow); text-shadow: 0 0 2px rgba(242, 192, 65, 0.3), 0 1px 0 rgba(0, 0, 0, 0.3); }
 .fen-r { color: var(--fen-marquee); text-shadow: 0 0 3px rgba(204, 52, 51, 0.3); }
-.fen-eyebrow { font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-eyebrow { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); }
 .fen-muted { color: var(--fen-chalk-soft); }
 .fen-row { display: flex; align-items: center; gap: 12px; }
 .fen-spacer { flex: 1; }
@@ -73,7 +73,7 @@
 
 /* lens picker */
 .fen-lens { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-.fen-lens .lab { font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-lens .lab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
 .fen-teamchip { font-family: var(--fen-chalk-font); font-size: 18px; background: none; border: 2px solid transparent; border-radius: 5px; cursor: pointer; color: var(--fen-chalk-soft); padding: 4px 11px; display: inline-flex; align-items: center; gap: 8px; }
 .fen-teamchip:hover { color: var(--fen-chalk); }
 .fen-teamchip .swab { width: 13px; height: 13px; border-radius: 4px; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.3); }
@@ -88,8 +88,8 @@
 .fen-mark { width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; font-family: var(--fen-chalk-font); font-size: 16px; position: relative; z-index: 2;
   background: var(--fen-ts); color: var(--fen-tp); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 3px color-mix(in srgb, var(--fen-tp) 60%, #000); }
 .fen-ident .nm { font-family: var(--fen-chalk-font); font-size: 28px; position: relative; z-index: 2; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
-.fen-ident .rec { font-family: var(--fen-type); font-size: 12px; color: rgba(255, 255, 255, 0.8); position: relative; z-index: 2; }
-.fen-ident .right { margin-left: auto; position: relative; z-index: 2; font-family: var(--fen-type); font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.fen-ident .rec { font-family: var(--fen-chalk-font); font-size: 12px; color: rgba(255, 255, 255, 0.8); position: relative; z-index: 2; }
+.fen-ident .right { margin-left: auto; position: relative; z-index: 2; font-family: var(--fen-chalk-font); font-size: 12px; color: rgba(255, 255, 255, 0.85); }
 .fen-colorbar { height: 5px; background: linear-gradient(90deg, var(--fen-tp) 0 60%, var(--fen-ts) 60% 100%); }
 
 /* board */
@@ -109,20 +109,20 @@
 .fen-pulse { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid rgba(0, 0, 0, 0.32); }
 .fen-pulse .club { font-family: var(--fen-chalk-font); font-size: 30px; }
 .fen-metric { cursor: pointer; background: none; border: none; text-align: left; padding: 0; }
-.fen-metric .ml { font-family: var(--fen-type); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-metric .ml { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
 .fen-metric .mv { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
-.fen-metric .tap { font-family: var(--fen-type); font-size: 9px; color: var(--fen-chalk-soft); opacity: 0.7; }
+.fen-metric .tap { font-family: var(--fen-chalk-font); font-size: 9px; color: var(--fen-chalk-soft); opacity: 0.7; }
 .fen-rivalcall { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 18px; }
 
 /* roster */
 .fen-roster { display: grid; grid-template-columns: 34px 60px 1fr 120px 70px 96px 92px; gap: 2px 12px; align-items: center; }
-.fen-roster .h { font-family: var(--fen-type); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 6px; }
+.fen-roster .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 6px; }
 .fen-roster .h.rt { text-align: right; }
 .fen-roster .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.22); }
 .fen-rnum { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-chalk-soft); }
-.fen-rpos { font-family: var(--fen-type); font-size: 12px; color: var(--fen-ash); text-align: center; background: rgba(0, 0, 0, 0.18); border-radius: 4px; padding: 2px 0; }
+.fen-rpos { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-ash); text-align: center; background: rgba(0, 0, 0, 0.18); border-radius: 4px; padding: 2px 0; }
 .fen-rname { font-family: var(--fen-chalk-font); font-size: 21px; }
-.fen-rbadge { font-family: var(--fen-type); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-yellow); border-radius: 4px; padding: 2px 7px; justify-self: start; }
+.fen-rbadge { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-yellow); border-radius: 4px; padding: 2px 7px; justify-self: start; }
 .fen-rbadge.alb { background: var(--fen-gray); }
 .fen-rnumcell { font-family: var(--fen-chalk-font); font-size: 20px; text-align: right; }
 .fen-rnumcell.soft { color: var(--fen-chalk-soft); }
@@ -135,54 +135,54 @@
 
 /* money — option B (small typewriter $/k + chalk digits) */
 .fen-money { font-family: var(--fen-chalk-font); display: inline-flex; align-items: baseline; }
-.fen-money .cur { font-family: var(--fen-type); font-size: 0.46em; color: var(--fen-chalk-soft); margin-right: 0.08em; transform: translateY(-0.12em); }
-.fen-money .unit { font-family: var(--fen-type); font-size: 0.46em; color: var(--fen-chalk-soft); margin-left: 0.06em; }
+.fen-money .cur { font-family: var(--fen-chalk-font); font-size: 0.46em; color: var(--fen-chalk-soft); margin-right: 0.08em; transform: translateY(-0.12em); }
+.fen-money .unit { font-family: var(--fen-chalk-font); font-size: 0.46em; color: var(--fen-chalk-soft); margin-left: 0.06em; }
 
 /* morale ledger popover */
 .fen-pop { position: absolute; z-index: 20; width: 340px; background: linear-gradient(180deg, #33403a, #2a342e); border: 2px solid #14110d; border-radius: 4px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.4); padding: 16px 18px; }
 .fen-pop .ph { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid rgba(0, 0, 0, 0.4); padding-bottom: 10px; margin-bottom: 10px; }
 .fen-pop .ph .nm { font-family: var(--fen-chalk-font); font-size: 22px; }
-.fen-pop .ph .st { font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-soft); margin-left: auto; text-transform: uppercase; letter-spacing: 0.08em; }
+.fen-pop .ph .st { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-left: auto; text-transform: uppercase; letter-spacing: 0.08em; }
 .fen-pop .big { font-family: var(--fen-chalk-font); font-size: 40px; line-height: 1; }
-.fen-pop .arc { font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-soft); margin: 2px 0 12px; }
+.fen-pop .arc { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin: 2px 0 12px; }
 .fen-entry { display: flex; gap: 11px; align-items: baseline; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
 .fen-entry:last-child { border-bottom: none; }
 .fen-entry .d { font-family: var(--fen-chalk-font); font-size: 17px; width: 40px; flex: none; text-align: right; }
 .fen-entry .d.up { color: var(--fen-yellow); }
 .fen-entry .d.dn { color: var(--fen-marquee); }
-.fen-entry .rs { font-family: var(--fen-type); font-size: 12px; color: var(--fen-chalk); line-height: 1.35; }
-.fen-entry .wk { font-family: var(--fen-type); font-size: 10px; color: var(--fen-chalk-soft); }
-.fen-pop .foot { font-family: var(--fen-type); font-size: 10.5px; color: var(--fen-chalk-soft); margin-top: 10px; text-align: center; opacity: 0.8; }
+.fen-entry .rs { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk); line-height: 1.35; }
+.fen-entry .wk { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-pop .foot { font-family: var(--fen-chalk-font); font-size: 10.5px; color: var(--fen-chalk-soft); margin-top: 10px; text-align: center; opacity: 0.8; }
 .fen-pop .close { position: absolute; top: 8px; right: 10px; background: none; border: none; color: var(--fen-chalk-faint); font-size: 18px; cursor: pointer; line-height: 1; }
 .fen-popbackdrop { position: fixed; inset: 0; z-index: 19; }
 
 /* empty / loading */
-.fen-empty { font-family: var(--fen-type); color: var(--fen-chalk-soft); text-align: center; padding: 40px 20px; font-size: 13px; }
+.fen-empty { font-family: var(--fen-chalk-font); color: var(--fen-chalk-soft); text-align: center; padding: 40px 20px; font-size: 13px; }
 
 /* ===== refined banner (archetype + crew, clean + spacious) ===== */
 .fen-id-main { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.fen-archetype { display: inline-flex; align-items: center; gap: 5px; font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 3px 10px; }
-.fen-id-meta { font-family: var(--fen-type); font-size: 12px; color: rgba(255, 255, 255, 0.78); position: relative; z-index: 2; margin-top: 3px; }
+.fen-archetype { display: inline-flex; align-items: center; gap: 5px; font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 3px 10px; }
+.fen-id-meta { font-family: var(--fen-chalk-font); font-size: 12px; color: rgba(255, 255, 255, 0.78); position: relative; z-index: 2; margin-top: 3px; }
 .fen-crewside { margin-left: auto; position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
 .fen-reporter { display: flex; align-items: center; gap: 10px; }
 .fen-reporter .rt { text-align: right; }
-.fen-reporter .rn { font-family: var(--fen-type); font-size: 12.5px; color: #fff; }
-.fen-reporter .rm { font-family: var(--fen-type); font-size: 11px; color: var(--fen-ash); font-style: italic; }
+.fen-reporter .rn { font-family: var(--fen-chalk-font); font-size: 12.5px; color: #fff; }
+.fen-reporter .rm { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); font-style: italic; }
 .fen-ravatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(160deg, #3a4a5a, #222a30); display: grid; place-items: center; font-size: 17px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(255, 255, 255, 0.15); }
-.fen-crew { font-family: var(--fen-type); font-size: 11px; color: rgba(255, 255, 255, 0.72); }
+.fen-crew { font-family: var(--fen-chalk-font); font-size: 11px; color: rgba(255, 255, 255, 0.72); }
 .fen-crew b { color: rgba(255, 255, 255, 0.95); }
 
 /* ===== Season Home ("The Clubhouse") ===== */
-.fen-sectlab { font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); margin: 0 0 11px; display: flex; align-items: center; gap: 10px; }
+.fen-sectlab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); margin: 0 0 11px; display: flex; align-items: center; gap: 10px; }
 .fen-sectlab::after { content: ""; flex: 1; height: 1px; background: rgba(0, 0, 0, 0.25); }
 .fen-sectlab .lite { text-transform: none; letter-spacing: 0; }
 
 .fen-lead { background: linear-gradient(180deg, #ddd1b6, #cdbf9d); color: var(--fen-navy); border: 1px solid #b3a583; border-radius: 3px; padding: 18px 20px; position: relative; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4); margin-bottom: 18px; }
-.fen-lead .kick { font-family: var(--fen-type); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 6px; }
-.fen-lead h2 { font-family: var(--fen-type); font-size: 24px; line-height: 1.14; margin: 0 0 7px; color: #23201a; }
-.fen-lead p { font-family: var(--fen-type); font-size: 13.5px; line-height: 1.5; margin: 0; max-width: 64ch; color: #23201a; }
-.fen-lead .by { font-family: var(--fen-type); font-size: 11px; color: #4a4536; margin-top: 9px; font-style: italic; }
-.fen-lead .wt { position: absolute; top: 14px; right: 16px; font-family: var(--fen-type); font-size: 10px; color: #6a5f48; text-transform: uppercase; letter-spacing: 0.1em; }
+.fen-lead .kick { font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 6px; }
+.fen-lead h2 { font-family: var(--fen-chalk-font); font-size: 24px; line-height: 1.14; margin: 0 0 7px; color: #23201a; }
+.fen-lead p { font-family: var(--fen-chalk-font); font-size: 13.5px; line-height: 1.5; margin: 0; max-width: 64ch; color: #23201a; }
+.fen-lead .by { font-family: var(--fen-chalk-font); font-size: 11px; color: #4a4536; margin-top: 9px; font-style: italic; }
+.fen-lead .wt { position: absolute; top: 14px; right: 16px; font-family: var(--fen-chalk-font); font-size: 10px; color: #6a5f48; text-transform: uppercase; letter-spacing: 0.1em; }
 
 .fen-homegrid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; }
 @media (max-width: 880px) { .fen-homegrid { grid-template-columns: 1fr; } }
@@ -196,8 +196,8 @@
 .fen-icard .t { font-family: var(--fen-chalk-font); font-size: 20px; line-height: 1.1; color: var(--fen-chalk); }
 .fen-icard.crisis .t { color: var(--fen-marquee); }
 .fen-icard.dated .t { color: var(--fen-yellow); }
-.fen-icard .d { font-family: var(--fen-type); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 3px; line-height: 1.4; }
-.fen-icard .go { margin-left: auto; font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-soft); white-space: nowrap; align-self: center; }
+.fen-icard .d { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 3px; line-height: 1.4; }
+.fen-icard .go { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); white-space: nowrap; align-self: center; }
 
 .fen-nextgame { background: linear-gradient(180deg, #445b3c, #36492f); border: 1px solid rgba(0, 0, 0, 0.4); border-radius: 6px; padding: 18px; box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4); }
 .fen-mteams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 14px; }
@@ -205,15 +205,15 @@
 .fen-mt .lg { width: 42px; height: 42px; border-radius: 11px; margin: 0 auto 6px; display: grid; place-items: center; font-family: var(--fen-chalk-font); font-size: 13px; background: var(--fen-green-deep); color: var(--fen-chalk); }
 .fen-mt .nm { font-family: var(--fen-chalk-font); font-size: 19px; }
 .fen-mt.you .nm, .fen-mt.you .lg { color: var(--fen-yellow); }
-.fen-mt .rc { font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-mt .rc { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
 .fen-vs { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-yellow); }
 .fen-bigplay { width: 100%; font-family: var(--fen-chalk-font); font-size: 18px; padding: 15px; border-radius: 4px; border: 2px solid #2a2208; cursor: pointer; background: linear-gradient(180deg, #f0d26a, #cba23f); color: var(--fen-navy); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.8); }
 .fen-bigplay:active { transform: scale(0.98); }
 .fen-simrow { display: flex; gap: 8px; margin-top: 10px; justify-content: center; }
-.fen-simbtn { font-family: var(--fen-type); font-size: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 4px; color: var(--fen-chalk-soft); padding: 8px 12px; cursor: pointer; }
-.fen-gpulse { font-family: var(--fen-type); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 14px; text-align: center; }
+.fen-simbtn { font-family: var(--fen-chalk-font); font-size: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 4px; color: var(--fen-chalk-soft); padding: 8px 12px; cursor: pointer; }
+.fen-gpulse { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 14px; text-align: center; }
 .fen-gpulse b { color: var(--fen-chalk); }
-.fen-calm { font-family: var(--fen-type); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
+.fen-calm { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
 .fen-calm b { color: var(--fen-chalk); }
 
 /* ===== Help layer — exposition hidden by default; a barely-there bottom toggle reveals it ===== */
@@ -221,7 +221,7 @@
 .fen-root.help-on .fen-help { display: inline; }
 .fen-help-b { display: none; }
 .fen-root.help-on .fen-help-b { display: block; }
-.fen-helpbtn { position: fixed; bottom: 13px; right: 15px; z-index: 60; font-family: var(--fen-type); font-size: 11px; color: var(--fen-chalk-faint); background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(236, 232, 218, 0.14); border-radius: 999px; padding: 5px 12px; cursor: pointer; opacity: 0.4; transition: opacity 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.fen-helpbtn { position: fixed; bottom: 13px; right: 15px; z-index: 60; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-faint); background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(236, 232, 218, 0.14); border-radius: 999px; padding: 5px 12px; cursor: pointer; opacity: 0.4; transition: opacity 0.15s; display: inline-flex; align-items: center; gap: 6px; }
 .fen-helpbtn:hover { opacity: 1; }
 .fen-root.help-on .fen-helpbtn { opacity: 1; color: var(--fen-navy); background: var(--fen-yellow); border-color: var(--fen-yellow); }
 
@@ -229,21 +229,26 @@
 .fen-paper { position: relative; border-radius: 3px; padding: 22px 26px; color: var(--fen-navy); background: linear-gradient(180deg, #ddd1b6, #cdbf9d); border: 1px solid #b3a583; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); overflow: hidden; }
 .fen-paper::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0.3; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
 .fen-masthead { text-align: center; border-bottom: 3px double var(--fen-navy); padding-bottom: 10px; margin-bottom: 8px; position: relative; z-index: 2; }
-.fen-masthead .name { font-family: var(--fen-type); font-size: 34px; line-height: 1.05; }
-.fen-masthead .subm { font-family: var(--fen-type); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; margin-top: 7px; color: #4a4536; }
-.fen-dateline { display: flex; justify-content: space-between; font-family: var(--fen-type); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--fen-navy); padding: 6px 0; margin-bottom: 16px; color: #4a4536; position: relative; z-index: 2; flex-wrap: wrap; gap: 8px; }
+.fen-masthead .name { font-family: var(--fen-chalk-font); font-size: 34px; line-height: 1.05; }
+.fen-masthead .subm { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; margin-top: 7px; color: #4a4536; }
+.fen-dateline { display: flex; justify-content: space-between; font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--fen-navy); padding: 6px 0; margin-bottom: 16px; color: #4a4536; position: relative; z-index: 2; flex-wrap: wrap; gap: 8px; }
 .fen-paper .pbody { position: relative; z-index: 2; }
 .fen-lead2 { margin-bottom: 16px; }
-.fen-lead2 .kick { font-family: var(--fen-type); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 5px; }
-.fen-lead2 h2 { font-family: var(--fen-type); font-size: 26px; line-height: 1.12; margin: 0 0 7px; }
-.fen-lead2 p { font-family: var(--fen-type); font-size: 13.5px; line-height: 1.5; margin: 0; max-width: 70ch; }
-.fen-lead2 .by { font-family: var(--fen-type); font-size: 11px; color: #4a4536; margin-top: 8px; font-style: italic; }
+.fen-lead2 .kick { font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 5px; }
+.fen-lead2 h2 { font-family: var(--fen-chalk-font); font-size: 26px; line-height: 1.12; margin: 0 0 7px; }
+.fen-lead2 p { font-family: var(--fen-chalk-font); font-size: 13.5px; line-height: 1.5; margin: 0; max-width: 70ch; }
+.fen-lead2 .by { font-family: var(--fen-chalk-font); font-size: 11px; color: #4a4536; margin-top: 8px; font-style: italic; }
 .fen-newsgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; position: relative; z-index: 2; }
 @media (max-width: 760px) { .fen-newsgrid { grid-template-columns: 1fr; } }
 .fen-ncard { border-top: 1px solid var(--fen-navy); padding-top: 11px; cursor: pointer; }
-.fen-ncat { display: inline-block; font-family: var(--fen-type); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 6px; }
-.fen-ncard h3 { font-family: var(--fen-type); font-size: 16px; line-height: 1.22; margin: 0 0 6px; }
-.fen-ncard .ex { font-family: var(--fen-type); font-size: 12.5px; color: #3a352a; margin: 0; line-height: 1.45; }
-.fen-ncard .by { font-family: var(--fen-type); font-size: 10.5px; color: #5a5446; margin-top: 8px; font-style: italic; }
+.fen-ncat { display: inline-block; font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 6px; }
+.fen-ncard h3 { font-family: var(--fen-chalk-font); font-size: 16px; line-height: 1.22; margin: 0 0 6px; }
+.fen-ncard .ex { font-family: var(--fen-chalk-font); font-size: 12.5px; color: #3a352a; margin: 0; line-height: 1.45; }
+.fen-ncard .by { font-family: var(--fen-chalk-font); font-size: 10.5px; color: #5a5446; margin-top: 8px; font-style: italic; }
 
 @media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
+
+/* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.
+ * Mom's Typewriter is reserved for the reporter's words ONLY: the Season Home lead
+ * story and the Tootwhistle Times newspaper. */
+.fen-lead, .fen-lead *, .fen-paper, .fen-paper * { font-family: var(--fen-type) !important; }
