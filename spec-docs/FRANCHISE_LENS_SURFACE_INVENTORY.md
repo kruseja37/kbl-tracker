@@ -109,7 +109,8 @@ adapters already written (L10–L13) but no home.
 | **Rebrand / relocation takeover** | fan-floor circuit-breaker: rename/relocate + fame reset | 🟡 | N | `franchiseRebrandCascade.ts:19` |
 | **Season-end ceremony / awards night** | the capstone — winners revealed + news | 🟢 (UI exists) | partial | `AwardsCeremonyFlow`, `franchiseL12AwardNewsAdapter.ts` |
 | **Random-event confirmation takeover** | the L10 sweep's 8 event families (hot streak, gain/lose pitch, earn/lose trait, trade demand, stadium change…) confirmed before applying | 🟢 sweep / 🟡 confirm | N | `franchiseL10EventEngine.ts:102` |
-| **Stadium oddity records** | the 19 curiosities (shortest HR, marathon game, error machines, comebacks) | 🟢 | N | `oddityRecordTracker.ts:17` |
+| **Stadium oddity records** ✅ BUILT | longest HR, most HR in a game, longest/marathon game, biggest comeback, blowout… (expanded House of Horrors) | 🟢 | Y | `oddityRecordTracker.ts:17` |
+| **Stadium richness** ✅ BUILT | park **archetype** badge, the **home-park-rival callout** (Captain feature), park **aggregates**, **Best/Worst hitter+pitcher here**, the **visitor ledger** (opponent records) | 🟢/🟡 | Y | `franchiseStadiumFoundation.ts`, `getHomeParkRival`, season stats |
 | **V2 fame-bearing stadium records** | farthest-HR-by-hand / WPA house-of-horrors / clutch-goat | ⚪ ABSENT (on `franchise-v1-next`) | N | — merge later |
 
 ---

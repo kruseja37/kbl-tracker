@@ -226,14 +226,22 @@ export interface SprayRoleVM {
   note?: string;
 }
 export interface StadiumRecordVM { label: string; holder: string; value: string; note?: string }
+export interface StadiumAggregateVM { label: string; value: string }
+export interface StadiumPerfVM { label: string; name: string; teamId: string; teamAbbr: string; value: string; kind: "good" | "bad" }
+export interface StadiumOpponentVM { teamId: string; teamAbbr: string; record: string; note?: string }
 export interface StadiumVM {
   name: string;
   nickname?: string;
   city?: string;
+  archetype?: string;                            // "Bandbox" / "Pitcher's Cavern" / "Neutral" …
   dims?: { lf: number; cf: number; rf: number };
   factors?: { overall: number; runs: number; hr: number; confidence: "LOW" | "MEDIUM" | "HIGH"; source?: string };
+  homeParkRival?: { teamId: string; teamAbbr: string; record: string; note?: string };  // the club that owns this park (Captain's feature)
+  aggregates?: StadiumAggregateVM[];             // park totals (HR here, runs/game, …)
+  performers?: StadiumPerfVM[];                  // best/worst hitter & pitcher at this park
+  opponents?: StadiumOpponentVM[];               // how visitors fare here
   spray: SprayRoleVM[];                          // batting / pitching / fielding
-  records?: StadiumRecordVM[];                   // the house-of-horrors catalog
+  records?: StadiumRecordVM[];                   // the house-of-horrors catalog (incl. oddities)
 }
 
 /* ===== Checkpoint confirmation worklist (the moment-driven transcription takeover) ===== */
@@ -963,11 +971,13 @@ function SprayPanel({ spray }: { spray: SprayRoleVM[] }) {
 function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
   const s = hub.stadium;
   if (!s) return <div className="fen-empty">No ballpark data for {active.name} yet.</div>;
+  const stadShort = s.nickname ?? s.name;
   return (
     <div className="fen-stadium">
       <div className="fen-stad-head">
         <div className="fen-stad-name fen-chalk fen-y">{s.nickname ? `"${s.nickname}"` : s.name}</div>
         <div className="fen-stad-sub">{[s.nickname ? s.name : null, s.city].filter(Boolean).join(" · ")}</div>
+        {s.archetype ? <span className="fen-stad-arch">{s.archetype}</span> : null}
         {s.dims ? (
           <div className="fen-stad-dims">
             <span><b>LF</b> {s.dims.lf}</span><span><b>CF</b> {s.dims.cf}</span><span><b>RF</b> {s.dims.rf}</span>
@@ -975,9 +985,16 @@ function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
         ) : null}
       </div>
 
+      {s.homeParkRival ? (
+        <div className="fen-stad-rival">
+          <span className="ic">⚔</span>
+          <span>This season <b className="fen-r">{s.homeParkRival.teamAbbr}</b> owns {s.nickname ? `"${s.nickname}"` : "your park"} — <b className="fen-chalk">{s.homeParkRival.record}</b> here{s.homeParkRival.note ? ` · ${s.homeParkRival.note}` : ""}.</span>
+        </div>
+      ) : null}
+
       <div className="fen-stad-grid">
         <div className="fen-stad-spray">
-          <div className="fen-sectlab">Spray Chart <span className="lite fen-help">· where balls go at {s.nickname ?? s.name}</span></div>
+          <div className="fen-sectlab">Spray Chart <span className="lite fen-help">· where balls go at {stadShort}</span></div>
           <SprayPanel spray={s.spray} />
         </div>
 
@@ -993,20 +1010,67 @@ function StadiumTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
               <div className="fen-park-note fen-help-b">100 = neutral · above favors hitters, below favors pitchers.</div>
             </div>
           ) : null}
-          {s.records && s.records.length ? (
-            <div className="fen-recbox">
-              <div className="fen-sectlab">House of Horrors <span className="lite fen-help">· the park record book</span></div>
-              {s.records.map((rec, i) => (
-                <div className="fen-rec" key={i}>
-                  <div className="rl">{rec.label}</div>
-                  <div className="rv fen-chalk">{rec.value}</div>
-                  <div className="rh">{rec.holder}{rec.note ? ` · ${rec.note}` : ""}</div>
-                </div>
-              ))}
+          {s.aggregates && s.aggregates.length ? (
+            <div className="fen-aggbox">
+              <div className="fen-sectlab">This Park, by the Numbers</div>
+              <div className="fen-aggs">
+                {s.aggregates.map((a, i) => (<div className="agg" key={i}><div className="v fen-chalk">{a.value}</div><div className="l">{a.label}</div></div>))}
+              </div>
             </div>
           ) : null}
         </div>
       </div>
+
+      {s.performers && s.performers.length ? (
+        <div className="fen-sr-sect">
+          <div className="fen-sectlab">Best &amp; Worst Here <span className="lite fen-help">· who owns this yard, and who it owns</span></div>
+          <div className="fen-perfs">
+            {s.performers.map((pf, i) => {
+              const tone = teamTone(pf.teamId, active);
+              return (
+                <div className={`fen-perf ${pf.kind}`} key={i}>
+                  <div className="pl">{pf.label}</div>
+                  <div className={`pn fen-chalk${tone}`}>{pf.name} <span className="tm">{pf.teamAbbr}</span></div>
+                  <div className="pv fen-chalk">{pf.value}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {s.opponents && s.opponents.length ? (
+        <div className="fen-sr-sect">
+          <div className="fen-sectlab">The Visitors <span className="lite fen-help">· how the league fares at {stadShort}</span></div>
+          <div className="fen-opps">
+            {s.opponents.map((o, i) => {
+              const tone = teamTone(o.teamId, active);
+              return (
+                <div className={`fen-opp${tone}`} key={i}>
+                  <span className="oa fen-chalk">{o.teamAbbr}</span>
+                  <span className="orr fen-chalk">{o.record}</span>
+                  {o.note ? <span className="on">{o.note}</span> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {s.records && s.records.length ? (
+        <div className="fen-sr-sect">
+          <div className="fen-sectlab">House of Horrors <span className="lite fen-help">· the park record book &amp; oddities</span></div>
+          <div className="fen-recgrid">
+            {s.records.map((rec, i) => (
+              <div className="fen-rec" key={i}>
+                <div className="rl">{rec.label}</div>
+                <div className="rv fen-chalk">{rec.value}</div>
+                <div className="rh">{rec.holder}{rec.note ? ` · ${rec.note}` : ""}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

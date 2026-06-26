@@ -392,6 +392,44 @@
 .fen-stad-sub { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
 .fen-stad-dims { margin-left: auto; display: flex; gap: 16px; font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk); }
 .fen-stad-dims b { color: var(--fen-chalk-soft); font-size: 11px; letter-spacing: 0.06em; margin-right: 3px; }
+.fen-stad-arch { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-ash); border-radius: 4px; padding: 3px 9px; }
+
+/* home-park rivalry callout (Captain's home-park-rival feature) */
+.fen-stad-rival { display: flex; align-items: center; gap: 11px; background: rgba(204, 52, 51, 0.1); border: 1px solid rgba(204, 52, 51, 0.35); border-left: 3px solid var(--fen-marquee); border-radius: 6px; padding: 10px 14px; margin-bottom: 18px; font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); }
+.fen-stad-rival .ic { font-size: 17px; }
+.fen-stad-rival b { color: var(--fen-chalk); }
+
+/* park aggregates */
+.fen-aggbox { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 14px 16px; }
+.fen-aggs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 10px; }
+.fen-aggs .agg { text-align: center; }
+.fen-aggs .agg .v { font-family: var(--fen-chalk-font); font-size: 22px; line-height: 1; }
+.fen-aggs .agg .l { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 4px; }
+
+/* best & worst performers here */
+.fen-perfs { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 10px; }
+.fen-perf { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 3px solid var(--fen-yellow); border-radius: 5px; padding: 10px 13px; }
+.fen-perf.bad { border-left-color: var(--fen-marquee); }
+.fen-perf .pl { grid-column: 1 / -1; font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-perf .pn { font-family: var(--fen-chalk-font); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-perf .pn.you { color: var(--fen-yellow); }
+.fen-perf .pn.rival { color: var(--fen-marquee); }
+.fen-perf .pn .tm { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-perf .pv { font-family: var(--fen-chalk-font); font-size: 16px; text-align: right; }
+
+/* visitor ledger */
+.fen-opps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.fen-opp { display: flex; align-items: baseline; gap: 9px; background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(0, 0, 0, 0.28); border-radius: 5px; padding: 8px 11px; }
+.fen-opp .oa { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-opp .orr { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-opp .on { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); margin-left: auto; }
+.fen-opp.you .oa, .fen-opp.you .orr { color: var(--fen-yellow); }
+.fen-opp.rival { border-color: rgba(204, 52, 51, 0.4); }
+.fen-opp.rival .oa, .fen-opp.rival .orr { color: var(--fen-marquee); }
+
+/* record book grid (expanded) */
+.fen-recgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; }
+@media (max-width: 720px) { .fen-recgrid { grid-template-columns: 1fr; } }
 
 .fen-stad-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
 @media (max-width: 880px) { .fen-stad-grid { grid-template-columns: 1fr; } }

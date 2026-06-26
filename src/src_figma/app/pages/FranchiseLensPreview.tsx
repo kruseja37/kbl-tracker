@@ -223,8 +223,28 @@ const ALMANAC: AlmanacVM = {
  * and the franchise stadium-records catalog. */
 const STADIUM_PC: StadiumVM = {
   name: "Page Capitals Park", nickname: "The Yard", city: "Caldwell",
+  archetype: "Bandbox · Hitter's Park",
   dims: { lf: 330, cf: 400, rf: 325 },
   factors: { overall: 1.05, runs: 1.06, hr: 1.10, confidence: "LOW", source: "SEED" },
+  homeParkRival: { teamId: "BM", teamAbbr: "BM", record: "5–2 here", note: "broke 2 park records" },
+  aggregates: [
+    { label: "HR hit here", value: "104" },
+    { label: "Runs / game", value: "5.4" },
+    { label: "Avg. game", value: "2h 41m" },
+    { label: "Sellouts", value: "12" },
+  ],
+  performers: [
+    { label: "Best hitter here", name: "B. Vance", teamId: "BM", teamAbbr: "BM", value: "1.140 OPS", kind: "good" },
+    { label: "Worst hitter here", name: "G. Hale", teamId: "RR", teamAbbr: "RR", value: ".148 AVG", kind: "bad" },
+    { label: "Best pitcher here", name: "R. Fenomeno", teamId: "PC", teamAbbr: "PC", value: "1.62 ERA", kind: "good" },
+    { label: "Worst pitcher here", name: "S. Knox", teamId: "DV", teamAbbr: "DV", value: "9.00 ERA", kind: "bad" },
+  ],
+  opponents: [
+    { teamId: "BM", teamAbbr: "BM", record: "5–2", note: "owns it" },
+    { teamId: "RR", teamAbbr: "RR", record: "2–5" },
+    { teamId: "SG", teamAbbr: "SG", record: "1–4" },
+    { teamId: "ST", teamAbbr: "ST", record: "1–2" },
+  ],
   spray: [
     {
       role: "batting",
@@ -263,12 +283,14 @@ const STADIUM_PC: StadiumVM = {
     },
   ],
   records: [
+    { label: "Longest home run", value: "471 ft", holder: "Boomer Vance · BM", note: "Week 7 — onto Landsdowne St." },
+    { label: "Most HR, one game", value: "7", holder: "Page vs Sand Gnats", note: "Week 4" },
     { label: "Most runs, one game", value: "17", holder: "vs Sand Gnats", note: "Week 4" },
     { label: "Wildest slugfest", value: "29", holder: "PC 17, Gnats 12" },
     { label: "Biggest blowout", value: "+15", holder: "vs Harbor Bandits" },
+    { label: "Longest game", value: "14 inn", holder: "vs Steel Tides", note: "4h 52m" },
+    { label: "Biggest comeback", value: "down 6", holder: "beat Delta Vipers, Wk 6" },
     { label: "Most batted balls", value: "41", holder: "Dash Okoye" },
-    { label: "Most contact faced", value: "38", holder: "Rafa Fenomeno" },
-    { label: "Most plays made", value: "52", holder: "Hank Drake" },
     { label: "No-hitters", value: "1", holder: "Fenomeno vs River Rats", note: "Week 9" },
     { label: "Perfect games", value: "—", holder: "none yet at The Yard" },
   ],
@@ -276,8 +298,28 @@ const STADIUM_PC: StadiumVM = {
 
 const STADIUM_BM: StadiumVM = {
   name: "Brass Monkeys Field", nickname: "The Foundry", city: "Steelton",
+  archetype: "Pitcher's Cavern",
   dims: { lf: 345, cf: 410, rf: 340 },
   factors: { overall: 0.93, runs: 0.91, hr: 0.87, confidence: "MEDIUM", source: "SEED" },
+  homeParkRival: { teamId: "PC", teamAbbr: "PC", record: "3–4 here", note: "only club to take a series" },
+  aggregates: [
+    { label: "HR hit here", value: "61" },
+    { label: "Runs / game", value: "4.2" },
+    { label: "Avg. game", value: "2h 28m" },
+    { label: "Shutouts", value: "9" },
+  ],
+  performers: [
+    { label: "Best pitcher here", name: "C. Vesper", teamId: "BM", teamAbbr: "BM", value: "1.41 ERA", kind: "good" },
+    { label: "Best hitter here", name: "B. Vance", teamId: "BM", teamAbbr: "BM", value: ".980 OPS", kind: "good" },
+    { label: "Worst hitter here", name: "K. Bowman", teamId: "CC", teamAbbr: "CC", value: ".131 AVG", kind: "bad" },
+    { label: "Worst pitcher here", name: "A. Lund", teamId: "RR", teamAbbr: "RR", value: "8.31 ERA", kind: "bad" },
+  ],
+  opponents: [
+    { teamId: "PC", teamAbbr: "PC", record: "3–4", note: "took a series" },
+    { teamId: "CC", teamAbbr: "CC", record: "0–6" },
+    { teamId: "ST", teamAbbr: "ST", record: "2–4" },
+    { teamId: "DV", teamAbbr: "DV", record: "1–3" },
+  ],
   spray: [
     {
       role: "batting",
@@ -314,6 +356,7 @@ const STADIUM_BM: StadiumVM = {
     },
   ],
   records: [
+    { label: "Longest home run", value: "418 ft", holder: "Tio Marsh · BM", note: "a rocket, for here" },
     { label: "Most runs, one game", value: "12", holder: "vs Cactus Cats" },
     { label: "Lowest-scoring win", value: "1–0", holder: "Vesper, 14 K" },
     { label: "Biggest blowout", value: "+11", holder: "vs Harbor Bandits" },
@@ -327,8 +370,28 @@ const STADIUM_BM: StadiumVM = {
 
 const STADIUM_RR: StadiumVM = {
   name: "River Rats Stadium", nickname: "The Levee", city: "Marsh Bend",
+  archetype: "Neutral · Gap Park",
   dims: { lf: 335, cf: 405, rf: 330 },
   factors: { overall: 1.00, runs: 1.01, hr: 0.96, confidence: "LOW", source: "SEED" },
+  homeParkRival: { teamId: "SG", teamAbbr: "SG", record: "4–3 here", note: "the Gnats love these gaps" },
+  aggregates: [
+    { label: "HR hit here", value: "78" },
+    { label: "Runs / game", value: "5.0" },
+    { label: "Triples here", value: "31" },
+    { label: "Avg. game", value: "2h 36m" },
+  ],
+  performers: [
+    { label: "Best hitter here", name: "S. Park", teamId: "RR", teamAbbr: "RR", value: ".352 AVG", kind: "good" },
+    { label: "Worst hitter here", name: "C. Vane", teamId: "PC", teamAbbr: "PC", value: ".121 AVG", kind: "bad" },
+    { label: "Best pitcher here", name: "M. Roan", teamId: "DV", teamAbbr: "DV", value: "2.04 ERA", kind: "good" },
+    { label: "Worst pitcher here", name: "S. Booker", teamId: "RR", teamAbbr: "RR", value: "7.45 ERA", kind: "bad" },
+  ],
+  opponents: [
+    { teamId: "SG", teamAbbr: "SG", record: "4–3", note: "owns it" },
+    { teamId: "PC", teamAbbr: "PC", record: "2–3" },
+    { teamId: "CC", teamAbbr: "CC", record: "2–2" },
+    { teamId: "HB", teamAbbr: "HB", record: "3–1" },
+  ],
   spray: [
     {
       role: "batting",
@@ -365,6 +428,7 @@ const STADIUM_RR: StadiumVM = {
     },
   ],
   records: [
+    { label: "Longest home run", value: "455 ft", holder: "Sol Park · RR", note: "to the gap and gone" },
     { label: "Most runs, one game", value: "14", holder: "vs Harbor Bandits" },
     { label: "Wildest slugfest", value: "26", holder: "RR 14, Bandits 12" },
     { label: "Most triples, one game", value: "4", holder: "Sol Park & co." },
