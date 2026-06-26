@@ -24066,3 +24066,147 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF adding STADIUM_RECORD forces an edit to a file outside the 3 listed (e.g. another exhaustive `Record<NarrativeEventType>` — if found, STOP and report it; do NOT silently edit a forbidden file).
 - A correct BLOCK is GOOD. Do NOT build the emission seam / wiring / flag, do NOT reuse SEASON_SUMMARY, do NOT thread real playContext, do NOT push.
 <!-- ===== END CONTRACT: A1.5d-hop4 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop5 ===== -->
+# CONTRACT A1.5d-hop5 — Almanac (§5.5): house the park record in the franchise-season Almanac, INDEPENDENT of the LLM take (build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-5 — the Almanac housing for park records, in TWO build-dark deliverables (both gated by `isFranchisePhase2StadiumRecordsEnabled()`):
+- **A. Almanac archive DERIVATION** — surface each standing stadium record as a `'park-record'` `AlmanacNarrativeArchiveEntry` in the franchise-season Almanac list.
+- **B. Season-summary EMBED** — embed the standing records into the persisted `FranchiseSeasonSummary` (the season-finalize de-orphan, §9).
+Do NOT touch `processCompletedGame.ts`, `franchiseStadiumRecordsTap.ts`, `franchiseStadiumRecordsStorage.ts`, `masterMoraleMatrix.ts`, `narrativeEngine.ts`, any reporter adapter, the trackerDb, or any flag definition. Do NOT build the Almanac UI surfacing (filter chip / label / icon in `AlmanacNarratives.tsx`) — that is USER-VISIBLE and FLAGGED for JK. Do NOT build hop-6 (rivalry edge) / §7 home-park-rivalry 2× / §8 per-stadium stat-display. No DB change (records live in their own db `kbl-franchise-stadium-records`; this ticket only READS them).
+
+## ⚠ KEY GROUNDING REVISION (Captain-verified from source — REVISES the spec premise)
+Spec §5.5 says "the change maps 1:1 to a new `'park-record'` AlmanacNarrativeArchiveEntry." **But the `AlmanacNarrativeArchiveEntry` is NOT a persisted store with a writer — it is a DERIVED VIEW.** `listAlmanacNarrativeArchive` (`src/utils/almanacNarrativeArchive.ts:324-371`) materializes entries ON-THE-FLY from durable sources (game stories, commentary tidbits, the transaction log). There is **no `putAlmanacNarrativeArchiveEntry`**. So the faithful, lowest-risk delivery is to teach that derivation to ALSO materialize `'park-record'` entries from the already-persisted `FranchiseStadiumRecord` rows (read via `listFranchiseStadiumRecords`) — exactly mirroring the existing `transactionToArchiveEntry` branch. **No new write path, no new store, no DB bump.** This is read-side, build-dark, and L-SIM byte-identical.
+
+## GOAL
+Flag ON ⇒ a franchise-season Almanac query (`{ franchiseId, seasonId }`) ALSO returns one `'park-record'` entry per standing stadium record for that scope; AND the persisted season summary carries the standing records. Flag OFF ⇒ byte-identical to today (no park-record entries; no `stadiumRecords` field).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26 — re-read before building)
+- **Almanac derivation** `src/utils/almanacNarrativeArchive.ts`:
+  - `AlmanacNarrativeKind` union (`:11-14`): currently `"historical-tidbit" | "post-game-story" | "transaction-history"`. Add `| "park-record"`. (No `Record<AlmanacNarrativeKind>` / exhaustive switch exists — Captain grep'd; `AlmanacNarratives.tsx` handles a new kind GRACEFULLY via default label/icon, no throw.)
+  - `AlmanacNarrativeArchiveEntry` interface (`:16-49`): fields incl. `id`, `kind`, `gameMode`, `timestamp` (number, sort key — DESC), `franchiseId?`, `seasonId?`, `seasonNumber?`, `statsScopeId?`, `playerIds?`, `teamIds?`, `headline`, `body`. **No stadiumId/recordType field** — encode those in `id` + `headline`/`body` (sufficient; filtering is by franchiseId/seasonId/statsScopeId/playerId/teamId).
+  - `listAlmanacNarrativeArchive(filters)` (`:324-371`): loads `completedGames` (`getAllCompletedGames()`, `:328`) into `archiveEntries`, then the transaction branch (`:358-366`) — gated `if (filters.franchiseId && filters.seasonId)` — pushes `transactionToArchiveEntry`. Add the park-record branch RIGHT AFTER the transaction branch, BEFORE the final `.filter(archiveEntryMatchesFilters).sort(...)` (`:368-370`). The existing filter+sort then handle the new entries for free.
+  - `transactionToArchiveEntry` (`:219-272`) is the SHAPE to mirror (a pure `Record → entry` mapper; `id: 'transaction:'+id`; finite-guarded `Date.parse` timestamp).
+- **Stadium records** `src/utils/franchiseStadiumRecordsStorage.ts`:
+  - `listFranchiseStadiumRecords(scope: FranchiseStadiumRecordsScopeInput): Promise<FranchiseStadiumRecord[]>` (`:1013-1034`). `FranchiseStadiumRecordsScopeInput extends FranchiseStadiumFoundationScope` = `{ franchiseId, seasonId, statsScopeId, seasonNumber }` (ALL required; `hasExplicitScope` at `:215` needs a positive-int `seasonNumber`). Returns records sorted by stadiumId→recordType→recordKey.
+  - `FranchiseStadiumRecord` (`:63-86`): `{ …scope, id, stadiumId, stadiumName: string|null, recordType, recordKey, value, valueLabel, leaderTeamIds[], leaderPlayerIds[], leaderPlayerNames[], evidenceSummary, identityKey, createdAt: string, updatedAt: string, … }` (createdAt/updatedAt are ISO STRINGS).
+  - `FranchiseStadiumRecordType` (`:11-29`, 18 members) + `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<…, 1|-1|0>` (`:31-50`) — both exported.
+- **Tap write-scope (so the read scope matches)** `src/utils/franchiseStadiumRecordsTap.ts:46-62`: the tap writes records under `scope.{franchiseId, seasonId, statsScopeId, seasonNumber}` from `PersistedTrueValueScope`, derived from the same per-game processing context. ⇒ a `CompletedGameRecord` in that franchise+season carries the SAME `statsScopeId`/`seasonNumber` to derive the read scope from.
+- **CompletedGameRecord** `src/utils/gameStorage.ts`: `seasonNumber: number` (required, `:103`), `statsScopeId?: string` (optional, falls back to seasonId per the `?? seasonId` resolution at `:776`), plus `franchiseId`/`seasonId`.
+- **Season-summary** `src/utils/franchiseSeasonSummaryStorage.ts`:
+  - `FranchiseSeasonSummary` interface (`:152-202`) — has placeholder sections `awards/milestones/fanMorale/narrative/parkFactors` (each `FranchiseSeasonSummaryPlaceholder` = `{ status:'placeholder'; reason:string }`, `:208`). **No `stadiumRecords` field yet.**
+  - `buildFranchiseSeasonSummary(params: { franchiseId; seasonNumber; playoffId? })` (`:633`): resolves `seasonId`, loads `config`/`completedGames`, builds `stadiumReport` at `:694`, has `now = Date.now()` (`:687`), and RETURNS the summary literal (`:721-780`). The scope here is FULLY available (`franchiseId`, `seasonId`, `seasonNumber`).
+  - `saveFranchiseSeasonSummary` (`:783`) writes to store `'franchiseSeasonSummaries'` in `getTrackerDb()` (the `kbl-tracker` db). **This builder is NOT invoked by `processCompletedGame` nor by the L-SIM** (Captain grep'd: zero `SeasonSummary` refs in `test-utils/lsim/`).
+- **Flag** `src/utils/franchisePhase2Flags.ts`: `isFranchisePhase2StadiumRecordsEnabled()` (`:125`) + `setFranchisePhase2StadiumRecordsEnabledForTests(b|null)` (`:129`). (Already defined — do NOT redefine.)
+- **L-SIM determinism** `test-utils/lsim/storeDump.ts:4-13` (`DUMP_DATABASES`): includes `kbl-tracker` + `kbl-franchise-morale` but NOT `kbl-franchise-stadium-records`. Deliverable A reads only `kbl-franchise-stadium-records` (not dumped) + writes nothing. Deliverable B's builder isn't invoked in the sim. ⇒ both are byte-identical in the L-SIM (no re-bake).
+
+## DEFAULTS TAKEN (Captain — documented; §16 where noted)
+1. **A — scope derivation:** the Almanac filters lack `seasonNumber`, so derive the full read-scope from a `CompletedGameRecord` in the same franchise+season (its `seasonNumber` + `statsScopeId`). If no such game (or non-positive seasonNumber) → emit no park-record entries (safe degradation). Records keyed under a divergent statsScopeId simply don't match (`listFranchiseStadiumRecords` in-memory filter) — empty, never a crash.
+2. **A — entry labels:** `headline`/`body` use a generic kebab→Title rendering of `recordType` + the record's `evidenceSummary`/`valueLabel`. The PRETTY labels are part of the JK-pending UI polish (below). No per-type label map maintained here.
+3. **B — omit-when-off:** when the flag is OFF, OMIT the `stadiumRecords` field entirely (it is OPTIONAL), rather than emitting a placeholder. This keeps flag-off season summaries byte-identical (zero blast radius on existing tests) — a deliberate, documented deviation from the always-placeholder convention used by the other 5 sections.
+4. **B — embed a trimmed snapshot** (not the raw storage row): drop `policies`/`storageVersion`/scope-key internals; keep display-relevant fields + polarity. Mirrors this file's `toScheduleSnapshot`/`toCompletedGameSnapshot` convention.
+
+## EXPECTED OUTPUT
+1. **`src/utils/almanacNarrativeArchive.ts`** (deliverable A):
+   - Add `| "park-record"` to `AlmanacNarrativeKind` (`:11-14`).
+   - Add type-only imports: `listFranchiseStadiumRecords`, `type FranchiseStadiumRecord` from `./franchiseStadiumRecordsStorage`; `isFranchisePhase2StadiumRecordsEnabled` from `./franchisePhase2Flags`.
+   - NEW pure helper `function stadiumRecordToArchiveEntry(record: FranchiseStadiumRecord): AlmanacNarrativeArchiveEntry`:
+     - `id: 'park-record:' + record.identityKey` (the identityKey already encodes scope+stadium+recordType+recordKey ⇒ unique/stable).
+     - `kind: 'park-record'`, `gameMode: 'franchise'`.
+     - `timestamp`: `const parsed = Date.parse(record.updatedAt); Number.isFinite(parsed) ? parsed : 0` (mirror `transactionToArchiveEntry`).
+     - `franchiseId/seasonId/seasonNumber/statsScopeId` from `record`.
+     - `playerIds: record.leaderPlayerIds`, `teamIds: record.leaderTeamIds`.
+     - `headline`: e.g. `` `${record.stadiumName ?? 'Park'} Record — ${titleCaseKebab(record.recordType)}` `` (add a tiny local `titleCaseKebab` helper: split on `-`, capitalize each, join with space).
+     - `body`: `record.evidenceSummary` (append `` ` (${record.valueLabel})` `` when `valueLabel` is non-empty). No LLM/IO/time/random beyond `Date.parse`.
+   - In `listAlmanacNarrativeArchive`, add AFTER the transaction branch (`:366`) and BEFORE the final filter/sort:
+     ```
+     if (isFranchisePhase2StadiumRecordsEnabled() && filters.franchiseId && filters.seasonId) {
+       const scopeGame = completedGames.find((game) =>
+         game.franchiseId === filters.franchiseId &&
+         game.seasonId === filters.seasonId &&
+         (!filters.statsScopeId || game.statsScopeId === filters.statsScopeId) &&
+         Number.isInteger(game.seasonNumber) && game.seasonNumber > 0,
+       );
+       if (scopeGame) {
+         const records = await listFranchiseStadiumRecords({
+           franchiseId: filters.franchiseId,
+           seasonId: filters.seasonId,
+           statsScopeId: scopeGame.statsScopeId ?? filters.statsScopeId ?? filters.seasonId,
+           seasonNumber: scopeGame.seasonNumber,
+         });
+         for (const record of records) {
+           archiveEntries.push(stadiumRecordToArchiveEntry(record));
+         }
+       }
+     }
+     ```
+2. **`src/utils/franchiseSeasonSummaryStorage.ts`** (deliverable B):
+   - Add imports: `listFranchiseStadiumRecords`, `type FranchiseStadiumRecord`, `type FranchiseStadiumRecordType`, `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY` from `./franchiseStadiumRecordsStorage`; `isFranchisePhase2StadiumRecordsEnabled` from `./franchisePhase2Flags`.
+   - NEW exported types:
+     ```
+     export interface FranchiseSeasonSummaryStadiumRecord {
+       stadiumId: string;
+       stadiumName: string | null;
+       recordType: FranchiseStadiumRecordType;
+       recordKey: string;
+       value: number;
+       valueLabel: string;
+       polarity: 1 | -1 | 0;
+       leaderTeamIds: string[];
+       leaderPlayerIds: string[];
+       leaderPlayerNames: string[];
+       evidenceSummary: string;
+     }
+     export type FranchiseSeasonSummaryStadiumRecords =
+       | FranchiseSeasonSummaryPlaceholder
+       | { status: 'present'; generatedAt: number; records: FranchiseSeasonSummaryStadiumRecord[] };
+     ```
+   - Add OPTIONAL field to `FranchiseSeasonSummary`: `stadiumRecords?: FranchiseSeasonSummaryStadiumRecords;`.
+   - NEW pure mapper `function toStadiumRecordSnapshot(record: FranchiseStadiumRecord): FranchiseSeasonSummaryStadiumRecord` (pick the fields above; `polarity: FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[record.recordType]`).
+   - In `buildFranchiseSeasonSummary`, before the `return` literal, compute:
+     ```
+     let stadiumRecords: FranchiseSeasonSummaryStadiumRecords | undefined;
+     if (isFranchisePhase2StadiumRecordsEnabled()) {
+       const records = await listFranchiseStadiumRecords({
+         franchiseId: params.franchiseId,
+         seasonId,
+         statsScopeId: seasonId,
+         seasonNumber: params.seasonNumber,
+       });
+       stadiumRecords = { status: 'present', generatedAt: now, records: records.map(toStadiumRecordSnapshot) };
+     }
+     ```
+     and in the returned literal add `...(stadiumRecords ? { stadiumRecords } : {}),` (OMIT when off — do NOT emit a placeholder).
+3. **`src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts`** (NEW — model on `src/utils/tests/almanacNarrativeArchive.test.ts`, `fake-indexeddb/auto`, real storage):
+   - beforeEach: delete `kbl-tracker` + `clearFranchiseStadiumRecordsDatabaseForTests()`; afterEach: `setFranchisePhase2StadiumRecordsEnabledForTests(null)`.
+   - Seed: persist a franchise `CompletedGameRecord` with `{ franchiseId:'fr-1', seasonId, statsScopeId: seasonId, seasonNumber: 1, competitionType:'franchise', aggregationStatus:'complete' }`; seed ≥1 standing record under the SAME scope (drive `upsertFranchiseStadiumRecordsFromFoundationReport` with a foundation report + `completedGames` that yields a fame-bearing record, OR build the minimal report directly — match how `franchiseStadiumRecordsTap.test.ts` seeds).
+   - Flag ON ⇒ `listAlmanacNarrativeArchive({ franchiseId:'fr-1', seasonId })` includes a `kind:'park-record'` entry: assert its `franchiseId/seasonId/seasonNumber`, `playerIds` = the record's leaders, `teamIds` = the record's leader teams, a non-empty `headline`+`body`, and a finite `timestamp`. Also assert the `kind:'park-record'` filter returns it and `kind:'transaction-history'` filter excludes it.
+   - Flag OFF ⇒ the SAME query returns NO `park-record` entry (byte-identical behavior).
+4. **`src/utils/tests/franchiseSeasonSummaryStadiumRecords.test.ts`** (NEW — model on existing season-summary tests):
+   - Flag OFF ⇒ `buildFranchiseSeasonSummary(...)` result has `stadiumRecords === undefined` (field omitted).
+   - Flag ON (with ≥1 seeded standing record under the scope) ⇒ `result.stadiumRecords?.status === 'present'`, `records.length >= 1`, each snapshot carries the mapped fields + correct `polarity` from the map, and the heavy storage internals (`policies`/`storageVersion`) are NOT present on the snapshot.
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/almanacNarrativeArchive.ts`, `src/utils/franchiseSeasonSummaryStorage.ts`, + the 2 NEW test files. Do NOT touch `processCompletedGame.ts` / `franchiseStadiumRecordsTap.ts` / `franchiseStadiumRecordsStorage.ts` / `franchisePhase2Flags.ts` / `narrativeEngine.ts` / `masterMoraleMatrix.ts` / `AlmanacNarratives.tsx` / any reporter adapter / the trackerDb / any flag definition.
+- Build-dark: BOTH deliverables gated by `isFranchisePhase2StadiumRecordsEnabled()`. Flag OFF ⇒ no park-record Almanac entries + `stadiumRecords` field omitted ⇒ byte-identical to today. No DB bump (the records db `kbl-franchise-stadium-records` already exists; this ticket only READS it).
+- PURE mappers: `stadiumRecordToArchiveEntry` + `toStadiumRecordSnapshot` do no IO/`Math.random`/`crypto`; the only time call is the finite-guarded `Date.parse(record.updatedAt)`. (`buildFranchiseSeasonSummary` already uses `Date.now()` for `now` — reuse the existing `now`, do not add a second.)
+- Do NOT build the Almanac UI surfacing, the season-summary placeholder-when-off, hop-6, §7 2×, or §8 display.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts src/utils/tests/almanacNarrativeArchive.test.ts src/utils/tests/franchiseSeasonSummaryStadiumRecords.test.ts` → green (incl. the pre-existing almanac test, to prove no regression).
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself (both files are imported by franchise UI + offseason orchestrators — a transitive-import partial-mock test could only fail in a full run) + the L-SIM season (expecting BYTE-IDENTICAL — dormant in the sim).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the 4 listed files touched; `'park-record'` added to the kind union; both deliverables flag-gated (flag-off byte-identical: no Almanac entries + `stadiumRecords` omitted); mappers PURE; no UI/flag-def/storage-source/narrativeEngine/processCompletedGame/DB change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the anchors differ from source (the Almanac derivation is somehow a write store; `listFranchiseStadiumRecords`/`FranchiseStadiumRecord`/`FranchiseSeasonSummary` shapes differ) — re-read, do not guess.
+- STOP-IF adding `'park-record'` forces an edit to a file outside the 4 listed (e.g. a hidden exhaustive `Record<AlmanacNarrativeKind>` / a `never`-exhaustiveness switch) — report it, do NOT silently edit a forbidden file.
+- STOP-IF the optional `stadiumRecords` field cannot be added without a required-field break on existing `FranchiseSeasonSummary` constructors — report it.
+- A correct BLOCK is GOOD. Do NOT build the UI surfacing / placeholder-when-off / hop-6 / §8, do NOT bump the DB, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop5 ===== -->
