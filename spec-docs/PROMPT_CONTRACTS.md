@@ -24310,3 +24310,47 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF wiring the tap forces a change outside the listed files (other than a test-only mock stub).
 - STOP-IF the incumbency/overtake logic cannot be made deterministic from the inputs. A correct BLOCK is GOOD. Do NOT build UI/morale, do NOT bump trackerDb, do NOT add the DB to DUMP_DATABASES, do NOT push.
 <!-- ===== END CONTRACT: HPR-A ===== -->
+
+<!-- ===== CONTRACT: HPR-B1 ===== -->
+# CONTRACT HPR-B1 — STANDINGS rival-red (first-person hub; step 2a) — USER-VISIBLE
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (step 2a of the rivalry feature — STANDINGS ONLY)
+Thread the first-person LENS team + its home-park RIVAL through the franchise data context, and color the rival team's name RED in the franchise-hub STANDINGS. Do NOT touch the award races (`AwardsWatchlist` — that's step 2b, needs the award data contract widened) or the all-star board (flag-dark). Do NOT touch the rival engine/store/tap (shipped). USER-VISIBLE → the visual is JK's browser sign-off; ship it dark-safe (flag off → no red).
+
+## GROUND ANCHORS (Captain-verified via grounding 2026-06-26 — re-read before building)
+- **Lens team** = the primary controlled team: `franchiseConfig?.controlledTeams?.[0]?.teamId ?? null` (`StoredFranchiseConfig.controlledTeams: FranchiseControlledTeamMetadata[]`, `src/types/franchise.ts:201-216` + `:11-15`). `useFranchiseData` already loads `franchiseConfig` into state and exposes it. (Couch-coop multi-team = a later seat-selector concern; v1 = index 0.)
+- **The rival reader** `getHomeParkRival(scope, teamId): Promise<HomeParkRivalRow | null>` (`src/utils/franchiseHomeParkRivalStorage.ts:121-142`) — returns `{rivalTeamId: string|null, ...}` or null. `scope = {franchiseId, seasonId, statsScopeId, seasonNumber}`. Flag-off ⇒ own-DB empty ⇒ returns null ⇒ no red (intrinsically safe; the persist tap no-ops when off).
+- **The hook** `src/src_figma/hooks/useFranchiseData.ts`: `StandingEntry` interface (`:26-32`) = `{team, wins, losses, gamesBack, runDiff}` — **`team` is the display NAME (`teamNameMap[teamId]`), NOT the teamId**; the teamId is in scope inside `entryForTeam(teamId)` (`:493`, populated at `:496-502` + `:505-511`) but DROPPED. `UseFranchiseDataReturn` (`:79-114`) is a flat interface; the context value is the hook's return object (`:630-648`), provided at `FranchiseHome.tsx:1241` `value={franchiseData}`. The hook derives `seasonId` via `getFranchiseSeasonId` (`:298-300`) and has `franchiseId`/`currentSeason` params; statsScopeId === seasonId (franchise invariant). It already does async IndexedDB loads via `useEffect`+`setState` (config `:303-337`, stadiumMap `:342-362`, standings `:466-478`) — mirror these for the rival load.
+- **Standings render** `src/src_figma/app/pages/FranchiseHome.tsx`: `StandingsContent` (`:3129`) maps `useFranchiseDataContext().standings`; team-name cell `:3193` = `<div className="text-[10px] text-[var(--franchise-text)]">{teamData.team}</div>`.
+- **Color token** `src/src_figma/styles/franchise-theme.css`: name color `--franchise-text` (`:59`); existing reds `--franchise-loss #DD0000` (`:86`) etc. are semantically "loss/error" (reused for the SMB logo shadow + error banners) → do NOT reuse. The `text-[var(--x)]` Tailwind arbitrary-value idiom is already used at these sites. (The file's tokens render live in the hub, so it IS wired.)
+
+## EXPECTED OUTPUT
+1. **`src/src_figma/styles/franchise-theme.css`** — add a NEW token near the other franchise tokens: `--franchise-rival: #E5484D;` (a distinct rival red — JK-tunable; NOT a reuse of `--franchise-loss`).
+2. **`src/src_figma/hooks/useFranchiseData.ts`**:
+   - Add `teamId: string;` to `StandingEntry` (`:26-32`); populate it in BOTH branches of `entryForTeam` (`:496-502`, `:505-511`) from the `teamId` already in scope.
+   - Add to `UseFranchiseDataReturn` (`:79-114`): `lensTeamId: string | null;` and `rivalTeamId: string | null;`.
+   - Derive `const lensTeamId = franchiseConfig?.controlledTeams?.[0]?.teamId ?? null;` (from the loaded config state).
+   - Add `const [rivalTeamId, setRivalTeamId] = useState<string | null>(null);` + a NEW `useEffect` mirroring the existing async loaders: when `franchiseId && lensTeamId`, build `scope = {franchiseId, seasonId, statsScopeId: seasonId, seasonNumber: currentSeason}`, optionally early-return if `!isFranchisePhase2StadiumRecordsEnabled()`, call `getHomeParkRival(scope, lensTeamId)`, and `setRivalTeamId(row?.rivalTeamId ?? null)` under a `cancelled` guard; deps `[franchiseId, lensTeamId, seasonId, currentSeason]`. Import `getHomeParkRival` from `../../utils/franchiseHomeParkRivalStorage` and `isFranchisePhase2StadiumRecordsEnabled` from `../../utils/franchisePhase2Flags`.
+   - Add `lensTeamId` + `rivalTeamId` to the hook's return object (`:630-648`).
+3. **`src/src_figma/app/pages/FranchiseHome.tsx`** — in `StandingsContent`, read `rivalTeamId` from `useFranchiseDataContext()` (it already consumes the context for `standings`), and at `:3193` make the className conditional: `teamData.teamId === rivalTeamId ? 'text-[10px] text-[var(--franchise-rival)]' : 'text-[10px] text-[var(--franchise-text)]'` (rival name renders red; everyone else unchanged). Do NOT change anything else in the row.
+4. **Test** (if a `useFranchiseData` test harness / `renderHook` pattern exists — grep `useFranchiseData` under `__tests__`/`tests`): add/extend a light test asserting `StandingEntry` rows now carry `teamId`, and that `rivalTeamId` threads through when `getHomeParkRival` is mocked to return a row. If NO hook-test harness exists, SKIP the test (do NOT invent a heavy RTL harness) and note that JK's browser is the acceptance for the visual.
+
+## CONSTRAINTS
+- Touch ONLY: `franchise-theme.css`, `useFranchiseData.ts`, `FranchiseHome.tsx` (+ a test file IF a harness exists). Do NOT touch `AwardsWatchlist`, the all-star board, the rival engine/store/tap, any flag definition, or the award data contract.
+- Additive + dark-safe: new optional context fields + a new token + a conditional className. Flag off (prod default) ⇒ `getHomeParkRival` returns null ⇒ `rivalTeamId` null ⇒ no row matches ⇒ ZERO visual change. Existing standings behavior byte-identical when there's no rival.
+- Do NOT break existing `useFranchiseData`/`FranchiseHome` consumers — `teamId` is an ADD to `StandingEntry` (no field removed/renamed); `lensTeamId`/`rivalTeamId` are ADDED to the return.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0 (this is the primary gate for a UI change).
+- Run any touched-area tests: `NODE_ENV= npx vitest run` for the `useFranchiseData`/`FranchiseHome`/standings test files if they exist (report which). Report `git status --porcelain`. (The Captain runs the AUTHORITATIVE FULL suite; JK does the browser sign-off for the red.)
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) test result (or "no hook-test harness — JK browser acceptance"); (4) confirmation: only the listed files touched; `--franchise-rival` is a NEW token (not a loss-red reuse); `StandingEntry.teamId` added (nothing removed); flag-off ⇒ no red (dark-safe); no races/all-star/engine/flag-def/award-contract change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `controlledTeams` / `StandingEntry` / `UseFranchiseDataReturn` / the `:3193` render shapes differ from the anchors — re-read.
+- STOP-IF coloring the standings forces touching the award races or a file outside the listed set. A correct BLOCK is GOOD. Do NOT build races-red, do NOT reuse `--franchise-loss`, do NOT push.
+<!-- ===== END CONTRACT: HPR-B1 ===== -->
