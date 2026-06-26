@@ -54,6 +54,30 @@ import {
 } from "../../utils/franchiseMoraleState";
 import { getPlayerMoraleSpecState } from "../../utils/franchisePlayerMoraleSpecAdapter";
 import {
+  mergeRatingsOverlays,
+} from "../../engines/ratingsOverlayMerge";
+import {
+  getFranchiseRatingsOverlaysByScope,
+  type FranchiseRatingsOverlayRow,
+} from "../../utils/franchiseRatingsOverlayStorage";
+import {
+  getFranchiseTrueValueSnapshotRowsByScope,
+  type FranchiseTrueValueSnapshotRow,
+} from "../../utils/franchiseTrueValueSnapshotsStorage";
+import {
+  getFranchiseTraitOverlaysByScope,
+  type FranchiseTraitOverlayRow,
+} from "../../utils/franchiseTraitOverlayStorage";
+import {
+  getFranchiseRelationshipEdgesByScope,
+  type RelationshipEdgeRow,
+} from "../../utils/franchiseRelationshipEdgesStorage";
+import {
+  getFranchiseFameRecordRowsByScope,
+  type FranchiseFameRecordRow,
+} from "../../utils/franchiseFameRecordsStorage";
+import { getCareerPhase, getCareerPhaseDisplayName } from "../../engines/agingEngine";
+import {
   getAllGamesByFranchise,
   type ScheduledGame,
 } from "../../utils/scheduleStorage";
@@ -67,13 +91,18 @@ import type { StoredFranchiseConfig } from "../../types/franchise";
 import type {
   ActiveTeamVM,
   AlmanacVM,
+  FameVM,
+  FormStateVM,
   HubVM,
   LeaderboardVM,
   LeaderEntryVM,
+  MakeupModVM,
   MoraleHistoryVM,
+  PlayerDetailVM,
   PlayerMoraleVM,
   PlayerRowVM,
   PulseVM,
+  RatingBarVM,
   ScheduleGameVM,
   ScheduleVM,
   SprayRoleVM,
@@ -81,7 +110,11 @@ import type {
   StandingRowVM,
   StandingsRacesVM,
   TeamPickerVM,
+  TieType,
+  TieVM,
+  TraitTimelineVM,
   TrophyVM,
+  ValuePointVM,
 } from "../app/components/franchise/FranchiseLensHub";
 
 const PITCHER_POSITIONS = new Set(["SP", "RP", "CP", "P", "SP/RP"]);
@@ -103,6 +136,11 @@ interface RawData {
   schedule: ScheduledGame[];
   championships: ChampionshipRecord[];
   awards: AwardWinner[];
+  ratingsOverlays: FranchiseRatingsOverlayRow[];
+  trueValueSnapshots: FranchiseTrueValueSnapshotRow[];
+  traitOverlays: FranchiseTraitOverlayRow[];
+  relationshipEdges: RelationshipEdgeRow[];
+  fameRecords: FranchiseFameRecordRow[];
 }
 
 export interface UseFranchiseLensDataReturn {
@@ -162,20 +200,147 @@ function mapDesignation(
   return { label: badge.label, kind: row.type === "ALBATROSS" ? "albatross" : "gold" };
 }
 
-function buildPlayerRow(
+/* ===== Phase 3: the per-player drawer (PlayerDetailVM) ===== */
+const RATING_LABELS: Record<string, string> = {
+  power: "Power",
+  contact: "Contact",
+  speed: "Speed",
+  fielding: "Fielding",
+  arm: "Arm",
+  velocity: "Velocity",
+  junk: "Junk",
+  accuracy: "Accuracy",
+};
+const REACH_LABELS = ["Unknown", "Local", "Regional", "National", "Legendary", "Immortal"];
+
+interface DrawerContext {
+  battingWar: Map<string, number>;
+  pitchingWar: Map<string, number>;
+  designations: FranchisePlayerDesignationRecord[];
+  moraleByPlayer: Map<string, FranchiseMoraleSnapshot>;
+  ratingsByPlayer: Map<string, FranchiseRatingsOverlayRow[]>;
+  valueByPlayer: Map<string, FranchiseTrueValueSnapshotRow[]>;
+  traitOverlaysByPlayer: Map<string, FranchiseTraitOverlayRow[]>;
+  edgesByPlayer: Map<string, RelationshipEdgeRow[]>;
+  fameByPlayer: Map<string, FranchiseFameRecordRow>;
+  nameById: Map<string, string>;
+  currentGameNumber: number;
+}
+
+function baseRatings(player: Player): Record<string, number> {
+  return isPitcher(player)
+    ? { velocity: player.velocity, junk: player.junk, accuracy: player.accuracy }
+    : {
+        power: player.power,
+        contact: player.contact,
+        speed: player.speed,
+        fielding: player.fielding,
+        arm: player.arm,
+      };
+}
+
+function buildRatingBars(
   player: Player,
-  teamId: string,
-  battingWar: Map<string, number>,
-  pitchingWar: Map<string, number>,
-  designations: FranchisePlayerDesignationRecord[],
-  moraleByPlayer: Map<string, FranchiseMoraleSnapshot>,
-): PlayerRowVM {
+  overlays: FranchiseRatingsOverlayRow[],
+  currentGameNumber: number,
+): RatingBarVM[] {
+  const base = baseRatings(player);
+  const current = mergeRatingsOverlays(base, overlays, currentGameNumber);
+  return Object.entries(base).map(([key, value]) => ({
+    label: RATING_LABELS[key] ?? key,
+    base: value,
+    current: current[key] ?? value,
+  }));
+}
+
+function buildValueTrend(rows: FranchiseTrueValueSnapshotRow[]): ValuePointVM[] {
+  return [...rows]
+    .sort((a, b) =>
+      String(a.checkpoint).localeCompare(String(b.checkpoint), undefined, { numeric: true }),
+    )
+    .map((row) => ({ checkpoint: String(row.checkpoint), value: Math.round(row.trueValue) }));
+}
+
+function buildTraitTimeline(rows: FranchiseTraitOverlayRow[]): TraitTimelineVM[] {
+  return [...rows]
+    .sort((a, b) => a.createdAtGameNumber - b.createdAtGameNumber)
+    .map((row) => ({
+      valence: row.valence,
+      trait: row.traitName,
+      displaces: row.displacesTraitName ?? undefined,
+      atGame: row.createdAtGameNumber,
+    }));
+}
+
+function buildTies(
+  edges: RelationshipEdgeRow[],
+  playerId: string,
+  nameById: Map<string, string>,
+): TieVM[] {
+  return edges.map((edge) => {
+    const partnerId = edge.player1Id === playerId ? edge.player2Id : edge.player1Id;
+    return {
+      partner: nameById.get(partnerId) ?? partnerId,
+      type: edge.type as TieType,
+      intensity: Math.round(edge.intensity * 100),
+      sinceGame: edge.formedAtGameNumber ?? undefined,
+      potential: edge.potential || undefined,
+    };
+  });
+}
+
+function buildFame(row: FranchiseFameRecordRow | undefined): FameVM | undefined {
+  if (!row) return undefined;
+  const reach = Math.max(0, Math.min(5, Math.round(row.reachFloor)));
+  const channels = Object.entries(row.channelByChannel ?? {}).map(([label, value]) => ({
+    label,
+    value: Math.round(value as number),
+  }));
+  return {
+    heat: Math.round(row.heat),
+    immortality: reach,
+    immortalityLabel: REACH_LABELS[reach] ?? "Unknown",
+    channels,
+  };
+}
+
+function buildModifiers(player: Player): MakeupModVM[] | undefined {
+  const m = player.hiddenPersonalityModifiers;
+  if (!m) return undefined;
+  return [
+    { label: "Loyalty", value: Math.round(m.loyalty) },
+    { label: "Ambition", value: Math.round(m.ambition) },
+    { label: "Resilience", value: Math.round(m.resilience) },
+    { label: "Charisma", value: Math.round(m.charisma) },
+  ];
+}
+
+function mojoChip(mojo: unknown): FormStateVM | undefined {
+  if (!mojo) return undefined;
+  const label = String(mojo);
+  const tone: FormStateVM["tone"] = /fire|jacked|locked/i.test(label)
+    ? "up"
+    : /rattled|tense/i.test(label)
+      ? "down"
+      : "flat";
+  return { label, tone };
+}
+
+function designationEffectLine(
+  designation: { label: string; kind: "gold" | "albatross" } | undefined,
+): string | undefined {
+  if (!designation) return undefined;
+  if (designation.kind === "albatross") return "Albatross — salary outweighs on-field value.";
+  return `${designation.label} — a cornerstone designation for the club.`;
+}
+
+function buildPlayerRow(player: Player, teamId: string, ctx: DrawerContext): PlayerRowVM {
   const pitcher = isPitcher(player);
-  const war = pitcher ? pitchingWar.get(player.id) : battingWar.get(player.id);
+  const war = pitcher ? ctx.pitchingWar.get(player.id) : ctx.battingWar.get(player.id);
   const designation = mapDesignation(
-    designations.find((row) => row.playerId === player.id && row.teamId === teamId),
+    ctx.designations.find((row) => row.playerId === player.id && row.teamId === teamId),
   );
-  const snapshot = moraleByPlayer.get(player.id) ?? null;
+  const snapshot = ctx.moraleByPlayer.get(player.id) ?? null;
   const moraleValue = snapshot?.currentValue ?? player.morale ?? 50;
   const morale: PlayerMoraleVM = {
     value: moraleValue,
@@ -183,15 +348,46 @@ function buildPlayerRow(
     trend: "flat",
     history: toMoraleHistory(snapshot),
   };
+
+  const valueTrend = buildValueTrend(ctx.valueByPlayer.get(player.id) ?? []);
+  const latestValue = valueTrend.length ? valueTrend[valueTrend.length - 1].value : undefined;
+  const salary = Number(player.salary) || 0;
+  const traits = [player.trait1, player.trait2].filter(Boolean) as string[];
+  const traitTimeline = buildTraitTimeline(ctx.traitOverlaysByPlayer.get(player.id) ?? []);
+  const ties = buildTies(ctx.edgesByPlayer.get(player.id) ?? [], player.id, ctx.nameById);
+
+  const detail: PlayerDetailVM = {
+    age: player.age,
+    bats: player.bats,
+    throws: player.throws,
+    grade: player.overallGrade,
+    bio: player.backstory,
+    nickname: player.nickname,
+    careerPhase: getCareerPhaseDisplayName(getCareerPhase(player.age)),
+    mojo: mojoChip(player.mojo),
+    personality: player.personality,
+    modifiers: buildModifiers(player),
+    valueTrend: valueTrend.length ? valueTrend : undefined,
+    ratings: buildRatingBars(player, ctx.ratingsByPlayer.get(player.id) ?? [], ctx.currentGameNumber),
+    traitsCurrent: traits.length ? traits : undefined,
+    traitTimeline: traitTimeline.length ? traitTimeline : undefined,
+    ties: ties.length ? ties : undefined,
+    fame: buildFame(ctx.fameByPlayer.get(player.id)),
+    designationEffect: designationEffectLine(designation),
+  };
+
   return {
     id: player.id,
     number: player.jerseyNumber != null ? String(player.jerseyNumber) : undefined,
     position: player.primaryPosition,
     name: `${player.firstName} ${player.lastName}`.trim(),
     war,
-    salary: Number(player.salary) || 0,
+    salary,
+    trueValue: latestValue,
+    valueGap: latestValue != null ? latestValue - salary : undefined,
     designation,
     morale,
+    detail,
   };
 }
 
@@ -456,7 +652,22 @@ function buildReturn(
     };
   }
 
-  const { config, teams, players, standings, designations, moraleSnapshots, schedule, championships, awards } = raw;
+  const {
+    config,
+    teams,
+    players,
+    standings,
+    designations,
+    moraleSnapshots,
+    schedule,
+    championships,
+    awards,
+    ratingsOverlays,
+    trueValueSnapshots,
+    traitOverlays,
+    relationshipEdges,
+    fameRecords,
+  } = raw;
 
   const teamMeta = new Map<string, TeamMeta>(
     teams.map((team) => [team.id, { abbr: team.abbreviation, name: team.name }]),
@@ -504,10 +715,41 @@ function buildReturn(
     ),
   );
 
+  // Drawer context: group the scope-level soul rows by player + name lookup + current game number.
+  const groupByPlayer = <T extends { playerId: string }>(rows: T[]): Map<string, T[]> => {
+    const map = new Map<string, T[]>();
+    for (const row of rows) {
+      const list = map.get(row.playerId) ?? [];
+      list.push(row);
+      map.set(row.playerId, list);
+    }
+    return map;
+  };
+  const edgesByPlayer = new Map<string, RelationshipEdgeRow[]>();
+  for (const edge of relationshipEdges) {
+    for (const pid of [edge.player1Id, edge.player2Id]) {
+      const list = edgesByPlayer.get(pid) ?? [];
+      list.push(edge);
+      edgesByPlayer.set(pid, list);
+    }
+  }
+  const completedGameNumbers = schedule.filter((game) => game.result).map((game) => game.gameNumber);
+  const ctx: DrawerContext = {
+    battingWar,
+    pitchingWar,
+    designations,
+    moraleByPlayer: playerMoraleById,
+    ratingsByPlayer: groupByPlayer(ratingsOverlays),
+    valueByPlayer: groupByPlayer(trueValueSnapshots),
+    traitOverlaysByPlayer: groupByPlayer(traitOverlays),
+    edgesByPlayer,
+    fameByPlayer: new Map(fameRecords.map((row) => [row.playerId, row])),
+    nameById: new Map(players.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()])),
+    currentGameNumber: completedGameNumbers.length ? Math.max(...completedGameNumbers) : 0,
+  };
+
   const roster: PlayerRowVM[] = teamPlayers
-    .map((player) =>
-      buildPlayerRow(player, activeTeam.id, battingWar, pitchingWar, designations, playerMoraleById),
-    )
+    .map((player) => buildPlayerRow(player, activeTeam.id, ctx))
     .sort((a, b) => (b.war ?? -Infinity) - (a.war ?? -Infinity) || a.name.localeCompare(b.name));
 
   const active: ActiveTeamVM = {
@@ -583,6 +825,14 @@ export function useFranchiseLensData(
         // Museum (champions / award winners) is global all-time history; empty on a fresh franchise.
         const championships = await getChampionships().catch(() => []);
         const awards = await getAwardWinners().catch(() => []);
+        // Phase-3 soul stores: scope-level reads (all players' rows for the season). Empty until the
+        // living season has run; each fills the per-player drawer when a real save is pointed here.
+        const scope = { franchiseId, seasonId, statsScopeId: seasonId };
+        const ratingsOverlays = await getFranchiseRatingsOverlaysByScope(scope).catch(() => []);
+        const trueValueSnapshots = await getFranchiseTrueValueSnapshotRowsByScope(scope).catch(() => []);
+        const traitOverlays = await getFranchiseTraitOverlaysByScope(scope).catch(() => []);
+        const relationshipEdges = await getFranchiseRelationshipEdgesByScope(scope).catch(() => []);
+        const fameRecords = await getFranchiseFameRecordRowsByScope(scope).catch(() => []);
         if (cancelled) return;
         setRaw({
           config,
@@ -594,6 +844,11 @@ export function useFranchiseLensData(
           schedule: schedule ?? [],
           championships: championships ?? [],
           awards: awards ?? [],
+          ratingsOverlays: ratingsOverlays ?? [],
+          trueValueSnapshots: trueValueSnapshots ?? [],
+          traitOverlays: traitOverlays ?? [],
+          relationshipEdges: relationshipEdges ?? [],
+          fameRecords: fameRecords ?? [],
         });
         setIsLoading(false);
       } catch (caught) {
