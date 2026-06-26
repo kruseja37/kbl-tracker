@@ -23833,3 +23833,94 @@ Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest su
 - STOP-IF applying either fix would change an EXISTING passing test's expectation (it should not — the existing WPA-split test uses genuinely non-zero holders). If it does, report which test + why before changing it.
 - A correct BLOCK is GOOD.
 <!-- ===== END CONTRACT: A1.5d-1c-fix ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop2 ===== -->
+# CONTRACT A1.5d-hop2 — stadium-record FAME SWAP (§6 polarity sign-law; the first `changes[]` consumer; build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **xhigh** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-2 — the centerpiece. The DETECT chain (hop-1a/1b/1c) is COMPLETE: a completed game produces `FranchiseStadiumRecordChange[]` (records that gained a new SOLE player holder this game). hop-2 makes the fame system CONSUME those changes per the §6 polarity sign-law: a record holder's stored fame HEAT moves (and, because the bump rides the player's single fame heat-delta, their player+fan morale moves too via the EXISTING fame→morale bridge, untouched). Build ONLY this. Do NOT build hop-3 (fan morale `PARK_RECORD_SET` row), hop-4 (reporter), hop-5 (Almanac), hop-6 (rivalry edge), or §8 display. Do NOT add a new `MasterMoraleEventType`/`NarrativeEventType`. Do NOT touch the morale bridge `persistFameMoraleConsequencesAfterFame` or `composeMoraleConsequence`. Do NOT touch any UI/oracle/DB.
+
+## GOAL
+Per §6: each stadium record has a polarity sign `s = FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[recordType]` (+1 glory / −1 dubious / 0 non-fame-bearing). For each change, the NEW sole holder gains fame and (on an overtake) the dethroned prior holder(s) lose fame, sign-preserving:
+- **SET** (new sole holder, no prior): `newHolderΔ = +B_set · s · w`
+- **OVERTAKE**: `newHolderΔ = +B_break · s · w`; **each** `priorLeaderPlayerId`: `Δ = −B_overtaken · s · w`
+where `B_set=2.0`, `B_break=1.5`, `B_overtaken=1.0` (asymmetric — you lose less than the breaker gains, "still a legend"), and `w` = a per-record-type weight (iconic records weighted higher per §16). The signed bumps are aggregated **per player** (a player can be the new holder of one record and the dethroned holder of another → net) and folded into that player's fame heat write, so heat moves AND the existing bridge moves morale from the combined delta — no bridge change, no new sentinel. Build-dark: at default flags nothing runs → byte-identical.
+
+## DESIGN DECISION (Captain-resolved from source — the make-or-break; do NOT deviate)
+The fame→morale **bridge moves MORALE only** (`persistFameMoraleConsequencesAfterFame`, `processCompletedGame.ts:520`); the stored fame **HEAT** is written by `persistDarkFameRecordsForCompletedGame` (`franchiseFameCompute.ts:107/129`). The returned `playerHeatDeltas` feed ONLY the bridge. Therefore hop-2 moves heat by **folding** the polarity bumps **into the fame writer's heat write** (NOT by concatenating onto `playerHeatDeltas` after the fact — a naive concat both fails to move stored heat AND collides on the bridge's per-player `fame:…:playerId:heat-delta` sentinel). Folding (summing the bump into the player's single fame heat-delta) makes the existing per-player `fame:` sentinel stay unique → no collision, no distinct sentinel needed; idempotency comes from the DETECT (on a re-run the upsert produces an EMPTY `changes[]` because the record already stores the new holder → no bump). Use `applyHonorHeatBump(heat, bump)` (additive, clamped, NO decay — the right primitive for a discrete event) NOT `applyHeatUpdate` (which decays).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **The change type** (`franchiseStadiumRecordsStorage.ts:90-99`): `interface FranchiseStadiumRecordChange { stadiumId; recordType: FranchiseStadiumRecordType; recordKey; changeKind: 'set'|'overtake'; priorValue: number|null; priorLeaderPlayerIds: string[]; newValue: number; newLeaderPlayerIds: string[]; }`. On `'set'`, `priorLeaderPlayerIds=[]`. A change fires only on a strict new SOLE holder, so `newLeaderPlayerIds` is a single id; `priorLeaderPlayerIds` may be one or (if prior was co-led) several.
+- **The polarity map** (`franchiseStadiumRecordsStorage.ts:31-50`): `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<FranchiseStadiumRecordType, 1|-1|0>`. 8 types = `0` (non-fame-bearing — `highest-team-runs-game`/`highest-combined-runs-game`/`largest-run-differential-game`/`most-batting/pitching/fielding-spray-events`/`no-hitter`/`perfect-game`); 10 = ±1. Iconic (weight-up) = `farthest-hr-rhb`, `farthest-hr-lhb`, `largest-positive-wpa-swing`, `largest-negative-wpa-swing`.
+- **The heat write** (`franchiseFameCompute.ts:94-131`): the main loop over `activeFamePlayerIds` (players with WPA totals OR fame events this game) reads `getFranchiseFameRecord(fameScope, playerId)`, skips if `storedRow?.updatedAtCheckpoint === checkpoint` (idempotency), computes `heat = applyHeatUpdate(stored.heat, breakdown.total)`, pushes a `FranchiseFameRecordRow`, then `await saveFranchiseFameRecordRows(rows)` and returns `{ status, written, playerHeatDeltas }`. `stored = storedRow ?? { heat:0, reachFloor:0, wasNegative:false }`.
+- **`applyHonorHeatBump(currentHeat, bump, config?)`** (`fameModel.ts:153-159`) = `clampAndRoundHeat(currentHeat + bump)` (additive, clamps to `FAME_TUNING.heat` `[min -30, max 50]`, neutral 0). Use THIS for the discrete bump.
+- **`aggregateChannelFame([])`** (`fameModel.ts:270`) returns `{ total:0, byChannel: <all-channel-keys=0> }` — use it to build the empty `channelByChannel` for a brand-new fame row of a dethroned holder who has NO prior fame record. `aggregateDefensiveFame([])`/`aggregateRolePlayerFame([])` → 0.
+- **The fame row shape** (`franchiseFameRecordsStorage.ts:16-27`): `{ ...scope, playerId, heat, reachFloor, wasNegative, channelTotal, channelByChannel, defensiveFame, rolePlayerFame, updatedAtCheckpoint }`. `wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral`.
+- **The chokepoint** (`processCompletedGame.ts`): inside `if (trueValueScope) {`, `persistTrueValueSnapshotsForCompletedGame` runs at `:1164`; the fame block `if (isFranchisePhase2FameEnabled()) { fameResult = await persistDarkFameRecordsForCompletedGame(...); await persistFameMoraleConsequencesAfterFame(..., fameResult.playerHeatDeltas, ...); }` at `:1168-1180`; the stadium DETECT tap currently runs LATER at `:1260-1266` (`if (isFranchisePhase2StadiumRecordsEnabled()) { await persistDarkStadiumRecordsForCompletedGame(...); }`) and its result is DISCARDED. hop-2 must run the detect BEFORE the fame block and feed its `changeList` into the fame writer.
+- **The tap** (`franchiseStadiumRecordsTap.ts`): `persistDarkStadiumRecordsForCompletedGame` returns `{ status, written, changes: number, reason? }` — `changes` is a COUNT. hop-2 needs the ARRAY → add a `changeList` field.
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseStadiumRecordFame.ts`** (NEW — PURE math, "the matrix is the math"):
+   - Documented §16 dials: `export const STADIUM_RECORD_FAME_BASE = { set: 2.0, break: 1.5, overtaken: 1.0 } as const;` and a per-record-type weight: `export const STADIUM_RECORD_FAME_WEIGHT: Partial<Record<FranchiseStadiumRecordType, number>>` with the 4 iconic types → `1.5`, everything else defaulting to `1.0` via a helper `stadiumRecordFameWeight(recordType): number` (default 1.0). All marked `// §16 SIM-TUNE placeholder (shape locked, value tunable)`.
+   - `export function buildStadiumRecordFameHeatBumps(changes: FranchiseStadiumRecordChange[]): Array<{ playerId: string; heatDelta: number }>`:
+     - For each change: `const s = FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[change.recordType];` `if (s === 0) continue;` `const w = stadiumRecordFameWeight(change.recordType);`
+     - New holders: for each id in `change.newLeaderPlayerIds`, add `(change.changeKind === 'set' ? STADIUM_RECORD_FAME_BASE.set : STADIUM_RECORD_FAME_BASE.break) * s * w`.
+     - Old holders (overtake only — `priorLeaderPlayerIds` is `[]` on set): for each id in `change.priorLeaderPlayerIds`, add `-(STADIUM_RECORD_FAME_BASE.overtaken) * s * w`.
+     - Aggregate per `playerId` (sum). Drop entries whose summed `heatDelta === 0`. Return SORTED by `playerId` (deterministic). PURE — no IO, no `Date.now`/`Math.random`/`crypto`, synchronous.
+   - Import `type FranchiseStadiumRecordChange`, `type FranchiseStadiumRecordType`, `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY` from `./franchiseStadiumRecordsStorage`. No other runtime imports (keep it pure — do NOT import storage write fns / fameModel here).
+2. **`src/utils/franchiseFameCompute.ts`** — extend `persistDarkFameRecordsForCompletedGame` to FOLD the bumps:
+   - Add a 4th OPTIONAL param `stadiumChanges: FranchiseStadiumRecordChange[] = []` (default empty → byte-identical to today). Import `buildStadiumRecordFameHeatBumps` from `./franchiseStadiumRecordFame`, `applyHonorHeatBump` from `../engines/fameModel`, and the change type.
+   - Build `const bumpByPlayer = new Map<string, number>(buildStadiumRecordFameHeatBumps(stadiumChanges).map(b => [b.playerId, b.heatDelta]));` (when empty, the map is empty → no behavior change).
+   - **In the main loop**, after computing `heat = applyHeatUpdate(stored.heat, breakdown.total)`: `const bump = bumpByPlayer.get(playerId); if (bump !== undefined) { heat = applyHonorHeatBump(heat, bump); bumpByPlayer.delete(playerId); }` then recompute `heatDelta = heat - stored.heat` and `wasNegative` AFTER the bump (so the pushed row + the returned delta include the bump). (The existing `continue` on `updatedAtCheckpoint === checkpoint` stays; on a re-run the detect yields no changes so `bumpByPlayer` is empty anyway.)
+   - **After the main loop**, handle dethroned holders who did NOT play this game (remaining `bumpByPlayer` entries): for each `[playerId, bump]`, read `getFranchiseFameRecord(fameScope, playerId)`; `const stored = storedRow ?? { heat:0, reachFloor:0, wasNegative:false }`; `const heat = applyHonorHeatBump(stored.heat, bump); const heatDelta = heat - stored.heat; if (heatDelta === 0) continue;` push `playerHeatDeltas.push({ playerId, heatDelta })` and a row. For an existing `storedRow`: preserve its `reachFloor`/`channelTotal`/`channelByChannel`/`defensiveFame`/`rolePlayerFame`/`updatedAtCheckpoint`, set `heat` + `wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral`. For a NULL `storedRow`: build a fresh row with `reachFloor:0`, `channelTotal:0`, `channelByChannel: aggregateChannelFame([]).byChannel`, `defensiveFame:0`, `rolePlayerFame:0`, `updatedAtCheckpoint: checkpoint`, `wasNegative: heat < FAME_TUNING.heat.neutral`. Push these rows into the same `rows` array BEFORE `saveFranchiseFameRecordRows(rows)` (one write).
+   - The function signature/return shape otherwise unchanged. Existing callers passing no 4th arg are byte-identical.
+3. **`src/utils/franchiseStadiumRecordsTap.ts`** — surface the array:
+   - Add `changeList: FranchiseStadiumRecordChange[];` to `PersistDarkStadiumRecordsResult` (import the type). In the dark-noop returns set `changeList: []`. In the written return set `changeList: result.changes` (keep `changes: result.changes.length`).
+4. **`src/utils/processCompletedGame.ts`** — restructure to detect EARLY and feed the fame writer:
+   - Add `import type { FranchiseStadiumRecordChange } from './franchiseStadiumRecordsStorage';`.
+   - Right AFTER the `persistTrueValueSnapshotsForCompletedGame` try/catch (`:1164-1167`), BEFORE the `if (isFranchisePhase2FameEnabled())` block, insert:
+     ```
+     let stadiumChanges: FranchiseStadiumRecordChange[] = [];
+     if (isFranchisePhase2StadiumRecordsEnabled()) {
+       try {
+         const stadiumResult = await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+         stadiumChanges = stadiumResult.changeList;
+       } catch (e) {
+         console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+       }
+     }
+     ```
+   - In the fame block, pass the changes into the fame writer: `const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions, stadiumChanges);` (the bridge call is UNCHANGED — it still gets `fameResult.playerHeatDeltas`, which now includes the folded stadium deltas).
+   - REMOVE the now-redundant late stadium-records block at `:1260-1266` (the `if (isFranchisePhase2StadiumRecordsEnabled()) { try { await persistDarkStadiumRecordsForCompletedGame(...); } catch {} }`). The detect now runs ONCE, early.
+5. **`src/utils/tests/franchiseStadiumRecordFame.test.ts`** (NEW — the pure math):
+   - SET on a positive record (e.g. `farthest-hr-rhb`, weight 1.5): new holder `+2.0*1*1.5 = +3.0`; no old holders.
+   - OVERTAKE on a positive record: new holder `+1.5*1*1.5`; each prior holder `-1.0*1*1.5`.
+   - SET/OVERTAKE on a NEGATIVE record (e.g. `most-hr-allowed-pitcher`, weight 1.0, s=-1): new holder gets `-` (infamy); on overtake the dethroned prior holder gets `+1.0` (relieved — rises). Pin the signs explicitly.
+   - A `0`-polarity record (e.g. `highest-team-runs-game`) → produces NO bumps.
+   - Aggregation: a player who is the new holder of one change AND a dethroned holder of another → net summed delta; a player who nets to exactly 0 is dropped; output sorted by playerId.
+6. **`src/utils/tests/franchiseFameCompute.test.ts`** (EXTEND — the fold): with Phase-2 fame ON, call `persistDarkFameRecordsForCompletedGame(game, scope, undefined, [setChange])` and assert (a) the new holder's stored fame `heat` rose by the expected bump beyond the no-stadium baseline, (b) `playerHeatDeltas` includes the bump; then an OVERTAKE change for a dethroned holder who did NOT play this game → assert a fame row is written for that player with a NEGATIVE heat (read it back via `getFranchiseFameRecord`) and they appear in `playerHeatDeltas`. Confirm passing NO 4th arg (or `[]`) is byte-identical to the existing tests (existing assertions must stay green).
+7. **`src/utils/tests/franchiseStadiumRecordsTap.test.ts`** (UPDATE): the three `expect(result).toEqual({...})` blocks must include the new `changeList` field (`changeList: []` for the two dark-noop cases; `changeList: [change]` for the written case).
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/franchiseStadiumRecordFame.ts` (NEW), `src/utils/franchiseFameCompute.ts`, `src/utils/franchiseStadiumRecordsTap.ts`, `src/utils/processCompletedGame.ts`, `src/utils/tests/franchiseStadiumRecordFame.test.ts` (NEW), `src/utils/tests/franchiseFameCompute.test.ts`, `src/utils/tests/franchiseStadiumRecordsTap.test.ts`. Do NOT touch the morale bridge / `composeMoraleConsequence` / `applyFranchiseMoraleMatrixConsequence` / `franchiseStadiumRecordsStorage.ts` / `franchiseStadiumFoundation.ts` / any UI / any oracle / any flag default / the trackerDb.
+- Build-dark: at default flags (`isFranchisePhase2StadiumRecordsEnabled` false AND/OR `isFranchisePhase2FameEnabled` false) NOTHING new runs → byte-identical. `stadiumChanges` defaults `[]`. No DB change (v26).
+- Determinism: no `Date.now()`/`Math.random()`/`crypto` in any new code path. `buildStadiumRecordFameHeatBumps` is PURE.
+- Do NOT consume the changes anywhere else (no fan morale / reporter / Almanac / rivalry — those are hops 3-6). Do NOT add a new sentinel or touch the bridge — the fold reuses the existing per-player `fame:` sentinel.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordFame.test.ts src/utils/tests/franchiseFameCompute.test.ts src/utils/tests/franchiseStadiumRecordsTap.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite + L-SIM (this restructures the `processCompletedGame` chokepoint + the fame path).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the listed files touched, the bridge untouched, `stadiumChanges` defaults `[]` (byte-identical at default flags), the late stadium block removed (detect runs once early), no new sentinel/record-type/flag-default/DB change, `buildStadiumRecordFameHeatBumps` pure.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `applyHonorHeatBump`/`aggregateChannelFame`/`getFranchiseFameRecord`/`saveFranchiseFameRecordRows` signatures differ from the anchors (re-read).
+- STOP-IF folding the bump forces a change to the morale bridge or any forbidden file.
+- STOP-IF the `FranchiseStadiumRecordChange` / polarity-map / fame-row shapes differ from the anchors (re-read `franchiseStadiumRecordsStorage.ts:31-99` / `franchiseFameRecordsStorage.ts:16-27`).
+- A correct BLOCK is GOOD. Do NOT build hops 3-6, do NOT add a new MoraleEventType/NarrativeEventType, do NOT flip a flag default, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop2 ===== -->
