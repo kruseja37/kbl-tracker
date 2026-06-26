@@ -29,6 +29,17 @@ The balance sim's roster-builder is a prototype of a **generalized roster-optimi
 - Flow: League Builder → draft-pool setup → **Draft Setup hub** (archetype + GM name + human/CPU + seats + shills) → draft → end-of-draft staffing (manager + reporter) → **freeze** → living-season hub.
 - **Couch-coop with seats** (multiple humans, each owns a set of teams). **GM = the human picker; the SCOUT is the draft guide** (no separate GM actor). **v1 IS a living season** (activate the built-dark Mode-2 dynamics, gated post-stabilization). Season-rules screen rebuilt (custom games/innings, dev cadence, intensity dial, conferences toggle; keep extra-innings; cut dead settings). **Phantom CPU shills required even all-human** (anti-collusion). Manager+reporter hired end-of-draft before the freeze.
 
+## 6b. Player matchup / rivalry — fit with optimizer + archetypes (JK loop-in 2026-06-26)
+Companion specs (main tree): `PLAYER_RIVALRY_MATCHUP_ENGINE_SPEC.md`, `SITUATIONAL_ADVISOR_AND_OPTIMAL_LINEUP_DEEPDIVE.md` (§"CONVERGENCE…" already aligns its advisor/lineups work to THIS keystone optimizer — cross-thread sync via shared docs is working).
+
+Fits on **two levels**:
+- **Level 1 — player-vs-player substrate (shared, two consumers).** A durable batter↔pitcher ledger: lifetime line + **recency** ("3-for-last-4, 2 HR"). Consumer A = the keystone optimizer/scout (situational lineup + roster advice — "owns this pitcher → start; 0-for-career → pinch-hit"). Consumer B = the soul layer (spawns player rivalries; amplifies per-at-bat morale). Aggregate read-side already exists (`getMatchupEvents` event log); the durable ledger + recency + rivalry store are NEW. **Build once, define the interface once, both threads consume.** Does NOT touch the manager metric.
+- **Level 2 — type/ARCHETYPE matchup (the bridge to the archetype core).** "Terrible against this TYPE of player" = a team archetype is not just a self-identity ("how I build") but a **matchup profile** ("what I beat / lose to"). This is where matchups meet **roster construction**: the scout flags a systematic type-weakness and advises trades/call-ups ("league trending velocity, your lineup is junkball-hitters → trade for a velocity bat"). Makes archetype choice tactically dynamic vs the field (a soft rock-paper-scissors meta, ideally no universal counter).
+  - **Empirical, not draft-time math:** the balance sim guarantees raw-strength PARITY; the matchup MATRIX (which archetype beats which) is discovered from the matchup substrate over real seasons (Mode-2), first-order-estimable from `effectiveRatings` (already nets opponent traits + handedness). Do NOT assert a specific matrix — measure it.
+  - **Separate balance check:** raw-strength parity (the sim) and matchup parity (no archetype is a universal counter) are different guarantees; watch both.
+
+Division of labor: other thread = manager-WPA + situational-advisor UI / lineups tab (ride on the optimizer); THIS thread = keystone optimizer + archetype core + fielding-corrected true value; the **matchup substrate is shared**.
+
 ## 6. Open / next
 - Build the keystone roster-optimizer (generalize the sim builder) → pre-draft feasibility + draft guide + in-season scout.
 - Fine-tune the 15 archetype magnitudes to taste; confirm across all three tiers.
