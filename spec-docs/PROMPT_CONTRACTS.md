@@ -23143,3 +23143,81 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** you are tempted to delete Noodle Arm / edit `addErrorSignals` (→ STOP — §8C:138 is SUPERSEDED by DT-D; do NOT); the roster `primaryPosition` string format does NOT match `'1B'/'2B'/'3B'/'SS'` (→ STOP and report the actual format, do NOT guess a mapping); a non-mismatch franchise/L-SIM fixture regresses (→ STOP, the protection is leaking beyond the map); a DB bump / oracle touch is needed (→ STOP); the boost would make a protected trait truly un-displaceable by ANY gain (→ STOP — §8C:134 requires a far-stronger gain can still break through). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: T-6a ===== -->
+
+<!-- ===== CONTRACT: RA-6A-CONVEX ===== -->
+## CONTRACT: RA-6A-CONVEX — §6A convex-curve dev-shape (the A2.5 remainder)
+
+**ROUTE:** `codex exec -C /Users/johnkruse/Projects/kbl-tracker` (worktree = MAIN, branch `codex/franchise-v1-next`).
+**ROLE:** Builder (Codex). Captain (Opus) audits the REAL diff + runs the authoritative FULL suite himself — your paste is never trusted.
+**Use xhigh reasoning effort.**
+
+**GOAL:** Add the §6A "convex curve" dev-shape to the ratings-development engine — **(a)** the convex γ-gate + dead-band on the over-expectation signal `r`, and **(b)** the δ edge-compression on the rating — BOTH as default-identity §16 tunables so the engine is **BYTE-IDENTICAL at the defaults**. Build-dark. This is the REMAINING §6A piece, DISTINCT from the already-merged A2.5 age bar-shift (`expectedStatsEngine.ts`, untouched) and RA-5 age-gravity (the additive `ageGravity` term, unchanged). The §6A(c) far-out equilibrium safety rail is **SCOPED OUT** of this ticket (it is a cumulative/sweep-level follow-up; the per-checkpoint `maxAbsDelta` already prevents single-step blowups, and the §3A equilibrium [A2.5] is the working bound).
+
+**SOURCE OF TRUTH:** `spec-docs/RATINGS_ADJUSTMENT_SPEC.md` §6A (lines 118-138; the formula block is lines 121-130):
+```
+if |r| < startBar:  Δ = 0   (dead-band)
+else:  Δ = sign(r) · baseScale · ((|r| − startBar)/(1 − startBar))^γ · edge(rating) · age · morale · rookie · confidence    (γ > 1)
+(b) edge: gains × ((99 − rating)/99)^δ ,  losses × (rating/99)^δ
+```
+The representative SIM values (spec line 206: `startBar 0.25, γ=2, δ≈1`) are **NOT the v1 defaults** — v1 defaults are the IDENTITY values (`0 / 1 / 0`); the real numbers are owned by the Simulation Gate (§16).
+
+**CONSTRAINTS:** branch-only — do NOT commit, do NOT push. Edit ONLY `src/engines/ratingsDevelopment.ts` + `src/engines/__tests__/ratingsDevelopment.test.ts`. **NO `TRACKER_DB_VERSION` bump** (engine-internal math; A2.5/RA-5 both stayed v25). **FROZEN read-only:** `spec-docs/reference/iv_oracle.json`. Do NOT touch `expectedStatsEngine.ts` (A2.5 bar-shift), `franchiseCheckpointSweepCompute.ts` (it inherits the new defaults via the `{...RATINGS_DEVELOPMENT_TUNING}` spread and ALREADY passes `baseRatingValue` — no signature change), `traitAcquisition.ts`, pricing/tier/scorer. The morale-coupling block in `computeRawRatingDelta` stays exactly as-is.
+
+**EXACT CHANGES (`src/engines/ratingsDevelopment.ts`):**
+1. **Extend `RatingsDevelopmentTuning`** (interface, after `trendTiltWeight`, before `ageCurveSlopeByBand`):
+   ```
+   startBar: number;             // §6A(a) dead-band: |r| below this → no move; 0 = no dead-band
+   convexGamma: number;          // §6A(a) γ convex reward exponent (>1 convex); 1 = identity
+   edgeCompressionDelta: number; // §6A(b) δ inverse-with-rating edge factor; 0 = identity (factor 1)
+   ```
+2. **Extend `RATINGS_DEVELOPMENT_TUNING`** defaults (§16 placeholders — add a comment that the representative sim values are `startBar 0.25 / γ 2 / δ 1` but the v1 defaults are the IDENTITY `0 / 1 / 0`):
+   ```
+   startBar: 0,
+   convexGamma: 1,
+   edgeCompressionDelta: 0,
+   ```
+3. **`computeRawRatingDelta`** — replace the bare `performanceSignal` factor with the convex-gated signal, BEFORE the `baseDeltaScale × morale` multiply (the morale block is unchanged):
+   ```
+   const r = clamp(input.performanceSignal, -1, 1);
+   const absR = Math.abs(r);
+   const convexSignal =
+     absR < tuning.startBar
+       ? 0
+       : Math.sign(r) * Math.pow((absR - tuning.startBar) / (1 - tuning.startBar), tuning.convexGamma);
+   // ...existing centeredMorale / moraleMultiplier / clampedMultiplier unchanged...
+   return tuning.baseDeltaScale * convexSignal * clampedMultiplier;
+   ```
+   (Keep the existing `const performanceSignal = clamp(...)` only if still needed by the morale-sign branch; the morale multiplier's `performanceSignal >= 0` test must use the SAME signed `r` so the sign is preserved — i.e. base the up/down morale branch on `r >= 0`, identical to today since `performanceSignal` was that clamp.)
+4. **`computeCheckpointRatingDevelopment`** — apply δ edge-compression to `rawDelta` (sign-aware, on `baseRatingValue`) BEFORE adding `ageGravity`:
+   ```
+   const ratingForEdge = clamp(input.baseRatingValue, 0, 99);
+   const edgeBase = rawDelta >= 0 ? (99 - ratingForEdge) / 99 : ratingForEdge / 99;
+   const edgeFactor = Math.pow(edgeBase, tuning.edgeCompressionDelta);
+   const edgedDelta = rawDelta * edgeFactor;
+   const signedMove = edgedDelta + ageGravity;   // edge compresses the PERFORMANCE move only, NOT ageGravity
+   ```
+   Everything after `signedMove` (the `cappedRaw` clamp, `confidenceScaled`, dampener, 0-99 clamp, `shouldShift`) is UNCHANGED. `result.rawDelta` should remain `signedMove` (same field meaning as today).
+
+**MAKE-OR-BREAK — byte-identity at defaults (`startBar=0 / γ=1 / δ=0`):**
+- **convex:** `absR < 0` is never true → dead-band never fires; `(absR − 0)/(1 − 0) = absR`; `sign(r)·absR^1 = r` (and at `r=0`: `sign(0)·pow(0,1)=0=r`). ⇒ `computeRawRatingDelta` returns `baseDeltaScale·r·morale`, EXACTLY today.
+- **edge:** `Math.pow(edgeBase, 0) = 1` for every `edgeBase ≥ 0` (incl. `pow(0,0)=1` in JS) ⇒ `edgedDelta = rawDelta`, EXACTLY today.
+- **ordering preserved:** `rawDelta → ×edge → +ageGravity → clamp(±maxAbsDelta) → ×confidence → dampener → clamp(0,99)`.
+- **distinctness:** A2.5 lives in `expectedStatsEngine.ts` (shapes the INPUT bar before `r`) and RA-5 is the additive `ageGravity` (unchanged) — this ticket only reshapes `r→Δ` (convex) and scales the move by an edge factor on the rating. No overlap, no double-count.
+- **no NaN:** `edgeBase ∈ [0,1]` (rating clamped 0-99); convex base `≥ 0` when `absR ≥ startBar` and `startBar < 1`.
+
+**TEST (`src/engines/__tests__/ratingsDevelopment.test.ts`):**
+- **Update the `toEqual` default-shape pin** (currently lines ~41-69) to include `startBar: 0, convexGamma: 1, edgeCompressionDelta: 0` (placed consistently with the interface order). This pin breaks deterministically when you add fields — update it, don't weaken it.
+- **Default-identity (the build-dark proof):** with default tuning, `computeRawRatingDelta` returns the legacy `baseDeltaScale·signal·moraleMult` for several signals (e.g. `signal=0.5, morale=50 (neutral) → 3·0.5·1 = 1.5`; a negative signal; `signal=0`) AND `computeCheckpointRatingDevelopment` yields the SAME `rawDelta`/`proposedRating` as before the change for a couple of (signal, rating, morale, ageBand) combos including a high rating (90) and a low rating (58) — proving edge is inert at δ=0.
+- **Convex non-identity:** with `{startBar:0.25, convexGamma:2}`: `r=0.5 → convex=((0.5−0.25)/0.75)^2=(1/3)^2≈0.1111 → rawDelta≈3·0.1111·moraleMult` (`toBeCloseTo`); **dead-band** `r=0.2 (<0.25) → convex 0 → rawDelta 0`; sign preserved for a negative `r`.
+- **Edge non-identity:** with `{edgeCompressionDelta:1}` and a positive performance move: `baseRatingValue=90 → edge=(99−90)/99≈0.0909` (compressed near ceiling) vs `baseRatingValue=58 → edge≈0.414` (bigger down low); a NEGATIVE move (loss) uses `(rating/99)^δ` → `baseRatingValue=10 → edge≈0.101` (loss resisted near floor). Assert the edge multiplies the performance move and that `ageGravity` is added AFTER (un-compressed) — e.g. a prime-band case (ageGravity 0) isolates the edge cleanly.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0.  2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/ratingsDevelopment.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `ratingsDevelopment.ts` is in the `processCompletedGame` chain via `franchiseCheckpointSweepCompute.ts:24,539` → partial-mock transitive-import risk) → report the FAILED-FILE list: must be ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`franchiseOffseasonGuards.component`/`AwardsWatchlist` order-flakes — solo-pass to confirm). Any franchise/ratings/L-SIM FIXTURE moving → STOP (the defaults must be byte-identical).
+5. `git --no-pager diff --stat` → `src/engines/ratingsDevelopment.ts` + `src/engines/__tests__/ratingsDevelopment.test.ts` ONLY. No `expectedStatsEngine.ts`, no `franchiseCheckpointSweepCompute.ts`, no `iv_oracle.json`/pricing/tier/scorer, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines changed; (2) the interface+defaults additions, the convex gate in `computeRawRatingDelta`, the edge factor in `computeCheckpointRatingDevelopment`, an explicit statement that defaults are byte-identical (convex→`r`, edge→1) + that A2.5/RA-5/sweep are untouched + no DB/oracle touch; (3) the exact verification output (tsc/build/focused/FULL failed-file list/diff --stat); (4) "RA-6A-CONVEX complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the convex or edge piece CANNOT be made default-identity (any default shifts a value vs today) → STOP; a `TRACKER_DB_VERSION` bump or `iv_oracle.json` touch is needed → STOP; you find this is NOT distinct from A2.5/RA-5 (already built) → STOP and report; the sweep needs a new arg (it should not — `baseRatingValue` already flows) → STOP and report; a non-default franchise/ratings/L-SIM fixture regresses → STOP (defaults are leaking); you are tempted to add the §6A(c) ~25pt safety rail → DON'T (scoped out); `startBar` could be ≥ 1 at any default (division-by-zero) → it must stay `< 1` (default 0). Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: RA-6A-CONVEX ===== -->
