@@ -174,36 +174,36 @@ function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => nu
   };
 }
 
-/**
- * Build the best-achievable 22-man roster under the archetype's SHIFTED caps via hill-climb.
- *   1. Greedy highest-IV-per-slot start.
- *   2. Hill-climb: repeatedly accept the single best slot-swap that improves `objective` (value minus a
- *      stiff over-budget penalty). The penalty first drives the roster under budget, then it maximises
- *      value within budget. Because swaps can replace a cap-BUSTING star with a same-position player
- *      who FITS the archetype's caps (sheds tax for little value), the climb discovers each archetype's
- *      natural roster shape — e.g. Defense First converging on glove-first, weak-bat hitters — instead
- *      of unfairly punishing archetypes whose optimum is counterintuitive. Identical for every
- *      archetype, so the comparison stays fair.
- */
-export function buildBestRoster(
-  pool: SimPlayer[],
-  archetype: SimArchetype,
-  tier: TierKey,
-  budget: number,
-): ArchetypeSimResult {
-  const caps = shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], { increase: archetype.increase, decrease: archetype.decrease });
-  const fitScore = makeFitScore(caps, tier);
+/** Fill each slot with the highest-scoring eligible player (score = value or archetype-fit). */
+function greedyStart(pool: SimPlayer[], score: (p: SimPlayer) => number): SlotPick[] {
   const picks: SlotPick[] = [];
   const used = new Set<string>();
-
   for (let i = 0; i < SLOT_PLAN.length; i += 1) {
     const cands = eligible(pool, SLOT_PLAN[i], used);
     if (cands.length === 0) continue;
-    const chosen = cands.reduce((best, c) => (c.iv > best.iv ? c : best));
+    const chosen = cands.reduce((best, c) => (score(c) > score(best) ? c : best));
     picks.push({ slotIndex: i, player: chosen });
     used.add(chosen.id);
   }
+  return picks;
+}
 
+/**
+ * Hill-climb from a starting roster: repeatedly accept the single best slot-swap that improves
+ * `objective` (value minus a stiff over-budget penalty). The penalty first drives the roster under
+ * budget, then maximises value within it. Because a swap can replace a cap-BUSTING star with a
+ * same-position player who FITS the archetype's caps (sheds tax for little value), the climb finds each
+ * archetype's natural roster shape rather than punishing the counterintuitive ones.
+ */
+function climb(
+  start: SlotPick[],
+  pool: SimPlayer[],
+  caps: LuxuryCapRow[],
+  budget: number,
+  fitScore: (p: SimPlayer) => number,
+): SlotPick[] {
+  const picks = start.map((p) => ({ ...p }));
+  const used = new Set(picks.map((p) => p.player.id));
   const MAX_PASSES = 40;
   for (let pass = 0; pass < MAX_PASSES; pass += 1) {
     let improved = false;
@@ -212,10 +212,8 @@ export function buildBestRoster(
       const usedExcept = new Set(used);
       usedExcept.delete(current.id);
       const players = picks.map((p) => p.player);
-      const baseObj = objective(players, caps, budget);
-
       let bestRepl: SimPlayer | null = null;
-      let bestObj = baseObj;
+      let bestObj = objective(players, caps, budget);
       for (const repl of shortlist(pool, SLOT_PLAN[picks[idx].slotIndex], usedExcept, fitScore)) {
         if (repl.id === current.id) continue;
         players[idx] = repl;
@@ -226,7 +224,6 @@ export function buildBestRoster(
         }
       }
       players[idx] = current; // restore
-
       if (bestRepl) {
         used.delete(current.id);
         used.add(bestRepl.id);
@@ -236,17 +233,40 @@ export function buildBestRoster(
     }
     if (!improved) break;
   }
+  return picks;
+}
 
-  const finalPlayers = picks.map((p) => p.player);
-  const totalIv = finalPlayers.reduce((s, p) => s + p.iv, 0);
-  const totalSalary = finalPlayers.reduce((s, p) => s + p.salary, 0);
-  const totalTax = taxOf(finalPlayers, caps);
+/**
+ * Build the best-achievable 22-man roster under the archetype's SHIFTED caps. Climbs from TWO
+ * independent starts — value-first and archetype-fit-first — and keeps the better roster. The fit-first
+ * start hands the deep-nerf archetypes a specialist-loaded roster the climb can refine, so they aren't
+ * scored low merely because their optimum is unreachable from a value-first start. Identical procedure
+ * for every archetype → fair comparison.
+ */
+export function buildBestRoster(
+  pool: SimPlayer[],
+  archetype: SimArchetype,
+  tier: TierKey,
+  budget: number,
+): ArchetypeSimResult {
+  const caps = shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], { increase: archetype.increase, decrease: archetype.decrease });
+  const fitScore = makeFitScore(caps, tier);
+  const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
+
+  const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, fitScore);
+  const fromFit = climb(greedyStart(pool, fitScore), pool, caps, budget, fitScore);
+  const best = objOf(fromFit) > objOf(fromValue) ? fromFit : fromValue;
+
+  const players = best.map((p) => p.player);
+  const totalIv = players.reduce((s, p) => s + p.iv, 0);
+  const totalSalary = players.reduce((s, p) => s + p.salary, 0);
+  const totalTax = taxOf(players, caps);
   return {
     name: archetype.name,
     totalIv,
     totalSalary,
     totalTax,
-    rosterSize: finalPlayers.length,
+    rosterSize: players.length,
     solvent: totalSalary + totalTax <= budget,
   };
 }

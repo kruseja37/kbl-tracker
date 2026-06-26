@@ -86,5 +86,23 @@ describe('archetype balance simulator — workbook baseline', () => {
     expect(report.results.length).toBe(archetypes.length);
     expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
     expect(report.budget).toBeGreaterThan(0);
+    // Documented baseline: the bulk of the workbook set is flat; only the deep-nerf extremes break.
+    const inBand = report.results.length - report.outliers.length;
+    expect(inBand).toBeGreaterThanOrEqual(30);
+  });
+
+  it('summarises parity across all three tiers (juiced / standard / nerfed)', () => {
+    const pool = loadPool();
+    const archetypes = workbookArchetypes();
+    for (const tier of ['juiced', 'standard', 'nerfed'] as const) {
+      const report = runBalanceSim(pool, archetypes, tier, 0.1);
+      const inBand = report.results.length - report.outliers.length;
+      // eslint-disable-next-line no-console
+      console.log(
+        `\n[${tier}] within ±10%: ${inBand}/${report.results.length}   maxDev ${(report.maxDeviation * 100).toFixed(1)}%   ` +
+          `outliers: ${report.outliers.map((o) => `${o.name} ${(o.deviation * 100).toFixed(0)}%`).join(', ') || 'none'}`,
+      );
+      expect(report.results.length).toBe(archetypes.length);
+    }
   });
 });
