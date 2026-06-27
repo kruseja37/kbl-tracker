@@ -1,16 +1,22 @@
 /**
- * teamArchetypeCatalog.ts — the UI-facing display catalog of the 15 historical
- * team archetypes (the curated, sim-balanced set; ARCHETYPE_BALANCE_SIM_RESULTS.md
- * §"Historical archetype set", 15/15 within band). This is DISPLAY data for the
- * Draft Setup archetype picker — name/era/lore + the plain "boost → sacrifice"
- * identity. The precise cap-shift magnitudes are still being tuned and live in the
- * engine (archetypeBalanceSimulator + the historical encoding); the UI shows the
- * plain trade-off, not the numbers. Wire `key` → the engine archetype later.
+ * teamArchetypeCatalog.ts — the UI-facing display catalog of the historical team archetypes for the
+ * Draft Setup archetype picker (name/era/lore + the plain "boost → sacrifice" identity).
  *
- * Each card reserves space for a future "strong vs / weak vs" matchup line — the
- * archetype-vs-archetype matrix is EMPIRICAL (discovered over real seasons), so we
- * design the container now and fill it after Season 1 (see the alignment brief §6b).
+ * SOURCE OF TRUTH = the canonical engine module `src/data/historicalArchetypes.ts`
+ * (`HISTORICAL_ARCHETYPES`). Per JK ruling (FRANCHISE_DRAFT_SETUP_REALDATA_PLAN.md §7): the archetype
+ * set is still being finalized by a parallel thread, so the picker READS the module dynamically and
+ * never hardcodes the list/count — `TEAM_ARCHETYPES` is DERIVED from it here, so the picker inherits
+ * whatever that thread lands. The picker/preview keep consuming this `TeamArchetype` display shape
+ * unchanged; only the data source moved.
+ *
+ * Each card reserves space for a future "strong vs / weak vs" matchup line — the archetype-vs-archetype
+ * matrix is EMPIRICAL (discovered over real seasons), filled after Season 1 (alignment brief §6b).
  */
+import {
+  HISTORICAL_ARCHETYPES,
+  type ArchetypeStat,
+  type HistoricalArchetype,
+} from "../../../data/historicalArchetypes";
 
 export type ArchetypeFamily = "Power" | "Small-ball" | "Speed" | "Pitching" | "Defense" | "Balanced";
 
@@ -37,83 +43,51 @@ export const FAMILY_COLOR: Record<ArchetypeFamily, string> = {
   Balanced: "#D4B863",    // light gold
 };
 
-export const TEAM_ARCHETYPES: TeamArchetype[] = [
-  {
-    key: "murderers-row", name: "Murderers' Row", era: "'27 Yankees", family: "Power",
-    lore: "The lineup that buried pitchers under relentless power and contact.",
-    boosts: ["Power", "Contact"], sacrifices: ["Speed"],
-  },
-  {
-    key: "bomba-squad", name: "Bomba Squad", era: "'19 Twins", family: "Power",
-    lore: "A record home-run barrage — all-or-nothing thump.",
-    boosts: ["Power"], sacrifices: ["Contact", "Speed"],
-  },
-  {
-    key: "bash-brothers", name: "Bash Brothers", era: "'89 A's", family: "Power",
-    lore: "Forearm bashes, towering blasts, and cannons in the outfield.",
-    boosts: ["Power", "Arm"], sacrifices: ["Rotation command", "Bullpen command"],
-  },
-  {
-    key: "whiteyball", name: "Whiteyball", era: "'85 Cardinals", family: "Speed",
-    lore: "Speed and leather on the artificial turf — Herzog's track meet.",
-    boosts: ["Speed", "Defense"], sacrifices: ["Power"],
-  },
-  {
-    key: "go-go-small-ball", name: "Go-Go Small Ball", era: "'59 Sox · '26 Rays", family: "Small-ball",
-    lore: "Slap it, run it, and catch everything in sight.",
-    boosts: ["Contact", "Defense"], sacrifices: ["Power"],
-  },
-  {
-    key: "dead-ball-suppressors", name: "Dead-Ball Suppressors", era: "'06 Cubs", family: "Pitching",
-    lore: "Junk, contact, and a deadened ball — nobody goes deep.",
-    boosts: ["Rotation junk", "Contact"], sacrifices: ["Power", "Bullpen velocity"],
-  },
-  {
-    key: "billy-ball-burners", name: "Billy Ball Burners", era: "Rickey's A's", family: "Speed",
-    lore: "Steal first, ask questions later. Chaos on the bases.",
-    boosts: ["Speed"], sacrifices: ["Power", "Rotation command"],
-  },
-  {
-    key: "junkball-surgeons", name: "Junkball Surgeons", era: "'95 Braves", family: "Pitching",
-    lore: "Pinpoint command and a deep bag of breaking junk.",
-    boosts: ["Rotation command", "Rotation junk"], sacrifices: ["Power", "Rotation velocity"],
-  },
-  {
-    key: "flamethrowers", name: "Flamethrowers", era: "'63 Dodgers", family: "Pitching",
-    lore: "Pure rotation velocity — Koufax-and-Drysdale heat.",
-    boosts: ["Rotation velocity"], sacrifices: ["Power", "Contact"],
-  },
-  {
-    key: "nasty-boys", name: "Nasty Boys", era: "'90 Reds", family: "Pitching",
-    lore: "Three flamethrowers out of the pen — lights out late.",
-    boosts: ["Bullpen velocity"], sacrifices: ["Bullpen command"],
-  },
-  {
-    key: "hdh-royals", name: "HDH Royals", era: "'14 Royals", family: "Pitching",
-    lore: "Speed, defense, and a shutdown back end — Herrera-Davis-Holland.",
-    boosts: ["Bullpen command", "Speed"], sacrifices: ["Power", "Rotation command"],
-  },
-  {
-    key: "the-opener", name: "The Opener", era: "'18 Rays", family: "Pitching",
-    lore: "Bullpen-first — no traditional rotation, all arms on deck.",
-    boosts: ["Bullpen"], sacrifices: ["Rotation"],
-  },
-  {
-    key: "the-oriole-way", name: "The Oriole Way", era: "'69 Orioles", family: "Defense",
-    lore: "Defense and command — fundamentals über alles.",
-    boosts: ["Defense", "Rotation command"], sacrifices: ["Speed", "Bullpen velocity"],
-  },
-  {
-    key: "shift-era-suppressors", name: "Shift-Era Suppressors", era: "'08 Rays", family: "Defense",
-    lore: "Defense and velocity — the shift-era run suppressors.",
-    boosts: ["Defense", "Rotation velocity"], sacrifices: ["Contact", "Bullpen command"],
-  },
-  {
-    key: "big-red-machine", name: "Big Red Machine", era: "'75 Reds", family: "Balanced",
-    lore: "Contact, defense, and pop — a balanced juggernaut.",
-    boosts: ["Contact", "Defense", "Power"], sacrifices: ["Rotation"],
-  },
-];
+/** Plain-English label for each engine stat code (for the boost/sacrifice chips). */
+const STAT_LABEL: Record<ArchetypeStat, string> = {
+  POW: "Power",
+  CON: "Contact",
+  SPD: "Speed",
+  FLD: "Defense",
+  ARM: "Arm",
+  ROT_VEL: "Rotation velocity",
+  ROT_JNK: "Rotation junk",
+  ROT_ACC: "Rotation command",
+  PEN_VEL: "Bullpen velocity",
+  PEN_JNK: "Bullpen junk",
+  PEN_ACC: "Bullpen command",
+};
+
+function statLabel(stat: ArchetypeStat): string {
+  return STAT_LABEL[stat] ?? stat;
+}
+
+/** Derive a display family (accent only) from the boosted stats. */
+function deriveFamily(boosts: ArchetypeStat[]): ArchetypeFamily {
+  if (boosts.length >= 3) return "Balanced";
+  if (boosts.some((s) => s.startsWith("ROT_") || s.startsWith("PEN_"))) return "Pitching";
+  if (boosts.includes("SPD")) return "Speed";
+  if (boosts.includes("FLD")) return "Defense";
+  if (boosts.includes("POW")) return "Power";
+  if (boosts.includes("CON")) return "Small-ball";
+  return "Balanced";
+}
+
+function toTeamArchetype(archetype: HistoricalArchetype): TeamArchetype {
+  return {
+    key: archetype.id,
+    name: archetype.name,
+    // Show the exemplar team/year on the card (e.g. "1927 Yankees"); fall back to the period.
+    era: archetype.exemplars[0] ?? archetype.era,
+    lore: archetype.lore,
+    boosts: archetype.boosts.map(statLabel),
+    sacrifices: archetype.nerfs.map(statLabel),
+    family: deriveFamily(archetype.boosts),
+  };
+}
+
+/** DERIVED from the canonical module — do not hardcode (JK ruling §7). */
+export const TEAM_ARCHETYPES: TeamArchetype[] = HISTORICAL_ARCHETYPES.map(toTeamArchetype);
 
 export function archetypeByKey(key: string | null | undefined): TeamArchetype | undefined {
   if (!key) return undefined;
