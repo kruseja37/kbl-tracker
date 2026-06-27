@@ -159,6 +159,8 @@ export interface PlayerSeasonFielding {
   nutshots?: number;
   outfieldAssists?: number;
   baserunnersHeld?: number;
+  rescuedThrowCredits?: number;
+  basesSavedCredits?: number;
   caughtStealingAgainst?: number; // catcher: runners thrown out stealing (populated by a later writer ticket; A1.5c-4 reads)
   stolenBasesAllowed?: number;    // catcher: SB allowed (populated by a later writer ticket; A1.5c-4 reads)
   difficultyWeightedConversion?: number; // Σ ladder weight on converted difficulty plays (NATIVE-WIRE)
@@ -297,6 +299,8 @@ export function createInitialFieldingStats(
     nutshots: 0,
     outfieldAssists: 0,
     baserunnersHeld: 0,
+    rescuedThrowCredits: 0,
+    basesSavedCredits: 0,
     caughtStealingAgainst: 0,
     stolenBasesAllowed: 0,
     difficultyWeightedConversion: 0,
