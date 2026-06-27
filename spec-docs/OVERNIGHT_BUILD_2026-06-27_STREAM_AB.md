@@ -56,9 +56,15 @@
   (MLB_ROSTER_CAP_EXCEEDED), send-down modal, trade executes + lands in the ledger with names, 7 award
   races + 7 frontrunners render with correct names/teams. **0 console/page errors.** tsc clean; franchise
   suites 274/274 (deterministic across 4 runs).
-- ⏸️ **DEFERRED with evidence (NOT built):** **playoff picture** — no engine exists; magic-number/clinch
-  logic is a from-scratch build, not a wire-up. **fitness chip** — no franchise-persisted fitness on the
-  Player (in-game-only); faking it would fabricate data. Both are honest gaps, surfaced not papered over.
+- ✅ **User-settable fitness that carries into the GameTracker** (`6e17cc7a`): JK corrected my earlier
+  read — fitness is a settable STATE (like elimination mode), not a dead end. Built the franchise analogue:
+  an editable 6-level FitnessPicker on the player card → persists to the SHARED mojoFitnessSnapshots store
+  under a `franchise:<id>` scope key (no new DB / no trackerDb bump) → `buildFranchiseGameTrackerRoster`
+  feeds it into the game-launch roster (the handoff already had the slot). **Browser-proven UI→store→game**:
+  set a player JUICED on the card → the actual roster builder returns him as `fitness:'JUICED'`. Elimination
+  flow untouched (store reuse, additive functions). 274/274 + 40/40 tests; 0 console errors.
+- ⏸️ **Playoff picture — PARKED (JK 2026-06-27: "hold off on playoff UI; do it once the season is rolling").**
+  No engine exists today; magic-number/clinch logic is a from-scratch build, not a wire-up. Revisit later.
 
 ---
 
