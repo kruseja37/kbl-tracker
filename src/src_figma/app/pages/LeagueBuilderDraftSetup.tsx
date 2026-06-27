@@ -339,7 +339,7 @@ export function LeagueBuilderDraftSetup() {
 
   const handleStartDraft = () => {
     if (!league || !locked || !sufficiency.meetsFloor) return;
-    navigate(draftRouteForLeague(league));
+    navigate(`/league-builder/draft-config?leagueId=${league.id}`);
   };
 
   const handleSaveEditedPlayer = useCallback(
