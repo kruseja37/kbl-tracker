@@ -25548,3 +25548,94 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: RIVALRY-ENVY-2B ===== -->
+
+<!-- ===== CONTRACT: STREAMB-1A-ARCHETYPE-CAP — archetype→capIdentity converter (faithful rawShift bridge) + Team provenance keys + mandatory unit test ===== -->
+
+# CONTRACT STREAMB-1A-ARCHETYPE-CAP
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** Convert a chosen historical team archetype into the team's live cap-shift (`Team.capIdentity`/`farmCapIdentity`) FAITHFULLY (matching the balance-sim's `archetypeCapShift`), and record provenance keys on `Team`. Build-dark (no UI caller yet) + a mandatory unit test. Full grounding: `spec-docs/STREAMB_TICKET1_ARCHETYPE_CAP_DECISION.md` (READ IT FIRST).
+
+## Background you MUST honor (verified from source — do not re-derive differently)
+- `capIdentity.increase[]/decrease[]` hold MOD NAMES (keys of `CAP_MODIFICATION_FRACTIONS` in `src/data/tierParams.ts`). The pitching mod names `'VEL'/'JNK'/'ACC'` each shift BOTH rotation AND bullpen, so they CANNOT faithfully encode rotation-vs-bullpen-separated archetypes (8/15 archetypes; `hdh-royals`/`the-opener` are impossible). **Therefore the archetype's MATH MUST NOT route through mod names.**
+- The faithful per-lux-key shift already exists: `archetypeCapShift(arch)` in `src/data/historicalArchetypes.ts:129-135` returns `Record<"group/stat", fraction>`.
+- `ArchetypeStat→ModStat` is the lux-key join (NOT a hand-written map): `ARCHETYPE_STAT_LUX_KEY[stat]` (hist:28-32) → `luxKeyToModStat` (inverse of `MOD_STAT_TO_LUX`, lC:85-97). The plan's `PEN_ACC→PVEL` is a TYPO; correct is `PEN_ACC→PACC`.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. `src/engines/leagueConstruction.ts`
+a. Add an OPTIONAL `rawShift` field to BOTH identity types (lines ~21-22):
+```ts
+export type IdentityComposition = { increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
+export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
+```
+b. In `identityCapShift` (lines ~207-226), add a TOP guard BEFORE `applyIdentitySelection` runs:
+```ts
+export function identityCapShift(identity: IdentityComposition): Record<ModStat, number> {
+  if (identity.rawShift) {
+    const base = Object.fromEntries(MOD_STATS.map((s) => [s, 0])) as Record<ModStat, number>;
+    return { ...base, ...identity.rawShift };
+  }
+  // ... existing body unchanged ...
+}
+```
+(Use whatever the file already uses to enumerate ModStats — `MOD_STATS` if exported there, else `(Object.keys(MOD_STAT_TO_LUX) as ModStat[])`.)
+c. Export a small helper that wraps the private `LUX_TO_MOD_STAT` (do NOT change LUX_TO_MOD_STAT itself):
+```ts
+export function luxKeyToModStat(luxKey: string): ModStat | undefined { return LUX_TO_MOD_STAT.get(luxKey); }
+```
+d. DO NOT modify `shiftLuxuryCaps`, `applyIdentitySelection`, `composeIdentity`, `MOD_STAT_TO_LUX`, or `CAP_MODIFICATION_FRACTIONS`. `shiftLuxuryCaps` already consumes `identityCapShift`'s output, so it inherits the faithful shift.
+
+### 2. `src/utils/leagueBuilderStorage.ts`
+Add to the `Team` interface (after `farmCapIdentity?` at ~line 151), additive + optional (NO IndexedDB version bump):
+```ts
+  mlbArchetypeKey?: string;   // HistoricalArchetype.id; provenance for the MLB capIdentity
+  farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
+```
+
+### 3. NEW FILE `src/engines/archetypeIdentity.ts`
+```ts
+import { HISTORICAL_ARCHETYPES, ARCHETYPE_STAT_LUX_KEY, archetypeCapShift,
+         type HistoricalArchetype, type ArchetypeStat } from '../data/historicalArchetypes';
+import { luxKeyToModStat, type TeamCapIdentity } from './leagueConstruction';
+import type { ModStat } from '../data/tierParams';
+import { saveTeam, type Team } from '../utils/leagueBuilderStorage';
+```
+- `archetypeToCapIdentity(arch: HistoricalArchetype): TeamCapIdentity` — PURE:
+  - Build `rawShift: Record<ModStat, number>` by iterating `archetypeCapShift(arch)` entries; for each `[luxKey, frac]`, `const m = luxKeyToModStat(luxKey)`; if `m` set `rawShift[m] = frac`. If `luxKeyToModStat` returns undefined for any key, THROW `Unknown lux key from archetype ${arch.id}: ${luxKey}` (loud — never silently drop).
+  - `increase` = `arch.boosts` mapped to display mod names via `archetypeStatToModName` (below), deduped; `decrease` = `arch.nerfs` mapped, deduped. These are DISPLAY-ONLY (math is rawShift; the top-guard in identityCapShift bypasses them).
+  - Return `{ increase, decrease, rawShift }` (leave `bandPriorities` undefined).
+  - Helper `archetypeStatToModName(stat: ArchetypeStat): string` — hitters return the pure name (`'POW'|'CON'|'SPD'|'FLD'|'ARM'`); rotation/bullpen return the shared `'VEL'|'JNK'|'ACC'` (suffix of the ArchetypeStat). All are valid `CAP_MODIFICATION_FRACTIONS` keys.
+- `async selectTeamArchetype(team: Team, mlbKey: string, farmKey?: string): Promise<Team>`:
+  - `mlbArch = HISTORICAL_ARCHETYPES.find(a => a.id === mlbKey)`; if missing THROW `Unknown archetype: ${mlbKey}`.
+  - Set `team.mlbArchetypeKey = mlbKey`; `team.capIdentity = archetypeToCapIdentity(mlbArch)`.
+  - If `farmKey`: find farmArch (THROW if missing); set `team.farmArchetypeKey = farmKey`; `team.farmCapIdentity = archetypeToCapIdentity(farmArch)`.
+  - `return saveTeam(team)`.
+
+### 4. NEW FILE `src/engines/__tests__/archetypeIdentity.test.ts` (MANDATORY — these 6 assertions)
+Mock storage so no IndexedDB is needed: `vi.mock('../../utils/leagueBuilderStorage', ...)` exposing a spy `saveTeam` that returns its arg, and keep the real `Team` type. Import `HISTORICAL_ARCHETYPES`, `ARCHETYPE_STAT_LUX_KEY`, `archetypeCapShift` from data, `identityCapShift`, `shiftLuxuryCaps`, `luxKeyToModStat` from leagueConstruction.
+1. **Typo pin / lux round-trip:** `expect(luxKeyToModStat(ARCHETYPE_STAT_LUX_KEY['PEN_ACC'])).toBe('PACC')` and `...['PEN_VEL'])).toBe('PVEL')` and `...['ROT_ACC'])).toBe('RACC')`. Then for EVERY ArchetypeStat, assert `luxKeyToModStat(ARCHETYPE_STAT_LUX_KEY[stat])` is defined.
+2. **Per-archetype direction:** for each `arch` in `HISTORICAL_ARCHETYPES`: `const shift = identityCapShift(archetypeToCapIdentity(arch))`. For each `stat` in `arch.boosts`: `expect(shift[luxKeyToModStat(ARCHETYPE_STAT_LUX_KEY[stat])!]).toBeGreaterThan(0)`. For each `stat` in `arch.nerfs`: `toBeLessThan(0)`.
+3. **Others ≈ 0 (proves rotation/bullpen separation — Design B would FAIL this):** for each archetype, compute the touched ModStat set = boosts∪nerfs mapped via lux key; for every OTHER ModStat assert `Math.abs(shift[modStat]) < 1e-9`.
+4. **Fidelity to the balance-proven path — for `the-opener` AND `hdh-royals` specifically** (the two impossible-via-mod-names archetypes): build a small `LuxuryCapRow[]` covering rotation+bullpen ACC/VEL rows with cap=100; assert `shiftLuxuryCaps(rows, archetypeToCapIdentity(arch))` equals each row independently recomputed as `100 * (1 + (archetypeCapShift(arch)[`${row.group}/${row.stat}`] ?? 0))`. This proves the LIVE path now matches `archetypeCapShift` AND that rotation/bullpen move in OPPOSITE directions for these archetypes.
+5. **`selectTeamArchetype` wiring:** call with a minimal Team stub + `'murderers-row'`; assert returned team has `mlbArchetypeKey==='murderers-row'`, `capIdentity.rawShift` set with POW>0/CON>0/SPD<0, and the mocked `saveTeam` was called once. With a farmKey, assert `farmArchetypeKey`/`farmCapIdentity` set too.
+6. **Throws on unknown key:** `await expect(selectTeamArchetype(stub, 'not-a-key')).rejects.toThrow()`.
+Also assert each archetype has ≤2 boosts and ≤2 nerfs (documents the display-name validity invariant); if any exceeds, leave the math (rawShift) correct and note it — do NOT truncate rawShift.
+
+## Constraints
+- ZERO changes outside the 4 files above. No DB version bump. No new dependency. No `any` without a justifying comment.
+- Behavior-preserving: any identity WITHOUT `rawShift` must produce byte-identical `identityCapShift` output as before.
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run archetypeIdentity leagueConstruction auctionLuxuryTax historicalArchetypes` → all green (these are the affected files; `historicalArchetypes` is GREEN on this lane today — do not regress it).
+- FALSIFICATION: confirm assertion #3 (others≈0) and #4 (opposite-direction fidelity) actually PASS — these are the ones that prove the faithful bridge; if either is RED the design is wrong, STOP.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, change nothing further, IF: adding `rawShift` to the identity types forces a change to `applyIdentitySelection`/`shiftLuxuryCaps` signatures; `MOD_STATS` is not available to enumerate (resolve via `Object.keys(MOD_STAT_TO_LUX)`); a circular import appears (it should not — leagueConstruction does NOT import historicalArchetypes); the Team field add requires an IndexedDB version bump; or assertion #3/#4 cannot pass with Design A (means the grounding is wrong — STOP and report, do not fall back to mod-names).
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-1A-ARCHETYPE-CAP ===== -->
