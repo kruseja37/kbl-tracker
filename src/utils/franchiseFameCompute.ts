@@ -4,7 +4,9 @@ import {
   aggregateRolePlayerFame,
   applyHonorHeatBump,
   applyHeatUpdate,
+  applyWarLegitimacyGravity,
   FAME_TUNING,
+  warPercentileToMeritLevel,
   type ChannelTaggedFameInput,
   type FameAttributionChannel,
 } from '../engines/fameModel';
@@ -97,6 +99,18 @@ export async function persistDarkFameRecordsForCompletedGame(
   const bumpByPlayer = new Map<string, number>(
     buildStadiumRecordFameHeatBumps(stadiumChanges).map((bump) => [bump.playerId, bump.heatDelta]),
   );
+  const warPercentileByPlayer = new Map<string, number>();
+  for (const row of fameScope.rows) {
+    const valueRow = row as { playerId?: unknown; warPercentile?: unknown };
+    if (
+      typeof valueRow.playerId === 'string' &&
+      valueRow.playerId.trim().length > 0 &&
+      typeof valueRow.warPercentile === 'number' &&
+      Number.isFinite(valueRow.warPercentile)
+    ) {
+      warPercentileByPlayer.set(valueRow.playerId, valueRow.warPercentile);
+    }
+  }
 
   for (const playerId of playerIds) {
     const storedRow = await getFranchiseFameRecord(fameScope, playerId);
@@ -112,6 +126,10 @@ export async function persistDarkFameRecordsForCompletedGame(
     const breakdown = aggregateChannelFame(inputs);
     const stored = storedRow ?? { heat: 0, reachFloor: 0, wasNegative: false };
     let heat = applyHeatUpdate(stored.heat, breakdown.total);
+    const warPct = warPercentileByPlayer.get(playerId);
+    if (warPct !== undefined) {
+      heat = applyWarLegitimacyGravity(heat, warPercentileToMeritLevel(warPct));
+    }
     const bump = bumpByPlayer.get(playerId);
     if (bump !== undefined) {
       heat = applyHonorHeatBump(heat, bump);

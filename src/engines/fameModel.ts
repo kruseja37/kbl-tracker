@@ -109,6 +109,11 @@ export const FAME_TUNING = {
   },
   warGravity: {
     strength: 0.2,
+    meritPercentileBands: {
+      elite: 0.90,
+      high: 0.70,
+      average: 0.40,
+    } satisfies Record<'elite' | 'high' | 'average', number>,
     meritHeatTarget: {
       low: 0,
       average: 4,
@@ -171,6 +176,19 @@ export function applyWarLegitimacyGravity(
     currentHeat + Math.max(0, (targetHeat - currentHeat) * config.warGravity.strength),
     config,
   );
+}
+
+export function warPercentileToMeritLevel(
+  warPercentile: number,
+  config: FameTuning = FAME_TUNING,
+): FameMeritLevel {
+  if (!Number.isFinite(warPercentile)) return 'low';
+
+  const bands = config.warGravity.meritPercentileBands;
+  if (warPercentile >= bands.elite) return 'elite';
+  if (warPercentile >= bands.high) return 'high';
+  if (warPercentile >= bands.average) return 'average';
+  return 'low';
 }
 
 export function heatToFameTier(heat: number, config: FameTuning = FAME_TUNING): FameTier {

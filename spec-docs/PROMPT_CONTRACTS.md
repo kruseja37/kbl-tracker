@@ -25104,3 +25104,65 @@ folded). Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window (pos
 Full contract: `spec-docs/MWAR_STEP5A_CONTRACT.md` (derived rotation-aware next-starter resolver + opponent-next-SP profile
 resolver + make launch rotation-aware; foundation for the 5b lineups tab). DERIVED (gamesPlayed % rotationSize), no new store.
 Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.
+
+<!-- ===== CONTRACT: FAME-FLOOR-1 — wire the orphaned WAR-legitimacy merit floor into the per-game fame compute + tighten its L-SIM invariant ===== -->
+
+**ROUTE:** Codex (builder) — worktree `/Users/johnkruse/Projects/kbl-soulgaps`, branch `claude/v1-soul-gaps`. **BRANCH-ONLY: do NOT `git add`, do NOT commit, do NOT push.** Leave all edits dirty in the working tree for Captain audit.
+
+**ROLE:** Connect the already-built-but-orphaned merit "WAR legitimacy floor" so it actually runs in the per-game dark fame compute, and make its currently-vacuous L-SIM invariant assert the floor really fires.
+
+**GOAL / MAKE-OR-BREAK:** In `persistDarkFameRecordsForCompletedGame`, thread each player's `warPercentile` (already present on the `fameScope.rows` object passed at the call site) into the per-player heat chain → derive a `FameMeritLevel` → call the EXISTING `applyWarLegitimacyGravity` right after `applyHeatUpdate`. The gravity is **UPWARD-ONLY and MUST stay upward-only** (a high-WAR/quietly-excellent player gets lifted toward a merit target; a low-WAR player is never dragged down). Then make `soul.fame-war-legitimacy-floor` assert the floor fires.
+
+**SOURCE OF TRUTH (spec §, verbatim):**
+- `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md` §20.1 (≈line 354): *"Floor — legitimacy (WAR). A slow-moving gravity that pulls fame toward what a player is actually worth (raw value vs peers)... WAR is a legitimacy floor only — not a direct fame contributor."* + FAME-2/FAME-3 (lines 451-453).
+- `spec-docs/MODE2_V1_COMPLETENESS.md` lines 200 / 241 / 291: the WAR legitimacy floor is ORPHANED, RULED v1, wire before the flag-flip; it powers the §20.2 snub/bust engine.
+- **Direction = UPWARD-ONLY** (soul-layer-direction rule — the Captain once mis-ratified this bidirectional and JK caught it; do NOT make it bidirectional).
+- Merit SIGNAL = "raw value vs peers" = the player's `warPercentile` (spec-verbatim). The percentile→level BAND CUTOFFS are spec-SILENT → use the documented conservative default below as a NAMED TUNING KNOB (the §16 sweep will move it).
+
+**GROUND ANCHORS (verified from source — re-read each before editing):**
+- `src/engines/fameModel.ts:17` `export type FameMeritLevel = 'low'|'average'|'high'|'elite'`.
+- `src/engines/fameModel.ts:110-118` `FAME_TUNING.warGravity = { strength: 0.2, meritHeatTarget: { low:0, average:4, high:12, elite:24 } }`.
+- `src/engines/fameModel.ts:161-174` `applyWarLegitimacyGravity(currentHeat, warJustifiedHeatOrMerit: number|FameMeritLevel, config)` = `clampAndRoundHeat(currentHeat + Math.max(0,(targetHeat-currentHeat)*strength))` — ALREADY upward-only (the `Math.max(0,...)`). Accepts a `FameMeritLevel` directly.
+- `src/engines/fameModel.ts` heat config: `neutral:0`, `decayPerUpdate:0.85`; `tierThresholds.localHero:3`.
+- `src/utils/franchiseFameCompute.ts:29` param type `PersistedTrueValueResult = FranchiseFameRecordsScopeInput & { seasonNumber; rows: unknown[] }` — the fn receives this as `fameScope` but NEVER reads `.rows`.
+- `src/utils/franchiseFameCompute.ts:76-139` the fn + per-player loop (101-139); **line 114 `let heat = applyHeatUpdate(stored.heat, breakdown.total);`** — insert gravity RIGHT AFTER this, BEFORE the stadium honor-bump block (lines 115-119).
+- Call site `src/utils/processCompletedGame.ts:1368` passes `trueValueScope` (built at :336-342 with `rows: result.rows`, locally typed :132-134 `{ ...scope, rows: FranchiseTrueValueRow[] }`) → warPercentile rows ARE in hand. **No change to processCompletedGame.ts.**
+- `src/utils/franchiseTrueValueStorage.ts:37-54` `FranchiseTrueValueRow` has `playerId: string`, `warPercentile: number` (0..1; `salaryCalculator.ts:1015 getPercentile`).
+- L-SIM already feeds rows: `test-utils/lsim/seasonRunner.ts:799` calls the compute with `{ ...scope, rows: snapshot.trueValueRows }`.
+- `test-utils/lsim/invariants/soul.ts:222-249` `fameTierLegitimacy` (severity INVESTIGATE) today ONLY flags apex-degeneracy (bottom-decile warPct at IMMORTAL_LEGEND) → it passes whether or not the gravity is wired = false comfort. Imports `FAME_TIER_RANK, FAME_TUNING, resolveFameTier`; uses `snapshot.trueValueRows` + `snapshot.fameRows`.
+- `test-utils/lsim/falsification.ts:~102` injects `{ playerId:'p', warPercentile:0.05 }` for the legitimacy leg.
+- Existing test `src/utils/tests/franchiseFameCompute.test.ts` uses `scope.rows = []` (line 32) → all existing cases UNAFFECTED (empty rows → no merit lookup → no gravity).
+
+**BUILD — edit EXACTLY these 5 files:**
+1. `src/engines/fameModel.ts`:
+   a. Add to `FAME_TUNING.warGravity` a named knob `meritPercentileBands: { elite: 0.90, high: 0.70, average: 0.40 } satisfies Record<'elite'|'high'|'average', number>` (a player below `average` → 'low'). Keep `as const`. Do NOT change `strength` or `meritHeatTarget`.
+   b. Export a PURE classifier `export function warPercentileToMeritLevel(warPercentile: number, config: FameTuning = FAME_TUNING): FameMeritLevel` — non-finite/NaN → 'low'; `>= elite` → 'elite'; `>= high` → 'high'; `>= average` → 'average'; else 'low'. (warPercentile is 0..1.)
+2. `src/utils/franchiseFameCompute.ts`:
+   a. Import `applyWarLegitimacyGravity` and `warPercentileToMeritLevel` from `../engines/fameModel` (alongside the existing fameModel imports).
+   b. Before the loop, build `const warPercentileByPlayer = new Map<string, number>()` from `fameScope.rows`: for each `row` (type `unknown`), read it as `{ playerId?: unknown; warPercentile?: unknown }`; include only when `playerId` is a non-empty string AND `warPercentile` is a finite number. **Do NOT import `FranchiseTrueValueRow` into this file** — keep the param's `rows: unknown[]` and narrow locally.
+   c. In the per-player loop, IMMEDIATELY AFTER line 114 (`let heat = applyHeatUpdate(...)`) and BEFORE the honor-bump block: `const warPct = warPercentileByPlayer.get(playerId); if (warPct !== undefined) { heat = applyWarLegitimacyGravity(heat, warPercentileToMeritLevel(warPct)); }`. The existing `heatDelta = heat - stored.heat` (line 121) must therefore naturally include the gravity contribution (it feeds the morale tap — that is intended).
+   d. Do NOT apply gravity in the second (stadium-bump-only) loop (lines 141-174).
+3. `src/engines/__tests__/fameModel.test.ts`: add a `test` for `warPercentileToMeritLevel` band boundaries — 0.95→'elite', 0.90→'elite', 0.89→'high', 0.70→'high', 0.41→'average', 0.40→'average', 0.39→'low', 0→'low', `NaN`→'low'.
+4. `src/utils/tests/franchiseFameCompute.test.ts`: add ONE flag-on test — run the single-player WPA case once with `scope.rows = []` (baseline heat) and once with `rows: [{ playerId:'player-1', warPercentile:0.95 } as <minimal cast to the param row type>]`; assert the merit-row heat is **STRICTLY GREATER** than the baseline (gravity lifted it). Also assert a `warPercentile:0.05` row does NOT raise heat above the baseline (low merit never lifts). Do NOT hard-pin exact gravity arithmetic beyond these inequalities (tuning knob).
+5. `test-utils/lsim/invariants/soul.ts` — tighten `fameTierLegitimacy` (KEEP severity INVESTIGATE):
+   - KEEP the apex-degeneracy guard exactly as-is.
+   - ADD a floor-firing clause: collect players that have a trueValue row with `warPercentile >= FAME_TUNING.warGravity.meritPercentileBands.elite` (import the SAME knob — NO magic number, per the per-tier-threshold lesson); compute the MEDIAN of their resolved `heat`; the median MUST be `>= FAME_TUNING.tierThresholds.localHero`. If the elite cohort is empty, PASS with a noted reason ("no elite-merit cohort to assert"). A violation = elite-merit cohort stuck at/below Unknown → the floor did NOT fire.
+   - Result `pass` = (no apex-degeneracy offenders) AND (elite-median floor satisfied OR cohort empty). Update the message to report BOTH clauses (apex offenders + elite cohort size + elite median heat).
+   - If `test-utils/lsim/falsification.ts`'s legitimacy leg relied on the old single-clause behavior, make the MINIMAL change so it still falsifies the (kept) apex-degeneracy clause. Do NOT weaken any other invariant.
+
+**CONSTRAINTS:** Edit ONLY the 5 files above. Do NOT touch any frozen oracle/golden/baseline JSON, any other engine, `processCompletedGame.ts`, or any flag default. Branch-only — leave the tree dirty, no git ops. Keep `FAME_TUNING as const`. warPercentile is 0..1 (never 0..100).
+
+**EXPECTED OUTPUT:** 5 files edited; `applyWarLegitimacyGravity` now has a real per-game caller; the pure classifier + its tests; the new fame-compute test; the non-vacuous invariant.
+
+**VERIFICATION (run in the worktree; report results; do NOT commit):**
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/fameModel.test.ts src/utils/tests/franchiseFameCompute.test.ts` → all green.
+- Print the per-file diff summary. Do NOT run the full L-SIM (the Captain runs the behavioral re-bake).
+
+**FORMAT:** End with: `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** If the gravity cannot be called without breaking upward-only; if `fameScope.rows` does NOT actually carry warPercentile at the call site (verify — it does); if making the invariant non-vacuous would force it to FAIL under correct wiring; or if any required change would touch a frozen oracle / `processCompletedGame.ts` — STOP, write `STOP-IF: <reason>` + analysis, and change nothing further.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: FAME-FLOOR-1 ===== -->

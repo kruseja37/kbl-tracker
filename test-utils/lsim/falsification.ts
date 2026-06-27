@@ -96,10 +96,18 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     } },
   { name: 'soul.fame-heat-fickle',
     mutate: (s) => { s.gamesSimulated = s.totalScheduledGames; /* season-end, no up+down transitions */ } },
-  { name: 'soul.fame-war-legitimacy-floor', // NAMED property now: apex degeneracy (replacement-WAR at the very top tier)
+  { name: 'soul.fame-war-legitimacy-floor', // NAMED property: apex degeneracy (replacement-WAR at the top tier) AND the elite-merit floor not firing (an elite-WAR player stranded at Unknown heat)
     mutate: (s) => {
-      s.fameRows = [{ playerId: 'p', heat: 50, reachFloor: 5, channelByChannel: { ...FINITE_CHANNELS } } as never];
-      s.trueValueRows = [{ playerId: 'p', warPercentile: 0.05 } as never];
+      // p trips the apex-degeneracy clause (bottom-decile WAR holding IMMORTAL_LEGEND);
+      // q trips the new elite-floor clause (top-decile WAR but heat below LOCAL_HERO == the gravity never lifted him).
+      s.fameRows = [
+        { playerId: 'p', heat: 50, reachFloor: 5, channelByChannel: { ...FINITE_CHANNELS } } as never,
+        { playerId: 'q', heat: 0, reachFloor: 0, channelByChannel: { ...FINITE_CHANNELS } } as never,
+      ];
+      s.trueValueRows = [
+        { playerId: 'p', warPercentile: 0.05 } as never,
+        { playerId: 'q', warPercentile: 0.95 } as never,
+      ];
     } },
   { name: 'soul.l12-race-no-nan-resolve-tier', // NAMED property now: eligible candidates dropped despite a non-empty pool
     mutate: (s) => {

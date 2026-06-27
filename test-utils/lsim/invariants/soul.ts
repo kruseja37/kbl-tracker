@@ -238,14 +238,35 @@ function fameTierLegitimacy(snapshot: LsimStateSnapshot): LsimInvariantResult {
         valueRow.warPercentile < APEX_DEGENERACY_WAR_PERCENTILE;
     })
     .map((row) => row.playerId);
+  const heatByPlayer = new Map(snapshot.fameRows.map((row) => [row.playerId, row.heat]));
+  const eliteMeritHeats = snapshot.trueValueRows
+    .filter((row) =>
+      isFiniteNumber(row.warPercentile) &&
+      row.warPercentile >= FAME_TUNING.warGravity.meritPercentileBands.elite
+    )
+    .map((row) => heatByPlayer.get(row.playerId))
+    .filter(isFiniteNumber)
+    .sort((a, b) => a - b);
+  const eliteMedianHeat = medianFinite(eliteMeritHeats);
+  const eliteFloorSatisfied = eliteMeritHeats.length === 0 ||
+    (isFiniteNumber(eliteMedianHeat) && eliteMedianHeat >= FAME_TUNING.tierThresholds.localHero);
+  const apexPass = offenders.length === 0;
   return invariantResult(
     'soul.fame-war-legitimacy-floor',
     INVESTIGATE,
-    offenders.length === 0,
-    offenders.length === 0
-      ? 'no replacement/neg-WAR player holds the apex IMMORTAL_LEGEND tier (high-fame/low-WAR darlings are blessed §20.2 — a §9 signal, not a fail)'
-      : `apexDegenerate=${offenders.slice(0, 8).join(',')}`,
+    apexPass && eliteFloorSatisfied,
+    `apexDegenerate=${offenders.slice(0, 8).join(',') || 'none'}; eliteCohort=${eliteMeritHeats.length}; eliteMedianHeat=${isFiniteNumber(eliteMedianHeat) ? eliteMedianHeat.toFixed(3) : 'n/a'}; ` +
+      (eliteMeritHeats.length === 0
+        ? 'no elite-merit cohort to assert'
+        : `eliteFloorSatisfied=${eliteFloorSatisfied}; localHeroFloor=${FAME_TUNING.tierThresholds.localHero}`),
   );
+}
+
+function medianFinite(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const middle = Math.floor(values.length / 2);
+  if (values.length % 2 === 1) return values[middle];
+  return (values[middle - 1] + values[middle]) / 2;
 }
 
 function l12RaceNoNanAndResolve(snapshot: LsimStateSnapshot): LsimInvariantResult {

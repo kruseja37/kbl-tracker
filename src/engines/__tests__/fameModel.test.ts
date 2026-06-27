@@ -14,6 +14,7 @@ import {
   getBaseIconicFameValue,
   resolveFameTier,
   updateReachFloor,
+  warPercentileToMeritLevel,
   type ChannelTaggedFameInput,
   type FameModelRecord,
 } from '../fameModel';
@@ -87,6 +88,18 @@ describe('fameModel L6a pure engine', () => {
     expect(rawFloorBelowCurrent).toBe(15);
     expect(rawFloorAboveCurrent).toBeGreaterThan(5);
     expect(rawFloorAboveCurrent).toBeLessThanOrEqual(15);
+  });
+
+  test('warPercentileToMeritLevel maps conservative percentile band boundaries', () => {
+    expect(warPercentileToMeritLevel(0.95)).toBe('elite');
+    expect(warPercentileToMeritLevel(0.90)).toBe('elite');
+    expect(warPercentileToMeritLevel(0.89)).toBe('high');
+    expect(warPercentileToMeritLevel(0.70)).toBe('high');
+    expect(warPercentileToMeritLevel(0.41)).toBe('average');
+    expect(warPercentileToMeritLevel(0.40)).toBe('average');
+    expect(warPercentileToMeritLevel(0.39)).toBe('low');
+    expect(warPercentileToMeritLevel(0)).toBe('low');
+    expect(warPercentileToMeritLevel(Number.NaN)).toBe('low');
   });
 
   test('fame-vs-merit classifies snub and bust', () => {

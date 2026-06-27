@@ -233,6 +233,39 @@ describe('franchise dark fame compute', () => {
     expect(duplicateRow).toEqual(secondRow);
   });
 
+  test('flag-on path applies the WAR legitimacy floor only as an upward lift', async () => {
+    setFranchisePhase2FameEnabledForTests(true);
+    const completedGame = gameState({
+      gameId: 'fame-game-war-floor',
+      playerWpaTotals: [playerTotal('player-1', 0.1)],
+    });
+
+    await persistDarkFameRecordsForCompletedGame(completedGame, { ...scope, rows: [] });
+    const baselineHeat = (await getFranchiseFameRecord(scope, 'player-1'))?.heat;
+    expect(baselineHeat).toBeTypeOf('number');
+
+    await clearFranchiseFameRecordsForTests();
+    resetFranchiseFameRecordsForTests();
+    await persistDarkFameRecordsForCompletedGame(completedGame, {
+      ...scope,
+      rows: [{ playerId: 'player-1', warPercentile: 0.95 } as PersistedTrueValueResult['rows'][number]],
+    });
+    const eliteMeritHeat = (await getFranchiseFameRecord(scope, 'player-1'))?.heat;
+
+    await clearFranchiseFameRecordsForTests();
+    resetFranchiseFameRecordsForTests();
+    await persistDarkFameRecordsForCompletedGame(completedGame, {
+      ...scope,
+      rows: [{ playerId: 'player-1', warPercentile: 0.05 } as PersistedTrueValueResult['rows'][number]],
+    });
+    const lowMeritHeat = (await getFranchiseFameRecord(scope, 'player-1'))?.heat;
+
+    expect(eliteMeritHeat).toBeTypeOf('number');
+    expect(lowMeritHeat).toBeTypeOf('number');
+    expect(eliteMeritHeat).toBeGreaterThan(baselineHeat as number);
+    expect(lowMeritHeat as number).toBeLessThanOrEqual(baselineHeat as number);
+  });
+
   test('folds a positive stadium-record SET bump into the active new holder heat write', async () => {
     setFranchisePhase2FameEnabledForTests(true);
     const completedGame = gameState({
