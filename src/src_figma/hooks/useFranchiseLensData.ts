@@ -49,6 +49,7 @@ import {
   type MojoFitnessSnapshot,
 } from "../../utils/mojoFitnessStorage";
 import { FITNESS_STATES, type FitnessState } from "../../engines/fitnessEngine";
+import { getRecentMilestones, type CareerMilestone } from "../../utils/careerStorage";
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -136,6 +137,7 @@ import type {
   ImpactCardVM,
   LeaderboardVM,
   LeaderEntryVM,
+  MilestoneVM,
   MomentsVM,
   MoraleHistoryVM,
   NewsVM,
@@ -204,6 +206,7 @@ interface RawData {
   reporters: BeatReporter[];
   raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>;
   conditionSnapshots: MojoFitnessSnapshot[];
+  milestones: CareerMilestone[];
 }
 
 /**
@@ -340,6 +343,7 @@ interface DrawerContext {
   edgesByPlayer: Map<string, RelationshipEdgeRow[]>;
   fameByPlayer: Map<string, FranchiseFameRecordRow>;
   fitnessByPlayer: Map<string, FitnessState>;
+  milestonesByPlayer: Map<string, CareerMilestone[]>;
   nameById: Map<string, string>;
   currentGameNumber: number;
 }
@@ -435,6 +439,22 @@ function mojoChip(mojo: unknown): FormStateVM | undefined {
   return { label, tone };
 }
 
+// Career milestones for the drawer (most-recent first). Career stat line / awards deferred per JK.
+function buildMilestones(rows: CareerMilestone[] | undefined): MilestoneVM[] | undefined {
+  if (!rows || rows.length === 0) return undefined;
+  return [...rows]
+    .sort((a, b) => b.achievedDate - a.achievedDate)
+    .map((m) => {
+      const seasonNum = /-season-(\d+)/.exec(m.seasonId ?? "")?.[1];
+      return {
+        label: m.description || `${m.thresholdValue} ${m.statName}`,
+        detail: m.tier ? `Tier ${m.tier}` : undefined,
+        achieved: true,
+        atLabel: seasonNum ? `Season ${seasonNum}` : undefined,
+      };
+    });
+}
+
 // Fitness chip: the user-set condition that carries into the game (JUICED↑ … HURT↓). FIT is neutral.
 function fitnessChip(state: FitnessState): FormStateVM {
   const tone: FormStateVM["tone"] =
@@ -490,6 +510,7 @@ function buildPlayerRow(player: Player, teamId: string, ctx: DrawerContext): Pla
     traitTimeline: traitTimeline.length ? traitTimeline : undefined,
     ties: ties.length ? ties : undefined,
     fame: buildFame(ctx.fameByPlayer.get(player.id)),
+    milestones: buildMilestones(ctx.milestonesByPlayer.get(player.id)),
     designationEffect: designationEffectLine(designation),
   };
 
@@ -1373,10 +1394,17 @@ function buildReturn(
     reporters,
     raceScores,
     conditionSnapshots,
+    milestones,
   } = raw;
   const fitnessByPlayer = new Map<string, FitnessState>(
     conditionSnapshots.map((snap) => [snap.playerId, snap.fitnessState]),
   );
+  const milestonesByPlayer = new Map<string, CareerMilestone[]>();
+  for (const ms of milestones) {
+    const list = milestonesByPlayer.get(ms.playerId);
+    if (list) list.push(ms);
+    else milestonesByPlayer.set(ms.playerId, [ms]);
+  }
 
   const teamMeta = new Map<string, TeamMeta>(
     teams.map((team) => [team.id, { abbr: team.abbreviation, name: team.name }]),
@@ -1454,6 +1482,7 @@ function buildReturn(
     edgesByPlayer,
     fameByPlayer: new Map(fameRecords.map((row) => [row.playerId, row])),
     fitnessByPlayer,
+    milestonesByPlayer,
     nameById: new Map(players.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()])),
     currentGameNumber: completedGameNumbers.length ? Math.max(...completedGameNumbers) : 0,
   };
@@ -1706,6 +1735,9 @@ export function useFranchiseLensData(
         const conditionSnapshots = await loadFranchiseConditionSnapshots(franchiseId).catch(
           (): MojoFitnessSnapshot[] => [],
         );
+        // Career milestones (global career store; one read, grouped by player in the VM). Empty until
+        // a played season records them. Career stat line / awards deferred per JK — milestones only.
+        const milestones = await getRecentMilestones(5000).catch((): CareerMilestone[] => []);
         if (cancelled) return;
         setRaw({
           config,
@@ -1730,6 +1762,7 @@ export function useFranchiseLensData(
           reporters: reporters ?? [],
           raceScores: raceScores ?? {},
           conditionSnapshots: conditionSnapshots ?? [],
+          milestones: milestones ?? [],
         });
         setIsLoading(false);
       } catch (caught) {
