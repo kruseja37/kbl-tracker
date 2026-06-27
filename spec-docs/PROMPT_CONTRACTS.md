@@ -24451,3 +24451,17 @@ Report: (1) files changed + one-line what; (2) build result; (3) focused vitest 
 - STOP-IF adding RIVAL_GAME_WIN/LOSS forces an edit outside the 3 files (another exhaustive `Record<MasterMoraleEventType>` / a `never` switch) — report it.
 - STOP-IF the pre-game rival cannot be captured before the rival-update tap without modifying that tap — report (the snapshot read before line 1243 must suffice). A correct BLOCK is GOOD. Do NOT modify Channel A, do NOT bump trackerDb, do NOT push.
 <!-- ===== END CONTRACT: HPR-C ===== -->
+
+---
+
+## CONTRACT POINTER — Manager-WPA Step 1 (2026-06-26)
+Full hardened contract: `spec-docs/MWAR_STEP1_CONTRACT.md` (single-layer 3:2:1 net-from-zero manager metric;
+retire tactical + lineup_delta from the total; two live tiers 30/10, keep-in 20 dark). Builder: Codex. Auditor: Opus.
+Lane: `experiment/manager-wpa-window`. Adversarial-reviewed (2 critical orphan bugs caught + fixed pre-handoff).
+
+---
+
+## CONTRACT POINTER — Manager-WPA Step 4 (2026-06-26)
+Full contract: `spec-docs/MWAR_STEP4_CONTRACT.md` (MINIMAL surface re-point — point the end-of-season Manager-of-the-Year
+ceremony screen at the live persisted award row instead of the dead legacy managerStorage store; one component,
+AwardsCeremonyFlow.tsx). JK ruled minimal scope. Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.
