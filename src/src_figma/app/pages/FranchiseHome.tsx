@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, createContext, useContext, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise } from "lucide-react";
+import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise, ListOrdered } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { TeamHubContent } from "@/app/components/TeamHubContent";
+import { LineupsTabContent } from "@/app/components/LineupsTabContent";
 import { MuseumContent, type RetiredJersey } from "@/app/components/MuseumContent";
 import { FreeAgencyFlow } from "@/app/components/FreeAgencyFlow";
 import { RatingsAdjustmentFlow } from "@/app/components/RatingsAdjustmentFlow";
@@ -128,7 +129,7 @@ async function ensureFranchiseReporterForTeam({
   );
 }
 
-type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
+type TabType = "todays-game" | "team" | "lineups" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
 type SeasonPhase = "regular" | "playoffs" | "offseason";
 
 function getPlayoffSeriesTeam(series: PlayoffSeries, teamId: string) {
@@ -1166,6 +1167,7 @@ export function FranchiseHome() {
     { id: "schedule", label: "SCHEDULE", icon: <Calendar className="w-4 h-4" /> },
     { id: "standings", label: "STANDINGS", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "team", label: "TEAM HUB", icon: <Users className="w-4 h-4" /> },
+    { id: "lineups", label: "LINEUPS", icon: <ListOrdered className="w-4 h-4" /> },
     { id: "leaders", label: "LEAGUE LEADERS", icon: <TrendingUp className="w-4 h-4" /> },
     { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
     ...(MODE_2_V1_TRANSACTION_UI_ENABLED
@@ -1424,6 +1426,9 @@ export function FranchiseHome() {
         )}
         {activeTab === "team" && (
           <TeamHubContent />
+        )}
+        {activeTab === "lineups" && (
+          <LineupsTabContent />
         )}
         {activeTab === "schedule" && (
           <ScheduleContent

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { staleFieldsForEliminationUpdate } from "../../app/components/EliminationTeamHub";
-import { applyFranchiseTeamUpdateWithStaleOptimalSnapshots } from "../../app/components/TeamHubContent";
+import { applyFranchiseTeamUpdateWithStaleOptimalSnapshots } from "../../app/utils/franchiseLineupDomain";
 import {
   buildLineupSnapshotFromSlots,
   type OptimalLineupSnapshotField,

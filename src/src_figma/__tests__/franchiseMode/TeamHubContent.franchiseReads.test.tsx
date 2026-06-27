@@ -3031,7 +3031,8 @@ describe('TeamHubContent franchise-owned visible reads', () => {
 
     const manager = await screen.findByRole('region', { name: /Franchise lineup and rotation manager/i });
     expect(within(manager).getByRole('combobox', { name: /Lineup slot 1 player/i })).toHaveValue('batter-1');
-    expect(within(manager).getByText(/Starter Alpha \(SP\)/i)).toBeInTheDocument();
+    // Rotation is now a 4-man set of pitcher dropdowns (JK 2026-06-26); the first slot holds the MLB starter.
+    expect(within(manager).getByRole('combobox', { name: /Rotation slot 1 pitcher/i })).toHaveValue('starter-a');
     expect(within(manager).queryByRole('option', { name: /Farm Hidden/i })).not.toBeInTheDocument();
     expect(mocks.mockSaveFranchiseTeam).not.toHaveBeenCalled();
   });

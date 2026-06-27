@@ -36,6 +36,47 @@ The **engine seam** both 5b (the tab) and 5c (pregame collapse) consume:
   mWAR track, or `lineupVsStarter.ts`/`scoutMove.ts`/`trueValue.ts`/`effectiveRatings.ts`/
   `franchiseRotationResolver.ts`. The optimal lineup is a **scout advisor**, not an mWAR input.
 
+### DONE 2026-06-26 (continued) — 5b TAB BUILT (uncommitted on `experiment/manager-wpa-window`)
+Steps 1–3 of the UI are complete + verified (tsc 0, build 0, 256 franchiseMode/seam tests green incl. the 4
+characterized Team-Hub gate tests; behavior-preserving extraction proven by the gate). **5c (pregame collapse)
+NOT yet started.**
+- **New files:** `src/src_figma/app/components/LineupsTabContent.tsx` (the tab),
+  `src/src_figma/app/components/FranchiseLineupRotationEditor.tsx` (the shared lineup+rotation editor — hook
+  + presentational, fully prop-controlled), `src/src_figma/app/utils/franchiseLineupDomain.ts` (the pure
+  lineup/rotation domain helpers + constants + `toOptimalCandidate` + `isActiveFranchisePlayerForTeam`,
+  moved verbatim out of TeamHubContent).
+- **TeamHubContent refactor:** the inline lineup editor (state + handlers + JSX + ~19 pure helpers) was
+  EXTRACTED to the two new files; Team Hub now renders `<FranchiseLineupRotationEditor onBeforeSave={()=>
+  setLineupComparison(null)} …/>` and imports the domain helpers. The per-hand advisor grid stays in Team Hub
+  (it's the durable vs-LHP/vs-RHP concept; the tab is single-pitcher). `optimalLineupStaleIntegration.test.ts`
+  import repointed to `franchiseLineupDomain`.
+- **Tab placement (current lines):** `FranchiseHome.tsx` `TabType` :132, regularSeasonTabs nav :1170,
+  content switch `activeTab==="lineups"` :1431. **LINEUPS is regular-season only** (removed from playoffTabs —
+  it reads the regular-season `nextGame`, which is null in playoffs; review finding).
+- **The tab does:** active club (`lensTeamId`) → load all teams + players → opponent's next SP via the seam →
+  display SP profile + optimal lineup vs that SP + ACCEPT (applies the batting order to the durable lineup) +
+  the shared editor for manual reorder + a mojo editor + `PregameBenchmarkChecklist` readiness row.
+- **Adversarial review run + fixed:** 3 confirmed findings, all fixed — (1+2, HIGH) the opponent fallback now
+  returns `null` (was an arbitrary away team) since `nextGame` isn't filtered to the controlled team;
+  (3, MED) LINEUPS removed from playoffTabs. Fitness edit deferred (not a franchise Player field — optimizer
+  assumes FIT).
+- **JK correction pass applied (256 tests green) — shared-layer, carries to the new hub:** (1) **4-man
+  rotation** — `normalizeFranchiseRotationIds` capped to `FRANCHISE_ROTATION_SIZE=4`; the rotation editor is now
+  4 pitcher dropdowns (pick which 4) + ×-remove + an "add starter" row. (2) **Bench + bullpen** readouts added
+  to the editor (position players outside the nine; pitchers outside the four), swap via the dropdowns. (3) **No
+  DH** — the vestigial DH/No-DH toggle removed from the tab, the shared editor (now always no-DH), AND Team
+  Hub's advisor (franchise is already config-sealed no-DH; UI toggle was wrong). One characterized render test
+  updated to assert the rotation dropdown (was plain text). JK decision recorded: build sequence = fix logic
+  now, polish in the new Fenway hub later (legacy tab = bare proving ground).
+
+### ⚠ GOTCHA CORRECTION (the handoff's name→id detail was STALE)
+`franchiseData.nextGame.awayTeam` / `.homeTeam` hold **team IDs, not names** — they're assigned from the
+scheduled game's `awayTeamId`/`homeTeamId` (`useFranchiseData.ts:640-641`), and line 636 confirms they match
+`standings teamId`. **No name→id mapping is needed.** Opponent id = whichever of `awayTeam`/`homeTeam` ≠
+`lensTeamId`; opponent games-played = that team's `wins+losses` from `standings` (flatten Eastern+Western).
+⚠ `getNextFranchiseGame` is called WITHOUT a teamFilter, so `nextGame` is the franchise's next game and may
+NOT involve the controlled team — hence the `null` fallback.
+
 ### Grounded contract (so the next thread doesn't re-discover)
 - `resolveOpponentStarterProfile(teamId, gamesPlayed, lookup)` — `franchiseRotationResolver.ts:48`. `lookup =
   { getTeam:(id)=>{startingRotation}, getPlayer:(id)=>{id,throws,velocity,junk,accuracy,trait1/2,arsenal,
@@ -55,21 +96,23 @@ The **engine seam** both 5b (the tab) and 5c (pregame collapse) consume:
   (b) derive the opponent's games-played (from standings W+L or a schedule count — `useFranchiseData
   .gamesPlayed` is the *active club's* count). This is the one unresolved wiring detail for 5b.
 
-### NEXT — the UI (in order; ~80% already exists, buried in Team Hub — extract, don't rebuild)
-1. **Add the tab** — `FranchiseHome.tsx`: `TabType` union :131, nav arrays :1168/1187, content switch :1415+
-   (mirror `activeTab==="team" → <TeamHubContent/>` :1425) → add `activeTab==="lineups" → <LineupsTabContent/>`.
-2. **Extract the buried controls to shared subcomponents** (both Team Hub + the tab use them):
-   - Accept/adjust advisor (COMPARE/APPLY/RECALC/SET) — `TeamHubContent.tsx:3194-3299` + handlers `:2776-2826`;
-     read-only gap card `OptimalLineupComparisonPanel.tsx`.
-   - Lineup + rotation editor — `TeamHubContent.tsx:3022-3192` + `handleSaveLineupRotation` `:2680`.
-   - Benchmark/readiness — `PregameBenchmarkChecklist.tsx`, `pregameLineupBenchmarks.ts`.
-3. **Build `LineupsTabContent`** — `useFranchiseData().nextGame` → resolve opponentTeamId + gamesPlayed →
-   `resolveFranchiseNextGameOptimalLineup(...)` (the seam) → display + accept/adjust + manual reorder +
-   mojo/fitness edit.
-4. **Collapse the pregame layer (5c)** — remove the standalone PRE-GAME LINEUP modal
-   (`FranchiseHome.tsx:4255-4370`); "Play Ball" reads the lineup the tab set via `handleLaunchGame`
-   (`:3636-3706`) + `withPregameManagerNavigationState` (`pregameNavigationState.ts:19-36`). Keep GameTracker's
-   in-game lineup/sub edit as the last-second buffer.
+### NEXT — only 5c remains (steps 1–3 DONE + verified, see the status block above)
+1. ✅ **Add the tab** — done (regular-season nav only).
+2. ✅ **Extract the buried controls to shared subcomponents** — done for the lineup+rotation editor + the
+   `toOptimalCandidate` mapper + the pure domain helpers (`franchiseLineupDomain.ts`). The Team-Hub per-hand
+   advisor grid stays in Team Hub by design (the tab is single-pitcher, not vs-LHP/vs-RHP). The read-only gap
+   card `OptimalLineupComparisonPanel.tsx` and `PregameBenchmarkChecklist.tsx` were already standalone — reused.
+3. ✅ **Build `LineupsTabContent`** — done (display + accept + manual reorder via the shared editor + mojo edit
+   + readiness row). Fitness edit deferred (not a franchise Player field).
+4. ⏳ **Collapse the pregame layer (5c)** — NOT started. Remove/slim the standalone PRE-GAME LINEUP modal
+   (`FranchiseHome.tsx` ~`4277-4380`, `interface PreGameData`); "Play Ball" reads the lineup the tab set via
+   `handleLaunchGame` (~`:3598-3720`) + `withPregameManagerNavigationState` (`pregameNavigationState.ts:19-36`).
+   **DESIGN FORK FOR JK:** the pregame modal does MORE than the active club's lineup — it also selects the
+   **starting pitcher for BOTH teams** (`selectedAwayStarterIdx`/`selectedHomeStarterIdx`) and holds both teams'
+   optimal-lineup snapshots + milestone watches. A full removal means "Play Ball" must auto-resolve both
+   starters (the rotation resolver can do this) and trust the saved durable lineups. Recommend JK eyeballs the
+   new tab on real data first, then choose: (A) make the modal a quick pre-filled confirm, or (B) full removal
+   with auto-starter-resolution. Keep GameTracker's in-game lineup/sub edit as the last-second buffer either way.
 
 ### Gotchas
 - **Avoid a trackerDb bump** — reuse the existing optimal-lineup snapshot persistence (a new store needs a
