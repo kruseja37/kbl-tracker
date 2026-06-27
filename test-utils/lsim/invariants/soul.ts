@@ -55,8 +55,8 @@ const L13_3A_RELATIONSHIP_TYPES = new Set<RelationshipEdgeType>([
   'MENTORSHIP',
   'FRIENDSHIP',
 ]);
-const EVENT_DRIVEN_SOURCES = new Set<string>(['overtake', 'envy']);
-const EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM = 24; // OPEN-DECISION placeholder (§16); event-driven (overtake + envy) edges get their own generous cap, tuned from the full-season count.
+const EVENT_DRIVEN_SOURCES = new Set<string>(['overtake', 'envy', 'asg-snub']);
+const EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM = 24; // OPEN-DECISION placeholder (§16); event-driven (overtake + envy + asg-snub) edges get their own generous cap, tuned from the full-season count.
 // §5.3 season-end honor edge: MVP/CY emit an AWARD_RESULT nod + a close-loser snub.
 // Mirrors franchiseSeasonEndHonors.ts:19 (SEASON_END_SNUB_TOP_N) + :29-32 (SEASON_END_HONORS, honorKind === award category).
 const SEASON_END_SNUB_TOP_N = 3;

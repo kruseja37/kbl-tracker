@@ -25416,3 +25416,81 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: RIVALRY-ENVY-2A ===== -->
+
+<!-- ===== CONTRACT: RIVALRY-ENVY-2B — All-Star SNUB forms a lasting event-driven RIVALRY edge at the All-Star lock (mid-season; "first guy out resents last guy in" per slot) ===== -->
+
+**ROUTE:** Codex (builder) — worktree `/Users/johnkruse/Projects/kbl-soulgaps`, branch `claude/v1-soul-gaps`. **BRANCH-ONLY: do NOT `git add`, commit, or push.** Leave edits dirty for Captain audit.
+
+**ROLE:** The third rivalry trigger. When the All-Star roster LOCKS (mid-season), the player who JUST missed the team forms a lasting `RIVALRY` edge against the player who JUST made it, per slot — **JK ruling 2026-06-27: "the first guy out resents the last guy in."** ADDITIVE: the existing All-Star snub morale (`runFranchiseAllStarLockPayouts`→`applyFranchiseRaceSnubMorale`) stays untouched; a NEW persisted RIVALRY edge is layered on, stamped `formationSource:'asg-snub'`.
+
+**PAIRING RULE (JK, exact):**
+- **Hitters — per position (C,1B,2B,3B,SS,LF,CF,RF):** first-out = the highest-merit candidate whose concrete field position is P who is NOT selected anywhere → resents the **STARTER at P** (the single `role:'starter'` selection at P). One edge per position.
+- **Pitchers — per kind (SP, RP):** first-out = the highest-merit non-selected pitcher of that kind → resents the **MARGINAL selected pitcher of that kind** (the lowest-`selectionScore` selection whose `position` === the kind; "last guy in"). One edge per kind.
+- Bounded ≤ 10 edges. Skip a slot with no starter / no first-out. Skip self-pairs.
+
+**GOAL / MAKE-OR-BREAK (all four):**
+1. The pairing (first-out↔last-in per slot) computed from the SAME normalization the selector uses (combo positions like 'OF'/'IF/OF' must resolve to the concrete slot).
+2. A NEW mid-season dark tap that idempotently writes `RIVALRY` edges stamped `formationSource:'asg-snub'`, formed at the LOCK game, **CREATE-IF-ABSENT** (existing pair edge → no-op), deterministic.
+3. **Intensity correctness (the deep make-or-break — DIFFERENT from ENVY-1):** these edges form MID-SEASON, so the per-game L13 intensity tap RE-NORMALIZES them on every subsequent game using the REAL charged-matchup state. So (a) they MUST use the REAL charged state, NOT the `'envy'` carve-out — `'asg-snub'` goes in `EVENT_DRIVEN_SOURCES` (formation partition) but is NOT added to the intensity-lifecycle `'envy'` carve-out; and (b) the lock tap runs at `processCompletedGame.ts:1473` (the All-Star compute) which is AFTER the L13 intensity tap (`:1437`), so the new edge is NOT normalized in its OWN lock game → the tap MUST set the correct formation intensity ITSELF via `computeRelationshipIntensity(edge, { gameNumber: lockGameNumber, isChargedMatchup: <computed from the lock gameState> })` (it HAS the gameState). This makes stored == the intensity-lifecycle invariant's expected at every checkpoint (formation value at the lock-game checkpoint; lifecycle value thereafter).
+4. Captain's gate: full suite ZERO-NEW-REDS + L-SIM season 60g clean. The All-Star lock fires mid-season → edges re-bake the lock-game checkpoint ONWARD (multiple checkpoints, not just 060); bounded/deterministic, findings:0.
+
+**SOURCE OF TRUTH:** `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md` §22.4 (envy feed → relationship edge born from the race), §24.2/§24.10 (Rivalry from race envy), ASG-3 (snub morale hit + envy feeds relationships). JK ruling 2026-06-27 defines the All-Star pairing as first-out↔last-in per slot. Intensity/accuracy = §16 placeholders (intensity is the lifecycle seed baseline, not a knob).
+
+**GROUND ANCHORS (Captain-verified from source THIS session — re-read before editing):**
+- Edge store `src/utils/franchiseRelationshipEdgesStorage.ts:39-40`: `formationSource?: 'formation' | 'overtake' | 'envy';` — you add `| 'asg-snub'`. `franchiseRelationshipEdgeId`, `getFranchiseRelationshipEdge`, `putFranchiseRelationshipEdge` as used by ENVY-1's `franchiseRelationshipEnvyCompute.ts` (mirror it).
+- Intensity: `computeRelationshipIntensity(edge, { gameNumber, isChargedMatchup })` from `'../engines/relationshipIntensity'` (`:125`). Charged helpers from `'./franchiseRelationshipIntensityCompute'`: `getRelationshipParticipantTeams(gameState)` (`:65`, returns `{ byPlayerId: Map }`) + `isChargedRelationshipMatchup({player1Id,player2Id}, participants)` (`:102`).
+- The selector `src/engines/franchiseAllStarSelector.ts`: `computeFranchiseAllStarRoster({candidates})` → `AllStarSelection[]` (`:35` has `{playerId,teamId,position,role:'starter'|'reserve',selectionScore}`); `position` is concrete ('C'..'RF'|'SP'|'RP'|'WILDCARD'); internal `normalizeCandidate(candidate)` (`:240`) → `NormalizedHitterCandidate{facet:'hitter',fieldPosition}` | `NormalizedPitcherCandidate{facet:'pitcher',pitcherKind:'SP'|'RP'}` | null; `V1_ALL_STAR_ROSTER_CONFIG` (`:55`, `.positionStarters` = the 8 hitter positions); merit fields on `AllStarCandidate` (`:18`): `hittingMerit`, `startingMerit`, `reliefMerit`. The per-slot sort tiebreaker the selector uses is `compareNullableDesc(merit) || playerId.localeCompare` — MATCH IT for determinism.
+- The wire `src/utils/franchiseAllStarRosterCompute.ts`: lock fires ONCE — `existing?.locked` early-returns `locked-noop` (`:54-56`); the `if (shouldLock)` block (`:89-105`) has `gameState`, `candidates` (`AllStarCandidate[]`), `selections` (`FranchiseAllStarSelection[]`), `scope`, `gameNumber` (the resolved lock game, `:72`), `gameState.savedAt` (deterministic timestamp). `runFranchiseAllStarLockPayouts` is called there (`:91`).
+- ENVY-1 template `src/utils/franchiseRelationshipEnvyCompute.ts` (the create-if-absent + lifecycle-intensity shape) + `franchiseRelationshipOvertakeCompute.ts` (the per-game gate/dedup/sorted-write shape).
+- Invariant `test-utils/lsim/invariants/soul.ts`: `EVENT_DRIVEN_SOURCES = new Set(['overtake','envy'])` (added by ENVY-1, near `:58`); the intensity-lifecycle `'envy'` carve-out (`:667-672`, `row.formationSource === 'envy' ? false : ...`). Falsification overtake/envy event-driven cases in `test-utils/lsim/falsification.ts:203`,`:230`(ish).
+
+**BUILD — edit/add EXACTLY these files (5 edit + 2 new = 7):**
+
+1. `src/utils/franchiseRelationshipEdgesStorage.ts` — widen `formationSource?` to `'formation' | 'overtake' | 'envy' | 'asg-snub'` + update the JSDoc. NO trackerDb bump.
+
+2. `src/engines/franchiseAllStarSelector.ts` — add ONE exported PURE function (reusing the internal `normalizeCandidate`):
+   `export function computeAllStarSnubRivalryPairs(rawCandidates: readonly AllStarCandidate[], selections: ReadonlyArray<{ playerId: string; position: string; role: 'starter' | 'reserve'; selectionScore: number }>, config: AllStarRosterConfig = V1_ALL_STAR_ROSTER_CONFIG): { snubbedPlayerId: string; selectedPlayerId: string }[]`
+   - Normalize candidates (`map(normalizeCandidate).filter(Boolean)`); `selectedIds = new Set(selections.map(s=>s.playerId))`.
+   - HITTERS: for each `position` of `config.positionStarters`: `starter = selections.find(s => s.position === position && s.role === 'starter')`; if none → skip. `firstOut` = the top non-selected `NormalizedHitterCandidate` with `fieldPosition === position`, sorted by `compareNullableDesc(hittingMerit) || playerId.localeCompare` — take `[0]`. If `firstOut` and `firstOut.playerId !== starter.playerId` → push `{snubbedPlayerId: firstOut.playerId, selectedPlayerId: starter.playerId}`.
+   - PITCHERS: for each `kind` of `['SP','RP']`: `selectedOfKind = selections.filter(s => s.position === kind)`; if empty → skip. `marginal` = the selection in `selectedOfKind` with the LOWEST `selectionScore` (tiebreak `playerId.localeCompare` ascending). `firstOut` = top non-selected `NormalizedPitcherCandidate` with `pitcherKind === kind` and the kind's merit (`startingMerit` for SP, `reliefMerit` for RP) `!== null`, sorted `compareNullableDesc(thatMerit) || playerId.localeCompare`, take `[0]`. If `firstOut` and `firstOut.playerId !== marginal.playerId` → push `{snubbedPlayerId: firstOut.playerId, selectedPlayerId: marginal.playerId}`.
+   - Return the pairs (deterministic order: hitters by position order, then SP, then RP). Export `compareNullableDesc` if not already exported, or reuse it in-module.
+
+3. NEW `src/utils/franchiseRelationshipAllStarSnubCompute.ts` — MIRROR `franchiseRelationshipEnvyCompute.ts`, with these differences:
+   - Imports: the edge-store fns; `computeRelationshipIntensity` from `'../engines/relationshipIntensity'`; `getRelationshipParticipantTeams, isChargedRelationshipMatchup` from `'./franchiseRelationshipIntensityCompute'`; `isFranchisePhase2L13Enabled` from `'./franchisePhase2Flags'`; `type PersistedGameState` from `'./gameStorage'`.
+   - `export const ALL_STAR_SNUB_RIVALRY_TUNING = { accuracy: 1 } as const;` (+ comment: intensity is the lifecycle seed baseline, not a knob).
+   - `export async function persistAllStarSnubRivalryEdges(params: { gameState: PersistedGameState; pairs: ReadonlyArray<{ snubbedPlayerId: string; selectedPlayerId: string }>; scope: FranchiseRelationshipEdgeScopeInput & { franchiseId: string; seasonNumber: number }; lockGameNumber: number; timestamp: number; }): Promise<{ status:'dark-noop'|'written'; written:number; reason?:string }>`:
+     - Gate `isFranchisePhase2L13Enabled()` FIRST → dark-noop.
+     - Validate `Number.isInteger(lockGameNumber) && lockGameNumber >= 1` → else dark-noop.
+     - `createdAt = timestamp > 0 ? timestamp : lockGameNumber`.
+     - `participants = getRelationshipParticipantTeams(gameState)`.
+     - Dedup pairs by canonical `franchiseRelationshipEdgeId(scope, snubbed, selected, 'RIVALRY')`, skipping falsy / self pairs.
+     - For each unique id in deterministic sorted order: `existing = getFranchiseRelationshipEdge(id); if (existing) continue;` (create-if-absent). Canonical `[player1Id,player2Id] = sort`. Build `base: RelationshipEdgeRow` with `formationSource:'asg-snub'`, `formedAtGameNumber: lockGameNumber`, `potential:false`, `dissolvedAtGameNumber:null`, `intensity:0`, `accuracy: ALL_STAR_SNUB_RIVALRY_TUNING.accuracy`, scope+seasonNumber, `createdAt`, `updatedAt:createdAt`. `const isCharged = isChargedRelationshipMatchup({player1Id, player2Id}, participants); const life = computeRelationshipIntensity(base, { gameNumber: lockGameNumber, isChargedMatchup: isCharged });` then `putFranchiseRelationshipEdge({ ...base, intensity: life.intensity, dissolvedAtGameNumber: life.dissolvedAtGameNumber });` `written++`.
+     - Return written-aware status.
+
+4. `src/utils/franchiseAllStarRosterCompute.ts` — import `computeAllStarSnubRivalryPairs` from `'../engines/franchiseAllStarSelector'` + `persistAllStarSnubRivalryEdges` from `'./franchiseRelationshipAllStarSnubCompute'`. Inside the `if (shouldLock)` block, AFTER the `runFranchiseAllStarLockPayouts` try-catch, add a NEW own try-catch: compute `const snubPairs = computeAllStarSnubRivalryPairs(candidates, selections);` then `await persistAllStarSnubRivalryEdges({ gameState, pairs: snubPairs, scope: { ...rosterScope, franchiseId: scope.franchiseId, seasonNumber: scope.seasonNumber }, lockGameNumber: gameNumber!, timestamp: gameState.savedAt });` (gameNumber is non-null inside shouldLock). Catch + `console.warn('[L13] All-Star snub rivalry edges skipped ...')`. The new compute self-gates on L13 (no extra gate). Change NOTHING else.
+
+5. `test-utils/lsim/invariants/soul.ts` — add `'asg-snub'` to `EVENT_DRIVEN_SOURCES` (`new Set(['overtake','envy','asg-snub'])`) + update the density-cap comment. **Do NOT add 'asg-snub' to the intensity-lifecycle `'envy'` carve-out** (asg-snub edges use the REAL charged state — that is the whole point). No other invariant change.
+
+6. `test-utils/lsim/falsification.ts` — add ONE inverse case under `soul.l13-relationship-formation-checkpoint-write`: an `'asg-snub'` RIVALRY edge with `formedAtGameNumber` OUT of `[1, gameNumber]` (mirror the overtake/envy cases) → trips `badEventDriven`. Leave existing cases unchanged.
+
+7. NEW `src/utils/tests/franchiseRelationshipAllStarSnubCompute.test.ts` — mirror `franchiseRelationshipEnvyCompute.test.ts` setup (fake-indexeddb, syncEngine mock, L13 flag helper). Cases: (a) flag-off → dark-noop, no edge; (b) flag-on, one pair (snubbed A → selected B), a gameState where A,B are NOT both playing → one `RIVALRY` edge, `formationSource==='asg-snub'`, `formedAtGameNumber===lockGameNumber`, `intensity===computeRelationshipIntensity(theRow,{gameNumber:lockGameNumber,isChargedMatchup:false}).intensity` (seed baseline in [0.72,0.9]), `accuracy===1`, `potential===false`, `dissolvedAtGameNumber===null`; (c) charged: a gameState where A,B ARE on opposing teams → intensity === the isChargedMatchup:true value (baseline + bump); (d) create-if-absent: pre-seed an edge for the pair → untouched, written===0; (e) dedup + self-pair guard. ALSO add a focused test for `computeAllStarSnubRivalryPairs` (in this file or the selector's test file): a hitter first-out↔starter pairing + a pitcher first-out↔marginal pairing, with a COMBO-position candidate ('OF') resolving to its concrete slot.
+
+**CONSTRAINTS:** Edit ONLY the 7 files. Do NOT touch the All-Star snub MORALE path (`franchiseAllStarLockPayouts.ts`, `franchiseRaceSnubMorale.ts`), the overtake/envy/formation/intensity taps, the `'envy'` carve-out, any flag default, trackerDb, or any frozen oracle/baseline. Branch-only. Deterministic (NO Date.now/Math.random).
+
+**EXPECTED OUTPUT:** `formationSource` widened; a pure pairing fn; a mid-season All-Star snub→RIVALRY tap (`asg-snub`, create-if-absent, gameState-charged formation intensity); wired in the lock block; `EVENT_DRIVEN_SOURCES` includes asg-snub (carve-out untouched); a falsification case; unit + pairing tests green.
+
+**VERIFICATION (run in worktree; report; do NOT commit):**
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/tests/franchiseRelationshipAllStarSnubCompute.test.ts` → green.
+- `NODE_ENV= npx vitest run src/utils/tests/franchiseRelationshipEnvyCompute.test.ts src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts` → still green.
+- the All-Star selector/roster test files (grep `franchiseAllStarSelector` / `franchiseAllStarRosterCompute` under `src/**/tests`/`__tests__`) → green.
+- `NODE_ENV= npx vitest run` the falsification config → the new asg-snub case falsifies via `badEventDriven`; existing cases still falsify.
+- Per-file diff summary. **Do NOT run the L-SIM season — the Captain runs it.**
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>` + analysis, change nothing further, IF: `normalizeCandidate` cannot be reused for the pairing without exporting selector internals beyond the ONE new function; the lock-block gameState/candidates/selections/gameNumber are not all in scope at the wire point (verify — they are); adding `'asg-snub'` would force a trackerDb bump or an exhaustive-Record touch; the intensity-lifecycle invariant would mismatch an asg-snub edge after wiring (re-derive: formation intensity uses lock-game charged state = invariant expected at the lock-game checkpoint; lifecycle owns it after); or any required change would touch the morale path / a frozen oracle / a flag default / the `'envy'` carve-out.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: RIVALRY-ENVY-2B ===== -->
