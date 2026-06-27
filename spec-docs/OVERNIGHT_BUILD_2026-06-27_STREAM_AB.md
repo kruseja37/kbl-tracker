@@ -68,9 +68,33 @@
 
 ---
 
-## ▶ RESUME HERE (new session 2026-06-27) — read this first
+## ▶ RESUME HERE — SESSION 3 START (read this FIRST, supersedes the blocks below)
 
-> **Session-2 state (latest):** branch `claude/lineups-fenway-hub`, worktree
+**Branch `claude/lineups-fenway-hub`, worktree `/Users/johnkruse/Projects/kbl-lineups-fenway`. Tree CLEAN,
+all committed (HEAD `e40b42a9`). Recommended reasoning effort: HIGH (cap/economics + flag-activation work
+is intricate/high-stakes; mechanical UI batches can run medium).**
+
+**THE NEXT JOB → build Stream B (the draft process UI/UX). Read `STREAM_B_DRAFT_UIUX_BUILD_PLAN.md` — it is
+the de-risked, slice-sequenced plan.** Start with Slice 1a (the archetype→capIdentity converter + unit test;
+the vocab-mismatch trap is fully mapped in the plan). Then seam fixes (Slice 2), then wire the redesigned
+screens (Slice 3). The draft flow IS the live setup flow — these are LIVE changes, unlike the preview hub.
+
+**JK DECISIONS THIS SESSION (locked):**
+1. **Setup persistence = HOLD-UNTIL-FREEZE** (no new pre-freeze store; the draft picks are already crash-safe
+   per pick — see [[auction-draft-per-pick-persisted]]).
+2. **Optimizer = GREENFIELD (re-verified twice).** Affordability/bargain/in-season-scout-win-value badges stay
+   "coming". Do NOT build the optimizer.
+3. **Living season = activate AFTER the draft.** Flipping the 11 `FRANCHISE_PHASE2_*_ENABLED_DEFAULT` flags
+   sims clean but ripples ~a handful of "dark-by-default" characterization tests + IndexedDB-in-node seams →
+   clean activation = flip + force-off those tests / fix env + the ~30-min `seasonRunner.scenario.ts` gate.
+   (Pre-existing branch failure to ignore: `wpaRuntimeBoundary.test.ts` ×2.)
+
+**SHIPPED THIS SESSION (all browser-verified, committed, preview-only):** roster moves (call-up/send-down/
+trade) + Moves ledger (`5d6c8022`,`5a6db94b`,`bbaf7668`); award races + Hardware board (`75112d5d`); settable
+fitness carrying to the GameTracker (`6e17cc7a`); player-card Milestones (`7a309411`). Career stat line +
+playoff picture DEFERRED per JK.
+
+> **Session-2 state (earlier):** branch `claude/lineups-fenway-hub`, worktree
 > `/Users/johnkruse/Projects/kbl-lineups-fenway`. Tree CLEAN. Roster moves (call-up/send-down/trade) +
 > the broadened Moves ledger + award races/Hardware are all wired to live engines, browser-verified,
 > committed (`5d6c8022`→`75112d5d`). Still PREVIEW-only. NEXT-BUILD #1 + the achievable half of #2 are DONE.
