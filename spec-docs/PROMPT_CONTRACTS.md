@@ -25886,3 +25886,88 @@ export function buildFranchiseDraftRecapSeasonNewsEvent(input: FranchiseDraftRec
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: STREAMB-10-DRAFT-RECAP ===== -->
+
+<!-- ===== CONTRACT: STREAMB-CP1-HUB-LIVE — wire the Draft Setup hub to live teams + archetype-write + start-the-draft [Tier-3 #11/#13 keystone] ===== -->
+
+# CONTRACT STREAMB-CP1-HUB-LIVE
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** Turn the mock Draft Setup hub (`DraftSetupHubPreview.tsx`) into a LIVE configuration front-door so the polished draft is playable: it reads the active league's REAL teams, lets the user pick each team's MLB+farm archetype identity (persisting a real `capIdentity` via the already-built converter), toggle human/CPU ownership, and launch the live auction. Everything it writes must already exist on this lane — do NOT invent engines.
+
+**Already built on THIS lane (reuse, do NOT rebuild):**
+- `selectTeamArchetype(team, mlbKey, farmKey?)` and `archetypeToCapIdentity` in `src/engines/archetypeIdentity.ts` (writes `team.mlbArchetypeKey`/`capIdentity`/`farmArchetypeKey`/`farmCapIdentity`, persists via `saveTeam`). The catalog `key` IS the archetype id (`teamArchetypeCatalog.ts:78` `key: archetype.id`), so the picker's `onPick(slot, key)` passes straight in.
+- `scaledShillDefault(leagueSize)` in `src/data/auctionEngineConstants.ts`.
+- `getAllTeams`/`saveTeam` + the `Team` record (`src/utils/leagueBuilderStorage.ts`); `team.controlledBy?: 'human' | 'ai'`.
+
+## Edits (make ONLY these 2 files)
+
+### 1. `src/src_figma/app/pages/DraftSetupHubPreview.tsx` — mock → live
+Keep the component's layout/sections (WHO'S PLAYING / THE ROOM / THE CLUBS / the picker). Replace the mock DATA with live data. Wire:
+
+**(a) Active league + real teams.** Add `useLeagueBuilderData()` (`src/src_figma/hooks/useLeagueBuilderData.ts` → `{ leagues, teams, ...reload }` — check the hook's reload fn name). Resolve the active league exactly like `LeagueBuilderAuctionDraft.tsx:112,123,135-145`: `leagueIdFromSearch(window.location.search)` + `resolveInitialLeagueId(leagues, requested)` (import both from `../utils/draftRouting`), then `activeLeague = leagues.find(...)`, and the league's teams = `activeLeague.teamIds.map(id => teams.find(t => t.id === id)).filter(Boolean)`. REPLACE the hardcoded `TEAMS` const (lines ~16-25) with these real teams (use `team.id`, `team.name`, `team.abbreviation`). If no league/teams resolved, render a clear empty state ("Select a league first") — do not crash.
+
+**(b) Archetype picks → persist via the converter.** Keep the per-team config state (mlbKey/farmKey) keyed by real `team.id`, SEEDED from each team's existing `team.mlbArchetypeKey`/`team.farmArchetypeKey`. On `onPick(slot, key)`: update local state, then read the LATEST team object from the hook's `teams` by id, call `await selectTeamArchetype(latestTeam, currentMlbKey, currentFarmKey)` (import from `../../../engines/archetypeIdentity`; pass whichever keys are currently selected — farmKey may be undefined), then trigger the hook's reload so `teams` reflects the save. (Per-pick save is fine — mirrors the auction's per-pick crash-safety.)
+
+**(c) Ownership (human/CPU).** Keep the seat UI, but make the per-team owner toggle authoritative by persisting `team.controlledBy`: owner === 'cpu' → `'ai'`, any seat → `'human'`. On change, read the latest team, `await saveTeam({ ...latestTeam, controlledBy })`, reload. (The couch-coop multi-seat GM NAMES stay session-local — accepted hold-until-freeze gap; do NOT add a new store.)
+
+**(d) Shill.** Seed the shill count from `scaledShillDefault(realTeams.length)` (display + adjustable locally; informational — the auction page owns the final value). Replace the `useState(3)`.
+
+**(e) Start the Draft.** The "Start the Draft" button (line ~176) → `navigate(draftRouteForLeague(activeLeague))` (import `draftRouteForLeague` from `../utils/draftRouting`; `navigate` from `react-router`). Disable it until every team has at least an MLB archetype (`mlbKey` set) — that's the real "ready" gate (replace the mock `ready` that required both mlb+farm; MLB is the affordability driver, farm is optional polish).
+
+**Optimizer-gated / leave as static "coming":** the archetype "strong vs / weak vs" matchup line (already reserved in `ArchetypePicker`). Do NOT compute it.
+
+**Read-latest-then-reload discipline:** before EVERY `selectTeamArchetype`/`saveTeam`, re-read the team from the hook's current `teams` by id (never from a stale closure) and reload after — so an archetype save and an ownership save never clobber each other.
+
+### 2. `src/App.tsx` — make the hub reachable live
+Add a live route `/league-builder/draft-config` rendering `DraftSetupHubPreview` (lazy, mirror the existing lazy-import + `<Route>` pattern). KEEP the existing `/__preview/draft-setup` route. (The START-DRAFT redirect into this route is a SEPARATE later ticket — do NOT touch `LeagueBuilderDraftSetup` here.)
+
+## Constraints
+- ZERO changes outside the 2 files. No new engine/store/type. No DB bump. No `any`. Do NOT rename the component. Do NOT build the roster optimizer or any affordability/bargain badge.
+- Reuse the live patterns verbatim (don't reinvent league-resolution or team-filtering — copy `LeagueBuilderAuctionDraft`'s approach).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run DraftSetup archetypeIdentity leagueConstruction` → green (add any test that imports the hub; if none, say so).
+- FALSIFICATION: confirm (by reading the final code) that (i) `onPick` calls `selectTeamArchetype` with the catalog key passed straight through (no remapping), (ii) the hardcoded `TEAMS` mock is GONE, (iii) "Start the Draft" navigates via `draftRouteForLeague`, (iv) no new store/DB was added.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: `useLeagueBuilderData` exposes no reload/refresh; `selectTeamArchetype`/`scaledShillDefault`/`draftRouteForLeague` are not importable as described (they ARE on this lane — re-grep before stopping); the hub cannot get the active league from the query without a new context; or wiring ownership cleanly requires touching `franchiseInitializer`/FranchiseConfig.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-CP1-HUB-LIVE ===== -->
+
+<!-- ===== CONTRACT: STREAMB-CP2-DRAFT-CONFIG-ROUTE — route the live draft through the config hub [Tier-3 #11 routing; JK-VISIBLE FLIP] ===== -->
+
+# CONTRACT STREAMB-CP2-DRAFT-CONFIG-ROUTE
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** Make the now-live Draft Setup hub (`/league-builder/draft-config`, added in CP-1) the real pre-auction step, so the polished config screen is in the playable flow: pool-lock → **draft-config hub** → auction → farm → freeze. This is a USER-VISIBLE reroute of the existing START-DRAFT button → flag for JK browser sign-off (it ships on-branch; JK accepts the flip).
+
+## Edits (make ONLY this 1 file)
+
+### `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+The "START DRAFT" action currently jumps straight to the auction: `navigate(draftRouteForLeague(league))` (line ~342). Reroute it to the config hub instead, threading the league id the same way the hub reads it:
+- Change line ~342 to: `navigate(\`/league-builder/draft-config?leagueId=\${league.id}\`)`.
+- Leave EVERYTHING else (the pool-lock logic, the button label/styling) unchanged. The hub's own "Start the Draft" then calls `draftRouteForLeague(league)` → the auction (built in CP-1), so the net flow is pool-lock → draft-config → auction.
+- If `league.id` is not in scope at that call site, read the surrounding code and use the same league object the existing `draftRouteForLeague(league)` call uses (it has `league`).
+
+## Constraints
+- ZERO changes outside this 1 file. One-line behavioral reroute. No new logic, no new imports unless strictly needed for the template string (none should be).
+- Do NOT remove the direct `/league-builder/auction-draft` route or `draftRouteForLeague` — the hub still uses it. Nothing is deleted; the path just gains a step.
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run LeagueBuilderDraftSetup` → green (if a test imports it; else say so).
+- FALSIFICATION: confirm START-DRAFT now navigates to `/league-builder/draft-config?leagueId=...` and the pool-lock logic is otherwise untouched.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: the `/league-builder/draft-config` route does not exist (CP-1 must land first); or the START-DRAFT site has branching that makes a single reroute unsafe (report the branches).
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-CP2-DRAFT-CONFIG-ROUTE ===== -->

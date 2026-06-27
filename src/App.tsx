@@ -356,6 +356,10 @@ function App() {
           path="/league-builder/draft-setup"
           element={<LeagueBuilderDraftSetup />}
         />
+        <Route
+          path="/league-builder/draft-config"
+          element={<DraftSetupHubPreview />}
+        />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route
           path="/league-builder/snake-draft"
