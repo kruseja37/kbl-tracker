@@ -400,6 +400,17 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
   only the code it edits. (RB-9a dispatch #1 BLOCKED on exactly this; fix1 embedded
   §3.5 inline + scoped the STOP-IF → re-dispatch.)
 
+- **Reconcile against git, not just the docs, for "how much is left" (JK correction
+  2026-06-26):** When JK asks how much work remains or how close to a milestone (e.g.
+  v1), always reconcile the spec/queue docs against the ACTUAL GIT STATE — all
+  branches, recent commits, AND `git worktree list` — before answering, because
+  parallel sessions/worktrees produce un-merged or superseding work the planning docs
+  do NOT track. JK said "check all branches and recent commits"; the doc-only count
+  had missed 3 un-merged streams (Lane-C ratings + the `draft-pipeline-fix` and
+  `auction-draft-ux-rehaul` redesigns) that `V1_BUILD_QUEUE.md` didn't reflect, two of
+  which SUPERSEDE queue items. Corollary: before declaring two lanes "safe concurrent,"
+  PROVE the file-surface partition from the real diffs ([[kbl-two-lane-concurrent-build]]).
+
 - **Full-cadence scoping for narrative systems (JK correction 2026-06-16):** When asked to
   "settle the cadence" of the reporter / any narrative system, always certify and settle the
   FULL cadence surface — per-game recap, per-EVENT takes (trade / call-up / send-down /

@@ -190,6 +190,18 @@ import type {
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
 import { OptimalLineupComparisonPanel } from "./OptimalLineupComparisonPanel";
+import { FranchiseLineupRotationEditor } from "./FranchiseLineupRotationEditor";
+import {
+  FRANCHISE_PITCHER_POSITIONS,
+  getFranchisePlayerName,
+  toOptimalCandidate,
+  buildOptimalPlayerStates,
+  lineupSlotsFromOptimalSnapshot,
+  normalizeFranchiseLineupSlots,
+  isFranchisePitcher,
+  isActiveFranchisePlayerForTeam,
+  applyFranchiseTeamUpdateWithStaleOptimalSnapshots,
+} from "../utils/franchiseLineupDomain";
 
 type TeamHubTab = "team" | "fan-morale" | "roster" | "directory" | "stats" | "stadium" | "manager";
 
@@ -224,9 +236,6 @@ type RosterSortColumn = 'name' | 'position' | 'rosterStatus' | 'salary' | 'moral
 const EMPTY_ROSTER_DATA: RosterTableItem[] = [];
 
 const EMPTY_STATS_DATA: { name: string; pos: string; war: number; pwar: number; bwar: number; rwar: number; fwar: number; era?: number; ip?: number; k?: number; w?: number; l?: number; sv?: number; avg?: number; hr?: number; rbi?: number; sb?: number; ops?: number }[] = [];
-const FRANCHISE_FIELD_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF'];
-const FRANCHISE_PITCHER_POSITIONS = new Set<Position>(['SP', 'RP', 'CP', 'SP/RP', 'P', 'TWO-WAY']);
-const FRANCHISE_ROTATION_POSITIONS = new Set<Position>(['SP', 'SP/RP']);
 const TEAM_HUB_CAPTAIN_BADGE = {
   label: 'Captain',
   borderStyle: 'solid' as const,
@@ -440,10 +449,6 @@ function convertToStatsItemFromSeason(
   return convertToStatsItem(player);
 }
 
-function getFranchisePlayerName(player: Player): string {
-  return `${player.firstName} ${player.lastName}`.trim();
-}
-
 function franchisePlayerDirectoryAssignment(player: Player, leagueId?: string) {
   const assignments = player.leagueAssignments ?? [];
   return (
@@ -613,14 +618,6 @@ function formatFranchiseShortName(player: Player): string {
     .filter(Boolean)
     .map((part, index) => index === 0 ? `${part[0]}.` : part)
     .join(' ') || player.id;
-}
-
-function isActiveFranchisePlayerForTeam(player: Player, teamId: string, leagueId?: string): boolean {
-  return player.leagueAssignments?.some((assignment) =>
-    assignment.teamId === teamId &&
-    (!leagueId || assignment.leagueId === leagueId) &&
-    (assignment.rosterStatus === 'MLB' || assignment.rosterStatus == null),
-  ) ?? false;
 }
 
 function isFarmFranchisePlayerForTeam(player: Player, teamId: string, leagueId?: string): boolean {
@@ -980,332 +977,6 @@ function profileEditFormToPayload(
   return payload;
 }
 
-function toOptimalCandidate(player: Player): OptimalLineupCandidate {
-  return {
-    playerId: player.id,
-    playerName: getFranchisePlayerName(player),
-    bats: player.bats,
-    primaryPosition: player.primaryPosition,
-    secondaryPosition: player.secondaryPosition,
-    power: player.power,
-    contact: player.contact,
-    speed: player.speed,
-    fielding: player.fielding,
-    arm: player.arm,
-    velocity: player.velocity,
-    junk: player.junk,
-    accuracy: player.accuracy,
-    arsenal: player.arsenal,
-    armSlot: player.armSlot,
-    mojo: player.mojo,
-    trait1: player.trait1,
-    trait2: player.trait2,
-    unavailable: false,
-  };
-}
-
-function buildOptimalPlayerStates(players: Player[]) {
-  return Object.fromEntries(
-    players.map((player) => [
-      player.id,
-      {
-        mojo: toEffectiveMojo(player.mojo),
-        fitness: "FIT" as const,
-      },
-    ]),
-  );
-}
-
-function toEffectiveMojo(mojo: Player["mojo"]) {
-  if (mojo === "On Fire") return "On Fire" as const;
-  if (mojo === "Hot") return "Locked In" as const;
-  if (mojo === "Cold") return "Tense" as const;
-  if (mojo === "Ice Cold") return "Rattled" as const;
-  return "Normal" as const;
-}
-
-function lineupSlotsFromOptimalSnapshot(snapshot: OptimalLineupSnapshot): LineupSlot[] {
-  return snapshot.slots
-    .slice()
-    .sort((left, right) => left.battingOrderSlot - right.battingOrderSlot)
-    .map((slot) => ({
-      battingOrder: slot.battingOrderSlot,
-      playerId: slot.playerId,
-      fieldingPosition: slot.defensivePosition as Position,
-    }));
-}
-
-function buildDefaultFranchiseLineupSlots(players: Player[], useDH: boolean): LineupSlot[] {
-  const positionPlayers = players.filter((player) => !FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition));
-  const assigned = new Set<string>();
-  const slots: LineupSlot[] = [];
-
-  for (const position of FRANCHISE_FIELD_POSITIONS) {
-    const player =
-      positionPlayers.find((candidate) => !assigned.has(candidate.id) && candidate.primaryPosition === position) ??
-      positionPlayers.find((candidate) => !assigned.has(candidate.id) && candidate.secondaryPosition === position) ??
-      positionPlayers.find((candidate) => !assigned.has(candidate.id));
-    if (!player) continue;
-    assigned.add(player.id);
-    slots.push({
-      battingOrder: slots.length + 1,
-      playerId: player.id,
-      fieldingPosition: position,
-    });
-  }
-
-  if (useDH) {
-    const dhPlayer = positionPlayers.find((candidate) => !assigned.has(candidate.id));
-    if (dhPlayer) {
-      slots.push({
-        battingOrder: slots.length + 1,
-        playerId: dhPlayer.id,
-        fieldingPosition: 'DH',
-      });
-    }
-  }
-
-  return slots;
-}
-
-function normalizeFranchiseLineupSlots(
-  players: Player[],
-  storedLineup: LineupSlot[] | undefined,
-  useDH: boolean,
-): LineupSlot[] {
-  const playerById = new Map(players.map((player) => [player.id, player]));
-  const positionPlayers = players.filter((player) => !FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition));
-  const assigned = new Set<string>();
-  const slots: LineupSlot[] = [];
-  const targetNonPitchers = useDH ? 9 : 8;
-
-  for (const slot of [...(storedLineup ?? [])].sort((left, right) => left.battingOrder - right.battingOrder)) {
-    if (slots.length === targetNonPitchers) break;
-    const player = playerById.get(slot.playerId);
-    if (!player || assigned.has(player.id)) continue;
-    if (FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition)) continue;
-    if (!useDH && slot.fieldingPosition === 'DH') continue;
-    assigned.add(player.id);
-    slots.push({
-      battingOrder: slots.length + 1,
-      playerId: player.id,
-      fieldingPosition: slot.fieldingPosition,
-    });
-  }
-
-  const fallbackSlots = buildDefaultFranchiseLineupSlots(players, useDH);
-  for (const slot of fallbackSlots) {
-    if (slots.length === targetNonPitchers) break;
-    if (assigned.has(slot.playerId)) continue;
-    assigned.add(slot.playerId);
-    slots.push({
-      ...slot,
-      battingOrder: slots.length + 1,
-    });
-  }
-
-  if (!useDH && slots.length < 9) {
-    const starter =
-      players.find((player) => FRANCHISE_ROTATION_POSITIONS.has(player.primaryPosition)) ??
-      players.find((player) => FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition));
-    if (starter) {
-      slots.push({
-        battingOrder: slots.length + 1,
-        playerId: starter.id,
-        fieldingPosition: 'P',
-      });
-    }
-  }
-
-  return slots.slice(0, 9).map((slot, index) => ({
-    ...slot,
-    battingOrder: index + 1,
-  }));
-}
-
-function isFranchisePitcher(player: Player): boolean {
-  return FRANCHISE_PITCHER_POSITIONS.has(player.primaryPosition);
-}
-
-function getManualLineupTargetCount(players: Player[], useDH: boolean): number {
-  const positionPlayerCount = players.filter((player) => !isFranchisePitcher(player)).length;
-  return Math.min(useDH ? 9 : 8, positionPlayerCount);
-}
-
-function buildEditableFranchiseLineupSlots(
-  players: Player[],
-  storedLineup: LineupSlot[] | undefined,
-  useDH: boolean,
-): LineupSlot[] {
-  const playerById = new Map(players.map((player) => [player.id, player]));
-  const targetCount = getManualLineupTargetCount(players, useDH);
-  return normalizeFranchiseLineupSlots(players, storedLineup, useDH)
-    .filter((slot) => {
-      const player = playerById.get(slot.playerId);
-      return Boolean(player && !isFranchisePitcher(player));
-    })
-    .slice(0, targetCount)
-    .map((slot, index) => ({
-      ...slot,
-      battingOrder: index + 1,
-      fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? players.find((player) => player.id === slot.playerId)?.primaryPosition ?? 'LF' : slot.fieldingPosition,
-    }));
-}
-
-function getFranchiseRotationCandidates(players: Player[]): Player[] {
-  const rotationEligible = players.filter((player) => FRANCHISE_ROTATION_POSITIONS.has(player.primaryPosition));
-  return rotationEligible.length > 0
-    ? rotationEligible
-    : players.filter((player) => isFranchisePitcher(player));
-}
-
-function normalizeFranchiseRotationIds(players: Player[], storedRotation: string[] | undefined): string[] {
-  const candidates = getFranchiseRotationCandidates(players);
-  const candidateIds = new Set(candidates.map((player) => player.id));
-  const assigned = new Set<string>();
-  const normalized: string[] = [];
-
-  for (const playerId of storedRotation ?? []) {
-    if (!candidateIds.has(playerId) || assigned.has(playerId)) continue;
-    assigned.add(playerId);
-    normalized.push(playerId);
-  }
-
-  for (const player of candidates) {
-    if (assigned.has(player.id)) continue;
-    assigned.add(player.id);
-    normalized.push(player.id);
-  }
-
-  return normalized;
-}
-
-function duplicateIds(ids: string[]): string[] {
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const id of ids) {
-    if (!id) continue;
-    if (seen.has(id)) duplicates.add(id);
-    seen.add(id);
-  }
-  return Array.from(duplicates);
-}
-
-function expectedManualLineupPositions(useDH: boolean): Position[] {
-  return useDH ? [...FRANCHISE_FIELD_POSITIONS, 'DH'] : FRANCHISE_FIELD_POSITIONS;
-}
-
-function describeStoredLineupRotationWarnings(
-  players: Player[],
-  storedLineup: LineupSlot[] | undefined,
-  storedRotation: string[] | undefined,
-  useDH: boolean,
-): string[] {
-  const playerById = new Map(players.map((player) => [player.id, player]));
-  const rotationCandidateIds = new Set(getFranchiseRotationCandidates(players).map((player) => player.id));
-  const warnings: string[] = [];
-  const staleLineupIds = (storedLineup ?? [])
-    .filter((slot) => {
-      const playerId = slot.playerId;
-      const player = playerById.get(playerId);
-      if (!player) return true;
-      if (isFranchisePitcher(player)) return useDH || slot?.fieldingPosition !== 'P';
-      if (!useDH && slot?.fieldingPosition === 'DH') return true;
-      return false;
-    })
-    .map((slot) => slot.playerId);
-  const duplicateLineupIds = duplicateIds((storedLineup ?? []).map((slot) => slot.playerId));
-  const staleRotationIds = (storedRotation ?? []).filter((playerId) => !rotationCandidateIds.has(playerId));
-  const duplicateRotationIds = duplicateIds(storedRotation ?? []);
-
-  if (staleLineupIds.length > 0) {
-    warnings.push(`Saved lineup includes non-current MLB players: ${Array.from(new Set(staleLineupIds)).join(', ')}.`);
-  }
-  if (duplicateLineupIds.length > 0) {
-    warnings.push(`Saved lineup includes duplicate players: ${duplicateLineupIds.join(', ')}.`);
-  }
-  if (staleRotationIds.length > 0) {
-    warnings.push(`Saved rotation includes non-current MLB pitchers: ${Array.from(new Set(staleRotationIds)).join(', ')}.`);
-  }
-  if (duplicateRotationIds.length > 0) {
-    warnings.push(`Saved rotation includes duplicate pitchers: ${duplicateRotationIds.join(', ')}.`);
-  }
-
-  return warnings;
-}
-
-function buildManualLineupForSave(
-  players: Player[],
-  editableSlots: LineupSlot[],
-  rotationIds: string[],
-  useDH: boolean,
-): LineupSlot[] {
-  const activePlayerIds = new Set(players.map((player) => player.id));
-  const playerById = new Map(players.map((player) => [player.id, player]));
-  const targetCount = getManualLineupTargetCount(players, useDH);
-  const slots: LineupSlot[] = editableSlots
-    .filter((slot) => activePlayerIds.has(slot.playerId))
-    .filter((slot) => {
-      const player = playerById.get(slot.playerId);
-      return Boolean(player && !isFranchisePitcher(player));
-    })
-    .slice(0, targetCount)
-    .map((slot, index) => ({
-      ...slot,
-      battingOrder: index + 1,
-      fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? playerById.get(slot.playerId)?.primaryPosition ?? 'LF' : slot.fieldingPosition,
-    }));
-
-  if (!useDH) {
-    const rotationCandidates = getFranchiseRotationCandidates(players);
-    const starterId =
-      rotationIds.find((playerId) => rotationCandidates.some((candidate) => candidate.id === playerId)) ??
-      rotationCandidates[0]?.id;
-    if (starterId) {
-      slots.push({
-        battingOrder: slots.length + 1,
-        playerId: starterId,
-        fieldingPosition: 'P',
-      });
-    }
-  }
-
-  return slots.slice(0, 9).map((slot, index) => ({
-    ...slot,
-    battingOrder: index + 1,
-  }));
-}
-
-function getFreshOptimalLineupFields(update: Partial<Team>): OptimalLineupSnapshotField[] {
-  return OPTIMAL_LINEUP_SNAPSHOT_FIELDS.filter((field) => field in update);
-}
-
-export function applyFranchiseTeamUpdateWithStaleOptimalSnapshots(
-  team: Team,
-  update: Partial<Team>,
-): Team {
-  const staleFields = new Set<OptimalLineupSnapshotField>();
-  const preserveFields = getFreshOptimalLineupFields(update);
-
-  if ('lineupWithDH' in update) {
-    for (const field of optimalLineupFieldsForDh(true)) staleFields.add(field);
-  }
-
-  if ('lineupWithoutDH' in update) {
-    for (const field of optimalLineupFieldsForDh(false)) staleFields.add(field);
-  }
-
-  if ('startingRotation' in update) {
-    for (const field of optimalLineupFieldsForDh(false)) staleFields.add(field);
-  }
-
-  return markOptimalLineupSnapshotsStaleForChange(
-    { ...team, ...update },
-    Array.from(staleFields),
-    preserveFields,
-  );
-}
-
 export function TeamHubContent() {
   // Get real data from hook
   const { teams: realTeams, players: realPlayers, hasRealData, isLoading } = useOffseasonData();
@@ -1315,7 +986,7 @@ export function TeamHubContent() {
   const franchiseId = franchiseData.franchiseConfig?.franchiseId;
   const seasonNumber = franchiseData.seasonNumber || 1;
   const seasonId = getSeasonIdForScope(franchiseId, seasonNumber);
-  const seasonStats = useSeasonStats(seasonId);
+  const seasonStats = useSeasonStats(seasonId, { franchiseId });
 
   // Build team → W-L record lookup from real standings (case-insensitive)
   const teamRecordMap = useMemo(() => {
@@ -1393,13 +1064,6 @@ export function TeamHubContent() {
   const [manualMoraleActionId, setManualMoraleActionId] = useState<string | null>(null);
   const [manualMoraleMessage, setManualMoraleMessage] = useState<string | null>(null);
   const [manualMoraleError, setManualMoraleError] = useState<string | null>(null);
-  const [lineupMode, setLineupMode] = useState<"DH" | "NO_DH">("NO_DH");
-  const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
-  const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
-  const [lineupRotationDirty, setLineupRotationDirty] = useState(false);
-  const [isLineupRotationSaving, setIsLineupRotationSaving] = useState(false);
-  const [lineupRotationMessage, setLineupRotationMessage] = useState<string | null>(null);
-  const [lineupRotationError, setLineupRotationError] = useState<string | null>(null);
   const [isOptimalSaving, setIsOptimalSaving] = useState(false);
   const [optimalError, setOptimalError] = useState<string | null>(null);
   const [lineupComparison, setLineupComparison] = useState<{
@@ -1444,98 +1108,20 @@ export function TeamHubContent() {
   }, [franchiseData.teamNameMap, realTeams, selectedTeam]);
 
   const franchiseLeagueId = franchiseData.franchiseConfig?.league ?? undefined;
-  const useDH = lineupMode === "DH";
+  // Franchise mode is sealed no-DH at config level — the lineup/optimal flow never uses DH.
+  const useDH = false;
   const currentFranchiseLineup = useMemo(() => {
     const storedLineup = useDH ? franchiseTeam?.lineupWithDH : franchiseTeam?.lineupWithoutDH;
     return normalizeFranchiseLineupSlots(franchiseRosterPlayers, storedLineup, useDH);
   }, [franchiseRosterPlayers, franchiseTeam, useDH]);
-  const franchiseRosterPlayerById = useMemo(
-    () => new Map(franchiseRosterPlayers.map((player) => [player.id, player])),
-    [franchiseRosterPlayers],
-  );
   const franchisePlayerById = useMemo(
     () => new Map(franchiseAllPlayers.map((player) => [player.id, player])),
     [franchiseAllPlayers],
   );
-  const manualLineupPlayerOptions = useMemo(
-    () => franchiseRosterPlayers.filter((player) => !isFranchisePitcher(player)),
-    [franchiseRosterPlayers],
-  );
-  const manualRotationPlayerOptions = useMemo(
-    () => getFranchiseRotationCandidates(franchiseRosterPlayers),
-    [franchiseRosterPlayers],
-  );
-  const manualFieldingPositionOptions = useMemo(
-    () => useDH ? [...FRANCHISE_FIELD_POSITIONS, 'DH' as Position] : FRANCHISE_FIELD_POSITIONS,
-    [useDH],
-  );
-  const storedLineupRotationWarnings = useMemo(() => {
-    const storedLineup = useDH ? franchiseTeam?.lineupWithDH : franchiseTeam?.lineupWithoutDH;
-    return describeStoredLineupRotationWarnings(
-      franchiseRosterPlayers,
-      storedLineup,
-      franchiseTeam?.startingRotation,
-      useDH,
-    );
-  }, [franchiseRosterPlayers, franchiseTeam, useDH]);
-  const duplicateManualLineupIds = useMemo(
-    () => duplicateIds(manualLineupSlots.map((slot) => slot.playerId)),
-    [manualLineupSlots],
-  );
-  const duplicateManualRotationIds = useMemo(
-    () => duplicateIds(manualRotationIds),
-    [manualRotationIds],
-  );
-  const duplicateManualLineupPositions = useMemo(
-    () => duplicateIds(manualLineupSlots.map((slot) => slot.fieldingPosition)),
-    [manualLineupSlots],
-  );
-  const missingManualLineupPositions = useMemo(() => {
-    const assignedPositions = new Set(manualLineupSlots.map((slot) => slot.fieldingPosition));
-    return expectedManualLineupPositions(useDH).filter((position) => !assignedPositions.has(position));
-  }, [manualLineupSlots, useDH]);
-  const lineupRotationBlockingMessage = useMemo(() => {
-    if (duplicateManualLineupIds.length > 0) {
-      return `Lineup has duplicate players: ${duplicateManualLineupIds.join(', ')}.`;
-    }
-    if (duplicateManualLineupPositions.length > 0) {
-      return `Lineup has duplicate defensive positions: ${duplicateManualLineupPositions.join(', ')}.`;
-    }
-    if (missingManualLineupPositions.length > 0) {
-      return `Lineup is missing defensive positions: ${missingManualLineupPositions.join(', ')}.`;
-    }
-    if (duplicateManualRotationIds.length > 0) {
-      return `Rotation has duplicate pitchers: ${duplicateManualRotationIds.join(', ')}.`;
-    }
-    return null;
-  }, [
-    duplicateManualLineupIds,
-    duplicateManualLineupPositions,
-    duplicateManualRotationIds,
-    missingManualLineupPositions,
-  ]);
 
   useEffect(() => {
     setLineupComparison(null);
   }, [selectedTeam, useDH]);
-
-  useEffect(() => {
-    if (!franchiseTeam) {
-      setManualLineupSlots([]);
-      setManualRotationIds([]);
-      setLineupRotationDirty(false);
-      setLineupRotationMessage(null);
-      setLineupRotationError(null);
-      return;
-    }
-
-    const storedLineup = useDH ? franchiseTeam.lineupWithDH : franchiseTeam.lineupWithoutDH;
-    setManualLineupSlots(buildEditableFranchiseLineupSlots(franchiseRosterPlayers, storedLineup, useDH));
-    setManualRotationIds(normalizeFranchiseRotationIds(franchiseRosterPlayers, franchiseTeam.startingRotation));
-    setLineupRotationDirty(false);
-    setLineupRotationMessage(null);
-    setLineupRotationError(null);
-  }, [franchiseRosterPlayers, franchiseTeam, useDH]);
 
   useEffect(() => {
     if (!franchiseId || !selectedTeamId) {
@@ -2617,88 +2203,6 @@ export function TeamHubContent() {
     }
   };
 
-  const updateManualLineupSlot = (index: number, update: Partial<LineupSlot>) => {
-    setManualLineupSlots((slots) =>
-      slots.map((slot, slotIndex) =>
-        slotIndex === index ? { ...slot, ...update } : slot,
-      ),
-    );
-    setLineupRotationDirty(true);
-    setLineupRotationMessage(null);
-    setLineupRotationError(null);
-  };
-
-  const moveManualLineupSlot = (index: number, direction: -1 | 1) => {
-    setManualLineupSlots((slots) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= slots.length) return slots;
-      const next = [...slots];
-      const [slot] = next.splice(index, 1);
-      next.splice(nextIndex, 0, slot);
-      return next.map((lineupSlot, slotIndex) => ({
-        ...lineupSlot,
-        battingOrder: slotIndex + 1,
-      }));
-    });
-    setLineupRotationDirty(true);
-    setLineupRotationMessage(null);
-    setLineupRotationError(null);
-  };
-
-  const moveManualRotationSlot = (index: number, direction: -1 | 1) => {
-    setManualRotationIds((rotationIds) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= rotationIds.length) return rotationIds;
-      const next = [...rotationIds];
-      const [playerId] = next.splice(index, 1);
-      next.splice(nextIndex, 0, playerId);
-      return next;
-    });
-    setLineupRotationDirty(true);
-    setLineupRotationMessage(null);
-    setLineupRotationError(null);
-  };
-
-  const rebuildManualLineupRotationFromMlb = () => {
-    setManualLineupSlots(buildEditableFranchiseLineupSlots(franchiseRosterPlayers, undefined, useDH));
-    setManualRotationIds(normalizeFranchiseRotationIds(franchiseRosterPlayers, undefined));
-    setLineupRotationDirty(true);
-    setLineupRotationMessage("Rebuilt from current MLB assignments. Save to make it durable.");
-    setLineupRotationError(null);
-  };
-
-  const handleSaveLineupRotation = async () => {
-    if (!franchiseId || !franchiseTeam || lineupRotationBlockingMessage) return;
-
-    setLineupComparison(null);
-    setIsLineupRotationSaving(true);
-    setLineupRotationError(null);
-    setLineupRotationMessage(null);
-
-    try {
-      const normalizedRotationIds = normalizeFranchiseRotationIds(franchiseRosterPlayers, manualRotationIds);
-      const lineupForSave = buildManualLineupForSave(
-        franchiseRosterPlayers,
-        manualLineupSlots,
-        normalizedRotationIds,
-        useDH,
-      );
-      const update: Partial<Team> = {
-        startingRotation: normalizedRotationIds,
-        [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineupForSave,
-      };
-      const nextTeam = applyFranchiseTeamUpdateWithStaleOptimalSnapshots(franchiseTeam, update);
-      const savedTeam = await saveFranchiseTeam(franchiseId, nextTeam);
-      setFranchiseTeam(savedTeam);
-      setLineupRotationDirty(false);
-      setLineupRotationMessage("Lineup and rotation saved to franchise team state.");
-    } catch (err) {
-      setLineupRotationError(err instanceof Error ? err.message : "Failed to save franchise lineup and rotation.");
-    } finally {
-      setIsLineupRotationSaving(false);
-    }
-  };
-
   const buildFranchiseOptimalSnapshot = (hand: OpposingPitcherHand) => {
     if (!franchiseTeam || !selectedTeamId) return null;
 
@@ -3019,177 +2523,13 @@ export function TeamHubContent() {
             error={valueTruthError}
           />
 
-          <section
-            aria-label="Franchise lineup and rotation manager"
-            className="mb-4 border-[4px] border-[var(--franchise-border)] bg-[var(--franchise-panel)] p-3"
-          >
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <div className="text-[10px] text-[var(--franchise-gold)]">DURABLE LINEUP + ROTATION</div>
-                <div className="mt-1 text-[8px] text-[var(--franchise-text)]/60">
-                  Saves current franchise-owned MLB setup for GameTracker launch.
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={rebuildManualLineupRotationFromMlb}
-                  disabled={!franchiseTeam || isLineupRotationSaving}
-                  className="border-2 border-[var(--franchise-text)]/30 bg-[var(--franchise-border)] px-3 py-1 text-[8px] font-bold text-[var(--franchise-text)] hover:border-[var(--franchise-gold)] disabled:opacity-40"
-                >
-                  REBUILD FROM MLB ASSIGNMENTS
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveLineupRotation()}
-                  disabled={!franchiseTeam || isLineupRotationSaving || Boolean(lineupRotationBlockingMessage)}
-                  className="border-2 border-[var(--franchise-text)] bg-[var(--franchise-border)] px-3 py-1 text-[8px] font-bold text-[var(--franchise-text)] hover:border-[var(--franchise-gold)] disabled:opacity-40"
-                >
-                  {isLineupRotationSaving ? "SAVING..." : "SAVE LINEUP + ROTATION"}
-                </button>
-              </div>
-            </div>
-
-            {storedLineupRotationWarnings.length > 0 && (
-              <div className="mb-3 space-y-1 border-2 border-[var(--franchise-gold)]/60 bg-[var(--franchise-border)] p-2 text-[8px] text-[var(--franchise-gold-soft)]">
-                {storedLineupRotationWarnings.map((warning) => (
-                  <div key={warning}>{warning}</div>
-                ))}
-              </div>
-            )}
-            {lineupRotationBlockingMessage && (
-              <div className="mb-3 border-2 border-[var(--franchise-loss)]/50 bg-[var(--franchise-border)] p-2 text-[8px] text-[var(--franchise-loss-text)]">
-                {lineupRotationBlockingMessage}
-              </div>
-            )}
-            {lineupRotationError && (
-              <div className="mb-3 border-2 border-[var(--franchise-loss)]/50 bg-[var(--franchise-border)] p-2 text-[8px] text-[var(--franchise-loss-text)]">
-                {lineupRotationError}
-              </div>
-            )}
-            {lineupRotationMessage && (
-              <div className="mb-3 border-2 border-[var(--franchise-text)]/30 bg-[var(--franchise-border)] p-2 text-[8px] text-[var(--franchise-text)]">
-                {lineupRotationMessage}
-              </div>
-            )}
-
-            <div className="mb-3 text-[8px] text-[var(--franchise-text)]/60">
-              Status: {lineupRotationDirty ? "dirty / unsaved" : "saved"}
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(220px,1fr)]">
-              <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2">
-                <div className="mb-2 text-[8px] font-bold text-[var(--franchise-gold)]">
-                  LINEUP ORDER ({useDH ? "DH" : "NO DH"})
-                </div>
-                {manualLineupSlots.length === 0 ? (
-                  <div className="text-[8px] text-[var(--franchise-text)]/60">No current MLB position players available.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {manualLineupSlots.map((slot, index) => {
-                      const player = franchiseRosterPlayerById.get(slot.playerId);
-                      return (
-                        <div key={`${slot.battingOrder}-${slot.playerId}-${index}`} className="grid grid-cols-[34px_minmax(150px,1fr)_80px_80px] items-center gap-2 text-[8px]">
-                          <div className="text-[var(--franchise-text)]/70">#{index + 1}</div>
-                          <select
-                            aria-label={`Lineup slot ${index + 1} player`}
-                            value={slot.playerId}
-                            onChange={(event) => updateManualLineupSlot(index, { playerId: event.target.value })}
-                            className="min-w-0 border-2 border-[var(--franchise-panel-dark)] bg-[var(--franchise-panel)] p-1 text-[var(--franchise-text)]"
-                          >
-                            {manualLineupPlayerOptions.map((optionPlayer) => (
-                              <option key={optionPlayer.id} value={optionPlayer.id}>
-                                {getFranchisePlayerName(optionPlayer)}
-                              </option>
-                            ))}
-                          </select>
-                          <select
-                            aria-label={`Lineup slot ${index + 1} position`}
-                            value={slot.fieldingPosition}
-                            onChange={(event) => updateManualLineupSlot(index, { fieldingPosition: event.target.value as Position })}
-                            className="border-2 border-[var(--franchise-panel-dark)] bg-[var(--franchise-panel)] p-1 text-[var(--franchise-text)]"
-                          >
-                            {manualFieldingPositionOptions.map((position) => (
-                              <option key={position} value={position}>
-                                {position}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Move lineup slot ${index + 1} up`}
-                              disabled={index === 0}
-                              onClick={() => moveManualLineupSlot(index, -1)}
-                              className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
-                            >
-                              UP
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Move lineup slot ${index + 1} down`}
-                              disabled={index === manualLineupSlots.length - 1}
-                              onClick={() => moveManualLineupSlot(index, 1)}
-                              className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
-                            >
-                              DN
-                            </button>
-                          </div>
-                          {!player && (
-                            <div className="col-span-4 text-[var(--franchise-loss-text)]">Selected player is no longer MLB-active for this team.</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2">
-                <div className="mb-2 text-[8px] font-bold text-[var(--franchise-gold)]">STARTING ROTATION</div>
-                {manualRotationIds.length === 0 ? (
-                  <div className="text-[8px] text-[var(--franchise-text)]/60">No current MLB starters available.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {manualRotationIds.map((playerId, index) => {
-                      const player = franchiseRosterPlayerById.get(playerId);
-                      return (
-                        <div key={`${playerId}-${index}`} className="grid grid-cols-[28px_minmax(120px,1fr)_70px] items-center gap-2 text-[8px]">
-                          <div className="text-[var(--franchise-text)]/70">#{index + 1}</div>
-                          <div className="text-[var(--franchise-text)]">
-                            {player ? `${getFranchisePlayerName(player)} (${player.primaryPosition})` : playerId}
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Move rotation pitcher ${index + 1} up`}
-                              disabled={index === 0}
-                              onClick={() => moveManualRotationSlot(index, -1)}
-                              className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
-                            >
-                              UP
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Move rotation pitcher ${index + 1} down`}
-                              disabled={index === manualRotationIds.length - 1}
-                              onClick={() => moveManualRotationSlot(index, 1)}
-                              className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
-                            >
-                              DN
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {manualRotationPlayerOptions.length === 0 && (
-                  <div className="mt-2 text-[8px] text-[var(--franchise-gold-soft)]">GameTracker will need a valid MLB pitcher before launch.</div>
-                )}
-              </div>
-            </div>
-          </section>
+          <FranchiseLineupRotationEditor
+            franchiseId={franchiseId}
+            franchiseTeam={franchiseTeam}
+            setFranchiseTeam={setFranchiseTeam}
+            franchiseRosterPlayers={franchiseRosterPlayers}
+            onBeforeSave={() => setLineupComparison(null)}
+          />
 
           <div className="mb-4 border-[4px] border-[var(--franchise-border)] bg-[var(--franchise-panel)] p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -3198,36 +2538,6 @@ export function TeamHubContent() {
                 <div className="mt-1 text-[8px] text-[var(--franchise-text)]/60">
                   {franchiseTeam ? "Franchise roster state" : "No franchise team record loaded"}
                 </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLineupMode("DH");
-                    setLineupComparison(null);
-                  }}
-                  className={`border-2 px-3 py-1 text-[8px] font-bold ${
-                    lineupMode === "DH"
-                      ? "border-[var(--franchise-text)] bg-[var(--franchise-border)] text-[var(--franchise-text)]"
-                      : "border-[var(--franchise-border)] bg-[var(--franchise-header)] text-[var(--franchise-text)]/70"
-                  }`}
-                >
-                  DH
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLineupMode("NO_DH");
-                    setLineupComparison(null);
-                  }}
-                  className={`border-2 px-3 py-1 text-[8px] font-bold ${
-                    lineupMode === "NO_DH"
-                      ? "border-[var(--franchise-text)] bg-[var(--franchise-border)] text-[var(--franchise-text)]"
-                      : "border-[var(--franchise-border)] bg-[var(--franchise-header)] text-[var(--franchise-text)]/70"
-                  }`}
-                >
-                  No DH
-                </button>
               </div>
             </div>
 

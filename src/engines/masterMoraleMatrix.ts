@@ -33,7 +33,10 @@ export type PlayerCentricMoraleEventType =
   | 'FAN_FAVORITE_LOCKED'
   | 'ALBATROSS_LOCKED'
   | 'CAPTAIN_BIG_GAME'
-  | 'CAPTAIN_SLUMP';
+  | 'CAPTAIN_SLUMP'
+  | 'RIVAL_GAME_WIN'
+  | 'RIVAL_GAME_LOSS'
+  | 'PARK_RECORD_SET';
 
 export type MasterMoraleEventType = FanMoraleEventType | PlayerCentricMoraleEventType;
 
@@ -81,6 +84,8 @@ export type MoraleMatrixEvent =
   | {
       kind?: 'event';
       type: MasterMoraleEventType | string;
+      playerId?: string;
+      teamId?: string;
     }
   | {
       kind: MoraleMatrixTapKind;
@@ -163,6 +168,8 @@ const EVENT_DELTA = {
   albatrossLockedSelf: -5,
   captainBigGameSelf: 3,
   captainSlumpSelf: -3,
+  rivalGameFan: 2,
+  rivalGameCaptain: 1,
 
   smallTeammateLift: 1,
   mediumTeammateLift: 2,
@@ -417,6 +424,11 @@ const PLAYER_EVENT_BASE_TABLE = {
   CAPTAIN_SLUMP: row(EVENT_DELTA.captainSlumpSelf, EVENT_DELTA.neutral, [
     touch('captain_teammate', EVENT_DELTA.mediumTeammateDrop),
   ], 'designation.captain_slump'),
+  RIVAL_GAME_WIN: row(EVENT_DELTA.rivalGameCaptain, EVENT_DELTA.rivalGameFan, [], 'game.rival_game_win'),
+  RIVAL_GAME_LOSS: row(-EVENT_DELTA.rivalGameCaptain, -EVENT_DELTA.rivalGameFan, [], 'game.rival_game_loss'),
+  PARK_RECORD_SET: row(EVENT_DELTA.neutral, EVENT_DELTA.playerMilestoneFan, [
+    touch('teammate', EVENT_DELTA.smallTeammateLift),
+  ], 'achievement.park_record_set'),
 } satisfies Record<MasterMoraleEventType, BaseMoraleConsequence>;
 
 export const MASTER_MORALE_BASE_TABLE: Readonly<Record<MasterMoraleEventType, BaseMoraleConsequence>> =

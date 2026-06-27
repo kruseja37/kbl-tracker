@@ -12,6 +12,7 @@ import type {
 } from "../engines/effectiveRatings";
 import type {
   PromptedManagerDecisionEvent,
+  PromptedManagerScoutEvaluation,
   PromptedManagerDecisionType,
 } from "./eventLog";
 import type { ManagerRecommendationWatchEvent } from "../types/managerWpa";
@@ -178,6 +179,7 @@ export function buildPromptedManagerDecisionFromRecommendation(input: {
   recommendation: ManagerRecommendation;
   action: ManagerRecommendationAction;
   opponentTeamId: string;
+  scoutEvaluation?: PromptedManagerScoutEvaluation;
 }): PromptedManagerDecisionEvent | null {
   const decisionType = getPromptedDecisionTypeForRecommendationAction(input.action);
   if (!decisionType) return null;
@@ -207,6 +209,7 @@ export function buildPromptedManagerDecisionFromRecommendation(input: {
     leverageIndex: input.recommendation.leverageIndex,
     recommendationId: input.recommendation.recommendationId,
     provenanceKey: input.recommendation.suppressKey,
+    scoutEvaluation: input.scoutEvaluation,
     resolution: {
       status: "pending",
       expectedEndpoint,

@@ -92,7 +92,7 @@ function createDeploymentStint(
     gameId: overrides.gameId ?? "game-1",
     managerId: overrides.managerId ?? "away-manager",
     teamId: overrides.teamId ?? "away",
-    deploymentRole: overrides.deploymentRole ?? "pinch_hitter_remaining",
+    deploymentRole: overrides.deploymentRole ?? "pinch_hitter_active",
     playerId: "bench-1",
     playerName: "Bench One",
     sourceEventId: "bp-1",
@@ -282,7 +282,7 @@ describe("getGamePogAwardSet", () => {
     const positive = getGamePogAwardSet({
       managerDecisions: [createDecision({ managerWpa: 0.002 })],
       managerDeploymentStints: [
-        createDeploymentStint({ managerDeploymentWpa: 0.002 }),
+        createDeploymentStint({ managerDeploymentWpa: 0.006 }),
       ],
       managerLineupDeltas: [createLineupDelta({ managerWpa: 0.002 })],
     });
@@ -298,7 +298,9 @@ describe("getGamePogAwardSet", () => {
 
   test("manager-only positive data returns manager_value source and Best Manager award", () => {
     const awards = getGamePogAwardSet({
-      managerDecisions: [createDecision({ managerWpa: 0.006 })],
+      managerDeploymentStints: [
+        createDeploymentStint({ managerDeploymentWpa: 0.006 }),
+      ],
     });
 
     expect(awards.dataQuality.source).toBe("manager_value");
@@ -323,7 +325,8 @@ describe("getGamePogAwardSet", () => {
     expect(awards.managerTotals).toEqual([
       expect.objectContaining({
         managerId: "away-manager",
-        managerValue: -0.01,
+        tacticalManagerWpa: -0.01,
+        managerValue: 0,
       }),
     ]);
     expect(awards.dataQuality.warnings).toContain(
@@ -337,7 +340,9 @@ describe("getGamePogAwardSet", () => {
         createCredit({ playerId: "modest-player", role: "batting", wpa: 0.02 }),
         createCredit({ playerId: "best-player", role: "pitching", wpa: 0.03 }),
       ],
-      managerDecisions: [createDecision({ managerWpa: 0.5 })],
+      managerDeploymentStints: [
+        createDeploymentStint({ managerDeploymentWpa: 0.5 }),
+      ],
     });
 
     expect(awards.overall?.playerId).toBe("best-player");

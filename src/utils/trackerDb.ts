@@ -14,7 +14,7 @@
  */
 
 const DB_NAME = 'kbl-tracker';
-export const TRACKER_DB_VERSION = 25; // Must be the highest version any consumer ever used
+export const TRACKER_DB_VERSION = 26; // Must be the highest version any consumer ever used
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -462,6 +462,16 @@ export async function getTrackerDb(): Promise<IDBDatabase> {
         relationshipEdgeStore.createIndex('by_pair', ['player1Id', 'player2Id'], {
           unique: false,
         });
+      }
+
+      // v26 / A1.3b: dark confirmed trade-demander membership store (§13 tooth #2).
+      // Written by the L10 dark sweep when a trade_demand event fires; read by the
+      // flashpoint-decay seam + the one-shot TRADE_DEMAND morale step. Empty until L10 is on.
+      if (!db.objectStoreNames.contains('franchiseTradeDemandState')) {
+        const tradeDemandStore = db.createObjectStore('franchiseTradeDemandState', {
+          keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+        });
+        tradeDemandStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], { unique: false });
       }
     };
   });

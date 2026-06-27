@@ -448,6 +448,8 @@ function calculateManagerPool(manager, allManagers) {
 
 ## End-of-Season Trait Assignment
 
+> **⚠ SUPERSEDED FOR V1 (JK ruled 2026-06-22 — see `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8`; confirmed T-7 2026-06-26).** The award-luck EOS model in this section — the **"Trait Wheel Spin"**, the award-winner-60%/top-30%/regular-5% weighting, the eye-test ranking, and the 15%-negative rule — is **DEPRECATED**. For v1 the end-of-season trait change is simply ONE MORE adaptive checkpoint of the same `TRAIT_GAIN_LOSS_THRESHOLD_SPEC` engine: the final game is the last 20%-grid checkpoint (`isCheckpointBoundary(totalGames, …)` is always true — test-pinned), run with the SAME thresholds as the in-season checkpoints. No separate ceremony spin; the `TraitLotteryWheel` UI was removed in the mode1-b merge (zero live refs). This section is retained for historical / Mode-3-offseason reference only.
+
 > **NEW February 2026**: Traits are assigned during the Awards Ceremony (Phase 2) as part of end-of-season processing. This section defines the rules for trait assignment, Chemistry mechanics, and the award-appropriate trait pools.
 
 ### Trait Assignment Timing

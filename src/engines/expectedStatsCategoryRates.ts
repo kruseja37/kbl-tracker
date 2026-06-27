@@ -4,7 +4,7 @@
  * Dormant/null-gated categories from RATINGS_ADJUSTMENT_SPEC §3B +
  * DECISIONS_LOG 2026-06-23 RA-2:
  * - armThrowingRate: RA-8 catcher caught-stealing season fields are not stored yet.
- * - pitcher non-pitching power/contact/speed/fielding categories: RA-11/B14 co-design.
+ * - pitcher non-pitching power/contact/speed/fielding categories: RA-11a cumulative leg.
  * - speedBaserunningRate: live from RA-2c-3 extraBasesTaken/advancementOpportunities
  *   season fields; populated by the RA-2c-3b writer, so it remains 0 until then.
  * - fieldingAvoidErrorRate: collinear with fieldingFieldingPct, folded for v1.
@@ -54,6 +54,10 @@ function addHitterRates(
   batting?: PlayerSeasonBatting,
   fielding?: PlayerSeasonFielding,
 ): void {
+  if (!batting && !fielding) {
+    return;
+  }
+
   const battingSample = batting?.pa ?? 0;
 
   setSample(result.sampleSizeByCat, 'powerSlugging', battingSample);
@@ -179,6 +183,7 @@ export function toExpectedStatsCategoryRates(input: CategoryRateInput): Category
     addHitterRates(result, input.batting, input.fielding);
   } else {
     addPitcherRates(result, input.pitching);
+    addHitterRates(result, input.batting, input.fielding);
   }
 
   return result;

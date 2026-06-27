@@ -485,10 +485,11 @@ export interface ManagerLineupDeltaSummary {
 }
 
 export type ManagerDeploymentRole =
-  | "pinch_hitter_remaining"
+  | "pinch_hitter_active"
   | "pinch_runner"
   | "defensive_position"
   | "pitcher"
+  | "untouched_starter"
   | "kept_position_player_in"
   | "kept_defender_in"
   | "kept_pitcher_in"

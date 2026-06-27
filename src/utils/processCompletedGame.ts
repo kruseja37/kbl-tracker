@@ -29,12 +29,16 @@ import {
   resolveExhibitionLeagueId,
 } from './gameStorage';
 import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
+import { getFranchiseConfig } from './franchiseManager';
 import { getEffectivePlayer } from './playerOverrides';
-import { getFranchisePlayer } from './franchisePlayerStorage';
+import { getAllFranchiseTeams, getFranchisePlayer } from './franchisePlayerStorage';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
 import { deriveAdaptiveStandardsConfig, type AdaptiveStandardsConfigInput } from './franchiseAdaptiveStandards';
 import { getSeasonMetadata, saveSeasonMetadata } from './seasonStorage';
-import { calculateAndPersistSeasonWAR } from '../src_figma/app/engines/warOrchestrator';
+import {
+  calculateAndPersistSeasonWAR,
+  type WARParkFactorContext,
+} from '../src_figma/app/engines/warOrchestrator';
 import {
   calculateAndPersistFranchiseTrueValueForSeason,
   type FranchiseTrueValueRow,
@@ -69,6 +73,7 @@ import {
   isFranchisePhase2L11Enabled,
   isFranchisePhase2L12Enabled,
   isFranchisePhase2L13Enabled,
+  isFranchisePhase2StadiumRecordsEnabled,
 } from './franchisePhase2Flags';
 import {
   persistDarkFameRecordsForCompletedGame,
@@ -77,6 +82,7 @@ import {
 import { persistDarkFlashpointDecayForCompletedGame } from './franchiseFlashpointDecayCompute';
 import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpointSweepCompute';
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
+import { getFranchiseTradeDemandRowsByScope } from './franchiseTradeDemandStorage';
 import { persistDarkRelationshipFormationForCompletedGame } from './franchiseRelationshipFormationCompute';
 import { persistDarkRelationshipIntensityForCompletedGame } from './franchiseRelationshipIntensityCompute';
 import { persistDarkRelationshipMoraleForCompletedGame } from './franchiseRelationshipMoraleCompute';
@@ -84,6 +90,10 @@ import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
 import { persistDarkL11AutoBackstopForCompletedGame } from './franchiseManagerAutoBackstop';
 import { recomputeFranchiseL12StandingsForCompletedGame } from './franchiseRaceStandingsCompute';
 import { persistFranchiseAllStarRosterForCompletedGame } from './franchiseAllStarRosterCompute';
+import { persistDarkStadiumRecordsForCompletedGame } from './franchiseStadiumRecordsTap';
+import { persistDarkHomeParkRivalForCompletedGame } from './franchiseHomeParkRivalTap';
+import { getHomeParkRival } from './franchiseHomeParkRivalStorage';
+import type { FranchiseStadiumRecordChange } from './franchiseStadiumRecordsStorage';
 import type { HiddenModifiers } from '../types/game';
 import { FAME_TUNING } from '../engines/fameModel';
 import {
@@ -115,7 +125,7 @@ type PersistedWarScope = {
   seasonId: string;
   statsScopeId: string;
 };
-type PersistedTrueValueScope = PersistedWarScope & {
+export type PersistedTrueValueScope = PersistedWarScope & {
   franchiseId: string;
   seasonNumber: number;
 };
@@ -257,7 +267,13 @@ async function persistSeasonWarAfterAggregation(
 
   const participantIds = getParticipantIds(gameState);
   const playerPositions = await buildWarPlayerPositions(gameState, participantIds, leagueId);
-  await calculateAndPersistSeasonWAR(seasonId, seasonGames, participantIds, playerPositions);
+  await calculateAndPersistSeasonWAR(
+    seasonId,
+    seasonGames,
+    participantIds,
+    playerPositions,
+    buildWarParkFactorContext(gameState, archiveOptions),
+  );
   return {
     seasonId,
     statsScopeId: seasonId,
@@ -276,6 +292,18 @@ function getCompletedGameFranchiseId(
     (competitionType === 'franchise' ? competitionId : null) ??
     null
   );
+}
+
+function buildWarParkFactorContext(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): WARParkFactorContext {
+  return {
+    franchiseId: getCompletedGameFranchiseId(gameState, archiveOptions),
+    homeTeamId: gameState.homeTeamId,
+    stadiumName: gameState.stadiumName ?? null,
+    parkFactors: archiveOptions?.context?.parkFactors ?? gameState.parkFactors ?? null,
+  };
 }
 
 async function persistTrueValueAfterWar(
@@ -542,6 +570,267 @@ export type PersistDarkFanMoraleChannelResult = {
   written: number;
   reason?: string;
 };
+
+async function resolveTradeDemandGameNumber(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<number | null> {
+  const scheduleGameId = archiveOptions?.context?.scheduleGameId ?? gameState.scheduleGameId;
+  if (!scheduleGameId) return null;
+
+  try {
+    const scheduledGame = await getScheduledGame(scheduleGameId);
+    if (scheduledGame && Number.isInteger(scheduledGame.gameNumber) && scheduledGame.gameNumber > 0) {
+      return scheduledGame.gameNumber;
+    }
+  } catch {
+    // Non-fatal: unresolved schedule ids dark-noop instead of blocking game completion.
+  }
+
+  return null;
+}
+
+export async function persistDarkTradeDemandMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueScope,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<PersistDarkFanMoraleChannelResult> {
+  if (!isFranchisePhase2MoraleEnabled()) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Phase-2 morale disabled; TRADE_DEMAND matrix consequence not written.',
+    };
+  }
+
+  const thisGameNumber = await resolveTradeDemandGameNumber(gameState, archiveOptions);
+  if (thisGameNumber == null) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'Unresolved league game number; cannot place a TRADE_DEMAND morale consequence.',
+    };
+  }
+
+  const rows = await getFranchiseTradeDemandRowsByScope(trueValueScope);
+  const newlyConfirmedRows = rows.filter(
+    (row) => row.status === 'active' && row.confirmedAtGameNumber === thisGameNumber,
+  );
+  if (newlyConfirmedRows.length === 0) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'No newly confirmed trade-demand rows for this game.',
+    };
+  }
+
+  let written = 0;
+  for (const row of newlyConfirmedRows) {
+    try {
+      const player = await getFranchisePlayer(row.franchiseId, row.playerId);
+      const currentPlayerMorale = await currentMoraleValue(row, 'player', row.playerId, player?.morale ?? 50);
+      const currentFanMorale = await currentMoraleValue(row, 'team-fan', row.teamId, 50);
+      const consequence = composeMoraleConsequence(
+        { type: 'TRADE_DEMAND' },
+        player?.personality,
+        resolveHiddenModifiers(player?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+
+      const result = await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: row.franchiseId,
+        seasonId: row.seasonId,
+        statsScopeId: row.statsScopeId,
+        seasonNumber: trueValueScope.seasonNumber,
+        playerId: row.playerId,
+        teamId: row.teamId,
+        consequence,
+        sourceEventId: [
+          'trade-demand',
+          row.franchiseId,
+          row.seasonId,
+          row.statsScopeId,
+          row.playerId,
+          row.confirmedAtCheckpoint,
+        ].join(':'),
+        timestamp: row.confirmedAtIso,
+      });
+      if (result.applied.length > 0) {
+        written += 1;
+      }
+    } catch (error) {
+      console.warn('[MoraleMatrix] trade-demand event skipped:', error);
+    }
+  }
+
+  return { status: 'written', written };
+}
+
+export async function persistDarkParkRecordMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  scope: PersistedTrueValueScope,
+  stadiumChanges: FranchiseStadiumRecordChange[],
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<void> {
+  if (!isFranchisePhase2MoraleEnabled()) return;
+
+  const config = await getFranchiseConfig(scope.franchiseId);
+  if (!config) return;
+
+  const checkpoint = fameMoraleSourceCheckpoint(gameState, archiveOptions);
+
+  for (const change of stadiumChanges) {
+    try {
+      if (change.newLeaderPlayerIds.length !== 1) continue;
+      const holderId = change.newLeaderPlayerIds[0];
+      const homeTeamId = config.stadiums?.find((stadium) => stadium.stadiumId === change.stadiumId)?.teamId;
+      if (!homeTeamId) continue;
+
+      const player = await getFranchisePlayer(scope.franchiseId, holderId);
+      const holderTeamId = sourceTeamIdForFameMorale(gameState, holderId, player);
+      if (holderTeamId !== homeTeamId) continue;
+
+      const currentPlayerMorale = await currentMoraleValue(scope, 'player', holderId, player?.morale ?? 50);
+      const currentFanMorale = await currentMoraleValue(scope, 'team-fan', homeTeamId, 50);
+      const consequence = composeMoraleConsequence(
+        { type: 'PARK_RECORD_SET' },
+        player?.personality,
+        resolveHiddenModifiers(player?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+      const sourceEventId = [
+        'park-record-set',
+        scope.franchiseId,
+        scope.seasonId,
+        scope.statsScopeId,
+        checkpoint,
+        change.stadiumId,
+        change.recordType,
+        change.recordKey,
+        change.changeKind,
+        holderId,
+      ].join(':');
+
+      await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: scope.franchiseId,
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        seasonNumber: scope.seasonNumber,
+        playerId: holderId,
+        teamId: homeTeamId,
+        consequence,
+        sourceEventId,
+        timestamp: String(gameState.savedAt ?? gameState.gameId),
+      });
+    } catch (error) {
+      console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', error);
+    }
+  }
+}
+
+function completedGameFinalScore(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): { home: number; away: number } {
+  return {
+    home: archiveOptions?.finalScore?.home ?? gameState.homeScore,
+    away: archiveOptions?.finalScore?.away ?? gameState.awayScore,
+  };
+}
+
+function rivalGameMoraleTeamContext(
+  gameState: PersistedGameState,
+  teamId: string,
+  archiveOptions?: CompletedGameArchiveOptions,
+): { opponentId: string | null; won: boolean | null } {
+  const score = completedGameFinalScore(gameState, archiveOptions);
+  if (teamId === gameState.homeTeamId) {
+    if (!gameState.awayTeamId || score.home === score.away) return { opponentId: gameState.awayTeamId ?? null, won: null };
+    return { opponentId: gameState.awayTeamId, won: score.home > score.away };
+  }
+  if (teamId === gameState.awayTeamId) {
+    if (!gameState.homeTeamId || score.home === score.away) return { opponentId: gameState.homeTeamId ?? null, won: null };
+    return { opponentId: gameState.homeTeamId, won: score.away > score.home };
+  }
+  return { opponentId: null, won: null };
+}
+
+function fanOnlyMatrixPlayerId(teamId: string): string {
+  return `team-fan:${teamId}`;
+}
+
+export async function persistDarkRivalGameMoraleForCompletedGame(
+  gameState: PersistedGameState,
+  scope: PersistedTrueValueScope,
+  preGameRivals: Map<string, string | null>,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<void> {
+  if (!isFranchisePhase2MoraleEnabled()) return;
+
+  const teams = await getAllFranchiseTeams(scope.franchiseId);
+  const captainsByTeam = new Map(
+    teams.map((team) => [team.id, team.captainPlayerId?.trim() ? team.captainPlayerId : null] as const),
+  );
+  const checkpoint = fameMoraleSourceCheckpoint(gameState, archiveOptions);
+
+  for (const teamId of completedGameTeamIds(gameState)) {
+    try {
+      const rivalTeamId = preGameRivals.get(teamId) ?? null;
+      const { opponentId, won } = rivalGameMoraleTeamContext(gameState, teamId, archiveOptions);
+      if (!rivalTeamId || rivalTeamId !== opponentId || won === null) continue;
+
+      const eventType: MasterMoraleEventType = won ? 'RIVAL_GAME_WIN' : 'RIVAL_GAME_LOSS';
+      const captainPlayerId = captainsByTeam.get(teamId) ?? null;
+      const captain = captainPlayerId ? await getFranchisePlayer(scope.franchiseId, captainPlayerId) : null;
+      const currentPlayerMorale = captainPlayerId
+        ? await currentMoraleValue(scope, 'player', captainPlayerId, captain?.morale ?? 50)
+        : 50;
+      const currentFanMorale = await currentMoraleValue(scope, 'team-fan', teamId, 50);
+      const composed = composeMoraleConsequence(
+        { type: eventType, playerId: captainPlayerId ?? undefined, teamId },
+        captain?.personality,
+        resolveHiddenModifiers(captain?.hiddenPersonalityModifiers),
+        currentPlayerMorale,
+        currentFanMorale,
+      );
+      const consequence: ResolvedMoraleConsequence = captainPlayerId
+        ? composed
+        : {
+            ...composed,
+            selfPlayerMoraleDelta: 0,
+            fanMoraleToPlayerMoraleDelta: 0,
+            totalPlayerMoraleDelta: 0,
+            projectedPlayerMorale: currentPlayerMorale,
+          };
+      const sourceEventId = [
+        'rival-grudge',
+        scope.franchiseId,
+        scope.seasonId,
+        scope.statsScopeId,
+        checkpoint,
+        teamId,
+        rivalTeamId,
+        won ? 'won' : 'lost',
+      ].join(':');
+
+      await applyFranchiseMoraleMatrixConsequence({
+        franchiseId: scope.franchiseId,
+        seasonId: scope.seasonId,
+        statsScopeId: scope.statsScopeId,
+        seasonNumber: scope.seasonNumber,
+        playerId: captainPlayerId ?? fanOnlyMatrixPlayerId(teamId),
+        teamId,
+        consequence,
+        sourceEventId,
+        timestamp: String(gameState.savedAt ?? gameState.gameId),
+      });
+    } catch (error) {
+      console.warn('[RivalGameMorale] dark rival-game morale skipped for completed game ' + gameState.gameId + ':', error);
+    }
+  }
+}
 
 const STORE_BACKED_DESIGNATION_TYPES: FranchiseDesignationType[] = [
   'TEAM_MVP',
@@ -1045,9 +1334,38 @@ export async function processCompletedGame(
         } catch (error) {
           console.warn('[TrueValueSnapshots] failed to persist True Value snapshots for completed game ' + gameState.gameId + ':', error);
         }
+        let stadiumChanges: FranchiseStadiumRecordChange[] = [];
+        if (isFranchisePhase2StadiumRecordsEnabled()) {
+          try {
+            const stadiumResult = await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+            stadiumChanges = stadiumResult.changeList;
+          } catch (e) {
+            console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        const preGameHomeParkRivals = new Map<string, string | null>();
+        if (isFranchisePhase2StadiumRecordsEnabled()) {
+          try {
+            for (const teamId of completedGameTeamIds(gameState)) {
+              preGameHomeParkRivals.set(
+                teamId,
+                (await getHomeParkRival(trueValueScope, teamId))?.rivalTeamId ?? null,
+              );
+            }
+          } catch (e) {
+            console.warn('[HomeParkRival] dark pre-game home-park rival snapshot skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2StadiumRecordsEnabled()) {
+          try {
+            await persistDarkHomeParkRivalForCompletedGame(gameState, trueValueScope, archiveOptions);
+          } catch (e) {
+            console.warn('[HomeParkRival] dark home-park rival tap skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
         if (isFranchisePhase2FameEnabled()) {
           try {
-            const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+            const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions, stadiumChanges);
             await persistFameMoraleConsequencesAfterFame(
               gameState,
               trueValueScope,
@@ -1056,6 +1374,20 @@ export async function processCompletedGame(
             );
           } catch (e) {
             console.warn('[Fame] dark fame compute skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2MoraleEnabled()) {
+          try {
+            await persistDarkParkRecordMoraleForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
+          } catch (e) {
+            console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e);
+          }
+        }
+        if (isFranchisePhase2MoraleEnabled()) {
+          try {
+            await persistDarkRivalGameMoraleForCompletedGame(gameState, trueValueScope, preGameHomeParkRivals, archiveOptions);
+          } catch (e) {
+            console.warn('[RivalGameMorale] dark rival-game morale skipped for completed game ' + gameState.gameId + ':', e);
           }
         }
         if (isFranchisePhase2FlashpointEnabled()) {
@@ -1112,6 +1444,11 @@ export async function processCompletedGame(
           } catch (e) {
             console.warn('[L10] dark random-event sweep skipped for completed game ' + gameState.gameId + ':', e);
           }
+        }
+        try {
+          await persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+        } catch (e) {
+          console.warn('[MoraleMatrix] dark trade-demand morale write skipped for completed game ' + gameState.gameId + ':', e);
         }
         if (isFranchisePhase2L11Enabled()) {
           try {

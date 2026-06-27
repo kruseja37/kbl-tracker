@@ -24,6 +24,11 @@ import {
 } from "../../../engines/farmArchetypeTilt";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
 import {
+  farmDraftRouteForLeague,
+  leagueIdFromSearch,
+  resolveInitialLeagueId,
+} from "../utils/draftRouting";
+import {
   getTeamAuctionMaxBid,
   type AuctionPlayer,
   type AuctionResult,
@@ -70,20 +75,6 @@ function positionBadges(player: Player | null | undefined) {
       {position}
     </span>
   ));
-}
-
-function leagueIdFromSearch(search: string): string | null {
-  return new URLSearchParams(search).get("leagueId");
-}
-
-function resolveInitialLeagueId(
-  leagues: readonly Pick<LeagueTemplate, "id">[],
-  requestedLeagueId: string | null,
-): string {
-  if (requestedLeagueId && leagues.some((league) => league.id === requestedLeagueId)) {
-    return requestedLeagueId;
-  }
-  return leagues[0]?.id ?? "";
 }
 
 function resultText(result: AuctionResult, playerById: Map<string, Player>, teamById: Map<string, Team>): string {
@@ -693,7 +684,7 @@ export function LeagueBuilderAuctionDraft() {
                 <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <span>AUCTION COMPLETE. MLB rosters are filled in the auction session.</span>
                   <button
-                    onClick={() => navigate("/league-builder/farm-auction-draft")}
+                    onClick={() => navigate(activeLeague ? farmDraftRouteForLeague(activeLeague) : "/league-builder/farm-auction-draft")}
                     className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold whitespace-nowrap"
                   >
                     PROCEED TO FARM AUCTION →

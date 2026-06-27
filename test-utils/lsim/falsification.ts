@@ -302,6 +302,8 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     } },
   { name: 'soul.trait-two-slot-no-offset-hysteresis',
     mutate: (s) => { s.players = [{ id: 'p', trait1: oppA, trait2: oppB } as never]; /* opposite pair held */ } },
+  { name: 'soul.trait-two-slot-no-offset-hysteresis',
+    mutate: (s) => { s.traitOverlays = [{ id: 'o', playerId: 'p', traitName: 'Wild Thrower', valence: 'gain', probability: 0.60, confirmationStatus: 'pending', displacesTraitName: null } as never]; /* gain BELOW its tier (MODERATE 0.65) threshold — must still trip the per-tier check */ } },
   { name: 'soul.persistence-backup-migration-proof', // NAMED property now includes the real version-bump leg
     mutate: (s) => { s.persistenceProof = { backupRoundTripByteIdentical: true, migrationSurvivalChecked: true, migrationSurvivalAcrossVersionBump: false, detail: 'no version-bump survival' }; } },
   { name: 'soul.channel-separation-double-count-guards',

@@ -2,6 +2,7 @@ import {
   aggregateChannelFame,
   aggregateDefensiveFame,
   aggregateRolePlayerFame,
+  applyHonorHeatBump,
   applyHeatUpdate,
   FAME_TUNING,
   type ChannelTaggedFameInput,
@@ -14,6 +15,8 @@ import {
   type FranchiseFameRecordRow,
   type FranchiseFameRecordsScopeInput,
 } from './franchiseFameRecordsStorage';
+import { buildStadiumRecordFameHeatBumps } from './franchiseStadiumRecordFame';
+import type { FranchiseStadiumRecordChange } from './franchiseStadiumRecordsStorage';
 import { isFranchisePhase2FameEnabled } from './franchisePhase2Flags';
 import { getGame as getScheduledGame } from './scheduleStorage';
 
@@ -74,6 +77,7 @@ export async function persistDarkFameRecordsForCompletedGame(
   gameState: PersistedGameState,
   fameScope: PersistedTrueValueResult,
   archiveOptions?: CompletedGameArchiveOptions,
+  stadiumChanges: FranchiseStadiumRecordChange[] = [],
 ): Promise<PersistDarkFameRecordsResult> {
   if (!isFranchisePhase2FameEnabled()) {
     return {
@@ -90,6 +94,9 @@ export async function persistDarkFameRecordsForCompletedGame(
   const playerIds = activeFamePlayerIds(playerTotals, fameEvents);
   const rows: FranchiseFameRecordRow[] = [];
   const playerHeatDeltas: Array<{ playerId: string; heatDelta: number }> = [];
+  const bumpByPlayer = new Map<string, number>(
+    buildStadiumRecordFameHeatBumps(stadiumChanges).map((bump) => [bump.playerId, bump.heatDelta]),
+  );
 
   for (const playerId of playerIds) {
     const storedRow = await getFranchiseFameRecord(fameScope, playerId);
@@ -104,7 +111,12 @@ export async function persistDarkFameRecordsForCompletedGame(
     );
     const breakdown = aggregateChannelFame(inputs);
     const stored = storedRow ?? { heat: 0, reachFloor: 0, wasNegative: false };
-    const heat = applyHeatUpdate(stored.heat, breakdown.total);
+    let heat = applyHeatUpdate(stored.heat, breakdown.total);
+    const bump = bumpByPlayer.get(playerId);
+    if (bump !== undefined) {
+      heat = applyHonorHeatBump(heat, bump);
+      bumpByPlayer.delete(playerId);
+    }
     const reachFloor = stored.reachFloor;
     const heatDelta = heat - stored.heat;
     const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
@@ -122,6 +134,41 @@ export async function persistDarkFameRecordsForCompletedGame(
       channelByChannel: breakdown.byChannel,
       defensiveFame: aggregateDefensiveFame(inputs),
       rolePlayerFame: aggregateRolePlayerFame(inputs),
+      updatedAtCheckpoint: checkpoint,
+    });
+  }
+
+  for (const [playerId, bump] of bumpByPlayer.entries()) {
+    const storedRow = await getFranchiseFameRecord(fameScope, playerId);
+    const stored = storedRow ?? { heat: 0, reachFloor: 0, wasNegative: false };
+    const heat = applyHonorHeatBump(stored.heat, bump);
+    const heatDelta = heat - stored.heat;
+    if (heatDelta === 0) continue;
+
+    const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
+    playerHeatDeltas.push({ playerId, heatDelta });
+
+    if (storedRow) {
+      rows.push({
+        ...storedRow,
+        heat,
+        wasNegative,
+      });
+      continue;
+    }
+
+    rows.push({
+      franchiseId: fameScope.franchiseId,
+      seasonId: fameScope.seasonId,
+      statsScopeId: fameScope.statsScopeId,
+      playerId,
+      heat,
+      reachFloor: 0,
+      wasNegative,
+      channelTotal: 0,
+      channelByChannel: aggregateChannelFame([]).byChannel,
+      defensiveFame: 0,
+      rolePlayerFame: 0,
       updatedAtCheckpoint: checkpoint,
     });
   }

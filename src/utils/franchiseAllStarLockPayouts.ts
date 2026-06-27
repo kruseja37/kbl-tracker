@@ -1,5 +1,11 @@
 import type { AllStarCandidate } from '../engines/franchiseAllStarSelector';
 import { emitFranchiseHonorNews } from '../src_figma/app/engines/reporter/franchiseHonorEmission';
+import {
+  getOrCreateCareerBatting,
+  getOrCreateCareerPitching,
+  updateCareerBatting,
+  updateCareerPitching,
+} from './careerStorage';
 import { applyFranchiseHonorReachFloor, type FranchiseHonorTier } from './franchiseHonorReachFloor';
 import { applyFranchiseRaceSnubMorale } from './franchiseRaceSnubMorale';
 import type { FranchiseAllStarSelection } from './franchiseAllStarRostersStorage';
@@ -17,7 +23,37 @@ export const franchiseAllStarLockPayoutSeam = {
   emit: emitFranchiseHonorNews,
   applyReachFloor: applyFranchiseHonorReachFloor,
   applySnub: applyFranchiseRaceSnubMorale,
+  incrementCareerSelections: applyFranchiseAllStarCareerSelections,
 };
+
+export async function applyFranchiseAllStarCareerSelections(
+  selections: ReadonlyArray<FranchiseAllStarSelection>,
+): Promise<{ status: string; written: number }> {
+  let written = 0;
+
+  for (const selection of selections) {
+    // L12-6 defaults: route SP/RP to pitching and all other slots to batting;
+    // playerId is the name fallback because the 60% lock should find existing
+    // career rows; updateCareer* keeps the established Date.now lastUpdated stamp.
+    const isPitcher = selection.position === 'SP' || selection.position === 'RP';
+    if (isPitcher) {
+      const career = await getOrCreateCareerPitching(selection.playerId, selection.playerId, selection.teamId);
+      await updateCareerPitching({
+        ...career,
+        allStarSelections: career.allStarSelections + 1,
+      });
+    } else {
+      const career = await getOrCreateCareerBatting(selection.playerId, selection.playerId, selection.teamId);
+      await updateCareerBatting({
+        ...career,
+        allStarSelections: career.allStarSelections + 1,
+      });
+    }
+    written += 1;
+  }
+
+  return { status: written > 0 ? 'written' : 'noop', written };
+}
 
 export function honoreesFromSelections(
   selections: ReadonlyArray<FranchiseAllStarSelection>,
@@ -71,7 +107,7 @@ export async function runFranchiseAllStarLockPayouts(params: {
   candidates: readonly AllStarCandidate[];
   scope: AllStarPayoutScope;
   timestamp: number;
-}): Promise<{ emit: string; reachFloor: string; snub: string }> {
+}): Promise<{ emit: string; reachFloor: string; snub: string; careerSelections: string }> {
   const reachScope = {
     franchiseId: params.scope.franchiseId,
     seasonId: params.scope.seasonId,
@@ -129,5 +165,13 @@ export async function runFranchiseAllStarLockPayouts(params: {
     }
   }
 
-  return { emit, reachFloor, snub };
+  let careerSelections = 'error';
+  try {
+    const result = await franchiseAllStarLockPayoutSeam.incrementCareerSelections(params.selections);
+    careerSelections = result.status;
+  } catch {
+    careerSelections = 'error';
+  }
+
+  return { emit, reachFloor, snub, careerSelections };
 }

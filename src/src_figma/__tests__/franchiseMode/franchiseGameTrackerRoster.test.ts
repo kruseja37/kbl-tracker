@@ -444,6 +444,82 @@ describe('franchise GameTracker roster identity', () => {
     );
   });
 
+  test('launch roster derives the next starter from team games played and wraps a four-man rotation', async () => {
+    const batter = (id: string, primaryPosition: string) => ({
+      id,
+      firstName: 'Batter',
+      lastName: id,
+      primaryPosition,
+      secondaryPosition: 'OF',
+      bats: 'R',
+      throws: 'R',
+      age: 27,
+      power: 70,
+      contact: 70,
+      speed: 60,
+      fielding: 70,
+      arm: 70,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    });
+    const starter = (id: string) => ({
+      id,
+      firstName: 'Starter',
+      lastName: id,
+      primaryPosition: 'SP',
+      secondaryPosition: 'P',
+      bats: 'R',
+      throws: 'R',
+      age: 30,
+      power: 10,
+      contact: 10,
+      speed: 20,
+      fielding: 55,
+      arm: 70,
+      velocity: 90,
+      junk: 80,
+      accuracy: 75,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    });
+
+    mockGetFranchiseTeam.mockResolvedValue({
+      id: 'team-1',
+      leagueIds: ['league-1'],
+      startingRotation: ['sp-a', 'sp-b', 'sp-c', 'sp-d'],
+    });
+    mockGetAllFranchisePlayers.mockResolvedValue([
+      batter('b1', 'C'),
+      batter('b2', '1B'),
+      batter('b3', '2B'),
+      batter('b4', 'SS'),
+      batter('b5', '3B'),
+      batter('b6', 'LF'),
+      batter('b7', 'CF'),
+      batter('b8', 'RF'),
+      starter('sp-a'),
+      starter('sp-b'),
+      starter('sp-c'),
+      starter('sp-d'),
+    ]);
+
+    const roster = await buildFranchiseGameTrackerRoster('team-1', {
+      franchiseId: 'franchise-1',
+      leagueId: 'league-1',
+      useDH: false,
+      teamGamesPlayed: 4,
+    });
+
+    expect(roster.pitchers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ playerId: 'sp-a', isStarter: true, isActive: true }),
+        expect.objectContaining({ playerId: 'sp-b', isStarter: false, isActive: false }),
+      ]),
+    );
+    expect(roster.players[8]).toMatchObject({ playerId: 'sp-a', position: 'P', battingOrder: 9 });
+  });
+
   test('starter override updates no-DH P batting slot without moving pitcher to leadoff', () => {
     const batterStats = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
     const pitcherStats = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };

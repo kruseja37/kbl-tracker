@@ -1,6 +1,11 @@
 import type { ReporterGameMode } from "../types/reporter";
 import type { CommentaryFeedEntryRecord, GameStory } from "../types/reporter";
 import { listAllCommentaryFeedEntries } from "./commentaryFeedStorage";
+import { isFranchisePhase2StadiumRecordsEnabled } from "./franchisePhase2Flags";
+import {
+  listFranchiseStadiumRecords,
+  type FranchiseStadiumRecord,
+} from "./franchiseStadiumRecordsStorage";
 import { getAllCompletedGames, type CompletedGameRecord, type CompetitionType } from "./gameStorage";
 import { listAllGameStories } from "./gameStoriesStorage";
 import {
@@ -11,7 +16,8 @@ import {
 export type AlmanacNarrativeKind =
   | "historical-tidbit"
   | "post-game-story"
-  | "transaction-history";
+  | "transaction-history"
+  | "park-record";
 
 export interface AlmanacNarrativeArchiveEntry {
   id: string;
@@ -216,6 +222,14 @@ function titleCaseTransactionType(type: TransactionLogEntry["type"]): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function titleCaseKebab(value: string): string {
+  return value
+    .split("-")
+    .filter((part) => part.length > 0)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+}
+
 function transactionToArchiveEntry(
   transaction: TransactionLogEntry,
 ): AlmanacNarrativeArchiveEntry {
@@ -268,6 +282,28 @@ function transactionToArchiveEntry(
     teamIds,
     headline,
     body: bodyParts.join(" "),
+  };
+}
+
+function stadiumRecordToArchiveEntry(
+  record: FranchiseStadiumRecord,
+): AlmanacNarrativeArchiveEntry {
+  const parsedTimestamp = Date.parse(record.updatedAt);
+  const valueLabel = record.valueLabel.trim();
+
+  return {
+    id: `park-record:${record.identityKey}`,
+    kind: "park-record",
+    gameMode: "franchise",
+    timestamp: Number.isFinite(parsedTimestamp) ? parsedTimestamp : 0,
+    franchiseId: record.franchiseId,
+    seasonId: record.seasonId,
+    seasonNumber: record.seasonNumber,
+    statsScopeId: record.statsScopeId,
+    playerIds: record.leaderPlayerIds,
+    teamIds: record.leaderTeamIds,
+    headline: `${record.stadiumName ?? "Park"} Record — ${titleCaseKebab(record.recordType)}`,
+    body: `${record.evidenceSummary}${valueLabel ? ` (${valueLabel})` : ""}`,
   };
 }
 
@@ -362,6 +398,30 @@ export async function listAlmanacNarrativeArchive(
     );
     for (const transaction of transactions) {
       archiveEntries.push(transactionToArchiveEntry(transaction));
+    }
+  }
+
+  if (isFranchisePhase2StadiumRecordsEnabled() && filters.franchiseId && filters.seasonId) {
+    const scopeGame = completedGames.find((game) =>
+      game.franchiseId === filters.franchiseId &&
+      game.seasonId === filters.seasonId &&
+      (!filters.statsScopeId || game.statsScopeId === filters.statsScopeId) &&
+      typeof game.seasonNumber === "number" &&
+      Number.isInteger(game.seasonNumber) &&
+      game.seasonNumber > 0,
+    );
+    const seasonNumber = scopeGame?.seasonNumber;
+    if (scopeGame && typeof seasonNumber === "number") {
+      // Franchise invariant (verified): records are written with statsScopeId === seasonId === getFranchiseSeasonId, so the read scope uses the franchise seasonId — NOT the completed game's statsScopeId field (which is not the records' scope source).
+      const records = await listFranchiseStadiumRecords({
+        franchiseId: filters.franchiseId,
+        seasonId: filters.seasonId,
+        statsScopeId: filters.statsScopeId ?? filters.seasonId,
+        seasonNumber,
+      });
+      for (const record of records) {
+        archiveEntries.push(stadiumRecordToArchiveEntry(record));
+      }
     }
   }
 

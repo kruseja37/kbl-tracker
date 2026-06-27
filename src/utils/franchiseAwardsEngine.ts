@@ -130,10 +130,8 @@ const ALL_STAR_IP_QUALIFIER_FRACTION = 0.15;
 
 // MOY-7: Simulation-Gate placeholder. Equal weights are intentionally temporary.
 const MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS = {
-  tacticalManagerWpa: 0.25,
-  deploymentWpa: 0.25,
-  lineupDeltaWpa: 0.25,
-  recordWinsAboveExpectation: 0.25,
+  deploymentWpa: 0.5,
+  recordWinsAboveExpectation: 0.5,
 } as const;
 
 function finiteNumber(value: unknown): value is number {
@@ -386,15 +384,20 @@ function buildAwardRow(params: {
   const winner = params.candidates[0];
   if (!winner) return null;
   const winnerScore = rounded(winner.score);
+  const winnerTeamId = params.candidates.find(
+    (candidate) => candidate.row.playerId === winner.row.playerId,
+  )?.row.currentTeamId ?? null;
 
   return {
     ...params.scope,
     category: params.category,
     winnerPlayerId: winner.row.playerId,
+    winnerTeamId,
     candidates: params.candidates.map((candidate) => {
       const score = rounded(candidate.score);
       return {
         playerId: candidate.row.playerId,
+        teamId: candidate.row.currentTeamId ?? null,
         score,
         marginToWinner: rounded(score - winnerScore),
       };
@@ -484,9 +487,7 @@ function computeFranchiseManagerOfYearFromEligibleInput(
     standings: input.standings,
     gamesPerTeam: input.gamesPerTeam,
   });
-  const tacticalNormalized = scaleToUnitRange(managers.map((manager) => manager.tacticalManagerWpa));
   const deploymentNormalized = scaleToUnitRange(managers.map((manager) => manager.deploymentWpa));
-  const lineupNormalized = scaleToUnitRange(managers.map((manager) => manager.lineupDeltaWpa));
   const recordNormalized = scaleToUnitRange(managers.map((manager) =>
     recordByTeamId.get(manager.teamId)?.recordTerm ?? 0,
   ));
@@ -499,9 +500,7 @@ function computeFranchiseManagerOfYearFromEligibleInput(
         recordTerm: 0,
       };
       const score =
-        (tacticalNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.tacticalManagerWpa) +
         (deploymentNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.deploymentWpa) +
-        (lineupNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.lineupDeltaWpa) +
         (recordNormalized[index] * MANAGER_OF_YEAR_SIM_GATE_PLACEHOLDER_WEIGHTS.recordWinsAboveExpectation);
       return {
         managerId: manager.managerId,
@@ -524,10 +523,12 @@ function computeFranchiseManagerOfYearFromEligibleInput(
     statsScopeId: input.statsScopeId,
     category: MANAGER_OF_YEAR_CATEGORY,
     winnerPlayerId: winner.managerId,
+    winnerTeamId: null,
     candidates: candidates.map((candidate) => {
       const score = rounded(candidate.score);
       return {
         playerId: candidate.managerId,
+        teamId: null,
         score,
         marginToWinner: rounded(score - winnerScore),
       };

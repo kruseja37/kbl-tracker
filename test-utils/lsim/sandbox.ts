@@ -138,6 +138,11 @@ const DB_NAMES_TO_DELETE = [
   'kbl-tracker',
   'kbl-franchise-morale',
   'kbl-league-builder',
+  // A1.5d: the stadium-records own-DB must be reset per leg or its state leaks across
+  // determinism legs (leg 2 inherits leg 1's records -> different detect changes[] ->
+  // different fame, breaking same-seed determinism once hop-2 wires records -> fame).
+  'kbl-franchise-stadium-records',
+  'kbl-franchise-home-park-rivals',
 ];
 
 function isPitcherPosition(position: Position): boolean {

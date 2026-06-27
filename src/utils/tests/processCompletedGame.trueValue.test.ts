@@ -29,6 +29,9 @@ vi.mock('../gameStorage', () => ({
   archiveCompletedGame: mocks.archiveCompletedGame,
   getCompletedGameById: mocks.getCompletedGameById,
   resolveExhibitionLeagueId: mocks.resolveExhibitionLeagueId,
+  // A1.5d-1b: the dark stadium-records tap (transitively imported via
+  // processCompletedGame) reads getRecentGames at module-load; stub it.
+  getRecentGames: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../eventLog', () => ({
@@ -211,6 +214,10 @@ describe('processCompletedGame True Value persistence gate', () => {
       32,
       ['batter-1', 'pitcher-1'],
       expect.any(Map),
+      expect.objectContaining({
+        franchiseId: 'franchise-1',
+        homeTeamId: 'team-b',
+      }),
     );
     expect(mocks.calculateAndPersistFranchiseTrueValueForSeason).toHaveBeenCalledWith({
       franchiseId: 'franchise-1',

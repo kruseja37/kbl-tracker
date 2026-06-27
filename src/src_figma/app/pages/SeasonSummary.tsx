@@ -228,7 +228,7 @@ export function SeasonSummary() {
   // Data hooks
   const franchiseData = useFranchiseData(franchiseId, currentSeason);
   const scheduleData = useScheduleData(currentSeason, { franchiseId });
-  const seasonStats = useSeasonStats(seasonId);
+  const seasonStats = useSeasonStats(seasonId, { franchiseId });
   const playoffData = usePlayoffData(currentSeason, { franchiseId });
 
   // Expandable sections

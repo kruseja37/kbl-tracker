@@ -163,13 +163,15 @@ function entry(overrides: Partial<CheckpointRosterEntry> = {}): CheckpointRoster
     teamId: overrides.teamId ?? 'team-a',
     isPitcher,
     baseRatings: isPitcher
-      ? { velocity: 50, junk: 50, accuracy: 50 }
+      ? { power: 50, contact: 50, speed: 50, fielding: 50, velocity: 50, junk: 50, accuracy: 50 }
       : { power: 50, contact: 50, speed: 50, fielding: 50, arm: 50 },
     personality: 'RELAXED',
     modifiers: neutralModifiers,
     playerMorale: 50,
     teamFanMorale: 50,
+    ageBand: '25-31',
     signalByRatingKey,
+    recentSignalByRatingKey: {},
     sampleByRatingKey,
     createdAt: '2026-06-18T00:00:00.000Z',
     ...overrides,
@@ -392,6 +394,202 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     ]);
   });
 
+  test('checkpoint-one keeps recent rates empty so default overlays stay cumulative-only', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const shifter = entry({ playerId: 'player-hitter', signalByRatingKey: { power: 1 } });
+    const rosterSpy = vi
+      .spyOn(checkpointSweepSeam, 'resolveCheckpointRoster')
+      .mockResolvedValue([shifter]);
+    const eventSpy = vi.spyOn(checkpointSweepSeam, 'resolveWindowAtBatEvents');
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+    const cumulativeOnly = computeCheckpointRatingDevelopment(
+      {
+        ratingKey: 'power',
+        baseRatingValue: shifter.baseRatings.power,
+        performanceSignal: shifter.signalByRatingKey.power!,
+        playerMorale: shifter.playerMorale,
+        teamFanMorale: shifter.teamFanMorale,
+        personality: shifter.personality,
+        modifiers: shifter.modifiers,
+        confidence: 1,
+      },
+      CHECKPOINT_DEV_TUNING,
+    );
+
+    expect(resolvePreviousCheckpointGameNumber(2, 10, 5)).toBe(0);
+    expect(eventSpy).not.toHaveBeenCalled();
+    expect(rosterSpy.mock.calls[0][2]).toEqual({ recentCategoryRatesByPlayerId: undefined });
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows[0].delta).toBe(cumulativeOnly.appliedDelta);
+  });
+
+  test('trendTiltWeight zero keeps overlays identical even when a recent signal is present', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-4', gameNumber: 4 } as never);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-default-recent']),
+      pitchers: new Set(),
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveWindowAtBatEvents').mockResolvedValue([
+      { eventId: 'recent-hot', gameId: 'g', eventIndex: 1, batterId: 'player-default-recent', pitcherId: 'p' },
+    ] as never);
+    const shifter = entry({
+      playerId: 'player-default-recent',
+      signalByRatingKey: { power: 0.4 },
+      recentSignalByRatingKey: { power: 1 },
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+    const cumulativeOnly = computeCheckpointRatingDevelopment(
+      {
+        ratingKey: 'power',
+        baseRatingValue: shifter.baseRatings.power,
+        performanceSignal: shifter.signalByRatingKey.power!,
+        playerMorale: shifter.playerMorale,
+        teamFanMorale: shifter.teamFanMorale,
+        personality: shifter.personality,
+        modifiers: shifter.modifiers,
+        confidence: 1,
+      },
+      CHECKPOINT_DEV_TUNING,
+    );
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(CHECKPOINT_DEV_TUNING.trendTiltWeight).toBe(0);
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].delta).toBe(cumulativeOnly.appliedDelta);
+  });
+
+  test('test-only positive trendTiltWeight makes a hot recent stretch move more than cumulative-only', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-4', gameNumber: 4 } as never);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-hot-recent']),
+      pitchers: new Set(),
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveWindowAtBatEvents').mockResolvedValue([
+      { eventId: 'recent-hot', gameId: 'g', eventIndex: 1, batterId: 'player-hot-recent', pitcherId: 'p' },
+    ] as never);
+    const shifter = entry({
+      playerId: 'player-hot-recent',
+      signalByRatingKey: { power: 0.4 },
+      recentSignalByRatingKey: { power: 1 },
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+    const cumulativeOnly = computeCheckpointRatingDevelopment(
+      {
+        ratingKey: 'power',
+        baseRatingValue: shifter.baseRatings.power,
+        performanceSignal: shifter.signalByRatingKey.power!,
+        playerMorale: shifter.playerMorale,
+        teamFanMorale: shifter.teamFanMorale,
+        personality: shifter.personality,
+        modifiers: shifter.modifiers,
+        confidence: 1,
+      },
+      { ...CHECKPOINT_DEV_TUNING, trendTiltWeight: 0.5 },
+    );
+    const blended = computeCheckpointRatingDevelopment(
+      {
+        ratingKey: 'power',
+        baseRatingValue: shifter.baseRatings.power,
+        performanceSignal: shifter.signalByRatingKey.power!,
+        recentSignal: shifter.recentSignalByRatingKey.power,
+        playerMorale: shifter.playerMorale,
+        teamFanMorale: shifter.teamFanMorale,
+        personality: shifter.personality,
+        modifiers: shifter.modifiers,
+        confidence: 1,
+      },
+      { ...CHECKPOINT_DEV_TUNING, trendTiltWeight: 0.5 },
+    );
+    const originalTrendTiltWeight = CHECKPOINT_DEV_TUNING.trendTiltWeight;
+
+    try {
+      CHECKPOINT_DEV_TUNING.trendTiltWeight = 0.5;
+      const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+      const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+      expect(blended.appliedDelta).toBeGreaterThan(cumulativeOnly.appliedDelta);
+      expect(result).toEqual({ status: 'written', written: 1 });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].delta).toBe(blended.appliedDelta);
+    } finally {
+      CHECKPOINT_DEV_TUNING.trendTiltWeight = originalTrendTiltWeight;
+    }
+  });
+
+  test('age gravity writes negative old and positive young neutral-signal overlays', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-old-38', 'player-young-20']),
+      pitchers: new Set(),
+    });
+    const old = entry({
+      playerId: 'player-old-38',
+      ageBand: '36+',
+      signalByRatingKey: { power: 0 },
+      teamFanMorale: 20,
+    });
+    const young = entry({
+      playerId: 'player-young-20',
+      ageBand: '18-21',
+      signalByRatingKey: { power: 0 },
+      teamFanMorale: 80,
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([old, young]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 2 });
+    expect(rows.map((row) => [row.playerId, row.delta]).sort()).toEqual([
+      ['player-old-38', -1],
+      ['player-young-20', 1],
+    ]);
+  });
+
+  test('prime-age sweep remains byte-identical to omitted age-band development', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(['player-prime-28']),
+      pitchers: new Set(),
+    });
+    const prime = entry({
+      playerId: 'player-prime-28',
+      ageBand: '25-31',
+      signalByRatingKey: { power: 1 },
+      teamFanMorale: 80,
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([prime]);
+    const preRa5Dev = computeCheckpointRatingDevelopment(
+      {
+        ratingKey: 'power',
+        baseRatingValue: prime.baseRatings.power,
+        performanceSignal: 1,
+        playerMorale: prime.playerMorale,
+        teamFanMorale: prime.teamFanMorale,
+        personality: prime.personality,
+        modifiers: prime.modifiers,
+        confidence: 1,
+      },
+      CHECKPOINT_DEV_TUNING,
+    );
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(preRa5Dev.rawDelta).toBe(3);
+    expect(result).toEqual({ status: 'written', written: 1 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].playerId).toBe('player-prime-28');
+    expect(rows[0].delta).toBe(preRa5Dev.appliedDelta);
+  });
+
   test('confidence dead-band blocks thin checkpoint samples but lets full samples shift', async () => {
     setFranchisePhase2CheckpointEnabledForTests(true);
     vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
@@ -505,6 +703,27 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(result).toEqual({ status: 'written', written: 1 });
     expect(rows).toHaveLength(1);
     expect(rows[0].ratingKey).toBe('velocity');
+    expect(rows.some((row) => row.ratingKey === 'arm')).toBe(false);
+  });
+
+  test('pitcher checkpoint writes non-pitching overlays and still never writes arm', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set(),
+      pitchers: new Set(['pitcher-non-pitching']),
+    });
+    const pitcher = entry({
+      playerId: 'pitcher-non-pitching',
+      isPitcher: true,
+      signalByRatingKey: { power: 1, contact: 1, speed: 1, fielding: 1, arm: 1 },
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([pitcher]);
+
+    const result = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const rows = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect(result).toEqual({ status: 'written', written: 4 });
+    expect(rows.map((row) => row.ratingKey).sort()).toEqual(['contact', 'fielding', 'power', 'speed']);
     expect(rows.some((row) => row.ratingKey === 'arm')).toBe(false);
   });
 
@@ -633,10 +852,208 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(cohortOnlyRows).toEqual([]);
   });
 
+  test('resolveCheckpointRoster supplies pitcher non-pitching ratings and category rates without arm', async () => {
+    const pitcherId = 'pitcher-sp';
+    vi.mocked(getAllFranchiseTeams).mockResolvedValue([{ id: 'team-a', leagueIds: ['league-1'] } as never]);
+    vi.mocked(getAllFranchisePlayers).mockResolvedValue([
+      player({
+        id: pitcherId,
+        primaryPosition: 'SP',
+        power: 31,
+        contact: 32,
+        speed: 33,
+        fielding: 34,
+        arm: 0,
+        velocity: 72,
+        junk: 68,
+        accuracy: 64,
+        leagueAssignments: [{
+          leagueId: 'league-1',
+          teamId: 'team-a',
+          rosterStatus: 'MLB',
+        }],
+      }),
+    ]);
+    vi.mocked(getPlayerTeamIdForLeague).mockReturnValue('team-a');
+    vi.mocked(getFranchiseTrueValueRows).mockResolvedValue([
+      {
+        ...scope,
+        playerId: pitcherId,
+        valueDelta: 0,
+        computedAt: '2026-06-18T02:00:00.000Z',
+      },
+    ] as never);
+    vi.mocked(getSeasonBattingStats).mockResolvedValue([
+      {
+        seasonId: scope.seasonId,
+        playerId: pitcherId,
+        playerName: pitcherId,
+        teamId: 'team-a',
+        games: 8,
+        pa: 24,
+        ab: 20,
+        hits: 8,
+        singles: 5,
+        doubles: 1,
+        triples: 1,
+        homeRuns: 1,
+        rbi: 0,
+        runs: 0,
+        walks: 3,
+        strikeouts: 4,
+        hitByPitch: 1,
+        sacFlies: 0,
+        sacBunts: 0,
+        stolenBases: 2,
+        caughtStealing: 0,
+        gidp: 0,
+        fameBonuses: 0,
+        fameBoners: 0,
+        fameNet: 0,
+        contactQualityGood: 8,
+        contactQualityTracked: 12,
+        extraBasesTaken: 3,
+        advancementOpportunities: 6,
+        lastUpdated: 1,
+      },
+    ] as never);
+    vi.mocked(getSeasonPitchingStats).mockResolvedValue([
+      {
+        seasonId: scope.seasonId,
+        playerId: pitcherId,
+        playerName: pitcherId,
+        teamId: 'team-a',
+        games: 8,
+        gamesStarted: 8,
+        outsRecorded: 40,
+        hitsAllowed: 12,
+        runsAllowed: 0,
+        earnedRuns: 0,
+        walksAllowed: 4,
+        strikeouts: 15,
+        homeRunsAllowed: 3,
+        hitBatters: 2,
+        wildPitches: 0,
+        wins: 0,
+        losses: 0,
+        saves: 0,
+        holds: 0,
+        blownSaves: 0,
+        qualityStarts: 0,
+        completeGames: 0,
+        shutouts: 0,
+        noHitters: 0,
+        perfectGames: 0,
+        fameBonuses: 0,
+        fameBoners: 0,
+        fameNet: 0,
+        weakContactInduced: 7,
+        weakContactTracked: 14,
+        lastUpdated: 1,
+      },
+    ] as never);
+    vi.mocked(getAllFieldingStats).mockResolvedValue([
+      {
+        seasonId: scope.seasonId,
+        playerId: pitcherId,
+        playerName: pitcherId,
+        teamId: 'team-a',
+        games: 8,
+        putouts: 9,
+        assists: 4,
+        errors: 1,
+        doublePlays: 0,
+        gamesByPosition: { SP: 8 },
+        putoutsByPosition: { SP: 9 },
+        assistsByPosition: { SP: 4 },
+        errorsByPosition: { SP: 1 },
+        difficultyWeightedConversion: 5,
+        difficultyFieldingOpportunities: 10,
+        lastUpdated: 1,
+      },
+    ] as never);
+    vi.mocked(buildFranchiseEffectivePositionReport).mockResolvedValue({
+      playerPositions: {
+        [pitcherId]: { effectivePosition: 'SP', startsShare: null },
+      },
+    } as never);
+    vi.mocked(getFranchiseMoraleSnapshot).mockResolvedValue({ currentValue: 55 } as never);
+    const signalSpy = vi.spyOn(checkpointRatingSignal, 'computeCheckpointRatingSignals');
+
+    const roster = await resolveCheckpointRoster(scope, gameState());
+    const members = signalSpy.mock.calls[0][0];
+    const member = members[0];
+
+    expect(member).toMatchObject({
+      playerId: pitcherId,
+      role: 'pitcher',
+      poolKey: 'SP',
+      ratings: {
+        power: 31,
+        contact: 32,
+        speed: 33,
+        fielding: 34,
+        velocity: 72,
+        junk: 68,
+        accuracy: 64,
+      },
+    });
+    expect('arm' in member.ratings).toBe(false);
+    expect(member.categoryRates.actualByCat.powerSlugging).toBeCloseTo(14 / 20, 10);
+    expect(member.categoryRates.actualByCat.powerHomeRunRate).toBeCloseTo(1 / 24, 10);
+    expect(member.categoryRates.actualByCat.contactAvoidStrikeoutRate).toBeCloseTo(1 - (4 / 24), 10);
+    expect(member.categoryRates.actualByCat.contactQualityRate).toBeCloseTo(8 / 12, 10);
+    expect(member.categoryRates.actualByCat.speedStealTripleRate).toBeCloseTo(3 / 24, 10);
+    expect(member.categoryRates.actualByCat.speedBaserunningRate).toBeCloseTo(3 / 6, 10);
+    expect(member.categoryRates.actualByCat.fieldingFieldingPct).toBeCloseTo(13 / 14, 10);
+    expect(member.categoryRates.actualByCat.fieldingRangeRate).toBeCloseTo(5 / 10, 10);
+    expect(member.categoryRates.actualByCat.pitchingStrikeoutRate).toBeCloseTo(15 / 58, 10);
+    expect(member.categoryRates.actualByCat.pitchingWalkAvoidanceRate).toBeCloseTo(1 - (4 / 58), 10);
+    expect(member.categoryRates.actualByCat.pitchingHomeRunSuppressionRate).toBeCloseTo(1 - (3 / 58), 10);
+    expect(member.categoryRates.actualByCat.pitchingWeakContactRate).toBeCloseTo(7 / 14, 10);
+    expect(member.categoryRates.sampleSizeByCat).toMatchObject({
+      powerSlugging: 24,
+      powerHomeRunRate: 24,
+      contactAvoidStrikeoutRate: 24,
+      contactQualityRate: 12,
+      speedStealTripleRate: 3,
+      speedBaserunningRate: 6,
+      fieldingFieldingPct: 14,
+      fieldingRangeRate: 10,
+      pitchingStrikeoutRate: 58,
+      pitchingWalkAvoidanceRate: 58,
+      pitchingHomeRunSuppressionRate: 58,
+      pitchingWeakContactRate: 14,
+    });
+
+    expect(roster).toHaveLength(1);
+    expect(roster[0].baseRatings).toEqual({
+      power: 31,
+      contact: 32,
+      speed: 33,
+      fielding: 34,
+      velocity: 72,
+      junk: 68,
+      accuracy: 64,
+    });
+    expect('arm' in roster[0].baseRatings).toBe(false);
+    expect(roster[0].sampleByRatingKey).toMatchObject({
+      power: 24,
+      contact: 24,
+      speed: 6,
+      fielding: 14,
+      arm: 0,
+      velocity: 58,
+      junk: 58,
+      accuracy: 58,
+    });
+  });
+
   test('resolveCheckpointRoster assembles roster-agnostic classifiable members with RA-2c signals', async () => {
     const playerIds = ['hitter-tv', 'farm-no-tv', 'peer-1', 'peer-2', 'peer-3', 'peer-4'];
     const hitters = playerIds.map((id, index) => player({
       id,
+      age: index === 0 ? 38 : index === 1 ? 20 : 28,
       primaryPosition: 'SS',
       personality: index === 0 ? 'Spirited' : 'Relaxed',
       morale: index === 0 ? 64 : 50,
@@ -731,13 +1148,37 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     } as never);
     vi.mocked(getFranchiseMoraleSnapshot).mockResolvedValue({ currentValue: 71 } as never);
     const signalSpy = vi.spyOn(checkpointRatingSignal, 'computeCheckpointRatingSignals');
+    const recentRates = {
+      actualByCat: {
+        powerSlugging: 1.250,
+        powerHomeRunRate: 0.250,
+        contactAvoidStrikeoutRate: 0.950,
+      },
+      sampleSizeByCat: {
+        powerSlugging: 12,
+        powerHomeRunRate: 12,
+        contactAvoidStrikeoutRate: 12,
+      },
+    };
+    const recentCategoryRatesByPlayerId = {
+      hitters: new Map([['hitter-tv', recentRates]]),
+      pitchers: new Map(),
+    };
 
-    const roster = await resolveCheckpointRoster(scope, gameState());
+    const roster = await resolveCheckpointRoster(
+      scope,
+      gameState(),
+      { recentCategoryRatesByPlayerId },
+    );
 
     expect(signalSpy).toHaveBeenCalledTimes(1);
     const members = signalSpy.mock.calls[0][0];
     expect(members.map((member) => member.playerId).sort()).toEqual([...playerIds].sort());
     expect(members.find((member) => member.playerId === 'hitter-tv')?.poolKey).toBe('middleIF');
+    expect(members.find((member) => member.playerId === 'hitter-tv')?.ageBand).toBe('36+');
+    expect(members.find((member) => member.playerId === 'hitter-tv')?.recentCategoryRates).toBe(recentRates);
+    expect(members.find((member) => member.playerId === 'farm-no-tv')?.recentCategoryRates).toBeUndefined();
+    expect(members.find((member) => member.playerId === 'farm-no-tv')?.ageBand).toBe('18-21');
     expect(members.find((member) => member.playerId === 'farm-no-tv')?.poolKey).toBe('middleIF');
     expect(buildFranchiseEffectivePositionReport).toHaveBeenCalledWith({
       franchiseId: scope.franchiseId,
@@ -761,6 +1202,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
       playerId: 'hitter-tv',
       teamId: 'team-a',
       isPitcher: false,
+      ageBand: '36+',
       baseRatings: {
         power: 48,
         contact: 50,
@@ -775,6 +1217,10 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
       createdAt: '2026-06-18T01:00:00.000Z',
     });
     expect(hitterEntry?.signalByRatingKey).toEqual(expect.any(Object));
+    expect(hitterEntry?.recentSignalByRatingKey).toEqual(expect.any(Object));
+    expect(Object.keys(hitterEntry?.recentSignalByRatingKey ?? {})).toEqual(
+      expect.arrayContaining(['power', 'contact']),
+    );
     expect(Object.keys(hitterEntry?.signalByRatingKey ?? {})).toEqual(
       expect.arrayContaining(['power', 'contact']),
     );
@@ -794,5 +1240,12 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     const source = readFileSync('src/utils/franchiseCheckpointSweepCompute.ts', 'utf8');
 
     expect(source).not.toMatch(/Math\.random|Date\.now|new Date\(|indexedDB\.open/);
+  });
+
+  test('L10 sweep remains age-neutral and does not call rating development', () => {
+    const source = readFileSync('src/utils/franchiseL10SweepCompute.ts', 'utf8');
+
+    expect(source).not.toMatch(/ageBand\s*:/);
+    expect(source).not.toMatch(/computeCheckpointRatingDevelopment/);
   });
 });

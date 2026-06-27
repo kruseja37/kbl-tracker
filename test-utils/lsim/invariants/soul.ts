@@ -7,6 +7,7 @@ import {
 } from '../../../src/engines/relationshipIntensity';
 import { L11_AUTO_BACKSTOP_TUNING } from '../../../src/utils/franchiseManagerAutoBackstop';
 import { TRAIT_ACQUISITION_TUNING, TRAIT_OPPOSITES } from '../../../src/engines/traitAcquisition';
+import { assignTier } from '../../../src/data/traitTierConfig';
 import { pickRaceSnubVictims } from '../../../src/utils/franchiseRaceSnubMorale';
 import {
   franchiseRelationshipEdgeId,
@@ -946,6 +947,23 @@ function ratingsOverlayValidity(snapshot: LsimStateSnapshot): LsimInvariantResul
   );
 }
 
+// The grant gates each trait on its TIER threshold (traitAcquisition.thresholdsForTrait ->
+// assignTier), NOT the global TRAIT_ACQUISITION_TUNING.{gain,lose}Threshold. So a valid
+// UNCOMMON/MODERATE gain (tier gainThreshold 0.65-0.70) lands in [0.65, 0.75) and must NOT be
+// flagged. Mirror the grant's per-tier fallback exactly so the invariant checks what the grant
+// actually enforces.
+function traitOverlayThresholdsFor(traitName: string): { gain: number; lose: number } {
+  try {
+    const tier = assignTier(traitName);
+    return { gain: tier.gainThreshold, lose: tier.lossThreshold };
+  } catch {
+    return {
+      gain: TRAIT_ACQUISITION_TUNING.gainThreshold,
+      lose: TRAIT_ACQUISITION_TUNING.loseThreshold,
+    };
+  }
+}
+
 function traitTwoSlotNoOffsetHysteresis(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const badPlayers = snapshot.players.filter((player) => {
     const traits = [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait));
@@ -953,15 +971,18 @@ function traitTwoSlotNoOffsetHysteresis(snapshot: LsimStateSnapshot): LsimInvari
     const hasOpposite = traits.some((trait) => TRAIT_OPPOSITES[trait] && traits.includes(TRAIT_OPPOSITES[trait]));
     return traits.length > 2 || hasDuplicate || hasOpposite;
   });
-  const badOverlays = snapshot.traitOverlays.filter((row) =>
-    row.confirmationStatus !== 'pending' ||
-    !isFiniteNumber(row.probability) ||
-    row.probability < 0 ||
-    row.probability > 1 ||
-    (row.valence === 'gain' && row.probability < TRAIT_ACQUISITION_TUNING.gainThreshold) ||
-    (row.valence === 'lose' && row.probability > TRAIT_ACQUISITION_TUNING.loseThreshold) ||
-    (row.valence === 'gain' && TRAIT_OPPOSITES[row.traitName] === row.displacesTraitName),
-  );
+  const badOverlays = snapshot.traitOverlays.filter((row) => {
+    const thresholds = traitOverlayThresholdsFor(row.traitName);
+    return (
+      row.confirmationStatus !== 'pending' ||
+      !isFiniteNumber(row.probability) ||
+      row.probability < 0 ||
+      row.probability > 1 ||
+      (row.valence === 'gain' && row.probability < thresholds.gain) ||
+      (row.valence === 'lose' && row.probability > thresholds.lose) ||
+      (row.valence === 'gain' && TRAIT_OPPOSITES[row.traitName] === row.displacesTraitName)
+    );
+  });
   // CHEAP TIGHTENING: displacement is ATOMIC — at most one displacing resolution (a gain that displaces a held
   // trait) per player per cycle (sourceEventId). (re-evaluate-to-drop is cross-cycle + needs trait LOSSES, which
   // require the generator-adversity decline path → it is a [post-Step-3] COVERAGE_GAPS item.)
@@ -1140,8 +1161,9 @@ function tvFreeze(snapshot: LsimStateSnapshot): LsimInvariantResult {
 
 function awardsOffFrozenArtifact(snapshot: LsimStateSnapshot): LsimInvariantResult {
   // §5.3 awards-off-frozen (AWARD_TRUST_CONTRACT.md:9-10,35): awards finalize OFF the FROZEN artifact — the D8 trust
-  // gate requires `artifact.frozen === true`, finalized rows are persisted, and every winner belongs to the frozen
-  // artifact's trustedPlayerIds. An untrusted / unfrozen-value row can NEVER win.
+  // gate requires `artifact.frozen === true`, finalized rows are persisted, and every PLAYER-award winner belongs to
+  // the frozen artifact's trustedPlayerIds. Manager-of-Year is a manager row, not a player row, so it is validated
+  // separately by requiring a concrete manager winner without forcing that id into the player artifact.
   if (snapshot.gamesSimulated < snapshot.totalScheduledGames) {
     return invariantResult(
       'soul.awards-off-frozen-artifact',
@@ -1154,18 +1176,26 @@ function awardsOffFrozenArtifact(snapshot: LsimStateSnapshot): LsimInvariantResu
   const frozen = artifact !== null && (artifact as { frozen?: boolean }).frozen === true;
   const trustedIds = new Set((artifact as { trustedPlayerIds?: string[] } | null)?.trustedPlayerIds ?? []);
   const finalized = snapshot.awardRows.filter((row) => row.finalized);
-  const winners = finalized.map((row) => row.winnerPlayerId).filter((id): id is string => Boolean(id));
-  const untrustedWinners = winners.filter((id) => !trustedIds.has(id));
+  const playerAwardRows = finalized.filter((row) => row.category !== 'MANAGER_OF_YEAR');
+  const managerAwardRows = finalized.filter((row) => row.category === 'MANAGER_OF_YEAR');
+  const playerWinners = playerAwardRows.map((row) => row.winnerPlayerId).filter((id): id is string => Boolean(id));
+  const managerWinners = managerAwardRows.map((row) => row.winnerPlayerId).filter((id): id is string => Boolean(id));
+  const untrustedWinners = playerWinners.filter((id) => !trustedIds.has(id));
+  const managerRowsHaveWinners = managerAwardRows.every((row) => Boolean(row.winnerPlayerId));
   // The artifact MUST be frozen (the gate that authorized the finalize), finalized rows MUST exist (the finalize ran),
-  // and NO winner may sit outside the frozen trusted set.
-  const pass = frozen && finalized.length > 0 && untrustedWinners.length === 0;
+  // no PLAYER winner may sit outside the frozen trusted set, and any manager rows must name a manager winner.
+  const pass =
+    frozen &&
+    finalized.length > 0 &&
+    untrustedWinners.length === 0 &&
+    managerRowsHaveWinners;
   return invariantResult(
     'soul.awards-off-frozen-artifact',
     CRITICAL,
     pass,
     pass
-      ? `artifact.frozen=true; finalizedRows=${finalized.length}; winners=[${winners.join(',') || 'none'}] all in trustedPlayerIds(${trustedIds.size})`
-      : `frozen=${frozen}; finalizedRows=${finalized.length}; untrustedWinners=[${untrustedWinners.join(',') || 'none'}]; trustedCount=${trustedIds.size}`,
+      ? `artifact.frozen=true; finalizedRows=${finalized.length}; playerWinners=[${playerWinners.join(',') || 'none'}] all in trustedPlayerIds(${trustedIds.size}); managerWinners=[${managerWinners.join(',') || 'none'}]`
+      : `frozen=${frozen}; finalizedRows=${finalized.length}; untrustedPlayerWinners=[${untrustedWinners.join(',') || 'none'}]; managerRowsHaveWinners=${managerRowsHaveWinners}; trustedCount=${trustedIds.size}`,
   );
 }
 

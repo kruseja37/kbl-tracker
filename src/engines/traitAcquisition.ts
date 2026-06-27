@@ -24,7 +24,7 @@ export type RosterRole = 'bench' | 'starter' | 'unknown';
 export type TraitValence = 'positive' | 'negative' | 'neutral';
 
 export interface HeldTrait { traitName: string; strength: number; }
-export interface TraitCandidate { traitName: string; score: TraitRealityScore; }
+export interface TraitCandidate { traitName: string; score: TraitRealityScore; recentPercentile?: number; }
 
 export interface TraitAcquisitionInput {
   playerRole: PlayerRole;
@@ -32,6 +32,7 @@ export interface TraitAcquisitionInput {
   modifiers?: HiddenModifiers;
   currentMorale?: number;
   rosterRole?: RosterRole;
+  primaryPosition?: string;
   heldTraits: readonly HeldTrait[];
   candidates: readonly TraitCandidate[];
   seed?: string;
@@ -51,6 +52,7 @@ export interface TraitChangeProposal {
     rosterRoleFactor: number;
     charismaTilt: number;
     resiliencePositiveTilt: number;
+    trendTilt: number;
   };
   displaces?: string;
 }
@@ -66,6 +68,7 @@ export interface SkippedTrait {
     | 'offsetting_pair_held'
     | 'elite_pitch_excluded'
     | 'cap_no_displacement'
+    | 'position_mismatch_protected'
     | 'likelihood_not_fired';
 }
 
@@ -85,6 +88,7 @@ export interface TraitAcquisitionTuning {
   loseThreshold: number;
   maxTraits?: number;
   incumbencyBeta?: number;
+  trendTiltWeight?: number;
 }
 
 interface TraitThresholds {
@@ -104,7 +108,16 @@ export const TRAIT_ACQUISITION_TUNING: TraitAcquisitionTuning = {
   loseThreshold: 0.35,
   maxTraits: 2, // §16 sim-tune placeholder
   incumbencyBeta: 1.25, // β=1.25 RULED
+  trendTiltWeight: 0, // §16 sim-tune placeholder — Simulation Gate owns the magnitude
 };
+
+// §8C: Cannon Arm is un-regainable from the v1 IF signal set (no valid IF arm signal).
+export const POSITION_MISMATCH_UNREGAINABLE: Record<string, ReadonlySet<string>> = {
+  'Cannon Arm': new Set(['1B', '2B', '3B', 'SS']),
+};
+
+// §16 sim-tune placeholder — much harder to lose, NOT impossible (§8C:134).
+export const POSITION_MISMATCH_KEEP_BOOST = 3;
 
 // §16 sim-tune placeholder — shape (monotonic in margin, tier-hardness) locked; constants tunable.
 export const TRAIT_FIRING_CURVE = {
@@ -389,6 +402,9 @@ export function computeTraitAcquisition(
     const proposalBase = buildProposalBase({
       traitName,
       realityPercentile,
+      recentPercentile: typeof candidate.recentPercentile === 'number' && Number.isFinite(candidate.recentPercentile)
+        ? clamp01(candidate.recentPercentile)
+        : undefined,
       modifiers,
       morale,
       rosterRole,
@@ -407,7 +423,11 @@ export function computeTraitAcquisition(
     }
 
     if (isHeld && proposalBase.probability <= thresholds.loseThreshold) {
-      rawProposals.push({ ...proposalBase, valence: 'lose' });
+      if (isPositionMismatchProtected(traitName, input.primaryPosition)) {
+        skipped.push({ traitName, reason: 'position_mismatch_protected' });
+      } else {
+        rawProposals.push({ ...proposalBase, valence: 'lose' });
+      }
       continue;
     }
 
@@ -425,6 +445,7 @@ export function computeTraitAcquisition(
     loseProposals,
     heldNames,
     heldProbabilityByTrait,
+    primaryPosition: input.primaryPosition,
     tuning,
     skipped,
   });
@@ -438,6 +459,7 @@ export function computeTraitAcquisition(
 function buildProposalBase(args: {
   traitName: string;
   realityPercentile: number;
+  recentPercentile?: number;
   modifiers: HiddenModifiers;
   morale: number;
   rosterRole: RosterRole;
@@ -468,6 +490,14 @@ function buildProposalBase(args: {
   const resiliencePositiveTilt = RESILIENCE_POSITIVE_TRAITS.has(args.traitName)
     ? 1 + centered(args.modifiers.resilience, 0, 100) * args.tuning.resilienceSwing
     : 1;
+  const trendTiltWeight = args.tuning.trendTiltWeight ?? 0;
+  const trendTilt = (
+    typeof args.recentPercentile === 'number'
+    && Number.isFinite(args.recentPercentile)
+    && trendTiltWeight > 0
+  )
+    ? 1 + clamp(args.recentPercentile - args.realityPercentile, -1, 1) * trendTiltWeight
+    : 1;
   const probability = clamp01(
     args.realityPercentile
     * ambitionTilt
@@ -476,7 +506,8 @@ function buildProposalBase(args: {
     * moraleFactor
     * rosterRoleFactor
     * charismaTilt
-    * resiliencePositiveTilt,
+    * resiliencePositiveTilt
+    * trendTilt,
   );
 
   return {
@@ -492,6 +523,7 @@ function buildProposalBase(args: {
       rosterRoleFactor,
       charismaTilt,
       resiliencePositiveTilt,
+      trendTilt,
     },
   };
 }
@@ -573,6 +605,7 @@ function reconcileGainProposals(args: {
   loseProposals: TraitChangeProposal[];
   heldNames: ReadonlySet<string>;
   heldProbabilityByTrait: ReadonlyMap<string, number>;
+  primaryPosition?: string;
   tuning: TraitAcquisitionTuning;
   skipped: SkippedTrait[];
 }): TraitChangeProposal[] {
@@ -587,8 +620,12 @@ function reconcileGainProposals(args: {
   const beta = args.tuning.incumbencyBeta ?? 1.25;
   const gainScore = (proposal: TraitChangeProposal): number =>
     proposal.probability * traitWeightFor(proposal.traitName);
-  const keepScore = (held: HeldTrait): number =>
-    effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta;
+  const keepScore = (held: HeldTrait): number => {
+    const base = effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta;
+    return isPositionMismatchProtected(held.traitName, args.primaryPosition)
+      ? base * POSITION_MISMATCH_KEEP_BOOST
+      : base;
+  };
 
   for (const proposal of args.gainProposals) {
     const opposite = TRAIT_OPPOSITES[proposal.traitName];
@@ -662,6 +699,11 @@ function reconcileGainProposals(args: {
   }
 
   return reconciled;
+}
+
+function isPositionMismatchProtected(traitName: string, primaryPosition?: string): boolean {
+  return primaryPosition != null
+    && (POSITION_MISMATCH_UNREGAINABLE[traitName]?.has(primaryPosition) ?? false);
 }
 
 function traitWeightFor(traitName: string): number {

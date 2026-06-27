@@ -27,10 +27,15 @@ import { calculateBWARSimplified } from '../engines/bwarCalculator';
 import { calculatePWARSimplified, type PitchingStatsForWAR } from '../engines/pwarCalculator';
 import { calculatePreferredFWARFromPersistedFieldingSet, type Position } from '../engines/fwarCalculator';
 import { calculateRWARSimplified, type BaserunningStats } from '../engines/rwarCalculator';
-import type { BattingStatsForWAR } from '../types/war';
+import {
+  getDerivedParkFactorsIfAvailable,
+  isParkFactorAdjustmentActive,
+} from '../engines/parkFactorDeriver';
+import type { BattingStatsForWAR, ParkFactors } from '../types/war';
 import type { CompetitionType } from '../utils/gameStorage';
 import { getFieldingEventsForScope } from '../utils/eventLog';
 import { MLB_BASELINE_GAMES } from '../utils/franchiseAdaptiveStandards';
+import { getAllFranchiseTeams } from '../utils/franchisePlayerStorage';
 
 // Default season
 const DEFAULT_SEASON_ID = 'season-1';
@@ -55,6 +60,48 @@ export function resolveSeasonGamesForWAR(metadata: SeasonMetadata | null): numbe
 
 function finiteWAR(value: number): number {
   return Number.isFinite(value) ? value : 0;
+}
+
+function optionalFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function seedParkFactorsFromStoredOrDerived(
+  stadiumName?: string | null,
+  parkFactors?: ParkFactors | null,
+): ParkFactors | undefined {
+  if (parkFactors?.source === 'SEED') return parkFactors;
+  return getDerivedParkFactorsIfAvailable(stadiumName ?? undefined);
+}
+
+function pitcherParkFactorFromSeed(parkFactors: ParkFactors | undefined): number | undefined {
+  if (!parkFactors) return undefined;
+  return parkFactors.homeRuns ?? parkFactors.overall;
+}
+
+function fallbackGamesPlayed(
+  battingStats: PlayerSeasonBatting[],
+  pitchingStats: PlayerSeasonPitching[],
+): number {
+  return Math.max(
+    0,
+    ...battingStats.map((stats) => stats.games),
+    ...pitchingStats.map((stats) => stats.games),
+  );
+}
+
+async function loadSeedParkFactorsByTeamId(
+  franchiseId?: string | null,
+): Promise<Map<string, ParkFactors>> {
+  const byTeamId = new Map<string, ParkFactors>();
+  if (!franchiseId) return byTeamId;
+
+  const teams = await getAllFranchiseTeams(franchiseId);
+  for (const team of teams) {
+    const seedParkFactors = seedParkFactorsFromStoredOrDerived(team.stadium, team.parkFactors);
+    if (seedParkFactors) byTeamId.set(team.id, seedParkFactors);
+  }
+  return byTeamId;
 }
 
 // ============================================
@@ -115,6 +162,10 @@ export interface UseSeasonStatsReturn {
   refresh: () => Promise<void>;
 }
 
+export interface UseSeasonStatsOptions {
+  franchiseId?: string | null;
+}
+
 // ============================================
 // WAR CONVERSION FUNCTIONS
 // ============================================
@@ -123,6 +174,11 @@ export interface UseSeasonStatsReturn {
  * Convert PlayerSeasonBatting to BattingStatsForWAR
  */
 function seasonBattingToWAR(stats: PlayerSeasonBatting): BattingStatsForWAR {
+  const homeAwareStats = stats as PlayerSeasonBatting & {
+    homePA?: number;
+    roadPA?: number;
+  };
+
   return {
     pa: stats.pa,
     ab: stats.ab,
@@ -140,6 +196,9 @@ function seasonBattingToWAR(stats: PlayerSeasonBatting): BattingStatsForWAR {
     gidp: stats.gidp,
     stolenBases: stats.stolenBases,
     caughtStealing: stats.caughtStealing,
+    homePA: optionalFiniteNumber(homeAwareStats.homePA),
+    roadPA: optionalFiniteNumber(homeAwareStats.roadPA),
+    teamId: stats.teamId,
   };
 }
 
@@ -218,7 +277,8 @@ function toBattingLeaderEntry(
   stats: PlayerSeasonBatting,
   rank: number,
   seasonGames: number,
-  fieldingWAR: number
+  fieldingWAR: number,
+  parkFactors?: ParkFactors
 ): BattingLeaderEntry {
   const derived = calculateBattingDerived(stats);
 
@@ -229,7 +289,13 @@ function toBattingLeaderEntry(
 
   try {
     if (stats.pa > 0) {
-      const bwarResult = calculateBWARSimplified(seasonBattingToWAR(stats), seasonGames);
+      const warStats = seasonBattingToWAR(stats);
+      const bwarResult = parkFactors
+        ? calculateBWARSimplified(warStats, seasonGames, {
+            parkFactors,
+            batterHand: 'S',
+          })
+        : calculateBWARSimplified(warStats, seasonGames);
       bWAR = finiteWAR(bwarResult.bWAR);
     }
   } catch { /* WAR calc may fail for edge cases — default to 0 */ }
@@ -261,14 +327,19 @@ function toBattingLeaderEntry(
 function toPitchingLeaderEntry(
   stats: PlayerSeasonPitching,
   rank: number,
-  seasonGames: number
+  seasonGames: number,
+  parkFactors?: ParkFactors
 ): PitchingLeaderEntry {
   const derived = calculatePitchingDerived(stats);
 
   let pWAR = 0;
   try {
     if (stats.outsRecorded > 0) {
-      const pwarResult = calculatePWARSimplified(seasonPitchingToWAR(stats), seasonGames);
+      const warStats = seasonPitchingToWAR(stats);
+      const parkFactor = pitcherParkFactorFromSeed(parkFactors);
+      const pwarResult = parkFactor === undefined
+        ? calculatePWARSimplified(warStats, seasonGames)
+        : calculatePWARSimplified(warStats, seasonGames, { parkFactor });
       pWAR = finiteWAR(pwarResult.pWAR);
     }
   } catch { /* pWAR calc may fail — default to 0 */ }
@@ -337,7 +408,10 @@ function getPitchingSortValue(entry: PitchingLeaderEntry, sortBy: PitchingSortKe
 // HOOK
 // ============================================
 
-export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonStatsReturn {
+export function useSeasonStats(
+  seasonId: string = DEFAULT_SEASON_ID,
+  options: UseSeasonStatsOptions = {},
+): UseSeasonStatsReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seasonMetadata, setSeasonMetadata] = useState<SeasonMetadata | null | undefined>(undefined);
@@ -347,8 +421,13 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
   const [pitchingStats, setPitchingStats] = useState<PlayerSeasonPitching[]>([]);
   const [fieldingStats, setFieldingStats] = useState<PlayerSeasonFielding[]>([]);
   const [fieldingWARByPlayer, setFieldingWARByPlayer] = useState<Map<string, number>>(new Map());
+  const [seedParkFactorsByTeamId, setSeedParkFactorsByTeamId] = useState<Map<string, ParkFactors>>(new Map());
 
   const seasonGames = seasonMetadata === undefined ? DEFAULT_TOTAL_GAMES : resolveSeasonGamesForWAR(seasonMetadata);
+  const seasonParkFactorsActive = isParkFactorAdjustmentActive(
+    optionalFiniteNumber(seasonMetadata?.gamesPlayed) ?? fallbackGamesPlayed(battingStats, pitchingStats),
+    seasonGames,
+  );
 
   // Load all stats for the season
   const loadStats = useCallback(async () => {
@@ -360,11 +439,12 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
       await getOrCreateSeason(seasonId, DEFAULT_SEASON_NUMBER, DEFAULT_SEASON_NAME, DEFAULT_TOTAL_GAMES);
 
       // Load all data in parallel
-      const [metadata, batting, pitching, fielding] = await Promise.all([
+      const [metadata, batting, pitching, fielding, seedParkFactors] = await Promise.all([
         getSeasonMetadata(seasonId),
         getAllBattingStats(seasonId),
         getAllPitchingStats(seasonId),
         getAllFieldingStats(seasonId),
+        loadSeedParkFactorsByTeamId(options.franchiseId),
       ]);
 
       const inferredCompetitionType = inferCompetitionTypeForScope(seasonId);
@@ -404,13 +484,14 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
       setPitchingStats(pitching);
       setFieldingStats(fielding);
       setFieldingWARByPlayer(new Map(scopedFieldingWAR.filter((entry): entry is readonly [string, number] => entry !== null)));
+      setSeedParkFactorsByTeamId(seedParkFactors);
     } catch (err) {
       console.error('Failed to load season stats:', err);
       setError(err instanceof Error ? err.message : 'Failed to load stats');
     } finally {
       setIsLoading(false);
     }
-  }, [seasonId]);
+  }, [seasonId, options.franchiseId]);
 
   // Load on mount and when seasonId changes
   useEffect(() => {
@@ -428,7 +509,13 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     // Pre-compute all entries with WAR
     const entries = qualified.map((s, _i) =>
-      toBattingLeaderEntry(s, 0, seasonGames, fieldingWARByPlayer.get(s.playerId) ?? 0)
+      toBattingLeaderEntry(
+        s,
+        0,
+        seasonGames,
+        fieldingWARByPlayer.get(s.playerId) ?? 0,
+        seasonParkFactorsActive ? seedParkFactorsByTeamId.get(s.teamId) : undefined,
+      )
     );
 
     // Lower-is-better stats (none for batting currently)
@@ -438,7 +525,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     // Re-assign ranks after sort
     return sorted.slice(0, limit).map((entry, i) => ({ ...entry, rank: i + 1 }));
-  }, [battingStats, fieldingWARByPlayer, seasonGames]);
+  }, [battingStats, fieldingWARByPlayer, seasonGames, seasonParkFactorsActive, seedParkFactorsByTeamId]);
 
   // Get pitching leaderboard sorted by specified stat
   const getPitchingLeaders = useCallback((sortBy: PitchingSortKey, limit: number = 10): PitchingLeaderEntry[] => {
@@ -449,7 +536,12 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     // Pre-compute all entries with WAR
     const entries = qualified.map((s, _i) =>
-      toPitchingLeaderEntry(s, 0, seasonGames)
+      toPitchingLeaderEntry(
+        s,
+        0,
+        seasonGames,
+        seasonParkFactorsActive ? seedParkFactorsByTeamId.get(s.teamId) : undefined,
+      )
     );
 
     // Lower-is-better stats
@@ -462,7 +554,7 @@ export function useSeasonStats(seasonId: string = DEFAULT_SEASON_ID): UseSeasonS
 
     // Re-assign ranks after sort
     return sorted.slice(0, limit).map((entry, i) => ({ ...entry, rank: i + 1 }));
-  }, [pitchingStats, seasonGames]);
+  }, [pitchingStats, seasonGames, seasonParkFactorsActive, seedParkFactorsByTeamId]);
 
   // Get fielding leaderboard sorted by specified stat
   const getFieldingLeaders = useCallback((sortBy: FieldingSortKey, limit: number = 10): FieldingLeaderEntry[] => {

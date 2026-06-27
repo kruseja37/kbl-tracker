@@ -137,7 +137,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     managerShare: 0.25,
     cap: 0.75,
     editable: false,
-    doubleCountingExclusions: ["player_kbl_wpa", "deployment_stints"],
+    doubleCountingExclusions: [],
   },
   pitching_change: {
     decisionType: "pitching_change",
@@ -156,7 +156,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.25,
     editable: true,
-    doubleCountingExclusions: ["deployment_initial_pa"],
+    doubleCountingExclusions: [],
   },
   leave_pitcher_in: {
     decisionType: "leave_pitcher_in",
@@ -175,7 +175,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
-    doubleCountingExclusions: ["unprompted_non_action"],
+    doubleCountingExclusions: [],
   },
   pinch_hitter: {
     decisionType: "pinch_hitter",
@@ -194,7 +194,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.25,
     editable: true,
-    doubleCountingExclusions: ["deployment_initial_pa"],
+    doubleCountingExclusions: [],
   },
   let_batter_hit: {
     decisionType: "let_batter_hit",
@@ -213,7 +213,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
-    doubleCountingExclusions: ["unprompted_non_action"],
+    doubleCountingExclusions: [],
   },
   keep_defender_in: {
     decisionType: "keep_defender_in",
@@ -232,7 +232,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.15,
     editable: true,
-    doubleCountingExclusions: ["unprompted_non_action"],
+    doubleCountingExclusions: [],
   },
   pinch_runner: {
     decisionType: "pinch_runner",
@@ -251,7 +251,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.25,
     editable: true,
-    doubleCountingExclusions: ["deployment_initial_runner_window"],
+    doubleCountingExclusions: [],
   },
   defensive_sub: {
     decisionType: "defensive_sub",
@@ -270,7 +270,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
-    doubleCountingExclusions: ["deployment_initial_fielding_window"],
+    doubleCountingExclusions: [],
   },
   position_change: {
     decisionType: "position_change",
@@ -289,7 +289,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: STINT_TRACE_COMPONENTS,
     managerShare: 0.1,
     editable: true,
-    doubleCountingExclusions: ["deployment_initial_fielding_window"],
+    doubleCountingExclusions: [],
   },
   intentional_walk: {
     decisionType: "intentional_walk",
@@ -308,7 +308,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: INNING_CONSEQUENCE_TRACE_COMPONENTS,
     managerShare: 1,
     editable: false,
-    doubleCountingExclusions: ["player_kbl_wpa"],
+    doubleCountingExclusions: [],
   },
   steal_send: {
     decisionType: "steal_send",
@@ -327,7 +327,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
-    doubleCountingExclusions: ["runner_choice_tootblan"],
+    doubleCountingExclusions: [],
   },
   runner_hold: {
     decisionType: "runner_hold",
@@ -346,7 +346,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.2,
     editable: true,
-    doubleCountingExclusions: ["defensive_of_hold_credit"],
+    doubleCountingExclusions: [],
   },
   out_advancing_send: {
     decisionType: "out_advancing_send",
@@ -365,7 +365,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: SUB_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
-    doubleCountingExclusions: ["runner_choice_tootblan", "hit_and_run"],
+    doubleCountingExclusions: [],
   },
   bunt_call: {
     decisionType: "bunt_call",
@@ -384,7 +384,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
-    doubleCountingExclusions: ["squeeze_call"],
+    doubleCountingExclusions: [],
   },
   squeeze_call: {
     decisionType: "squeeze_call",
@@ -403,7 +403,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.5,
     editable: true,
-    doubleCountingExclusions: ["bunt_call"],
+    doubleCountingExclusions: [],
   },
   hit_and_run: {
     decisionType: "hit_and_run",
@@ -422,7 +422,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     traceComponents: WHOLE_EVENT_TRACE_COMPONENTS,
     managerShare: 0.35,
     editable: true,
-    doubleCountingExclusions: ["out_advancing_send", "deployment_stints"],
+    doubleCountingExclusions: [],
   },
   defensive_alignment: {
     decisionType: "defensive_alignment",
@@ -440,7 +440,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     counterfactualReadiness: "not_available",
     traceComponents: NON_SCORING_TRACE_COMPONENTS,
     editable: false,
-    doubleCountingExclusions: ["active_manager_value"],
+    doubleCountingExclusions: [],
   },
   manual_note: {
     decisionType: "manual_note",
@@ -458,7 +458,7 @@ export const MANAGER_DECISION_REGISTRY: Record<
     counterfactualReadiness: "not_available",
     traceComponents: NON_SCORING_TRACE_COMPONENTS,
     editable: true,
-    doubleCountingExclusions: ["automatic_derivation"],
+    doubleCountingExclusions: [],
   },
 };
 

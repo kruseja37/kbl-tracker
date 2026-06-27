@@ -22982,3 +22982,2125 @@ If `franchiseCheckpointSweepCompute.test.ts` asserts on the signal-map return sh
 
 **FAILURE PROTOCOL / STOP-IF:** a trackerDb bump is needed (→ STOP); an `iv_oracle.json` byte change (→ STOP); the builder cannot read `TRAIT_REALITY_SCORER_TUNING.minPeerPool` without a circular import (→ duplicate the literal `3` with a `// === traitRealityScorer minPeerPool` comment, NOT a stop); a NON-trait franchise/L-SIM fixture regresses outside the characterized set (→ STOP, that means something live shifted and the grant isn't dark); the only way to make a test pass is to weaken it rather than re-baseline a legitimately-split percentile (→ STOP). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
 <!-- ===== END CONTRACT: T-3a ===== -->
+
+<!-- ===== CONTRACT: T-3b-1 ===== -->
+## T-3b-1 — trend-tilt ENGINE seam for trait acquisition (default-identity, build-dark; §4A trend factor)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding ONE multiplicative tilt term to the trait-acquisition probability, mirroring the RA-9a engine-seam precedent. Build-dark / default-identity (weight 0 → byte-identical). This is the ENGINE half of the §4A trend factor; the SWEEP that supplies the recent signal is the separate T-3b-2 ticket — DO NOT touch `franchiseTraitGrantCompute.ts` here.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (§4A RULED 2026-06-22):** add a "moderate, bounded, multiplicative" trend tilt to the gain/keep probability — recent form (since last checkpoint) vs the season aggregate eases gain + resists loss when trending UP, eases loss + resists gain when trending DOWN. T-3b-1 builds the ENGINE term, default-INERT (weight 0, no recent signal supplied yet) so it is byte-identical until T-3b-2 supplies the recent percentile and the Simulation Gate sets the weight.
+
+**SOURCE OF TRUTH:** `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §4A:53` ("Trend factor — RULED: moderate. A multiplicative tilt from recent form (since the last checkpoint) vs the aggregate… Moderate, bounded multiplier (sim-tunable). Neutral at checkpoint 1.") + `:62` ("a new multiplicative term in `buildProposalBase`"). Magnitude is §16-SILENT → default weight 0. Precedent = RA-9a (`ratingsDevelopment` trend-tilt, `trendTiltWeight` default 0, identity unless recent finite AND weight>0) — NOTE RA-9a is on the unmerged lane C, so CLONE the discipline, do not import.
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `buildProposalBase` (`traitAcquisition.ts:438-497`): every tilt is a factor ~1.0 multiplied into `clamp01(args.realityPercentile × ambitionTilt × resilienceTilt × imageAxisTilt × moraleFactor × rosterRoleFactor × charismaTilt × resiliencePositiveTilt)` (`:471-480`); the parallel `factors` record is at `:487-495`. `clamp` and `clamp01` are already in-module (used at `:130`/`:471`).
+- `computeTraitAcquisition` (`:366-415`): per candidate, `realityPercentile = clamp01(candidate.score.realityPercentile)` (`:388`) then `buildProposalBase({ traitName, realityPercentile, modifiers, morale, rosterRole, imagePersonalities, tuning })` (`:389-397`). The gain test is `probability >= gainThreshold` (`:404`), loss is `probability <= loseThreshold` (`:409`) — BOTH valence-blind.
+- `TraitCandidate` (`:27`) = `{ traitName; score: TraitRealityScore }`. `TraitAcquisitionTuning` (`:77-88`) has REQUIRED swings + OPTIONAL `maxTraits?`/`incumbencyBeta?`. `TRAIT_ACQUISITION_TUNING` (`:96-107`). `TraitChangeProposal.factors` (`:46-54`).
+- Direction is UNIFORM across valence (make-or-break): negative-trait signals are built as BADNESS rates (Whiffer=K-rate etc.) and `getPercentile` is monotone, so high percentile = "more of the trait" = GAIN for BOTH polarities; the gain/loss comparison never branches on valence. Therefore ONE tilt on `realityPercentile` (recentP>aggregateP raises P) is spec-correct for positives (eases gain) AND negatives (recentP>aggregateP = doing the bad thing more lately = correctly eases gaining the flaw / resists losing it). NO per-valence branch.
+
+**BUILD (`traitAcquisition.ts` only):**
+1. `TraitCandidate` (`:27`): add optional `recentPercentile?: number` (the recent-window reality percentile for that trait; absent → no trend).
+2. `TraitAcquisitionTuning` (`:77-88`): add optional `trendTiltWeight?: number` (mirror the `maxTraits?` optional pattern).
+3. `TRAIT_ACQUISITION_TUNING` (`:96-107`): add `trendTiltWeight: 0, // §16 sim-tune placeholder — Simulation Gate owns the magnitude`.
+4. `TraitChangeProposal.factors` (`:46-54`): add `trendTilt: number;`.
+5. `buildProposalBase`: add `recentPercentile?: number` to the `args` type (`:438-446`); compute
+   ```
+   const trendTiltWeight = args.tuning.trendTiltWeight ?? 0;
+   const trendTilt = (typeof args.recentPercentile === 'number' && Number.isFinite(args.recentPercentile) && trendTiltWeight > 0)
+     ? 1 + clamp(args.recentPercentile - args.realityPercentile, -1, 1) * trendTiltWeight
+     : 1;
+   ```
+   multiply `trendTilt` into the `clamp01(...)` product (`:471-480`, append as the last factor) and add `trendTilt` to the returned `factors` object (`:487-495`).
+6. `computeTraitAcquisition` (`:389-397`): pass `recentPercentile: candidate.recentPercentile != null ? clamp01(candidate.recentPercentile) : undefined` into the `buildProposalBase` call.
+
+**MAKE-OR-BREAK:** `trendTilt === 1` (exact identity) whenever `trendTiltWeight === 0` (the default) OR `recentPercentile` is absent/non-finite ⇒ EVERY proposal `probability` + `factors` (except the new always-1 `trendTilt` key) byte-identical to today ⇒ build-dark. The tilt multiplies `realityPercentile` in the SAME `clamp01` product as the existing tilts; the delta `recentPercentile − realityPercentile` is clamped to `[-1, 1]`; ONE tilt, uniform across valence (no positive/negative branch). NO `franchiseTraitGrantCompute.ts` change (T-3b-2 supplies the recent signal). NO DB bump, NO oracle/pricing/tier/scorer touch.
+
+**TEST (`src/engines/__tests__/traitAcquisition.test.ts`):**
+- **Default-identity (the build-dark proof):** a candidate WITH `recentPercentile` set but tuning at the default (`trendTiltWeight` unset/0) → `probability` and the other `factors` are byte-identical to the same candidate with NO `recentPercentile`; `factors.trendTilt === 1`.
+- **Eases gain when hot:** with an explicit `trendTiltWeight: 0.5` tuning + `recentPercentile > realityPercentile` → `probability` is HIGHER than the no-recent baseline (and `factors.trendTilt > 1`); the exact value = `clamp01(base × (1 + (recentP − aggregateP) × 0.5))`.
+- **Eases loss when cold:** `recentPercentile < realityPercentile` + weight 0.5 → `probability` LOWER, `factors.trendTilt < 1`.
+- **Clamp:** `recentPercentile − realityPercentile` beyond ±1 is clamped (use 0 vs 1 extremes).
+- **Recent absent → identity** (`factors.trendTilt === 1`).
+- If any existing test asserts `proposal.factors` exhaustively via `toEqual`, ADD `trendTilt: 1` to it (a legitimate additive update, NOT a weakening).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/engines/__tests__/traitCandidateBuilder.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `traitAcquisition.ts` is in the `franchiseTraitGrantCompute`→`processCompletedGame` import chain) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist` order-flakes, solo-pass to confirm). A franchise/L-SIM fixture moving → STOP (the default MUST be inert/byte-identical).
+5. `git --no-pager diff --stat` → `traitAcquisition.ts` + its test ONLY. No `franchiseTraitGrantCompute.ts`, no `traitCandidateBuilder.ts`, no `iv_oracle.json`/pricing/tier/scorer, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) the `trendTilt` term + the tuning field + the `recentPercentile` thread + the factors-type change, confirm identity-at-default + uniform-across-valence + no caller/DB/oracle touch; (3) verification output; (4) "T-3b-1 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the default is NOT byte-identical (a franchise/L-SIM fixture moves with weight 0 — → STOP, the tilt is leaking); the trend would need a per-valence branch (→ STOP and report — the uniform-direction grounding says it must NOT); a DB bump / oracle touch is needed (→ STOP); `franchiseTraitGrantCompute.ts` must change (→ STOP, that is T-3b-2). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: T-3b-1 ===== -->
+
+<!-- ===== CONTRACT: T-3b-2 ===== -->
+## T-3b-2 — sweep SUPPLIES the since-last-checkpoint recent percentile (the §4A trend-factor data half; build-dark)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer wiring the trait-grant sweep to compute a recent-window trait signal and feed it into T-3b-1's `recentPercentile` seam, mirroring the RA-9b sweep-supply precedent. Build-dark / guarded so the weight-0 default skips the work entirely (byte-identical).
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (§4A):** the trend factor compares RECENT form (since the last checkpoint) vs the season aggregate. T-3b-1 added the engine term (`trendTilt`, reads `TraitCandidate.recentPercentile`, default-inert). T-3b-2 SUPPLIES `recentPercentile`: at each trait-grant checkpoint, re-run the candidate builder over only the events since the previous checkpoint, then attach each player's recent reality-percentile per trait. Guarded so that while `trendTiltWeight === 0` (the default) NO recent work runs and the output is byte-identical; at checkpoint 1 (no prior boundary) → no recent → neutral.
+
+**SOURCE OF TRUTH:** `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §4A:53,62` (recent-since-last-checkpoint vs aggregate; "the engine must track the recent window"). Precedent = RA-9b (`checkpointWindowedCategoryRates.ts` + `resolveWindowAtBatEvents` over `(prevBoundary, current]`, neutral at CP1) — on the unmerged lane C, so CLONE the windowing discipline, do not import.
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `franchiseTraitGrantCompute.ts` `persistDarkTraitGrantForCompletedGame`: `gameNumber` resolved at `:174`; `totalGames` at `:184`; `checkpointCount = checkpointCountForCadence(...)` at `:193`; the boundary gate `isCheckpointBoundary(gameNumber, totalGames, checkpointCount)` at `:194`. The aggregate candidates are computed at `:219-237` (`traitGrantSeam.computeSeasonTraitCandidates({...})`). The per-player acquisition loop at `:242-280` calls `traitGrantSeam.computeTraitAcquisition({..., candidates: candidates as TraitCandidate[]})` at `:249-258`.
+- `seasonData` (`loadSeasonTraitData`, `:289-344`): `games: GameHeader[]` (`getSeasonGames`), `atBatEvents`/`betweenPlayEvents`/`fieldingEvents` (flattened across all games), plus the season-aggregate maps (`seasonPitchingByPlayer` etc.). `GameHeader` (`eventLog.ts:145`) carries `gameId` + optional `scheduleGameId` but NO `gameNumber`. Every event type carries `gameId` (`eventLog.ts:212`/`:510`/`:733`).
+- `getScheduledGame` (alias of `getGame` from `scheduleStorage`) is ALREADY imported (`:75`) and is how `resolveTraitGrantGameNumber` (`:346-363`) maps a `scheduleGameId → gameNumber`.
+- `resolvePreviousCheckpointGameNumber(current, totalGames, checkpointCount)` is EXPORTED at `franchiseCheckpointSweepCompute.ts:159` (returns the prior boundary's gameNumber, or `0` at the first checkpoint).
+- `TRAIT_ACQUISITION_TUNING.trendTiltWeight` (default `0`, from T-3b-1) is the live weight; the sweep does NOT pass a custom tuning to `computeTraitAcquisition` (uses the default const).
+
+**BUILD (`franchiseTraitGrantCompute.ts` only; the engine seam already exists from T-3b-1):**
+1. Import `resolvePreviousCheckpointGameNumber` from `./franchiseCheckpointSweepCompute` and `TRAIT_ACQUISITION_TUNING` from `../engines/traitAcquisition`.
+2. After the aggregate `candidatesByPlayer` (`:237`), compute `recentByPlayer: Map<playerId, Map<traitName, number>>` ONLY when **both** `(TRAIT_ACQUISITION_TUNING.trendTiltWeight ?? 0) > 0` AND `prevBoundary > 0`, where `const prevBoundary = resolvePreviousCheckpointGameNumber(gameNumber, totalGames, checkpointCount);`. (When the guard fails — the default-dark case OR checkpoint 1 — leave `recentByPlayer` empty ⇒ no `recentPercentile` ⇒ trendTilt identity ⇒ byte-identical.)
+3. When the guard passes: build the window gameId set — for each `game` in `seasonData.games`, resolve its gameNumber via `getScheduledGame(game.scheduleGameId)` (skip games with no `scheduleGameId` / unresolved / non-positive gameNumber), keep games with `prevBoundary < gn <= gameNumber`, collect their `gameId`s into a `Set`. Filter `seasonData.atBatEvents`/`betweenPlayEvents`/`fieldingEvents` to events whose `gameId ∈ windowGameIds`. Re-run `traitGrantSeam.computeSeasonTraitCandidates({...})` with the IDENTICAL args as `:219-237` EXCEPT the 3 windowed event arrays (keep the SAME season-aggregate maps — `seasonPitchingByPlayer` etc. — so the SP/RP cohort + min-sample stay full-season-stable; only events are windowed). For each player's recent candidates, map `traitName → score.realityPercentile` for those with `score.sufficient === true && score.realityPercentile != null`.
+4. In the per-player loop (`:243`), attach `recentPercentile` when building the candidates passed to `computeTraitAcquisition`: `candidates.map((c) => ({ ...c, recentPercentile: recentByPlayer.get(entry.playerId)?.get(c.traitName) }))` (the spread keeps `score`; absent → undefined → trendTilt identity).
+
+**MAKE-OR-BREAK:** byte-identical while dark — when `trendTiltWeight === 0` (the default) NO recent computation runs and NO `recentPercentile` is attached ⇒ every overlay row identical to today. CP1 (`prevBoundary === 0`) → skip → neutral. The recent re-run uses the SAME aggregate maps (cohort/min-sample stable), windowing ONLY the events to `(prevBoundary, current]` in gameNumber space (mapped via `getScheduledGame`). NO new store, NO DB bump, NO oracle/scorer/pricing touch; the engine term (`buildProposalBase`) is UNCHANGED (T-3b-1 owns it).
+
+**TEST (`src/utils/tests/franchiseTraitGrantCompute.test.ts`):**
+- **Default-dark byte-identity:** with the default tuning (`trendTiltWeight` 0), a multi-checkpoint scenario writes overlays byte-identical to the pre-T-3b-2 behavior AND the recent re-run is NOT invoked (assert the candidate-builder seam is called ONCE per checkpoint, not twice) — the build-dark proof.
+- **Recent supplied when tuned:** stub `TRAIT_ACQUISITION_TUNING.trendTiltWeight` > 0 (or inject tuning if the seam allows) at a non-first checkpoint with the `getScheduledGame` mock mapping window games to gameNumbers in `(prevBoundary, current]` → assert a player's `computeTraitAcquisition` call receives candidates carrying a finite `recentPercentile` for a trait that has window events, and that a player with NO window events gets no `recentPercentile`.
+- **CP1 neutral:** at the first checkpoint (`prevBoundary === 0`) → no recent re-run, no `recentPercentile`, even with weight > 0.
+- Extend the existing `getScheduledGame`/`getGame` mock to return gameNumbers for the windowed games (no NEW store mock needed — the window reuses `getSeasonGames` + `getScheduledGame`, both already mocked).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/utils/tests/franchiseTraitGrantCompute.test.ts src/engines/__tests__/traitAcquisition.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `franchiseTraitGrantCompute.ts` IS the `processCompletedGame` chain; the partial-mock canary lives in the 6+ `processCompletedGame`-mock GameTracker tests) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist` order-flakes, solo-pass to confirm). A franchise/L-SIM fixture moving → STOP (the default MUST be inert/byte-identical).
+5. `git --no-pager diff --stat` → `franchiseTraitGrantCompute.ts` + its test ONLY. No `traitAcquisition.ts`/`traitCandidateBuilder.ts`/`franchiseCheckpointSweepCompute.ts`, no `iv_oracle.json`/scorer/pricing/tier, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) the prevBoundary resolution + the weight>0/CP1 guard + the gameId-window map + the recent re-run + the `recentPercentile` attach, confirm byte-identity-while-dark + same-aggregate-maps + no engine/DB/oracle touch; (3) verification output; (4) "T-3b-2 complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the default is NOT byte-identical (a franchise/L-SIM fixture moves with weight 0 — → STOP, the recent path is leaking; it MUST be guarded off when dark); the window gameId→gameNumber map can't be built from `getScheduledGame` (→ STOP and report — do NOT fall back to event ordering/timestamps without flagging it); a DB bump / new store / oracle touch is needed (→ STOP); `traitAcquisition.ts` or `franchiseCheckpointSweepCompute.ts` must change (→ STOP — T-3b-1 owns the engine, the boundary helpers are read-only). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: T-3b-2 ===== -->
+
+<!-- ===== CONTRACT: T-6a ===== -->
+## T-6a — position-mismatch protection (protect + flag, don't prevent) — engine half (§8C; build-dark)
+
+**ROUTE:** Codex (gpt-5.5) | xhigh reasoning effort
+**ROLE:** Precise TypeScript engineer adding the §8C position-mismatch protection to the trait-acquisition engine (additive to the §8B slot-duel). Build-dark (trait pipeline `isFranchisePhase2TraitsEnabled()`-gated); no DB bump. This is the ENGINE half; the scout-draft-flag + Roster-Analyzer-flag consumers are the separate T-6b ticket — DO NOT build them here.
+**BRANCH:** `codex/franchise-v1-next` (worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit/push.
+
+**GOAL (§8C RULED 2026-06-22):** an infielder who HOLDS an arm trait (Cannon Arm) accrues an artificial ~0 arm signal (outfield-assists-only, no IF signal) → today the engine would propose an unfair LOSS that can't be re-earned at that position. FIX: for a (trait × position) combo in a canonical mismatch map, (a) the absent signal does NOT drive self-loss (treat as no-signal/dormant), and (b) boost the held trait's keepScore so a competing trait only RARELY displaces it (much harder, NOT impossible — a genuinely far-stronger trait can still break through). Protect + flag; do NOT build the IF-signal cure.
+
+**SOURCE OF TRUTH:** `TRAIT_GAIN_LOSS_THRESHOLD_SPEC.md §8C:127-141`. The map (`:133`): "v1: the arm family — Cannon Arm — at **1B/2B/3B/SS** only; catcher REMOVED (measurable via CS); DH gone." Protect (`:134`): "(a) the artificial/absent signal does NOT drive self-loss (treat it as no-signal → dormant…); (b) a strong keepScore boost / much-higher displacement bar so a competing trait only rarely bumps it. It CAN still be displaced by a genuinely far-stronger trait." Build (`:141`): "a (trait→producing-positions) map + the mismatch set (one data table); in the acquisition engine, suppress signal-driven loss + boost keepScore for mismatch combos (additive to §8B); No event-schema/trackerDb bump… the trait analog of the salary `POSITION_MULTIPLIERS`."
+
+**⚠ SUPERSEDED SPEC LINE — DO NOT FOLLOW IT:** `§8C:138` says "Noodle Arm: DELETE from BUILDABLE_TRAITS." That line (dated 2026-06-22) is **SUPERSEDED** by the DT-D ruling (`DECISIONS_LOG.md` 2026-06-25): Noodle Arm was RE-ADDED + reinterpreted as a MENTAL-error trait (`traitCandidateBuilder.ts` `addErrorSignals`, `traitAcquisition.ts:243-245`). **T-6a does NOT delete Noodle Arm and does NOT touch `addErrorSignals` / `traitCandidateBuilder.ts` at all.** Noodle Arm is unrelated to the arm-signal mismatch (the map is Cannon Arm only).
+
+**GROUNDING (Captain-verified from source 2026-06-26; re-read before editing):**
+- `computeTraitAcquisition` (`traitAcquisition.ts:352-436`): per candidate, the lose branch is `if (isHeld && proposalBase.probability <= thresholds.loseThreshold) { rawProposals.push({ ...proposalBase, valence: 'lose' }); continue; }` (`:409-412`); the gain branch is `:404-407`; the dead-band skip is `:414`. `reconcileGainProposals` is called at `:422-430`.
+- `reconcileGainProposals` (`:587-682`): `keepScore = (held) => effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta` (`:607-608`, β=1.25); the displacement duel is `if (weakestHeld && gainScore(proposal) > keepScore(weakestHeld)) { …displaces… }` (`:670-676`). Boosting keepScore raises the bar a gain must clear.
+- `TraitAcquisitionInput` (`:29-38`) does NOT carry the player's primary position today. `SkippedTrait.reason` union is at `:58-69`.
+- The caller `franchiseTraitGrantCompute.ts` already has `entry.primaryPosition` (used at `:230` to build `primaryPositionByPlayer`); the `computeTraitAcquisition` call is at `:249-258` (T-3b-2 added `candidates: attachRecentPercentiles(...)` there — leave that intact).
+- `Cannon Arm` is a `POSITION_ONLY` trait (`traitRealityScorer.ts:112`), so a position player can hold it. Confirm the roster `primaryPosition` string format (e.g. `'1B'`/`'2B'`/`'3B'`/`'SS'`) matches the map keys before finalizing — read how `entry.primaryPosition` is produced.
+
+**BUILD:**
+1. `traitAcquisition.ts`:
+   a. NEW exported `const POSITION_MISMATCH_UNREGAINABLE: Record<string, ReadonlySet<string>> = { 'Cannon Arm': new Set(['1B', '2B', '3B', 'SS']) };` (§8C:133; comment cite). Plus a module helper `function isPositionMismatchProtected(traitName: string, primaryPosition?: string): boolean { return primaryPosition != null && (POSITION_MISMATCH_UNREGAINABLE[traitName]?.has(primaryPosition) ?? false); }`.
+   b. NEW exported `const POSITION_MISMATCH_KEEP_BOOST = 3; // §16 sim-tune placeholder — "much harder to lose, NOT impossible" (§8C:134); a far-stronger gain can still displace`.
+   c. Add `primaryPosition?: string;` to `TraitAcquisitionInput` (`:29-38`).
+   d. Add `'position_mismatch_protected'` to the `SkippedTrait.reason` union (`:58-69`).
+   e. Lose branch (`:409-412`): wrap the loss in the mismatch check —
+      ```
+      if (isHeld && proposalBase.probability <= thresholds.loseThreshold) {
+        if (isPositionMismatchProtected(traitName, input.primaryPosition)) {
+          skipped.push({ traitName, reason: 'position_mismatch_protected' });
+        } else {
+          rawProposals.push({ ...proposalBase, valence: 'lose' });
+        }
+        continue;
+      }
+      ```
+   f. Pass `primaryPosition: input.primaryPosition` into the `reconcileGainProposals({...})` args (`:422-430`).
+   g. `reconcileGainProposals`: add `primaryPosition?: string;` to its args type (`:587-595`); change `keepScore` (`:607-608`) to multiply by the boost for protected held traits —
+      ```
+      const keepScore = (held: HeldTrait): number => {
+        const base = effectiveHeldStrength(held) * traitWeightFor(held.traitName) * beta;
+        return isPositionMismatchProtected(held.traitName, args.primaryPosition) ? base * POSITION_MISMATCH_KEEP_BOOST : base;
+      };
+      ```
+2. `franchiseTraitGrantCompute.ts`: add `primaryPosition: entry.primaryPosition` to the `computeTraitAcquisition({...})` call args (`:249-258`) — `entry.primaryPosition` already exists.
+
+**MAKE-OR-BREAK:** NON-mismatch cases BYTE-IDENTICAL — `isPositionMismatchProtected` returns false for every (trait, position) not in the map (and when `primaryPosition` is absent), so the lose-gate + keepScore are unchanged for all but a held `Cannon Arm` at `1B/2B/3B/SS`. A protected held trait is NOT proposed for loss (skipped `position_mismatch_protected`) AND its keepScore is ×`POSITION_MISMATCH_KEEP_BOOST` (higher displacement bar) — but a far-stronger gain whose `gainScore` still exceeds the boosted keepScore CAN displace it (not impossible). Noodle Arm + `addErrorSignals` + `traitCandidateBuilder.ts` UNTOUCHED. NO DB bump, NO oracle/pricing/tier/scorer touch.
+
+**TEST (`src/engines/__tests__/traitAcquisition.test.ts`):**
+- **Protect-loss:** a player whose `primaryPosition` is `'SS'` HOLDING `Cannon Arm` with a below-loseThreshold arm percentile → NO `'lose'` proposal (skipped `position_mismatch_protected`). CONTROL: the SAME below-threshold `Cannon Arm` held by a `primaryPosition: 'CF'` (outfield) player → STILL a `'lose'` proposal (CF is not a mismatch). And `primaryPosition` absent → still a `'lose'` (back-compat).
+- **keepScore boost (higher displacement bar):** an `SS` holding `Cannon Arm` at the `maxTraits` cap; a competing COMMON gain whose `gainScore` would exceed the UN-boosted keepScore but NOT the boosted one → BLOCKED (`cap_no_displacement`), Cannon Arm holds. A genuinely far-stronger gain whose `gainScore` exceeds even the boosted keepScore → STILL displaces Cannon Arm (proves "not impossible").
+- **Non-mismatch byte-identical:** a non-Cannon-Arm held trait, or Cannon Arm held by an OF player, behaves exactly as before (regression guard).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0. 2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/traitAcquisition.test.ts src/utils/tests/franchiseTraitGrantCompute.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `traitAcquisition.ts`/`franchiseTraitGrantCompute.ts` are in the `processCompletedGame` chain) → FAILED-file list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`franchiseOffseasonGuards.component`/`AwardsWatchlist` order-flakes, solo-pass to confirm). A franchise/L-SIM fixture moving → STOP (only a held Cannon-Arm-at-IF case should change anything).
+5. `git --no-pager diff --stat` → `traitAcquisition.ts` + `franchiseTraitGrantCompute.ts` + `traitAcquisition.test.ts` ONLY. No `traitCandidateBuilder.ts` (Noodle Arm/addErrorSignals untouched), no `iv_oracle.json`/pricing/tier/scorer, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines; (2) the map + helper + boost const, the lose-suppress + keepScore-boost + primaryPosition thread, confirm non-mismatch byte-identical + Noodle-Arm-untouched + no DB/oracle touch + far-stronger-gain-still-displaces; (3) verification output; (4) "T-6a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** you are tempted to delete Noodle Arm / edit `addErrorSignals` (→ STOP — §8C:138 is SUPERSEDED by DT-D; do NOT); the roster `primaryPosition` string format does NOT match `'1B'/'2B'/'3B'/'SS'` (→ STOP and report the actual format, do NOT guess a mapping); a non-mismatch franchise/L-SIM fixture regresses (→ STOP, the protection is leaking beyond the map); a DB bump / oracle touch is needed (→ STOP); the boost would make a protected trait truly un-displaceable by ANY gain (→ STOP — §8C:134 requires a far-stronger gain can still break through). Never summarize/batch. Use xhigh effort; ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: T-6a ===== -->
+
+<!-- ===== CONTRACT: RA-6A-CONVEX ===== -->
+## CONTRACT: RA-6A-CONVEX — §6A convex-curve dev-shape (the A2.5 remainder)
+
+**ROUTE:** `codex exec -C /Users/johnkruse/Projects/kbl-tracker` (worktree = MAIN, branch `codex/franchise-v1-next`).
+**ROLE:** Builder (Codex). Captain (Opus) audits the REAL diff + runs the authoritative FULL suite himself — your paste is never trusted.
+**Use xhigh reasoning effort.**
+
+**GOAL:** Add the §6A "convex curve" dev-shape to the ratings-development engine — **(a)** the convex γ-gate + dead-band on the over-expectation signal `r`, and **(b)** the δ edge-compression on the rating — BOTH as default-identity §16 tunables so the engine is **BYTE-IDENTICAL at the defaults**. Build-dark. This is the REMAINING §6A piece, DISTINCT from the already-merged A2.5 age bar-shift (`expectedStatsEngine.ts`, untouched) and RA-5 age-gravity (the additive `ageGravity` term, unchanged). The §6A(c) far-out equilibrium safety rail is **SCOPED OUT** of this ticket (it is a cumulative/sweep-level follow-up; the per-checkpoint `maxAbsDelta` already prevents single-step blowups, and the §3A equilibrium [A2.5] is the working bound).
+
+**SOURCE OF TRUTH:** `spec-docs/RATINGS_ADJUSTMENT_SPEC.md` §6A (lines 118-138; the formula block is lines 121-130):
+```
+if |r| < startBar:  Δ = 0   (dead-band)
+else:  Δ = sign(r) · baseScale · ((|r| − startBar)/(1 − startBar))^γ · edge(rating) · age · morale · rookie · confidence    (γ > 1)
+(b) edge: gains × ((99 − rating)/99)^δ ,  losses × (rating/99)^δ
+```
+The representative SIM values (spec line 206: `startBar 0.25, γ=2, δ≈1`) are **NOT the v1 defaults** — v1 defaults are the IDENTITY values (`0 / 1 / 0`); the real numbers are owned by the Simulation Gate (§16).
+
+**CONSTRAINTS:** branch-only — do NOT commit, do NOT push. Edit ONLY `src/engines/ratingsDevelopment.ts` + `src/engines/__tests__/ratingsDevelopment.test.ts`. **NO `TRACKER_DB_VERSION` bump** (engine-internal math; A2.5/RA-5 both stayed v25). **FROZEN read-only:** `spec-docs/reference/iv_oracle.json`. Do NOT touch `expectedStatsEngine.ts` (A2.5 bar-shift), `franchiseCheckpointSweepCompute.ts` (it inherits the new defaults via the `{...RATINGS_DEVELOPMENT_TUNING}` spread and ALREADY passes `baseRatingValue` — no signature change), `traitAcquisition.ts`, pricing/tier/scorer. The morale-coupling block in `computeRawRatingDelta` stays exactly as-is.
+
+**EXACT CHANGES (`src/engines/ratingsDevelopment.ts`):**
+1. **Extend `RatingsDevelopmentTuning`** (interface, after `trendTiltWeight`, before `ageCurveSlopeByBand`):
+   ```
+   startBar: number;             // §6A(a) dead-band: |r| below this → no move; 0 = no dead-band
+   convexGamma: number;          // §6A(a) γ convex reward exponent (>1 convex); 1 = identity
+   edgeCompressionDelta: number; // §6A(b) δ inverse-with-rating edge factor; 0 = identity (factor 1)
+   ```
+2. **Extend `RATINGS_DEVELOPMENT_TUNING`** defaults (§16 placeholders — add a comment that the representative sim values are `startBar 0.25 / γ 2 / δ 1` but the v1 defaults are the IDENTITY `0 / 1 / 0`):
+   ```
+   startBar: 0,
+   convexGamma: 1,
+   edgeCompressionDelta: 0,
+   ```
+3. **`computeRawRatingDelta`** — replace the bare `performanceSignal` factor with the convex-gated signal, BEFORE the `baseDeltaScale × morale` multiply (the morale block is unchanged):
+   ```
+   const r = clamp(input.performanceSignal, -1, 1);
+   const absR = Math.abs(r);
+   const convexSignal =
+     absR < tuning.startBar
+       ? 0
+       : Math.sign(r) * Math.pow((absR - tuning.startBar) / (1 - tuning.startBar), tuning.convexGamma);
+   // ...existing centeredMorale / moraleMultiplier / clampedMultiplier unchanged...
+   return tuning.baseDeltaScale * convexSignal * clampedMultiplier;
+   ```
+   (Keep the existing `const performanceSignal = clamp(...)` only if still needed by the morale-sign branch; the morale multiplier's `performanceSignal >= 0` test must use the SAME signed `r` so the sign is preserved — i.e. base the up/down morale branch on `r >= 0`, identical to today since `performanceSignal` was that clamp.)
+4. **`computeCheckpointRatingDevelopment`** — apply δ edge-compression to `rawDelta` (sign-aware, on `baseRatingValue`) BEFORE adding `ageGravity`:
+   ```
+   const ratingForEdge = clamp(input.baseRatingValue, 0, 99);
+   const edgeBase = rawDelta >= 0 ? (99 - ratingForEdge) / 99 : ratingForEdge / 99;
+   const edgeFactor = Math.pow(edgeBase, tuning.edgeCompressionDelta);
+   const edgedDelta = rawDelta * edgeFactor;
+   const signedMove = edgedDelta + ageGravity;   // edge compresses the PERFORMANCE move only, NOT ageGravity
+   ```
+   Everything after `signedMove` (the `cappedRaw` clamp, `confidenceScaled`, dampener, 0-99 clamp, `shouldShift`) is UNCHANGED. `result.rawDelta` should remain `signedMove` (same field meaning as today).
+
+**MAKE-OR-BREAK — byte-identity at defaults (`startBar=0 / γ=1 / δ=0`):**
+- **convex:** `absR < 0` is never true → dead-band never fires; `(absR − 0)/(1 − 0) = absR`; `sign(r)·absR^1 = r` (and at `r=0`: `sign(0)·pow(0,1)=0=r`). ⇒ `computeRawRatingDelta` returns `baseDeltaScale·r·morale`, EXACTLY today.
+- **edge:** `Math.pow(edgeBase, 0) = 1` for every `edgeBase ≥ 0` (incl. `pow(0,0)=1` in JS) ⇒ `edgedDelta = rawDelta`, EXACTLY today.
+- **ordering preserved:** `rawDelta → ×edge → +ageGravity → clamp(±maxAbsDelta) → ×confidence → dampener → clamp(0,99)`.
+- **distinctness:** A2.5 lives in `expectedStatsEngine.ts` (shapes the INPUT bar before `r`) and RA-5 is the additive `ageGravity` (unchanged) — this ticket only reshapes `r→Δ` (convex) and scales the move by an edge factor on the rating. No overlap, no double-count.
+- **no NaN:** `edgeBase ∈ [0,1]` (rating clamped 0-99); convex base `≥ 0` when `absR ≥ startBar` and `startBar < 1`.
+
+**TEST (`src/engines/__tests__/ratingsDevelopment.test.ts`):**
+- **Update the `toEqual` default-shape pin** (currently lines ~41-69) to include `startBar: 0, convexGamma: 1, edgeCompressionDelta: 0` (placed consistently with the interface order). This pin breaks deterministically when you add fields — update it, don't weaken it.
+- **Default-identity (the build-dark proof):** with default tuning, `computeRawRatingDelta` returns the legacy `baseDeltaScale·signal·moraleMult` for several signals (e.g. `signal=0.5, morale=50 (neutral) → 3·0.5·1 = 1.5`; a negative signal; `signal=0`) AND `computeCheckpointRatingDevelopment` yields the SAME `rawDelta`/`proposedRating` as before the change for a couple of (signal, rating, morale, ageBand) combos including a high rating (90) and a low rating (58) — proving edge is inert at δ=0.
+- **Convex non-identity:** with `{startBar:0.25, convexGamma:2}`: `r=0.5 → convex=((0.5−0.25)/0.75)^2=(1/3)^2≈0.1111 → rawDelta≈3·0.1111·moraleMult` (`toBeCloseTo`); **dead-band** `r=0.2 (<0.25) → convex 0 → rawDelta 0`; sign preserved for a negative `r`.
+- **Edge non-identity:** with `{edgeCompressionDelta:1}` and a positive performance move: `baseRatingValue=90 → edge=(99−90)/99≈0.0909` (compressed near ceiling) vs `baseRatingValue=58 → edge≈0.414` (bigger down low); a NEGATIVE move (loss) uses `(rating/99)^δ` → `baseRatingValue=10 → edge≈0.101` (loss resisted near floor). Assert the edge multiplies the performance move and that `ageGravity` is added AFTER (un-compressed) — e.g. a prime-band case (ageGravity 0) isolates the edge cleanly.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0.  2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/ratingsDevelopment.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — `ratingsDevelopment.ts` is in the `processCompletedGame` chain via `franchiseCheckpointSweepCompute.ts:24,539` → partial-mock transitive-import risk) → report the FAILED-FILE list: must be ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`franchiseOffseasonGuards.component`/`AwardsWatchlist` order-flakes — solo-pass to confirm). Any franchise/ratings/L-SIM FIXTURE moving → STOP (the defaults must be byte-identical).
+5. `git --no-pager diff --stat` → `src/engines/ratingsDevelopment.ts` + `src/engines/__tests__/ratingsDevelopment.test.ts` ONLY. No `expectedStatsEngine.ts`, no `franchiseCheckpointSweepCompute.ts`, no `iv_oracle.json`/pricing/tier/scorer, no `trackerDb.ts`.
+
+**FORMAT:** (1) files+lines changed; (2) the interface+defaults additions, the convex gate in `computeRawRatingDelta`, the edge factor in `computeCheckpointRatingDevelopment`, an explicit statement that defaults are byte-identical (convex→`r`, edge→1) + that A2.5/RA-5/sweep are untouched + no DB/oracle touch; (3) the exact verification output (tsc/build/focused/FULL failed-file list/diff --stat); (4) "RA-6A-CONVEX complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the convex or edge piece CANNOT be made default-identity (any default shifts a value vs today) → STOP; a `TRACKER_DB_VERSION` bump or `iv_oracle.json` touch is needed → STOP; you find this is NOT distinct from A2.5/RA-5 (already built) → STOP and report; the sweep needs a new arg (it should not — `baseRatingValue` already flows) → STOP and report; a non-default franchise/ratings/L-SIM fixture regresses → STOP (defaults are leaking); you are tempted to add the §6A(c) ~25pt safety rail → DON'T (scoped out); `startBar` could be ≥ 1 at any default (division-by-zero) → it must stay `< 1` (default 0). Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: RA-6A-CONVEX ===== -->
+
+<!-- ===== CONTRACT: RA-11a ===== -->
+## CONTRACT: RA-11a — pitcher non-pitching over-expectation signal (§4A, cumulative leg, STANDALONE)
+
+**ROUTE:** `codex exec -C /Users/johnkruse/Projects/kbl-tracker` (worktree = MAIN, branch `codex/franchise-v1-next`).
+**ROLE:** Builder (Codex). Captain (Opus) audits the REAL diff + runs the authoritative FULL suite himself — your paste is never trusted.
+**Use xhigh reasoning effort.**
+
+**GOAL:** Give pitchers an over-expectation development signal for their NON-pitching ratings — **power, contact, speed, fielding (NO arm)** — so a pitcher's batting/fielding can develop at checkpoints, pooled against other pitchers (the existing SP/RP cohort). This is RA-11 **STANDALONE** (JK ruling 2026-06-26: build to the documented §4A assumption now; reconcile with the paused Mode-1 B14 §5.7 at the eventual merge). Build the **CUMULATIVE/primary** leg only; the windowed/recent-trend mirror is DEFERRED to RA-11b (it's doubly-dark and falls back gracefully — see MAKE-OR-BREAK). Fully **build-dark** behind the default-OFF Phase-2 checkpoint flag.
+
+**SOURCE OF TRUTH:** `spec-docs/RATINGS_ADJUSTMENT_SPEC.md` §4A (lines 87-94) + §10 (line 168) + DECISIONS_LOG 2026-06-22 (§4A ruling) / 2026-06-24 (`:316` RA-11/B14 cross-pin). §4A: pitcher non-pitching = **HIT (power+contact) from his batting, RUN (speed) from his baserunning, FIELD (fielding) from his fielding plays — NOT arm** (every pitcher's `arm` is structurally 0; emit NO arm signal). Peer pool keyed SP/RP (ALREADY done in `classifyRatingsPoolKey`).
+
+**GROUND FIRST (re-read from source before editing — do NOT trust this contract's line numbers blindly):**
+- `src/engines/expectedStatsCategoryRates.ts:172-185` — `toExpectedStatsCategoryRates`: the pitcher branch (`else`) calls ONLY `addPitcherRates(result, input.pitching)`, dropping batting/fielding. **THE primary edit.**
+- `src/engines/expectedStatsCategoryRates.ts:52-128` — `addHitterRates(result, batting, fielding)` = the reusable template that emits power/contact/speed/fielding category rates. **Read its EXACT emitted category set** — confirm whether it emits any `arm`-keyed category (the hitter baseRatings includes `arm`); if it does, the pitcher must NOT get an arm signal.
+- `src/utils/franchiseCheckpointSweepCompute.ts:368-379` — the pitcher `baseRatings` object is `{velocity, junk, accuracy}` ONLY. **Secondary edit:** add `power/contact/speed/fielding` (NOT arm) so the engine has pitcher player-ratings to compare the new actual rates against.
+- `src/utils/franchiseCheckpointSweepCompute.ts:381-385` — the sweep ALREADY passes `{role, batting, pitching, fielding}` for every player incl. pitchers (the substrate is at the engine's door).
+- `src/engines/checkpointWindowedCategoryRates.ts` (~line 120) — the WINDOWED/recent aggregator's pitcher map calls `toExpectedStatsCategoryRates({ role: 'pitcher', pitching })` with **NO batting/fielding**. You are NOT editing this file, but your change to the shared `toExpectedStatsCategoryRates` WILL flow through it (see MAKE-OR-BREAK null-safety).
+- `src/utils/checkpointRatingSignal.ts:114-118` — `classifyRatingsPoolKey` already returns SP/RP for pitchers (pool keying done). The engine (`expectedStatsEngine.ts`) is key-agnostic + already null-gates pitcher arm.
+
+**CONSTRAINTS:** branch-only — do NOT commit/push. Edit ONLY `src/engines/expectedStatsCategoryRates.ts` + `src/utils/franchiseCheckpointSweepCompute.ts` + their test files (`src/engines/__tests__/expectedStatsCategoryRates.test.ts`, `src/utils/tests/franchiseCheckpointSweepCompute.test.ts`) + IF needed `src/utils/tests/checkpointRatingSignal.test.ts` / `src/engines/__tests__/checkpointWindowedCategoryRates.test.ts` (the null-safety regression). **NO `TRACKER_DB_VERSION` bump** (all inputs — PlayerSeasonBatting/Fielding, batterRatings — already persist). **FROZEN read-only:** `spec-docs/reference/iv_oracle.json`. Do NOT touch `addPitcherRates`, the hitter path, `classifyRatingsPoolKey`, `expectedStatsEngine.ts`, pricing/tier/salary/IV.
+
+**EXACT CHANGES:**
+1. `expectedStatsCategoryRates.ts` — pitcher branch of `toExpectedStatsCategoryRates`:
+   ```
+   } else {
+     addPitcherRates(result, input.pitching);
+     addHitterRates(result, input.batting, input.fielding); // §4A: pitcher non-pitching power/contact/speed/fielding
+   }
+   ```
+   - **§4A NO-ARM:** ensure NO `arm`-keyed actual rate ends up in a pitcher's result. If `addHitterRates` emits an arm category, exclude it for the pitcher branch (cleanest mechanism your call: a param/flag on `addHitterRates`, or delete the arm key from `result` after the call) — OR rely on the pitcher `baseRatings` omitting `arm` + the engine's existing pitcher-arm null-gate (verify it actually null-gates so no pitcher-arm OVERLAY is ever produced). The MAKE-OR-BREAK is: **a pitcher NEVER develops an arm rating.**
+   - **NULL-SAFETY (make-or-break — see below):** `addHitterRates` MUST be a no-op when `batting`/`fielding` are absent. Confirm/guard: undefined `batting` → emit no power/contact/speed cats; undefined `fielding` → emit no fielding cats. (The hitter windowed path already calls it with `fielding` undefined, so fielding is likely already guarded; BATTING-undefined is the new case the pitcher windowed call introduces.)
+2. `franchiseCheckpointSweepCompute.ts` — pitcher `baseRatings`: add `power, contact, speed, fielding` (NOT `arm`) to the `isPitcher ? {...}` object.
+
+**MAKE-OR-BREAK:**
+- **Flag-OFF byte-identical (live app):** the whole sweep early-returns `dark-noop` when `isFranchisePhase2CheckpointEnabled()` is false (the default) → RA-11a never runs live. Build-dark by inheritance — NO new flag.
+- **The shared-function trap (THE make-or-break):** `toExpectedStatsCategoryRates` is called from BOTH the cumulative sweep path (passes batting+fielding → pitcher now gets the 4 non-pitching rates = the INTENDED new behavior) AND the WINDOWED/recent aggregator (`checkpointWindowedCategoryRates.ts`) pitcher map, which passes `{role:'pitcher', pitching}` with NO batting/fielding. Your change MUST leave the windowed pitcher output BYTE-IDENTICAL (pitching-only) — i.e. `addHitterRates(undefined, undefined)` emits NOTHING. If `addHitterRates` throws or emits on undefined batting, you've broken the recent leg. This null-safe no-op IS the deliberate RA-11b deferral (pitcher recent non-pitching rates stay empty → the dev engine's trend blend falls back to cumulative-only via the existing `recentSignal` finite-gate → graceful, no inconsistency).
+- **Additive only:** the hitter path unchanged; `addPitcherRates` (pitcher PITCHING cats velocity/junk/accuracy) unchanged; only ADD pitcher power/contact/speed/fielding. No category-key collision (hitter `power*/contact*/speed*/fielding*` vs pitcher `pitching*`).
+- NO DB bump, NO oracle touch, NO B14 dependency (standalone per JK), NO leak to salary/IV/live paths.
+
+**TEST:**
+- `expectedStatsCategoryRates.test.ts`: a pitcher input `{role:'pitcher', batting, pitching, fielding}` now yields BOTH the pitching cats (unchanged values) AND power/contact/speed/fielding actual rates (pin the exact rates via the `addHitterRates` math); a pitcher input with NO batting/fielding (`{role:'pitcher', pitching}`) yields **pitching-only** (the windowed no-op — the make-or-break); NO arm-keyed cat for a pitcher; the hitter path is a byte-identical regression.
+- `franchiseCheckpointSweepCompute.test.ts`: with the Phase-2 flag ON, a pitcher checkpoint now produces development overlays for power/contact/speed/fielding (when sample suffices) and NONE for arm; flag OFF → dark-noop (no overlays). Hitter overlays unchanged.
+- If `checkpointWindowedCategoryRates.test.ts` has a pitcher recent-rates assertion, confirm it stays pitching-only (the null-safe no-op).
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0.  2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/expectedStatsCategoryRates.test.ts src/engines/__tests__/checkpointWindowedCategoryRates.test.ts src/utils/tests/checkpointRatingSignal.test.ts src/utils/tests/franchiseCheckpointSweepCompute.test.ts` → pass.
+4. `NODE_ENV= npm test` (FULL — feeds `processCompletedGame` via the sweep, transitive partial-mock risk) → report the FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` order-flakes — solo-pass to confirm). Any LIVE (flag-off) fixture or a hitter/pitching fixture moving → STOP.
+5. `git --no-pager diff --stat` → only `expectedStatsCategoryRates.ts` + `franchiseCheckpointSweepCompute.ts` + the test files. No `iv_oracle.json`/`trackerDb.ts`/salary/IV/`addPitcherRates`-semantics/`classifyRatingsPoolKey` change.
+
+**FORMAT:** (1) files+lines; (2) the pitcher-branch addHitterRates call + no-arm handling + null-safety, the pitcher baseRatings additions, an explicit statement that flag-off is byte-identical + the windowed pitcher path is byte-identical (null-safe no-op) + hitter/pitching paths unchanged + no pitcher-arm development + no DB/oracle; (3) exact verification output; (4) "RA-11a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the windowed pitcher path is NOT byte-identical / `addHitterRates(undefined,...)` throws or emits → STOP (fix null-safety); a pitcher develops an arm rating → STOP (§4A forbids it); a `TRACKER_DB_VERSION` bump or `iv_oracle.json` touch is needed → STOP; a LIVE (flag-off) or hitter or pitcher-PITCHING fixture moves → STOP; you cannot reuse `addHitterRates` cleanly and would rewrite the per-category math → STOP and report (the spec wants the hitter-identical decomposition); the pitcher fielding-credit path turns out absent so the FIELD signal self-gates to frozen → that is ACCEPTABLE (the min-sample valve makes it a clean no-op, the intended §4A RP self-gating) — build HIT/RUN/FIELD anyway and NOTE it, do not block. Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: RA-11a ===== -->
+
+<!-- ===== CONTRACT: A1.3a ===== -->
+## CONTRACT: A1.3a — trade-propensity wiring (post-roll gate on L10 trade_demand, CONTAINED)
+
+**ROUTE:** `codex exec -C /Users/johnkruse/Projects/kbl-tracker` (worktree = MAIN, branch `codex/franchise-v1-next`).
+**ROLE:** Builder (Codex). Captain (Opus) audits the REAL diff + runs the authoritative FULL suite himself.
+**Use xhigh reasoning effort.**
+
+**GOAL:** Wire the PRE-BUILT-but-ORPHANED `computeTradeRequestPropensity` engine as a **post-roll gate** on L10 `trade_demand` candidates: a `trade_demand` event fires only if the player's propensity clears the threshold (`wouldRequest`). Thread `loyalty` + `teamId` onto the L10 candidate so the gate has its inputs. This is the **CONTAINED** half — explicitly EXCLUDE A1.3b (the flashpoint tax `computeFlashpointGameTax`, the `TRADE_DEMAND` morale emitter, the persisted 'confirmed demander' source, and the trackerDb bump). Build-dark (L10 is behind the default-OFF Phase-2 L10 flag).
+
+**SOURCE OF TRUTH:** the engine's own contract comment `src/engines/tradeRequestGeneration.ts:14-16` — "L5c emits PROPENSITY only. The WHO-fires roll is L10's seeded job, so this module is pure + deterministic." So L10 owns the seeded cadence roll; propensity is a deterministic content gate. CURRENT_STATE.md:34 (A1.3a contained scope).
+
+**GROUND FIRST (re-read from source — do NOT trust line numbers blindly):**
+- `src/engines/tradeRequestGeneration.ts:77` `computeTradeRequestPropensity(player: TradeRequestPlayer, teamFanMorale: number, intensity: TierKey, config?) => TradeRequestResult`. `TradeRequestPlayer = Pick<HiddenModifiers,'loyalty'> & { id?, personality: CanonicalPersonality, playerMorale: number }`. `TradeRequestResult.wouldRequest = propensity >= config.requestThreshold` (deterministic; NO roll). Pure — consume AS-IS, do NOT change its signature.
+- `src/engines/franchiseL10EventEngine.ts:81-89` `FranchiseL10Candidate` — has `id/kind/role/personality?/playerMorale?/fanMorale?/performanceSignal?`; **lacks `loyalty` + `teamId`** (thread them).
+- `src/engines/franchiseL10EventEngine.ts:181-193` `computeFranchiseL10Events` emit loop: cadence roll `if (roll >= probability) continue;` then `events.push(buildEventCandidate(...))`. `getRosterEvent` (`:331-346`) resolves `trade_demand`/`mentorship`/`clubhouse_rift` via a seeded 1/3 sub-roll. THE gate goes here: after the event is built, if `eventType==='trade_demand'`, apply the propensity gate and `continue` (skip push) on `!wouldRequest`.
+- `src/utils/franchiseL10SweepCompute.ts:126` `teamId` already resolved (non-null guarded `:127`); `:143-151` the player-candidate push — thread `loyalty` (`player.hiddenPersonalityModifiers?.loyalty ?? 50`) + `teamId` here.
+- Confirm `input.intensity`'s type matches the engine's `TierKey` (`'juiced'|'standard'|'nerfed'`); the sweep default is `DEFAULT_L10_INTENSITY='standard'`. If the L10 intensity type differs, map it (do NOT pass a mismatched type).
+- The L10 dark flag: `isFranchisePhase2L10Enabled()` (default false) — the sweep no-ops when off; rows are `confirmationStatus:'pending'`/`applied:false`.
+
+**EXACT CHANGES:**
+1. `franchiseL10EventEngine.ts`: add OPTIONAL `loyalty?: number;` + `teamId?: string;` to `FranchiseL10Candidate` (keep optional so team-kind candidates + existing tests stay valid). Import `computeTradeRequestPropensity` from `./tradeRequestGeneration`. In `computeFranchiseL10Events`, gate ONLY the `trade_demand` event:
+   ```
+   const event = buildEventCandidate(...);
+   if (event.eventType === 'trade_demand') {
+     const propensity = computeTradeRequestPropensity(
+       { id: candidate.id, personality: candidate.personality ?? <a sane CanonicalPersonality default>, playerMorale: candidate.playerMorale ?? config.neutralMorale-or-50, loyalty: candidate.loyalty ?? 50 },
+       candidate.fanMorale ?? 50,
+       input.intensity,
+     );
+     if (!propensity.wouldRequest) continue;   // drop the trade_demand; mentorship/clubhouse_rift untouched
+   }
+   events.push(event);
+   ```
+   (Gate `trade_demand` ONLY — do NOT gate mentorship/clubhouse_rift. The hard `wouldRequest` boolean gate — NO new RNG, NO `Math.random`.)
+2. `franchiseL10SweepCompute.ts`: at the player-candidate push (`:143-151`), add `loyalty: player.hiddenPersonalityModifiers?.loyalty ?? 50` and `teamId` (the `:126` value).
+
+**MAKE-OR-BREAK:**
+- The propensity gate fires ONLY on `trade_demand`; `mentorship`/`clubhouse_rift`/all other families BYTE-IDENTICAL.
+- Hard deterministic gate (`wouldRequest`) — NO `Math.random`, no new roll (the codebase is seeded-RNG-only; the engine is pure).
+- Null-safe: a candidate with no `loyalty` → default 50; no personality → a documented default; `fanMorale ?? 50`. A `team`-kind candidate never reaches the trade_demand gate (roster events are player-scoped) — but the optional fields keep team candidates valid.
+- NOT default-identity ON the trade_demand slice (FEWER trade_demand events fire) — that is INTENDED and SAFE because L10 is dark (default-OFF flag; pending/unapplied rows). Update the engine/sweep tests that assert on `trade_demand`. NO live (flag-off) behavior change.
+- NO `TRACKER_DB_VERSION` bump. NO A1.3b scope (no flashpoint tax, no TRADE_DEMAND morale emitter into processCompletedGame, no persisted demander). NO oracle/pricing/tier touch. Engine signature of `computeTradeRequestPropensity` UNCHANGED.
+
+**TEST (`src/engines/__tests__/franchiseL10EventEngine.test.ts` + `src/utils/tests/franchiseL10SweepCompute.test.ts`):**
+- A high-loyalty, content (high-morale / happy-fan) player whose `trade_demand` sub-roll would fire → the event is DROPPED (`!wouldRequest`).
+- A low-morale, angry-fanbase, low-loyalty player → `trade_demand` SURVIVES (`wouldRequest`).
+- `mentorship` + `clubhouse_rift` outcomes for the SAME candidates are UNCHANGED (regression — the gate is trade_demand-only).
+- A candidate with no `loyalty`/no `hiddenPersonalityModifiers` → gate uses the 50 default, does not crash.
+- The sweep seam test still reconstructs events from the real engine with the threaded fields.
+
+**VERIFICATION (run, paste exact output):**
+1. `NODE_ENV= npx tsc -b` → 0.  2. `NODE_ENV= npm run build` → 0.
+3. `NODE_ENV= npx vitest run src/engines/__tests__/franchiseL10EventEngine.test.ts src/utils/tests/franchiseL10SweepCompute.test.ts src/engines/__tests__/tradeRequestGeneration.test.ts` → pass (tradeRequestGeneration stays green — engine unchanged).
+4. `NODE_ENV= npm test` (FULL — the L10 sweep feeds `processCompletedGame`, transitive partial-mock risk) → FAILED-FILE list: ZERO NEW REDS vs baseline (`wpaRuntimeBoundary` hard; `franchiseManualSmokeFixture`/`AwardsWatchlist`/`franchiseOffseasonGuards.component` order-flakes — solo-pass to confirm). Any NON-L10 fixture moving → STOP. If a `soul.*` L-SIM invariant references `trade_demand`, update it in this diff (per the standing cross-ticket-invariant lesson) — else confirm none does.
+5. `git --no-pager diff --stat` → only `franchiseL10EventEngine.ts` + `franchiseL10SweepCompute.ts` + their test files. No `tradeRequestGeneration.ts` semantics change, no `trackerDb.ts`, no `processCompletedGame.ts`, no `iv_oracle.json`/pricing/tier.
+
+**FORMAT:** (1) files+lines; (2) the candidate-type additions, the trade_demand-only gate, the loyalty/teamId thread, an explicit statement that non-trade_demand families are byte-identical + no Math.random + no DB bump + no A1.3b scope + L10 stays dark; (3) exact verification output; (4) "A1.3a complete" OR "BLOCKED: <reason>".
+
+**FAILURE PROTOCOL / STOP-IF:** the gate would touch mentorship/clubhouse_rift or any non-trade_demand family → STOP; you reach for `Math.random` or a new RNG → STOP (hard `wouldRequest` gate; if a probabilistic gate is truly wanted, use `franchiseL10DeterministicRoll` with a `:roster:trade_demand:propensity` seed suffix — but DEFAULT to the boolean gate); a `TRACKER_DB_VERSION` bump or a persisted field is needed → STOP (that's A1.3b); you're tempted to add the flashpoint tax / TRADE_DEMAND morale emitter / persisted demander → STOP (A1.3b); `computeTradeRequestPropensity` needs an input not in scope → STOP and report (all inputs verified available); a non-L10 fixture regresses → STOP. Never summarize/batch. Ground every file:line in the `kbl-tracker` worktree before editing.
+<!-- ===== END CONTRACT: A1.3a ===== -->
+
+<!-- ===== CONTRACT: A1.3b ===== -->
+# CONTRACT A1.3b — trade-demand FULL (persisted demander store + §13 flashpoint tax + one-shot TRADE_DEMAND morale)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push (the Captain commits).
+**ROLE:** You are the builder. Build to this contract EXACTLY. Use **xhigh** reasoning effort.
+
+## GOAL
+Make a `trade_demand` random event do something real downstream — the §13 "tooth #2" mechanism. Today (after A1.3a) the L10 engine only *emits* a gated `trade_demand` overlay; nothing persists the demander or taxes the team. This ticket:
+1. Persists a **confirmed trade-demander** to a NEW trackerDb store (JK-AUTHORIZED `TRACKER_DB_VERSION` bump v25→v26).
+2. Fills the flashpoint-decay seam so a confirmed demander **bleeds fan morale every game via the existing compounding tax** (same machinery as a locked Albatross).
+3. Emits a **one-shot `TRADE_DEMAND` morale consequence** at the confirmation game (mirrors how a locked Albatross fires both `ALBATROSS_LOCKED` once AND the ongoing flashpoint tax).
+
+**Everything is BUILD-DARK** behind the existing default-OFF Phase-2 flags (`isFranchisePhase2L10Enabled`, `isFranchisePhase2FlashpointEnabled`, `isFranchisePhase2MoraleEnabled`). With all flags at their OFF defaults, NOTHING is written, NO behavior changes — the only non-dark change is the additive, empty new store created by the DB upgrade.
+
+## SOURCE OF TRUTH
+- Spec §13 tooth #2 (FRANCHISE_V1_LIVING_SEASON_SPEC.md:227): "A turned-on player (a locked Albatross, a trade-demander) who stays *bleeds* fan morale slowly every game — not a cliff, a compounding tax." §10:186 lists `trade demand (low loyalty + low morale)` as a roster random event.
+- The Albatross analogue (the pattern to MIRROR): membership lives in a designation store (`franchiseDesignationRows`), the per-game tax accumulator is `franchiseFlashpointDecay`, and the one-shot morale event `ALBATROSS_LOCKED` is emitted in `persistDesignationMoraleConsequencesAfterTrueValue` (`processCompletedGame.ts:423-471`). Trade-demand is the SAME shape: a new membership store + the SHARED flashpoint accumulator + a one-shot `TRADE_DEMAND` morale event.
+
+## GROUND ANCHORS (re-read before editing — verified by the Captain from source 2026-06-26; the HANDOFF's older line numbers are stale, USE THESE)
+- `src/engines/flashpointDecay.ts:21` — `FlashpointKind = 'albatross' | 'trade_demander' | null` ALREADY includes `trade_demander`; `computeFlashpointGameTax` (`:74`) ALREADY handles it (shared tax base — no engine change needed).
+- `src/utils/franchiseFlashpointDecayCompute.ts:95` — the SEAM: `// SEAM (still empty): L10/L13 trade-demander fills 'trade_demander'.` in `resolveTurnedOnPlayers` (`:63-97`). `teamIds` (the completed game's home+away) is already computed at `:67-73`. Albatross is added per-team at `:90-92`.
+- `src/utils/franchiseFlashpointDecayStorage.ts` — the storage-module template to CLONE (store `franchiseFlashpointDecay`, keyPath `['franchiseId','seasonId','statsScopeId','playerId']`, `by_scope` index, save/get/getByScope/getRow/delete/clear/reset + syncEngine.upsert).
+- `src/utils/franchiseL10SweepCompute.ts:177-242` — `persistDarkL10ForCompletedGame`: builds `candidates` (each player candidate carries `teamId`, `:143-153`), computes `report.events`, writes overlay rows. `report.events[i]` carries `targetId`/`targetKind`/`eventType` (a `trade_demand` event = `eventType:'trade_demand'`, `targetKind:'player'`, `targetId`=playerId). `createdAt` (deterministic ISO) computed at `:200`. `gameNumber` at `:186`.
+- `src/utils/processCompletedGame.ts:1130-1136` — the L10 sweep call site (gated `isFranchisePhase2L10Enabled`). The new one-shot morale step is inserted RIGHT AFTER this block (after `:1136`).
+- `src/utils/processCompletedGame.ts:387-471` — `designationEventToMoraleEvent` + `persistDesignationMoraleConsequencesAfterTrueValue` — the EXACT morale-apply pattern to clone: `composeMoraleConsequence({type}, personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), currentPlayerMorale, currentFanMorale)` → `applyFranchiseMoraleMatrixConsequence({franchiseId,seasonId,statsScopeId,seasonNumber,playerId,teamId,consequence,sourceEventId,timestamp})`. `currentMoraleValue` helper at `:413`. All imports (`composeMoraleConsequence`, `applyFranchiseMoraleMatrixConsequence`, `getFranchisePlayer`, `resolveHiddenModifiers`, `currentMoraleValue`, `isFranchisePhase2MoraleEnabled`) already present in the file.
+- `src/engines/masterMoraleMatrix.ts:407` — `TRADE_DEMAND: row(EVENT_DELTA.tradeDemandSelf /* -3 */, EVENT_DELTA.tradeSalaryDumpFan, [touch('clubhouse', EVENT_DELTA.smallTeammateDrop)], 'player.trade_demand')` — the matrix row ALREADY EXISTS (`MasterMoraleEventType` includes `'TRADE_DEMAND'` at `:32`). Just emit it; do NOT edit the matrix.
+
+## THE 5 FORKS — DOCUMENTED DEFAULTS (build EXACTLY these; the Captain ruled them under AUTH-4)
+1. **Demander source-of-truth** → a NEW dedicated store `franchiseTradeDemandState` (the Albatross-designation analogue), written by the L10 dark sweep, read by the flashpoint seam + the one-shot morale step. (NOT the L10 overlay store — that is a generic pending-event log; a dedicated per-player membership store mirrors `franchiseDesignationRows` and is cheap to query per-team.)
+2. **flashpoint-tax vs one-shot-morale vs both** → **BOTH** (mirrors Albatross: `ALBATROSS_LOCKED` one-shot + ongoing tax). The one-shot fires ONCE at the confirmation game; the compounding flashpoint tax accrues every subsequent game the demander's team plays. No double-count (initial event vs ongoing-unresolved bleed — identical to Albatross).
+3. **albatross↔trade_demander row-key collision** → in `resolveTurnedOnPlayers`, dedupe by `playerId` with **albatross-precedence**: if a player is already in `turnedOnPlayers` (as albatross), do NOT add a second `trade_demander` entry. (The flashpoint store row is keyed by playerId with a single `flashpointKind`; two same-key entries would collide. The tax base is shared, so albatross-precedence loses no magnitude.)
+4. **resolution/counter-reset** → v1 has NO trade-execution UI, so NO auto-resolution: a confirmed demander stays `status:'active'` for the season; the row carries a `status: 'active' | 'resolved'` field as the documented SEAM for a later resolution/trade ticket (which will set `'resolved'` + reset the flashpoint counter). The L10 demander write is IDEMPOTENT — if the player is already a demander, do NOT overwrite `confirmedAtGameNumber`/`confirmedAtIso` (so the one-shot fires exactly once).
+5. **intensity source** → the flashpoint tax AND the `TRADE_DEMAND` matrix delta are intensity-INDEPENDENT (shared tax base matching Albatross; fixed matrix delta). Intensity only governs WHETHER L10 fires `trade_demand` (already handled upstream by the sweep's `'standard'` dial + the A1.3a propensity gate). Do NOT record intensity on the demander row.
+
+## EXPECTED OUTPUT — build these parts (and ONLY these files)
+
+### Part 1 — new store + DB bump + ALL registrations (the safety-critical spine — get this byte-right)
+- **`src/utils/trackerDb.ts`**: bump `TRACKER_DB_VERSION` `25`→`26` (line 17). In `onupgradeneeded`, after the v25 `franchiseRelationshipEdges` block (`:453-465`), add a guarded v26 block:
+  ```
+  // v26 / A1.3b: dark confirmed trade-demander membership store (§13 tooth #2).
+  // Written by the L10 dark sweep when a trade_demand event fires; read by the
+  // flashpoint-decay seam + the one-shot TRADE_DEMAND morale step. Empty until L10 is on.
+  if (!db.objectStoreNames.contains('franchiseTradeDemandState')) {
+    const tradeDemandStore = db.createObjectStore('franchiseTradeDemandState', {
+      keyPath: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],
+    });
+    tradeDemandStore.createIndex('by_scope', ['franchiseId', 'seasonId', 'statsScopeId'], { unique: false });
+  }
+  ```
+- **`src/utils/franchiseTradeDemandStorage.ts`** (NEW): clone `franchiseFlashpointDecayStorage.ts` exactly (same helpers/promise wrappers/syncEngine pattern). Export `FRANCHISE_TRADE_DEMAND_STORE_NAME = 'franchiseTradeDemandState'`, types:
+  ```
+  export interface FranchiseTradeDemandScopeInput { franchiseId: string; seasonId: string; statsScopeId: string; }
+  export interface FranchiseTradeDemandRow extends FranchiseTradeDemandScopeInput {
+    playerId: string;
+    teamId: string;
+    status: 'active' | 'resolved';
+    confirmedAtGameNumber: number;
+    confirmedAtCheckpoint: string;
+    confirmedAtIso: string;
+  }
+  ```
+  and functions `resetFranchiseTradeDemandForTests`, `clearFranchiseTradeDemandForTests`, `initFranchiseTradeDemandDatabase`, `saveFranchiseTradeDemandRows`, `upsertFranchiseTradeDemandRow`, `deleteFranchiseTradeDemandForScope`, `getFranchiseTradeDemandRowsByScope`, `getFranchiseTradeDemandRow` (mirror the flashpoint storage signatures/sort-by-playerId).
+- **`src/utils/backupRestore.ts`**: (a) in the `trackerStores` registry (`:69`), add a `franchiseTradeDemandState` entry — `{ keyPath: ['franchiseId','seasonId','statsScopeId','playerId'], indexes: [{ name: 'by_scope', keyPath: ['franchiseId','seasonId','statsScopeId'] }], optional: true }` (place it near the other franchise stores, e.g. after `franchiseRelationshipEdges`/before `franchiseL10Overlays` — ordering inside the object is cosmetic, but it MUST be present). (b) Bump `STATIC_DATABASE_SCHEMAS['kbl-tracker'].version` `25`→`26` (`:366`). ⚠ The parity test `backupRestore.franchiseParity.test.ts:320-328` asserts `Object.keys(STATIC_DATABASE_SCHEMAS['kbl-tracker'].stores)` EQUALS `db.objectStoreNames` — so this registration is MANDATORY or that test goes RED.
+- **`src/utils/syncConfig.ts`**: in `SYNC_REGISTRY['kbl-tracker']` (`:10-`), add `franchiseTradeDemandState: ['franchiseId', 'seasonId', 'statsScopeId', 'playerId'],` (so the store syncs like flashpoint/fame).
+
+### Part 2 — L10 sweep writes the confirmed demander (the membership write)
+- **`src/utils/franchiseL10SweepCompute.ts`** `persistDarkL10ForCompletedGame` (`:177-242`): after the overlay rows are written (after `:239`), build `const teamIdByPlayerId = new Map(candidates.filter(c => c.kind === 'player' && c.teamId).map(c => [c.id, c.teamId as string]));` then for each `event` in `report.events` where `event.eventType === 'trade_demand' && event.targetKind === 'player'`: resolve `teamId = teamIdByPlayerId.get(event.targetId)`; if no teamId, skip. Read the existing row via `getFranchiseTradeDemandRow(scope, event.targetId)`; if it already exists, do NOTHING (idempotent — keep first confirmation). If absent, `upsertFranchiseTradeDemandRow({ franchiseId, seasonId, statsScopeId, playerId: event.targetId, teamId, status: 'active', confirmedAtGameNumber: gameNumber, confirmedAtCheckpoint: String(gameNumber), confirmedAtIso: createdAt })`. Keep this inside the existing L10-flag gate (the whole function is already gated). Expose the write through the existing `l10SweepSeam` object OR a small local helper so the test can assert it. Do NOT change overlay-row behavior.
+
+### Part 3 — flashpoint seam fill (the §13 compounding tax)
+- **`src/utils/franchiseFlashpointDecayCompute.ts`** `resolveTurnedOnPlayers` (`:63-97`): at the SEAM (`:95`), replace the empty comment with: read `await getFranchiseTradeDemandRowsByScope(scope)`, filter to `row.status === 'active' && teamIds.includes(row.teamId)`, and for each push `{ playerId: row.playerId, kind: 'trade_demander' }` — BUT skip any `playerId` already present in `turnedOnPlayers` (albatross-precedence; track a `Set<string>` of already-added playerIds populated from the albatross loop). Import `getFranchiseTradeDemandRowsByScope` from `./franchiseTradeDemandStorage`. The rest of the compute (tax accumulation, re-entry guard) is UNCHANGED — `trade_demander` flows through `computeFlashpointGameTax` exactly like albatross.
+
+### Part 4 — one-shot TRADE_DEMAND morale emitter
+- **`src/utils/processCompletedGame.ts`**: add an exported `persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions)` modeled on `persistDesignationMoraleConsequencesAfterTrueValue` (`:423-471`) + the Channel-A persister gating. It: early-returns unless `isFranchisePhase2MoraleEnabled()`; resolves this game's gameNumber (clone the `resolveL10GameNumber` schedule-lookup approach OR reuse an existing checkpoint resolver — must be deterministic, no wall-clock); reads `getFranchiseTradeDemandRowsByScope(trueValueScope)`, filters to `row.status === 'active' && row.confirmedAtGameNumber === thisGameNumber` (the demanders NEWLY confirmed THIS game); for each, loads `getFranchisePlayer`, current player+fan morale via `currentMoraleValue`, `composeMoraleConsequence({ type: 'TRADE_DEMAND' }, player?.personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), currentPlayerMorale, currentFanMorale)`, then `applyFranchiseMoraleMatrixConsequence({ ...scope, seasonNumber: trueValueScope.seasonNumber, playerId: row.playerId, teamId: row.teamId, consequence, sourceEventId: ['trade-demand', franchiseId, seasonId, statsScopeId, row.playerId, row.confirmedAtCheckpoint].join(':'), timestamp: row.confirmedAtIso })`. Wrap per-row in try/catch with a `console.warn('[MoraleMatrix] trade-demand event skipped:', error)` (match the designation catch). Import `getFranchiseTradeDemandRowsByScope`.
+- Call it in the pipeline RIGHT AFTER the L10 block (after `:1136`), unconditionally inside a `try/catch` (it self-gates on the morale flag), matching the Channel-A/B call style:
+  ```
+  try {
+    await persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
+  } catch (e) {
+    console.warn('[MoraleMatrix] dark trade-demand morale write skipped for completed game ' + gameState.gameId + ':', e);
+  }
+  ```
+
+### Part 5 — version-pin + parity tests (these MUST be updated or they go RED — that is EXPECTED, not a regression)
+- **`src/utils/tests/franchiseSeasonLedgerStorage.test.ts`**: add `'franchiseTradeDemandState',` to `expectedTrackerStores` (between `'franchiseSeasonSummaries'` and `'franchiseTraitOverlays'`, `:45-46` — keep the array alphabetical); change `expect(TRACKER_DB_VERSION).toBe(25)` (`:278`)→`toBe(26)`; change `expect(db.version).toBe(25)` (`:298`)→`toBe(26)`.
+- **`src/src_figma/__tests__/franchiseMode/franchiseInitializer.test.ts:468`**: `expect(TRACKER_DB_VERSION).toBe(25)`→`toBe(26)`.
+- **`src/utils/tests/franchiseRelationshipEdgesStorage.test.ts:316`**: `expect(db.version).toBe(25)`→`toBe(26)`.
+- **`src/utils/tests/backupRestore.franchiseParity.test.ts`**: the structural-alignment test (`:320`) auto-passes once Part 1 is correct. ADD coverage proving the new store round-trips: declare a `tradeDemandRow` fixture, add `'franchiseTradeDemandState'` to the `seedFranchiseEconomyRows` transaction store list (`:251-265`) + a `tx.objectStore('franchiseTradeDemandState').put(tradeDemandRow)` (`:269-280`), and add `expect(backup.databases[TRACKER_DB_NAME].franchiseTradeDemandState).toEqual([tradeDemandRow]);` to the round-trip test (`:345-356`).
+
+### Part 6 — focused new tests (prove the make-or-break)
+- New `src/utils/tests/franchiseTradeDemandStorage.test.ts` (clone the flashpoint storage test): save/get round-trip, getByScope sort, scope isolation, version is 26 + store exists.
+- Extend `src/utils/tests/franchiseL10SweepCompute.test.ts`: with the L10 flag ON, a fired `trade_demand` event writes ONE `franchiseTradeDemandState` row (status active, correct teamId/gameNumber/iso); a second sweep for the same player does NOT overwrite `confirmedAtGameNumber` (idempotent); existing overlay-row assertions still pass.
+- Extend `src/utils/tests/franchiseFlashpointDecayCompute.test.ts`: with a seeded active demander on a playing team, `resolveTurnedOnPlayers` returns a `trade_demander` entry and the compute accrues the tax; a player who is BOTH an Albatross AND a demander yields exactly ONE entry with `kind:'albatross'` (precedence); a demander whose team is NOT in the completed game is excluded.
+
+## CONSTRAINTS
+- Branch `codex/franchise-v1-next` ONLY. Do NOT commit, do NOT push. The Captain commits by path.
+- Touch ONLY: `src/utils/trackerDb.ts`, `src/utils/franchiseTradeDemandStorage.ts` (NEW), `src/utils/backupRestore.ts`, `src/utils/syncConfig.ts`, `src/utils/franchiseL10SweepCompute.ts`, `src/utils/franchiseFlashpointDecayCompute.ts`, `src/utils/processCompletedGame.ts`, and the 4 existing test files + 1 new test file listed above. Do NOT touch any FROZEN oracle (`spec-docs/reference/iv_oracle.json`, golden snapshots), the `flashpointDecay.ts`/`masterMoraleMatrix.ts` engines (read-only — they already support what you need), or any UI/component file.
+- Do NOT flip any Phase-2 flag. Everything stays build-dark.
+- Determinism: no `Math.random`, no `Date.now()`, no wall-clock. Timestamps come from the persisted `confirmedAtIso` / event-derived ISO only.
+- Keep hitter/albatross/overlay byte-paths identical when the new code path is inactive (empty demander store → flashpoint seam adds nothing; morale flag off → emitter no-ops; L10 flag off → no demander writes).
+
+## VERIFICATION (run locally; report the exact output)
+- `NODE_ENV= npm run build` → exit 0 (tsc clean).
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseTradeDemandStorage.test.ts src/utils/tests/franchiseL10SweepCompute.test.ts src/utils/tests/franchiseFlashpointDecayCompute.test.ts src/utils/tests/franchiseSeasonLedgerStorage.test.ts src/utils/tests/backupRestore.franchiseParity.test.ts src/utils/tests/franchiseRelationshipEdgesStorage.test.ts src/src_figma/__tests__/franchiseMode/franchiseInitializer.test.ts` → all green.
+- Report every changed/created path (`git status --porcelain`) + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself.
+
+## FORMAT
+Report: (1) each file changed + a one-line what/why; (2) the build result; (3) the focused vitest summary (passed/failed counts + any failed file names); (4) confirmation that no Phase-2 flag was flipped and no forbidden file was touched.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP, do not improvise)
+- STOP-IF the new store cannot be registered in `backupRestore.ts` without the structural-parity test failing for a reason OTHER than "add the store" (i.e. if the registry shape doesn't match — report it).
+- STOP-IF `composeMoraleConsequence`/`applyFranchiseMoraleMatrixConsequence` signatures do NOT match the designation-path usage at `processCompletedGame.ts:437-466` (re-read; do not guess a different shape).
+- STOP-IF filling the flashpoint seam changes the ALBATROSS byte-path (the albatross-only tests must stay green unchanged).
+- STOP-IF you cannot make the L10 demander write idempotent without overwriting `confirmedAtGameNumber`.
+- A correct BLOCK is GOOD. Do NOT widen scope, do NOT touch extra files, do NOT flip a flag to "make it work."
+<!-- ===== END CONTRACT: A1.3b ===== -->
+
+<!-- ===== CONTRACT: A1.4-CTR ===== -->
+# CONTRACT A1.4 / L12-6 (DATA-LAYER ONLY) — `allStarSelections` career-counter write-path
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push (the Captain commits).
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (read first)
+L12-6 is "Almanac/UI surfacing + the `allStarSelections` career counter." Per JK's standing ruling, this ticket builds ONLY the **DATA LAYER** (the career-counter write-path, build-dark). The **UI-surfacing half is OUT OF SCOPE** and stays browser-pending for JK — do NOT touch `AwardsWatchlist.tsx`, `FranchiseHome.tsx`, any standings/All-Star UI, or `AWARD_ORDER`. Those are flagged for a JK browser pass.
+
+## GOAL
+The `allStarSelections` career counter exists on `PlayerCareerBatting` (`careerStorage.ts:72`) and `PlayerCareerPitching` (`careerStorage.ts:130`) but has **NO live writer** (greenfield — only reads/inits). When the dark All-Star roster LOCKS (once per season, at the 60% break), each selected player's career `allStarSelections` must increment by exactly 1. Build-dark behind the existing L12 flag (the lock only happens when `isFranchisePhase2L12Enabled()` is ON — default OFF).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- `src/utils/franchiseAllStarLockPayouts.ts:69-110` — `runFranchiseAllStarLockPayouts({selections, candidates, scope, timestamp})` returns `{ emit, reachFloor, snub }`. It already runs 3 try/catch sub-steps (reachFloor / snub / emit) each via `franchiseAllStarLockPayoutSeam` (`:14-18`). This is the L12-5 honor-ratchet orchestrator — the hook point.
+- `src/utils/franchiseAllStarRosterCompute.ts` — calls `runFranchiseAllStarLockPayouts` ONLY inside the `if (shouldLock)` block, and early-returns `{status:'locked-noop'}` when `existing?.locked` (the lock-once guard). ⇒ the payouts (and thus the counter increment) fire **exactly once per season**. The whole compute is gated by `isFranchisePhase2L12Enabled()`. **Do NOT add any new idempotency guard — the parent lock-once already guarantees once-per-(player,season).**
+- `FranchiseAllStarSelection` (`src/utils/franchiseAllStarRostersStorage.ts:17-22`) = `{ playerId, teamId, position, role, selectionScore? }`. `position` is `'C'..'RF' | 'SP' | 'RP' | 'WILDCARD'`. **Pitcher iff `position === 'SP' || position === 'RP'`; everything else (field positions + WILDCARD) is a hitter.** Both starters AND reserves count as selections (increment ALL of `params.selections`).
+- `src/utils/careerStorage.ts` — `getOrCreateCareerBatting(playerId, playerName, teamId)` (`:313`) → mutate `.allStarSelections` → `updateCareerBatting(stats)` (`:346`); `getOrCreateCareerPitching(playerId, playerName, teamId)` (`:386`) → `updateCareerPitching(stats)` (`:419`). Stores `playerCareerBatting`/`playerCareerPitching` live in trackerDb (`initCareerDatabase` delegates to `getTrackerDb()`, `:30`). The field is already initialized to `0` (`:225`, `:272`). **No DB bump, no schema change — the field + stores already exist.**
+- Read side (for context — do NOT touch): `allStarSelections` is consumed param-threaded by `isHofCaliber(totalWAR, allStarSelections, mvpCyYoungCount)` (`teamMVP.ts:471`); the only `playerCareerStats` map builder is the INACTIVE `src/components/GameTracker/OffseasonFlow.tsx:266` (passes `new Map()`), so there is NO live store-coupled read yet — the counter is a forward-looking deposit. Type-routing (pitcher→pitching record, else→batting record) matches the field living on both interfaces.
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseAllStarLockPayouts.ts`**: add a 4th sub-step to `runFranchiseAllStarLockPayouts`, mirroring the existing reachFloor/snub/emit try/catch shape:
+   - Add the change to the return type: `{ emit, reachFloor, snub, careerSelections }` (a status string).
+   - Add a new seam member `incrementCareerSelections` to `franchiseAllStarLockPayoutSeam` (so the test can spy/mock it), pointing at a new exported helper (below).
+   - Call it in a try/catch: `const result = await franchiseAllStarLockPayoutSeam.incrementCareerSelections(params.selections); careerSelections = result.status;` (default `'error'` on throw).
+   - Write the helper `applyFranchiseAllStarCareerSelections(selections: ReadonlyArray<FranchiseAllStarSelection>): Promise<{ status: string; written: number }>` (in this file or a small new `src/utils/franchiseAllStarCareerSelections.ts` — your call, but if a new file, KEEP IT MINIMAL and import-clean). It iterates `selections`; for each: `isPitcher = selection.position === 'SP' || selection.position === 'RP'`; if pitcher → `const c = await getOrCreateCareerPitching(playerId, playerId /* name fallback: the career record already exists by the 60% lock since the player has season stats; name only matters on create */, teamId); await updateCareerPitching({ ...c, allStarSelections: c.allStarSelections + 1 });` else the batting equivalent. Count `written`. Return `{ status: written > 0 ? 'written' : 'noop', written }`.
+   - DEFAULTS-TAKEN (document in a code comment): (a) type-routing by selected `position` (SP/RP→pitching, else→batting); (b) `playerId` as the getOrCreate `playerName` fallback (record-exists invariant at the 60% lock); (c) reuse the existing `updateCareer*` path (it stamps `lastUpdated` via `Date.now()` — that is the established career-write behavior and is build-dark inert at the default-OFF L12 flag, so the L-SIM default-flag baseline is unaffected).
+2. **`src/utils/tests/franchiseAllStarLockPayouts.test.ts`**: extend it. With a seeded selections list (a starter hitter at e.g. 'C', a reserve hitter at 'WILDCARD', an 'SP' starter, an 'RP' reserve), after `runFranchiseAllStarLockPayouts`: each hitter's career BATTING `allStarSelections` is +1, each pitcher's career PITCHING `allStarSelections` is +1, and the cross-store is untouched (a hitter's pitching record is NOT incremented). Confirm `careerSelections === 'written'`. If practical, add a once-per-season proof: a second `runFranchiseAllStarLockPayouts` would double — but since the PARENT enforces lock-once, instead assert (or comment) that the increment is driven only by the lock-once parent (do not weaken any existing assertion). Pre-seed the career records so getOrCreate returns existing (so the name fallback never materializes).
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/franchiseAllStarLockPayouts.ts`, the test file above, and (optionally) ONE new `src/utils/franchiseAllStarCareerSelections.ts`. Do NOT touch `careerStorage.ts` (use its existing exports), `franchiseAllStarRosterCompute.ts` (the parent already calls the payouts — no change needed; the return-shape widening is internal to the payouts function and its consumer only reads it loosely — VERIFY the caller does not destructure a fixed shape that breaks; if it does, STOP-IF), any UI file, any flag file, or any oracle.
+- Do NOT flip any Phase-2 flag. Build-dark: the increment only fires inside the L12-gated, lock-once parent.
+- Do NOT add a DB bump or schema change (field + stores already exist).
+- No new idempotency guard (parent lock-once suffices).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseAllStarLockPayouts.test.ts src/utils/tests/franchiseAllStarRosterCompute.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself (this wires into the processCompletedGame L12 path → transitive-mock-break risk).
+
+## FORMAT
+Report: (1) files changed + one-line what/why; (2) build result; (3) focused vitest summary (passed/failed + any failed file names); (4) confirmation no UI/flag/oracle/DB file was touched and `runFranchiseAllStarLockPayouts`'s caller still compiles.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF widening the `runFranchiseAllStarLockPayouts` return shape breaks its caller in `franchiseAllStarRosterCompute.ts` (if the caller destructures `{emit,reachFloor,snub}` exactly and a 4th key breaks it — report; adding a key to an object return is normally safe, but VERIFY).
+- STOP-IF the career record API does not match (`getOrCreateCareerBatting`/`updateCareerBatting` signatures differ from the anchors — re-read).
+- STOP-IF you cannot route pitcher-vs-hitter from `selection.position` alone (it should be sufficient: SP/RP = pitcher).
+- A correct BLOCK is GOOD. Do NOT widen scope, do NOT touch the UI, do NOT flip a flag.
+<!-- ===== END CONTRACT: A1.4-CTR ===== -->
+
+<!-- ===== CONTRACT: A1.5-L4b ===== -->
+# CONTRACT A1.5 / L4b (DETERMINISTIC CORE) — matrix-sourced season-take news adapter (pure, dormant)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN worktree `/Users/johnkruse/Projects/kbl-tracker`). Branch-only — do NOT commit, do NOT push (the Captain commits).
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (read first)
+L4b = "the reporter narrates L3 master-morale-matrix events as season takes over the L4a bus." Per the spec rule (FRANCHISE_V1_LIVING_SEASON_SPEC §M): **"The matrix is the math (deterministic — *what* happens); the reporter is the words (generated — *how* it is told). The language model never decides an outcome; it only narrates one the matrix already decided."** This ticket builds ONLY the **deterministic "math" half** — a PURE adapter that maps a SIGNIFICANT matrix consequence into a `SeasonNewsEvent` (the input the reporter narrates). The **"words" half — the live LLM emission** (`generateSeasonNewsTake` → `callClaudeMessages`), the `processCompletedGame` wiring, and any new flag — is OUT OF SCOPE (it is inherently LLM/browser-pending, JK's sign-off domain). This mirrors the EXISTING L10/L11 adapters, which are pure + dormant (no production caller yet). Do NOT call the LLM, do NOT wire into `processCompletedGame`, do NOT add a flag, do NOT touch `seasonNewsGenerator.ts`/`reporterIntensity.ts`/`narrativeEngine.ts`.
+
+## GOAL
+Create `src/src_figma/app/engines/reporter/franchiseL3MatrixNewsAdapter.ts` — a PURE, deterministic, dormant adapter that turns a significant master-morale-matrix consequence into a `SeasonNewsEvent`. Build-dark by construction (no caller, no LLM, no I/O, no wall-clock, no randomness).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **Template to MIRROR exactly:** `src/src_figma/app/engines/reporter/franchiseL11ManagerChangeNewsAdapter.ts` (pure function, SIM-tuned dramatic-weight const, input interface, `clamp` helper, returns a `SeasonNewsEvent`, header comment documenting PURE + DARK/ORPHANED-PENDING). Read it in full and copy its structure/comment conventions.
+- `SeasonNewsEvent` (`src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:11-19`) = `{ franchiseId: string; seasonId: string; seasonNumber: number; eventType: NarrativeEventType; subjectIds: string[]; facts: Record<string, unknown>; dramaticWeight: number }`. **Do NOT mint `id`/`createdAt`** — those belong to the live reporter downstream (same as L11).
+- `NarrativeEventType` (`src/engines/narrativeEngine.ts:77-91`) ALREADY contains `'SEASON_SUMMARY'` — **REUSE IT** for the matrix season-take (it is the natural fit for a season-level morale take, and reusing it AVOIDS touching the exhaustive `hedgingModifier: Record<NarrativeEventType, number>` at `narrativeEngine.ts:592`). Do NOT add a new `NarrativeEventType`.
+- The adapter INPUT is the matrix consequence's deterministic ground truth. `ResolvedMoraleConsequence` (`src/engines/masterMoraleMatrix.ts:63-76`) carries the fields to read: `eventType` (the `MasterMoraleEventType`), `personality`, `selfPlayerMoraleDelta`, `teamFanMoraleDelta`, `totalPlayerMoraleDelta`, `reason`, `isNeutral`. (Define your OWN flat input interface carrying these + identity — do NOT import `ResolvedMoraleConsequence` to avoid coupling; mirror how L11 defines `FranchiseManagerChangeNewsInput`.)
+
+## EXPECTED OUTPUT — `src/src_figma/app/engines/reporter/franchiseL3MatrixNewsAdapter.ts` (NEW)
+- Header comment mirroring L11's (PURE: no LLM/network/IO/wall-clock/randomness, fully synchronous, deeply-equal output for equal input; DARK/ORPHANED-PENDING: no production caller, does not invoke the live reporter or wire into any emission path; facts are lifted verbatim, never fabricated; `id`/`createdAt` minted downstream). Note that the post-D13/browser emission seam is where a caller will eventually plug this in.
+- A SIM-tuned placeholder const (mirror `L11_NEWS_DRAMATIC_WEIGHT`'s "conservative placeholder, §16 Simulation-Gate-owned" framing):
+  ```
+  export const L4B_MATRIX_NEWS_TUNING = {
+    /** §16 placeholder — the line between per-play morale noise and a season-level take (abs morale points). */
+    seasonTakeSignificanceThreshold: 5,
+    base: 0.35,
+    magnitudeScale: 0.35,
+    /** §16 placeholder — magnitude denominator that maps an abs morale delta onto [0..1]. */
+    magnitudeDenominator: 10,
+  } as const;
+  ```
+- An input interface:
+  ```
+  export interface FranchiseMatrixMoraleNewsInput {
+    franchiseId: string;
+    seasonId: string;
+    seasonNumber: number;
+    matrixEventType: string;      // the MasterMoraleEventType
+    personality: string;          // CanonicalPersonality
+    playerId: string;
+    teamId: string;
+    selfPlayerMoraleDelta: number;
+    teamFanMoraleDelta: number;
+    totalPlayerMoraleDelta: number;
+    reason: string;
+    isNeutral: boolean;
+    sourceEventId: string;        // the matrix event source key (idempotency anchor downstream)
+  }
+  ```
+- The pure builder, returning `SeasonNewsEvent | null` (null = below the season-take bar → no take):
+  ```
+  export function buildFranchiseMatrixMoraleSeasonNewsEvent(
+    input: FranchiseMatrixMoraleNewsInput,
+  ): SeasonNewsEvent | null
+  ```
+  Logic: `const magnitude = Math.max(Math.abs(input.totalPlayerMoraleDelta), Math.abs(input.teamFanMoraleDelta));` SKIP (return null) when `input.isNeutral || magnitude < L4B_MATRIX_NEWS_TUNING.seasonTakeSignificanceThreshold` (a neutral or sub-threshold matrix tick is per-play noise, not a season take). Otherwise `dramaticWeight = clamp(base + magnitudeScale * clamp(magnitude / magnitudeDenominator, 0, 1), 0, 1)` (a local pure `clamp`, mirror L11). Return `{ franchiseId, seasonId, seasonNumber, eventType: 'SEASON_SUMMARY' as NarrativeEventType, subjectIds: [input.playerId, input.teamId], facts: { matrixEventType, personality, selfPlayerMoraleDelta, teamFanMoraleDelta, totalPlayerMoraleDelta, reason: input.reason, sourceEventId: input.sourceEventId }, dramaticWeight }`.
+- **DEFAULTS-TAKEN (document in the header comment):** (1) reuse the existing `'SEASON_SUMMARY'` NarrativeEventType (no new type → no exhaustive-Record touch); (2) the significance threshold + dramatic-weight numbers are §16 sim-tune placeholders (the line between per-play noise and a season take — JK/Sim-Gate tunes later); (3) the adapter is DORMANT (the live LLM emission + the `processCompletedGame` wiring + an `isFranchisePhase2L4bEnabled` flag are the browser/LLM-pending "reporter words" half, FLAGGED for JK — NOT built here).
+
+## EXPECTED OUTPUT — `src/src_figma/app/engines/reporter/__tests__/franchiseL3MatrixNewsAdapter.test.ts` (NEW; match the existing adapter test location/naming — verify where `franchiseL11ManagerChangeNewsAdapter.test.ts` lives and co-locate)
+- A significant matrix consequence → a `SeasonNewsEvent` with the exact expected `eventType:'SEASON_SUMMARY'`, `subjectIds`, `facts`, and `dramaticWeight` (pin the arithmetic).
+- A sub-threshold magnitude → `null` (no season take).
+- `isNeutral: true` → `null` (even if magnitude is high — neutral takes are not narrated).
+- Determinism: the same input called twice produces a deeply-equal event (`toEqual`).
+- Dramatic weight scales with magnitude (a bigger delta → a larger, still-clamped weight).
+
+## CONSTRAINTS
+- Touch ONLY the 2 NEW files above. Do NOT modify any existing file — not `narrativeEngine.ts` (no new NarrativeEventType), not `seasonNewsGenerator.ts`, not `processCompletedGame.ts`, not `franchisePhase2Flags.ts`, not any other adapter, not any oracle.
+- PURE: no `callClaudeMessages`/LLM, no IndexedDB/storage, no `Date.now()`/`new Date()`, no `Math.random()`/`crypto`. Fully synchronous (the builder is NOT async).
+- No flag, no DB, no wiring. Dormant by construction (the only callers are the test).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0 (tsc clean — confirms the `'SEASON_SUMMARY'` reuse + `SeasonNewsEvent` shape typecheck).
+- Focused: `NODE_ENV= npx vitest run src/src_figma/app/engines/reporter/__tests__/franchiseL3MatrixNewsAdapter.test.ts` (adjust path to where you placed it) → green.
+- Report `git status --porcelain` (only the 2 new files) + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself.
+
+## FORMAT
+Report: (1) the 2 new files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation that NO existing file was modified, no LLM/IO/randomness/wall-clock is used, and `'SEASON_SUMMARY'` was reused (no new NarrativeEventType).
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `'SEASON_SUMMARY'` is somehow not assignable to `SeasonNewsEvent.eventType` (re-read `NarrativeEventType`).
+- STOP-IF building the pure adapter requires modifying ANY existing file (it must be fully self-contained — if a type import forces an edit elsewhere, report it).
+- STOP-IF the `SeasonNewsEvent` shape differs from the anchor (re-read `seasonNewsGenerator.ts:11-19`).
+- A correct BLOCK is GOOD. Do NOT add the LLM emission, the flag, or the processCompletedGame wiring — those are explicitly out of scope (JK browser-pending).
+<!-- ===== END CONTRACT: A1.5-L4b ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1a ===== -->
+# CONTRACT A1.5d-1a — stadium-records DETECT foundation: `changes[]` on the upsert (pure storage extension)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d (STADIUM RECORDS) is a 6-hop feature; this is the FIRST slice of hop-1 (DETECT). Build ONLY the pure storage-layer `changes[]` extension. Do NOT add the `isFranchisePhase2StadiumRecordsEnabled` flag, do NOT touch `processCompletedGame.ts`, do NOT build the per-game tap, do NOT add new record types, do NOT touch fame/morale/reporter/Almanac/rivalry. Those are later hops (1b → 2..6), explicitly out of scope here.
+
+## GOAL
+`upsertFranchiseStadiumRecordsFromFoundationReport` (`src/utils/franchiseStadiumRecordsStorage.ts:527`) already reads the prior-stored record per candidate (`existing`) and overwrites it with the freshly-recomputed candidate. Extend it to ALSO RETURN a `changes[]` array describing each record that gained a NEW SOLE player holder this upsert (the §5-hop-1 SET/OVERTAKE detection that the later fame/morale/reporter hops will consume). This is a PURE additive change to the return value — what gets STORED is unchanged; existing callers that ignore the new field keep working.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- `src/utils/franchiseStadiumRecordsStorage.ts:527-588` — `upsertFranchiseStadiumRecordsFromFoundationReport`. Its loop (`:552-560`) computes `identity`, reads `existing = await getRecordById(recordId(identity))`, and pushes `recordFromCandidate(scope, candidate, timestamp, existing ?? undefined)`. `recordFromCandidate` (`:279`) takes the candidate's `value`/`leaderPlayerIds` WHOLESALE (only preserves `existing.createdAt`) — so the candidate IS the recomputed season-to-date record; `existing` is the prior game's stored record. That existing-vs-new pair is exactly the SET/OVERTAKE signal.
+- `FranchiseStadiumRecord` (`:32-55`) has `value: number`, `leaderPlayerIds: string[]` (already `uniqueSorted`), `stadiumId`, `recordType: FranchiseStadiumRecordType`, `recordKey: string`.
+- `UpsertFranchiseStadiumRecordsResult` (`:59-72`) — add the new field here + in `emptyResult` (`:590-608`).
+- §5 hop-1 rule (STADIUM_ANALYTICS_SPEC_V2): "New identity = SET; newValue beats a different sole holder = OVERTAKE (priorLeaderPlayerIds = dethroned). Ties extend co-leadership silently (**only a strict new SOLE holder fires the swap**)."
+- Existing test to EXTEND: `src/utils/tests/franchiseStadiumRecordsStorage.test.ts` (already constructs `FranchiseStadiumFoundationReport` fixtures + drives the upsert — reuse those fixtures).
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseStadiumRecordsStorage.ts`**:
+   - Add + export:
+     ```
+     export interface FranchiseStadiumRecordChange {
+       stadiumId: string;
+       recordType: FranchiseStadiumRecordType;
+       recordKey: string;
+       changeKind: 'set' | 'overtake';
+       priorValue: number | null;
+       priorLeaderPlayerIds: string[];
+       newValue: number;
+       newLeaderPlayerIds: string[];
+     }
+     ```
+   - Add `changes: FranchiseStadiumRecordChange[];` to `UpsertFranchiseStadiumRecordsResult` (and return `changes: []` in `emptyResult`).
+   - In the upsert loop, for each `candidate` (after computing `newRecord = recordFromCandidate(...)` and reading `existing`), classify with this EXACT rule (player-sole-holder; team-only records never fire):
+     - `const newSole = newRecord.leaderPlayerIds.length === 1 ? newRecord.leaderPlayerIds[0] : null;`
+     - `const priorSole = existing && existing.leaderPlayerIds.length === 1 ? existing.leaderPlayerIds[0] : null;`
+     - A change fires IFF `newSole !== null && newSole !== priorSole`. (So: new sole holder + no prior record OR prior was a tie OR prior sole holder was someone else → fires. Same sole holder (even if value grew) → SILENT. New record is a tie → SILENT. No player leaders [team-only record] → SILENT.)
+     - `changeKind = existing ? 'overtake' : 'set'` (no existing stored record = SET / new identity; an existing record being taken over by a new sole holder = OVERTAKE).
+     - Push `{ stadiumId: newRecord.stadiumId, recordType: newRecord.recordType, recordKey: newRecord.recordKey, changeKind, priorValue: existing?.value ?? null, priorLeaderPlayerIds: existing?.leaderPlayerIds ?? [], newValue: newRecord.value, newLeaderPlayerIds: newRecord.leaderPlayerIds }`.
+   - Collect the changes across the loop and return them in the result. Order them deterministically (e.g. sort by `stadiumId`, then `recordType`, then `recordKey`) so the output is stable.
+   - Do NOT change what is stored, the blockers logic, or the policy flags. The `changes[]` is purely additive to the return.
+2. **`src/utils/tests/franchiseStadiumRecordsStorage.test.ts`** — extend (reuse the existing foundation-report fixtures):
+   - **SET:** empty store → upsert a report yielding a sole-player record → `result.changes` contains that record with `changeKind:'set'`, `priorValue:null`, `priorLeaderPlayerIds:[]`, the right `newLeaderPlayerIds`.
+   - **OVERTAKE:** upsert report-1 (player A the sole holder), then upsert report-2 (player B the new sole holder, higher value) against the SAME store → the second `result.changes` has `changeKind:'overtake'`, `priorLeaderPlayerIds:[A]`, `newLeaderPlayerIds:[B]`, `priorValue`/`newValue` correct.
+   - **SILENT same-holder:** sole holder A, then A again (higher value) → no change entry for that record.
+   - **SILENT tie:** a record whose `leaderPlayerIds` has 2+ ids → no change entry.
+   - **(if a team-only record fixture exists)** a record with empty `leaderPlayerIds` → no change entry.
+
+## CONSTRAINTS
+- Touch ONLY `src/utils/franchiseStadiumRecordsStorage.ts` + its test. Do NOT touch `franchiseStadiumFoundation.ts`, `processCompletedGame.ts`, `franchisePhase2Flags.ts`, any UI, any oracle. No DB change (the `kbl-franchise-stadium-records` db + store already exist; this adds a return field only, no schema change).
+- Pure/additive: storage behavior (what's persisted) byte-identical; only the return value gains `changes[]`. No `Math.random`, no new wall-clock beyond the existing `timestamp` path.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsStorage.test.ts src/utils/tests/franchiseSaveSlotManifest.test.ts` → green (the save-slot test imports this module — confirm the additive field didn't break it).
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite.
+
+## FORMAT
+Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation that what-gets-STORED is unchanged (only the return gained `changes[]`), and no flag/UI/processCompletedGame/foundation file was touched.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `recordFromCandidate` does NOT take the candidate value wholesale (i.e. if it actually does a max/merge that means `existing.value` could exceed `newRecord.value` — re-read `:279`; if so, the comparison must use the STORED winner, report it).
+- STOP-IF the existing test has no reusable foundation-report fixture to drive sole/tie leaders (report what shape `buildCandidatesFromFoundation` needs).
+- STOP-IF adding the field breaks `franchiseSaveSlotManifest.test.ts` or any other consumer of `UpsertFranchiseStadiumRecordsResult`.
+- A correct BLOCK is GOOD. Do NOT add the flag, the tap, or new record types.
+<!-- ===== END CONTRACT: A1.5d-1a ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1b ===== -->
+# CONTRACT A1.5d-1b — stadium-records per-game DETECT tap + the flag (build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+Second slice of A1.5d hop-1. Build ONLY: (a) the new `isFranchisePhase2StadiumRecordsEnabled` flag, and (b) a build-dark per-game DETECT tap that builds the stadium foundation report and upserts records (capturing the `changes[]` hop-1a added, but NOT consuming them). Do NOT build hops 2-6 (fame swap / fan morale / reporter / Almanac / rivalry — those CONSUME `changes[]` later), do NOT add new record types, do NOT load at-bat/fielding events (the spray-event + fame-bearing records come in hop-1c), do NOT touch any UI.
+
+## GOAL
+Wire the existing stadium-records machinery into the live completed-game pipeline, behind a new default-OFF flag. Per game (when the flag is ON), build the franchise-season stadium foundation report from the season's completed games + the franchise stadium snapshots, then upsert the records. `changes[]` (from hop-1a) is surfaced in the result but not yet acted on. With the flag OFF (default), the tap is a zero-cost no-op (no loads). Build-dark.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **Flag pattern to clone:** `src/utils/franchisePhase2Flags.ts` — the L13/L14 block (`:97-114`): `export const FRANCHISE_PHASE2_<X>_ENABLED_DEFAULT = false;` + `let …Override: boolean | null = null;` + `export function isFranchisePhase2<X>Enabled(): boolean { return …Override ?? …DEFAULT; }` + `export function setFranchisePhase2<X>EnabledForTests(enabled: boolean | null): void { …Override = enabled; }`. Add `StadiumRecords` (`isFranchisePhase2StadiumRecordsEnabled`, default false). (L14 is taken — do NOT reuse it.)
+- **The loaders (proven by the de-orphan caller `franchiseSeasonSummaryStorage.ts:656-657,699-700`):** `completedGames = await getRecentGames(1000, { franchiseId, seasonId })` (from `./gameStorage`, `:1059`, returns `CompletedGameRecord[]`); `stadiumSnapshots = (await getFranchiseConfig(franchiseId))?.stadiums ?? []` (`getFranchiseConfig` from `./franchiseManager`, `:341`, returns `StoredFranchiseConfig | null` with `.stadiums: FranchiseTeamStadiumSnapshot[]`). Neither is imported in `processCompletedGame.ts` yet.
+- **The report builder + upsert:** `buildFranchiseStadiumFoundationReport({ franchiseId, seasonId, statsScopeId, seasonNumber, stadiumSnapshots, completedGames })` (`franchiseStadiumFoundation.ts:548`, PURE/sync) → `upsertFranchiseStadiumRecordsFromFoundationReport(report, { completedGames })` (`franchiseStadiumRecordsStorage.ts:527`, now returns `{ records, changes, … }` after hop-1a).
+- **The dark-tap chain** lives inside the `if (trueValueScope)` block of `processCompletedGame` (where `persistDarkFlashpointDecayForCompletedGame` / `persistDarkL10ForCompletedGame` / the L12 `persistFranchiseAllStarRosterForCompletedGame` etc. are each called in their own `if (flag) { try { … } catch {} }`). Place the new stadium tap in that chain (e.g. right after the L12 block), gated by `isFranchisePhase2StadiumRecordsEnabled()`, in a `try/catch` matching the siblings. `trueValueScope` carries `franchiseId`/`seasonId`/`statsScopeId`/`seasonNumber`.
+- **The persister/seam pattern to mirror:** `franchiseL10SweepCompute.ts` exposes an `l10SweepSeam = { … }` indirection so the per-game compute + tests call loaders/builders through one mockable object, and returns a `{ status: 'dark-noop' | 'written'; written: number; reason?: string }` result. Mirror that shape.
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchisePhase2Flags.ts`**: add the `StadiumRecords` flag block (clone L13/L14; default false).
+2. **`src/utils/franchiseStadiumRecordsTap.ts`** (NEW — keep the tap OUT of `processCompletedGame.ts` so it is unit-testable in isolation, mirroring `franchiseL10SweepCompute.ts`):
+   - `export const stadiumRecordsTapSeam = { getRecentGames, getFranchiseConfig, buildFranchiseStadiumFoundationReport, upsertFranchiseStadiumRecordsFromFoundationReport };` (import the four from their modules).
+   - `export type PersistDarkStadiumRecordsResult = { status: 'dark-noop' | 'written'; written: number; changes: number; reason?: string };`
+   - `export async function persistDarkStadiumRecordsForCompletedGame(gameState: PersistedGameState, scope: PersistedTrueValueScope, archiveOptions?: CompletedGameArchiveOptions): Promise<PersistDarkStadiumRecordsResult>`:
+     - if `!isFranchisePhase2StadiumRecordsEnabled()` → return `{ status:'dark-noop', written:0, changes:0, reason:'Phase-2 stadium-records disabled.' }`.
+     - `const completedGames = await stadiumRecordsTapSeam.getRecentGames(1000, { franchiseId: scope.franchiseId, seasonId: scope.seasonId });`
+     - `const config = await stadiumRecordsTapSeam.getFranchiseConfig(scope.franchiseId); const stadiumSnapshots = config?.stadiums ?? [];`
+     - `const report = stadiumRecordsTapSeam.buildFranchiseStadiumFoundationReport({ franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, seasonNumber: scope.seasonNumber, stadiumSnapshots, completedGames });`
+     - `const result = await stadiumRecordsTapSeam.upsertFranchiseStadiumRecordsFromFoundationReport(report, { completedGames });`
+     - return `{ status: result.persisted ? 'written' : 'dark-noop', written: result.records.length, changes: result.changes.length, reason: result.persisted ? undefined : (result.blockers[0] ?? 'No stadium records to persist.') }`.
+     - Determinism: no `Date.now()`/`Math.random()`/wall-clock added (the upsert's existing `timestamp` default is its own concern; do NOT pass a wall-clock timestamp from here). Reuse the exact `CompletedGameArchiveOptions`/`PersistedTrueValueScope`/`PersistedGameState` types the sibling persisters import.
+3. **`src/utils/processCompletedGame.ts`**: import `persistDarkStadiumRecordsForCompletedGame` + `isFranchisePhase2StadiumRecordsEnabled`; in the dark-tap chain (inside `if (trueValueScope)`, e.g. right after the L12 All-Star block), add:
+   ```
+   if (isFranchisePhase2StadiumRecordsEnabled()) {
+     try {
+       await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+     } catch (e) {
+       console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+     }
+   }
+   ```
+4. **`src/utils/tests/franchiseStadiumRecordsTap.test.ts`** (NEW): 
+   - flag OFF (default) → `persistDarkStadiumRecordsForCompletedGame` returns `dark-noop` and calls NONE of the seam loaders (spy `stadiumRecordsTapSeam.getRecentGames` → not called).
+   - flag ON (via `setFranchisePhase2StadiumRecordsEnabledForTests(true)`, reset in afterEach) with the seam mocked: `getRecentGames` → `[oneCompletedGame]`, `getFranchiseConfig` → `{ stadiums: [...] }`, spy `buildFranchiseStadiumFoundationReport` → a stub report, spy `upsertFranchiseStadiumRecordsFromFoundationReport` → `{ records:[r], changes:[c], persisted:true, blockers:[], … }` → assert the result is `{ status:'written', written:1, changes:1 }` and that the upsert was called with the built report.
+   - flag ON but `upsert` returns `persisted:false` (no records) → result `status:'dark-noop'`, `written:0`, `changes:0`.
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/franchisePhase2Flags.ts`, `src/utils/franchiseStadiumRecordsTap.ts` (NEW), `src/utils/processCompletedGame.ts`, `src/utils/tests/franchiseStadiumRecordsTap.test.ts` (NEW). Do NOT touch `franchiseStadiumRecordsStorage.ts`/`franchiseStadiumFoundation.ts` (use their existing exports), any UI, any oracle, any other flag.
+- Build-dark: flag default false → the tap early-returns before any load. No DB change (the stadium db/store + the `changes[]` field already exist).
+- No new record types, no at-bat/fielding event loads, no consumption of `changes[]` (later hops).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsTap.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (this wires into `processCompletedGame` → transitive-mock-break risk).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: flag default false, tap is a no-op when off, only the listed files touched, no new record types / no event loads / changes[] not consumed.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `getRecentGames`/`getFranchiseConfig` signatures differ from the anchors (re-read `gameStorage.ts:1059` / `franchiseManager.ts:341`).
+- STOP-IF `PersistedTrueValueScope` does not expose `franchiseId`/`seasonId`/`statsScopeId`/`seasonNumber` (re-read how the sibling dark taps read the scope).
+- STOP-IF wiring the import/tap forces a change to a forbidden file.
+- A correct BLOCK is GOOD. Do NOT consume `changes[]`, do NOT add fame/morale/reporter, do NOT flip the flag's default.
+<!-- ===== END CONTRACT: A1.5d-1b ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1c ===== -->
+# CONTRACT A1.5d-1c — §4 fame-bearing park-record catalog (DETECT, build-dark, single storage file)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+Third slice of A1.5d hop-1 (DETECT). hop-1a returned `changes[]`; hop-1b wired the per-game tap+flag. This hop ADDS the §4 FAME-BEARING record types to the candidate builder so the records become meaningful — and they automatically flow through hop-1a's existing `changes[]` SET/OVERTAKE detection (no detection change needed). **Build ONLY the record catalog + builder, in ONE production file (`franchiseStadiumRecordsStorage.ts`) + its test.** Do NOT consume `changes[]` (hop-2 fame swap is the first consumer), do NOT touch fame/morale/reporter/Almanac/rivalry, do NOT add a `min-sample` valve, do NOT build §8 display.
+
+## CRITICAL DESIGN — read this first (Captain re-verified every field from source 2026-06-26)
+The handoff suggested "extend the foundation input with `getGameEvents` loads + thread hrDistance/WPA onto `FranchiseSprayChartRow`." **That is UNNECESSARY and is NOT what to build.** Verification: the §4 source data is ALREADY INLINE on the `CompletedGameRecord[]` that the tap passes to the upsert (`upsertFranchiseStadiumRecordsFromFoundationReport(report, { completedGames })`). So compute the §4 records **directly from `options.completedGames`** inside the candidate builder. This touches ONLY `franchiseStadiumRecordsStorage.ts` (+ test) — NO `franchiseStadiumFoundation.ts` change (no read-only-contract bump), NO tap change, NO flag change, NO DB change. It is purely additive: the existing storage tests pass bare `completedGame()` fixtures that carry NO inline `atBatEvents`/`playerWpaTotals`, so they produce ZERO new records and stay green (the `toHaveLength(3)` idempotency test MUST remain 3 — do NOT weaken it).
+
+## GROUND ANCHORS (all Captain-verified from source — re-read at point of use; do NOT re-discover)
+- **`CompletedGameRecord`** (`src/utils/gameStorage.ts:572`): `.atBatEvents?: AtBatEvent[]` (`:626`), `.playerWpaTotals?: KblWpaPlayerTotal[]` (`:624`), `.stadiumId?: string|null` (`:595`), `.stadiumName?: string|null` (`:594`), `.finalScore` (`:601`). Both `atBatEvents` + `playerWpaTotals` are archived inline on each game and returned by `getRecentGames` (the tap's source). They may be `undefined`/`[]` for some games — guard with `?? []`.
+- **`AtBatEvent`** (`src/utils/eventLog.ts:210`): `.result: AtBatResult` (`:226`); `.wpa: number` (`:248`, **batter's-team perspective** — positive = batter helped his team); `.batterId`/`.batterName`/`.batterTeamId` (`:218-220`); `.pitcherId`/`.pitcherName`/`.pitcherTeamId` (`:221-223`); `.batterContext?.handedness?: 'L'|'R'|'S'` (`:322`); `.enrichment?.hrDistance?: number` (`:436`); play context `.inning`/`.halfInning`/`.outs`/`.awayScore`/`.homeScore` (`:231-236`); `.undoneAt?` (`:215`); `.eventId` (`:211`).
+- **HR detection:** `result === 'HR' || result === 'ITPHR'` (`AtBatResult`, `src/types/game.ts:13`; `'HR'`=over-fence, `'ITPHR'`=inside-the-park).
+- **`KblWpaPlayerTotal`** (`src/utils/kblWpaAttribution.ts:57`): `.playerId`/`.playerName`/`.teamId`/`.totalWpa`/`.battingWpa`/`.pitchingWpa` (`:58-63`).
+- **Candidate plumbing** (`src/utils/franchiseStadiumRecordsStorage.ts`): `interface RecordCandidate` (`:86-99`); `buildCandidatesFromFoundation(report, completedGames, blockers)` (`:528`) currently returns `[...scoreRecordCandidates(report.scope, completedGames, blockers), ...sprayCandidates(report.sprayCharts.rows)]`; `scoreRecordCandidates` (`:337`) shows the canonical per-stadium grouping + `sameScope`/`gameIsComplete`/`hasText(game.stadiumId)` guards to REUSE; `recordFromCandidate` (`:291`) + the upsert loop (`:565-588`) do the generic `changes[]` SET/OVERTAKE detection on `leaderPlayerIds.length === 1` — the new records inherit it for free; `candidateSummary` (`:267`) has a safe default branch (set explicit `evidenceSummary` on every new candidate so it is never hit).
+- **No external consumers of `FranchiseStadiumRecordType`** (only this file + the pass-through tap) → adding literals is safe; NO exhaustive switch anywhere breaks.
+- §4 polarity table (STADIUM_ANALYTICS_SPEC_V2 §4): farthest-HR RHB/LHB = +; most-HR-here-season = +; most-HR-**allowed** = −; highest-cum-WPA position/pitcher = +; lowest-cum-WPA position/pitcher = −; largest +single-play-WPA-swing = +; largest −single-play-WPA-swing = −. (Existing run/spray/no-hitter/perfect-game = NOT fame-bearing → polarity 0.)
+
+## EXPECTED OUTPUT — `src/utils/franchiseStadiumRecordsStorage.ts`
+1. **Extend `FranchiseStadiumRecordType`** (`:11`) with the 10 new literals:
+   `'farthest-hr-rhb' | 'farthest-hr-lhb' | 'most-hr-here-season' | 'most-hr-allowed-pitcher' | 'highest-cumulative-wpa-position' | 'lowest-cumulative-wpa-position' | 'highest-cumulative-wpa-pitcher' | 'lowest-cumulative-wpa-pitcher' | 'largest-positive-wpa-swing' | 'largest-negative-wpa-swing'`.
+2. **Add + export** `export const FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<FranchiseStadiumRecordType, 1 | -1 | 0> = { … }` — the 8 existing types → `0`; the 10 new per the §4 table above (+1 / −1). (This is the seam hop-2 reads; unconsumed here.)
+3. **Add a new builder** `function fameBearingCandidates(scope: FranchiseStadiumRecordsScopeInput, completedGames: CompletedGameRecord[], blockers: string[]): RecordCandidate[]`:
+   - Filter to scoped + complete games with a non-empty `stadiumId` (REUSE `sameScope(scope, game)` + `gameIsComplete(game)` + `hasText(game.stadiumId)`; push a blocker + skip on scope/stadium mismatch exactly like `scoreRecordCandidates`). Group games by `game.stadiumId`. `stadiumName` = first game with `hasText(game.stadiumName)` (mirror `:360`).
+   - Per stadium, iterate the stadium's games' `atBatEvents ?? []` (skip `event.undoneAt`) and `playerWpaTotals ?? []`, and emit these candidates (recordKey `'leader'` for all; `value`/`valueLabel`/`leaderTeamIds`/`leaderPlayerIds`/`leaderPlayerNames`/`sourceGameIds`/`evidenceIds`/explicit `evidenceSummary` filled). Emit a candidate ONLY when there is at least one qualifying datum (no qualifying HR → no farthest/most-HR candidate, etc.):
+     - **`farthest-hr-rhb`** / **`farthest-hr-lhb`**: among HRs (HR|ITPHR) with `typeof enrichment.hrDistance === 'number' && Number.isFinite(...)` AND `batterContext.handedness === 'R'` (rhb) / `'L'` (lhb), pick the MAX distance; leader = that batter; `value` = distance (feet). **Switch hitters (`'S'`) and null/undefined handedness are EXCLUDED from BOTH handedness distance records** (per-PA stance is not in the data — documented conservative default). Ties (equal max distance, different batters) → multiple `leaderPlayerIds` (silent at the changes layer).
+     - **`most-hr-here-season`**: count ALL HRs (HR|ITPHR, any handedness, distance irrelevant) per `batterId`; leader(s) = max count; `value` = count.
+     - **`most-hr-allowed-pitcher`** (polarity −): count ALL HRs per `pitcherId`; leader(s) = max count; `value` = count. `leaderTeamIds` = the pitcher's team.
+     - **`highest-cumulative-wpa-position`** / **`lowest-cumulative-wpa-position`**: per playerId, sum `(totalWpa - pitchingWpa)` across the stadium's `playerWpaTotals` rows (the position contribution; a two-way player's pitching is excluded here). Eligible = players with ≥1 row at the stadium. highest = MAX-sum holder; lowest = MIN-sum holder. `value` = the sum (may be negative). (A stadium with ≥1 eligible position-WPA player yields both a highest and a lowest candidate; if only one eligible player, highest==lowest holder is fine — both fire for that sole player.)
+     - **`highest-cumulative-wpa-pitcher`** / **`lowest-cumulative-wpa-pitcher`**: per playerId, sum `pitchingWpa`. Eligible = players with ≥1 row AND a non-zero pitching contribution? — NO, keep it simple: eligible = players with ≥1 `playerWpaTotals` row at the stadium (pitchingWpa defaults 0). highest = MAX, lowest = MIN. (Documented: a pure position player sums pitchingWpa 0; if every eligible player is 0 the holder is still well-defined — pick deterministically by the max/min then `playerId` tiebreak via the existing sole/tie logic.)
+     - **`largest-positive-wpa-swing`** (polarity +) / **`largest-negative-wpa-swing`** (polarity −): over the stadium's at-bat events (`!undoneAt`), pick the play with the MAX `wpa` (positive-swing) and the MIN `wpa` (negative-swing), **batter-attributed** (leader = `batterId`). Emit the positive-swing candidate ONLY if the max `wpa > 0`; the negative-swing ONLY if the min `wpa < 0`. `value` = that play's `wpa`. `evidenceIds` = [that play's `eventId`]; `evidenceSummary` = play context, e.g. `` `${batterName} ${result} (inning ${inning} ${halfInning}, WPA ${wpa.toFixed(3)}) at ${stadiumName ?? stadiumId}` `` (this is the hop-4 reporter's play-context source).
+   - Determinism: when building per-player sums use a `Map` keyed by playerId and resolve ties into multiple `leaderPlayerIds` (do NOT collapse a real tie to one). Sort nothing inside the candidate (the upsert + `recordFromCandidate`/`uniqueSorted` already normalize).
+4. **Wire it in:** `buildCandidatesFromFoundation` (`:528`) returns `[...scoreRecordCandidates(...), ...sprayCandidates(...), ...fameBearingCandidates(report.scope, completedGames, blockers)]`.
+5. Do NOT change `recordFromCandidate`, the upsert loop, the `changes[]` classification, the policy flags, or what is stored. The new records ride the EXISTING machinery.
+
+## EXPECTED OUTPUT — `src/utils/tests/franchiseStadiumRecordsStorage.test.ts` (extend; reuse the `completedGame()`/`atBat()`/`foundation()`/`scope` fixtures at the top)
+Add tests that pass `completedGames` carrying inline `atBatEvents` + `playerWpaTotals` (override the `completedGame()` fixture) so the new records fire, pinning at least:
+- **farthest-hr-rhb SET then OVERTAKE:** game with a RHB HR `hrDistance:450` → `changes` has `farthest-hr-rhb` `set`, leader = that batter, value 450; a second upsert with a different RHB HR `hrDistance:460` → `overtake`, `priorLeaderPlayerIds:[A]`, `newLeaderPlayerIds:[B]`, priorValue 450 / newValue 460.
+- **switch hitter excluded:** an `'S'` HR with a distance does NOT create a farthest-hr record (rhb+lhb absent for that batter) but DOES count toward `most-hr-here-season`.
+- **blank distance:** an HR with `hrDistance: undefined` is ineligible for farthest-hr but counts toward `most-hr-here-season` / `most-hr-allowed-pitcher`.
+- **most-hr-allowed-pitcher** fires with the right pitcher leader + count.
+- **position vs pitcher cumulative WPA split:** a `playerWpaTotals` row with `totalWpa:2, pitchingWpa:1.5` → position contribution `0.5`, pitcher contribution `1.5`; assert the `highest-cumulative-wpa-position` value and the `highest-cumulative-wpa-pitcher` value are computed from the right components; prove a two-way player can hold BOTH; prove `lowest-*` picks the min holder when 2+ players.
+- **single-play swing:** max-wpa play → `largest-positive-wpa-swing` (batter leader, value = wpa, evidenceSummary contains the inning/result); min-wpa (negative) play → `largest-negative-wpa-swing`; an all-positive-WPA stadium yields NO negative-swing record.
+- **polarity map:** assert `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY['farthest-hr-rhb'] === 1`, `['most-hr-allowed-pitcher'] === -1`, `['highest-team-runs-game'] === 0`.
+- **existing tests stay green:** the `rerunning storage is idempotent` test (bare `completedGame()`, no inline atBat/WPA) STILL yields `toHaveLength(3)` — confirm you did NOT have to change it.
+
+## CONSTRAINTS
+- Touch ONLY `src/utils/franchiseStadiumRecordsStorage.ts` + `src/utils/tests/franchiseStadiumRecordsStorage.test.ts`. Do NOT touch `franchiseStadiumFoundation.ts`, the tap, `franchisePhase2Flags.ts`, `processCompletedGame.ts`, any UI, any oracle. No DB change (additive record TYPES only — no schema/store/version change; the `by_identity` index already keys on the new types' identity).
+- No `Math.random`/`Date.now()`/`new Date()` added (the upsert's existing `timestamp` path is untouched). Pure/deterministic builder.
+- Build-dark: the upsert is only called live by the flag-gated tap (default OFF) → zero live behavior change. (The upsert is also called directly by tests — expected.)
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsStorage.test.ts src/utils/tests/franchiseStadiumRecordsTap.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (this module is in the `processCompletedGame` transitive graph via the tap).
+
+## FORMAT
+Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: computed from inline `completedGames` data (NOT foundation/spray-row/getGameEvents); `franchiseStadiumFoundation.ts`/tap/flag/processCompletedGame UNTOUCHED; the idempotency `toHaveLength(3)` test unchanged; 10 new types + polarity map added; `changes[]` detection NOT modified.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF any anchor field is NOT where stated (e.g. `AtBatEvent.wpa` / `.enrichment.hrDistance` / `KblWpaPlayerTotal.pitchingWpa` / `CompletedGameRecord.playerWpaTotals` absent) — re-read and report; do NOT invent a fallback source.
+- STOP-IF building a record forces a change to `franchiseStadiumFoundation.ts`, the tap, the flag, or `processCompletedGame.ts` (it must not — the data is inline on `completedGames`).
+- STOP-IF the existing `rerunning storage is idempotent` `toHaveLength(3)` test breaks (that would mean a fixture carries inline atBat/WPA data unexpectedly — report it, do NOT weaken the assertion).
+- A correct BLOCK is GOOD. Do NOT consume `changes[]`, do NOT add fame/morale/reporter, do NOT build §8 display, do NOT add a min-sample valve.
+<!-- ===== END CONTRACT: A1.5d-1c ===== -->
+
+<!-- ===== CONTRACT: A1.5d-1c-fix ===== -->
+# CONTRACT A1.5d-1c-fix — two DETECT-correctness fixes in `fameBearingCandidates` (found by adversarial audit)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Apply EXACTLY these two fixes to the already-built A1.5d-1c code. Use **high** reasoning effort.
+
+## CONTEXT
+A1.5d-1c added `fameBearingCandidates` + helpers to `src/utils/franchiseStadiumRecordsStorage.ts` (already on the working tree, NOT committed). The full suite is green (the 2 new test files pass; only the characterized `wpaRuntimeBoundary` + `franchiseManualSmokeFixture` fail). An adversarial audit found two real DETECT-correctness defects the tests don't yet cover. Fix BOTH, in the SAME single production file + its test. Do NOT change anything else, do NOT touch other files, do NOT alter the records that are already correct.
+
+## FIX 1 — pure pitchers must NOT be eligible for the POSITION-player WPA records, and pure position players must NOT be eligible for the PITCHER WPA records (`pushCumulativeWpaCandidates`)
+**Bug:** the function builds BOTH a position aggregate (`totalWpa - pitchingWpa`) and a pitcher aggregate (`pitchingWpa`) for EVERY `playerWpaTotals` row, with no eligibility gate. A pure pitcher has position value `0`; a pure hitter has pitcher value `0`. Those spurious `0`s then compete for the records — e.g. when all real position players are net-positive, a pure pitcher sitting at position-`0` becomes the SOLE `lowest-cumulative-wpa-position` leader (a position record won by someone who never batted); symmetrically a pure hitter at pitcher-`0` can win/co-win `lowest-cumulative-wpa-pitcher`. §4 types these as "position player" vs "pitcher (via `pitchingWpa`)" records.
+**Fix:** when selecting the highest/lowest leaders, restrict each pool to aggregates whose summed value for THAT dimension is non-zero. Concretely: after building `positionWpa`/`pitcherWpa`, compute `const positionEligible = Array.from(positionWpa.values()).filter((a) => a.value !== 0);` and only emit the highest/lowest-position candidates when `positionEligible.length > 0`, taking `Math.max`/`Math.min` + `leadersByValue` over `positionEligible` (NOT the full map). Do the same with `pitcherEligible` for the pitcher records. (Rationale: a player with exactly zero NET contribution in a dimension had no impact there → not eligible for that dimension's record. A two-way player with non-zero in both stays in both. This excludes the pure-pitcher/pure-hitter `0` pollution.) Keep `leadersByValue` exact-equality as-is (see the deferred note — do NOT add epsilon).
+
+## FIX 2 — single-play WPA-swing records must keep TIES as co-leaders (so a tie stays SILENT), not collapse to one arbitrary sole leader (`pushSinglePlayWpaCandidates`)
+**Bug:** the function uses `reduce` to pick exactly ONE `maxEvent`/`minEvent`, so the candidate's `leaderPlayerIds` always has length 1. The `changes[]` detector treats any single leader as a "sole" leader and fires `overtake` when the sole leader differs from the prior — so two plays with EQUAL max `wpa` (across games, on the per-game tap) illegally dethrone the prior holder and fire a fame swap with the SAME value. §5/§12: "ties extend co-leadership silently (only a strict new SOLE holder fires the swap)." Every OTHER record type here already emits all co-leaders (farthest-HR via `=== maxDistance`, counts via `leadersByValue`); the two swing records are the lone exception.
+**Fix:** mirror the farthest-HR co-leader pattern. For the positive swing: `const maxWpa = Math.max(...eventsWithWpa.map((e) => e.wpa)); if (maxWpa > 0) { const leaders = eventsWithWpa.filter((e) => e.wpa === maxWpa); … }` and set `leaderTeamIds`/`leaderPlayerIds`/`leaderPlayerNames`/`sourceGameIds`/`evidenceIds` from ALL `leaders` (map over them), so a genuine tie yields >1 leader → the detector stays silent. For the negative swing use `Math.min` + `< 0` + `e.wpa === minWpa`. `value` = `maxWpa`/`minWpa`. For `evidenceSummary`, build it from the FIRST leader event (`swingEvidenceSummary(leaders[0], …)`) — a single representative play-context string is fine; the make-or-break is the leader LIST. Keep batter attribution (`batterId`/`batterName`/`batterTeamId`).
+
+## EXPECTED OUTPUT
+1. `src/utils/franchiseStadiumRecordsStorage.ts` — the two fixes above; nothing else changes (the 8 existing records, farthest-HR, HR counts, the polarity map, `buildCandidatesFromFoundation` wiring, the changes[] detector — all untouched).
+2. `src/utils/tests/franchiseStadiumRecordsStorage.test.ts` — ADD two tests (keep all existing tests green):
+   - **FIX 1:** a single game whose `playerWpaTotals` has (a) two real position players both net-POSITIVE (e.g. +0.6, +0.2) and (b) a pure pitcher (`battingWpa:0, totalWpa === pitchingWpa`, e.g. totalWpa 1.0 / pitchingWpa 1.0 → position contribution 0). Assert `lowest-cumulative-wpa-position` leader is the smaller-positive POSITION player (NOT the pitcher), and the pitcher is NOT in its `leaderPlayerIds`. Symmetrically include a pure hitter (`pitchingWpa:0`) among net-positive pitchers and assert it is excluded from `lowest-cumulative-wpa-pitcher`.
+   - **FIX 2:** a single game with two at-bat events by DIFFERENT batters with EQUAL positive `wpa` (e.g. both 0.250, the stadium max). Assert the stored `largest-positive-wpa-swing` record has BOTH batters in `leaderPlayerIds` (co-leaders) AND that the upsert `result.changes` contains NO entry for `largest-positive-wpa-swing` (tie → silent, because there is no sole holder). (Reuse the `completedGame()`/`atBat()`/`playerWpaTotal()` fixtures.)
+   - Confirm the existing "cumulative WPA records split position and pitcher contributions" test STILL passes unchanged (the fix does not change its expectations — its low-position/low-pitcher holders have genuinely non-zero contributions).
+
+## CONSTRAINTS
+- Touch ONLY `src/utils/franchiseStadiumRecordsStorage.ts` + `src/utils/tests/franchiseStadiumRecordsStorage.test.ts`. No other file. No DB/flag/foundation/tap/processCompletedGame/oracle touch.
+- Do NOT add epsilon/float-tolerance to `leadersByValue` or the WPA comparisons (deferred to hop-2 as a documented §16 refinement — exact equality matches the existing integer records' pattern).
+- No `Math.random`/`Date.now`/`new Date()`.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordsStorage.test.ts` → green (existing + the 2 new tests). The Captain re-runs the AUTHORITATIVE FULL suite.
+
+## FORMAT
+Report: (1) the 2 files + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only `pushCumulativeWpaCandidates` + `pushSinglePlayWpaCandidates` logic changed, all other records/the polarity map/the changes[] detector untouched, no epsilon added.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF applying either fix would change an EXISTING passing test's expectation (it should not — the existing WPA-split test uses genuinely non-zero holders). If it does, report which test + why before changing it.
+- A correct BLOCK is GOOD.
+<!-- ===== END CONTRACT: A1.5d-1c-fix ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop2 ===== -->
+# CONTRACT A1.5d-hop2 — stadium-record FAME SWAP (§6 polarity sign-law; the first `changes[]` consumer; build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **xhigh** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-2 — the centerpiece. The DETECT chain (hop-1a/1b/1c) is COMPLETE: a completed game produces `FranchiseStadiumRecordChange[]` (records that gained a new SOLE player holder this game). hop-2 makes the fame system CONSUME those changes per the §6 polarity sign-law: a record holder's stored fame HEAT moves (and, because the bump rides the player's single fame heat-delta, their player+fan morale moves too via the EXISTING fame→morale bridge, untouched). Build ONLY this. Do NOT build hop-3 (fan morale `PARK_RECORD_SET` row), hop-4 (reporter), hop-5 (Almanac), hop-6 (rivalry edge), or §8 display. Do NOT add a new `MasterMoraleEventType`/`NarrativeEventType`. Do NOT touch the morale bridge `persistFameMoraleConsequencesAfterFame` or `composeMoraleConsequence`. Do NOT touch any UI/oracle/DB.
+
+## GOAL
+Per §6: each stadium record has a polarity sign `s = FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[recordType]` (+1 glory / −1 dubious / 0 non-fame-bearing). For each change, the NEW sole holder gains fame and (on an overtake) the dethroned prior holder(s) lose fame, sign-preserving:
+- **SET** (new sole holder, no prior): `newHolderΔ = +B_set · s · w`
+- **OVERTAKE**: `newHolderΔ = +B_break · s · w`; **each** `priorLeaderPlayerId`: `Δ = −B_overtaken · s · w`
+where `B_set=2.0`, `B_break=1.5`, `B_overtaken=1.0` (asymmetric — you lose less than the breaker gains, "still a legend"), and `w` = a per-record-type weight (iconic records weighted higher per §16). The signed bumps are aggregated **per player** (a player can be the new holder of one record and the dethroned holder of another → net) and folded into that player's fame heat write, so heat moves AND the existing bridge moves morale from the combined delta — no bridge change, no new sentinel. Build-dark: at default flags nothing runs → byte-identical.
+
+## DESIGN DECISION (Captain-resolved from source — the make-or-break; do NOT deviate)
+The fame→morale **bridge moves MORALE only** (`persistFameMoraleConsequencesAfterFame`, `processCompletedGame.ts:520`); the stored fame **HEAT** is written by `persistDarkFameRecordsForCompletedGame` (`franchiseFameCompute.ts:107/129`). The returned `playerHeatDeltas` feed ONLY the bridge. Therefore hop-2 moves heat by **folding** the polarity bumps **into the fame writer's heat write** (NOT by concatenating onto `playerHeatDeltas` after the fact — a naive concat both fails to move stored heat AND collides on the bridge's per-player `fame:…:playerId:heat-delta` sentinel). Folding (summing the bump into the player's single fame heat-delta) makes the existing per-player `fame:` sentinel stay unique → no collision, no distinct sentinel needed; idempotency comes from the DETECT (on a re-run the upsert produces an EMPTY `changes[]` because the record already stores the new holder → no bump). Use `applyHonorHeatBump(heat, bump)` (additive, clamped, NO decay — the right primitive for a discrete event) NOT `applyHeatUpdate` (which decays).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **The change type** (`franchiseStadiumRecordsStorage.ts:90-99`): `interface FranchiseStadiumRecordChange { stadiumId; recordType: FranchiseStadiumRecordType; recordKey; changeKind: 'set'|'overtake'; priorValue: number|null; priorLeaderPlayerIds: string[]; newValue: number; newLeaderPlayerIds: string[]; }`. On `'set'`, `priorLeaderPlayerIds=[]`. A change fires only on a strict new SOLE holder, so `newLeaderPlayerIds` is a single id; `priorLeaderPlayerIds` may be one or (if prior was co-led) several.
+- **The polarity map** (`franchiseStadiumRecordsStorage.ts:31-50`): `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<FranchiseStadiumRecordType, 1|-1|0>`. 8 types = `0` (non-fame-bearing — `highest-team-runs-game`/`highest-combined-runs-game`/`largest-run-differential-game`/`most-batting/pitching/fielding-spray-events`/`no-hitter`/`perfect-game`); 10 = ±1. Iconic (weight-up) = `farthest-hr-rhb`, `farthest-hr-lhb`, `largest-positive-wpa-swing`, `largest-negative-wpa-swing`.
+- **The heat write** (`franchiseFameCompute.ts:94-131`): the main loop over `activeFamePlayerIds` (players with WPA totals OR fame events this game) reads `getFranchiseFameRecord(fameScope, playerId)`, skips if `storedRow?.updatedAtCheckpoint === checkpoint` (idempotency), computes `heat = applyHeatUpdate(stored.heat, breakdown.total)`, pushes a `FranchiseFameRecordRow`, then `await saveFranchiseFameRecordRows(rows)` and returns `{ status, written, playerHeatDeltas }`. `stored = storedRow ?? { heat:0, reachFloor:0, wasNegative:false }`.
+- **`applyHonorHeatBump(currentHeat, bump, config?)`** (`fameModel.ts:153-159`) = `clampAndRoundHeat(currentHeat + bump)` (additive, clamps to `FAME_TUNING.heat` `[min -30, max 50]`, neutral 0). Use THIS for the discrete bump.
+- **`aggregateChannelFame([])`** (`fameModel.ts:270`) returns `{ total:0, byChannel: <all-channel-keys=0> }` — use it to build the empty `channelByChannel` for a brand-new fame row of a dethroned holder who has NO prior fame record. `aggregateDefensiveFame([])`/`aggregateRolePlayerFame([])` → 0.
+- **The fame row shape** (`franchiseFameRecordsStorage.ts:16-27`): `{ ...scope, playerId, heat, reachFloor, wasNegative, channelTotal, channelByChannel, defensiveFame, rolePlayerFame, updatedAtCheckpoint }`. `wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral`.
+- **The chokepoint** (`processCompletedGame.ts`): inside `if (trueValueScope) {`, `persistTrueValueSnapshotsForCompletedGame` runs at `:1164`; the fame block `if (isFranchisePhase2FameEnabled()) { fameResult = await persistDarkFameRecordsForCompletedGame(...); await persistFameMoraleConsequencesAfterFame(..., fameResult.playerHeatDeltas, ...); }` at `:1168-1180`; the stadium DETECT tap currently runs LATER at `:1260-1266` (`if (isFranchisePhase2StadiumRecordsEnabled()) { await persistDarkStadiumRecordsForCompletedGame(...); }`) and its result is DISCARDED. hop-2 must run the detect BEFORE the fame block and feed its `changeList` into the fame writer.
+- **The tap** (`franchiseStadiumRecordsTap.ts`): `persistDarkStadiumRecordsForCompletedGame` returns `{ status, written, changes: number, reason? }` — `changes` is a COUNT. hop-2 needs the ARRAY → add a `changeList` field.
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseStadiumRecordFame.ts`** (NEW — PURE math, "the matrix is the math"):
+   - Documented §16 dials: `export const STADIUM_RECORD_FAME_BASE = { set: 2.0, break: 1.5, overtaken: 1.0 } as const;` and a per-record-type weight: `export const STADIUM_RECORD_FAME_WEIGHT: Partial<Record<FranchiseStadiumRecordType, number>>` with the 4 iconic types → `1.5`, everything else defaulting to `1.0` via a helper `stadiumRecordFameWeight(recordType): number` (default 1.0). All marked `// §16 SIM-TUNE placeholder (shape locked, value tunable)`.
+   - `export function buildStadiumRecordFameHeatBumps(changes: FranchiseStadiumRecordChange[]): Array<{ playerId: string; heatDelta: number }>`:
+     - For each change: `const s = FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[change.recordType];` `if (s === 0) continue;` `const w = stadiumRecordFameWeight(change.recordType);`
+     - New holders: for each id in `change.newLeaderPlayerIds`, add `(change.changeKind === 'set' ? STADIUM_RECORD_FAME_BASE.set : STADIUM_RECORD_FAME_BASE.break) * s * w`.
+     - Old holders (overtake only — `priorLeaderPlayerIds` is `[]` on set): for each id in `change.priorLeaderPlayerIds`, add `-(STADIUM_RECORD_FAME_BASE.overtaken) * s * w`.
+     - Aggregate per `playerId` (sum). Drop entries whose summed `heatDelta === 0`. Return SORTED by `playerId` (deterministic). PURE — no IO, no `Date.now`/`Math.random`/`crypto`, synchronous.
+   - Import `type FranchiseStadiumRecordChange`, `type FranchiseStadiumRecordType`, `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY` from `./franchiseStadiumRecordsStorage`. No other runtime imports (keep it pure — do NOT import storage write fns / fameModel here).
+2. **`src/utils/franchiseFameCompute.ts`** — extend `persistDarkFameRecordsForCompletedGame` to FOLD the bumps:
+   - Add a 4th OPTIONAL param `stadiumChanges: FranchiseStadiumRecordChange[] = []` (default empty → byte-identical to today). Import `buildStadiumRecordFameHeatBumps` from `./franchiseStadiumRecordFame`, `applyHonorHeatBump` from `../engines/fameModel`, and the change type.
+   - Build `const bumpByPlayer = new Map<string, number>(buildStadiumRecordFameHeatBumps(stadiumChanges).map(b => [b.playerId, b.heatDelta]));` (when empty, the map is empty → no behavior change).
+   - **In the main loop**, after computing `heat = applyHeatUpdate(stored.heat, breakdown.total)`: `const bump = bumpByPlayer.get(playerId); if (bump !== undefined) { heat = applyHonorHeatBump(heat, bump); bumpByPlayer.delete(playerId); }` then recompute `heatDelta = heat - stored.heat` and `wasNegative` AFTER the bump (so the pushed row + the returned delta include the bump). (The existing `continue` on `updatedAtCheckpoint === checkpoint` stays; on a re-run the detect yields no changes so `bumpByPlayer` is empty anyway.)
+   - **After the main loop**, handle dethroned holders who did NOT play this game (remaining `bumpByPlayer` entries): for each `[playerId, bump]`, read `getFranchiseFameRecord(fameScope, playerId)`; `const stored = storedRow ?? { heat:0, reachFloor:0, wasNegative:false }`; `const heat = applyHonorHeatBump(stored.heat, bump); const heatDelta = heat - stored.heat; if (heatDelta === 0) continue;` push `playerHeatDeltas.push({ playerId, heatDelta })` and a row. For an existing `storedRow`: preserve its `reachFloor`/`channelTotal`/`channelByChannel`/`defensiveFame`/`rolePlayerFame`/`updatedAtCheckpoint`, set `heat` + `wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral`. For a NULL `storedRow`: build a fresh row with `reachFloor:0`, `channelTotal:0`, `channelByChannel: aggregateChannelFame([]).byChannel`, `defensiveFame:0`, `rolePlayerFame:0`, `updatedAtCheckpoint: checkpoint`, `wasNegative: heat < FAME_TUNING.heat.neutral`. Push these rows into the same `rows` array BEFORE `saveFranchiseFameRecordRows(rows)` (one write).
+   - The function signature/return shape otherwise unchanged. Existing callers passing no 4th arg are byte-identical.
+3. **`src/utils/franchiseStadiumRecordsTap.ts`** — surface the array:
+   - Add `changeList: FranchiseStadiumRecordChange[];` to `PersistDarkStadiumRecordsResult` (import the type). In the dark-noop returns set `changeList: []`. In the written return set `changeList: result.changes` (keep `changes: result.changes.length`).
+4. **`src/utils/processCompletedGame.ts`** — restructure to detect EARLY and feed the fame writer:
+   - Add `import type { FranchiseStadiumRecordChange } from './franchiseStadiumRecordsStorage';`.
+   - Right AFTER the `persistTrueValueSnapshotsForCompletedGame` try/catch (`:1164-1167`), BEFORE the `if (isFranchisePhase2FameEnabled())` block, insert:
+     ```
+     let stadiumChanges: FranchiseStadiumRecordChange[] = [];
+     if (isFranchisePhase2StadiumRecordsEnabled()) {
+       try {
+         const stadiumResult = await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+         stadiumChanges = stadiumResult.changeList;
+       } catch (e) {
+         console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
+       }
+     }
+     ```
+   - In the fame block, pass the changes into the fame writer: `const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions, stadiumChanges);` (the bridge call is UNCHANGED — it still gets `fameResult.playerHeatDeltas`, which now includes the folded stadium deltas).
+   - REMOVE the now-redundant late stadium-records block at `:1260-1266` (the `if (isFranchisePhase2StadiumRecordsEnabled()) { try { await persistDarkStadiumRecordsForCompletedGame(...); } catch {} }`). The detect now runs ONCE, early.
+5. **`src/utils/tests/franchiseStadiumRecordFame.test.ts`** (NEW — the pure math):
+   - SET on a positive record (e.g. `farthest-hr-rhb`, weight 1.5): new holder `+2.0*1*1.5 = +3.0`; no old holders.
+   - OVERTAKE on a positive record: new holder `+1.5*1*1.5`; each prior holder `-1.0*1*1.5`.
+   - SET/OVERTAKE on a NEGATIVE record (e.g. `most-hr-allowed-pitcher`, weight 1.0, s=-1): new holder gets `-` (infamy); on overtake the dethroned prior holder gets `+1.0` (relieved — rises). Pin the signs explicitly.
+   - A `0`-polarity record (e.g. `highest-team-runs-game`) → produces NO bumps.
+   - Aggregation: a player who is the new holder of one change AND a dethroned holder of another → net summed delta; a player who nets to exactly 0 is dropped; output sorted by playerId.
+6. **`src/utils/tests/franchiseFameCompute.test.ts`** (EXTEND — the fold): with Phase-2 fame ON, call `persistDarkFameRecordsForCompletedGame(game, scope, undefined, [setChange])` and assert (a) the new holder's stored fame `heat` rose by the expected bump beyond the no-stadium baseline, (b) `playerHeatDeltas` includes the bump; then an OVERTAKE change for a dethroned holder who did NOT play this game → assert a fame row is written for that player with a NEGATIVE heat (read it back via `getFranchiseFameRecord`) and they appear in `playerHeatDeltas`. Confirm passing NO 4th arg (or `[]`) is byte-identical to the existing tests (existing assertions must stay green).
+7. **`src/utils/tests/franchiseStadiumRecordsTap.test.ts`** (UPDATE): the three `expect(result).toEqual({...})` blocks must include the new `changeList` field (`changeList: []` for the two dark-noop cases; `changeList: [change]` for the written case).
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/franchiseStadiumRecordFame.ts` (NEW), `src/utils/franchiseFameCompute.ts`, `src/utils/franchiseStadiumRecordsTap.ts`, `src/utils/processCompletedGame.ts`, `src/utils/tests/franchiseStadiumRecordFame.test.ts` (NEW), `src/utils/tests/franchiseFameCompute.test.ts`, `src/utils/tests/franchiseStadiumRecordsTap.test.ts`. Do NOT touch the morale bridge / `composeMoraleConsequence` / `applyFranchiseMoraleMatrixConsequence` / `franchiseStadiumRecordsStorage.ts` / `franchiseStadiumFoundation.ts` / any UI / any oracle / any flag default / the trackerDb.
+- Build-dark: at default flags (`isFranchisePhase2StadiumRecordsEnabled` false AND/OR `isFranchisePhase2FameEnabled` false) NOTHING new runs → byte-identical. `stadiumChanges` defaults `[]`. No DB change (v26).
+- Determinism: no `Date.now()`/`Math.random()`/`crypto` in any new code path. `buildStadiumRecordFameHeatBumps` is PURE.
+- Do NOT consume the changes anywhere else (no fan morale / reporter / Almanac / rivalry — those are hops 3-6). Do NOT add a new sentinel or touch the bridge — the fold reuses the existing per-player `fame:` sentinel.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseStadiumRecordFame.test.ts src/utils/tests/franchiseFameCompute.test.ts src/utils/tests/franchiseStadiumRecordsTap.test.ts` → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite + L-SIM (this restructures the `processCompletedGame` chokepoint + the fame path).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the listed files touched, the bridge untouched, `stadiumChanges` defaults `[]` (byte-identical at default flags), the late stadium block removed (detect runs once early), no new sentinel/record-type/flag-default/DB change, `buildStadiumRecordFameHeatBumps` pure.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `applyHonorHeatBump`/`aggregateChannelFame`/`getFranchiseFameRecord`/`saveFranchiseFameRecordRows` signatures differ from the anchors (re-read).
+- STOP-IF folding the bump forces a change to the morale bridge or any forbidden file.
+- STOP-IF the `FranchiseStadiumRecordChange` / polarity-map / fame-row shapes differ from the anchors (re-read `franchiseStadiumRecordsStorage.ts:31-99` / `franchiseFameRecordsStorage.ts:16-27`).
+- A correct BLOCK is GOOD. Do NOT build hops 3-6, do NOT add a new MoraleEventType/NarrativeEventType, do NOT flip a flag default, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop2 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop3 ===== -->
+# CONTRACT A1.5d-hop3 — stadium-record FAN-MORALE buzz (PARK_RECORD_SET, §5.3+§6+§7, build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-3 — the home-crowd fan buzz when a park record is set/taken. Consumes hop-2's `stadiumChanges` (the `FranchiseStadiumRecordChange[]` already surfaced in `processCompletedGame`). Build ONLY: (a) a new `PARK_RECORD_SET` MasterMoraleEventType + its matrix row, and (b) a build-dark dark writer that, per stadium-record change whose new SOLE holder is on the stadium's HOME team, fires a fan-morale buzz for that home team. Do NOT build the §7 home-park-RIVALRY 2× mechanism (separate later slice). Do NOT touch `narrativeEngine.ts` (the STADIUM_RECORD NarrativeEventType is hop-4). Do NOT add a reporter/almanac/rivalry hop. Do NOT flip any flag default. No DB change.
+
+## GOAL
+§5.3 + §7: when a `FranchiseStadiumRecordChange` fires AND its new sole holder is on the stadium's HOME team, the HOME team's FANS get a morale lift (§16 = the existing PLAYER_MILESTONE fan delta) via a new `PARK_RECORD_SET` matrix event. §6 DOUBLE-COUNT GUARD (make-or-break): the row's SELF delta is 0 — the holder's self-pride already moved via hop-2's fame-heat→morale bridge; PARK_RECORD_SET carries ONLY fan + teammate deltas. A VISITOR who sets a record here earns his fame (hop-2) but NO home-crowd buzz. No negative to the overtaken team's fans in v1. Build-dark: default flags OFF ⇒ byte-identical.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **The matrix exhaustiveness guard = EXACTLY ONE touch point:** `PLAYER_EVENT_BASE_TABLE` (`src/engines/masterMoraleMatrix.ts:301`) `satisfies Record<MasterMoraleEventType, BaseMoraleConsequence>` (`:420`). Adding the union member WITHOUT the table row fails `tsc` (good); both edits required.
+- **Union:** `PlayerCentricMoraleEventType` ends at `'CAPTAIN_SLUMP'` (`masterMoraleMatrix.ts:36`); `MasterMoraleEventType = FanMoraleEventType | PlayerCentricMoraleEventType` (`:38`). Add `| 'PARK_RECORD_SET'` after `'CAPTAIN_SLUMP'`.
+- **Row helper** (`:579`): `row(selfPlayerMoraleDelta, teamFanMoraleDelta, otherTouched: OtherTouchedBase[], reason)`. `touch(relation, delta)` (`:593`).
+- **Clone PLAYER_MILESTONE** (`:347-349`): `row(EVENT_DELTA.clutchHitSelf, EVENT_DELTA.playerMilestoneFan, [touch('teammate', EVENT_DELTA.smallTeammateLift)], 'achievement.player_milestone')`.
+- **EVENT_DELTA** (`:102`): `neutral: 0` (`:103`), `playerMilestoneFan: 4` (`:129`), `smallTeammateLift: 1` (`:167`).
+- **composeMoraleConsequence** (`:461`): `composeMoraleConsequence(event: MoraleMatrixEvent, personality, modifiers, currentPlayerMorale, currentFanMorale)`. A plain matrix event is `{ type: '<MasterMoraleEventType>' }` — the trade-demand sibling uses `composeMoraleConsequence({ type: 'TRADE_DEMAND' }, …)` (`processCompletedGame.ts:630-636`). **USE `{ type: 'PARK_RECORD_SET' }` — NOT `{ kind: 'event', … }`.**
+- **The sibling dark writer to MIRROR:** `persistDarkTradeDemandMoraleForCompletedGame` (`processCompletedGame.ts:589-665`) — gate → per-row: `getFranchisePlayer` → `currentMoraleValue(scope,'player',…)` + `currentMoraleValue(scope,'team-fan',teamId,…)` → `composeMoraleConsequence({type},…,resolveHiddenModifiers(player?.hiddenPersonalityModifiers),…)` → `applyFranchiseMoraleMatrixConsequence({franchiseId,seasonId,statsScopeId,seasonNumber,playerId,teamId,consequence,sourceEventId,timestamp})` in try/catch.
+- **Holder→team:** `sourceTeamIdForFameMorale(gameState, holderId, player)` (`processCompletedGame.ts:479`). **Checkpoint:** `fameMoraleSourceCheckpoint(gameState, archiveOptions)` (`:497`). Both are local fns in `processCompletedGame.ts` — reuse directly.
+- **Stadium→home team:** `getFranchiseConfig(scope.franchiseId)?.stadiums` is `FranchiseTeamStadiumSnapshot[]` (`types/franchise.ts:54`); `.find(s => s.stadiumId === change.stadiumId)?.teamId`. ⚠ `getFranchiseConfig` is **NOT yet imported** in `processCompletedGame.ts` — add `import { getFranchiseConfig } from './franchiseManager';`.
+- **The change shape** (`franchiseStadiumRecordsStorage.ts:90`): `{ stadiumId, recordType, recordKey, changeKind:'set'|'overtake', priorValue, priorLeaderPlayerIds, newValue, newLeaderPlayerIds }`. Sole holder ⇒ `newLeaderPlayerIds.length === 1`.
+- **Wiring:** `stadiumChanges` captured at `processCompletedGame.ts:1169`; fame block `:1178-1190`; flashpoint block `:1191`. Insert the new call between `:1190` and `:1191` (after fame, before flashpoint).
+- **Flag:** `isFranchisePhase2MoraleEnabled` (already imported `:69`). `applyFranchiseMoraleMatrixConsequence` re-checks it (`franchiseMoraleState.ts:498`) and dedups by `sourceEventId` (`:406`).
+
+## EXPECTED OUTPUT
+1. **`src/engines/masterMoraleMatrix.ts`** (2 edits):
+   - Add `| 'PARK_RECORD_SET'` to `PlayerCentricMoraleEventType` (after `'CAPTAIN_SLUMP'`).
+   - Add to `PLAYER_EVENT_BASE_TABLE` (before the `satisfies` at `:420`): `PARK_RECORD_SET: row(EVENT_DELTA.neutral, EVENT_DELTA.playerMilestoneFan, [touch('teammate', EVENT_DELTA.smallTeammateLift)], 'achievement.park_record_set'),` — **self-delta = `EVENT_DELTA.neutral` (0, the §6 guard), fan = `playerMilestoneFan` (4), teammate = `smallTeammateLift` (1).**
+2. **`src/utils/processCompletedGame.ts`**:
+   - Add `import { getFranchiseConfig } from './franchiseManager';`.
+   - New `export async function persistDarkParkRecordMoraleForCompletedGame(gameState: PersistedGameState, scope: PersistedTrueValueScope, stadiumChanges: FranchiseStadiumRecordChange[], archiveOptions?: CompletedGameArchiveOptions): Promise<void>` mirroring the trade-demand sibling:
+     - if `!isFranchisePhase2MoraleEnabled()` → return.
+     - `const config = await getFranchiseConfig(scope.franchiseId); if (!config) return;`
+     - `const checkpoint = fameMoraleSourceCheckpoint(gameState, archiveOptions);`
+     - for each `change` of `stadiumChanges`:
+       - `if (change.newLeaderPlayerIds.length !== 1) continue;` `const holderId = change.newLeaderPlayerIds[0];`
+       - `const homeTeamId = config.stadiums?.find(s => s.stadiumId === change.stadiumId)?.teamId; if (!homeTeamId) continue;`
+       - `const player = await getFranchisePlayer(scope.franchiseId, holderId);`
+       - `const holderTeamId = sourceTeamIdForFameMorale(gameState, holderId, player); if (holderTeamId !== homeTeamId) continue;` (visitor ⇒ no buzz)
+       - `const currentPlayerMorale = await currentMoraleValue(scope, 'player', holderId, player?.morale ?? 50);`
+       - `const currentFanMorale = await currentMoraleValue(scope, 'team-fan', homeTeamId, 50);`
+       - `const consequence = composeMoraleConsequence({ type: 'PARK_RECORD_SET' }, player?.personality, resolveHiddenModifiers(player?.hiddenPersonalityModifiers), currentPlayerMorale, currentFanMorale);`
+       - `const sourceEventId = ['park-record-set', scope.franchiseId, scope.seasonId, scope.statsScopeId, checkpoint, change.stadiumId, change.recordType, change.recordKey, change.changeKind, holderId].join(':');`
+       - `await applyFranchiseMoraleMatrixConsequence({ franchiseId: scope.franchiseId, seasonId: scope.seasonId, statsScopeId: scope.statsScopeId, seasonNumber: scope.seasonNumber, playerId: holderId, teamId: homeTeamId, consequence, sourceEventId, timestamp: String(gameState.savedAt ?? gameState.gameId) });`
+     - wrap the per-change body in try/catch with `console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e)` (per-change, so one bad change doesn't drop the rest — OR a single outer try/catch matching the sibling; mirror the sibling's granularity).
+   - Insert the call after the fame block (`:1190`), before the flashpoint block (`:1191`):
+     ```
+     if (isFranchisePhase2MoraleEnabled()) {
+       try {
+         await persistDarkParkRecordMoraleForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
+       } catch (e) {
+         console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e);
+       }
+     }
+     ```
+3. **`src/utils/tests/processCompletedGame.parkRecordMorale.test.ts`** (NEW): unit-test `persistDarkParkRecordMoraleForCompletedGame` with the morale flag toggled via `setFranchisePhase2MoraleEnabledForTests` + mocks (mirror the trade-demand test if one exists, else the fameMorale test). Pin: (a) flag OFF → no `applyFranchiseMoraleMatrixConsequence` call; (b) flag ON, home-team sole holder → ONE apply with `teamId === homeTeamId`, `playerId === holderId`, the `park-record-set:…` sourceEventId, and a PARK_RECORD_SET consequence whose `selfPlayerMoraleDelta === 0` + `teamFanMoraleDelta === 4`; (c) VISITOR holder (holderTeamId ≠ homeTeamId) → no apply; (d) tie (`newLeaderPlayerIds.length > 1`) → no apply; (e) idempotency — a 2nd identical invocation does not double-apply (same sourceEventId deduped).
+4. **`test-utils/lsim/falsification.ts`**: add a falsification entry proving the `PARK_RECORD_SET` row is non-neutral (composing it yields a non-zero `teamFanMoraleDelta`), OR (simpler) leave falsification to the existing matrix coverage if a matrix-row sanity test already exists — confirm via grep; do NOT weaken any invariant.
+
+## CONSTRAINTS
+- Touch ONLY: `src/engines/masterMoraleMatrix.ts`, `src/utils/processCompletedGame.ts`, `src/utils/tests/processCompletedGame.parkRecordMorale.test.ts` (NEW), and (if needed) `test-utils/lsim/falsification.ts`. Do NOT touch `narrativeEngine.ts` / `franchiseStadiumRecordsStorage.ts` / `franchiseFameCompute.ts` / `franchiseMoraleState.ts` / any flag default / any oracle / the trackerDb.
+- Build-dark: default flags OFF ⇒ byte-identical (the writer early-returns; the new matrix row is inert unless `PARK_RECORD_SET` is composed, which only the new flag-gated writer does).
+- Determinism: no `Date.now()`/`Math.random()`/`crypto` (timestamp from `gameState.savedAt ?? gameState.gameId`, mirroring the bridge).
+- §6 guard: self-delta MUST be `EVENT_DELTA.neutral` (0). Do NOT give the holder a second self-morale swing.
+- ⚠ TRANSITIVE-IMPORT-MOCK-BREAK: adding `import { getFranchiseConfig }` to `processCompletedGame.ts` may break partial `./franchiseManager` mocks in some processCompletedGame test files at module-load. If a test file fails to COLLECT with "No getFranchiseConfig export on the ../franchiseManager mock", add `getFranchiseConfig: vi.fn().mockResolvedValue(null)` to that file's `franchiseManager` mock (test-only stub). The FULL suite is the gate.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/processCompletedGame.parkRecordMorale.test.ts` + any masterMoraleMatrix test → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (processCompletedGame chokepoint + the exhaustive-Record touch + transitive-mock-break risk) + L-SIM (smoke + season + falsification).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the listed files touched, narrativeEngine UNTOUCHED, self-delta 0, compose uses `{ type: 'PARK_RECORD_SET' }`, visitor/tie skipped, distinct sourceEventId, no flag-default/DB change, default flags → byte-identical.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the matrix `satisfies Record<MasterMoraleEventType,…>` / `row`/`touch`/`EVENT_DELTA` / `composeMoraleConsequence` shapes differ from the anchors (re-read).
+- STOP-IF `MoraleMatrixEvent` does NOT accept `{ type: 'PARK_RECORD_SET' }` once the union member is added (re-read `masterMoraleMatrix.ts:80`).
+- STOP-IF resolving the home team forces a change to a forbidden file.
+- A correct BLOCK is GOOD. Do NOT build the §7 rivalry-2× / reporter / almanac / rivalry-edge hops, do NOT add a NarrativeEventType, do NOT flip a flag default, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop3 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop4 ===== -->
+# CONTRACT A1.5d-hop4 — stadium-record REPORTER (STADIUM_RECORD PURE news adapter, §5.4, build-dark/dormant)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-4 — the reporter's DETERMINISTIC half for park records. Per [[reporter-adapter-pure-emission-llm-split]]: BUILD ONLY the **PURE deterministic news adapter** (mints a `SeasonNewsEvent` from a stadium-record change; no LLM/IO/wall-clock/randomness; NO production caller — dormant, mirroring `franchiseL3MatrixNewsAdapter`) + the new `STADIUM_RECORD` NarrativeEventType. **FLAG (do NOT build) the LLM emission seam** (`generateSeasonNewsTake`→`callClaudeMessages`, the `processCompletedGame` wiring, the emission flag, the dedup-at-emission) — that's JK's browser/LLM sign-off domain. Do NOT touch `processCompletedGame.ts`, `franchiseStadiumRecordsStorage.ts`, `masterMoraleMatrix.ts`, or any storage. Do NOT build hop-5 (Almanac) / hop-6 (rivalry edge) / §8 display. No flag, no DB change.
+
+## GOAL
+A `FranchiseStadiumRecordChange` → a `SeasonNewsEvent` (eventType `STADIUM_RECORD`) carrying the deterministic facts a reporter LLM will later render: recordType, stadiumName, newValue, oldValue, the dethroned + new holders, batterHand (for HR records), and a `dramaticWeight`. PURE + dormant + build-dark.
+
+## FORK RULING (Captain-decided from grounding): ADD a new `STADIUM_RECORD` NarrativeEventType — do NOT reuse SEASON_SUMMARY.
+The exhaustive touch is exactly 2 trivial compile-enforced edits; reuse would collide with `franchiseL3MatrixNewsAdapter`'s SEASON_SUMMARY and muddy event identity for an Almanac-scoped, fame-bearing event.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **NarrativeEventType union** (`src/engines/narrativeEngine.ts:77-91`, 14 members ending `'RELATIONSHIP_FLARE'`): add `| 'STADIUM_RECORD'`.
+- **hedgingModifier** `Record<NarrativeEventType, number>` (`narrativeEngine.ts:592-607`, EXHAUSTIVE — compile-fails without an entry): add `STADIUM_RECORD: 1.0,` (records are factual, matching MILESTONE/STREAK/AWARD_RESULT/SEASON_SUMMARY = 1.0). **These 2 edits are the ENTIRE narrativeEngine touch.** Do NOT add it to `requiresRetraction`/`highStakesEvents` (`:640`, a plain `NarrativeEventType[]` literal — records are factual, not retraction-prone). Do NOT touch `reporter.ts:151 perEventRate` (`Partial<Record<…>>`, optional).
+- **SeasonNewsEvent** (`src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:10-19`): `{ franchiseId; seasonId; seasonNumber; eventType: NarrativeEventType; subjectIds: string[]; facts: Record<string, unknown>; dramaticWeight: number }`. **No id/createdAt** (minted later by the flagged emission seam).
+- **Clone target** `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts:28-48` — `buildFranchiseAwardSeasonNewsEvent(input): SeasonNewsEvent`: pure, `dramaticWeight = clamp(base[kind] + magnitudeScale*magnitude, 0, 1)`, `facts: {...input.facts, …discriminators}`, no id/createdAt. Mirror this shape exactly.
+- **The change** (`src/utils/franchiseStadiumRecordsStorage.ts:90-99`): `{ stadiumId, recordType, recordKey, changeKind:'set'|'overtake', priorValue:number|null, priorLeaderPlayerIds:string[], newValue:number, newLeaderPlayerIds:string[] }`. (No stadiumName/playContext on the change — see deferred facts.)
+- **Emission seam to FLAG (do NOT build)**: `franchiseRelationshipFlareEmission.ts:66-102` (flag-gate → load config → adapter → `generateSeasonNewsTake` [LLM] → dedup → persist).
+
+## EXPECTED OUTPUT
+1. **`src/engines/narrativeEngine.ts`** (2 edits): add `| 'STADIUM_RECORD'` to the union; add `STADIUM_RECORD: 1.0,` to `hedgingModifier`.
+2. **`src/src_figma/app/engines/reporter/franchiseStadiumRecordNewsAdapter.ts`** (NEW — PURE, clone the L12 adapter):
+   - `export const STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT = { setBase: 0.5, overtakeBase: 0.6, magnitudeScale: 0.25 } as const;` (§16 sim-tune placeholders — documented).
+   - `export interface FranchiseStadiumRecordNewsInput { franchiseId: string; seasonId: string; seasonNumber: number; change: FranchiseStadiumRecordChange; stadiumName?: string | null; triggerPhase?: 'in-season' | 'season-end'; }` (import the change type type-only from `../../../../utils/franchiseStadiumRecordsStorage`).
+   - `export function buildFranchiseStadiumRecordSeasonNewsEvent(input: FranchiseStadiumRecordNewsInput): SeasonNewsEvent` — ALWAYS returns (records are always newsworthy; never null):
+     - `const { change } = input;`
+     - `const base = change.changeKind === 'overtake' ? STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT.overtakeBase : STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT.setBase;`
+     - `const magnitude = change.priorValue == null ? 0.5 : clamp(Math.abs(change.newValue - change.priorValue) / Math.max(Math.abs(change.priorValue), 1), 0, 1);`
+     - `const dramaticWeight = clamp(base + STADIUM_RECORD_NEWS_DRAMATIC_WEIGHT.magnitudeScale * magnitude, 0, 1);`
+     - `const batterHand = change.recordType === 'farthest-hr-rhb' ? 'R' : change.recordType === 'farthest-hr-lhb' ? 'L' : null;`
+     - `subjectIds`: dedup `[...change.newLeaderPlayerIds, ...change.priorLeaderPlayerIds]` (new holders first, no duplicates — use a Set-preserving-order or filter).
+     - return `{ franchiseId, seasonId, seasonNumber, eventType: 'STADIUM_RECORD', subjectIds, facts: { recordType: change.recordType, recordKey: change.recordKey, stadiumId: change.stadiumId, stadiumName: input.stadiumName ?? null, changeKind: change.changeKind, newValue: change.newValue, oldValue: change.priorValue, newHolderIds: change.newLeaderPlayerIds, overtakenHolderIds: change.priorLeaderPlayerIds, batterHand, playContext: null, triggerPhase: input.triggerPhase ?? 'in-season' }, dramaticWeight }`.
+     - Local `clamp(v,min,max)` helper (mirror the L12 adapter). PURE: no LLM/IO/`Date.now`/`Math.random`/`crypto`. Does NOT mint id/createdAt.
+   - Header comment: documents (a) PURE/dormant/build-dark; (b) **`playContext: null` is a documented v1 DEFER** for the single-play-swing records (the exact play lives in `CompletedGameRecord.atBatEvents`, not on the change/record; reconstructing it would break purity — §4 marks it best-effort; a later schema ticket threads it); (c) the dedup key the emission seam will use = `(stadiumId, recordType, recordKey, newValue)` — all present in `facts`; (d) the flagged emission seam (clone `franchiseRelationshipFlareEmission`).
+3. **`src/src_figma/app/engines/reporter/__tests__/franchiseStadiumRecordNewsAdapter.test.ts`** (NEW — mirror the L12 adapter test): pin (a) a `'set'` farthest-hr-rhb change → eventType STADIUM_RECORD, batterHand 'R', oldValue null, the facts verbatim, dramaticWeight === setBase + scale*0.5; (b) an `'overtake'` change with priorValue → oldValue set, overtakenHolderIds populated, dramaticWeight uses overtakeBase + the computed magnitude (pin the arithmetic); (c) a non-HR record (e.g. highest-cumulative-wpa-pitcher) → batterHand null; (d) a swing record (largest-positive-wpa-swing) → playContext null; (e) subjectIds dedup + new-holders-first; (f) NO id/createdAt minted; (g) purity (deeply-equal output for equal input, no throw).
+
+## CONSTRAINTS
+- Touch ONLY: `src/engines/narrativeEngine.ts`, `src/src_figma/app/engines/reporter/franchiseStadiumRecordNewsAdapter.ts` (NEW), `src/src_figma/app/engines/reporter/__tests__/franchiseStadiumRecordNewsAdapter.test.ts` (NEW). Do NOT touch `processCompletedGame.ts` / `franchiseStadiumRecordsStorage.ts` / `masterMoraleMatrix.ts` / `seasonNewsGenerator.ts` / any flag / any storage / the trackerDb.
+- Build-dark + DORMANT: the adapter has NO production caller (exported + unit-tested only, like `franchiseL3MatrixNewsAdapter`). The new NarrativeEventType + hedging entry are inert until the (flagged) emission seam emits a STADIUM_RECORD — which this ticket does NOT build.
+- PURE: no LLM, no IO, no `Date.now`/`Math.random`/`crypto`, fully synchronous, deterministic.
+- Do NOT reuse SEASON_SUMMARY (ruling above). Do NOT add the LLM emission / wiring / flag.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/src_figma/app/engines/reporter/__tests__/franchiseStadiumRecordNewsAdapter.test.ts` + any narrativeEngine test → green.
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite (the narrativeEngine exhaustive union touch — a fixture enumerating NarrativeEventType would only fail in a full run).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the 3 listed files touched; STADIUM_RECORD added to the union + hedgingModifier (1.0) ONLY; adapter is PURE + dormant (no caller, no id/createdAt, no LLM/IO/time/random); playContext null (documented defer); SEASON_SUMMARY NOT reused; no emission/wiring/flag/storage/DB change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the NarrativeEventType union / hedgingModifier / SeasonNewsEvent / L12-adapter shapes differ from the anchors (re-read).
+- STOP-IF adding STADIUM_RECORD forces an edit to a file outside the 3 listed (e.g. another exhaustive `Record<NarrativeEventType>` — if found, STOP and report it; do NOT silently edit a forbidden file).
+- A correct BLOCK is GOOD. Do NOT build the emission seam / wiring / flag, do NOT reuse SEASON_SUMMARY, do NOT thread real playContext, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop4 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop5 ===== -->
+# CONTRACT A1.5d-hop5 — Almanac (§5.5): house the park record in the franchise-season Almanac, INDEPENDENT of the LLM take (build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY
+A1.5d hop-5 — the Almanac housing for park records, in TWO build-dark deliverables (both gated by `isFranchisePhase2StadiumRecordsEnabled()`):
+- **A. Almanac archive DERIVATION** — surface each standing stadium record as a `'park-record'` `AlmanacNarrativeArchiveEntry` in the franchise-season Almanac list.
+- **B. Season-summary EMBED** — embed the standing records into the persisted `FranchiseSeasonSummary` (the season-finalize de-orphan, §9).
+Do NOT touch `processCompletedGame.ts`, `franchiseStadiumRecordsTap.ts`, `franchiseStadiumRecordsStorage.ts`, `masterMoraleMatrix.ts`, `narrativeEngine.ts`, any reporter adapter, the trackerDb, or any flag definition. Do NOT build the Almanac UI surfacing (filter chip / label / icon in `AlmanacNarratives.tsx`) — that is USER-VISIBLE and FLAGGED for JK. Do NOT build hop-6 (rivalry edge) / §7 home-park-rivalry 2× / §8 per-stadium stat-display. No DB change (records live in their own db `kbl-franchise-stadium-records`; this ticket only READS them).
+
+## ⚠ KEY GROUNDING REVISION (Captain-verified from source — REVISES the spec premise)
+Spec §5.5 says "the change maps 1:1 to a new `'park-record'` AlmanacNarrativeArchiveEntry." **But the `AlmanacNarrativeArchiveEntry` is NOT a persisted store with a writer — it is a DERIVED VIEW.** `listAlmanacNarrativeArchive` (`src/utils/almanacNarrativeArchive.ts:324-371`) materializes entries ON-THE-FLY from durable sources (game stories, commentary tidbits, the transaction log). There is **no `putAlmanacNarrativeArchiveEntry`**. So the faithful, lowest-risk delivery is to teach that derivation to ALSO materialize `'park-record'` entries from the already-persisted `FranchiseStadiumRecord` rows (read via `listFranchiseStadiumRecords`) — exactly mirroring the existing `transactionToArchiveEntry` branch. **No new write path, no new store, no DB bump.** This is read-side, build-dark, and L-SIM byte-identical.
+
+## GOAL
+Flag ON ⇒ a franchise-season Almanac query (`{ franchiseId, seasonId }`) ALSO returns one `'park-record'` entry per standing stadium record for that scope; AND the persisted season summary carries the standing records. Flag OFF ⇒ byte-identical to today (no park-record entries; no `stadiumRecords` field).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26 — re-read before building)
+- **Almanac derivation** `src/utils/almanacNarrativeArchive.ts`:
+  - `AlmanacNarrativeKind` union (`:11-14`): currently `"historical-tidbit" | "post-game-story" | "transaction-history"`. Add `| "park-record"`. (No `Record<AlmanacNarrativeKind>` / exhaustive switch exists — Captain grep'd; `AlmanacNarratives.tsx` handles a new kind GRACEFULLY via default label/icon, no throw.)
+  - `AlmanacNarrativeArchiveEntry` interface (`:16-49`): fields incl. `id`, `kind`, `gameMode`, `timestamp` (number, sort key — DESC), `franchiseId?`, `seasonId?`, `seasonNumber?`, `statsScopeId?`, `playerIds?`, `teamIds?`, `headline`, `body`. **No stadiumId/recordType field** — encode those in `id` + `headline`/`body` (sufficient; filtering is by franchiseId/seasonId/statsScopeId/playerId/teamId).
+  - `listAlmanacNarrativeArchive(filters)` (`:324-371`): loads `completedGames` (`getAllCompletedGames()`, `:328`) into `archiveEntries`, then the transaction branch (`:358-366`) — gated `if (filters.franchiseId && filters.seasonId)` — pushes `transactionToArchiveEntry`. Add the park-record branch RIGHT AFTER the transaction branch, BEFORE the final `.filter(archiveEntryMatchesFilters).sort(...)` (`:368-370`). The existing filter+sort then handle the new entries for free.
+  - `transactionToArchiveEntry` (`:219-272`) is the SHAPE to mirror (a pure `Record → entry` mapper; `id: 'transaction:'+id`; finite-guarded `Date.parse` timestamp).
+- **Stadium records** `src/utils/franchiseStadiumRecordsStorage.ts`:
+  - `listFranchiseStadiumRecords(scope: FranchiseStadiumRecordsScopeInput): Promise<FranchiseStadiumRecord[]>` (`:1013-1034`). `FranchiseStadiumRecordsScopeInput extends FranchiseStadiumFoundationScope` = `{ franchiseId, seasonId, statsScopeId, seasonNumber }` (ALL required; `hasExplicitScope` at `:215` needs a positive-int `seasonNumber`). Returns records sorted by stadiumId→recordType→recordKey.
+  - `FranchiseStadiumRecord` (`:63-86`): `{ …scope, id, stadiumId, stadiumName: string|null, recordType, recordKey, value, valueLabel, leaderTeamIds[], leaderPlayerIds[], leaderPlayerNames[], evidenceSummary, identityKey, createdAt: string, updatedAt: string, … }` (createdAt/updatedAt are ISO STRINGS).
+  - `FranchiseStadiumRecordType` (`:11-29`, 18 members) + `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY: Record<…, 1|-1|0>` (`:31-50`) — both exported.
+- **Tap write-scope (so the read scope matches)** `src/utils/franchiseStadiumRecordsTap.ts:46-62`: the tap writes records under `scope.{franchiseId, seasonId, statsScopeId, seasonNumber}` from `PersistedTrueValueScope`, derived from the same per-game processing context. ⇒ a `CompletedGameRecord` in that franchise+season carries the SAME `statsScopeId`/`seasonNumber` to derive the read scope from.
+- **CompletedGameRecord** `src/utils/gameStorage.ts`: `seasonNumber: number` (required, `:103`), `statsScopeId?: string` (optional, falls back to seasonId per the `?? seasonId` resolution at `:776`), plus `franchiseId`/`seasonId`.
+- **Season-summary** `src/utils/franchiseSeasonSummaryStorage.ts`:
+  - `FranchiseSeasonSummary` interface (`:152-202`) — has placeholder sections `awards/milestones/fanMorale/narrative/parkFactors` (each `FranchiseSeasonSummaryPlaceholder` = `{ status:'placeholder'; reason:string }`, `:208`). **No `stadiumRecords` field yet.**
+  - `buildFranchiseSeasonSummary(params: { franchiseId; seasonNumber; playoffId? })` (`:633`): resolves `seasonId`, loads `config`/`completedGames`, builds `stadiumReport` at `:694`, has `now = Date.now()` (`:687`), and RETURNS the summary literal (`:721-780`). The scope here is FULLY available (`franchiseId`, `seasonId`, `seasonNumber`).
+  - `saveFranchiseSeasonSummary` (`:783`) writes to store `'franchiseSeasonSummaries'` in `getTrackerDb()` (the `kbl-tracker` db). **This builder is NOT invoked by `processCompletedGame` nor by the L-SIM** (Captain grep'd: zero `SeasonSummary` refs in `test-utils/lsim/`).
+- **Flag** `src/utils/franchisePhase2Flags.ts`: `isFranchisePhase2StadiumRecordsEnabled()` (`:125`) + `setFranchisePhase2StadiumRecordsEnabledForTests(b|null)` (`:129`). (Already defined — do NOT redefine.)
+- **L-SIM determinism** `test-utils/lsim/storeDump.ts:4-13` (`DUMP_DATABASES`): includes `kbl-tracker` + `kbl-franchise-morale` but NOT `kbl-franchise-stadium-records`. Deliverable A reads only `kbl-franchise-stadium-records` (not dumped) + writes nothing. Deliverable B's builder isn't invoked in the sim. ⇒ both are byte-identical in the L-SIM (no re-bake).
+
+## DEFAULTS TAKEN (Captain — documented; §16 where noted)
+1. **A — scope derivation:** the Almanac filters lack `seasonNumber`, so derive the full read-scope from a `CompletedGameRecord` in the same franchise+season (its `seasonNumber` + `statsScopeId`). If no such game (or non-positive seasonNumber) → emit no park-record entries (safe degradation). Records keyed under a divergent statsScopeId simply don't match (`listFranchiseStadiumRecords` in-memory filter) — empty, never a crash.
+2. **A — entry labels:** `headline`/`body` use a generic kebab→Title rendering of `recordType` + the record's `evidenceSummary`/`valueLabel`. The PRETTY labels are part of the JK-pending UI polish (below). No per-type label map maintained here.
+3. **B — omit-when-off:** when the flag is OFF, OMIT the `stadiumRecords` field entirely (it is OPTIONAL), rather than emitting a placeholder. This keeps flag-off season summaries byte-identical (zero blast radius on existing tests) — a deliberate, documented deviation from the always-placeholder convention used by the other 5 sections.
+4. **B — embed a trimmed snapshot** (not the raw storage row): drop `policies`/`storageVersion`/scope-key internals; keep display-relevant fields + polarity. Mirrors this file's `toScheduleSnapshot`/`toCompletedGameSnapshot` convention.
+
+## EXPECTED OUTPUT
+1. **`src/utils/almanacNarrativeArchive.ts`** (deliverable A):
+   - Add `| "park-record"` to `AlmanacNarrativeKind` (`:11-14`).
+   - Add type-only imports: `listFranchiseStadiumRecords`, `type FranchiseStadiumRecord` from `./franchiseStadiumRecordsStorage`; `isFranchisePhase2StadiumRecordsEnabled` from `./franchisePhase2Flags`.
+   - NEW pure helper `function stadiumRecordToArchiveEntry(record: FranchiseStadiumRecord): AlmanacNarrativeArchiveEntry`:
+     - `id: 'park-record:' + record.identityKey` (the identityKey already encodes scope+stadium+recordType+recordKey ⇒ unique/stable).
+     - `kind: 'park-record'`, `gameMode: 'franchise'`.
+     - `timestamp`: `const parsed = Date.parse(record.updatedAt); Number.isFinite(parsed) ? parsed : 0` (mirror `transactionToArchiveEntry`).
+     - `franchiseId/seasonId/seasonNumber/statsScopeId` from `record`.
+     - `playerIds: record.leaderPlayerIds`, `teamIds: record.leaderTeamIds`.
+     - `headline`: e.g. `` `${record.stadiumName ?? 'Park'} Record — ${titleCaseKebab(record.recordType)}` `` (add a tiny local `titleCaseKebab` helper: split on `-`, capitalize each, join with space).
+     - `body`: `record.evidenceSummary` (append `` ` (${record.valueLabel})` `` when `valueLabel` is non-empty). No LLM/IO/time/random beyond `Date.parse`.
+   - In `listAlmanacNarrativeArchive`, add AFTER the transaction branch (`:366`) and BEFORE the final filter/sort:
+     ```
+     if (isFranchisePhase2StadiumRecordsEnabled() && filters.franchiseId && filters.seasonId) {
+       const scopeGame = completedGames.find((game) =>
+         game.franchiseId === filters.franchiseId &&
+         game.seasonId === filters.seasonId &&
+         (!filters.statsScopeId || game.statsScopeId === filters.statsScopeId) &&
+         Number.isInteger(game.seasonNumber) && game.seasonNumber > 0,
+       );
+       if (scopeGame) {
+         const records = await listFranchiseStadiumRecords({
+           franchiseId: filters.franchiseId,
+           seasonId: filters.seasonId,
+           statsScopeId: scopeGame.statsScopeId ?? filters.statsScopeId ?? filters.seasonId,
+           seasonNumber: scopeGame.seasonNumber,
+         });
+         for (const record of records) {
+           archiveEntries.push(stadiumRecordToArchiveEntry(record));
+         }
+       }
+     }
+     ```
+2. **`src/utils/franchiseSeasonSummaryStorage.ts`** (deliverable B):
+   - Add imports: `listFranchiseStadiumRecords`, `type FranchiseStadiumRecord`, `type FranchiseStadiumRecordType`, `FRANCHISE_STADIUM_RECORD_TYPE_POLARITY` from `./franchiseStadiumRecordsStorage`; `isFranchisePhase2StadiumRecordsEnabled` from `./franchisePhase2Flags`.
+   - NEW exported types:
+     ```
+     export interface FranchiseSeasonSummaryStadiumRecord {
+       stadiumId: string;
+       stadiumName: string | null;
+       recordType: FranchiseStadiumRecordType;
+       recordKey: string;
+       value: number;
+       valueLabel: string;
+       polarity: 1 | -1 | 0;
+       leaderTeamIds: string[];
+       leaderPlayerIds: string[];
+       leaderPlayerNames: string[];
+       evidenceSummary: string;
+     }
+     export type FranchiseSeasonSummaryStadiumRecords =
+       | FranchiseSeasonSummaryPlaceholder
+       | { status: 'present'; generatedAt: number; records: FranchiseSeasonSummaryStadiumRecord[] };
+     ```
+   - Add OPTIONAL field to `FranchiseSeasonSummary`: `stadiumRecords?: FranchiseSeasonSummaryStadiumRecords;`.
+   - NEW pure mapper `function toStadiumRecordSnapshot(record: FranchiseStadiumRecord): FranchiseSeasonSummaryStadiumRecord` (pick the fields above; `polarity: FRANCHISE_STADIUM_RECORD_TYPE_POLARITY[record.recordType]`).
+   - In `buildFranchiseSeasonSummary`, before the `return` literal, compute:
+     ```
+     let stadiumRecords: FranchiseSeasonSummaryStadiumRecords | undefined;
+     if (isFranchisePhase2StadiumRecordsEnabled()) {
+       const records = await listFranchiseStadiumRecords({
+         franchiseId: params.franchiseId,
+         seasonId,
+         statsScopeId: seasonId,
+         seasonNumber: params.seasonNumber,
+       });
+       stadiumRecords = { status: 'present', generatedAt: now, records: records.map(toStadiumRecordSnapshot) };
+     }
+     ```
+     and in the returned literal add `...(stadiumRecords ? { stadiumRecords } : {}),` (OMIT when off — do NOT emit a placeholder).
+3. **`src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts`** (NEW — model on `src/utils/tests/almanacNarrativeArchive.test.ts`, `fake-indexeddb/auto`, real storage):
+   - beforeEach: delete `kbl-tracker` + `clearFranchiseStadiumRecordsDatabaseForTests()`; afterEach: `setFranchisePhase2StadiumRecordsEnabledForTests(null)`.
+   - Seed: persist a franchise `CompletedGameRecord` with `{ franchiseId:'fr-1', seasonId, statsScopeId: seasonId, seasonNumber: 1, competitionType:'franchise', aggregationStatus:'complete' }`; seed ≥1 standing record under the SAME scope (drive `upsertFranchiseStadiumRecordsFromFoundationReport` with a foundation report + `completedGames` that yields a fame-bearing record, OR build the minimal report directly — match how `franchiseStadiumRecordsTap.test.ts` seeds).
+   - Flag ON ⇒ `listAlmanacNarrativeArchive({ franchiseId:'fr-1', seasonId })` includes a `kind:'park-record'` entry: assert its `franchiseId/seasonId/seasonNumber`, `playerIds` = the record's leaders, `teamIds` = the record's leader teams, a non-empty `headline`+`body`, and a finite `timestamp`. Also assert the `kind:'park-record'` filter returns it and `kind:'transaction-history'` filter excludes it.
+   - Flag OFF ⇒ the SAME query returns NO `park-record` entry (byte-identical behavior).
+4. **`src/utils/tests/franchiseSeasonSummaryStadiumRecords.test.ts`** (NEW — model on existing season-summary tests):
+   - Flag OFF ⇒ `buildFranchiseSeasonSummary(...)` result has `stadiumRecords === undefined` (field omitted).
+   - Flag ON (with ≥1 seeded standing record under the scope) ⇒ `result.stadiumRecords?.status === 'present'`, `records.length >= 1`, each snapshot carries the mapped fields + correct `polarity` from the map, and the heavy storage internals (`policies`/`storageVersion`) are NOT present on the snapshot.
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/almanacNarrativeArchive.ts`, `src/utils/franchiseSeasonSummaryStorage.ts`, + the 2 NEW test files. Do NOT touch `processCompletedGame.ts` / `franchiseStadiumRecordsTap.ts` / `franchiseStadiumRecordsStorage.ts` / `franchisePhase2Flags.ts` / `narrativeEngine.ts` / `masterMoraleMatrix.ts` / `AlmanacNarratives.tsx` / any reporter adapter / the trackerDb / any flag definition.
+- Build-dark: BOTH deliverables gated by `isFranchisePhase2StadiumRecordsEnabled()`. Flag OFF ⇒ no park-record Almanac entries + `stadiumRecords` field omitted ⇒ byte-identical to today. No DB bump (the records db `kbl-franchise-stadium-records` already exists; this ticket only READS it).
+- PURE mappers: `stadiumRecordToArchiveEntry` + `toStadiumRecordSnapshot` do no IO/`Math.random`/`crypto`; the only time call is the finite-guarded `Date.parse(record.updatedAt)`. (`buildFranchiseSeasonSummary` already uses `Date.now()` for `now` — reuse the existing `now`, do not add a second.)
+- Do NOT build the Almanac UI surfacing, the season-summary placeholder-when-off, hop-6, §7 2×, or §8 display.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts src/utils/tests/almanacNarrativeArchive.test.ts src/utils/tests/franchiseSeasonSummaryStadiumRecords.test.ts` → green (incl. the pre-existing almanac test, to prove no regression).
+- Report `git status --porcelain` + the focused vitest summary. The Captain runs the AUTHORITATIVE FULL suite himself (both files are imported by franchise UI + offseason orchestrators — a transitive-import partial-mock test could only fail in a full run) + the L-SIM season (expecting BYTE-IDENTICAL — dormant in the sim).
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the 4 listed files touched; `'park-record'` added to the kind union; both deliverables flag-gated (flag-off byte-identical: no Almanac entries + `stadiumRecords` omitted); mappers PURE; no UI/flag-def/storage-source/narrativeEngine/processCompletedGame/DB change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the anchors differ from source (the Almanac derivation is somehow a write store; `listFranchiseStadiumRecords`/`FranchiseStadiumRecord`/`FranchiseSeasonSummary` shapes differ) — re-read, do not guess.
+- STOP-IF adding `'park-record'` forces an edit to a file outside the 4 listed (e.g. a hidden exhaustive `Record<AlmanacNarrativeKind>` / a `never`-exhaustiveness switch) — report it, do NOT silently edit a forbidden file.
+- STOP-IF the optional `stadiumRecords` field cannot be added without a required-field break on existing `FranchiseSeasonSummary` constructors — report it.
+- A correct BLOCK is GOOD. Do NOT build the UI surfacing / placeholder-when-off / hop-6 / §8, do NOT bump the DB, do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop5 ===== -->
+
+<!-- ===== CONTRACT: A1.5d-hop5-fix ===== -->
+# CONTRACT A1.5d-hop5-fix — harden the Almanac park-record read scope (fix-iter #1)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Apply EXACTLY this small hardening. Use **high** reasoning effort.
+
+## WHY (Captain adversarial-review + source-trace, 2026-06-26)
+An adversarial review flagged that deliverable A (the Almanac park-record derivation in `src/utils/almanacNarrativeArchive.ts`) derives the records read-scope's `statsScopeId` from a matching `CompletedGameRecord`'s `statsScopeId` field — a fragile indirection that could (in theory) diverge from the scope the records were WRITTEN under. A source trace PROVED the franchise invariant: records are written with `statsScopeId === seasonId === getFranchiseSeasonId(franchiseId, seasonNumber)` — `persistSeasonWarAfterAggregation` returns `{ seasonId, statsScopeId: seasonId }` (`processCompletedGame.ts:275-278`); the canonical handoff sets `statsScopeId: seasonId` (`franchisePersistenceContract.ts:79-85`); the completed game's stored `seasonId`/`statsScopeId` coincide. So for the ONLY flow that produces franchise stadium records, the current code is CORRECT — but we will HARDEN it to read `statsScopeId` from the invariant directly (matching deliverable B, which already uses `statsScopeId: seasonId`), removing the scopeGame-`statsScopeId` dependency, and PIN it with a regression test.
+
+## EXPECTED OUTPUT (3 small changes; NO behavior change for the happy path)
+1. **`src/utils/almanacNarrativeArchive.ts`** — in the park-record branch of `listAlmanacNarrativeArchive`, change the `listFranchiseStadiumRecords` read `statsScopeId` from `scopeGame.statsScopeId ?? filters.statsScopeId ?? filters.seasonId` to **`filters.statsScopeId ?? filters.seasonId`** (drop the `scopeGame.statsScopeId` term). KEEP everything else identical — the `scopeGame` is still found (it supplies `seasonNumber`, which the filters lack, and confirms the franchise+season has games). Add a one-line comment above the read: `// Franchise invariant (verified): records are written with statsScopeId === seasonId === getFranchiseSeasonId, so the read scope uses the franchise seasonId — NOT the completed game's statsScopeId field (which is not the records' scope source).`
+2. **`src/utils/franchiseSeasonSummaryStorage.ts`** — add a one-line comment above the `listFranchiseStadiumRecords` call in `buildFranchiseSeasonSummary` (the `statsScopeId: seasonId` read): `// Franchise invariant: stadium records are scoped statsScopeId === seasonId === getFranchiseSeasonId.` NO code change here (the read is already correct).
+3. **`src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts`** — ADD ONE regression test: seed the standing record under the canonical `scope` (statsScopeId === seasonId, as the existing helper does), but seed the COMPLETED GAME with a DIVERGENT `statsScopeId` (e.g. `{ ...completedGame(), statsScopeId: 'divergent-stats-scope' }`) while keeping its `seasonId` === `scope.seasonId` and a valid `seasonNumber`. Flag ON. Assert `listAlmanacNarrativeArchive({ franchiseId: scope.franchiseId, seasonId: scope.seasonId })` STILL returns the `park-record` entry (id `park-record:${record.identityKey}`). (This proves the read scope is derived from the franchise seasonId invariant, NOT the game's `statsScopeId` — the pre-hardening code would have returned zero here.)
+
+## CONSTRAINTS
+- Touch ONLY: `src/utils/almanacNarrativeArchive.ts`, `src/utils/franchiseSeasonSummaryStorage.ts` (comment only), `src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts`. Do NOT touch any other file, no flag/DB/storage-source change.
+- Build-dark preserved; flag-off behavior byte-identical. No new imports needed.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/tests/almanacNarrativeArchive.stadiumRecords.test.ts src/utils/tests/almanacNarrativeArchive.test.ts src/utils/tests/franchiseSeasonSummaryStadiumRecords.test.ts` → all green (incl. the new divergent-statsScopeId regression test). Report `git status --porcelain` + the vitest summary.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF dropping `scopeGame.statsScopeId` would break the existing happy-path test (it must not — under the invariant the value is identical). 
+- STOP-IF the regression test passes WITHOUT the code change (means the change is a no-op — re-check the test seeds a genuinely divergent game `statsScopeId`). A correct BLOCK is GOOD. Do NOT push.
+<!-- ===== END CONTRACT: A1.5d-hop5-fix ===== -->
+
+<!-- ===== CONTRACT: HPR-A ===== -->
+# CONTRACT HPR-A — Home-Park RIVAL engine + store + per-game tap (the "rival brain", build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (this is STEP 1 of 3 — engine only; NO UI, NO fan-morale)
+Build the engine that computes + persists each franchise team's HOME-PARK RIVAL, updated per completed game, build-dark. Do NOT build the hub RED coloring (step 2) or the rival-game fan-morale amplifier (step 3). Do NOT touch any UI file, fanMoraleEngine, masterMoraleMatrix, the trackerDb, or any DUMPED store. New rival data lives in its OWN new IndexedDB db (`kbl-franchise-home-park-rivals`, NOT in the L-SIM DUMP_DATABASES → byte-identical, no re-bake).
+
+## THE RULE (JK-ruled 2026-06-26 — implement EXACTLY)
+For a franchise team T, T's home-park rival = the OPPOSING team that owns T's home ballpark this season:
+- **Eligibility** — a candidate opponent V is eligible to be a rival ONLY if BOTH hold: (1) V has **won ≥1 game** at T's home park this season; (2) **≥2 distinct visiting teams** have played at T's home park (V is not the only visitor). **Holding a park record is NOT required** (JK 2026-06-26: "if a team has won three games at your park and no one else has won that many, they are now your rival, **regardless of whether they hold a park record**"). A clear wins leader with ZERO park records IS the rival.
+- **Ranking** among eligible candidates: most **wins at the park** (DESC); tiebreak (ONLY when wins are equal) **most records held at the park** (DESC); final deterministic tiebreak **teamId ASC**. Records held are the **wins-tie tiebreaker only** — never a gate.
+- **Incumbency (sticky)** — once a team is T's rival they STAY until a challenger STRICTLY overtakes: a challenger replaces the incumbent only if `challenger.wins > incumbent.wins`, OR (`challenger.wins === incumbent.wins` AND `challenger.records > incumbent.records`). A pure tie (equal wins AND equal records) does NOT dethrone — incumbent retained. The incumbent is NOT re-checked for eligibility once crowned (default: the title is lost only by being overtaken, even if the incumbent later loses its last record). With no incumbent, the top eligible candidate is crowned (null if none eligible).
+- **Directional / asymmetric** — computed PER home team T (T's rival is whoever owns T's park; unrelated to whether T owns anyone else's park). Per-season (resets each season via the scope key).
+
+## RECORD-COUNT RULE (the wins-tie TIEBREAKER only — NOT an eligibility gate)
+"Records V holds at park S" = count of `FranchiseStadiumRecord` rows where `stadiumId === S` AND `leaderPlayerIds.length > 0` (PLAYER-attributable only — excludes the 3 game-level team records highest-team-runs-game / highest-combined-runs-game / largest-run-differential-game, which list both teams and are not "ownership") AND `leaderTeamIds.includes(V)`. Co-led records (multiple teams in leaderTeamIds) count once for EACH listed team. This count is consulted ONLY to break a tie in wins (ranking) and a strict-overtake check on equal wins — it is NOT required to qualify.
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **Per-game tap chain** `src/utils/processCompletedGame.ts:1233-1241`: the stadium-records detect tap runs first (`if (isFranchisePhase2StadiumRecordsEnabled()) { … persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions) … }`), then fame (`:1242`), then park-record morale (`:1255`). Insert the NEW rival tap as a SEPARATE gated block IMMEDIATELY AFTER the stadium-records block (after line 1241) — it must run AFTER the records are upserted (it reads them). Mirror the exact `if (isFranchisePhase2StadiumRecordsEnabled()) { try { await persistDarkHomeParkRivalForCompletedGame(gameState, trueValueScope, archiveOptions); } catch (e) { console.warn('[HomeParkRival] …', e); } }` shape. `isFranchisePhase2StadiumRecordsEnabled` already imported (`:76`). REUSE that flag (the rival is a downstream consumer of the records; no new flag).
+- **Completed games + win attribution** `src/utils/gameStorage.ts`: `CompletedGameRecord` (`:572-635`) has `stadiumId?: string|null` (`:595`), `homeTeamId`/`awayTeamId` (`:597-598`, required), `finalScore: {away:number; home:number}` (`:601`), `date:number` (`:574`, chronological), `franchiseId`/`seasonId`/`seasonNumber`. Loader `getRecentGames(limit, {franchiseId, seasonId})` (`:1059`, DESC by date, hard cap = limit; use limit 2000). At T's home park S: opponent V = `awayTeamId` of games where `stadiumId===S && homeTeamId===T`; **V WIN ⟺ finalScore.away > finalScore.home**. Skip games with null `stadiumId`.
+- **Team → home stadium** `src/types/franchise.ts:54-60` `FranchiseTeamStadiumSnapshot {teamId, stadiumId?, stadiumName/stadium}`; loaded via `getFranchiseConfig(franchiseId)?.stadiums` (the park-record morale tap already does `config.stadiums?.find(s => s.stadiumId === change.stadiumId)?.teamId` at `processCompletedGame.ts:685`). Resolve T's home stadium S = `stadiums.find(s => s.teamId === T)?.stadiumId`. If T has no configured stadium, SKIP (no rival).
+- **Records** `src/utils/franchiseStadiumRecordsStorage.ts`: `listFranchiseStadiumRecords(scope)` (`:1013`) returns all franchise-season records; each has `stadiumId` (`:66`), `leaderTeamIds:string[]` (`:72`, uniqueSorted — `.includes` valid), `leaderPlayerIds:string[]` (`:73`). Scope = `{franchiseId, seasonId, statsScopeId, seasonNumber}` (franchise invariant: statsScopeId===seasonId). The own-DB is `kbl-franchise-stadium-records` (separate from the new rival DB).
+- **trueValueScope** is the `PersistedTrueValueScope {franchiseId, seasonId, statsScopeId, seasonNumber}` already in scope at the tap (passed to the sibling taps). `gameState.homeTeamId` + `gameState.stadiumId` available (`gameStorage.ts:100-105`).
+- **Own-DB pattern to mirror** `src/utils/franchiseStadiumRecordsStorage.ts:132-205` (DB_NAME/DB_VERSION/STORES/single dbInstance + `initFranchiseStadiumRecordsDatabase` with guarded `onupgradeneeded` + `ensureIndex`; `resetFranchiseStadiumRecordsDatabaseForTests`/`clearFranchiseStadiumRecordsDatabaseForTests`; `listFranchiseStadiumRecords` scope-keyed read at `:1013`).
+- **L-SIM sandbox** `test-utils/lsim/sandbox.ts:137-145` `DB_NAMES_TO_DELETE` — the new rival DB MUST be added here (per the [[lsim-season-verification-gaps]] own-DB leak rule). It must NOT be added to `test-utils/lsim/storeDump.ts` DUMP_DATABASES (keeping it out → byte-identical, no re-bake).
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseHomeParkRivalCompute.ts`** (NEW — PURE, no IO/Date/random):
+   - `export interface HomeParkRivalCandidate { teamId: string; winsAtPark: number; recordsHeld: number; }`
+   - `export interface ComputeHomeParkRivalInput { homeTeamId: string; candidates: HomeParkRivalCandidate[]; distinctVisitorCount: number; currentRivalTeamId: string | null; }`
+   - `export interface ComputeHomeParkRivalResult { rivalTeamId: string | null; rivalWinsAtPark: number; rivalRecordsHeld: number; outcome: 'no-eligible' | 'crowned' | 'retained' | 'overtaken'; }`
+   - `export function computeHomeParkRival(input): ComputeHomeParkRivalResult` implementing THE RULE exactly: filter candidates to eligible (**winsAtPark≥1 AND distinctVisitorCount≥2 AND teamId !== homeTeamId** — NO recordsHeld gate); sort eligible by winsAtPark DESC, recordsHeld DESC, teamId ASC; incumbent = the eligible-or-not candidate with teamId===currentRivalTeamId (look up its current winsAtPark/recordsHeld from `candidates`); apply the strict-overtake/incumbency logic (overtake iff challenger.wins > incumbent.wins OR (equal wins AND challenger.records > incumbent.records)); return the chosen rival + its current wins/records + the outcome. (No incumbent + no eligible ⇒ {null, 0, 0, 'no-eligible'}. No incumbent + eligible ⇒ top eligible, 'crowned'. Incumbent retained ⇒ 'retained'. Strict overtake ⇒ new top challenger, 'overtaken'.)
+2. **`src/utils/franchiseHomeParkRivalStorage.ts`** (NEW — own IndexedDB db, MIRROR the stadium-records storage structure):
+   - `DB_NAME = 'kbl-franchise-home-park-rivals'`, `DB_VERSION = 1`, store `'homeParkRivals'`, keyPath `'id'`, index `by_scope` on `scopeKey`. Single `dbInstance` + guarded `onupgradeneeded` init.
+   - `export interface HomeParkRivalRow { id: string; franchiseId: string; seasonId: string; statsScopeId: string; seasonNumber: number; homeTeamId: string; rivalTeamId: string | null; rivalWinsAtPark: number; rivalRecordsHeld: number; scopeKey: string; updatedAt: string; updatedAtGameId: string; }` — `id = ${scopeKey}:${homeTeamId}`, `scopeKey = franchiseId:seasonId:statsScopeId:seasonNumber` (mirror `franchiseStadiumRecordsStorage.ts:238-245`).
+   - `export async function putHomeParkRival(row): Promise<void>`; `export async function getHomeParkRival(scope, homeTeamId): Promise<HomeParkRivalRow | null>`; `export async function listHomeParkRivals(scope): Promise<HomeParkRivalRow[]>` (by_scope index, re-filter on the 4 scope fields like `listFranchiseStadiumRecords`); `export function resetHomeParkRivalDatabaseForTests(): void` + `export async function clearHomeParkRivalDatabaseForTests(): Promise<void>`.
+3. **`src/utils/franchiseHomeParkRivalTap.ts`** (NEW — mirror `franchiseStadiumRecordsTap.ts`'s seam pattern):
+   - `export const homeParkRivalTapSeam = { getRecentGames, getFranchiseConfig, listFranchiseStadiumRecords, getHomeParkRival, putHomeParkRival };` (mockable).
+   - `export async function persistDarkHomeParkRivalForCompletedGame(gameState: PersistedGameState, scope: PersistedTrueValueScope, archiveOptions?: CompletedGameArchiveOptions): Promise<{status:'dark-noop'|'updated'|'unchanged'; rivalTeamId: string|null}>`:
+     - If `!isFranchisePhase2StadiumRecordsEnabled()` → `{status:'dark-noop', rivalTeamId:null}`.
+     - Resolve home team `T = gameState.homeTeamId`; config = `getFranchiseConfig(scope.franchiseId)`; `S = config?.stadiums?.find(s => s.teamId === T)?.stadiumId`. If no `T` or no `S` → dark-noop.
+     - Load `games = getRecentGames(2000, {franchiseId: scope.franchiseId, seasonId: scope.seasonId})`; keep franchise completed games with `stadiumId===S && homeTeamId===T && awayTeamId` present. Build per-opponent `winsAtPark` (away>home) + the set of distinct `awayTeamId` (distinctVisitorCount = its size). Exclude `awayTeamId===T`.
+     - Load `records = listFranchiseStadiumRecords(scope)`; for each opponent V, `recordsHeld = count(records where stadiumId===S && leaderPlayerIds.length>0 && leaderTeamIds.includes(V))`.
+     - `candidates = [{teamId:V, winsAtPark, recordsHeld} for each distinct visitor V]`.
+     - `current = await getHomeParkRival(scope, T)`; `result = computeHomeParkRival({homeTeamId:T, candidates, distinctVisitorCount, currentRivalTeamId: current?.rivalTeamId ?? null})`.
+     - If `result.rivalTeamId !== (current?.rivalTeamId ?? null)` OR no current row → `putHomeParkRival({...scope, homeTeamId:T, rivalTeamId: result.rivalTeamId, rivalWinsAtPark: result.rivalWinsAtPark, rivalRecordsHeld: result.rivalRecordsHeld, scopeKey, id, updatedAt: <ISO from a passed-in or deterministic ts — NO Date.now in the pure compute; the tap MAY stamp updatedAt via the archiveOptions timestamp or a new Date in the tap only>, updatedAtGameId: gameState.gameId})` and return `{status:'updated', rivalTeamId: result.rivalTeamId}`; else `{status:'unchanged', rivalTeamId: result.rivalTeamId}`. (Idempotent: same inputs → unchanged.)
+4. **`src/utils/processCompletedGame.ts`** — insert the gated tap block immediately after the stadium-records block (after line 1241), per the GROUND ANCHOR shape. Import `persistDarkHomeParkRivalForCompletedGame` from `./franchiseHomeParkRivalTap`.
+5. **`test-utils/lsim/sandbox.ts`** — add `'kbl-franchise-home-park-rivals'` to `DB_NAMES_TO_DELETE`.
+6. **Tests** (NEW):
+   - `src/utils/tests/franchiseHomeParkRivalCompute.test.ts` — pin: no-eligible (no wins / single-visitor) → null; **a clear wins leader with ZERO records held IS crowned (records NOT required to qualify)**; crowning the top eligible; ranking (wins primary, records tiebreak ONLY on equal wins, teamId final tiebreak); incumbency retain on a pure tie (challenger ties incumbent on wins AND records → incumbent stays); strict overtake on more wins; strict overtake on equal-wins-more-records; a challenger with MORE records but FEWER wins does NOT overtake (wins dominate; records are tiebreak-only); incumbent retained when it later has 0 records but no challenger has more wins; homeTeam excluded from its own candidates.
+   - `src/utils/tests/franchiseHomeParkRivalTap.test.ts` — `fake-indexeddb/auto`, flag on; seed completed games (via the same seed pattern as `almanacNarrativeArchive.stadiumRecords.test.ts` — put into `kbl-tracker` completedGames) + stadium records (via `upsertFranchiseStadiumRecordsFromFoundationReport`) + config.stadiums (mock `getFranchiseConfig`); run the tap; assert the persisted `getHomeParkRival(scope, T).rivalTeamId`. Include a 2-game incumbency sequence (game 1 crowns V1; a later game where V2 ties V1 → V1 retained; a game where V2 passes V1 → V2 overtakes). Flag-off → dark-noop, nothing persisted.
+
+## CONSTRAINTS
+- Touch ONLY the 4 NEW files + `processCompletedGame.ts` (the tap block + import) + `test-utils/lsim/sandbox.ts` (the one DB-name add) + the 2 NEW test files. Do NOT touch any UI, fanMoraleEngine, masterMoraleMatrix, franchisePhase2Flags (reuse the existing flag), trackerDb, storeDump.ts, or any DUMPED store. NO trackerDb bump.
+- PURE compute: `franchiseHomeParkRivalCompute.ts` has no IO/`Date.now`/`Math.random`/`crypto`. The tap MAY use a timestamp for `updatedAt` (the only side of time), but the rival DECISION must be deterministic from inputs.
+- Build-dark: flag off → the tap is a zero-load no-op; the new DB is never opened. The new DB is NOT dumped by the L-SIM → byte-identical (no re-bake). It IS added to the sandbox reset list.
+- Watch the transitive-import-mock-break: wiring `persistDarkHomeParkRivalForCompletedGame` into `processCompletedGame` may break partial-mock test files at module-load (the documented [[processcompletedgame-transitive-import-mock-break]]). If a `gameStorage`/`franchiseManager` mock is missing the new transitively-imported export, ADD a test-only `vi.fn()` stub to that mock (do NOT change production code to dodge it).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- Focused: `NODE_ENV= npx vitest run src/utils/tests/franchiseHomeParkRivalCompute.test.ts src/utils/tests/franchiseHomeParkRivalTap.test.ts` → green. Report `git status --porcelain` + the vitest summary. (The Captain runs the AUTHORITATIVE FULL suite — processCompletedGame chokepoint — + the L-SIM season expecting BYTE-IDENTICAL.)
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the listed files touched; the new DB added to DB_NAMES_TO_DELETE but NOT DUMP_DATABASES; compute is pure; flag-gated/build-dark; no UI/morale/flag-def/trackerDb/DUMPED-store change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the anchors differ from source (CompletedGameRecord/finalScore/getRecentGames/listFranchiseStadiumRecords/config.stadiums shapes) — re-read.
+- STOP-IF wiring the tap forces a change outside the listed files (other than a test-only mock stub).
+- STOP-IF the incumbency/overtake logic cannot be made deterministic from the inputs. A correct BLOCK is GOOD. Do NOT build UI/morale, do NOT bump trackerDb, do NOT add the DB to DUMP_DATABASES, do NOT push.
+<!-- ===== END CONTRACT: HPR-A ===== -->
+
+<!-- ===== CONTRACT: HPR-B1 ===== -->
+# CONTRACT HPR-B1 — STANDINGS rival-red (first-person hub; step 2a) — USER-VISIBLE
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (step 2a of the rivalry feature — STANDINGS ONLY)
+Thread the first-person LENS team + its home-park RIVAL through the franchise data context, and color the rival team's name RED in the franchise-hub STANDINGS. Do NOT touch the award races (`AwardsWatchlist` — that's step 2b, needs the award data contract widened) or the all-star board (flag-dark). Do NOT touch the rival engine/store/tap (shipped). USER-VISIBLE → the visual is JK's browser sign-off; ship it dark-safe (flag off → no red).
+
+## GROUND ANCHORS (Captain-verified via grounding 2026-06-26 — re-read before building)
+- **Lens team** = the primary controlled team: `franchiseConfig?.controlledTeams?.[0]?.teamId ?? null` (`StoredFranchiseConfig.controlledTeams: FranchiseControlledTeamMetadata[]`, `src/types/franchise.ts:201-216` + `:11-15`). `useFranchiseData` already loads `franchiseConfig` into state and exposes it. (Couch-coop multi-team = a later seat-selector concern; v1 = index 0.)
+- **The rival reader** `getHomeParkRival(scope, teamId): Promise<HomeParkRivalRow | null>` (`src/utils/franchiseHomeParkRivalStorage.ts:121-142`) — returns `{rivalTeamId: string|null, ...}` or null. `scope = {franchiseId, seasonId, statsScopeId, seasonNumber}`. Flag-off ⇒ own-DB empty ⇒ returns null ⇒ no red (intrinsically safe; the persist tap no-ops when off).
+- **The hook** `src/src_figma/hooks/useFranchiseData.ts`: `StandingEntry` interface (`:26-32`) = `{team, wins, losses, gamesBack, runDiff}` — **`team` is the display NAME (`teamNameMap[teamId]`), NOT the teamId**; the teamId is in scope inside `entryForTeam(teamId)` (`:493`, populated at `:496-502` + `:505-511`) but DROPPED. `UseFranchiseDataReturn` (`:79-114`) is a flat interface; the context value is the hook's return object (`:630-648`), provided at `FranchiseHome.tsx:1241` `value={franchiseData}`. The hook derives `seasonId` via `getFranchiseSeasonId` (`:298-300`) and has `franchiseId`/`currentSeason` params; statsScopeId === seasonId (franchise invariant). It already does async IndexedDB loads via `useEffect`+`setState` (config `:303-337`, stadiumMap `:342-362`, standings `:466-478`) — mirror these for the rival load.
+- **Standings render** `src/src_figma/app/pages/FranchiseHome.tsx`: `StandingsContent` (`:3129`) maps `useFranchiseDataContext().standings`; team-name cell `:3193` = `<div className="text-[10px] text-[var(--franchise-text)]">{teamData.team}</div>`.
+- **Color token** `src/src_figma/styles/franchise-theme.css`: name color `--franchise-text` (`:59`); existing reds `--franchise-loss #DD0000` (`:86`) etc. are semantically "loss/error" (reused for the SMB logo shadow + error banners) → do NOT reuse. The `text-[var(--x)]` Tailwind arbitrary-value idiom is already used at these sites. (The file's tokens render live in the hub, so it IS wired.)
+
+## EXPECTED OUTPUT
+1. **`src/src_figma/styles/franchise-theme.css`** — add a NEW token near the other franchise tokens: `--franchise-rival: #E5484D;` (a distinct rival red — JK-tunable; NOT a reuse of `--franchise-loss`).
+2. **`src/src_figma/hooks/useFranchiseData.ts`**:
+   - Add `teamId: string;` to `StandingEntry` (`:26-32`); populate it in BOTH branches of `entryForTeam` (`:496-502`, `:505-511`) from the `teamId` already in scope.
+   - Add to `UseFranchiseDataReturn` (`:79-114`): `lensTeamId: string | null;` and `rivalTeamId: string | null;`.
+   - Derive `const lensTeamId = franchiseConfig?.controlledTeams?.[0]?.teamId ?? null;` (from the loaded config state).
+   - Add `const [rivalTeamId, setRivalTeamId] = useState<string | null>(null);` + a NEW `useEffect` mirroring the existing async loaders: when `franchiseId && lensTeamId`, build `scope = {franchiseId, seasonId, statsScopeId: seasonId, seasonNumber: currentSeason}`, optionally early-return if `!isFranchisePhase2StadiumRecordsEnabled()`, call `getHomeParkRival(scope, lensTeamId)`, and `setRivalTeamId(row?.rivalTeamId ?? null)` under a `cancelled` guard; deps `[franchiseId, lensTeamId, seasonId, currentSeason]`. Import `getHomeParkRival` from `../../utils/franchiseHomeParkRivalStorage` and `isFranchisePhase2StadiumRecordsEnabled` from `../../utils/franchisePhase2Flags`.
+   - Add `lensTeamId` + `rivalTeamId` to the hook's return object (`:630-648`).
+3. **`src/src_figma/app/pages/FranchiseHome.tsx`** — in `StandingsContent`, read `rivalTeamId` from `useFranchiseDataContext()` (it already consumes the context for `standings`), and at `:3193` make the className conditional: `teamData.teamId === rivalTeamId ? 'text-[10px] text-[var(--franchise-rival)]' : 'text-[10px] text-[var(--franchise-text)]'` (rival name renders red; everyone else unchanged). Do NOT change anything else in the row.
+4. **Test** (if a `useFranchiseData` test harness / `renderHook` pattern exists — grep `useFranchiseData` under `__tests__`/`tests`): add/extend a light test asserting `StandingEntry` rows now carry `teamId`, and that `rivalTeamId` threads through when `getHomeParkRival` is mocked to return a row. If NO hook-test harness exists, SKIP the test (do NOT invent a heavy RTL harness) and note that JK's browser is the acceptance for the visual.
+
+## CONSTRAINTS
+- Touch ONLY: `franchise-theme.css`, `useFranchiseData.ts`, `FranchiseHome.tsx` (+ a test file IF a harness exists). Do NOT touch `AwardsWatchlist`, the all-star board, the rival engine/store/tap, any flag definition, or the award data contract.
+- Additive + dark-safe: new optional context fields + a new token + a conditional className. Flag off (prod default) ⇒ `getHomeParkRival` returns null ⇒ `rivalTeamId` null ⇒ no row matches ⇒ ZERO visual change. Existing standings behavior byte-identical when there's no rival.
+- Do NOT break existing `useFranchiseData`/`FranchiseHome` consumers — `teamId` is an ADD to `StandingEntry` (no field removed/renamed); `lensTeamId`/`rivalTeamId` are ADDED to the return.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0 (this is the primary gate for a UI change).
+- Run any touched-area tests: `NODE_ENV= npx vitest run` for the `useFranchiseData`/`FranchiseHome`/standings test files if they exist (report which). Report `git status --porcelain`. (The Captain runs the AUTHORITATIVE FULL suite; JK does the browser sign-off for the red.)
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) test result (or "no hook-test harness — JK browser acceptance"); (4) confirmation: only the listed files touched; `--franchise-rival` is a NEW token (not a loss-red reuse); `StandingEntry.teamId` added (nothing removed); flag-off ⇒ no red (dark-safe); no races/all-star/engine/flag-def/award-contract change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF `controlledTeams` / `StandingEntry` / `UseFranchiseDataReturn` / the `:3193` render shapes differ from the anchors — re-read.
+- STOP-IF coloring the standings forces touching the award races or a file outside the listed set. A correct BLOCK is GOOD. Do NOT build races-red, do NOT reuse `--franchise-loss`, do NOT push.
+<!-- ===== END CONTRACT: HPR-B1 ===== -->
+
+<!-- ===== CONTRACT: HPR-B2 ===== -->
+# CONTRACT HPR-B2 — RACES rival-red (award data + AwardsWatchlist; step 2b) — USER-VISIBLE
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (step 2b — award RACES only)
+Widen the award data to carry each candidate's team, then color the rival team's players RED in the franchise-hub award races (`AwardsWatchlist`). Purely ADDITIVE to the award row/candidate shape (no behavior/ordering change). Do NOT touch the rival engine/store/tap, the standings (shipped 2a), the all-star board, or fan-morale (step 3). USER-VISIBLE → JK browser sign-off for the visual.
+
+## GROUND ANCHORS (Captain-verified via grounding 2026-06-26 — re-read before building)
+- **Types** `src/utils/franchiseAwardsStorage.ts`: `FranchiseAwardCandidate` (`:33-37`) = `{playerId, score, marginToWinner}` (NO teamId). `FranchiseAwardRow` (`:44-54`) = `{...scope, category, winnerPlayerId, candidates, goldGloveSplit?, managerActualWins?, managerExpectedWins?, voteWeight, finalized, computedAt}` (NO winnerTeamId).
+- **Builder** `src/utils/franchiseAwardsEngine.ts`: `buildAwardRow(params)` (`:380-414`) maps `params.candidates` (each `{row: FranchiseValueInputRow; score; trueValueScore}`) to `FranchiseAwardCandidate`, extracting `candidate.row.playerId` (`:394-400`). **The team is ALREADY in hand**: `FranchiseValueInputRow.currentTeamId: string | null` (`src/utils/franchiseValueInputs.ts:80`). `categoryCandidateRows` (`:314-378`) supplies the rows with `currentTeamId`. `winnerPlayerId` is set in `buildAwardRow` — derive `winnerTeamId` from the candidate row whose `playerId === winnerPlayerId`.
+- **Award store** `franchiseAwardsRows` in **`kbl-tracker`** (`trackerDb.ts:360-366`, keyPath `[franchiseId,seasonId,statsScopeId,category]`). IndexedDB is schema-agnostic for object props → adding fields needs NO version bump. **⚠ `kbl-tracker` IS in the L-SIM `DUMP_DATABASES`, and season-finalize persists award rows (`computeAndPersistFranchiseWarAwards`), so adding fields RE-BAKES the L-SIM season baseline (benign uniform additive delta — the Captain will run the season, verify the delta is only the new fields, and commit the regenerated baselines).**
+- **UI** `src/src_figma/app/components/AwardsWatchlist.tsx`: loads rows via `getFranchiseAwardRowsByScope` (`:106-110`); winner name at `:199` (`resolveName(row, row.winnerPlayerId)`), candidate name at `:255` (`resolveName(row, candidate.playerId)`); uses the `text-[var(--franchise-text)]` idiom. Mounted from `FranchiseHome.tsx:1474-1479` (props `{franchiseId, seasonId, statsScopeId, seasonNumber}`). `FranchiseHome` has `rivalTeamId` in scope (`:3135` reads `useFranchiseDataContext().rivalTeamId`). The `--franchise-rival` token (`#E5484D`) exists (shipped 2a).
+
+## EXPECTED OUTPUT
+1. **`src/utils/franchiseAwardsStorage.ts`** — add `teamId: string | null;` to `FranchiseAwardCandidate` (`:37`); add `winnerTeamId: string | null;` to `FranchiseAwardRow` (`:54`-area).
+2. **`src/utils/franchiseAwardsEngine.ts`** — in `buildAwardRow` (`:394-400`), add `teamId: candidate.row.currentTeamId ?? null` to each mapped candidate; compute `winnerTeamId` = the `currentTeamId` of the candidate row whose `playerId === winnerPlayerId` (`?? null` if no winner/row), and include it on the returned row. If a SEPARATE manager-award build path exists (MOY) that constructs `FranchiseAwardCandidate`/rows without a player `currentTeamId`, set `teamId`/`winnerTeamId` to `null` there (managers are not rival-team players). Do NOT change any scoring/ordering/winner logic — additive fields only.
+3. **`src/src_figma/app/components/AwardsWatchlist.tsx`** — add an optional prop `rivalTeamId?: string | null` to its props (PREFER a prop over `useFranchiseDataContext()` — avoids any out-of-provider mount risk). Color the WINNER name red when `row.winnerTeamId && row.winnerTeamId === rivalTeamId`, and each CANDIDATE name red when `candidate.teamId && candidate.teamId === rivalTeamId`, via the conditional `text-[var(--franchise-rival)]` vs `text-[var(--franchise-text)]` swap (mirror the standings pattern). Default (no prop / null) ⇒ no red.
+4. **`src/src_figma/app/pages/FranchiseHome.tsx`** — pass `rivalTeamId={franchiseData.rivalTeamId}` to the `<AwardsWatchlist .../>` mount (`:1474-1479`). (`franchiseData` / the context rivalTeamId is already available in the hub render scope — confirm the mount site has it; if the mount is outside where `rivalTeamId` is read, read it from `useFranchiseDataContext()` at the mount.)
+5. **Tests** — update any award tests that assert the EXACT `FranchiseAwardCandidate`/`FranchiseAwardRow` shape (grep `franchiseAwardsEngine`/`franchiseAwards` tests for `toEqual`/`toMatchObject` on candidates/rows) to include the new fields; add a focused assertion that a player-award candidate carries the builder-resolved `teamId` and the row carries `winnerTeamId`. If AwardsWatchlist has a render test, optionally assert the rival prop drives the red class (only if a harness exists — do not invent one).
+
+## CONSTRAINTS
+- Touch ONLY: `franchiseAwardsStorage.ts`, `franchiseAwardsEngine.ts`, `AwardsWatchlist.tsx`, `FranchiseHome.tsx`, + award test files. Do NOT touch the rival engine/store/tap, standings, all-star, fanMoraleEngine, flags, or trackerDb schema (no version bump — additive object props only).
+- ADDITIVE only: no award scoring/ordering/winner/finalization change; `teamId`/`winnerTeamId` are new nullable fields. Old persisted rows without them coexist (null) until re-baked.
+- Dark-safe-ish: when `rivalTeamId` is null (flag off / no rival), no race name turns red. The teamId data-layer add is always-on (additive, harmless) — only the COLORING is rival-gated.
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run` over the award + AwardsWatchlist test files (report which) → green. Report `git status --porcelain`. (The Captain runs the AUTHORITATIVE FULL suite + the L-SIM season — **EXPECT a re-bake**: the award rows gain teamId/winnerTeamId; the Captain verifies the digest delta is ONLY those fields and commits the regenerated `lsim-h2-baseline-checkpoint-*.json`. JK does the browser sign-off for the red.)
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) test result; (4) confirmation: only the listed files touched; teamId/winnerTeamId are ADDITIVE (no scoring/ordering change); coloring is rival-gated (null ⇒ no red); no engine/store/tap/standings/all-star/morale/flag/trackerDb-schema change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the award types / `buildAwardRow` / `FranchiseValueInputRow.currentTeamId` / AwardsWatchlist shapes differ from the anchors — re-read.
+- STOP-IF adding the fields requires a trackerDb VERSION bump or changes award scoring/winner selection — report it (it must NOT). A correct BLOCK is GOOD. Do NOT touch morale/standings/all-star, do NOT push.
+<!-- ===== END CONTRACT: HPR-B2 ===== -->
+
+<!-- ===== CONTRACT: HPR-C ===== -->
+# CONTRACT HPR-C — the GRUDGE: rival games swing FAN + CAPTAIN morale a bit more (step 3, build-dark)
+
+**ROUTE:** Codex (builder). Branch `codex/franchise-v1-next` (MAIN). Branch-only — do NOT commit, do NOT push.
+**ROLE:** Builder. Build EXACTLY this. Use **high** reasoning effort.
+
+## SCOPE BOUNDARY (step 3 — the morale grudge)
+When a franchise team plays a game (HOME or AWAY) against its home-park RIVAL, that team's FANBASE morale swings a bit MORE than a normal game (more negative on a loss, more positive on a win) AND its team CAPTAIN's morale swings slightly more. ADDITIVE bonus on top of the existing Channel A win/loss fan swing — mirror hop-3's PARK_RECORD_SET tap exactly. Directional/asymmetric (only the team whose PRE-GAME home-park rival is this game's opponent). Build-dark behind `isFranchisePhase2StadiumRecordsEnabled` (rival data) AND `isFranchisePhase2MoraleEnabled` (the morale writer). Do NOT touch the rival engine/store/tap, the standings/races UI, Channel A's existing computation, or fanMoraleEngine. ⚠ Writes to the DUMPED `kbl-franchise-morale` store → the Captain will RE-BAKE the L-SIM morale baselines.
+
+## THE RULE (JK-ruled)
+- For each completed franchise game, for EACH team T in {homeTeamId, awayTeamId}: let `rivalTeamId = T's PRE-GAME home-park rival`; let `opponent = the other team`. If `rivalTeamId && rivalTeamId === opponent`, fire the grudge for T: a FAN-morale bonus to T's fans + a CAPTAIN-morale bonus to T's captain, signed by T's result (T won → positive; T lost → negative).
+- **Asymmetric, per-team:** check EACH team's OWN pre-game rival independently; do NOT symmetrize. (Both sides fire only if each independently has the other as its home-park rival.)
+- **Pre-game rival** ("as it stands going into the game"): the rival-update tap (`persistDarkHomeParkRivalForCompletedGame`, processCompletedGame.ts:1243-1249) MUTATES the home team's rival THIS game, so the rival must be SNAPSHOT before that tap runs.
+- **Additive:** this is a BONUS on top of Channel A's normal swing (the team still gets its normal win/loss fan swing). Independent of Channel A's division-based `vsRival` ±1 (a different rival concept; if a team is both a division rival and a home-park rival, both apply — documented default, JK-tunable).
+
+## GROUND ANCHORS (Captain-verified from source 2026-06-26)
+- **Tap chain** `src/utils/processCompletedGame.ts`: stadium detect (1235-1242) · rival-UPDATE tap (1243-1249, mutates the rival) · fame (1250-1262) · park-record morale hop-3 (1263-1269) · Channel A fan swing (1277-1281). Capture the pre-game rivals BEFORE line 1243; fire the grudge tap in the morale section (after the park-record morale block, ~1269), gated `isFranchisePhase2MoraleEnabled`.
+- **hop-3 template (mirror it)** `persistDarkParkRecordMoraleForCompletedGame` (processCompletedGame.ts:668-728, INLINE function): reads `currentMoraleValue(scope,'player',playerId,…)` (:419-426) + `currentMoraleValue(scope,'team-fan',teamId,…)`, builds ONE `composeMoraleConsequence({type, playerId, teamId, …})`, a deterministic colon-joined `sourceEventId`, and ONE `applyFranchiseMoraleMatrixConsequence(...)` carrying both playerId + teamId. One consequence → a team-fan row (when teamFanMoraleDelta≠0) + a player row (when totalPlayerMoraleDelta≠0), idempotent on sourceEventId (`franchiseMoraleState.ts:357-417`).
+- **Matrix** `src/engines/masterMoraleMatrix.ts`: `PlayerCentricMoraleEventType` union (~:20-39 — PARK_RECORD_SET was added here); `PLAYER_EVENT_BASE_TABLE` is the single `satisfies Record<MasterMoraleEventType, BaseMoraleConsequence>` (~:302-424) — adding a type REQUIRES exactly one row here (no other exhaustive map); `EVENT_DELTA` fan/player magnitude constants (~:103-174, e.g. `winFan:1, lossFan:-1`). `composeMoraleConsequence(event, personality, modifiers, currentPlayerMorale, currentFanMorale)` (~:465) returns `{selfPlayerMoraleDelta, teamFanMoraleDelta, totalPlayerMoraleDelta, otherTouched}`.
+- **Rival read** `getHomeParkRival(scope, teamId): Promise<HomeParkRivalRow | null>` (`src/utils/franchiseHomeParkRivalStorage.ts:121-142`) → `{rivalTeamId}`.
+- **Captain** = `Team.captainPlayerId` (`src/utils/leagueBuilderStorage.ts:152`), persisted by `assignTeamCaptains` (`franchiseInitializer.ts:318`). Read the franchise teams via `getAllFranchiseTeams(franchiseId)` (already imported in processCompletedGame for other taps — confirm) and find the team by id → `captainPlayerId`. If null, fire the FAN bonus only (skip the captain delta).
+- **Result/scores**: `gameState.homeTeamId/awayTeamId` + the final scores (mirror how `deriveCompletedGameResultContext` / Channel A derive win/loss; use the same score source the existing taps use — `gameState.homeScore/awayScore` or the archiveOptions finalScore).
+- **DUMPED store** `kbl-franchise-morale` (`franchiseMoraleState.ts:98`) — in the L-SIM `DUMP_DATABASES`. Flags-on grudge writes change the morale snapshot row count + digest → **L-SIM re-bake expected** (the Captain runs it).
+
+## §16 MAGNITUDE (documented defaults — JK-tunable)
+New `EVENT_DELTA` constants in `masterMoraleMatrix.ts`: `rivalGameFan: 2` (the FAN bonus, modest — on top of Channel A's normal ±1×fameVolume) and `rivalGameCaptain: 1` (the SLIGHT captain swing). RIVAL_GAME_WIN uses `+rivalGameFan` fan / `+rivalGameCaptain` self; RIVAL_GAME_LOSS uses the negatives.
+
+## EXPECTED OUTPUT
+1. **`src/engines/masterMoraleMatrix.ts`**:
+   - Add `RIVAL_GAME_WIN` and `RIVAL_GAME_LOSS` to the `PlayerCentricMoraleEventType` union.
+   - Add `rivalGameFan: 2` and `rivalGameCaptain: 1` to `EVENT_DELTA` (documented §16 sim-tune defaults).
+   - Add the TWO rows to `PLAYER_EVENT_BASE_TABLE` (the exhaustive map): `RIVAL_GAME_WIN` → `{ teamFanMoraleDelta: EVENT_DELTA.rivalGameFan, selfPlayerMoraleDelta: EVENT_DELTA.rivalGameCaptain, …mirror the shape of the PARK_RECORD_SET/WIN rows }`; `RIVAL_GAME_LOSS` → the negatives. (Match the existing row field shape exactly; no otherTouched.)
+2. **`src/utils/processCompletedGame.ts`**:
+   - Import `getHomeParkRival` from `./franchiseHomeParkRivalStorage` (+ `getAllFranchiseTeams` if not already imported).
+   - BEFORE line 1243 (after the stadium-records detect block), capture the pre-game rivals: `const preGameHomeParkRivals = new Map<string, string | null>();` and, gated `if (isFranchisePhase2StadiumRecordsEnabled())` in a try/catch, for each of `gameState.homeTeamId`/`gameState.awayTeamId` (skip falsy) set `preGameHomeParkRivals.set(teamId, (await getHomeParkRival(trueValueScope, teamId))?.rivalTeamId ?? null)`.
+   - Add an INLINE `async function persistDarkRivalGameMoraleForCompletedGame(gameState, scope, preGameRivals: Map<string,string|null>, archiveOptions?)` mirroring `persistDarkParkRecordMoraleForCompletedGame`: gate `if (!isFranchisePhase2MoraleEnabled()) return;`; load `getAllFranchiseTeams(scope.franchiseId)` once → a `teamId→captainPlayerId` map; for each team T in `[gameState.homeTeamId, gameState.awayTeamId]` (skip falsy): `rivalTeamId = preGameRivals.get(T)`; `opponent = T === gameState.homeTeamId ? gameState.awayTeamId : gameState.homeTeamId`; if `!rivalTeamId || rivalTeamId !== opponent` continue; derive `won` (T's score > opponent's score from the same score source the file already uses); `eventType = won ? 'RIVAL_GAME_WIN' : 'RIVAL_GAME_LOSS'`; `captainPlayerId = captainsByTeam.get(T) ?? null`; read currentFan via `currentMoraleValue(scope,'team-fan',T,…)` and currentPlayer via `currentMoraleValue(scope,'player',captainPlayerId,…)` (only if captain present); `composeMoraleConsequence({ type: eventType, playerId: captainPlayerId ?? undefined, teamId: T, … }, …)`; `sourceEventId = ['rival-grudge', scope.franchiseId, scope.seasonId, scope.statsScopeId, <checkpoint/gameId>, T, rivalTeamId, won ? 'won' : 'lost'].join(':')`; `await applyFranchiseMoraleMatrixConsequence({ …consequence, sourceEventId, teamId: T, playerId: captainPlayerId ?? undefined, … })` (match hop-3's call arg shape EXACTLY). If `captainPlayerId` is null, the consequence carries the fan delta only (no player row).
+   - Wire the call in the tap chain AFTER the park-record morale block (after line 1269), inside an `if (isFranchisePhase2MoraleEnabled())` try/catch (mirror the hop-3 block): `await persistDarkRivalGameMoraleForCompletedGame(gameState, trueValueScope, preGameHomeParkRivals, archiveOptions);`.
+3. **`src/utils/tests/processCompletedGame.rivalGameMorale.test.ts`** (NEW — mirror `processCompletedGame.parkRecordMorale.test.ts`): pin (a) a rival game (T's pre-game rival === opponent) → exactly one `applyFranchiseMoraleMatrixConsequence` per qualifying team with the right eventType (WIN vs LOSS by result), a team-fan delta of the right sign, and a captain player delta of the right sign; (b) a NON-rival game (opponent ≠ T's rival) → NO grudge consequence; (c) home AND away symmetry (a team gets the grudge whether it's home or away in the game, as long as the opponent is its rival); (d) asymmetry (only the team whose rival is the opponent fires — not both, unless both independently qualify); (e) null captain → fan-only (no player row); (f) idempotency (re-run with the same sourceEventId does not double-apply); (g) flag-off (morale or stadium-records off) → no grudge.
+
+## CONSTRAINTS
+- Touch ONLY: `masterMoraleMatrix.ts`, `processCompletedGame.ts`, + the NEW test file. Do NOT touch the rival engine/store/tap, Channel A's existing computation, fanMoraleEngine, the UI, flags definitions, or the trackerDb. NO trackerDb bump (kbl-franchise-morale is its own DB, no schema change — matrix-auto effect).
+- Build-dark: gated by `isFranchisePhase2StadiumRecordsEnabled` (the pre-game rival snapshot) AND `isFranchisePhase2MoraleEnabled` (the writer). Flags off ⇒ no snapshot, no grudge. Additive on top of Channel A (do NOT modify Channel A).
+- Mirror hop-3 EXACTLY for the compose/apply/sourceEventId/idempotency shape. The captain delta is the captain's own reaction (Channel A is fan-only → no double-count; selfPlayerMoraleDelta is NON-zero, unlike hop-3's self-guard).
+- ⚠ transitive-import-mock-break: adding `getHomeParkRival`/`getAllFranchiseTeams` imports into processCompletedGame may break partial-mock test files at module-load — if so, add a test-only `vi.fn()` stub to that mock (do NOT change production code to dodge it).
+
+## VERIFICATION (run locally; report exact output)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/tests/processCompletedGame.rivalGameMorale.test.ts` + any masterMoraleMatrix test → green. Report `git status --porcelain` + the vitest summary. (The Captain runs the AUTHORITATIVE FULL suite — exhaustive-Record + processCompletedGame chokepoint — + the L-SIM season; **EXPECT a morale re-bake**: rival-game writes add `kbl-franchise-morale.moraleSnapshots` rows + move the digest. The Captain verifies the delta is sane [new rival-grudge sourceEventIds, morale stays in [0,99]] and commits the regenerated baselines. JK does the browser sign-off.)
+
+## FORMAT
+Report: (1) files changed + one-line what; (2) build result; (3) focused vitest summary; (4) confirmation: only the 3 files touched; RIVAL_GAME_WIN/LOSS added to the union + the ONE exhaustive table (2 rows) + EVENT_DELTA; grudge reads the PRE-GAME rival (snapshot before line 1243); additive (Channel A untouched); captain delta non-zero; flag-gated; no UI/engine/store/tap/fanMoraleEngine/trackerDb change.
+
+## FAILURE PROTOCOL (STOP-IF — emit `BLOCKED: <reason>` and STOP)
+- STOP-IF the matrix union/table/EVENT_DELTA, `composeMoraleConsequence`/`applyFranchiseMoraleMatrixConsequence`, hop-3 tap, the tap-chain lines, `getHomeParkRival`, or `Team.captainPlayerId`/`getAllFranchiseTeams` shapes differ from the anchors — re-read.
+- STOP-IF adding RIVAL_GAME_WIN/LOSS forces an edit outside the 3 files (another exhaustive `Record<MasterMoraleEventType>` / a `never` switch) — report it.
+- STOP-IF the pre-game rival cannot be captured before the rival-update tap without modifying that tap — report (the snapshot read before line 1243 must suffice). A correct BLOCK is GOOD. Do NOT modify Channel A, do NOT bump trackerDb, do NOT push.
+<!-- ===== END CONTRACT: HPR-C ===== -->
+
+---
+
+## CONTRACT POINTER — Manager-WPA Step 1 (2026-06-26)
+Full hardened contract: `spec-docs/MWAR_STEP1_CONTRACT.md` (single-layer 3:2:1 net-from-zero manager metric;
+retire tactical + lineup_delta from the total; two live tiers 30/10, keep-in 20 dark). Builder: Codex. Auditor: Opus.
+Lane: `experiment/manager-wpa-window`. Adversarial-reviewed (2 critical orphan bugs caught + fixed pre-handoff).
+
+---
+
+## CONTRACT POINTER — Manager-WPA Step 4 (2026-06-26)
+Full contract: `spec-docs/MWAR_STEP4_CONTRACT.md` (MINIMAL surface re-point — point the end-of-season Manager-of-the-Year
+ceremony screen at the live persisted award row instead of the dead legacy managerStorage store; one component,
+AwardsCeremonyFlow.tsx). JK ruled minimal scope. Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.
+<!-- ===== CONTRACT: EDIT-FROM-DRAFT-1 ===== -->
+## CONTRACT: EDIT-FROM-DRAFT-1 — edit player from the Draft Setup screen (grade auto-derived)
+
+**ROUTE:** worktree `/Users/johnkruse/Projects/kbl-draftfix`, branch `codex/draft-pipeline-fix`.
+**ROLE:** Builder (Codex). Build a UI feature. Branch-only; do NOT commit/push (sandboxed .git — the Captain commits + gates).
+
+**GOAL (JK ruling 2026-06-25, "build it now with grade auto-calculated from ratings"):**
+On the Draft Setup screen, let the user click any player row (IN-POOL or AVAILABLE pane) to FOCUS that player. Show a detail panel below the two panes with the player's identity + ratings + DERIVED letter grade + DERIVED IV, and an **"Edit Player"** button that opens a compact modal to edit the profile. On Save, persist via the hook's `updatePlayer`, with the letter grade AUTO-DERIVED from the (possibly edited) ratings via the CANONICAL model, then `refresh()` so the IV + grade reflect the new profile on the row + panel. This also lets the user disambiguate duplicate players (different ratings/grades) by inspecting them.
+
+**SOURCE OF TRUTH (re-read each at point of use; do not trust this summary blindly):**
+- Target screen: `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (the two-pane Draft Setup you are extending). It already has: the IN-POOL/AVAILABLE `Pane` + `Row` components, bulk multi-select (checkbox/row toggle), `computePlayerIv` for IN-pool IV, the `useLeagueBuilderData` hook (which exposes `updatePlayer` + `refresh`), and `formatMoney`.
+- **Canonical grade = `scoreSmb4Player` (`src/engines/smb4GradeEmulator.ts`), NOT the 3:3:2:1:1 `gradeEngine`** (memory: the IV uses scoreSmb4Player; grade must match its basis). `Smb4PlayerInput` (smb4GradeEmulator.ts:25-46) has ALL-optional fields: name, age, primaryPosition, secondaryPosition, bats, throws, power, contact, speed, fielding, arm, velocity, junk, accuracy, arsenal, trait1, trait2. scoreSmb4Player picks hitter vs pitcher fields internally by position. Reference caller: `src/utils/franchiseTraitGrantCompute.ts:135-146` (`scoreSmb4Player({primaryPosition, bats, throws, velocity, junk, accuracy, trait1, trait2}).grade`). **Add a helper `computePlayerGrade(player: Player): Grade` to `src/utils/leagueBuilderPoolBuilder.ts` (additive, next to `computePlayerIv`)** that passes the player's identity/position/ratings/traits/arsenal to scoreSmb4Player and returns `.grade`. The `.grade` is a `Smb4Grade`; **confirm it is assignable/mappable to `Player['overallGrade']` (the `Grade` type from gradeEngine); if the scales diverge, map it explicitly** (do NOT force an unsafe cast — STOP-IF below).
+- Live IV = `computePlayerIv(player)` (already exported from `leagueBuilderPoolBuilder.ts`).
+- Persist = `updatePlayer` from `useLeagueBuilderData` (→ savePlayer, trackChanges); then `refresh()`. Both already used in the Draft Setup page.
+- Player shape + editable fields: `src/utils/leagueBuilderStorage.ts` `Player` type. Editable in the modal: identity (firstName, lastName, age, bats L/R/S, throws L/R), position (primaryPosition + optional secondaryPosition — use the canonical draftable set already in this file's `POSITION_OPTIONS` minus "All"), and ratings — show the HITTER set (power, contact, speed, fielding, arm) OR the PITCHER set (velocity, junk, accuracy) based on whether primaryPosition is a pitcher role (SP, RP, CP, SP/RP). **overallGrade is DERIVED (display-only, recomputed live as ratings change) — NEVER a manual input.**
+- The Players-page editor (`LeagueBuilderPlayers.tsx`, openEditModal / modal JSX / handleSave) is a FIELD-SET reference only — it is coupled to that page (override tabs, league context). Do NOT import or reuse it. Build a SELF-CONTAINED compact modal (in the Draft Setup file, or one new sibling component file), base profile fields only.
+- Theme: match `LeagueBuilderDraftSetup.tsx`'s retro styling (bg `#2d3d2f`, panels `#556B55`/`#4A6844`, text `#E8E8D8`, accents `#5A8352`/`#C4A853`/`#3B7DD8`, thick borders, `shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]`). Reuse the existing Pane/Row visual language for the panel + modal.
+
+**CONSTRAINTS — edit ONLY these:**
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (the panel + modal + focus state + the row affordance).
+- `src/utils/leagueBuilderPoolBuilder.ts` (ADD `computePlayerGrade` only — additive).
+- OPTIONAL: ONE new component file for the modal (e.g. `src/src_figma/app/pages/DraftSetupPlayerEditModal.tsx`) if cleaner than inline.
+- OPTIONAL: extend the modal/grade with a small unit test (e.g. `computePlayerGrade` returns a valid Grade) — additive test only.
+- **DO NOT TOUCH:** `src/utils/leagueBuilderStorage.ts` (cross-branch overlap; not needed), `src/data/playerDatabase.ts` + `spec-docs/reference/iv_oracle.json` (FROZEN, read-only), the auction/franchise pipeline, `src/engines/smb4GradeEmulator.ts` / `ivEngine.ts` (read-only). No TRACKER_DB_VERSION / kbl-league-builder DB bump (none needed).
+- **Preserve bulk-select + lock/unlock/Start Draft.** The focus/edit interaction must NOT break multi-select. Recommended: clicking a row's body FOCUSES it (shows the panel) while a dedicated checkbox toggles selection — OR keep row-toggle for selection and add a small per-row "edit"/info icon (stop propagation) that focuses+opens. Pick the cleaner one but KEEP bulk add/remove working exactly as now.
+
+**EXPECTED OUTPUT:**
+1. A focused-player detail panel below the panes: name, position(s), age, B/T, ratings, DERIVED grade, DERIVED IV (formatMoney), + "Edit Player" button.
+2. A compact self-contained edit modal: editable identity/position/ratings; grade + IV recompute LIVE from the in-modal ratings (display-only); Save → `updatePlayer` (with overallGrade = computePlayerGrade(edited)) → `refresh()`; Cancel closes without saving.
+3. `computePlayerGrade` helper in leagueBuilderPoolBuilder.ts (canonical scoreSmb4Player grade).
+4. Bulk select + lock/start unaffected.
+
+**VERIFICATION (Codex self-check):** `NODE_ENV= npm run build` exits 0; the modal shows the correct hitter/pitcher rating set; computePlayerGrade returns a valid Grade and the Smb4Grade→Grade mapping is confirmed (state the result in your summary). The Captain runs the full vitest gate + a browser check.
+
+**FORMAT:** Concise summary — files changed; the grade-helper approach + the Smb4Grade→Grade compatibility result; the focus/edit-vs-bulk-select interaction you chose; any STOP-IF hit.
+
+**FAILURE PROTOCOL (STOP-IF):** (a) `Smb4Grade` not cleanly assignable/mappable to `Player['overallGrade']` → STOP, report (no unsafe cast). (b) The feature would require editing `leagueBuilderStorage.ts` or any FROZEN file → STOP. (c) Bulk-select can't be preserved alongside focus/edit → STOP, describe.
+
+**Use xhigh reasoning effort.**
+<!-- ===== END CONTRACT: EDIT-FROM-DRAFT-1 ===== -->
+
+<!-- ===== CONTRACT: POOL-FEAS-1 — pre-draft pool-feasibility check (keystone optimizer step 1) ===== -->
+## POOL-FEAS-1 — pre-draft pool-feasibility check (keystone optimizer step 1)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). You implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files.
+
+GOAL:
+Build the pre-draft pool-feasibility analyzer: point the existing best-roster builder at a LOCKED draft pool and, per
+team archetype, classify support (`supported` | `thin` | `starved`) and emit an "Add ~N [type] players to activate
+[archetype]" prompt when not supported.
+
+SOURCE OF TRUTH:
+`spec-docs/POOL_FEASIBILITY_SPEC.md` (this branch — read it in full first). The operative algorithm is embedded inline
+below so you never need a file off this branch. If the spec doc and this inline text ever disagree, STOP and report.
+
+CONSTRAINTS:
+- CREATE ONLY these two files:
+  - `src/engines/poolFeasibility.ts`
+  - `src/engines/__tests__/poolFeasibility.test.ts`
+- Do NOT edit (import read-only): `src/engines/archetypeBalanceSimulator.ts`, `src/data/historicalArchetypes.ts`,
+  `src/engines/leagueConstruction.ts`, `src/data/tierParams.ts`, `spec-docs/reference/iv_oracle.json`, and any other
+  existing file. If implementation appears to require editing ANY existing file → STOP and report.
+- Pure / headless / deterministic: NO `Date.now()`, `Math.random()`, `fs`, DOM, `window`, IndexedDB inside
+  `poolFeasibility.ts`. (The TEST file may read `iv_oracle.json` via `node:fs` to build pools — mirror the existing
+  `src/engines/__tests__/historicalArchetypes.test.ts` `loadPool()` exactly.)
+- Quote `POOL_FEASIBILITY_SPEC.md` for each non-obvious choice in your report.
+- Work directly in this worktree (no new branches/worktrees).
+
+EXPECTED OUTPUT — `poolFeasibility.ts` exports (signatures verbatim):
+```ts
+export interface FeasibilityShortfall { stat: ArchetypeStat; group: 'hitters'|'rotation'|'bullpen';
+  demand: number; supply: number; needCount: number; binding: boolean; descriptor: string; }
+export interface ArchetypeFeasibility { archetypeId: string; archetypeName: string;
+  support: 'supported'|'thin'|'starved'; built: ArchetypeSimResult;
+  shortfalls: FeasibilityShortfall[]; activationPrompt: string | null; }
+export interface PoolFeasibilityReport { tier: TierKey; budget: number; poolSize: number; results: ArchetypeFeasibility[]; }
+export function analyzePoolFeasibility(lockedPool: SimPlayer[], archetypes: HistoricalArchetype[], tier: TierKey,
+  referencePool?: SimPlayer[]): PoolFeasibilityReport;
+```
+Also EXPORT the tunables: `STRONG_PERCENTILE = 0.67`, `DEMAND_HITTER = 7`, `DEMAND_ROTATION = 3`, `DEMAND_BULLPEN = 3`,
+`BINDING_STATS` (a `Set<ArchetypeStat>` = {POW, CON, ROT_VEL, ROT_JNK, ROT_ACC, PEN_VEL}), and the `DESCRIPTORS`
+stat→phrase map.
+
+ALGORITHM (inline — authoritative, per the spec):
+Per archetype `arch`:
+1. `budget = computePoolTierCap(lockedPool.map(p=>p.iv), tier)`;
+   `built = buildBestRoster(lockedPool, { name: arch.name, rawShift: archetypeCapShift(arch) }, tier, budget)`.
+2. Boosted stats = the keys of `arch.spec` whose multiplier > 0 (equivalently `arch.boosts`). For each boosted stat S:
+   - `group` of S: hitters if S ∈ {POW,CON,SPD,FLD,ARM}, rotation if S ∈ {ROT_*}, bullpen if S ∈ {PEN_*}.
+   - Group membership of a player: hitters = `!isPitcher`; rotation = `role ∈ {SP, 'SP/RP'}`;
+     bullpen = `role ∈ {RP, CP, 'SP/RP'}` (SP/RP counts to both — mirror `isStarter`/`isReliever` in the sim).
+   - The player's S-rating: hitters read `bat.POW/CON/SPD/FLD/ARM`; rotation/bullpen read `pit.VEL/JNK/ACC`
+     (ROT_VEL & PEN_VEL → `pit.VEL`, ROT_JNK & PEN_JNK → `pit.JNK`, ROT_ACC & PEN_ACC → `pit.ACC`).
+   - Threshold = P67 of the S-ratings of `(referencePool ?? lockedPool)` members of S's group, nearest-rank:
+     sort ascending, `idx = clamp(ceil(0.67*n)-1, 0, n-1)`, threshold = `sorted[idx]` (n = group size; if n===0 → threshold 0).
+   - `supply` = count of LOCKED-pool players in S's group with S-rating ≥ threshold.
+   - `demand` = 7 if group hitters, 3 if rotation, 3 if bullpen. `needCount = max(0, demand - supply)`.
+   - `binding = BINDING_STATS.has(S)`. `descriptor = DESCRIPTORS[S]`.
+   - Push a `FeasibilityShortfall` ONLY (so the array isn't noisy) — include every boosted stat row (needCount may be 0)
+     so the diagnostic is complete; classification + prompt use needCount>0.
+3. Sort `shortfalls`: binding true first, then needCount desc, then `stat` ascending (stable, deterministic).
+4. `notFieldable = !built.solvent || built.rosterSize < 22`.
+   `hasBindingShortfall = shortfalls.some(s=>s.binding && s.needCount>0)`;
+   `hasAnyShortfall = shortfalls.some(s=>s.needCount>0)`.
+   `support = notFieldable || hasBindingShortfall ? 'starved' : hasAnyShortfall ? 'thin' : 'supported'`.
+5. `activationPrompt`: `null` if supported; else if `notFieldable` AND no needCount>0 shortfall →
+   `"This pool is too thin to field a full {name} roster — add more players."`; else take the first shortfall with
+   needCount>0 after the sort → `"Add ~{needCount} {descriptor} to activate {name}."`
+6. `results` preserves input `archetypes` order. `report = { tier, budget, poolSize: lockedPool.length, results }`.
+
+DESCRIPTORS: POW="power bats", CON="contact hitters", SPD="speed/baserunning threats", FLD="rangy defenders",
+ARM="strong-armed fielders", ROT_VEL="power starters", ROT_JNK="finesse starters", ROT_ACC="pinpoint command starters",
+PEN_VEL="power relievers", PEN_JNK="junkball relievers", PEN_ACC="pinpoint command relievers".
+
+TESTS (`poolFeasibility.test.ts`) — reuse the `loadPool()` shape from `historicalArchetypes.test.ts`:
+1. Full canonical pool (all 440) + `HISTORICAL_ARCHETYPES`, tier 'standard', referencePool = the same full pool →
+   EVERY archetype `support === 'supported'` and `activationPrompt === null`.
+2. Glove-stripped: from the full pool drop every hitter whose FLD ≥ the full-pool hitter-FLD P67; referencePool = the
+   FULL pool → Whiteyball, Go-Go Small Ball, The Oriole Way each have an FLD shortfall with needCount>0,
+   descriptor "rangy defenders", activationPrompt non-null.
+3. Command-stripped: drop every SP whose ACC ≥ the full-pool rotation-ACC P67; referencePool = full pool → Junkball
+   Surgeons and The Oriole Way flag ROT_ACC with needCount>0 and `support === 'starved'` (binding).
+4. Too-thin pool: any 18-player slice → for at least one archetype `built.rosterSize < 22` ⇒ `support === 'starved'`
+   and the "too thin to field" prompt appears.
+5. Determinism: two `analyzePoolFeasibility(...)` calls on identical inputs are `JSON.stringify`-equal.
+6. Binding-vs-flavor: construct/choose a case where an FLD-only shortfall yields `thin` while an equal-sized POW
+   shortfall yields `starved`.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/poolFeasibility.test.ts src/engines/__tests__/historicalArchetypes.test.ts src/engines/__tests__/archetypeBalanceSimulator.test.ts
+```
+Both must be clean: tsc 0 errors; vitest all-pass (the two existing archetype tests must STAY green — proves no
+regression to the shared engine).
+
+FORMAT (your report):
+1. Files changed (exact paths) + total changed-path count.
+2. Each export + each test, with the `POOL_FEASIBILITY_SPEC.md` clause it implements.
+3. Verification: paste the exact tsc + vitest output (pass counts).
+4. "POOL-FEAS-1 complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `buildBestRoster` / `SimPlayer` / `ArchetypeSimResult` are NOT exported from
+  `src/engines/archetypeBalanceSimulator.ts`, or `archetypeCapShift` / `HISTORICAL_ARCHETYPES` / `ArchetypeStat` not
+  exported from `src/data/historicalArchetypes.ts`, or `computePoolTierCap` not from `src/engines/leagueConstruction.ts`
+  → STOP, report the actual export surface.
+- (b) Implementation would require editing ANY existing file → STOP, report which and why.
+- (c) The full-pool test (Test 1) does NOT come back all-`supported` → STOP, report which archetype/stat broke and the
+  numbers; do NOT loosen the test or the thresholds to force green (that would mask a real algorithm bug).
+- (d) Any existing test regresses → STOP, report.
+- Never summarize/batch around a STOP. Never invent a constant not in this contract.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: POOL-FEAS-1 ===== -->
+
+<!-- ===== CONTRACT: TRUEVAL-1 — derived chemistry-trait potency primitive (keystone optimizer step 2a) ===== -->
+## TRUEVAL-1 — derived chemistry-trait potency primitive (keystone optimizer step 2a)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. This is the FOUNDATION (step 2a) for the optimizer's fielding-corrected "true value"; it is
+BUILD-DARK (no production wiring in this ticket).
+
+GOAL:
+Build a pure, deterministic primitive that, given a team roster's chemistry mix, derives each of a player's traits to a
+chemistry-potency tier (L1/L2/L3) and the value-adjustment FACTOR relative to the L2 "fit" baseline the frozen IV is
+founded on. (JK ruling: L1 = default/lowest every trait gets; L2 = a chemistry "fit" = the level the frozen IV prices
+at; L3 = max fit, rare. So the factor is RELATIVE to L2 = 1.0.)
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Trait → chemistry + polarity: `src/data/traitPricing.ts` (each trait entry has `chemistry: ChemistryType` and
+  `polarity: 'positive' | 'negative'`; `ChemistryType = 'Competitive'|'Crafty'|'Disciplined'|'Scholarly'|'Spirited'`).
+  Find the exported trait array/registry and build a name→{chemistry, polarity} lookup from it.
+- Chemistry canon + normalize: `src/data/chemistryCanonical.ts` (`normalizeToChemistryCode`, `ChemistryCode`).
+- Player chemistry field: `src/data/playerDatabase.ts:66` (`chemistry: string`, codes SPI/DIS/CMP/SCH/CRA; rows carry
+  full names e.g. 'SPIRITED' — ALWAYS pass through `normalizeToChemistryCode`).
+- Potency scale: `src/data/rosterEngineConstants.ts` `POTENCY_SCALE` (positives {L1:0.5,L2:1.0,L3:3.0}; standardInverted
+  {L1:3.0,L2:1.0,L3:0.5}) + `PotencyTier` type. (L3=3.0 is canonical/workbook-correct, JK 2026-06-22 — do NOT change it.)
+- Threshold prototype (REUSE THE PATTERN, NOT THE NUMBERS): `src/engines/chemistryFitValue.ts` `chemistryFitTier` uses
+  4/8 (a farm-auction sim-tune, off-by-one). This primitive MUST use the CANONICAL 3/7 (JK-ruled 2026-06-22):
+  L1 = 0–2 shared, L2 = 3–6, L3 = ≥7.
+- Counting prototype: `LeagueBuilderFarmAuctionDraft.tsx` `rosterChemistryCountsForTeamId` (the existing pattern that
+  counts a roster by chemistry code).
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/derivedTraitPotency.ts` + `src/engines/__tests__/derivedTraitPotency.test.ts`.
+- Do NOT edit any existing file (import read-only). If you must edit one → STOP and report.
+- Pure / deterministic: NO Date.now/Math.random/fs/DOM/IndexedDB in the engine. (Test may read fixtures.)
+- Do NOT touch the frozen oracle, `ivEngine.ts`, `rosterEngineConstants.ts`, `chemistryFitValue.ts`, `traitPricing.ts`,
+  `playerDatabase.ts`, `effectiveRatings.ts`.
+
+EXPECTED OUTPUT — `derivedTraitPotency.ts` exports (signatures verbatim):
+```ts
+export const POTENCY_L2_MIN = 3;   // ≥3 shared-chemistry players → L2 "fit"
+export const POTENCY_L3_MIN = 7;   // ≥7 → L3 "max fit"
+export function derivedPotencyTier(sharedChemistryCount: number): PotencyTier; // L1:0–2, L2:3–6, L3:≥7
+
+export type RosterChemistryCounts = Partial<Record<ChemistryCode, number>>;
+export function countRosterChemistry(roster: { chemistry: string }[]): RosterChemistryCounts;
+
+export interface TraitPotency {
+  trait: string;
+  chemistry: ChemistryType;
+  polarity: 'positive' | 'negative';
+  sharedCount: number;          // roster players whose chemistry == this trait's chemistry
+  tier: PotencyTier;
+  factor: number;               // value vs the L2 baseline (L2 → 1.0); positive: POTENCY_SCALE.positives[tier];
+                                // negative: POTENCY_SCALE.standardInverted[tier]
+}
+/** For each known trait name, its potency tier+factor given the roster chemistry counts. Unknown trait names
+ *  (not in traitPricing) are OMITTED from the result (do not throw). Order preserves input traitNames. */
+export function traitPotencies(traitNames: string[], counts: RosterChemistryCounts): TraitPotency[];
+```
+
+ALGORITHM:
+- `derivedPotencyTier(n)`: n≥7 → 'L3'; n≥3 → 'L2'; else 'L1'. (Clamp negative/NaN n to 0.)
+- `countRosterChemistry(roster)`: for each player, `normalizeToChemistryCode(player.chemistry)` → increment that code's
+  count. Skip entries that don't normalize.
+- `traitPotencies(traitNames, counts)`: for each name, look up {chemistry, polarity} in traitPricing; if unknown, skip.
+  `code = normalizeToChemistryCode(trait.chemistry)`; `sharedCount = counts[code] ?? 0`; `tier =
+  derivedPotencyTier(sharedCount)`; `factor = polarity === 'positive' ? POTENCY_SCALE.positives[tier] :
+  POTENCY_SCALE.standardInverted[tier]`.
+
+DOCUMENTED ASSUMPTIONS (write as code comments; these are flagged build-dark defaults, not yet JK-ratified — spec
+CHEMISTRY_TRAIT_POTENCY_VALUATION_SPEC §2.6 marks the denominator UNKNOWN):
+- The roster passed in is the team's FULL active roster (the roster-construction context); chemistry self-counts (a
+  player's own chemistry contributes to its traits' shared count). Both are retunable in Mode-2.
+
+TESTS (`derivedTraitPotency.test.ts`):
+1. `derivedPotencyTier`: 0,1,2→L1; 3,4,5,6→L2; 7,8,20→L3; -1/NaN→L1.
+2. `countRosterChemistry`: a mixed roster (full-name + code inputs) → correct per-code counts via normalize.
+3. A POSITIVE trait (look one up from traitPricing, e.g. a Scholarly positive) on a roster with ≥7 of its chemistry →
+   tier L3, factor 3.0; with exactly 3 → L2, factor 1.0; with ≤2 → L1, factor 0.5.
+4. A NEGATIVE trait → inverted: ≥7 shared → L3 factor 0.5; ≤2 shared → L1 factor 3.0; 3–6 → L2 factor 1.0.
+5. Unknown trait name → omitted (not thrown); known names preserve input order.
+6. Determinism: two calls on identical inputs are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/derivedTraitPotency.test.ts
+```
+tsc 0 errors; vitest all-pass.
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output; 4) "TRUEVAL-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `POTENCY_SCALE` / `PotencyTier` not exported from `rosterEngineConstants.ts`, or `normalizeToChemistryCode` /
+  `ChemistryCode` not from `chemistryCanonical.ts`, or traitPricing has no per-trait `chemistry`+`polarity` you can look
+  up by name → STOP, report the actual export surface (do NOT invent a trait→chemistry map).
+- (b) Implementation would require editing any existing file → STOP, report.
+- (c) `POTENCY_SCALE` positives.L3 is NOT 3.0 (i.e. the constant differs from this contract) → STOP, report the actual
+  value (do not assume).
+- Never invent a constant; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: TRUEVAL-1 ===== -->
+
+<!-- ===== CONTRACT: TRUEVAL-2 — directional fielding-corrected true value (keystone optimizer step 2b) ===== -->
+## TRUEVAL-2 — directional fielding-corrected true value (keystone optimizer step 2b)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. BUILD-DARK (no production wiring in this ticket).
+
+GOAL:
+Build the optimizer's own "true value" — a pure, deterministic, BOUNDED, DIRECTIONAL adjustment layer on top of the
+frozen kblIV, for the optimizer/draft-guide/scout ONLY. It (1) leans value with the player's roster-chemistry potency
+(chemistry-fit traits worth more, unsupported traits/maxed flaws worth less) and (2) corrects fielding (good gloves up,
+bad gloves down — the frozen IV under-prices fielding's mojo payoff, spec D17). v1 is intentionally DIRECTIONAL +
+provisional: the magnitudes are conservative documented constants, calibrated empirically in Mode-2 (JK ruling
+2026-06-26; spec D17 "fit a correction ONLY if data demands / do not overengineer"). The frozen IV/economy is NEVER
+touched — this is a SEPARATE additive value.
+
+SOURCE OF TRUTH (verify anchors against source FIRST):
+- `src/engines/derivedTraitPotency.ts` (TRUEVAL-1, already committed): `traitPotencies(traitNames, counts)` →
+  per-trait `{ trait, chemistry, polarity, sharedCount, tier, factor }` where `factor` is the trait's EFFECT scale vs
+  the L2 baseline (positive: 0.5/1.0/3.0 at L1/L2/L3; negative inverted 3.0/1.0/0.5). Also `RosterChemistryCounts`,
+  `countRosterChemistry`.
+- The frozen kblIV is computed UPSTREAM and passed IN (do NOT import/call `ivEngine`/`computeIV` here — keep this layer
+  decoupled and oracle-free).
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/trueValue.ts` + `src/engines/__tests__/trueValue.test.ts`.
+- Do NOT edit any existing file (import read-only from `derivedTraitPotency`). If you must edit one → STOP, report.
+- Pure / deterministic: NO Date.now/Math.random/fs/DOM. Do NOT import or call `ivEngine.ts` (kblIV is an input).
+- Do NOT touch the frozen oracle or any IV/economy file.
+
+EXPECTED OUTPUT — `trueValue.ts` exports (signatures verbatim):
+```ts
+// Conservative, PROVISIONAL v1 magnitudes — Mode-2 calibration pending (exported so they retune at one site).
+export const CHEM_LEAN_COEF = 0.02;     // kblIV fraction per unit of net signed chemistry lean
+export const CHEM_LEAN_CAP = 0.12;      // ±12% max chemistry swing
+export const FIELDING_COEF = 0.10;      // kblIV fraction per normalized FLD deviation
+export const FIELDING_BASELINE = 50;    // FLD reference (0–99 scale); above → glove credit, below → glove debit
+export const FIELDING_RANGE = 50;       // normalizer: (FLD - BASELINE)/RANGE
+export const FIELDING_CAP = 0.08;       // ±8% max fielding swing
+
+export interface TrueValueInput {
+  kblIV: number;                        // frozen canonical value (passed in; never recomputed here)
+  traits: string[];                     // player trait names
+  fielding: number;                     // player FLD rating (0–99)
+  isPitcher: boolean;                   // pitchers: fielding correction is 0 (mound FLD already priced at usage 1.0)
+}
+export interface TrueValueResult {
+  trueValue: number;                    // kblIV + chemistryAdjustment + fieldingAdjustment (rounded)
+  kblIV: number;                        // passthrough
+  chemistryAdjustment: number;          // signed $, bounded by ±CHEM_LEAN_CAP·kblIV
+  fieldingAdjustment: number;           // signed $, bounded by ±FIELDING_CAP·kblIV (0 for pitchers)
+  netSignedLean: number;                // the raw chemistry lean used (transparency / scout-edge surfacing)
+}
+export function computeTrueValue(input: TrueValueInput, rosterChemistryCounts: RosterChemistryCounts): TrueValueResult;
+```
+
+ALGORITHM:
+- `tp = traitPotencies(input.traits, rosterChemistryCounts)`.
+- Per-trait VALUE lean (note the polarity flip — a dampened FLAW raises value):
+  `signedLean(t) = t.polarity === 'positive' ? (t.factor - 1) : -(t.factor - 1)`.
+  `netSignedLean = Σ signedLean(t)` over tp (0 when no known traits).
+- `chemRaw = CHEM_LEAN_COEF * netSignedLean`; `chemFrac = clamp(chemRaw, -CHEM_LEAN_CAP, +CHEM_LEAN_CAP)`;
+  `chemistryAdjustment = round(input.kblIV * chemFrac)`.
+- Fielding: `fieldFrac = input.isPitcher ? 0 : clamp(FIELDING_COEF * (input.fielding - FIELDING_BASELINE) / FIELDING_RANGE,
+  -FIELDING_CAP, +FIELDING_CAP)`; `fieldingAdjustment = round(input.kblIV * fieldFrac)`.
+- `trueValue = input.kblIV + chemistryAdjustment + fieldingAdjustment`.
+- `round` = `Math.round`. `clamp(x,lo,hi) = Math.max(lo, Math.min(hi, x))`.
+
+DOCUMENT (code comments): all six constants are conservative PROVISIONAL v1 values, Mode-2-calibrated; this layer is
+the optimizer/scout/draft-guide value ONLY and never feeds salary/economy/archetype-balance (those stay on frozen
+kblIV). The price≠true-value gap IS the intended scout edge (bargains = underpriced good gloves; traps = overpriced
+bad gloves).
+
+TESTS (`trueValue.test.ts`):
+1. NEUTRAL invariant: a position player with traits whose chemistries all land L2 (counts 3–6 each) AND fielding ==
+   FIELDING_BASELINE → chemistryAdjustment === 0, fieldingAdjustment === 0, trueValue === kblIV (clean additive layer).
+2. Chemistry boost: a known POSITIVE trait at L3 (its chemistry count ≥7) → netSignedLean > 0, chemistryAdjustment > 0.
+3. Chemistry drag: same positive trait at L1 (count ≤2) → chemistryAdjustment < 0. AND a NEGATIVE trait at L1 (flaw
+   maxed) → chemistryAdjustment < 0; the SAME negative trait at L3 (flaw dampened) → chemistryAdjustment > 0.
+4. Fielding: position player FLD 90 → fieldingAdjustment > 0; FLD 20 → < 0; a PITCHER with FLD 20 → fieldingAdjustment
+   === 0.
+5. Bounds: extreme inputs (many stacked boosted traits; FLD 0 / 99) → |chemFrac| ≤ CHEM_LEAN_CAP and |fieldFrac| ≤
+   FIELDING_CAP (adjustments never exceed the caps × kblIV).
+6. Ranking-fix sanity: an all-bat/no-glove position player (high kblIV e.g. 200000, FLD 15) is DOCKED vs a glove-first
+   player (lower kblIV e.g. 140000, FLD 92) is CREDITED — assert the fielding adjustments have the right signs (the
+   inversion the frozen IV causes is corrected in the right direction).
+7. Determinism: two calls on identical inputs are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/trueValue.test.ts src/engines/__tests__/derivedTraitPotency.test.ts
+```
+tsc 0; vitest all-pass (derivedTraitPotency stays green — proves no regression to the consumed primitive).
+
+FORMAT: 1) files changed + count; 2) each export + test with the clause it implements; 3) exact tsc + vitest output;
+4) "TRUEVAL-2 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `traitPotencies`/`RosterChemistryCounts` not exported from `derivedTraitPotency.ts` with the documented shape →
+  STOP, report the actual surface.
+- (b) Implementation would require editing any existing file, or importing `ivEngine`/`computeIV` → STOP, report.
+- (c) The NEUTRAL invariant (Test 1) does NOT yield trueValue === kblIV → STOP, report the numbers (do not fudge the
+  test; a non-zero adjustment at the neutral baseline means the layer is not cleanly additive — a real bug).
+- Never invent a constant beyond the six above; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: TRUEVAL-2 ===== -->
+
+<!-- ===== CONTRACT: SCOUT-1 — evaluateScoutMove (keystone optimizer step 3a, win-value keep-in scorer) ===== -->
+## SCOUT-1 — evaluateScoutMove (keystone optimizer step 3a, win-value keep-in scorer)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. BUILD-DARK (no production wiring; the manager lane swaps it in at its scorer call-site).
+
+GOAL:
+Build the pure, deterministic, headless **win-value keep-in scorer** the manager-WPA lane's Rung-2 needs: given an
+in-game decision context, score each candidate vs the incumbent in projected **kbl-WPA** (NOT auction dollars), say
+whether a meaningfully better move exists, and how much better. Yardstick = the fielding-corrected **true value**
+(`trueValue.ts`), converted to win-value with leverage intrinsic — per SITUATIONAL_ADVISOR_AND_OPTIMAL_LINEUP_DEEPDIVE.md
+§"Two direct ties" lines 215-222 ("that fielding-corrected true value IS the win-value yardstick the advisor should
+use instead of raw auction IV"; the 3:2:1 manager METRIC itself stays uncorrected — real-WPA based).
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Interface shapes + 6 guarantees + 6 answers: `${MAIN}/spec-docs/MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (MAIN =
+  /Users/johnkruse/Projects/kbl-tracker). Leverage = RAW/intrinsic (Answer 1); optimizer owns thresholdKblWpa (Answer
+  2); tiebreak = candidateName.localeCompare then candidateId (Answer 6); completeness — never throw/null (Guarantee 4).
+- Scorer pipeline to REUSE (do NOT duplicate): `src/engines/subRecommendations.ts` `scoreEffectiveRatingsIv`
+  (lines ~131-158: effectiveRatings → IVPlayerInput → computeIV().kblIV) and `recommendSubs` (ranking + confidence
+  tiers high≥×2 / medium≥×1.25 / low>threshold). Import `effectiveRatings` (`src/engines/effectiveRatings.ts`),
+  `computeIV` (`src/engines/ivEngine.ts`), `trueValue` (`src/engines/trueValue.ts`, already committed — TRUEVAL-2),
+  `OptimalLineupCandidate` (`src/utils/optimalLineup.ts`) as the ScoutPlayer alias.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/scoutMove.ts` + `src/engines/__tests__/scoutMove.test.ts`.
+- Do NOT edit any existing file (import read-only). If you must edit one → STOP, report.
+- Pure / deterministic / headless: NO Date.now/Math.random/fs/DOM/IndexedDB/window. Same context in → byte-identical out.
+- Do NOT touch the frozen oracle, ivEngine, trueValue, or any manager-WPA file (managerWpaGameState etc.).
+
+EXPECTED OUTPUT — `scoutMove.ts` exports (shapes verbatim from the interface contract; ScoutPlayer = OptimalLineupCandidate):
+```ts
+export type ScoutPlayer = OptimalLineupCandidate;
+export interface ScoutDecisionContext {
+  decisionType: 'pitcher_change' | 'pinch_hit' | 'defensive_replacement';   // the kind of keep-in being scored
+  gameId?: string;
+  inning: number; half: 'top' | 'bottom'; outs: number; totalInnings: number;
+  leverageIndex: number;                              // intrinsic — the scout scales win-value by it, no separate multiplier
+  count?: { balls: number; strikes: number };
+  basesOccupied: { first: boolean; second: boolean; third: boolean };
+  scoreDifferentialForFieldingTeam: number;
+  battingTeamId: string; fieldingTeamId: string;
+  incumbent: ScoutPlayer; candidates: ScoutPlayer[];
+  opposingPitcher?: ScoutPlayer; opposingBatter?: ScoutPlayer;
+}
+export interface ScoutCandidateScore { candidateId: string; candidateName: string; kblWpaGain: number; justification: string; }
+export interface ScoutMoveEvaluation {
+  evaluationId: string; decisionType: ScoutDecisionContext['decisionType'];
+  incumbentPlayerId: string; bestCandidateId: string | null; bestCandidateName: string | null;
+  bestMoveKblWpaGain: number;          // >= 0 WHEN recommend===true
+  recommend: boolean; thresholdKblWpa: number; recommendationStrength: 'high' | 'medium' | 'low';
+  rankedCandidates: ScoutCandidateScore[];   // element 0 == best
+  justification: string; algorithmVersion: string; optimizerConstantsVersion: string;
+}
+export function evaluateScoutMove(ctx: ScoutDecisionContext): ScoutMoveEvaluation;
+```
+EXPORT the versioned constants (conservative PROVISIONAL v1, Mode-2 calibrated — same posture as TRUEVAL-2):
+`ALGORITHM_VERSION='scout-1.0.0'`, `OPTIMIZER_CONSTANTS_VERSION='scout-consts-1.0.0'`,
+`SCOUT_DECISION_WPA_DIVISOR` (converts a true-value DELTA in IV-$ to a per-decision win-value, BEFORE leverage; pick a
+conservative value so a typical strong upgrade in average leverage yields a small WPA like ~0.01-0.05 — document the
+reasoning), and `SCOUT_THRESHOLD_KBL_WPA: Record<decisionType, number>` (the per-type recommend bar in WPA units).
+
+ALGORITHM (per player = incumbent or candidate):
+1. Build a GameContext from ctx (opposingHand from opposingPitcher?.throws else infer from half; playingPosition from
+   the player's position; inning; the base/out/score fields) and a PlayerState from the ScoutPlayer's mojo/fitness —
+   REUSE the exact assembly `scoreEffectiveRatingsIv` uses (read it; mirror it; do not invent a new mapping).
+2. `kblIV = computeIV(effectiveRatings(player, state, gameCtx)).kblIV`.
+3. `tv = trueValue({ kblIV, traits: [], fielding: <player FLD>, isPitcher: decisionType==='pitcher_change' }, {}).trueValue`.
+   **Pass `traits: []` and empty counts on purpose:** the keep-in context carries no full team roster, so chemistry
+   potency is NOT applied here (kblIV already prices traits at the L2 "fit"); only the FIELDING correction applies in v1.
+   Document this as a flagged v1 limitation (chemistry potency lights up in optimizeLineupVsStarter, which has the roster).
+4. Per candidate: `kblWpaGain = (tv(candidate) - tv(incumbent)) / SCOUT_DECISION_WPA_DIVISOR * ctx.leverageIndex` (signed).
+5. Rank candidates by kblWpaGain desc; tiebreak candidateName.localeCompare then candidateId. element0 = best.
+6. `thresholdKblWpa = SCOUT_THRESHOLD_KBL_WPA[ctx.decisionType]`. `bestMoveKblWpaGain = rankedCandidates[0]?.kblWpaGain ?? 0`.
+   `recommend = bestMoveKblWpaGain > thresholdKblWpa`. (So bestMoveKblWpaGain >= 0 whenever recommend — Guarantee 3.)
+7. `recommendationStrength`: 'high' if gain ≥ threshold*2, 'medium' if ≥ threshold*1.25, else 'low'.
+8. `bestCandidateId/Name` = rankedCandidates[0]'s (null only if candidates empty). `incumbentPlayerId` = incumbent id.
+9. `evaluationId` = DETERMINISTIC from context: `\`${ctx.gameId ?? 'nogame'}:${ctx.inning}:${ctx.half}:${ctx.outs}:${ctx.decisionType}:${incumbent id}\``
+   (no random/time). `justification` = deterministic human string. Stamp algorithmVersion/optimizerConstantsVersion.
+10. COMPLETENESS (Guarantee 4): never throw, never return null; empty candidates → recommend:false,
+    bestCandidateId:null, bestMoveKblWpaGain:0, rankedCandidates:[].
+
+TESTS (`scoutMove.test.ts`):
+1. A clearly-better candidate (much higher fielding / ratings than incumbent, defensive_replacement, leverageIndex>1)
+   → bestMoveKblWpaGain > 0, recommend true, rankedCandidates[0] is that candidate.
+2. No better option (all candidates worse than incumbent) → recommend false, bestMoveKblWpaGain ≤ 0, rankedCandidates
+   still populated (Guarantee 4), bestCandidateId = the least-bad (non-null).
+3. Sign/Guarantee 3: whenever recommend===true, bestMoveKblWpaGain >= 0.
+4. Leverage intrinsic: the SAME candidate vs incumbent at leverageIndex 2.0 yields ~2× the kblWpaGain of leverageIndex
+   1.0 (linear in leverage, no separate multiplier).
+5. Fielding yardstick: for a defensive_replacement, a glove-up candidate (higher FLD, equal bat) scores a positive gain
+   driven by the fielding correction (prove the true-value fielding term moves it).
+6. decisionType=pitcher_change → isPitcher path (fielding correction 0 in trueValue); a velocity/junk/accuracy upgrade
+   still scores a positive gain via kblIV.
+7. Tiebreak: two candidates with identical scores rank by candidateName.localeCompare then candidateId — deterministic.
+8. Completeness: empty candidates[] → no throw; recommend false, bestCandidateId null.
+9. Determinism: two calls on identical ctx are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/scoutMove.test.ts src/engines/__tests__/trueValue.test.ts
+```
+tsc 0; vitest all-pass (trueValue stays green — proves no regression to the consumed yardstick).
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output; 4) "SCOUT-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `trueValue`/`TrueValueInput` not exported from `trueValue.ts` with the TRUEVAL-2 shape, or `effectiveRatings`/
+  `computeIV`/`OptimalLineupCandidate` not importable as documented, or `scoreEffectiveRatingsIv`'s GameContext/state
+  assembly cannot be mirrored from source → STOP, report the actual surface (do NOT invent a parallel scorer).
+- (b) Implementation would require editing any existing file, or importing/using a manager-WPA runtime file
+  (managerWpaGameState etc.) → STOP, report.
+- (c) Determinism cannot be met without Date.now/Math.random (e.g. evaluationId) → STOP (it CAN — derive from ctx).
+- Never invent a constant beyond those named; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: SCOUT-1 ===== -->
+
+<!-- ===== CONTRACT: SCOUT-2 — optimizeLineupVsStarter (keystone optimizer step 3b, opponent-SP lineup) ===== -->
+## SCOUT-2 — optimizeLineupVsStarter (keystone optimizer step 3b, opponent-SP lineup)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — two new files only. BUILD-DARK (no
+production wiring; the manager lane's lineups tab swaps it in later).
+
+GOAL:
+Build the pure, deterministic, headless **opponent-SP lineup optimizer**: given a roster + the actual next starter's
+full profile, return an `OptimalLineupSnapshot` whose per-slot win-values (`projectedSlotKblWpa`) are scored on the
+fielding-corrected **true value** vs the **full opponent starter** (not just L/R hand), via the canonical IV→WPA
+conversion. Yardstick = true value (deep-dive §215-222), same as SCOUT-1.
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Interface shapes: `${MAIN}/spec-docs/MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (MAIN = /Users/johnkruse/Projects/
+  kbl-tracker) — `OptimizeLineupVsStarterInput` (teamId, mode, instanceId?, dhEnabled?, roster: ScoutPlayer[],
+  opponentStarter: OpponentStarterProfile, chosenLineup?), `OpponentStarterProfile` (pitcherId, pitcherName, throws,
+  velocity?, junk?, accuracy?, trait1?, trait2?, traits?, arsenal?, armSlot?, pitcherRole?), returns
+  `OptimalLineupSnapshot` (Answer 5: optimizer returns CONTENT with identity unset — lane mints snapshotId/sourceConfidence).
+- Reuse (read + reuse, do NOT duplicate): `src/utils/optimalLineup.ts` `buildOptimalLineupSnapshot`
+  (the assignment + snapshot assembly; PASS `generatedAt: 0` so it stays pure — it falls back to `Date.now()`),
+  `BuildOptimalLineupSnapshotInput` (line ~69), `analysisTeamForCandidates`. `OptimalLineupCandidate` (= ScoutPlayer),
+  `OptimalLineupSnapshot`/`OptimalLineupSlot` (`src/types/managerWpa.ts`).
+- Per-slot true-value re-score chain (mirror SCOUT-1's `scoutMove.ts` scoreTrueValue + `ivOfEffectiveRatings`
+  `rosterAnalyzer.ts:529-572`): `effectiveRatings` → IVPlayerInput → `computeIV().kblIV` → `computeTrueValue`
+  (`trueValue.ts`). `defensivePlacementRisk` (`effectiveRatings.ts:516`, returns {chanceFrequency, errorLikelihood}).
+  `BATTING_ORDER_SLOT_WEIGHTS` + `CALIBRATE.lineupSnapshotWpaDivisor` (10_000_000) + `CALIBRATE.lineupDefensiveRiskIvPenalty`
+  (300_000) from `src/data/rosterEngineConstants.ts`.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/lineupVsStarter.ts` + `src/engines/__tests__/lineupVsStarter.test.ts`.
+- Do NOT edit any existing file (the assignment comes from the UNCHANGED `buildOptimalLineupSnapshot`; only the WPA
+  numbers are re-scored on top). If you must edit one → STOP, report.
+- Pure / deterministic / headless: NO Date.now/Math.random/fs/DOM. (Pass generatedAt:0 into buildOptimalLineupSnapshot.)
+- Do NOT touch the frozen oracle, ivEngine, trueValue, rosterAnalyzer, optimalLineup, or any manager-WPA runtime file.
+
+EXPECTED OUTPUT — `lineupVsStarter.ts` exports:
+```ts
+export type ScoutPlayer = OptimalLineupCandidate;
+export interface OpponentStarterProfile { pitcherId: string; pitcherName: string; throws: 'L'|'R';
+  velocity?: number; junk?: number; accuracy?: number; trait1?: string|null; trait2?: string|null;
+  traits?: string[]; arsenal?: string[]; armSlot?: 'High'|'Mid'|'Low'|'Sub'|null; pitcherRole?: 'SP'|'SP/RP'|'RP'|'CP'; }
+export interface OptimizeLineupVsStarterInput { teamId: string; mode: OptimalLineupModeContext; instanceId?: string;
+  dhEnabled?: boolean; roster: ScoutPlayer[]; opponentStarter: OpponentStarterProfile;
+  chosenLineup?: { playerId: string; battingOrderSlot: number; defensivePosition: string }[]; }
+export const LINEUP_VS_STARTER_ALGORITHM_VERSION = 'lineup-vs-starter-1.0.0';
+export function optimizeLineupVsStarter(input: OptimizeLineupVsStarterInput): OptimalLineupSnapshot;
+```
+
+ALGORITHM:
+1. `base = buildOptimalLineupSnapshot({ candidates: input.roster, teamId: input.teamId, dhEnabled: input.dhEnabled,
+   opposingPitcherHand: input.opponentStarter.throws, mode: input.mode, instanceId: input.instanceId, generatedAt: 0,
+   ...required fields })` — reuse its assignment (batting order + defensive positions) + assembly. (Map every required
+   BuildOptimalLineupSnapshotInput field from source; STOP if a required field has no input source.)
+2. For each `slot` in `base.slots`: find the player in `input.roster` (by playerId). Re-score with the FULL opponent +
+   true value:
+   - Build a GameContext with `opposingPlayer = input.opponentStarter` (as EffectiveRatingsPlayer), `opposingHand =
+     opponentStarter.throws`, `playingPosition = slot.defensivePosition`, `pressure: 'none'` (no leverage here).
+   - `eff = effectiveRatings(player, state, ctx)`; `kblIV = computeIV(toIvInput(player, eff)).kblIV`.
+   - `tv = computeTrueValue({ kblIV, traits: [], fielding: <player FLD>, isPitcher: false }, {}).trueValue`. (traits:[]
+     + empty counts on purpose: lineup candidates carry no chemistry field, so chemistry potency is NOT applied in v1 —
+     only the FIELDING correction; document as a flagged v1 limitation, Mode-2.)
+   - `defensivePenalty = slot.defensivePosition === 'DH' ? 0 : risk.chanceFrequency * risk.errorLikelihood *
+     CALIBRATE.lineupDefensiveRiskIvPenalty` (risk = defensivePlacementRisk(player, slot.defensivePosition)).
+   - `slotScore = (tv - defensivePenalty) * BATTING_ORDER_SLOT_WEIGHTS[clamp(slot.battingOrderSlot,1,9)]`.
+   - `projectedSlotKblWpa = roundWpa(slotScore / CALIBRATE.lineupSnapshotWpaDivisor)` (same rounding as
+     projectedSlotKblWpaFromIv — match its precision).
+3. Return the base snapshot with each slot's `projectedSlotKblWpa` REPLACED by the re-scored value,
+   `projectedTeamLineupKblWpa = Σ` the new per-slot values, `algorithmVersion = LINEUP_VS_STARTER_ALGORITHM_VERSION`,
+   `generatedAt: 0`, and `snapshotId: ''` (identity unset — lane mints it; Answer 5). Keep all other base fields.
+
+DOCUMENTED v1 LIMITATIONS (code comments): the ASSIGNMENT (who plays where + batting order) comes from the existing
+hand-based optimizer; only the WIN-VALUE numbers are re-scored on the full opponent + true value. A true-value/
+full-opponent-optimal ASSIGNMENT and the matchup substrate are Mode-2/later (interface contract Answer 4). Chemistry
+potency is deferred (candidates carry no chemistry).
+
+TESTS (`lineupVsStarter.test.ts`):
+1. Returns a valid OptimalLineupSnapshot: slots populated, each slot has a finite projectedSlotKblWpa,
+   projectedTeamLineupKblWpa === Σ slot values (within rounding), algorithmVersion === the new constant, snapshotId === ''.
+2. Fielding yardstick: a roster where one candidate is a glove-up (high FLD) at a premium position → that slot's
+   projectedSlotKblWpa is higher than the same roster scored with a low-FLD player in that slot (the true-value fielding
+   correction moves it).
+3. Opponent sensitivity: changing opponentStarter (e.g. throws 'L' vs 'R', or a high vs low profile) changes at least
+   one slot's projectedSlotKblWpa (the full opponent flows through effectiveRatings).
+4. Purity/determinism: two calls on identical input are JSON.stringify-equal (no Date.now leakage — generatedAt is 0).
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/lineupVsStarter.test.ts src/engines/__tests__/scoutMove.test.ts
+```
+ALSO run the existing reuse-owner tests to prove the unchanged assignment path is untouched:
+```
+NODE_ENV= npx vitest run src/utils/__tests__ src/engines/__tests__ 2>&1 | tail -20   # adjust to the real test dirs; report the optimalLineup/rosterAnalyzer files PASS
+```
+tsc 0; vitest all-pass; the existing optimalLineup/rosterAnalyzer tests STAY green (proves no regression — you edited nothing they own).
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output (incl. the existing-tests-still-green proof); 4) "SCOUT-2 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- (a) `buildOptimalLineupSnapshot`/`BuildOptimalLineupSnapshotInput`/`analysisTeamForCandidates` not importable, or a
+  REQUIRED BuildOptimalLineupSnapshotInput field has no source in OptimizeLineupVsStarterInput → STOP, report the actual
+  shape (do not fabricate a field value).
+- (b) `BATTING_ORDER_SLOT_WEIGHTS`/`CALIBRATE`/`defensivePlacementRisk`/`computeTrueValue` not exported as documented →
+  STOP, report.
+- (c) Implementation would require editing any existing file → STOP, report (the assignment must come from the
+  unchanged buildOptimalLineupSnapshot).
+- Never invent a constant; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: SCOUT-2 ===== -->
+
+---
+
+## CONTRACT POINTER — Manager-WPA rung-2 (2026-06-26)
+Full contract: `spec-docs/MWAR_RUNG2_CONTRACT.md` (light up the 20% conscious-keep-in tier, scout-gated via the merged
+`evaluateScoutMove`; re-enable the keep-in producer + the starter→keep-in handoff close to avoid double-count; hoist the
+decision assembly headless; sim decline policy; extend the L-SIM proof). Adversarial-reviewed (2 HIGH + sim-placement fixes
+folded). Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window (post optimizer-lane merge).
+
+---
+
+## CONTRACT POINTER — Step 5a rotation resolver (2026-06-26)
+Full contract: `spec-docs/MWAR_STEP5A_CONTRACT.md` (derived rotation-aware next-starter resolver + opponent-next-SP profile
+resolver + make launch rotation-aware; foundation for the 5b lineups tab). DERIVED (gamesPlayed % rotationSize), no new store.
+Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.

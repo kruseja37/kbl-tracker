@@ -32,6 +32,7 @@ export type FranchiseAwardCategory = Extract<
 
 export interface FranchiseAwardCandidate {
   playerId: string;
+  teamId: string | null;
   score: number;
   marginToWinner: number;
 }
@@ -44,6 +45,7 @@ export interface FranchiseAwardGoldGloveSplit {
 export interface FranchiseAwardRow extends FranchiseAwardsScopeInput {
   category: FranchiseAwardCategory;
   winnerPlayerId: string | null;
+  winnerTeamId: string | null;
   candidates: FranchiseAwardCandidate[];
   goldGloveSplit?: FranchiseAwardGoldGloveSplit | null;
   managerActualWins?: number | null;

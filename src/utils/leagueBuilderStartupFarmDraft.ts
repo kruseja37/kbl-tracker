@@ -299,7 +299,7 @@ function buildScoutDescriptors(teamStates: DraftTeamState[]): Record<string, Pro
       state.team.id,
       {
         scoutId: `startup-farm-scout-${state.team.id}`,
-        scoutName: `Startup Farm Scout ${index + 1}`,
+        scoutName: `${pick(`startup-farm-scout-${state.team.id}:first`, SMB4_FIRST_NAMES)} ${pick(`startup-farm-scout-${state.team.id}:last`, SMB4_LAST_NAMES)}`,
         specialties: profile.specialties,
         weaknesses: profile.weaknesses,
         accuracyModifier: profile.accuracyModifier,

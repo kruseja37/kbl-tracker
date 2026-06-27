@@ -243,6 +243,77 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
     });
   });
 
+  test('maps pitcher batting and fielding rows to non-pitching rates without arm', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'pitcher',
+      batting: baseBatting({
+        pa: 40,
+        ab: 35,
+        hits: 12,
+        singles: 5,
+        doubles: 4,
+        triples: 1,
+        homeRuns: 2,
+        walks: 3,
+        strikeouts: 6,
+        hitByPitch: 1,
+        stolenBases: 3,
+        caughtStealing: 1,
+        contactQualityGood: 9,
+        contactQualityTracked: 15,
+        extraBasesTaken: 4,
+        advancementOpportunities: 10,
+      }),
+      pitching: basePitching({
+        outsRecorded: 60,
+        hitsAllowed: 15,
+        walksAllowed: 5,
+        strikeouts: 21,
+        homeRunsAllowed: 2,
+        hitBatters: 1,
+        weakContactInduced: 12,
+        weakContactTracked: 20,
+      }),
+      fielding: baseFielding({
+        putouts: 10,
+        assists: 8,
+        errors: 2,
+        difficultyWeightedConversion: 7.2,
+        difficultyFieldingOpportunities: 9,
+      }),
+    });
+    const battersFaced = 60 + 15 + 5 + 1;
+
+    expect(result.actualByCat.pitchingStrikeoutRate).toBeCloseTo(21 / battersFaced, 10);
+    expect(result.actualByCat.pitchingWalkAvoidanceRate).toBeCloseTo(1 - (5 / battersFaced), 10);
+    expect(result.actualByCat.pitchingHomeRunSuppressionRate).toBeCloseTo(1 - (2 / battersFaced), 10);
+    expect(result.actualByCat.pitchingWeakContactRate).toBeCloseTo(12 / 20, 10);
+    expect(result.actualByCat.powerSlugging).toBeCloseTo(24 / 35, 10);
+    expect(result.actualByCat.powerHomeRunRate).toBeCloseTo(2 / 40, 10);
+    expect(result.actualByCat.contactAvoidStrikeoutRate).toBeCloseTo(1 - (6 / 40), 10);
+    expect(result.actualByCat.contactQualityRate).toBeCloseTo(9 / 15, 10);
+    expect(result.actualByCat.speedStealTripleRate).toBeCloseTo(4 / 40, 10);
+    expect(result.actualByCat.speedBaserunningRate).toBeCloseTo(4 / 10, 10);
+    expect(result.actualByCat.fieldingFieldingPct).toBeCloseTo(18 / 20, 10);
+    expect(result.actualByCat.fieldingRangeRate).toBeCloseTo(7.2 / 9, 10);
+
+    expect(result.sampleSizeByCat).toEqual({
+      pitchingStrikeoutRate: battersFaced,
+      pitchingWalkAvoidanceRate: battersFaced,
+      pitchingHomeRunSuppressionRate: battersFaced,
+      pitchingWeakContactRate: 20,
+      powerSlugging: 40,
+      powerHomeRunRate: 40,
+      contactAvoidStrikeoutRate: 40,
+      contactQualityRate: 15,
+      speedStealTripleRate: 5,
+      speedBaserunningRate: 10,
+      fieldingFieldingPct: 20,
+      fieldingRangeRate: 9,
+    });
+    expectCategoriesAbsent(result, DORMANT_CATEGORIES);
+  });
+
   test('omits all actual rates for a zero-PA hitter while emitting zero samples', () => {
     const result = toExpectedStatsCategoryRates({
       role: 'hitter',
@@ -301,6 +372,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
     });
     const pitcher = toExpectedStatsCategoryRates({
       role: 'pitcher',
+      batting: baseBatting({ pa: 20, ab: 18, hits: 6, singles: 4, doubles: 1, homeRuns: 1 }),
       pitching: basePitching({
         outsRecorded: 30,
         hitsAllowed: 9,
@@ -308,13 +380,14 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
         strikeouts: 12,
         homeRunsAllowed: 1,
       }),
+      fielding: baseFielding({ games: 5, putouts: 8, assists: 4, errors: 1 }),
     });
 
     expectCategoriesAbsent(hitter, DORMANT_CATEGORIES);
     expectCategoriesAbsent(pitcher, DORMANT_CATEGORIES);
   });
 
-  test('role gates hitter and pitcher category sets even when opposite rows are supplied', () => {
+  test('hitter ignores pitching rows while pitcher combines pitching with non-pitching rows', () => {
     const hitter = toExpectedStatsCategoryRates({
       role: 'hitter',
       batting: baseBatting({ pa: 20, ab: 18, hits: 6, singles: 4, doubles: 1, homeRuns: 1 }),
@@ -329,6 +402,9 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
     });
 
     expectCategoriesAbsent(hitter, PITCHER_LIVE_CATEGORIES);
-    expectCategoriesAbsent(pitcher, HITTER_LIVE_CATEGORIES);
+    for (const category of [...PITCHER_LIVE_CATEGORIES, ...HITTER_LIVE_CATEGORIES]) {
+      expect(category in pitcher.sampleSizeByCat).toBe(true);
+    }
+    expectCategoriesAbsent(pitcher, DORMANT_CATEGORIES);
   });
 });

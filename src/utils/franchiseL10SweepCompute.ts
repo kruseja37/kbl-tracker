@@ -70,6 +70,10 @@ import {
   type FranchiseL10OverlayRow,
   type FranchiseL10OverlayScopeInput,
 } from './franchiseL10OverlayStorage';
+import {
+  getFranchiseTradeDemandRow,
+  upsertFranchiseTradeDemandRow,
+} from './franchiseTradeDemandStorage';
 import { isFranchisePhase2L10Enabled } from './franchisePhase2Flags';
 import { getGame as getScheduledGame } from './scheduleStorage';
 
@@ -143,10 +147,12 @@ export async function resolveL10Candidates(
     playerCandidates.push({
       id: player.id,
       kind: 'player',
+      teamId,
       role: getPlayerIsPitcher(player) ? 'pitcher' : 'position',
       personality: normalizePersonality(player.personality),
       playerMorale: player.morale,
       fanMorale: await teamFanMoraleByTeamId.get(teamId)!,
+      loyalty: player.hiddenPersonalityModifiers?.loyalty ?? 50,
       performanceSignal,
     });
   }
@@ -170,6 +176,8 @@ export async function resolveL10Candidates(
 export const l10SweepSeam = {
   resolveL10Candidates,
   computeFranchiseL10Events,
+  getFranchiseTradeDemandRow,
+  upsertFranchiseTradeDemandRow,
 };
 
 export async function persistDarkL10ForCompletedGame(
@@ -234,6 +242,33 @@ export async function persistDarkL10ForCompletedGame(
 
   for (const row of rows) {
     await putFranchiseL10Overlay(row);
+  }
+
+  const teamIdByPlayerId = new Map(
+    candidates
+      .filter((candidate) => candidate.kind === 'player' && candidate.teamId)
+      .map((candidate) => [candidate.id, candidate.teamId as string]),
+  );
+  for (const event of report.events) {
+    if (event.eventType !== 'trade_demand' || event.targetKind !== 'player') continue;
+
+    const teamId = teamIdByPlayerId.get(event.targetId);
+    if (!teamId) continue;
+
+    const existingRow = await l10SweepSeam.getFranchiseTradeDemandRow(scope, event.targetId);
+    if (existingRow) continue;
+
+    await l10SweepSeam.upsertFranchiseTradeDemandRow({
+      franchiseId: scope.franchiseId,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      playerId: event.targetId,
+      teamId,
+      status: 'active',
+      confirmedAtGameNumber: gameNumber,
+      confirmedAtCheckpoint: String(gameNumber),
+      confirmedAtIso: createdAt,
+    });
   }
 
   return { status: 'written', written: rows.length };

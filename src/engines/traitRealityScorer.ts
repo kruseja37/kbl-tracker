@@ -86,7 +86,7 @@ export type PlayerRole = 'pitcher' | 'position';
 // (75th trait, A7 — a staminaModifier pitcher trait) but is NOT enumerated in
 // any VI.2 role list. A position player has no stamina/pitch-count signal, so
 // it is classified PITCHER here. Flagged in the run log for JK.
-const PITCHER_ONLY_TRAITS: readonly string[] = [
+export const PITCHER_ONLY_TRAITS: readonly string[] = [
   'Gets Ahead', 'Falls Behind', 'Composed', 'BB Prone', 'K Collector',
   'K Neglector', 'Rally Stopper', 'Surrounded', 'Meltdown', 'Specialist',
   'Reverse Splits', 'Pick Officer', 'Easy Jumps', 'Wild Thing', 'Metal Head',

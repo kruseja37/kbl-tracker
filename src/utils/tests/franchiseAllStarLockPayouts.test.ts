@@ -1,6 +1,14 @@
+import 'fake-indexeddb/auto';
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { AllStarCandidate } from '../../engines/franchiseAllStarSelector';
+import {
+  getOrCreateCareerBatting,
+  getOrCreateCareerPitching,
+  updateCareerBatting,
+  updateCareerPitching,
+} from '../careerStorage';
 import {
   emitTeamId,
   franchiseAllStarLockPayoutSeam,
@@ -9,6 +17,16 @@ import {
   runFranchiseAllStarLockPayouts,
 } from '../franchiseAllStarLockPayouts';
 import type { FranchiseAllStarSelection } from '../franchiseAllStarRostersStorage';
+import { resetTrackerDbForTests } from '../trackerDb';
+
+vi.mock('../syncEngine', () => ({
+  syncEngine: {
+    isSuppressed: vi.fn(() => true),
+    upsert: vi.fn(),
+  },
+}));
+
+const DB_NAME = 'kbl-tracker';
 
 const scope = {
   franchiseId: 'franchise-lock',
@@ -16,6 +34,15 @@ const scope = {
   statsScopeId: 'stats-lock',
   seasonNumber: 2,
 };
+
+function deleteDatabase(name: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => resolve();
+  });
+}
 
 function selection(
   overrides: Partial<FranchiseAllStarSelection> & Pick<FranchiseAllStarSelection, 'playerId'>,
@@ -51,12 +78,16 @@ function candidate(
 }
 
 describe('franchiseAllStarLockPayouts', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    resetTrackerDbForTests();
+    await deleteDatabase(DB_NAME);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    resetTrackerDbForTests();
+    await deleteDatabase(DB_NAME);
   });
 
   test('honoreesFromSelections maps starters and wildcard starters to allStarStarter, reserves to allStarReserve', () => {
@@ -120,6 +151,8 @@ describe('franchiseAllStarLockPayouts', () => {
       .mockResolvedValue({ status: 'applied', appliedCount: 3 });
     const emit = vi.spyOn(franchiseAllStarLockPayoutSeam, 'emit')
       .mockResolvedValue({ status: 'emitted' });
+    const incrementCareerSelections = vi.spyOn(franchiseAllStarLockPayoutSeam, 'incrementCareerSelections')
+      .mockResolvedValue({ status: 'written', written: 3 });
 
     const result = await runFranchiseAllStarLockPayouts({
       selections,
@@ -128,7 +161,12 @@ describe('franchiseAllStarLockPayouts', () => {
       timestamp: 1720000000000,
     });
 
-    expect(result).toEqual({ emit: 'emitted', reachFloor: 'ratcheted', snub: 'applied' });
+    expect(result).toEqual({
+      emit: 'emitted',
+      reachFloor: 'ratcheted',
+      snub: 'applied',
+      careerSelections: 'written',
+    });
     expect(applyReachFloor).toHaveBeenCalledWith({
       honorees: [
         { playerId: 'starter-c', honorTier: 'allStarStarter' },
@@ -164,6 +202,7 @@ describe('franchiseAllStarLockPayouts', () => {
       },
       teamId: 'team-a',
     });
+    expect(incrementCareerSelections).toHaveBeenCalledWith(selections);
   });
 
   test('runFranchiseAllStarLockPayouts isolates payout failures so a snub throw does not block emit or reach-floor', async () => {
@@ -173,6 +212,8 @@ describe('franchiseAllStarLockPayouts', () => {
       .mockRejectedValue(new Error('snub failed'));
     const emit = vi.spyOn(franchiseAllStarLockPayoutSeam, 'emit')
       .mockResolvedValue({ status: 'emitted' });
+    const incrementCareerSelections = vi.spyOn(franchiseAllStarLockPayoutSeam, 'incrementCareerSelections')
+      .mockResolvedValue({ status: 'written', written: 1 });
 
     const result = await runFranchiseAllStarLockPayouts({
       selections: [selection({ playerId: 'starter-c', teamId: 'team-a', role: 'starter' })],
@@ -181,9 +222,66 @@ describe('franchiseAllStarLockPayouts', () => {
       timestamp: 1720000000000,
     });
 
-    expect(result).toEqual({ emit: 'emitted', reachFloor: 'ratcheted', snub: 'error' });
+    expect(result).toEqual({
+      emit: 'emitted',
+      reachFloor: 'ratcheted',
+      snub: 'error',
+      careerSelections: 'written',
+    });
     expect(applyReachFloor).toHaveBeenCalledTimes(1);
     expect(applySnub).toHaveBeenCalledTimes(1);
     expect(emit).toHaveBeenCalledTimes(1);
+    expect(incrementCareerSelections).toHaveBeenCalledTimes(1);
+  });
+
+  test('runFranchiseAllStarLockPayouts increments selected hitters in batting and pitchers in pitching', async () => {
+    // The parent roster lock owns once-per-season idempotency; this payout
+    // helper deliberately increments once per lock-triggered call.
+    const selections = [
+      selection({ playerId: 'starter-hitter', teamId: 'team-h', position: 'C', role: 'starter' }),
+      selection({ playerId: 'reserve-wildcard', teamId: 'team-w', position: 'WILDCARD', role: 'reserve' }),
+      selection({ playerId: 'starter-pitcher', teamId: 'team-sp', position: 'SP', role: 'starter' }),
+      selection({ playerId: 'reserve-reliever', teamId: 'team-rp', position: 'RP', role: 'reserve' }),
+    ];
+
+    const starterHitterBatting = await getOrCreateCareerBatting('starter-hitter', 'Starter Hitter', 'team-h');
+    await updateCareerBatting({ ...starterHitterBatting, allStarSelections: 2 });
+    const reserveWildcardBatting = await getOrCreateCareerBatting('reserve-wildcard', 'Reserve Wildcard', 'team-w');
+    await updateCareerBatting({ ...reserveWildcardBatting, allStarSelections: 0 });
+    const starterPitcherPitching = await getOrCreateCareerPitching('starter-pitcher', 'Starter Pitcher', 'team-sp');
+    await updateCareerPitching({ ...starterPitcherPitching, allStarSelections: 5 });
+    const reserveRelieverPitching = await getOrCreateCareerPitching('reserve-reliever', 'Reserve Reliever', 'team-rp');
+    await updateCareerPitching({ ...reserveRelieverPitching, allStarSelections: 1 });
+
+    const starterHitterPitching = await getOrCreateCareerPitching('starter-hitter', 'Starter Hitter', 'team-h');
+    await updateCareerPitching({ ...starterHitterPitching, allStarSelections: 4 });
+    const starterPitcherBatting = await getOrCreateCareerBatting('starter-pitcher', 'Starter Pitcher', 'team-sp');
+    await updateCareerBatting({ ...starterPitcherBatting, allStarSelections: 7 });
+
+    vi.spyOn(franchiseAllStarLockPayoutSeam, 'applyReachFloor')
+      .mockResolvedValue({ status: 'ratcheted', ratchetedCount: 4 });
+    vi.spyOn(franchiseAllStarLockPayoutSeam, 'applySnub')
+      .mockResolvedValue({ status: 'noop', appliedCount: 0 });
+    vi.spyOn(franchiseAllStarLockPayoutSeam, 'emit')
+      .mockResolvedValue({ status: 'emitted' });
+
+    const result = await runFranchiseAllStarLockPayouts({
+      selections,
+      candidates: selections.map((allStarSelection) => candidate({
+        playerId: allStarSelection.playerId,
+        teamId: allStarSelection.teamId,
+        rawPosition: allStarSelection.position,
+      })),
+      scope,
+      timestamp: 1720000000000,
+    });
+
+    expect(result.careerSelections).toBe('written');
+    expect((await getOrCreateCareerBatting('starter-hitter', 'Starter Hitter', 'team-h')).allStarSelections).toBe(3);
+    expect((await getOrCreateCareerBatting('reserve-wildcard', 'Reserve Wildcard', 'team-w')).allStarSelections).toBe(1);
+    expect((await getOrCreateCareerPitching('starter-pitcher', 'Starter Pitcher', 'team-sp')).allStarSelections).toBe(6);
+    expect((await getOrCreateCareerPitching('reserve-reliever', 'Reserve Reliever', 'team-rp')).allStarSelections).toBe(2);
+    expect((await getOrCreateCareerPitching('starter-hitter', 'Starter Hitter', 'team-h')).allStarSelections).toBe(4);
+    expect((await getOrCreateCareerBatting('starter-pitcher', 'Starter Pitcher', 'team-sp')).allStarSelections).toBe(7);
   });
 });

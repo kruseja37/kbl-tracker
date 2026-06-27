@@ -12,7 +12,8 @@
  *   2. src/data/traitPricing.ts — trait names (exact), polarity, chemistry, workbook L2
  *      rating-equivalents (used as deltas where the guide publishes no in-game numbers)
  *   3. spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §4.3 — schema intent + known predicates
- *   4. spec §3.5 potency rule — default 0.5x/1.0x/2.0x of L2 unless guide-explicit
+ *   4. spec §3.5 potency rule — default 0.5x/1.0x/3.0x of L2 unless guide-explicit
+ *      (L3/L1 corrected 2.0→3.0 to the workbook, JK 2026-06-22 — see POTENCY_SCALE in rosterEngineConstants.ts)
  * Authored: 2026-06-10 (T2). Consumed by the Effective Ratings evaluator (T6) — no engine here.
  *
  * ============================== POTENCY RULING (READ FIRST) ==============================
@@ -27,8 +28,8 @@
  *       Whiffer: DeMarco 37 CON, "unless you have maxed out Competitive, and even then he's
  *       still sitting at 25 contact" -> L3 = -12 (mildest), matching printed -50/-25/-12.
  *       Injury Prone: "forcing you to stack Competitive" to suppress it (§Traits/COMPETITIVE).
- *   potency: 'standard'          = L1 0.5x / L2 1.0x / L3 2.0x of `deltas` (positives, spec §3.5)
- *   potency: 'standardInverted'  = L1 2.0x / L2 1.0x / L3 0.5x of `deltas` (negatives whose guide
+ *   potency: 'standard'          = L1 0.5x / L2 1.0x / L3 3.0x of `deltas` (positives, spec §3.5; workbook-corrected)
+ *   potency: 'standardInverted'  = L1 3.0x / L2 1.0x / L3 0.5x of `deltas` (negatives whose guide
  *                                  line gives only x4/x2/x1 multipliers) — ADDED to the contract
  *                                  union; using 'standard' for these would silently flip the sign
  *                                  of the chemistry incentive.

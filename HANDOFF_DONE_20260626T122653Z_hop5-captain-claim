@@ -1,0 +1,35 @@
+next_ticket: **A1.5d hop-5 (Almanac — house the park record in the franchise-season Almanac, independent of the LLM take).** A1.5d DETECT(hop-1) + FAME swap(hop-2 `219bdb3a`) + FAN buzz(hop-3 `6805ab74`) + REPORTER pure adapter(hop-4 `20732a1c`) are all DONE + FULLY VERIFIED; the pre-existing trait-trip is fixed (`514ce366`); the L-SIM season is GREEN + reproducible. Continue the UNATTENDED AUTH-4 captain loop on `codex/franchise-v1-next` (MAIN). Proven loop: ground FRESH from source (a parallel grounding workflow keeps heavy reads off main context) → Captain RE-verifies the make-or-break → write+commit contract → dispatch Codex (`run_in_background`+`dangerouslyDisableSandbox`, watchdog) → audit the REAL diff → (ultracode: a parallel adversarial design-review subagent before accepting) → Captain runs his OWN FULL suite + L-SIM → commit branch-only BY PATH → log.
+
+branch/topology: **MAIN** `/Users/johnkruse/Projects/kbl-tracker` on `codex/franchise-v1-next` (HEAD = the hop-4-doc commit). **trackerDb v26**. A1.5d uses own db `kbl-franchise-stadium-records` → NO trackerDb bump. ⚠ **PAUSED — DO NOT TOUCH/MERGE (JK):** `codex/draft-pipeline-fix` + `codex/auction-draft-ux-rehaul`.
+
+resume_note: **SOLE WORKER — claim the baton FIRST** (`mv HANDOFF_NEEDED HANDOFF_DONE_$(date -u +%Y%m%dT%H%M%SZ)_<note>`; confirm no `codex exec` + no other `claude` on this branch). **caffeinate PID 84474** (verify). Benign Codex stderr `mode2-pilot/SKILL.md: invalid YAML` is NOT a build error.
+- **FULL-suite baseline (ZERO-NEW-REDS): ~8425 passing**; ONLY fails = `wpaRuntimeBoundary` (HARD) + `franchiseManualSmokeFixture` + `franchiseOffseasonGuards` (order-flakes, re-run SOLO). Read the vitest SUMMARY (failed-file LIST), NOT the RC.
+- **L-SIM HEALTHY:** `season.config.ts` runs a full clean 60g (digest `9425360:10944d37`, findings 0, sameSeed true, reproducible byte-identical); smoke 24g all-CRITICAL-pass; falsification 44/44. Always read the SUMMARY JSON (`stoppedEarly`/`criticalFindings`/`sameSeed`), NOT the RC. SMOKE(24g) does NOT reach game 36 — run the SEASON for late coverage. A flags-ON change touching a DUMPED store (kbl-tracker / kbl-franchise-morale) RE-BAKES the anchor (verify the delta is sane → commit the regenerated `lsim-h2-baseline-checkpoint-*.json`); a DORMANT change (no caller) stays byte-identical (no re-bake). New own-DBs feeding dumped state MUST be added to `test-utils/lsim/sandbox.ts` `DB_NAMES_TO_DELETE`.
+
+**DETECT→living-season chain:** hop-1 DETECT ✅ · hop-2 FAME swap ✅ · hop-3 FAN buzz (PARK_RECORD_SET, self-delta-0) ✅ · hop-4 REPORTER pure adapter (STADIUM_RECORD NarrativeEventType + `franchiseStadiumRecordNewsAdapter`; LLM emission FLAGGED for JK) ✅. Settled facts: the fame bridge moves SELF morale ONLY (`resolveFameTap` zeros team-fan); PARK_RECORD_SET is the sole home-fan path. The reporter LLM emission half (for hop-4) is browser/JK-pending.
+
+**➡ hop-5 (Almanac, §5.5) — ground from source first:** the stadium-record change maps 1:1 to a new `'park-record'` `AlmanacNarrativeArchiveEntry` (same scope keys: franchiseId/seasonId/statsScopeId/stadiumId/recordType/recordKey), AND the standing record embeds in the persisted season summary (`franchiseSeasonSummaryStorage.ts:701` de-orphan site) so the franchise-season Almanac houses it **independent of the LLM take**. De-orphan at BOTH season-finalize and the per-game tap (§9). GROUND: the `AlmanacNarrativeArchiveEntry` type + its archive writer/store + how existing entry kinds are written; whether this is build-dark behind the StadiumRecords flag; whether it touches a DUMPED store (→ L-SIM re-bake) or its own Almanac db (→ byte-identical). Likely a pure archive-write tap (mirror the hop-1b detect tap shape) + a season-summary embed. Then hop-6 rivalry edge (overtake stamps a `RelationshipEdgeRow` via `putFranchiseRelationshipEdge`, gated `isFranchisePhase2L13Enabled`, §5.6) + the §7 home-park-rivalry 2× (archive aggregation + `vsRival` flag-flip + 2× dial in `fanMoraleEngine`) → §8 per-stadium stat-display (USER-VISIBLE → flag for JK). **AFTER A1.5d the queue is JK-DECISION-BLOCKED** (re-grade store · RA-7). BROWSER/JK-PENDING: A1.4 L12-6 UI · L4b LLM emission · A1.3b fork-2 · A1.5d hop-4 reporter LLM half + §8 display · BV backlog.
+
+DISPATCH MECHANICS (proven; watchdog; macOS has no `timeout`; `model_reasoning_effort` ∈ high|xhigh — NEVER very-high):
+  cd /Users/johnkruse/Projects/kbl-tracker
+  export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+  rm -f /tmp/codex-<ID>.out; : > /tmp/codex-<ID>.stdout
+  ( PREV=0; STALL=0; ELAPSED=0
+    while [ $ELAPSED -lt 1800 ]; do
+      sleep 120; ELAPSED=$((ELAPSED+120))
+      pgrep -f "codex exec.*codex-<ID>.out" >/dev/null 2>&1 || exit 0
+      CUR=$(wc -c < /tmp/codex-<ID>.stdout 2>/dev/null | tr -d ' '); CUR=${CUR:-0}
+      CHANGED=$(git -C /Users/johnkruse/Projects/kbl-tracker diff --name-only -- src 2>/dev/null | wc -l | tr -d ' '); CHANGED=${CHANGED:-0}
+      if [ "$CUR" -le "$PREV" ] && [ "$CHANGED" -eq 0 ] && [ ! -s /tmp/codex-<ID>.out ]; then STALL=$((STALL+1)); else STALL=0; fi
+      PREV=$CUR
+      if [ $STALL -ge 3 ]; then echo "WATCHDOG STALL kill at ${ELAPSED}s" >> /tmp/codex-<ID>.stdout; pkill -9 -f "codex exec.*codex-<ID>.out" 2>/dev/null; exit 0; fi
+    done
+    echo "WATCHDOG 30m cap kill" >> /tmp/codex-<ID>.stdout; pkill -9 -f "codex exec.*codex-<ID>.out" 2>/dev/null ) &
+  WDOG=$!
+  sed -n '/<!-- ===== CONTRACT: <ID> /,/<!-- ===== END CONTRACT: <ID> /p' /Users/johnkruse/Projects/kbl-tracker/spec-docs/PROMPT_CONTRACTS.md \
+    | NODE_ENV= ~/.local/bin/codex exec -C /Users/johnkruse/Projects/kbl-tracker --skip-git-repo-check -s workspace-write -c model_reasoning_effort=high -o /tmp/codex-<ID>.out - >> /tmp/codex-<ID>.stdout 2>&1
+  RC=$?; kill $WDOG 2>/dev/null; echo "codex rc=$RC"
+
+session-done (2026-06-26, UNATTENDED AUTH-4 → JK-attended "keep rolling"): **3 A1.5d hops SHIPPED (hop-2 `219bdb3a` fame swap · hop-3 `6805ab74` fan buzz · hop-4 `20732a1c` reporter adapter) + 2 pre-existing fixes (L-SIM harness leak `19b75104` · trait-trip invariant `514ce366`).** All branch-only / Codex-built or Captain-fixed / adversarially-reviewed / FULL ZERO-NEW-REDS / L-SIM verified (season clean 60g, re-baked where live / byte-identical where dormant). Clean seam — nothing in flight. Handing hop-5 to fresh context after a long session.
+
+READ ON RESUME (in order): `spec-docs/AUTONOMOUS_RUN_LOG.md` (newest blocks = hop-4 → hop-3 → trait-fix → hop-2) · `spec-docs/CURRENT_STATE.md` LIVE HEADER · `spec-docs/AUTONOMOUS_RUN_PROTOCOL.md` · `spec-docs/SESSION_RULES.md` · `spec-docs/STADIUM_ANALYTICS_SPEC_V2.md` §5.5 (Almanac) + §5.6 (rivalry edge) + §9 (de-orphan sites).

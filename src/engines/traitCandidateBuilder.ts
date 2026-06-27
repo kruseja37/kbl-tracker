@@ -13,6 +13,8 @@ import {
   CANONICAL_TRAIT_NAMES,
   computeTraitRealityScore,
   isTraitEligibleForRole,
+  PITCHER_ONLY_TRAITS,
+  TRAIT_REALITY_SCORER_TUNING,
   type PlayerRole,
 } from './traitRealityScorer';
 import type { TraitCandidate } from './traitAcquisition';
@@ -1872,6 +1874,9 @@ function hashString(value: string): number {
 
 const TWO_WAY_VARIANTS = ['Two Way (C)', 'Two Way (IF)', 'Two Way (OF)'] as const;
 type TwoWayVariant = (typeof TWO_WAY_VARIANTS)[number];
+const SP_RP_SPLIT_TRAITS = new Set(
+  PITCHER_ONLY_TRAITS.filter((t) => !(TWO_WAY_VARIANTS as readonly string[]).includes(t)),
+);
 
 /**
  * PRE-ACT-TRAITS-1: deterministic per-pitcher Two Way variant. Stable forever
@@ -1884,16 +1889,16 @@ function twoWayVariantForPitcher(playerId: string): TwoWayVariant {
 }
 
 /**
- * PRE-ACT-TRAITS-1 / DT-F2: trait-specific peer-pool folding. Two Way canonicalizes
- * the C/IF/OF variants to one 'Two Way' family. Workhorse folds to local SP/RP
- * cohorts by gamesStarted (>0 => SP, otherwise RP). Every other trait keys on
- * itself.
+ * PRE-ACT-TRAITS-1 / T-3a: trait-specific peer-pool folding. Two Way canonicalizes
+ * the C/IF/OF variants to one 'Two Way' family. Pitcher-only traits except Two
+ * Way fold to local SP/RP cohorts by gamesStarted (>0 => SP, otherwise RP).
+ * Every other trait keys on itself.
  */
 function poolTraitKey(traitName: string, playerId: string, input: SeasonTraitCandidateInput): string {
   if ((TWO_WAY_VARIANTS as readonly string[]).includes(traitName)) return 'Two Way';
-  if (traitName === 'Workhorse') {
+  if (SP_RP_SPLIT_TRAITS.has(traitName)) {
     const starts = input.seasonPitchingByPlayer?.get(playerId)?.gamesStarted ?? 0;
-    return starts > 0 ? 'Workhorse|SP' : 'Workhorse|RP';
+    return starts > 0 ? `${traitName}|SP` : `${traitName}|RP`;
   }
   return traitName;
 }
@@ -2072,6 +2077,11 @@ function buildPeerPools(input: SeasonTraitCandidateInput, raw: RawSignalMap): Ma
       const key = roleKey(player.role, poolTraitKey(traitName, player.playerId, input));
       pools.set(key, pools.get(key) ?? []);
       pools.get(key)?.push(signal.signalValue);
+      if (SP_RP_SPLIT_TRAITS.has(traitName)) {
+        const fallbackKey = roleKey(player.role, traitName);
+        pools.set(fallbackKey, pools.get(fallbackKey) ?? []);
+        pools.get(fallbackKey)?.push(signal.signalValue);
+      }
     }
   }
   return pools;
@@ -2099,12 +2109,17 @@ export function computeSeasonTraitCandidates(
         if (!isTraitEligibleForRole(traitName, player.role)) continue;
         const signal = byTrait.get(traitName);
         if (!signal) continue;
+        const splitKey = roleKey(player.role, poolTraitKey(traitName, player.playerId, input));
+        let peerValues = peerPools.get(splitKey) ?? [];
+        if (SP_RP_SPLIT_TRAITS.has(traitName) && peerValues.length < TRAIT_REALITY_SCORER_TUNING.minPeerPool) {
+          peerValues = peerPools.get(roleKey(player.role, traitName)) ?? peerValues;
+        }
         const score = computeTraitRealityScore({
           traitName,
           playerRole: player.role,
           signalValue: signal.signalValue,
           sampleSize: signal.sampleSize,
-          peerValues: peerPools.get(roleKey(player.role, poolTraitKey(traitName, player.playerId, input))) ?? [],
+          peerValues,
           basis: 'none',
         }, config);
         // Emit the L9b-2 seam shape ({ traitName, score }) + raw debug fields.

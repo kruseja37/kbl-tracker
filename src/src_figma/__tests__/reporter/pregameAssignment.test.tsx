@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ReporterAssignmentPanel } from "../../app/components/ReporterAssignmentPanel";
 import { INITIAL_MOOD_STATE } from "../../../engines/moodEngine";
 import { deriveReporterAvatarPalette } from "../../../engines/reporterAvatarPalette";
-import { ERA_REPORTER_NAME_POOLS } from "../../../engines/reporterNameGenerator";
+import { SMB4_FIRST_NAMES, SMB4_LAST_NAMES } from "../../../data/smb4NameDatabase";
 import type { BeatReporter } from "../../../types/reporter";
 import { autoGenerateReporterForTeam, assignReporterToTeam } from "../../../utils/reporterAssignment";
 import { createReporter, getReporterForTeam } from "../../../utils/reporterStorage";
@@ -111,7 +111,9 @@ describe("pre-game reporter assignment", () => {
 
     expect(reporter.teamId).toBe(team.id);
     expect(reporter.leagueId).toBe("league-1");
-    expect(ERA_REPORTER_NAME_POOLS.classic).toContain(reporter.name);
+    const [reporterFirstName, ...reporterRest] = reporter.name.split(" ");
+    expect(SMB4_FIRST_NAMES).toContain(reporterFirstName);
+    expect(SMB4_LAST_NAMES).toContain(reporterRest.join(" "));
     expect(reporter.avatarColors).toEqual({
       primary: expectedPalette.primary,
       secondary: expectedPalette.secondary,

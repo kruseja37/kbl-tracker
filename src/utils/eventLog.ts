@@ -476,6 +476,13 @@ export type PromptedManagerDecisionAction =
   | 'let_batter_hit'
   | 'decline_defensive_sub';
 
+export interface PromptedManagerScoutEvaluation {
+  recommend: boolean;
+  decisionType: 'pitcher_change' | 'pinch_hit' | 'defensive_replacement';
+  bestMoveKblWpaGain: number;
+  thresholdKblWpa: number;
+}
+
 export interface PromptedManagerDecisionEvent {
   decisionType: PromptedManagerDecisionType;
   action: PromptedManagerDecisionAction;
@@ -492,6 +499,7 @@ export interface PromptedManagerDecisionEvent {
   leverageIndex?: number;
   recommendationId?: string;
   provenanceKey?: string;
+  scoutEvaluation?: PromptedManagerScoutEvaluation;
   resolution?: {
     status: 'pending';
     expectedEndpoint: ManagerDecisionResolutionEndpoint;

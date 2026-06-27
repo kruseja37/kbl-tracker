@@ -78,5 +78,12 @@ describe('L-SIM H2 season runner and invariant suite', () => {
     expect(summary.baseline.totalScheduledGames).toBe(Math.floor((6 * gamesPerTeam) / 2));
     expect(summary.determinism.firstGamesSimulated).toBeGreaterThan(0);
     expect(summary.determinism.secondGamesSimulated).toBeGreaterThan(0);
+    expect(summary.baseline.managerWpaProof.managerTotalCount).toBeGreaterThan(0);
+    expect(summary.baseline.managerWpaProof.keptInStintCount).toBeGreaterThan(0);
+    expect(summary.baseline.managerWpaProof.keptInShareIsTwentyPercent).toBe(true);
+    expect(summary.baseline.managerWpaProof.zeroRetiredLayerTotals).toBe(true);
+    expect(summary.baseline.managerWpaProof.deploymentOnlyTotals).toBe(true);
+    expect(summary.baseline.managerWpaProof.rawCoveragePass).toBe(true);
+    expect(summary.baseline.managerWpaProof.noNaN).toBe(true);
   }, 900_000);
 });

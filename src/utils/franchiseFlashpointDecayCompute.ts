@@ -6,11 +6,11 @@
  * locked Albatross, a trade-demander) who stays on the roster, accumulate a
  * compounding per-game fan-morale tax into the franchiseFlashpointDecay store.
  *
- * SEAM-NEUTRAL for trade-demanders until L10/L13: the "turned-on player"
- * source list is resolved by resolveTurnedOnPlayers(), which now reads active
- * or locked Albatross designation holders for each team in the completed game.
- * So even with the Phase-2 flashpoint flag ON, this writes NOTHING unless an
- * active/locked Albatross exists for the home/away team.
+ * SEAM-NEUTRAL until the source stores have rows: the "turned-on player" source
+ * list is resolved by resolveTurnedOnPlayers(), which reads active or locked
+ * Albatross designation holders and active trade-demanders for each team in the
+ * completed game. So even with the Phase-2 flashpoint flag ON, this writes
+ * NOTHING unless a source store has a row for the home/away team.
  *
  * L5b ONLY accumulates the tax artifact (decay-on-write running state). It does
  * NOT mutate any fan-morale snapshot — applying the accumulated tax to live fan
@@ -26,6 +26,7 @@ import {
   type FranchiseFlashpointDecayRow,
   type FranchiseFlashpointDecayScopeInput,
 } from './franchiseFlashpointDecayStorage';
+import { getFranchiseTradeDemandRowsByScope } from './franchiseTradeDemandStorage';
 import { isFranchisePhase2FlashpointEnabled } from './franchisePhase2Flags';
 import { getGame as getScheduledGame } from './scheduleStorage';
 
@@ -54,7 +55,8 @@ export interface TurnedOnPlayer {
 /**
  * SEAM: resolve the players currently "turned on" (a locked Albatross or a
  * trade-demander) for this scope/game. Albatross is resolved from the persisted
- * active|locked designation row; trade-demander stays empty until L10/L13 land.
+ * active|locked designation row; trade-demanders are resolved from the L10
+ * confirmed membership store.
  * Keep this the single explicit seam so L5b stays gated and mockable.
  *
  * Exposed on `flashpointSeam` so the per-game compute (and tests) call it
@@ -72,6 +74,7 @@ export async function resolveTurnedOnPlayers(
     ),
   );
   const turnedOnPlayers: TurnedOnPlayer[] = [];
+  const turnedOnPlayerIds = new Set<string>();
 
   for (const teamId of teamIds) {
     const row = await getFranchiseDesignationRow({
@@ -89,10 +92,20 @@ export async function resolveTurnedOnPlayers(
     // check here.
     if (row && (row.status === 'active' || row.status === 'locked') && row.playerId) {
       turnedOnPlayers.push({ playerId: row.playerId, kind: 'albatross' });
+      turnedOnPlayerIds.add(row.playerId);
     }
   }
 
-  // SEAM (still empty): L10/L13 trade-demander fills 'trade_demander'.
+  const tradeDemandRows = await getFranchiseTradeDemandRowsByScope(scope);
+  for (const row of tradeDemandRows) {
+    if (row.status !== 'active') continue;
+    if (!teamIds.includes(row.teamId)) continue;
+    if (turnedOnPlayerIds.has(row.playerId)) continue;
+
+    turnedOnPlayers.push({ playerId: row.playerId, kind: 'trade_demander' });
+    turnedOnPlayerIds.add(row.playerId);
+  }
+
   return turnedOnPlayers;
 }
 

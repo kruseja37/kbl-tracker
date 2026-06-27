@@ -153,16 +153,60 @@ describe('checkpointRatingSignal RA-2c-1', () => {
 
     const result = computeCheckpointRatingSignals(cohort);
 
-    expect(result.get('anchor')?.contact).toBeCloseTo(0, 10);
-    expect(result.get('high')?.contact).toBeGreaterThan(0);
-    expect(result.get('low')?.contact).toBeLessThan(0);
+    expect(result.cumulative.get('anchor')?.contact).toBeCloseTo(0, 10);
+    expect(result.cumulative.get('high')?.contact).toBeGreaterThan(0);
+    expect(result.cumulative.get('low')?.contact).toBeLessThan(0);
+    expect(result.recent.size).toBe(0);
+  });
+
+  test('recentCategoryRates produces a parallel recent signal against the cumulative pool stats', () => {
+    const cohort: CheckpointSignalMember[] = [
+      {
+        ...member('target', 'middleIF', 0.280),
+        recentCategoryRates: categoryRate(0.340, 10),
+      },
+      member('low', 'middleIF', 0.240),
+      member('below', 'middleIF', 0.260),
+      member('mid', 'middleIF', 0.280),
+      member('above', 'middleIF', 0.300),
+      member('high', 'middleIF', 0.320),
+    ];
+
+    const result = computeCheckpointRatingSignals(cohort);
+
+    expect(result.cumulative.get('target')?.contact).toBeCloseTo(0, 10);
+    expect(result.recent.get('target')?.contact).toBeGreaterThan(
+      result.cumulative.get('target')?.contact ?? Number.NEGATIVE_INFINITY,
+    );
+    expect(result.recent.has('low')).toBe(false);
+  });
+
+  test('thin recentCategoryRates are gated by the same flat floor as cumulative rates', () => {
+    const cohort: CheckpointSignalMember[] = [
+      {
+        ...member('target', 'middleIF', 0.280),
+        recentCategoryRates: categoryRate(0.340, 9),
+      },
+      member('low', 'middleIF', 0.240),
+      member('below', 'middleIF', 0.260),
+      member('mid', 'middleIF', 0.280),
+      member('above', 'middleIF', 0.300),
+      member('high', 'middleIF', 0.320),
+    ];
+
+    const result = computeCheckpointRatingSignals(cohort);
+
+    expect(result.cumulative.get('target')?.contact).toBeCloseTo(0, 10);
+    expect(result.recent.get('target')).toEqual({});
   });
 
   test('computeCheckpointRatingSignals handles empty and one-member thin pools without throwing', () => {
-    expect(computeCheckpointRatingSignals([]).size).toBe(0);
+    const empty = computeCheckpointRatingSignals([]);
+    expect(empty.cumulative.size).toBe(0);
+    expect(empty.recent.size).toBe(0);
 
     expect(() => computeCheckpointRatingSignals([member('solo', 'middleIF')])).not.toThrow();
-    expect(computeCheckpointRatingSignals([member('solo', 'middleIF')]).get('solo')).toEqual({});
+    expect(computeCheckpointRatingSignals([member('solo', 'middleIF')]).cumulative.get('solo')).toEqual({});
   });
 
   test('computeCheckpointRatingSignals suppresses a thin position-pure pool and never borrows the wider MEAN (RA-2c-1a)', () => {
@@ -172,7 +216,7 @@ describe('checkpointRatingSignal RA-2c-1', () => {
     const thinResult = computeCheckpointRatingSignals(fiveMiddleInfielders);
 
     for (const thinMember of fiveMiddleInfielders) {
-      expect(thinResult.get(thinMember.playerId)?.contact).toBeUndefined();
+      expect(thinResult.cumulative.get(thinMember.playerId)?.contact).toBeUndefined();
     }
 
     const mixedCohort: CheckpointSignalMember[] = [
@@ -184,13 +228,13 @@ describe('checkpointRatingSignal RA-2c-1', () => {
     ];
     const mixedResult = computeCheckpointRatingSignals(mixedCohort);
 
-    expect(mixedResult.get('low-mi')?.contact).toBeUndefined();
-    expect(mixedResult.get('high-mi')?.contact).toBeUndefined();
+    expect(mixedResult.cumulative.get('low-mi')?.contact).toBeUndefined();
+    expect(mixedResult.cumulative.get('high-mi')?.contact).toBeUndefined();
     expect(
       mixedCohort
         .filter((m) => m.poolKey === 'cornerIF')
         .some((m) => {
-          const signal = mixedResult.get(m.playerId)?.contact;
+          const signal = mixedResult.cumulative.get(m.playerId)?.contact;
           return typeof signal === 'number' && Number.isFinite(signal);
         }),
     ).toBe(true);
@@ -206,8 +250,8 @@ describe('checkpointRatingSignal RA-2c-1', () => {
       ...qualifyingContactPeers('middleIF', 6, 10),
     ];
 
-    expect(computeCheckpointRatingSignals(belowFloor).get('target')?.contact).toBeUndefined();
-    expect(computeCheckpointRatingSignals(atFloor).get('target')?.contact).toEqual(expect.any(Number));
+    expect(computeCheckpointRatingSignals(belowFloor).cumulative.get('target')?.contact).toBeUndefined();
+    expect(computeCheckpointRatingSignals(atFloor).cumulative.get('target')?.contact).toEqual(expect.any(Number));
   });
 
   test('RA-2c-2a flat floors use the 5 PA bench contact floor for benchIF members', () => {
@@ -220,8 +264,8 @@ describe('checkpointRatingSignal RA-2c-1', () => {
       ...qualifyingContactPeers('benchIF', 6, 5),
     ];
 
-    expect(computeCheckpointRatingSignals(aboveBenchFloor).get('bench-target')?.contact).toEqual(expect.any(Number));
-    expect(computeCheckpointRatingSignals(belowBenchFloor).get('bench-target')?.contact).toBeUndefined();
+    expect(computeCheckpointRatingSignals(aboveBenchFloor).cumulative.get('bench-target')?.contact).toEqual(expect.any(Number));
+    expect(computeCheckpointRatingSignals(belowBenchFloor).cumulative.get('bench-target')?.contact).toBeUndefined();
   });
 
   test('RA-2c-2a flat floors suppress speedStealTripleRate below 2 speed events and allow it at 2', () => {
@@ -234,7 +278,7 @@ describe('checkpointRatingSignal RA-2c-1', () => {
       ...qualifyingSpeedPeers(6),
     ];
 
-    expect(computeCheckpointRatingSignals(belowFloor).get('speed-target')?.speed).toBeUndefined();
-    expect(computeCheckpointRatingSignals(atFloor).get('speed-target')?.speed).toEqual(expect.any(Number));
+    expect(computeCheckpointRatingSignals(belowFloor).cumulative.get('speed-target')?.speed).toBeUndefined();
+    expect(computeCheckpointRatingSignals(atFloor).cumulative.get('speed-target')?.speed).toEqual(expect.any(Number));
   });
 });

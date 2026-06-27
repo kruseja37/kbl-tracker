@@ -57,6 +57,7 @@
 
   /* --- TEXT: parchment / cream -------------------------------------------- */
   --franchise-text: #E8E8D8;           /* primary text (cream)                  */
+  --franchise-rival: #E5484D;          /* home-park rival team name             */
 
   /* --- GOLD / AMBER: accent ----------------------------------------------- */
   --franchise-gold: #C4A853;           /* primary gold accent                   */

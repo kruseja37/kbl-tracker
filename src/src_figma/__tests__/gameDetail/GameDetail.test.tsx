@@ -368,8 +368,8 @@ describe("GameDetail Manager WPA overlay", () => {
     const overlay = await screen.findByTestId("manager-wpa-overlay");
     expect(within(overlay).getByText("MANAGER WPA OVERLAY")).toBeInTheDocument();
     expect(within(overlay).getByText("Casey Custom")).toBeInTheDocument();
-    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+18.4 pp");
-    expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("-5.2 pp");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+0.0 pp");
+    expect(screen.getByTestId("manager-wpa-total-home")).toHaveTextContent("+0.0 pp");
     expect(within(screen.getByTestId("manager-wpa-card-away")).getByText("2 (1 pending)")).toBeInTheDocument();
     expect(screen.getByTestId("manager-tactical-trace-details-away")).toHaveTextContent(
       "Pinch hitter decision judged on the next plate appearance.",
@@ -662,10 +662,10 @@ describe("GameDetail Manager WPA overlay", () => {
     render(<GameDetail />);
 
     await screen.findByTestId("manager-wpa-overlay");
-    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+29.6 pp");
+    expect(screen.getByTestId("manager-wpa-total-away")).toHaveTextContent("+1.2 pp");
     expect(screen.getByTestId("manager-deployment-wpa-away")).toHaveTextContent("+1.2 pp");
     expect(screen.getByTestId("manager-lineup-delta-away")).toHaveTextContent("+10.0 pp");
-    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+29.6 pp");
+    expect(screen.getByTestId("manager-value-away")).toHaveTextContent("+1.2 pp");
     expect(screen.getByTestId("manager-wpa-boundary-copy")).toHaveTextContent(
       "Player WPA remains player outcome credit",
     );

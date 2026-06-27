@@ -48,6 +48,27 @@ describe('ratingsDevelopment L8a pure engine', () => {
       moraleMultiplierMax: 1.5,
       shiftThreshold: 0.75,
       maxAbsDelta: 6,
+      trendTiltWeight: 0,
+      startBar: 0,
+      convexGamma: 1,
+      edgeCompressionDelta: 0,
+      ageCurveSlopeByBand: {
+        '18-21': 0.8,
+        '22-24': 0.35,
+        '25-31': 0,
+        '32-35': -0.35,
+        '36+': -0.8,
+      },
+      ageSteepnessByRatingKey: {
+        power: 1,
+        contact: 1,
+        speed: 1.25,
+        fielding: 1.2,
+        arm: 1.25,
+        velocity: 1.1,
+        junk: 1,
+        accuracy: 1,
+      },
     });
   });
 
@@ -63,6 +84,84 @@ describe('ratingsDevelopment L8a pure engine', () => {
     expect(normalizePerformanceSignal(-scale / 2)).toBe(-0.5);
   });
 
+  test('omitted recentSignal preserves the cumulative signal even when trend tilt is configured', () => {
+    const input: CheckpointRatingDevelopmentInput = {
+      ...baseCheckpointInput,
+      performanceSignal: 0.4,
+      teamFanMorale: 80,
+    };
+    const baseline = computeCheckpointRatingDevelopment(input);
+    const configuredTilt = computeCheckpointRatingDevelopment(
+      input,
+      withTuning({ trendTiltWeight: 0.5 }),
+    );
+
+    expect(configuredTilt).toEqual(baseline);
+  });
+
+  test('trendTiltWeight zero ignores a supplied recentSignal', () => {
+    const input: CheckpointRatingDevelopmentInput = {
+      ...baseCheckpointInput,
+      performanceSignal: -0.4,
+      teamFanMorale: 20,
+    };
+    const baseline = computeCheckpointRatingDevelopment(input);
+    const withRecent = computeCheckpointRatingDevelopment({
+      ...input,
+      recentSignal: 1,
+    });
+
+    expect(withRecent).toEqual(baseline);
+  });
+
+  test('positive trendTiltWeight blends cumulative and recent signals before raw delta', () => {
+    const tuning = withTuning({ trendTiltWeight: 0.25 });
+    const cumulativeOnly = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        performanceSignal: -0.2,
+        teamFanMorale: 80,
+      },
+      tuning,
+    );
+    const blended = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        performanceSignal: -0.2,
+        recentSignal: 1,
+        teamFanMorale: 80,
+      },
+      tuning,
+    );
+    const effectiveSignal = (1 - tuning.trendTiltWeight) * -0.2 + tuning.trendTiltWeight * 1;
+
+    expect(blended.rawDelta).toBeCloseTo(tuning.baseDeltaScale * effectiveSignal, 12);
+    expect(blended.rawDelta).toBeGreaterThan(cumulativeOnly.rawDelta);
+    expect(blended.dampenedDelta).toBe(blended.rawDelta);
+  });
+
+  test('blended signal still respects the [-1, 1] signal clamp and maxAbsDelta', () => {
+    const capTuning = withTuning({
+      baseDeltaScale: 20,
+      maxAbsDelta: 6,
+      trendTiltWeight: 0.75,
+    });
+    const result = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        performanceSignal: 1,
+        recentSignal: 5,
+        teamFanMorale: 80,
+      },
+      capTuning,
+    );
+
+    expect(result.rawDelta).toBe(20);
+    expect(result.dampenedDelta).toBe(6);
+    expect(result.proposedRating).toBe(56);
+    expect(result.appliedDelta).toBe(6);
+  });
+
   test('computes zero and neutral-morale raw deltas from base scale exactly', () => {
     expect(
       computeRawRatingDelta({ performanceSignal: 0, playerMorale: 100 }),
@@ -73,6 +172,211 @@ describe('ratingsDevelopment L8a pure engine', () => {
     expect(
       computeRawRatingDelta({ performanceSignal: -0.5, playerMorale: 50 }),
     ).toBe(RATINGS_DEVELOPMENT_TUNING.baseDeltaScale * -0.5);
+    expect(
+      computeRawRatingDelta({ performanceSignal: 0.5, playerMorale: 100 }),
+    ).toBeCloseTo(RATINGS_DEVELOPMENT_TUNING.baseDeltaScale * 0.5 * 1.4, 12);
+    expect(
+      computeRawRatingDelta({ performanceSignal: -0.5, playerMorale: 0 }),
+    ).toBeCloseTo(RATINGS_DEVELOPMENT_TUNING.baseDeltaScale * -0.5 * 1.4, 12);
+  });
+
+  test('default convex and edge tunables preserve legacy checkpoint movement', () => {
+    const highRatingGain = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      baseRatingValue: 90,
+      ageBand: '25-31',
+      performanceSignal: 1,
+      playerMorale: 50,
+      teamFanMorale: 80,
+    });
+    const lowRatingLoss = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      baseRatingValue: 58,
+      ageBand: '25-31',
+      performanceSignal: -0.5,
+      playerMorale: 50,
+      teamFanMorale: 20,
+    });
+
+    expect(highRatingGain.rawDelta).toBe(3);
+    expect(highRatingGain.proposedRating).toBe(93);
+    expect(lowRatingLoss.rawDelta).toBe(-1.5);
+    expect(lowRatingLoss.proposedRating).toBe(57);
+  });
+
+  test('convex gate creates a dead-band and preserves signal sign when configured', () => {
+    const convexTuning = withTuning({
+      startBar: 0.25,
+      convexGamma: 2,
+    });
+    const expectedConvex = Math.pow((0.5 - 0.25) / (1 - 0.25), 2);
+
+    expect(
+      computeRawRatingDelta(
+        { performanceSignal: 0.5, playerMorale: 50 },
+        convexTuning,
+      ),
+    ).toBeCloseTo(RATINGS_DEVELOPMENT_TUNING.baseDeltaScale * expectedConvex, 12);
+    expect(
+      computeRawRatingDelta(
+        { performanceSignal: 0.2, playerMorale: 50 },
+        convexTuning,
+      ),
+    ).toBe(0);
+    expect(
+      computeRawRatingDelta(
+        { performanceSignal: -0.5, playerMorale: 50 },
+        convexTuning,
+      ),
+    ).toBeCloseTo(RATINGS_DEVELOPMENT_TUNING.baseDeltaScale * -expectedConvex, 12);
+  });
+
+  test('edge compression scales performance movement by rating and leaves age gravity uncompressed', () => {
+    const edgeTuning = withTuning({ edgeCompressionDelta: 1 });
+    const highRatingGain = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        baseRatingValue: 90,
+        ageBand: '25-31',
+        performanceSignal: 1,
+        teamFanMorale: 80,
+      },
+      edgeTuning,
+    );
+    const lowRatingGain = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        baseRatingValue: 58,
+        ageBand: '25-31',
+        performanceSignal: 1,
+        teamFanMorale: 80,
+      },
+      edgeTuning,
+    );
+    const floorLoss = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        baseRatingValue: 10,
+        ageBand: '25-31',
+        performanceSignal: -1,
+        teamFanMorale: 20,
+      },
+      edgeTuning,
+    );
+    const ageBoostedHighRatingGain = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        baseRatingValue: 90,
+        ageBand: '18-21',
+        performanceSignal: 1,
+        teamFanMorale: 80,
+      },
+      edgeTuning,
+    );
+
+    expect(highRatingGain.rawDelta).toBeCloseTo(3 * ((99 - 90) / 99), 12);
+    expect(lowRatingGain.rawDelta).toBeCloseTo(3 * ((99 - 58) / 99), 12);
+    expect(lowRatingGain.rawDelta).toBeGreaterThan(highRatingGain.rawDelta);
+    expect(floorLoss.rawDelta).toBeCloseTo(-3 * (10 / 99), 12);
+    expect(ageBoostedHighRatingGain.rawDelta).toBeCloseTo(
+      3 * ((99 - 90) / 99) +
+        RATINGS_DEVELOPMENT_TUNING.ageCurveSlopeByBand['18-21'],
+      12,
+    );
+  });
+
+  test('undefined and prime age bands add exactly zero to checkpoint movement', () => {
+    const omitted = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      performanceSignal: 1,
+      teamFanMorale: 80,
+    });
+    const prime = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ageBand: '25-31',
+      performanceSignal: 1,
+      teamFanMorale: 80,
+    });
+    const neutralPrime = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ageBand: '25-31',
+      performanceSignal: 0,
+      teamFanMorale: 80,
+    });
+
+    expect(prime).toEqual(omitted);
+    expect(neutralPrime.rawDelta).toBe(0);
+    expect(neutralPrime.dampenedDelta).toBe(0);
+    expect(neutralPrime.proposedRating).toBe(50);
+  });
+
+  test('age gravity moves young players up and oldest players down at neutral performance', () => {
+    const young = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ageBand: '18-21',
+      performanceSignal: 0,
+      teamFanMorale: 80,
+    });
+    const old = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ageBand: '36+',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+
+    expect(young.rawDelta).toBe(0.8);
+    expect(young.dampenedDelta).toBe(0.8);
+    expect(young.proposedRating).toBe(51);
+    expect(young.shouldShift).toBe(true);
+    expect(young.direction).toBe('up');
+    expect(old.rawDelta).toBe(-0.8);
+    expect(old.dampenedDelta).toBe(-0.8);
+    expect(old.proposedRating).toBe(49);
+    expect(old.shouldShift).toBe(true);
+    expect(old.direction).toBe('down');
+  });
+
+  test('speed fielding and arm use steeper age multipliers than power and contact', () => {
+    const power = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ratingKey: 'power',
+      ageBand: '36+',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+    const contact = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ratingKey: 'contact',
+      ageBand: '36+',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+    const speed = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ratingKey: 'speed',
+      ageBand: '36+',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+    const fielding = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ratingKey: 'fielding',
+      ageBand: '36+',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+    const arm = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ratingKey: 'arm',
+      ageBand: '36+',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+
+    expect(Math.abs(power.rawDelta)).toBe(Math.abs(contact.rawDelta));
+    expect(Math.abs(speed.rawDelta)).toBeGreaterThan(Math.abs(power.rawDelta));
+    expect(Math.abs(fielding.rawDelta)).toBeGreaterThan(Math.abs(power.rawDelta));
+    expect(Math.abs(arm.rawDelta)).toBeGreaterThan(Math.abs(power.rawDelta));
   });
 
   test('player morale amplifies gains and shrinks drops when high', () => {
@@ -331,6 +635,50 @@ describe('ratingsDevelopment L8a pure engine', () => {
     expect(result.dampenedDelta).toBe(6);
     expect(result.proposedRating).toBe(56);
     expect(result.appliedDelta).toBe(result.proposedRating - 50);
+  });
+
+  test('age gravity shares cap clamp and dampener governors', () => {
+    const capTuning = withTuning({
+      baseDeltaScale: 0,
+      maxAbsDelta: 6,
+      ageCurveSlopeByBand: {
+        ...RATINGS_DEVELOPMENT_TUNING.ageCurveSlopeByBand,
+        '18-21': 10,
+      },
+    });
+    const capped = computeCheckpointRatingDevelopment(
+      {
+        ...baseCheckpointInput,
+        ageBand: '18-21',
+        performanceSignal: 0,
+        teamFanMorale: 80,
+      },
+      capTuning,
+    );
+    const clamped = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ageBand: '18-21',
+      baseRatingValue: 99,
+      performanceSignal: 0,
+      teamFanMorale: 80,
+    });
+    const dampened = computeCheckpointRatingDevelopment({
+      ...baseCheckpointInput,
+      ageBand: '18-21',
+      performanceSignal: 0,
+      teamFanMorale: 20,
+    });
+
+    expect(capped.rawDelta).toBe(10);
+    expect(capped.dampenedDelta).toBe(6);
+    expect(capped.proposedRating).toBe(56);
+    expect(clamped.rawDelta).toBe(0.8);
+    expect(clamped.proposedRating).toBe(99);
+    expect(clamped.shouldShift).toBe(false);
+    expect(dampened.rawDelta).toBe(0.8);
+    expect(dampened.dampener.applied).toBe(true);
+    expect(dampened.dampener.direction).toBe('counter-trend-up');
+    expect(dampened.dampenedDelta).toBeLessThan(dampened.rawDelta);
   });
 
   test('direction and appliedDelta reflect the integer proposed rating', () => {

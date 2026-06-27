@@ -185,7 +185,7 @@ describe("teamImpact", () => {
       tacticalManagerWpa: 0.12,
       deploymentWpa: 0.08,
       lineupDeltaWpa: 0.3,
-      managerValue: 0.5,
+      managerValue: 0.08,
     });
     expect(alpha.pog.bestManager).toBe(1);
     expect(alpha.playerLeaders.some((player) => player.playerId === "alpha-manager")).toBe(false);
@@ -193,6 +193,7 @@ describe("teamImpact", () => {
 
   test("POG points include Overall, role awards, and Best Manager while excluding Team Standout", () => {
     const awardGame = game({
+      managerDeploymentStints: [managerDeployment("alpha-manager", "alpha", 0.05)],
       managerLineupDeltas: [managerLineupDelta("alpha-manager", "alpha", 0.05)],
     });
     const summaries = build("elimination", "run-1", [
@@ -901,20 +902,20 @@ describe("teamImpact", () => {
 
     expect(leaderboards.managerValueTeamLeaders[0]).toMatchObject({
       teamId: "alpha",
-      value: 0.5,
+      value: 0.08,
       bestManagerWins: 1,
       managerWpa: {
         tacticalManagerWpa: 0.12,
         deploymentWpa: 0.08,
         lineupDeltaWpa: 0.3,
-        managerValue: 0.5,
+        managerValue: 0.08,
       },
     });
     expect(leaderboards.bestManagerLeaders[0]).toMatchObject({
       teamId: "alpha",
       teamName: "Alpha",
       count: 1,
-      managerValue: 0.5,
+      managerValue: 0.08,
     });
     expect(leaderboards.teamWpaLeaders[0]).toMatchObject({
       teamId: "beta",
@@ -1175,7 +1176,7 @@ function managerDeployment(
     gameId: "game-1",
     managerId,
     teamId,
-    deploymentRole: "pinch_hitter_remaining",
+    deploymentRole: "pinch_hitter_active",
     playerId: `${teamId}-bench`,
     sourceEventId: "bp-1",
     openedAtEventIndex: 1,

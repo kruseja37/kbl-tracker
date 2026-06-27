@@ -183,6 +183,7 @@ function mockLeagueData() {
     error: null,
     getRegisteredPool: vi.fn(async () => pool),
     registerLeaguePool: vi.fn(async () => pool),
+    clearRoster: vi.fn(async (teamId: string) => emptyRoster(teamId)),
     getRoster: vi.fn(async (teamId: string) => emptyRoster(teamId)),
     refresh: vi.fn(async () => undefined),
   } as unknown as UseLeagueBuilderDataReturn;

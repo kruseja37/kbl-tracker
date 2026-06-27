@@ -175,7 +175,7 @@ export function buildManagerWpaOverlayRows(
       tacticalManagerWpa,
       deploymentWpa,
       lineupDeltaWpa,
-      managerValue: tacticalManagerWpa + deploymentWpa + lineupDeltaWpa,
+      managerValue: deploymentWpa,
       decisionCount: activeTeamDecisions.length,
       pendingCount: activeTeamDecisions.length - resolvedDecisions.length,
       deploymentStints: teamDeploymentStints,

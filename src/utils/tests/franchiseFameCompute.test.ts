@@ -11,6 +11,7 @@ import {
   getFranchiseFameRecord,
   resetFranchiseFameRecordsForTests,
 } from '../franchiseFameRecordsStorage';
+import type { FranchiseStadiumRecordChange } from '../franchiseStadiumRecordsStorage';
 import { setFranchisePhase2FameEnabledForTests } from '../franchisePhase2Flags';
 import { syncEngine } from '../syncEngine';
 
@@ -108,6 +109,25 @@ function fameEvent(
     halfInning: 'BOTTOM',
     timestamp: 1,
     autoDetected: true,
+  };
+}
+
+function stadiumChange(
+  overrides: Partial<FranchiseStadiumRecordChange> & {
+    recordType: FranchiseStadiumRecordChange['recordType'];
+    changeKind: FranchiseStadiumRecordChange['changeKind'];
+    newLeaderPlayerIds: string[];
+  },
+): FranchiseStadiumRecordChange {
+  return {
+    stadiumId: 'stadium-fame',
+    recordType: overrides.recordType,
+    recordKey: 'overall',
+    changeKind: overrides.changeKind,
+    priorValue: overrides.priorValue ?? (overrides.changeKind === 'set' ? null : 400),
+    priorLeaderPlayerIds: overrides.priorLeaderPlayerIds ?? [],
+    newValue: overrides.newValue ?? 425,
+    newLeaderPlayerIds: overrides.newLeaderPlayerIds,
   };
 }
 
@@ -211,6 +231,85 @@ describe('franchise dark fame compute', () => {
 
     expect(duplicateResult).toEqual({ status: 'written', written: 0, playerHeatDeltas: [] });
     expect(duplicateRow).toEqual(secondRow);
+  });
+
+  test('folds a positive stadium-record SET bump into the active new holder heat write', async () => {
+    setFranchisePhase2FameEnabledForTests(true);
+    const completedGame = gameState({
+      gameId: 'fame-game-stadium-set',
+      playerWpaTotals: [playerTotal('player-park-hero', 0.4)],
+    });
+
+    const result = await persistDarkFameRecordsForCompletedGame(
+      completedGame,
+      scope,
+      undefined,
+      [
+        stadiumChange({
+          recordType: 'farthest-hr-rhb',
+          changeKind: 'set',
+          newLeaderPlayerIds: ['player-park-hero'],
+        }),
+      ],
+    );
+    const row = await getFranchiseFameRecord(scope, 'player-park-hero');
+
+    expect(result).toEqual({
+      status: 'written',
+      written: 1,
+      playerHeatDeltas: [{ playerId: 'player-park-hero', heatDelta: 7 }],
+    });
+    expect(row).toMatchObject({
+      heat: 7,
+      channelTotal: 4,
+      updatedAtCheckpoint: 'fame-game-stadium-set',
+    });
+  });
+
+  test('writes a fame row for a dethroned prior holder who did not play this game', async () => {
+    setFranchisePhase2FameEnabledForTests(true);
+    const completedGame = gameState({
+      gameId: 'fame-game-stadium-overtake',
+      playerWpaTotals: [playerTotal('new-park-holder', 0)],
+    });
+
+    const result = await persistDarkFameRecordsForCompletedGame(
+      completedGame,
+      scope,
+      undefined,
+      [
+        stadiumChange({
+          recordType: 'farthest-hr-rhb',
+          changeKind: 'overtake',
+          priorLeaderPlayerIds: ['dethroned-holder'],
+          newLeaderPlayerIds: ['new-park-holder'],
+        }),
+      ],
+    );
+    const dethronedRow = await getFranchiseFameRecord(scope, 'dethroned-holder');
+
+    expect(result).toEqual({
+      status: 'written',
+      written: 2,
+      playerHeatDeltas: [
+        { playerId: 'new-park-holder', heatDelta: 2.25 },
+        { playerId: 'dethroned-holder', heatDelta: -1.5 },
+      ],
+    });
+    expect(dethronedRow).toMatchObject({
+      heat: -1.5,
+      wasNegative: true,
+      channelTotal: 0,
+      defensiveFame: 0,
+      rolePlayerFame: 0,
+      updatedAtCheckpoint: 'fame-game-stadium-overtake',
+    });
+    expect(dethronedRow?.channelByChannel).toMatchObject({
+      wpa_spine: 0,
+      iconic_event: 0,
+      defensive: 0,
+      role_player: 0,
+    });
   });
 
   test('compute module source stays firewalled from reporter LLM and narrative imports', async () => {

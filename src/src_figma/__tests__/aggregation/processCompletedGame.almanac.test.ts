@@ -45,6 +45,9 @@ vi.mock('../../../utils/gameStorage', () => ({
     (game.competitionType === 'exhibition' || !game.competitionType
       ? game.competitionId
       : undefined),
+  // A1.5d-1b: the dark stadium-records tap (transitively imported via
+  // processCompletedGame) reads getRecentGames at module-load; stub it.
+  getRecentGames: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../../utils/eventLog', () => ({

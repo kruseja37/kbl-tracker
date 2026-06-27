@@ -117,3 +117,15 @@ export function isFranchisePhase2L14Enabled(): boolean {
 export function setFranchisePhase2L14EnabledForTests(enabled: boolean | null): void {
   franchisePhase2L14EnabledOverride = enabled;
 }
+
+export const FRANCHISE_PHASE2_STADIUM_RECORDS_ENABLED_DEFAULT = false;
+
+let franchisePhase2StadiumRecordsEnabledOverride: boolean | null = null;
+
+export function isFranchisePhase2StadiumRecordsEnabled(): boolean {
+  return franchisePhase2StadiumRecordsEnabledOverride ?? FRANCHISE_PHASE2_STADIUM_RECORDS_ENABLED_DEFAULT;
+}
+
+export function setFranchisePhase2StadiumRecordsEnabledForTests(enabled: boolean | null): void {
+  franchisePhase2StadiumRecordsEnabledOverride = enabled;
+}

@@ -30,8 +30,10 @@ import {
 } from '../../../engines/rwarCalculator';
 import {
   createDefaultLeagueContext,
+  type ParkFactors,
   SMB4_BASELINES,
 } from '../../../types/war';
+import { isParkFactorAdjustmentActive } from '../../../engines/parkFactorDeriver';
 import {
   MLB_BASELINE_INNINGS,
   getSeasonScalingFactor,
@@ -114,6 +116,22 @@ export interface WARCalculationState {
   error: string | null;
 }
 
+export interface WARCalculationParkOptions {
+  parkFactors?: ParkFactors;
+  stadiumName?: string;
+  batterHand?: 'L' | 'R' | 'S';
+  pitcherParkFactor?: number;
+  gamesPlayed?: number;
+}
+
+function hasBattingParkContext(options: WARCalculationParkOptions): boolean {
+  return Boolean(options.parkFactors || options.stadiumName);
+}
+
+function hasPitchingParkContext(options: WARCalculationParkOptions): boolean {
+  return typeof options.pitcherParkFactor === 'number' && Number.isFinite(options.pitcherParkFactor);
+}
+
 // ============================================
 // CONVERSION HELPERS
 // ============================================
@@ -184,18 +202,41 @@ function convertBaserunningStats(stats: SimpleBaserunningStats) {
 
 export function useWARCalculations(
   seasonId: string = 'default',
-  seasonGames: number = 50
+  seasonGames: number = 50,
+  parkOptions: WARCalculationParkOptions = {}
 ) {
   const [state, setState] = useState<WARCalculationState>({
     isCalculating: false,
     lastUpdated: null,
     error: null,
   });
+  const {
+    parkFactors,
+    stadiumName,
+    batterHand,
+    pitcherParkFactor,
+    gamesPlayed,
+  } = parkOptions;
 
   // Create league context for calculations
   const leagueContext = useMemo(() => {
     return createDefaultLeagueContext(seasonId, seasonGames);
   }, [seasonId, seasonGames]);
+  const parkAdjustmentsActive = useMemo(() => {
+    const activeOptions = {
+      parkFactors,
+      stadiumName,
+      pitcherParkFactor,
+    };
+    if (!hasBattingParkContext(activeOptions) && !hasPitchingParkContext(activeOptions)) return false;
+    return isParkFactorAdjustmentActive(gamesPlayed ?? seasonGames, seasonGames);
+  }, [
+    gamesPlayed,
+    parkFactors,
+    pitcherParkFactor,
+    stadiumName,
+    seasonGames,
+  ]);
 
   /**
    * Calculate bWAR for a batter
@@ -205,7 +246,13 @@ export function useWARCalculations(
   ): WARResult => {
     try {
       const fullStats = convertBattingStats(stats);
-      const result = calculateBWAR(fullStats, leagueContext);
+      const result = parkAdjustmentsActive && (parkFactors || stadiumName)
+        ? calculateBWAR(fullStats, leagueContext, {
+            parkFactors,
+            stadiumName,
+            batterHand: batterHand ?? 'S',
+          })
+        : calculateBWAR(fullStats, leagueContext);
       return {
         war: result.bWAR,
         components: {
@@ -220,7 +267,7 @@ export function useWARCalculations(
       console.error('[useWARCalculations] bWAR error:', error);
       return { war: 0, components: {}, quality: 'Unknown' };
     }
-  }, [leagueContext]);
+  }, [batterHand, leagueContext, parkAdjustmentsActive, parkFactors, stadiumName]);
 
   /**
    * Calculate pWAR for a pitcher
@@ -230,7 +277,9 @@ export function useWARCalculations(
   ): WARResult => {
     try {
       const fullStats = convertPitchingStats(stats);
-      const result = calculatePWAR(fullStats as any, leagueContext as any);
+      const result = parkAdjustmentsActive && typeof pitcherParkFactor === 'number' && Number.isFinite(pitcherParkFactor)
+        ? calculatePWAR(fullStats as any, leagueContext as any, { parkFactor: pitcherParkFactor })
+        : calculatePWAR(fullStats as any, leagueContext as any);
       return {
         war: result.pWAR,
         components: {
@@ -245,7 +294,7 @@ export function useWARCalculations(
       console.error('[useWARCalculations] pWAR error:', error);
       return { war: 0, components: {}, quality: 'Unknown' };
     }
-  }, [leagueContext]);
+  }, [leagueContext, parkAdjustmentsActive, pitcherParkFactor]);
 
   /**
    * Calculate rWAR for baserunning

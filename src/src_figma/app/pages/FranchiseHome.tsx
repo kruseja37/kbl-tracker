@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo, createContext, useContext, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise } from "lucide-react";
+import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise, ListOrdered } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { TeamHubContent } from "@/app/components/TeamHubContent";
+import { LineupsTabContent } from "@/app/components/LineupsTabContent";
 import { MuseumContent, type RetiredJersey } from "@/app/components/MuseumContent";
 import { FreeAgencyFlow } from "@/app/components/FreeAgencyFlow";
 import { RatingsAdjustmentFlow } from "@/app/components/RatingsAdjustmentFlow";
@@ -128,7 +129,7 @@ async function ensureFranchiseReporterForTeam({
   );
 }
 
-type TabType = "todays-game" | "team" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
+type TabType = "todays-game" | "team" | "lineups" | "schedule" | "standings" | "news" | "leaders" | "rosters" | "allstar" | "museum" | "awards" | "ratings-adj" | "contraction" | "retirements" | "free-agency" | "draft" | "farm-reconciliation" | "chemistry" | "spring-training" | "finalize" | "advance" | "bracket" | "series" | "playoff-stats" | "playoff-leaders";
 type SeasonPhase = "regular" | "playoffs" | "offseason";
 
 function getPlayoffSeriesTeam(series: PlayoffSeries, teamId: string) {
@@ -1166,6 +1167,7 @@ export function FranchiseHome() {
     { id: "schedule", label: "SCHEDULE", icon: <Calendar className="w-4 h-4" /> },
     { id: "standings", label: "STANDINGS", icon: <BarChart3 className="w-4 h-4" /> },
     { id: "team", label: "TEAM HUB", icon: <Users className="w-4 h-4" /> },
+    { id: "lineups", label: "LINEUPS", icon: <ListOrdered className="w-4 h-4" /> },
     { id: "leaders", label: "LEAGUE LEADERS", icon: <TrendingUp className="w-4 h-4" /> },
     { id: "awards", label: "AWARDS", icon: <Award className="w-4 h-4" /> },
     ...(MODE_2_V1_TRANSACTION_UI_ENABLED
@@ -1425,6 +1427,9 @@ export function FranchiseHome() {
         {activeTab === "team" && (
           <TeamHubContent />
         )}
+        {activeTab === "lineups" && (
+          <LineupsTabContent />
+        )}
         {activeTab === "schedule" && (
           <ScheduleContent
             games={getFilteredSchedule(selectedScheduleTeam)}
@@ -1476,6 +1481,7 @@ export function FranchiseHome() {
             seasonId={activeSeasonId}
             statsScopeId={activeSeasonId}
             seasonNumber={currentSeason}
+            rivalTeamId={franchiseData.rivalTeamId}
           />
         )}
         {activeTab === "rosters" && (
@@ -3132,6 +3138,7 @@ function StandingsContent() {
   // Get standings from context (real data or mock fallback)
   const franchiseData = useFranchiseDataContext();
   const standings = franchiseData.standings;
+  const rivalTeamId = franchiseData.rivalTeamId;
 
   const currentLeagueStandings = standings[selectedLeague];
 
@@ -3190,7 +3197,7 @@ function StandingsContent() {
                 index % 2 === 0 ? 'bg-[var(--franchise-panel)]/30' : ''
               }`}
             >
-              <div className="text-[10px] text-[var(--franchise-text)]">{teamData.team}</div>
+              <div className={teamData.teamId === rivalTeamId ? 'text-[10px] text-[var(--franchise-rival)]' : 'text-[10px] text-[var(--franchise-text)]'}>{teamData.team}</div>
               <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.wins}</div>
               <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.losses}</div>
               <div className="text-[10px] text-[var(--franchise-text)] text-center">{teamData.gamesBack}</div>
@@ -3374,6 +3381,10 @@ function GameDayContent({
   // Team IDs for the matchup — pull from schedule if available
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
+  const countCompletedGamesForTeam = (teamId: string): number =>
+    (scheduleData.completedGames ?? []).filter(
+      (game) => game.awayTeamId === teamId || game.homeTeamId === teamId,
+    ).length;
 
   // T3-01: Show pre-game lineup review before launching game
   const handlePlayGame = async () => {
@@ -3389,11 +3400,23 @@ function GameDayContent({
     setIsPreparingGameLaunch(true);
     try {
       await onRepairFranchisePersistence();
+      const awayGamesPlayed = countCompletedGamesForTeam(away);
+      const homeGamesPlayed = countCompletedGamesForTeam(home);
 
       // Load real rosters from IndexedDB for both teams
       const [awayRoster, homeRoster] = await Promise.all([
-        buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
-        buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
+        buildFranchiseGameTrackerRoster(away, {
+          franchiseId,
+          leagueId: franchiseLeagueId,
+          useDH: franchiseUseDH,
+          teamGamesPlayed: awayGamesPlayed,
+        }),
+        buildFranchiseGameTrackerRoster(home, {
+          franchiseId,
+          leagueId: franchiseLeagueId,
+          useDH: franchiseUseDH,
+          teamGamesPlayed: homeGamesPlayed,
+        }),
       ]);
 
       const missingRosterTeams: string[] = [];

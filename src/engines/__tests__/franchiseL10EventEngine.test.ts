@@ -25,6 +25,11 @@ const highRateTuning: FranchiseL10EventTuning = {
   baseRate: Object.fromEntries(families.map((family) => [family, 0.6])) as Record<FranchiseL10EventFamily, number>,
 };
 
+const rosterOnlyTuning: FranchiseL10EventTuning = {
+  ...FRANCHISE_L10_EVENT_TUNING,
+  baseRate: Object.fromEntries(families.map((family) => [family, family === 'roster' ? 1 : 0])) as Record<FranchiseL10EventFamily, number>,
+};
+
 function candidate(index: number, overrides: Partial<FranchiseL10Candidate> = {}): FranchiseL10Candidate {
   return {
     id: `candidate-${index.toString().padStart(3, '0')}`,
@@ -47,6 +52,23 @@ function countEvents(
   config: FranchiseL10EventTuning = highRateTuning,
 ): number {
   return computeFranchiseL10Events({ candidates, intensity, seedBase: 'l10:test' }, config).events.length;
+}
+
+function expectRosterSubRoll(
+  seedBase: string,
+  candidateId: string,
+  expectedEventType: 'trade_demand' | 'mentorship' | 'clubhouse_rift',
+): void {
+  const roll = franchiseL10DeterministicRoll(`${seedBase}:${candidateId}:roster:eventType`);
+
+  if (expectedEventType === 'trade_demand') {
+    expect(roll).toBeLessThan(1 / 3);
+  } else if (expectedEventType === 'mentorship') {
+    expect(roll).toBeGreaterThanOrEqual(1 / 3);
+    expect(roll).toBeLessThan(2 / 3);
+  } else {
+    expect(roll).toBeGreaterThanOrEqual(2 / 3);
+  }
 }
 
 describe('franchiseL10EventEngine L10-1 pure selection engine', () => {
@@ -300,14 +322,149 @@ describe('franchiseL10EventEngine L10-1 pure selection engine', () => {
     ).toBe(false);
   });
 
-  test('roster fire chooses one representative downstream candidate type', () => {
-    const config: FranchiseL10EventTuning = {
-      ...FRANCHISE_L10_EVENT_TUNING,
-      baseRate: Object.fromEntries(families.map((family) => [family, family === 'roster' ? 1 : 0])) as Record<FranchiseL10EventFamily, number>,
-    };
+  test('trade_demand post-roll gate drops content high-loyalty players', () => {
+    const seedBase = 'trade-gate';
+    expectRosterSubRoll(seedBase, 'candidate-001', 'trade_demand');
+
     const report = computeFranchiseL10Events(
-      { candidates: playerSet(30, { role: 'position' }), intensity: 'standard', seedBase: 'roster-representative' },
-      config,
+      {
+        candidates: [
+          candidate(1, {
+            personality: 'COMPETITIVE',
+            playerMorale: 100,
+            fanMorale: 100,
+            loyalty: 100,
+          }),
+        ],
+        intensity: 'standard',
+        seedBase,
+      },
+      rosterOnlyTuning,
+    );
+
+    expect(report.events).toEqual([]);
+  });
+
+  test('trade_demand post-roll gate preserves low-morale angry-fan low-loyalty requesters', () => {
+    const seedBase = 'trade-gate';
+    expectRosterSubRoll(seedBase, 'candidate-001', 'trade_demand');
+
+    const report = computeFranchiseL10Events(
+      {
+        candidates: [
+          candidate(1, {
+            personality: 'EGOTISTICAL',
+            playerMorale: 0,
+            fanMorale: 0,
+            loyalty: 0,
+          }),
+        ],
+        intensity: 'standard',
+        seedBase,
+      },
+      rosterOnlyTuning,
+    );
+
+    expect(report.events).toHaveLength(1);
+    expect(report.events[0]).toMatchObject({
+      family: 'roster',
+      eventType: 'trade_demand',
+      targetId: 'candidate-001',
+      targetKind: 'player',
+      valence: 'negative',
+    });
+  });
+
+  test('trade_demand post-roll gate defaults missing personality and loyalty without crashing', () => {
+    const seedBase = 'trade-gate';
+    expectRosterSubRoll(seedBase, 'candidate-001', 'trade_demand');
+
+    const report = computeFranchiseL10Events(
+      {
+        candidates: [
+          {
+            id: 'candidate-001',
+            kind: 'player',
+            role: 'position',
+            playerMorale: 0,
+            fanMorale: 0,
+          },
+        ],
+        intensity: 'standard',
+        seedBase,
+      },
+      rosterOnlyTuning,
+    );
+
+    expect(report.events).toHaveLength(1);
+    expect(report.events[0].eventType).toBe('trade_demand');
+  });
+
+  test('trade_demand gate leaves mentorship and clubhouse_rift roster outcomes unchanged', () => {
+    const seedBase = 'roster-regression';
+    expectRosterSubRoll(seedBase, 'candidate-000', 'clubhouse_rift');
+    expectRosterSubRoll(seedBase, 'candidate-007', 'mentorship');
+
+    const report = computeFranchiseL10Events(
+      {
+        candidates: [
+          candidate(0, {
+            personality: 'COMPETITIVE',
+            playerMorale: 100,
+            fanMorale: 100,
+            loyalty: 100,
+          }),
+          candidate(7, {
+            personality: 'COMPETITIVE',
+            playerMorale: 100,
+            fanMorale: 100,
+            loyalty: 100,
+          }),
+        ],
+        intensity: 'standard',
+        seedBase,
+      },
+      rosterOnlyTuning,
+    );
+
+    expect(report.events).toEqual([
+      {
+        family: 'roster',
+        eventType: 'clubhouse_rift',
+        targetId: 'candidate-000',
+        targetKind: 'player',
+        valence: 'negative',
+        magnitude: 1,
+        probability: 1,
+        seed: franchiseL10DeterministicRoll(`${seedBase}:candidate-000:roster`),
+      },
+      {
+        family: 'roster',
+        eventType: 'mentorship',
+        targetId: 'candidate-007',
+        targetKind: 'player',
+        valence: 'positive',
+        magnitude: 1,
+        probability: 1,
+        seed: franchiseL10DeterministicRoll(`${seedBase}:candidate-007:roster`),
+      },
+    ]);
+  });
+
+  test('roster fire chooses one representative downstream candidate type', () => {
+    const report = computeFranchiseL10Events(
+      {
+        candidates: playerSet(30, {
+          role: 'position',
+          personality: 'EGOTISTICAL',
+          playerMorale: 0,
+          fanMorale: 0,
+          loyalty: 0,
+        }),
+        intensity: 'standard',
+        seedBase: 'roster-representative',
+      },
+      rosterOnlyTuning,
     );
     const rosterEvents = report.events.filter((event) => event.family === 'roster');
 

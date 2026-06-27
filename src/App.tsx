@@ -115,6 +115,26 @@ const LeagueBuilderFarmAuctionDraft = lazy(() =>
     default: module.LeagueBuilderFarmAuctionDraft,
   })),
 );
+const LeagueBuilderDraftSetup = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderDraftSetup").then((module) => ({
+    default: module.LeagueBuilderDraftSetup,
+  })),
+);
+const DraftSetupArchetypePreview = lazy(() =>
+  import("./src_figma/app/pages/DraftSetupArchetypePreview").then((module) => ({
+    default: module.DraftSetupArchetypePreview,
+  })),
+);
+const DraftSetupHubPreview = lazy(() =>
+  import("./src_figma/app/pages/DraftSetupHubPreview").then((module) => ({
+    default: module.DraftSetupHubPreview,
+  })),
+);
+const SeasonRulesPreview = lazy(() =>
+  import("./src_figma/app/pages/SeasonRulesPreview").then((module) => ({
+    default: module.SeasonRulesPreview,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -276,6 +296,9 @@ function App() {
       <Routes>
         {/* Main Menu - Figma Design */}
         <Route path="/" element={<AppHome />} />
+        <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
+        <Route path="/__preview/draft-setup" element={<DraftSetupHubPreview />} />
+        <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
@@ -325,6 +348,10 @@ function App() {
         <Route
           path="/league-builder/rosters"
           element={<LeagueBuilderRosters />}
+        />
+        <Route
+          path="/league-builder/draft-setup"
+          element={<LeagueBuilderDraftSetup />}
         />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route

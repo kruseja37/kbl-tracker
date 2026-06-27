@@ -495,14 +495,16 @@ function describeDeploymentStint(
     case "kept_pitcher_in":
     case "kept_in":
       return `Kept ${player} in after the prompt; later ${weightedSummary || "linked"} outcomes carry deployment weights.`;
-    case "pinch_hitter_remaining":
-      return `After the pinch-hit plate appearance, ${player}'s remaining batting, running, and fielding value stays with the deployment choice.`;
+    case "pinch_hitter_active":
+      return `Pinch hitter ${player}'s active stint carries later linked value.`;
     case "pinch_runner":
       return `Pinch runner ${player}'s remaining baserunning and fielding outcomes stay with the deployment choice.`;
     case "pitcher":
       return `New pitcher ${player}'s later pitching outcomes count after the initial change plate appearance.`;
     case "defensive_position":
       return `Defensive sub or position change for ${player} tracks later fielding outcomes.`;
+    case "untouched_starter":
+      return `Untouched starter ${player}'s game value carries starter deployment weight.`;
     case "manual_deployment":
       return `Manual deployment for ${player} tracks later linked outcomes.`;
   }
@@ -546,14 +548,16 @@ function formatEndpointWait(
 
 function formatDeploymentRole(role: ManagerDeploymentRole): string {
   switch (role) {
-    case "pinch_hitter_remaining":
-      return "Pinch hitter remaining";
+    case "pinch_hitter_active":
+      return "Pinch hitter active";
     case "pinch_runner":
       return "Pinch runner";
     case "defensive_position":
       return "Defensive position";
     case "pitcher":
       return "Pitcher";
+    case "untouched_starter":
+      return "Untouched starter";
     case "kept_position_player_in":
       return "Kept position player in";
     case "kept_defender_in":

@@ -97,6 +97,9 @@ vi.mock('../../../utils/franchiseSeasonSummaryStorage', () => ({
 vi.mock('../../../utils/franchiseManager', () => ({
   updateFranchiseMetadata: mocks.mockUpdateFranchiseMetadata,
   loadFranchise: mocks.mockLoadFranchise,
+  // A1.5d-1b: the dark stadium-records tap (transitively imported via
+  // processCompletedGame) reads getFranchiseConfig at module-load; stub it.
+  getFranchiseConfig: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('../../../utils/careerStorage', () => ({
@@ -358,7 +361,7 @@ function makeFranchiseData(useDH?: boolean) {
   };
 }
 
-function makeScheduleData() {
+function makeScheduleData(completedGames = []) {
   const game = {
     id: 'game-7',
     seasonNumber: 1,
@@ -374,7 +377,7 @@ function makeScheduleData() {
     error: null,
     metadata: null,
     nextGame: game,
-    completedGames: [],
+    completedGames,
     upcomingGames: [game],
     getTeamStats: vi.fn(),
     addGame: vi.fn(),
@@ -795,6 +798,49 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
     });
     expect(state.optimalLineupSnapshots.away).toBe(snapshotsByTeam['away-team'].noDh.vsLHP);
     expect(state.optimalLineupSnapshots.home).toBe(snapshotsByTeam['home-team'].noDh.vsRHP);
+  });
+
+  test('regular-season launch passes schedule-derived team games played for rotation selection', async () => {
+    mocks.mockUseScheduleData.mockReturnValue(makeScheduleData([
+      {
+        id: 'completed-away-1',
+        seasonNumber: 1,
+        gameNumber: 1,
+        dayNumber: 1,
+        awayTeamId: 'away-team',
+        homeTeamId: 'other-team',
+        status: 'COMPLETED',
+      },
+      {
+        id: 'completed-home-1',
+        seasonNumber: 1,
+        gameNumber: 2,
+        dayNumber: 1,
+        awayTeamId: 'home-team',
+        homeTeamId: 'other-team',
+        status: 'COMPLETED',
+      },
+      {
+        id: 'completed-home-2',
+        seasonNumber: 1,
+        gameNumber: 3,
+        dayNumber: 1,
+        awayTeamId: 'other-team',
+        homeTeamId: 'home-team',
+        status: 'COMPLETED',
+      },
+    ]));
+
+    await startRegularSeasonGame();
+
+    expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
+      'away-team',
+      expect.objectContaining({ teamGamesPlayed: 1 }),
+    );
+    expect(mocks.mockBuildFranchiseGameTrackerRoster).toHaveBeenCalledWith(
+      'home-team',
+      expect.objectContaining({ teamGamesPlayed: 2 }),
+    );
   });
 
   test('resolveFranchiseGameUseDH reads the persisted no-DH franchise seal', () => {
