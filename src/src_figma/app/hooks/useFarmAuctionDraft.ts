@@ -30,6 +30,9 @@ import {
   saveAuctionSessionById,
   type LeagueBuilderScoutProfile,
 } from "../../../utils/leagueBuilderStorage";
+import {
+  commitCompletedFarmAuctionSessionToLeagueRosters,
+} from "../../../utils/leagueBuilderAuctionPipeline";
 import type { ProspectScoutDescriptor } from "../../../utils/prospectScoutingDraftEngine";
 import {
   useLeagueBuilderData,
@@ -267,6 +270,13 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       session: nextSession,
       pool: poolRef.current ?? undefined,
     });
+    if (nextSession.state === "AUCTION_COMPLETE" && nextSession.saleCount > 0 && poolRef.current) {
+      await commitCompletedFarmAuctionSessionToLeagueRosters({
+        leagueId: nextContext.leagueId,
+        session: nextSession,
+        pool: poolRef.current,
+      });
+    }
     return nextSession;
   }, []);
 

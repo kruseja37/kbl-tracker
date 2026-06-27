@@ -33,6 +33,7 @@ const baseLeague = {
   id: 'league-1',
   name: 'League One',
   teamIds: ['team-1', 'team-2'],
+  draftFormat: 'snake',
   conferences: [],
   divisions: [],
   createdDate: '2026-01-01',

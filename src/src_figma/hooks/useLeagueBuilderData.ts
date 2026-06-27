@@ -30,8 +30,8 @@ import {
   deleteRulesPreset,
   getTeamRoster,
   saveTeamRoster,
+  clearTeamRoster,
   deleteTeamRoster,
-  saveRegisteredPool,
   getRegisteredPool as getRegisteredPoolFromStorage,
   getMlbDraftSession as getMlbDraftSessionFromStorage,
   saveMlbDraftSession as saveMlbDraftSessionToStorage,
@@ -48,13 +48,9 @@ import {
   type TeamRoster,
   type LeagueBuilderMlbDraftSession,
 } from '../../utils/leagueBuilderStorage';
-import { registerPool, type ConstructionPlayer, type RegisteredPool } from '../../engines/leagueConstruction';
-import {
-  calculateIvBaseSalary,
-  type PlayerForSalary,
-  type PlayerPosition as SalaryPosition,
-} from '../../engines/salaryCalculator';
-import { BALANCE_MODE_DEFAULT } from '../../data/rosterEngineConstants';
+import type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
+import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegistration';
+import type { PlayerForSalary } from '../../engines/salaryCalculator';
 
 // Re-export types for convenience
 export type {
@@ -131,6 +127,7 @@ export interface UseLeagueBuilderDataReturn {
   // Roster operations
   getRoster: (teamId: string) => Promise<TeamRoster | null>;
   updateRoster: (roster: TeamRoster) => Promise<TeamRoster>;
+  clearRoster: (teamId: string, leagueId?: string) => Promise<TeamRoster>;
   removeRoster: (teamId: string) => Promise<void>;
 
   // SMB4 Database Seeding
@@ -149,70 +146,10 @@ export interface UseLeagueBuilderDataReturn {
 // HOOK IMPLEMENTATION
 // ============================================
 
-function toSalaryPosition(position: Player['primaryPosition'] | Player['secondaryPosition']): SalaryPosition {
-  const salaryPositions = new Set<string>([
-    'C',
-    '1B',
-    '2B',
-    'SS',
-    '3B',
-    'LF',
-    'CF',
-    'RF',
-    'DH',
-    'SP',
-    'RP',
-    'CP',
-    'SP/RP',
-  ]);
-  return position && salaryPositions.has(position) ? position as SalaryPosition : 'UTIL';
-}
-
 function toPitcherRole(position: Player['primaryPosition']): PlayerForSalary['pitcherRole'] {
   return position === 'SP' || position === 'RP' || position === 'CP' || position === 'SP/RP'
     ? position
     : 'SP';
-}
-
-function toSalaryPlayer(player: Player): PlayerForSalary {
-  const isPitcher = player.primaryPosition === 'SP'
-    || player.primaryPosition === 'RP'
-    || player.primaryPosition === 'CP'
-    || player.primaryPosition === 'SP/RP'
-    || player.primaryPosition === 'P';
-
-  return {
-    id: player.id,
-    name: `${player.firstName} ${player.lastName}`.trim(),
-    isPitcher,
-    primaryPosition: toSalaryPosition(player.primaryPosition),
-    secondaryPosition: player.secondaryPosition ? toSalaryPosition(player.secondaryPosition) : undefined,
-    pitcherRole: isPitcher ? toPitcherRole(player.primaryPosition) : undefined,
-    ratings: isPitcher
-      ? { velocity: player.velocity, junk: player.junk, accuracy: player.accuracy }
-      : {
-          power: player.power,
-          contact: player.contact,
-          speed: player.speed,
-          fielding: player.fielding,
-          arm: player.arm,
-        },
-    battingRatings: isPitcher
-      ? {
-          power: player.power,
-          contact: player.contact,
-          speed: player.speed,
-          fielding: player.fielding,
-          arm: player.arm,
-        }
-      : undefined,
-    age: player.age,
-    bats: player.bats,
-    fame: player.fame,
-    traits: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
-    arsenal: player.arsenal,
-    armSlot: player.armSlot ?? null,
-  };
 }
 
 export function toConstructionPlayer(player: Player): ConstructionPlayer {
@@ -396,28 +333,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
   const registerLeaguePool = useCallback(async (leagueId: string) => {
     try {
-      const league = await getLeagueTemplate(leagueId);
-      if (!league) throw new Error('League not found');
-
-      const allPlayers = await getAllPlayers();
-      const leaguePlayers = allPlayers.filter((player) =>
-        player.leagueAssignments?.some((assignment) => assignment.leagueId === league.id)
-      );
-
-      const registeredPool = registerPool({
-        leagueId: league.id,
-        tier: league.tier ?? 'juiced',
-        balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
-        totalSlots: league.teamIds.length * 22,
-        players: leaguePlayers.map((player) => ({
-          id: player.id,
-          iv: calculateIvBaseSalary(toSalaryPlayer(player)).ivBase,
-          salary: player.salary,
-        })),
-      });
-
-      await saveRegisteredPool(registeredPool);
-      return registeredPool;
+      return await registerLeaguePoolForLeague(leagueId);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to register league pool';
       setError(message);
@@ -594,6 +510,18 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     }
   }, []);
 
+  const clearRoster = useCallback(async (teamId: string, leagueId?: string) => {
+    try {
+      const cleared = await clearTeamRoster(teamId, leagueId);
+      await refresh();
+      return cleared;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to clear roster';
+      setError(message);
+      throw err;
+    }
+  }, [refresh]);
+
   const removeRoster = useCallback(async (teamId: string) => {
     try {
       await deleteTeamRoster(teamId);
@@ -693,6 +621,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     // Roster operations
     getRoster,
     updateRoster,
+    clearRoster,
     removeRoster,
 
     // SMB4 Database Seeding

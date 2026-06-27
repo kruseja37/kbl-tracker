@@ -2,6 +2,13 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-06-24 (Codex isolated builder branch) — DRAFT-PIPELINE goal green at engine/storage level
+- **Route:** worked only in `/Users/johnkruse/Projects/kbl-draftfix` on `codex/draft-pipeline-fix`, isolated off `codex/franchise-v1-next`; nothing pushed; no `TRACKER_DB_VERSION` bump; frozen player/IV-oracle artifacts untouched.
+- **Built:** a deterministic headless integration test `src/utils/tests/draftPipeline.integration.test.ts` that seeds the real MLB player path, creates an auction league with empty MLB rosters, registers the league pool, clears a stale vacuous complete auction row, runs the real MLB `auctionStateMachine` + auction-session persistence to genuine completion, runs the farm auction to completion, commits drafted MLB/farm rosters, launches a franchise via `initializeFranchise`, and reruns the same pipeline twice with fixed time/randomness to prove deterministic output.
+- **Fixed pipeline defects:** re-registering a pool now deletes stale season-1 auction sessions; `loadAuction` no longer surfaces a vacuous `AUCTION_COMPLETE` saved blob as a live finished draft; completed MLB/farm auction sessions now commit sold players/prospects into League Builder rosters/player assignments so franchise launch copies the drafted teams instead of empty/undrafted rosters. Extracted shared pool-registration and auction-pipeline helpers so hooks and the integration test use the same engine/storage path.
+- **Gate:** `NODE_ENV= npm run build` exit 0; focused draft integration green; related auction/farm/franchise/League Builder tests green; full `NODE_ENV= npx vitest run` = **1 failed / 519 passed files, 1 failed / 8204 passed tests**, with the sole remaining failure the documented baseline `src/engines/__tests__/wpaRuntimeBoundary.test.ts`. The new draft-pipeline integration passed inside the full suite (7.3s under load after adding an explicit test timeout).
+- **Product calls:** none. Empty MLB rosters were test setup required by the goal; stale-session redo behavior follows the existing explicit Register Pool action. No `DECISIONS_LOG.md` entry needed.
+
 ## Session: 2026-06-23 (attended, Claude Code / Opus 4.8) — A1.2 fame→morale legs (a+b BUILT+verified, c dispatched) · L13-8 CLOSED · A1.3 deferred · 8 JK rulings
 
 - **SESSION TYPE:** attended v1 keystone-build execution on Branch A (`codex/franchise-v1-next`), Codex-builds / Opus-audits, per-ticket grounding workflows + adversarial verify. JK directive: *"knock out as much as we can without any context loss."* Resumed via `/kbl-start`, restated, JK confirmed.

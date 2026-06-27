@@ -7,11 +7,11 @@
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { LeagueBuilderLeagues } from '../../app/pages/LeagueBuilderLeagues';
 import {
-  LeagueBuilderLeagues,
   draftRouteForFormat,
   draftRouteForLeague,
-} from '../../app/pages/LeagueBuilderLeagues';
+} from '../../app/utils/draftRouting';
 
 // ============================================
 // MOCKS
@@ -170,19 +170,20 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
     });
 
-    test('per-league Draft action routes by format and threads leagueId', () => {
+    test('per-league Draft action opens Draft Setup threading leagueId; routing helper still maps format', () => {
+      // The format→route helper Draft Setup uses to start the draft is unchanged.
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
         '/league-builder/snake-draft?leagueId=league-2',
       );
 
       render(<LeagueBuilderLeagues />);
-      const draftButtons = screen.getAllByTitle('Draft league');
+      const draftButtons = screen.getAllByTitle('Draft setup');
 
       fireEvent.click(draftButtons[0]);
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/auction-draft?leagueId=league-1');
+      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/draft-setup?leagueId=league-1');
 
       fireEvent.click(draftButtons[1]);
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/snake-draft?leagueId=league-2');
+      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/draft-setup?leagueId=league-2');
     });
   });
 

@@ -1452,6 +1452,83 @@ export async function saveTeamRoster(roster: TeamRoster): Promise<TeamRoster> {
   });
 }
 
+export function createEmptyTeamRoster(teamId: string): TeamRoster {
+  return {
+    teamId,
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    depthChart: createEmptyDepthChart(),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+    lastModified: nowISO(),
+  };
+}
+
+async function clearTeamAssignmentsFromPlayers(teamId: string, leagueId?: string): Promise<void> {
+  const players = await getAllPlayers();
+
+  for (const player of players) {
+    let changed = false;
+    const nextAssignments = (player.leagueAssignments ?? []).map((assignment) => {
+      if (assignment.teamId !== teamId) return assignment;
+      if (leagueId && assignment.leagueId !== leagueId) return assignment;
+      if (!assignment.teamId && assignment.rosterStatus === 'FREE_AGENT') return assignment;
+
+      changed = true;
+      return {
+        ...assignment,
+        teamId: '',
+        rosterStatus: 'FREE_AGENT' as const,
+      };
+    });
+
+    if (!changed) continue;
+    await savePlayer({
+      ...player,
+      leagueAssignments: nextAssignments,
+    });
+  }
+}
+
+export async function clearTeamRoster(teamId: string, leagueId?: string): Promise<TeamRoster> {
+  const existing = await getTeamRoster(teamId);
+  const base = existing ?? createEmptyTeamRoster(teamId);
+  const cleared: TeamRoster = {
+    ...base,
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    depthChart: createEmptyDepthChart(),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+  };
+
+  const saved = await saveTeamRoster(cleared);
+  await clearTeamAssignmentsFromPlayers(teamId, leagueId);
+  return saved;
+}
+
 export async function deleteTeamRoster(teamId: string): Promise<void> {
   const db = await initLeagueBuilderDatabase();
 
@@ -2183,6 +2260,14 @@ function buildDepthChart(players: Player[]): DepthChart {
       continue;
     }
 
+    // SP/RP swingmen are eligible for BOTH pitching roles — never DH (no SP/RP depth bucket exists,
+    // so the generic branch below would otherwise dump them at DH). JK ruling 2026-06-25.
+    if (player.primaryPosition === 'SP/RP') {
+      depthChart.SP.push(player.id);
+      depthChart.RP.push(player.id);
+      continue;
+    }
+
     if (player.primaryPosition in depthChart) {
       depthChart[player.primaryPosition as keyof DepthChart].push(player.id);
     } else {
@@ -2215,12 +2300,19 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[], sourceData?: Rec
   // Use source PlayerData role to distinguish rotation SP from bullpen SP
   const getSourceRole = (id: string) => sourceData?.[id]?.role;
 
-  const startingRotation = pitchers
+  // SMB4 uses a 4-man rotation. Pure SP fill the rotation first; SP/RP swingmen backfill and
+  // overflow to long relief. This mirrors the "SP/RPs need the option to start" ruling (2026-06-25).
+  const ROTATION_SIZE = 4;
+  const pureStarters = pitchers
     .filter((player) => player.primaryPosition === 'SP' && getSourceRole(player.id) !== 'BULLPEN')
     .map((player) => player.id);
-  const longRelievers = pitchers
+  const swingmen = pitchers
     .filter((player) => player.primaryPosition === 'SP/RP')
     .map((player) => player.id);
+  const rotationCandidates = [...pureStarters, ...swingmen];
+  const startingRotation = rotationCandidates.slice(0, ROTATION_SIZE);
+  const startingSet = new Set(startingRotation);
+  const longRelievers = rotationCandidates.filter((id) => !startingSet.has(id));
   const closingPitcher = pitchers.find((player) => player.primaryPosition === 'CP')?.id || '';
   const assignedIds = new Set([...startingRotation, ...longRelievers, closingPitcher].filter(Boolean));
   const setupPitchers = pitchers

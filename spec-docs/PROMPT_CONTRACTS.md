@@ -24465,3 +24465,627 @@ Lane: `experiment/manager-wpa-window`. Adversarial-reviewed (2 critical orphan b
 Full contract: `spec-docs/MWAR_STEP4_CONTRACT.md` (MINIMAL surface re-point — point the end-of-season Manager-of-the-Year
 ceremony screen at the live persisted award row instead of the dead legacy managerStorage store; one component,
 AwardsCeremonyFlow.tsx). JK ruled minimal scope. Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.
+<!-- ===== CONTRACT: EDIT-FROM-DRAFT-1 ===== -->
+## CONTRACT: EDIT-FROM-DRAFT-1 — edit player from the Draft Setup screen (grade auto-derived)
+
+**ROUTE:** worktree `/Users/johnkruse/Projects/kbl-draftfix`, branch `codex/draft-pipeline-fix`.
+**ROLE:** Builder (Codex). Build a UI feature. Branch-only; do NOT commit/push (sandboxed .git — the Captain commits + gates).
+
+**GOAL (JK ruling 2026-06-25, "build it now with grade auto-calculated from ratings"):**
+On the Draft Setup screen, let the user click any player row (IN-POOL or AVAILABLE pane) to FOCUS that player. Show a detail panel below the two panes with the player's identity + ratings + DERIVED letter grade + DERIVED IV, and an **"Edit Player"** button that opens a compact modal to edit the profile. On Save, persist via the hook's `updatePlayer`, with the letter grade AUTO-DERIVED from the (possibly edited) ratings via the CANONICAL model, then `refresh()` so the IV + grade reflect the new profile on the row + panel. This also lets the user disambiguate duplicate players (different ratings/grades) by inspecting them.
+
+**SOURCE OF TRUTH (re-read each at point of use; do not trust this summary blindly):**
+- Target screen: `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (the two-pane Draft Setup you are extending). It already has: the IN-POOL/AVAILABLE `Pane` + `Row` components, bulk multi-select (checkbox/row toggle), `computePlayerIv` for IN-pool IV, the `useLeagueBuilderData` hook (which exposes `updatePlayer` + `refresh`), and `formatMoney`.
+- **Canonical grade = `scoreSmb4Player` (`src/engines/smb4GradeEmulator.ts`), NOT the 3:3:2:1:1 `gradeEngine`** (memory: the IV uses scoreSmb4Player; grade must match its basis). `Smb4PlayerInput` (smb4GradeEmulator.ts:25-46) has ALL-optional fields: name, age, primaryPosition, secondaryPosition, bats, throws, power, contact, speed, fielding, arm, velocity, junk, accuracy, arsenal, trait1, trait2. scoreSmb4Player picks hitter vs pitcher fields internally by position. Reference caller: `src/utils/franchiseTraitGrantCompute.ts:135-146` (`scoreSmb4Player({primaryPosition, bats, throws, velocity, junk, accuracy, trait1, trait2}).grade`). **Add a helper `computePlayerGrade(player: Player): Grade` to `src/utils/leagueBuilderPoolBuilder.ts` (additive, next to `computePlayerIv`)** that passes the player's identity/position/ratings/traits/arsenal to scoreSmb4Player and returns `.grade`. The `.grade` is a `Smb4Grade`; **confirm it is assignable/mappable to `Player['overallGrade']` (the `Grade` type from gradeEngine); if the scales diverge, map it explicitly** (do NOT force an unsafe cast — STOP-IF below).
+- Live IV = `computePlayerIv(player)` (already exported from `leagueBuilderPoolBuilder.ts`).
+- Persist = `updatePlayer` from `useLeagueBuilderData` (→ savePlayer, trackChanges); then `refresh()`. Both already used in the Draft Setup page.
+- Player shape + editable fields: `src/utils/leagueBuilderStorage.ts` `Player` type. Editable in the modal: identity (firstName, lastName, age, bats L/R/S, throws L/R), position (primaryPosition + optional secondaryPosition — use the canonical draftable set already in this file's `POSITION_OPTIONS` minus "All"), and ratings — show the HITTER set (power, contact, speed, fielding, arm) OR the PITCHER set (velocity, junk, accuracy) based on whether primaryPosition is a pitcher role (SP, RP, CP, SP/RP). **overallGrade is DERIVED (display-only, recomputed live as ratings change) — NEVER a manual input.**
+- The Players-page editor (`LeagueBuilderPlayers.tsx`, openEditModal / modal JSX / handleSave) is a FIELD-SET reference only — it is coupled to that page (override tabs, league context). Do NOT import or reuse it. Build a SELF-CONTAINED compact modal (in the Draft Setup file, or one new sibling component file), base profile fields only.
+- Theme: match `LeagueBuilderDraftSetup.tsx`'s retro styling (bg `#2d3d2f`, panels `#556B55`/`#4A6844`, text `#E8E8D8`, accents `#5A8352`/`#C4A853`/`#3B7DD8`, thick borders, `shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]`). Reuse the existing Pane/Row visual language for the panel + modal.
+
+**CONSTRAINTS — edit ONLY these:**
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (the panel + modal + focus state + the row affordance).
+- `src/utils/leagueBuilderPoolBuilder.ts` (ADD `computePlayerGrade` only — additive).
+- OPTIONAL: ONE new component file for the modal (e.g. `src/src_figma/app/pages/DraftSetupPlayerEditModal.tsx`) if cleaner than inline.
+- OPTIONAL: extend the modal/grade with a small unit test (e.g. `computePlayerGrade` returns a valid Grade) — additive test only.
+- **DO NOT TOUCH:** `src/utils/leagueBuilderStorage.ts` (cross-branch overlap; not needed), `src/data/playerDatabase.ts` + `spec-docs/reference/iv_oracle.json` (FROZEN, read-only), the auction/franchise pipeline, `src/engines/smb4GradeEmulator.ts` / `ivEngine.ts` (read-only). No TRACKER_DB_VERSION / kbl-league-builder DB bump (none needed).
+- **Preserve bulk-select + lock/unlock/Start Draft.** The focus/edit interaction must NOT break multi-select. Recommended: clicking a row's body FOCUSES it (shows the panel) while a dedicated checkbox toggles selection — OR keep row-toggle for selection and add a small per-row "edit"/info icon (stop propagation) that focuses+opens. Pick the cleaner one but KEEP bulk add/remove working exactly as now.
+
+**EXPECTED OUTPUT:**
+1. A focused-player detail panel below the panes: name, position(s), age, B/T, ratings, DERIVED grade, DERIVED IV (formatMoney), + "Edit Player" button.
+2. A compact self-contained edit modal: editable identity/position/ratings; grade + IV recompute LIVE from the in-modal ratings (display-only); Save → `updatePlayer` (with overallGrade = computePlayerGrade(edited)) → `refresh()`; Cancel closes without saving.
+3. `computePlayerGrade` helper in leagueBuilderPoolBuilder.ts (canonical scoreSmb4Player grade).
+4. Bulk select + lock/start unaffected.
+
+**VERIFICATION (Codex self-check):** `NODE_ENV= npm run build` exits 0; the modal shows the correct hitter/pitcher rating set; computePlayerGrade returns a valid Grade and the Smb4Grade→Grade mapping is confirmed (state the result in your summary). The Captain runs the full vitest gate + a browser check.
+
+**FORMAT:** Concise summary — files changed; the grade-helper approach + the Smb4Grade→Grade compatibility result; the focus/edit-vs-bulk-select interaction you chose; any STOP-IF hit.
+
+**FAILURE PROTOCOL (STOP-IF):** (a) `Smb4Grade` not cleanly assignable/mappable to `Player['overallGrade']` → STOP, report (no unsafe cast). (b) The feature would require editing `leagueBuilderStorage.ts` or any FROZEN file → STOP. (c) Bulk-select can't be preserved alongside focus/edit → STOP, describe.
+
+**Use xhigh reasoning effort.**
+<!-- ===== END CONTRACT: EDIT-FROM-DRAFT-1 ===== -->
+
+<!-- ===== CONTRACT: POOL-FEAS-1 — pre-draft pool-feasibility check (keystone optimizer step 1) ===== -->
+## POOL-FEAS-1 — pre-draft pool-feasibility check (keystone optimizer step 1)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). You implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files.
+
+GOAL:
+Build the pre-draft pool-feasibility analyzer: point the existing best-roster builder at a LOCKED draft pool and, per
+team archetype, classify support (`supported` | `thin` | `starved`) and emit an "Add ~N [type] players to activate
+[archetype]" prompt when not supported.
+
+SOURCE OF TRUTH:
+`spec-docs/POOL_FEASIBILITY_SPEC.md` (this branch — read it in full first). The operative algorithm is embedded inline
+below so you never need a file off this branch. If the spec doc and this inline text ever disagree, STOP and report.
+
+CONSTRAINTS:
+- CREATE ONLY these two files:
+  - `src/engines/poolFeasibility.ts`
+  - `src/engines/__tests__/poolFeasibility.test.ts`
+- Do NOT edit (import read-only): `src/engines/archetypeBalanceSimulator.ts`, `src/data/historicalArchetypes.ts`,
+  `src/engines/leagueConstruction.ts`, `src/data/tierParams.ts`, `spec-docs/reference/iv_oracle.json`, and any other
+  existing file. If implementation appears to require editing ANY existing file → STOP and report.
+- Pure / headless / deterministic: NO `Date.now()`, `Math.random()`, `fs`, DOM, `window`, IndexedDB inside
+  `poolFeasibility.ts`. (The TEST file may read `iv_oracle.json` via `node:fs` to build pools — mirror the existing
+  `src/engines/__tests__/historicalArchetypes.test.ts` `loadPool()` exactly.)
+- Quote `POOL_FEASIBILITY_SPEC.md` for each non-obvious choice in your report.
+- Work directly in this worktree (no new branches/worktrees).
+
+EXPECTED OUTPUT — `poolFeasibility.ts` exports (signatures verbatim):
+```ts
+export interface FeasibilityShortfall { stat: ArchetypeStat; group: 'hitters'|'rotation'|'bullpen';
+  demand: number; supply: number; needCount: number; binding: boolean; descriptor: string; }
+export interface ArchetypeFeasibility { archetypeId: string; archetypeName: string;
+  support: 'supported'|'thin'|'starved'; built: ArchetypeSimResult;
+  shortfalls: FeasibilityShortfall[]; activationPrompt: string | null; }
+export interface PoolFeasibilityReport { tier: TierKey; budget: number; poolSize: number; results: ArchetypeFeasibility[]; }
+export function analyzePoolFeasibility(lockedPool: SimPlayer[], archetypes: HistoricalArchetype[], tier: TierKey,
+  referencePool?: SimPlayer[]): PoolFeasibilityReport;
+```
+Also EXPORT the tunables: `STRONG_PERCENTILE = 0.67`, `DEMAND_HITTER = 7`, `DEMAND_ROTATION = 3`, `DEMAND_BULLPEN = 3`,
+`BINDING_STATS` (a `Set<ArchetypeStat>` = {POW, CON, ROT_VEL, ROT_JNK, ROT_ACC, PEN_VEL}), and the `DESCRIPTORS`
+stat→phrase map.
+
+ALGORITHM (inline — authoritative, per the spec):
+Per archetype `arch`:
+1. `budget = computePoolTierCap(lockedPool.map(p=>p.iv), tier)`;
+   `built = buildBestRoster(lockedPool, { name: arch.name, rawShift: archetypeCapShift(arch) }, tier, budget)`.
+2. Boosted stats = the keys of `arch.spec` whose multiplier > 0 (equivalently `arch.boosts`). For each boosted stat S:
+   - `group` of S: hitters if S ∈ {POW,CON,SPD,FLD,ARM}, rotation if S ∈ {ROT_*}, bullpen if S ∈ {PEN_*}.
+   - Group membership of a player: hitters = `!isPitcher`; rotation = `role ∈ {SP, 'SP/RP'}`;
+     bullpen = `role ∈ {RP, CP, 'SP/RP'}` (SP/RP counts to both — mirror `isStarter`/`isReliever` in the sim).
+   - The player's S-rating: hitters read `bat.POW/CON/SPD/FLD/ARM`; rotation/bullpen read `pit.VEL/JNK/ACC`
+     (ROT_VEL & PEN_VEL → `pit.VEL`, ROT_JNK & PEN_JNK → `pit.JNK`, ROT_ACC & PEN_ACC → `pit.ACC`).
+   - Threshold = P67 of the S-ratings of `(referencePool ?? lockedPool)` members of S's group, nearest-rank:
+     sort ascending, `idx = clamp(ceil(0.67*n)-1, 0, n-1)`, threshold = `sorted[idx]` (n = group size; if n===0 → threshold 0).
+   - `supply` = count of LOCKED-pool players in S's group with S-rating ≥ threshold.
+   - `demand` = 7 if group hitters, 3 if rotation, 3 if bullpen. `needCount = max(0, demand - supply)`.
+   - `binding = BINDING_STATS.has(S)`. `descriptor = DESCRIPTORS[S]`.
+   - Push a `FeasibilityShortfall` ONLY (so the array isn't noisy) — include every boosted stat row (needCount may be 0)
+     so the diagnostic is complete; classification + prompt use needCount>0.
+3. Sort `shortfalls`: binding true first, then needCount desc, then `stat` ascending (stable, deterministic).
+4. `notFieldable = !built.solvent || built.rosterSize < 22`.
+   `hasBindingShortfall = shortfalls.some(s=>s.binding && s.needCount>0)`;
+   `hasAnyShortfall = shortfalls.some(s=>s.needCount>0)`.
+   `support = notFieldable || hasBindingShortfall ? 'starved' : hasAnyShortfall ? 'thin' : 'supported'`.
+5. `activationPrompt`: `null` if supported; else if `notFieldable` AND no needCount>0 shortfall →
+   `"This pool is too thin to field a full {name} roster — add more players."`; else take the first shortfall with
+   needCount>0 after the sort → `"Add ~{needCount} {descriptor} to activate {name}."`
+6. `results` preserves input `archetypes` order. `report = { tier, budget, poolSize: lockedPool.length, results }`.
+
+DESCRIPTORS: POW="power bats", CON="contact hitters", SPD="speed/baserunning threats", FLD="rangy defenders",
+ARM="strong-armed fielders", ROT_VEL="power starters", ROT_JNK="finesse starters", ROT_ACC="pinpoint command starters",
+PEN_VEL="power relievers", PEN_JNK="junkball relievers", PEN_ACC="pinpoint command relievers".
+
+TESTS (`poolFeasibility.test.ts`) — reuse the `loadPool()` shape from `historicalArchetypes.test.ts`:
+1. Full canonical pool (all 440) + `HISTORICAL_ARCHETYPES`, tier 'standard', referencePool = the same full pool →
+   EVERY archetype `support === 'supported'` and `activationPrompt === null`.
+2. Glove-stripped: from the full pool drop every hitter whose FLD ≥ the full-pool hitter-FLD P67; referencePool = the
+   FULL pool → Whiteyball, Go-Go Small Ball, The Oriole Way each have an FLD shortfall with needCount>0,
+   descriptor "rangy defenders", activationPrompt non-null.
+3. Command-stripped: drop every SP whose ACC ≥ the full-pool rotation-ACC P67; referencePool = full pool → Junkball
+   Surgeons and The Oriole Way flag ROT_ACC with needCount>0 and `support === 'starved'` (binding).
+4. Too-thin pool: any 18-player slice → for at least one archetype `built.rosterSize < 22` ⇒ `support === 'starved'`
+   and the "too thin to field" prompt appears.
+5. Determinism: two `analyzePoolFeasibility(...)` calls on identical inputs are `JSON.stringify`-equal.
+6. Binding-vs-flavor: construct/choose a case where an FLD-only shortfall yields `thin` while an equal-sized POW
+   shortfall yields `starved`.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/poolFeasibility.test.ts src/engines/__tests__/historicalArchetypes.test.ts src/engines/__tests__/archetypeBalanceSimulator.test.ts
+```
+Both must be clean: tsc 0 errors; vitest all-pass (the two existing archetype tests must STAY green — proves no
+regression to the shared engine).
+
+FORMAT (your report):
+1. Files changed (exact paths) + total changed-path count.
+2. Each export + each test, with the `POOL_FEASIBILITY_SPEC.md` clause it implements.
+3. Verification: paste the exact tsc + vitest output (pass counts).
+4. "POOL-FEAS-1 complete" OR "BLOCKED: <exact reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `buildBestRoster` / `SimPlayer` / `ArchetypeSimResult` are NOT exported from
+  `src/engines/archetypeBalanceSimulator.ts`, or `archetypeCapShift` / `HISTORICAL_ARCHETYPES` / `ArchetypeStat` not
+  exported from `src/data/historicalArchetypes.ts`, or `computePoolTierCap` not from `src/engines/leagueConstruction.ts`
+  → STOP, report the actual export surface.
+- (b) Implementation would require editing ANY existing file → STOP, report which and why.
+- (c) The full-pool test (Test 1) does NOT come back all-`supported` → STOP, report which archetype/stat broke and the
+  numbers; do NOT loosen the test or the thresholds to force green (that would mask a real algorithm bug).
+- (d) Any existing test regresses → STOP, report.
+- Never summarize/batch around a STOP. Never invent a constant not in this contract.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: POOL-FEAS-1 ===== -->
+
+<!-- ===== CONTRACT: TRUEVAL-1 — derived chemistry-trait potency primitive (keystone optimizer step 2a) ===== -->
+## TRUEVAL-1 — derived chemistry-trait potency primitive (keystone optimizer step 2a)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. This is the FOUNDATION (step 2a) for the optimizer's fielding-corrected "true value"; it is
+BUILD-DARK (no production wiring in this ticket).
+
+GOAL:
+Build a pure, deterministic primitive that, given a team roster's chemistry mix, derives each of a player's traits to a
+chemistry-potency tier (L1/L2/L3) and the value-adjustment FACTOR relative to the L2 "fit" baseline the frozen IV is
+founded on. (JK ruling: L1 = default/lowest every trait gets; L2 = a chemistry "fit" = the level the frozen IV prices
+at; L3 = max fit, rare. So the factor is RELATIVE to L2 = 1.0.)
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Trait → chemistry + polarity: `src/data/traitPricing.ts` (each trait entry has `chemistry: ChemistryType` and
+  `polarity: 'positive' | 'negative'`; `ChemistryType = 'Competitive'|'Crafty'|'Disciplined'|'Scholarly'|'Spirited'`).
+  Find the exported trait array/registry and build a name→{chemistry, polarity} lookup from it.
+- Chemistry canon + normalize: `src/data/chemistryCanonical.ts` (`normalizeToChemistryCode`, `ChemistryCode`).
+- Player chemistry field: `src/data/playerDatabase.ts:66` (`chemistry: string`, codes SPI/DIS/CMP/SCH/CRA; rows carry
+  full names e.g. 'SPIRITED' — ALWAYS pass through `normalizeToChemistryCode`).
+- Potency scale: `src/data/rosterEngineConstants.ts` `POTENCY_SCALE` (positives {L1:0.5,L2:1.0,L3:3.0}; standardInverted
+  {L1:3.0,L2:1.0,L3:0.5}) + `PotencyTier` type. (L3=3.0 is canonical/workbook-correct, JK 2026-06-22 — do NOT change it.)
+- Threshold prototype (REUSE THE PATTERN, NOT THE NUMBERS): `src/engines/chemistryFitValue.ts` `chemistryFitTier` uses
+  4/8 (a farm-auction sim-tune, off-by-one). This primitive MUST use the CANONICAL 3/7 (JK-ruled 2026-06-22):
+  L1 = 0–2 shared, L2 = 3–6, L3 = ≥7.
+- Counting prototype: `LeagueBuilderFarmAuctionDraft.tsx` `rosterChemistryCountsForTeamId` (the existing pattern that
+  counts a roster by chemistry code).
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/derivedTraitPotency.ts` + `src/engines/__tests__/derivedTraitPotency.test.ts`.
+- Do NOT edit any existing file (import read-only). If you must edit one → STOP and report.
+- Pure / deterministic: NO Date.now/Math.random/fs/DOM/IndexedDB in the engine. (Test may read fixtures.)
+- Do NOT touch the frozen oracle, `ivEngine.ts`, `rosterEngineConstants.ts`, `chemistryFitValue.ts`, `traitPricing.ts`,
+  `playerDatabase.ts`, `effectiveRatings.ts`.
+
+EXPECTED OUTPUT — `derivedTraitPotency.ts` exports (signatures verbatim):
+```ts
+export const POTENCY_L2_MIN = 3;   // ≥3 shared-chemistry players → L2 "fit"
+export const POTENCY_L3_MIN = 7;   // ≥7 → L3 "max fit"
+export function derivedPotencyTier(sharedChemistryCount: number): PotencyTier; // L1:0–2, L2:3–6, L3:≥7
+
+export type RosterChemistryCounts = Partial<Record<ChemistryCode, number>>;
+export function countRosterChemistry(roster: { chemistry: string }[]): RosterChemistryCounts;
+
+export interface TraitPotency {
+  trait: string;
+  chemistry: ChemistryType;
+  polarity: 'positive' | 'negative';
+  sharedCount: number;          // roster players whose chemistry == this trait's chemistry
+  tier: PotencyTier;
+  factor: number;               // value vs the L2 baseline (L2 → 1.0); positive: POTENCY_SCALE.positives[tier];
+                                // negative: POTENCY_SCALE.standardInverted[tier]
+}
+/** For each known trait name, its potency tier+factor given the roster chemistry counts. Unknown trait names
+ *  (not in traitPricing) are OMITTED from the result (do not throw). Order preserves input traitNames. */
+export function traitPotencies(traitNames: string[], counts: RosterChemistryCounts): TraitPotency[];
+```
+
+ALGORITHM:
+- `derivedPotencyTier(n)`: n≥7 → 'L3'; n≥3 → 'L2'; else 'L1'. (Clamp negative/NaN n to 0.)
+- `countRosterChemistry(roster)`: for each player, `normalizeToChemistryCode(player.chemistry)` → increment that code's
+  count. Skip entries that don't normalize.
+- `traitPotencies(traitNames, counts)`: for each name, look up {chemistry, polarity} in traitPricing; if unknown, skip.
+  `code = normalizeToChemistryCode(trait.chemistry)`; `sharedCount = counts[code] ?? 0`; `tier =
+  derivedPotencyTier(sharedCount)`; `factor = polarity === 'positive' ? POTENCY_SCALE.positives[tier] :
+  POTENCY_SCALE.standardInverted[tier]`.
+
+DOCUMENTED ASSUMPTIONS (write as code comments; these are flagged build-dark defaults, not yet JK-ratified — spec
+CHEMISTRY_TRAIT_POTENCY_VALUATION_SPEC §2.6 marks the denominator UNKNOWN):
+- The roster passed in is the team's FULL active roster (the roster-construction context); chemistry self-counts (a
+  player's own chemistry contributes to its traits' shared count). Both are retunable in Mode-2.
+
+TESTS (`derivedTraitPotency.test.ts`):
+1. `derivedPotencyTier`: 0,1,2→L1; 3,4,5,6→L2; 7,8,20→L3; -1/NaN→L1.
+2. `countRosterChemistry`: a mixed roster (full-name + code inputs) → correct per-code counts via normalize.
+3. A POSITIVE trait (look one up from traitPricing, e.g. a Scholarly positive) on a roster with ≥7 of its chemistry →
+   tier L3, factor 3.0; with exactly 3 → L2, factor 1.0; with ≤2 → L1, factor 0.5.
+4. A NEGATIVE trait → inverted: ≥7 shared → L3 factor 0.5; ≤2 shared → L1 factor 3.0; 3–6 → L2 factor 1.0.
+5. Unknown trait name → omitted (not thrown); known names preserve input order.
+6. Determinism: two calls on identical inputs are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/derivedTraitPotency.test.ts
+```
+tsc 0 errors; vitest all-pass.
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output; 4) "TRUEVAL-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `POTENCY_SCALE` / `PotencyTier` not exported from `rosterEngineConstants.ts`, or `normalizeToChemistryCode` /
+  `ChemistryCode` not from `chemistryCanonical.ts`, or traitPricing has no per-trait `chemistry`+`polarity` you can look
+  up by name → STOP, report the actual export surface (do NOT invent a trait→chemistry map).
+- (b) Implementation would require editing any existing file → STOP, report.
+- (c) `POTENCY_SCALE` positives.L3 is NOT 3.0 (i.e. the constant differs from this contract) → STOP, report the actual
+  value (do not assume).
+- Never invent a constant; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: TRUEVAL-1 ===== -->
+
+<!-- ===== CONTRACT: TRUEVAL-2 — directional fielding-corrected true value (keystone optimizer step 2b) ===== -->
+## TRUEVAL-2 — directional fielding-corrected true value (keystone optimizer step 2b)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. BUILD-DARK (no production wiring in this ticket).
+
+GOAL:
+Build the optimizer's own "true value" — a pure, deterministic, BOUNDED, DIRECTIONAL adjustment layer on top of the
+frozen kblIV, for the optimizer/draft-guide/scout ONLY. It (1) leans value with the player's roster-chemistry potency
+(chemistry-fit traits worth more, unsupported traits/maxed flaws worth less) and (2) corrects fielding (good gloves up,
+bad gloves down — the frozen IV under-prices fielding's mojo payoff, spec D17). v1 is intentionally DIRECTIONAL +
+provisional: the magnitudes are conservative documented constants, calibrated empirically in Mode-2 (JK ruling
+2026-06-26; spec D17 "fit a correction ONLY if data demands / do not overengineer"). The frozen IV/economy is NEVER
+touched — this is a SEPARATE additive value.
+
+SOURCE OF TRUTH (verify anchors against source FIRST):
+- `src/engines/derivedTraitPotency.ts` (TRUEVAL-1, already committed): `traitPotencies(traitNames, counts)` →
+  per-trait `{ trait, chemistry, polarity, sharedCount, tier, factor }` where `factor` is the trait's EFFECT scale vs
+  the L2 baseline (positive: 0.5/1.0/3.0 at L1/L2/L3; negative inverted 3.0/1.0/0.5). Also `RosterChemistryCounts`,
+  `countRosterChemistry`.
+- The frozen kblIV is computed UPSTREAM and passed IN (do NOT import/call `ivEngine`/`computeIV` here — keep this layer
+  decoupled and oracle-free).
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/trueValue.ts` + `src/engines/__tests__/trueValue.test.ts`.
+- Do NOT edit any existing file (import read-only from `derivedTraitPotency`). If you must edit one → STOP, report.
+- Pure / deterministic: NO Date.now/Math.random/fs/DOM. Do NOT import or call `ivEngine.ts` (kblIV is an input).
+- Do NOT touch the frozen oracle or any IV/economy file.
+
+EXPECTED OUTPUT — `trueValue.ts` exports (signatures verbatim):
+```ts
+// Conservative, PROVISIONAL v1 magnitudes — Mode-2 calibration pending (exported so they retune at one site).
+export const CHEM_LEAN_COEF = 0.02;     // kblIV fraction per unit of net signed chemistry lean
+export const CHEM_LEAN_CAP = 0.12;      // ±12% max chemistry swing
+export const FIELDING_COEF = 0.10;      // kblIV fraction per normalized FLD deviation
+export const FIELDING_BASELINE = 50;    // FLD reference (0–99 scale); above → glove credit, below → glove debit
+export const FIELDING_RANGE = 50;       // normalizer: (FLD - BASELINE)/RANGE
+export const FIELDING_CAP = 0.08;       // ±8% max fielding swing
+
+export interface TrueValueInput {
+  kblIV: number;                        // frozen canonical value (passed in; never recomputed here)
+  traits: string[];                     // player trait names
+  fielding: number;                     // player FLD rating (0–99)
+  isPitcher: boolean;                   // pitchers: fielding correction is 0 (mound FLD already priced at usage 1.0)
+}
+export interface TrueValueResult {
+  trueValue: number;                    // kblIV + chemistryAdjustment + fieldingAdjustment (rounded)
+  kblIV: number;                        // passthrough
+  chemistryAdjustment: number;          // signed $, bounded by ±CHEM_LEAN_CAP·kblIV
+  fieldingAdjustment: number;           // signed $, bounded by ±FIELDING_CAP·kblIV (0 for pitchers)
+  netSignedLean: number;                // the raw chemistry lean used (transparency / scout-edge surfacing)
+}
+export function computeTrueValue(input: TrueValueInput, rosterChemistryCounts: RosterChemistryCounts): TrueValueResult;
+```
+
+ALGORITHM:
+- `tp = traitPotencies(input.traits, rosterChemistryCounts)`.
+- Per-trait VALUE lean (note the polarity flip — a dampened FLAW raises value):
+  `signedLean(t) = t.polarity === 'positive' ? (t.factor - 1) : -(t.factor - 1)`.
+  `netSignedLean = Σ signedLean(t)` over tp (0 when no known traits).
+- `chemRaw = CHEM_LEAN_COEF * netSignedLean`; `chemFrac = clamp(chemRaw, -CHEM_LEAN_CAP, +CHEM_LEAN_CAP)`;
+  `chemistryAdjustment = round(input.kblIV * chemFrac)`.
+- Fielding: `fieldFrac = input.isPitcher ? 0 : clamp(FIELDING_COEF * (input.fielding - FIELDING_BASELINE) / FIELDING_RANGE,
+  -FIELDING_CAP, +FIELDING_CAP)`; `fieldingAdjustment = round(input.kblIV * fieldFrac)`.
+- `trueValue = input.kblIV + chemistryAdjustment + fieldingAdjustment`.
+- `round` = `Math.round`. `clamp(x,lo,hi) = Math.max(lo, Math.min(hi, x))`.
+
+DOCUMENT (code comments): all six constants are conservative PROVISIONAL v1 values, Mode-2-calibrated; this layer is
+the optimizer/scout/draft-guide value ONLY and never feeds salary/economy/archetype-balance (those stay on frozen
+kblIV). The price≠true-value gap IS the intended scout edge (bargains = underpriced good gloves; traps = overpriced
+bad gloves).
+
+TESTS (`trueValue.test.ts`):
+1. NEUTRAL invariant: a position player with traits whose chemistries all land L2 (counts 3–6 each) AND fielding ==
+   FIELDING_BASELINE → chemistryAdjustment === 0, fieldingAdjustment === 0, trueValue === kblIV (clean additive layer).
+2. Chemistry boost: a known POSITIVE trait at L3 (its chemistry count ≥7) → netSignedLean > 0, chemistryAdjustment > 0.
+3. Chemistry drag: same positive trait at L1 (count ≤2) → chemistryAdjustment < 0. AND a NEGATIVE trait at L1 (flaw
+   maxed) → chemistryAdjustment < 0; the SAME negative trait at L3 (flaw dampened) → chemistryAdjustment > 0.
+4. Fielding: position player FLD 90 → fieldingAdjustment > 0; FLD 20 → < 0; a PITCHER with FLD 20 → fieldingAdjustment
+   === 0.
+5. Bounds: extreme inputs (many stacked boosted traits; FLD 0 / 99) → |chemFrac| ≤ CHEM_LEAN_CAP and |fieldFrac| ≤
+   FIELDING_CAP (adjustments never exceed the caps × kblIV).
+6. Ranking-fix sanity: an all-bat/no-glove position player (high kblIV e.g. 200000, FLD 15) is DOCKED vs a glove-first
+   player (lower kblIV e.g. 140000, FLD 92) is CREDITED — assert the fielding adjustments have the right signs (the
+   inversion the frozen IV causes is corrected in the right direction).
+7. Determinism: two calls on identical inputs are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/trueValue.test.ts src/engines/__tests__/derivedTraitPotency.test.ts
+```
+tsc 0; vitest all-pass (derivedTraitPotency stays green — proves no regression to the consumed primitive).
+
+FORMAT: 1) files changed + count; 2) each export + test with the clause it implements; 3) exact tsc + vitest output;
+4) "TRUEVAL-2 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `traitPotencies`/`RosterChemistryCounts` not exported from `derivedTraitPotency.ts` with the documented shape →
+  STOP, report the actual surface.
+- (b) Implementation would require editing any existing file, or importing `ivEngine`/`computeIV` → STOP, report.
+- (c) The NEUTRAL invariant (Test 1) does NOT yield trueValue === kblIV → STOP, report the numbers (do not fudge the
+  test; a non-zero adjustment at the neutral baseline means the layer is not cleanly additive — a real bug).
+- Never invent a constant beyond the six above; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: TRUEVAL-2 ===== -->
+
+<!-- ===== CONTRACT: SCOUT-1 — evaluateScoutMove (keystone optimizer step 3a, win-value keep-in scorer) ===== -->
+## SCOUT-1 — evaluateScoutMove (keystone optimizer step 3a, win-value keep-in scorer)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — no architectural decisions, no scope
+beyond the two new files. BUILD-DARK (no production wiring; the manager lane swaps it in at its scorer call-site).
+
+GOAL:
+Build the pure, deterministic, headless **win-value keep-in scorer** the manager-WPA lane's Rung-2 needs: given an
+in-game decision context, score each candidate vs the incumbent in projected **kbl-WPA** (NOT auction dollars), say
+whether a meaningfully better move exists, and how much better. Yardstick = the fielding-corrected **true value**
+(`trueValue.ts`), converted to win-value with leverage intrinsic — per SITUATIONAL_ADVISOR_AND_OPTIMAL_LINEUP_DEEPDIVE.md
+§"Two direct ties" lines 215-222 ("that fielding-corrected true value IS the win-value yardstick the advisor should
+use instead of raw auction IV"; the 3:2:1 manager METRIC itself stays uncorrected — real-WPA based).
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Interface shapes + 6 guarantees + 6 answers: `${MAIN}/spec-docs/MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (MAIN =
+  /Users/johnkruse/Projects/kbl-tracker). Leverage = RAW/intrinsic (Answer 1); optimizer owns thresholdKblWpa (Answer
+  2); tiebreak = candidateName.localeCompare then candidateId (Answer 6); completeness — never throw/null (Guarantee 4).
+- Scorer pipeline to REUSE (do NOT duplicate): `src/engines/subRecommendations.ts` `scoreEffectiveRatingsIv`
+  (lines ~131-158: effectiveRatings → IVPlayerInput → computeIV().kblIV) and `recommendSubs` (ranking + confidence
+  tiers high≥×2 / medium≥×1.25 / low>threshold). Import `effectiveRatings` (`src/engines/effectiveRatings.ts`),
+  `computeIV` (`src/engines/ivEngine.ts`), `trueValue` (`src/engines/trueValue.ts`, already committed — TRUEVAL-2),
+  `OptimalLineupCandidate` (`src/utils/optimalLineup.ts`) as the ScoutPlayer alias.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/scoutMove.ts` + `src/engines/__tests__/scoutMove.test.ts`.
+- Do NOT edit any existing file (import read-only). If you must edit one → STOP, report.
+- Pure / deterministic / headless: NO Date.now/Math.random/fs/DOM/IndexedDB/window. Same context in → byte-identical out.
+- Do NOT touch the frozen oracle, ivEngine, trueValue, or any manager-WPA file (managerWpaGameState etc.).
+
+EXPECTED OUTPUT — `scoutMove.ts` exports (shapes verbatim from the interface contract; ScoutPlayer = OptimalLineupCandidate):
+```ts
+export type ScoutPlayer = OptimalLineupCandidate;
+export interface ScoutDecisionContext {
+  decisionType: 'pitcher_change' | 'pinch_hit' | 'defensive_replacement';   // the kind of keep-in being scored
+  gameId?: string;
+  inning: number; half: 'top' | 'bottom'; outs: number; totalInnings: number;
+  leverageIndex: number;                              // intrinsic — the scout scales win-value by it, no separate multiplier
+  count?: { balls: number; strikes: number };
+  basesOccupied: { first: boolean; second: boolean; third: boolean };
+  scoreDifferentialForFieldingTeam: number;
+  battingTeamId: string; fieldingTeamId: string;
+  incumbent: ScoutPlayer; candidates: ScoutPlayer[];
+  opposingPitcher?: ScoutPlayer; opposingBatter?: ScoutPlayer;
+}
+export interface ScoutCandidateScore { candidateId: string; candidateName: string; kblWpaGain: number; justification: string; }
+export interface ScoutMoveEvaluation {
+  evaluationId: string; decisionType: ScoutDecisionContext['decisionType'];
+  incumbentPlayerId: string; bestCandidateId: string | null; bestCandidateName: string | null;
+  bestMoveKblWpaGain: number;          // >= 0 WHEN recommend===true
+  recommend: boolean; thresholdKblWpa: number; recommendationStrength: 'high' | 'medium' | 'low';
+  rankedCandidates: ScoutCandidateScore[];   // element 0 == best
+  justification: string; algorithmVersion: string; optimizerConstantsVersion: string;
+}
+export function evaluateScoutMove(ctx: ScoutDecisionContext): ScoutMoveEvaluation;
+```
+EXPORT the versioned constants (conservative PROVISIONAL v1, Mode-2 calibrated — same posture as TRUEVAL-2):
+`ALGORITHM_VERSION='scout-1.0.0'`, `OPTIMIZER_CONSTANTS_VERSION='scout-consts-1.0.0'`,
+`SCOUT_DECISION_WPA_DIVISOR` (converts a true-value DELTA in IV-$ to a per-decision win-value, BEFORE leverage; pick a
+conservative value so a typical strong upgrade in average leverage yields a small WPA like ~0.01-0.05 — document the
+reasoning), and `SCOUT_THRESHOLD_KBL_WPA: Record<decisionType, number>` (the per-type recommend bar in WPA units).
+
+ALGORITHM (per player = incumbent or candidate):
+1. Build a GameContext from ctx (opposingHand from opposingPitcher?.throws else infer from half; playingPosition from
+   the player's position; inning; the base/out/score fields) and a PlayerState from the ScoutPlayer's mojo/fitness —
+   REUSE the exact assembly `scoreEffectiveRatingsIv` uses (read it; mirror it; do not invent a new mapping).
+2. `kblIV = computeIV(effectiveRatings(player, state, gameCtx)).kblIV`.
+3. `tv = trueValue({ kblIV, traits: [], fielding: <player FLD>, isPitcher: decisionType==='pitcher_change' }, {}).trueValue`.
+   **Pass `traits: []` and empty counts on purpose:** the keep-in context carries no full team roster, so chemistry
+   potency is NOT applied here (kblIV already prices traits at the L2 "fit"); only the FIELDING correction applies in v1.
+   Document this as a flagged v1 limitation (chemistry potency lights up in optimizeLineupVsStarter, which has the roster).
+4. Per candidate: `kblWpaGain = (tv(candidate) - tv(incumbent)) / SCOUT_DECISION_WPA_DIVISOR * ctx.leverageIndex` (signed).
+5. Rank candidates by kblWpaGain desc; tiebreak candidateName.localeCompare then candidateId. element0 = best.
+6. `thresholdKblWpa = SCOUT_THRESHOLD_KBL_WPA[ctx.decisionType]`. `bestMoveKblWpaGain = rankedCandidates[0]?.kblWpaGain ?? 0`.
+   `recommend = bestMoveKblWpaGain > thresholdKblWpa`. (So bestMoveKblWpaGain >= 0 whenever recommend — Guarantee 3.)
+7. `recommendationStrength`: 'high' if gain ≥ threshold*2, 'medium' if ≥ threshold*1.25, else 'low'.
+8. `bestCandidateId/Name` = rankedCandidates[0]'s (null only if candidates empty). `incumbentPlayerId` = incumbent id.
+9. `evaluationId` = DETERMINISTIC from context: `\`${ctx.gameId ?? 'nogame'}:${ctx.inning}:${ctx.half}:${ctx.outs}:${ctx.decisionType}:${incumbent id}\``
+   (no random/time). `justification` = deterministic human string. Stamp algorithmVersion/optimizerConstantsVersion.
+10. COMPLETENESS (Guarantee 4): never throw, never return null; empty candidates → recommend:false,
+    bestCandidateId:null, bestMoveKblWpaGain:0, rankedCandidates:[].
+
+TESTS (`scoutMove.test.ts`):
+1. A clearly-better candidate (much higher fielding / ratings than incumbent, defensive_replacement, leverageIndex>1)
+   → bestMoveKblWpaGain > 0, recommend true, rankedCandidates[0] is that candidate.
+2. No better option (all candidates worse than incumbent) → recommend false, bestMoveKblWpaGain ≤ 0, rankedCandidates
+   still populated (Guarantee 4), bestCandidateId = the least-bad (non-null).
+3. Sign/Guarantee 3: whenever recommend===true, bestMoveKblWpaGain >= 0.
+4. Leverage intrinsic: the SAME candidate vs incumbent at leverageIndex 2.0 yields ~2× the kblWpaGain of leverageIndex
+   1.0 (linear in leverage, no separate multiplier).
+5. Fielding yardstick: for a defensive_replacement, a glove-up candidate (higher FLD, equal bat) scores a positive gain
+   driven by the fielding correction (prove the true-value fielding term moves it).
+6. decisionType=pitcher_change → isPitcher path (fielding correction 0 in trueValue); a velocity/junk/accuracy upgrade
+   still scores a positive gain via kblIV.
+7. Tiebreak: two candidates with identical scores rank by candidateName.localeCompare then candidateId — deterministic.
+8. Completeness: empty candidates[] → no throw; recommend false, bestCandidateId null.
+9. Determinism: two calls on identical ctx are JSON.stringify-equal.
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/scoutMove.test.ts src/engines/__tests__/trueValue.test.ts
+```
+tsc 0; vitest all-pass (trueValue stays green — proves no regression to the consumed yardstick).
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output; 4) "SCOUT-1 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
+- (a) `trueValue`/`TrueValueInput` not exported from `trueValue.ts` with the TRUEVAL-2 shape, or `effectiveRatings`/
+  `computeIV`/`OptimalLineupCandidate` not importable as documented, or `scoreEffectiveRatingsIv`'s GameContext/state
+  assembly cannot be mirrored from source → STOP, report the actual surface (do NOT invent a parallel scorer).
+- (b) Implementation would require editing any existing file, or importing/using a manager-WPA runtime file
+  (managerWpaGameState etc.) → STOP, report.
+- (c) Determinism cannot be met without Date.now/Math.random (e.g. evaluationId) → STOP (it CAN — derive from ctx).
+- Never invent a constant beyond those named; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: SCOUT-1 ===== -->
+
+<!-- ===== CONTRACT: SCOUT-2 — optimizeLineupVsStarter (keystone optimizer step 3b, opponent-SP lineup) ===== -->
+## SCOUT-2 — optimizeLineupVsStarter (keystone optimizer step 3b, opponent-SP lineup)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — two new files only. BUILD-DARK (no
+production wiring; the manager lane's lineups tab swaps it in later).
+
+GOAL:
+Build the pure, deterministic, headless **opponent-SP lineup optimizer**: given a roster + the actual next starter's
+full profile, return an `OptimalLineupSnapshot` whose per-slot win-values (`projectedSlotKblWpa`) are scored on the
+fielding-corrected **true value** vs the **full opponent starter** (not just L/R hand), via the canonical IV→WPA
+conversion. Yardstick = true value (deep-dive §215-222), same as SCOUT-1.
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Interface shapes: `${MAIN}/spec-docs/MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (MAIN = /Users/johnkruse/Projects/
+  kbl-tracker) — `OptimizeLineupVsStarterInput` (teamId, mode, instanceId?, dhEnabled?, roster: ScoutPlayer[],
+  opponentStarter: OpponentStarterProfile, chosenLineup?), `OpponentStarterProfile` (pitcherId, pitcherName, throws,
+  velocity?, junk?, accuracy?, trait1?, trait2?, traits?, arsenal?, armSlot?, pitcherRole?), returns
+  `OptimalLineupSnapshot` (Answer 5: optimizer returns CONTENT with identity unset — lane mints snapshotId/sourceConfidence).
+- Reuse (read + reuse, do NOT duplicate): `src/utils/optimalLineup.ts` `buildOptimalLineupSnapshot`
+  (the assignment + snapshot assembly; PASS `generatedAt: 0` so it stays pure — it falls back to `Date.now()`),
+  `BuildOptimalLineupSnapshotInput` (line ~69), `analysisTeamForCandidates`. `OptimalLineupCandidate` (= ScoutPlayer),
+  `OptimalLineupSnapshot`/`OptimalLineupSlot` (`src/types/managerWpa.ts`).
+- Per-slot true-value re-score chain (mirror SCOUT-1's `scoutMove.ts` scoreTrueValue + `ivOfEffectiveRatings`
+  `rosterAnalyzer.ts:529-572`): `effectiveRatings` → IVPlayerInput → `computeIV().kblIV` → `computeTrueValue`
+  (`trueValue.ts`). `defensivePlacementRisk` (`effectiveRatings.ts:516`, returns {chanceFrequency, errorLikelihood}).
+  `BATTING_ORDER_SLOT_WEIGHTS` + `CALIBRATE.lineupSnapshotWpaDivisor` (10_000_000) + `CALIBRATE.lineupDefensiveRiskIvPenalty`
+  (300_000) from `src/data/rosterEngineConstants.ts`.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/lineupVsStarter.ts` + `src/engines/__tests__/lineupVsStarter.test.ts`.
+- Do NOT edit any existing file (the assignment comes from the UNCHANGED `buildOptimalLineupSnapshot`; only the WPA
+  numbers are re-scored on top). If you must edit one → STOP, report.
+- Pure / deterministic / headless: NO Date.now/Math.random/fs/DOM. (Pass generatedAt:0 into buildOptimalLineupSnapshot.)
+- Do NOT touch the frozen oracle, ivEngine, trueValue, rosterAnalyzer, optimalLineup, or any manager-WPA runtime file.
+
+EXPECTED OUTPUT — `lineupVsStarter.ts` exports:
+```ts
+export type ScoutPlayer = OptimalLineupCandidate;
+export interface OpponentStarterProfile { pitcherId: string; pitcherName: string; throws: 'L'|'R';
+  velocity?: number; junk?: number; accuracy?: number; trait1?: string|null; trait2?: string|null;
+  traits?: string[]; arsenal?: string[]; armSlot?: 'High'|'Mid'|'Low'|'Sub'|null; pitcherRole?: 'SP'|'SP/RP'|'RP'|'CP'; }
+export interface OptimizeLineupVsStarterInput { teamId: string; mode: OptimalLineupModeContext; instanceId?: string;
+  dhEnabled?: boolean; roster: ScoutPlayer[]; opponentStarter: OpponentStarterProfile;
+  chosenLineup?: { playerId: string; battingOrderSlot: number; defensivePosition: string }[]; }
+export const LINEUP_VS_STARTER_ALGORITHM_VERSION = 'lineup-vs-starter-1.0.0';
+export function optimizeLineupVsStarter(input: OptimizeLineupVsStarterInput): OptimalLineupSnapshot;
+```
+
+ALGORITHM:
+1. `base = buildOptimalLineupSnapshot({ candidates: input.roster, teamId: input.teamId, dhEnabled: input.dhEnabled,
+   opposingPitcherHand: input.opponentStarter.throws, mode: input.mode, instanceId: input.instanceId, generatedAt: 0,
+   ...required fields })` — reuse its assignment (batting order + defensive positions) + assembly. (Map every required
+   BuildOptimalLineupSnapshotInput field from source; STOP if a required field has no input source.)
+2. For each `slot` in `base.slots`: find the player in `input.roster` (by playerId). Re-score with the FULL opponent +
+   true value:
+   - Build a GameContext with `opposingPlayer = input.opponentStarter` (as EffectiveRatingsPlayer), `opposingHand =
+     opponentStarter.throws`, `playingPosition = slot.defensivePosition`, `pressure: 'none'` (no leverage here).
+   - `eff = effectiveRatings(player, state, ctx)`; `kblIV = computeIV(toIvInput(player, eff)).kblIV`.
+   - `tv = computeTrueValue({ kblIV, traits: [], fielding: <player FLD>, isPitcher: false }, {}).trueValue`. (traits:[]
+     + empty counts on purpose: lineup candidates carry no chemistry field, so chemistry potency is NOT applied in v1 —
+     only the FIELDING correction; document as a flagged v1 limitation, Mode-2.)
+   - `defensivePenalty = slot.defensivePosition === 'DH' ? 0 : risk.chanceFrequency * risk.errorLikelihood *
+     CALIBRATE.lineupDefensiveRiskIvPenalty` (risk = defensivePlacementRisk(player, slot.defensivePosition)).
+   - `slotScore = (tv - defensivePenalty) * BATTING_ORDER_SLOT_WEIGHTS[clamp(slot.battingOrderSlot,1,9)]`.
+   - `projectedSlotKblWpa = roundWpa(slotScore / CALIBRATE.lineupSnapshotWpaDivisor)` (same rounding as
+     projectedSlotKblWpaFromIv — match its precision).
+3. Return the base snapshot with each slot's `projectedSlotKblWpa` REPLACED by the re-scored value,
+   `projectedTeamLineupKblWpa = Σ` the new per-slot values, `algorithmVersion = LINEUP_VS_STARTER_ALGORITHM_VERSION`,
+   `generatedAt: 0`, and `snapshotId: ''` (identity unset — lane mints it; Answer 5). Keep all other base fields.
+
+DOCUMENTED v1 LIMITATIONS (code comments): the ASSIGNMENT (who plays where + batting order) comes from the existing
+hand-based optimizer; only the WIN-VALUE numbers are re-scored on the full opponent + true value. A true-value/
+full-opponent-optimal ASSIGNMENT and the matchup substrate are Mode-2/later (interface contract Answer 4). Chemistry
+potency is deferred (candidates carry no chemistry).
+
+TESTS (`lineupVsStarter.test.ts`):
+1. Returns a valid OptimalLineupSnapshot: slots populated, each slot has a finite projectedSlotKblWpa,
+   projectedTeamLineupKblWpa === Σ slot values (within rounding), algorithmVersion === the new constant, snapshotId === ''.
+2. Fielding yardstick: a roster where one candidate is a glove-up (high FLD) at a premium position → that slot's
+   projectedSlotKblWpa is higher than the same roster scored with a low-FLD player in that slot (the true-value fielding
+   correction moves it).
+3. Opponent sensitivity: changing opponentStarter (e.g. throws 'L' vs 'R', or a high vs low profile) changes at least
+   one slot's projectedSlotKblWpa (the full opponent flows through effectiveRatings).
+4. Purity/determinism: two calls on identical input are JSON.stringify-equal (no Date.now leakage — generatedAt is 0).
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/lineupVsStarter.test.ts src/engines/__tests__/scoutMove.test.ts
+```
+ALSO run the existing reuse-owner tests to prove the unchanged assignment path is untouched:
+```
+NODE_ENV= npx vitest run src/utils/__tests__ src/engines/__tests__ 2>&1 | tail -20   # adjust to the real test dirs; report the optimalLineup/rosterAnalyzer files PASS
+```
+tsc 0; vitest all-pass; the existing optimalLineup/rosterAnalyzer tests STAY green (proves no regression — you edited nothing they own).
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output (incl. the existing-tests-still-green proof); 4) "SCOUT-2 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- (a) `buildOptimalLineupSnapshot`/`BuildOptimalLineupSnapshotInput`/`analysisTeamForCandidates` not importable, or a
+  REQUIRED BuildOptimalLineupSnapshotInput field has no source in OptimizeLineupVsStarterInput → STOP, report the actual
+  shape (do not fabricate a field value).
+- (b) `BATTING_ORDER_SLOT_WEIGHTS`/`CALIBRATE`/`defensivePlacementRisk`/`computeTrueValue` not exported as documented →
+  STOP, report.
+- (c) Implementation would require editing any existing file → STOP, report (the assignment must come from the
+  unchanged buildOptimalLineupSnapshot).
+- Never invent a constant; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: SCOUT-2 ===== -->
