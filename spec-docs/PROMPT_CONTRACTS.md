@@ -26033,3 +26033,54 @@ If Playwright/a browser is available in this environment, smoke the hub against 
 Use xhigh reasoning effort. Be rigorous: JK is relying on this draft being reliable enough to load rosters into franchise mode 2.
 
 <!-- ===== END CONTRACT: STREAMB-FINISH-PLAYABLE-DRAFT ===== -->
+
+<!-- ===== CONTRACT: DRAFT-STAFF-GUIDE-WIRE ===== -->
+
+# CONTRACT: DRAFT-STAFF-GUIDE-WIRE — wire scout-hire + scout-guide-in-auction + staff-hire ceremony into the LIVE draft flow
+
+**ROUTE:** worktree `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. **Branch-only. Do NOT commit. Do NOT push.** (The Captain audits + commits.)
+
+**ROLE:** Builder (Codex). The Captain (Opus) audits the real diff + runs the gate + commits.
+
+**GOAL (JK-approved, for the first playable draft):** the scout draft-guide and the staff-hire screens already exist as standalone PREVIEW pages — wire them into the LIVE draft flow in this order:
+`DraftSetupHub → [NEW] Scout-Hire → MLB auction (NOW shows the hired scout's read per nomination) → farm auction → [NEW] Staff-Hire (manager + beat reporter) → /franchise/setup (freeze) → franchise`.
+The point: a scout hired BEFORE the draft makes the in-auction guide actually useful (resolves the "scout not in scope at nomination" landmine), and staff-hire is a short ceremony after the draft.
+
+**SOURCE OF TRUTH (re-read from source; verify every anchor before building):**
+- Flow transitions: `src/src_figma/app/pages/DraftSetupHubPreview.tsx:283` ("Start the Draft" → `navigate(draftRouteForLeague(activeLeague))`); `src/src_figma/app/utils/draftRouting.ts` (route resolvers → `/league-builder/auction-draft`|`/league-builder/farm-auction-draft`); `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx:871` (farm-done → `navigate("/franchise/setup")`); routes registered in `src/App.tsx`.
+- Existing preview screens to promote to live: `src/src_figma/app/pages/ScoutHirePreview.tsx`, `src/src_figma/app/pages/EndOfDraftStaffingPreview.tsx` (manager + beat reporter + optional recap), `src/src_figma/app/components/draft/DraftGuideCard.tsx` (price band / 20-80 grade / affordability), `src/src_figma/app/pages/DraftGuidePreview.tsx`.
+- Auction host (where the guide renders): `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (the current-nomination/lot render).
+- Persistence (confirm the exact fns): SCOUT = the `scoutProfiles` store (`getScoutProfilesForLeague`/`deleteScoutProfilesForLeague` in `src/utils/franchisePlayerStorage.ts` import chain — find the SAVE fn). MANAGER = `src/utils/managerStorage.ts` / `src/utils/managerIdentityStorage.ts`. REPORTER = uncertain (see STOP-IF).
+- Verification anchor: `src/utils/tests/draftPipeline.integration.test.ts` (the authoritative headless draft→franchise chain).
+
+**REQUIRED WORK (priority-ordered; each must leave the flow WORKING, never half-broken):**
+
+**P1 — Scout-Hire-before-draft + the in-auction guide (MUST):**
+1. New live route `/league-builder/scout-hire` (register in `App.tsx`, lazy import) rendering a real Scout-Hire screen (promote `ScoutHirePreview` — per human-controlled team, pick from the shared scout pool). **Persist** each team's chosen scout to the `scoutProfiles` store (reuse the existing save path; if none, see STOP-IF). On "continue" → `navigate(draftRouteForLeague(activeLeague))` (the auction). 
+2. Re-point `DraftSetupHubPreview.tsx:283` "Start the Draft" → `navigate('/league-builder/scout-hire' + same league search param)` instead of straight to the auction.
+3. In `LeagueBuilderAuctionDraft.tsx`, render `DraftGuideCard` for the current nomination, fed by the controlling team's HIRED scout profile (price band + grade) + affordability from that team's cap. If no scout was hired for a team, render the card in its public-only state (no crash). Keep it additive — do not change auction bid/award logic.
+
+**P2 — Staff-Hire ceremony after the draft (if clean; else STOP-IF + flag):**
+4. New live route `/league-builder/staff-hire` (register in `App.tsx`) rendering a real Staff-Hire screen (promote `EndOfDraftStaffingPreview` — manager + beat reporter per human team). **Persist** manager via `managerStorage`/`managerIdentityStorage`; persist the beat reporter IF a clean persistence path exists.
+5. Re-point `LeagueBuilderFarmAuctionDraft.tsx:871` farm-done → `navigate('/league-builder/staff-hire')`; on its "continue" → `navigate('/franchise/setup')`.
+
+**CONSTRAINTS:**
+- Touch ONLY the draft/setup surface listed above + `App.tsx` route registrations + the relevant storage save calls. Do NOT refactor `FranchiseSetup.tsx`'s step machine — staff-hire is its OWN route BEFORE `/franchise/setup`, not a step inside it.
+- Keep the existing `/__preview/*` routes working (don't delete the previews; the live screens may import/share their components).
+- The freeze gate `validatePreparedLeagueBuilderFarmScoutingState()` must still pass — scouts hired EARLIER (before the auction) is fine/better; VERIFY the gate doesn't regress.
+- TypeScript strict (no `any`/`@ts-ignore`). No DB schema/version bump. No flag-default change. Nothing pushed.
+
+**EXPECTED OUTPUT:** the routing inserts + 2 new live screens + the in-auction guide + the persistence calls, all compiling.
+
+**VERIFICATION (you run, report actual output):**
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/tests/draftPipeline.integration.test.ts` → green (the chain still saves+launches with rosters).
+- ADD + run a focused test proving: scout-hire persists a chosen scout (read back via `getScoutProfilesForLeague`), and the staff-hire persists a manager (read back). If reporter persistence is skipped (STOP-IF), say so in the test notes.
+
+**FORMAT:** Report files changed, the two routing inserts (before/after nav targets), exactly what persists for scout/manager/reporter, whether the reporter STOP-IF fired, and the command outputs. Do NOT commit. Do NOT push.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` + analysis, change nothing further, and DELIVER P1 cleanly while flagging the rest, IF: there is no clean save path for the beat reporter (deliver scout + manager, leave reporter cosmetic/unpersisted + flag); feeding the hired scout into `LeagueBuilderAuctionDraft` requires exporting auction-selector internals beyond a clean prop/hook; re-pointing the farm-done nav breaks the freeze gate (`validatePreparedLeagueBuilderFarmScoutingState`); or wiring staff-hire would force a refactor of `FranchiseSetup`'s step machine. NEVER leave the draft→franchise chain half-broken — if P2 can't land cleanly, ship P1 (scout-hire + in-auction guide) and flag P2 for Tuesday.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: DRAFT-STAFF-GUIDE-WIRE ===== -->
