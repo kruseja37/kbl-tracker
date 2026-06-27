@@ -241,6 +241,14 @@ const FranchiseLensSeed = enableFranchiseManualSmokeSetupRoute
       })),
     )
   : null;
+// Dev/test-only: seeds a demo franchise AND plays a season (flags on) so all surfaces populate.
+const FranchiseLensSeedPlayed = enableFranchiseManualSmokeSetupRoute
+  ? lazy(() =>
+      import("./src_figma/app/pages/FranchiseLensSeedPlayed").then((module) => ({
+        default: module.FranchiseLensSeedPlayed,
+      })),
+    )
+  : null;
 
 /**
  * KBL Tracker - Main App
@@ -395,6 +403,12 @@ function App() {
           <Route
             path="/__preview/franchise-lens-seed"
             element={FranchiseLensSeed ? <FranchiseLensSeed /> : <NotFound />}
+          />
+        ) : null}
+        {enableFranchiseManualSmokeSetupRoute ? (
+          <Route
+            path="/__preview/franchise-lens-seed-played"
+            element={FranchiseLensSeedPlayed ? <FranchiseLensSeedPlayed /> : <NotFound />}
           />
         ) : null}
         {enableFranchiseManualSmokeSetupRoute ? (
