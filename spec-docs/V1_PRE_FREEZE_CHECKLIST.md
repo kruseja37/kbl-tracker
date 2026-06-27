@@ -9,11 +9,11 @@
 1. **Archetype→capIdentity converter** (`selectTeamArchetype`/`archetypeToCapIdentity` + ArchetypeStat→ModStat→CAP_MODIFICATION_FRACTIONS vocab bridge + unit test; add `mlbArchetypeKey`/`farmArchetypeKey` to Team) — ✅ BUILT (claude/v1-draft-ui `2e53a0a6`). Faithful **rawShift** bridge (mod-names can't separate rotation/bullpen → hdh-royals/the-opener impossible that way); the plan's `PEN_ACC→PVEL` was a TYPO, corrected to `PACC`. Build-dark, behavior-preserving. The intricate one; gates the setup spine + archetype picker + Draft Setup hub.
 
 ## TIER 1 — setup write spine (depends on #1)
-2. Seat→team assignment write (couch-coop ownership into `initializeFranchise`) — NOT-BUILT, M.
-3. CPU shill scaling + override + pre-auction persistence — PARTIAL, S.
-4. Season-rules canonical home (fold `SeasonRulesPreview` → live `FranchiseSetup`; D4/D6) — PARTIAL, M.
-5. Pre-freeze setup persistence (carry setup choices into `initializeFranchise`, no new store) — NOT-BUILT, S.
-6. Conferences toggle configurable + wired to standings/playoff seeding — PARTIAL, M.
+2. Seat→team assignment write (couch-coop ownership into `initializeFranchise`) — ✅ BUILT (`cc2d1829`, seat→owner write-spine + couch-coop derivation, backward-compat; hub-writer is #11).
+3. CPU shill scaling + override + pre-auction persistence — ✅ BUILT (`cdf47f49`, league-size-scaled default + sticky override; count is JK-pending/§16).
+4. Season-rules canonical home (fold `SeasonRulesPreview` → live `FranchiseSetup`; D4/D6) — ♻️ RESCOPED: mostly ALREADY BUILT (cadence=`CheckpointCadence` league-template; intensity=Lane A #24; conferences=`leagueDetails.conferences`). Residual = a Tier-3 setup-UI affordance, not a Tier-1 fold. See `STREAMB_TIER1_SETUP_SPINE_PLAN.md` REFRAME.
+5. Pre-freeze setup persistence (carry setup choices into `initializeFranchise`, no new store) — NOT-BUILT, S. **← the genuine remaining Tier-1 spine work.**
+6. Conferences toggle configurable + wired to standings/playoff seeding — ♻️ RESCOPED: standings already group by `leagueDetails.conferences` (count=1=single league); seeder is conference-optional. Residual = a franchise-setup on/off affordance (Tier-3). See REFRAME.
 
 ## TIER 2 — draft seam fixes (small, independent)
 7. Farm-draft "Continue to Franchise Setup" button — NOT-BUILT, S. · 8. Freeze-confirmation dialog before START FRANCHISE — NOT-BUILT, S. · 9. Replace "two-number freeze (AUC-5.2)" copy with plain wording — NOT-BUILT, S. · 10. Draft recap (`DRAFT_RECAP` narrative type + adapter; emission LLM-gated) — NOT-BUILT, M.

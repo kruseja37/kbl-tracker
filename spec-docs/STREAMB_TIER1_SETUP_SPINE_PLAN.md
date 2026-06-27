@@ -26,6 +26,29 @@
 7. **#4 playoff defaults** → keep the live defaults (4 teams / varied series), not the mock's 6/Bo5.
 8. **#6 conferences default** → ON (per Stream-B plan slice 1d). When OFF, accept the existing cosmetic seed-index split for the bracket (a true single-pool bracket is Lane A / v2).
 
+## REFRAME (post-build deep-grounding 2026-06-27) — #4 and #6 are LARGELY ALREADY BUILT
+A direct grep of the existing engines (NOT done by the first Tier-1 grounding) shows the mock's
+"net-new" season-rules fields mostly already have homes — the "fold the mock" framing overstated the gap:
+- **cadence** → `CheckpointCadence` already exists (`rosterEngineConstants.ts:288-297`: `CHECKPOINT_CADENCE_DEFAULT`,
+  `normalizeCheckpointCadence`), lives on the LEAGUE TEMPLATE (`leagueBuilderStorage.ts:110`), and is already
+  surfaced in `LeagueBuilderLeagues.tsx`. Do NOT add a parallel `season.cadence`. Cadence is set at
+  league-build time. #4's cadence gap ≈ ZERO.
+- **intensity** → already consumed: `franchiseL10EventEngine.ts:246` reads `config.intensityMultiplier[intensity]`.
+  The intensity DIAL + its wiring is **Lane A ticket #24** (LS-16 Juiced/Standard/Nerfed). Do NOT invent a
+  `season.intensity` with the mock's `calm/standard/wild` vocab (vocab-mismatch seam). Lane-A owned.
+- **conferences (#6)** → already represented: `useFranchiseData.ts:257` reads `config.leagueDetails.conferences`
+  (a number; `Math.max(1, …)` → count=1 = single league), and `buildStandings` already groups by the league
+  template's conferences. The "toggle" = the league's conference count (1 vs 2+), already a LeagueBuilder
+  setting; the seeder is conference-optional. So #6 is largely FUNCTIONAL; the only residual is a clean
+  franchise-setup on/off affordance.
+
+**Rescope decision (AUTH-4 conservative default, logged):** #4 and #6 carry almost no genuine Tier-1 spine
+build. Their thin residual = surfacing existing league-level settings (conference count / cadence) as
+franchise-setup affordances — which is a **Tier-3 screen-wiring concern** that lands naturally when the real
+Draft-Setup screens arrive via the Tier-5 merge (#26-28). Building throwaway franchise-setup UI now, before
+those screens, would be wasted. → **DEFER #4/#6's residual into Tier-3 (#11 + screen wiring); do not build a
+redundant fold now.** Genuine remaining Tier-1 spine work = **#5 (setup persistence / hold-until-freeze)**.
+
 ## Sizing corrections vs the checklist
 - #2: **M** (not S) — `playerAssignments` is dead; the seat→owner shape must be designed.
 - #3: **S** — persistence half already works; only scaling default + reload-seed + override max.
