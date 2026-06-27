@@ -9,6 +9,8 @@ const DUMP_DATABASES = [
   'kbl-event-log',
   'kbl-app-meta',
   'kbl-manager-identity',
+  'kbl-franchise-stadium-records',
+  'kbl-franchise-home-park-rivals',
   `kbl-franchise-${L_SIM_IDS.franchiseId}`,
 ] as const;
 

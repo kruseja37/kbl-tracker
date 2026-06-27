@@ -237,6 +237,69 @@ export function computeFranchiseAllStarRoster(input: {
   return selections;
 }
 
+export function computeAllStarSnubRivalryPairs(
+  rawCandidates: readonly AllStarCandidate[],
+  selections: ReadonlyArray<{
+    playerId: string;
+    position: string;
+    role: 'starter' | 'reserve';
+    selectionScore: number;
+  }>,
+  config: AllStarRosterConfig = V1_ALL_STAR_ROSTER_CONFIG,
+): { snubbedPlayerId: string; selectedPlayerId: string }[] {
+  const candidates = rawCandidates
+    .map(normalizeCandidate)
+    .filter((candidate): candidate is NormalizedAllStarCandidate => candidate !== null);
+  const selectedIds = new Set(selections.map((selection) => selection.playerId));
+  const pairs: { snubbedPlayerId: string; selectedPlayerId: string }[] = [];
+
+  for (const position of config.positionStarters) {
+    const starter = selections.find((selection) =>
+      selection.position === position && selection.role === 'starter',
+    );
+    if (!starter) continue;
+
+    const firstOut = candidates
+      .filter((candidate): candidate is NormalizedHitterCandidate =>
+        candidate.facet === 'hitter' &&
+        candidate.fieldPosition === position &&
+        !selectedIds.has(candidate.playerId),
+      )
+      .sort((left, right) => compareNullableDesc(left.hittingMerit, right.hittingMerit) ||
+        left.playerId.localeCompare(right.playerId))[0];
+
+    if (firstOut && firstOut.playerId !== starter.playerId) {
+      pairs.push({ snubbedPlayerId: firstOut.playerId, selectedPlayerId: starter.playerId });
+    }
+  }
+
+  for (const kind of ['SP', 'RP'] as const) {
+    const selectedOfKind = selections.filter((selection) => selection.position === kind);
+    if (selectedOfKind.length === 0) continue;
+
+    const marginal = [...selectedOfKind].sort((left, right) =>
+      (left.selectionScore - right.selectionScore) || left.playerId.localeCompare(right.playerId),
+    )[0];
+    const meritForKind = (candidate: NormalizedPitcherCandidate): number | null =>
+      kind === 'SP' ? candidate.startingMerit : candidate.reliefMerit;
+    const firstOut = candidates
+      .filter((candidate): candidate is NormalizedPitcherCandidate =>
+        candidate.facet === 'pitcher' &&
+        candidate.pitcherKind === kind &&
+        meritForKind(candidate) !== null &&
+        !selectedIds.has(candidate.playerId),
+      )
+      .sort((left, right) => compareNullableDesc(meritForKind(left), meritForKind(right)) ||
+        left.playerId.localeCompare(right.playerId))[0];
+
+    if (firstOut && firstOut.playerId !== marginal.playerId) {
+      pairs.push({ snubbedPlayerId: firstOut.playerId, selectedPlayerId: marginal.playerId });
+    }
+  }
+
+  return pairs;
+}
+
 function normalizeCandidate(candidate: AllStarCandidate): NormalizedAllStarCandidate | null {
   const fieldPosition = normalizeFieldPosition(candidate.rawPosition);
   const pitcherKind = normalizePitcherKind(candidate.gamesStarted);

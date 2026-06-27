@@ -36,6 +36,8 @@ export interface RelationshipEdgeRow extends FranchiseRelationshipEdgeScopeInput
   dissolvedAtGameNumber: number | null;
   createdAt: number;
   updatedAt?: number;
+  /** Discriminates event-driven edges ('overtake' per-game, 'envy'/'asg-snub' honor locks) from checkpoint-formed edges (undefined/'formation' = legacy/back-compat). */
+  formationSource?: 'formation' | 'overtake' | 'envy' | 'asg-snub';
 }
 
 export function resetFranchiseRelationshipEdgesForTests(): void {

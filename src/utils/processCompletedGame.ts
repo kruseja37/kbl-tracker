@@ -84,6 +84,7 @@ import { persistDarkCheckpointSweepForCompletedGame } from './franchiseCheckpoin
 import { persistDarkTraitGrantForCompletedGame } from './franchiseTraitGrantCompute';
 import { getFranchiseTradeDemandRowsByScope } from './franchiseTradeDemandStorage';
 import { persistDarkRelationshipFormationForCompletedGame } from './franchiseRelationshipFormationCompute';
+import { persistDarkRelationshipOvertakeForCompletedGame } from './franchiseRelationshipOvertakeCompute';
 import { persistDarkRelationshipIntensityForCompletedGame } from './franchiseRelationshipIntensityCompute';
 import { persistDarkRelationshipMoraleForCompletedGame } from './franchiseRelationshipMoraleCompute';
 import { persistDarkL10ForCompletedGame } from './franchiseL10SweepCompute';
@@ -1426,6 +1427,11 @@ export async function processCompletedGame(
             await persistDarkRelationshipFormationForCompletedGame(gameState, trueValueScope, archiveOptions);
           } catch (e) {
             console.warn('[L13] dark relationship formation skipped for completed game ' + gameState.gameId + ':', e);
+          }
+          try {
+            await persistDarkRelationshipOvertakeForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
+          } catch (e) {
+            console.warn('[L13] dark relationship overtake skipped for completed game ' + gameState.gameId + ':', e);
           }
           try {
             await persistDarkRelationshipIntensityForCompletedGame(gameState, trueValueScope, archiveOptions);

@@ -1,9 +1,13 @@
 import type { PersistedGameState } from './gameStorage';
 import { isFranchisePhase2L12Enabled } from './franchisePhase2Flags';
 import { buildFranchiseAllStarCandidates } from './franchiseAwardsEngine';
-import { computeFranchiseAllStarRoster } from '../engines/franchiseAllStarSelector';
+import {
+  computeAllStarSnubRivalryPairs,
+  computeFranchiseAllStarRoster,
+} from '../engines/franchiseAllStarSelector';
 import { isAtOrPastAllStarLockFraction } from './franchiseAllStarLock';
 import { runFranchiseAllStarLockPayouts } from './franchiseAllStarLockPayouts';
+import { persistAllStarSnubRivalryEdges } from './franchiseRelationshipAllStarSnubCompute';
 import {
   getFranchiseAllStarRoster,
   putFranchiseAllStarRoster,
@@ -101,6 +105,30 @@ export async function persistFranchiseAllStarRosterForCompletedGame(
       });
     } catch (e) {
       console.warn('[L12] All-Star lock payouts skipped for completed game ' + gameState.gameId + ':', e);
+    }
+    try {
+      const snubPairs = computeAllStarSnubRivalryPairs(
+        candidates,
+        selections.map((selection) => ({
+          playerId: selection.playerId,
+          position: selection.position,
+          role: selection.role,
+          selectionScore: selection.selectionScore ?? 0,
+        })),
+      );
+      await persistAllStarSnubRivalryEdges({
+        gameState,
+        pairs: snubPairs,
+        scope: {
+          ...rosterScope,
+          franchiseId: scope.franchiseId,
+          seasonNumber: scope.seasonNumber,
+        },
+        lockGameNumber: gameNumber!,
+        timestamp: gameState.savedAt,
+      });
+    } catch (e) {
+      console.warn('[L13] All-Star snub rivalry edges skipped for completed game ' + gameState.gameId + ':', e);
     }
   }
 

@@ -55,6 +55,8 @@ const L13_3A_RELATIONSHIP_TYPES = new Set<RelationshipEdgeType>([
   'MENTORSHIP',
   'FRIENDSHIP',
 ]);
+const EVENT_DRIVEN_SOURCES = new Set<string>(['overtake', 'envy', 'asg-snub']);
+const EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM = 24; // OPEN-DECISION placeholder (§16); event-driven (overtake + envy + asg-snub) edges get their own generous cap, tuned from the full-season count.
 // §5.3 season-end honor edge: MVP/CY emit an AWARD_RESULT nod + a close-loser snub.
 // Mirrors franchiseSeasonEndHonors.ts:19 (SEASON_END_SNUB_TOP_N) + :29-32 (SEASON_END_HONORS, honorKind === award category).
 const SEASON_END_SNUB_TOP_N = 3;
@@ -238,14 +240,35 @@ function fameTierLegitimacy(snapshot: LsimStateSnapshot): LsimInvariantResult {
         valueRow.warPercentile < APEX_DEGENERACY_WAR_PERCENTILE;
     })
     .map((row) => row.playerId);
+  const heatByPlayer = new Map(snapshot.fameRows.map((row) => [row.playerId, row.heat]));
+  const eliteMeritHeats = snapshot.trueValueRows
+    .filter((row) =>
+      isFiniteNumber(row.warPercentile) &&
+      row.warPercentile >= FAME_TUNING.warGravity.meritPercentileBands.elite
+    )
+    .map((row) => heatByPlayer.get(row.playerId))
+    .filter(isFiniteNumber)
+    .sort((a, b) => a - b);
+  const eliteMedianHeat = medianFinite(eliteMeritHeats);
+  const eliteFloorSatisfied = eliteMeritHeats.length === 0 ||
+    (isFiniteNumber(eliteMedianHeat) && eliteMedianHeat >= FAME_TUNING.tierThresholds.localHero);
+  const apexPass = offenders.length === 0;
   return invariantResult(
     'soul.fame-war-legitimacy-floor',
     INVESTIGATE,
-    offenders.length === 0,
-    offenders.length === 0
-      ? 'no replacement/neg-WAR player holds the apex IMMORTAL_LEGEND tier (high-fame/low-WAR darlings are blessed §20.2 — a §9 signal, not a fail)'
-      : `apexDegenerate=${offenders.slice(0, 8).join(',')}`,
+    apexPass && eliteFloorSatisfied,
+    `apexDegenerate=${offenders.slice(0, 8).join(',') || 'none'}; eliteCohort=${eliteMeritHeats.length}; eliteMedianHeat=${isFiniteNumber(eliteMedianHeat) ? eliteMedianHeat.toFixed(3) : 'n/a'}; ` +
+      (eliteMeritHeats.length === 0
+        ? 'no elite-merit cohort to assert'
+        : `eliteFloorSatisfied=${eliteFloorSatisfied}; localHeroFloor=${FAME_TUNING.tierThresholds.localHero}`),
   );
+}
+
+function medianFinite(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const middle = Math.floor(values.length / 2);
+  if (values.length % 2 === 1) return values[middle];
+  return (values[middle - 1] + values[middle]) / 2;
 }
 
 function l12RaceNoNanAndResolve(snapshot: LsimStateSnapshot): LsimInvariantResult {
@@ -520,12 +543,18 @@ function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
 
 function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const reached = reachedCheckpoints(snapshot);
+  const eventDrivenEdges = snapshot.relationshipEdges.filter((row) =>
+    EVENT_DRIVEN_SOURCES.has(row.formationSource as string),
+  );
+  const checkpointEdges = snapshot.relationshipEdges.filter((row) =>
+    !EVENT_DRIVEN_SOURCES.has(row.formationSource as string),
+  );
   const edgeIds = snapshot.relationshipEdges.map((row) => row.id);
   const duplicateIds = edgeIds.filter((id, index) => edgeIds.indexOf(id) !== index);
   const allowedCheckpoints = new Set(snapshot.checkpointGameNumbers);
   const currentIsCheckpoint = allowedCheckpoints.has(snapshot.gameNumber);
   const formedAtNumbers = Array.from(new Set(
-    snapshot.relationshipEdges
+    checkpointEdges
       .map((row) => row.formedAtGameNumber)
       .filter((gameNumber): gameNumber is number => Number.isInteger(gameNumber)),
   )).sort((left, right) => left - right);
@@ -544,13 +573,28 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     !Number.isInteger(row.formedAtGameNumber),
   );
   const finalDensityLimit = Math.max(1, snapshot.teamIds.length * 3);
-  const densityExceeded = snapshot.relationshipEdges.length > finalDensityLimit;
-  const missingEdgesAfterCheckpoint = reached.length > 0 && snapshot.relationshipEdges.length === 0;
+  const densityExceeded = checkpointEdges.length > finalDensityLimit;
+  const missingEdgesAfterCheckpoint = reached.length > 0 && checkpointEdges.length === 0;
   const missingCurrentCheckpointWrite = currentIsCheckpoint &&
     snapshot.gameNumber > 0 &&
-    snapshot.relationshipEdges.length > 0 &&
+    checkpointEdges.length > 0 &&
     !formedAtNumbers.includes(snapshot.gameNumber);
-  const shouldBeEmptyPreCheckpoint = reached.length === 0 && snapshot.relationshipEdges.length > 0;
+  const shouldBeEmptyPreCheckpoint = reached.length === 0 && checkpointEdges.length > 0;
+  const eventDrivenDensityLimit = Math.max(1, snapshot.teamIds.length * EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM);
+  const eventDrivenDensityExceeded = eventDrivenEdges.length > eventDrivenDensityLimit;
+  const eventDrivenFormedAtNumbers = eventDrivenEdges
+    .map((row) => row.formedAtGameNumber)
+    .filter((gameNumber): gameNumber is number => Number.isInteger(gameNumber))
+    .sort((left, right) => left - right);
+  const eventDrivenRange = eventDrivenFormedAtNumbers.length > 0
+    ? `${eventDrivenFormedAtNumbers[0]}-${eventDrivenFormedAtNumbers[eventDrivenFormedAtNumbers.length - 1]}`
+    : 'none';
+  const badEventDriven = eventDrivenEdges.filter((row) =>
+    !Number.isInteger(row.formedAtGameNumber) ||
+    (row.formedAtGameNumber as number) < 1 ||
+    (row.formedAtGameNumber as number) > snapshot.gameNumber ||
+    row.potential !== false,
+  );
   const pass =
     duplicateIds.length === 0 &&
     nonBoundaryFormation.length === 0 &&
@@ -560,15 +604,17 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     !densityExceeded &&
     !missingEdgesAfterCheckpoint &&
     !missingCurrentCheckpointWrite &&
-    !shouldBeEmptyPreCheckpoint;
+    !shouldBeEmptyPreCheckpoint &&
+    !eventDrivenDensityExceeded &&
+    badEventDriven.length === 0;
 
   return invariantResult(
     'soul.l13-relationship-formation-checkpoint-write',
     CRITICAL,
     pass,
     pass
-      ? `edges=${snapshot.relationshipEdges.length}; formedAt=${formedAtNumbers.join(',') || 'none'}; current=${snapshot.gameNumber}; cadence=${snapshot.checkpointCadence}; densityLimit=${finalDensityLimit}; no duplicate ids`
-      : `edges=${snapshot.relationshipEdges.length}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
+      ? `edges=${snapshot.relationshipEdges.length}; checkpointEdges=${checkpointEdges.length}; eventDrivenEdges=${eventDrivenEdges.length}; checkpointFormedAt=${formedAtNumbers.join(',') || 'none'}; eventDrivenFormedAtRange=${eventDrivenRange}; current=${snapshot.gameNumber}; cadence=${snapshot.checkpointCadence}; checkpointDensityLimit=${finalDensityLimit}; eventDrivenDensityLimit=${eventDrivenDensityLimit}; no duplicate ids`
+      : `edges=${snapshot.relationshipEdges.length}; checkpointEdges=${checkpointEdges.length}; eventDrivenEdges=${eventDrivenEdges.length}; checkpointFormedAt=${formedAtNumbers.join(',') || 'none'}; eventDrivenFormedAtRange=${eventDrivenRange}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; eventDrivenDensityExceeded=${eventDrivenDensityExceeded}; badEventDriven=${badEventDriven.slice(0, 4).map((row) => row.id).join(',') || 'none'}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
   );
 }
 
@@ -623,7 +669,11 @@ function relationshipIntensityLifecycle(snapshot: LsimStateSnapshot): LsimInvari
   let chargedCount = 0;
 
   for (const row of snapshot.relationshipEdges) {
-    const isChargedMatchup = isChargedRelationshipEdgeThisGame(row, teamByPlayer);
+    // Envy edges form at season finalize, not as participants in the current game,
+    // so their formation intensity carries no in-game charged-matchup bump.
+    const isChargedMatchup = row.formationSource === 'envy'
+      ? false
+      : isChargedRelationshipEdgeThisGame(row, teamByPlayer);
     if (isChargedMatchup) chargedCount += 1;
     const expected = computeRelationshipIntensity(row, {
       gameNumber: snapshot.gameNumber,

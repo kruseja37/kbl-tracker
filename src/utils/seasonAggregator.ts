@@ -41,6 +41,29 @@ const DEFAULT_SEASON_ID = 'season-1';
 const DEFAULT_SEASON_NUMBER = 1;
 const DEFAULT_SEASON_NAME = 'Season 1';
 const DEFAULT_TOTAL_GAMES = MLB_BASELINE_GAMES;
+const MADE_OUT_RESULTS = new Set<AtBatEvent['result']>([
+  'GO',
+  'FO',
+  'FLO',
+  'LO',
+  'PO',
+  'DP',
+  'TP',
+  'FC',
+  'SF',
+  'SAC',
+]);
+const POSITION_TO_NUMBER: Partial<Record<FieldingEvent['position'], number>> = {
+  P: 1,
+  C: 2,
+  '1B': 3,
+  '2B': 4,
+  '3B': 5,
+  SS: 6,
+  LF: 7,
+  CF: 8,
+  RF: 9,
+};
 
 export interface PitchingAchievementContext {
   scheduledInnings?: number;
@@ -391,6 +414,7 @@ async function aggregateFieldingStats(
   seasonId: string
 ): Promise<void> {
   const fieldingEvents = await getFieldingEventsForAggregation(gameState);
+  const atBatEvents = await getAtBatEventsForAggregation(gameState);
   const ofMap = new Map<string, { assists: number; held: number }>();
 
   for (const fieldingEvent of fieldingEvents) {
@@ -430,6 +454,9 @@ async function aggregateFieldingStats(
     difficultyMap.set(playerId, { weightedConversion, difficultyOpportunities });
   }
 
+  const rescuedThrowCredits = tallyRescuedThrowCredits(atBatEvents, fieldingEvents);
+  const basesSavedCredits = tallyBasesSavedCredits(atBatEvents, fieldingEvents);
+
   for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
     // Player name and team carried through from PersistedGameState
     const playerName = gameStats.playerName || playerId;
@@ -449,6 +476,8 @@ async function aggregateFieldingStats(
       nutshots: (seasonStats.nutshots ?? 0) + (gameStats.nutshots ?? 0),
       outfieldAssists: (seasonStats.outfieldAssists ?? 0) + (ofMap.get(playerId)?.assists ?? 0),
       baserunnersHeld: (seasonStats.baserunnersHeld ?? 0) + (ofMap.get(playerId)?.held ?? 0),
+      rescuedThrowCredits: (seasonStats.rescuedThrowCredits ?? 0) + (rescuedThrowCredits.get(playerId) ?? 0),
+      basesSavedCredits: (seasonStats.basesSavedCredits ?? 0) + (basesSavedCredits.get(playerId) ?? 0),
       caughtStealingAgainst: (seasonStats.caughtStealingAgainst ?? 0) + (catcherMap.get(playerId)?.cs ?? 0),
       stolenBasesAllowed: (seasonStats.stolenBasesAllowed ?? 0) + (catcherMap.get(playerId)?.sb ?? 0),
       difficultyWeightedConversion: (seasonStats.difficultyWeightedConversion ?? 0) + (difficultyMap.get(playerId)?.weightedConversion ?? 0),
@@ -458,6 +487,79 @@ async function aggregateFieldingStats(
 
     await updateFieldingStats(updated);
   }
+}
+
+function tallyRescuedThrowCredits(
+  atBatEvents: AtBatEvent[],
+  fieldingEvents: FieldingEvent[],
+): Map<string, number> {
+  const credits = new Map<string, number>();
+  const fieldingByAtBat = groupFieldingEventsByAtBat(fieldingEvents);
+
+  for (const event of atBatEvents) {
+    if (event.undoneAt || !event.enrichment?.rescuedThrow || !MADE_OUT_RESULTS.has(event.result)) continue;
+    const rows = fieldingByAtBat.get(event.eventId) ?? [];
+    const sequence = getFieldingSequence(event, rows);
+    if (sequence.length < 2 || sequence[sequence.length - 1] !== 3) continue;
+
+    const firstBase = rows.find((row) => positionNumber(row.position) === 3);
+    if (!firstBase) continue;
+
+    credits.set(firstBase.playerId, (credits.get(firstBase.playerId) ?? 0) + 1);
+  }
+
+  return credits;
+}
+
+function tallyBasesSavedCredits(
+  atBatEvents: AtBatEvent[],
+  fieldingEvents: FieldingEvent[],
+): Map<string, number> {
+  const credits = new Map<string, number>();
+  const baseSaveByAtBat = new Map<string, FieldingEvent[]>();
+
+  for (const fieldingEvent of fieldingEvents) {
+    if (!isBaserunnerHeldEvent(fieldingEvent)) continue;
+    const rows = baseSaveByAtBat.get(fieldingEvent.atBatEventId) ?? [];
+    rows.push(fieldingEvent);
+    baseSaveByAtBat.set(fieldingEvent.atBatEventId, rows);
+  }
+
+  for (const event of atBatEvents) {
+    if (event.undoneAt) continue;
+    const basesSaved = event.enrichment?.basesSaved;
+    if (basesSaved !== 1 && basesSaved !== 2) continue;
+
+    const rows = baseSaveByAtBat.get(event.eventId) ?? [];
+    if (rows.length !== 1) continue;
+
+    const fielder = rows[0];
+    credits.set(fielder.playerId, (credits.get(fielder.playerId) ?? 0) + basesSaved);
+  }
+
+  return credits;
+}
+
+function groupFieldingEventsByAtBat(fieldingEvents: FieldingEvent[]): Map<string, FieldingEvent[]> {
+  const grouped = new Map<string, FieldingEvent[]>();
+  for (const fieldingEvent of fieldingEvents) {
+    const rows = grouped.get(fieldingEvent.atBatEventId) ?? [];
+    rows.push(fieldingEvent);
+    grouped.set(fieldingEvent.atBatEventId, rows);
+  }
+  return grouped;
+}
+
+function getFieldingSequence(event: AtBatEvent, fieldingEvents: FieldingEvent[]): number[] {
+  const sequence = event.enrichment?.fieldingSequence;
+  if (sequence && sequence.length > 0) return sequence;
+  return fieldingEvents
+    .map((row) => positionNumber(row.position))
+    .filter((position): position is number => typeof position === 'number');
+}
+
+function positionNumber(position: FieldingEvent['position']): number | undefined {
+  return POSITION_TO_NUMBER[position];
 }
 
 async function getFieldingEventsForAggregation(gameState: PersistedGameState): Promise<FieldingEvent[]> {

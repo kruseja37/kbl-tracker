@@ -10,7 +10,7 @@ import {
 } from './franchiseMoraleState';
 import { isFranchisePhase2L12Enabled } from './franchisePhase2Flags';
 
-export type FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR';
+export type FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR' | 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR';
 
 type RaceSnubVictim = {
   playerId: string;

@@ -96,10 +96,18 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     } },
   { name: 'soul.fame-heat-fickle',
     mutate: (s) => { s.gamesSimulated = s.totalScheduledGames; /* season-end, no up+down transitions */ } },
-  { name: 'soul.fame-war-legitimacy-floor', // NAMED property now: apex degeneracy (replacement-WAR at the very top tier)
+  { name: 'soul.fame-war-legitimacy-floor', // NAMED property: apex degeneracy (replacement-WAR at the top tier) AND the elite-merit floor not firing (an elite-WAR player stranded at Unknown heat)
     mutate: (s) => {
-      s.fameRows = [{ playerId: 'p', heat: 50, reachFloor: 5, channelByChannel: { ...FINITE_CHANNELS } } as never];
-      s.trueValueRows = [{ playerId: 'p', warPercentile: 0.05 } as never];
+      // p trips the apex-degeneracy clause (bottom-decile WAR holding IMMORTAL_LEGEND);
+      // q trips the new elite-floor clause (top-decile WAR but heat below LOCAL_HERO == the gravity never lifted him).
+      s.fameRows = [
+        { playerId: 'p', heat: 50, reachFloor: 5, channelByChannel: { ...FINITE_CHANNELS } } as never,
+        { playerId: 'q', heat: 0, reachFloor: 0, channelByChannel: { ...FINITE_CHANNELS } } as never,
+      ];
+      s.trueValueRows = [
+        { playerId: 'p', warPercentile: 0.05 } as never,
+        { playerId: 'q', warPercentile: 0.95 } as never,
+      ];
     } },
   { name: 'soul.l12-race-no-nan-resolve-tier', // NAMED property now: eligible candidates dropped despite a non-empty pool
     mutate: (s) => {
@@ -190,6 +198,87 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
         dissolvedAtGameNumber: null,
         createdAt: 3,
         updatedAt: 3,
+      }] as never;
+    } },
+  { name: 'soul.l13-relationship-formation-checkpoint-write',
+    mutate: (s) => {
+      s.gameNumber = 2;
+      s.gamesSimulated = 2;
+      s.players = [
+        { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+        { id: 'p2', leagueAssignments: [{ teamId: 't1' }] } as never,
+      ];
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:RIVALRY',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'RIVALRY',
+        formationSource: 'overtake',
+        intensity: 0.5,
+        potential: false,
+        accuracy: 1,
+        formedAtGameNumber: 5,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 2,
+      }] as never;
+    } },
+  { name: 'soul.l13-relationship-formation-checkpoint-write',
+    mutate: (s) => {
+      s.gameNumber = 2;
+      s.gamesSimulated = 2;
+      s.players = [
+        { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+        { id: 'p2', leagueAssignments: [{ teamId: 't1' }] } as never,
+      ];
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:RIVALRY',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'RIVALRY',
+        formationSource: 'envy',
+        intensity: 0.8,
+        potential: false,
+        accuracy: 1,
+        formedAtGameNumber: 7,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 2,
+      }] as never;
+    } },
+  { name: 'soul.l13-relationship-formation-checkpoint-write',
+    mutate: (s) => {
+      s.gameNumber = 2;
+      s.gamesSimulated = 2;
+      s.players = [
+        { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+        { id: 'p2', leagueAssignments: [{ teamId: 't1' }] } as never,
+      ];
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:RIVALRY',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'RIVALRY',
+        formationSource: 'asg-snub',
+        intensity: 0.8,
+        potential: false,
+        accuracy: 1,
+        formedAtGameNumber: 7,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 2,
       }] as never;
     } },
   { name: 'soul.l13-relationship-intensity-lifecycle',

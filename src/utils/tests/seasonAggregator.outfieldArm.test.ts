@@ -67,6 +67,7 @@ function playerStats(
 function gameState(
   gameId: string,
   fieldingEvents: FieldingEvent[],
+  atBatEvents: AtBatEvent[] = [],
 ): PersistedGameState {
   return {
     id: 'current',
@@ -99,6 +100,7 @@ function gameState(
     maxDeficitHome: 0,
     activityLog: [],
     fieldingEvents,
+    atBatEvents,
   };
 }
 
@@ -314,6 +316,60 @@ describe('season aggregator outfield arm capture', () => {
     expect(playerZ.baserunnersHeld).toBe(0);
     expect(playerZ.difficultyWeightedConversion).toBe(0);
     expect(playerZ.difficultyFieldingOpportunities).toBe(0);
+  });
+
+  test('credits rescued throws to the first baseman and basesSaved value to the base_save fielder only once', async () => {
+    const seasonId = 'field-credit-season';
+
+    await expect(
+      aggregateGameToSeason(
+        gameState(
+          'field-credit-game-1',
+          [
+            fieldingEvent('field-credit-game-1', 1, 'player-x', 'assist', {
+              atBatEventId: 'field-credit-game-1-ab-1',
+              position: 'SS',
+            }),
+            fieldingEvent('field-credit-game-1', 2, 'player-z', 'putout', {
+              atBatEventId: 'field-credit-game-1-ab-1',
+              position: '1B',
+            }),
+            fieldingEvent('field-credit-game-1', 3, 'player-y', 'base_save', {
+              atBatEventId: 'field-credit-game-1-ab-2',
+              position: 'RF',
+            }),
+          ],
+          [
+            atBat('field-credit-game-1', 1, 'GO', [], {
+              enrichment: { rescuedThrow: true, fieldingSequence: [6, 3] },
+            }),
+            atBat('field-credit-game-1', 2, '1B', [], {
+              enrichment: { basesSaved: 2 },
+            }),
+          ],
+        ),
+        { seasonId, detectMilestones: false },
+      ),
+    ).resolves.toMatchObject({ success: true });
+
+    await expect(
+      aggregateGameToSeason(
+        gameState('field-credit-game-2', []),
+        { seasonId, detectMilestones: false },
+      ),
+    ).resolves.toMatchObject({ success: true });
+
+    const thrower = await getOrCreateFieldingStats(seasonId, 'player-x', 'Player X', 'away');
+    const baseSaveFielder = await getOrCreateFieldingStats(seasonId, 'player-y', 'Player Y', 'away');
+    const firstBase = await getOrCreateFieldingStats(seasonId, 'player-z', 'Player Z', 'away');
+
+    expect(firstBase.rescuedThrowCredits).toBe(1);
+    expect(firstBase.basesSavedCredits).toBe(0);
+    expect(baseSaveFielder.rescuedThrowCredits).toBe(0);
+    expect(baseSaveFielder.basesSavedCredits).toBe(2);
+    expect(baseSaveFielder.baserunnersHeld).toBe(1);
+    expect(thrower.rescuedThrowCredits).toBe(0);
+    expect(thrower.basesSavedCredits).toBe(0);
   });
 });
 

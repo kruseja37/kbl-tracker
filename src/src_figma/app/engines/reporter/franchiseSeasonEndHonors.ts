@@ -14,6 +14,7 @@ import {
   pickRaceSnubVictims,
   type FranchiseHonorKind,
 } from '../../../../utils/franchiseRaceSnubMorale';
+import { persistRaceSnubRivalryEdges } from '../../../../utils/franchiseRelationshipEnvyCompute';
 import { isFranchisePhase2L12Enabled } from '../../../../utils/franchisePhase2Flags';
 import { emitFranchiseHonorNews } from './franchiseHonorEmission';
 
@@ -31,6 +32,14 @@ type SeasonEndHonorConfig = {
 const SEASON_END_HONORS: SeasonEndHonorConfig[] = [
   { category: 'MVP', honorKind: 'MVP', honorTier: 'mvp' },
   { category: 'CY_YOUNG', honorKind: 'CY_YOUNG', honorTier: 'cyYoung' },
+];
+
+const SEASON_END_SNUB_ONLY_HONORS: {
+  category: FranchiseAwardCategory;
+  honorKind: Extract<FranchiseHonorKind, 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR'>;
+}[] = [
+  { category: 'ROOKIE_OF_YEAR', honorKind: 'ROOKIE_OF_YEAR' },
+  { category: 'RELIEVER_OF_YEAR', honorKind: 'RELIEVER_OF_YEAR' },
 ];
 
 type SeasonEndHonorScope = {
@@ -66,6 +75,50 @@ async function loadValueReport(scope: SeasonEndHonorScope): Promise<Pick<Franchi
     return await franchiseSeasonEndHonorsSeam.getValueRows(scope);
   } catch {
     return { rows: [] };
+  }
+}
+
+async function applyRaceSnubAndEnvyEdge(
+  row: FranchiseAwardRow,
+  winnerPlayerId: string,
+  honorKind: FranchiseHonorKind,
+  teamByPlayer: Map<string, string | null>,
+  scope: SeasonEndHonorScope,
+): Promise<void> {
+  const victims = pickRaceSnubVictims(
+    row.candidates
+      .map((candidate) => ({
+        playerId: candidate.playerId,
+        teamId: teamByPlayer.get(candidate.playerId) ?? '',
+        marginToWinner: candidate.marginToWinner,
+      }))
+      .filter((candidate) => candidate.teamId !== ''),
+    new Set([winnerPlayerId]),
+    SEASON_END_SNUB_TOP_N,
+  );
+
+  try {
+    await franchiseSeasonEndHonorsSeam.applySnub({
+      victims,
+      honorKind,
+      scope,
+      timestamp: Date.parse(row.computedAt) || 0,
+    });
+  } catch {
+    // Snub payout failure must not block the next honor.
+  }
+
+  try {
+    await persistRaceSnubRivalryEdges({
+      pairs: victims.map((victim) => ({
+        snubbedPlayerId: victim.playerId,
+        honoredPlayerId: winnerPlayerId,
+      })),
+      scope,
+      timestamp: Date.parse(row.computedAt) || 0,
+    });
+  } catch {
+    // Envy-edge failure must not block the next honor.
   }
 }
 
@@ -131,27 +184,18 @@ export async function emitFranchiseSeasonEndHonors(
       // Reach-floor payout failure must not block snub payout or the next honor.
     }
 
-    try {
-      const victims = pickRaceSnubVictims(
-        row.candidates
-          .map((candidate) => ({
-            playerId: candidate.playerId,
-            teamId: teamByPlayer.get(candidate.playerId) ?? '',
-            marginToWinner: candidate.marginToWinner,
-          }))
-          .filter((candidate) => candidate.teamId !== ''),
-        new Set([winnerPlayerId]),
-        SEASON_END_SNUB_TOP_N,
-      );
-      await franchiseSeasonEndHonorsSeam.applySnub({
-        victims,
-        honorKind: honor.honorKind,
-        scope,
-        timestamp: Date.parse(row.computedAt) || 0,
-      });
-    } catch {
-      // Snub payout failure must not block the next honor.
-    }
+    await applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, teamByPlayer, scope);
+  }
+
+  for (const honor of SEASON_END_SNUB_ONLY_HONORS) {
+    const row = awards.find((award) =>
+      award.category === honor.category &&
+      award.finalized &&
+      award.winnerPlayerId,
+    );
+    if (!row?.winnerPlayerId) continue;
+
+    await applyRaceSnubAndEnvyEdge(row, row.winnerPlayerId, honor.honorKind, teamByPlayer, scope);
   }
 
   return { status: 'processed', emitted };
