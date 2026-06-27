@@ -25639,3 +25639,137 @@ Also assert each archetype has ≤2 boosts and ≤2 nerfs (documents the display
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: STREAMB-1A-ARCHETYPE-CAP ===== -->
+
+<!-- ===== CONTRACT: STREAMB-3-SHILL-SCALING — CPU shill count scales with league size + sticky override + reload-seed (Mode-1 auction only) ===== -->
+
+# CONTRACT STREAMB-3-SHILL-SCALING
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file. Full plan: `spec-docs/STREAMB_TIER1_SETUP_SPINE_PLAN.md`.
+
+**Goal:** The CPU shill (phantom bidder) count in the auction setup should DEFAULT to a value that scales with league size, stay user-overridable (override is sticky), and re-seed sensibly on reload — instead of the hardcoded `0` that resets every reload. The value already persists into the auction session at start; only the pre-start default + reload behavior are missing.
+
+**HARD GUARDRAIL (Mode-1/Mode-2 boundary):** `cpuShillCount` lives ONLY in the auction session config. Do NOT add it to `FranchiseConfig`/`StoredFranchiseConfig`/`FranchiseRulesSnapshot` or thread it into `franchiseInitializer`. It dissolves at auction end. If the only way to do this seems to require touching `FranchiseConfig`, STOP.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. `src/data/auctionEngineConstants.ts`
+Keep `DEFAULT_CPU_SHILL_COUNT = 0` (line 36) as the floor constant. Add a tunable helper below it:
+```ts
+/**
+ * §16 sim-tune / JK-PENDING (phantom-bidder count): default shill count scaled to league size.
+ * PLACEHOLDER formula — the exact count is JK's call (assembly-plan open decision); this is the
+ * tunable knob, not a final ruling. Override range in the UI is 0..(leagueSize-1) (need >=1 non-shill).
+ */
+export function scaledShillDefault(leagueSize: number): number {
+  return Math.max(0, Math.floor(leagueSize / 3));
+}
+```
+
+### 2. `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`
+- Import `scaledShillDefault`.
+- Add `const cpuCountTouchedRef = useRef(false);` near the `cpuCount` state (line ~114).
+- In the CPU COUNT input `onChange` (line ~406), set `cpuCountTouchedRef.current = true;` alongside `setCpuCount(...)`.
+- Add an effect that seeds the scaled default once the league resolves, pre-session, WITHOUT clobbering a manual override:
+```ts
+useEffect(() => {
+  if (session) return;                         // auction in progress: input is disabled
+  if (cpuCountTouchedRef.current) return;       // respect a manual override
+  if (leagueTeams.length === 0) return;
+  setCpuCount(scaledShillDefault(leagueTeams.length));
+}, [session, leagueTeams.length]);
+```
+- Do NOT change the input `max` (`Math.max(0, leagueTeams.length - 1)` is the intended bound).
+
+### 3. `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`
+Mirror the same pattern (touched-ref + seed effect) against the farm page's own `cpuCount` state (~line 218) and its league-size source. Read the file to find the correct league-teams variable; if the farm page has no equivalent pre-session league-size in scope, STOP and report rather than guessing.
+
+## Constraints
+- ZERO changes outside the 3 files. No `FranchiseConfig`/initializer touch. No new store. No DB bump. No `any`.
+- The override must be STICKY (once the user edits the field, the seed effect must never overwrite it for that mount).
+- Behavior when a session already exists must be unchanged (input stays disabled; no re-seed).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run useAuctionDraft auctionLuxuryTax cpuShillBidding cpuTeamRoles` → green (the shill/auction surface; add any test file that imports the touched pages if one exists).
+- FALSIFICATION: confirm (by reading the final code) that a manual override is not overwritten by the seed effect, and that `cpuShillCount` appears in NO franchise-config/initializer file (`grep -rn cpuShillCount src/types/franchise.ts src/utils/franchiseInitializer.ts` must be empty).
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, change nothing further, IF: the farm page has no pre-session league-size in scope; the seed effect would need to touch shared auction-session shape; or doing the scaling cleanly requires a `FranchiseConfig`/initializer change.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-3-SHILL-SCALING ===== -->
+
+<!-- ===== CONTRACT: STREAMB-2-SEAT-SPINE — couch-coop seat→team ownership write-spine (data shape + initializer consumption + unit test) ===== -->
+
+# CONTRACT STREAMB-2-SEAT-SPINE
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file. Full plan: `spec-docs/STREAMB_TIER1_SETUP_SPINE_PLAN.md`.
+
+**Goal:** Establish the couch-coop **seat→team ownership** write-spine so the Draft Setup hub (a later Tier-3 ticket) can persist "who owns which club" and it flows into franchise init. Today only a binary `selectedTeams: string[]` exists; the richer `playerAssignments` field is DEAD. This ticket gives `playerAssignments` a clear meaning (`teamId → seatId | 'cpu'`), adds a `seats` roster (couch-coop players = GM identities), and teaches the franchise initializer to derive team control from them — **backward-compatible** (when no seat data is present, behavior is byte-identical to today). Build-dark spine + unit test; the hub UI that writes it is ticket #11 (do NOT build UI here).
+
+**Seat model (already prototyped in `DraftSetupHubPreview.tsx`):** `Seat { id, name }`; each team's `ownerId = seatId | "cpu"`. Mirror that exactly.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. `src/types/franchise.ts`
+- Add a seat type near `FranchiseType` (line ~8):
+```ts
+export interface FranchiseSeat { id: string; name: string }  // couch-coop player; name = GM identity
+```
+- Extend `FranchiseConfig.teams` (lines 177-181), additive + clarifying (NO removal/rename):
+```ts
+  teams: {
+    selectedTeams: string[];
+    mode: "single" | "multiplayer";
+    playerAssignments: Record<string, string>;  // teamId -> seatId | 'cpu'
+    seats?: FranchiseSeat[];                      // couch-coop players / GM identities
+  };
+```
+(Optional `seats` → no IndexedDB version bump; `playerAssignments` type unchanged, only its meaning is documented.)
+
+### 2. `src/utils/franchiseInitializer.ts`
+Make the seat path additive. A team is "human" iff `playerAssignments[teamId]` is a seat id (truthy and !== 'cpu'); 'cpu'/unmapped → 'ai'. When NO seat assignment exists, fall back to the existing `selectedTeams` logic unchanged.
+- Add a private helper:
+```ts
+function seatSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]): string[] | null {
+  const a = config.teams.playerAssignments ?? {};
+  const hasSeatData = Object.values(a).some((v) => v && v !== 'cpu');
+  if (!hasSeatData) return null;  // no seat data → caller uses the existing selectedTeams path
+  return teams.filter((t) => { const o = a[t.teamId]; return Boolean(o) && o !== 'cpu'; }).map((t) => t.teamId);
+}
+```
+- In `buildTeamControlSnapshot` (144-171): compute `const selectedTeamIds = seatSelectedTeamIds(config, teams) ?? normalizeSelectedTeamIds(config, teams);` and use it for `selectedSet`/`controlledTeams` exactly as today. (Everything downstream is unchanged.)
+- In `deriveFranchiseType` (133-142): BEFORE the existing `selectedTeamIds.length === teams.length` line, add the couch-coop-by-seats rule (only fires when seat data exists, so existing behavior is preserved):
+```ts
+  const distinctSeatOwners = new Set(
+    Object.values(config.teams.playerAssignments ?? {}).filter((v) => v && v !== 'cpu'),
+  );
+  if (distinctSeatOwners.size >= 2) return 'couch-coop';
+```
+- EXPORT `buildTeamControlSnapshot` and `deriveFranchiseType` (add `export`) so the unit test can call them directly. Do NOT change their signatures or any other behavior. `initializeFranchise` and all existing callers must be untouched.
+
+### 3. NEW FILE `src/utils/tests/franchiseSeatAssignment.test.ts`
+Unit test for the seat-derivation (no IndexedDB — call the now-exported helpers directly with a minimal `FranchiseConfig` + `ScheduleTeam[]`). Build a `makeConfig(partialTeams)` + `makeTeams(n)` helper. Assert:
+1. **Seat path:** seats `[s1,s2]`, playerAssignments `{t1:'s1', t2:'s1', t3:'s2', t4:'cpu'}`, 4 teams → `teamControl` = `{t1:'human',t2:'human',t3:'human',t4:'ai'}`; `controlledTeams` ids = `[t1,t2,t3]`; `deriveFranchiseType` = `'couch-coop'` (2 distinct seats).
+2. **Single seat, multiple teams** → `'custom'` (1 distinct seat owns >1 team, not all teams) — confirm NOT couch-coop.
+3. **Backward-compat (no seat data):** empty `playerAssignments`, `selectedTeams:['t1']`, 3 teams → identical to today: `teamControl` `{t1:'human',t2:'ai',t3:'ai'}`, type `'solo'`; and `selectedTeams` = all teams → `'couch-coop'` (existing all-human heuristic still works).
+4. **'cpu'/unmapped → 'ai':** a team with `playerAssignments[t]==='cpu'` and a team absent from the map both resolve to `'ai'`.
+
+## Constraints
+- ZERO changes outside the 3 files. No DB version bump. No UI changes (the hub writer is #11). No `any`.
+- BACKWARD-COMPATIBLE: with empty `playerAssignments`, `buildTeamControlSnapshot`/`deriveFranchiseType` must return byte-identical results to the current code (the existing initializer tests must stay green).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run franchiseSeatAssignment franchiseInitializer FranchiseSetup franchiseSetupLaunch draftPipeline` → green (the franchise-init + setup surface; do not regress).
+- FALSIFICATION: confirm assertion #3 (backward-compat) passes — it proves the additive change didn't alter the no-seat path.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, change nothing further, IF: exporting the two helpers collides with an existing export; the additive `deriveFranchiseType` branch changes any existing initializer test's expected `franchiseType`; the `seats` field requires an IndexedDB version bump; or making this work cleanly requires touching `initializeFranchise`'s body beyond the two helper edits.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-2-SEAT-SPINE ===== -->

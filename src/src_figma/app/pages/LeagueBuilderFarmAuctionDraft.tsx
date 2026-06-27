@@ -16,6 +16,7 @@ import {
   leagueIdFromSearch,
   resolveInitialLeagueId,
 } from "../utils/draftRouting";
+import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
@@ -219,6 +220,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   const [bidIncrement, setBidIncrement] = useState(1000);
   const [bidAmount, setBidAmount] = useState("");
   const loadedKeyRef = useRef<string | null>(null);
+  const cpuCountTouchedRef = useRef(false);
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
 
   useEffect(() => {
@@ -251,6 +253,13 @@ export function LeagueBuilderFarmAuctionDraft() {
       .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
       .filter((team): team is Team => Boolean(team));
   }, [activeLeague, leagueData.teams]);
+
+  useEffect(() => {
+    if (session) return;
+    if (cpuCountTouchedRef.current) return;
+    if (leagueTeams.length === 0) return;
+    setCpuCount(scaledShillDefault(leagueTeams.length));
+  }, [session, leagueTeams.length]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
@@ -560,7 +569,10 @@ export function LeagueBuilderFarmAuctionDraft() {
                 CPU COUNT
                 <input
                   value={cpuCount}
-                  onChange={(event) => setCpuCount(Number(event.target.value) || 0)}
+                  onChange={(event) => {
+                    cpuCountTouchedRef.current = true;
+                    setCpuCount(Number(event.target.value) || 0);
+                  }}
                   disabled={Boolean(session)}
                   type="number"
                   min={0}

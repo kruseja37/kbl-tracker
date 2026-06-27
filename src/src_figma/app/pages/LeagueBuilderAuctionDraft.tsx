@@ -23,6 +23,7 @@ import {
   tiltAnalyzerFindings,
 } from "../../../engines/farmArchetypeTilt";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
+import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import {
   farmDraftRouteForLeague,
   leagueIdFromSearch,
@@ -115,6 +116,7 @@ export function LeagueBuilderAuctionDraft() {
   const [bidIncrement, setBidIncrement] = useState(5000);
   const [bidAmount, setBidAmount] = useState("");
   const loadedKeyRef = useRef<string | null>(null);
+  const cpuCountTouchedRef = useRef(false);
 
   useEffect(() => {
     if (!activeLeagueId && leagueData.leagues.length > 0) {
@@ -141,6 +143,13 @@ export function LeagueBuilderAuctionDraft() {
       .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
       .filter(Boolean);
   }, [activeLeague, leagueData.teams]);
+
+  useEffect(() => {
+    if (session) return;
+    if (cpuCountTouchedRef.current) return;
+    if (leagueTeams.length === 0) return;
+    setCpuCount(scaledShillDefault(leagueTeams.length));
+  }, [session, leagueTeams.length]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
@@ -403,7 +412,10 @@ export function LeagueBuilderAuctionDraft() {
                 CPU COUNT
                 <input
                   value={cpuCount}
-                  onChange={(event) => setCpuCount(Number(event.target.value) || 0)}
+                  onChange={(event) => {
+                    cpuCountTouchedRef.current = true;
+                    setCpuCount(Number(event.target.value) || 0);
+                  }}
                   disabled={Boolean(session)}
                   type="number"
                   min={0}
