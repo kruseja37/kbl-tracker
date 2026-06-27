@@ -16,7 +16,7 @@
 6. Conferences toggle configurable + wired to standings/playoff seeding — ♻️ RESCOPED: standings already group by `leagueDetails.conferences` (count=1=single league); seeder is conference-optional. Residual = a franchise-setup on/off affordance (Tier-3). See REFRAME.
 
 ## TIER 2 — draft seam fixes (small, independent)
-7. Farm-draft "Continue to Franchise Setup" button — NOT-BUILT, S. · 8. Freeze-confirmation dialog before START FRANCHISE — NOT-BUILT, S. · 9. Replace "two-number freeze (AUC-5.2)" copy with plain wording — NOT-BUILT, S. · 10. Draft recap (`DRAFT_RECAP` narrative type + adapter; emission LLM-gated) — NOT-BUILT, M.
+7. Farm-draft "Continue to Franchise Setup" button — ✅ BUILT (`25f6e8ec`). · 8. Freeze-confirmation dialog before START FRANCHISE — ✅ BUILT (`25f6e8ec`; +5 v1-gate tests updated). · 9. Replace "two-number freeze (AUC-5.2)" copy with plain wording — ✅ BUILT (`25f6e8ec`). · 10. Draft recap (`DRAFT_RECAP` adapter; emission LLM-gated) — ✅ BUILT (`5b269204`, build-dark, reused `OFFSEASON_NEWS`+`facts.recapKind` to avoid union/Record ripple; call-site+emission = flagged seam).
 
 ## TIER 3 — wire the redesigned screens onto live engines (after the Tier-5 merges land)
 11. Draft Setup hub / construction-rail spine wired to #1-#5 — PARTIAL, L. · 12. AuctionStage wired to live `LeagueBuilderAuctionDraft` — PARTIAL, L. · 13. Archetype picker wired to #1 (live write) — PARTIAL, M. · 14. DraftGuideCard scout halves (price band + 20-80 grade + confidence) — PARTIAL, M. · 15. Manager/beat-reporter/scout-hire ceremony screens wired — PARTIAL, M. · 16. My-teams switcher wired — PARTIAL, S. · 17. InGameAdvisor screen connected to live `evaluateScoutMove` — PARTIAL, M.
