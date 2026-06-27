@@ -44,6 +44,12 @@ import {
   type FranchiseWarAwardCategory,
 } from "../../utils/franchiseAwardsEngine";
 import {
+  loadFranchiseConditionSnapshots,
+  saveFranchiseFitness,
+  type MojoFitnessSnapshot,
+} from "../../utils/mojoFitnessStorage";
+import { FITNESS_STATES, type FitnessState } from "../../engines/fitnessEngine";
+import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
 } from "../../utils/franchisePlayerStorage";
@@ -197,6 +203,7 @@ interface RawData {
   gameStories: GameStory[];
   reporters: BeatReporter[];
   raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>;
+  conditionSnapshots: MojoFitnessSnapshot[];
 }
 
 /**
@@ -256,6 +263,8 @@ export interface UseFranchiseLensDataReturn {
   sendDown: (playerId: string, teamId: string) => Promise<LensRosterActionResult>;
   /** Execute a manual in-season trade (the engine blocks unrevealed prospects); reloads on success. */
   executeTrade: (req: LensTradeRequest) => Promise<LensRosterActionResult>;
+  /** Set a player's fitness state (carries into the next game launch, like elimination mode). */
+  setFitness: (playerId: string, state: FitnessState) => Promise<LensRosterActionResult>;
 }
 
 function isPitcher(player: Player): boolean {
@@ -330,6 +339,7 @@ interface DrawerContext {
   traitOverlaysByPlayer: Map<string, FranchiseTraitOverlayRow[]>;
   edgesByPlayer: Map<string, RelationshipEdgeRow[]>;
   fameByPlayer: Map<string, FranchiseFameRecordRow>;
+  fitnessByPlayer: Map<string, FitnessState>;
   nameById: Map<string, string>;
   currentGameNumber: number;
 }
@@ -425,6 +435,13 @@ function mojoChip(mojo: unknown): FormStateVM | undefined {
   return { label, tone };
 }
 
+// Fitness chip: the user-set condition that carries into the game (JUICED↑ … HURT↓). FIT is neutral.
+function fitnessChip(state: FitnessState): FormStateVM {
+  const tone: FormStateVM["tone"] =
+    state === "JUICED" ? "up" : state === "STRAINED" || state === "WEAK" || state === "HURT" ? "down" : "flat";
+  return { label: FITNESS_STATES[state].displayName, tone };
+}
+
 function designationEffectLine(
   designation: { label: string; kind: "gold" | "albatross" } | undefined,
 ): string | undefined {
@@ -464,6 +481,8 @@ function buildPlayerRow(player: Player, teamId: string, ctx: DrawerContext): Pla
     nickname: player.nickname,
     careerPhase: getCareerPhaseDisplayName(getCareerPhase(player.age)),
     mojo: mojoChip(player.mojo),
+    fitness: fitnessChip(ctx.fitnessByPlayer.get(player.id) ?? "FIT"),
+    fitnessState: ctx.fitnessByPlayer.get(player.id) ?? "FIT",
     personality: player.personality,
     valueTrend: valueTrend.length ? valueTrend : undefined,
     ratings: buildRatingBars(player, ctx.ratingsByPlayer.get(player.id) ?? [], ctx.currentGameNumber),
@@ -1313,7 +1332,7 @@ function buildReturn(
   statsReady: boolean,
   isLoading: boolean,
   error: string | null,
-): Omit<UseFranchiseLensDataReturn, "reload" | "callUp" | "sendDown" | "executeTrade"> {
+): Omit<UseFranchiseLensDataReturn, "reload" | "callUp" | "sendDown" | "executeTrade" | "setFitness"> {
   if (!raw || raw.teams.length === 0) {
     return {
       teams: [],
@@ -1353,7 +1372,11 @@ function buildReturn(
     gameStories,
     reporters,
     raceScores,
+    conditionSnapshots,
   } = raw;
+  const fitnessByPlayer = new Map<string, FitnessState>(
+    conditionSnapshots.map((snap) => [snap.playerId, snap.fitnessState]),
+  );
 
   const teamMeta = new Map<string, TeamMeta>(
     teams.map((team) => [team.id, { abbr: team.abbreviation, name: team.name }]),
@@ -1430,6 +1453,7 @@ function buildReturn(
     traitOverlaysByPlayer: groupByPlayer(traitOverlays),
     edgesByPlayer,
     fameByPlayer: new Map(fameRecords.map((row) => [row.playerId, row])),
+    fitnessByPlayer,
     nameById: new Map(players.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()])),
     currentGameNumber: completedGameNumbers.length ? Math.max(...completedGameNumbers) : 0,
   };
@@ -1593,6 +1617,22 @@ export function useFranchiseLensData(
     [franchiseId, seasonId, seasonNumber, reload],
   );
 
+  // Set a player's fitness (the user-controlled condition). Persists to the shared snapshot store; the
+  // franchise GameTracker roster builder reads it at launch. Reloads so the drawer chip reflects it.
+  const setFitness = useCallback(
+    async (playerId: string, state: FitnessState): Promise<LensRosterActionResult> => {
+      if (!franchiseId) return { success: false, message: "No active franchise." };
+      try {
+        await saveFranchiseFitness(franchiseId, playerId, state);
+        reload();
+        return { success: true };
+      } catch (e) {
+        return { success: false, message: e instanceof Error ? e.message : "Could not save fitness." };
+      }
+    },
+    [franchiseId, reload],
+  );
+
   useEffect(() => {
     if (!franchiseId) {
       setRaw(null);
@@ -1662,6 +1702,10 @@ export function useFranchiseLensData(
           { ...scope, seasonNumber },
           RACE_CATEGORIES,
         ).catch(() => ({}) as Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>);
+        // User-set fitness per player (carries into the game at launch). Empty until the user sets one.
+        const conditionSnapshots = await loadFranchiseConditionSnapshots(franchiseId).catch(
+          (): MojoFitnessSnapshot[] => [],
+        );
         if (cancelled) return;
         setRaw({
           config,
@@ -1685,6 +1729,7 @@ export function useFranchiseLensData(
           gameStories: gameStories ?? [],
           reporters: reporters ?? [],
           raceScores: raceScores ?? {},
+          conditionSnapshots: conditionSnapshots ?? [],
         });
         setIsLoading(false);
       } catch (caught) {
@@ -1706,8 +1751,8 @@ export function useFranchiseLensData(
     [raw, viewedTeamId, seasonNumber, statsReady, isLoading, error],
   );
   return useMemo(
-    () => ({ ...view, reload, callUp, sendDown, executeTrade }),
-    [view, reload, callUp, sendDown, executeTrade],
+    () => ({ ...view, reload, callUp, sendDown, executeTrade, setFitness }),
+    [view, reload, callUp, sendDown, executeTrade, setFitness],
   );
 }
 

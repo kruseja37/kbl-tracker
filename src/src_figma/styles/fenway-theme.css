@@ -665,6 +665,18 @@
 .fen-dform .chip { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 999px; padding: 3px 10px; }
 .fen-dform .chip.up { color: var(--fen-yellow); border-color: rgba(242, 192, 65, 0.4); }
 .fen-dform .chip.down, .fen-dform .chip.warn { color: var(--fen-marquee); border-color: rgba(204, 52, 51, 0.4); }
+
+/* editable fitness picker (the user-set condition that carries into the game) */
+.fen-fitpick { position: relative; display: inline-block; }
+.fen-fitpick-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.fen-fitpick-btn:hover { border-color: rgba(242, 192, 65, 0.5); color: var(--fen-chalk); }
+.fen-fitpick-btn .caret { opacity: 0.7; }
+.fen-fitpick-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; min-width: 170px; background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green-dk)); border: 1px solid var(--fen-yellow); border-radius: 6px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55); padding: 4px; display: flex; flex-direction: column; gap: 1px; }
+.fen-fitpick-opt { display: grid; grid-template-columns: 18px 1fr auto; align-items: baseline; gap: 8px; font-family: var(--fen-chalk-font); font-size: 13px; cursor: pointer; text-align: left; background: none; border: none; color: var(--fen-chalk-soft); border-radius: 4px; padding: 6px 9px; }
+.fen-fitpick-opt:hover { background: rgba(0, 0, 0, 0.28); color: var(--fen-chalk); }
+.fen-fitpick-opt.on { background: rgba(242, 192, 65, 0.16); color: var(--fen-chalk); }
+.fen-fitpick-opt .mu { font-size: 11px; color: var(--fen-chalk-faint); }
+
 .fen-personality { font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk); margin-bottom: 10px; }
 .fen-mods { display: flex; flex-direction: column; gap: 7px; }
 .fen-mod { display: grid; grid-template-columns: 78px 1fr 30px; align-items: center; gap: 10px; }

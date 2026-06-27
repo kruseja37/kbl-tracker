@@ -1,5 +1,6 @@
 import type { MojoLevel } from '../../../engines/mojoEngine';
 import type { FitnessState } from '../../../engines/fitnessEngine';
+import { loadFranchiseConditionSnapshots } from '../../../utils/mojoFitnessStorage';
 import { getPlayersByTeam, getTeam } from '../../../utils/leagueBuilderStorage';
 import type { LineupSlot, Player as StoredPlayer, Team } from '../../../utils/leagueBuilderStorage';
 import type { OptimalLineupSnapshot } from '../../../types/managerWpa';
@@ -321,6 +322,18 @@ export async function buildFranchiseGameTrackerRoster(
     return { players: [], pitchers: [] };
   }
 
+  // Carry the user-set fitness from the team hub into the game (mirrors the elimination snapshot flow).
+  // Non-fatal: any failure falls back to the 'FIT' default below.
+  const conditionByPlayer = new Map<string, FitnessState>();
+  if (context.franchiseId) {
+    try {
+      const snaps = await loadFranchiseConditionSnapshots(context.franchiseId);
+      for (const snap of snaps) conditionByPlayer.set(snap.playerId, snap.fitnessState);
+    } catch {
+      // leave the map empty → 'FIT' fallback
+    }
+  }
+
   const emptyBatterStats = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, k: 0 };
   const emptyPitcherStats = { ip: '0.0', h: 0, r: 0, er: 0, bb: 0, k: 0, pitches: 0 };
 
@@ -364,7 +377,7 @@ export async function buildFranchiseGameTrackerRoster(
       stats: { ...emptyBatterStats },
       battingHand: p.bats,
       mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
+      fitness: conditionByPlayer.get(p.id) ?? ('FIT' as FitnessState),
       power: p.power,
       contact: p.contact,
       speed: p.speed,
@@ -444,7 +457,7 @@ export async function buildFranchiseGameTrackerRoster(
       isStarter: isStarter || false,
       isActive: isStarter || false,
       mojo: 0 as MojoLevel,
-      fitness: 'FIT' as FitnessState,
+      fitness: conditionByPlayer.get(p.id) ?? ('FIT' as FitnessState),
       velocity: p.velocity,
       junk: p.junk,
       accuracy: p.accuracy,

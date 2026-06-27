@@ -60,6 +60,34 @@ export async function loadMojoFitnessSnapshots(
   });
 }
 
+/**
+ * Franchise condition snapshots reuse the SAME mojoFitnessSnapshots store (already in trackerDb +
+ * backup/sync), scoped by a synthetic `franchise:<franchiseId>` key in place of an eliminationId.
+ * This is the franchise analogue of the elimination-mode flow: the user sets a player's fitness on
+ * the team hub, we persist it here, and the franchise GameTracker roster builder reads it back at
+ * game launch (mirroring loadMojoFitnessSnapshots in the elimination path). No new store / no DB bump.
+ */
+export function franchiseConditionScopeId(franchiseId: string): string {
+  return `franchise:${franchiseId}`;
+}
+
+export async function saveFranchiseFitness(
+  franchiseId: string,
+  playerId: string,
+  fitnessState: FitnessState,
+  mojoLevel: MojoLevel = 0 as MojoLevel,
+): Promise<void> {
+  return saveMojoFitnessSnapshots(franchiseConditionScopeId(franchiseId), [
+    { playerId, mojoLevel, fitnessState },
+  ]);
+}
+
+export async function loadFranchiseConditionSnapshots(
+  franchiseId: string,
+): Promise<MojoFitnessSnapshot[]> {
+  return loadMojoFitnessSnapshots(franchiseConditionScopeId(franchiseId));
+}
+
 export async function deleteMojoFitnessSnapshots(
   eliminationId: string
 ): Promise<void> {

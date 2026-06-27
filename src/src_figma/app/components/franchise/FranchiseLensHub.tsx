@@ -1,5 +1,6 @@
 import { Fragment, useState } from "react";
 import { FranchiseLineupsBoard } from "./FranchiseLineupsBoard";
+import { FITNESS_STATES, type FitnessState } from "../../../../engines/fitnessEngine";
 
 /**
  * FranchiseLensHub — the aged-"Green Monster" team-lens franchise hub (redesign,
@@ -123,6 +124,7 @@ export interface PlayerDetailVM {
   retirementNote?: string;
   mojo?: FormStateVM;
   fitness?: FormStateVM;
+  fitnessState?: FitnessState;     // the raw state (for the editable picker's current selection)
   personality?: string;         // the canonical personality
   modifiers?: MakeupModVM[];    // loyalty / ambition / resilience / charisma
   valueTrend?: ValuePointVM[];
@@ -462,6 +464,7 @@ export interface FranchiseLensActions {
   onCallUp: (playerId: string, teamId: string) => Promise<RosterActionResult>;
   onSendDown: (playerId: string, teamId: string) => Promise<RosterActionResult>;
   onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
+  onSetFitness: (playerId: string, state: FitnessState) => Promise<RosterActionResult>;
 }
 /** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
 interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
@@ -599,6 +602,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
               ? () => { requestSendDown(openPlayer.id, openPlayer.name); setOpenPlayer(null); }
               : undefined
           }
+          onSetFitness={actions ? (state) => actions.onSetFitness(openPlayer.id, state) : undefined}
         />
       ) : null}
       {pendingMove && actions ? (
@@ -1545,7 +1549,43 @@ function DrawerSection({ title, hint, children }: { title: string; hint?: string
   );
 }
 
-function PlayerDrawer({ player, onClose, onSendDown }: { player: PlayerRowVM; onClose: () => void; onSendDown?: () => void }) {
+/** Best→worst, the order the user picks from. JUICED↑ … HURT↓; FIT is neutral/default. */
+const FITNESS_ORDER: FitnessState[] = ["JUICED", "FIT", "WELL", "STRAINED", "WEAK", "HURT"];
+
+/**
+ * Editable fitness chip (the franchise analogue of elimination mode's condition selector). Local
+ * state shows the pick instantly; onSet persists it (and the adapter reloads), so it carries into
+ * the next game launch. Keyed by player id by the caller so it re-inits when the drawer switches.
+ */
+function FitnessPicker({ current, onSet }: { current: FitnessState; onSet: (state: FitnessState) => Promise<RosterActionResult> }) {
+  const [sel, setSel] = useState<FitnessState>(current);
+  const [open, setOpen] = useState(false);
+  const def = FITNESS_STATES[sel];
+  const choose = (state: FitnessState) => { setSel(state); setOpen(false); void onSet(state); };
+  return (
+    <div className="fen-fitpick">
+      <button type="button" className="chip fen-fitpick-btn" onClick={() => setOpen((v) => !v)} aria-label="Set fitness">
+        Fitness · <span style={{ color: def.color }}>{def.emoji} {def.displayName}</span> <span className="caret">▾</span>
+      </button>
+      {open ? (
+        <div className="fen-fitpick-menu" role="listbox">
+          {FITNESS_ORDER.map((state) => {
+            const fd = FITNESS_STATES[state];
+            return (
+              <button type="button" key={state} className={`fen-fitpick-opt${state === sel ? " on" : ""}`} onClick={() => choose(state)} role="option" aria-selected={state === sel}>
+                <span className="ic" style={{ color: fd.color }}>{fd.emoji}</span>
+                <span className="nm">{fd.displayName}</span>
+                <span className="mu">×{fd.multiplier.toFixed(2)}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PlayerDrawer({ player, onClose, onSendDown, onSetFitness }: { player: PlayerRowVM; onClose: () => void; onSendDown?: () => void; onSetFitness?: (state: FitnessState) => Promise<RosterActionResult> }) {
   const d = player.detail;
   const m = player.morale;
   return (
@@ -1571,10 +1611,14 @@ function PlayerDrawer({ player, onClose, onSendDown }: { player: PlayerRowVM; on
             </div>
           </div>
         </div>
-        {(d?.mojo || d?.fitness || d?.retirementNote) ? (
+        {(d?.mojo || d?.fitness || d?.retirementNote || onSetFitness) ? (
           <div className="fen-dform">
             {d?.mojo ? <span className={`chip ${d.mojo.tone ?? "flat"}`}>Mojo · {d.mojo.label}</span> : null}
-            {d?.fitness ? <span className={`chip ${d.fitness.tone ?? "flat"}`}>Fitness · {d.fitness.label}</span> : null}
+            {onSetFitness ? (
+              <FitnessPicker key={player.id} current={d?.fitnessState ?? "FIT"} onSet={onSetFitness} />
+            ) : d?.fitness ? (
+              <span className={`chip ${d.fitness.tone ?? "flat"}`}>Fitness · {d.fitness.label}</span>
+            ) : null}
             {d?.retirementNote ? <span className="chip warn">{d.retirementNote}</span> : null}
           </div>
         ) : null}
