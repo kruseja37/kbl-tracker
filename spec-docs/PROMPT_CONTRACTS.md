@@ -25104,3 +25104,58 @@ folded). Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window (pos
 Full contract: `spec-docs/MWAR_STEP5A_CONTRACT.md` (derived rotation-aware next-starter resolver + opponent-next-SP profile
 resolver + make launch rotation-aware; foundation for the 5b lineups tab). DERIVED (gamesPlayed % rotationSize), no new store.
 Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.
+
+<!-- ===== CONTRACT: SIM-DBCAP-1 ===== -->
+ROUTE: codex exec -C /Users/johnkruse/Projects/kbl-soulgaps (branch claude/v1-soul-gaps).
+ROLE: Builder (Codex). The Captain (Opus) audits your diff + runs the L-SIM re-bake — do NOT run the L-SIM yourself.
+GOAL: Make the L-SIM determinism snapshot SEE the two newest franchise own-DBs. They are reset (listed in sandbox DB_NAMES_TO_DELETE) but NOT dumped — so their rows are invisible to the determinism digest + every invariant. A divergence in stadium-records or home-park-rivals (which feed fame via the hop-2 records→fame bridge) currently passes the byte-identical gate SILENTLY. This closes that blind spot.
+SOURCE OF TRUTH (Captain-grounded): test-utils/lsim/storeDump.ts:4-13 — DUMP_DATABASES is a `readonly string[]` of BARE DB-NAME strings ending `as const`; the dump auto-enumerates each DB's object stores (NO per-DB store list needed). It currently omits `kbl-franchise-stadium-records` and `kbl-franchise-home-park-rivals` (both already present in sandbox.ts DB_NAMES_TO_DELETE).
+CONSTRAINTS:
+- EDIT ONLY `test-utils/lsim/storeDump.ts`. Add EXACTLY two entries to the DUMP_DATABASES array: `'kbl-franchise-stadium-records'` and `'kbl-franchise-home-park-rivals'` (bare strings, matching the existing entry style; keep the `as const`). 
+- CONFIRM both DB-name strings against their storage modules before writing: `kbl-franchise-home-park-rivals` is `DB_NAME` in `src/utils/franchiseHomeParkRivalStorage.ts`; confirm the stadium-records DB name from its storage module. If either name does not match its storage `DB_NAME` constant, STOP and report — do not guess.
+- Do NOT touch any baseline JSON, any invariant file, sandbox.ts, or any other file. Do NOT change determinism/dump logic.
+- Branch-only on `claude/v1-soul-gaps`. Do NOT commit. Do NOT push. (The Captain commits after auditing the diff + running the L-SIM re-bake.)
+EXPECTED OUTPUT: storeDump.ts DUMP_DATABASES contains the 2 new bare-string entries; nothing else changed.
+VERIFICATION (yours): `NODE_ENV= npm run build` → exit 0. Do NOT run the L-SIM.
+FORMAT: report the exact 2-line diff of storeDump.ts + confirm the DB names against the storage files you read.
+FAILURE PROTOCOL (STOP-IF): a DB name that doesn't match its storage `DB_NAME` → STOP + report, no guess.
+Use high reasoning effort.
+<!-- ===== END CONTRACT: SIM-DBCAP-1 ===== -->
+
+<!-- ===== CONTRACT: FIELD-CREDITS-1 ===== -->
+ROUTE: codex exec -C /Users/johnkruse/Projects/kbl-soulgaps (branch claude/v1-soul-gaps).
+ROLE: Builder (Codex). The Captain (Opus) audits the real diff + runs the L-SIM re-bake — do NOT run the L-SIM yourself.
+GOAL: Two captured fielding credits — `rescuedThrow` (a 1B scoop of a bad throw) and `basesSaved` (a fielder holding a runner, value 1|2) — are PERSISTED on at-bat enrichment but NEVER aggregated into season fielding stats, so a real fielding contribution is silently dropped from season totals. Aggregate both into PlayerSeasonFielding, attributed to the CORRECT fielder. (JK-ruled v1 credits.)
+SOURCE OF TRUTH (Captain-grounded — re-verify each at point of use, the † rule):
+- PERSISTENCE confirmed: `basesSaved?: 1|2` (src/utils/eventLog.ts:432) + `rescuedThrow?: boolean` (:435) live on the persisted AtBatEvent enrichment, written via logAtBatEvent (:875-912), returned by getGameEvents (:1659-1680). seasonAggregator ALREADY fetches these via getAtBatEventsForAggregation→getGameEvents (seasonAggregator.ts:493/497) and already reads enrichment (event.enrichment?.exitType at :246/:316). NO capture/persistence change is needed — read from the already-fetched at-bat events.
+- The FieldingEvent type does NOT carry these fields → you JOIN the at-bat enrichment to the fielder.
+- ATTRIBUTION MODEL (mirror the existing code, do NOT invent):
+  * rescuedThrow → the FIRST BASEMAN (position 3) who scooped. Mirror kblWpaAttribution.ts buildBadThrowRescueRawUnits (:742-762): the credit resolves to resolveFielderForPosition(event, fieldingEvents, 3) ("First-base rescued throw"). Attribute the season credit to that position-3 fielder of the play.
+  * basesSaved → the held-runner fielder = the fielder of the `base_save` FieldingEvent for that play (the existing path: isBaserunnerHeldEvent at seasonAggregator.ts:514 feeding playerArmEvents.held at :401-402). Join the at-bat's basesSaved value to the base_save FieldingEvent's playerId via atBatEventId.
+TARGET: add two OPTIONAL counting fields to PlayerSeasonFielding (src/utils/seasonStorage.ts ~:145): `rescuedThrowCredits?: number` (count of rescued-throw plays credited to the position-3 fielder) + `basesSavedCredits?: number` (SUM of basesSaved values credited to the held-runner fielder). Default in getOrCreateFieldingStats; merge in updateFieldingStats (seasonAggregator.ts ~:438-459).
+CONSTRAINTS:
+- EDIT ONLY: src/utils/seasonStorage.ts (type + getOrCreate default) + src/utils/seasonAggregator.ts (aggregation) + the existing seasonAggregator/seasonStorage test file (add a focused test: a rescuedThrow at-bat → +1 rescuedThrowCredits on the position-3 fielder; a base_save play with basesSaved:2 → +2 basesSavedCredits on the held fielder; no double-count; players without these plays byte-unchanged). Do NOT touch eventLog, the FieldingEvent type, the WPA, or any UI/capture code.
+- ALWAYS-ON (no Phase-2 flag). Default-safe: a game with no rescuedThrow/basesSaved leaves the new fields absent/0 — existing season fielding stats must stay byte-identical for such plays.
+- Branch-only on claude/v1-soul-gaps. Do NOT commit. Do NOT push.
+EXPECTED OUTPUT: the 2 fields aggregate with the specified attribution; existing aggregation byte-unchanged for plays without these credits.
+VERIFICATION (yours): NODE_ENV= npm run build exit 0 + the affected seasonAggregator/seasonStorage test file green. Do NOT run the L-SIM (the Captain re-bakes).
+FORMAT: report the per-file diff + the exact attribution logic + confirm you mirrored buildBadThrowRescueRawUnits for rescuedThrow.
+FAILURE PROTOCOL (STOP-IF): a rescuedThrow play with no resolvable position-3 fielder, OR a basesSaved value with no corresponding base_save FieldingEvent → STOP + report the ambiguity, do NOT guess an attribution.
+Use high reasoning effort.
+<!-- ===== END CONTRACT: FIELD-CREDITS-1 ===== -->
+
+<!-- ===== CONTRACT: FIELD-CREDITS-1-FIX ===== -->
+ROUTE: codex exec -C /Users/johnkruse/Projects/kbl-soulgaps (branch claude/v1-soul-gaps). FIX-ITER on your FIELD-CREDITS-1 work (already uncommitted in the tree). The Captain audits + re-bakes.
+ROLE: Builder (Codex).
+GOAL: Soften the two runtime THROWS in `tallyRescuedThrowCredits` + `tallyBasesSavedCredits` to GRACEFUL SKIPS. A season aggregator runs on EVERY completed game in production — it must NOT throw on a single malformed play (a throw drops the whole game's fielding aggregation). Mirror the WPA's graceful pattern (`buildBadThrowRescueRawUnits` returns null on a non-matching play; it never throws).
+SOURCE OF TRUTH: src/utils/seasonAggregator.ts — the `tallyRescuedThrowCredits` + `tallyBasesSavedCredits` functions you just added.
+CHANGES:
+1. `tallyRescuedThrowCredits` — REORDER to match the WPA gating order (kblWpaAttribution.ts:747-756): FIRST `if (sequence.length < 2 || sequence[sequence.length-1] !== 3) continue;` (skip non-1B-ending plays), THEN resolve `firstBase`. If a genuine 1B-ending rescuedThrow play has NO position-3 fielder → `continue` (skip; optional console.warn) — REMOVE the `throw`.
+2. `tallyBasesSavedCredits` — if a basesSaved at-bat has not exactly one base_save FieldingEvent → `continue` (skip; optional console.warn) — REMOVE the `throw`.
+3. Keep the happy-path credit/attribution logic IDENTICAL (rescuedThrow → position-3 fielder +1; basesSaved → the base_save fielder + the 1|2 value). The existing test must stay green.
+CONSTRAINTS: EDIT ONLY src/utils/seasonAggregator.ts (the 2 tally functions). Optionally add ONE test asserting a malformed play (rescuedThrow with no position-3 fielder) is SKIPPED (no throw, no credit, existing stats unchanged). Branch-only; do NOT commit/push.
+VERIFICATION (yours): NODE_ENV= npm run build exit 0 + src/utils/tests/seasonAggregator.outfieldArm.test.ts green. Do NOT run the L-SIM.
+FORMAT: report the diff of the 2 functions + confirm ZERO `throw` remains in either tally.
+FAILURE PROTOCOL (STOP-IF): none expected; if the WPA gating order can't be cleanly mirrored, report what you found.
+Use high reasoning effort.
+<!-- ===== END CONTRACT: FIELD-CREDITS-1-FIX ===== -->
