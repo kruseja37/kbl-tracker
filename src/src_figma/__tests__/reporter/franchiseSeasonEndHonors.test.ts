@@ -326,7 +326,7 @@ describe('emitFranchiseSeasonEndHonors', () => {
     expect(seam.applySnub).not.toHaveBeenCalled();
   });
 
-  test('processes MVP and CY Young independently', async () => {
+  test('aggregates MVP and CY Young winner reach-floor while preserving emit and snub per category', async () => {
     setFranchisePhase2L12EnabledForTests(true);
     const seam = installSeamMocks({
       awards: [
@@ -354,19 +354,27 @@ describe('emitFranchiseSeasonEndHonors', () => {
 
     expect(result).toEqual({ status: 'processed', emitted: ['MVP', 'CY_YOUNG'] });
     expect(seam.emit).toHaveBeenCalledTimes(2);
-    expect(seam.applyReachFloor).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      honorees: [{ playerId: 'player-mvp', honorTier: 'mvp' }],
-    }));
-    expect(seam.applyReachFloor).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      honorees: [{ playerId: 'pitcher-cy', honorTier: 'cyYoung' }],
-    }));
+    expect(seam.applyReachFloor).toHaveBeenCalledTimes(1);
+    expect(seam.applyReachFloor).toHaveBeenCalledWith({
+      honorees: [
+        { playerId: 'player-mvp', honorTier: 'mvp' },
+        { playerId: 'pitcher-cy', honorTier: 'cyYoung' },
+      ],
+      scope: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        statsScopeId: 'season-1',
+      },
+      checkpointSentinel: 'season-end-honor',
+    });
+    expect(seam.applySnub).toHaveBeenCalledTimes(2);
     expect(seam.applySnub).toHaveBeenNthCalledWith(2, expect.objectContaining({
       victims: [{ playerId: 'pitcher-runner', teamId: 'team-pitcher-runner' }],
       honorKind: 'CY_YOUNG',
     }));
   });
 
-  test('applies Rookie of the Year snub payout without winner-side honor payout', async () => {
+  test('applies Rookie of the Year winner-side reach-floor and snub payout without news', async () => {
     setFranchisePhase2L12EnabledForTests(true);
     const computedAt = '2026-10-02T12:00:00.000Z';
     const seam = installSeamMocks({
@@ -395,7 +403,15 @@ describe('emitFranchiseSeasonEndHonors', () => {
 
     expect(result).toEqual({ status: 'processed', emitted: [] });
     expect(seam.emit).not.toHaveBeenCalled();
-    expect(seam.applyReachFloor).not.toHaveBeenCalled();
+    expect(seam.applyReachFloor).toHaveBeenCalledWith({
+      honorees: [{ playerId: 'rookie-winner', honorTier: 'rookie' }],
+      scope: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        statsScopeId: 'season-1',
+      },
+      checkpointSentinel: 'season-end-honor',
+    });
     expect(seam.applySnub).toHaveBeenCalledTimes(1);
     expect(seam.applySnub).toHaveBeenCalledWith({
       victims: [
@@ -406,6 +422,56 @@ describe('emitFranchiseSeasonEndHonors', () => {
       scope,
       timestamp: Date.parse(computedAt),
     });
+  });
+
+  test('collects duplicate player award wins so reach-floor can stack additively', async () => {
+    setFranchisePhase2L12EnabledForTests(true);
+    const seam = installSeamMocks({
+      awards: [
+        awardRow({
+          winnerPlayerId: 'dual-winner',
+          candidates: [
+            { playerId: 'dual-winner', score: 10, marginToWinner: 0 },
+            { playerId: 'mvp-runner', score: 9.5, marginToWinner: 0.5 },
+          ],
+        }),
+        awardRow({
+          category: 'SILVER_SLUGGER',
+          winnerPlayerId: 'dual-winner',
+          candidates: [
+            { playerId: 'dual-winner', score: 7, marginToWinner: 0 },
+            { playerId: 'slug-runner', score: 6.9, marginToWinner: 0.1 },
+          ],
+        }),
+      ],
+      valueRows: [
+        { playerId: 'dual-winner', currentTeamId: 'team-dual' },
+        { playerId: 'mvp-runner', currentTeamId: 'team-mvp-runner' },
+        { playerId: 'slug-runner', currentTeamId: 'team-slug-runner' },
+      ],
+    });
+
+    const result = await emitFranchiseSeasonEndHonors(scope);
+
+    expect(result).toEqual({ status: 'processed', emitted: ['MVP'] });
+    expect(seam.emit).toHaveBeenCalledTimes(1);
+    expect(seam.applyReachFloor).toHaveBeenCalledTimes(1);
+    expect(seam.applyReachFloor).toHaveBeenCalledWith({
+      honorees: [
+        { playerId: 'dual-winner', honorTier: 'mvp' },
+        { playerId: 'dual-winner', honorTier: 'silverSlugger' },
+      ],
+      scope: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        statsScopeId: 'season-1',
+      },
+      checkpointSentinel: 'season-end-honor',
+    });
+    expect(seam.applySnub).toHaveBeenCalledTimes(1);
+    expect(seam.applySnub).toHaveBeenCalledWith(expect.objectContaining({
+      honorKind: 'MVP',
+    }));
   });
 
   test('snub failure does not block the next honor', async () => {
@@ -440,7 +506,7 @@ describe('emitFranchiseSeasonEndHonors', () => {
 
     expect(result).toEqual({ status: 'processed', emitted: ['MVP', 'CY_YOUNG'] });
     expect(seam.emit).toHaveBeenCalledTimes(2);
-    expect(seam.applyReachFloor).toHaveBeenCalledTimes(2);
+    expect(seam.applyReachFloor).toHaveBeenCalledTimes(1);
     expect(seam.applySnub).toHaveBeenCalledTimes(2);
     expect(seam.applySnub).toHaveBeenNthCalledWith(2, expect.objectContaining({
       honorKind: 'CY_YOUNG',

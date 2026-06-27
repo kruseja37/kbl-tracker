@@ -78,11 +78,25 @@ describe('franchise honor reach-floor ratchet', () => {
     expect(applyHonorHeatBump(10, 5)).not.toBe(applyHeatUpdate(10, 5));
   });
 
-  test('honorHeatBump ladder is monotonic from MVP down through All-Star reserve', () => {
+  test('honorHeatBump award prestige ladder is monotonic and positive', () => {
     expect(FAME_TUNING.honorHeatBump.mvp)
       .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.cyYoung);
     expect(FAME_TUNING.honorHeatBump.cyYoung)
-      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.allStarStarter);
+      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.silverSlugger);
+    expect(FAME_TUNING.honorHeatBump.silverSlugger)
+      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.goldGlove);
+    expect(FAME_TUNING.honorHeatBump.goldGlove)
+      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.rookie);
+    expect(FAME_TUNING.honorHeatBump.rookie)
+      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.reliever);
+    expect(FAME_TUNING.honorHeatBump.reliever)
+      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.benchPlayer);
+    expect(FAME_TUNING.honorHeatBump.benchPlayer)
+      .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.boogerGlove);
+    expect(FAME_TUNING.honorHeatBump.boogerGlove).toBeGreaterThan(0);
+  });
+
+  test('honorHeatBump All-Star ladder keeps starter above reserve', () => {
     expect(FAME_TUNING.honorHeatBump.allStarStarter)
       .toBeGreaterThanOrEqual(FAME_TUNING.honorHeatBump.allStarReserve);
   });
@@ -163,6 +177,37 @@ describe('franchise honor reach-floor ratchet', () => {
         ...oldRow,
         heat: newHeat,
         reachFloor: newReachFloor,
+        updatedAtCheckpoint: sentinel,
+      },
+    ]);
+  });
+
+  test('duplicate-player honors stack additively in one save', async () => {
+    setFranchisePhase2L12EnabledForTests(true);
+    setFranchisePhase2FameEnabledForTests(true);
+    const oldRow = fameRow('dup', { heat: 4, reachFloor: 1 });
+    const { getRecord, saveRecords } = mockSeam({ dup: oldRow });
+    const sentinel = 'season-end-honor';
+    const summedBump = FAME_TUNING.honorHeatBump.mvp + FAME_TUNING.honorHeatBump.cyYoung;
+
+    const result = await applyFranchiseHonorReachFloor({
+      honorees: [
+        { playerId: 'dup', honorTier: 'mvp' },
+        { playerId: 'dup', honorTier: 'cyYoung' },
+      ],
+      scope,
+      checkpointSentinel: sentinel,
+    });
+
+    expect(result).toEqual({ status: 'ratcheted', ratchetedCount: 1 });
+    expect(getRecord).toHaveBeenCalledTimes(1);
+    expect(getRecord).toHaveBeenCalledWith(scope, 'dup');
+    expect(saveRecords).toHaveBeenCalledTimes(1);
+    expect(saveRecords).toHaveBeenCalledWith([
+      {
+        ...oldRow,
+        heat: applyHonorHeatBump(oldRow.heat, summedBump),
+        reachFloor: Math.max(oldRow.reachFloor, FAME_TIER_RANK.REGIONAL_STAR),
         updatedAtCheckpoint: sentinel,
       },
     ]);

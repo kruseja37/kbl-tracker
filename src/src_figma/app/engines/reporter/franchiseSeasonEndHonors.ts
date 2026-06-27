@@ -17,29 +17,35 @@ import {
 import { persistRaceSnubRivalryEdges } from '../../../../utils/franchiseRelationshipEnvyCompute';
 import { isFranchisePhase2L12Enabled } from '../../../../utils/franchisePhase2Flags';
 import { emitFranchiseHonorNews } from './franchiseHonorEmission';
+import type { FranchiseHonorKind as FranchiseHonorNewsKind } from './franchiseL12AwardNewsAdapter';
 
 const SEASON_END_SNUB_TOP_N = 3;
 const SEASON_END_HONOR_SENTINEL = 'season-end-honor';
 
-type SeasonEndHonorKind = Extract<FranchiseHonorKind, 'MVP' | 'CY_YOUNG'>;
+type SeasonEndHonorKind = Extract<FranchiseHonorNewsKind, 'MVP' | 'CY_YOUNG'>;
 
-type SeasonEndHonorConfig = {
+type SeasonEndHonorBaseConfig = {
   category: FranchiseAwardCategory;
-  honorKind: SeasonEndHonorKind;
-  honorTier: Extract<FranchiseHonorTier, 'mvp' | 'cyYoung'>;
+  honorTier: FranchiseHonorTier;
 };
 
-const SEASON_END_HONORS: SeasonEndHonorConfig[] = [
-  { category: 'MVP', honorKind: 'MVP', honorTier: 'mvp' },
-  { category: 'CY_YOUNG', honorKind: 'CY_YOUNG', honorTier: 'cyYoung' },
-];
+type SeasonEndHonorConfig = SeasonEndHonorBaseConfig & {
+  honorKind: SeasonEndHonorKind;
+  emitsNews: true;
+} | SeasonEndHonorBaseConfig & {
+  honorKind?: FranchiseHonorKind;
+  emitsNews: false;
+};
 
-const SEASON_END_SNUB_ONLY_HONORS: {
-  category: FranchiseAwardCategory;
-  honorKind: Extract<FranchiseHonorKind, 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR'>;
-}[] = [
-  { category: 'ROOKIE_OF_YEAR', honorKind: 'ROOKIE_OF_YEAR' },
-  { category: 'RELIEVER_OF_YEAR', honorKind: 'RELIEVER_OF_YEAR' },
+const PLAYER_AWARD_HONORS: SeasonEndHonorConfig[] = [
+  { category: 'MVP', honorTier: 'mvp', honorKind: 'MVP', emitsNews: true },
+  { category: 'CY_YOUNG', honorTier: 'cyYoung', honorKind: 'CY_YOUNG', emitsNews: true },
+  { category: 'ROOKIE_OF_YEAR', honorTier: 'rookie', honorKind: 'ROOKIE_OF_YEAR', emitsNews: false },
+  { category: 'RELIEVER_OF_YEAR', honorTier: 'reliever', honorKind: 'RELIEVER_OF_YEAR', emitsNews: false },
+  { category: 'GOLD_GLOVE', honorTier: 'goldGlove', emitsNews: false },
+  { category: 'SILVER_SLUGGER', honorTier: 'silverSlugger', emitsNews: false },
+  { category: 'BENCH_PLAYER', honorTier: 'benchPlayer', emitsNews: false },
+  { category: 'BOOGER_GLOVE', honorTier: 'boogerGlove', emitsNews: false },
 ];
 
 type SeasonEndHonorScope = {
@@ -131,8 +137,14 @@ export async function emitFranchiseSeasonEndHonors(
   const valueReport = await loadValueReport(scope);
   const teamByPlayer = new Map(valueReport.rows.map((row) => [row.playerId, row.currentTeamId]));
   const emitted: string[] = [];
+  const fameScope = {
+    franchiseId: scope.franchiseId,
+    seasonId: scope.seasonId,
+    statsScopeId: scope.statsScopeId,
+  };
+  const fameHonorees: { playerId: string; honorTier: FranchiseHonorTier }[] = [];
 
-  for (const honor of SEASON_END_HONORS) {
+  for (const honor of PLAYER_AWARD_HONORS) {
     const row = awards.find((award) =>
       award.category === honor.category &&
       award.finalized &&
@@ -144,58 +156,53 @@ export async function emitFranchiseSeasonEndHonors(
     const winnerTeamId = teamByPlayer.get(winnerPlayerId) ?? null;
     if (winnerTeamId === null) continue;
 
-    let nodEmitted = false;
-    try {
-      const emitResult = await franchiseSeasonEndHonorsSeam.emit({
-        honorInput: {
-          franchiseId: scope.franchiseId,
-          seasonId: scope.seasonId,
-          seasonNumber: scope.seasonNumber,
-          honorKind: honor.honorKind,
-          triggerPhase: 'season-end',
-          subjectIds: [winnerPlayerId],
-          facts: { winnerId: winnerPlayerId },
-        },
-        teamId: winnerTeamId,
-      });
-      nodEmitted = emitResult.status === 'emitted';
-    } catch {
-      nodEmitted = false;
+    if (honor.emitsNews && honor.honorKind) {
+      let nodEmitted = false;
+      try {
+        const emitResult = await franchiseSeasonEndHonorsSeam.emit({
+          honorInput: {
+            franchiseId: scope.franchiseId,
+            seasonId: scope.seasonId,
+            seasonNumber: scope.seasonNumber,
+            honorKind: honor.honorKind,
+            triggerPhase: 'season-end',
+            subjectIds: [winnerPlayerId],
+            facts: { winnerId: winnerPlayerId },
+          },
+          teamId: winnerTeamId,
+        });
+        nodEmitted = emitResult.status === 'emitted';
+      } catch {
+        nodEmitted = false;
+      }
+
+      if (nodEmitted) emitted.push(honor.honorKind as SeasonEndHonorKind);
     }
 
-    if (nodEmitted) emitted.push(honor.honorKind);
-
     try {
-      const fameScope = {
-        franchiseId: scope.franchiseId,
-        seasonId: scope.seasonId,
-        statsScopeId: scope.statsScopeId,
-      };
       const fameRecord = await franchiseSeasonEndHonorsSeam.getFameRecord(fameScope, winnerPlayerId);
-      // MVP and CY share one season-end checkpoint field; a dual winner receives one reach-floor bump.
       if (fameRecord?.updatedAtCheckpoint !== SEASON_END_HONOR_SENTINEL) {
-        await franchiseSeasonEndHonorsSeam.applyReachFloor({
-          honorees: [{ playerId: winnerPlayerId, honorTier: honor.honorTier }],
-          scope: fameScope,
-          checkpointSentinel: SEASON_END_HONOR_SENTINEL,
-        });
+        fameHonorees.push({ playerId: winnerPlayerId, honorTier: honor.honorTier });
       }
     } catch {
-      // Reach-floor payout failure must not block snub payout or the next honor.
+      // Fame lookup failure must not block snub payout or the next honor.
     }
 
-    await applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, teamByPlayer, scope);
+    if (honor.honorKind) {
+      await applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, teamByPlayer, scope);
+    }
   }
 
-  for (const honor of SEASON_END_SNUB_ONLY_HONORS) {
-    const row = awards.find((award) =>
-      award.category === honor.category &&
-      award.finalized &&
-      award.winnerPlayerId,
-    );
-    if (!row?.winnerPlayerId) continue;
-
-    await applyRaceSnubAndEnvyEdge(row, row.winnerPlayerId, honor.honorKind, teamByPlayer, scope);
+  if (fameHonorees.length > 0) {
+    try {
+      await franchiseSeasonEndHonorsSeam.applyReachFloor({
+        honorees: fameHonorees,
+        scope: fameScope,
+        checkpointSentinel: SEASON_END_HONOR_SENTINEL,
+      });
+    } catch {
+      // Reach-floor payout failure must not block season-end honor processing.
+    }
   }
 
   return { status: 'processed', emitted };

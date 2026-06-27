@@ -2,7 +2,17 @@ import { FAME_TIER_RANK, FAME_TUNING, applyHonorHeatBump } from '../engines/fame
 import { getFranchiseFameRecord, saveFranchiseFameRecordRows } from './franchiseFameRecordsStorage';
 import { isFranchisePhase2FameEnabled, isFranchisePhase2L12Enabled } from './franchisePhase2Flags';
 
-export type FranchiseHonorTier = 'mvp' | 'cyYoung' | 'allStarStarter' | 'allStarReserve';
+export type FranchiseHonorTier =
+  | 'mvp'
+  | 'cyYoung'
+  | 'silverSlugger'
+  | 'goldGlove'
+  | 'rookie'
+  | 'reliever'
+  | 'benchPlayer'
+  | 'boogerGlove'
+  | 'allStarStarter'
+  | 'allStarReserve';
 
 export const franchiseHonorReachFloorSeam = {
   getRecord: getFranchiseFameRecord,
@@ -24,13 +34,21 @@ export async function applyFranchiseHonorReachFloor(params: {
     return { status: 'dark-noop', ratchetedCount: 0, reason: 'Fame disabled (no record substrate)' };
   }
 
-  let ratchetedCount = 0;
+  const bumpByPlayerId = new Map<string, number>();
   for (const honoree of params.honorees) {
-    const row = await franchiseHonorReachFloorSeam.getRecord(params.scope, honoree.playerId);
+    bumpByPlayerId.set(
+      honoree.playerId,
+      (bumpByPlayerId.get(honoree.playerId) ?? 0) + FAME_TUNING.honorHeatBump[honoree.honorTier],
+    );
+  }
+
+  let ratchetedCount = 0;
+  for (const [playerId, summedBump] of bumpByPlayerId) {
+    const row = await franchiseHonorReachFloorSeam.getRecord(params.scope, playerId);
     // No fame record yet means there is no existing row to ratchet.
     if (!row) continue;
 
-    const newHeat = applyHonorHeatBump(row.heat, FAME_TUNING.honorHeatBump[honoree.honorTier]);
+    const newHeat = applyHonorHeatBump(row.heat, summedBump);
     const newReachFloor = Math.max(row.reachFloor, FAME_TIER_RANK.REGIONAL_STAR);
     await franchiseHonorReachFloorSeam.saveRecords([
       {

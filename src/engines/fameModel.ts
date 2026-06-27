@@ -128,6 +128,13 @@ export const FAME_TUNING = {
   honorHeatBump: {
     mvp: 12,
     cyYoung: 10,
+    // #18 winner-honors: per-award prestige. Placeholder magnitudes — §16 balance-tuning owns the final numbers. Dubious-award (boogerGlove) fame treatment is a JK/§16 open-decision.
+    silverSlugger: 8, // #18 placeholder prestige — §16-tunable
+    goldGlove: 7, // #18 placeholder prestige — §16-tunable
+    rookie: 6, // #18 placeholder prestige — §16-tunable
+    reliever: 5, // #18 placeholder prestige — §16-tunable
+    benchPlayer: 3, // #18 placeholder prestige — §16-tunable
+    boogerGlove: 2, // #18 placeholder prestige — §16-tunable; DUBIOUS award (worst fielder) — small positive notoriety, §16/JK open-decision.
     allStarStarter: 6,
     allStarReserve: 3,
   },
