@@ -95,25 +95,32 @@ import type { StoredFranchiseConfig } from "../../types/franchise";
 import type {
   ActiveTeamVM,
   AlmanacVM,
+  CeremonyMomentVM,
   CheckpointPlayerVM,
   CheckpointVM,
   FameVM,
+  FarmPlayerVM,
   FormStateVM,
   GameRecapVM,
   HubVM,
+  ImpactCardVM,
   LeaderboardVM,
   LeaderEntryVM,
   MakeupModVM,
+  MomentsVM,
   MoraleHistoryVM,
   NewsVM,
+  NextGameVM,
   PlayerDetailVM,
   PlayerMoraleVM,
   PlayerRowVM,
   PulseVM,
   RatingBarVM,
   RatingChangeVM,
+  RosterExtrasVM,
   ScheduleGameVM,
   ScheduleVM,
+  SeasonHomeVM,
   SprayRoleVM,
   StadiumVM,
   StandingRowVM,
@@ -786,6 +793,159 @@ function buildCheckpointVM(
   };
 }
 
+/* ===== Stream A finish: Clubhouse home + roster extras (the farm) + moment takeovers ===== */
+function buildNextGameVM(
+  schedule: ScheduledGame[],
+  activeTeamId: string,
+  standingByTeam: Map<string, TeamStanding>,
+  teamMeta: Map<string, TeamMeta>,
+): NextGameVM | undefined {
+  const next = schedule
+    .filter((g) => !g.result && (g.homeTeamId === activeTeamId || g.awayTeamId === activeTeamId))
+    .sort((a, b) => a.gameNumber - b.gameNumber)[0];
+  if (!next) return undefined;
+  const rec = (teamId: string) => {
+    const s = standingByTeam.get(teamId);
+    return s ? `${s.wins}-${s.losses}` : "0-0";
+  };
+  const nameOf = (teamId: string) => teamMeta.get(teamId)?.name ?? teamId;
+  const abbrOf = (teamId: string) => teamMeta.get(teamId)?.abbr ?? teamId;
+  return {
+    awayName: nameOf(next.awayTeamId),
+    awayAbbr: abbrOf(next.awayTeamId),
+    awayRecord: rec(next.awayTeamId),
+    homeName: nameOf(next.homeTeamId),
+    homeAbbr: abbrOf(next.homeTeamId),
+    homeRecord: rec(next.homeTeamId),
+    meta: next.date ? `Up next · ${next.date}` : "Up next",
+  };
+}
+
+function buildHomeVM(
+  seasonNews: SeasonNewsItem[],
+  schedule: ScheduledGame[],
+  activeTeam: Team,
+  standingByTeam: Map<string, TeamStanding>,
+  teamMeta: Map<string, TeamMeta>,
+  checkpoint: CheckpointVM | undefined,
+  fanMoraleValue: number | undefined,
+  byline: string,
+): SeasonHomeVM | undefined {
+  const topNews = [...seasonNews].sort((a, b) => b.dramaticWeight - a.dramaticWeight)[0];
+  const leadStory = topNews
+    ? { kicker: prettyEvent(topNews.eventType), headline: topNews.headline, body: topNews.body, byline }
+    : undefined;
+
+  const impactCards: ImpactCardVM[] = [];
+  if (checkpoint) {
+    impactCards.push({
+      kind: "dated",
+      icon: "📋",
+      title: `${checkpoint.label} — development to enter`,
+      detail: `${checkpoint.players.length} player change${checkpoint.players.length === 1 ? "" : "s"} to transcribe into SMB4 at ${checkpoint.pctLabel ?? "this checkpoint"}.`,
+      cta: "Open the worklist",
+      action: "checkpoint",
+    });
+  }
+  const standing = standingByTeam.get(activeTeam.id);
+  if (standing && standing.wins + standing.losses > 0) {
+    const winning = standing.winPct >= 0.5;
+    impactCards.push({
+      kind: winning ? "good" : "info",
+      icon: winning ? "📈" : "📊",
+      title: `${standing.wins}-${standing.losses}${standing.streak.count > 0 ? ` · ${standing.streak.type}${standing.streak.count}` : ""}`,
+      detail: winning ? "Above .500 — the club is in the hunt." : "Fighting to climb the standings.",
+    });
+  }
+  const lastPlayed = schedule
+    .filter((g) => g.result && (g.homeTeamId === activeTeam.id || g.awayTeamId === activeTeam.id))
+    .sort((a, b) => b.gameNumber - a.gameNumber)[0];
+  if (lastPlayed?.result) {
+    const home = lastPlayed.homeTeamId === activeTeam.id;
+    const us = home ? lastPlayed.result.homeScore : lastPlayed.result.awayScore;
+    const them = home ? lastPlayed.result.awayScore : lastPlayed.result.homeScore;
+    const won = lastPlayed.result.winningTeamId === activeTeam.id;
+    const oppAbbr = teamMeta.get(home ? lastPlayed.awayTeamId : lastPlayed.homeTeamId)?.abbr ?? "OPP";
+    impactCards.push({
+      kind: won ? "good" : "info",
+      icon: won ? "✅" : "▫️",
+      title: `${won ? "Beat" : "Lost to"} ${oppAbbr} ${us}-${them}`,
+      detail: won ? "Last time out — a win in the book." : "Last time out — back at it next game.",
+    });
+  }
+  if (fanMoraleValue != null && fanMoraleValue < 40) {
+    impactCards.push({
+      kind: "crisis",
+      icon: "🔥",
+      title: "The crowd is restless",
+      detail: `Fan morale has slipped to ${Math.round(fanMoraleValue)}. A few wins would settle them.`,
+    });
+  }
+
+  const nextGame = buildNextGameVM(schedule, activeTeam.id, standingByTeam, teamMeta);
+  if (!leadStory && impactCards.length === 0 && !nextGame) return undefined;
+  return { leadStory, impactCards, nextGame };
+}
+
+function farmReadiness(grade: string): string {
+  const g = grade.charAt(0).toUpperCase();
+  if (g === "A" || g === "B") return "MLB-ready";
+  if (g === "C") return "needs a year";
+  return "raw";
+}
+
+function buildRosterExtrasVM(
+  players: Player[],
+  activeTeamId: string,
+  payroll: number,
+  mlbCount: number,
+): RosterExtrasVM | undefined {
+  const farmPlayers = players.filter((p) =>
+    p.leagueAssignments?.some((a) => a.teamId === activeTeamId && a.rosterStatus === "FARM"),
+  );
+  const farm: FarmPlayerVM[] = farmPlayers.map((p) => {
+    const grade = String(p.overallGrade ?? "");
+    const readiness = farmReadiness(grade);
+    return {
+      id: p.id,
+      position: p.primaryPosition,
+      name: `${p.firstName} ${p.lastName}`.trim(),
+      grade: grade || undefined,
+      age: p.age,
+      readiness,
+      callUpReady: readiness === "MLB-ready",
+    };
+  });
+  const capNote = `${mlbCount}/22 active · ${farm.length}/10 farm · ${money(payroll)} payroll`;
+  if (farm.length === 0) return { capNote };
+  return { farm, capNote };
+}
+
+function buildMomentsVM(
+  championships: ChampionshipRecord[],
+  awards: AwardWinner[],
+  teamMeta: Map<string, TeamMeta>,
+): MomentsVM | undefined {
+  // Best-effort: surface a season-end ceremony if a champion exists. The firing / rebrand / random-event
+  // takeovers fire from L11/rebrand/L10 engines that are dark or empty on a normal save — left undefined.
+  const champ = [...championships].sort((a, b) => b.year - a.year)[0];
+  if (!champ) return undefined;
+  const ceremony: CeremonyMomentVM = {
+    title: `${champ.year} Championship`,
+    champion: champ.champion,
+    awards: awards
+      .filter((a) => a.year === champ.year)
+      .slice(0, 8)
+      .map((a) => ({
+        category: prettyEvent(a.awardType),
+        winner: a.playerName,
+        teamAbbr: teamMeta.get(a.teamId)?.abbr ?? a.teamId,
+      })),
+    note: champ.mvp ? `Series MVP: ${champ.mvp}` : undefined,
+  };
+  return { ceremony };
+}
+
 function buildReturn(
   raw: RawData | null,
   viewedTeamId: string | undefined,
@@ -931,16 +1091,31 @@ function buildReturn(
   };
 
   const activeReporter = reporters.find((reporter) => reporter.teamId === activeTeam.id);
+  const byline = activeReporter ? activeReporter.name : "the Tootwhistle desk";
+  const payroll = teamPlayers.reduce((sum, player) => sum + (Number(player.salary) || 0), 0);
+  const checkpointVM = buildCheckpointVM(ratingsOverlays, traitOverlays, players);
 
   const hub: HubVM = {
+    home: buildHomeVM(
+      seasonNews,
+      schedule,
+      activeTeam,
+      standingByTeam,
+      teamMeta,
+      checkpointVM,
+      fanSnapshot?.currentValue,
+      byline,
+    ),
     pulse: buildPulse(teamPlayers, activeTeam.id, fanSnapshot, standings),
     roster,
+    rosterExtras: buildRosterExtrasVM(players, activeTeam.id, payroll, teamPlayers.length),
     standings: buildStandingsVM(teams, standingByTeam, config),
     stadium: buildStadiumVM(activeTeam),
     schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
     almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, championships, awards),
     news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
-    checkpoint: buildCheckpointVM(ratingsOverlays, traitOverlays, players),
+    checkpoint: checkpointVM,
+    moments: buildMomentsVM(championships, awards, teamMeta),
     loading: false,
   };
 

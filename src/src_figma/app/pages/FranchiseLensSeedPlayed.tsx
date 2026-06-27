@@ -99,7 +99,10 @@ export function FranchiseLensSeedPlayed() {
         const pairings = roundRobinPairings(LENS_DEMO_TEAMS.map((t) => t.id));
         const totalGames = pairings.length * cycles;
         const gamesPerTeam = (LENS_DEMO_TEAMS.length - 1) * cycles;
-        setTotal(totalGames);
+        // Play ~80% so the season reads mid-stream: standings/stats populate, but some games stay
+        // upcoming (so the Clubhouse "next game" cockpit + schedule have something ahead).
+        const playThrough = Math.max(1, Math.floor(totalGames * 0.8));
+        setTotal(playThrough);
 
         setStatus("seeding league + franchise…");
         const seeded = await seedDemoFranchise(gamesPerTeam);
@@ -153,7 +156,7 @@ export function FranchiseLensSeedPlayed() {
         enableLivingSeasonFlags();
         const processOptions = { seasonId, gamesPerTeam, seasonTotalGames: totalGames };
 
-        for (let gameNumber = 1; gameNumber <= totalGames; gameNumber += 1) {
+        for (let gameNumber = 1; gameNumber <= playThrough; gameNumber += 1) {
           const row = scheduleByGameNumber.get(gameNumber)!;
           const home = sideByTeam.get(row.homeTeamId)!;
           const away = sideByTeam.get(row.awayTeamId)!;
