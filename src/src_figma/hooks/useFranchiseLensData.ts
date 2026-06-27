@@ -663,6 +663,18 @@ function buildTradesVM(
       return nameById.get(key) ?? key;
     });
   };
+  // The trade transaction embeds the moved players as objects carrying playerName; prefer those, and
+  // fall back to resolving the id arrays. (The engine writes sourcePlayers/targetPlayers + the
+  // playersFromSource/playersFromTarget id arrays — NOT the team1/playersFromTeam1 shape.)
+  const namesFromEmbedded = (arr: unknown): string[] =>
+    Array.isArray(arr)
+      ? arr
+          .map((p) => {
+            const rec = (p ?? {}) as Record<string, unknown>;
+            return String(rec.playerName ?? rec.name ?? "");
+          })
+          .filter(Boolean)
+      : [];
   const formatDate = (iso: string): string => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
@@ -674,15 +686,20 @@ function buildTradesVM(
     .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
     .map((txn) => {
       const data = (txn.data ?? {}) as Record<string, unknown>;
-      const team1Id = String(data.team1 ?? "");
-      const team2Id = String(data.team2 ?? "");
-      const cashRaw = Number(data.cash);
-      const cash = Number.isFinite(cashRaw) && cashRaw !== 0 ? cashRaw : undefined;
+      const team1Id = String(data.sourceTeamId ?? data.team1 ?? "");
+      const team2Id = String(data.targetTeamId ?? data.team2 ?? "");
+      const team1Players = namesFromEmbedded(data.sourcePlayers);
+      const team2Players = namesFromEmbedded(data.targetPlayers);
       return {
         date: formatDate(txn.timestamp),
-        team1: { ...resolveTeam(team1Id), players: resolvePlayers(data.playersFromTeam1) },
-        team2: { ...resolveTeam(team2Id), players: resolvePlayers(data.playersFromTeam2) },
-        cash,
+        team1: {
+          ...resolveTeam(team1Id),
+          players: team1Players.length ? team1Players : resolvePlayers(data.playersFromSource ?? data.playersFromTeam1),
+        },
+        team2: {
+          ...resolveTeam(team2Id),
+          players: team2Players.length ? team2Players : resolvePlayers(data.playersFromTarget ?? data.playersFromTeam2),
+        },
         involvesActive: team1Id === activeTeamId || team2Id === activeTeamId,
       };
     });
