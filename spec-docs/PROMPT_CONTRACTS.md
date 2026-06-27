@@ -25548,3 +25548,93 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: RIVALRY-ENVY-2B ===== -->
+
+<!-- ===== CONTRACT: WINNER-HONORS-18 ===== -->
+
+# CONTRACT: WINNER-HONORS-18 — Season-end winner-honors resolver, rarity/prestige-scaled + additive
+
+**ROUTE:** MAIN tree `/Users/johnkruse/Projects/kbl-tracker`, trunk `experiment/manager-wpa-window` (LANE A). Branch-only; do NOT commit/push — the Captain commits.
+
+**ROLE:** Builder (Codex). The Captain (Opus) audits the real diff + runs the gate + the L-SIM + commits.
+
+**GOAL (V1 pre-freeze checklist #18; JK ruled 2026-06-27 + 2026-06-27#2):** Extend the season-end honors so **EVERY award winner** gets honored with a **fame reach-floor bump SCALED BY THAT AWARD'S PRESTIGE**, and **multi-award winners STACK ADDITIVELY** (a player who wins N awards gets the SUM of their awards' prestige bumps). Today only MVP + CY Young winners get the winner-side fame bump (and a dual MVP+CY winner gets ONLY one bump, blocked by a checkpoint sentinel). #18 = build the prestige-weighted, additive winner-fame mechanism with a **§16-TUNABLE PLACEHOLDER** prestige table.
+
+**SCOPE — which awards (the 8 player WAR award categories produced by `franchiseAwardsEngine.computeAndPersistFranchiseWarAwards`):** MVP, CY_YOUNG, ROOKIE_OF_YEAR, RELIEVER_OF_YEAR, GOLD_GLOVE, SILVER_SLUGGER, BENCH_PLAYER, BOOGER_GLOVE. (MANAGER_OF_YEAR is a MANAGER award — winnerPlayerId is a managerId with no player fame record — EXCLUDE it; it naturally no-ops anyway. ALL_STAR is honored on a separate path — `franchiseAllStarLockPayouts.ts` — do NOT touch it.)
+
+**SCOPE BOUNDARY — #18 is the FAME (reach-floor) half ONLY:**
+- ADD the prestige-scaled, additive winner FAME reach-floor for all 8 categories.
+- PRESERVE the existing NEWS emission EXACTLY (today: MVP + CY only). Do NOT add news for the new categories — that is ticket #20 (`FranchiseHonorKind` only has MVP/CY_YOUNG/ALL_STAR/ROOKIE_OF_YEAR/RELIEVER_OF_YEAR; GG/SS/Booger/Bench have no honorKind yet).
+- PRESERVE the existing SNUB/envy-edge behavior EXACTLY (today: MVP, CY, ROOKIE_OF_YEAR, RELIEVER_OF_YEAR snub their close losers). Do NOT add snub for GG/SS/Booger/Bench (snub is the ENVY track, separate). Snub stays keyed by `FranchiseHonorKind`.
+
+**SOURCE OF TRUTH (re-read every file:line — do NOT trust this summary blindly):**
+- `spec-docs/V1_STATUS_AND_ASSEMBLY_PLAN.md` `## JK RULINGS — 2026-06-27` ruling #1 ("All award WINNERS get honored, SCALED BY RARITY... magnitude is a §16 tuning concern") + `## JK RULINGS — 2026-06-27 #2` ("Winner-honors 'rarity' = per-award PRESTIGE value... multi-award winners STACK ADDITIVELY... a per-award prestige-weight table + winner fame = sum of won-award prestige values. Nothing too complex").
+- `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts` — `emitFranchiseSeasonEndHonors`, `SEASON_END_HONORS` (MVP/CY), `SEASON_END_SNUB_ONLY_HONORS` (ROY/RELIEVER), `applyRaceSnubAndEnvyEdge`, the `SEASON_END_HONOR_SENTINEL` guard at the reach-floor call.
+- `src/utils/franchiseHonorReachFloor.ts` — `FranchiseHonorTier`, `applyFranchiseHonorReachFloor` (the per-honoree loop; `FAME_TUNING.honorHeatBump[honoree.honorTier]`; `Math.max(reachFloor, FAME_TIER_RANK.REGIONAL_STAR)`).
+- `src/engines/fameModel.ts` — `FAME_TUNING.honorHeatBump` (today `{ mvp: 12, cyYoung: 10, allStarStarter: 6, allStarReserve: 3 }`), `applyHonorHeatBump`, `FAME_TIER_RANK`.
+- `src/utils/franchiseAwardsStorage.ts` — `FranchiseAwardCategory`, `FranchiseAwardRow` (fields: `category`, `winnerPlayerId`, `candidates[]`, `finalized`, `computedAt`), `getFranchiseAwardRowsByScope`.
+- `src/utils/franchiseAllStarLockPayouts.ts` — the OTHER caller of `applyFranchiseHonorReachFloor` (passes `honorees: [{playerId, honorTier:'allStarStarter'|'allStarReserve'}]`, distinct players, never duplicates). Must stay byte-identical in behavior.
+
+**THE MAKE-OR-BREAK (state it back before you build): ADDITIVE STACKING vs the SENTINEL.** Today `franchiseSeasonEndHonors.ts` calls reach-floor once PER category, and guards each call with `if (fameRecord.updatedAtCheckpoint !== SEASON_END_HONOR_SENTINEL)`. Because `applyFranchiseHonorReachFloor` STAMPS the sentinel on every save, a player who wins MVP first has the sentinel set, so their CY (or any 2nd award) reach-floor is SKIPPED → only one bump. That is the OPPOSITE of the required additive stacking. The fix MUST aggregate every award a winner won and bump by the SUM, while still being idempotent on a finalize RE-RUN.
+
+**REQUIRED IMPLEMENTATION:**
+
+1. **`src/engines/fameModel.ts` — extend the prestige table.** Add 6 keys to `FAME_TUNING.honorHeatBump` (these ARE the §16-tunable per-award prestige values). Keep `mvp: 12, cyYoung: 10` unchanged. Add **PLACEHOLDER** values (monotonic by rough prestige), each with a comment `// #18 placeholder prestige — §16-tunable`:
+   - `silverSlugger: 8`
+   - `goldGlove: 7`
+   - `rookie: 6`
+   - `reliever: 5`
+   - `benchPlayer: 3`
+   - `boogerGlove: 2`   // DUBIOUS award (worst fielder) — placeholder treats it as small positive notoriety; direction/magnitude is a §16/JK open-decision.
+   Leave `allStarStarter: 6, allStarReserve: 3` unchanged. Add a block comment above the new keys: `// #18 winner-honors: per-award prestige. Placeholder magnitudes — §16 balance-tuning owns the final numbers. Dubious-award (boogerGlove) fame treatment is a JK/§16 open-decision.`
+
+2. **`src/utils/franchiseHonorReachFloor.ts` — extend the tier union + make the bump ADDITIVE per player.**
+   - Extend `FranchiseHonorTier` to: `'mvp' | 'cyYoung' | 'silverSlugger' | 'goldGlove' | 'rookie' | 'reliever' | 'benchPlayer' | 'boogerGlove' | 'allStarStarter' | 'allStarReserve'`.
+   - Change `applyFranchiseHonorReachFloor`'s loop: instead of one save per honoree entry, **GROUP honorees by `playerId` and SUM `FAME_TUNING.honorHeatBump[honorTier]` across that player's entries**, then write ONCE per player: `heat = applyHonorHeatBump(row.heat, summedBump)`, `reachFloor = Math.max(row.reachFloor, FAME_TIER_RANK.REGIONAL_STAR)`, `updatedAtCheckpoint = checkpointSentinel`. Preserve: the L12-off + Fame-off dark-noop early returns (unchanged); `if (!row) continue` (recordless skip); `ratchetedCount` = number of DISTINCT players with an existing record that were ratcheted. Iterate players in a DETERMINISTIC order (honoree array insertion order is fine — callers build it deterministically). This keeps the all-star caller byte-identical (it passes distinct players → sum == single bump) and makes a duplicate-player honoree list stack additively in ONE write.
+
+3. **`src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts` — unify the config; aggregate winner fame; preserve news + snub.**
+   - Replace `SEASON_END_HONORS` + `SEASON_END_SNUB_ONLY_HONORS` with ONE config array `PLAYER_AWARD_HONORS` covering all 8 categories, each entry: `{ category: FranchiseAwardCategory; honorTier: FranchiseHonorTier; honorKind?: FranchiseHonorKind; emitsNews: boolean }`:
+     - `{ MVP, mvp, honorKind:'MVP', emitsNews:true }`
+     - `{ CY_YOUNG, cyYoung, honorKind:'CY_YOUNG', emitsNews:true }`
+     - `{ ROOKIE_OF_YEAR, rookie, honorKind:'ROOKIE_OF_YEAR', emitsNews:false }`
+     - `{ RELIEVER_OF_YEAR, reliever, honorKind:'RELIEVER_OF_YEAR', emitsNews:false }`
+     - `{ GOLD_GLOVE, goldGlove, emitsNews:false }` (no honorKind → no snub, no news)
+     - `{ SILVER_SLUGGER, silverSlugger, emitsNews:false }`
+     - `{ BENCH_PLAYER, benchPlayer, emitsNews:false }`
+     - `{ BOOGER_GLOVE, boogerGlove, emitsNews:false }`
+   - For each config (in array order): find the finalized winner row (`award.category === cfg.category && award.finalized && award.winnerPlayerId`); resolve `winnerTeamId = teamByPlayer.get(winnerPlayerId) ?? null`; **if `winnerTeamId === null` → skip this winner entirely** (preserves the current no-team skip for fame + news + snub).
+     - If `cfg.emitsNews` → emit the honor news EXACTLY as today (same `honorInput` shape, `triggerPhase:'season-end'`, push `cfg.honorKind` to `emitted` when status==='emitted'). Wrap in try/catch as today.
+     - **Collect the winner FAME honoree:** read the winner's fame record (`getFameRecord(fameScope, winnerPlayerId)`); **idempotency: if `fameRecord.updatedAtCheckpoint === SEASON_END_HONOR_SENTINEL`, SKIP adding this winner to the honoree list** (finalize already ran). Otherwise add `{ playerId: winnerPlayerId, honorTier: cfg.honorTier }` to a `fameHonorees` array (one entry per award won — a multi-award winner appears multiple times).
+     - If `cfg.honorKind` → `applyRaceSnubAndEnvyEdge(row, winnerPlayerId, cfg.honorKind, teamByPlayer, scope)` EXACTLY as today.
+   - **After the loop: ONE reach-floor call** if `fameHonorees.length > 0`: `await franchiseSeasonEndHonorsSeam.applyReachFloor({ honorees: fameHonorees, scope: fameScope, checkpointSentinel: SEASON_END_HONOR_SENTINEL })` in a try/catch (failure must not throw). The reach-floor sums per player → additive. If `fameHonorees` is empty → do NOT call reach-floor (preserves the "all winners already at sentinel → reach-floor not called" behavior).
+   - Keep `fameScope = { franchiseId, seasonId, statsScopeId }`. Keep the return `{ status:'processed'|'dark-noop', emitted }`. Keep the `isFranchisePhase2L12Enabled()` dark-noop early return (no seam calls). Remove the now-unused per-category sentinel-then-reach-floor inline block (folded into the aggregation).
+
+4. **Tests — update + extend (keep ALL preserved behaviors green):**
+   - `src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts`:
+     - The single-winner cases (MVP alone) still pass `applyReachFloor` ONCE with `honorees: [{playerId:'player-mvp', honorTier:'mvp'}]` — unchanged assertions.
+     - UPDATE the `processes MVP and CY independently` test: it now expects ONE `applyReachFloor` call with `honorees: [{playerId:'player-mvp',honorTier:'mvp'},{playerId:'pitcher-cy',honorTier:'cyYoung'}]` (rename to reflect aggregation), while emit + snub stay per-category (`emitted:['MVP','CY_YOUNG']`, two emit calls, two snub calls). 
+     - Keep the sentinel-skip test (record already at `season-end-honor` → reach-floor NOT called), the no-team/no-winner/non-finalized skip test, the ROY snub-without-winner-honor test (ROY still snubs; with #18 ROY ALSO contributes a fame honoree — UPDATE that test: give the rookie-winner a value-row team and assert reach-floor IS now called with `[{playerId:'rookie-winner',honorTier:'rookie'}]`, snub unchanged), and the flag-off + snub-failure tests.
+     - ADD a test: a SINGLE player wins MVP + SILVER_SLUGGER → ONE reach-floor call whose honorees include BOTH `{player, mvp}` and `{player, silverSlugger}` (proves additive aggregation feeds the reach-floor).
+   - `src/utils/tests/franchiseHonorReachFloor.test.ts`:
+     - Extend the monotonic-ladder test or add a #18 ladder test asserting `mvp ≥ cyYoung ≥ silverSlugger ≥ goldGlove ≥ rookie ≥ reliever ≥ benchPlayer ≥ boogerGlove > 0`.
+     - ADD a test: honorees `[{playerId:'dup',honorTier:'mvp'},{playerId:'dup',honorTier:'cyYoung'}]` with one existing record → `saveRecords` called ONCE for 'dup' with `heat = applyHonorHeatBump(oldHeat, honorHeatBump.mvp + honorHeatBump.cyYoung)` and `ratchetedCount === 1` (proves additive sum + single write).
+     - Keep the all-star distinct-players test green (no summing when players differ).
+
+**CONSTRAINTS:**
+- EXACT files (no others): `src/engines/fameModel.ts`, `src/utils/franchiseHonorReachFloor.ts`, `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts`, `src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts`, `src/utils/tests/franchiseHonorReachFloor.test.ts`.
+- NO DB/schema change, NO trackerDb version bump, NO new store, NO flag default change. Honors stay gated by `isFranchisePhase2L12Enabled()` (build-dark).
+- Do NOT touch `franchiseAllStarLockPayouts.ts`, the awards engine, the morale path, `FranchiseHonorKind`, `franchiseHonorEmission.ts`, or any frozen oracle.
+- TypeScript strict: no `any`, no `@ts-ignore`. Pure/deterministic — no `Date.now()`/`Math.random()` introduced.
+
+**EXPECTED OUTPUT:** the 3 production edits + 2 test files updated, all compiling.
+
+**VERIFICATION (you run, report actual output):**
+- `NODE_ENV= npm run build` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts src/utils/tests/franchiseHonorReachFloor.test.ts` → all green (paste summary).
+
+**FORMAT:** Report: files changed (with the new honorHeatBump values), how additive aggregation works, the exact test deltas, and the two command outputs. Do NOT commit. Do NOT push.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP, print `STOP-IF: <reason>` + analysis, change nothing further, IF: extending `FranchiseHonorTier` forces a change in any file beyond the 5 listed (e.g. another exhaustive `Record<FranchiseHonorTier>` consumer exists — report it, do NOT edit it); `getFranchiseAwardRowsByScope` / `FranchiseAwardRow` does not expose `category`/`winnerPlayerId`/`candidates`/`finalized`/`computedAt` as assumed; making the reach-floor additive would change the all-star path's behavior (it must stay byte-identical); or any required change would touch a DB schema, a flag default, the morale path, or a frozen oracle.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: WINNER-HONORS-18 ===== -->
