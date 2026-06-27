@@ -22,6 +22,7 @@ import {
 } from '../../src/utils/franchiseTrustedValueStorage';
 import { emitFranchiseSeasonEndHonors } from '../../src/src_figma/app/engines/reporter/franchiseSeasonEndHonors';
 import { getTrackerDb, resetTrackerDbForTests, TRACKER_DB_VERSION } from '../../src/utils/trackerDb';
+import { hashStringToUint32 } from '../../src/utils/franchiseManagerAutoBackstop';
 import type { AtBatResult } from '../../src/types/game';
 import type { Player } from '../../src/utils/leagueBuilderStorage';
 import { computeLsimDistributions, type LsimDistributions } from './distributions';
@@ -100,6 +101,8 @@ export interface LsimManagerWpaTeamCapSample {
 
 export interface LsimManagerWpaProof {
   managerTotalCount: number;
+  keptInStintCount: number;
+  keptInShareIsTwentyPercent: boolean;
   deploymentOnlyTotals: boolean;
   zeroRetiredLayerTotals: boolean;
   noNaN: boolean;
@@ -138,6 +141,8 @@ const DEFAULT_CHECKPOINT_EVERY = 10;
 const DEFAULT_OUTPUT_DIR = path.resolve(process.cwd(), 'test-utils/lsim/results');
 const EMPTY_RUNNER_STATE: RunnerState = { first: null, second: null, third: null };
 const EVENT_RESULTS: AtBatResult[] = ['1B', '2B', 'HR', 'K', 'BB', 'FO', 'GO', 'SF'];
+// Tunable v1 sim policy: half of scout-recommended moves are consciously declined.
+const KEEP_IN_DECLINE_RATE = 0.5;
 
 interface SeededSyntheticEventLog {
   atBatEvents: AtBatEvent[];
@@ -205,10 +210,100 @@ function sourceTimestamp(game: LsimSyntheticCompletedGame, gameNumber: number, e
   return game.gameState.savedAt + (eventIndex * 1000) + gameNumber;
 }
 
+function buildSyntheticPitcherKeepInEvent(input: {
+  context: LsimSandboxContext;
+  synthetic: LsimSyntheticCompletedGame;
+  seed: string;
+  gameNumber: number;
+  atBatEvent: AtBatEvent;
+  pitcherName: string;
+}): BetweenPlayEvent | null {
+  const evaluationId = [
+    input.atBatEvent.gameId,
+    input.atBatEvent.inning,
+    input.atBatEvent.halfInning.toLowerCase(),
+    input.atBatEvent.outs,
+    'pitcher_change',
+    input.atBatEvent.pitcherId,
+  ].join(':');
+  const roll =
+    hashStringToUint32(`${input.seed}:${evaluationId}:keep-in-decline`) /
+    0x100000000;
+  if (roll >= KEEP_IN_DECLINE_RATE) {
+    return null;
+  }
+
+  const eventIndex = input.atBatEvent.eventIndex - 0.25;
+  const battingTeamId = input.atBatEvent.batterTeamId;
+  const fieldingTeamId = input.atBatEvent.pitcherTeamId;
+
+  return {
+    eventId: `${input.atBatEvent.gameId}-keep-pitcher-${input.atBatEvent.eventIndex}`,
+    gameId: input.atBatEvent.gameId,
+    seasonId: input.context.ids.seasonId,
+    seasonNumber: input.context.ids.seasonNumber,
+    statsScopeId: input.context.ids.statsScopeId,
+    competitionType: 'franchise',
+    competitionId: input.context.ids.franchiseId,
+    franchiseId: input.context.ids.franchiseId,
+    scheduleGameId: input.synthetic.gameState.scheduleGameId,
+    leagueId: input.context.ids.leagueId,
+    timestamp: sourceTimestamp(input.synthetic, input.gameNumber, eventIndex),
+    eventIndex,
+    type: 'manager_moment',
+    gameState: {
+      inning: input.atBatEvent.inning,
+      halfInning: input.atBatEvent.halfInning,
+      outs: input.atBatEvent.outs,
+      totalInnings: input.context.ids.inningsPerGame,
+      score: {
+        away: input.atBatEvent.awayScore,
+        home: input.atBatEvent.homeScore,
+      },
+      runnersOn: input.atBatEvent.runners,
+    },
+    managerMoment: {
+      leverageIndex: input.atBatEvent.leverageIndex ?? 1,
+      decisionType: 'leave_pitcher_in',
+      context: evaluationId,
+    },
+    promptedManagerDecision: {
+      decisionType: 'leave_pitcher_in',
+      action: 'keep_pitcher',
+      source: 'recommendation',
+      decisionSource: 'situational_prompt',
+      confidence: 'medium',
+      managerId: `${fieldingTeamId}:manager`,
+      teamId: fieldingTeamId,
+      opponentTeamId: battingTeamId,
+      trackedPlayerIds: [input.atBatEvent.pitcherId],
+      involvedPlayerIds: [input.atBatEvent.pitcherId],
+      playerId: input.atBatEvent.pitcherId,
+      playerName: input.pitcherName,
+      leverageIndex: input.atBatEvent.leverageIndex ?? 1,
+      recommendationId: `${evaluationId}:synthetic-rec`,
+      provenanceKey: `${evaluationId}:synthetic-keep-in`,
+      scoutEvaluation: {
+        recommend: true,
+        decisionType: 'pitcher_change',
+        bestMoveKblWpaGain: 0.035,
+        thresholdKblWpa: 0.015,
+      },
+      resolution: {
+        status: 'pending',
+        expectedEndpoint: 'next_pa',
+      },
+    },
+    version: 1,
+    editHistory: [],
+  };
+}
+
 async function seedSyntheticEventLog(
   context: LsimSandboxContext,
   synthetic: LsimSyntheticCompletedGame,
   gameNumber: number,
+  seed: string,
 ): Promise<SeededSyntheticEventLog> {
   const game = synthetic.gameState;
   const atBatEvents: AtBatEvent[] = [];
@@ -382,6 +477,20 @@ async function seedSyntheticEventLog(
         version: 1,
         editHistory: [],
       };
+      if (lineupIndex === 0) {
+        const keepInEvent = buildSyntheticPitcherKeepInEvent({
+          context,
+          synthetic,
+          seed,
+          gameNumber,
+          atBatEvent,
+          pitcherName: half.pitcher.pitcherName,
+        });
+        if (keepInEvent) {
+          await logBetweenPlayEvent(keepInEvent);
+          betweenPlayEvents.push(keepInEvent);
+        }
+      }
       await logAtBatEvent(atBatEvent);
       atBatEvents.push(atBatEvent);
 
@@ -900,6 +1009,15 @@ function deriveManagerWpaProof(
 ): LsimManagerWpaProof {
   const managerTotals = completedGames.flatMap((game) => game.managerWpaTotals ?? []);
   const stints = completedGames.flatMap((game) => game.managerDeploymentStints ?? []);
+  const keptInStints = stints.filter((stint) =>
+    stint.deploymentRole === 'kept_position_player_in' ||
+    stint.deploymentRole === 'kept_defender_in' ||
+    stint.deploymentRole === 'kept_pitcher_in' ||
+    stint.deploymentRole === 'kept_in',
+  );
+  const keptInShareIsTwentyPercent = keptInStints.every(
+    (stint) => roundProofWpa(stint.managerShare) === 0.2,
+  );
   const deploymentOnlyTotals = managerTotals.every(
     (total) => roundProofWpa(total.managerValue) === roundProofWpa(total.deploymentWpa),
   );
@@ -983,6 +1101,8 @@ function deriveManagerWpaProof(
 
   return {
     managerTotalCount: managerTotals.length,
+    keptInStintCount: keptInStints.length,
+    keptInShareIsTwentyPercent,
     deploymentOnlyTotals,
     zeroRetiredLayerTotals,
     noNaN,
@@ -1100,7 +1220,12 @@ export async function runLsimSeason(config: LsimSeasonRunnerConfig): Promise<Lsi
       if (runInvariantChecks && relationshipRecoveryBreakEdgeId === null && previous.relationshipEdges.length > 0) {
         relationshipRecoveryBreakEdgeId = await breakRelationshipCoRosteringForRecovery(context, previous, synthetic);
       }
-      const seededLog = await seedSyntheticEventLog(context, synthetic, gameNumber);
+      const seededLog = await seedSyntheticEventLog(
+        context,
+        synthetic,
+        gameNumber,
+        config.seed,
+      );
       hydrateSyntheticManagerWpa(synthetic, seededLog);
       const processOptions = {
         ...context.processOptions,

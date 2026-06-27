@@ -328,7 +328,7 @@ export function deriveManagerDeploymentStintRecords(
 
   const closeStarterStintsForActiveOpening = (
     opening: OpenDeploymentStint | null,
-    event: BetweenPlayEvent,
+    event: Pick<BetweenPlayEvent, "eventId" | "eventIndex">,
   ) => {
     if (!opening || opening.deploymentRole === "untouched_starter") return;
     for (let index = open.length - 1; index >= 0; index--) {
@@ -387,6 +387,7 @@ export function deriveManagerDeploymentStintRecords(
       }
       for (const opening of promptedOpeningsByEndpointId.get(entry.eventId) ?? []) {
         if (hasOpenDeploymentForPlayer(open, opening)) continue;
+        closeStarterStintsForActiveOpening(opening, entry);
         open.push(opening);
       }
       continue;
@@ -770,9 +771,7 @@ function groupPromptedKeepCurrentDeploymentOpenings(
   input: DeriveCommittedManagerDecisionStateInput,
   events: BetweenPlayEvent[],
 ): Map<string, OpenDeploymentStint[]> {
-  void input;
-  void events;
-  return new Map();
+  return _groupPromptedKeepCurrentDeploymentOpeningsLegacy(input, events);
 }
 
 function _groupPromptedKeepCurrentDeploymentOpeningsLegacy(
@@ -799,6 +798,7 @@ function _groupPromptedKeepCurrentDeploymentOpeningsLegacy(
     const prompted = event.promptedManagerDecision;
     const recommendationWatch = event.managerRecommendationWatch;
     if (!event.gameState) continue;
+    if (!prompted?.scoutEvaluation?.recommend) continue;
 
     const decisionType =
       prompted?.decisionType ??

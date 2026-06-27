@@ -806,6 +806,16 @@ function isNoChangeDecisionForRecommendationType(
   );
 }
 
+function isPromptedKeepCurrentDeploymentOnlyDecision(
+  decision: ManagerDecisionRecord,
+): boolean {
+  return (
+    decision.inferenceMethod === "prompted" &&
+    isNoChangeDecisionForRecommendationType(decision.decisionType) &&
+    decision.derivation.derivedFromFields.includes("promptedManagerDecision")
+  );
+}
+
 function getWatchNoChangeResolutionAtBat(
   watch: ManagerRecommendationWatchRecord,
   event: AtBatEvent,
@@ -1734,6 +1744,9 @@ function resolveDecisionAtEndpoint(
   const rawWindowWpa = roundWpa(
     teamWinProbabilityAfter - decision.teamWinProbabilityBefore,
   );
+  const scoredRawWindowWpa = isPromptedKeepCurrentDeploymentOnlyDecision(decision)
+    ? 0
+    : rawWindowWpa;
   const linkedEventIds = uniqueStrings([
     ...decision.linkedEventIds,
     ...endpoint.eventIds,
@@ -1743,8 +1756,8 @@ function resolveDecisionAtEndpoint(
     ...decision,
     linkedEventIds,
     teamWinProbabilityAfter,
-    rawWindowWpa,
-    managerWpa: roundWpa(rawWindowWpa * share),
+    rawWindowWpa: scoredRawWindowWpa,
+    managerWpa: roundWpa(scoredRawWindowWpa * share),
     resolved: true,
     resolvedAtEventId: endpoint.eventId,
     explanationMetadata:

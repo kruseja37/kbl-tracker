@@ -471,6 +471,12 @@ describe("generateManagerRecommendations", () => {
       recommendation,
       action: "keep_pitcher",
       opponentTeamId: "away",
+      scoutEvaluation: {
+        recommend: true,
+        decisionType: "pitcher_change",
+        bestMoveKblWpaGain: 0.031,
+        thresholdKblWpa: 0.015,
+      },
     });
 
     expect(getPromptedDecisionTypeForRecommendationAction("keep_pitcher")).toBe("leave_pitcher_in");
@@ -486,6 +492,12 @@ describe("generateManagerRecommendations", () => {
       involvedPlayerIds: ["home-pitcher", "home-reliever"],
       recommendationId: recommendation.recommendationId,
       provenanceKey: recommendation.suppressKey,
+      scoutEvaluation: {
+        recommend: true,
+        decisionType: "pitcher_change",
+        bestMoveKblWpaGain: 0.031,
+        thresholdKblWpa: 0.015,
+      },
       resolution: { status: "pending", expectedEndpoint: "next_pa" },
     });
   });

@@ -64,7 +64,7 @@ async function getTeamFanMorale(scope: L11AutoBackstopScope, teamId: string): Pr
   return snapshot?.currentValue ?? 50;
 }
 
-function hashStringToUint32(value: string): number {
+export function hashStringToUint32(value: string): number {
   let hash = 2166136261;
   for (let i = 0; i < value.length; i += 1) {
     hash ^= value.charCodeAt(i);

@@ -113,6 +113,7 @@ function createPromptedKeepCurrent(
     managerId?: string;
     opponentTeamId?: string;
     provenanceKey?: string;
+    scoutRecommend?: boolean;
   } = {},
 ): BetweenPlayEvent {
   const decisionType = overrides.decisionType ?? "let_batter_hit";
@@ -149,6 +150,19 @@ function createPromptedKeepCurrent(
       leverageIndex: 2.1,
       recommendationId: `rec-${overrides.provenanceKey ?? decisionType}`,
       provenanceKey: overrides.provenanceKey ?? `${decisionType}:key`,
+      scoutEvaluation:
+        overrides.scoutRecommend === undefined
+          ? undefined
+          : {
+              recommend: overrides.scoutRecommend,
+              decisionType:
+                decisionType === "leave_pitcher_in"
+                  ? "pitcher_change"
+                  : "pinch_hit",
+              bestMoveKblWpaGain: overrides.scoutRecommend ? 0.04 : 0.001,
+              thresholdKblWpa:
+                decisionType === "leave_pitcher_in" ? 0.015 : 0.0125,
+            },
       resolution: {
         status: "pending",
         expectedEndpoint: "next_pa",
@@ -1375,7 +1389,7 @@ describe("committed manager WPA game state", () => {
     });
   });
 
-  test("keeps let-batter-hit deployment tier dark in Step 1", () => {
+  test("opens let-batter-hit kept-in stint when scout recommends a declined move", () => {
     const keepBatter = createPromptedKeepCurrent({
       eventId: "game-1_bp_keep_batter",
       eventIndex: 1,
@@ -1385,6 +1399,7 @@ describe("committed manager WPA game state", () => {
       managerId: "away-manager",
       opponentTeamId: "home",
       provenanceKey: "let-away-batter-hit",
+      scoutRecommend: true,
     });
     const tacticalPa = createAtBat({
       eventId: "game-1_2",
@@ -1472,22 +1487,34 @@ describe("committed manager WPA game state", () => {
       gameEnded: true,
     });
 
-    expect(
-      state.managerDeploymentStints.filter(
-        (row) => row.deploymentRole === "kept_position_player_in",
-      ),
-    ).toEqual([]);
+    const keptStint = state.managerDeploymentStints.find(
+      (row) => row.deploymentRole === "kept_position_player_in",
+    );
+    expect(keptStint).toMatchObject({
+      deploymentRole: "kept_position_player_in",
+      playerId: "away-batter",
+      teamId: "away",
+      managerId: "away-manager",
+      sourceEventId: "game-1_bp_keep_batter",
+      openedAtEventIndex: 2,
+      managerShare: 0.2,
+    });
+    expect(keptStint?.linkedEventIds).toEqual(["game-1_3", "game-1_4", "game-1_5"]);
+    expect(keptStint?.rawLinkedWpa).not.toBe(0);
     expect(state.managerDecisions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           decisionType: "let_batter_hit",
           inferenceMethod: "prompted",
+          managerWpa: 0,
+          rawWindowWpa: 0,
+          resolved: true,
         }),
       ]),
     );
   });
 
-  test("does not open let-batter-hit deployment stints from prompted keep-ins", () => {
+  test("does not open let-batter-hit kept-in stints when scout does not recommend a move", () => {
     const firstKeep = createPromptedKeepCurrent({
       eventId: "game-1_bp_keep_1",
       eventIndex: 1,
@@ -1497,6 +1524,7 @@ describe("committed manager WPA game state", () => {
       managerId: "away-manager",
       opponentTeamId: "home",
       provenanceKey: "let-away-batter-hit",
+      scoutRecommend: false,
       gameState: {
         inning: 6,
         halfInning: "TOP",
@@ -1524,6 +1552,7 @@ describe("committed manager WPA game state", () => {
       managerId: "away-manager",
       opponentTeamId: "home",
       provenanceKey: "let-away-batter-hit",
+      scoutRecommend: false,
       gameState: {
         inning: 6,
         halfInning: "TOP",
@@ -1565,7 +1594,7 @@ describe("committed manager WPA game state", () => {
     expect(keptInStints).toEqual([]);
   });
 
-  test("let-batter-hit keep-in does not create a deployment stint for same-player pitching credit", () => {
+  test("let-batter-hit keep-in without scout verdict does not create a deployment stint for same-player pitching credit", () => {
     const keepBatter = createPromptedKeepCurrent({
       eventId: "game-1_bp_keep_batter",
       eventIndex: 1,
@@ -1617,7 +1646,7 @@ describe("committed manager WPA game state", () => {
     expect(state.managerDeploymentStints).toEqual([]);
   });
 
-  test("leave-pitcher-in keep-in deployment tier stays dark", () => {
+  test("leave-pitcher-in keep-in without scout verdict does not open a kept-pitcher stint", () => {
     const keepPitcher = createPromptedKeepCurrent({
       eventId: "game-1_bp_keep_pitcher",
       eventIndex: 1,
@@ -1744,7 +1773,114 @@ describe("committed manager WPA game state", () => {
     );
   });
 
-  test("ignored defensive replacement recommendation keeps the kept-defender deployment tier dark", () => {
+  test("starter kept in by scout-gated prompt closes untouched window before kept-in credit", () => {
+    const keepPitcher = createPromptedKeepCurrent({
+      eventId: "game-1_bp_keep_pitcher",
+      eventIndex: 1,
+      decisionType: "leave_pitcher_in",
+      trackedPlayerId: "home-pitcher",
+      teamId: "home",
+      managerId: "home-manager",
+      opponentTeamId: "away",
+      provenanceKey: "keep-home-pitcher",
+      scoutRecommend: true,
+      gameState: {
+        inning: 6,
+        halfInning: "TOP",
+        outs: 0,
+        score: { away: 2, home: 2 },
+        runnersOn: {},
+      },
+    });
+    const boundaryPa = createAtBat({
+      eventId: "game-1_2",
+      eventIndex: 2,
+      inning: 6,
+      halfInning: "TOP",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      pitcherTeamId: "home",
+      outs: 0,
+      outsAfter: 1,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+    const countedPa = createAtBat({
+      eventId: "game-1_3",
+      eventIndex: 3,
+      inning: 6,
+      halfInning: "TOP",
+      pitcherId: "home-pitcher",
+      pitcherName: "Home Pitcher",
+      pitcherTeamId: "home",
+      outs: 1,
+      outsAfter: 2,
+      wpaModelVersion: WPA_MODEL_VERSION,
+    });
+
+    const state = deriveCommittedManagerDecisionState({
+      gameId: "game-1",
+      atBatEvents: [boundaryPa, countedPa],
+      betweenPlayEvents: [keepPitcher],
+      startingLineups: {
+        away: [],
+        home: [],
+      },
+      startingPitchers: {
+        away: { playerId: "away-pitcher", playerName: "Away Pitcher" },
+        home: { playerId: "home-pitcher", playerName: "Home Pitcher" },
+      },
+      awayTeamId: "away",
+      homeTeamId: "home",
+      awayManagerId: "away-manager",
+      homeManagerId: "home-manager",
+      totalInnings: 9,
+      gameEnded: true,
+    });
+    const untouched = state.managerDeploymentStints.find(
+      (stint) =>
+        stint.deploymentRole === "untouched_starter" &&
+        stint.playerId === "home-pitcher",
+    );
+    const kept = state.managerDeploymentStints.find(
+      (stint) => stint.deploymentRole === "kept_pitcher_in",
+    );
+    const countedPaCredits = [untouched, kept]
+      .flatMap((stint) => stint?.linkedOutcomes ?? [])
+      .filter((outcome) => outcome.eventId === "game-1_3");
+
+    expect(untouched).toMatchObject({
+      deploymentRole: "untouched_starter",
+      playerId: "home-pitcher",
+      closedAtEventIndex: 2,
+      closeReason: "role_change",
+      managerShare: 0.1,
+      linkedEventIds: ["game-1_2"],
+    });
+    expect(kept).toMatchObject({
+      deploymentRole: "kept_pitcher_in",
+      playerId: "home-pitcher",
+      openedAtEventIndex: 2,
+      managerShare: 0.2,
+      linkedEventIds: ["game-1_3"],
+    });
+    expect(countedPaCredits).toHaveLength(1);
+    expect(kept?.linkedOutcomes?.map((outcome) => outcome.eventId)).toEqual([
+      "game-1_3",
+    ]);
+    expect(state.managerDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          decisionType: "leave_pitcher_in",
+          inferenceMethod: "prompted",
+          managerWpa: 0,
+          rawWindowWpa: 0,
+          resolved: true,
+        }),
+      ]),
+    );
+  });
+
+  test("ignored defensive replacement watch without prompted scout verdict keeps the kept-defender tier closed", () => {
     const watch = createRecommendationWatch({
       eventId: "game-1_bp_def_rec",
       eventIndex: 1,
@@ -1855,7 +1991,7 @@ describe("committed manager WPA game state", () => {
     ).toEqual([]);
   });
 
-  test("explicit keep-current recommendation does not duplicate inferred no-change", () => {
+  test("explicit keep-current recommendation without scout verdict does not duplicate inferred no-change", () => {
     const watch = createRecommendationWatch({
       eventId: "game-1_bp_rec_pitcher",
       eventIndex: 1,
@@ -1910,7 +2046,7 @@ describe("committed manager WPA game state", () => {
     ).toEqual([]);
   });
 
-  test("does not open overlapping leave-pitcher-in deployment stints", () => {
+  test("leave-pitcher-in keep-ins without scout verdict do not open overlapping deployment stints", () => {
     const firstKeep = createPromptedKeepCurrent({
       eventId: "game-1_bp_keep_pitcher_1",
       eventIndex: 1,
@@ -1987,7 +2123,7 @@ describe("committed manager WPA game state", () => {
     expect(stints).toEqual([]);
   });
 
-  test("active mid-game typed kept-in stint remains unscored", () => {
+  test("active mid-game typed kept-in stint without scout verdict remains unscored", () => {
     const keepBatter = createPromptedKeepCurrent({
       eventId: "game-1_bp_keep_batter",
       eventIndex: 1,
