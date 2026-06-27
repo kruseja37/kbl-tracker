@@ -16,6 +16,7 @@ import {
 } from './leagueBuilderStorage';
 import {
   generateProspectScoutingDraft,
+  pick,
   PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
   type LeagueBuilderProspectPlayerDto,
   type ProspectDraftPick as EngineProspectDraftPick,
@@ -23,6 +24,7 @@ import {
   type ScoutSpecialty,
   type VisibleSafeProspectReport,
 } from './prospectScoutingDraftEngine';
+import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 
 export const STARTUP_PROSPECT_DRAFT_VERSION = 'startup-prospect-draft-v1-auto-snake';
 
@@ -208,7 +210,7 @@ function buildBridgeScoutDescriptors(teamStates: DraftTeamState[]): Record<strin
       teamState.teamId,
       {
         scoutId: `bridge-scout-${teamState.teamId}`,
-        scoutName: `Franchise Setup Bridge Scout ${index + 1}`,
+        scoutName: `${pick(`bridge-scout-${teamState.teamId}:first`, SMB4_FIRST_NAMES)} ${pick(`bridge-scout-${teamState.teamId}:last`, SMB4_LAST_NAMES)}`,
         specialties: profile.specialties,
         weaknesses: profile.weaknesses,
         accuracyModifier: profile.accuracyModifier,
