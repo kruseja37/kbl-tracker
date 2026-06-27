@@ -227,6 +227,33 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
         updatedAt: 2,
       }] as never;
     } },
+  { name: 'soul.l13-relationship-formation-checkpoint-write',
+    mutate: (s) => {
+      s.gameNumber = 2;
+      s.gamesSimulated = 2;
+      s.players = [
+        { id: 'p1', leagueAssignments: [{ teamId: 't1' }] } as never,
+        { id: 'p2', leagueAssignments: [{ teamId: 't1' }] } as never,
+      ];
+      s.relationshipEdges = [{
+        id: 'f:s:ss:p1:p2:RIVALRY',
+        franchiseId: 'f',
+        seasonId: 's',
+        statsScopeId: 'ss',
+        seasonNumber: 1,
+        player1Id: 'p1',
+        player2Id: 'p2',
+        type: 'RIVALRY',
+        formationSource: 'envy',
+        intensity: 0.8,
+        potential: false,
+        accuracy: 1,
+        formedAtGameNumber: 7,
+        dissolvedAtGameNumber: null,
+        createdAt: 2,
+        updatedAt: 2,
+      }] as never;
+    } },
   { name: 'soul.l13-relationship-intensity-lifecycle',
     mutate: (s) => {
       s.gameNumber = 3;

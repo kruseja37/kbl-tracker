@@ -7,6 +7,10 @@
 
 ## June 2026
 
+### 2026-06-27 (RIVALRY-ENVY-1): race-snub rivalry edge is additive
+
+RIVALRY-ENVY-1 builds the MVP/Cy Young race-snub → persisted `RIVALRY` edge as an ADDITIVE extension: the existing morale-only snub remains intact, while spec §22.4/§24.10/ASG-3/RACE-2 mandate the relationship edge; F2/F7 scope the morale tap victim set and no-double-count rule only, and are silent on relationship edges. All-Star envy is DEFERRED as an OPEN-DECISION because the pairing is ambiguous. Envy edge intensity is the L13 lifecycle seed baseline, not an author knob; envy uses create-if-absent semantics so an existing pair edge is preserved untouched after finalize.
+
 ### 2026-06-26 (attended Hybrid via `/kbl-captain`): Butter Fingers ⇄ Magic Hands — diametrically-opposed FIELDING counter-trait pair
 
 **JK ruling:** Butter Fingers is the **counter-trait to Magic Hands** — they must be scored over the SAME fielding event set and count in **diametrically opposed ways**, so a Magic Hands qualifier CANNOT also be a Butter Fingers qualifier.

@@ -55,7 +55,8 @@ const L13_3A_RELATIONSHIP_TYPES = new Set<RelationshipEdgeType>([
   'MENTORSHIP',
   'FRIENDSHIP',
 ]);
-const EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM = 24; // OPEN-DECISION placeholder (§16); event-driven (overtake) edges get their own generous cap, tuned from the full-season count.
+const EVENT_DRIVEN_SOURCES = new Set<string>(['overtake', 'envy']);
+const EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM = 24; // OPEN-DECISION placeholder (§16); event-driven (overtake + envy) edges get their own generous cap, tuned from the full-season count.
 // §5.3 season-end honor edge: MVP/CY emit an AWARD_RESULT nod + a close-loser snub.
 // Mirrors franchiseSeasonEndHonors.ts:19 (SEASON_END_SNUB_TOP_N) + :29-32 (SEASON_END_HONORS, honorKind === award category).
 const SEASON_END_SNUB_TOP_N = 3;
@@ -542,8 +543,12 @@ function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
 
 function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): LsimInvariantResult {
   const reached = reachedCheckpoints(snapshot);
-  const eventDrivenEdges = snapshot.relationshipEdges.filter((row) => row.formationSource === 'overtake');
-  const checkpointEdges = snapshot.relationshipEdges.filter((row) => row.formationSource !== 'overtake');
+  const eventDrivenEdges = snapshot.relationshipEdges.filter((row) =>
+    EVENT_DRIVEN_SOURCES.has(row.formationSource as string),
+  );
+  const checkpointEdges = snapshot.relationshipEdges.filter((row) =>
+    !EVENT_DRIVEN_SOURCES.has(row.formationSource as string),
+  );
   const edgeIds = snapshot.relationshipEdges.map((row) => row.id);
   const duplicateIds = edgeIds.filter((id, index) => edgeIds.indexOf(id) !== index);
   const allowedCheckpoints = new Set(snapshot.checkpointGameNumbers);
@@ -664,7 +669,11 @@ function relationshipIntensityLifecycle(snapshot: LsimStateSnapshot): LsimInvari
   let chargedCount = 0;
 
   for (const row of snapshot.relationshipEdges) {
-    const isChargedMatchup = isChargedRelationshipEdgeThisGame(row, teamByPlayer);
+    // Envy edges form at season finalize, not as participants in the current game,
+    // so their formation intensity carries no in-game charged-matchup bump.
+    const isChargedMatchup = row.formationSource === 'envy'
+      ? false
+      : isChargedRelationshipEdgeThisGame(row, teamByPlayer);
     if (isChargedMatchup) chargedCount += 1;
     const expected = computeRelationshipIntensity(row, {
       gameNumber: snapshot.gameNumber,

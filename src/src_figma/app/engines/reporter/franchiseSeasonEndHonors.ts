@@ -14,6 +14,7 @@ import {
   pickRaceSnubVictims,
   type FranchiseHonorKind,
 } from '../../../../utils/franchiseRaceSnubMorale';
+import { persistRaceSnubRivalryEdges } from '../../../../utils/franchiseRelationshipEnvyCompute';
 import { isFranchisePhase2L12Enabled } from '../../../../utils/franchisePhase2Flags';
 import { emitFranchiseHonorNews } from './franchiseHonorEmission';
 
@@ -131,18 +132,19 @@ export async function emitFranchiseSeasonEndHonors(
       // Reach-floor payout failure must not block snub payout or the next honor.
     }
 
+    const victims = pickRaceSnubVictims(
+      row.candidates
+        .map((candidate) => ({
+          playerId: candidate.playerId,
+          teamId: teamByPlayer.get(candidate.playerId) ?? '',
+          marginToWinner: candidate.marginToWinner,
+        }))
+        .filter((candidate) => candidate.teamId !== ''),
+      new Set([winnerPlayerId]),
+      SEASON_END_SNUB_TOP_N,
+    );
+
     try {
-      const victims = pickRaceSnubVictims(
-        row.candidates
-          .map((candidate) => ({
-            playerId: candidate.playerId,
-            teamId: teamByPlayer.get(candidate.playerId) ?? '',
-            marginToWinner: candidate.marginToWinner,
-          }))
-          .filter((candidate) => candidate.teamId !== ''),
-        new Set([winnerPlayerId]),
-        SEASON_END_SNUB_TOP_N,
-      );
       await franchiseSeasonEndHonorsSeam.applySnub({
         victims,
         honorKind: honor.honorKind,
@@ -151,6 +153,19 @@ export async function emitFranchiseSeasonEndHonors(
       });
     } catch {
       // Snub payout failure must not block the next honor.
+    }
+
+    try {
+      await persistRaceSnubRivalryEdges({
+        pairs: victims.map((victim) => ({
+          snubbedPlayerId: victim.playerId,
+          honoredPlayerId: winnerPlayerId,
+        })),
+        scope,
+        timestamp: Date.parse(row.computedAt) || 0,
+      });
+    } catch {
+      // Envy-edge failure must not block the next honor.
     }
   }
 
