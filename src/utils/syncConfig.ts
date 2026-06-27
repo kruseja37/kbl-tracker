@@ -126,6 +126,9 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
   'kbl-franchise-stadium-records': {
     stadiumRecords: 'id',
   },
+  'kbl-franchise-home-park-rivals': {
+    homeParkRivals: 'id',
+  },
   'kbl-transactions': {
     transactions: 'id',
   },
