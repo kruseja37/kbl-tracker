@@ -22190,3 +22190,120 @@ FAILURE PROTOCOL (STOP-IF, scoped to THIS worktree's code anchors):
 
 **Use high reasoning effort. Think step-by-step.**
 <!-- ===== END CONTRACT: SCOUT-1 ===== -->
+
+<!-- ===== CONTRACT: SCOUT-2 — optimizeLineupVsStarter (keystone optimizer step 3b, opponent-SP lineup) ===== -->
+## SCOUT-2 — optimizeLineupVsStarter (keystone optimizer step 3b, opponent-SP lineup)
+
+**ROUTE: Codex 5.x | high reasoning effort → Opus audit.**
+
+You are a precise TypeScript build engineer on the KBL Tracker `codex/draft-pipeline-fix` worktree
+(`/Users/johnkruse/Projects/kbl-draftfix`). Implement EXACTLY this contract — two new files only. BUILD-DARK (no
+production wiring; the manager lane's lineups tab swaps it in later).
+
+GOAL:
+Build the pure, deterministic, headless **opponent-SP lineup optimizer**: given a roster + the actual next starter's
+full profile, return an `OptimalLineupSnapshot` whose per-slot win-values (`projectedSlotKblWpa`) are scored on the
+fielding-corrected **true value** vs the **full opponent starter** (not just L/R hand), via the canonical IV→WPA
+conversion. Yardstick = true value (deep-dive §215-222), same as SCOUT-1.
+
+SOURCE OF TRUTH (verify every anchor against source FIRST — line numbers may have drifted):
+- Interface shapes: `${MAIN}/spec-docs/MANAGER_WPA_OPTIMIZER_INTERFACE_CONTRACT.md` (MAIN = /Users/johnkruse/Projects/
+  kbl-tracker) — `OptimizeLineupVsStarterInput` (teamId, mode, instanceId?, dhEnabled?, roster: ScoutPlayer[],
+  opponentStarter: OpponentStarterProfile, chosenLineup?), `OpponentStarterProfile` (pitcherId, pitcherName, throws,
+  velocity?, junk?, accuracy?, trait1?, trait2?, traits?, arsenal?, armSlot?, pitcherRole?), returns
+  `OptimalLineupSnapshot` (Answer 5: optimizer returns CONTENT with identity unset — lane mints snapshotId/sourceConfidence).
+- Reuse (read + reuse, do NOT duplicate): `src/utils/optimalLineup.ts` `buildOptimalLineupSnapshot`
+  (the assignment + snapshot assembly; PASS `generatedAt: 0` so it stays pure — it falls back to `Date.now()`),
+  `BuildOptimalLineupSnapshotInput` (line ~69), `analysisTeamForCandidates`. `OptimalLineupCandidate` (= ScoutPlayer),
+  `OptimalLineupSnapshot`/`OptimalLineupSlot` (`src/types/managerWpa.ts`).
+- Per-slot true-value re-score chain (mirror SCOUT-1's `scoutMove.ts` scoreTrueValue + `ivOfEffectiveRatings`
+  `rosterAnalyzer.ts:529-572`): `effectiveRatings` → IVPlayerInput → `computeIV().kblIV` → `computeTrueValue`
+  (`trueValue.ts`). `defensivePlacementRisk` (`effectiveRatings.ts:516`, returns {chanceFrequency, errorLikelihood}).
+  `BATTING_ORDER_SLOT_WEIGHTS` + `CALIBRATE.lineupSnapshotWpaDivisor` (10_000_000) + `CALIBRATE.lineupDefensiveRiskIvPenalty`
+  (300_000) from `src/data/rosterEngineConstants.ts`.
+
+CONSTRAINTS:
+- CREATE ONLY: `src/engines/lineupVsStarter.ts` + `src/engines/__tests__/lineupVsStarter.test.ts`.
+- Do NOT edit any existing file (the assignment comes from the UNCHANGED `buildOptimalLineupSnapshot`; only the WPA
+  numbers are re-scored on top). If you must edit one → STOP, report.
+- Pure / deterministic / headless: NO Date.now/Math.random/fs/DOM. (Pass generatedAt:0 into buildOptimalLineupSnapshot.)
+- Do NOT touch the frozen oracle, ivEngine, trueValue, rosterAnalyzer, optimalLineup, or any manager-WPA runtime file.
+
+EXPECTED OUTPUT — `lineupVsStarter.ts` exports:
+```ts
+export type ScoutPlayer = OptimalLineupCandidate;
+export interface OpponentStarterProfile { pitcherId: string; pitcherName: string; throws: 'L'|'R';
+  velocity?: number; junk?: number; accuracy?: number; trait1?: string|null; trait2?: string|null;
+  traits?: string[]; arsenal?: string[]; armSlot?: 'High'|'Mid'|'Low'|'Sub'|null; pitcherRole?: 'SP'|'SP/RP'|'RP'|'CP'; }
+export interface OptimizeLineupVsStarterInput { teamId: string; mode: OptimalLineupModeContext; instanceId?: string;
+  dhEnabled?: boolean; roster: ScoutPlayer[]; opponentStarter: OpponentStarterProfile;
+  chosenLineup?: { playerId: string; battingOrderSlot: number; defensivePosition: string }[]; }
+export const LINEUP_VS_STARTER_ALGORITHM_VERSION = 'lineup-vs-starter-1.0.0';
+export function optimizeLineupVsStarter(input: OptimizeLineupVsStarterInput): OptimalLineupSnapshot;
+```
+
+ALGORITHM:
+1. `base = buildOptimalLineupSnapshot({ candidates: input.roster, teamId: input.teamId, dhEnabled: input.dhEnabled,
+   opposingPitcherHand: input.opponentStarter.throws, mode: input.mode, instanceId: input.instanceId, generatedAt: 0,
+   ...required fields })` — reuse its assignment (batting order + defensive positions) + assembly. (Map every required
+   BuildOptimalLineupSnapshotInput field from source; STOP if a required field has no input source.)
+2. For each `slot` in `base.slots`: find the player in `input.roster` (by playerId). Re-score with the FULL opponent +
+   true value:
+   - Build a GameContext with `opposingPlayer = input.opponentStarter` (as EffectiveRatingsPlayer), `opposingHand =
+     opponentStarter.throws`, `playingPosition = slot.defensivePosition`, `pressure: 'none'` (no leverage here).
+   - `eff = effectiveRatings(player, state, ctx)`; `kblIV = computeIV(toIvInput(player, eff)).kblIV`.
+   - `tv = computeTrueValue({ kblIV, traits: [], fielding: <player FLD>, isPitcher: false }, {}).trueValue`. (traits:[]
+     + empty counts on purpose: lineup candidates carry no chemistry field, so chemistry potency is NOT applied in v1 —
+     only the FIELDING correction; document as a flagged v1 limitation, Mode-2.)
+   - `defensivePenalty = slot.defensivePosition === 'DH' ? 0 : risk.chanceFrequency * risk.errorLikelihood *
+     CALIBRATE.lineupDefensiveRiskIvPenalty` (risk = defensivePlacementRisk(player, slot.defensivePosition)).
+   - `slotScore = (tv - defensivePenalty) * BATTING_ORDER_SLOT_WEIGHTS[clamp(slot.battingOrderSlot,1,9)]`.
+   - `projectedSlotKblWpa = roundWpa(slotScore / CALIBRATE.lineupSnapshotWpaDivisor)` (same rounding as
+     projectedSlotKblWpaFromIv — match its precision).
+3. Return the base snapshot with each slot's `projectedSlotKblWpa` REPLACED by the re-scored value,
+   `projectedTeamLineupKblWpa = Σ` the new per-slot values, `algorithmVersion = LINEUP_VS_STARTER_ALGORITHM_VERSION`,
+   `generatedAt: 0`, and `snapshotId: ''` (identity unset — lane mints it; Answer 5). Keep all other base fields.
+
+DOCUMENTED v1 LIMITATIONS (code comments): the ASSIGNMENT (who plays where + batting order) comes from the existing
+hand-based optimizer; only the WIN-VALUE numbers are re-scored on the full opponent + true value. A true-value/
+full-opponent-optimal ASSIGNMENT and the matchup substrate are Mode-2/later (interface contract Answer 4). Chemistry
+potency is deferred (candidates carry no chemistry).
+
+TESTS (`lineupVsStarter.test.ts`):
+1. Returns a valid OptimalLineupSnapshot: slots populated, each slot has a finite projectedSlotKblWpa,
+   projectedTeamLineupKblWpa === Σ slot values (within rounding), algorithmVersion === the new constant, snapshotId === ''.
+2. Fielding yardstick: a roster where one candidate is a glove-up (high FLD) at a premium position → that slot's
+   projectedSlotKblWpa is higher than the same roster scored with a low-FLD player in that slot (the true-value fielding
+   correction moves it).
+3. Opponent sensitivity: changing opponentStarter (e.g. throws 'L' vs 'R', or a high vs low profile) changes at least
+   one slot's projectedSlotKblWpa (the full opponent flows through effectiveRatings).
+4. Purity/determinism: two calls on identical input are JSON.stringify-equal (no Date.now leakage — generatedAt is 0).
+
+VERIFICATION (run, paste exact output):
+```
+cd /Users/johnkruse/Projects/kbl-draftfix
+export PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH"
+NODE_ENV= npx tsc -p tsconfig.app.json --noEmit
+NODE_ENV= npx vitest run src/engines/__tests__/lineupVsStarter.test.ts src/engines/__tests__/scoutMove.test.ts
+```
+ALSO run the existing reuse-owner tests to prove the unchanged assignment path is untouched:
+```
+NODE_ENV= npx vitest run src/utils/__tests__ src/engines/__tests__ 2>&1 | tail -20   # adjust to the real test dirs; report the optimalLineup/rosterAnalyzer files PASS
+```
+tsc 0; vitest all-pass; the existing optimalLineup/rosterAnalyzer tests STAY green (proves no regression — you edited nothing they own).
+
+FORMAT: 1) files changed + count; 2) each export + test with the source clause it implements; 3) exact tsc + vitest
+output (incl. the existing-tests-still-green proof); 4) "SCOUT-2 complete" OR "BLOCKED: <reason>".
+
+FAILURE PROTOCOL (STOP-IF):
+- (a) `buildOptimalLineupSnapshot`/`BuildOptimalLineupSnapshotInput`/`analysisTeamForCandidates` not importable, or a
+  REQUIRED BuildOptimalLineupSnapshotInput field has no source in OptimizeLineupVsStarterInput → STOP, report the actual
+  shape (do not fabricate a field value).
+- (b) `BATTING_ORDER_SLOT_WEIGHTS`/`CALIBRATE`/`defensivePlacementRisk`/`computeTrueValue` not exported as documented →
+  STOP, report.
+- (c) Implementation would require editing any existing file → STOP, report (the assignment must come from the
+  unchanged buildOptimalLineupSnapshot).
+- Never invent a constant; never weaken a test to force green.
+
+**Use high reasoning effort. Think step-by-step.**
+<!-- ===== END CONTRACT: SCOUT-2 ===== -->
