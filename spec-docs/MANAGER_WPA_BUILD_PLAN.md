@@ -67,10 +67,31 @@ Wire the orphaned aggregation (`managerStorage.ts` `aggregateManagerGameToSeason
 `updateManagerCareer` — zero callers today) so per-game manager WPA rolls into a **season + career** number for MOY /
 leaderboards. Needed for JK to watch a season play out. Mind the trackerDb version-pin test trap if a store is added.
 
-## STEP 5 — Lineups tab + rotation pointer  *(draft-lane-coordinated, not manager-first)*
-The opponent-SP rotation-aware lineups tab consumes `optimizeLineupVsStarter`; the persisted per-team **rotation pointer**
-(auto-advance on game completion) is the one genuinely-new system piece. Sequenced after the optimizer; coordinate, don't
-duplicate.
+## STEP 5 — Lineups tab + rotation pointer  *(optimizer merged in; broken into 5a/5b/5c, discovery 2026-06-26)*
+Discovery findings: optimal-lineup UI today is buried in **Team Hub** (`TeamHubContent.tsx` — "OPTIMAL LINEUP BENCHMARKS"
+COMPARE/APPLY/RECALC/SET panel :3194-3299 + the "DURABLE LINEUP + ROTATION" manual editor :3022-3192), **hand-based only**
+(`buildOptimalLineupSnapshot` takes opposingPitcherHand R/L). The merged `optimizeLineupVsStarter` (specific-SP) is **ORPHANED**
+(zero callers). **No living-season rotation pointer exists** — teams have a `startingRotation` order but launch just picks
+`startingRotation[0]`; only the synthetic batch-sim has an advancing `rotationIndex`. Pregame = a standalone PRE-GAME LINEUP
+modal (`FranchiseHome.tsx:4255-4370`, lineup NOT editable there — set in Team Hub) → `handleLaunchGame` (:3636-3706) navigates
+to GameTracker with `optimalLineupSnapshots`.
+
+- **5a — Rotation pointer (foundation; storage + engine, minimal UI).** A persisted per-team rotation pointer (index into
+  `startingRotation`) that **auto-advances on real game completion** (hook the post-game pipeline / `processCompletedGame`),
+  exposes "next SP" for a team, + an opponent-next-starter resolver (opponent rotation + pointer → SP playerId → full
+  `OpponentStarterProfile`). Store on the existing franchise team record (no new store / version bump — confirm). + manual
+  rotation reorder respected.
+- **5b — Lineups tab (the big UI; needs JK browser sign-off).** New franchise-hub sub-tab `LineupsTabContent` next to TEAM HUB
+  (`FranchiseHome.tsx` TabType :131, nav :1168/:1187, switch :1415+). REUSE the Team-Hub panels (the COMPARE/APPLY/RECALC/SET
+  advisor + `OptimalLineupComparisonPanel`, the manual reorder editor, the benchmark checklist) — extract them to shared
+  subcomponents. NEW: call `optimizeLineupVsStarter` against the opponent's ACTUAL next SP (via 5a) instead of hand-only;
+  mojo/fitness edit on the tab; persist the accepted/adjusted chosen lineup. Lane mints snapshotId/sourceConfidence.
+- **5c — Pregame collapse (flow cleanup).** Remove the standalone PRE-GAME LINEUP modal as the finalization step; "Play Ball"
+  reads the lineup/rotation already set on the Lineups tab and passes through (reuse `handleLaunchGame` nav assembly :3636-3706);
+  keep GameTracker's in-game lineup/sub + mojo/fitness as the last-second buffer.
+
+Sequence: 5a (foundation) → 5b (the tab) → 5c (collapse). The optimal-lineup is a **scout-driven advisor** (accept/adjust),
+NOT a manager-WPA input (the manager metric is real-WPA based + already complete).
 
 ---
 

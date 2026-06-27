@@ -25089,3 +25089,18 @@ FAILURE PROTOCOL (STOP-IF):
 
 **Use high reasoning effort. Think step-by-step.**
 <!-- ===== END CONTRACT: SCOUT-2 ===== -->
+
+---
+
+## CONTRACT POINTER — Manager-WPA rung-2 (2026-06-26)
+Full contract: `spec-docs/MWAR_RUNG2_CONTRACT.md` (light up the 20% conscious-keep-in tier, scout-gated via the merged
+`evaluateScoutMove`; re-enable the keep-in producer + the starter→keep-in handoff close to avoid double-count; hoist the
+decision assembly headless; sim decline policy; extend the L-SIM proof). Adversarial-reviewed (2 HIGH + sim-placement fixes
+folded). Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window (post optimizer-lane merge).
+
+---
+
+## CONTRACT POINTER — Step 5a rotation resolver (2026-06-26)
+Full contract: `spec-docs/MWAR_STEP5A_CONTRACT.md` (derived rotation-aware next-starter resolver + opponent-next-SP profile
+resolver + make launch rotation-aware; foundation for the 5b lineups tab). DERIVED (gamesPlayed % rotationSize), no new store.
+Builder: Codex. Auditor: Opus. Lane: experiment/manager-wpa-window.
