@@ -70,6 +70,7 @@ export function FranchiseSetup() {
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [showFreezeConfirm, setShowFreezeConfirm] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [farmScoutingReport, setFarmScoutingReport] =
     useState<LeagueBuilderFarmScoutingValidationReport | null>(null);
@@ -225,6 +226,48 @@ export function FranchiseSetup() {
         </div>
       )}
 
+      {showFreezeConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="freeze-confirm-title"
+            className="w-full max-w-[520px] bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+          >
+            <h2 id="freeze-confirm-title" className="text-lg font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>
+              Start the franchise?
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-[#E8E8D8]/85" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+              This LOCKS your rosters, starting morale, and league rules — it can't be undone.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowFreezeConfirm(false)}
+                className="px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide"
+                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowFreezeConfirm(false);
+                  void handleNext();
+                }}
+                disabled={isInitializing}
+                className={`px-6 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all ${
+                  isInitializing
+                    ? "bg-[#3A5A32] text-[#8A9A82] border-[#8A9A82] cursor-not-allowed"
+                    : "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+                }`}
+                style={!isInitializing ? { textShadow: '1px 1px 0px rgba(0,0,0,0.2)' } : {}}
+              >
+                Start Franchise
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-[800px] bg-[#5A7A52] border-[6px] border-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
         {/* Init error banner */}
         {initError && (
@@ -349,7 +392,7 @@ export function FranchiseSetup() {
             CANCEL
           </button>
           <button
-            onClick={handleNext}
+            onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}
             disabled={!canAdvance}
             className={`px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
               canAdvance

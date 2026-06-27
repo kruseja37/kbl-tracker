@@ -25773,3 +25773,116 @@ Unit test for the seat-derivation (no IndexedDB — call the now-exported helper
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: STREAMB-2-SEAT-SPINE ===== -->
+
+<!-- ===== CONTRACT: STREAMB-D-DRAFT-FLOW-SEAMS — make the live draft→franchise flow walkable: farm-draft Continue button (#7) + freeze-confirmation dialog (#8) + plain freeze copy (#9) ===== -->
+
+# CONTRACT STREAMB-D-DRAFT-FLOW-SEAMS
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file. Three small UI seam fixes so the live draft→franchise flow is traversable end-to-end.
+
+## Edits (exhaustive — make ONLY these, in 2 files)
+
+### #7 + #9 — `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`
+The `AUCTION_COMPLETE` block (currently lines ~864-871) dead-ends with no way forward, and uses misleading jargon. Replace that block's body so it (a) uses plain wording and (b) adds a "Continue to Franchise Setup" button that navigates to the franchise wizard.
+- **#9 copy:** replace `Draft complete — the two-number freeze runs next (AUC-5.2).` with plain wording, e.g. `Draft complete. Next: set your league's starting team morale and fan morale, then launch the franchise.`
+- **#7 button:** add a button below that copy: label `Continue to Franchise Setup`, `onClick={() => navigate("/franchise/setup")}` (the route is confirmed in `src/App.tsx:274`; `navigate` is already in scope at line ~214). Style it like the page's other primary buttons (e.g. the `NEXT LOT` button's classes). Keep the "FARM AUCTION COMPLETE…" headline.
+
+### #8 — `src/src_figma/app/pages/FranchiseSetup.tsx` (freeze-confirmation dialog before START FRANCHISE)
+The bottom button runs `handleNext` (line ~146); when `currentStep === totalSteps` that path calls `initializeFranchise` (line ~171) — an IRREVERSIBLE freeze with no confirmation. Gate it behind a confirm modal WITHOUT restructuring `handleNext`:
+- Add state near the others (lines ~30-36): `const [showFreezeConfirm, setShowFreezeConfirm] = useState(false);`
+- Change the bottom NEXT/START button's `onClick` (line ~352) to: `onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}`. (On non-final steps it still advances exactly as before.)
+- Render a confirmation modal when `showFreezeConfirm` is true (match the app's existing modal/overlay styling — a centered card over a dimmed backdrop). Copy: title `Start the franchise?`, body `This LOCKS your rosters, starting morale, and league rules — it can't be undone.` Two buttons: `Cancel` → `setShowFreezeConfirm(false)`; `Start Franchise` → `setShowFreezeConfirm(false); void handleNext();` (handleNext sees `currentStep === totalSteps` and runs the freeze unchanged). Disable/guard the confirm button while `isInitializing`.
+
+## Constraints
+- ZERO changes outside the 2 files. No engine/type/store changes. No `any`. Do NOT alter `handleNext`'s body, `initializeFranchise`, or the freeze logic — only gate the entry to it.
+- Non-final-step behavior must be byte-identical (the conditional onClick only changes the LAST step).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run FranchiseSetup franchiseSetupLaunch LeagueBuilderFarmAuctionDraft` → green (add any test that imports these pages). If no test imports the farm page, say so.
+- FALSIFICATION: confirm the modal gates the FINAL step only (non-final NEXT still calls handleNext directly), and that Cancel does NOT call initializeFranchise.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: `/franchise/setup` is not the FranchiseSetup route; `navigate` is not in scope on the farm page; or gating the button cleanly requires restructuring `handleNext`.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-D-DRAFT-FLOW-SEAMS ===== -->
+
+<!-- ===== CONTRACT: STREAMB-10-DRAFT-RECAP — deterministic DRAFT_RECAP reporter adapter (build-dark; emission flagged) [#10] ===== -->
+
+# CONTRACT STREAMB-10-DRAFT-RECAP
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** A PURE, deterministic draft-recap reporter adapter that shapes deterministic draft ground-truth into a `SeasonNewsEvent`, mirroring the existing reporter-tap adapters. Build-dark + unit test. Do NOT build the call-site or the LLM emission (that is the flagged seam, per the reporter adapter/emission split).
+
+**Pattern to mirror EXACTLY:** `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts` (`buildFranchiseAwardSeasonNewsEvent`). Same structure: a §16 placeholder dramatic-weight constant, a `clamp`, an input interface, a `build…SeasonNewsEvent(input): SeasonNewsEvent` that lifts `facts` verbatim and assigns a clamped `dramaticWeight`.
+
+**Type decision (DECIDED — do not deviate):** REUSE the existing `NarrativeEventType` value `'OFFSEASON_NEWS'` (the draft is a preseason roster event), discriminated by `facts.recapKind: 'DRAFT'`. Do NOT add a new `DRAFT_RECAP` member to the `NarrativeEventType` union (every existing reporter adapter reuses an existing type; extending would ripple into the exhaustive `hedgingModifier` Record and any switch handling). This matches the codebase precedent.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. NEW FILE `src/src_figma/app/engines/reporter/franchiseDraftRecapNewsAdapter.ts`
+```ts
+import type { SeasonNewsEvent } from './seasonNewsGenerator';
+import type { NarrativeEventType } from '../../../../engines/narrativeEngine';
+
+// SIM-tuned placeholder dramatic weight for the draft recap (§16; conservative, tunable).
+export const DRAFT_RECAP_DRAMATIC_WEIGHT = { base: 0.5, magnitudeScale: 0.3 } as const;
+
+export interface FranchiseDraftRecapNewsInput {
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  subjectIds?: string[];            // optional notable drafted player ids
+  facts: Record<string, unknown>;   // deterministic draft ground truth lifted verbatim by the caller — never fabricated here
+  magnitude?: number;               // optional 0..1 drama (e.g. biggest-signing notability); clamped
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+export function buildFranchiseDraftRecapSeasonNewsEvent(input: FranchiseDraftRecapNewsInput): SeasonNewsEvent {
+  const magnitude = clamp(input.magnitude ?? 0.4, 0, 1);
+  const dramaticWeight = clamp(
+    DRAFT_RECAP_DRAMATIC_WEIGHT.base + DRAFT_RECAP_DRAMATIC_WEIGHT.magnitudeScale * magnitude,
+    0, 1,
+  );
+  const eventType: NarrativeEventType = 'OFFSEASON_NEWS';
+  return {
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    seasonNumber: input.seasonNumber,
+    eventType,
+    subjectIds: input.subjectIds ? [...input.subjectIds] : [],
+    facts: { ...input.facts, recapKind: 'DRAFT' },
+    dramaticWeight,
+  };
+}
+```
+**VERIFY against the real `SeasonNewsEvent` type** in `./seasonNewsGenerator`: if any field above is named differently or required differently than what `buildFranchiseAwardSeasonNewsEvent` returns, MATCH that adapter's exact shape (it is the source of truth). If `SeasonNewsEvent` requires a field this omits, add it the way the award adapter does; if it forbids one, drop it. Do not invent fields.
+
+### 2. NEW FILE `src/src_figma/app/engines/reporter/__tests__/franchiseDraftRecapNewsAdapter.test.ts`
+- Given a minimal input (franchiseId/seasonId/seasonNumber + `facts: { biggestSigning: 'X', totalSpend: 1000 }`), assert the event has `eventType === 'OFFSEASON_NEWS'`, `facts.recapKind === 'DRAFT'`, `facts.biggestSigning === 'X'` (lifted verbatim), and `dramaticWeight` within [0,1].
+- Monotonicity: higher `magnitude` → `dramaticWeight` strictly greater (until clamped at 1).
+- `subjectIds` defaults to `[]` when omitted and is copied (not aliased) when provided.
+
+## Constraints
+- ZERO changes outside the 2 new files. Do NOT modify `narrativeEngine.ts` (no union change), `seasonNewsGenerator.ts`, or any Record. No `any`.
+- The adapter is PURE: no I/O, no store, no Date.now/random. It does not COMPUTE draft facts (the caller lifts them) — it shapes + weights.
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run franchiseDraftRecapNewsAdapter` → green.
+- FALSIFICATION: confirm `facts` is lifted verbatim (the test's `biggestSigning` survives) and `recapKind` is added without clobbering input facts.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: `SeasonNewsEvent`'s real shape can't accept this event without extra required fields you'd have to fabricate; `'OFFSEASON_NEWS'` is not a valid `NarrativeEventType`; or `seasonNewsGenerator` does not export `SeasonNewsEvent`.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-10-DRAFT-RECAP ===== -->

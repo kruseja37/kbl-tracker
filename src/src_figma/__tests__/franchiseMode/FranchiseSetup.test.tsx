@@ -287,6 +287,8 @@ describe('FranchiseSetup Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      // #8: START FRANCHISE now opens a freeze-confirmation modal; confirm to run the freeze.
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
 
       await waitFor(() => {
         expect(mockInitializeFranchise).toHaveBeenCalled();
@@ -312,6 +314,8 @@ describe('FranchiseSetup Component', () => {
         target: { value: 'Casey Ledger' },
       });
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      // #8: START FRANCHISE now opens a freeze-confirmation modal; confirm to run the freeze.
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
 
       await waitFor(() => {
         expect(mockInitializeFranchise).toHaveBeenCalledWith(
@@ -345,6 +349,8 @@ describe('FranchiseSetup Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      // #8: START FRANCHISE now opens a freeze-confirmation modal; confirm to run the freeze.
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
 
       expect(await screen.findByText(/farm\/scouting handoff blocked/i)).toBeInTheDocument();
       expect(mockInitializeFranchise).not.toHaveBeenCalled();
@@ -375,6 +381,8 @@ describe('FranchiseSetup Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      // #8: START FRANCHISE now opens a freeze-confirmation modal; confirm to run the freeze.
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
 
       expect(await screen.findByText(/farm\/scouting handoff blocked/i)).toBeInTheDocument();
       expect(mockInitializeFranchise).not.toHaveBeenCalled();
@@ -389,6 +397,8 @@ describe('FranchiseSetup Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      // #8: START FRANCHISE now opens a freeze-confirmation modal; confirm to run the freeze.
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
 
       expect(await screen.findByText(/copy failed/i)).toBeInTheDocument();
       expect(mockValidatePreparedLeagueBuilderFarmScoutingState).toHaveBeenCalled();

@@ -865,8 +865,14 @@ export function LeagueBuilderFarmAuctionDraft() {
               <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold">
                 FARM AUCTION COMPLETE. Farm rosters are filled in the auction session.
                 <div className="mt-2 text-sm text-[#E8E8D8]/85">
-                  Draft complete — the two-number freeze runs next (AUC-5.2).
+                  Draft complete. Next: set your league's starting team morale and fan morale, then launch the franchise.
                 </div>
+                <button
+                  onClick={() => navigate("/franchise/setup")}
+                  className="mt-4 px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
+                >
+                  Continue to Franchise Setup
+                </button>
               </div>
             )}
           </section>
