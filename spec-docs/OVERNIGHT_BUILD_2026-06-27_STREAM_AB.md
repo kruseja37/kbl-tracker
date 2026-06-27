@@ -40,9 +40,37 @@
 - ✅ Fixed the TWO hidden/revealed v1 blockers the new hub introduced (`0f44cbcf`): hidden personality
   modifiers no longer displayed; farm-prospect grades gated to scout-perceived until call-up.
 
+### Session 2 (2026-06-27, continued) — roster moves + trades + award races, browser-verified
+- ✅ **Call-up + Send-down wired to the live engines** (`5d6c8022`): farm "Call up" button + drawer "Send to
+  farm" → a confirm dialog → `callUpFranchisePlayer`/`sendDownFranchisePlayer` → hook reload. leagueId
+  omitted (validator-optional; teamId match is robust for the single-league lens). Engines enforce the
+  hidden-prospect gates. Static mock unchanged.
+- ✅ **Trade builder + broadened Moves ledger** (`5a6db94b`): the "Trades" tab → "Moves" (The Wire) showing
+  trades + roster moves; "Propose a trade" builder (counterparty pick + two MLB rosters → `executeManual
+  FranchiseTrade`). Candidate rosters = MLB-only (gate-safe).
+- ✅ **Trade-card display fix** (`bbaf7668`, browser-found): the card read the wrong transaction keys
+  (team1/playersFromTeam1/cash) — the engine writes sourceTeamId/sourcePlayers/salaryImpact. Now correct.
+- ✅ **Award races + the Hardware frontrunner board** (`75112d5d`): Standings → The Races + The Hardware via
+  `computeFranchiseRaceCandidateRows`. Empty on a gameless save, fills on a played one.
+- ✅ **Browser-verified** (Playwright, gameless + played demo seeds): call-up gate fires
+  (MLB_ROSTER_CAP_EXCEEDED), send-down modal, trade executes + lands in the ledger with names, 7 award
+  races + 7 frontrunners render with correct names/teams. **0 console/page errors.** tsc clean; franchise
+  suites 274/274 (deterministic across 4 runs).
+- ⏸️ **DEFERRED with evidence (NOT built):** **playoff picture** — no engine exists; magic-number/clinch
+  logic is a from-scratch build, not a wire-up. **fitness chip** — no franchise-persisted fitness on the
+  Player (in-game-only); faking it would fabricate data. Both are honest gaps, surfaced not papered over.
+
 ---
 
 ## ▶ RESUME HERE (new session 2026-06-27) — read this first
+
+> **Session-2 state (latest):** branch `claude/lineups-fenway-hub`, worktree
+> `/Users/johnkruse/Projects/kbl-lineups-fenway`. Tree CLEAN. Roster moves (call-up/send-down/trade) +
+> the broadened Moves ledger + award races/Hardware are all wired to live engines, browser-verified,
+> committed (`5d6c8022`→`75112d5d`). Still PREVIEW-only. NEXT-BUILD #1 + the achievable half of #2 are DONE.
+> **Remaining unblocked:** the deferred playoff-picture (needs a NEW small engine) + fitness (needs a
+> persisted source) — both are real builds, not wire-ups; raise with JK before starting. The two JK forks
+> below are still open. The block below is the ORIGINAL session-1 resume note (kept for context).
 
 **Branch:** `claude/lineups-fenway-hub`, worktree `/Users/johnkruse/Projects/kbl-lineups-fenway`. Working tree
 CLEAN, all work committed. = engine trunk `experiment/manager-wpa-window` + Stream-A Fenway hub +
@@ -66,6 +94,16 @@ swap — JK flips after his morning review). Serve for review: `npx vite` in the
 - **A. Pre-freeze persistence** (draft-process map §0): there is NO store for draft-setup choices before
   `initializeFranchise`. Wiring the Stream-B setup spine needs a new `DraftSetupConfig` store OR
   hold-until-freeze. Decide before building draft-setup persistence.
+  - **CORRECTION (session-2 trace, evidence-strict):** the gap is NARROWER than the map first implied. The
+    AUCTION ITSELF is already crash-safe — every pick is written to IndexedDB per pick (`useAuctionDraft.ts`
+    `saveAuctionSession`, mirrored in `useFarmAuctionDraft.ts`); a refresh mid-draft resumes from the saved
+    session, no picks lost. The freeze (`initializeFranchise`→`computeDraftFreeze`) runs ONLY at the end,
+    after both drafts complete, and snapshots morale + true-value into the living season (irreversible). So
+    JK's instinct — "save each pick, commit to mode-2 only at the freeze" — is ALREADY the architecture for
+    the draft. The ONLY unpersisted bit is the pre-draft SETUP-SCREEN choices (seat assignments, archetype,
+    shill) held in `FranchiseSetup` React state. **JK leaning: hold-until-freeze** (the picks, the expensive
+    part, are already crash-safe; the cheap upgrade is to write archetype/seat as they're picked since teams
+    exist pre-draft). Confirm before building the setup write spine.
 - **B. Flip the living-season "on" switch** (living-season map §3): morale/fame/traits/checkpoints/records are
   BUILT-DARK (flags default off). Flipping them = the "v1 is living" activation (a JK call, not a build).
 
