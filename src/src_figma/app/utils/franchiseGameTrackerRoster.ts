@@ -4,6 +4,7 @@ import { getPlayersByTeam, getTeam } from '../../../utils/leagueBuilderStorage';
 import type { LineupSlot, Player as StoredPlayer, Team } from '../../../utils/leagueBuilderStorage';
 import type { OptimalLineupSnapshot } from '../../../types/managerWpa';
 import { getAllFranchisePlayers, getFranchiseTeam } from '../../../utils/franchisePlayerStorage';
+import { getRotationStarterId } from '../../../utils/franchiseRotationResolver';
 import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from '@/app/components/TeamRoster';
 
 const PITCHER_POS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
@@ -272,7 +273,7 @@ export function applyFranchiseStarterSelectionToRosterSnapshot(input: {
 
 export async function buildFranchiseGameTrackerRoster(
   teamId: string,
-  context: { franchiseId?: string; leagueId?: string; useDH?: boolean } = {},
+  context: { franchiseId?: string; leagueId?: string; useDH?: boolean; teamGamesPlayed?: number } = {},
 ): Promise<FranchiseGameTrackerRoster> {
   let dbPlayers: StoredPlayer[];
   let storedTeam: Team | null = null;
@@ -327,9 +328,13 @@ export async function buildFranchiseGameTrackerRoster(
   const pitcherPlayers = dbPlayers.filter(isStoredPitcher);
   const playerById = new Map(dbPlayers.map((player) => [player.id, player]));
   const useDH = context.useDH ?? false;
-  const rotationStarter = storedTeam?.startingRotation
-    ?.map((playerId) => pitcherPlayers.find((player) => player.id === playerId))
-    .find((player): player is StoredPlayer => Boolean(player && isRotationEligiblePitcher(player)));
+  const rotationStarterId = getRotationStarterId(
+    storedTeam?.startingRotation,
+    context.teamGamesPlayed ?? 0,
+  );
+  const rotationStarter = rotationStarterId
+    ? pitcherPlayers.find((player) => player.id === rotationStarterId && isRotationEligiblePitcher(player))
+    : undefined;
   const starterPitcher =
     rotationStarter ?? pitcherPlayers.find(isRotationEligiblePitcher) ?? pitcherPlayers[0];
   const storedLineup = useDH ? storedTeam?.lineupWithDH : storedTeam?.lineupWithoutDH;

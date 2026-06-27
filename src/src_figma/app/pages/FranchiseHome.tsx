@@ -3376,6 +3376,10 @@ function GameDayContent({
   // Team IDs for the matchup — pull from schedule if available
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
+  const countCompletedGamesForTeam = (teamId: string): number =>
+    (scheduleData.completedGames ?? []).filter(
+      (game) => game.awayTeamId === teamId || game.homeTeamId === teamId,
+    ).length;
 
   // T3-01: Show pre-game lineup review before launching game
   const handlePlayGame = async () => {
@@ -3391,11 +3395,23 @@ function GameDayContent({
     setIsPreparingGameLaunch(true);
     try {
       await onRepairFranchisePersistence();
+      const awayGamesPlayed = countCompletedGamesForTeam(away);
+      const homeGamesPlayed = countCompletedGamesForTeam(home);
 
       // Load real rosters from IndexedDB for both teams
       const [awayRoster, homeRoster] = await Promise.all([
-        buildFranchiseGameTrackerRoster(away, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
-        buildFranchiseGameTrackerRoster(home, { franchiseId, leagueId: franchiseLeagueId, useDH: franchiseUseDH }),
+        buildFranchiseGameTrackerRoster(away, {
+          franchiseId,
+          leagueId: franchiseLeagueId,
+          useDH: franchiseUseDH,
+          teamGamesPlayed: awayGamesPlayed,
+        }),
+        buildFranchiseGameTrackerRoster(home, {
+          franchiseId,
+          leagueId: franchiseLeagueId,
+          useDH: franchiseUseDH,
+          teamGamesPlayed: homeGamesPlayed,
+        }),
       ]);
 
       const missingRosterTeams: string[] = [];
