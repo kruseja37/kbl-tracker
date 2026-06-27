@@ -404,8 +404,30 @@ export interface TradeCardVM {
   cash?: number;            // net cash, when present
   involvesActive?: boolean; // the lens club is on either side → highlight
 }
+/** A single roster move in the broadened ledger (call-up / send-down / release). */
+export interface MoveEntryVM {
+  date: string;
+  kind: "call_up" | "send_down" | "release" | "other";
+  icon: string;             // ▲ ▼ ✂
+  label: string;            // "Called up" / "Sent down" / "Released"
+  playerName?: string;
+  teamAbbr?: string;
+  detail?: string;          // "to the active roster" / "to AAA"
+  involvesActive: boolean;  // the lens club made the move → highlight
+}
 export interface TradesVM {
   trades: TradeCardVM[];
+  moves?: MoveEntryVM[];    // the broader wire: call-ups, send-downs, releases
+}
+
+/* ===== Trade builder (propose a manual in-season trade from the hub) ===== */
+export interface TradeCandidatePlayerVM { id: string; name: string; position: string; salary?: number }
+export interface TradeCandidateTeamVM {
+  teamId: string;
+  teamAbbr: string;
+  teamName: string;
+  isActive: boolean;        // the lens club (the source side of any proposal)
+  players: TradeCandidatePlayerVM[];   // MLB-rostered (revealed) players only — gate-safe
 }
 
 export interface HubVM {
@@ -420,6 +442,7 @@ export interface HubVM {
   almanac?: AlmanacVM;
   playoffs?: PlayoffsVM;
   trades?: TradesVM;
+  tradeCandidates?: TradeCandidateTeamVM[];   // all clubs' MLB rosters, for the trade builder
   checkpoint?: CheckpointVM;
   moments?: MomentsVM;
   lineups?: LineupsContextVM;
@@ -429,9 +452,16 @@ export interface HubVM {
 
 /* ===== Roster-move actions (optional; wired by the live-data page, absent in the static mock) ===== */
 export interface RosterActionResult { success: boolean; message?: string }
+export interface TradeProposal {
+  sourceTeamId: string;
+  targetTeamId: string;
+  outgoingPlayerIds: string[];
+  incomingPlayerIds: string[];
+}
 export interface FranchiseLensActions {
   onCallUp: (playerId: string, teamId: string) => Promise<RosterActionResult>;
   onSendDown: (playerId: string, teamId: string) => Promise<RosterActionResult>;
+  onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
 }
 /** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
 interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
@@ -446,7 +476,7 @@ export interface FranchiseLensHubProps {
   actions?: FranchiseLensActions;
 }
 
-const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times", "Playoffs", "Trades"] as const;
+const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times", "Playoffs", "Moves"] as const;
 const LEAGUE_TABS = ["Standings & Races", "Schedule", "Almanac"] as const;
 
 function moraleClass(v: number): string {
@@ -543,8 +573,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
               <NewspaperTab hub={hub} active={active} />
             ) : tab === "Playoffs" ? (
               <PlayoffsTab hub={hub} active={active} />
-            ) : tab === "Trades" ? (
-              <TradesTab hub={hub} active={active} />
+            ) : tab === "Moves" ? (
+              <TradesTab hub={hub} active={active} actions={actions} />
             ) : tab === "Standings & Races" ? (
               <StandingsRacesTab hub={hub} active={active} />
             ) : tab === "Stadium" ? (
@@ -1819,16 +1849,157 @@ function TradeCard({ t }: { t: TradeCardVM }) {
   );
 }
 
-function TradesTab({ hub, active: _active }: { hub: HubVM; active: ActiveTeamVM }) {
+function TradesTab({ hub, active, actions }: { hub: HubVM; active: ActiveTeamVM; actions?: FranchiseLensActions }) {
+  const [builderOpen, setBuilderOpen] = useState(false);
   const tr = hub.trades;
-  if (!tr || tr.trades.length === 0) {
-    return <div className="fen-empty">No trades yet this season.</div>;
-  }
+  const trades = tr?.trades ?? [];
+  const moves = tr?.moves ?? [];
+  const canPropose = !!actions?.onExecuteTrade && !!hub.tradeCandidates && hub.tradeCandidates.length > 1;
+
   return (
     <div className="fen-trades">
-      <div className="fen-sectlab">Trade Wire <span className="lite fen-help">· your club's deals in yellow</span></div>
-      {tr.trades.map((t, i) => <TradeCard key={i} t={t} />)}
+      <div className="fen-moves-head">
+        <div className="fen-sectlab">The Wire <span className="lite fen-help">· every move this season · your club in yellow</span></div>
+        {canPropose ? (
+          <button type="button" className="fen-callup" onClick={() => setBuilderOpen(true)}>⇄ Propose a trade</button>
+        ) : null}
+      </div>
+
+      {trades.length === 0 && moves.length === 0 ? (
+        <div className="fen-empty">No moves yet this season.</div>
+      ) : null}
+
+      {trades.length ? (
+        <>
+          <div className="fen-movelab">Trades</div>
+          {trades.map((t, i) => <TradeCard key={i} t={t} />)}
+        </>
+      ) : null}
+
+      {moves.length ? (
+        <>
+          <div className="fen-movelab">Roster moves</div>
+          <div className="fen-movelist">
+            {moves.map((m, i) => (
+              <div className={`fen-moverow${m.involvesActive ? " you" : ""}`} key={i}>
+                <span className={`fen-moveic ${m.kind}`}>{m.icon}</span>
+                <span className="fen-movewhat fen-chalk">{m.label}</span>
+                <span className="fen-movewho fen-chalk">{m.playerName ?? "—"}</span>
+                {m.teamAbbr ? <span className="fen-moveteam">{m.teamAbbr}</span> : null}
+                {m.detail ? <span className="fen-movedetail fen-help">{m.detail}</span> : null}
+                <span className="fen-movewhen">{m.date}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {builderOpen && actions?.onExecuteTrade && hub.tradeCandidates ? (
+        <TradeBuilder
+          candidates={hub.tradeCandidates}
+          active={active}
+          onExecuteTrade={actions.onExecuteTrade}
+          onClose={() => setBuilderOpen(false)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Propose-a-trade builder. Your club is always the source; pick a counterparty, then the players each
+ * side ships. Only MLB-rostered (revealed) players are offered — gate-safe — and the engine still
+ * refuses unrevealed prospects, surfacing that error inline.
+ */
+function TradeBuilder({
+  candidates, active, onExecuteTrade, onClose,
+}: {
+  candidates: TradeCandidateTeamVM[];
+  active: ActiveTeamVM;
+  onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
+  onClose: () => void;
+}) {
+  const source = candidates.find((c) => c.teamId === active.id) ?? candidates.find((c) => c.isActive);
+  const others = candidates.filter((c) => c.teamId !== source?.teamId);
+  const [targetId, setTargetId] = useState<string>(others[0]?.teamId ?? "");
+  const [out, setOut] = useState<Set<string>>(new Set());
+  const [inc, setInc] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const target = others.find((c) => c.teamId === targetId);
+
+  const toggle = (set: Set<string>, setSet: (s: Set<string>) => void, id: string) => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSet(next);
+  };
+  const ready = !!source && !!target && out.size > 0 && inc.size > 0 && !busy;
+
+  const run = async () => {
+    if (!source || !target) return;
+    setBusy(true);
+    setErr(null);
+    const res = await onExecuteTrade({
+      sourceTeamId: source.teamId,
+      targetTeamId: target.teamId,
+      outgoingPlayerIds: Array.from(out),
+      incomingPlayerIds: Array.from(inc),
+    });
+    setBusy(false);
+    if (res.success) onClose();
+    else setErr(res.message ?? "The trade couldn't be completed.");
+  };
+
+  return (
+    <MomentShell
+      accent="ceremony"
+      kicker="Roster move · trade"
+      title={`Propose a trade — ${source?.teamAbbr ?? "your club"}`}
+      onClose={busy ? () => {} : onClose}
+      footer={
+        <>
+          <button type="button" className="fen-cp-allbtn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="fen-cp-donebtn" onClick={run} disabled={!ready}>
+            {busy ? "Working…" : "Execute trade"}
+          </button>
+        </>
+      }
+    >
+      <div className="fen-tb-teampick">
+        <span className="fen-help">Trade with</span>
+        <select className="fen-tb-select" value={targetId} onChange={(e) => { setTargetId(e.target.value); setInc(new Set()); }}>
+          {others.map((c) => <option key={c.teamId} value={c.teamId}>{c.teamName}</option>)}
+        </select>
+      </div>
+      <div className="fen-tb-cols">
+        <div className="fen-tb-col">
+          <div className="fen-movelab">{source?.teamAbbr ?? "You"} send</div>
+          <div className="fen-tb-list">
+            {(source?.players ?? []).map((p) => (
+              <button type="button" key={p.id} className={`fen-tb-pl${out.has(p.id) ? " on" : ""}`} onClick={() => toggle(out, setOut, p.id)}>
+                <span className="pos">{p.position}</span>
+                <span className="nm">{p.name}</span>
+                {p.salary !== undefined ? <Money value={p.salary} className="sal" /> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="fen-tb-swap">⇄</div>
+        <div className="fen-tb-col">
+          <div className="fen-movelab">{target?.teamAbbr ?? "They"} send</div>
+          <div className="fen-tb-list">
+            {(target?.players ?? []).map((p) => (
+              <button type="button" key={p.id} className={`fen-tb-pl${inc.has(p.id) ? " on" : ""}`} onClick={() => toggle(inc, setInc, p.id)}>
+                <span className="pos">{p.position}</span>
+                <span className="nm">{p.name}</span>
+                {p.salary !== undefined ? <Money value={p.salary} className="sal" /> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {err ? <div className="fen-cp-sub fen-r" style={{ marginTop: 10 }}>{err}</div> : null}
+    </MomentShell>
   );
 }
 

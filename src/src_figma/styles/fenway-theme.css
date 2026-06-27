@@ -885,3 +885,34 @@
 .fen-trade-pl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
 .fen-trade-pl.soft { color: var(--fen-chalk-faint); }
 .fen-trade-swap { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-marquee); text-align: center; align-self: center; }
+
+/* the broadened wire: header + roster-move rows */
+.fen-moves-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fen-movelab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); margin: 8px 0 2px; }
+.fen-movelist { display: flex; flex-direction: column; gap: 1px; }
+.fen-moverow { display: grid; grid-template-columns: 22px 92px 1fr auto auto auto; align-items: baseline; gap: 9px; font-family: var(--fen-chalk-font); padding: 6px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.16); }
+.fen-moverow.you { box-shadow: inset 3px 0 0 var(--fen-yellow); }
+.fen-moveic { font-size: 13px; text-align: center; }
+.fen-moveic.call_up { color: var(--fen-yellow); }
+.fen-moveic.send_down { color: var(--fen-ash); }
+.fen-moveic.release { color: var(--fen-marquee); }
+.fen-movewhat { font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-movewho { font-size: 14px; }
+.fen-moveteam { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); background: rgba(0, 0, 0, 0.22); border-radius: 4px; padding: 1px 6px; }
+.fen-movedetail { font-size: 11px; }
+.fen-movewhen { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-faint); white-space: nowrap; }
+
+/* trade builder (in the takeover shell) */
+.fen-tb-teampick { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.fen-tb-select { font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk); background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(236, 232, 218, 0.2); border-radius: 5px; padding: 6px 10px; }
+.fen-tb-cols { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 10px; align-items: start; }
+@media (max-width: 560px) { .fen-tb-cols { grid-template-columns: 1fr; } .fen-tb-swap { transform: rotate(90deg); } }
+.fen-tb-col { display: flex; flex-direction: column; gap: 4px; }
+.fen-tb-swap { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-marquee); text-align: center; align-self: center; }
+.fen-tb-list { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; }
+.fen-tb-pl { display: grid; grid-template-columns: 30px 1fr auto; align-items: baseline; gap: 8px; font-family: var(--fen-chalk-font); cursor: pointer; text-align: left; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-radius: 5px; padding: 7px 10px; color: var(--fen-chalk-soft); }
+.fen-tb-pl:hover { border-color: rgba(236, 232, 218, 0.28); color: var(--fen-chalk); }
+.fen-tb-pl.on { border-color: var(--fen-yellow); background: rgba(242, 192, 65, 0.14); color: var(--fen-chalk); }
+.fen-tb-pl .pos { font-size: 11px; color: var(--fen-ash); }
+.fen-tb-pl .nm { font-size: 14px; }
+.fen-tb-pl .sal { font-size: 12px; }

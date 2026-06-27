@@ -37,6 +37,7 @@ import {
   callUpFranchisePlayer,
   sendDownFranchisePlayer,
 } from "../../utils/franchiseRosterMovement";
+import { executeManualFranchiseTrade } from "../../utils/franchiseTradeAdapter";
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -143,9 +144,12 @@ import type {
   StadiumVM,
   StandingRowVM,
   StandingsRacesVM,
+  MoveEntryVM,
   TeamPickerVM,
   TieType,
   TieVM,
+  TradeCandidatePlayerVM,
+  TradeCandidateTeamVM,
   TradeCardVM,
   TradesVM,
   TraitChangeVM,
@@ -192,6 +196,14 @@ export interface LensRosterActionResult {
   message?: string;
 }
 
+/** A manual trade proposed from the hub: your club ships `outgoing`, gets `incoming` back. */
+export interface LensTradeRequest {
+  sourceTeamId: string;
+  targetTeamId: string;
+  outgoingPlayerIds: string[];
+  incomingPlayerIds: string[];
+}
+
 export interface UseFranchiseLensDataReturn {
   teams: TeamPickerVM[];
   active: ActiveTeamVM | null;
@@ -204,6 +216,8 @@ export interface UseFranchiseLensDataReturn {
   callUp: (playerId: string, teamId: string) => Promise<LensRosterActionResult>;
   /** Option a player down to AAA; reloads on success. */
   sendDown: (playerId: string, teamId: string) => Promise<LensRosterActionResult>;
+  /** Execute a manual in-season trade (the engine blocks unrevealed prospects); reloads on success. */
+  executeTrade: (req: LensTradeRequest) => Promise<LensRosterActionResult>;
 }
 
 function isPitcher(player: Player): boolean {
@@ -673,7 +687,70 @@ function buildTradesVM(
       };
     });
 
-  return { trades: cards };
+  // The broader wire: call-ups, send-downs, releases. Each carries playerName + teamId in `data`.
+  const MOVE_META: Record<string, { kind: MoveEntryVM["kind"]; icon: string; label: string; detail?: string }> = {
+    call_up: { kind: "call_up", icon: "▲", label: "Called up", detail: "to the active roster" },
+    send_down: { kind: "send_down", icon: "▼", label: "Sent down", detail: "to AAA" },
+    release: { kind: "release", icon: "✂", label: "Released" },
+  };
+  const moves: MoveEntryVM[] = transactions
+    .filter((txn) => txn.type === "call_up" || txn.type === "send_down" || txn.type === "release")
+    .slice()
+    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+    .map((txn) => {
+      const data = (txn.data ?? {}) as Record<string, unknown>;
+      const meta = MOVE_META[txn.type] ?? { kind: "other" as const, icon: "•", label: txn.type };
+      const teamId = String(data.teamId ?? "");
+      const playerName = data.playerName ? String(data.playerName) : nameById.get(String(data.playerId ?? ""));
+      return {
+        date: formatDate(txn.timestamp),
+        kind: meta.kind,
+        icon: meta.icon,
+        label: meta.label,
+        playerName,
+        teamAbbr: teamMeta.get(teamId)?.abbr ?? (teamId || undefined),
+        detail: meta.detail,
+        involvesActive: teamId === activeTeamId,
+      };
+    });
+
+  if (cards.length === 0 && moves.length === 0) return undefined;
+  return { trades: cards, moves: moves.length ? moves : undefined };
+}
+
+/**
+ * Trade-candidate rosters for the in-hub trade builder: every club's MLB-rostered players. MLB players
+ * are uncovered under the hidden/revealed rule, so this is gate-safe; farm prospects are excluded
+ * entirely (and the engine independently refuses to trade unrevealed prospects).
+ */
+function buildTradeCandidates(
+  teams: Team[],
+  players: Player[],
+  activeTeamId: string,
+  teamMeta: Map<string, TeamMeta>,
+): TradeCandidateTeamVM[] {
+  return teams
+    .map((team): TradeCandidateTeamVM => {
+      const roster: TradeCandidatePlayerVM[] = players
+        .filter((p) =>
+          p.leagueAssignments?.some((a) => a.teamId === team.id && a.rosterStatus === "MLB"),
+        )
+        .map((p) => ({
+          id: p.id,
+          name: `${p.firstName} ${p.lastName}`.trim(),
+          position: (p.primaryPosition as string) ?? "—",
+          salary: Number.isFinite(Number(p.salary)) ? Number(p.salary) : undefined,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        teamId: team.id,
+        teamAbbr: teamMeta.get(team.id)?.abbr ?? team.abbreviation ?? team.id,
+        teamName: teamMeta.get(team.id)?.name ?? team.name ?? team.id,
+        isActive: team.id === activeTeamId,
+        players: roster,
+      };
+    })
+    .filter((t) => t.players.length > 0);
 }
 
 function formatBatting(key: BattingSortKey, entry: BattingLeaderEntry): string {
@@ -1126,7 +1203,7 @@ function buildReturn(
   statsReady: boolean,
   isLoading: boolean,
   error: string | null,
-): Omit<UseFranchiseLensDataReturn, "reload" | "callUp" | "sendDown"> {
+): Omit<UseFranchiseLensDataReturn, "reload" | "callUp" | "sendDown" | "executeTrade"> {
   if (!raw || raw.teams.length === 0) {
     return {
       teams: [],
@@ -1289,6 +1366,7 @@ function buildReturn(
     schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
     playoffs: buildPlayoffsVM(playoffs, playoffSeries, activeTeam.id, teamMeta),
     trades: buildTradesVM(transactions, activeTeam.id, teamMeta, ctx.nameById),
+    tradeCandidates: buildTradeCandidates(teams, players, activeTeam.id, teamMeta),
     almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, championships, awards),
     news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
     checkpoint: checkpointVM,
@@ -1369,6 +1447,41 @@ export function useFranchiseLensData(
     [franchiseId, seasonId, seasonNumber, reload],
   );
 
+  // Manual in-season trade. Mirrors the legacy TradeFlow call shape exactly. The engine refuses to
+  // trade unrevealed farm prospects (it protects hidden ratings) — that error surfaces in the modal.
+  const executeTrade = useCallback(
+    async (req: LensTradeRequest): Promise<LensRosterActionResult> => {
+      if (!franchiseId) return { success: false, message: "No active franchise." };
+      const result = await executeManualFranchiseTrade(
+        {
+          franchiseId,
+          seasonId,
+          statsScopeId: seasonId,
+          seasonNumber,
+          offseasonStateId: `regular-season-${seasonId}`,
+          dryRun: false,
+        },
+        {
+          transactionPhase: "REGULAR_SEASON",
+          requestedTrade: {
+            sourceTeamId: req.sourceTeamId,
+            targetTeamId: req.targetTeamId,
+            outgoingPlayerIds: req.outgoingPlayerIds,
+            incomingPlayerIds: req.incomingPlayerIds,
+          },
+        },
+      );
+      if (result.success) reload();
+      return {
+        success: result.success,
+        message: result.success
+          ? undefined
+          : `${result.errorCode ?? "TRADE_FAILED"}: ${result.message ?? "Trade failed."}`,
+      };
+    },
+    [franchiseId, seasonId, seasonNumber, reload],
+  );
+
   useEffect(() => {
     if (!franchiseId) {
       setRaw(null);
@@ -1409,12 +1522,13 @@ export function useFranchiseLensData(
         const playoffSeries = playoffs
           ? await getSeriesByPlayoff(playoffs.id).catch((): PlayoffSeries[] => [])
           : [];
-        // Trades: the season transaction ledger, narrowed to executed trades. Empty until a deal is made.
+        // Moves ledger: the full season transaction ledger (trades + call-ups + send-downs + releases).
+        // Empty until the first move; the VM builders narrow per type. Excludes undone rows.
         const transactions = (
           await getTransactionsByFranchiseSeason(franchiseId, seasonId).catch(
             (): TransactionLogEntry[] => [],
           )
-        ).filter((txn) => txn.type === "trade");
+        ).filter((txn) => !txn.undone);
         // Museum (champions / award winners) is global all-time history; empty on a fresh franchise.
         const championships = await getChampionships().catch(() => []);
         const awards = await getAwardWinners().catch(() => []);
@@ -1474,8 +1588,8 @@ export function useFranchiseLensData(
     [raw, viewedTeamId, seasonNumber, statsReady, isLoading, error],
   );
   return useMemo(
-    () => ({ ...view, reload, callUp, sendDown }),
-    [view, reload, callUp, sendDown],
+    () => ({ ...view, reload, callUp, sendDown, executeTrade }),
+    [view, reload, callUp, sendDown, executeTrade],
   );
 }
 

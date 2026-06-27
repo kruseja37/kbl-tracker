@@ -20,7 +20,7 @@ export function FranchiseLensLivePreview() {
   const seasonNumber = Number(searchParams.get("season") ?? "1") || 1;
   const [viewedTeamId, setViewedTeamId] = useState<string | undefined>(undefined);
 
-  const { teams, active, hub, isLoading, error, callUp, sendDown } = useFranchiseLensData(
+  const { teams, active, hub, isLoading, error, callUp, sendDown, executeTrade } = useFranchiseLensData(
     franchiseId,
     seasonNumber,
     viewedTeamId,
@@ -55,7 +55,7 @@ export function FranchiseLensLivePreview() {
         active={active}
         hub={hub}
         onSelectTeam={setViewedTeamId}
-        actions={{ onCallUp: callUp, onSendDown: sendDown }}
+        actions={{ onCallUp: callUp, onSendDown: sendDown, onExecuteTrade: executeTrade }}
       />
     </div>
   );
