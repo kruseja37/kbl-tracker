@@ -6,7 +6,7 @@
 > **Owner = Captain (build-dark, autonomous) unless noted "JK".** Statuses are the VERIFIED (post-source-check) values.
 
 ## TIER 0 — foundational unblocker (build FIRST)
-1. **Archetype→capIdentity converter** (`selectTeamArchetype`/`archetypeToIdentity` + ArchetypeStat→ModStat→CAP_MODIFICATION_FRACTIONS vocab bridge + unit test; add `mlbArchetypeKey`/`farmArchetypeKey` to Team) — NOT-BUILT, M. The intricate one (silent vocab-mismatch trap); gates the setup spine + archetype picker + Draft Setup hub.
+1. **Archetype→capIdentity converter** (`selectTeamArchetype`/`archetypeToCapIdentity` + ArchetypeStat→ModStat→CAP_MODIFICATION_FRACTIONS vocab bridge + unit test; add `mlbArchetypeKey`/`farmArchetypeKey` to Team) — ✅ BUILT (claude/v1-draft-ui `2e53a0a6`). Faithful **rawShift** bridge (mod-names can't separate rotation/bullpen → hdh-royals/the-opener impossible that way); the plan's `PEN_ACC→PVEL` was a TYPO, corrected to `PACC`. Build-dark, behavior-preserving. The intricate one; gates the setup spine + archetype picker + Draft Setup hub.
 
 ## TIER 1 — setup write spine (depends on #1)
 2. Seat→team assignment write (couch-coop ownership into `initializeFranchise`) — NOT-BUILT, M.
