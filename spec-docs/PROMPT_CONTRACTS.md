@@ -25971,3 +25971,65 @@ The "START DRAFT" action currently jumps straight to the auction: `navigate(draf
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: STREAMB-CP2-DRAFT-CONFIG-ROUTE ===== -->
+
+<!-- ===== CONTRACT: STREAMB-FINISH-PLAYABLE-DRAFT — make the end-to-end draft FULLY playable: it must reliably SAVE and LAUNCH into franchise mode 2 with the drafted rosters loaded [FINISHER handoff] ===== -->
+
+# CONTRACT STREAMB-FINISH-PLAYABLE-DRAFT (Codex 5.5, xhigh — autonomous finisher)
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only; commit when green; do NOT push. Do NOT touch any Lane A file (relationship/fame/playoff/seasonRunner/honors/L-SIM/rivalry).
+
+**THE GOAL (the only thing that matters):** a FULLY FUNCTIONAL, FULLY RELIABLE draft that, end to end, **SAVES and LAUNCHES into franchise mode 2 with the drafted rosters loaded.** The user must be able to: configure the draft (the hub) → run the MLB auction → run the farm auction → freeze → land in a franchise (mode 2) whose teams carry the drafted rosters. Reliability > new features. If something in this chain is broken or flaky, FIX it (within Lane B's surface) or report it precisely.
+
+## STATE — what is already built + verified on this branch (do NOT rebuild; reuse)
+The whole draft slate shipped this session, each gated (build + tests) + committed:
+- `#1` archetype→capIdentity converter — `src/engines/archetypeIdentity.ts` (`selectTeamArchetype(team, mlbKey, farmKey?)`, `archetypeToCapIdentity`); catalog `key` === `HistoricalArchetype.id` (`teamArchetypeCatalog.ts:78`), so the picker key passes straight in. Writes `team.capIdentity`/`farmCapIdentity` via `saveTeam`.
+- `#2` couch-coop seat spine — `FranchiseConfig.teams.seats`/`playerAssignments`; `franchiseInitializer.buildTeamControlSnapshot`/`deriveFranchiseType` derive control from seats (backward-compatible).
+- `#3` shill scaling — `scaledShillDefault(leagueSize)` (`auctionEngineConstants.ts`); stays in the auction session only.
+- `#7/#8/#9` draft-flow seams — farm-draft Continue button, START-FRANCHISE freeze-confirm modal, plain copy.
+- `#10` DRAFT_RECAP reporter adapter (build-dark).
+- `#27` merge — 9 draft preview screens + `teamArchetypeCatalog` + routes.
+- **CP-1** — `DraftSetupHubPreview.tsx` is now LIVE: reads the active league's real teams (`useLeagueBuilderData` + `league.teamIds`), per-team MLB+farm archetype picks → `selectTeamArchetype`→`saveTeam`, ownership → `team.controlledBy`, shill seed, "Start the Draft" → `draftRouteForLeague`. Reachable at `/league-builder/draft-config`.
+- **CP-2** — pool-lock's START-DRAFT now routes to `/league-builder/draft-config` (the hub), then the hub → auction.
+
+**The existing draft→franchise PIPELINE already works and is TESTED:** `src/utils/tests/draftPipeline.integration.test.ts` runs "MLB auction → farm auction → franchise launch with real seeded players and deterministic storage results." This is your RELIABILITY ANCHOR — it proves the freeze loads rosters into the franchise. It currently passes.
+
+## MISSION (bounded; verification-driven; in order)
+
+### 1. VERIFY the end-to-end chain (deterministic — this is the real gate)
+Run and report:
+- `NODE_ENV= npm run build` → must be exit 0.
+- `NODE_ENV= npx vitest run draftPipeline franchiseInitializer franchiseSeatAssignment FranchiseSetup franchiseSetupLaunch archetypeIdentity leagueConstruction auctionLuxuryTax cpuShillBidding` → report file-by-file. (NOTE: `historicalArchetypes.test.ts` FAILS in large mixed batches — cross-file state bleed — but PASSES solo; that is a documented characterized red, NOT a regression. Do not "fix" it; verify it solo if it appears.)
+- Confirm `draftPipeline.integration.test.ts` is GREEN (the freeze→franchise+rosters proof). If it is RED, that is the #1 thing to fix.
+
+### 2. HARDEN: prove the HUB's outputs flow end-to-end (add/extend ONE integration test)
+The pipeline test does not yet exercise the new hub's writes. Add or extend a vitest test that proves a hub-configured team flows through:
+- Give a team a `capIdentity` via `selectTeamArchetype(team, '<a real HISTORICAL_ARCHETYPES id>')` (e.g. `'murderers-row'`) and set `controlledBy`.
+- Assert the auction caps honor it: `shiftLuxuryCaps(pool.luxuryCaps, team.capIdentity)` (or the `auctionLuxuryTax` path) shifts the expected ModStats (the `rawShift` is authoritative — see `archetypeIdentity`/`leagueConstruction`).
+- Assert that after `initializeFranchise` (mirror `draftPipeline.integration`'s setup), the franchise carries (a) the team control derived from ownership and (b) the rosters. Keep it deterministic (no Date.now/random).
+- This test GREEN = the reliability guarantee JK needs. Make it real, not vacuous.
+
+### 3. BROWSER SMOKE (best-effort; report, do NOT gate on it)
+If Playwright/a browser is available in this environment, smoke the hub against a worktree dev server (`npm run dev -- --port 5181 --strictPort`): navigate `/league-builder`, click "IMPORT MLB", **WAIT for the in-browser seed to finish** (it writes 30 teams + 660 players to IndexedDB — poll the page until it shows "30 teams"; do NOT navigate away early — that was the trap that made it look empty), then go to `/league-builder/draft-config`, confirm REAL teams render (not the empty state), pick an MLB archetype on a club, confirm no console errors, click "Start the Draft" and confirm it lands on the auction route. Report exactly what you saw. If the browser is unavailable in this exec, SKIP and say so — the integration test (steps 1-2) is the authoritative gate.
+
+### 4. FIX any break found in steps 1-3 that prevents the draft from reliably saving/launching — ONLY within Lane B's draft/setup surface (draft/setup pages, `leagueBuilder*`/`franchiseInitializer`/`draftRouting`/setup utils, the archetype/auction engines). Keep fixes minimal and behavior-preserving for the existing green pipeline.
+
+## STOP-IF (report precisely in the DONE report, change nothing further) — IF:
+- A required fix would touch a Lane A file (relationship/fame/playoff/seasonRunner/honors/L-SIM/rivalry).
+- A required fix needs a JK product decision (e.g. how couch-coop seat NAMES should persist to the freeze — that is the accepted hold-until-freeze gap; do NOT invent a new store).
+- `draftPipeline.integration` / the freeze→rosters path is broken in a way that needs a franchise-init redesign (report the exact failure + root cause for JK Tuesday rather than a risky deep change).
+
+## GATE (must hold before commit)
+- `npm run build` exit 0.
+- The step-1 suite green (file-by-file; characterized `historicalArchetypes` batch-red excepted, verified solo).
+- The step-2 hardening test green.
+- Browser smoke done OR explicitly skipped-with-reason.
+
+## DELIVERABLES
+- Commit all changes branch-only with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- Write `spec-docs/STREAMB_FINISH_REPORT.md` with: (a) the end-to-end VERDICT — does the draft reliably SAVE + LAUNCH into franchise mode 2 with rosters? **YES/NO + the evidence (test names + results)**; (b) what you verified; (c) what you fixed (file:line); (d) anything left for JK's Tuesday session + any STOP-IF hit.
+
+**FINAL FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> E2E_SAVES_AND_LAUNCHES=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+Use xhigh reasoning effort. Be rigorous: JK is relying on this draft being reliable enough to load rosters into franchise mode 2.
+
+<!-- ===== END CONTRACT: STREAMB-FINISH-PLAYABLE-DRAFT ===== -->
