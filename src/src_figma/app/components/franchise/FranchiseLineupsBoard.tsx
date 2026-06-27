@@ -2,6 +2,7 @@ import type { ActiveTeamVM, HubVM } from "./FranchiseLensHub";
 import type { MojoState, Player, Position } from "../../../../utils/leagueBuilderStorage";
 import {
   FRANCHISE_FIELD_POSITIONS,
+  FRANCHISE_PITCHER_LINEUP_SLOT_ID,
   FRANCHISE_ROTATION_SIZE,
   getFranchisePlayerName,
 } from "../../utils/franchiseLineupDomain";
@@ -175,7 +176,19 @@ export function FranchiseLineupsBoard({ hub, active }: { hub: HubVM; active: Act
             <div className="fen-lu-spmeta lite">No MLB position players available.</div>
           ) : (
             <div className="fen-lu-rows">
-              {editor.manualLineupSlots.map((slot, index) => (
+              {editor.manualLineupSlots.map((slot, index) => {
+                if (slot.playerId === FRANCHISE_PITCHER_LINEUP_SLOT_ID) {
+                  return (
+                    <div key={`pitcher-${index}`} className="fen-lu-editrow">
+                      <span className="fen-lu-num">{index + 1}</span>
+                      <span className="grow">{editor.rotationStarterName ?? "Starting pitcher"} <span className="lite">SP</span></span>
+                      <span className="fen-lu-optpos">P</span>
+                      <button type="button" aria-label={`Move lineup slot ${index + 1} up`} className="fen-lu-mini" disabled={index === 0} onClick={() => editor.moveManualLineupSlot(index, -1)}>▲</button>
+                      <button type="button" aria-label={`Move lineup slot ${index + 1} down`} className="fen-lu-mini" disabled={index === editor.manualLineupSlots.length - 1} onClick={() => editor.moveManualLineupSlot(index, 1)}>▼</button>
+                    </div>
+                  );
+                }
+                return (
                 <div key={`${slot.battingOrder}-${slot.playerId}-${index}`} className="fen-lu-editrow">
                   <span className="fen-lu-num">{index + 1}</span>
                   <select
@@ -201,12 +214,8 @@ export function FranchiseLineupsBoard({ hub, active }: { hub: HubVM; active: Act
                   <button type="button" aria-label={`Move lineup slot ${index + 1} up`} className="fen-lu-mini" disabled={index === 0} onClick={() => editor.moveManualLineupSlot(index, -1)}>▲</button>
                   <button type="button" aria-label={`Move lineup slot ${index + 1} down`} className="fen-lu-mini" disabled={index === editor.manualLineupSlots.length - 1} onClick={() => editor.moveManualLineupSlot(index, 1)}>▼</button>
                 </div>
-              ))}
-              <div className="fen-lu-editrow lite">
-                <span className="fen-lu-num">{editor.manualLineupSlots.length + 1}</span>
-                <span className="grow">{editor.rotationStarterName ? `${editor.rotationStarterName} (auto)` : "Starting pitcher"}</span>
-                <span className="fen-lu-optpos">P</span>
-              </div>
+                );
+              })}
             </div>
           )}
           <div className="fen-lu-pen">

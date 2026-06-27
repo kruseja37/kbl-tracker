@@ -1,6 +1,7 @@
 import type { Position } from "../../../utils/leagueBuilderStorage";
 import {
   FRANCHISE_FIELD_POSITIONS,
+  FRANCHISE_PITCHER_LINEUP_SLOT_ID,
   FRANCHISE_ROTATION_SIZE,
   getFranchisePlayerName,
 } from "../utils/franchiseLineupDomain";
@@ -112,6 +113,35 @@ export function FranchiseLineupRotationEditor(props: FranchiseLineupRotationEdit
           ) : (
             <div className="space-y-2">
               {manualLineupSlots.map((slot, index) => {
+                if (slot.playerId === FRANCHISE_PITCHER_LINEUP_SLOT_ID) {
+                  return (
+                    <div key={`pitcher-${index}`} className="grid grid-cols-[34px_minmax(150px,1fr)_80px_80px] items-center gap-2 text-[8px]">
+                      <div className="text-[var(--franchise-text)]/70">#{index + 1}</div>
+                      <div className="text-[var(--franchise-text)]">{rotationStarterName ?? "Starting pitcher"} <span className="text-[var(--franchise-text)]/40">(SP)</span></div>
+                      <div className="text-[var(--franchise-gold-soft)]">P</div>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Move lineup slot ${index + 1} up`}
+                          disabled={index === 0}
+                          onClick={() => moveManualLineupSlot(index, -1)}
+                          className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
+                        >
+                          UP
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move lineup slot ${index + 1} down`}
+                          disabled={index === manualLineupSlots.length - 1}
+                          onClick={() => moveManualLineupSlot(index, 1)}
+                          className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
+                        >
+                          DN
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
                 const player = franchiseRosterPlayerById.get(slot.playerId);
                 return (
                   <div key={`${slot.battingOrder}-${slot.playerId}-${index}`} className="grid grid-cols-[34px_minmax(150px,1fr)_80px_80px] items-center gap-2 text-[8px]">
@@ -166,11 +196,6 @@ export function FranchiseLineupRotationEditor(props: FranchiseLineupRotationEdit
                   </div>
                 );
               })}
-              <div className="grid grid-cols-[34px_minmax(150px,1fr)_80px] items-center gap-2 text-[8px] text-[var(--franchise-text)]/70">
-                <div>#{manualLineupSlots.length + 1}</div>
-                <div>{rotationStarterName ? `${rotationStarterName} (auto)` : "Starting pitcher"}</div>
-                <div>P</div>
-              </div>
             </div>
           )}
 
