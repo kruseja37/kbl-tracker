@@ -20,7 +20,7 @@
  * Lens team is pinned to controlledTeams[0] (v1; multi-team selector deferred). Rival-red is left
  * undefined until this branch rebases onto the trunk's home-park-rivalry seam — degrades gracefully.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   useSeasonStats,
@@ -33,6 +33,10 @@ import {
 import { getFranchiseConfig } from "../../utils/franchiseManager";
 import { resolveFranchiseSalaryRevealState } from "../../utils/franchiseSalary";
 import { getFranchiseSeasonId } from "../../utils/franchisePersistenceContract";
+import {
+  callUpFranchisePlayer,
+  sendDownFranchisePlayer,
+} from "../../utils/franchiseRosterMovement";
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -182,12 +186,24 @@ interface RawData {
   reporters: BeatReporter[];
 }
 
+/** Result of a roster move, surfaced to the confirm modal (kept engine-type-free for the pure view). */
+export interface LensRosterActionResult {
+  success: boolean;
+  message?: string;
+}
+
 export interface UseFranchiseLensDataReturn {
   teams: TeamPickerVM[];
   active: ActiveTeamVM | null;
   hub: HubVM;
   isLoading: boolean;
   error: string | null;
+  /** Re-read every store and rebuild the view (call after a successful mutation). */
+  reload: () => void;
+  /** Promote a farm player to the active roster (reveals true ratings); reloads on success. */
+  callUp: (playerId: string, teamId: string) => Promise<LensRosterActionResult>;
+  /** Option a player down to AAA; reloads on success. */
+  sendDown: (playerId: string, teamId: string) => Promise<LensRosterActionResult>;
 }
 
 function isPitcher(player: Player): boolean {
@@ -1110,7 +1126,7 @@ function buildReturn(
   statsReady: boolean,
   isLoading: boolean,
   error: string | null,
-): UseFranchiseLensDataReturn {
+): Omit<UseFranchiseLensDataReturn, "reload" | "callUp" | "sendDown"> {
   if (!raw || raw.teams.length === 0) {
     return {
       teams: [],
@@ -1295,6 +1311,63 @@ export function useFranchiseLensData(
   const [raw, setRaw] = useState<RawData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumping this re-runs the load effect — the post-mutation refresh seam for roster moves.
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  // Roster moves: assemble the engine input from the lens's own context. leagueId is intentionally
+  // OMITTED — the validator treats it as an optional extra filter (`!leagueId || assignment.leagueId
+  // === leagueId`), so for the single-league franchise lens, matching by teamId alone is the robust
+  // choice (a wrong league id would silently fail eligibility). The engines already enforce the
+  // hidden-prospect gates (call-up flips reveal→'revealed'; unrevealed prospects can't be traded).
+  const callUp = useCallback(
+    async (playerId: string, teamId: string): Promise<LensRosterActionResult> => {
+      if (!franchiseId) return { success: false, message: "No active franchise." };
+      const result = await callUpFranchisePlayer({
+        franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        seasonNumber,
+        teamId,
+        playerId,
+        actor: "USER",
+        rosterMovementPhase: "REGULAR_SEASON",
+      });
+      if (result.success) reload();
+      return {
+        success: result.success,
+        message: result.success
+          ? undefined
+          : `${result.errorCode ?? "ROSTER_MOVE_FAILED"}: ${result.errorMessage ?? "Call-up failed."}`,
+      };
+    },
+    [franchiseId, seasonId, seasonNumber, reload],
+  );
+
+  const sendDown = useCallback(
+    async (playerId: string, teamId: string): Promise<LensRosterActionResult> => {
+      if (!franchiseId) return { success: false, message: "No active franchise." };
+      const result = await sendDownFranchisePlayer({
+        franchiseId,
+        seasonId,
+        statsScopeId: seasonId,
+        seasonNumber,
+        teamId,
+        playerId,
+        actor: "USER",
+        rosterMovementPhase: "REGULAR_SEASON",
+        rosterLevel: "AAA",
+      });
+      if (result.success) reload();
+      return {
+        success: result.success,
+        message: result.success
+          ? undefined
+          : `${result.errorCode ?? "ROSTER_MOVE_FAILED"}: ${result.errorMessage ?? "Send-down failed."}`,
+      };
+    },
+    [franchiseId, seasonId, seasonNumber, reload],
+  );
 
   useEffect(() => {
     if (!franchiseId) {
@@ -1391,14 +1464,18 @@ export function useFranchiseLensData(
     return () => {
       cancelled = true;
     };
-  }, [franchiseId, seasonId, seasonNumber]);
+  }, [franchiseId, seasonId, seasonNumber, reloadKey]);
 
   const statsReady = !seasonStats.isLoading;
-  return useMemo(
+  const view = useMemo(
     () => buildReturn(raw, viewedTeamId, seasonNumber, seasonStats, statsReady, isLoading, error),
     // seasonStats getters are useCallback-stable; statsReady gates the stats-derived rebuild.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [raw, viewedTeamId, seasonNumber, statsReady, isLoading, error],
+  );
+  return useMemo(
+    () => ({ ...view, reload, callUp, sendDown }),
+    [view, reload, callUp, sendDown],
   );
 }
 

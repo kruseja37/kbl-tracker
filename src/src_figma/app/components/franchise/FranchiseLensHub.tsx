@@ -427,12 +427,23 @@ export interface HubVM {
   emptyNote?: string;
 }
 
+/* ===== Roster-move actions (optional; wired by the live-data page, absent in the static mock) ===== */
+export interface RosterActionResult { success: boolean; message?: string }
+export interface FranchiseLensActions {
+  onCallUp: (playerId: string, teamId: string) => Promise<RosterActionResult>;
+  onSendDown: (playerId: string, teamId: string) => Promise<RosterActionResult>;
+}
+/** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
+interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
+
 export interface FranchiseLensHubProps {
   teams: TeamPickerVM[];
   active: ActiveTeamVM;
   hub: HubVM;
   onSelectTeam: (teamId: string) => void;
   onBack?: () => void;
+  /** When present, roster rows/farm expose call-up & send-down affordances wired to the live engines. */
+  actions?: FranchiseLensActions;
 }
 
 const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times", "Playoffs", "Trades"] as const;
@@ -460,12 +471,21 @@ function Money({ value, className }: { value: number; className?: string }) {
   );
 }
 
-export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: FranchiseLensHubProps) {
+export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: FranchiseLensHubProps) {
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
   const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
   const [openMoment, setOpenMoment] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [helpOn, setHelpOn] = useState(false);
+
+  // Farm call-up: only offered when actions are wired (the live page). teamId = the lens club.
+  const requestCallUp = actions
+    ? (playerId: string, name: string) => setPendingMove({ kind: "call-up", playerId, teamId: active.id, name })
+    : undefined;
+  const requestSendDown = actions
+    ? (playerId: string, name: string) => setPendingMove({ kind: "send-down", playerId, teamId: active.id, name })
+    : undefined;
 
   const identityStyle = {
     ["--fen-tp" as string]: active.primary,
@@ -515,6 +535,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
                 openMorale={openMorale}
                 setOpenMorale={setOpenMorale}
                 onOpenPlayer={setOpenPlayer}
+                onRequestCallUp={requestCallUp}
               />
             ) : tab === "Lineups" ? (
               <FranchiseLineupsBoard hub={hub} active={active} />
@@ -539,7 +560,20 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
         </div>
       </div>
       <button type="button" className="fen-helpbtn" onClick={() => setHelpOn((v) => !v)}>? Help</button>
-      {openPlayer ? <PlayerDrawer player={openPlayer} onClose={() => setOpenPlayer(null)} /> : null}
+      {openPlayer ? (
+        <PlayerDrawer
+          player={openPlayer}
+          onClose={() => setOpenPlayer(null)}
+          onSendDown={
+            requestSendDown
+              ? () => { requestSendDown(openPlayer.id, openPlayer.name); setOpenPlayer(null); }
+              : undefined
+          }
+        />
+      ) : null}
+      {pendingMove && actions ? (
+        <RosterMoveConfirm move={pendingMove} actions={actions} onClose={() => setPendingMove(null)} />
+      ) : null}
       {openMoment === "checkpoint" && hub.checkpoint ? <CheckpointTakeover cp={hub.checkpoint} onClose={() => setOpenMoment(null)} /> : null}
       {openMoment === "firing" && hub.moments?.firing ? <FiringTakeover m={hub.moments.firing} onClose={() => setOpenMoment(null)} /> : null}
       {openMoment === "rebrand" && hub.moments?.rebrand ? <RebrandTakeover m={hub.moments.rebrand} onClose={() => setOpenMoment(null)} /> : null}
@@ -743,13 +777,14 @@ function NewspaperTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
 }
 
 function RosterTab({
-  active, hub, openMorale, setOpenMorale, onOpenPlayer,
+  active, hub, openMorale, setOpenMorale, onOpenPlayer, onRequestCallUp,
 }: {
   active: ActiveTeamVM;
   hub: HubVM;
   openMorale: string | null;
   setOpenMorale: (v: string | null) => void;
   onOpenPlayer: (p: PlayerRowVM) => void;
+  onRequestCallUp?: (playerId: string, name: string) => void;
 }) {
   const fan = hub.pulse.fanMorale;
   return (
@@ -813,12 +848,12 @@ function RosterTab({
         </div>
       )}
 
-      {hub.rosterExtras ? <RosterExtras extras={hub.rosterExtras} /> : null}
+      {hub.rosterExtras ? <RosterExtras extras={hub.rosterExtras} onRequestCallUp={onRequestCallUp} /> : null}
     </>
   );
 }
 
-function RosterExtras({ extras }: { extras: RosterExtrasVM }) {
+function RosterExtras({ extras, onRequestCallUp }: { extras: RosterExtrasVM; onRequestCallUp?: (playerId: string, name: string) => void }) {
   return (
     <>
       {(extras.advice && extras.advice.length) || (extras.tradeDemands && extras.tradeDemands.length) ? (
@@ -861,7 +896,13 @@ function RosterExtras({ extras }: { extras: RosterExtrasVM }) {
                 <div className="fen-rname fen-chalk">{f.name}{f.age ? <span className="fen-farm-age"> · {f.age}</span> : null}</div>
                 <div className="fen-farm-grade">{f.grade ?? "—"}</div>
                 <div className="fen-farm-ready">{f.readiness ?? ""}{f.note ? <span className="fen-farm-note fen-help"> · {f.note}</span> : null}</div>
-                <div className="fen-farm-act"><button type="button" className={`fen-callup${f.callUpReady ? "" : " ghost"}`}>▲ Call up</button></div>
+                <div className="fen-farm-act">
+                  {onRequestCallUp ? (
+                    <button type="button" className={`fen-callup${f.callUpReady ? "" : " ghost"}`} onClick={() => onRequestCallUp(f.id, f.name)}>▲ Call up</button>
+                  ) : (
+                    <button type="button" className={`fen-callup${f.callUpReady ? "" : " ghost"}`} disabled>▲ Call up</button>
+                  )}
+                </div>
                 <div className="line" />
               </Fragment>
             ))}
@@ -870,6 +911,50 @@ function RosterExtras({ extras }: { extras: RosterExtrasVM }) {
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Confirm-and-execute dialog for a roster move. Reuses the MomentShell takeover so it matches the
+ * board aesthetic with no new chrome. Call-up reveals the prospect's true ratings (the scout fog
+ * lifts) — we say so. The engine enforces eligibility; its error surfaces inline.
+ */
+function RosterMoveConfirm({ move, actions, onClose }: { move: PendingMove; actions: FranchiseLensActions; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const isCallUp = move.kind === "call-up";
+  const run = async () => {
+    setBusy(true);
+    setErr(null);
+    const res = isCallUp
+      ? await actions.onCallUp(move.playerId, move.teamId)
+      : await actions.onSendDown(move.playerId, move.teamId);
+    setBusy(false);
+    if (res.success) onClose();
+    else setErr(res.message ?? "The move couldn't be completed.");
+  };
+  return (
+    <MomentShell
+      accent={isCallUp ? "ceremony" : "rebrand"}
+      kicker={isCallUp ? "Roster move · call-up" : "Roster move · send-down"}
+      title={isCallUp ? `Call up ${move.name}?` : `Send ${move.name} down?`}
+      onClose={busy ? () => {} : onClose}
+      footer={
+        <>
+          <button type="button" className="fen-cp-allbtn" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="fen-cp-donebtn" onClick={run} disabled={busy}>
+            {busy ? "Working…" : isCallUp ? "Call him up" : "Send him down"}
+          </button>
+        </>
+      }
+    >
+      <div className="fen-cp-sub">
+        {isCallUp
+          ? `Promoting ${move.name} to the active roster reveals his true ratings — the scout's fog lifts — and logs the move to the wire.`
+          : `Optioning ${move.name} to AAA opens an active-roster spot and logs the move to the wire.`}
+      </div>
+      {err ? <div className="fen-cp-sub fen-r" style={{ marginTop: 10 }}>{err}</div> : null}
+    </MomentShell>
   );
 }
 
@@ -1430,7 +1515,7 @@ function DrawerSection({ title, hint, children }: { title: string; hint?: string
   );
 }
 
-function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () => void }) {
+function PlayerDrawer({ player, onClose, onSendDown }: { player: PlayerRowVM; onClose: () => void; onSendDown?: () => void }) {
   const d = player.detail;
   const m = player.morale;
   return (
@@ -1438,6 +1523,11 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
       <div className="fen-drawer-back" onClick={onClose} />
       <div className="fen-drawer" role="dialog" aria-label={`${player.name} dossier`}>
         <button type="button" className="fen-drawer-x" onClick={onClose} aria-label="Close">×</button>
+        {onSendDown ? (
+          <div className="fen-drawer-act">
+            <button type="button" className="fen-callup ghost" onClick={onSendDown}>▼ Send to farm</button>
+          </div>
+        ) : null}
         <div className="fen-dhead">
           <div className="dnum fen-chalk">{player.number ?? ""}</div>
           <div className="dident">
