@@ -25366,3 +25366,53 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: RIVALRY-ENVY-1 ===== -->
+
+<!-- ===== CONTRACT: RIVALRY-ENVY-2A — extend the race-snub (morale hit + RIVALRY edge) to Rookie of the Year + Reliever of the Year (snub-only; reuses ENVY-1) ===== -->
+
+**ROUTE:** Codex (builder) — worktree `/Users/johnkruse/Projects/kbl-soulgaps`, branch `claude/v1-soul-gaps`. **BRANCH-ONLY: do NOT `git add`, commit, or push.** Leave edits dirty for Captain audit.
+
+**ROLE:** JK ruled 2026-06-27: extend SNUBS to the **Rookie of the Year** and **Reliever of the Year** races. Today only MVP + Cy Young produce a season-finalize snub (morale hit + — as of RIVALRY-ENVY-1 — a lasting RIVALRY edge against the winner). Add ROY + Reliever to that SNUB treatment: each close-loser takes the personality-scaled morale hit AND forms a `RIVALRY` edge against the award winner. **SNUB-ONLY** (JK said "snubs"): do NOT add winner-side honor payouts (news emission / fame reach-floor) for ROY/Reliever — they have no `FranchiseHonorTier` and the fame magnitude is an un-tuned §20.3 decision (DEFER as an OPEN-DECISION). Reuse the ENVY-1 machinery verbatim (`applyFranchiseRaceSnubMorale` + `persistRaceSnubRivalryEdges`).
+
+**GOAL / MAKE-OR-BREAK:**
+1. ROY + Reliever finalized award rows (winner + close-loser candidates) each fire the EXISTING `applyFranchiseRaceSnubMorale` (morale) + `persistRaceSnubRivalryEdges` (RIVALRY edge), with `honorKind` `'ROOKIE_OF_YEAR'` / `'RELIEVER_OF_YEAR'`.
+2. **The existing MVP/CY path stays behaviorally IDENTICAL** (winner emission + reach-floor + snub + envy edge) — the honors unit test (`src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts`) MUST stay green.
+3. No winner-side emission or reach-floor for ROY/Reliever (snub-only).
+4. Captain's gate: full suite ZERO-NEW-REDS + L-SIM season 60g clean (ROY is finalized in the L-SIM scenario → its snub morale fires + edges form/dedup against the MVP edges via create-if-absent; Reliever is NOT finalized in that scenario → noop. Behavioral re-bake expected: new ROY snub-morale rows ± a few edges; bounded/deterministic).
+
+**SOURCE OF TRUTH:** `spec-docs/FRANCHISE_V1_LIVING_SEASON_SPEC.md` §21-23 (the race/award family — MVP/CY/ROY/Reliever are all merit races) + RACE-2/RACE-3 (snubs are the close losers). JK ruling 2026-06-27 extends the snub set to ROY + Reliever. Winner-side honors for ROY/Reliever = DEFERRED OPEN-DECISION (fame-magnitude tuning).
+
+**GROUND ANCHORS (Captain-verified from source THIS session — re-read before editing):**
+- `src/utils/franchiseRaceSnubMorale.ts:13`: `export type FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR';`. The morale event is built generically (`:50-55` `buildRaceSnubMoraleEvent` → `type: \`race.snub.${honorKind.toLowerCase()}\``); the morale matrix `race` tap (`src/engines/masterMoraleMatrix.ts:456-461`) prices ANY `kind:'race'` event at `EVENT_DELTA.raceSnubSelf` — so new honor kinds need NO matrix change. `applyFranchiseRaceSnubMorale` is L12-gated (`:106`).
+- `src/utils/franchiseAwardsStorage.ts`: `FranchiseAwardCategory` includes `'ROOKIE_OF_YEAR'` + `'RELIEVER_OF_YEAR'` (`:20`,`:30`). `FranchiseAwardRow` (`:45`) has `winnerPlayerId: string|null` (`:47`), `candidates: FranchiseAwardCandidate[]` (`:49`, each `{playerId, teamId:string|null, score, marginToWinner}`), `finalized` (`:54`) — SAME shape MVP/CY use. The awards engine computes ROY + Reliever (`franchiseAwardsEngine.ts:117`,`:275`,`:299`,`:346`,`:358`).
+- `src/utils/franchiseHonorReachFloor.ts:5`: `FranchiseHonorTier = 'mvp'|'cyYoung'|'allStarStarter'|'allStarReserve'` — **NO ROY/Reliever tier** → snub-only is the clean default (do NOT invent a tier).
+- The wire site `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts` (ENVY-1 already wired): `SEASON_END_HONORS` (`:31-34`) = MVP/CY with `honorTier`; the per-honor loop does emission (`:95-113`) + reach-floor (`:115-132`) + the LIFTED `victims` const (`:135`) + snub (`:146-151`) + `persistRaceSnubRivalryEdges` (`:157-166`). `awards` (`:77`) + `teamByPlayer` (`:79`) are loaded ONCE before the loop. `SEASON_END_SNUB_TOP_N` (`:20`). `persistRaceSnubRivalryEdges` imported from `'../../../../utils/franchiseRelationshipEnvyCompute'`.
+
+**BUILD — edit/add EXACTLY these files (2-3 code + maybe 1 test):**
+
+1. `src/utils/franchiseRaceSnubMorale.ts` — widen `FranchiseHonorKind` (`:13`) to `'MVP' | 'CY_YOUNG' | 'ALL_STAR' | 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR'`. (The `.toLowerCase()` event-type builder + the generic race tap need NO other change.) Change NOTHING else in this file.
+
+2. `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts`:
+   - Extract the snub+envy logic into ONE local helper, BEHAVIOR-PRESERVING for MVP/CY: `async function applyRaceSnubAndEnvyEdge(row: FranchiseAwardRow, winnerPlayerId: string, honorKind: FranchiseHonorKind, teamByPlayer: Map<string,string>, scope: SeasonEndHonorScope): Promise<void>` containing EXACTLY the current victims-derivation + the `try{applySnub}` + the `try{persistRaceSnubRivalryEdges}` blocks (verbatim, same seam call `franchiseSeasonEndHonorsSeam.applySnub`, same `timestamp: Date.parse(row.computedAt) || 0`, same own-try-catches). Replace those inline blocks in the MVP/CY loop with a single `await applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, teamByPlayer, scope);`. The MVP/CY loop keeps its emission + reach-floor blocks UNCHANGED.
+   - Add a SNUB-ONLY constant `const SEASON_END_SNUB_ONLY_HONORS: { category: FranchiseAwardCategory; honorKind: Extract<FranchiseHonorKind, 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR'> }[] = [ { category: 'ROOKIE_OF_YEAR', honorKind: 'ROOKIE_OF_YEAR' }, { category: 'RELIEVER_OF_YEAR', honorKind: 'RELIEVER_OF_YEAR' } ];`
+   - After the existing MVP/CY `for` loop (before the final `return`), add a NEW loop over `SEASON_END_SNUB_ONLY_HONORS`: find `row = awards.find(a => a.category === honor.category && a.finalized && a.winnerPlayerId)`; `if (!row?.winnerPlayerId) continue;`; `await applyRaceSnubAndEnvyEdge(row, row.winnerPlayerId, honor.honorKind, teamByPlayer, scope);`. NO emission, NO reach-floor. (Reuses the already-loaded `awards` + `teamByPlayer`.)
+   - The function is L12-gated already (`:75`) — both loops sit under that gate. The envy edge is L13-gated INSIDE `persistRaceSnubRivalryEdges` (no extra gate needed).
+
+3. `src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts` — add ONE test (mirror an existing case's L12 setup + the award-row/value-row seam stubs): a finalized `ROOKIE_OF_YEAR` award (winner + ≥1 close-loser candidate with a team) → assert `franchiseSeasonEndHonorsSeam.applySnub` is called with `honorKind: 'ROOKIE_OF_YEAR'` and the close-loser victims, AND that NO reach-floor/emission fires for ROY (the seam `applyReachFloor`/`emit` are NOT called with a ROY honoree). Keep all existing cases unchanged. (If the test harness can't easily assert the envy edge — L13 off in those tests — just assert the snub seam call; the envy edge is covered by the ENVY-1 unit test + the L-SIM.)
+
+**CONSTRAINTS:** Edit ONLY the files above. Do NOT add a reach-floor tier or winner emission for ROY/Reliever. Do NOT change the MVP/CY winner-payout behavior (emission + reach-floor stay exactly as-is; the snub+envy helper extraction must be behavior-identical). Do NOT touch `persistRaceSnubRivalryEdges`, the morale matrix, any flag default, trackerDb, or any frozen oracle/baseline. Branch-only. Deterministic.
+
+**EXPECTED OUTPUT:** `FranchiseHonorKind` widened; a behavior-preserving snub+envy helper; a snub-only ROY/Reliever loop in `emitFranchiseSeasonEndHonors`; one new honors test case; MVP/CY path unchanged.
+
+**VERIFICATION (run in the worktree; report; do NOT commit):**
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts` → green (existing + new case).
+- `NODE_ENV= npx vitest run src/utils/tests/franchiseRelationshipEnvyCompute.test.ts` → still green (unchanged).
+- Print the per-file diff summary. **Do NOT run the L-SIM season — the Captain runs it.**
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>` + analysis, change nothing further, IF: extending `FranchiseHonorKind` breaks an exhaustive switch/Record somewhere (grep usages first — if a `Record<FranchiseHonorKind, …>` exists it must get ROY/Reliever entries; if those entries require a non-obvious value, STOP and report); the helper extraction cannot be made behavior-identical for MVP/CY (honors test goes red); or ROY/Reliever snub-only cannot be added without firing winner emission/reach-floor.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: RIVALRY-ENVY-2A ===== -->

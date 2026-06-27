@@ -7,6 +7,10 @@
 
 ## June 2026
 
+### 2026-06-27 (RIVALRY-ENVY-2A): race-snub (morale hit + rivalry edge) extended to Rookie of the Year + Reliever of the Year
+
+JK ruled 2026-06-27 to extend snubs to the Rookie of the Year and Reliever of the Year races. Both awards already exist and are engine-computed with the same row shape (winner + close-loser candidates) as MVP/CY, so each close-loser now takes the personality-scaled morale hit AND forms a `RIVALRY` edge against the winner, reusing the ENVY-1 machinery (`applyFranchiseRaceSnubMorale` + `persistRaceSnubRivalryEdges`). Implemented **SNUB-ONLY** (per JK's "snubs" wording): no winner-side news emission or fame reach-floor for ROY/Reliever winners — those have no `FranchiseHonorTier` and the magnitude is an un-tuned §20.3 decision. **OPEN-DECISION (deferred):** whether ROY/Reliever WINNERS should also receive the winner-side honor treatment (news + reach-floor fame), and at what magnitude. The MVP/CY winner-payout path is unchanged (the snub+envy block was extracted to a behavior-identical shared helper). All-Star envy pairing now ruled (snubbed 2nd-at-position → starter-at-position) and queued as RIVALRY-ENVY-2B.
+
 ### 2026-06-27 (RIVALRY-ENVY-1): race-snub rivalry edge is additive
 
 RIVALRY-ENVY-1 builds the MVP/Cy Young race-snub → persisted `RIVALRY` edge as an ADDITIVE extension: the existing morale-only snub remains intact, while spec §22.4/§24.10/ASG-3/RACE-2 mandate the relationship edge; F2/F7 scope the morale tap victim set and no-double-count rule only, and are silent on relationship edges. All-Star envy is DEFERRED as an OPEN-DECISION because the pairing is ambiguous. Envy edge intensity is the L13 lifecycle seed baseline, not an author knob; envy uses create-if-absent semantics so an existing pair edge is preserved untouched after finalize.

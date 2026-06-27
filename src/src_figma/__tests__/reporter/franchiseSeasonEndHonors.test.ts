@@ -366,6 +366,48 @@ describe('emitFranchiseSeasonEndHonors', () => {
     }));
   });
 
+  test('applies Rookie of the Year snub payout without winner-side honor payout', async () => {
+    setFranchisePhase2L12EnabledForTests(true);
+    const computedAt = '2026-10-02T12:00:00.000Z';
+    const seam = installSeamMocks({
+      awards: [
+        awardRow({
+          category: 'ROOKIE_OF_YEAR',
+          winnerPlayerId: 'rookie-winner',
+          candidates: [
+            { playerId: 'rookie-winner', score: 8.5, marginToWinner: 0 },
+            { playerId: 'rookie-runner-1', score: 8.4, marginToWinner: 0.1 },
+            { playerId: 'rookie-no-team', score: 8.45, marginToWinner: 0.05 },
+            { playerId: 'rookie-runner-2', score: 8.2, marginToWinner: 0.3 },
+          ],
+          computedAt,
+        }),
+      ],
+      valueRows: [
+        { playerId: 'rookie-winner', currentTeamId: 'team-rookie-winner' },
+        { playerId: 'rookie-runner-1', currentTeamId: 'team-rookie-runner-1' },
+        { playerId: 'rookie-no-team', currentTeamId: null },
+        { playerId: 'rookie-runner-2', currentTeamId: 'team-rookie-runner-2' },
+      ],
+    });
+
+    const result = await emitFranchiseSeasonEndHonors(scope);
+
+    expect(result).toEqual({ status: 'processed', emitted: [] });
+    expect(seam.emit).not.toHaveBeenCalled();
+    expect(seam.applyReachFloor).not.toHaveBeenCalled();
+    expect(seam.applySnub).toHaveBeenCalledTimes(1);
+    expect(seam.applySnub).toHaveBeenCalledWith({
+      victims: [
+        { playerId: 'rookie-runner-1', teamId: 'team-rookie-runner-1' },
+        { playerId: 'rookie-runner-2', teamId: 'team-rookie-runner-2' },
+      ],
+      honorKind: 'ROOKIE_OF_YEAR',
+      scope,
+      timestamp: Date.parse(computedAt),
+    });
+  });
+
   test('snub failure does not block the next honor', async () => {
     setFranchisePhase2L12EnabledForTests(true);
     const applySnub = vi.fn()
