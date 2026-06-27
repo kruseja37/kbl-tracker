@@ -89,3 +89,12 @@ What's left: **assemble the unmerged branches → finish the headless playoff/si
 - **Broad reads / inventory / scouting:** cheap subagents (Sonnet / Explore), low–medium. Never burn Opus on file sweeps.
 - **Sims / test suites:** tooling, no model; serialize the heavy ones.
 - **Tuning analysis (read sim output, adjust knobs):** Opus, medium–high.
+
+---
+
+## JK RULINGS — 2026-06-27 (post-audit, AUTH-4 ultra-think)
+
+1. **All award WINNERS get honored, SCALED BY RARITY.** Every award winner (not just MVP/Cy Young) gets a fame BUMP + news coverage, scaled by the RARITY of the win. The MAGNITUDE is a §16 tuning concern (JK wants it tuned) → build the scaled-by-rarity mechanism with a tunable placeholder magnitude. **Supersedes the ENVY-2A "snub-only" default** (ROY/Reliever winners now get honored too). OPEN-DECISION: the exact "rarity" metric (how rarity scales the bump + news prominence) — ground/define from the fame/honor system; magnitude = §16.
+2. **Playoff games get fame/clutch amplification** — confirmed (readiness item 7 / PLAYOFF-DRIVER-3).
+3. **Champion MVP: defer UNLESS an easy add** (a playoff-stats MVP resolver in PLAYOFF-DRIVER-2 only if trivial; else defer).
+4. **FREEZE GATE (the v1 finish-line sequence):** feature freeze + engine-flag-flip + hub live-flip happen ONLY AFTER (a) the ENTIRE DRAFT-PROCESS features are built AND (b) all non-deferred LIVING-SEASON features are built. THEN the §16 TUNING sweep (a BIG pre-play step — so a draft/season isn't started only to hit wonky magnitude sliders). THEN JK's browser sign-off. ⇒ **Pre-freeze build scope = draft-process features (Stream B / STREAM_B_DRAFT_UIUX_BUILD_PLAN.md) + non-deferred living-season features (playoff driver, winner-honors, assembly, any remaining §0d items).**
