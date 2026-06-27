@@ -440,9 +440,12 @@ function Step1SelectLeague({
   const selectLeague = (leagueId: string) => {
     const league = leagues.find((l) => l.id === leagueId);
     if (league) {
-      // Get teams count for this league
-      const leagueTeamCount = teams.filter(t => league.teamIds?.includes(t.id)).length;
-      const teamCount = leagueTeamCount || league.teamIds?.length || 0;
+      const leagueTeamIds = league.teamIds ?? [];
+      const leagueTeams = teams.filter(t => leagueTeamIds.includes(t.id));
+      const teamCount = leagueTeams.length || leagueTeamIds.length || 0;
+      const humanTeamIds = leagueTeams
+        .filter((team) => team.controlledBy === "human")
+        .map((team) => team.id);
       setConfig({
         ...config,
         league: leagueId,
@@ -456,10 +459,10 @@ function Step1SelectLeague({
           ...config.playoffs,
           teamsQualifying: clampPlayoffTeamsQualifying(config.playoffs.teamsQualifying, teamCount),
         },
-        // Reset team selection when league changes
+        // Seed from the Draft Setup hub's ownership choices when present.
         teams: {
           ...config.teams,
-          selectedTeams: [],
+          selectedTeams: humanTeamIds,
         },
       });
     }

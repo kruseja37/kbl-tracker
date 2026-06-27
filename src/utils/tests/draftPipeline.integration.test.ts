@@ -24,6 +24,9 @@ import {
 import type { CpuShillAuctionSession } from '../../engines/cpuShillBidding';
 import { DEFAULT_AUCTION_SETUP_CONFIG } from '../../data/auctionEngineConstants';
 import { LEAGUE_MINIMUM_SALARY } from '../../data/rosterEngineConstants';
+import { LUXURY_CAP_TABLES } from '../../data/tierParams';
+import { selectTeamArchetype } from '../../engines/archetypeIdentity';
+import { shiftLuxuryCaps } from '../../engines/leagueConstruction';
 import {
   buildAuctionPlayers,
   buildAuctionTeams,
@@ -87,7 +90,47 @@ const LEAGUE_ID = 'draft-pipeline-integration-league';
 const TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
 const MLB_AUCTION_SEED = 'draft-pipeline-mlb-auction-seed';
 const FARM_AUCTION_SEED = 'draft-pipeline-farm-auction-seed';
+const HUB_ARCHETYPE_ID = 'murderers-row';
+const HUB_CONFIGURED_TEAM_ID = TEAM_IDS[1];
 const CREATED_FRANCHISE_IDS: string[] = [];
+
+interface HubConfiguredTeamResult {
+  teamId: string;
+  archetypeId: string;
+  persistedControlledBy: 'human' | 'ai' | undefined;
+  rawShift: {
+    POW: number;
+    SPD: number;
+  };
+  baseCaps: {
+    POW: number;
+    SPD: number;
+  };
+  shiftedCaps: {
+    POW: number;
+    SPD: number;
+  };
+  franchiseControl?: string;
+  franchiseRoster?: { MLB: number; FARM: number };
+}
+
+interface DraftPipelineResult {
+  mlbSoldPlayerIds: string[];
+  farmSoldPlayerIds: string[];
+  rosterCounts: Record<string, { MLB: number; FARM: number }>;
+  franchisePlayerCount: number;
+  franchiseTeamCount: number;
+  franchiseFarmRecordCount: number;
+  registeredPoolSize: number;
+  addedFreeAgentId: string;
+  removedCuratedPlayerId: string;
+  hubConfiguredTeam?: HubConfiguredTeamResult;
+}
+
+interface RunDraftPipelineOptions {
+  configureHubTeam?: boolean;
+  mirrorHubOwnershipToFranchise?: boolean;
+}
 
 function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSession {
   if (!result.ok) throw new Error(`Auction transition rejected: ${result.reason}`);
@@ -282,7 +325,90 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   };
 }
 
-function makeFranchiseConfig(): FranchiseConfig {
+async function configureHubTeamOutput(): Promise<HubConfiguredTeamResult> {
+  const team = await getTeam(HUB_CONFIGURED_TEAM_ID);
+  if (!team) throw new Error(`Hub-configured team ${HUB_CONFIGURED_TEAM_ID} was not found.`);
+
+  const configured = await selectTeamArchetype(
+    { ...team, controlledBy: 'human' },
+    HUB_ARCHETYPE_ID,
+  );
+  if (!configured.capIdentity?.rawShift) {
+    throw new Error('Hub-configured archetype did not produce a raw-shift cap identity.');
+  }
+  const rawShift = configured.capIdentity.rawShift;
+  if (typeof rawShift.POW !== 'number' || typeof rawShift.SPD !== 'number') {
+    throw new Error('Murderers Row raw-shift proof requires POW and SPD shifts.');
+  }
+
+  const baseCaps = LUXURY_CAP_TABLES.standard;
+  const shiftedCaps = shiftLuxuryCaps(baseCaps, configured.capIdentity);
+  const basePow = baseCaps.find((row) => row.group === 'hitters' && row.stat === 'POW');
+  const baseSpeed = baseCaps.find((row) => row.group === 'hitters' && row.stat === 'SPD');
+  const shiftedPow = shiftedCaps.find((row) => row.group === 'hitters' && row.stat === 'POW');
+  const shiftedSpeed = shiftedCaps.find((row) => row.group === 'hitters' && row.stat === 'SPD');
+  if (!basePow || !baseSpeed || !shiftedPow || !shiftedSpeed) {
+    throw new Error('Standard luxury cap table is missing a hitters POW/SPD proof row.');
+  }
+
+  expect(rawShift.POW).toBeGreaterThan(0);
+  expect(rawShift.SPD).toBeLessThan(0);
+  expect(shiftedPow.cap).toBeCloseTo(basePow.cap * (1 + rawShift.POW));
+  expect(shiftedSpeed.cap).toBeCloseTo(baseSpeed.cap * (1 + rawShift.SPD));
+  await expect(getTeam(HUB_CONFIGURED_TEAM_ID)).resolves.toEqual(
+    expect.objectContaining({
+      controlledBy: 'human',
+      mlbArchetypeKey: HUB_ARCHETYPE_ID,
+      capIdentity: expect.objectContaining({
+        rawShift: expect.objectContaining({
+          POW: rawShift.POW,
+          SPD: rawShift.SPD,
+        }),
+      }),
+    }),
+  );
+
+  return {
+    teamId: configured.id,
+    archetypeId: HUB_ARCHETYPE_ID,
+    persistedControlledBy: configured.controlledBy,
+    rawShift: {
+      POW: rawShift.POW,
+      SPD: rawShift.SPD,
+    },
+    baseCaps: {
+      POW: basePow.cap,
+      SPD: baseSpeed.cap,
+    },
+    shiftedCaps: {
+      POW: shiftedPow.cap,
+      SPD: shiftedSpeed.cap,
+    },
+  };
+}
+
+async function franchiseControlFromSavedOwnership(): Promise<Pick<FranchiseConfig['teams'], 'selectedTeams' | 'playerAssignments' | 'seats'>> {
+  const savedTeams = await Promise.all(TEAM_IDS.map((teamId) => getTeam(teamId)));
+  const selectedTeams = savedTeams
+    .filter((team): team is NonNullable<typeof team> => team?.controlledBy === 'human')
+    .map((team) => team.id);
+  const playerAssignments = Object.fromEntries(
+    TEAM_IDS.map((teamId) => {
+      const team = savedTeams.find((candidate) => candidate?.id === teamId);
+      return [teamId, team?.controlledBy === 'human' ? 's1' : 'cpu'];
+    }),
+  );
+
+  return {
+    selectedTeams,
+    playerAssignments,
+    seats: [{ id: 's1', name: 'You' }],
+  };
+}
+
+function makeFranchiseConfig(
+  controlOverrides?: Pick<FranchiseConfig['teams'], 'selectedTeams' | 'playerAssignments' | 'seats'>,
+): FranchiseConfig {
   return {
     franchiseName: 'Draft Pipeline Franchise',
     league: LEAGUE_ID,
@@ -314,9 +440,10 @@ function makeFranchiseConfig(): FranchiseConfig {
       homeFieldAdvantage: 'higher-seed',
     },
     teams: {
-      selectedTeams: [TEAM_IDS[0]],
-      mode: 'single',
-      playerAssignments: {},
+      selectedTeams: controlOverrides?.selectedTeams ?? [TEAM_IDS[0]],
+      mode: (controlOverrides?.selectedTeams?.length ?? 1) > 1 ? 'multiplayer' : 'single',
+      playerAssignments: controlOverrides?.playerAssignments ?? {},
+      seats: controlOverrides?.seats,
     },
     roster: {
       mode: 'existing',
@@ -334,18 +461,9 @@ async function cleanup(): Promise<void> {
   await clearAllLeagueBuilderData().catch(() => undefined);
 }
 
-async function runDraftPipeline(): Promise<{
-  mlbSoldPlayerIds: string[];
-  farmSoldPlayerIds: string[];
-  rosterCounts: Record<string, { MLB: number; FARM: number }>;
-  franchisePlayerCount: number;
-  franchiseTeamCount: number;
-  franchiseFarmRecordCount: number;
-  registeredPoolSize: number;
-  addedFreeAgentId: string;
-  removedCuratedPlayerId: string;
-}> {
+async function runDraftPipeline(options: RunDraftPipelineOptions = {}): Promise<DraftPipelineResult> {
   const curatedFixture = await seedDraftLeagueWithRealMlbPlayers();
+  const hubConfiguredTeam = options.configureHubTeam ? await configureHubTeamOutput() : undefined;
   const rosterPoolPlayerIds = Object.values(curatedFixture.initialRosterPlayerIdsByTeamId).flat();
 
   const staleComplete = initAuctionSession({
@@ -533,7 +651,10 @@ async function runDraftPipeline(): Promise<{
     }),
   );
 
-  const franchiseId = await initializeFranchise(makeFranchiseConfig());
+  const controlOverrides = options.mirrorHubOwnershipToFranchise
+    ? await franchiseControlFromSavedOwnership()
+    : undefined;
+  const franchiseId = await initializeFranchise(makeFranchiseConfig(controlOverrides));
   CREATED_FRANCHISE_IDS.push(franchiseId);
   const seasonId = getFranchiseSeasonId(franchiseId, 1);
   const [
@@ -590,6 +711,11 @@ async function runDraftPipeline(): Promise<{
     Array.from({ length: TEAM_IDS.length }, () => ({ MLB: 22, FARM: 10 })),
   );
 
+  if (hubConfiguredTeam) {
+    hubConfiguredTeam.franchiseControl = storedConfig?.teamControl?.[hubConfiguredTeam.teamId];
+    hubConfiguredTeam.franchiseRoster = rosterCounts[hubConfiguredTeam.teamId];
+  }
+
   return {
     mlbSoldPlayerIds: completedMlbSession.results
       .filter((result) => result.disposition === 'SOLD')
@@ -604,6 +730,7 @@ async function runDraftPipeline(): Promise<{
     registeredPoolSize: pool.players.length,
     addedFreeAgentId: curatedFixture.addedFreeAgentId,
     removedCuratedPlayerId: curatedFixture.removedCuratedPlayerId,
+    hubConfiguredTeam,
   };
 }
 
@@ -710,5 +837,29 @@ describe('draft pipeline integration', () => {
     expect(unlocked?.locked).toBe(false);
     await expect(addPlayersToLeaguePool([removedCuratedPlayerId], LEAGUE_ID)).resolves.toBeUndefined();
     expect((await registerLeaguePoolForLeague(LEAGUE_ID)).players).toHaveLength(mlbSlots + 2);
+  }, 30_000);
+
+  test('carries hub-configured archetype and ownership through cap math and franchise launch rosters', async () => {
+    const result = await runDraftPipeline({
+      configureHubTeam: true,
+      mirrorHubOwnershipToFranchise: true,
+    });
+
+    expect(result.hubConfiguredTeam).toEqual(
+      expect.objectContaining({
+        teamId: HUB_CONFIGURED_TEAM_ID,
+        archetypeId: HUB_ARCHETYPE_ID,
+        persistedControlledBy: 'human',
+        franchiseControl: 'human',
+        franchiseRoster: { MLB: 22, FARM: 10 },
+      }),
+    );
+    expect(result.hubConfiguredTeam?.shiftedCaps.POW).toBeCloseTo(
+      result.hubConfiguredTeam!.baseCaps.POW * (1 + result.hubConfiguredTeam!.rawShift.POW),
+    );
+    expect(result.hubConfiguredTeam?.shiftedCaps.SPD).toBeCloseTo(
+      result.hubConfiguredTeam!.baseCaps.SPD * (1 + result.hubConfiguredTeam!.rawShift.SPD),
+    );
+    expect(result.franchisePlayerCount).toBe(TEAM_IDS.length * 32);
   }, 30_000);
 });
