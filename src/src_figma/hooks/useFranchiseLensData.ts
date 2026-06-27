@@ -103,6 +103,7 @@ import type {
   FormStateVM,
   GameRecapVM,
   HubVM,
+  LineupsContextVM,
   ImpactCardVM,
   LeaderboardVM,
   LeaderEntryVM,
@@ -821,6 +822,35 @@ function buildNextGameVM(
   };
 }
 
+/** Raw ids the interactive Lineups board needs (it loads rosters + runs the engine seam itself). */
+function buildLineupsContextVM(
+  schedule: ScheduledGame[],
+  activeTeamId: string,
+  standingByTeam: Map<string, TeamStanding>,
+  teamMeta: Map<string, TeamMeta>,
+  config: StoredFranchiseConfig | null,
+): LineupsContextVM {
+  const next = schedule
+    .filter((g) => !g.result && (g.homeTeamId === activeTeamId || g.awayTeamId === activeTeamId))
+    .sort((a, b) => a.gameNumber - b.gameNumber)[0];
+  const opponentTeamId = next
+    ? next.homeTeamId === activeTeamId
+      ? next.awayTeamId
+      : next.homeTeamId
+    : null;
+  const opponentStanding = opponentTeamId ? standingByTeam.get(opponentTeamId) : undefined;
+  return {
+    franchiseId: config?.franchiseId ?? undefined,
+    leagueId: config?.league ?? undefined,
+    activeTeamId,
+    opponentTeamId,
+    opponentTeamName: opponentTeamId ? teamMeta.get(opponentTeamId)?.name ?? opponentTeamId : null,
+    opponentGamesPlayed: opponentStanding ? opponentStanding.wins + opponentStanding.losses : 0,
+    nextGameNumber: next ? next.gameNumber : null,
+    hasNextGame: Boolean(next),
+  };
+}
+
 function buildHomeVM(
   seasonNews: SeasonNewsItem[],
   schedule: ScheduledGame[],
@@ -1116,6 +1146,7 @@ function buildReturn(
     news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
     checkpoint: checkpointVM,
     moments: buildMomentsVM(championships, awards, teamMeta),
+    lineups: buildLineupsContextVM(schedule, activeTeam.id, standingByTeam, teamMeta, config),
     loading: false,
   };
 

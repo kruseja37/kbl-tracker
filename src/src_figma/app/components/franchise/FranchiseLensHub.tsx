@@ -1,4 +1,5 @@
 import { Fragment, useState } from "react";
+import { FranchiseLineupsBoard } from "./FranchiseLineupsBoard";
 
 /**
  * FranchiseLensHub — the aged-"Green Monster" team-lens franchise hub (redesign,
@@ -344,6 +345,23 @@ export interface RosterExtrasVM {
   capNote?: string;          // "22/22 active · 9/10 farm · under the line"
 }
 
+/**
+ * Raw context the interactive Lineups surface needs (the hub is otherwise a pure view, but the Lineups
+ * board loads raw rosters + runs the optimizer engine, so the adapter hands it the ids it can't derive
+ * from the view-models). Opponent = the active club's next-game opponent; games-played drives the
+ * opponent's rotation slot inside the engine seam.
+ */
+export interface LineupsContextVM {
+  franchiseId?: string;
+  leagueId?: string;
+  activeTeamId: string;
+  opponentTeamId: string | null;
+  opponentTeamName: string | null;
+  opponentGamesPlayed: number;
+  nextGameNumber: number | null;
+  hasNextGame: boolean;
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
@@ -356,6 +374,7 @@ export interface HubVM {
   almanac?: AlmanacVM;
   checkpoint?: CheckpointVM;
   moments?: MomentsVM;
+  lineups?: LineupsContextVM;
   loading?: boolean;
   emptyNote?: string;
 }
@@ -368,7 +387,7 @@ export interface FranchiseLensHubProps {
   onBack?: () => void;
 }
 
-const TABS = ["The Clubhouse", "Roster", "Stadium", "Tootwhistle Times"] as const;
+const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times"] as const;
 const LEAGUE_TABS = ["Standings & Races", "Schedule", "Almanac"] as const;
 
 function moraleClass(v: number): string {
@@ -449,6 +468,8 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
                 setOpenMorale={setOpenMorale}
                 onOpenPlayer={setOpenPlayer}
               />
+            ) : tab === "Lineups" ? (
+              <FranchiseLineupsBoard hub={hub} active={active} />
             ) : tab === "Tootwhistle Times" ? (
               <NewspaperTab hub={hub} active={active} />
             ) : tab === "Standings & Races" ? (

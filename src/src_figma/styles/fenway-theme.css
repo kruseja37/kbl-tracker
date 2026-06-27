@@ -797,3 +797,50 @@
  * Mom's Typewriter is reserved for the reporter's words ONLY: the Season Home lead
  * story and the Tootwhistle Times newspaper. */
 .fen-lead, .fen-lead *, .fen-paper, .fen-paper * { font-family: var(--fen-type) !important; }
+
+/* ===== Lineups board (next-game matchup advisor + interactive lineup/rotation editor) ===== */
+.fen-lu { display: flex; flex-direction: column; gap: 8px; }
+.fen-lu .lite { opacity: 0.62; }
+.fen-lu-matchup { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 1.6fr); gap: 18px; margin-bottom: 6px; }
+.fen-lu-edit { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 18px; }
+@media (max-width: 720px) { .fen-lu-matchup, .fen-lu-edit { grid-template-columns: 1fr; } }
+.fen-lu-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-lu-optimal { border-left-color: var(--fen-yellow); }
+.fen-lu-sp { border-left-color: var(--fen-marquee); }
+.fen-lu-cardlab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-bottom: 9px; }
+.fen-lu-cardhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.fen-lu-spbody { display: flex; flex-direction: column; gap: 3px; }
+.fen-lu-spname { font-family: var(--fen-chalk-font); font-size: 20px; margin-bottom: 2px; }
+.fen-lu-spmeta { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); }
+.fen-lu-optlist { display: flex; flex-direction: column; gap: 2px; }
+.fen-lu-optrow { display: grid; grid-template-columns: 22px 1fr 40px 50px; align-items: baseline; gap: 8px; }
+.fen-lu-num { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-lu-optname { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-lu-optpos { font-family: var(--fen-chalk-font); font-size: 12px; text-align: center; }
+.fen-lu-edithead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 8px; flex-wrap: wrap; }
+.fen-lu-editbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.fen-lu-status { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-lu-rows { display: flex; flex-direction: column; gap: 6px; }
+.fen-lu-editrow { display: flex; align-items: center; gap: 6px; font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-lu-editrow .grow { flex: 1; min-width: 0; }
+.fen-lu-sel { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk); background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(236, 232, 218, 0.18); border-radius: 4px; padding: 4px 6px; }
+.fen-lu-sel.grow { flex: 1; min-width: 0; }
+.fen-lu-sel.pos { width: 60px; }
+.fen-lu-mini { font-family: var(--fen-chalk-font); font-size: 11px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.16); border-radius: 4px; padding: 3px 7px; }
+.fen-lu-mini:hover:not(:disabled) { color: var(--fen-chalk); }
+.fen-lu-mini:disabled { opacity: 0.3; cursor: default; }
+.fen-lu-mini.danger { color: var(--fen-marquee); }
+.fen-lu-btn { font-family: var(--fen-chalk-font); font-size: 12px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.18); border-radius: 5px; padding: 6px 12px; }
+.fen-lu-btn:hover:not(:disabled) { color: var(--fen-chalk); }
+.fen-lu-btn:disabled { opacity: 0.4; cursor: default; }
+.fen-lu-btn.accent { color: var(--fen-navy); background: var(--fen-yellow); border-color: var(--fen-yellow); }
+.fen-lu-btn.accent:disabled { background: rgba(242, 192, 65, 0.3); border-color: transparent; color: var(--fen-chalk-soft); }
+.fen-lu-pen { margin-top: 10px; padding-top: 8px; border-top: 1px dotted rgba(255, 255, 255, 0.1); }
+.fen-lu-penlab { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-faint); margin-bottom: 5px; }
+.fen-lu-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.fen-lu-tag { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(236, 232, 218, 0.12); border-radius: 4px; padding: 2px 7px; }
+.fen-lu-mojo { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.fen-lu-mojorow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--fen-chalk-font); font-size: 13px; }
+.fen-lu-err { font-family: var(--fen-chalk-font); font-size: 12px; background: rgba(204, 52, 51, 0.1); border: 1px solid rgba(204, 52, 51, 0.3); border-radius: 5px; padding: 6px 12px; }
+.fen-lu-ok { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); background: rgba(74, 89, 80, 0.35); border: 1px solid rgba(236, 232, 218, 0.14); border-radius: 5px; padding: 6px 12px; }
+.fen-lu-warn { font-family: var(--fen-chalk-font); font-size: 11.5px; color: var(--fen-yellow); background: rgba(242, 192, 65, 0.08); border: 1px solid rgba(242, 192, 65, 0.25); border-radius: 5px; padding: 5px 11px; }
