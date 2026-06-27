@@ -39,6 +39,11 @@ import {
 } from "../../utils/franchiseRosterMovement";
 import { executeManualFranchiseTrade } from "../../utils/franchiseTradeAdapter";
 import {
+  computeFranchiseRaceCandidateRows,
+  type FranchiseRaceCandidateScore,
+  type FranchiseWarAwardCategory,
+} from "../../utils/franchiseAwardsEngine";
+import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
 } from "../../utils/franchisePlayerStorage";
@@ -111,6 +116,8 @@ import type { StoredFranchiseConfig } from "../../types/franchise";
 import type {
   ActiveTeamVM,
   AlmanacVM,
+  AwardRaceVM,
+  AwardSlotVM,
   CeremonyMomentVM,
   CheckpointPlayerVM,
   CheckpointVM,
@@ -134,6 +141,7 @@ import type {
   PlayoffRoundVM,
   PlayoffsVM,
   PulseVM,
+  RaceCandidateVM,
   RatingBarVM,
   RatingChangeVM,
   RosterExtrasVM,
@@ -188,7 +196,37 @@ interface RawData {
   seasonNews: SeasonNewsItem[];
   gameStories: GameStory[];
   reporters: BeatReporter[];
+  raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>;
 }
+
+/**
+ * The WAR-led award races wired into the Standings tab — both the candidate races and the Hardware
+ * frontrunner board come from `computeFranchiseRaceCandidateRows`. The engine returns {} until the
+ * season has enough games for a trustworthy WAR preview, so these are EMPTY on a gameless save and
+ * fill on a played one. BOOGER_GLOVE is a negative honor (score = −fieldingWAR, so desc-sort still
+ * puts its "winner" first); it renders with the dubious accent.
+ */
+const RACE_CATEGORIES: readonly FranchiseWarAwardCategory[] = [
+  "MVP",
+  "CY_YOUNG",
+  "ROOKIE_OF_YEAR",
+  "GOLD_GLOVE",
+  "SILVER_SLUGGER",
+  "RELIEVER_OF_YEAR",
+  "BENCH_PLAYER",
+  "BOOGER_GLOVE",
+];
+const RACE_LABELS: Record<FranchiseWarAwardCategory, string> = {
+  MVP: "MVP",
+  CY_YOUNG: "Cy Young",
+  ROOKIE_OF_YEAR: "Rookie of the Year",
+  GOLD_GLOVE: "Gold Glove",
+  SILVER_SLUGGER: "Silver Slugger",
+  RELIEVER_OF_YEAR: "Reliever of the Year",
+  BENCH_PLAYER: "Top Bench Bat",
+  BOOGER_GLOVE: "Booger Glove",
+};
+const DUBIOUS_CATEGORIES = new Set<FranchiseWarAwardCategory>(["BOOGER_GLOVE"]);
 
 /** Result of a roster move, surfaced to the confirm modal (kept engine-type-free for the pure view). */
 export interface LensRosterActionResult {
@@ -455,6 +493,9 @@ function buildStandingsVM(
   teams: Team[],
   standingByTeam: Map<string, TeamStanding>,
   config: StoredFranchiseConfig | null,
+  raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>,
+  players: Player[],
+  teamMeta: Map<string, TeamMeta>,
 ): StandingsRacesVM {
   const rows: StandingRowVM[] = teams
     .map((team) => {
@@ -476,7 +517,59 @@ function buildStandingsVM(
     })
     .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || a.name.localeCompare(b.name));
   const groupName = config?.leagueDetails?.name ?? config?.franchiseName ?? "League";
-  return { divisions: [{ name: groupName, rows }], races: [] };
+
+  const { races, awards } = buildAwardRacesAndHardware(raceScores, players, teamMeta);
+  return { divisions: [{ name: groupName, rows }], races, awards: awards.length ? awards : undefined };
+}
+
+/**
+ * Map the WAR-led race scores into the candidate-race VMs (top of each award) + the Hardware
+ * frontrunner board. Player id → name/team is resolved from the roster; a category with no qualified
+ * candidate is dropped. Both lists are empty on a gameless save (the engine returns {}).
+ */
+function buildAwardRacesAndHardware(
+  raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>,
+  players: Player[],
+  teamMeta: Map<string, TeamMeta>,
+): { races: AwardRaceVM[]; awards: AwardSlotVM[] } {
+  const meta = new Map<string, { name: string; teamId: string }>();
+  for (const p of players) {
+    const teamId = p.leagueAssignments?.[0]?.teamId ?? "";
+    meta.set(p.id, { name: `${p.firstName} ${p.lastName}`.trim(), teamId });
+  }
+  const resolve = (teamId: string) => teamMeta.get(teamId);
+
+  const races: AwardRaceVM[] = [];
+  const awards: AwardSlotVM[] = [];
+  for (const category of RACE_CATEGORIES) {
+    const scores = raceScores[category];
+    if (!scores || scores.length === 0) continue;
+    const ranked = [...scores].sort((a, b) => b.score - a.score);
+    const dubious = DUBIOUS_CATEGORIES.has(category);
+    const candidates: RaceCandidateVM[] = ranked.slice(0, 5).map((row) => {
+      const pm = meta.get(row.playerId);
+      const teamId = pm?.teamId ?? "";
+      return {
+        teamId,
+        teamAbbr: resolve(teamId)?.abbr ?? teamId,
+        name: pm?.name ?? row.playerId,
+        score: row.score,
+        marginToWinner: row.marginToWinner,
+      };
+    });
+    if (candidates.length === 0) continue;
+    races.push({ category: RACE_LABELS[category], candidates });
+    const top = candidates[0];
+    awards.push({
+      category: RACE_LABELS[category],
+      frontrunner: top.name,
+      teamId: top.teamId,
+      teamAbbr: top.teamAbbr,
+      status: "lead",
+      dubious: dubious || undefined,
+    });
+  }
+  return { races, awards };
 }
 
 function buildPulse(
@@ -1259,6 +1352,7 @@ function buildReturn(
     seasonNews,
     gameStories,
     reporters,
+    raceScores,
   } = raw;
 
   const teamMeta = new Map<string, TeamMeta>(
@@ -1378,7 +1472,7 @@ function buildReturn(
     pulse: buildPulse(teamPlayers, activeTeam.id, fanSnapshot, standings),
     roster,
     rosterExtras: buildRosterExtrasVM(players, activeTeam.id, payroll, teamPlayers.length),
-    standings: buildStandingsVM(teams, standingByTeam, config),
+    standings: buildStandingsVM(teams, standingByTeam, config, raceScores, players, teamMeta),
     stadium: buildStadiumVM(activeTeam),
     schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
     playoffs: buildPlayoffsVM(playoffs, playoffSeries, activeTeam.id, teamMeta),
@@ -1562,6 +1656,12 @@ export function useFranchiseLensData(
         const seasonNews = await listSeasonNewsItemsForFranchiseSeason(franchiseId, seasonId).catch(() => []);
         const gameStories = await listGameStoriesForFranchiseSeason(franchiseId, seasonId).catch(() => []);
         const reporters = await listReporters({ franchiseId }).catch((): BeatReporter[] => []);
+        // Award races + Hardware frontrunners (WAR-led). Returns {} until the season has enough games
+        // for a trustworthy WAR preview → empty on a gameless save, fills on a played one.
+        const raceScores = await computeFranchiseRaceCandidateRows(
+          { ...scope, seasonNumber },
+          RACE_CATEGORIES,
+        ).catch(() => ({}) as Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>);
         if (cancelled) return;
         setRaw({
           config,
@@ -1584,6 +1684,7 @@ export function useFranchiseLensData(
           seasonNews: seasonNews ?? [],
           gameStories: gameStories ?? [],
           reporters: reporters ?? [],
+          raceScores: raceScores ?? {},
         });
         setIsLoading(false);
       } catch (caught) {
