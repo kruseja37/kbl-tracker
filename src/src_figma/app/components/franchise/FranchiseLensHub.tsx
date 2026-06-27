@@ -1470,16 +1470,11 @@ function PlayerDrawer({ player, onClose }: { player: PlayerRowVM; onClose: () =>
         {d?.valueTrend && d.valueTrend.length > 1 ? <DrawerSection title="Value trend" hint="True Value by checkpoint"><ValueSparkline points={d.valueTrend} /></DrawerSection> : null}
         {d?.ratings && d.ratings.length ? <DrawerSection title="Ratings" hint="bar = now · tick = draft-day"><RatingBars ratings={d.ratings} /></DrawerSection> : null}
         {d?.spray && d.spray.length ? <DrawerSection title="Spray chart" hint={d.spray[0]?.role === "pitching" ? "contact off him" : "where he hits"}><SprayPanel spray={d.spray} /></DrawerSection> : null}
-        {(d?.personality || (d?.modifiers && d.modifiers.length)) ? (
-          <DrawerSection title="Makeup" hint="personality + hidden makeup">
-            {d?.personality ? <div className="fen-personality">{d.personality}</div> : null}
-            {d?.modifiers && d.modifiers.length ? (
-              <div className="fen-mods">
-                {d.modifiers.map((mo, i) => (
-                  <div className="fen-mod" key={i}><span className="ml">{mo.label}</span><span className="mbar"><span className="fill" style={{ width: `${mo.value}%` }} /></span><span className="mv fen-chalk">{mo.value}</span></div>
-                ))}
-              </div>
-            ) : null}
+        {/* Hidden personality modifiers (loyalty/ambition/resilience/charisma) are HIDDEN by product rule
+            on ALL players — only the public temperament string is shown. See LIVING_SEASON_UIUX_COVERAGE_MAP. */}
+        {d?.personality ? (
+          <DrawerSection title="Makeup" hint="public temperament">
+            <div className="fen-personality">{d.personality}</div>
           </DrawerSection>
         ) : null}
         {(d?.traitsCurrent?.length || d?.traitTimeline?.length) ? (

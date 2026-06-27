@@ -31,6 +31,7 @@ import {
   type UseSeasonStatsReturn,
 } from "../../hooks/useSeasonStats";
 import { getFranchiseConfig } from "../../utils/franchiseManager";
+import { resolveFranchiseSalaryRevealState } from "../../utils/franchiseSalary";
 import { getFranchiseSeasonId } from "../../utils/franchisePersistenceContract";
 import {
   getAllFranchisePlayers,
@@ -117,7 +118,6 @@ import type {
   ImpactCardVM,
   LeaderboardVM,
   LeaderEntryVM,
-  MakeupModVM,
   MomentsVM,
   MoraleHistoryVM,
   NewsVM,
@@ -343,16 +343,8 @@ function buildFame(row: FranchiseFameRecordRow | undefined): FameVM | undefined 
   };
 }
 
-function buildModifiers(player: Player): MakeupModVM[] | undefined {
-  const m = player.hiddenPersonalityModifiers;
-  if (!m) return undefined;
-  return [
-    { label: "Loyalty", value: Math.round(m.loyalty) },
-    { label: "Ambition", value: Math.round(m.ambition) },
-    { label: "Resilience", value: Math.round(m.resilience) },
-    { label: "Charisma", value: Math.round(m.charisma) },
-  ];
-}
+// Hidden personality modifiers (loyalty/ambition/resilience/charisma) are HIDDEN by product rule on ALL
+// players — never surfaced. Only the public `personality` string is shown. See LIVING_SEASON_UIUX_COVERAGE_MAP.
 
 function mojoChip(mojo: unknown): FormStateVM | undefined {
   if (!mojo) return undefined;
@@ -405,7 +397,6 @@ function buildPlayerRow(player: Player, teamId: string, ctx: DrawerContext): Pla
     careerPhase: getCareerPhaseDisplayName(getCareerPhase(player.age)),
     mojo: mojoChip(player.mojo),
     personality: player.personality,
-    modifiers: buildModifiers(player),
     valueTrend: valueTrend.length ? valueTrend : undefined,
     ratings: buildRatingBars(player, ctx.ratingsByPlayer.get(player.id) ?? [], ctx.currentGameNumber),
     traitsCurrent: traits.length ? traits : undefined,
@@ -1063,13 +1054,19 @@ function buildRosterExtrasVM(
     p.leagueAssignments?.some((a) => a.teamId === activeTeamId && a.rosterStatus === "FARM"),
   );
   const farm: FarmPlayerVM[] = farmPlayers.map((p) => {
-    const grade = String(p.overallGrade ?? "");
-    const readiness = farmReadiness(grade);
+    // Hidden/revealed rule: a farm prospect's TRUE grade stays hidden until call-up — surface the
+    // scout-perceived grade ONLY. Readiness derives from the perceived grade (what the GM actually knows).
+    const revealed = resolveFranchiseSalaryRevealState(p, "FARM") === "revealed";
+    const scouted = (p as Player & { prospectProfile?: { scoutedGrade?: string } }).prospectProfile?.scoutedGrade;
+    const trueGrade = String(p.overallGrade ?? "");
+    const perceivedGrade = scouted ?? "";
+    const shownGrade = revealed ? trueGrade : scouted ? `Scouted ${scouted}` : "Unscouted";
+    const readiness = farmReadiness(revealed ? trueGrade : perceivedGrade);
     return {
       id: p.id,
       position: p.primaryPosition,
       name: `${p.firstName} ${p.lastName}`.trim(),
-      grade: grade || undefined,
+      grade: shownGrade || undefined,
       age: p.age,
       readiness,
       callUpReady: readiness === "MLB-ready",
