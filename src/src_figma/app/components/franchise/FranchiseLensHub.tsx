@@ -362,6 +362,52 @@ export interface LineupsContextVM {
   hasNextGame: boolean;
 }
 
+/* ===== Playoffs (club-scoped view of the franchise bracket) ===== */
+export interface PlayoffMatchupVM {
+  higherSeedAbbr: string;   // abbr of the higher seed (resolved via teamMeta)
+  higherSeedName: string;
+  higherSeed: number;
+  higherSeedWins: number;
+  lowerSeedAbbr: string;
+  lowerSeedName: string;
+  lowerSeed: number;
+  lowerSeedWins: number;
+  bestOf: number;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  winnerAbbr?: string;      // abbr of the series winner, when decided
+  involvesActive?: boolean; // the lens club is in this series → highlight
+}
+export interface PlayoffRoundVM {
+  round: number;
+  roundName: string;
+  matchups: PlayoffMatchupVM[];
+}
+export interface PlayoffsVM {
+  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+  rounds: PlayoffRoundVM[];
+  championAbbr?: string;     // resolved abbr of the champion
+  championName?: string;
+  mvpName?: string;
+  mvpStats?: string;
+}
+
+/* ===== Trades (club + league transaction ledger for the season) ===== */
+export interface TradeSideVM {
+  teamAbbr: string;
+  teamName: string;
+  players: string[];        // resolved names where possible, else id/count
+}
+export interface TradeCardVM {
+  date: string;             // friendly date
+  team1: TradeSideVM;
+  team2: TradeSideVM;
+  cash?: number;            // net cash, when present
+  involvesActive?: boolean; // the lens club is on either side → highlight
+}
+export interface TradesVM {
+  trades: TradeCardVM[];
+}
+
 export interface HubVM {
   home?: SeasonHomeVM;
   news?: NewsVM;
@@ -372,6 +418,8 @@ export interface HubVM {
   stadium?: StadiumVM;
   schedule?: ScheduleVM;
   almanac?: AlmanacVM;
+  playoffs?: PlayoffsVM;
+  trades?: TradesVM;
   checkpoint?: CheckpointVM;
   moments?: MomentsVM;
   lineups?: LineupsContextVM;
@@ -387,7 +435,7 @@ export interface FranchiseLensHubProps {
   onBack?: () => void;
 }
 
-const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times"] as const;
+const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times", "Playoffs", "Trades"] as const;
 const LEAGUE_TABS = ["Standings & Races", "Schedule", "Almanac"] as const;
 
 function moraleClass(v: number): string {
@@ -472,6 +520,10 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam }: Franchise
               <FranchiseLineupsBoard hub={hub} active={active} />
             ) : tab === "Tootwhistle Times" ? (
               <NewspaperTab hub={hub} active={active} />
+            ) : tab === "Playoffs" ? (
+              <PlayoffsTab hub={hub} active={active} />
+            ) : tab === "Trades" ? (
+              <TradesTab hub={hub} active={active} />
             ) : tab === "Standings & Races" ? (
               <StandingsRacesTab hub={hub} active={active} />
             ) : tab === "Stadium" ? (
@@ -1581,6 +1633,116 @@ function ScheduleTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
           {sc.recent.length ? sc.recent.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">No games played yet.</div>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ===== Playoffs (read-only bracket view of the franchise's October) ===== */
+function PlayoffMatchupCard({ m }: { m: PlayoffMatchupVM }) {
+  const decided = m.status === "COMPLETED";
+  const higherWon = decided && m.winnerAbbr === m.higherSeedAbbr;
+  const lowerWon = decided && m.winnerAbbr === m.lowerSeedAbbr;
+  return (
+    <div className={`fen-po-card${m.involvesActive ? " you" : ""}${decided ? " done" : ""}`}>
+      <div className={`fen-po-team${higherWon ? " win" : ""}`}>
+        <span className="seed">{m.higherSeed}</span>
+        <span className="ab fen-chalk">{m.higherSeedAbbr}</span>
+        <span className="nm">{m.higherSeedName}</span>
+        <span className={`sc${higherWon ? " fen-y" : ""}`}>{m.higherSeedWins}</span>
+        {higherWon ? <span className="adv">✓</span> : null}
+      </div>
+      <div className={`fen-po-team${lowerWon ? " win" : ""}`}>
+        <span className="seed">{m.lowerSeed}</span>
+        <span className="ab fen-chalk">{m.lowerSeedAbbr}</span>
+        <span className="nm">{m.lowerSeedName}</span>
+        <span className={`sc${lowerWon ? " fen-y" : ""}`}>{m.lowerSeedWins}</span>
+        {lowerWon ? <span className="adv">✓</span> : null}
+      </div>
+      <div className="fen-po-meta">
+        Best of {m.bestOf}
+        {m.status === "IN_PROGRESS" ? " · underway" : m.status === "PENDING" ? " · awaiting" : ""}
+      </div>
+    </div>
+  );
+}
+
+function PlayoffsTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const po = hub.playoffs;
+  if (!po || po.rounds.length === 0) {
+    return <div className="fen-empty">The playoffs haven't started.</div>;
+  }
+  return (
+    <div className="fen-po">
+      {po.status === "COMPLETED" && po.championAbbr ? (
+        <div className={`fen-po-champ${active.abbr === po.championAbbr ? " you" : ""}`}>
+          <div className="fen-po-trophy">🏆</div>
+          <div className="fen-po-champbody">
+            <div className="fen-po-champlab">Champions</div>
+            <div className="fen-po-champname fen-chalk fen-y">{po.championName ?? po.championAbbr}</div>
+            {po.mvpName ? (
+              <div className="fen-po-mvp">Series MVP · <b className="fen-chalk">{po.mvpName}</b>{po.mvpStats ? ` · ${po.mvpStats}` : ""}</div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      {po.rounds.map((round) => (
+        <div className="fen-po-round" key={round.round}>
+          <div className="fen-sectlab">{round.roundName}</div>
+          {round.matchups.length ? (
+            <div className="fen-po-grid">
+              {round.matchups.map((m, i) => <PlayoffMatchupCard key={i} m={m} />)}
+            </div>
+          ) : (
+            <div className="fen-empty">No series set for this round.</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ===== Trades (read-only league transaction ledger for the season) ===== */
+function TradeCard({ t }: { t: TradeCardVM }) {
+  return (
+    <div className={`fen-trade-card${t.involvesActive ? " you" : ""}`}>
+      <div className="fen-trade-head">
+        <span className="fen-trade-when">{t.date}</span>
+        {t.cash ? <span className="fen-trade-cash fen-y">${t.cash.toLocaleString()}</span> : null}
+      </div>
+      <div className="fen-trade-body">
+        <div className="fen-trade-side">
+          <div className="fen-trade-team fen-chalk"><span className="ab">{t.team1.teamAbbr}</span>{t.team1.teamName}</div>
+          <div className="fen-trade-lab">sends</div>
+          {t.team1.players.length ? (
+            t.team1.players.map((p, i) => <div className="fen-trade-pl" key={i}>{p}</div>)
+          ) : (
+            <div className="fen-trade-pl soft">—</div>
+          )}
+        </div>
+        <div className="fen-trade-swap">⇄</div>
+        <div className="fen-trade-side">
+          <div className="fen-trade-team fen-chalk"><span className="ab">{t.team2.teamAbbr}</span>{t.team2.teamName}</div>
+          <div className="fen-trade-lab">sends</div>
+          {t.team2.players.length ? (
+            t.team2.players.map((p, i) => <div className="fen-trade-pl" key={i}>{p}</div>)
+          ) : (
+            <div className="fen-trade-pl soft">—</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TradesTab({ hub, active: _active }: { hub: HubVM; active: ActiveTeamVM }) {
+  const tr = hub.trades;
+  if (!tr || tr.trades.length === 0) {
+    return <div className="fen-empty">No trades yet this season.</div>;
+  }
+  return (
+    <div className="fen-trades">
+      <div className="fen-sectlab">Trade Wire <span className="lite fen-help">· your club's deals in yellow</span></div>
+      {tr.trades.map((t, i) => <TradeCard key={i} t={t} />)}
     </div>
   );
 }

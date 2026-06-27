@@ -844,3 +844,43 @@
 .fen-lu-err { font-family: var(--fen-chalk-font); font-size: 12px; background: rgba(204, 52, 51, 0.1); border: 1px solid rgba(204, 52, 51, 0.3); border-radius: 5px; padding: 6px 12px; }
 .fen-lu-ok { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); background: rgba(74, 89, 80, 0.35); border: 1px solid rgba(236, 232, 218, 0.14); border-radius: 5px; padding: 6px 12px; }
 .fen-lu-warn { font-family: var(--fen-chalk-font); font-size: 11.5px; color: var(--fen-yellow); background: rgba(242, 192, 65, 0.08); border: 1px solid rgba(242, 192, 65, 0.25); border-radius: 5px; padding: 5px 11px; }
+
+/* ===== Playoffs (read-only bracket view) ===== */
+.fen-po { display: flex; flex-direction: column; gap: 16px; }
+.fen-po-round { display: flex; flex-direction: column; gap: 8px; }
+.fen-po-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.fen-po-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-po-card.you { border-left-color: var(--fen-yellow); }
+.fen-po-card.done { opacity: 0.92; }
+.fen-po-team { display: grid; grid-template-columns: 22px 46px 1fr 26px 16px; align-items: baseline; gap: 7px; font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); padding: 2px 0; }
+.fen-po-team.win { color: var(--fen-chalk); }
+.fen-po-team .seed { font-size: 11px; color: var(--fen-chalk-faint); text-align: right; }
+.fen-po-team .ab { font-size: 13px; letter-spacing: 0.04em; }
+.fen-po-team .nm { font-size: 13px; color: var(--fen-chalk-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fen-po-team .sc { font-size: 16px; text-align: right; color: var(--fen-chalk); }
+.fen-po-team .adv { color: var(--fen-yellow); font-size: 12px; }
+.fen-po-meta { font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-faint); margin-top: 7px; }
+.fen-po-champ { display: flex; align-items: center; gap: 16px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-yellow); border-radius: 5px; padding: 14px 16px; }
+.fen-po-champ.you { box-shadow: inset 0 0 0 1px rgba(242, 192, 65, 0.25); }
+.fen-po-trophy { font-size: 34px; line-height: 1; }
+.fen-po-champlab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-po-champname { font-family: var(--fen-chalk-font); font-size: 24px; }
+.fen-po-mvp { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); margin-top: 3px; }
+
+/* ===== Trades (read-only transaction ledger) ===== */
+.fen-trades { display: flex; flex-direction: column; gap: 10px; }
+.fen-trades .lite { opacity: 0.62; }
+.fen-trade-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-trade-card.you { border-left-color: var(--fen-yellow); }
+.fen-trade-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.fen-trade-when { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-trade-cash { font-family: var(--fen-chalk-font); font-size: 13px; }
+.fen-trade-body { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 12px; align-items: start; }
+@media (max-width: 560px) { .fen-trade-body { grid-template-columns: 1fr; } .fen-trade-swap { transform: rotate(90deg); } }
+.fen-trade-side { display: flex; flex-direction: column; gap: 2px; }
+.fen-trade-team { font-family: var(--fen-chalk-font); font-size: 15px; display: flex; align-items: baseline; gap: 7px; }
+.fen-trade-team .ab { font-size: 12px; letter-spacing: 0.04em; color: var(--fen-chalk-soft); }
+.fen-trade-lab { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-faint); margin-bottom: 2px; }
+.fen-trade-pl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
+.fen-trade-pl.soft { color: var(--fen-chalk-faint); }
+.fen-trade-swap { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-marquee); text-align: center; align-self: center; }

@@ -87,6 +87,16 @@ import {
   type AwardWinner,
   type ChampionshipRecord,
 } from "../../utils/museumStorage";
+import {
+  getPlayoffByFranchiseSeason,
+  getSeriesByPlayoff,
+  type PlayoffConfig,
+  type PlayoffSeries,
+} from "../../utils/playoffStorage";
+import {
+  getTransactionsByFranchiseSeason,
+  type TransactionLogEntry,
+} from "../../utils/transactionStorage";
 import { listSeasonNewsItemsForFranchiseSeason } from "../../utils/seasonNewsStorage";
 import { listGameStoriesForFranchiseSeason } from "../../utils/gameStoriesStorage";
 import { listReporters } from "../../utils/reporterStorage";
@@ -115,6 +125,9 @@ import type {
   PlayerDetailVM,
   PlayerMoraleVM,
   PlayerRowVM,
+  PlayoffMatchupVM,
+  PlayoffRoundVM,
+  PlayoffsVM,
   PulseVM,
   RatingBarVM,
   RatingChangeVM,
@@ -129,6 +142,8 @@ import type {
   TeamPickerVM,
   TieType,
   TieVM,
+  TradeCardVM,
+  TradesVM,
   TraitChangeVM,
   TraitTimelineVM,
   TrophyVM,
@@ -152,6 +167,9 @@ interface RawData {
   designations: FranchisePlayerDesignationRecord[];
   moraleSnapshots: FranchiseMoraleSnapshot[];
   schedule: ScheduledGame[];
+  playoffs: PlayoffConfig | null;
+  playoffSeries: PlayoffSeries[];
+  transactions: TransactionLogEntry[];
   championships: ChampionshipRecord[];
   awards: AwardWinner[];
   ratingsOverlays: FranchiseRatingsOverlayRow[];
@@ -538,6 +556,117 @@ function buildScheduleVM(
   const recent = teamGames.filter((game) => game.result).map(toVM);
   if (upcoming[0]) upcoming[0].isNext = true;
   return { upcoming: upcoming.slice(0, 10), recent: recent.slice(-10).reverse() };
+}
+
+/* ===== Playoffs: the franchise bracket as a club-scoped read-only view ===== */
+function buildPlayoffsVM(
+  playoff: PlayoffConfig | null,
+  series: PlayoffSeries[],
+  activeTeamId: string,
+  teamMeta: Map<string, TeamMeta>,
+): PlayoffsVM | undefined {
+  if (!playoff) return undefined;
+  const abbrFor = (teamId: string, fallback: string): string =>
+    teamMeta.get(teamId)?.abbr ?? fallback;
+
+  // Group the series by round, preserving round order; resolve names + the winner abbr.
+  const byRound = new Map<number, { roundName: string; matchups: PlayoffMatchupVM[] }>();
+  const sortedSeries = [...series].sort((a, b) => a.round - b.round);
+  for (const s of sortedSeries) {
+    const bucket = byRound.get(s.round) ?? { roundName: s.roundName, matchups: [] };
+    const winnerAbbr =
+      s.winner === s.higherSeed.teamId
+        ? abbrFor(s.higherSeed.teamId, s.higherSeed.teamName)
+        : s.winner === s.lowerSeed.teamId
+          ? abbrFor(s.lowerSeed.teamId, s.lowerSeed.teamName)
+          : undefined;
+    const involvesActive =
+      s.higherSeed.teamId === activeTeamId || s.lowerSeed.teamId === activeTeamId;
+    bucket.matchups.push({
+      higherSeedAbbr: abbrFor(s.higherSeed.teamId, s.higherSeed.teamName),
+      higherSeedName: s.higherSeed.teamName,
+      higherSeed: s.higherSeed.seed,
+      higherSeedWins: s.higherSeedWins,
+      lowerSeedAbbr: abbrFor(s.lowerSeed.teamId, s.lowerSeed.teamName),
+      lowerSeedName: s.lowerSeed.teamName,
+      lowerSeed: s.lowerSeed.seed,
+      lowerSeedWins: s.lowerSeedWins,
+      bestOf: s.bestOf,
+      status: s.status,
+      winnerAbbr,
+      involvesActive,
+    });
+    byRound.set(s.round, bucket);
+  }
+
+  const rounds: PlayoffRoundVM[] = [...byRound.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([round, bucket]) => ({ round, roundName: bucket.roundName, matchups: bucket.matchups }));
+
+  const championTeam = playoff.champion
+    ? playoff.teams.find((t) => t.teamId === playoff.champion)
+    : undefined;
+  const championAbbr = playoff.champion
+    ? abbrFor(playoff.champion, championTeam?.teamName ?? playoff.champion)
+    : undefined;
+  const championName = championTeam?.teamName ?? teamMeta.get(playoff.champion ?? "")?.name;
+
+  return {
+    status: playoff.status,
+    rounds,
+    championAbbr,
+    championName,
+    mvpName: playoff.mvp?.playerName,
+    mvpStats: playoff.mvp?.stats,
+  };
+}
+
+/* ===== Trades: the season transaction ledger filtered to executed trades ===== */
+function buildTradesVM(
+  transactions: TransactionLogEntry[],
+  activeTeamId: string,
+  teamMeta: Map<string, TeamMeta>,
+  nameById: Map<string, string>,
+): TradesVM | undefined {
+  const trades = transactions.filter((txn) => txn.type === "trade");
+  if (trades.length === 0) return undefined;
+
+  const resolveTeam = (teamId: string): { teamAbbr: string; teamName: string } => {
+    const meta = teamMeta.get(teamId);
+    return { teamAbbr: meta?.abbr ?? teamId, teamName: meta?.name ?? teamId };
+  };
+  const resolvePlayers = (ids: unknown): string[] => {
+    if (!Array.isArray(ids)) return [];
+    return ids.map((id) => {
+      const key = String(id);
+      return nameById.get(key) ?? key;
+    });
+  };
+  const formatDate = (iso: string): string => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
+  const cards: TradeCardVM[] = trades
+    .slice()
+    .sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0))
+    .map((txn) => {
+      const data = (txn.data ?? {}) as Record<string, unknown>;
+      const team1Id = String(data.team1 ?? "");
+      const team2Id = String(data.team2 ?? "");
+      const cashRaw = Number(data.cash);
+      const cash = Number.isFinite(cashRaw) && cashRaw !== 0 ? cashRaw : undefined;
+      return {
+        date: formatDate(txn.timestamp),
+        team1: { ...resolveTeam(team1Id), players: resolvePlayers(data.playersFromTeam1) },
+        team2: { ...resolveTeam(team2Id), players: resolvePlayers(data.playersFromTeam2) },
+        cash,
+        involvesActive: team1Id === activeTeamId || team2Id === activeTeamId,
+      };
+    });
+
+  return { trades: cards };
 }
 
 function formatBatting(key: BattingSortKey, entry: BattingLeaderEntry): string {
@@ -1010,6 +1139,9 @@ function buildReturn(
     designations,
     moraleSnapshots,
     schedule,
+    playoffs,
+    playoffSeries,
+    transactions,
     championships,
     awards,
     ratingsOverlays,
@@ -1142,6 +1274,8 @@ function buildReturn(
     standings: buildStandingsVM(teams, standingByTeam, config),
     stadium: buildStadiumVM(activeTeam),
     schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
+    playoffs: buildPlayoffsVM(playoffs, playoffSeries, activeTeam.id, teamMeta),
+    trades: buildTradesVM(transactions, activeTeam.id, teamMeta, ctx.nameById),
     almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, championships, awards),
     news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
     checkpoint: checkpointVM,
@@ -1195,6 +1329,22 @@ export function useFranchiseLensData(
           seasonNumber,
         );
         const schedule = await getAllGamesByFranchise(franchiseId, seasonNumber);
+        // Playoffs: the franchise's October bracket + its series. Null/empty until the season reaches
+        // the playoffs; the Playoffs tab shows "haven't started" against a regular-season-only save.
+        const playoffs = await getPlayoffByFranchiseSeason({
+          franchiseId,
+          seasonNumber,
+          seasonId,
+        }).catch((): PlayoffConfig | null => null);
+        const playoffSeries = playoffs
+          ? await getSeriesByPlayoff(playoffs.id).catch((): PlayoffSeries[] => [])
+          : [];
+        // Trades: the season transaction ledger, narrowed to executed trades. Empty until a deal is made.
+        const transactions = (
+          await getTransactionsByFranchiseSeason(franchiseId, seasonId).catch(
+            (): TransactionLogEntry[] => [],
+          )
+        ).filter((txn) => txn.type === "trade");
         // Museum (champions / award winners) is global all-time history; empty on a fresh franchise.
         const championships = await getChampionships().catch(() => []);
         const awards = await getAwardWinners().catch(() => []);
@@ -1220,6 +1370,9 @@ export function useFranchiseLensData(
           designations: designations ?? [],
           moraleSnapshots: moraleSnapshots ?? [],
           schedule: schedule ?? [],
+          playoffs: playoffs ?? null,
+          playoffSeries: playoffSeries ?? [],
+          transactions: transactions ?? [],
           championships: championships ?? [],
           awards: awards ?? [],
           ratingsOverlays: ratingsOverlays ?? [],
