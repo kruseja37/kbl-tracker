@@ -56,6 +56,10 @@ const POSITION_OPTIONS = ["All", ...DRAFTABLE_POSITION_OPTIONS] as const;
 const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
 const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
 const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", "Sub"];
+const SAVED_DRAFT_POOL_LOCK_MESSAGE =
+  "A saved auction is in progress. Resume that draft before changing this player pool.";
+const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved auction before allowing pool edits.";
+const LOCKED_POOL_EDIT_MESSAGE = "Unlock the player pool before editing. Locked pools freeze the auction values.";
 
 type DraftablePosition = (typeof DRAFTABLE_POSITION_OPTIONS)[number];
 
@@ -204,6 +208,7 @@ export function LeagueBuilderDraftSetup() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [savedDraftChecked, setSavedDraftChecked] = useState(false);
 
   const refreshPool = useCallback(async (leagueId: string) => {
     setRegisteredPool(await getRegisteredPool(leagueId));
@@ -217,14 +222,20 @@ export function LeagueBuilderDraftSetup() {
   useEffect(() => {
     if (!activeLeagueId) {
       setHasSavedDraft(false);
+      setSavedDraftChecked(true);
       return;
     }
     let cancelled = false;
+    setSavedDraftChecked(false);
     void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
       if (cancelled) return;
       setHasSavedDraft(Boolean(row && row.session.state !== "AUCTION_COMPLETE"));
+      setSavedDraftChecked(true);
     }).catch(() => {
-      if (!cancelled) setHasSavedDraft(false);
+      if (!cancelled) {
+        setHasSavedDraft(false);
+        setSavedDraftChecked(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -232,6 +243,13 @@ export function LeagueBuilderDraftSetup() {
   }, [activeLeagueId]);
 
   const locked = Boolean(registeredPool?.locked);
+  const savedDraftMutationBlocked = !savedDraftChecked || hasSavedDraft;
+  const poolEditingBlocked = locked || savedDraftMutationBlocked;
+  const poolEditingBlockMessage = hasSavedDraft
+    ? SAVED_DRAFT_POOL_LOCK_MESSAGE
+    : savedDraftChecked
+      ? LOCKED_POOL_EDIT_MESSAGE
+      : CHECKING_SAVED_DRAFT_MESSAGE;
 
   // Selection state (ids checked in each pane).
   const [inSelected, setInSelected] = useState<Set<string>>(new Set());
@@ -313,7 +331,7 @@ export function LeagueBuilderDraftSetup() {
   // pre-existing assignment must not suppress the seed). Retries on failure.
   const autoImportedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isLoading || !activeLeagueId || !league || locked) return;
+    if (isLoading || !activeLeagueId || !league || poolEditingBlocked) return;
     if (autoImportedRef.current === activeLeagueId) return;
     autoImportedRef.current = activeLeagueId;
     void (async () => {
@@ -324,7 +342,7 @@ export function LeagueBuilderDraftSetup() {
         autoImportedRef.current = null; // allow retry on a later render
       }
     })();
-  }, [isLoading, activeLeagueId, league, locked, refresh]);
+  }, [isLoading, activeLeagueId, league, poolEditingBlocked, refresh]);
 
   const runAction = useCallback(
     async (fn: () => Promise<void>) => {
@@ -343,30 +361,40 @@ export function LeagueBuilderDraftSetup() {
     [refresh, refreshPool, activeLeagueId],
   );
 
+  const assertPoolCanMutate = () => {
+    if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
+    if (hasSavedDraft) throw new Error(SAVED_DRAFT_POOL_LOCK_MESSAGE);
+  };
+
   const handleAdd = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await addPlayersToLeaguePool([...availSelected], activeLeagueId);
       setAvailSelected(new Set());
     });
 
   const handleRemove = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await removePlayersFromLeaguePool([...inSelected], activeLeagueId);
       setInSelected(new Set());
     });
 
   const handleImport = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await importRosteredPlayersToLeaguePool(activeLeagueId);
     });
 
   const handleLock = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await lockLeaguePool(activeLeagueId);
     });
 
   const handleUnlock = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await unlockLeaguePool(activeLeagueId);
     });
 
@@ -377,8 +405,8 @@ export function LeagueBuilderDraftSetup() {
 
   const handleSaveEditedPlayer = useCallback(
     async (updatedPlayer: Player) => {
-      if (locked) {
-        setEditError("Unlock the player pool before editing. Locked pools freeze the auction values.");
+      if (poolEditingBlocked) {
+        setEditError(poolEditingBlockMessage);
         return;
       }
       setEditSaving(true);
@@ -399,7 +427,7 @@ export function LeagueBuilderDraftSetup() {
         setEditSaving(false);
       }
     },
-    [activeLeagueId, locked, refresh, refreshPool, updatePlayer],
+    [activeLeagueId, poolEditingBlockMessage, poolEditingBlocked, refresh, refreshPool, updatePlayer],
   );
 
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
@@ -479,12 +507,12 @@ export function LeagueBuilderDraftSetup() {
               onSearch={setInSearch}
               position={inPosition}
               onPosition={setInPosition}
-              disabled={locked}
+              disabled={poolEditingBlocked}
               onSelectAll={() => selectAll(inFiltered, setInSelected)}
               footer={
                 <button
                   onClick={handleRemove}
-                  disabled={locked || busy || inSelected.size === 0}
+                  disabled={poolEditingBlocked || busy || inSelected.size === 0}
                   className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   Remove <ChevronRight className="w-4 h-4" />
@@ -499,7 +527,7 @@ export function LeagueBuilderDraftSetup() {
                   rightTitle="IV"
                   checked={inSelected.has(p.id)}
                   focused={focusedPlayerId === p.id}
-                  disabled={locked}
+                  disabled={poolEditingBlocked}
                   onToggle={() => toggle(inSelected, setInSelected, p.id)}
                   onFocus={() => setFocusedPlayerId(p.id)}
                 />
@@ -521,12 +549,12 @@ export function LeagueBuilderDraftSetup() {
               onSearch={setAvailSearch}
               position={availPosition}
               onPosition={setAvailPosition}
-              disabled={locked}
+              disabled={poolEditingBlocked}
               onSelectAll={() => selectAll(availFiltered, setAvailSelected)}
               footer={
                 <button
                   onClick={handleAdd}
-                  disabled={locked || busy || availSelected.size === 0}
+                  disabled={poolEditingBlocked || busy || availSelected.size === 0}
                   className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   <ChevronLeft className="w-4 h-4" /> Add
@@ -541,7 +569,7 @@ export function LeagueBuilderDraftSetup() {
                   rightTitle="Grade"
                   checked={availSelected.has(p.id)}
                   focused={focusedPlayerId === p.id}
-                  disabled={locked}
+                  disabled={poolEditingBlocked}
                   onToggle={() => toggle(availSelected, setAvailSelected, p.id)}
                   onFocus={() => setFocusedPlayerId(p.id)}
                 />
@@ -558,9 +586,11 @@ export function LeagueBuilderDraftSetup() {
           {focusedPlayer && (
             <FocusedPlayerPanel
               player={focusedPlayer}
-              locked={locked}
+              locked={poolEditingBlocked}
+              lockedLabel={hasSavedDraft ? "Draft Saved" : undefined}
+              lockedTitle={poolEditingBlockMessage}
               onEdit={() => {
-                if (locked) return;
+                if (poolEditingBlocked) return;
                 setEditError(null);
                 setEditingPlayer(focusedPlayer);
               }}
@@ -589,7 +619,7 @@ export function LeagueBuilderDraftSetup() {
             )}
             <button
               onClick={handleImport}
-              disabled={locked || busy}
+              disabled={poolEditingBlocked || busy}
               className="flex items-center gap-2 bg-[#556B55] hover:bg-[#4A6844] disabled:opacity-40 border-4 border-[#C4A853] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
             >
               <Download className="w-4 h-4" /> Import from branded teams
@@ -601,7 +631,7 @@ export function LeagueBuilderDraftSetup() {
             {!locked ? (
               <button
                 onClick={handleLock}
-                disabled={busy || inPoolPlayers.length === 0}
+                disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0}
                 className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
               >
                 <Lock className="w-5 h-5" /> LOCK POOL
@@ -610,7 +640,7 @@ export function LeagueBuilderDraftSetup() {
               <>
                 <button
                   onClick={handleUnlock}
-                  disabled={busy}
+                  disabled={busy || savedDraftMutationBlocked}
                   className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   <Unlock className="w-5 h-5" /> UNLOCK
@@ -646,7 +676,19 @@ export function LeagueBuilderDraftSetup() {
   );
 }
 
-function FocusedPlayerPanel({ player, locked, onEdit }: { player: Player; locked: boolean; onEdit: () => void }) {
+function FocusedPlayerPanel({
+  player,
+  locked,
+  lockedLabel,
+  lockedTitle,
+  onEdit,
+}: {
+  player: Player;
+  locked: boolean;
+  lockedLabel?: string;
+  lockedTitle?: string;
+  onEdit: () => void;
+}) {
   const grade = computePlayerGrade(player);
   const iv = computePlayerIv(player);
   const ratings = isPitcherPosition(player.primaryPosition)
@@ -669,10 +711,10 @@ function FocusedPlayerPanel({ player, locked, onEdit }: { player: Player; locked
           type="button"
           onClick={onEdit}
           disabled={locked}
-          title={locked ? "Unlock the player pool before editing frozen auction values." : undefined}
+          title={locked ? lockedTitle ?? "Unlock the player pool before editing frozen auction values." : undefined}
           className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] disabled:opacity-45 disabled:hover:bg-[#5A8352] border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
         >
-          <Pencil className="w-4 h-4" /> {locked ? "Unlock to Edit" : "Edit Player"}
+          <Pencil className="w-4 h-4" /> {locked ? lockedLabel ?? "Unlock to Edit" : "Edit Player"}
         </button>
       </div>
 

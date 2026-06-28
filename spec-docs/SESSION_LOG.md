@@ -6388,3 +6388,8 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Added the skeptical-audit P2 regression test proving mixed auction transfer semantics: production `deriveShillTeamIds` identifies the pure shill, `commitCompletedMlbAuctionSessionToLeagueRosters` commits the human and real CPU winners, and the pure-shill winner remains out of League Builder rosters/player assignments.
 - Local audit of the added diff found no confirmed bug; the test uses a minimal completed auction session and asserts both positive real-team transfer and negative shill transfer.
 - Verification after addendum 3: `draftPipeline.integration.test.ts` passed 5/5; focused auction/draft suite passed 42/42; `npm run -s build` passed; `git diff --check` passed.
+
+### 2026-06-28 addendum 4 — saved-auction pool freeze follow-up
+- Fixed the independent-audit P1: draft setup now treats an in-progress saved auction as a full pool mutation lock. The page blocks unlock, add/remove/import, auto-import, and player edit saves while a resumable auction exists, and it keeps edits blocked while the saved-session lookup is still pending.
+- Added regression coverage proving a saved auction changes the action to `RESUME DRAFT`, disables `UNLOCK`, and keeps the focused player editor disabled as `Draft Saved`.
+- Verification after addendum 4: `LeagueBuilderDraftSetup.test.tsx` passed 2/2; focused auction/draft suite passed 43/43; `npm run -s build` passed; `git diff --check` passed; localhost `5173` returned 200 for the draft setup route and served updated `LeagueBuilderDraftSetup.tsx` markers (`savedLock`, `savedDraftChecked`, `Draft Saved`). Browser rendering smoke remained blocked because the local Playwright browser binary is not installed.

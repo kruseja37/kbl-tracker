@@ -10,6 +10,7 @@ import {
   type Team,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
+import { getAuctionSession } from "../../../utils/leagueBuilderStorage";
 
 const mockNavigate = vi.fn();
 
@@ -152,5 +153,26 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Unlock to Edit/i })).toBeDisabled();
     });
+  });
+
+  test("keeps the pool frozen while a saved auction is in progress", async () => {
+    vi.mocked(getAuctionSession).mockResolvedValueOnce({
+      leagueId: "league-page",
+      season: "MLB_AUCTION",
+      session: { state: "OPEN_BIDDING" },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    } as Awaited<ReturnType<typeof getAuctionSession>>);
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /RESUME DRAFT/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: /UNLOCK/i })).toBeDisabled();
+
+    fireEvent.click(await screen.findByText("Avery Anchor"));
+
+    expect(screen.getByRole("button", { name: /Draft Saved/i })).toBeDisabled();
   });
 });
