@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus, X, Users, Gavel, Minus, ChevronRight, Check } from "lucide-react";
+import { Plus, X, Users, Gavel, Minus, ChevronRight, Check, Lock, Unlock, Edit3, AlertTriangle } from "lucide-react";
 import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
 import { archetypeByKey } from "../data/teamArchetypeCatalog";
-import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
-import { leagueIdFromSearch, resolveInitialLeagueId, scoutHireRouteForLeague } from "../utils/draftRouting";
+import { useLeagueBuilderData, type RegisteredPool, type Team } from "../../hooks/useLeagueBuilderData";
+import {
+  MAX_DRAFT_SHILL_COUNT,
+  clampDraftShillCount,
+  leagueIdFromSearch,
+  resolveInitialLeagueId,
+  scoutHireRouteForLeague,
+  shillCountFromSearch,
+} from "../utils/draftRouting";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { saveTeam } from "../../../utils/leagueBuilderStorage";
+import { getAuctionSession } from "../../../utils/leagueBuilderStorage";
+import { evaluatePoolSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
+import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 
 /**
  * DraftSetupHubPreview — the full Draft Setup hub (roadmap §7.2). The "big
@@ -32,13 +42,18 @@ function seededOwnerId(team: Team, existing: TeamConfig | undefined): string {
 
 export function DraftSetupHubPreview() {
   const navigate = useNavigate();
-  const { leagues, teams, isLoading, error, refresh } = useLeagueBuilderData();
+  const { leagues, teams, isLoading, error, refresh, getRegisteredPool } = useLeagueBuilderData();
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
+  const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [seats, setSeats] = useState<Seat[]>([{ id: "s1", name: "You" }, { id: "s2", name: "Player 2" }]);
   const [configs, setConfigs] = useState<Record<string, TeamConfig>>({});
   const [shills, setShills] = useState(() => scaledShillDefault(0));
   const [selected, setSelected] = useState<string>("");
+  const [registeredPool, setRegisteredPool] = useState<RegisteredPool | null>(null);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const [poolError, setPoolError] = useState<string | null>(null);
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -59,8 +74,52 @@ export function DraftSetupHubPreview() {
   }, [activeLeague, teams]);
 
   useEffect(() => {
-    setShills(scaledShillDefault(leagueTeams.length));
-  }, [leagueTeams.length]);
+    if (!activeLeagueId) {
+      setRegisteredPool(null);
+      setPoolLoading(false);
+      setPoolError(null);
+      setHasSavedDraft(false);
+      return;
+    }
+    let cancelled = false;
+    setRegisteredPool(null);
+    setPoolLoading(true);
+    setPoolError(null);
+    void getRegisteredPool(activeLeagueId)
+      .then((pool) => {
+        if (!cancelled) setRegisteredPool(pool);
+      })
+      .catch((caught) => {
+        if (!cancelled) setPoolError(caught instanceof Error ? caught.message : "Could not load player pool.");
+      })
+      .finally(() => {
+        if (!cancelled) setPoolLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId, getRegisteredPool]);
+
+  useEffect(() => {
+    if (!activeLeagueId) {
+      setHasSavedDraft(false);
+      return;
+    }
+    let cancelled = false;
+    void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
+      if (cancelled) return;
+      setHasSavedDraft(Boolean(row && row.session.state !== "AUCTION_COMPLETE"));
+    }).catch(() => {
+      if (!cancelled) setHasSavedDraft(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId]);
+
+  useEffect(() => {
+    setShills(clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)));
+  }, [leagueTeams.length, requestedShillCount]);
 
   useEffect(() => {
     if (leagueTeams.length === 0) return;
@@ -114,9 +173,21 @@ export function DraftSetupHubPreview() {
   };
 
   const humanTeams = useMemo(() => leagueTeams.filter((team) => configs[team.id]?.ownerId !== "cpu"), [configs, leagueTeams]);
-  const ready = leagueTeams.length > 0 && leagueTeams.every((team) => configs[team.id]?.mlbKey);
+  const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => configs[team.id]?.mlbKey);
+  const poolSize = registeredPool?.players.length ?? 0;
+  const draftingParticipantCount = (activeLeague?.teamIds.length ?? 0) + shills;
+  const poolSufficiency = useMemo(
+    () => evaluatePoolSufficiency(poolSize, draftingParticipantCount),
+    [draftingParticipantCount, poolSize],
+  );
+  const poolLocked = Boolean(registeredPool?.locked);
+  const poolReady = poolLocked && poolSufficiency.meetsFloor;
+  const ready = identitiesReady && poolReady && !poolLoading && !poolError;
   const sel = leagueTeams.find((team) => team.id === selected);
   const selCfg = configs[selected];
+  const poolEditRoute = activeLeague
+    ? `/league-builder/draft-setup?leagueId=${encodeURIComponent(activeLeague.id)}`
+    : "/league-builder/draft-setup";
 
   const addSeat = () => setSeats((s) => [...s, { id: `s${Date.now()}`, name: `Player ${s.length + 1}` }]);
   const removeSeat = (id: string) => {
@@ -173,6 +244,38 @@ export function DraftSetupHubPreview() {
           Who's playing, who owns which clubs, each club's identity, and how much CPU pressure fills the room — all before the draft begins.
         </p>
 
+        <div className="bg-[#2d3d2f] border-4 border-[#4A6844] p-4 mb-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                {poolLocked ? <Lock className="w-4 h-4 text-[#9FE0A0]" /> : <Unlock className="w-4 h-4 text-[#FFD27A]" />}
+                <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853]">PLAYER POOL</div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 ${poolReady ? "bg-[#9FE0A0] text-[#1A1A1A]" : "bg-[#6B3A3A] text-[#FFE8B0]"}`}>
+                  {poolLoading ? "LOADING" : poolReady ? "LOCKED" : "NEEDS LOCK"}
+                </span>
+              </div>
+              <div className="text-sm text-[#E8E8D8]/75">
+                {poolSize.toLocaleString()} players · {poolSufficiency.mlbSlots} draft slots
+                {poolSufficiency.meetsFloor
+                  ? ` · surplus ${poolSufficiency.surplus >= 0 ? "+" : ""}${poolSufficiency.surplus}`
+                  : ` · need ${Math.abs(poolSufficiency.surplus)} more`}
+              </div>
+              {poolError ? (
+                <div className="mt-2 flex items-center gap-2 text-xs font-bold text-[#FFE8B0]">
+                  <AlertTriangle className="w-3.5 h-3.5" /> {poolError}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(poolEditRoute)}
+              className="flex items-center gap-2 bg-[#34472f] hover:bg-[#3a4d3c] border-2 border-[#C4A853] px-3 py-2 text-sm font-bold"
+            >
+              <Edit3 className="w-4 h-4" /> Edit player pool
+            </button>
+          </div>
+        </div>
+
         {/* who's playing + the room */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 mb-4">
           <div className="bg-[#2d3d2f] border-4 border-[#4A6844] p-4">
@@ -212,13 +315,13 @@ export function DraftSetupHubPreview() {
               <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853]">THE ROOM</div>
             </div>
             <div className="text-[12px] text-[#E8E8D8]/60 mb-3">
-              CPU <b className="text-[#E8E8D8]">shill bidders</b> add price pressure so nobody colludes into cheap rosters — required even in an all-human league.
+              Pure shills bid from their own visible draft rosters and do not transfer into the living season.
             </div>
             <div className="flex items-center gap-3">
-              <button type="button" onClick={() => setShills((n) => Math.max(0, n - 1))}
+              <button type="button" aria-label="Decrease shill bidders" onClick={() => setShills((n) => Math.max(0, n - 1))}
                 className="p-2 border-2 border-[#4A6844] hover:border-[#C4A853]"><Minus className="w-4 h-4" /></button>
               <div className="text-3xl font-bold text-[#E8E8D8] w-10 text-center" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>{shills}</div>
-              <button type="button" onClick={() => setShills((n) => Math.min(12, n + 1))}
+              <button type="button" aria-label="Increase shill bidders" onClick={() => setShills((n) => Math.min(MAX_DRAFT_SHILL_COUNT, n + 1))}
                 className="p-2 border-2 border-[#4A6844] hover:border-[#C4A853]"><Plus className="w-4 h-4" /></button>
               <div className="text-[11px] text-[#E8E8D8]/50 ml-1">shill bidders</div>
             </div>
@@ -230,8 +333,8 @@ export function DraftSetupHubPreview() {
           <div className="flex items-center gap-3 mb-3">
             <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853]">THE CLUBS</div>
             <span className="text-[11px] text-[#E8E8D8]/45">{humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU</span>
-            <span className={`ml-auto text-[11px] font-bold ${ready ? "text-[#9FE0A0]" : "text-[#E8E8D8]/45"}`}>
-              {ready ? "✓ every club has an identity" : "set each club's identity"}
+            <span className={`ml-auto text-[11px] font-bold ${identitiesReady ? "text-[#9FE0A0]" : "text-[#E8E8D8]/45"}`}>
+              {identitiesReady ? "✓ every club has an identity" : "set each club's identity"}
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -280,11 +383,15 @@ export function DraftSetupHubPreview() {
         </div>
 
         <div className="mt-5 flex items-center gap-3">
-          <button type="button" disabled={!ready} onClick={() => navigate(scoutHireRouteForLeague(activeLeague))}
+          <button type="button" disabled={!ready} onClick={() => { if (ready) navigate(scoutHireRouteForLeague(activeLeague, { shillCount: shills })); }}
             className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95">
-            Start the Draft <ChevronRight className="w-5 h-5" />
+            {hasSavedDraft ? "Resume Draft" : "Start the Draft"} <ChevronRight className="w-5 h-5" />
           </button>
-          {!ready && <span className="text-[11px] text-[#E8E8D8]/50">give every club an MLB identity first</span>}
+          {!ready && (
+            <span className="text-[11px] text-[#E8E8D8]/50">
+              {!poolReady ? "lock a sufficient player pool first" : "give every club an MLB identity first"}
+            </span>
+          )}
         </div>
       </div>
     </div>

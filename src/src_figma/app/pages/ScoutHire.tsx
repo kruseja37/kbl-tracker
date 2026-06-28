@@ -8,6 +8,7 @@ import {
   draftRouteForLeague,
   leagueIdFromSearch,
   resolveInitialLeagueId,
+  shillCountFromSearch,
 } from "../utils/draftRouting";
 import {
   buildLiveScoutPool,
@@ -32,6 +33,7 @@ function selectedTeamForScout(
 export function ScoutHire() {
   const navigate = useNavigate();
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
+  const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
   const { leagues, teams, isLoading, error } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [selectedByTeamId, setSelectedByTeamId] = useState<Record<string, string | undefined>>({});
@@ -109,7 +111,7 @@ export function ScoutHire() {
         selectedScoutIdsByTeamId: selectedByTeamId,
         pool: scoutPool,
       });
-      navigate(draftRouteForLeague(activeLeague));
+      navigate(draftRouteForLeague(activeLeague, { shillCount: requestedShillCount }));
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : "Could not save scout hires.");
     } finally {
@@ -151,7 +153,7 @@ export function ScoutHire() {
           <button
             aria-label="Back to draft setup"
             type="button"
-            onClick={() => navigate(`/league-builder/draft-config?leagueId=${encodeURIComponent(activeLeague.id)}`)}
+            onClick={() => navigate(`/league-builder/draft-config?leagueId=${encodeURIComponent(activeLeague.id)}${requestedShillCount !== null ? `&shills=${requestedShillCount}` : ""}`)}
             className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           >
             <ArrowLeft className="w-5 h-5" />

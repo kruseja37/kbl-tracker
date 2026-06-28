@@ -1,9 +1,23 @@
 import "fake-indexeddb/auto";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { __resetLeagueBuilderDatabaseForTests } from "../../../utils/leagueBuilderStorage";
+import {
+  __resetLeagueBuilderDatabaseForTests,
+  clearAllLeagueBuilderData,
+} from "../../../utils/leagueBuilderStorage";
+import {
+  initAuctionSession,
+  seededNominationOrder,
+  surfaceNextPlayer,
+  type AuctionSession,
+} from "../../../engines/auctionStateMachine";
+import {
+  cpuBidOnLot,
+  type CpuShillAuctionSession,
+  type CpuShillProfile,
+} from "../../../engines/cpuShillBidding";
 import { LeagueBuilderAuctionDraft } from "../../app/pages/LeagueBuilderAuctionDraft";
 import {
   useLeagueBuilderData,
@@ -14,6 +28,7 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
+import { buildAuctionPlayers } from "../../app/hooks/useAuctionDraft";
 
 const mockNavigate = vi.fn();
 
@@ -39,15 +54,10 @@ vi.mock("../../hooks/useLeagueBuilderData", async () => {
   };
 });
 
-const DB_NAME = "kbl-league-builder";
-
-function deleteDatabase(name: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(name);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => resolve();
-  });
+async function resetLeagueBuilderTestState(): Promise<void> {
+  __resetLeagueBuilderDatabaseForTests();
+  await clearAllLeagueBuilderData().catch(() => undefined);
+  __resetLeagueBuilderDatabaseForTests();
 }
 
 function makeLeague(overrides: Partial<LeagueTemplate> = {}): LeagueTemplate {
@@ -66,7 +76,7 @@ function makeLeague(overrides: Partial<LeagueTemplate> = {}): LeagueTemplate {
   };
 }
 
-function makeTeam(id: string): Team {
+function makeTeam(id: string, overrides: Partial<Team> = {}): Team {
   return {
     id,
     name: id === "team-a" ? "Caps" : "Keys",
@@ -79,6 +89,7 @@ function makeTeam(id: string): Team {
     leagueIds: ["league-page"],
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
+    ...overrides,
   };
 }
 
@@ -127,6 +138,37 @@ function makePlayer(
   return player;
 }
 
+function makePlayers(count = 44): Player[] {
+  const players = [
+    makePlayer("player-a", "CF", "LF"),
+    makePlayer("player-b", "SP"),
+  ];
+  for (let index = players.length; index < count; index += 1) {
+    const position = index % 5 === 0 ? "C" : index % 5 === 1 ? "SS" : index % 5 === 2 ? "RF" : index % 5 === 3 ? "RP" : "SP";
+    players.push(makePlayer(`depth-${index + 1}`, position as Player["primaryPosition"]));
+  }
+  return players;
+}
+
+function makePool(players: Player[]): RegisteredPool {
+  return {
+    leagueId: "league-page",
+    tier: "standard",
+    balanceMode: "taxed",
+    players: players.map((player, index) => ({
+      id: player.id,
+      iv: index === 0 ? 100_000 : index === 1 ? 80_000 : 12_000 + index,
+      salary: index === 0 ? 10_000 : index === 1 ? 8_000 : 3_000,
+    })),
+    tierCap: 1_000_000,
+    luxuryCaps: [],
+    pickValueChart: [],
+    totalSlots: players.length,
+    poolSurplusWarning: false,
+    locked: true,
+  };
+}
+
 function emptyRoster(teamId: string): TeamRoster {
   return {
     teamId,
@@ -159,25 +201,52 @@ function emptyRoster(teamId: string): TeamRoster {
   };
 }
 
-function mockLeagueData() {
-  const pool: RegisteredPool = {
-    leagueId: "league-page",
-    tier: "standard",
-    balanceMode: "taxed",
-    players: [
-      { id: "player-a", iv: 100_000, salary: 10_000 },
-      { id: "player-b", iv: 80_000, salary: 8_000 },
-    ],
-    tierCap: 1_000_000,
-    luxuryCaps: [],
-    pickValueChart: [],
-    totalSlots: 44,
-    poolSurplusWarning: false,
-  };
+function seedForOpeningLot(
+  players: readonly Player[],
+  options: {
+    bidderTeamId?: string;
+    playerIds?: readonly string[];
+    teamIds?: readonly string[];
+  } = {},
+): string {
+  const teamIds = options.teamIds ?? ["team-a", "team-b"];
+  const playerIds = new Set(options.playerIds ?? ["player-a", "player-b"]);
+  const auctionPlayers = buildAuctionPlayers(makePool([...players]));
+
+  for (let index = 0; index < 2000; index += 1) {
+    const seed = `page-opening-seed-${index}`;
+    if (options.bidderTeamId && seededNominationOrder(teamIds, seed)[0] !== options.bidderTeamId) continue;
+    const initialized = initAuctionSession({
+      teams: teamIds.map((teamId) => ({
+        teamId,
+        budgetRemaining: 1_000_000,
+        rosterSlotsRemaining: 22,
+        minSalary: 3_000,
+        projectedTax: 0,
+      })),
+      players: auctionPlayers,
+      config: {
+        nominationOrderSeed: seed,
+        bidIncrement: 5_000,
+        nominationWeightExponent: 2,
+      },
+    });
+    const surfaced = surfaceNextPlayer(initialized);
+    if (!surfaced.ok || surfaced.session.state !== "OPEN_BIDDING") continue;
+    const lot = surfaced.session.currentLot;
+    if (lot && playerIds.has(lot.playerId)) return seed;
+  }
+
+  throw new Error("No deterministic opening-lot seed found.");
+}
+
+function mockLeagueData(options: { players?: Player[]; pool?: RegisteredPool } = {}) {
+  const players = options.players ?? makePlayers();
+  const pool = options.pool ?? makePool(players);
   const leagueData = {
     leagues: [makeLeague()],
     teams: [makeTeam("team-a"), makeTeam("team-b")],
-    players: [makePlayer("player-a", "CF", "LF"), makePlayer("player-b", "SP")],
+    players,
     rulesPresets: [],
     isLoading: false,
     error: null,
@@ -192,37 +261,145 @@ function mockLeagueData() {
   return leagueData;
 }
 
+const TEST_SHILL_ID = "__auction_shill__league-page__1";
+const TEST_SHILL_PROFILE: CpuShillProfile = {
+  teamId: TEST_SHILL_ID,
+  personality: "sniper",
+  bandPriorities: {
+    Power: 1,
+    Contact: 3,
+    Speed: 1,
+    Defense: 2,
+    Rotation: 2,
+    Bullpen: 1,
+  },
+};
+
+function cpuDecisionSeedForTest(session: AuctionSession, kind: "bid" | "claim", teamId: string): string {
+  const lot = session.currentLot;
+  return [
+    session.config.nominationOrderSeed,
+    "preview",
+    kind,
+    session.results.length,
+    teamId,
+    lot?.playerId ?? session.pendingClaim?.playerId ?? "no-player",
+    lot?.highBid ?? "open",
+    lot?.stillIn.join("-") ?? "resolve",
+  ].join(":");
+}
+
+function seedWhereFirstShillBids(players: readonly Player[]): string {
+  const teamIds = ["team-a", "team-b", TEST_SHILL_ID];
+  const auctionPlayers = buildAuctionPlayers(makePool([...players]));
+
+  for (let index = 0; index < 2000; index += 1) {
+    const seed = `page-shill-win-seed-${index}`;
+    if (seededNominationOrder(teamIds, seed)[0] !== TEST_SHILL_ID) continue;
+    const initialized = initAuctionSession({
+      teams: [
+        { teamId: "team-a", budgetRemaining: 1_000_000, rosterSlotsRemaining: 22, minSalary: 3_000, projectedTax: 0 },
+        { teamId: "team-b", budgetRemaining: 1_000_000, rosterSlotsRemaining: 22, minSalary: 3_000, projectedTax: 0 },
+        { teamId: TEST_SHILL_ID, budgetRemaining: 1_000_000, rosterSlotsRemaining: 22, minSalary: 3_000, projectedTax: 0 },
+      ],
+      players: auctionPlayers,
+      config: {
+        nominationOrderSeed: seed,
+        bidIncrement: 5_000,
+        nominationWeightExponent: 2,
+      },
+    }) as CpuShillAuctionSession;
+    const surfaced = surfaceNextPlayer(initialized);
+    if (!surfaced.ok || surfaced.session.state !== "OPEN_BIDDING") continue;
+    const session = {
+      ...surfaced.session,
+      cpuShills: { [TEST_SHILL_ID]: TEST_SHILL_PROFILE },
+    } as CpuShillAuctionSession;
+    const decision = cpuBidOnLot(session, TEST_SHILL_ID, cpuDecisionSeedForTest(session, "bid", TEST_SHILL_ID));
+    if (decision.kind === "bid") return seed;
+  }
+
+  throw new Error("No deterministic shill-bid seed found.");
+}
+
+function seedWhereCpuTeamBids(players: readonly Player[], teamId: string): string {
+  const teamIds = ["team-a", "team-b"];
+  const auctionPlayers = buildAuctionPlayers(makePool([...players]));
+
+  for (let index = 0; index < 2000; index += 1) {
+    const seed = `page-cpu-bid-seed-${index}`;
+    if (seededNominationOrder(teamIds, seed)[0] !== teamId) continue;
+    const initialized = initAuctionSession({
+      teams: teamIds.map((candidateTeamId) => ({
+        teamId: candidateTeamId,
+        budgetRemaining: 1_000_000,
+        rosterSlotsRemaining: 22,
+        minSalary: 3_000,
+        projectedTax: 0,
+      })),
+      players: auctionPlayers,
+      config: {
+        nominationOrderSeed: seed,
+        bidIncrement: 5_000,
+        nominationWeightExponent: 2,
+      },
+    }) as CpuShillAuctionSession;
+    const surfaced = surfaceNextPlayer(initialized);
+    if (!surfaced.ok || surfaced.session.state !== "OPEN_BIDDING") continue;
+    const session = surfaced.session as CpuShillAuctionSession;
+    const decision = cpuBidOnLot(session, teamId, cpuDecisionSeedForTest(session, "bid", teamId));
+    if (decision.kind === "bid") return seed;
+  }
+
+  throw new Error(`No deterministic CPU bid seed found for ${teamId}.`);
+}
+
 describe("LeagueBuilderAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     window.history.pushState({}, "", "/league-builder/auction-draft");
-    __resetLeagueBuilderDatabaseForTests();
-    await deleteDatabase(DB_NAME).catch(() => undefined);
+    await resetLeagueBuilderTestState();
     mockLeagueData();
   });
 
   afterEach(async () => {
-    __resetLeagueBuilderDatabaseForTests();
-    await deleteDatabase(DB_NAME).catch(() => undefined);
+    cleanup();
+    await resetLeagueBuilderTestState();
   });
 
   test("renders setup and begins into an engine-nominated open lot", async () => {
+    const players = makePlayers();
+    mockLeagueData({ players, pool: makePool(players) });
+    const seed = seedForOpeningLot(players);
+
     render(<LeagueBuilderAuctionDraft />);
 
     expect(screen.getByText("MLB AUCTION DRAFT")).toBeInTheDocument();
     expect(screen.getByText("STATE: SETUP")).toBeInTheDocument();
 
+    const seedInput = await screen.findByLabelText("SEED");
+    fireEvent.change(seedInput, { target: { value: seed } });
+    await waitFor(() => {
+      expect(seedInput).toHaveValue(seed);
+    });
+
     const begin = await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i });
     fireEvent.click(begin);
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
+      expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
     });
-    expect(screen.getByText("ENGINE NOMINATED")).toBeInTheDocument();
+    expect(screen.queryByText("MLB auction")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(screen.getByText("MLB auction")).toBeInTheDocument();
+    expect(screen.getByText("On the block")).toBeInTheDocument();
     expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /IV SORT/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/Avery Anchor|Blake Bolt/)).toBeInTheDocument();
-    expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
+    expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Most you can bid")).toBeInTheDocument();
+    expect(screen.getByText(/Scout Insight:/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /BID/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Let him go/i })).toBeInTheDocument();
   });
 
   test("uses leagueId query param over the first league when it matches a known league", async () => {
@@ -254,42 +431,165 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
   });
 
-  test("renders open bidding with names and records a SOLD result row with winner salary", async () => {
+  test("uses shill count from the draft setup route before starting the auction", async () => {
+    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=2");
+
     render(<LeagueBuilderAuctionDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(2);
+    });
+  });
+
+  test("clamps high shill route params and ignores malformed shill route params", async () => {
+    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=9999");
+
+    const { unmount } = render(<LeagueBuilderAuctionDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(12);
+    });
+
+    unmount();
+    cleanup();
+    await resetLeagueBuilderTestState();
+    mockLeagueData();
+    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=3abc");
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(0);
+    });
+  });
+
+  test("blocks direct auction start when selected shills make the locked pool underfilled", async () => {
+    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=1");
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/needs 22 more player\(s\) for 3 drafting teams/i)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /BEGIN AUCTION DRAFT|STARTING/i })).toBeDisabled();
+    });
+  });
+
+  test("renders open bidding with names and records a SOLD result row with winner salary", async () => {
+    const players = makePlayers();
+    mockLeagueData({ players, pool: makePool(players) });
+    const seed = seedForOpeningLot(players);
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    const seedInput = await screen.findByLabelText("SEED");
+    fireEvent.change(seedInput, { target: { value: seed } });
+    await waitFor(() => {
+      expect(seedInput).toHaveValue(seed);
+    });
 
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
+      expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText("ENGINE NOMINATED")).toBeInTheDocument();
-    expect(screen.getByText(/Avery Anchor|Blake Bolt/)).toBeInTheDocument();
-    expect(screen.getByText("No bid yet")).toBeInTheDocument();
-    expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
-    expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
-    expect(screen.getByText("ROSTER SLOTS REMAINING")).toBeInTheDocument();
-    expect(screen.getByText("CURRENT ROSTER POSITION TALLY")).toBeInTheDocument();
-    expect(screen.getByText(/Still in: Page (Caps|Keys), Page (Caps|Keys)/)).toBeInTheDocument();
+    expect(screen.getByText("On the block")).toBeInTheDocument();
+    expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("opening — be the first")).toBeInTheDocument();
+    expect(screen.getByText(/Page (Caps|Keys) budget/)).toBeInTheDocument();
+    expect(screen.getByText("Most you can bid")).toBeInTheDocument();
+    expect(screen.getByText("Slots left")).toBeInTheDocument();
+    expect(screen.getByText(/Priority need:/)).toBeInTheDocument();
     expect(screen.queryByText("player-a")).not.toBeInTheDocument();
     expect(screen.queryByText("team-a")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Custom bid amount")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(70000);
+      expect(screen.getByRole("button", { name: /BID \$70k/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /RAISE CUSTOM/i }));
+    fireEvent.click(screen.getByRole("button", { name: /BID \$70k/i }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(75000);
+      expect(screen.getByText("$70,000")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "PASS" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let him go" }));
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: SOLD")).toBeInTheDocument();
+      expect(screen.getByText("SOLD")).toBeInTheDocument();
     });
-
     expect(screen.getAllByText(/(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/).length).toBeGreaterThan(0);
+  });
+
+  test("shows a read-only CPU decision preview before advancing automated turns", async () => {
+    const players = makePlayers();
+    const leagueData = mockLeagueData({ players, pool: makePool(players) });
+    leagueData.teams = [makeTeam("team-a", { controlledBy: "ai" }), makeTeam("team-b")];
+    const seed = seedWhereCpuTeamBids(players, "team-a");
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    const seedInput = await screen.findByLabelText("SEED");
+    fireEvent.change(seedInput, { target: { value: seed } });
+    await waitFor(() => {
+      expect(seedInput).toHaveValue(seed);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Review CPU decision")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/turn preview/i)).toBeInTheDocument();
+    expect(screen.getByText(/Page Caps will bid \$70,000/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Advance decision" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Let him go/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advance decision" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/turn preview/i)).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("Page Caps")).toBeInTheDocument();
+    expect(screen.getAllByText("$70,000").length).toBeGreaterThan(0);
+  });
+
+  test("shows a pure shill winner on the visible AuctionStage roster board after SOLD", async () => {
+    const players = makePlayers(66);
+    mockLeagueData({ players, pool: makePool(players) });
+    const seed = seedWhereFirstShillBids(players);
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    fireEvent.change(await screen.findByLabelText("CPU COUNT"), { target: { value: "1" } });
+    const seedInput = screen.getByLabelText("SEED");
+    fireEvent.change(seedInput, { target: { value: seed } });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(1);
+      expect(seedInput).toHaveValue(seed);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Market Shill 1 will bid/)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Advance decision" }));
+
+    for (let index = 0; index < 2; index += 1) {
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /Let him go/i })).toBeEnabled();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /Let him go/i }));
+    }
+
+    await waitFor(() => {
+      expect(screen.getByText("SOLD")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Market Shill 1 · 1 of 22/)).toBeInTheDocument();
+    expect(screen.getByText(/SOLD to Market Shill 1/)).toBeInTheDocument();
   });
 });

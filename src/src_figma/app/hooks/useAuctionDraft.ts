@@ -15,11 +15,15 @@ import {
 import { computeAuctionTeamProjectedTaxWithCaps } from "../../../engines/auctionLuxuryTax";
 import type { ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
 import {
-  cpuBidOnLot,
-  cpuDecideLoneSurvivor,
   type CpuShillAuctionSession,
+  type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
+import {
+  classifyCpuTeams,
+  deriveShillTeamIds,
+} from "../../../engines/cpuTeamRoles";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
+import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import type { LuxuryCapRow } from "../../../data/tierParams";
 import {
   createAuctionSessionId,
@@ -90,6 +94,8 @@ export interface UseAuctionDraftReturn {
   resolve: () => Promise<CpuShillAuctionSession | null>;
   advance: () => Promise<CpuShillAuctionSession | null>;
   isCpuTeam: (teamId: string | null | undefined) => boolean;
+  shillTeamIds: string[];
+  controlledCpuTeamIds: string[];
 }
 
 function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSession {
@@ -173,25 +179,52 @@ export function applyAuctionLuxuryTaxForLot(
 }
 
 export function deriveCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
-  if (!session) return [];
-  const ids = new Set<string>();
+  return classifyCpuTeams(session, leagueTeams).allCpuTeamIds;
+}
 
-  for (const team of leagueTeams) {
-    if (team.controlledBy === "ai") ids.add(team.id);
-  }
+function shillTeamId(leagueId: string, index: number): string {
+  return `__auction_shill__${leagueId}__${index + 1}`;
+}
 
-  for (const teamId of Object.keys(session.cpuShills ?? {})) {
-    ids.add(teamId);
-  }
+function buildPureShillProfiles(leagueId: string, count: number): Record<string, CpuShillProfile> {
+  const personalities: CpuShillProfile["personality"][] = ["sniper", "spender", "zealot"];
+  return Object.fromEntries(Array.from({ length: count }, (_, index) => {
+    const teamId = shillTeamId(leagueId, index);
+    return [teamId, {
+      teamId,
+      personality: personalities[index % personalities.length],
+      bandPriorities: {
+        Power: index % 3 === 1 ? 3 : 1,
+        Contact: index % 3 === 0 ? 3 : 1,
+        Speed: index % 3 === 2 ? 3 : 1,
+        Defense: 2,
+        Rotation: index % 2 === 0 ? 2 : 1,
+        Bullpen: index % 2 === 1 ? 2 : 1,
+      },
+    } satisfies CpuShillProfile];
+  }));
+}
 
-  const count = Math.max(0, Math.min(session.config.cpuShillCount ?? 0, session.nominationOrder.length));
-  if (count > 0) {
-    for (const teamId of session.nominationOrder.slice(-count)) {
-      ids.add(teamId);
-    }
-  }
-
-  return session.nominationOrder.filter((teamId) => ids.has(teamId));
+function buildPureShillAuctionTeams(input: {
+  leagueId: string;
+  count: number;
+  budget: number;
+}): Array<{
+  teamId: string;
+  budgetRemaining: number;
+  rosterSlotsRemaining: number;
+  minSalary: number;
+  projectedTax: number;
+  roster: [];
+}> {
+  return Array.from({ length: input.count }, (_, index) => ({
+    teamId: shillTeamId(input.leagueId, index),
+    budgetRemaining: input.budget,
+    rosterSlotsRemaining: 22,
+    minSalary: LEAGUE_MINIMUM_SALARY,
+    projectedTax: 0,
+    roster: [],
+  }));
 }
 
 function stateProgressKey(session: CpuShillAuctionSession): string {
@@ -237,7 +270,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       .filter((team): team is Team => Boolean(team));
   }, [activeLeague, leagueData.teams]);
 
-  const cpuTeamIds = useMemo(() => deriveCpuTeamIds(session, leagueTeams), [leagueTeams, session]);
+  const cpuRoles = useMemo(() => classifyCpuTeams(session, leagueTeams), [leagueTeams, session]);
+  const cpuTeamIds = cpuRoles.allCpuTeamIds;
+  const shillTeamIds = cpuRoles.shillTeamIds;
+  const controlledCpuTeamIds = cpuRoles.controlledCpuTeamIds;
   const cpuTeamIdSet = useMemo(() => new Set(cpuTeamIds), [cpuTeamIds]);
   const currentBidderTeamId = getCurrentBidderTeamId(session);
 
@@ -253,10 +289,11 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       await commitCompletedMlbAuctionSessionToLeagueRosters({
         leagueId: nextContext.leagueId,
         session: nextSession,
+        excludeTeamIds: deriveShillTeamIds(nextSession, leagueTeams),
       });
     }
     return nextSession;
-  }, []);
+  }, [leagueTeams]);
 
   const autoAdvanceCpu = useCallback(async (
     startSession: CpuShillAuctionSession,
@@ -282,25 +319,12 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
         } else {
           const bidder = getCurrentBidderTeamId(next);
           if (!nextCpuTeamIds.has(bidder ?? "")) return next;
-
-          const decision = cpuBidOnLot(next, bidder!, `${next.config.nominationOrderSeed}:bid:${step}:${next.currentLot.highBid ?? "open"}`);
-          next = transitionOrThrow(
-            decision.kind === "bid"
-              ? recordBid(next, bidder!, decision.bid)
-              : passBid(next, bidder!),
-          );
-          await persist(next, nextContext);
+          return next;
         }
       } else if (next.state === "RESOLVE") {
         if (next.pendingClaim) {
           if (!nextCpuTeamIds.has(next.pendingClaim.teamId)) return next;
-          const decision = cpuDecideLoneSurvivor(
-            next,
-            next.pendingClaim.teamId,
-            `${next.config.nominationOrderSeed}:claim:${step}`,
-          );
-          next = transitionOrThrow(decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivorOut(next));
-          await persist(next, nextContext);
+          return next;
         } else {
           next = transitionOrThrow(resolveLot(next));
           await persist(next, nextContext);
@@ -393,24 +417,38 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       await leagueData.clearRoster(team.id, leagueId);
     }
 
-    const teams = await buildAuctionTeams({
+    const realTeams = await buildAuctionTeams({
       leagueTeams: nextLeagueTeams,
       pool,
       getRoster: leagueData.getRoster,
     });
+    const explicitShillCount = Math.max(0, partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount);
+    const teams = [
+      ...realTeams,
+      ...buildPureShillAuctionTeams({
+        leagueId,
+        count: explicitShillCount,
+        budget: pool.tierCap,
+      }),
+    ];
     const players = buildAuctionPlayers(pool);
     const config: AuctionSetupConfig = {
       ...DEFAULT_AUCTION_SETUP_CONFIG,
       ...partialConfig,
       nominationOrderSeed: partialConfig.nominationOrderSeed || DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
       bidIncrement: partialConfig.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement,
-      cpuShillCount: Math.max(0, Math.min(partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount, teams.length)),
+      // Pure shills are explicit session participants in cpuShills. Keep the legacy
+      // "last N nomination-order teams" selector off so real clubs are never borrowed.
+      cpuShillCount: 0,
       turnTimerSeconds: partialConfig.turnTimerSeconds ?? null,
       excludeFromLeague: partialConfig.excludeFromLeague ?? true,
       nominationWeightExponent: 2,
     };
     const nextContext = { leagueId, seasonNumber: MLB_AUCTION_SEASON };
-    const initialized = initAuctionSession({ teams, players, config }) as CpuShillAuctionSession;
+    const initialized = {
+      ...(initAuctionSession({ teams, players, config }) as CpuShillAuctionSession),
+      cpuShills: buildPureShillProfiles(leagueId, explicitShillCount),
+    };
 
     setContext(nextContext);
     taxContextRef.current = buildAuctionLuxuryTaxContext({
@@ -451,6 +489,8 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     activeLeagueId: context?.leagueId ?? null,
     seasonNumber: context?.seasonNumber ?? MLB_AUCTION_SEASON,
     cpuTeamIds,
+    shillTeamIds,
+    controlledCpuTeamIds,
     currentBidderTeamId,
     initAuction,
     loadAuction,

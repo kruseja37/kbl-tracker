@@ -199,13 +199,19 @@ function farmProspectToPlayer(
 export async function commitCompletedMlbAuctionSessionToLeagueRosters(input: {
   leagueId: string;
   session: AuctionSession;
+  excludeTeamIds?: readonly string[];
 }): Promise<AuctionRosterCommitReport> {
   completedSessionOrThrow(input.session);
 
   const teamRosterCounts: Record<string, number> = {};
   const committedPlayerIds: string[] = [];
+  const excludedTeamIds = new Set(input.excludeTeamIds ?? []);
 
   for (const team of input.session.teams) {
+    if (excludedTeamIds.has(team.teamId)) {
+      teamRosterCounts[team.teamId] = team.roster.length;
+      continue;
+    }
     const playerIds = team.roster.map((assignment) => assignment.playerId);
     await commitTeamRoster({
       leagueId: input.leagueId,

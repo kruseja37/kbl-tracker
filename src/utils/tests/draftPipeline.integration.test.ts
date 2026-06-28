@@ -22,6 +22,7 @@ import {
   type AuctionTransitionResult,
 } from '../../engines/auctionStateMachine';
 import type { CpuShillAuctionSession } from '../../engines/cpuShillBidding';
+import { deriveShillTeamIds } from '../../engines/cpuTeamRoles';
 import { DEFAULT_AUCTION_SETUP_CONFIG } from '../../data/auctionEngineConstants';
 import { LEAGUE_MINIMUM_SALARY } from '../../data/rosterEngineConstants';
 import { LUXURY_CAP_TABLES } from '../../data/tierParams';
@@ -70,6 +71,7 @@ import {
   seedFromMLBDatabase,
   __resetLeagueBuilderDatabaseForTests,
   type Player,
+  type Team,
   type TeamRoster,
 } from '../leagueBuilderStorage';
 import {
@@ -222,6 +224,55 @@ async function removePlayerFromLeague(player: Player, leagueId: string): Promise
     ...player,
     leagueAssignments: (player.leagueAssignments ?? []).filter((assignment) => assignment.leagueId !== leagueId),
   });
+}
+
+function makeCommitRegressionTeam(id: string, leagueId: string, controlledBy: Team['controlledBy']): Team {
+  return {
+    id,
+    name: `${id} Team`,
+    abbreviation: id.slice(0, 3).toUpperCase(),
+    location: 'Commit',
+    nickname: id,
+    colors: { primary: '#000000', secondary: '#ffffff' },
+    stadium: 'Commit Park',
+    controlledBy,
+    leagueIds: [leagueId],
+    createdDate: '2026-01-01',
+    lastModified: '2026-01-01',
+  };
+}
+
+function makeCommitRegressionPlayer(id: string): Player {
+  return {
+    id,
+    firstName: id,
+    lastName: 'Winner',
+    gender: 'M',
+    age: 25,
+    bats: 'R',
+    throws: 'R',
+    primaryPosition: 'CF',
+    power: 70,
+    contact: 70,
+    speed: 70,
+    fielding: 70,
+    arm: 70,
+    velocity: 30,
+    junk: 30,
+    accuracy: 30,
+    arsenal: ['4F'],
+    overallGrade: 'B',
+    personality: 'Competitive',
+    chemistry: 'Crafty',
+    morale: 50,
+    mojo: 'Normal',
+    fame: 0,
+    salary: 10_000,
+    leagueAssignments: [],
+    createdDate: '2026-01-01',
+    lastModified: '2026-01-01',
+    isCustom: true,
+  };
 }
 
 async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
@@ -871,6 +922,175 @@ describe('draft pipeline integration', () => {
       }),
     );
   }, 30_000);
+
+  test('commits real CPU auction winners while excluding pure shill winners from league rosters', async () => {
+    const leagueId = `${LEAGUE_ID}-mixed-commit`;
+    const humanTeamId = 'mixed-human';
+    const cpuTeamId = 'mixed-cpu';
+    const shillTeamId = '__auction_shill__mixed__1';
+    const humanPlayerId = 'mixed-human-player';
+    const cpuPlayerId = 'mixed-cpu-player';
+    const shillPlayerId = 'mixed-shill-player';
+
+    await saveLeagueTemplate({
+      id: leagueId,
+      name: 'Mixed Commit League',
+      teamIds: [humanTeamId, cpuTeamId],
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'auction',
+      tier: 'standard',
+      balanceMode: 'taxed',
+    });
+    await saveTeam(makeCommitRegressionTeam(humanTeamId, leagueId, 'human'));
+    await saveTeam(makeCommitRegressionTeam(cpuTeamId, leagueId, 'ai'));
+    await saveTeamRoster(createEmptyTeamRoster(humanTeamId));
+    await saveTeamRoster(createEmptyTeamRoster(cpuTeamId));
+    await savePlayer(makeCommitRegressionPlayer(humanPlayerId));
+    await savePlayer(makeCommitRegressionPlayer(cpuPlayerId));
+    await savePlayer(makeCommitRegressionPlayer(shillPlayerId));
+
+    const completedSession = {
+      ...(initAuctionSession({
+        teams: [
+          {
+            teamId: humanTeamId,
+            budgetRemaining: 990_000,
+            rosterSlotsRemaining: 21,
+            minSalary: LEAGUE_MINIMUM_SALARY,
+            roster: [{ playerId: humanPlayerId, salary: 10_000 }],
+          },
+          {
+            teamId: cpuTeamId,
+            budgetRemaining: 988_000,
+            rosterSlotsRemaining: 21,
+            minSalary: LEAGUE_MINIMUM_SALARY,
+            roster: [{ playerId: cpuPlayerId, salary: 12_000 }],
+          },
+          {
+            teamId: shillTeamId,
+            budgetRemaining: 987_000,
+            rosterSlotsRemaining: 21,
+            minSalary: LEAGUE_MINIMUM_SALARY,
+            roster: [{ playerId: shillPlayerId, salary: 13_000 }],
+          },
+        ],
+        players: [
+          { playerId: humanPlayerId, iv: 10_000, ivPercentile: 90 },
+          { playerId: cpuPlayerId, iv: 12_000, ivPercentile: 80 },
+          { playerId: shillPlayerId, iv: 13_000, ivPercentile: 70 },
+        ],
+        config: {
+          ...DEFAULT_AUCTION_SETUP_CONFIG,
+          nominationOrderSeed: 'mixed-cpu-shill-commit',
+          cpuShillCount: 0,
+          bidIncrement: 1_000,
+          turnTimerSeconds: null,
+          excludeFromLeague: true,
+          nominationWeightExponent: 2,
+        },
+      }) as CpuShillAuctionSession),
+      state: 'AUCTION_COMPLETE' as const,
+      availablePlayerIds: [],
+      currentLot: null,
+      pendingClaim: null,
+      results: [
+        {
+          playerId: humanPlayerId,
+          disposition: 'SOLD' as const,
+          nominatorTeamId: humanTeamId,
+          winnerTeamId: humanTeamId,
+          salary: 10_000,
+        },
+        {
+          playerId: cpuPlayerId,
+          disposition: 'SOLD' as const,
+          nominatorTeamId: cpuTeamId,
+          winnerTeamId: cpuTeamId,
+          salary: 12_000,
+        },
+        {
+          playerId: shillPlayerId,
+          disposition: 'SOLD' as const,
+          nominatorTeamId: shillTeamId,
+          winnerTeamId: shillTeamId,
+          salary: 13_000,
+        },
+      ],
+      saleCount: 3,
+      cpuShills: {
+        [shillTeamId]: {
+          teamId: shillTeamId,
+          personality: 'sniper' as const,
+          bandPriorities: {
+            Power: 1,
+            Contact: 3,
+            Speed: 1,
+            Defense: 2,
+            Rotation: 2,
+            Bullpen: 1,
+          },
+        },
+      },
+    } satisfies CpuShillAuctionSession;
+
+    const leagueTeams = [
+      await getTeam(humanTeamId),
+      await getTeam(cpuTeamId),
+    ].filter((team): team is Team => Boolean(team));
+    const excludeTeamIds = deriveShillTeamIds(completedSession, leagueTeams);
+    expect(excludeTeamIds).toEqual([shillTeamId]);
+
+    const report = await commitCompletedMlbAuctionSessionToLeagueRosters({
+      leagueId,
+      session: completedSession,
+      excludeTeamIds,
+    });
+
+    await expect(getTeamRoster(humanTeamId)).resolves.toEqual(
+      expect.objectContaining({ mlbRoster: [humanPlayerId] }),
+    );
+    await expect(getTeamRoster(cpuTeamId)).resolves.toEqual(
+      expect.objectContaining({ mlbRoster: [cpuPlayerId] }),
+    );
+    await expect(getPlayer(humanPlayerId)).resolves.toEqual(
+      expect.objectContaining({
+        settledSalary: 10_000,
+        leagueAssignments: expect.arrayContaining([
+          expect.objectContaining({ leagueId, teamId: humanTeamId, rosterStatus: 'MLB' }),
+        ]),
+      }),
+    );
+    await expect(getPlayer(cpuPlayerId)).resolves.toEqual(
+      expect.objectContaining({
+        settledSalary: 12_000,
+        leagueAssignments: expect.arrayContaining([
+          expect.objectContaining({ leagueId, teamId: cpuTeamId, rosterStatus: 'MLB' }),
+        ]),
+      }),
+    );
+    const shillPlayer = await getPlayer(shillPlayerId);
+    expect(shillPlayer).toEqual(
+      expect.objectContaining({
+        salary: 10_000,
+        leagueAssignments: expect.not.arrayContaining([
+          expect.objectContaining({ leagueId }),
+        ]),
+      }),
+    );
+    expect(shillPlayer?.settledSalary).toBeUndefined();
+    expect(report).toMatchObject({
+      leagueId,
+      rosterStatus: 'MLB',
+      committedPlayerIds: [humanPlayerId, cpuPlayerId],
+      teamRosterCounts: {
+        [humanTeamId]: 1,
+        [cpuTeamId]: 1,
+        [shillTeamId]: 1,
+      },
+    });
+  });
 
   test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {
     const { addedFreeAgentId, removedCuratedPlayerId, initialRosterPlayerIdsByTeamId } =

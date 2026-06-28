@@ -36,7 +36,7 @@ const expectedLines: Array<{
   {
     tier: "mlb",
     state: "OPEN_BIDDING",
-    line: "He's on the block. Raise or pass — and remember, pass and he's gone for good.",
+    line: "Player is on the block. Raise or pass — one pass can remove the player for good.",
   },
   {
     tier: "farm",
@@ -46,12 +46,12 @@ const expectedLines: Array<{
   {
     tier: "mlb",
     state: "RESOLVE",
-    line: "You're the last bidder standing. Claim him at the reserve price, or pass and send him back to the pool.",
+    line: "You're the last bidder standing. Claim the player at the reserve price, or pass and send the player back to the pool.",
   },
   {
     tier: "farm",
     state: "RESOLVE",
-    line: "You're the last bidder standing. Claim him at the reserve price, or pass and send him back to the pool.",
+    line: "You're the last bidder standing. Claim the player at the reserve price, or pass and send the player back to the pool.",
   },
   {
     tier: "mlb",
@@ -66,12 +66,12 @@ const expectedLines: Array<{
   {
     tier: "mlb",
     state: "PASSED",
-    line: "No takers — he's out of the draft. Next player coming up.",
+    line: "No takers — the player is out of the draft. Next player coming up.",
   },
   {
     tier: "farm",
     state: "PASSED",
-    line: "No takers — he's out of the draft. Next player coming up.",
+    line: "No takers — the player is out of the draft. Next player coming up.",
   },
   {
     tier: "mlb",
@@ -95,7 +95,7 @@ describe("AuctionCoachBanner", () => {
 
     expect(screen.getByText("COACH")).toBeInTheDocument();
     expect(
-      screen.getByText("He's on the block. Raise or pass — and remember, pass and he's gone for good."),
+      screen.getByText("Player is on the block. Raise or pass — one pass can remove the player for good."),
     ).toBeInTheDocument();
   });
 });
