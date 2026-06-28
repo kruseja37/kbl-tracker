@@ -59,6 +59,8 @@ const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", 
 const SAVED_DRAFT_POOL_LOCK_MESSAGE =
   "A saved auction is in progress. Resume that draft before changing this player pool.";
 const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved auction before allowing pool edits.";
+const SAVED_DRAFT_LOOKUP_ERROR_MESSAGE =
+  "Could not confirm whether a saved auction exists. Refresh before changing this player pool.";
 const LOCKED_POOL_EDIT_MESSAGE = "Unlock the player pool before editing. Locked pools freeze the auction values.";
 
 type DraftablePosition = (typeof DRAFTABLE_POSITION_OPTIONS)[number];
@@ -209,6 +211,7 @@ export function LeagueBuilderDraftSetup() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
   const [savedDraftChecked, setSavedDraftChecked] = useState(false);
+  const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
 
   const refreshPool = useCallback(async (leagueId: string) => {
     setRegisteredPool(await getRegisteredPool(leagueId));
@@ -222,18 +225,22 @@ export function LeagueBuilderDraftSetup() {
   useEffect(() => {
     if (!activeLeagueId) {
       setHasSavedDraft(false);
+      setSavedDraftLookupError(null);
       setSavedDraftChecked(true);
       return;
     }
     let cancelled = false;
     setSavedDraftChecked(false);
+    setSavedDraftLookupError(null);
     void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
       if (cancelled) return;
       setHasSavedDraft(Boolean(row && row.session.state !== "AUCTION_COMPLETE"));
+      setSavedDraftLookupError(null);
       setSavedDraftChecked(true);
     }).catch(() => {
       if (!cancelled) {
         setHasSavedDraft(false);
+        setSavedDraftLookupError(SAVED_DRAFT_LOOKUP_ERROR_MESSAGE);
         setSavedDraftChecked(true);
       }
     });
@@ -243,13 +250,13 @@ export function LeagueBuilderDraftSetup() {
   }, [activeLeagueId]);
 
   const locked = Boolean(registeredPool?.locked);
-  const savedDraftMutationBlocked = !savedDraftChecked || hasSavedDraft;
+  const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft;
   const poolEditingBlocked = locked || savedDraftMutationBlocked;
   const poolEditingBlockMessage = hasSavedDraft
     ? SAVED_DRAFT_POOL_LOCK_MESSAGE
-    : savedDraftChecked
+    : savedDraftLookupError ?? (savedDraftChecked
       ? LOCKED_POOL_EDIT_MESSAGE
-      : CHECKING_SAVED_DRAFT_MESSAGE;
+      : CHECKING_SAVED_DRAFT_MESSAGE);
 
   // Selection state (ids checked in each pane).
   const [inSelected, setInSelected] = useState<Set<string>>(new Set());
@@ -363,6 +370,7 @@ export function LeagueBuilderDraftSetup() {
 
   const assertPoolCanMutate = () => {
     if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
+    if (savedDraftLookupError) throw new Error(savedDraftLookupError);
     if (hasSavedDraft) throw new Error(SAVED_DRAFT_POOL_LOCK_MESSAGE);
   };
 
@@ -484,10 +492,10 @@ export function LeagueBuilderDraftSetup() {
         )}
       </div>
 
-      {(error || actionError) && (
+      {(error || actionError || savedDraftLookupError) && (
         <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400" />
-          <span className="text-red-200">{actionError ?? error}</span>
+          <span className="text-red-200">{actionError ?? savedDraftLookupError ?? error}</span>
         </div>
       )}
 
@@ -647,7 +655,7 @@ export function LeagueBuilderDraftSetup() {
                 </button>
                 <button
                   onClick={handleStartDraft}
-                  disabled={busy || !sufficiency.meetsFloor}
+                  disabled={busy || savedDraftMutationBlocked || !sufficiency.meetsFloor}
                   className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] disabled:opacity-40 border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START DRAFT"}

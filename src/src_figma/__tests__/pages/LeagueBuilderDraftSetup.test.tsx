@@ -175,4 +175,20 @@ describe("LeagueBuilderDraftSetup", () => {
 
     expect(screen.getByRole("button", { name: /Draft Saved/i })).toBeDisabled();
   });
+
+  test("keeps the pool frozen when saved auction status cannot be verified", async () => {
+    vi.mocked(getAuctionSession).mockRejectedValueOnce(new Error("storage unavailable"));
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not confirm whether a saved auction exists/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: /UNLOCK/i })).toBeDisabled();
+
+    fireEvent.click(await screen.findByText("Avery Anchor"));
+
+    expect(screen.getByRole("button", { name: /Unlock to Edit/i })).toBeDisabled();
+  });
 });

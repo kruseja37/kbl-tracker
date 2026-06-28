@@ -9,12 +9,35 @@ import {
   type Team,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
+import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
+import { getAuctionSession, saveTeam } from "../../../utils/leagueBuilderStorage";
 
 const mockNavigate = vi.fn();
 
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
 }));
+
+vi.mock("../../../engines/archetypeIdentity", async () => {
+  const actual = await vi.importActual<typeof import("../../../engines/archetypeIdentity")>(
+    "../../../engines/archetypeIdentity",
+  );
+  return {
+    ...actual,
+    selectTeamArchetype: vi.fn(async (team) => team),
+  };
+});
+
+vi.mock("../../../utils/leagueBuilderStorage", async () => {
+  const actual = await vi.importActual<typeof import("../../../utils/leagueBuilderStorage")>(
+    "../../../utils/leagueBuilderStorage",
+  );
+  return {
+    ...actual,
+    getAuctionSession: vi.fn(async () => null),
+    saveTeam: vi.fn(async (team) => team),
+  };
+});
 
 vi.mock("../../hooks/useLeagueBuilderData", async () => {
   const actual = await vi.importActual<typeof import("../../hooks/useLeagueBuilderData")>(
@@ -152,5 +175,47 @@ describe("DraftSetupHubPreview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Start the Draft/i }));
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=2");
+  });
+
+  test("freezes hub setup changes while a saved auction is in progress", async () => {
+    vi.mocked(getAuctionSession).mockResolvedValueOnce({
+      leagueId: "league-page",
+      season: "MLB_AUCTION",
+      session: { state: "OPEN_BIDDING" },
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    } as Awaited<ReturnType<typeof getAuctionSession>>);
+    mockLeagueData(makePool({ locked: true }));
+
+    render(<DraftSetupHubPreview />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Resume Draft/i })).toBeEnabled();
+    });
+
+    const ownerSelect = screen.getAllByRole("combobox")[0];
+    expect(ownerSelect).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Increase shill bidders/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Add player/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Bomba Squad/i }));
+    fireEvent.change(ownerSelect, { target: { value: "cpu" } });
+
+    expect(selectTeamArchetype).not.toHaveBeenCalled();
+    expect(saveTeam).not.toHaveBeenCalled();
+  });
+
+  test("fails closed when the hub cannot verify saved auction status", async () => {
+    vi.mocked(getAuctionSession).mockRejectedValueOnce(new Error("storage unavailable"));
+    mockLeagueData(makePool({ locked: true }));
+
+    render(<DraftSetupHubPreview />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not confirm whether a saved auction exists/i)).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: /Start the Draft/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Increase shill bidders/i })).toBeDisabled();
+    expect(screen.getAllByRole("combobox")[0]).toBeDisabled();
   });
 });

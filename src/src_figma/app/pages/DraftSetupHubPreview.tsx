@@ -29,6 +29,11 @@ import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline"
 
 interface Seat { id: string; name: string }
 interface TeamConfig { ownerId: string; mlbKey?: string; farmKey?: string } // ownerId = seatId | "cpu"
+const SAVED_DRAFT_SETUP_LOCK_MESSAGE =
+  "A saved auction is in progress. Resume that draft before changing setup.";
+const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved auction before allowing setup changes.";
+const SAVED_DRAFT_LOOKUP_ERROR_MESSAGE =
+  "Could not confirm whether a saved auction exists. Refresh before changing setup.";
 
 function compactTeams(team: Team | undefined): team is Team {
   return Boolean(team);
@@ -54,6 +59,9 @@ export function DraftSetupHubPreview() {
   const [poolLoading, setPoolLoading] = useState(false);
   const [poolError, setPoolError] = useState<string | null>(null);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [savedDraftChecked, setSavedDraftChecked] = useState(false);
+  const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
+  const [setupActionError, setSetupActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -103,14 +111,25 @@ export function DraftSetupHubPreview() {
   useEffect(() => {
     if (!activeLeagueId) {
       setHasSavedDraft(false);
+      setSavedDraftLookupError(null);
+      setSavedDraftChecked(true);
       return;
     }
     let cancelled = false;
+    setSavedDraftChecked(false);
+    setSavedDraftLookupError(null);
+    setSetupActionError(null);
     void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
       if (cancelled) return;
       setHasSavedDraft(Boolean(row && row.session.state !== "AUCTION_COMPLETE"));
+      setSavedDraftLookupError(null);
+      setSavedDraftChecked(true);
     }).catch(() => {
-      if (!cancelled) setHasSavedDraft(false);
+      if (!cancelled) {
+        setHasSavedDraft(false);
+        setSavedDraftLookupError(SAVED_DRAFT_LOOKUP_ERROR_MESSAGE);
+        setSavedDraftChecked(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -151,7 +170,19 @@ export function DraftSetupHubPreview() {
   const setConfig = (teamId: string, patch: Partial<TeamConfig>) =>
     setConfigs((c) => ({ ...c, [teamId]: { ...c[teamId], ...patch } }));
   const latestTeam = (teamId: string) => teams.find((team) => team.id === teamId);
+  const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft;
+  const setupMutationBlockMessage = hasSavedDraft
+    ? SAVED_DRAFT_SETUP_LOCK_MESSAGE
+    : savedDraftLookupError ?? (savedDraftChecked
+      ? null
+      : CHECKING_SAVED_DRAFT_MESSAGE);
+  const canMutateSetup = () => {
+    if (!setupMutationBlockMessage) return true;
+    setSetupActionError(setupMutationBlockMessage);
+    return false;
+  };
   const handlePick = async (slot: ArchetypeSlot, key: string) => {
+    if (!canMutateSetup()) return;
     if (!selected) return;
     const current = configs[selected];
     const nextMlbKey = slot === "mlb" ? key : current?.mlbKey;
@@ -165,6 +196,7 @@ export function DraftSetupHubPreview() {
     await refresh();
   };
   const handleOwnerChange = async (teamId: string, ownerId: string) => {
+    if (!canMutateSetup()) return;
     setConfig(teamId, { ownerId });
     const team = latestTeam(teamId);
     if (!team) return;
@@ -182,15 +214,19 @@ export function DraftSetupHubPreview() {
   );
   const poolLocked = Boolean(registeredPool?.locked);
   const poolReady = poolLocked && poolSufficiency.meetsFloor;
-  const ready = identitiesReady && poolReady && !poolLoading && !poolError;
+  const ready = identitiesReady && poolReady && !poolLoading && !poolError && savedDraftChecked && !savedDraftLookupError;
   const sel = leagueTeams.find((team) => team.id === selected);
   const selCfg = configs[selected];
   const poolEditRoute = activeLeague
     ? `/league-builder/draft-setup?leagueId=${encodeURIComponent(activeLeague.id)}`
     : "/league-builder/draft-setup";
 
-  const addSeat = () => setSeats((s) => [...s, { id: `s${Date.now()}`, name: `Player ${s.length + 1}` }]);
+  const addSeat = () => {
+    if (!canMutateSetup()) return;
+    setSeats((s) => [...s, { id: `s${Date.now()}`, name: `Player ${s.length + 1}` }]);
+  };
   const removeSeat = (id: string) => {
+    if (!canMutateSetup()) return;
     const affectedTeamIds = leagueTeams
       .filter((team) => configs[team.id]?.ownerId === id)
       .map((team) => team.id);
@@ -260,9 +296,9 @@ export function DraftSetupHubPreview() {
                   ? ` · surplus ${poolSufficiency.surplus >= 0 ? "+" : ""}${poolSufficiency.surplus}`
                   : ` · need ${Math.abs(poolSufficiency.surplus)} more`}
               </div>
-              {poolError ? (
+              {poolError || savedDraftLookupError || setupActionError ? (
                 <div className="mt-2 flex items-center gap-2 text-xs font-bold text-[#FFE8B0]">
-                  <AlertTriangle className="w-3.5 h-3.5" /> {poolError}
+                  <AlertTriangle className="w-3.5 h-3.5" /> {setupActionError ?? savedDraftLookupError ?? poolError}
                 </div>
               ) : null}
             </div>
@@ -290,21 +326,25 @@ export function DraftSetupHubPreview() {
                   <span className="w-6 text-center text-xs font-bold text-[#C4A853]">{i + 1}</span>
                   <input
                     value={s.name}
-                    onChange={(e) => setSeats((arr) => arr.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)))}
+                    onChange={(e) => {
+                      if (savedDraftMutationBlocked) return;
+                      setSeats((arr) => arr.map((x) => (x.id === s.id ? { ...x, name: e.target.value } : x)));
+                    }}
+                    disabled={savedDraftMutationBlocked}
                     className="flex-1 bg-[#34472f] border-2 border-[#4A6844] focus:border-[#C4A853] outline-none px-3 py-2 text-sm font-bold text-[#E8E8D8]"
                   />
                   <span className="text-[11px] text-[#E8E8D8]/50 w-20 text-right">
                     {leagueTeams.filter((team) => configs[team.id]?.ownerId === s.id).length} team(s)
                   </span>
-                  <button type="button" onClick={() => removeSeat(s.id)} disabled={seats.length <= 1}
+                  <button type="button" onClick={() => removeSeat(s.id)} disabled={seats.length <= 1 || savedDraftMutationBlocked}
                     className="p-1.5 border-2 border-[#4A6844] hover:border-[#E0857A] disabled:opacity-30">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
             </div>
-            <button type="button" onClick={addSeat}
-              className="mt-3 flex items-center gap-2 bg-[#34472f] hover:bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2 text-sm font-bold">
+            <button type="button" onClick={addSeat} disabled={savedDraftMutationBlocked}
+              className="mt-3 flex items-center gap-2 bg-[#34472f] hover:bg-[#3a4d3c] disabled:opacity-40 border-2 border-[#4A6844] px-3 py-2 text-sm font-bold">
               <Plus className="w-4 h-4" /> Add player
             </button>
           </div>
@@ -318,11 +358,11 @@ export function DraftSetupHubPreview() {
               Pure shills bid from their own visible draft rosters and do not transfer into the living season.
             </div>
             <div className="flex items-center gap-3">
-              <button type="button" aria-label="Decrease shill bidders" onClick={() => setShills((n) => Math.max(0, n - 1))}
-                className="p-2 border-2 border-[#4A6844] hover:border-[#C4A853]"><Minus className="w-4 h-4" /></button>
+              <button type="button" aria-label="Decrease shill bidders" disabled={savedDraftMutationBlocked} onClick={() => setShills((n) => Math.max(0, n - 1))}
+                className="p-2 border-2 border-[#4A6844] hover:border-[#C4A853] disabled:opacity-40"><Minus className="w-4 h-4" /></button>
               <div className="text-3xl font-bold text-[#E8E8D8] w-10 text-center" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>{shills}</div>
-              <button type="button" aria-label="Increase shill bidders" onClick={() => setShills((n) => Math.min(MAX_DRAFT_SHILL_COUNT, n + 1))}
-                className="p-2 border-2 border-[#4A6844] hover:border-[#C4A853]"><Plus className="w-4 h-4" /></button>
+              <button type="button" aria-label="Increase shill bidders" disabled={savedDraftMutationBlocked} onClick={() => setShills((n) => Math.min(MAX_DRAFT_SHILL_COUNT, n + 1))}
+                className="p-2 border-2 border-[#4A6844] hover:border-[#C4A853] disabled:opacity-40"><Plus className="w-4 h-4" /></button>
               <div className="text-[11px] text-[#E8E8D8]/50 ml-1">shill bidders</div>
             </div>
           </div>
@@ -352,6 +392,7 @@ export function DraftSetupHubPreview() {
                     <select
                       value={cfg.ownerId}
                       onChange={(e) => { void handleOwnerChange(t.id, e.target.value); }}
+                      disabled={savedDraftMutationBlocked}
                       className="ml-auto bg-[#243024] border-2 border-[#4A6844] text-xs font-bold px-2 py-1 text-[#E8E8D8] outline-none"
                     >
                       <option value="cpu">CPU</option>
@@ -379,6 +420,8 @@ export function DraftSetupHubPreview() {
             mlbKey={selCfg.mlbKey}
             farmKey={selCfg.farmKey}
             onPick={handlePick}
+            disabled={savedDraftMutationBlocked}
+            disabledReason={setupMutationBlockMessage ?? undefined}
           />
         </div>
 
@@ -389,7 +432,13 @@ export function DraftSetupHubPreview() {
           </button>
           {!ready && (
             <span className="text-[11px] text-[#E8E8D8]/50">
-              {!poolReady ? "lock a sufficient player pool first" : "give every club an MLB identity first"}
+              {savedDraftLookupError
+                ? "could not verify saved draft status"
+                : !savedDraftChecked
+                  ? "checking for a saved draft"
+                  : !poolReady
+                    ? "lock a sufficient player pool first"
+                    : "give every club an MLB identity first"}
             </span>
           )}
         </div>
