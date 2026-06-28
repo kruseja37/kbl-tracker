@@ -158,6 +158,12 @@ const EndOfDraftStaffingPreview = lazy(() =>
 const ScoutHirePreview = lazy(() =>
   import("./src_figma/app/pages/ScoutHirePreview").then((module) => ({ default: module.ScoutHirePreview })),
 );
+const EndOfDraftStaffing = lazy(() =>
+  import("./src_figma/app/pages/EndOfDraftStaffing").then((module) => ({ default: module.EndOfDraftStaffing })),
+);
+const ScoutHire = lazy(() =>
+  import("./src_figma/app/pages/ScoutHire").then((module) => ({ default: module.ScoutHire })),
+);
 const MyTeamsSwitcherPreview = lazy(() =>
   import("./src_figma/app/pages/MyTeamsSwitcherPreview").then((module) => ({ default: module.MyTeamsSwitcherPreview })),
 );
@@ -360,6 +366,7 @@ function App() {
           path="/league-builder/draft-config"
           element={<DraftSetupHubPreview />}
         />
+        <Route path="/league-builder/scout-hire" element={<ScoutHire />} />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route
           path="/league-builder/snake-draft"
@@ -373,6 +380,7 @@ function App() {
           path="/league-builder/farm-auction-draft"
           element={<LeagueBuilderFarmAuctionDraft />}
         />
+        <Route path="/league-builder/staff-hire" element={<EndOfDraftStaffing />} />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
         {/* Almanac - Figma Design */}

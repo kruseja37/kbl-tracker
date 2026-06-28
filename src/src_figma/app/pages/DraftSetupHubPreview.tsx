@@ -4,7 +4,7 @@ import { Plus, X, Users, Gavel, Minus, ChevronRight, Check } from "lucide-react"
 import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
 import { archetypeByKey } from "../data/teamArchetypeCatalog";
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
-import { draftRouteForLeague, leagueIdFromSearch, resolveInitialLeagueId } from "../utils/draftRouting";
+import { leagueIdFromSearch, resolveInitialLeagueId, scoutHireRouteForLeague } from "../utils/draftRouting";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { saveTeam } from "../../../utils/leagueBuilderStorage";
@@ -280,7 +280,7 @@ export function DraftSetupHubPreview() {
         </div>
 
         <div className="mt-5 flex items-center gap-3">
-          <button type="button" disabled={!ready} onClick={() => navigate(draftRouteForLeague(activeLeague))}
+          <button type="button" disabled={!ready} onClick={() => navigate(scoutHireRouteForLeague(activeLeague))}
             className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95">
             Start the Draft <ChevronRight className="w-5 h-5" />
           </button>

@@ -13,6 +13,10 @@ import {
   type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
+import DraftGuideCard, {
+  type Affordability,
+  type DraftGuidePlayer,
+} from "../components/draft/DraftGuideCard";
 import { AuctionCoachBanner } from "../components/AuctionCoachBanner";
 import {
   analyzeDraftRoster,
@@ -29,6 +33,10 @@ import {
   leagueIdFromSearch,
   resolveInitialLeagueId,
 } from "../utils/draftRouting";
+import {
+  getScoutProfilesForLeague,
+  type LeagueBuilderScoutProfile,
+} from "../../../utils/leagueBuilderStorage";
 import {
   getTeamAuctionMaxBid,
   type AuctionPlayer,
@@ -105,6 +113,89 @@ function rosterPositionTally(
   return [...tally.entries()].sort((left, right) => left[0].localeCompare(right[0]));
 }
 
+const GRADE_TO_2080: Record<string, number> = {
+  S: 80,
+  "A+": 75,
+  A: 70,
+  "A-": 65,
+  "B+": 60,
+  B: 55,
+  "B-": 50,
+  "C+": 45,
+  C: 40,
+  "C-": 35,
+  "D+": 30,
+  D: 25,
+  "D-": 20,
+};
+
+function clampGrade(grade: number): number {
+  return Math.max(20, Math.min(80, Math.round(grade / 5) * 5));
+}
+
+function playerGradeToTwentyEighty(player: Player | null | undefined): number {
+  return clampGrade(GRADE_TO_2080[player?.overallGrade ?? ""] ?? 50);
+}
+
+function averageScoutAccuracy(scout: LeagueBuilderScoutProfile): number {
+  const values = Object.values(scout.accuracyByPosition);
+  if (values.length === 0) return 65;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function scoutAccuracyForPlayer(scout: LeagueBuilderScoutProfile, player: Player | null | undefined): number {
+  const positionValues = playerPositions(player)
+    .map((position) => scout.accuracyByPosition[position])
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  if (positionValues.length > 0) {
+    return positionValues.reduce((sum, value) => sum + value, 0) / positionValues.length;
+  }
+  return averageScoutAccuracy(scout);
+}
+
+function scoutPriceRange(center: number, accuracy: number): { priceLow: string; priceHigh: string } {
+  const spread = Math.max(0.08, Math.min(0.36, (100 - accuracy) / 150));
+  return {
+    priceLow: formatMoney(center * (1 - spread)),
+    priceHigh: formatMoney(center * (1 + spread)),
+  };
+}
+
+function draftGuideAffordability(
+  ask: number | null,
+  maxBid: number | null,
+  teamState: AuctionSession["teams"][number] | null | undefined,
+): { affordability: Affordability; affordabilityNote: string } {
+  if (ask === null) {
+    return { affordability: "yellow", affordabilityNote: "Waiting for current ask." };
+  }
+  if (maxBid !== null && ask > maxBid) {
+    return { affordability: "red", affordabilityNote: `Ask ${formatMoney(ask)} exceeds max ${formatMoney(maxBid)}.` };
+  }
+  if (!teamState || maxBid === null) {
+    return { affordability: "yellow", affordabilityNote: "Budget read pending." };
+  }
+  const remainingFloor = Math.max(0, teamState.rosterSlotsRemaining - 1) * teamState.minSalary;
+  const budgetAfterAsk = teamState.budgetRemaining - ask;
+  if (budgetAfterAsk < remainingFloor) {
+    return { affordability: "red", affordabilityNote: "Would leave too little for remaining slots." };
+  }
+  if (ask >= maxBid * 0.85) {
+    return { affordability: "yellow", affordabilityNote: `Tight: max bid ${formatMoney(maxBid)}.` };
+  }
+  return { affordability: "green", affordabilityNote: `Room to bid up to ${formatMoney(maxBid)}.` };
+}
+
+function draftGuideTeamFit(player: Player | null | undefined, tally: Array<[string, number]>): DraftGuidePlayer["teamFit"] {
+  const position = player?.primaryPosition;
+  if (!position) return undefined;
+  const currentCount = tally.find(([candidate]) => candidate === position)?.[1] ?? 0;
+  if (currentCount === 0) {
+    return { fit: true, text: `Fills empty ${position} slot` };
+  }
+  return { fit: false, text: `${currentCount} current ${position} rostered` };
+}
+
 export function LeagueBuilderAuctionDraft() {
   const navigate = useNavigate();
   const auction = useAuctionDraft();
@@ -115,6 +206,7 @@ export function LeagueBuilderAuctionDraft() {
   const [cpuCount, setCpuCount] = useState(0);
   const [bidIncrement, setBidIncrement] = useState(5000);
   const [bidAmount, setBidAmount] = useState("");
+  const [scoutProfiles, setScoutProfiles] = useState<LeagueBuilderScoutProfile[]>([]);
   const loadedKeyRef = useRef<string | null>(null);
   const cpuCountTouchedRef = useRef(false);
 
@@ -131,6 +223,20 @@ export function LeagueBuilderAuctionDraft() {
     loadedKeyRef.current = key;
     void loadAuction(activeLeagueId);
   }, [activeLeagueId, loadAuction]);
+
+  useEffect(() => {
+    if (!activeLeagueId) {
+      setScoutProfiles([]);
+      return;
+    }
+    let cancelled = false;
+    void getScoutProfilesForLeague(activeLeagueId).then((profiles) => {
+      if (!cancelled) setScoutProfiles(profiles);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId]);
 
   const activeLeague = useMemo(
     () => leagueData.leagues.find((league) => league.id === activeLeagueId) ?? null,
@@ -154,6 +260,13 @@ export function LeagueBuilderAuctionDraft() {
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
   const teamStateById = useMemo(() => new Map(session?.teams.map((team) => [team.teamId, team]) ?? []), [session]);
+  const scoutByTeamId = useMemo(() => {
+    const map = new Map<string, LeagueBuilderScoutProfile>();
+    for (const scout of scoutProfiles) {
+      if (scout.teamId) map.set(scout.teamId, scout);
+    }
+    return map;
+  }, [scoutProfiles]);
 
   const currentBidder = auction.currentBidderTeamId ? teamById.get(auction.currentBidderTeamId) : null;
   const currentLotPlayer = session?.currentLot ? playerById.get(session.currentLot.playerId) : null;
@@ -165,6 +278,7 @@ export function LeagueBuilderAuctionDraft() {
   const currentBidderMaxBid = session && auction.currentBidderTeamId
     ? getTeamAuctionMaxBid(session, auction.currentBidderTeamId)
     : null;
+  const currentBidderScout = auction.currentBidderTeamId ? scoutByTeamId.get(auction.currentBidderTeamId) : undefined;
   const currentBidderIsCpu = auction.isCpuTeam(auction.currentBidderTeamId);
   const currentRosterTally = useMemo(
     () => rosterPositionTally(currentBidderTeamState, playerById),
@@ -239,6 +353,45 @@ export function LeagueBuilderAuctionDraft() {
       ? "Filling your remaining slots would exceed your budget"
       : null;
   }, [rosterBoardTeamState]);
+  const currentDraftGuidePlayer = useMemo<DraftGuidePlayer | null>(() => {
+    if (!lot || !currentLotPlayer) return null;
+    const guideAsk = minBid ?? lot.openingAsk;
+    const affordability = draftGuideAffordability(guideAsk, currentBidderMaxBid, currentBidderTeamState);
+    const scoutAccuracy = currentBidderScout ? scoutAccuracyForPlayer(currentBidderScout, currentLotPlayer) : null;
+    const scoutCenter = lotAuctionPlayer?.iv ?? lot.openingAsk;
+    const scout = currentBidderScout && Number.isFinite(scoutCenter)
+      ? {
+          ...scoutPriceRange(scoutCenter, scoutAccuracy ?? 65),
+          grade: clampGrade(playerGradeToTwentyEighty(currentLotPlayer) + Math.round(((scoutAccuracy ?? 65) - 65) / 18) * 5),
+          confidence: `${currentBidderScout.name} - ${Math.round(scoutAccuracy ?? 65)} eye`,
+        }
+      : undefined;
+
+    return {
+      name: playerDisplayName(currentLotPlayer),
+      position: playerPositions(currentLotPlayer).join("/") || "POS",
+      personality: currentLotPlayer.personality,
+      tier: "mlb",
+      ivLabel: formatMoney(lotAuctionPlayer?.iv),
+      affordability: affordability.affordability,
+      affordabilityNote: affordability.affordabilityNote,
+      scout,
+      scoutNote: currentBidder
+        ? `${teamDisplayName(currentBidder)} has no hired scout read for this nomination.`
+        : "Waiting for the controlling bidder.",
+      teamFit: draftGuideTeamFit(currentLotPlayer, currentRosterTally),
+    };
+  }, [
+    currentBidder,
+    currentBidderMaxBid,
+    currentBidderScout,
+    currentBidderTeamState,
+    currentLotPlayer,
+    currentRosterTally,
+    lot,
+    lotAuctionPlayer?.iv,
+    minBid,
+  ]);
   const latestResult = session?.results.at(-1) ?? null;
 
   useEffect(() => {
@@ -539,6 +692,9 @@ export function LeagueBuilderAuctionDraft() {
                       <div className="text-sm text-[#FFD27A] font-bold">Teams below the current ask are auto-passed.</div>
                     </div>
                   </div>
+                  {currentDraftGuidePlayer ? (
+                    <DraftGuideCard player={currentDraftGuidePlayer} />
+                  ) : null}
                   <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
                     <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
                       <div>

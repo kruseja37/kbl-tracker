@@ -57,6 +57,7 @@ import {
   getAuctionSessionById,
   getPlayer,
   getRegisteredPool,
+  getScoutProfilesForLeague,
   getTeam,
   getTeamRoster,
   saveAuctionSession,
@@ -72,6 +73,14 @@ import {
   type TeamRoster,
 } from '../leagueBuilderStorage';
 import {
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+  getManagerAssignment,
+  getManagerProfile,
+  resetManagerIdentityDatabaseForTests,
+} from '../managerIdentityStorage';
+import { getReporterForTeam } from '../reporterStorage';
+import { resetTrackerDbForTests } from '../trackerDb';
+import {
   deleteFranchise,
   getFranchiseConfig,
 } from '../franchiseManager';
@@ -85,6 +94,11 @@ import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 import { initializeFranchise } from '../franchiseInitializer';
 import { clearAllSchedules } from '../scheduleStorage';
 import { deleteSeasonMetadata } from '../seasonStorage';
+import {
+  buildLiveScoutPool,
+  persistDraftStaffForLeague,
+  persistScoutHiresForLeague,
+} from '../../src_figma/app/utils/draftStaffingPersistence';
 
 const LEAGUE_ID = 'draft-pipeline-integration-league';
 const TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
@@ -459,6 +473,21 @@ async function cleanup(): Promise<void> {
   }
   await clearAllSchedules().catch(() => undefined);
   await clearAllLeagueBuilderData().catch(() => undefined);
+  resetManagerIdentityDatabaseForTests();
+  resetTrackerDbForTests();
+  await Promise.all([
+    deleteIndexedDbForTests('kbl-manager-identity'),
+    deleteIndexedDbForTests('kbl-tracker'),
+  ]);
+}
+
+async function deleteIndexedDbForTests(name: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.deleteDatabase(name);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => resolve();
+  });
 }
 
 async function runDraftPipeline(options: RunDraftPipelineOptions = {}): Promise<DraftPipelineResult> {
@@ -762,6 +791,85 @@ describe('draft pipeline integration', () => {
     expect(first.franchisePlayerCount).toBe(TEAM_IDS.length * 32);
     expect(first.franchiseTeamCount).toBe(TEAM_IDS.length);
     expect(first.franchiseFarmRecordCount).toBe(TEAM_IDS.length * 10);
+  }, 30_000);
+
+  test('persists scout-hire and staff-hire selections through the live draft ceremony stores', async () => {
+    await seedDraftLeagueWithRealMlbPlayers();
+    const leagueTeams = await Promise.all(TEAM_IDS.map(async (teamId) => {
+      const team = await getTeam(teamId);
+      if (!team) throw new Error(`Team ${teamId} missing after seed.`);
+      return team;
+    }));
+    const humanTeam = leagueTeams.find((team) => team.controlledBy === 'human') ?? leagueTeams[0];
+    const scoutPool = buildLiveScoutPool(LEAGUE_ID, leagueTeams.length);
+    const selectedScout = scoutPool[2];
+
+    const savedScouts = await persistScoutHiresForLeague({
+      leagueId: LEAGUE_ID,
+      teams: leagueTeams,
+      selectedScoutIdsByTeamId: {
+        [humanTeam.id]: selectedScout.id,
+      },
+      pool: scoutPool,
+    });
+    const scoutsByTeam = await getScoutProfilesForLeague(LEAGUE_ID);
+
+    expect(savedScouts).toHaveLength(TEAM_IDS.length);
+    expect(scoutsByTeam).toHaveLength(TEAM_IDS.length);
+    expect(new Set(scoutsByTeam.map((scout) => scout.teamId)).size).toBe(TEAM_IDS.length);
+    expect(scoutsByTeam.find((scout) => scout.teamId === humanTeam.id)).toEqual(
+      expect.objectContaining({
+        id: selectedScout.id,
+        leagueId: LEAGUE_ID,
+        teamId: humanTeam.id,
+        hiredPick: expect.objectContaining({ teamId: humanTeam.id }),
+      }),
+    );
+
+    const staffResult = await persistDraftStaffForLeague({
+      leagueId: LEAGUE_ID,
+      staff: [{
+        team: humanTeam,
+        managerName: 'A. Builder',
+        managerStyle: 'Analytics',
+        reporterName: 'R. Wire',
+        reporterPersona: 'Straight shooter',
+        reporterAvatar: 'headset',
+      }],
+    });
+    const managerAssignment = await getManagerAssignment({
+      teamId: humanTeam.id,
+      mode: 'franchise',
+      instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    });
+
+    expect(staffResult.managers[0]).toEqual(expect.objectContaining({ displayName: 'A. Builder' }));
+    expect(managerAssignment).toEqual(expect.objectContaining({
+      managerId: staffResult.managers[0].managerId,
+      teamId: humanTeam.id,
+      mode: 'franchise',
+      instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    }));
+    if (!managerAssignment) throw new Error('Manager assignment was not saved.');
+    await expect(getManagerProfile(managerAssignment.managerId)).resolves.toEqual(
+      expect.objectContaining({ displayName: 'A. Builder' }),
+    );
+    await expect(getTeam(humanTeam.id)).resolves.toEqual(
+      expect.objectContaining({
+        managerId: staffResult.managers[0].managerId,
+        managerName: 'A. Builder',
+      }),
+    );
+    await expect(getReporterForTeam(humanTeam.id, LEAGUE_ID)).resolves.toEqual(
+      expect.objectContaining({
+        leagueId: LEAGUE_ID,
+        teamId: humanTeam.id,
+        name: 'R. Wire',
+        personality: 'BALANCED',
+        voiceStyle: 'THE_CALLER',
+        avatarEra: 'headset',
+      }),
+    );
   }, 30_000);
 
   test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {

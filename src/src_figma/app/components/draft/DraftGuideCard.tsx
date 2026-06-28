@@ -24,7 +24,8 @@ export interface DraftGuidePlayer {
   ivLabel?: string;          // MLB only — public IV, e.g. "~$144k"
   affordability: Affordability;
   affordabilityNote?: string;
-  scout: { priceLow: string; priceHigh: string; grade: number; confidence?: string }; // covered read
+  scout?: { priceLow: string; priceHigh: string; grade: number; confidence?: string }; // covered read
+  scoutNote?: string;
   teamFit?: { fit: boolean; text: string };
   flag?: { kind: "bargain" | "trap"; text: string };
 }
@@ -85,26 +86,36 @@ export function DraftGuideCard({ player }: { player: DraftGuidePlayer }) {
         )}
       </div>
 
-      {/* covered scout read — press & hold */}
-      <button type="button" {...hold}
-        className="w-full text-left border-2 border-[#4A6844] bg-[#2d3d2f] px-3 py-2 mb-3 select-none cursor-pointer">
-        <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.14em] text-[#C4A853] mb-1">
-          <Lock className="w-3 h-3" /> YOUR SCOUT'S READ
-          <span className="ml-auto text-[#E8E8D8]/40 normal-case tracking-normal">{revealed ? "release to cover" : "hold to reveal"}</span>
-        </div>
-        {revealed ? (
-          <div className="grid grid-cols-[1fr_auto] gap-3 items-center pt-1">
-            <div>
-              <div className="text-[10px] text-[#E8E8D8]/45">SCOUT PRICE RANGE</div>
-              <div className="text-base font-bold text-[#E8E8D8]">{player.scout.priceLow} – {player.scout.priceHigh}</div>
-              {player.scout.confidence ? <div className="text-[10px] text-[#E8E8D8]/45 mt-0.5">{player.scout.confidence}</div> : null}
-            </div>
-            <div className="w-28"><GradeGauge grade={player.scout.grade} /></div>
+      {player.scout ? (
+        <button type="button" {...hold}
+          className="w-full text-left border-2 border-[#4A6844] bg-[#2d3d2f] px-3 py-2 mb-3 select-none cursor-pointer">
+          <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.14em] text-[#C4A853] mb-1">
+            <Lock className="w-3 h-3" /> YOUR SCOUT'S READ
+            <span className="ml-auto text-[#E8E8D8]/40 normal-case tracking-normal">{revealed ? "release to cover" : "hold to reveal"}</span>
           </div>
-        ) : (
-          <div className="text-[12px] text-[#E8E8D8]/30 py-1">●●●●●●  ·  ●●  ·  press & hold to see the range + grade</div>
-        )}
-      </button>
+          {revealed ? (
+            <div className="grid grid-cols-[1fr_auto] gap-3 items-center pt-1">
+              <div>
+                <div className="text-[10px] text-[#E8E8D8]/45">SCOUT PRICE RANGE</div>
+                <div className="text-base font-bold text-[#E8E8D8]">{player.scout.priceLow} - {player.scout.priceHigh}</div>
+                {player.scout.confidence ? <div className="text-[10px] text-[#E8E8D8]/45 mt-0.5">{player.scout.confidence}</div> : null}
+              </div>
+              <div className="w-28"><GradeGauge grade={player.scout.grade} /></div>
+            </div>
+          ) : (
+            <div className="text-[12px] text-[#E8E8D8]/30 py-1">covered read - press and hold to see the range + grade</div>
+          )}
+        </button>
+      ) : (
+        <div className="w-full border-2 border-[#4A6844] bg-[#2d3d2f] px-3 py-2 mb-3">
+          <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.14em] text-[#C4A853] mb-1">
+            <Lock className="w-3 h-3" /> PUBLIC-ONLY READ
+          </div>
+          <div className="text-[12px] text-[#E8E8D8]/55 py-1">
+            {player.scoutNote ?? "No hired scout is available for this team."}
+          </div>
+        </div>
+      )}
 
       {/* team-fit + bargain/trap flags */}
       <div className="flex flex-col gap-1.5">

@@ -33,6 +33,14 @@ export function farmDraftRouteForLeague(league: Pick<LeagueTemplate, "id" | "dra
   return withLeagueId(farmDraftRouteForFormat(league.draftFormat), league.id);
 }
 
+export function scoutHireRouteForLeague(league: Pick<LeagueTemplate, "id">): string {
+  return withLeagueId("/league-builder/scout-hire", league.id);
+}
+
+export function staffHireRouteForLeague(league: Pick<LeagueTemplate, "id">): string {
+  return withLeagueId("/league-builder/staff-hire", league.id);
+}
+
 export function leagueIdFromSearch(search: string): string | null {
   return new URLSearchParams(search).get("leagueId");
 }

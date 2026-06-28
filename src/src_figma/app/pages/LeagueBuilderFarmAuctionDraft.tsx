@@ -15,6 +15,7 @@ import {
   farmDraftRouteForLeague,
   leagueIdFromSearch,
   resolveInitialLeagueId,
+  staffHireRouteForLeague,
 } from "../utils/draftRouting";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
@@ -868,7 +869,7 @@ export function LeagueBuilderFarmAuctionDraft() {
                   Draft complete. Next: set your league's starting team morale and fan morale, then launch the franchise.
                 </div>
                 <button
-                  onClick={() => navigate("/franchise/setup")}
+                  onClick={() => navigate(activeLeague ? staffHireRouteForLeague(activeLeague) : "/league-builder/staff-hire")}
                   className="mt-4 px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
                 >
                   Continue to Franchise Setup
