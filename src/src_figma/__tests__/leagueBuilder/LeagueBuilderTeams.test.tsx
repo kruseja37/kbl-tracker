@@ -6,8 +6,9 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderTeams } from '../../app/pages/LeagueBuilderTeams';
+import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
 
 // ============================================
 // MOCKS
@@ -18,6 +19,16 @@ const mockNavigate = vi.fn();
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
+
+vi.mock('../../../utils/leagueBuilderStorage', async () => {
+  const actual = await vi.importActual<typeof import('../../../utils/leagueBuilderStorage')>(
+    '../../../utils/leagueBuilderStorage',
+  );
+  return {
+    ...actual,
+    getAuctionSession: vi.fn(async () => null),
+  };
+});
 
 const mockCreateTeam = vi.fn(async (team) => team);
 const mockUpdateTeam = vi.fn(async (team) => team);
@@ -92,6 +103,7 @@ vi.mock('../../../utils/managerIdentityStorage', () => ({
 describe('LeagueBuilderTeams Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getAuctionSession).mockResolvedValue(null);
   });
 
   describe('Header', () => {
@@ -314,6 +326,26 @@ describe('LeagueBuilderTeams Component', () => {
         );
       });
     });
+
+    test('blocks edits to league teams while a saved auction is in progress', async () => {
+      vi.mocked(getAuctionSession).mockResolvedValue({
+        leagueId: 'league-1',
+        session: {
+          state: 'OPEN_BIDDING',
+          players: {},
+        },
+      } as Awaited<ReturnType<typeof getAuctionSession>>);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      expect((await screen.findAllByText(/A saved auction is in progress/i)).length).toBeGreaterThan(0);
+      const saveButton = screen.getByRole('button', { name: /Save Changes/i });
+      expect(saveButton).toBeDisabled();
+
+      fireEvent.click(saveButton);
+      expect(mockUpdateTeam).not.toHaveBeenCalled();
+    });
   });
 
   describe('Delete Team', () => {
@@ -337,6 +369,9 @@ describe('LeagueBuilderTeams Component', () => {
 
     test('clicking confirm delete calls removeTeam', async () => {
       render(<LeagueBuilderTeams />);
+      await act(async () => {
+        await Promise.resolve();
+      });
       const deleteButtons = screen.getAllByTitle('Delete team');
       fireEvent.click(deleteButtons[0]);
       fireEvent.click(screen.getByTitle('Confirm delete'));
