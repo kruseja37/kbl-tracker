@@ -171,3 +171,59 @@ projection core first; add LLM language as a later gated enhancement.**
   incremental re-opt / precompute). The "if you PASS, here's what's still gettable" projection needs the
   **MARKET MODEL** (estimate future prices of remaining players) — exact for current state (who's gone),
   ESTIMATED for remaining-player future cost. → next question.
+
+### Q5 — The market / price-prediction model (how does the scout know what players will go for?)
+JK chose "learns from the room" with sophisticated logic: marginal value of the next player at a position
+goes UP for teams still needing it / DOWN for teams who just filled it (fewer suitors as a position fills);
+underbidders likely bid again ("4 bid on a catcher, 1 won → 3 still hunting"); a weighted statistical model
+moves future-player values up/down; adaptive online update (a curveball discount re-marks the board, the scout
+isn't "wrong", it adapts); OPPONENT MODELING from each team's KNOWN archetype (shills hidden) + live behavior.
+JK: how should it work? are there various models? can scouts learn from rivals' archetype+behavior?
+
+**ANSWER (workflow, auction-theory-grounded) — JK re-derived 2nd-price auction theory. The model:**
+Value each player THROUGH EACH RIVAL'S EYES (`v_ij = IV × archetypeFit(player, team_j) × needMultiplier_j(pos)
+× personalityBias_j`, clamped to that team's solvency `auctionMaxBid`), then predict he **clears at the
+SECOND-highest of those valuations + one increment** — because in an open ascending auction nobody pays their
+max; the price stops just above the RUNNER-UP's drop point.
+- **THE 2ND-PRICE INSIGHT is the whole ballgame.** A player ONE team loves + nobody else wants goes CHEAP
+  (bargain to flag) even at high IV; a player TWO teams covet goes near their shared ceiling. Pivot advice =
+  maximize your SURPLUS (your valuation − predicted clearing price), not raw quality.
+- **JK's "fewer suitors as a position fills"** = `needMultiplier_j(pos) = own_need_j(pos) [1.4 open / 1.0
+  depth / 0.5 filled] × leagueScarcity(pos) [teams-still-needing / players-left]`. Catcher sells → filled
+  teams drop out, still-needy teams firm up. Exactly his mechanic.
+- **JK's "the 3 losers bid the next catcher"** = underbidder-carry (needs the bid-log signal — see infra).
+- **JK's "curveball discount → re-update"** = recompute-on-sale (v1) + later an online market-heat λ scalar.
+- **Shills hidden** = the model knows their seed-derived valuations internally but **WIDENS the displayed
+  band** so the GM gets honest uncertainty ("1-2 wildcard bidders here"), not false precision.
+
+**CANDIDATE MODELS (JK asked "are there various?"):** 6 families — (a) value-anchor [cold-start prior],
+(b) residual-demand curve [the chassis], (c) opponent-modeling→2nd-price [the core], (d) Bayesian online
+update [the adaptive wrapper], (e) Monte-Carlo draft sim [optional deepening, §15], (f) underbidder tracking
+[signal feed]. The answer is the COMBINATION, staged.
+
+**DETERMINISM + SPEED:** closed-form, NO Monte-Carlo in the hot path. `O(players × teams)` arithmetic + a
+small sort per player ≈ sub-millisecond; seed-deterministic (reuse `buildSeededCpuShill`, no Math.random).
+Re-projecting "bid X vs pass" = recompute with one team's budget/need toggled = instant. Monte-Carlo (seeded,
+16-64 paths) ONLY for the on-demand §15 forward projection (completion-probabilities/regret), never per-keystroke.
+
+**THE ACCURACY TRAP (make-or-break — JK named it himself):** a confidently-WRONG scout is worse than a humble
+one. Rules: NEVER a point price, ALWAYS a range (low/median/high — §12 `EstimatedPlayerCost` already typed this
+way); band WIDENS with the count of unknowable/shill bidders + early-auction + thin pool; frame as "live
+estimates that shift"; recompute-on-sale is VISIBLE (demonstrates it adapts → builds trust). **THE PRE-SHIP
+GATE: calibrate band width against the existing `auctionTuningSim.test.ts` until the true price lands inside
+[low,high] ~85-90% of the time.** Measurable, not vibes. This gate is what earns "stop worrying if you can afford it."
+
+**STAGING (structure → learning → simulation):**
+- **v1 "Second-Price Board":** opponent-valuation → 2nd-price clearing → ranges → recompute-on-sale. Closed-form,
+  deterministic, reuses `capIdentity`/budgets/slots/`auctionMaxBid`/`auctionMarginalTax`/`evaluateCpuValuation`.
+  Small new code: the 2nd-price sort, `needMultiplier`, the band, + TYPE the 3 undefined spec types
+  (`EstimatedMarket`, `CompetingTeamProfile`, `ShillProfile` — referenced in §10.1 but never defined).
+- **v1.1 "Underbidder Memory":** consume the new bid log → "those 3 will be back" (biggest accuracy jump).
+- **v1.2 "Market Heat":** online λ scalar + per-team revealed-aggression learning.
+- **v2 "Forward Projection":** seeded low-path Monte-Carlo (§15) on-demand only.
+**INFRA ADD (do during v1, log-first-consume-later):** the auction currently DISCARDS bid history
+(`AuctionResult` keeps only winner+price; `passBid` drops the passer). Add `Lot.bidLog:{teamId,amount}[]` +
+`AuctionResult.{bidderSet,underbidder,numBidders}` NOW so v1.1 has data waiting. Cheap, additive.
+**SPEC FIX:** the 3 undefined types get defined here; §12/§14/§15 shapes (EstimatedPlayerCost range, BidImpact
+risk-bands Safe/Aggressive/Reckless/Emergency/Blocked, Auction Simulation) are sound — build ON them.
+BUILDABILITY: net-new model but on a mostly-live opponent-signal spine; no sale-price predictor exists today.
