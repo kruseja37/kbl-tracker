@@ -227,3 +227,43 @@ GATE: calibrate band width against the existing `auctionTuningSim.test.ts` until
 **SPEC FIX:** the 3 undefined types get defined here; §12/§14/§15 shapes (EstimatedPlayerCost range, BidImpact
 risk-bands Safe/Aggressive/Reckless/Emergency/Blocked, Auction Simulation) are sound — build ON them.
 BUILDABILITY: net-new model but on a mostly-live opponent-signal spine; no sale-price predictor exists today.
+
+**Q5 FOLLOW-UPS (JK):**
+- **(F1) Roster-construction awareness — CORRECTION to the needMultiplier.** The scout must use the REAL
+  canonical roster model (§4), NOT one-slot-per-position: a team with 1 catcher still needs a BACKUP C (C is
+  the most important backup position); starting pitchers have **4 critical slots** (SP1-4); etc. So
+  `own_need_j(pos)` = f(slots REQUIRED at pos − slots FILLED), and a position isn't "filled" until ALL its
+  required slots are. The residual-demand math drives off the full roster requirement per team.
+- **(F2) Imperfect information (reinforces ranges):** the scout does NOT know non-shill GMs' private draft
+  strategies (their boards/priorities are hidden) NOR what shills will do. Both → honest uncertainty / bands.
+- **(F3) Shill tuning is an OPEN SIM/TUNING item:** tune shill behavior so it doesn't destroy draft dynamics
+  (too aggressive = snipe/distort; too conservative = dead auction) AND **learn the right NUMBER of shills for
+  an 8-team draft.** Post-build tuning (like the cap magnitudes), validated against the auction tuning sim.
+
+**STRUCTURAL REVISION (JK decided) — RANK-ORDER + ONE LIVE BOARD (the three "boards" become a posture DIAL).**
+The live market model (Q5) + bid-vs-pass projection (Q4) make three SEPARATELY-LOCKED static boards stale the
+instant the draft deviates. JK: "should there be a rank-order and only one draft board now that is the
+live-updated in-draft board?" → **YES.** New model:
+- The GM gets (a) a **rank-ordering of all players** (their big board, from per-position priorities) + (b) **ONE
+  LIVE board** = the scout's current best roster-build PATH given the live draft state + priorities + risk posture.
+- The three risk levels (Conservative=0 tax / Optimal=some / Aggressive=scrubs, from Q2) become a **posture DIAL
+  / three VIEWS of the one live board** — flip the dial to see safe↔aggressive live — NOT three separately
+  calibrated/locked rosters. (Fits light-touch Q3 + the live model; the original "lock 3 boards" was
+  pre-live-model thinking.)
+- **What "locks" before the draft = the GM's PRIORITIES + risk posture** (+ archetype, per the auction-lock
+  rule), NOT three static rosters. The board itself stays LIVE/current. Q2's differentiation logic is unchanged
+  (per-position priorities × tax-posture); only the PACKAGING changes (one live board + dial, not 3 locked).
+
+### Q6 — Farm draft: how blind is the scout?
+**JK ANSWER: ONE board (same as MLB), but it CANNOT spoil true ratings in ANY way.** The farm scout:
+- Steers GMs toward players that fit the team's **FARM archetype** (set in the per-league team settings, separate
+  from MLB — [[hidden-vs-revealed-ui-rule]]).
+- Shows **3-, 5-, or 7-BANDED overall player values on the 20-80 scale** (the scout grade band — coarser/finer =
+  confidence), NEVER true ratings (farm hidden-attribute gate stays, already built).
+- Then behaves like the MLB draft (one live board, per-position priorities, the 2nd-price market model) but with
+  **MUCH WIDER BID BANDS** due to the higher uncertainty.
+- **HEADLINE for the farm scout = CAP-SPACE RISK DISCIPLINE:** the GM must understand the risk of running out of
+  cap while bidding under fuzzy values, so he **doesn't bet it all on one or two guys.** The farm scout's primary
+  value is protecting the GM from over-concentrating budget on a couple of uncertain prospects.
+- (Goal = farm-archetype fit under uncertainty + cap-discipline; not an explicit ceiling-weighting — the banded
+  20-80 overall IS the projected value the scout reasons on.)
