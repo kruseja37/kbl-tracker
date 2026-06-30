@@ -44,7 +44,10 @@ mirroring the proven `leaguePlayerOverrides` pattern:
 - **Additive shadow:** the global team stays the DEFAULT; the per-league record SHADOWS it when present →
   **zero migration**, existing leagues untouched. NEVER migrate `capIdentity` off the global team.
 - **IDENTITY/CONFIG ONLY.** NEVER make the team ROSTER per-league (`teamRosters` keyed by teamId is the most
-  load-bearing record — the scope-creep danger). The DRAFTED roster flows to the franchise (per-league). [VERIFY]
+  load-bearing record — the scope-creep danger). **[VERIFY-AT-BUILD: confirm the DRAFTED roster lands in the
+  FRANCHISE (per-league), not the global team — so the "roster stays global / identity-only" fence holds.]**
+  (The cross-league identity bleed this layer fixes is a real but LATENT bug — it only bites if a team is put
+  in two leagues, for which there's no flow today — which is why this is safe layer-first work, not a hotfix.)
 - Register the new store in backup/sync/L-SIM-sandbox/save-slot ([[new-own-db-store-three-registries]]).
 
 **The identity bundle (configured at leisure on the per-league team-edit page):** GM name · **Assistant GM
@@ -134,6 +137,12 @@ needMultiplier_j(pos) = own_need_j(pos) × leagueScarcity(pos)
 - **Surplus = your valuation − predicted clearing price** is the pivot signal (a guy only YOU want = bargain).
 - **REUSE existing:** `auctionMaxBid` (solvency), `auctionMarginalTax`, `evaluateCpuValuation`, live
   `capIdentity`/budgets/slots.
+- **Candidate model families (the answer is the COMBINATION, staged):** value-anchor (cold-start prior) +
+  residual-demand curve (the chassis) + opponent-modeling→2nd-price (the core) + Bayesian online update (the
+  adaptive wrapper) + underbidder-tracking (signal feed) + Monte-Carlo forward-sim (the v2 deepening).
+- **IMPERFECT INFORMATION (two band-wideners, not one):** the Asst GM knows neither the non-shill GMs' PRIVATE
+  draft strategies NOR what the shills will do — both feed honest uncertainty (wider ranges), never false
+  precision.
 
 **THE ACCURACY GATE (make-or-break):** NEVER a point price — ALWAYS a range (low/median/high). Band WIDENS with
 unknowable/shill bidders + early-auction + thin pool. Shill archetypes are hidden → the model knows their
@@ -209,7 +218,9 @@ Farm Auction → [Staffing — relocating to the team page] → Franchise Setup 
 **FREEZE ("4-number" model, `draftMorale.ts`):** per-player starting morale (slot-class ±15 + pay-class ±10,
 personality-adjusted, neutral 50) + team fan-morale from payroll; writes settled salaries + morale baselines +
 draft-baseline True-Value rows. **v1: AUCTION-ONLY** (snake skips the freeze, out of scope). BIG GAP = the
-middle of the flow is UNMERGED to trunk (= the JK-gated assembly).
+middle of the flow is UNMERGED to trunk (= the JK-gated assembly). *(Build caveat: the freeze pay-class morale
+uses an IV-centered reconstructed scout range, not the exact range the GM saw at bid time — a known
+approximation; revisit if the displayed range needs to drive the morale bump exactly.)*
 
 ## 9. THE IN-SEASON ASSISTANT GM
 
@@ -234,7 +245,8 @@ leak what they learn to rivals.
 - **MANAGER** = a named person + style in the team setup (identity LIVE: name/gender/age/hometown/style,
   assignment, seeded default, firing + tenure + morale ripples). In-game tactical VALUE = the Manager-WPA
   per-game decision layer (LIVE in the GameTracker; the season/career roll-up + manual firing are dark — the
-  separate `experiment/manager-wpa-window` lane).
+  separate `experiment/manager-wpa-window` lane; the legacy `mwarCalculator`/`managerStorage` value model is
+  deprecated/orphaned and gets cut over to the WPA-window layer).
 - **BEAT REPORTER** = a narrator (the deterministic engines own all math; the reporter only voices it). **v1
   ships the LIVE post-game columns + in-game commentary** (wired, real `claude-column` LLM edge fn). **Franchise
   season-news = fast-follow** — it rides the Phase-2 soul-flag-flip + the JK LLM browser sign-off (already
