@@ -267,3 +267,20 @@ live-updated in-draft board?" → **YES.** New model:
   value is protecting the GM from over-concentrating budget on a couple of uncertain prospects.
 - (Goal = farm-archetype fit under uncertainty + cap-discipline; not an explicit ceiling-weighting — the banded
   20-80 overall IS the projected value the scout reasons on.)
+
+### Q7 — What happens to the scout when the draft ends? (draft → season handoff)
+**JK ANSWER: the scout PERSISTS into the season as the in-season roster advisor.** Same hired scout, now
+advising on: **optimized lineups, roster moves, trades, archetype-change options**, and "all sorts of advice on
+button presses when GMs ask for roster analysis" — the roster-analysis-on-demand is "**should be partially
+built already**" (the existing diagnostic roster analyzer). This is the same brain as the draft optimizer
+(the [[archetype-optimizer-fielding-decisions]] "one analyzer powers pre-draft boards + in-season dropdown" /
+the evolve-your-archetype dropdown from Q1's archetype-evolution thread). Continuity: the GM who drafted your
+team keeps advising it.
+**FREEZE: everything carries over** into the season as the franchise's starting state — roster + identity
+(MLB/Farm archetype) + scout + draft posture (+ GM/manager/beat-reporter from the per-league team bundle). The
+season opens already knowing who you are. (Ties to the draft-freeze → Mode-2 handoff + the persistent per-league
+team-instance identity bundle from Q1.)
+
+---
+
+## STATUS: tightened spec draft produced → `SCOUTING_INTELLIGENCE_SPEC_V2.md` (2026-06-30, after Q1-Q7). Interrogation to CONTINUE.
