@@ -520,3 +520,36 @@ single fixed pool. So "game-able = out" is MECHANICALLY TESTABLE — I can draft
 balance-test each, keep the ±10% ones; decide source-of-truth unification. (2) PLAYER weakness-map — LIFT System
 C's 18 templates into a reusable, per-position, value-aware classifier menu + expand to comprehensive
 good-AND-bad coverage per position + bench. Both are design+SIM loops (runnable harness).
+
+**(b) JK RULINGS (taxonomy targets + approach):**
+- **TEAM:** roughly EVEN coverage across the 6 flavors, **~20-24 total**; each archetype tied to **1-3 specific
+  HISTORICAL teams** (exemplars, like the existing 15). Approach = **Captain proposes + balance-tests candidates,
+  brings results to JK to rule.** (Gap to fill = offense/contact/speed/balanced — pitching is over-covered.)
+- **PLAYER = a STRENGTHS-AND-WEAKNESSES map** (NOT only weaknesses): full-spectrum signed profiles the GM places
+  strategically across the roster, one by one, as targets the Asst GM models from. The GM should leverage player
+  archetypes that ALIGN with their TEAM archetype (matching BOTH its boosts AND its nerfs) to build realistic
+  rosters. **KEY FEATURE: player archetypes that align with the selected team archetype STAND OUT** (highlighted)
+  to show the GM which choices maximize value. Build = lift System C's 18 templates into a reusable, per-position,
+  VALUE-AWARE classifier menu + expand to comprehensive coverage (a complex mechanical analysis no human can do
+  in-head). Confirmed approach.
+
+### (b) TEAM-archetype gap-fill — ROUND 1 (proposed + balance-tested; PENDING JK approval)
+Captain drafted candidates for the offense/contact/speed/defense gaps + ran them through `runBalanceSim`
+(the real harness, 440 IV-oracle pool, ±10% across juiced/standard/nerfed). **RESULT: 7 NEW archetypes PASS →
+22 total, max deviation 8.7%, ZERO outliers all 3 tiers.** (NOT yet written to `historicalArchetypes.ts` —
+pending JK.) The 7 (name · spec · band-flavor · proposed 1-3 exemplars):
+1. **Hit 'Em Where They Ain't** `{CON:1.5,SPD:1,POW:-2}` — contact+speed slap — 1894 Orioles, 2001 Mariners (Ichiro)
+2. **Toolsy Burners** `{POW:1,SPD:1.5,CON:-1,FLD:-1}` — power+speed five-tool — 2007 Phillies, 2021 Blue Jays
+3. **Cannon Corps** `{ARM:2,FLD:1,POW:-1,SPD:-1}` — arm+defense (cannons) — 1971 Pirates (Clemente), 2002 Angels
+4. **Gap-to-Gap** `{CON:1.5,POW:1,SPD:-1,ARM:-1}` — contact+power doubles — 2003 Red Sox, 1996 Indians
+5. **Web Gems** `{FLD:2,ARM:1,POW:-1.5,CON:-0.5}` — pure defense, light bats — 2013–15 Royals, 1980 Cardinals
+6. **Launch & Leather** `{POW:1.5,FLD:1,CON:-1,SPD:-1}` — power+defense (3TO + gloves) — 2016 Cubs, 2021 Astros
+7. **No-Glove Offense** `{POW:1,CON:1,FLD:-1.5,ARM:-1.5}` — all bats, no defense — 1930 Phillies, 2000 Astros
+**DROPPED: "Complete Club"** (balanced offense + leaky BULLPEN) — structurally fails (−20% standard: the
+bullpen sacrifice is too costly at standard tier) AND redundant with Big Red Machine (balanced offense via a
+ROTATION sacrifice). FINDING: a balanced/complete identity needs a ROTATION or DEFENSE sacrifice, not bullpen.
+**COVERAGE now (22):** Power well-covered (Murderers'/Bomba/Bash + Toolsy/Gap/Launch/No-Glove), Contact
+(Go-Go/Big Red + Hit-Em/Gap), Speed (Whiteyball/Billy + Hit-Em/Toolsy), Defense (Oriole/Shift + Cannon/Web
+Gems/Launch), Rotation×3, Bullpen×3. Caveat: EV=ΣkblIV not sim-wins — recommend an L-SIM spot-check on the
+strongest before locking. Exemplars/lore are flavor (JK can refine). NEXT: JK approves/refines → write to data
++ extend `historicalArchetypes.test` to 22; then the PLAYER strengths-and-weaknesses map.
