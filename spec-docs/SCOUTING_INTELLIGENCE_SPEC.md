@@ -222,6 +222,14 @@ middle of the flow is UNMERGED to trunk (= the JK-gated assembly). *(Build cavea
 uses an IV-centered reconstructed scout range, not the exact range the GM saw at bid time — a known
 approximation; revisit if the displayed range needs to drive the morale bump exactly.)*
 
+**MOCK-DRAFT toggle (v1, LOW RISK).** A toggle at the start of every draft marks it a MOCK: it plays out + shows
+the resulting rosters in-session, but the mock path **SKIPS BOTH durable writes** — NO roster commit
+(`commitCompletedMlb/FarmAuctionSessionToLeagueRosters` → `teamRosters`) and NO franchise advance
+(`initializeFranchise`/freeze). The league/teams SETUP is untouched by ANY draft (the draft only READS it), so it
+stays intact by construction. **Reset = `deleteAuctionSession`** (the primitive exists) → re-run a real or
+another mock draft. The one build discipline: gate BOTH durable writes behind the not-mock flag so nothing leaks.
+Lets GMs test priorities/archetype/strategy before committing (complements the Asst-GM).
+
 ## 9. THE IN-SEASON ASSISTANT GM
 
 The Assistant GM PERSISTS as the in-season roster advisor (same brain as the draft optimizer) — advising on

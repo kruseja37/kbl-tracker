@@ -472,3 +472,22 @@ performance-aware (feed season stats) vs ratings-only for v1; (4) surface pool-f
 
 ## STATUS (post Q1-Q12 + Thread A): the scout/Assistant-GM design is COMPREHENSIVE. Remaining = (b) the
 ## archetype TAXONOMY build (team + player menus, design+sim, Decision C) + (c) a clean SPEC consolidation.
+## [(c) DONE → SCOUTING_INTELLIGENCE_SPEC.md (canonical, QC-verified). (b) foundation grounding in flight.]
+
+### MOCK-DRAFT toggle (JK feature request) — LOW RISK, clean to build
+JK: add a toggle at the start of every draft to mark it a MOCK draft — does NOT advance to a real franchise at
+completion, keeps all league/team setups intact, lets the league reset + re-run a real or another mock draft.
+**RISK ASSESSMENT (grounded): LOW.** Key facts:
+- The draft does **NOT mutate the league/teams SETUP** (archetypes/identities) — grep of the auction hooks for
+  `saveTeam`/`updateTeam`/`selectTeamArchetype` = EMPTY. It READS the setup. So "keeps setup intact" is FREE by
+  construction (the draft can't corrupt it).
+- A real draft's only durable writes are: (1) the drafted ROSTERS onto the team records
+  (`commitCompletedMlb/FarmAuctionSessionToLeagueRosters` → `commitTeamRoster` → `saveTeamRoster`, the
+  `teamRosters` store, `leagueBuilderAuctionPipeline.ts:143-216`), and (2) later the FRANCHISE
+  (`initializeFranchise` + freeze, triggered from FranchiseSetup).
+- A `deleteAuctionSession` primitive already EXISTS (`leagueBuilderStorage.ts:1815`) — the reset mechanism.
+**DESIGN (clean): a mock draft writes ONLY to its own (deletable) draft session.** It plays out + shows the
+result in-session, but the mock path SKIPS BOTH durable writes — NO `commitCompleted…ToLeagueRosters` and NO
+franchise advance. Reset = `deleteAuctionSession` → league pristine → re-run real or mock. The ONE discipline:
+gate BOTH durable writes behind the not-mock flag so nothing leaks. Great product fit (test your priorities/
+archetype/strategy before committing — complements the Asst-GM). v1 feature.
