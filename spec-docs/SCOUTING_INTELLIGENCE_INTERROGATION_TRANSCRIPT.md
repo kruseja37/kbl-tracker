@@ -302,3 +302,26 @@ RESOLVES the §9/§10 crux.
 - **Net economy (FINAL):** draft acquisition cost = bid + graduated archetype penalty (visible, paid from draft
   budget, once); season salary = intrinsic; dead-cap = on intrinsic; no in-season archetype tax; trade = clean
   swap; removal = send-down or trade (no release). The scout's "true cost" display = the draft acquisition cost.
+
+### Q9 — Soft-risk / completion guardrails + the hard-floor problem (JK: "the spec already answers this")
+**JK is RIGHT — already answered, + a precise hard-floor nuance.** The cap-health guidance the Captain's Q9
+proposed (always-on "can you still finish your roster" with escalating warnings) IS the **bid-vs-pass
+projection (Q4) + market model (Q5)** — the scout already shows live whether your roster stays completable. No
+separate risk-band system needed; Q9 was redundant with prior decisions.
+**THE HARD-FLOOR PROBLEM (JK): the current floor "overvalues the floor for the rest of the draft" → keeps
+teams from bidding even the minimum.** Verified cause: `auctionMaxBid = remainingBudget − (slotsRemaining−1)×
+minSalary − projectedTax` (`rosterEngineConstants.ts:364-371`). The **`projectedTax` reservation is the
+culprit** — it holds back budget for a luxury tax that may never be incurred (reserved crudely against the
+current lot, not the GM's actual plan), choking legitimate bids. The pure-solvency part
+(`budget − (slots−1)×minSalary`) is the TRUE minimum and is correct.
+**RESOLUTION:**
+- **KEEP the hard floor, but as PURE SOLVENCY ONLY** (`budget − (slots−1)×minSalary`, NO projectedTax
+  reservation). Its VALUE = the absolute guarantee you can always field a LEGAL roster. An INVISIBLE backstop.
+- **Strip the projectedTax over-reservation.** Under Option A (Q8) the off-fit penalty is a real draft-budget
+  debit only when you CHOOSE to buy off-fit → must NOT be pre-reserved against every lot.
+- **The scout's PLAN-AWARE accurate reserve replaces the crude floor as the GUIDANCE the GM bids against:**
+  "given your actual plan + the live market (incl. cheap 'weakness' archetypes + any planned off-fit
+  penalties), keep ~$X for the rest → you can spend up to (budget − $X) here." More accurate AND more generous
+  than reserving minimum×slots+tax → stops choking minimum bids. The floor becomes a non-issue (rarely binds;
+  the scout warned accurately well before) — exactly JK's "make it a non-issue, then it's fine to keep."
+  CONFIRMED VALUE: keep the pure-solvency floor; the projectedTax part is the bug.

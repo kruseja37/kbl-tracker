@@ -144,6 +144,14 @@ with one team's budget/need toggled = instant.
   guidance. **Cap-discipline / completion guardrail:** the projection makes "can you still legally fill your
   roster if you bid this" obvious → the scout protects the GM from stranding themselves (warn clearly; per
   §14 hard-block ONLY truly impossible bids, never risky-but-possible ones).
+- **HARD-FLOOR FIX (Q9):** the live cap-health guidance IS the bid-vs-pass projection (no separate risk-band
+  system). The current solvency floor `auctionMaxBid = budget − (slots−1)×minSalary − projectedTax` over-reserves
+  via the **`projectedTax`** term (holds back budget for a tax that may never be incurred, choking even minimum
+  bids). FIX: keep the floor as **PURE SOLVENCY** (`budget − (slots−1)×minSalary`, strip projectedTax) — an
+  INVISIBLE backstop guaranteeing a legal roster; the SCOUT's **plan-aware accurate reserve** (predicted cost of
+  the GM's actual remaining plan + the live market, incl. cheap weakness-archetypes + chosen off-fit penalties)
+  is the surfaced affordability the GM bids against — more accurate/generous than the crude floor, so it never
+  chokes legitimate bids. The floor rarely binds; the scout warned accurately well before.
 
 ## 6. LLM USAGE (Q4)
 **Core needs NO LLM.** The math + the board projection carry it, and the math is ALWAYS deterministic (never let
