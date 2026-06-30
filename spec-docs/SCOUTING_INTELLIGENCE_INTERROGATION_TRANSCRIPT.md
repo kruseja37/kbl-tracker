@@ -136,3 +136,38 @@ non-user-intensive design philosophy — the scout spares the 22-pick micromanag
 §9.4 (the 3 boards become scout memory: player ids, GM-adjusted rankings, plan checkboxes, salary/tax/effective
 totals, archetype accumulation, position coverage, risk profile, notes/tags) + the GM's per-position
 priorities + spending posture. RESOLVED.
+
+### Q4 — Live-auction guidance (Captain's "fast bidding, glance vs dashboard" framing was WRONG)
+**JK CORRECTION — the auction format:** there is **NO TIMER**. It's **pass-the-iPad** couch co-op: each GM
+takes the device on their turn, studies everything they need with no time pressure, clicks **bid or pass**,
+and hands the iPad to the next GM. So the design constraint is **PRIVACY** (hide a GM's scouting analysis from
+rivals at the table), NOT brevity.
+- **PUBLIC layer (always on screen, never hidden):** the player up for bid + his **IV** + full player-profile
+  details — ratings/traits/chemistry/personality/age/handedness for **MLB** players (FARM players keep their
+  hidden attributes per the already-built visibility gate, [[hidden-vs-revealed-ui-rule]]) — AND **the active
+  GM's live roster.**
+- **PRIVATE layer (behind a click):** everything the **scout** provides. The GM expands the surface to study
+  privately, then collapses it (or clicks bid/pass); the next GM gets the same hidden surface to unhide on
+  their turn. ⇒ full scout depth is available (no need to trim for speed) — just gated for privacy.
+
+**Q4 KILLER FEATURE (JK) — real-time BID-vs-PASS board projection (the scout's core; needs NO LLM):**
+Instead of noisy numeric phrases, the scout SHOWS the two futures, concretely:
+- **"If you BID at the currently-selected figure → here is how your 3 boards look going forward."**
+- **"If you PASS → here is how your 3 boards look going forward."**
+The scout tracks who's been **bought/lost for good** and updates the **draft pool feeding the boards in
+real time**, re-projecting continuously. Show-don't-tell; deterministic (just re-running the optimizer on the
+live state); more informative than any sentence. **This is the load-bearing scout guidance.**
+
+**LLM right-sizing (JK asked: do we need the LLM, like the beat reporter?):** the CORE needs **NO LLM** — the
+board projection + the exact numbers (true cost, which plans survive, tax, budget) carry it, and the math
+must ALWAYS be deterministic (never let an LLM hallucinate "this breaks your plan"). The LLM is an **OPTIONAL
+polish layer**: reuse the beat-reporter `callClaudeMessages` link to phrase the exact facts as richer
+summary language (avoids the "few numbers + redundant phrases = noise" risk), **gated**, on TOP of the
+deterministic facts. Same pattern as the reporter ([[reporter-adapter-pure-emission-llm-split]]): pure
+deterministic adapter computes facts → LLM-gated presentation enriches language. **Build the deterministic
+projection core first; add LLM language as a later gated enhancement.**
+- **BUILD CAVEAT:** the optimizer must be fast enough to **re-project interactively** per bid-figure/pass
+  (no-timer eases the latency budget — a couple seconds is fine — but it must be responsive; may need
+  incremental re-opt / precompute). The "if you PASS, here's what's still gettable" projection needs the
+  **MARKET MODEL** (estimate future prices of remaining players) — exact for current state (who's gone),
+  ESTIMATED for remaining-player future cost. → next question.
