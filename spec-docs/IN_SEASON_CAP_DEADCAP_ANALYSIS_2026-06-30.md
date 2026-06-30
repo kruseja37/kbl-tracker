@@ -106,3 +106,58 @@ framing: **logged, not ratified**, partially conflicts on two knobs (call-up sca
 treatment, morale threshold) that close the exploit holes — the math is the easy part and it's largely done.**
 The two most dangerous specific holes are **free release** and **demotion-as-cap-relief** — both let a
 min-maxer turn the penalty into a net *benefit*, which is worse than no mechanic at all.
+*(Note: §9 below REVISES the "demotion-as-cap-relief" reading per JK — demotion-to-save IS intended,
+gated by morale, not a cap floor. Read §9 as authoritative where it conflicts.)*
+
+## 9. JK CORRECTIONS (2026-06-30) — these SUPERSEDE §6/§7/§8 where they conflict
+
+JK reviewed the exploit analysis and corrected three things. These are authoritative.
+
+**(C-2) There is NO release / no free-agent pool — and that changes the "free exit" guardrail.**
+There is no intended way to *release* a player. Player removal = **(a) send-down + call-up from your farm**,
+or **(b) TRADE the player for another** — a trade **fully clears the outgoing player's salary** (he's gone,
+the other team pays him; NO dead money) **and you fully take on the incoming player's salary.**
+- The grounding found a `release` action wired in the OFFSEASON finalize flow (`FinalizeAdvanceFlow.tsx`,
+  `releaseFranchisePhase11Player`). **This is a stray path JK did not intend → flag for removal/gating in v1.**
+- Revised guardrail #2: there is no free in-season release to close; the exits are send-down (75% dead money)
+  and trade (clean swap, no dead money). **The natural brake on "dump my albatross via trade" is the CPU
+  counterparty's willingness** — no CPU team takes an overpaid underperformer without compensation (the trade
+  AI is the guardrail, not a dead-money rule). **VERIFY (open):** confirm the trade path actually clears the
+  outgoing salary fully + takes on the incoming fully today (vs. leaving residual dead money).
+
+**(C-3) Demotion-to-save-money is INTENDED — REVERSES guardrail #3.** A GM *should* be able to save money by
+sending an expensive underperformer (an albatross) down and calling up a cheaper rookie — **that is what
+rebuilding looks like and a legitimate way to save money.** So: **drop the "demotion can never reduce your
+cap" floor.** Demoting CAN lower your cap, by design. The brake is NOT the cap — it's **fan morale keyed to
+the demoted player's value** (next). The 75% dead money still means it's not *free*, but a net cap saving on a
+bad contract is a feature, not an exploit.
+
+**(C-3 + C-5) The morale model is PLAYER-VALUE-DRIVEN, per move, on BOTH send-down and call-up.** Fan morale
+reacts to *which* player moves, by that player's individual **fame** and **net true value (TV)**:
+- **Send-down:** demote a player whose **net TV is NEGATIVE** (a bum) → fan morale **UP** (fans glad to see him
+  benched); demote a player whose **net TV is POSITIVE** (a good/beloved player) → fan morale **DOWN**.
+  Magnitude scales with the player's **fame** (demoting a famous star stings more than an unknown).
+- **Call-up:** also triggers a morale reaction — **especially a "Fan Hopeful"-designated rookie → morale UP**
+  (fans excited about the prospect).
+- **PLUS the aggregate layer (from Exploit 10):** team-total dead money as a % of budget is a separate slow
+  "you're wasting money" drag — so thousand-cuts distribution can't escape *all* morale consequence.
+So morale has TWO coupled layers: **per-move (fame × net-TV of the specific player)** AND **aggregate (team
+dead-money %)**. This replaces the simpler "above-threshold albatross tax only" framing.
+
+**(C-4) The archetype arbitrage (Exploit 7), as a SIMPLE worked example for clarity:**
+Your team is a **Bash Brothers** (power) build. You sign an off-archetype **finesse command pitcher**.
+- His **face salary = $4M**, but because he's off your archetype, the luxury tax made his **true cost to YOU
+  ≈ $7M** (you paid a ~$3M "wrong-fit" premium at the draft).
+- He flops; you send him down. **Dead money today = 75% of FACE ($4M) = $3.0M.** The $3M archetype premium you
+  paid just vanishes from the books.
+- An **on-archetype $4M slugger** you bury → also $3.0M dead money. **Same cost** — even though the off-archetype
+  guy was effectively a $7M commitment.
+- **That's backwards:** the off-archetype mistake should be *more* expensive to get out of. **Fix:** charge dead
+  money on the **archetype-adjusted true cost** (75% of $7M = $5.25M dead), not face. Then "this off-archetype
+  guy isn't just expensive now, he's expensive to get *out* of later" becomes literally true — one unified cost
+  basis shared between the draft-time tax and the in-season ledger.
+
+**Net of the corrections:** removal is send-down-or-trade (no release); demotion-as-rebuilding is a real,
+intended money-saving move gated by **player-value-keyed fan morale** (not a cap floor); and the cost basis
+must be the archetype true cost so burying off-archetype mistakes hurts more. These fold into the
+scouting-interrogation as the in-season half of the ONE true-cost economy.
