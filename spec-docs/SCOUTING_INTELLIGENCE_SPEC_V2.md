@@ -218,6 +218,27 @@ Assistant GM who drafted your team keeps advising it. (= the
   **across-seasons** (remember rivals/you across drafts — DEFERRED, no data until a season turns over; same
   bucket as the v1.2 market-heat learning). Scouts are UNIQUE to the team and NEVER leak what they learn to
   rival GMs (your scout works only for you).
+- **IN-SEASON ASST GM — build shape (Thread A rulings; much already built):** (1) **ADVISE by default, the GM
+  clicks** (no auto-execute; one-click apply only for the safe lineup case that already works). (2) A
+  **DEDICATED invoked "Assistant GM" surface** (button/screen), NOT the current passive Team-Hub sidebar. (3)
+  **PERFORMANCE-AWARE** — wire real season stats into the franchise roster analyzer (today hard-coded
+  `stats: 'unavailable'` in `rosterAnalyzerFranchiseAdapter.ts`); required for "your 2B is slumping" + the Q10
+  within-season learning. (4) **SURFACE pool-feasibility** (`analyzePoolFeasibility`/`buildBestRoster`,
+  orphaned in-season today) as the **evolve-your-archetype** tool. REUSE the 4 built engines (roster-readiness
+  analyzer + lineup optimizer wired into Team Hub; in-game scout-move evaluator; pool-feasibility) — unify them
+  into one Asst-GM view; the build = stats-feed + the dedicated surface + recommend-then-apply wiring.
+
+## 8.5 DRAFT FLOW + STAFFING (Thread A)
+Full chain BUILT on the draft-lane: Setup → Config (owners/archetypes/shill) → ScoutHire → MLB Auction → Farm
+Auction → Staffing → FranchiseSetup → **FREEZE inside `initializeFranchise`** → launch. The **FREEZE** ("4-number"
+draft morale: slot ±15 + pay ±10, personality-adjusted, neutral 50; team fan-morale from payroll) writes settled
+salaries + morale baselines + draft-baseline True-Value rows. **v1 rulings:** AUCTION-ONLY (snake skips the
+freeze, out of scope); **persist seat names** as durable couch-coop GM identities (today throwaway local-state);
+**manager + reporter + scout naming RELOCATES** from the post-draft Staffing screen up into the per-league
+team-edit page (§1 bundle) — the Staffing screen refactors away. BIG GAP = the middle of the flow is UNMERGED to
+trunk (= the JK-gated assembly). **MANAGER** = named entity + style in the team setup (identity + in-game mWAR
+LIVE; season roll-up + manual firing dark — separate lane). **BEAT REPORTER** = live post-game columns +
+in-game commentary ship v1 (wired); franchise season-news = fast-follow on the Phase-2 flag-flip + LLM sign-off.
 
 ## 9. ECONOMY TIE-INS (from the cap/dead-cap dialogue — see `IN_SEASON_CAP_DEADCAP_ANALYSIS_2026-06-30.md`)
 - **TRUE COST = the DRAFT acquisition cost (RESOLVED Q8, Option A).** The off-archetype "wrong-fit penalty" is a

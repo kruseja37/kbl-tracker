@@ -453,3 +453,22 @@ actionable); franchise analyzer is RATINGS-ONLY (stats hard-coded 'unavailable' 
 siloed surfaces (no unified Asst-GM view). DECISIONS (the genuine forks): (1) ACT (one-click execute moves)
 vs stay READ-ONLY advisor; (2) a dedicated invoked "Assistant GM" surface vs the passive sidebar; (3)
 performance-aware (feed season stats) vs ratings-only for v1; (4) surface pool-feasibility in-season.
+
+**THREAD A — JK RULINGS (all resolved):**
+- **In-season Assistant GM (roster analysis):** (1) **ADVISE by default, user clicks** — no auto-execute; the
+  Asst GM recommends, the GM acts (one-click apply for the already-safe lineup case). (2) **DEDICATED invoked
+  "Assistant GM" surface** (a button/screen), not the passive sidebar — matches Q7 "roster analysis on a button
+  press." (3) **PERFORMANCE-AWARE** — feed the in-season analyzer real season stats (today hard-coded
+  'unavailable'); needed for "your 2B is slumping" + the Q10 within-season learning (a real wire-up, core).
+  (4) **SURFACE the pool-feasibility / "best roster you could field" engine in-season** (`analyzePoolFeasibility`/
+  `buildBestRoster`, orphaned today) = the **evolve-your-archetype tool** ("you have the bodies for Power but
+  you're 2 bats short").
+- **Draft flow:** **persist seat names** as durable couch-coop GM identities (today throwaway local-state);
+  **AUCTION-ONLY for v1** (snake-draft out of scope — it skips the freeze anyway).
+- **Manager:** named entity + style, RELOCATED into the per-league team setup; mostly built; mWAR season
+  roll-up + manual firing = known-dark (separate `experiment/manager-wpa-window` lane).
+- **Beat reporter:** v1 = live post-game columns + in-game commentary (already wired); franchise season-news =
+  fast-follow (rides the Phase-2 flag-flip + JK LLM browser sign-off, already JK-gated).
+
+## STATUS (post Q1-Q12 + Thread A): the scout/Assistant-GM design is COMPREHENSIVE. Remaining = (b) the
+## archetype TAXONOMY build (team + player menus, design+sim, Decision C) + (c) a clean SPEC consolidation.
