@@ -79,6 +79,59 @@ with "no in-season archetype tax").
 - **Q7:** Hard-cap vs soft-tax interaction with the reified cost (Decision B was soft tax — confirm how the
   reified true cost interacts with the soft luxury-tax/payroll-percentile/fan-morale machinery).
 
+## FAN-MORALE × SALARY × ALBATROSS × SHILLS (verified 2026-06-30 — JK's payroll-morale question)
+
+**Fan morale does NOT watch total payroll today.** In-season morale moves on RESULTS vs a TALENT-based
+expected-wins baseline (`expectedWins = gamesPerTeam/2 + (teamTrueValue − leagueAvgTrueValue)×0.5`;
+`calculateMoraleBaseline = 50 + expectedWinsDiff×2 + standingsFactor`). The "expected wins" JK remembers is
+real but **talent-derived (True Value = WAR-percentile→salary), NOT contract spend.** The ONLY payroll→morale
+coupling is a ONE-TIME **draft-freeze** spend penalty (`computeDraftFanMorale` ranks teams by relative
+auction spend; biggest spenders start with lower morale = higher expectations). Even the talent→expected-wins
+→morale path is **confirmation-gated / `calculatesExpectedWins:false` in v1** (not auto-mutating yet).
+
+**RECOMMENDATION: do NOT build a payroll→morale layer (CUT it).** What JK wants ("are we getting our money's
+worth?") is **already answered by the talent model**, because in this economy salary ≈ True Value: a team that
+pays top-3 money bought top-3 True Value → high expected-win bar → if they're in the cellar the EXISTING
+performance gap already bleeds morale; and where salary diverges from True Value (overpaid), the ALBATROSS
+system already handles it. A separate payroll signal is (a) redundant where it agrees, (b) **exploitable**
+(spend low to lower the bar = expectation laundering), and (c) **unfair to a deliberate rebuild** (cheap+bad is
+correct strategy; the talent model correctly keeps a cheap losing team neutral; a payroll layer would punish
+it). → Instead, just **flip the existing talent-based expected-wins→morale path LIVE** (it's gated off in v1).
+
+**Salary-albatross disincentive — JK's instinct is RIGHT, with caveats:**
+- Albatross mechanic is BUILT and keys EXACTLY on salary-vs-production (`salary ≥ 2×MIN` AND
+  `valueDelta/contractValue ≤ −25%`, valueDelta = trueValue − actual salary; the single worst-value player per
+  team). A high-salary/low-IV off-archetype overpay is the textbook trigger. **BUT flag-OFF + accumulate-only**
+  (`FRANCHISE_PHASE2_FLASHPOINT_ENABLED_DEFAULT=false`) — the tax never reaches live morale (needs flag + a
+  consumer). The "hard to trade" half **does NOT exist** — the live trade path has NO CPU acceptance gate (user
+  trades self-execute); the only salary-aware willingness logic (`evaluateTradeForAI`) is ORPHANED dead code.
+- **DOUBLE/TRIPLE-PUNISHMENT GUARDRAIL (important):** the auction overpay is ALREADY the full honest cost
+  (you paid more for less, self-correcting). Stacking albatross morale tax AND trade-lock on top = billing the
+  same mistake 3× → a death spiral that turns a "priced choice" into a "trap." **Pick ONE back-loaded
+  consequence (morale tax OR trade resistance, not both).** Ensure the albatross fires only on GENUINE absolute
+  overpay (the −25% gate is hard, so a clean roster has NO albatross rather than always electing its
+  least-best player). Trade resistance, if built, must be RESISTANCE (CPU takes the bad contract at a
+  discount/sweetener), never a WALL (outright refusal).
+
+**Shill aggressiveness (JK's auction-liveness worry — verified & valid):** shills today are deliberately
+CONSERVATIVE, fold early, bid only the min increment, are hard-capped so they're never a guaranteed bidder
+(`NO_FLOOR_MAX_INTEREST_PROBABILITY=0.92`, anti-hidden-floor), and are **OFF by default**
+(`DEFAULT_CPU_SHILL_COUNT=0`). Logic lives in `cpuShillBidding.ts` (NOT the parked WIP — the WIP left it
+untouched, only added shill-team-identity plumbing). There is **no pushback-on-pass** behavior. The safe fix
+(NOT global aggression): a shill provides pushback **only when a lot is about to clear at the floor with zero
+competing HUMAN bids**, **capped hard at fair-value-to-a-fitting-team**, and **only on lots the shill itself
+fits** (else shills bid up off-archetype prices and UNDO the disincentive); **keep the 0.92 no-floor cap** —
+liveliness comes from the silence TRIGGER (a state change), not from raising the probability ceiling. Add one
+"liveliness" knob + flip the default shill count above 0. Aggressive-everywhere shills become the price-setter
+and snipe the nominating human (worse than a dead lot).
+
+**BUILD-REALITY (state plainly — this is DESIGNED, not mostly-built):** talent→expected-wins→morale = built
+but gated off in v1; albatross salary-vs-IV math = built but dark + unconsumed; trade resistance = unbuilt
+(orphan code); payroll→morale = doesn't exist (and shouldn't). So the off-archetype back-loaded "reckoning"
+does NOT run in production today — shipping it = (a) flip talent-morale live, (b) wire the albatross consumer,
+(c) optionally build ONE of {trade-acceptance gate}, (d) the silence-triggered shill knob — + §16 tuning of
+placeholder magnitudes. Sequence into the living-season + scouting builds; do not greenlight as "mostly there."
+
 ## VERIFY-AT-BUILD (factual checks before coding)
 - Archetype field is mutable/persisted in-season (re-pointable).
 - Trade path clears outgoing salary cleanly + takes on incoming fully (no residual).
