@@ -70,3 +70,41 @@ IDENTITY/SETUP only (GM/scout/boards/archetype-override), global team stays the 
 **VERIFY-AT-BUILD:** where does the DRAFTED roster land — the franchise (per-league, expected, so the per-league
 team layer need NOT touch `teamRosters`) vs the global team? Confirm the draft output is franchise-scoped so
 the "roster stays global / identity-only" fence holds without contortion.
+
+**Q1 ADDENDUM (JK):** managers + beat reporters should ALSO be assigned in the per-league team setup (not
+post-draft/pre-season). ⇒ the per-league team-instance identity bundle = GM name + MLB/Farm archetype +
+scout + draft boards + **manager + beat reporter**. All configured at leisure; the draft/season pulls them in.
+
+### Q2 — What makes the three boards (Conservative/Optimal/Aggressive) genuinely different?
+Spec §9-10 differentiates them by RISK TOLERANCE via different optimizer objective-weights (Conservative
+protects completion/budget/tax; Optimal = best balanced archetype build; Aggressive = chase ceiling/stars,
+accept tax + thin bench). My read: right backbone; risk = three near-identical lists; make the primary visible
+differentiator budget-concentration (stars-and-scrubs vs depth) + a plan-distinctness test.
+
+**JK ANSWER — boards differ by PER-POSITION PRIORITY × risk/spend, two input modes:**
+- **ROBUST mode:** a dropdown next to EACH position to pick the desired **PLAYER ARCHETYPE** (the kind of
+  player you want there). The scout prioritizes hitting those per-position targets. The 3 boards = ALIGNMENT
+  levels driven by money: **Aggressive = maximal alignment** (spends/taxes to nail your ideal at each spot),
+  **Conservative = least** (cheaper fallback fits), **Optimal = between.**
+- **SIMPLIFIED mode (alternative the GM picks instead):** rank the 22 roster slots by priority (1: SS, 2: SP1,
+  3: C, 4: CP, 5: CF, 6: SP2 … 17: Bench-C, 18: Bench-IF, 19: SP/RP…); the scout fills the highest-IV player at
+  each slot in priority order, within the salary-cap / team-archetype / 3-board constraints.
+- **Tax/spend profile per board (JK, the concrete enforceable differentiator):** **Conservative = ZERO luxury
+  tax; Optimal = SOME tax but not enough to require scrubs; Aggressive = enough to require a few minimum-salary
+  SCRUBS at the end.** ⇒ answers the distinctness bar: genuinely different teams. Cap magnitudes for
+  juiced/standard/nerfed = DEFERRED to post-build §16 tuning (JK uncertain until the engine exists).
+
+**BUILDABILITY (verified): YES, with one piece to formalize.**
+- Simplified ranking mode = buildable on existing concepts (positions, IV, `buildBestRoster`, roster slots).
+- `PlayerArchetype` taxonomy EXISTS but is a small narrative starter set (`src/types/reporter.ts:20` —
+  ACE/SLUGGER/SPEEDSTER…; tag list in `LeagueBuilderPlayers.tsx`). ROBUST mode needs it **expanded into a
+  comprehensive per-position player-type menu** — design+build connected to the TEAM-archetype matrix gap-fill
+  ([[v1-rulings-2026-06-30]] C): same "what are the building blocks?" question at the player level (likely
+  derive player-type from rating/trait profiles + name the menu).
+- `buildBestRoster` (`archetypeBalanceSimulator.ts:269`) exists (takes pool/team-archetype/tier/budget); must
+  be GENERALIZED to accept per-position targets + emit 3 tax-leveled boards (the "generalize the sim builder"
+  note, [[archetype-optimizer-fielding-decisions]]).
+- **Unified insight:** the two modes are the SAME thing at different fidelity — the GM's per-position
+  priorities (robust = "what KIND of player"; simplified = "which positions matter most"); both feed the
+  optimizer as per-position constraints; the 3 boards = how fully targets are met vs money (tax/scrubs).
+  Modes are alternatives (pick one); priorities set ONCE → 3 boards generated.
