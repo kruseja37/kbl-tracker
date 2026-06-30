@@ -108,3 +108,31 @@ differentiator budget-concentration (stars-and-scrubs vs depth) + a plan-distinc
   priorities (robust = "what KIND of player"; simplified = "which positions matter most"); both feed the
   optimizer as per-position constraints; the 3 boards = how fully targets are met vs money (tax/scrubs).
   Modes are alternatives (pick one); priorities set ONCE → 3 boards generated.
+
+**Q2 FOLLOW-UP (JK) — player archetypes = a COMPREHENSIVE rating-combo map (good AND bad), which is the GM's
+"choose where to be weak/cheap" lever. THE economic heart of the scout.**
+- Player archetypes must be **fully researched + populated** so users aren't forced to reuse the same few.
+  They must reflect player rating COMBOS **both good and bad** — NOT treat every archetype as a star type.
+- The key power: the GM **specifies where they're willing to be WEAK** to save money. Examples: **"glove-only
+  SS"** (good fielding, weak bat → very CHEAP → frees budget for a more aggressive board elsewhere);
+  **"power-only RF"** (good power; explicitly OK with low contact/speed/fielding/arm). So each per-position
+  archetype encodes both the strengths to pay for AND the weaknesses to accept-for-cheap.
+- ⇒ the optimizer's job is **budget allocation ACROSS positions**: the per-position archetype choices (incl.
+  deliberate weaknesses) tell the scout where to spend and where to economize. This is what makes the 3 boards
+  (and the whole scout) valuable.
+- **Co-design with the TEAM-archetype gap-fill ([[v1-rulings-2026-06-30]] C):** do the player-archetype +
+  team-archetype taxonomies TOGETHER so both are comprehensive and complement each other (same "building
+  blocks" problem at two levels; both still must stay balance-tested — game-able is out).
+- **Applies to BENCH too:** the GM specifies bench archetypes/strategy, not just starters.
+- DECISION: the player-archetype taxonomy is a comprehensive co-designed (with team archetypes) rating-profile
+  map covering strong+weak combos, per position + bench; it's both the scout's vocabulary AND the GM's
+  cost/strategy lever. Bigger taxonomy task than "name star types" — but the right scope (drives the economy).
+
+### Q3 — How much hands-on calibration does the GM do? Once locked, what's frozen?
+**JK ANSWER: (a) LIGHT TOUCH / optional fine-tuning.** The per-position priorities do the real steering; the
+scout hands over 3 good boards that are lockable as-is; the manual calibration table (reorder, check/uncheck,
+swap, mark, notes — spec §8.2) is OPTIONAL for the GM who wants to obsess, NOT required. (Fits the
+non-user-intensive design philosophy — the scout spares the 22-pick micromanage.) Lock contents = per spec
+§9.4 (the 3 boards become scout memory: player ids, GM-adjusted rankings, plan checkboxes, salary/tax/effective
+totals, archetype accumulation, position coverage, risk profile, notes/tags) + the GM's per-position
+priorities + spending posture. RESOLVED.
