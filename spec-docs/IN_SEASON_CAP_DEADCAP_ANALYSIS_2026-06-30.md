@@ -159,5 +159,60 @@ Your team is a **Bash Brothers** (power) build. You sign an off-archetype **fine
 
 **Net of the corrections:** removal is send-down-or-trade (no release); demotion-as-rebuilding is a real,
 intended money-saving move gated by **player-value-keyed fan morale** (not a cap floor); and the cost basis
-must be the archetype true cost so burying off-archetype mistakes hurts more. These fold into the
-scouting-interrogation as the in-season half of the ONE true-cost economy.
+~~must be the archetype true cost~~ **[RETRACTED — see §10]**. These fold into the scouting-interrogation as
+the in-season half of the ONE true-cost economy.
+
+## 10. ARCHETYPE COST + EVOLUTION (RESOLVED 2026-06-30) — supersedes §6 Exploit-7 & §9 (C-4)
+
+JK challenged the "charge dead-cap on archetype-inflated true cost" idea on double-counting grounds. A
+4-lens verify (2 lenses returned decisive evidence) settled it. **JK is RIGHT; (C-4) is RETRACTED.**
+
+**VERDICT — the off-archetype premium is ONE-TIME, paid at the auction; dead-cap stays on intrinsic salary.**
+- The "luxury tax" is a **whole-roster rating-CONCENTRATION tax** (top-N ratings over a per-(group,stat) cap),
+  NOT a per-player salary premium. Your archetype/`capIdentity` SHIFTS the cap thresholds (`shiftLuxuryCaps`,
+  `leagueConstruction.ts:228-235`) so off-archetype concentration crosses caps sooner → more tax *while
+  building*. In the auction it only ever appears as `projectedTax`, a held-back **bidding reserve** that
+  shrinks your max bid (`rosterEngineConstants.ts:364-371`); the tax dollar is **never debited, never stored**
+  — `finalizeSoldLot` stores ONLY the winning bid (`auctionStateMachine.ts:421-448`). It does **not recur** in
+  the franchise (`luxuryTaxActive: false`, `franchiseSalaryLifecycle.ts:58`).
+- A player's stored salary is **pure intrinsic value** (ratings/age, no archetype embed); two equal-talent
+  players carry identical salary + identical dead money regardless of who drafted them (`franchiseSalary.ts`,
+  `rosterAnalyzer.ts:249`). So there is **no "$7M true cost" on the books** to charge against.
+- ⇒ Charging dead-cap on an archetype-inflated cost would **re-monetize a sunk one-time premium** — a second
+  bill for something already paid. **Dead money = 75% of intrinsic face salary, no archetype adjustment.**
+  The off-archetype penalty is correctly **front-loaded at the auction** (less headroom), not back-loaded at
+  send-down. **"Expensive to get out of later" is RETRACTED** — off-archetype players are expensive to
+  *acquire*, not to *move*.
+
+**ARCHETYPE = declared-but-EVOLVABLE identity (separate for MLB & Farm). NO in-season drift penalty.**
+It affects exactly two things: (1) auction bidding headroom (front-loaded, once), and (2) the **lens the scout
+reasons through** in-season. Roster DRIFT from playing the game (ratings/traits/trades) is FREE — penalizing
+it would punish playing. The only cost of changing is the natural churn (auction premiums on adds, ordinary
+dead money on drops, trade value).
+
+**DROPDOWN-EVOLUTION FEATURE (buildable on the existing analyzer):** GM clicks a TARGET archetype → the
+roster analyzer (today diagnostic-only) returns a ranked **keep/add/drop/trade evolution plan** toward it,
+each move annotated with real cost (auction headroom / dead money / trade return) + fan-morale swing.
+Per-context (MLB vs Farm; Farm reasons over **scout grades/ranges**, not true ratings — the hidden-rating
+gate). Build work: (a) analyzer accepts a *target* archetype param, (b) emits the costed/morale-annotated
+plan, (c) dropdown UI + per-context wiring. No new penalty engine, no salary-shape change.
+
+**THE 4 GUARDRAILS (devil's-advocate — #1 is load-bearing):**
+1. **The declared archetype is LOCKED for the duration of the auction.** NON-NEGOTIABLE: if you could
+   re-declare mid-auction you'd re-point to match each lot and dodge the concentration tax entirely → the
+   front-loaded cost never gets paid → the whole "no dead-cap" verdict collapses (off-archetype becomes free
+   everywhere). Tie this to the dead-cap rule in the spec so a future "allow mid-auction re-declare" change
+   can't silently re-open the hole.
+2. **Re-declaring the IDENTITY is a deliberate, cooldown-gated event** (per-season / every-N-games), not a
+   live per-lot/per-week toggle — keeps commitment meaningful, stops weekly meta-rebuilds.
+3. **Re-declaring fires a one-time fan-IDENTITY morale nod** (the team-level reaction §9 lacked), scaled to
+   distance from the old identity AND fit to the actual roster: ratify where your roster already drifted →
+   small/zero; whiplash contradiction of your roster → a fan grumble. Reuse the morale-swing calculator.
+4. **The dropdown is a clearly-labeled PREVIEW lens** ("exploring as X — not committed") vs. a separate
+   deliberate "Adopt this identity" commit. Free to look; costed to become — so the scout never silently
+   degrades into a weekly meta-optimizer.
+
+**THE CLEAN LINE:** *drift* (your roster diverging from a stable identity) is free and IS the game; *evolution*
+(changing what your team SAYS it is) is a deliberate, felt event. **Open verify-items (build time):** confirm
+the archetype field is mutable/persisted in-season; confirm the trade path clears outgoing salary cleanly;
+confirm the analyzer can accept a target archetype. Feeds the scouting-intelligence interrogation.
