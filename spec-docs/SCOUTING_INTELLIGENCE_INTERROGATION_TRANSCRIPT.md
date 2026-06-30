@@ -491,3 +491,32 @@ result in-session, but the mock path SKIPS BOTH durable writes — NO `commitCom
 franchise advance. Reset = `deleteAuctionSession` → league pristine → re-run real or mock. The ONE discipline:
 gate BOTH durable writes behind the not-mock flag so nothing leaks. Great product fit (test your priorities/
 archetype/strategy before committing — complements the Asst-GM). v1 feature.
+
+### (b) ARCHETYPE TAXONOMY — foundation grounding (the "archetypal matrix")
+**THE MATRIX AXES:** 8 raw ratings (POW/CON/SPD/FLD/ARM + VEL/JNK/ACC) → 11 cap-mod axes (pitching SPLIT by
+role: RVEL/RJNK/RACC rotation + PVEL/PJNK/PACC bullpen) → **6 user-facing BANDS** (Power, Contact, Speed,
+Defense[FLD+ARM], Rotation, Bullpen). A team archetype = a signed cap-shift over these; a player archetype =
+a signed rating-bias template per position.
+**TEAM ARCHETYPES — 15 locked, sim-balanced (±10%), but FAMILY-SKEWED:** Power×3, Speed×2, Small-ball×1,
+**Pitching×6**, Defense×2, Balanced×1 (`historicalArchetypes.ts:50-126`). ⇒ visible GAP = offense/contact/
+balanced THIN, pitching over-covered. (ALSO ~32 named workbook archetypes in `CAP_MODIFICATION_FRACTIONS` —
+candidate material, but deep-nerf extremes break the band; the 15 are the balanced subset.) STRUCTURAL: TWO
+divergent reps (`HistoricalArchetype.spec`×`ARCHETYPE_STAT_UNIT` vs `CAP_MODIFICATION_FRACTIONS.increase/
+decrease`) — not unified; taxonomy should pick a source of truth.
+**PLAYER ARCHETYPES — JK's weakness-map is ~80% THERE:** `ProspectArchetypeFamily` (`prospectScoutingDraftEngine.ts:435-553`)
+= **18 per-position SIGNED rating-bias templates** (Slugger/Pure-Power/Power-Speed/Five-Tool/Speedster/
+Slap-Hitter/Contact-Glove/Defensive-Wizard/Cannon-Corner/Project/Balanced + Power-Ace/Power-Reliever/Crafty-Ace/
+Command-Artist/Pitchability/Pitching-Project). Already good-AND-bad + per-position (JK's "glove-only SS" ≈
+Defensive-Wizard, "power-only RF" ≈ Pure-Power). BUT: (i) FORWARD ONLY (family→generate ratings) — NO reverse
+classifier (player ratings→named type); (ii) locked inside the generator, not reusable; (iii) not
+position-VALUE-aware (glove-only SS valuable / glove-only 1B worthless — in IV/POSITION_MULTIPLIERS,
+unconnected); (iv) the player-facing `PlayerArchetype` field (12 reporter labels) is DECORATIVE, no logic.
+**BALANCE HARNESS (runnable):** `runBalanceSim(pool, [...set, candidate], tier, 0.1)` builds each archetype's
+best 22-man roster from the 440 IV-oracle pool, measures Σ kblIV deviation from the mean; **PASS = within ±10%
+across juiced/standard/nerfed + rosterSize 22.** The edge it catches = luxury-tax dodged by building to a
+raised-cap identity. CAVEAT: EV = total kblIV, NOT simulated wins (cross-check with L-SIM); heuristic builder;
+single fixed pool. So "game-able = out" is MECHANICALLY TESTABLE — I can draft candidates + run them.
+**TAXONOMY DESIGN BREAKS INTO:** (1) TEAM gap-fill — fill the family/band gaps (offense-heavy), draft candidates,
+balance-test each, keep the ±10% ones; decide source-of-truth unification. (2) PLAYER weakness-map — LIFT System
+C's 18 templates into a reusable, per-position, value-aware classifier menu + expand to comprehensive
+good-AND-bad coverage per position + bench. Both are design+SIM loops (runnable harness).
