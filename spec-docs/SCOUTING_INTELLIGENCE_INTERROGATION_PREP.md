@@ -132,6 +132,42 @@ does NOT run in production today — shipping it = (a) flip talent-morale live, 
 (c) optionally build ONE of {trade-acceptance gate}, (d) the silence-triggered shill knob — + §16 tuning of
 placeholder magnitudes. Sequence into the living-season + scouting builds; do not greenlight as "mostly there."
 
+## CORRECTIONS (JK 2026-06-30, same session) — supersede the shill + trade-build guidance above
+
+**(S) SHILL MODEL — JK's is cleaner; my "fair-value-capped backstop" was WRONG.** Do NOT cap shills at IV /
+fair value ("otherwise why not just set the reserve at IV?" — that defeats the purpose). The shill is a
+**hidden rival GM building toward its OWN secret archetype** (hidden from the humans). It therefore:
+- bids on SOME players and not others (by fit to ITS hidden archetype);
+- goes HIGHER, aggressively, on players that fit its archetype — **allowed to pay its archetype premium ABOVE
+  raw IV** for a strong fit, exactly like a human would (so NO fair-value cap);
+- bows out early on players that don't fit it at all;
+- is willing to STAY IN even when all-but-one human is passing — because it genuinely wants that player for
+  its team (it's a bidder not on the couch);
+- is **UNPREDICTABLE on purpose** — "it just can't be predictably consistent or it's pointless." Sometimes it
+  contests a quiet lot, sometimes not. (This matches the existing `NO_FLOOR_MAX_INTEREST_PROBABILITY=0.92`
+  never-guaranteed design — KEEP that randomness.)
+This is CLOSE to the built `cpuShillBidding.ts` (archetype-fit valuation × personality × noise + a probability
+roll). Likely build delta = **give each shill its OWN hidden target archetype** to build toward (verify
+whether it has one today vs. generic fit), let its valuation carry an archetype premium on fits (don't cap at
+IV), and ensure it'll chase its fits into a quiet room. DROP the earlier "silence-trigger + fair-value cap +
+fit-to-a-fitting-team" reframe — superseded. Shills are **DRAFT-ONLY** (see below).
+
+**(T) v1 IS USER-CONTROLLED TEAMS ONLY — no post-draft/in-season AI logic.** All teams in a league are humans
+(couch co-op). Consequences:
+- **No CPU trade-acceptance gate to build.** The "harder to trade an above-IV/albatross contract" disincentive
+  is **FREE human game theory** — human GM B won't take GM A's overpaid underperformer because that contract
+  would become B's own albatross. Nothing to wire (the earlier "trade resistance = net-new CPU wiring" is
+  DROPPED for v1). The ONLY thing that must be active is the **albatross DESIGNATION logic** (so humans can SEE
+  a player is an albatross / above-IV) — and that designation is already built (`franchiseDesignationEligibility`).
+- **Shills exist only in the DRAFT auction**, not in-season (in-season is all humans).
+- **The double-punishment / death-spiral risk is much LOWER than flagged.** It assumed a hard AI trade-WALL;
+  with human-only trades the trade reluctance is SOFT and escapable (a human can still take the contract for
+  the right return). So **the auction overpay + albatross morale tax + soft human trade-reluctance is a fair
+  "warning + reckoning," NOT a trap** — the "pick only ONE back-loaded penalty" guardrail RELAXES (it was
+  predicated on the hard wall). Still keep the albatross morale tax a "tax not a cliff" (it already is).
+- **Still recommended:** flip the talent-based expected-wins→morale live; turn on the albatross designation +
+  its morale tax; CUT the payroll→morale layer (unchanged). These are the only in-season economy builds for v1.
+
 ## VERIFY-AT-BUILD (factual checks before coding)
 - Archetype field is mutable/persisted in-season (re-pointable).
 - Trade path clears outgoing salary cleanly + takes on incoming fully (no residual).
