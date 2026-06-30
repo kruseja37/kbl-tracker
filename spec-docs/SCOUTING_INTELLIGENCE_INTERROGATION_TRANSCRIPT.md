@@ -58,3 +58,15 @@ draft-is-just-the-auction UX re-architecture) and re-home the boards into it.** 
 real but LATENT bug (needs an un-exercised "team in 2 leagues" flow to trigger) → v1.1 correctness win.
 [OPEN sub-fork for JK: build-the-layer-first-then-boards (cleaner, boards built once, slower to playable) vs
 boards-on-rails-now-relocate-later (faster to playable, cheap re-home). Captain lean: boards-first.]
+
+**JK RULING (Q1 sub-fork): OPTION A — LAYER-FIRST, in v1.** Rework draft setup so it lives INSIDE the
+league (pool) + the per-league teams (GM/scout/draft boards), and switch the draft to an EVENT that pulls
+everything from the associated league+teams ("set up on our own time, come together when ready to draft").
+⇒ the per-league team-instance layer + the per-league team-edit page + the thin-draft-event rework are now
+FOUNDATIONAL v1 work (sequenced before the playable draft). Safety fences STILL apply (and matter more, since
+we're building it in v1): additive shadow-override store (zero migration), per-league team holds
+IDENTITY/SETUP only (GM/scout/boards/archetype-override), global team stays the default, NEVER migrate
+`capIdentity` off the team, register the new store in backup/sync/L-SIM/save-slot.
+**VERIFY-AT-BUILD:** where does the DRAFTED roster land — the franchise (per-league, expected, so the per-league
+team layer need NOT touch `teamRosters`) vs the global team? Confirm the draft output is franchise-scoped so
+the "roster stays global / identity-only" fence holds without contortion.
