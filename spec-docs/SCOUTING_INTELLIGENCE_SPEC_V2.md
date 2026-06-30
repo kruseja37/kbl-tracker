@@ -146,6 +146,15 @@ with one team's budget/need toggled = instant.
 - **v1.1 "Underbidder Memory":** consume the new bid log → "those 3 will be back for the next catcher."
 - **v1.2 "Market Heat":** online λ scalar + per-team revealed-aggression learning.
 - **v2 "Forward Projection":** seeded low-path Monte-Carlo (§15, completion-prob/regret), on-demand ONLY.
+- **NOMINATION-TIMING (Q12) — adds the TIME dimension to the advisement.** Nomination is engine-driven weighted
+  sampling: `weight = (ivPercentile/100)^2.5`, seeded (`selectNextNominee`, `auctionStateMachine.ts:187`) — a
+  KNOWN process, so the Asst GM can COMPUTE "when will my target come up" odds (P(target next) = w/Σw). Use it
+  for **overspend-EARLY-vs-WAIT** advice: bid now if `surplus_now ≥ E[surplus_if_wait]` where
+  `E[surplus_if_wait] = P(an acceptable target nominated while still affordable) × (value − predicted price)`.
+  Makes the bid-vs-pass "if you PASS" branch honest. **v1-SIMPLE cue** (closed-form, most of the value):
+  "N acceptable targets left; high-IV come early so your top target surfaces soon + contested, cheaper
+  fallbacks likely later → don't overpay here." **v2:** the full P(comes-up-while-affordable) model (rides the
+  Forward Projection). Odds/ranges only, never "comes up in 6 picks."
 - **INFRA ADD NOW (log-first-consume-later):** the auction DISCARDS bid history today — add
   `Lot.bidLog:{teamId,amount}[]` + `AuctionResult.{bidderSet,underbidder,numBidders}` during v1 so v1.1 has data.
 

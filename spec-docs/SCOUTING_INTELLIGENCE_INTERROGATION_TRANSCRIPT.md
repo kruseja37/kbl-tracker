@@ -387,3 +387,35 @@ name-it + auto-specialize on the per-league team page; (3) the Assistant GM is N
 intelligence (no built MLB-scout code to conflict — the MLB intelligence was vaporware); (4) add Scout + Asst
 GM NAMES to the per-league identity bundle. The only "refactor not just add" piece = deprecating the farm
 scout-draft/pool flow. Clean + workable.
+
+### Q12 — Nomination mechanics (who puts players up?)
+GROUNDED: nomination is **ENGINE-driven** today — the UI literally says "ENGINE NOMINATED"
+(`LeagueBuilderAuctionDraft.tsx:492`); there's a `nominatorTeamId` + seeded `nominationOrder`/`nominationRound`
+but the human never chooses WHICH player goes up. The strategic "nominate to drain a rival" lever does not exist.
+**JK DECISION: STICK WITH (A) — engine nomination, no human nomination choice for v1.** (Pure-bidding strategy;
+no drain-a-rival mind-game.)
+**JK ADD + question:** the engine nominates on a **PROBABILISTIC curve weighting players by IV** — high-IV
+players tend to come up sooner but NOT deterministically, so there's real uncertainty about WHEN a specific
+player is nominated + whether GMs will still have money. JK asks: should this nomination-timing uncertainty
+feed the **Assistant GM's** prediction model (it knows the GM's targets + rivals' budgets), enabling
+"overspend EARLY vs wait" advice? → analysis in flight (workflow). **Captain early lean: YES, richer — it adds
+the TIME/availability dimension to the bid-vs-pass projection ("if you pass, P% chance a comparable target
+comes up while you can still afford him"); likely the v2 Forward-Projection layer, with a simpler v1 cue
+("N comparable targets remain + their expected prices + your affordability") capturing most of the value.
+**RESOLVED (Captain grounded `selectNextNominee`, `auctionStateMachine.ts:187-214`):** nomination = **weighted
+random sampling** — `weight = (ivPercentile/100)^2.5` (`DEFAULT_NOMINATION_WEIGHT_EXPONENT = 2.5`),
+`key = u^(1/weight)` with `u` a SEEDED uniform, max key wins (Efraimidis-Spirakis). High-IV strongly favored
+early; seed-deterministic but human-unpredictable. **KEY: it's a KNOWN process → the Asst GM can COMPUTE timing
+odds** (P(target is next) = w_target/Σw; P(within k lots) approximable) — closed-form-ish, NO Monte-Carlo needed
+for the basic cue.
+**VERDICT: YES, fold it in — it makes the advisement richer (adds the TIME dimension) and it's TRACTABLE.**
+- Integration: for a target at position p, advice = bid now if `surplus_now ≥ E[surplus_if_wait]`, where
+  `E[surplus_if_wait] = P(an acceptable p-target is nominated while still affordable) × (its value − predicted
+  price)` — integrating the nomination odds (known) × the Second-Price price model × the GM's budget trajectory.
+  This IS JK's "they know the GM's targets + whether to overspend early or late." It makes the bid-vs-pass "if
+  you PASS" branch HONEST ("~P% chance a comparable SS comes up while you can still afford him").
+- **STAGING:** **v1-SIMPLE cue (most of the value, cheap, closed-form):** "you have N acceptable Ps left;
+  high-IV come early so your top target likely surfaces soon + contested, but 2 cheaper fallbacks likely come
+  later — don't overpay here," using the known weights + remaining-acceptable-count + expected prices +
+  affordability. **v2 = the full probabilistic timing model** (P(comes up while affordable)), naturally part of
+  the Forward-Projection layer. HONESTY: odds/ranges only ("~70% chance"), NEVER "he comes up in 6 picks."
