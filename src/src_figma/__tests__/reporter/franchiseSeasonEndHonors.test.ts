@@ -374,7 +374,7 @@ describe('emitFranchiseSeasonEndHonors', () => {
     }));
   });
 
-  test('applies Rookie of the Year winner-side reach-floor and snub payout without news', async () => {
+  test('applies Rookie of the Year winner-side reach-floor and snub payout with news', async () => {
     setFranchisePhase2L12EnabledForTests(true);
     const computedAt = '2026-10-02T12:00:00.000Z';
     const seam = installSeamMocks({
@@ -401,8 +401,20 @@ describe('emitFranchiseSeasonEndHonors', () => {
 
     const result = await emitFranchiseSeasonEndHonors(scope);
 
-    expect(result).toEqual({ status: 'processed', emitted: [] });
-    expect(seam.emit).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: 'processed', emitted: ['ROOKIE_OF_YEAR'] });
+    expect(seam.emit).toHaveBeenCalledTimes(1);
+    expect(seam.emit).toHaveBeenCalledWith({
+      honorInput: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        seasonNumber: 1,
+        honorKind: 'ROOKIE_OF_YEAR',
+        triggerPhase: 'season-end',
+        subjectIds: ['rookie-winner'],
+        facts: { winnerId: 'rookie-winner' },
+      },
+      teamId: 'team-rookie-winner',
+    });
     expect(seam.applyReachFloor).toHaveBeenCalledWith({
       honorees: [{ playerId: 'rookie-winner', honorTier: 'rookie' }],
       scope: {
@@ -422,6 +434,54 @@ describe('emitFranchiseSeasonEndHonors', () => {
       scope,
       timestamp: Date.parse(computedAt),
     });
+  });
+
+  test('emits Gold Glove news and reach-floor without no-snub category payout', async () => {
+    setFranchisePhase2L12EnabledForTests(true);
+    const seam = installSeamMocks({
+      awards: [
+        awardRow({
+          category: 'GOLD_GLOVE',
+          winnerPlayerId: 'gold-winner',
+          candidates: [
+            { playerId: 'gold-winner', score: 5, marginToWinner: 0 },
+            { playerId: 'gold-runner', score: 4.8, marginToWinner: 0.2 },
+          ],
+        }),
+      ],
+      valueRows: [
+        { playerId: 'gold-winner', currentTeamId: 'team-gold-winner' },
+        { playerId: 'gold-runner', currentTeamId: 'team-gold-runner' },
+      ],
+    });
+
+    const result = await emitFranchiseSeasonEndHonors(scope);
+
+    expect(result).toEqual({ status: 'processed', emitted: ['GOLD_GLOVE'] });
+    expect(seam.emit).toHaveBeenCalledTimes(1);
+    expect(seam.emit).toHaveBeenCalledWith({
+      honorInput: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        seasonNumber: 1,
+        honorKind: 'GOLD_GLOVE',
+        triggerPhase: 'season-end',
+        subjectIds: ['gold-winner'],
+        facts: { winnerId: 'gold-winner' },
+      },
+      teamId: 'team-gold-winner',
+    });
+    expect(seam.applyReachFloor).toHaveBeenCalledTimes(1);
+    expect(seam.applyReachFloor).toHaveBeenCalledWith({
+      honorees: [{ playerId: 'gold-winner', honorTier: 'goldGlove' }],
+      scope: {
+        franchiseId: 'franchise-1',
+        seasonId: 'season-1',
+        statsScopeId: 'season-1',
+      },
+      checkpointSentinel: 'season-end-honor',
+    });
+    expect(seam.applySnub).not.toHaveBeenCalled();
   });
 
   test('collects duplicate player award wins so reach-floor can stack additively', async () => {
@@ -453,8 +513,8 @@ describe('emitFranchiseSeasonEndHonors', () => {
 
     const result = await emitFranchiseSeasonEndHonors(scope);
 
-    expect(result).toEqual({ status: 'processed', emitted: ['MVP'] });
-    expect(seam.emit).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ status: 'processed', emitted: ['MVP', 'SILVER_SLUGGER'] });
+    expect(seam.emit).toHaveBeenCalledTimes(2);
     expect(seam.applyReachFloor).toHaveBeenCalledTimes(1);
     expect(seam.applyReachFloor).toHaveBeenCalledWith({
       honorees: [

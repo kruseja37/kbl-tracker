@@ -25638,3 +25638,81 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: WINNER-HONORS-18 ===== -->
+
+<!-- ===== CONTRACT: HONOR-NEWS-20 ===== -->
+
+# CONTRACT: HONOR-NEWS-20 — Honor-news path for the new non-MVP season-end award winners
+
+**ROUTE:** MAIN tree `/Users/johnkruse/Projects/kbl-tracker`, trunk `experiment/manager-wpa-window` (LANE A). Branch-only; do NOT commit/push — the Captain commits. NOTE: the working tree has UNRELATED uncommitted Mode-1 auction WIP (auctionStateMachine / cpuTeamRoles / useAuctionDraft / farmAuctionPool / prospectScoutingDraftEngine + their tests). Do NOT touch, stage, revert, or reference any of those files — they are not yours and the Captain commits only the 4 files below by path.
+
+**ROLE:** Builder (Codex). The Captain (Opus) audits the real diff + runs the gate (build + FULL suite + L-SIM) + commits.
+
+**GOAL (V1 pre-freeze checklist #20, the explicit NEXT after #18):** Today only MVP + CY_YOUNG season-end winners emit honor NEWS (a beat-reporter `AWARD_RESULT` column). The other 6 award winners that #18 now FAME-honors — Rookie of the Year, Reliever of the Year, Gold Glove, Silver Slugger, Bench Player, Booger Glove — emit NO news, because the news adapter type `FranchiseHonorKind` is only `MVP | CY_YOUNG | ALL_STAR`. #20 = make EVERY season-end award winner also emit the honor news, with a **§16-TUNABLE PLACEHOLDER** dramatic-weight per award. NEWS-only ticket — the FAME (reach-floor) half is already done by #18 and must NOT change; the SNUB/envy track must NOT change.
+
+**SOURCE OF TRUTH (re-read every file:line — do NOT trust this summary blindly):**
+- `spec-docs/V1_PRE_FREEZE_CHECKLIST.md` line 27: "20. Honor-news path for the new non-MVP winners (`FranchiseHonorKind` is only MVP/CY/ALL_STAR) — PARTIAL, M (after #18)." (TIER 4 living-season feature wiring.)
+- `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts` — `FranchiseHonorKind` (currently `'MVP' | 'CY_YOUNG' | 'ALL_STAR'`), `L12_NEWS_DRAMATIC_WEIGHT` (`base: { MVP: 0.8, CY_YOUNG: 0.7, ALL_STAR: 0.6 }, magnitudeScale: 0.3`), `buildFranchiseAwardSeasonNewsEvent` (indexes `L12_NEWS_DRAMATIC_WEIGHT.base[input.honorKind]`).
+- `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts` — `PLAYER_AWARD_HONORS` (8 categories; only MVP/CY have `emitsNews:true` + `honorKind`; the `honorKind` field today does DOUBLE DUTY for both the news emit AND the snub call), `SeasonEndHonorKind = Extract<FranchiseHonorNewsKind,'MVP'|'CY_YOUNG'>`, the news-emit block (`if (honor.emitsNews && honor.honorKind)` → `seam.emit` → push to `emitted`), the fame-honoree collection (sentinel idempotency), and `applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, …)` guarded by `if (honor.honorKind)`.
+- `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts` — `emitFranchiseHonorNews` (L12-gated dark-noop; dedup `existing.some(i => i.facts?.honorKind === honorInput.honorKind)`; `getReporter`; `generateTake` is LLM-gated → returns null with no LLM → `take-failed`, persists NOTHING). One AWARD_RESULT per (franchise, season, honorKind). No change needed here, but read it to confirm the new kinds flow through unchanged.
+- `src/utils/franchiseRaceSnubMorale.ts` line 13 — the SNUB-side `FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR' | 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR'` (5-kind). This is a DIFFERENT type from the news one; it is the ENVY/snub track and must stay EXACTLY 5-kind — do NOT widen it, do NOT add snub for GG/SS/Bench/Booger.
+
+**THE MAKE-OR-BREAK (state it back before you build): the config's `honorKind` does DOUBLE DUTY (news emit + snub), and after #20 the two diverge.** Today MVP/CY live in BOTH the news type and the snub type, so one field works. After #20 the new winners (GoldGlove/SilverSlugger/Bench/Booger) emit NEWS but have NO snub (the snub type is intentionally only MVP/CY/ROY/RELIEVER). A single field can no longer be both. You MUST split the config field into a `newsKind` (the widened news-adapter kind, present on ALL 8 season-end categories) and a `snubKind` (the 5-kind snub type, present ONLY on MVP/CY/ROY/RELIEVER). Wire the news emit + the `emitted` push off `newsKind`, and the snub call off `snubKind`. Net effect that MUST hold: snub fires for EXACTLY the same 4 categories as today (byte-identical snub behavior); news now fires for all 8.
+
+**REQUIRED IMPLEMENTATION:**
+
+1. **`src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts` — widen the type + add placeholder weights.**
+   - Widen `FranchiseHonorKind` to: `'MVP' | 'CY_YOUNG' | 'ALL_STAR' | 'ROOKIE_OF_YEAR' | 'RELIEVER_OF_YEAR' | 'GOLD_GLOVE' | 'SILVER_SLUGGER' | 'BENCH_PLAYER' | 'BOOGER_GLOVE'`.
+   - Add 6 keys to `L12_NEWS_DRAMATIC_WEIGHT.base` (these ARE the §16-tunable per-award news dramatic weights; monotonic by rough prestige, all below ALL_STAR's 0.6 since these are lesser news beats). Keep MVP/CY/ALL_STAR unchanged. Add a comment above the new keys: `// #20 honor-news: per-award news dramatic weight. Placeholder magnitudes — §16 balance-tuning owns the final numbers. Booger Glove (worst-fielder) is a dubious award → smallest weight; direction is a §16/JK open-decision.`
+     - `SILVER_SLUGGER: 0.53`
+     - `GOLD_GLOVE: 0.47`
+     - `ROOKIE_OF_YEAR: 0.4`
+     - `RELIEVER_OF_YEAR: 0.33`
+     - `BENCH_PLAYER: 0.2`
+     - `BOOGER_GLOVE: 0.13`
+   - `buildFranchiseAwardSeasonNewsEvent` needs NO logic change — `base[input.honorKind]` now resolves for all 9 kinds.
+
+2. **`src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts` — split the config kind; emit news for all 8; keep fame + snub byte-identical.**
+   - Replace `type SeasonEndHonorKind = Extract<FranchiseHonorNewsKind, 'MVP' | 'CY_YOUNG'>` with `type SeasonEndNewsKind = Exclude<FranchiseHonorNewsKind, 'ALL_STAR'>` (all 8 season-end categories; ALL_STAR is the all-star-lock path, not season-end).
+   - Replace the discriminated `SeasonEndHonorConfig` (the `emitsNews:true | false` union) with ONE flat shape: `{ category: FranchiseAwardCategory; honorTier: FranchiseHonorTier; newsKind: SeasonEndNewsKind; snubKind?: FranchiseHonorKind /* snub 5-kind */ }`. (`FranchiseHonorKind` here = the import from `franchiseRaceSnubMorale`, the snub 5-kind, as today.)
+   - `PLAYER_AWARD_HONORS` (all 8; `newsKind` on every one, `snubKind` only on the 4 voted-race awards — preserving today's snub set):
+     - `{ category:'MVP', honorTier:'mvp', newsKind:'MVP', snubKind:'MVP' }`
+     - `{ category:'CY_YOUNG', honorTier:'cyYoung', newsKind:'CY_YOUNG', snubKind:'CY_YOUNG' }`
+     - `{ category:'ROOKIE_OF_YEAR', honorTier:'rookie', newsKind:'ROOKIE_OF_YEAR', snubKind:'ROOKIE_OF_YEAR' }`
+     - `{ category:'RELIEVER_OF_YEAR', honorTier:'reliever', newsKind:'RELIEVER_OF_YEAR', snubKind:'RELIEVER_OF_YEAR' }`
+     - `{ category:'GOLD_GLOVE', honorTier:'goldGlove', newsKind:'GOLD_GLOVE' }`
+     - `{ category:'SILVER_SLUGGER', honorTier:'silverSlugger', newsKind:'SILVER_SLUGGER' }`
+     - `{ category:'BENCH_PLAYER', honorTier:'benchPlayer', newsKind:'BENCH_PLAYER' }`
+     - `{ category:'BOOGER_GLOVE', honorTier:'boogerGlove', newsKind:'BOOGER_GLOVE' }`
+   - In the loop (the no-team skip, fame-honoree sentinel collection, and the single post-loop `applyReachFloor` call all stay EXACTLY as today):
+     - News: emit for EVERY config (newsKind is always present). Same `honorInput` shape but `honorKind: honor.newsKind` (and `triggerPhase:'season-end'`, `subjectIds:[winnerPlayerId]`, `facts:{ winnerId: winnerPlayerId }`). On `status==='emitted'` push `honor.newsKind` to `emitted`. Keep the try/catch. Remove the `emitsNews` gate (all emit now).
+     - Snub: replace `if (honor.honorKind) applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, …)` with `if (honor.snubKind) applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.snubKind, …)`. Unchanged otherwise.
+   - The `emitted` return stays `string[]`. The dark-noop early return, `fameScope`, the reach-floor aggregation, and the return shape are UNCHANGED.
+
+3. **Tests — update the two intentionally-flipped cases + add coverage (4th file):**
+   - `src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts`:
+     - The test today titled `applies Rookie of the Year winner-side reach-floor and snub payout without news` — Rookie now EMITS news. Rename to `…with news`; change `expect(result).toEqual({ status:'processed', emitted: [] })` → `emitted: ['ROOKIE_OF_YEAR']`; change `expect(seam.emit).not.toHaveBeenCalled()` → assert `seam.emit` WAS called once with `honorInput` carrying `honorKind:'ROOKIE_OF_YEAR'`, `triggerPhase:'season-end'`, `subjectIds:['rookie-winner']`, `facts:{ winnerId:'rookie-winner' }`, `teamId:'team-rookie-winner'`. The reach-floor + snub assertions stay UNCHANGED (rookie still snubs, honorTier 'rookie').
+     - The test `collects duplicate player award wins so reach-floor can stack additively` (a single player wins MVP + SILVER_SLUGGER) — Silver Slugger now ALSO emits news. Change `emitted: ['MVP']` → `emitted: ['MVP','SILVER_SLUGGER']`; change `expect(seam.emit).toHaveBeenCalledTimes(1)` → `2`. Keep `applyReachFloor` called once with BOTH honorees (`mvp` + `silverSlugger`) and `applySnub` called once with `honorKind:'MVP'` (Silver Slugger has NO snubKind → still no snub).
+     - ADD a test: a GOLD_GLOVE-only finalized winner (with a value-row team) → `emitted: ['GOLD_GLOVE']`, `seam.emit` called once with `honorKind:'GOLD_GLOVE'`, `applyReachFloor` called once with `[{playerId, honorTier:'goldGlove'}]`, and `applySnub` NOT called (proves news fires for a no-snub category). Keep the MVP-alone, sentinel-skip, no-team/no-winner/non-finalized, MVP+CY aggregation, flag-off, and snub-failure tests passing (only the two named above change).
+   - `src/src_figma/__tests__/reporter/franchiseL12AwardNewsAdapter.test.ts`:
+     - ADD cases for a couple of new kinds (e.g. `GOLD_GLOVE` and `BOOGER_GLOVE`): `eventType==='AWARD_RESULT'`, `facts.honorKind` preserved, and `dramaticWeight` ≈ `L12_NEWS_DRAMATIC_WEIGHT.base[kind] + L12_NEWS_DRAMATIC_WEIGHT.magnitudeScale * magnitude`. Keep the existing MVP/CY/ALL_STAR cases unchanged.
+
+**CONSTRAINTS:**
+- EXACT files (no others): `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts`, `src/src_figma/app/engines/reporter/franchiseSeasonEndHonors.ts`, `src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts`, `src/src_figma/__tests__/reporter/franchiseL12AwardNewsAdapter.test.ts`. (NO change to `franchiseHonorEmission.ts`, `franchiseRaceSnubMorale.ts`, `fameModel.ts`, `franchiseHonorReachFloor.ts`, or the awards engine.)
+- NEWS-ONLY: do NOT change any FAME (reach-floor / honorHeatBump) value or logic, do NOT change the SNUB set/behavior, do NOT widen the snub-side `FranchiseHonorKind` (5-kind stays). The L-SIM season baseline MUST stay byte-identical (news is LLM-gated → persists nothing headless; fame is unchanged) — the Captain verifies this.
+- NO DB/schema change, NO trackerDb version bump, NO new store, NO flag default change. Honors stay gated by `isFranchisePhase2L12Enabled()` (build-dark).
+- Do NOT touch the uncommitted Mode-1 auction WIP in the working tree (listed in ROUTE). Do NOT commit. Do NOT push.
+- TypeScript strict: no `any`, no `@ts-ignore`. Pure/deterministic — no `Date.now()`/`Math.random()` introduced.
+
+**EXPECTED OUTPUT:** the 2 production edits + 2 test files updated, all compiling.
+
+**VERIFICATION (you run, report actual output):**
+- `NODE_ENV= npm run build` → exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/reporter/franchiseSeasonEndHonors.test.ts src/src_figma/__tests__/reporter/franchiseL12AwardNewsAdapter.test.ts src/src_figma/__tests__/reporter/franchiseHonorEmission.test.ts` → all green (paste summary). Do NOT run the L-SIM (the Captain runs it).
+
+**FORMAT:** Report: files changed (with the new base dramatic-weight values), how you split `newsKind`/`snubKind`, the exact test deltas (the two flipped cases + the new GOLD_GLOVE case + the adapter cases), and the two command outputs. Do NOT commit. Do NOT push.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP, print `STOP-IF: <reason>` + analysis, change nothing further, IF: widening the news `FranchiseHonorKind` forces a change in any file beyond the 4 listed (e.g. an exhaustive `Record<FranchiseHonorKind>` / switch consumer of the news type exists — report it, do NOT edit it); the all-star-lock caller (`franchiseAllStarLockPayouts.ts`) or `franchiseHonorEmission.ts` would need an edit to keep compiling; splitting `newsKind`/`snubKind` would change the snub set (it must stay MVP/CY/ROY/RELIEVER) or alter any fame/reach-floor value; or any required change would touch a DB schema, a flag default, the snub-side type, or a frozen oracle.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: HONOR-NEWS-20 ===== -->

@@ -22,30 +22,24 @@ import type { FranchiseHonorKind as FranchiseHonorNewsKind } from './franchiseL1
 const SEASON_END_SNUB_TOP_N = 3;
 const SEASON_END_HONOR_SENTINEL = 'season-end-honor';
 
-type SeasonEndHonorKind = Extract<FranchiseHonorNewsKind, 'MVP' | 'CY_YOUNG'>;
+type SeasonEndNewsKind = Exclude<FranchiseHonorNewsKind, 'ALL_STAR'>;
 
-type SeasonEndHonorBaseConfig = {
+type SeasonEndHonorConfig = {
   category: FranchiseAwardCategory;
   honorTier: FranchiseHonorTier;
-};
-
-type SeasonEndHonorConfig = SeasonEndHonorBaseConfig & {
-  honorKind: SeasonEndHonorKind;
-  emitsNews: true;
-} | SeasonEndHonorBaseConfig & {
-  honorKind?: FranchiseHonorKind;
-  emitsNews: false;
+  newsKind: SeasonEndNewsKind;
+  snubKind?: FranchiseHonorKind;
 };
 
 const PLAYER_AWARD_HONORS: SeasonEndHonorConfig[] = [
-  { category: 'MVP', honorTier: 'mvp', honorKind: 'MVP', emitsNews: true },
-  { category: 'CY_YOUNG', honorTier: 'cyYoung', honorKind: 'CY_YOUNG', emitsNews: true },
-  { category: 'ROOKIE_OF_YEAR', honorTier: 'rookie', honorKind: 'ROOKIE_OF_YEAR', emitsNews: false },
-  { category: 'RELIEVER_OF_YEAR', honorTier: 'reliever', honorKind: 'RELIEVER_OF_YEAR', emitsNews: false },
-  { category: 'GOLD_GLOVE', honorTier: 'goldGlove', emitsNews: false },
-  { category: 'SILVER_SLUGGER', honorTier: 'silverSlugger', emitsNews: false },
-  { category: 'BENCH_PLAYER', honorTier: 'benchPlayer', emitsNews: false },
-  { category: 'BOOGER_GLOVE', honorTier: 'boogerGlove', emitsNews: false },
+  { category: 'MVP', honorTier: 'mvp', newsKind: 'MVP', snubKind: 'MVP' },
+  { category: 'CY_YOUNG', honorTier: 'cyYoung', newsKind: 'CY_YOUNG', snubKind: 'CY_YOUNG' },
+  { category: 'ROOKIE_OF_YEAR', honorTier: 'rookie', newsKind: 'ROOKIE_OF_YEAR', snubKind: 'ROOKIE_OF_YEAR' },
+  { category: 'RELIEVER_OF_YEAR', honorTier: 'reliever', newsKind: 'RELIEVER_OF_YEAR', snubKind: 'RELIEVER_OF_YEAR' },
+  { category: 'GOLD_GLOVE', honorTier: 'goldGlove', newsKind: 'GOLD_GLOVE' },
+  { category: 'SILVER_SLUGGER', honorTier: 'silverSlugger', newsKind: 'SILVER_SLUGGER' },
+  { category: 'BENCH_PLAYER', honorTier: 'benchPlayer', newsKind: 'BENCH_PLAYER' },
+  { category: 'BOOGER_GLOVE', honorTier: 'boogerGlove', newsKind: 'BOOGER_GLOVE' },
 ];
 
 type SeasonEndHonorScope = {
@@ -156,28 +150,26 @@ export async function emitFranchiseSeasonEndHonors(
     const winnerTeamId = teamByPlayer.get(winnerPlayerId) ?? null;
     if (winnerTeamId === null) continue;
 
-    if (honor.emitsNews && honor.honorKind) {
-      let nodEmitted = false;
-      try {
-        const emitResult = await franchiseSeasonEndHonorsSeam.emit({
-          honorInput: {
-            franchiseId: scope.franchiseId,
-            seasonId: scope.seasonId,
-            seasonNumber: scope.seasonNumber,
-            honorKind: honor.honorKind,
-            triggerPhase: 'season-end',
-            subjectIds: [winnerPlayerId],
-            facts: { winnerId: winnerPlayerId },
-          },
-          teamId: winnerTeamId,
-        });
-        nodEmitted = emitResult.status === 'emitted';
-      } catch {
-        nodEmitted = false;
-      }
-
-      if (nodEmitted) emitted.push(honor.honorKind as SeasonEndHonorKind);
+    let nodEmitted = false;
+    try {
+      const emitResult = await franchiseSeasonEndHonorsSeam.emit({
+        honorInput: {
+          franchiseId: scope.franchiseId,
+          seasonId: scope.seasonId,
+          seasonNumber: scope.seasonNumber,
+          honorKind: honor.newsKind,
+          triggerPhase: 'season-end',
+          subjectIds: [winnerPlayerId],
+          facts: { winnerId: winnerPlayerId },
+        },
+        teamId: winnerTeamId,
+      });
+      nodEmitted = emitResult.status === 'emitted';
+    } catch {
+      nodEmitted = false;
     }
+
+    if (nodEmitted) emitted.push(honor.newsKind);
 
     try {
       const fameRecord = await franchiseSeasonEndHonorsSeam.getFameRecord(fameScope, winnerPlayerId);
@@ -188,8 +180,8 @@ export async function emitFranchiseSeasonEndHonors(
       // Fame lookup failure must not block snub payout or the next honor.
     }
 
-    if (honor.honorKind) {
-      await applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.honorKind, teamByPlayer, scope);
+    if (honor.snubKind) {
+      await applyRaceSnubAndEnvyEdge(row, winnerPlayerId, honor.snubKind, teamByPlayer, scope);
     }
   }
 

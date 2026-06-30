@@ -3,11 +3,31 @@ import type { NarrativeEventType } from '../../../../engines/narrativeEngine';
 
 // SIM-tuned placeholder dramatic-weight tuning for L12 marquee honors (§16; conservative).
 export const L12_NEWS_DRAMATIC_WEIGHT = {
-  base: { MVP: 0.8, CY_YOUNG: 0.7, ALL_STAR: 0.6 },
+  base: {
+    MVP: 0.8,
+    CY_YOUNG: 0.7,
+    ALL_STAR: 0.6,
+    // #20 honor-news: per-award news dramatic weight. Placeholder magnitudes — §16 balance-tuning owns the final numbers. Booger Glove (worst-fielder) is a dubious award → smallest weight; direction is a §16/JK open-decision.
+    SILVER_SLUGGER: 0.53,
+    GOLD_GLOVE: 0.47,
+    ROOKIE_OF_YEAR: 0.4,
+    RELIEVER_OF_YEAR: 0.33,
+    BENCH_PLAYER: 0.2,
+    BOOGER_GLOVE: 0.13,
+  },
   magnitudeScale: 0.3,
 } as const;
 
-export type FranchiseHonorKind = 'MVP' | 'CY_YOUNG' | 'ALL_STAR';
+export type FranchiseHonorKind =
+  | 'MVP'
+  | 'CY_YOUNG'
+  | 'ALL_STAR'
+  | 'ROOKIE_OF_YEAR'
+  | 'RELIEVER_OF_YEAR'
+  | 'GOLD_GLOVE'
+  | 'SILVER_SLUGGER'
+  | 'BENCH_PLAYER'
+  | 'BOOGER_GLOVE';
 export type FranchiseHonorTriggerPhase = 'season-end' | 'all-star-lock';
 
 export interface FranchiseHonorNewsInput {

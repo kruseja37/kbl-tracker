@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildFranchiseAwardSeasonNewsEvent,
   L12_NEWS_DRAMATIC_WEIGHT,
+  type FranchiseHonorKind,
   type FranchiseHonorNewsInput,
 } from '../../app/engines/reporter/franchiseL12AwardNewsAdapter';
 
@@ -112,6 +113,28 @@ describe('buildFranchiseAwardSeasonNewsEvent', () => {
         L12_NEWS_DRAMATIC_WEIGHT.magnitudeScale * 1,
     );
   });
+
+  it.each([
+    ['GOLD_GLOVE', 0.25],
+    ['BOOGER_GLOVE', 0.75],
+  ] satisfies Array<[FranchiseHonorKind, number]>)(
+    'maps a %s season-end honor using its per-award dramatic weight',
+    (honorKind, magnitude) => {
+      const result = build({
+        honorKind,
+        subjectIds: [`winner-${honorKind.toLowerCase()}`],
+        facts: { winnerId: `winner-${honorKind.toLowerCase()}` },
+        magnitude,
+      });
+
+      expect(result.eventType).toBe('AWARD_RESULT');
+      expect(result.facts.honorKind).toBe(honorKind);
+      expect(result.dramaticWeight).toBeCloseTo(
+        L12_NEWS_DRAMATIC_WEIGHT.base[honorKind] +
+          L12_NEWS_DRAMATIC_WEIGHT.magnitudeScale * magnitude,
+      );
+    },
+  );
 
   it('is deterministic: same input yields a deeply-equal SeasonNewsEvent', () => {
     const input = awardInput({
