@@ -325,3 +325,34 @@ current lot, not the GM's actual plan), choking legitimate bids. The pure-solven
   than reserving minimum×slots+tax → stops choking minimum bids. The floor becomes a non-issue (rarely binds;
   the scout warned accurately well before) — exactly JK's "make it a non-issue, then it's fine to keep."
   CONFIRMED VALUE: keep the pure-solvency floor; the projectedTax part is the bug.
+
+**Q9 FOLLOW-UP (JK: "how is the floor calculated? should we just get rid of it?") — REFINED resolution.**
+Verified: the floor IS a HARD BLOCK (`auctionStateMachine.ts:302/372` reject `bid-above-solvency-cap`); formula
+`auctionMaxBid = max(0, budget − (slots−1)×minSalary − projectedTax)` (`rosterEngineConstants.ts:364`); an
+anti-strand **forced-filler** already exists (`auctionStateMachine.ts:494-504` forces a cheap filler before a
+PASS could strand a slot); minimum salary IS a real per-slot cost (so a team CANNOT spend 100% — pure-removal
+is UNSAFE: you'd be unable to afford your remaining fillers).
+**JK's diagnosis is right — the crude floor miscalculates in BOTH directions:** it OVER-reserves (the
+projectedTax phantom) AND can UNDER-reserve (it assumes a minimum-salary filler EXISTS at every remaining
+position; if the cheapest catcher left is $2M > minimum, the crude floor lets you strand catcher).
+**RESOLUTION — don't remove the floor; make it the SCOUT's ACCURATE calc.** The hard block should fire on the
+scout's real "can you still complete a legal roster from the players ACTUALLY LEFT at each remaining required
+position, at their real cheapest prices" — NOT crude minimum×slots+tax. Then: (1) it never chokes a legitimate
+bid (accurate ⇒ only blocks at TRUE impossibility = the spec's "hard-block only impossible bids"); (2) it keeps
+the guarantee you can always field a LEGAL roster (humans ignore warnings; in couch-coop one stranded team is a
+broken league outcome). This IS "let the scout do the work" — the floor BECOMES the scout's accurate
+completion calc, enforced only at the one point the outcome would be genuinely broken; it stops being a felt
+constraint. (Strip projectedTax; reuse the forced-filler.) [Alternative JK floated = pure-soft no-block; rejected
+because minimum-salary fillers cost money + humans ignore warnings → stranded incomplete rosters.]
+
+### Q10 — Does the scout learn? (about you, about rivals; within-draft / within-season / across-seasons)
+**JK ANSWERS:**
+- **Rival-learning WITHIN a draft = v1** (the price model reads the room — Q5). ✓
+- **Cross-draft / cross-SEASON learning = NOT v1** — correct reasoning: one draft per league initially, the
+  value only materializes once a season turns over (no data yet). Deferred (same bucket as the v1.2 market-heat
+  learning).
+- **Scouts are UNIQUE to the team and never leak** what they learn to rival GMs. Confirmed.
+- **NEW (JK likes it) — WITHIN-SEASON learning = v1:** the in-season scout (the persistent advisor from Q7)
+  watches how YOUR team AND the other league teams are CONSTRUCTED + PERFORM over the season, recognizes
+  TENDENCIES, and makes recommendations from that. So the scout's learning has THREE horizons: within-draft
+  (v1) · within-season (v1, the in-season advisor learns the league as it plays) · across-seasons (deferred).

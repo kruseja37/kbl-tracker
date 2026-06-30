@@ -144,14 +144,19 @@ with one team's budget/need toggled = instant.
   guidance. **Cap-discipline / completion guardrail:** the projection makes "can you still legally fill your
   roster if you bid this" obvious → the scout protects the GM from stranding themselves (warn clearly; per
   §14 hard-block ONLY truly impossible bids, never risky-but-possible ones).
-- **HARD-FLOOR FIX (Q9):** the live cap-health guidance IS the bid-vs-pass projection (no separate risk-band
-  system). The current solvency floor `auctionMaxBid = budget − (slots−1)×minSalary − projectedTax` over-reserves
-  via the **`projectedTax`** term (holds back budget for a tax that may never be incurred, choking even minimum
-  bids). FIX: keep the floor as **PURE SOLVENCY** (`budget − (slots−1)×minSalary`, strip projectedTax) — an
-  INVISIBLE backstop guaranteeing a legal roster; the SCOUT's **plan-aware accurate reserve** (predicted cost of
-  the GM's actual remaining plan + the live market, incl. cheap weakness-archetypes + chosen off-fit penalties)
-  is the surfaced affordability the GM bids against — more accurate/generous than the crude floor, so it never
-  chokes legitimate bids. The floor rarely binds; the scout warned accurately well before.
+- **HARD-FLOOR FIX (Q9 + follow-up):** the live cap-health guidance IS the bid-vs-pass projection (no separate
+  risk-band system). The current floor `auctionMaxBid = max(0, budget − (slots−1)×minSalary − projectedTax)`
+  (`rosterEngineConstants.ts:364`, a HARD block — `auctionStateMachine.ts:302/372`) **miscalculates BOTH ways:**
+  OVER-reserves via the phantom **`projectedTax`** term, and can UNDER-reserve because it assumes a
+  minimum-salary filler EXISTS at every remaining position (false if the cheapest player left at a needed
+  position costs > minimum). **FIX — don't remove it; make the hard block the SCOUT's ACCURATE completion calc:**
+  block on the scout's real "can you still complete a LEGAL roster from the players ACTUALLY LEFT at each
+  remaining required position, at their real cheapest prices" — NOT crude minimum×slots+tax. Strip the
+  projectedTax reservation; reuse the existing **forced-filler** anti-strand (`auctionStateMachine.ts:494-504`).
+  Result: it only fires at TRUE impossibility (= "hard-block only impossible bids"), never chokes a legitimate
+  bid, and keeps the legal-roster guarantee (minimum salary is a real per-slot cost → a team can't spend 100%;
+  humans ignore warnings → a stranded incomplete roster is a broken couch-coop outcome). The floor BECOMES the
+  scout's accurate calc — "let the scout do the work," enforced only where the outcome would be genuinely broken.
 
 ## 6. LLM USAGE (Q4)
 **Core needs NO LLM.** The math + the board projection carry it, and the math is ALWAYS deterministic (never let
@@ -174,6 +179,12 @@ same brain as the draft optimizer — advising on **optimized lineups, roster mo
 options, and roster-analysis-on-button-press** (the on-demand analysis "should be partially built already" = the
 existing diagnostic analyzer). Continuity: the scout who drafted your team keeps advising it. (= the
 "one analyzer powers pre-draft boards + in-season evolve-dropdown" decision.)
+- **SCOUT LEARNING — three horizons (Q10):** **within-draft** (the price model reads the room — v1) ·
+  **within-SEASON** (the in-season advisor watches how YOUR team + the other league teams are CONSTRUCTED +
+  PERFORM over the season, recognizes TENDENCIES, recommends from that — **v1**, JK likes it) ·
+  **across-seasons** (remember rivals/you across drafts — DEFERRED, no data until a season turns over; same
+  bucket as the v1.2 market-heat learning). Scouts are UNIQUE to the team and NEVER leak what they learn to
+  rival GMs (your scout works only for you).
 
 ## 9. ECONOMY TIE-INS (from the cap/dead-cap dialogue — see `IN_SEASON_CAP_DEADCAP_ANALYSIS_2026-06-30.md`)
 - **TRUE COST = the DRAFT acquisition cost (RESOLVED Q8, Option A).** The off-archetype "wrong-fit penalty" is a
