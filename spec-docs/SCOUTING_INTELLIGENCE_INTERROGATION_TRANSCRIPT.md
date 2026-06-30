@@ -356,3 +356,34 @@ because minimum-salary fillers cost money + humans ignore warnings → stranded 
   watches how YOUR team AND the other league teams are CONSTRUCTED + PERFORM over the season, recognizes
   TENDENCIES, and makes recommendations from that. So the scout's learning has THREE horizons: within-draft
   (v1) · within-season (v1, the in-season advisor learns the league as it plays) · across-seasons (deferred).
+
+### Q11 — Scout quality/hiring → JK SPLIT the role into TWO entities (Scout + Assistant GM)
+GROUNDED current state: a `LeagueBuilderScoutProfile` already has `accuracyByPosition` + `specialties` +
+`weaknesses` + a hire-from-a-`scoutPool` draft (`scoutOrder`/`hiredPick`/`hiredScoutIdsByTeamId`,
+`leagueBuilderStorage.ts:178-205`) — but it's wired for the **FARM** (hidden prospect ratings → accuracy = read
+quality). MLB ratings are PUBLIC, so "scout accuracy" was meaningless there — which is why Q11 felt off.
+**JK RE-CONCEPTUALIZATION (the resolution): SPLIT the merged role into TWO named entities.**
+- **THE SCOUT** = FARM prospect evaluation ONLY. Instead of manual 2-strong/2-weak positions, the scout
+  **specializes in your team's FARM ARCHETYPE** → implicitly **strong = 3-band vision** (tight/precise) in the
+  archetype-aligned areas, **weak = 7-band vision** (fuzzy/wide) in de-emphasized areas, **average = 5-band**
+  elsewhere. (REFRAMES Q6: the 3/5/7-band is NOT a GM banding choice — it's the scout's ARCHETYPE-DERIVED
+  confidence per area; fewer bands = tighter/stronger.)
+- **THE ASSISTANT GM** = the MLB draft + MONEY side (draft AND ongoing in-season advisement) — i.e. the entire
+  "scouting intelligence" we spec'd (optimizer + Second-Price market model + bid-vs-pass projection + cap
+  discipline + in-season roster advisor). It specializes in **ROSTER CONSTRUCTION**, which is WHY it sees
+  ACROSS archetypes (yours, rivals', theoretical, in-season roster changes) and advises on **strategy, finance,
+  and roster pivots** during the draft + the season. The Q11 "MLB scout quality" question DISSOLVES — the MLB
+  competency is construction (Asst GM), not rating-accuracy (Scout).
+**SETUP UX (per-league team-edit page — extends the Q1 identity bundle):** name your **Scout** + your
+**Assistant GM** in text boxes; pick your **FARM archetype** (dropdown of all team-archetype options) → the
+Scout auto-specializes in it; pick your **MLB archetype** (dropdown) → the Assistant GM is aware of it and, on
+a **button-click, generates the initial draft board + rankings** from team archetype + per-position player
+archetypes, housed in the team setup.
+**ALIGNMENT + WORKABILITY (Captain assessment): ALIGNS, and it's a clarifying improvement** (a real
+baseball-org split: scouts EVALUATE talent, the front office/Asst GM CONSTRUCTS the roster + runs the money).
+Refactor map: (1) REFRAME the scout — derive `accuracyByPosition`/bands from the FARM archetype; (2) DEPRECATE
+the scout-pool/hire-draft mechanism (`scoutOrder`/`hiredPick`/`scoutPool`/ScoutHire) → replaced by
+name-it + auto-specialize on the per-league team page; (3) the Assistant GM is NEW but = the already-spec'd MLB
+intelligence (no built MLB-scout code to conflict — the MLB intelligence was vaporware); (4) add Scout + Asst
+GM NAMES to the per-league identity bundle. The only "refactor not just add" piece = deprecating the farm
+scout-draft/pool flow. Clean + workable.

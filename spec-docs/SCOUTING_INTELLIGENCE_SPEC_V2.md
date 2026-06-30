@@ -12,11 +12,29 @@
 
 ## 0. ONE-PARAGRAPH VISION
 Each GM declares a team identity (separate for the MLB club and the Farm) and sets per-position priorities at
-leisure in League Builder. The scout — a hired entity that persists from draft into the season — turns those
-priorities into a **live, continuously-updating draft board** and, during a no-timer pass-the-iPad auction,
-answers the only question that matters at each bid: *"if I bid this vs. pass, here's how my team looks going
-forward, and here's what everything will roughly cost."* It does the affordability/pivot math so the GM thinks
-strategy, not arithmetic. After the draft, the same scout becomes the in-season roster advisor.
+leisure in League Builder. Their **Assistant GM** — a named entity that persists from draft into the season —
+turns those priorities into a **live, continuously-updating draft board** and, during a no-timer pass-the-iPad
+auction, answers the only question that matters at each bid: *"if I bid this vs. pass, here's how my team looks
+going forward, and here's what everything will roughly cost."* It does the affordability/pivot math so the GM
+thinks strategy, not arithmetic. After the draft, the same Assistant GM becomes the in-season roster advisor.
+Their **Scout** evaluates FARM prospects under uncertainty. Two roles, two entities (§0.5).
+
+## 0.5 ENTITY MODEL (Q11) — Scout vs Assistant GM (a real baseball-org split)
+The originally-merged "scout" SPLITS into TWO named entities (you name both in the per-league team-edit page):
+- **THE SCOUT — talent EVALUATION (farm only).** Reads FARM prospects, whose true ratings are HIDDEN. The
+  scout **specializes in your team's FARM archetype**, which DERIVES its per-area confidence: **strong = 3-band
+  vision** (tight/precise) in archetype-aligned areas, **average = 5-band**, **weak = 7-band vision**
+  (fuzzy/wide) in de-emphasized areas. (Replaces the old manual specialties/weaknesses + scout-pool hire-draft.)
+- **THE ASSISTANT GM — roster CONSTRUCTION + money (MLB draft + in-season).** This is the entire "scouting
+  intelligence" of this spec: the optimizer, the Second-Price market model, the bid-vs-pass projection, cap
+  discipline, and the in-season roster advisor. It specializes in roster construction, which is WHY it sees
+  ACROSS archetypes (yours, rivals', theoretical, in-season changes) and advises on strategy, finance, and
+  roster pivots — at the draft AND all season. (MLB ratings are PUBLIC, so the MLB competency is construction,
+  NOT rating-accuracy — that's the Scout's farm job.)
+**Throughout this spec, "scout intelligence" in any MLB/money/board/in-season context = the ASSISTANT GM;
+"scout" = the farm prospect evaluator.** Refactor: derive the scout's bands from the farm archetype; DEPRECATE
+the scout-pool/hire-draft flow (`scoutOrder`/`hiredPick`/`scoutPool`/ScoutHire); the Assistant GM is the new
+build (no conflicting built MLB-scout code).
 
 ---
 
@@ -32,9 +50,11 @@ set on it bleeds across every league. Add a **per-(league,team) shadow-override 
   need not touch rosters. [VERIFY at build.]
 - Register the new store in backup/sync/L-SIM-sandbox/save-slot ([[new-own-db-store-three-registries]]).
 
-**The identity bundle (configured at leisure on the per-league team-edit page):** GM name · MLB archetype ·
-Farm archetype · hired scout · draft boards/priorities · manager · beat reporter. **The league holds the draft
-POOL.** **"The draft" collapses to a thin EVENT** that pulls everything from the league+teams — set up on your
+**The identity bundle (configured at leisure on the per-league team-edit page):** GM name · **Assistant GM
+name** · **Scout name** · MLB archetype (dropdown → the Asst GM uses it) · Farm archetype (dropdown → the Scout
+auto-specializes in it) · draft boards/priorities (the Asst GM generates the initial board + rankings on a
+button-click from the archetypes + per-position player-archetypes) · manager · beat reporter. **The league
+holds the draft POOL.** **"The draft" collapses to a thin EVENT** that pulls everything from the league+teams — set up on your
 own time, come together when ready to draft. (JK chose layer-FIRST: build the per-league layer, then the boards
 into it. Build-time: also collapse the multi-step draft-setup wizard, which today does seats/GM/owner/archetype/
 shill in one screen + a separate scout-hire.)
@@ -166,18 +186,22 @@ phrases = noise"), **gated**, on top of the deterministic facts ([[reporter-adap
 Build the deterministic projection first; add LLM language later.
 
 ## 7. FARM DRAFT (Q6)
-Same one-live-board machine, but **CANNOT spoil true ratings in any way**: shows **3/5/7-banded overall values
-on the 20-80 scale** (GM picks the banding; coarse↔fine = confidence), steered by the **FARM** archetype, with
-**MUCH WIDER bid bands** (higher uncertainty). **Headline = CAP-SPACE RISK DISCIPLINE** — keep the GM from
-betting it all on one or two fuzzy prospects. (The banded 20-80 overall IS the projected value the scout reasons
+Same one-live-board machine (run by the Assistant GM for the money/board side), but the **SCOUT** supplies the
+prospect reads and **CANNOT spoil true ratings in any way**: shows **3/5/7-banded overall values on the 20-80
+scale**, where the band count = the **SCOUT's archetype-derived confidence per area** (NOT a GM choice):
+**3-band = strong/precise** in farm-archetype-aligned areas, **5-band = average**, **7-band = weak/fuzzy**
+in de-emphasized areas. Steered by the **FARM** archetype, with **MUCH WIDER bid bands** (higher uncertainty
+than MLB). **Headline = CAP-SPACE RISK DISCIPLINE** — keep the GM from betting it all on one or two fuzzy
+prospects. (The banded 20-80 overall IS the projected value the scout reasons
 on; farm hidden-attribute gate already built.)
 
 ## 8. DRAFT → SEASON HANDOFF (Q7)
 **Everything freezes into the season** as the franchise's starting state: roster + identity (MLB/Farm archetype)
-+ scout + draft posture (+ GM/manager/beat-reporter). **The scout PERSISTS as the in-season roster advisor** —
-same brain as the draft optimizer — advising on **optimized lineups, roster moves, trades, archetype-change
-options, and roster-analysis-on-button-press** (the on-demand analysis "should be partially built already" = the
-existing diagnostic analyzer). Continuity: the scout who drafted your team keeps advising it. (= the
++ Scout + Assistant GM + draft posture (+ GM/manager/beat-reporter). **The ASSISTANT GM PERSISTS as the
+in-season roster advisor** — same brain as the draft optimizer — advising on **optimized lineups, roster moves,
+trades, archetype-change options, and roster-analysis-on-button-press** (the on-demand analysis "should be
+partially built already" = the existing diagnostic analyzer). The Scout stays farm-only. Continuity: the
+Assistant GM who drafted your team keeps advising it. (= the
 "one analyzer powers pre-draft boards + in-season evolve-dropdown" decision.)
 - **SCOUT LEARNING — three horizons (Q10):** **within-draft** (the price model reads the room — v1) ·
   **within-SEASON** (the in-season advisor watches how YOUR team + the other league teams are CONSTRUCTED +
