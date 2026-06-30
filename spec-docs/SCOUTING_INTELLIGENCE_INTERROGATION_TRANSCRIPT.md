@@ -283,4 +283,22 @@ team-instance identity bundle from Q1.)
 
 ---
 
-## STATUS: tightened spec draft produced → `SCOUTING_INTELLIGENCE_SPEC_V2.md` (2026-06-30, after Q1-Q7). Interrogation to CONTINUE.
+## STATUS: tightened spec draft produced → `SCOUTING_INTELLIGENCE_SPEC_V2.md` (2026-06-30, after Q1-Q7). Interrogation CONTINUES below.
+
+### Q8 — Where does the off-archetype "wrong-fit penalty" land? (the one-true-cost crux, RESOLVED)
+**JK ANSWER: OPTION A.** The wrong-fit penalty is paid AT THE DRAFT, out of your draft budget, **visibly** —
+winning a $4M off-fit player actually drains ~$7M of draft budget ($4M salary + ~$3M wrong-fit penalty), shown
+in full BEFORE the bid. Once the season starts the player carries his **INTRINSIC salary ($4M)** — what he's
+worth. **Dead-cap = on intrinsic** (NOT on the inflated true cost). The premium is paid ONCE, at the draft,
+visibly — NOT carried as an ongoing season cap hit (Option B rejected: no permanent burden, no
+evolution-un-reify mess, no double-count). This **definitively RETIRES the "dead-cap on true cost" idea** and
+RESOLVES the §9/§10 crux.
+- The disincentive lives at the BID moment ("do I want to spend $7M of budget on a non-fit?") — exactly where
+  it belongs. The mechanism: the archetype penalty is a real, visible DEBIT from draft budget on winning an
+  off-fit player (the current invisible bidding-reserve effect made EXPLICIT + actually charged).
+- **Penalty SCALING (documented default — JK didn't object; matches the existing graduated concentration tax):
+  GRADUATED** — a little off = a little penalty, completely off = a big one (the built tax already shifts caps
+  proportionally; flat would be a regression). JK can override.
+- **Net economy (FINAL):** draft acquisition cost = bid + graduated archetype penalty (visible, paid from draft
+  budget, once); season salary = intrinsic; dead-cap = on intrinsic; no in-season archetype tax; trade = clean
+  swap; removal = send-down or trade (no release). The scout's "true cost" display = the draft acquisition cost.

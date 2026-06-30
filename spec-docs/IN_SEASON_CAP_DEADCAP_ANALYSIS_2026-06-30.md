@@ -217,12 +217,12 @@ plan, (c) dropdown UI + per-context wiring. No new penalty engine, no salary-sha
 the archetype field is mutable/persisted in-season; confirm the trade path clears outgoing salary cleanly;
 confirm the analyzer can accept a target archetype. Feeds the scouting-intelligence interrogation.
 
-**UPDATE (JK 2026-06-30, same session) — the dead-cap basis is RE-OPENED by the "true cost" fix.** JK
-identified that today's auction carries only the BID price into the season and the archetype tax is an
-invisible background bidding-reserve. He wants the true cost **reified** — the player carries his full price
-(intrinsic + archetype-fit penalty, computed against the declared archetype at draft) as the ONE number used
-at the draft, as the season cap hit, for dead-cap, and in trades. **Under that model, "dead-cap on true cost"
-is CORRECT, not double-counting** — there is a single cost basis applied consistently (the double-count only
-existed because today's system splits cost into an invisible tax + a face salary). So §10's "dead money on
-intrinsic salary" holds for TODAY's system; the **target** model is dead-cap on the one reified true cost.
-This is the crux of the economy → tracked in `SCOUTING_INTELLIGENCE_INTERROGATION_PREP.md` (THE CRUX + Q2).
+**RESOLVED (JK 2026-06-30, interrogation Q8 — Option A).** The "true cost" fix re-opened then SETTLED the
+dead-cap basis. JK chose: the off-archetype "wrong-fit penalty" is a **GRADUATED, VISIBLE debit from the DRAFT
+BUDGET** when you win an off-fit player (bid + penalty, shown before the bid — the current invisible
+bidding-reserve made explicit + actually charged). Paid ONCE, at the draft. The player then carries his
+**INTRINSIC salary** into the season; **dead-cap = on intrinsic** (this §10 stands as the FINAL model, not just
+"today's"). Option B (reify the premium into carried season salary → dead-cap on true cost) was REJECTED: no
+permanent burden, no evolution-un-reify mess, no double-count. **The "dead-cap on true cost" idea is
+definitively RETIRED.** The scout's "true cost" display = the draft acquisition cost (bid + penalty), a
+DRAFT-time number; the in-season dead-cap is intrinsic. Tracked in `SCOUTING_INTELLIGENCE_SPEC_V2.md` §9.

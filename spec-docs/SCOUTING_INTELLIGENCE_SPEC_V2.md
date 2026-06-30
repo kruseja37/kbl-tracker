@@ -168,9 +168,13 @@ existing diagnostic analyzer). Continuity: the scout who drafted your team keeps
 "one analyzer powers pre-draft boards + in-season evolve-dropdown" decision.)
 
 ## 9. ECONOMY TIE-INS (from the cap/dead-cap dialogue — see `IN_SEASON_CAP_DEADCAP_ANALYSIS_2026-06-30.md`)
-- **ONE true cost** carried everywhere (OPEN crux: reify the archetype premium into carried salary so dead-cap
-  on true cost is consistent, not double-counting — vs today's invisible-tax model where dead-cap is on intrinsic
-  salary). The visible true cost disincentivizes off-archetype reaches.
+- **TRUE COST = the DRAFT acquisition cost (RESOLVED Q8, Option A).** The off-archetype "wrong-fit penalty" is a
+  GRADUATED, VISIBLE debit from your DRAFT BUDGET when you win an off-fit player (bid + penalty, shown before the
+  bid — the current invisible bidding-reserve effect made explicit + actually charged). Paid ONCE, at the draft.
+  The player then carries his **INTRINSIC salary** into the season; **dead-cap = on intrinsic.** No carried
+  premium, no ongoing in-season archetype cost (Option B rejected — no permanent burden / evolution-un-reify /
+  double-count). The scout's "true cost" display = this draft acquisition cost. The disincentive lives at the
+  bid moment, where it belongs.
 - **No in-season archetype tax.** Removal = send-down (75% dead money on intrinsic salary today) or TRADE (clean
   swap). **No release / no FA pool** (a stray offseason release path to remove).
 - **v1 = USER-CONTROLLED TEAMS ONLY** in-season → the "albatross is harder to trade" disincentive is FREE human
