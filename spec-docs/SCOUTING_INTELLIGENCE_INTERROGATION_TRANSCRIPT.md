@@ -419,3 +419,37 @@ for the basic cue.
   later — don't overpay here," using the known weights + remaining-acceptable-count + expected prices +
   affordability. **v2 = the full probabilistic timing model** (P(comes up while affordable)), naturally part of
   the Forward-Projection layer. HONESTY: odds/ranges only ("~70% chance"), NEVER "he comes up in 6 picks."
+
+### Thread A — grounding the smaller threads (manager · beat reporter · draft-flow · roster-analysis)
+Much is BUILT. Grounded findings + the genuine decisions:
+**MANAGER:** Identity system LIVE (person: name/gender/age/hometown/style; `(mode,instanceId,teamId)` assignment;
+seeded default; firing + tenure + morale ripples). In-game VALUE = the Manager-WPA per-game decision layer
+LIVE-wired into GameTracker (the `experiment/manager-wpa-window` lane); season/career ROLL-UP orphaned (build-plan
+STEP 4); legacy mWAR deprecated; manual firing build-dark (L11 flag). Assigned TODAY at the post-draft Staffing
+screen → per JK RELOCATE to the per-league team setup (Q1 bundle). DECISION: manager = named entity + style in
+the team setup; mostly built; the mWAR season roll-up + manual firing = known-dark (separate lane).
+**BEAT REPORTER:** Substantially built — entity (personality/voice/era/avatar/mood), per-team auto-gen +
+`ReporterAssignmentPanel`; two products: **post-game columns (GameStory) + in-game commentary = LIVE & wired**
+(LLM via the real `claude-column` edge fn, gated by `postGameColumnsEnabled`); **franchise season-news = DARK**
+(Phase-2 flags default false; several adapters orphaned at emission). Reporter = NARRATOR (engines own the math).
+DECISION: v1 = ship the live columns + commentary (already wired); franchise season-news = fast-follow (rides
+the Phase-2 flag-flip + JK LLM browser sign-off — already JK-gated in the v1 plan).
+**DRAFT-FLOW:** Full chain BUILT on the draft-lane (`claude/v1-draft-ui`): DraftSetup → Config Hub
+(seats/GM/owner/archetypes/shill) → ScoutHire → MLB Auction → Farm Auction → End-of-Draft Staffing
+(manager+reporter) → FranchiseSetup → **FREEZE inside `initializeFranchise`** → launch. FREEZE (the "4-number"
+model, `draftMorale.ts`): per-player starting morale (slot-class ±15 + pay-class ±10, personality-adjusted,
+neutral 50) + team fan-morale from payroll; writes settled salaries + morale baselines + draft-baseline
+True-Value rows. BIG GAP = the MIDDLE of the flow (scout-hire/staffing/config) is UNMERGED to trunk (= the
+JK-gated assembly). Per Q1, manager/reporter/scout assignment RELOCATES from post-draft Staffing → pre-draft
+per-league team setup (the just-built Staffing screen refactors into the team-edit page). Small Qs: seat-name
+persistence (local-state today, GM re-entered at staffing); IV-centered freeze range is an approximation of the
+displayed range; snake-draft skips the freeze (v1 scope?).
+**ROSTER ANALYSIS (in-season):** FOUR engines, mostly built: (A) **roster-readiness analyzer** (`analyzeRoster`,
+wired into Team Hub Roster tab, AUTO-runs, READ-ONLY), (B) **lineup optimizer** (`optimizeLineup`, wired,
+COMPARE/APPLY/RECALC/SET — APPLY is ACTIONABLE), (C) **in-game scout-move evaluator** (`evaluateScoutMove`,
+wired into GameTracker manager recs), (D) **pool-feasibility** (`analyzePoolFeasibility`/`buildBestRoster`,
+ORPHANED in-season). GAPS: no button-press entry (passive sidebar); call-up/send-down advice text-only (not
+actionable); franchise analyzer is RATINGS-ONLY (stats hard-coded 'unavailable' — not performance-aware); 3
+siloed surfaces (no unified Asst-GM view). DECISIONS (the genuine forks): (1) ACT (one-click execute moves)
+vs stay READ-ONLY advisor; (2) a dedicated invoked "Assistant GM" surface vs the passive sidebar; (3)
+performance-aware (feed season stats) vs ratings-only for v1; (4) surface pool-feasibility in-season.
