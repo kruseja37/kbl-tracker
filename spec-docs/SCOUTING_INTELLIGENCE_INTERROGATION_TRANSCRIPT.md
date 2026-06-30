@@ -553,3 +553,28 @@ ROTATION sacrifice). FINDING: a balanced/complete identity needs a ROTATION or D
 Gems/Launch), Rotation×3, Bullpen×3. Caveat: EV=ΣkblIV not sim-wins — recommend an L-SIM spot-check on the
 strongest before locking. Exemplars/lore are flavor (JK can refine). NEXT: JK approves/refines → write to data
 + extend `historicalArchetypes.test` to 22; then the PLAYER strengths-and-weaknesses map.
+
+### (b) TEAM-archetype gap-fill — ROUND 2 (JK rulings folded; 24 total, ALL PASS)
+JK: (1) confirmed the vetting = total-team-VALUE via the IV engine (kblIV) balanced ±10% — approves for full
+sim tests; wants DIVERSE exemplars (no franchise >2 ACROSS archetypes). (2) test a SPEED+ARM and a
+SPEED+ARM+FIELDING archetype; and **POWER = SMB4's most-valued category → power-adders should sacrifice NEGATIVE
+PITCHING** (realistic + proper counterweight). **ROUND 2 RESULT (runBalanceSim): all 9 candidates PASS → 24
+total, maxDev 8.7%, ZERO outliers, all 3 tiers.** Final 9:
+1. Hit 'Em Where They Ain't `{CON:1.5,SPD:1,POW:-2}` (contact+speed)
+2. Toolsy Burners `{POW:1,SPD:1.5,ROT_ACC:-1,FLD:-1}` (power+speed, REVISED −rotation command)
+3. Cannon Corps `{ARM:2,FLD:1,POW:-1,SPD:-1}` (arm+defense)
+4. Gap-to-Gap `{CON:1.5,POW:1,ROT_ACC:-1,PEN_VEL:-1}` (contact+power doubles, REVISED −pitching)
+5. Web Gems `{FLD:2,ARM:1,POW:-1.5,CON:-0.5}` (pure defense)
+6. Launch & Leather `{POW:1.5,FLD:1,ROT_ACC:-1,PEN_ACC:-1}` (power+defense, REVISED −command both)
+7. No-Glove Offense `{POW:1,CON:1,FLD:-1.5,ARM:-1.5}` (all bats no defense)
+8. **Wheels & Cannons** `{SPD:1.5,ARM:1,POW:-2}` (NEW speed+arm)
+9. **Rangy Defenders** `{SPD:1,ARM:1,FLD:1,POW:-1.5,CON:-0.5}` (NEW speed+arm+fielding)
+**KEY FINDING: power+(−pitching command) BALANCES** — the value-calibrated units make a −1 ROT_ACC/PEN_ACC
+sacrifice offset a +1 POW boost. So sluggers-can't-pitch is a clean, realistic, balanced template.
+**DIVERSIFIED EXEMPLARS (≤2 archetypes/franchise):** 1 Hit'Em→2001 Mariners/1992 Brewers · 2 Toolsy→2007
+Phillies/2021 Blue Jays · 3 Cannon Corps→1971 Pirates/2002 Angels · 4 Gap-to-Gap→2003 Red Sox/1996 Indians ·
+5 Web Gems→1969 Mets/2021 Cardinals · 6 Launch&Leather→2016 Cubs/2021 Astros · 7 No-Glove→1930 Phillies/1996
+Rockies · 8 Wheels&Cannons→1980 Expos/1991 Braves · 9 Rangy→2017 Diamondbacks/2010 Padres. **FLAG: pre-existing
+RAYS appear in 3 archetypes** (Go-Go 2026 + Opener 2018 + Shift-Era 2008/10) — suggest trimming Go-Go's 2026 Rays.
+**NEXT:** the VALUE-parity gate passed; a true WIN-RATE validation needs a head-to-head season-sim harness
+(follow-up build) vs accepting value-parity + L-SIM regression. JK approves final 24 → write to data + extend test.
