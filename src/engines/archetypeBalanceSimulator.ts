@@ -25,6 +25,7 @@ import {
   type ConstructionPlayer,
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
+import { canRelieve, canStart, isLegalRoster } from '../data/rosterConstruction';
 
 /** A pool player for the simulator: construction ratings + canonical value/salary. */
 export interface SimPlayer extends ConstructionPlayer {
@@ -75,6 +76,8 @@ export interface ArchetypeSimResult {
   rosterSize: number;
   /** Σsalary + Σtax ≤ budget. */
   solvent: boolean;
+  /** True iff the built roster is a LEGAL SMB4 construction (14 position players incl a backup C, 8 pitchers). */
+  legalRoster: boolean;
 }
 
 export interface BalanceReport {
@@ -95,32 +98,45 @@ const HITTER_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as cons
 type SlotKind =
   | { kind: 'pos'; position: string }
   | { kind: 'flex' }
+  | { kind: 'benchOrRp' } // the swing slot: a 5th bench bat OR a 5th reliever (whichever builds more value)
   | { kind: 'sp' }
   | { kind: 'rp' };
 
-/** 22 slots: 8 set position players + 5 flex hitters + 4 starters + 5 relievers (= a topN-valid staff). */
+/**
+ * 22 slots = the canonical LEGAL SMB4 roster (`LEGAL_ROSTER`, JK-confirmed 2026-06-30), so the balance
+ * result translates to a real auction draft rather than to impossible teams:
+ *   8 field starters (one of each C/1B/2B/3B/SS/LF/CF/RF, HARD by primary position)
+ * + 1 REQUIRED backup catcher (a 2nd primary-C — the most load-bearing bench slot)
+ * + 4 bench position players (any non-pitcher)
+ * + 1 SWING slot — a 5th bench bat OR a 5th reliever, so bench flexes 4-5 and relievers flex 4-5
+ * + 4 starting pitchers (SP or SP/RP)
+ * + 4 relievers (RP/CP, or an SP/RP swing)
+ * = 13-14 position players + 8-9 pitchers. The 8 field slots + the backup C are HARD position
+ * requirements (no "any hitter" fallback — see `eligible`); an archetype that cannot field a legal
+ * roster is a real finding, not a silent pass (verified by `isLegalRoster`).
+ */
 const SLOT_PLAN: SlotKind[] = [
   ...HITTER_POSITIONS.map((position) => ({ kind: 'pos', position } as SlotKind)),
-  ...Array.from({ length: 5 }, () => ({ kind: 'flex' } as SlotKind)),
+  { kind: 'pos', position: 'C' } as SlotKind, // required backup catcher
+  ...Array.from({ length: 4 }, () => ({ kind: 'flex' } as SlotKind)),
+  { kind: 'benchOrRp' } as SlotKind, // swing: 5th bench bat or 5th reliever
   ...Array.from({ length: 4 }, () => ({ kind: 'sp' } as SlotKind)),
-  ...Array.from({ length: 5 }, () => ({ kind: 'rp' } as SlotKind)),
+  ...Array.from({ length: 4 }, () => ({ kind: 'rp' } as SlotKind)),
 ];
-
-function isStarter(player: SimPlayer): boolean {
-  return player.isPitcher && (player.role === 'SP' || player.role === 'SP/RP');
-}
-function isReliever(player: SimPlayer): boolean {
-  return player.isPitcher && (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP');
-}
 
 function eligible(pool: SimPlayer[], slot: SlotKind, used: Set<string>): SimPlayer[] {
   const free = pool.filter((p) => !used.has(p.id));
-  if (slot.kind === 'sp') return free.filter(isStarter);
-  if (slot.kind === 'rp') return free.filter(isReliever);
+  if (slot.kind === 'sp') return free.filter(canStart);
+  if (slot.kind === 'rp') return free.filter(canRelieve);
   if (slot.kind === 'flex') return free.filter((p) => !p.isPitcher);
-  // 'pos': prefer exact primary/secondary position; fall back to any hitter so the roster always fills.
-  const exact = free.filter((p) => !p.isPitcher && p.position === slot.position);
-  return exact.length > 0 ? exact : free.filter((p) => !p.isPitcher);
+  // the swing slot: a bench position player OR a reliever (the climb keeps whichever adds more value).
+  if (slot.kind === 'benchOrRp') return free.filter((p) => !p.isPitcher || canRelieve(p));
+  // 'pos': HARD-require the primary position. A legal SMB4 roster must field one of each of the 8 spots
+  // PLUS a real backup catcher — no "any hitter" fallback (that produced illegal rosters that don't
+  // translate to a real auction draft). The pool carries 28-40 players per position, so this always fills;
+  // if a position ever ran dry the slot stays empty and the archetype fails the rosterSize===22 check —
+  // a real finding, surfaced rather than hidden.
+  return free.filter((p) => !p.isPitcher && p.position === slot.position);
 }
 
 function taxOf(roster: SimPlayer[], caps: LuxuryCapRow[]): number {
@@ -291,6 +307,7 @@ export function buildBestRoster(
     totalTax,
     rosterSize: players.length,
     solvent: totalSalary + totalTax <= budget,
+    legalRoster: isLegalRoster(players),
   };
 }
 

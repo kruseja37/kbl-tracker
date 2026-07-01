@@ -36,9 +36,9 @@ function loadPool(): SimPlayer[] {
 const SIM_SET: SimArchetype[] = HISTORICAL_ARCHETYPES.map((a) => ({ name: a.name, rawShift: archetypeCapShift(a) }));
 
 describe('historical team archetypes — locked set, all tiers', () => {
-  it('is 15 distinct archetypes', () => {
-    expect(HISTORICAL_ARCHETYPES.length).toBe(15);
-    expect(new Set(HISTORICAL_ARCHETYPES.map((a) => a.id)).size).toBe(15);
+  it('is 24 distinct archetypes', () => {
+    expect(HISTORICAL_ARCHETYPES.length).toBe(24);
+    expect(new Set(HISTORICAL_ARCHETYPES.map((a) => a.id)).size).toBe(24);
   });
 
   it('stays within the ±10% parity band across juiced / standard / nerfed, and prints the landscape', () => {
@@ -57,6 +57,9 @@ describe('historical team archetypes — locked set, all tiers', () => {
       // eslint-disable-next-line no-console
       console.log('  ' + rows.map((r) => `${r.name} ${(r.dev * 100).toFixed(1)}%`).join('  ·  '));
       expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
+      // Every archetype must field a LEGAL SMB4 roster (8 field + backup C + 13-14 position / 8-9 pitchers,
+      // ≥4 SP + ≥4 RP) — so the parity result translates to a real auction draft, not impossible teams (JK 2026-06-30).
+      expect(report.results.every((r) => r.legalRoster)).toBe(true);
       expect(report.withinBand).toBe(true);
     }
   });

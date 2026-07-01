@@ -46,7 +46,7 @@ export interface HistoricalArchetype {
   spec: Partial<Record<ArchetypeStat, number>>;
 }
 
-/** The locked set (15). Profiles balanced via the sim; see ARCHETYPE_BALANCE_SIM_RESULTS.md. */
+/** The locked set (24). Profiles balanced via the sim; see ARCHETYPE_BALANCE_SIM_RESULTS.md. */
 export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'murderers-row', name: "Murderers' Row", exemplars: ['1927 Yankees', '1928 Yankees'], era: '1920s–30s',
@@ -122,6 +122,55 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
     id: 'big-red-machine', name: 'Big Red Machine', exemplars: ['1975 Reds', '1976 Reds'], era: '1970s',
     lore: 'The complete offense that out-scores its ordinary rotation.', identity: '+contact +defense (+power) → −rotation',
     boosts: ['CON', 'FLD'], nerfs: ['ROT_VEL', 'ROT_ACC'], spec: { CON: 1.5, FLD: 1, POW: 0.5, ROT_VEL: -1.5, ROT_ACC: -1 },
+  },
+  // ── Round-2 gap-fill (9): even out the offense/contact/speed/defense flavors the original 15 were
+  //    thin on. All value-parity balanced (±10% across juiced/standard/nerfed); power-adders pay with
+  //    negative PITCHING per JK (SMB4's most-valued category needs a real counterweight). Exemplars
+  //    diversified (≤2 archetypes per franchise). See SCOUTING_INTELLIGENCE_INTERROGATION_TRANSCRIPT §(b).
+  {
+    id: 'hit-em-where-they-aint', name: "Hit 'Em Where They Ain't", exemplars: ['2001 Mariners', '1992 Brewers'], era: 'contact/speed',
+    lore: 'Slap it through the hole, leg out the extra base; the fences stay safe.', identity: '+contact +speed → −power',
+    boosts: ['CON', 'SPD'], nerfs: ['POW'], spec: { CON: 1.5, SPD: 1, POW: -2 },
+  },
+  {
+    id: 'toolsy-burners', name: 'Toolsy Burners', exemplars: ['2007 Phillies', '2021 Blue Jays'], era: 'five-tool athletes',
+    lore: 'Power and wheels up and down the order; the arms and gloves are the price.', identity: '+power +speed → −rotation command −defense',
+    boosts: ['POW', 'SPD'], nerfs: ['ROT_ACC', 'FLD'], spec: { POW: 1, SPD: 1.5, ROT_ACC: -1, FLD: -1 },
+  },
+  {
+    id: 'cannon-corps', name: 'Cannon Corps', exemplars: ['1971 Pirates', '2002 Angels'], era: 'arm + defense',
+    lore: 'Rocket arms and sure hands; runners freeze and the bats stay quiet.', identity: '+arm +defense → −power −speed',
+    boosts: ['ARM', 'FLD'], nerfs: ['POW', 'SPD'], spec: { ARM: 2, FLD: 1, POW: -1, SPD: -1 },
+  },
+  {
+    id: 'gap-to-gap', name: 'Gap-to-Gap', exemplars: ['2003 Red Sox', '1996 Indians'], era: 'doubles machine',
+    lore: 'Line drives in the gaps all day; the pitching just tries to keep up.', identity: '+contact +power → −rotation command −bullpen velocity',
+    boosts: ['CON', 'POW'], nerfs: ['ROT_ACC', 'PEN_VEL'], spec: { CON: 1.5, POW: 1, ROT_ACC: -1, PEN_VEL: -1 },
+  },
+  {
+    id: 'web-gems', name: 'Web Gems', exemplars: ['1969 Mets', '2021 Cardinals'], era: 'the leather',
+    lore: 'Highlight-reel gloves turn every ball into an out; the bats are an afterthought.', identity: '+defense +arm → −power −contact',
+    boosts: ['FLD', 'ARM'], nerfs: ['POW', 'CON'], spec: { FLD: 2, ARM: 1, POW: -1.5, CON: -0.5 },
+  },
+  {
+    id: 'launch-and-leather', name: 'Launch & Leather', exemplars: ['2016 Cubs', '2021 Astros'], era: 'three-true-outcomes + gloves',
+    lore: 'Mash and pick it clean; if the staff could find the zone they would be unbeatable.', identity: '+power +defense → −command (rotation & bullpen)',
+    boosts: ['POW', 'FLD'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: { POW: 1.5, FLD: 1, ROT_ACC: -1, PEN_ACC: -1 },
+  },
+  {
+    id: 'no-glove-offense', name: 'No-Glove Offense', exemplars: ['1930 Phillies', '1996 Rockies'], era: 'all bat, no glove',
+    lore: 'Out-score everybody and pray the ball is never hit your way.', identity: '+power +contact → −defense −arm',
+    boosts: ['POW', 'CON'], nerfs: ['FLD', 'ARM'], spec: { POW: 1, CON: 1, FLD: -1.5, ARM: -1.5 },
+  },
+  {
+    id: 'wheels-and-cannons', name: 'Wheels & Cannons', exemplars: ['1980 Expos', '1991 Braves'], era: 'speed + arm',
+    lore: 'Steal a base, gun down a runner; the long ball belongs to the other guys.', identity: '+speed +arm → −power',
+    boosts: ['SPD', 'ARM'], nerfs: ['POW'], spec: { SPD: 1.5, ARM: 1, POW: -2 },
+  },
+  {
+    id: 'rangy-defenders', name: 'Rangy Defenders', exemplars: ['2017 Diamondbacks', '2010 Padres'], era: 'athletic defense',
+    lore: 'Cover every blade of grass and throw out anybody; the runs come the hard way.', identity: '+speed +arm +defense → −power −contact',
+    boosts: ['SPD', 'ARM', 'FLD'], nerfs: ['POW', 'CON'], spec: { SPD: 1, ARM: 1, FLD: 1, POW: -1.5, CON: -0.5 },
   },
 ];
 

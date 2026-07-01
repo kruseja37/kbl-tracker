@@ -578,3 +578,80 @@ Rockies · 8 Wheels&Cannons→1980 Expos/1991 Braves · 9 Rangy→2017 Diamondba
 RAYS appear in 3 archetypes** (Go-Go 2026 + Opener 2018 + Shift-Era 2008/10) — suggest trimming Go-Go's 2026 Rays.
 **NEXT:** the VALUE-parity gate passed; a true WIN-RATE validation needs a head-to-head season-sim harness
 (follow-up build) vs accepting value-parity + L-SIM regression. JK approves final 24 → write to data + extend test.
+
+### (b) WIN-RATE VALIDATION → JK RULING: ship the 24 on VALUE-PARITY (head-to-head win-model DEFERRED)
+Built the head-to-head win-rate harness (independent run model: ratings → expected production via the documented
+SMB4 schema → runs via `SMB4_LINEAR_WEIGHTS`/wOBA + FIP → Pythagenpat win% → round-robin; every value judgment
+taken from the game's documented run constants, NEVER kblIV; all elasticities in one tuning object). Model
+VALIDATED against known-truth: a league-average synthetic team lands RS=RA=3.19 EXACTLY + 50% win; strong(+1SD)
+beats weak(−1SD) 99.2%; strictly monotone.
+
+**But running the 24 exposed a CONFOUND, not an archetype verdict:**
+- Raw head-to-head win% spread ≈ ±16 pts (standard) and NEARLY INVERTS between standard and nerfed tiers
+  (Bash Brothers +14 → −18) — instability = a model×tier artifact, not stable archetype imbalance.
+- ROOT CAUSE (evidence-verified): kblIV prices PITCHING far above hitting in the 440-player oracle pool — the
+  top-22 players by kblIV are 19 pitchers / 3 hitters (RP kblIV up to ~218k vs the best hitter ~128k). So the
+  value-MAXIMIZING roster builder (`buildBestRoster` maximizes Σ kblIV − tax) routes the budget to arms and
+  STARVES the bats — even for offense identities. Concrete (standard tier): **Big Red Machine** (a complete-offense
+  identity) spends 66% on arms and fields a lineup ~0.5 SD BELOW pool-avg power; **Bomba Squad** (power) 61% arms,
+  top-9 POWz −0.21 / CONz −0.69; **the Oriole Way** (pitch/def) ironically fields the BETTER lineup (POWz +0.28)
+  and spends 56% on bats.
+- ⇒ the builder does NOT EMBODY identities (it minimizes tax under shifted caps → converges to pitching-heavy for
+  everyone). So the win test as-built measures kblIV-pitching-bias × builder × tier, NOT identity balance. A clean
+  identity-vs-identity win test needs a roster generator that builds TO the identity (or to wins) — a genuine
+  follow-up build (exactly why the earlier note called it a "follow-up").
+- OPEN two-sided uncertainty for the later project: is kblIV OVER-pricing pitching, or is the run model
+  UNDER-crediting it (offense elasticities ran ~2.3× hotter than run-prevention per SD — a symmetry-calibration
+  TODO)? Likely both; disentangling needs real SMB4 run data or an identity-first / win-first builder.
+
+**JK RULING (2026-06-30): OPTION C — ship the 24 on the VALUE-PARITY test already passed + a light regression
+spot-check; treat a fully-trustworthy head-to-head win model as a LATER project.** Rationale: the equal-value gate
+(±10%, 3 tiers) is the fair-buildable-value guarantee; the head-to-head confound is really about the value engine's
+pitching pricing (inherited equally by every identity), not the 24 specs.
+
+**DONE (this session):** the 9 gap-fill archetypes written to `src/data/historicalArchetypes.ts` (24 total, ids +
+lore + exemplars per ROUND 2); `historicalArchetypes.test` locked at 24 — value-parity **24/24 within ±10% across
+juiced (5.4%) / standard (5.8%) / nerfed (8.7%)**; `poolFeasibility` 6/6 (all 24 supported on the canonical pool);
+`npm run build` exit 0. The win-sim exploration files were REMOVED (the balance simulator restored pristine); the
+validated run-model design + the confound diagnosis are preserved HERE as the starting point for the later
+win-model project.
+
+**⚠ SIDE-FINDING (matters for the PLAYER map / Move 2): because kblIV prizes pitching, an OFFENSE-leaning TEAM
+identity can be a value TRAP for a GM who chases raw value — directly relevant to the "which player archetypes
+ALIGN with your team identity" highlighting (make sure alignment ≠ blindly maximizing raw value).**
+
+**⚠ REMAINING WIRING GAP (belongs to the draft-setup UI, NOT this design thread): the picker reads a SEPARATE
+hand-kept display catalog `src/src_figma/app/data/teamArchetypeCatalog.ts` that still lists 15 — the 9 new need a
+one-time copy there (+ update the "choose from 15" copy in `ArchetypePicker.tsx` / `DraftSetupArchetypePreview.tsx`)
+before players can pick them. Display-only, no logic, no test pins.**
+
+### (b) ROSTER-LEGALITY CORRECTION (JK caught it, 2026-06-30) — the equal-value gate now builds LEGAL rosters
+JK flagged that the equal-value builder didn't enforce a legal SMB4 roster construction, so its parity result
+wouldn't translate to a real auction draft. VERIFIED — he was right: (1) the balance builder's 8 field slots used
+a SOFT position fallback (fell back to "any hitter"), had NO required backup catcher, and ran 4 SP / 5 RP (13
+hitters / 9 pitchers); (2) worse, the ACTUAL auction enforces NO positions at all — `rosterSlotsRemaining = 22 −
+drafted`, a flat count (`leagueBuilderAuctionPipeline.ts:86`); the position-aware `own_need` roster model is SPEC'd
+(§5) but UNBUILT. So "a legal roster" was not codified anywhere.
+**JK-CONFIRMED legal construction (the target):** 22 = 8 field (one each C/1B/2B/3B/SS/LF/CF/RF, HARD by primary
+position) + 6 bench (a REQUIRED backup C + 5 position players) + 4 SP + 4 RP (CP counts as an RP; an SP/RP swings
+either) = 14 position players + 8 pitchers.
+**FIX (this session):** `archetypeBalanceSimulator` SLOT_PLAN rebuilt to that legal shape; `eligible('pos')` now
+HARD-requires the primary position (no "any hitter" fallback); a new `isLegalRoster` check + a `legalRoster` flag on
+`ArchetypeSimResult`, ASSERTED in `historicalArchetypes.test` (a permanent guard). **RE-RUN on legal rosters: 24/24
+still within ±10% (juiced 9.8 / standard 4.2 / nerfed 3.3) AND every archetype fields a legal roster; workbook
+provenance green; build exit 0.** ⇒ the equal-value lock is now VALIDATED on realistic rosters (no longer
+provisional). BONUS: the legal constraint also removes the earlier pitching-overload skew (the builder can no
+longer field 9 pitchers or skip a backup C). **FLAG: juiced tier 9.8% is near the ±10% edge — passes, but with the
+least margin.**
+**FOLLOW-ON (noted, not this thread): the real AUCTION still needs the position-aware roster requirement built (the
+`own_need` model, §5) — foundational for BOTH the Second-Price market AND guaranteeing GMs draft legal, fieldable teams.**
+
+**REFINEMENT (JK 2026-06-30, same session):** (1) bench flexes 4-5 and relievers flex 4-5 — those are MINIMUMS not
+caps (one swing slot = a 5th bench bat OR a 5th reliever) → 13-14 position / 8-9 pitchers. The swing loosened the
+build enough to TIGHTEN all tiers: **24/24 now maxDev ≤ 4.4% (juiced 4.4 / std 3.1 / nerf 2.8)** — the juiced
+near-edge is gone. (2) The legal-roster rules were EXTRACTED to a canonical shared module `src/data/rosterConstruction.ts`
+(`LEGAL_ROSTER` + `isLegalRoster` + `canStart`/`canRelieve`, guard-tested) — the SINGLE source of truth the auction
+draft, the scout/Assistant-GM board, and the in-season roster advisor must ALL adopt (JK directive; balance sim
+consumes it now, the other three are the forward wiring). (3) Dedicated reference doc written:
+`spec-docs/TEAM_ARCHETYPES_24.md` (all 24 with exemplars + estimated ±rating-point construction per area). Move-1
+committed to main; player-archetype build (Move 2) is next.
