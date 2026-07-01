@@ -403,7 +403,7 @@ the TIME/availability dimension to the bid-vs-pass projection ("if you pass, P% 
 comes up while you can still afford him"); likely the v2 Forward-Projection layer, with a simpler v1 cue
 ("N comparable targets remain + their expected prices + your affordability") capturing most of the value.
 **RESOLVED (Captain grounded `selectNextNominee`, `auctionStateMachine.ts:187-214`):** nomination = **weighted
-random sampling** — `weight = (ivPercentile/100)^2.5` (`DEFAULT_NOMINATION_WEIGHT_EXPONENT = 2.5`),
+random sampling** — `weight = (ivPercentile/100)^E` (`DEFAULT_NOMINATION_WEIGHT_EXPONENT = 2.5` default, but the live hooks OVERRIDE per tier: **MLB E=2, Farm E=3** per DECISIONS_LOG RB-2-Q3 — the flat 2.5 was stale, corrected 2026-07-01 SPEC-FIX-NOMINATION-2-3),
 `key = u^(1/weight)` with `u` a SEEDED uniform, max key wins (Efraimidis-Spirakis). High-IV strongly favored
 early; seed-deterministic but human-unpredictable. **KEY: it's a KNOWN process → the Asst GM can COMPUTE timing
 odds** (P(target is next) = w_target/Σw; P(within k lots) approximable) — closed-form-ish, NO Monte-Carlo needed

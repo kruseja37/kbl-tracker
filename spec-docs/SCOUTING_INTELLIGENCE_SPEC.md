@@ -151,7 +151,9 @@ seed-derived valuations internally but **widens the displayed band** (honest "1-
 against `auctionTuningSim.test.ts` until the true price lands inside [low,high] ~85-90% of the time.**
 
 **NOMINATION-TIMING (the TIME dimension).** Nomination is engine-driven weighted sampling: `weight =
-(ivPercentile/100)^2.5`, seeded (`selectNextNominee`) — a KNOWN process, so the Asst GM can COMPUTE "when will
+(ivPercentile/100)^E` where the exponent is RATIFIED PER-TIER — **MLB = 2, Farm = 3** (DECISIONS_LOG RB-2-Q3;
+the live hooks override the `DEFAULT_NOMINATION_WEIGHT_EXPONENT` 2.5 default per tier — the earlier flat `^2.5`
+written here was STALE, corrected 2026-07-01 per SPEC-FIX-NOMINATION-2-3), seeded (`selectNextNominee`) — a KNOWN process, so the Asst GM can COMPUTE "when will
 my target come up" odds. Powers **overspend-EARLY-vs-WAIT** advice: bid now if `surplus_now ≥
 E[surplus_if_wait]`, where `E[surplus_if_wait] = P(acceptable target nominated while still affordable) ×
 (value − predicted price)`. Makes the bid-vs-pass "if you PASS" branch honest. Odds/ranges only, never "comes

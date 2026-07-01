@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED (2026-07-01).** The single v1 source of truth is **`spec-docs/V1_BUILD_STATUS.md`** (see its §5). This doc predates the 2026-06-30 draft re-design + the 24-archetype lock; its status / branch-map / scope claims are stale. Kept for history — do not plan from it.
+
 # SCOUTING INTELLIGENCE — Tightened Spec Draft (v2, post-interrogation Q1–Q7)
 
 > **Status:** DRAFT, 2026-06-30. Synthesizes the JK interrogation (Q1–Q7) +
