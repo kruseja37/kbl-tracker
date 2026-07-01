@@ -25764,6 +25764,14 @@ Use high reasoning effort.
 
 Use xhigh reasoning effort.
 
+**AMENDMENT (2026-07-01, Fable — folded pre-dispatch per the ratified plan §2.1 + the day's rulings; design detail in `FABLE_C1_DESIGN_2026-07-01.md`):**
+- **(d-rescope)** The vocabulary bridge = CONSUME + 24-VERIFY the merged `src/engines/archetypeIdentity.ts` (`archetypeToCapIdentity`/`selectTeamArchetype`) — do NOT author a second converter. Reconcile its stale pre-lock test (`archetypeIdentity.test.ts` expects ≤2 boosts; the locked 24 include 3-boost identities — the KNOWN carried-forward assembly red; fix the TEST expectation, the 24 data layer is frozen).
+- **(e) Legality per Ruling A EXPANDED + RATIFIED (DECISIONS_LOG 2026-07-01):** widen `RosterSlotPlayer` (secondaryPosition + twoWayVariant); HARD = 22-frame + 8 primary-position field spots + catcher-depth-2 (primary-C/secondary-C/Two Way (C), ≥1 primary-C) + pitcher minimums; SOFT = `depthReport()` depth-2-everywhere advisor tier with group-secondary expansion (IF/OF/IF-OF/1B-OF; Two Way pitchers count for their group). One counting brain for all consumers.
+- **(f) own_need = a DERIVED view over an injected position map** (built from the pool at session build/load, never persisted — no saved-shape change; the STOP-IF stays honored). Machine gains `bid-strands-roster` rejection (position-aware forced-filler floor); the economic completion floor stays C2B.
+- **(g) The snipe-test draftability RANKER (RATIFIED formula):** deletion-resilience K-rebuilds × tax bands → GREEN (≥2 no-tax builds) / YELLOW (fragile or tax-required, named reason) / LOCKED (cannot complete within max tax); rank by (band, K, embodiment margin, tax headroom); defaults §16-tunable. Plus the FIELDING ROBUSTNESS SWEEP (re-rank at fielding-IV ×1.15/×1.30, report rank stability).
+- **(h) Posture dial** = value-floor constraint (Conservative 0.95 / Optimal 0.90 / Aggressive 0.82, §16-tunable) + a basic plan-distinctness assertion.
+- **AUDIT TOPOLOGY (JK-ruled):** Codex cross-model adversarial review of the diff FIRST, then Opus auditor-of-record (gate + L-SIM + commit).
+
 <!-- ===== END CONTRACT: FABLE-C1 ===== -->
 
 <!-- ===== CONTRACT: FABLE-C2A ===== -->

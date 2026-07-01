@@ -2928,3 +2928,94 @@ preferences in the TEAM-SETUP UI BEFORE the Assistant GM generates the initial d
 player rankings by position. Confirmed compatible with the ratified plan (the S2 per-league store
 holds the inputs; C1 consumes them; C4 surfaces them; the Move-2 taxonomy design session follows
 the market brain, with SIMPLIFIED priorities as the v1 fallback).
+
+## 2026-07-01 — RATIFIED: the two-tier legality model + JK's expanded Assistant-GM brain requirements
+
+**RATIFIED (JK: "ratify"):** Fable's hard/soft legality split from the 2026-07-01 Ruling-A-expanded
+entry is now canon — HARD legality = 22-frame + 8 primaries + catcher-depth-2 (counting secondary-C
+and Two Way (C) pitchers, ≥1 primary-C) + pitcher minimums; the veteran depth-2-everywhere rule =
+SOFT advisor warning tier, never a block. JK also confirmed ("correct") the CP mojo-timing
+discrepancy finding (code punishes CP *starting*; the rule is CP entering *before the second-to-last
+inning*) — parked for a GameTracker/mojo verification pass.
+
+**JK direction (same message) — the Assistant-GM brain's success criteria (expands C1/C3 scope):**
+1. **Constructibility proof:** prove rosters CAN be built within the salary caps across ALL 24
+   archetypes while staying TRUE to the archetypal identity (not just value-equal). Caveat JK
+   states: the 24 are value-equal per the IV engine only; fielding is KNOWN-undervalued by IV; true
+   sim-balance is unprovable without an SMB4-logic sim, so the IV engine is the best equality proof
+   available — treat parity as unproven from a roster-construction standpoint.
+2. **Pool→archetype draftability ranking (one click):** for a given draft pool, rank-order the
+   archetypes' draftability; UNDRAFTABLE archetypes are marked ineligible for that league; the rest
+   ranked best→worst fit.
+3. **Archetype→pool extraction (one click, reverse direction):** select the archetypes desired
+   eligible for a league → the engine EXTRACTS a draft pool from a much larger source set (e.g.
+   240+ from 1000+) that supports them. (Elevates the auto-curate line that existed in DRAFT
+   CONTRACT 3 but was dropped from FABLE-C3's final text — now first-class.)
+4. **Live private draft boards:** the Assistant GM maintains dynamic draft boards updating in real
+   time during the draft (GM's eyes only), tracking salary-cap + luxury-tax implications as bids
+   rise and as players come off the board (on-board or off-board).
+5. **The dependability guarantee (the point of it all):** the GM must NEVER be stranded unable to
+   finish a complete, legal roster aligned with their chosen archetype. Uniquely intelligent AND
+   dependable — strategic fun without the stranding failure mode.
+
+**Fable's planned response (design-level, logged for the record):** the draftability RANKER
+(uncontested form) folds into FABLE-C1's all-24 constructibility proof (same builder, run per-pool);
+the pool EXTRACTOR becomes a small follow-on Fable ticket (C1B) before the market model; FABLE-C3
+later upgrades both with contention-aware completion probability + shill count + FS-3. A
+fielding-sensitivity ROBUSTNESS SWEEP (re-rank draftability with fielding IV scaled up ~1.15×/1.3×,
+report rank stability) addresses the known fielding undervaluation without an SMB4 sim. Four scope
+questions surfaced to JK (cutoff philosophy, contention staging, extractor scope/fairness, picker
+gating) — answers to be logged when ruled.
+
+## 2026-07-01 — Draftability/extractor rulings (JK, four-question round)
+
+- **Contention staging: TWO-STAGE ratified.** The one-click draftability button ships on uncontested
+  feasibility first; the contention-aware completion-probability layer is added when the market model
+  (C2B/C3) lands. Until then, the RESILIENCE buffer (below) is the explicit hedge for "a rival
+  snipes your key player."
+- **Picker gating: LOCKED-WITH-REASON ratified.** Ineligible archetypes show grayed-out with the
+  plain cause (e.g. "this pool can't field it"); they cannot be picked for that league.
+- **Ineligibility definition: OPEN — JK raised the single-point-of-failure problem** (a legal+
+  affordable roster that depends on winning ONE specific player is not really draftable) and
+  proposed tax-based flags (no-tax-needed = green; tax-required = flag) and/or requiring X
+  solutions under the cap + X solutions over-cap-but-under-max-tax. Fable to propose the concrete
+  buffer/robustness metric (see next entry when ruled).
+- **Extractor: MLB+FARM BALANCED ratified, CONDITIONAL on an architecture change JK pre-approved:**
+  farm prospects are today generated AFTER the MLB draft; to extract both pools in one click,
+  prospect GENERATION MOVES EARLIER into the league-builder/extraction step, with generated
+  prospects HIDDEN (GMs see only the grade distribution for pool validation — consistent with the
+  standing hidden-vs-revealed rule: scout grade/range only until call-up). Any code assuming
+  post-MLB-draft generation timing must be rerouted when this lands (C1B/C3 scope).
+
+## 2026-07-01 — RATIFIED: the snipe-test draftability formula (JK: "yes on the snipe-test formula")
+
+Deletion-resilience is canon for the draftability verdict: build the archetype's best identity-true
+roster → ban the players it leaned on at scarce/boosted positions → rebuild, repeated (K successive
+successful rebuilds, capped ~3). Verdict bands (defaults §16-tunable): **GREEN** = ≥2 no-tax builds;
+**YELLOW** = buildable but fragile (K<2) OR tax-required, shown with the named reason on the card;
+**LOCKED** = cannot complete a legal roster within max tax. Ranker sorts by (band, K,
+identity-embodiment margin, tax headroom). The snipe test doubles as the pre-market-model contention
+hedge (two-stage ruling). Full formulation: FABLE_C1_DESIGN_2026-07-01.md §2 D7. C1 is now
+zero-open-questions.
+
+## 2026-07-01 — Browser sign-off DEFERRED (batched) + auditor topology for the Fable math builds
+
+- **Wave-0 browser sign-off: DEFERRED, not waived (JK):** JK cannot meaningfully click through the
+  assembled app yet — the draft flow is a mixed legacy-8-bit/new-soft UI, the hub is unreachable
+  without a full draft, and the post-draft FRANCHISE-SETUP surface carries obsolete legacy
+  rules/quirks. Per the batched-browser-verification convention: the engineering gate (build +
+  suite + byte-identical L-SIM) stands as the ADOPTION evidence; the full
+  league-setup→draft→hub click-through is logged BROWSER-VERIFY OUTSTANDING, batched to after the
+  v1 setup/draft surface is built (post-C4). Browser sign-off remains the sole real-world
+  ACCEPTANCE gate — batched, never waived.
+- **Missing-spec flag (JK):** the UI-change/league-rule specs from JK↔Opus conversations over the
+  last week (franchise-setup rework) may not be fully captured in spec-docs — a DEDICATED
+  spec-recovery/design session on the league-setup/franchise-setup surface is queued after the
+  current priorities. Until then: no Codex UI work against the legacy franchise-setup surface.
+- **Auditor topology for FABLE-C1/C2B (Fable's call, JK delegated):** Opus stays AUDITOR-OF-RECORD
+  (independent gate rerun + L-SIM + commit). ADDED: a Codex cross-model ADVERSARIAL REVIEW pass on
+  the C1 and C2B diffs before Opus's gate. Rationale: builder≠auditor holds either way (Fable
+  builds), but Fable and Opus share a model family — the ratified decorrelation lesson cuts the
+  other way when Claude is the builder, so Codex supplies the different-blind-spots screen on the
+  novel math while Opus keeps the practiced gate/commit machinery. C3 gets the Codex pass only if
+  C1/C2B findings warrant.
