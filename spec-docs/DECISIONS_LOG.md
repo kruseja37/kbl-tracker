@@ -2848,3 +2848,34 @@ sim-tune dials, none block the build.
   Built as `derivedTraitPotency.ts` (TRUEVAL-1) + `trueValue.ts` (TRUEVAL-2), build-dark. Documented build-dark
   assumptions (flagged, retunable, spec §2.6 leaves them open): chemistry counts over the FULL active roster, and a
   player's chemistry self-counts toward its own traits' potency.
+
+## 2026-07-01 — JK ratifies the Fable v1 plan (Wave 0 fire order) + two product rulings
+
+**Context:** Fable 5's planning session produced `V1_PLAN_FABLE_2026-07-01.md` (assembly-FIRST
+correction + wave sequencing + budget routing). JK ratified all five decisions:
+
+1. **Assembly fires now** (Wave 0, Opus executes `ASSEMBLY_PLAN_2026-07-01.md`).
+2. **`main` advances** right after assembly (clean FF, local only, never pushed).
+3. **FABLE-C2A routes to Codex-xhigh** (protect Fable's capped budget for C1/C2B/C3).
+4. **Two pulled-forward Codex tickets approved:** in-season legal-roster enforcement (audit
+   ISAGM-04/05) + the per-league team-instance shadow store (S2 foundation) — both parallel to C1.
+5. **Conference editor is IN v1 scope** (see ruling B); divisions are NOT.
+
+**Ruling A — backup-catcher legality counts SECONDARY positions (JK 2026-07-01):** a player whose
+SECONDARY position is C satisfies the required backup-catcher slot for roster legality. This RELAXES
+the canonical `rosterConstruction.ts` (JK-confirmed 2026-06-30), whose header + `isLegalRoster` count
+primary-C only ("a second primary-C") and whose `RosterSlotPlayer` shape carries no secondary
+position. Strategy caveat JK stated: secondary-position ratings are NERFED in play unless the player
+has the level-3 UTILITY trait (rare) — so the advisor should treat the slot as legally filled but may
+surface a quality/strategy note. **OPEN SUB-QUESTION (surfaced to JK, not yet ruled):** does the
+secondary-position relaxation extend to the eight STARTING field spots, or only the backup-C slot?
+(Fable's recommendation: starting eight stay primary-only per the confirmed module; only backup-C
+relaxes.) Consumers to update once ruled: `rosterConstruction.ts` (shape + rule + header),
+FABLE-C1's own_need model, the in-season enforcement ticket, the advisor/market need logic.
+**Builder verification note:** confirm the secondary-position field + the UTILITY-trait nerf
+exemption actually exist in the player data model before wiring (don't assume — deep-dive rule).
+
+**Ruling B — conference assignment is v1 league-setup scope (JK 2026-07-01):** when setting up a
+league, users must be able to assign each team to a conference. NO division editor in v1. Fold the
+conference-editor UI into the S2/league-setup work (it resolves the S1 open question in
+`V1_BUILD_STATUS.md`).
