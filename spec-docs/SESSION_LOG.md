@@ -2,6 +2,30 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-06-30 (attended, Claude Code / Opus 4.8) — the 24 archetypes LOCKED on legal-roster value parity + the scout paradigm shift · handoff written
+- **SESSION TYPE:** JK-driven design thread (scout-intelligence Move 1). Continued from the spec-complete checkpoint.
+  Committed to `experiment/manager-wpa-window` (`efc7cfb6` feat + `6ea3bb1d` doc-fix). **Handoff: `V1_HANDOFF_2026-06-30_DRAFT_AND_LIVING_SEASON.md`.**
+- **✅ Move 1 — the 24 team archetypes LOCKED.** Wrote the 9 gap-fill archetypes (24 total) to `historicalArchetypes.ts`;
+  extended `historicalArchetypes.test` to 24. All 24 within ±10% value parity across juiced/standard/nerfed (maxDev 4.4%).
+  Reference doc `TEAM_ARCHETYPES_24.md` (exemplars + estimated ±rating-point construction).
+- **✅ Head-to-head WIN-RATE harness built + validated, then DEFERRED (JK Option C).** Independent ratings→runs→wins model
+  (game's own run constants, never kblIV) — validated (league-avg team centers at RS/RA 3.19 + 50%; strong beats weak 99.2%).
+  BUT raw archetype result is CONFOUNDED: kblIV over-prices pitching (top-22 by kblIV = 19 pitchers) → value-max builds
+  starve offense + don't embody identity; tier-unstable. JK ruled: ship the 24 on value-parity, win-model = later project.
+  Win-sim exploration removed; diagnosis preserved in the transcript §(b).
+- **✅ ROSTER LEGALITY fix (JK caught it).** The equal-value builder wasn't enforcing a legal SMB4 roster (soft positions, no
+  backup C, 4SP/5RP), and the real auction enforces NO positions (flat 22-slot count; own_need model spec'd-but-unbuilt).
+  FIXED: builder now HARD-requires a legal roster; extracted the canonical construction to `src/data/rosterConstruction.ts`
+  (`LEGAL_ROSTER`/`isLegalRoster`/`canStart`/`canRelieve`, guard-tested) = the SINGLE source of truth the auction + scout +
+  in-season advisor must adopt. Bench flexes 4-5 / relievers 4-5 (minimums). RE-RAN → 24/24 still ±10% on legal rosters.
+- **✅ Strategy-first (identity) building demonstrated.** A value-max builder makes every team hoard the same priciest players
+  regardless of identity; a strategy-first (fit) builder makes a rotation team lead with starters, etc. → the correct paradigm
+  for the scout/Assistant-GM (the "one live board"). Prototype built + reverted; example roster docs generated for JK review.
+  Finding: identity-built team VALUES spread ~26% (offense priced higher than pitching/defense) — resolvable only by the win test.
+- **Housekeeping:** memory consolidated (index 19.9KB→12.1KB). Gate: `npm run build` exit 0; 15 archetype/roster tests green.
+- **OPEN for JK:** `main` is ~1104 commits behind (today's commit on the working branch); win-model revisit y/n; tier feel; Rays exemplar trim.
+- **NEXT:** Move 2 = the PLAYER strengths-and-weaknesses map; then Move 3 = scope the scout/Assistant-GM build.
+
 ## 2026-06-24 (Codex isolated builder branch) — DRAFT-PIPELINE goal green at engine/storage level
 - **Route:** worked only in `/Users/johnkruse/Projects/kbl-draftfix` on `codex/draft-pipeline-fix`, isolated off `codex/franchise-v1-next`; nothing pushed; no `TRACKER_DB_VERSION` bump; frozen player/IV-oracle artifacts untouched.
 - **Built:** a deterministic headless integration test `src/utils/tests/draftPipeline.integration.test.ts` that seeds the real MLB player path, creates an auction league with empty MLB rosters, registers the league pool, clears a stale vacuous complete auction row, runs the real MLB `auctionStateMachine` + auction-session persistence to genuine completion, runs the farm auction to completion, commits drafted MLB/farm rosters, launches a franchise via `initializeFranchise`, and reruns the same pipeline twice with fixed time/randomness to prove deterministic output.
