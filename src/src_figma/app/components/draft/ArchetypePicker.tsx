@@ -26,6 +26,8 @@ export interface ArchetypePickerProps {
   farmKey?: string | null;
   onPick: (slot: ArchetypeSlot, key: string) => void;
   teamLabel?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }
 
 function BoostSacrifice({ a }: { a: TeamArchetype }) {
@@ -67,20 +69,27 @@ function SlotButton({
 }
 
 function ArchetypeCard({
-  a, pickedFor, isActiveSlotPick, onClick,
+  a, pickedFor, isActiveSlotPick, disabled, disabledReason, onClick,
 }: {
-  a: TeamArchetype; pickedFor: ArchetypeSlot[]; isActiveSlotPick: boolean; onClick: () => void;
+  a: TeamArchetype;
+  pickedFor: ArchetypeSlot[];
+  isActiveSlotPick: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
+  onClick: () => void;
 }) {
   const color = FAMILY_COLOR[a.family];
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={disabled ? disabledReason : undefined}
       className={`relative text-left border-4 p-4 transition-transform active:scale-[0.99] ${
         isActiveSlotPick
           ? "border-[#C4A853] bg-[#3a4d3c] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           : "border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
-      }`}
+      } disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]`}
     >
       {/* picked badges */}
       {pickedFor.length > 0 && (
@@ -109,7 +118,14 @@ function ArchetypeCard({
   );
 }
 
-export function ArchetypePicker({ mlbKey, farmKey, onPick, teamLabel }: ArchetypePickerProps) {
+export function ArchetypePicker({
+  mlbKey,
+  farmKey,
+  onPick,
+  teamLabel,
+  disabled = false,
+  disabledReason,
+}: ArchetypePickerProps) {
   const [slot, setSlot] = useState<ArchetypeSlot>("mlb");
   const mlb = archetypeByKey(mlbKey);
   const farm = archetypeByKey(farmKey);
@@ -145,6 +161,8 @@ export function ArchetypePicker({ mlbKey, farmKey, onPick, teamLabel }: Archetyp
               a={a}
               pickedFor={pickedFor}
               isActiveSlotPick={activeKey === a.key}
+              disabled={disabled}
+              disabledReason={disabledReason}
               onClick={() => onPick(slot, a.key)}
             />
           );

@@ -5,7 +5,7 @@
  * Create and manage league templates with custom settings.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
   ArrowLeft,
@@ -31,6 +31,10 @@ import {
 import type { BalanceMode } from "../../../engines/leagueConstruction";
 import type { TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
+import {
+  isSavedAuctionMutationGuardMessage,
+  useSavedAuctionMutationGuard,
+} from "../utils/savedAuctionMutationGuard";
 
 // ============================================
 // TYPES
@@ -117,8 +121,21 @@ export function LeagueBuilderLeagues() {
   const [editingLeague, setEditingLeague] = useState<LeagueTemplate | null>(null);
   const [formData, setFormData] = useState<LeagueFormData>(DEFAULT_FORM_DATA);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const showCheckpointCadenceControl = isFranchisePhase2L13Enabled();
+  const allLeagueIds = useMemo(() => leagues.map((league) => league.id), [leagues]);
+  const savedAuctionGuard = useSavedAuctionMutationGuard(allLeagueIds);
+  const isLeagueMutationBlocked = (leagueId: string | null | undefined) => {
+    if (!leagueId) return false;
+    return (
+      !savedAuctionGuard.checked ||
+      Boolean(savedAuctionGuard.lookupError) ||
+      savedAuctionGuard.lockedLeagueIds.includes(leagueId)
+    );
+  };
+  const savedAuctionMutationMessage = savedAuctionGuard.message;
+  const editingLeagueMutationBlocked = isLeagueMutationBlocked(editingLeague?.id);
 
   // Set default rules preset when data loads
   useEffect(() => {
@@ -134,6 +151,7 @@ export function LeagueBuilderLeagues() {
 
   const openCreateModal = () => {
     setEditingLeague(null);
+    setSaveError(null);
     setFormData({
       ...DEFAULT_FORM_DATA,
       defaultRulesPreset: rulesPresets.find((p) => p.isDefault)?.id || rulesPresets[0]?.id || "",
@@ -143,6 +161,7 @@ export function LeagueBuilderLeagues() {
 
   const openEditModal = (league: LeagueTemplate) => {
     setEditingLeague(league);
+    setSaveError(null);
     setFormData({
       name: league.name,
       description: league.description || "",
@@ -160,13 +179,31 @@ export function LeagueBuilderLeagues() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingLeague(null);
+    setSaveError(null);
     setFormData(DEFAULT_FORM_DATA);
   };
 
+  useEffect(() => {
+    if (!isModalOpen || !editingLeagueMutationBlocked || !savedAuctionMutationMessage) return;
+    setSaveError(savedAuctionMutationMessage);
+  }, [editingLeagueMutationBlocked, isModalOpen, savedAuctionMutationMessage]);
+
+  useEffect(() => {
+    setSaveError((current) => {
+      if (!isSavedAuctionMutationGuardMessage(current)) return current;
+      return savedAuctionGuard.blocked ? savedAuctionMutationMessage : null;
+    });
+  }, [savedAuctionGuard.blocked, savedAuctionMutationMessage]);
+
   const handleSave = async () => {
     if (!formData.name.trim()) return;
+    if (editingLeagueMutationBlocked) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      return;
+    }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       if (editingLeague) {
         await updateLeague({
@@ -199,17 +236,24 @@ export function LeagueBuilderLeagues() {
       closeModal();
     } catch (err) {
       console.error("Failed to save league:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save league.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
+    if (isLeagueMutationBlocked(id)) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      setDeleteConfirmId(null);
+      return;
+    }
     try {
       await removeLeague(id);
       setDeleteConfirmId(null);
     } catch (err) {
       console.error("Failed to delete league:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to delete league.");
     }
   };
 
@@ -222,6 +266,10 @@ export function LeagueBuilderLeagues() {
   };
 
   const toggleTeam = (teamId: string) => {
+    if (editingLeagueMutationBlocked) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      return;
+    }
     setFormData((prev) => ({
       ...prev,
       teamIds: prev.teamIds.includes(teamId)
@@ -268,10 +316,10 @@ export function LeagueBuilderLeagues() {
         </div>
 
         {/* Error Display */}
-        {error && (
+        {(error || saveError) && (
           <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
-            <span className="text-red-200">{error}</span>
+            <span className="text-red-200">{saveError ?? error}</span>
           </div>
         )}
 
@@ -419,6 +467,11 @@ export function LeagueBuilderLeagues() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {saveError && (
+              <div className="mx-6 mt-4 bg-red-900/50 border-4 border-red-500 p-3 text-sm text-red-100">
+                {saveError}
+              </div>
+            )}
 
             {/* Modal Content */}
             <div className="p-6 space-y-6">
@@ -593,7 +646,8 @@ export function LeagueBuilderLeagues() {
                             type="checkbox"
                             checked={formData.teamIds.includes(team.id)}
                             onChange={() => toggleTeam(team.id)}
-                            className="w-4 h-4 accent-[#5A8352]"
+                            disabled={editingLeagueMutationBlocked}
+                            className="w-4 h-4 accent-[#5A8352] disabled:cursor-not-allowed"
                           />
                           <div
                             className="w-3 h-3 rounded-full"
@@ -618,7 +672,7 @@ export function LeagueBuilderLeagues() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formData.name.trim() || isSaving}
+                disabled={!formData.name.trim() || editingLeagueMutationBlocked || isSaving}
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (

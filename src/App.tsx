@@ -135,6 +135,38 @@ const SeasonRulesPreview = lazy(() =>
     default: module.SeasonRulesPreview,
   })),
 );
+const DraftGuidePreview = lazy(() =>
+  import("./src_figma/app/pages/DraftGuidePreview").then((module) => ({
+    default: module.DraftGuidePreview,
+  })),
+);
+const ScoutPanelPreview = lazy(() =>
+  import("./src_figma/app/pages/ScoutPanelPreview").then((module) => ({ default: module.ScoutPanelPreview })),
+);
+const LineupsTabPreview = lazy(() =>
+  import("./src_figma/app/pages/LineupsTabPreview").then((module) => ({ default: module.LineupsTabPreview })),
+);
+const InGameAdvisorPreview = lazy(() =>
+  import("./src_figma/app/pages/InGameAdvisorPreview").then((module) => ({ default: module.InGameAdvisorPreview })),
+);
+const ConstructionRailPreview = lazy(() =>
+  import("./src_figma/app/pages/ConstructionRailPreview").then((module) => ({ default: module.ConstructionRailPreview })),
+);
+const EndOfDraftStaffingPreview = lazy(() =>
+  import("./src_figma/app/pages/EndOfDraftStaffingPreview").then((module) => ({ default: module.EndOfDraftStaffingPreview })),
+);
+const ScoutHirePreview = lazy(() =>
+  import("./src_figma/app/pages/ScoutHirePreview").then((module) => ({ default: module.ScoutHirePreview })),
+);
+const EndOfDraftStaffing = lazy(() =>
+  import("./src_figma/app/pages/EndOfDraftStaffing").then((module) => ({ default: module.EndOfDraftStaffing })),
+);
+const ScoutHire = lazy(() =>
+  import("./src_figma/app/pages/ScoutHire").then((module) => ({ default: module.ScoutHire })),
+);
+const MyTeamsSwitcherPreview = lazy(() =>
+  import("./src_figma/app/pages/MyTeamsSwitcherPreview").then((module) => ({ default: module.MyTeamsSwitcherPreview })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -268,6 +300,14 @@ function App() {
         <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
         <Route path="/__preview/draft-setup" element={<DraftSetupHubPreview />} />
         <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
+        <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
+        <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
+        <Route path="/__preview/lineups" element={<LineupsTabPreview />} />
+        <Route path="/__preview/ingame-advisor" element={<InGameAdvisorPreview />} />
+        <Route path="/__preview/construction-rail" element={<ConstructionRailPreview />} />
+        <Route path="/__preview/staffing" element={<EndOfDraftStaffingPreview />} />
+        <Route path="/__preview/scout-hire" element={<ScoutHirePreview />} />
+        <Route path="/__preview/my-teams" element={<MyTeamsSwitcherPreview />} />
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
@@ -322,6 +362,11 @@ function App() {
           path="/league-builder/draft-setup"
           element={<LeagueBuilderDraftSetup />}
         />
+        <Route
+          path="/league-builder/draft-config"
+          element={<DraftSetupHubPreview />}
+        />
+        <Route path="/league-builder/scout-hire" element={<ScoutHire />} />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
         <Route
           path="/league-builder/snake-draft"
@@ -335,6 +380,7 @@ function App() {
           path="/league-builder/farm-auction-draft"
           element={<LeagueBuilderFarmAuctionDraft />}
         />
+        <Route path="/league-builder/staff-hire" element={<EndOfDraftStaffing />} />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
         {/* Almanac - Figma Design */}

@@ -8,6 +8,8 @@
 export type FranchiseType = 'solo' | 'couch-coop' | 'custom';
 export type FranchiseTeamControl = 'human' | 'ai';
 
+export interface FranchiseSeat { id: string; name: string } // couch-coop player; name = GM identity
+
 export interface FranchiseControlledTeamMetadata {
   teamId: string;
   teamName: string;
@@ -177,7 +179,8 @@ export interface FranchiseConfig {
   teams: {
     selectedTeams: string[];
     mode: "single" | "multiplayer";
-    playerAssignments: Record<string, string>;
+    playerAssignments: Record<string, string>; // teamId -> seatId | 'cpu'
+    seats?: FranchiseSeat[]; // couch-coop players / GM identities
   };
   roster: {
     mode: "existing" | "draft";

@@ -25947,3 +25947,538 @@ Use low reasoning effort.
 **SOURCE OF TRUTH:** the `season-simulator` skill; the L-SIM protocol (kbl-captain STEP 5); every `§16-tunable placeholder` comment in-repo.
 
 <!-- ===== END FORWARD ENTRY: FABLE-C5 ===== -->
+<!-- ===== CONTRACT: STREAMB-1A-ARCHETYPE-CAP — archetype→capIdentity converter (faithful rawShift bridge) + Team provenance keys + mandatory unit test ===== -->
+
+# CONTRACT STREAMB-1A-ARCHETYPE-CAP
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** Convert a chosen historical team archetype into the team's live cap-shift (`Team.capIdentity`/`farmCapIdentity`) FAITHFULLY (matching the balance-sim's `archetypeCapShift`), and record provenance keys on `Team`. Build-dark (no UI caller yet) + a mandatory unit test. Full grounding: `spec-docs/STREAMB_TICKET1_ARCHETYPE_CAP_DECISION.md` (READ IT FIRST).
+
+## Background you MUST honor (verified from source — do not re-derive differently)
+- `capIdentity.increase[]/decrease[]` hold MOD NAMES (keys of `CAP_MODIFICATION_FRACTIONS` in `src/data/tierParams.ts`). The pitching mod names `'VEL'/'JNK'/'ACC'` each shift BOTH rotation AND bullpen, so they CANNOT faithfully encode rotation-vs-bullpen-separated archetypes (8/15 archetypes; `hdh-royals`/`the-opener` are impossible). **Therefore the archetype's MATH MUST NOT route through mod names.**
+- The faithful per-lux-key shift already exists: `archetypeCapShift(arch)` in `src/data/historicalArchetypes.ts:129-135` returns `Record<"group/stat", fraction>`.
+- `ArchetypeStat→ModStat` is the lux-key join (NOT a hand-written map): `ARCHETYPE_STAT_LUX_KEY[stat]` (hist:28-32) → `luxKeyToModStat` (inverse of `MOD_STAT_TO_LUX`, lC:85-97). The plan's `PEN_ACC→PVEL` is a TYPO; correct is `PEN_ACC→PACC`.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. `src/engines/leagueConstruction.ts`
+a. Add an OPTIONAL `rawShift` field to BOTH identity types (lines ~21-22):
+```ts
+export type IdentityComposition = { increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
+export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
+```
+b. In `identityCapShift` (lines ~207-226), add a TOP guard BEFORE `applyIdentitySelection` runs:
+```ts
+export function identityCapShift(identity: IdentityComposition): Record<ModStat, number> {
+  if (identity.rawShift) {
+    const base = Object.fromEntries(MOD_STATS.map((s) => [s, 0])) as Record<ModStat, number>;
+    return { ...base, ...identity.rawShift };
+  }
+  // ... existing body unchanged ...
+}
+```
+(Use whatever the file already uses to enumerate ModStats — `MOD_STATS` if exported there, else `(Object.keys(MOD_STAT_TO_LUX) as ModStat[])`.)
+c. Export a small helper that wraps the private `LUX_TO_MOD_STAT` (do NOT change LUX_TO_MOD_STAT itself):
+```ts
+export function luxKeyToModStat(luxKey: string): ModStat | undefined { return LUX_TO_MOD_STAT.get(luxKey); }
+```
+d. DO NOT modify `shiftLuxuryCaps`, `applyIdentitySelection`, `composeIdentity`, `MOD_STAT_TO_LUX`, or `CAP_MODIFICATION_FRACTIONS`. `shiftLuxuryCaps` already consumes `identityCapShift`'s output, so it inherits the faithful shift.
+
+### 2. `src/utils/leagueBuilderStorage.ts`
+Add to the `Team` interface (after `farmCapIdentity?` at ~line 151), additive + optional (NO IndexedDB version bump):
+```ts
+  mlbArchetypeKey?: string;   // HistoricalArchetype.id; provenance for the MLB capIdentity
+  farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
+```
+
+### 3. NEW FILE `src/engines/archetypeIdentity.ts`
+```ts
+import { HISTORICAL_ARCHETYPES, ARCHETYPE_STAT_LUX_KEY, archetypeCapShift,
+         type HistoricalArchetype, type ArchetypeStat } from '../data/historicalArchetypes';
+import { luxKeyToModStat, type TeamCapIdentity } from './leagueConstruction';
+import type { ModStat } from '../data/tierParams';
+import { saveTeam, type Team } from '../utils/leagueBuilderStorage';
+```
+- `archetypeToCapIdentity(arch: HistoricalArchetype): TeamCapIdentity` — PURE:
+  - Build `rawShift: Record<ModStat, number>` by iterating `archetypeCapShift(arch)` entries; for each `[luxKey, frac]`, `const m = luxKeyToModStat(luxKey)`; if `m` set `rawShift[m] = frac`. If `luxKeyToModStat` returns undefined for any key, THROW `Unknown lux key from archetype ${arch.id}: ${luxKey}` (loud — never silently drop).
+  - `increase` = `arch.boosts` mapped to display mod names via `archetypeStatToModName` (below), deduped; `decrease` = `arch.nerfs` mapped, deduped. These are DISPLAY-ONLY (math is rawShift; the top-guard in identityCapShift bypasses them).
+  - Return `{ increase, decrease, rawShift }` (leave `bandPriorities` undefined).
+  - Helper `archetypeStatToModName(stat: ArchetypeStat): string` — hitters return the pure name (`'POW'|'CON'|'SPD'|'FLD'|'ARM'`); rotation/bullpen return the shared `'VEL'|'JNK'|'ACC'` (suffix of the ArchetypeStat). All are valid `CAP_MODIFICATION_FRACTIONS` keys.
+- `async selectTeamArchetype(team: Team, mlbKey: string, farmKey?: string): Promise<Team>`:
+  - `mlbArch = HISTORICAL_ARCHETYPES.find(a => a.id === mlbKey)`; if missing THROW `Unknown archetype: ${mlbKey}`.
+  - Set `team.mlbArchetypeKey = mlbKey`; `team.capIdentity = archetypeToCapIdentity(mlbArch)`.
+  - If `farmKey`: find farmArch (THROW if missing); set `team.farmArchetypeKey = farmKey`; `team.farmCapIdentity = archetypeToCapIdentity(farmArch)`.
+  - `return saveTeam(team)`.
+
+### 4. NEW FILE `src/engines/__tests__/archetypeIdentity.test.ts` (MANDATORY — these 6 assertions)
+Mock storage so no IndexedDB is needed: `vi.mock('../../utils/leagueBuilderStorage', ...)` exposing a spy `saveTeam` that returns its arg, and keep the real `Team` type. Import `HISTORICAL_ARCHETYPES`, `ARCHETYPE_STAT_LUX_KEY`, `archetypeCapShift` from data, `identityCapShift`, `shiftLuxuryCaps`, `luxKeyToModStat` from leagueConstruction.
+1. **Typo pin / lux round-trip:** `expect(luxKeyToModStat(ARCHETYPE_STAT_LUX_KEY['PEN_ACC'])).toBe('PACC')` and `...['PEN_VEL'])).toBe('PVEL')` and `...['ROT_ACC'])).toBe('RACC')`. Then for EVERY ArchetypeStat, assert `luxKeyToModStat(ARCHETYPE_STAT_LUX_KEY[stat])` is defined.
+2. **Per-archetype direction:** for each `arch` in `HISTORICAL_ARCHETYPES`: `const shift = identityCapShift(archetypeToCapIdentity(arch))`. For each `stat` in `arch.boosts`: `expect(shift[luxKeyToModStat(ARCHETYPE_STAT_LUX_KEY[stat])!]).toBeGreaterThan(0)`. For each `stat` in `arch.nerfs`: `toBeLessThan(0)`.
+3. **Others ≈ 0 (proves rotation/bullpen separation — Design B would FAIL this):** for each archetype, compute the touched ModStat set = boosts∪nerfs mapped via lux key; for every OTHER ModStat assert `Math.abs(shift[modStat]) < 1e-9`.
+4. **Fidelity to the balance-proven path — for `the-opener` AND `hdh-royals` specifically** (the two impossible-via-mod-names archetypes): build a small `LuxuryCapRow[]` covering rotation+bullpen ACC/VEL rows with cap=100; assert `shiftLuxuryCaps(rows, archetypeToCapIdentity(arch))` equals each row independently recomputed as `100 * (1 + (archetypeCapShift(arch)[`${row.group}/${row.stat}`] ?? 0))`. This proves the LIVE path now matches `archetypeCapShift` AND that rotation/bullpen move in OPPOSITE directions for these archetypes.
+5. **`selectTeamArchetype` wiring:** call with a minimal Team stub + `'murderers-row'`; assert returned team has `mlbArchetypeKey==='murderers-row'`, `capIdentity.rawShift` set with POW>0/CON>0/SPD<0, and the mocked `saveTeam` was called once. With a farmKey, assert `farmArchetypeKey`/`farmCapIdentity` set too.
+6. **Throws on unknown key:** `await expect(selectTeamArchetype(stub, 'not-a-key')).rejects.toThrow()`.
+Also assert each archetype has ≤2 boosts and ≤2 nerfs (documents the display-name validity invariant); if any exceeds, leave the math (rawShift) correct and note it — do NOT truncate rawShift.
+
+## Constraints
+- ZERO changes outside the 4 files above. No DB version bump. No new dependency. No `any` without a justifying comment.
+- Behavior-preserving: any identity WITHOUT `rawShift` must produce byte-identical `identityCapShift` output as before.
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run archetypeIdentity leagueConstruction auctionLuxuryTax historicalArchetypes` → all green (these are the affected files; `historicalArchetypes` is GREEN on this lane today — do not regress it).
+- FALSIFICATION: confirm assertion #3 (others≈0) and #4 (opposite-direction fidelity) actually PASS — these are the ones that prove the faithful bridge; if either is RED the design is wrong, STOP.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, change nothing further, IF: adding `rawShift` to the identity types forces a change to `applyIdentitySelection`/`shiftLuxuryCaps` signatures; `MOD_STATS` is not available to enumerate (resolve via `Object.keys(MOD_STAT_TO_LUX)`); a circular import appears (it should not — leagueConstruction does NOT import historicalArchetypes); the Team field add requires an IndexedDB version bump; or assertion #3/#4 cannot pass with Design A (means the grounding is wrong — STOP and report, do not fall back to mod-names).
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-1A-ARCHETYPE-CAP ===== -->
+
+<!-- ===== CONTRACT: STREAMB-3-SHILL-SCALING — CPU shill count scales with league size + sticky override + reload-seed (Mode-1 auction only) ===== -->
+
+# CONTRACT STREAMB-3-SHILL-SCALING
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file. Full plan: `spec-docs/STREAMB_TIER1_SETUP_SPINE_PLAN.md`.
+
+**Goal:** The CPU shill (phantom bidder) count in the auction setup should DEFAULT to a value that scales with league size, stay user-overridable (override is sticky), and re-seed sensibly on reload — instead of the hardcoded `0` that resets every reload. The value already persists into the auction session at start; only the pre-start default + reload behavior are missing.
+
+**HARD GUARDRAIL (Mode-1/Mode-2 boundary):** `cpuShillCount` lives ONLY in the auction session config. Do NOT add it to `FranchiseConfig`/`StoredFranchiseConfig`/`FranchiseRulesSnapshot` or thread it into `franchiseInitializer`. It dissolves at auction end. If the only way to do this seems to require touching `FranchiseConfig`, STOP.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. `src/data/auctionEngineConstants.ts`
+Keep `DEFAULT_CPU_SHILL_COUNT = 0` (line 36) as the floor constant. Add a tunable helper below it:
+```ts
+/**
+ * §16 sim-tune / JK-PENDING (phantom-bidder count): default shill count scaled to league size.
+ * PLACEHOLDER formula — the exact count is JK's call (assembly-plan open decision); this is the
+ * tunable knob, not a final ruling. Override range in the UI is 0..(leagueSize-1) (need >=1 non-shill).
+ */
+export function scaledShillDefault(leagueSize: number): number {
+  return Math.max(0, Math.floor(leagueSize / 3));
+}
+```
+
+### 2. `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`
+- Import `scaledShillDefault`.
+- Add `const cpuCountTouchedRef = useRef(false);` near the `cpuCount` state (line ~114).
+- In the CPU COUNT input `onChange` (line ~406), set `cpuCountTouchedRef.current = true;` alongside `setCpuCount(...)`.
+- Add an effect that seeds the scaled default once the league resolves, pre-session, WITHOUT clobbering a manual override:
+```ts
+useEffect(() => {
+  if (session) return;                         // auction in progress: input is disabled
+  if (cpuCountTouchedRef.current) return;       // respect a manual override
+  if (leagueTeams.length === 0) return;
+  setCpuCount(scaledShillDefault(leagueTeams.length));
+}, [session, leagueTeams.length]);
+```
+- Do NOT change the input `max` (`Math.max(0, leagueTeams.length - 1)` is the intended bound).
+
+### 3. `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`
+Mirror the same pattern (touched-ref + seed effect) against the farm page's own `cpuCount` state (~line 218) and its league-size source. Read the file to find the correct league-teams variable; if the farm page has no equivalent pre-session league-size in scope, STOP and report rather than guessing.
+
+## Constraints
+- ZERO changes outside the 3 files. No `FranchiseConfig`/initializer touch. No new store. No DB bump. No `any`.
+- The override must be STICKY (once the user edits the field, the seed effect must never overwrite it for that mount).
+- Behavior when a session already exists must be unchanged (input stays disabled; no re-seed).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run useAuctionDraft auctionLuxuryTax cpuShillBidding cpuTeamRoles` → green (the shill/auction surface; add any test file that imports the touched pages if one exists).
+- FALSIFICATION: confirm (by reading the final code) that a manual override is not overwritten by the seed effect, and that `cpuShillCount` appears in NO franchise-config/initializer file (`grep -rn cpuShillCount src/types/franchise.ts src/utils/franchiseInitializer.ts` must be empty).
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, change nothing further, IF: the farm page has no pre-session league-size in scope; the seed effect would need to touch shared auction-session shape; or doing the scaling cleanly requires a `FranchiseConfig`/initializer change.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-3-SHILL-SCALING ===== -->
+
+<!-- ===== CONTRACT: STREAMB-2-SEAT-SPINE — couch-coop seat→team ownership write-spine (data shape + initializer consumption + unit test) ===== -->
+
+# CONTRACT STREAMB-2-SEAT-SPINE
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file. Full plan: `spec-docs/STREAMB_TIER1_SETUP_SPINE_PLAN.md`.
+
+**Goal:** Establish the couch-coop **seat→team ownership** write-spine so the Draft Setup hub (a later Tier-3 ticket) can persist "who owns which club" and it flows into franchise init. Today only a binary `selectedTeams: string[]` exists; the richer `playerAssignments` field is DEAD. This ticket gives `playerAssignments` a clear meaning (`teamId → seatId | 'cpu'`), adds a `seats` roster (couch-coop players = GM identities), and teaches the franchise initializer to derive team control from them — **backward-compatible** (when no seat data is present, behavior is byte-identical to today). Build-dark spine + unit test; the hub UI that writes it is ticket #11 (do NOT build UI here).
+
+**Seat model (already prototyped in `DraftSetupHubPreview.tsx`):** `Seat { id, name }`; each team's `ownerId = seatId | "cpu"`. Mirror that exactly.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. `src/types/franchise.ts`
+- Add a seat type near `FranchiseType` (line ~8):
+```ts
+export interface FranchiseSeat { id: string; name: string }  // couch-coop player; name = GM identity
+```
+- Extend `FranchiseConfig.teams` (lines 177-181), additive + clarifying (NO removal/rename):
+```ts
+  teams: {
+    selectedTeams: string[];
+    mode: "single" | "multiplayer";
+    playerAssignments: Record<string, string>;  // teamId -> seatId | 'cpu'
+    seats?: FranchiseSeat[];                      // couch-coop players / GM identities
+  };
+```
+(Optional `seats` → no IndexedDB version bump; `playerAssignments` type unchanged, only its meaning is documented.)
+
+### 2. `src/utils/franchiseInitializer.ts`
+Make the seat path additive. A team is "human" iff `playerAssignments[teamId]` is a seat id (truthy and !== 'cpu'); 'cpu'/unmapped → 'ai'. When NO seat assignment exists, fall back to the existing `selectedTeams` logic unchanged.
+- Add a private helper:
+```ts
+function seatSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]): string[] | null {
+  const a = config.teams.playerAssignments ?? {};
+  const hasSeatData = Object.values(a).some((v) => v && v !== 'cpu');
+  if (!hasSeatData) return null;  // no seat data → caller uses the existing selectedTeams path
+  return teams.filter((t) => { const o = a[t.teamId]; return Boolean(o) && o !== 'cpu'; }).map((t) => t.teamId);
+}
+```
+- In `buildTeamControlSnapshot` (144-171): compute `const selectedTeamIds = seatSelectedTeamIds(config, teams) ?? normalizeSelectedTeamIds(config, teams);` and use it for `selectedSet`/`controlledTeams` exactly as today. (Everything downstream is unchanged.)
+- In `deriveFranchiseType` (133-142): BEFORE the existing `selectedTeamIds.length === teams.length` line, add the couch-coop-by-seats rule (only fires when seat data exists, so existing behavior is preserved):
+```ts
+  const distinctSeatOwners = new Set(
+    Object.values(config.teams.playerAssignments ?? {}).filter((v) => v && v !== 'cpu'),
+  );
+  if (distinctSeatOwners.size >= 2) return 'couch-coop';
+```
+- EXPORT `buildTeamControlSnapshot` and `deriveFranchiseType` (add `export`) so the unit test can call them directly. Do NOT change their signatures or any other behavior. `initializeFranchise` and all existing callers must be untouched.
+
+### 3. NEW FILE `src/utils/tests/franchiseSeatAssignment.test.ts`
+Unit test for the seat-derivation (no IndexedDB — call the now-exported helpers directly with a minimal `FranchiseConfig` + `ScheduleTeam[]`). Build a `makeConfig(partialTeams)` + `makeTeams(n)` helper. Assert:
+1. **Seat path:** seats `[s1,s2]`, playerAssignments `{t1:'s1', t2:'s1', t3:'s2', t4:'cpu'}`, 4 teams → `teamControl` = `{t1:'human',t2:'human',t3:'human',t4:'ai'}`; `controlledTeams` ids = `[t1,t2,t3]`; `deriveFranchiseType` = `'couch-coop'` (2 distinct seats).
+2. **Single seat, multiple teams** → `'custom'` (1 distinct seat owns >1 team, not all teams) — confirm NOT couch-coop.
+3. **Backward-compat (no seat data):** empty `playerAssignments`, `selectedTeams:['t1']`, 3 teams → identical to today: `teamControl` `{t1:'human',t2:'ai',t3:'ai'}`, type `'solo'`; and `selectedTeams` = all teams → `'couch-coop'` (existing all-human heuristic still works).
+4. **'cpu'/unmapped → 'ai':** a team with `playerAssignments[t]==='cpu'` and a team absent from the map both resolve to `'ai'`.
+
+## Constraints
+- ZERO changes outside the 3 files. No DB version bump. No UI changes (the hub writer is #11). No `any`.
+- BACKWARD-COMPATIBLE: with empty `playerAssignments`, `buildTeamControlSnapshot`/`deriveFranchiseType` must return byte-identical results to the current code (the existing initializer tests must stay green).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run franchiseSeatAssignment franchiseInitializer FranchiseSetup franchiseSetupLaunch draftPipeline` → green (the franchise-init + setup surface; do not regress).
+- FALSIFICATION: confirm assertion #3 (backward-compat) passes — it proves the additive change didn't alter the no-seat path.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, change nothing further, IF: exporting the two helpers collides with an existing export; the additive `deriveFranchiseType` branch changes any existing initializer test's expected `franchiseType`; the `seats` field requires an IndexedDB version bump; or making this work cleanly requires touching `initializeFranchise`'s body beyond the two helper edits.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-2-SEAT-SPINE ===== -->
+
+<!-- ===== CONTRACT: STREAMB-D-DRAFT-FLOW-SEAMS — make the live draft→franchise flow walkable: farm-draft Continue button (#7) + freeze-confirmation dialog (#8) + plain freeze copy (#9) ===== -->
+
+# CONTRACT STREAMB-D-DRAFT-FLOW-SEAMS
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file. Three small UI seam fixes so the live draft→franchise flow is traversable end-to-end.
+
+## Edits (exhaustive — make ONLY these, in 2 files)
+
+### #7 + #9 — `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx`
+The `AUCTION_COMPLETE` block (currently lines ~864-871) dead-ends with no way forward, and uses misleading jargon. Replace that block's body so it (a) uses plain wording and (b) adds a "Continue to Franchise Setup" button that navigates to the franchise wizard.
+- **#9 copy:** replace `Draft complete — the two-number freeze runs next (AUC-5.2).` with plain wording, e.g. `Draft complete. Next: set your league's starting team morale and fan morale, then launch the franchise.`
+- **#7 button:** add a button below that copy: label `Continue to Franchise Setup`, `onClick={() => navigate("/franchise/setup")}` (the route is confirmed in `src/App.tsx:274`; `navigate` is already in scope at line ~214). Style it like the page's other primary buttons (e.g. the `NEXT LOT` button's classes). Keep the "FARM AUCTION COMPLETE…" headline.
+
+### #8 — `src/src_figma/app/pages/FranchiseSetup.tsx` (freeze-confirmation dialog before START FRANCHISE)
+The bottom button runs `handleNext` (line ~146); when `currentStep === totalSteps` that path calls `initializeFranchise` (line ~171) — an IRREVERSIBLE freeze with no confirmation. Gate it behind a confirm modal WITHOUT restructuring `handleNext`:
+- Add state near the others (lines ~30-36): `const [showFreezeConfirm, setShowFreezeConfirm] = useState(false);`
+- Change the bottom NEXT/START button's `onClick` (line ~352) to: `onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}`. (On non-final steps it still advances exactly as before.)
+- Render a confirmation modal when `showFreezeConfirm` is true (match the app's existing modal/overlay styling — a centered card over a dimmed backdrop). Copy: title `Start the franchise?`, body `This LOCKS your rosters, starting morale, and league rules — it can't be undone.` Two buttons: `Cancel` → `setShowFreezeConfirm(false)`; `Start Franchise` → `setShowFreezeConfirm(false); void handleNext();` (handleNext sees `currentStep === totalSteps` and runs the freeze unchanged). Disable/guard the confirm button while `isInitializing`.
+
+## Constraints
+- ZERO changes outside the 2 files. No engine/type/store changes. No `any`. Do NOT alter `handleNext`'s body, `initializeFranchise`, or the freeze logic — only gate the entry to it.
+- Non-final-step behavior must be byte-identical (the conditional onClick only changes the LAST step).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run FranchiseSetup franchiseSetupLaunch LeagueBuilderFarmAuctionDraft` → green (add any test that imports these pages). If no test imports the farm page, say so.
+- FALSIFICATION: confirm the modal gates the FINAL step only (non-final NEXT still calls handleNext directly), and that Cancel does NOT call initializeFranchise.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: `/franchise/setup` is not the FranchiseSetup route; `navigate` is not in scope on the farm page; or gating the button cleanly requires restructuring `handleNext`.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-D-DRAFT-FLOW-SEAMS ===== -->
+
+<!-- ===== CONTRACT: STREAMB-10-DRAFT-RECAP — deterministic DRAFT_RECAP reporter adapter (build-dark; emission flagged) [#10] ===== -->
+
+# CONTRACT STREAMB-10-DRAFT-RECAP
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** A PURE, deterministic draft-recap reporter adapter that shapes deterministic draft ground-truth into a `SeasonNewsEvent`, mirroring the existing reporter-tap adapters. Build-dark + unit test. Do NOT build the call-site or the LLM emission (that is the flagged seam, per the reporter adapter/emission split).
+
+**Pattern to mirror EXACTLY:** `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts` (`buildFranchiseAwardSeasonNewsEvent`). Same structure: a §16 placeholder dramatic-weight constant, a `clamp`, an input interface, a `build…SeasonNewsEvent(input): SeasonNewsEvent` that lifts `facts` verbatim and assigns a clamped `dramaticWeight`.
+
+**Type decision (DECIDED — do not deviate):** REUSE the existing `NarrativeEventType` value `'OFFSEASON_NEWS'` (the draft is a preseason roster event), discriminated by `facts.recapKind: 'DRAFT'`. Do NOT add a new `DRAFT_RECAP` member to the `NarrativeEventType` union (every existing reporter adapter reuses an existing type; extending would ripple into the exhaustive `hedgingModifier` Record and any switch handling). This matches the codebase precedent.
+
+## Edits (exhaustive — make ONLY these)
+
+### 1. NEW FILE `src/src_figma/app/engines/reporter/franchiseDraftRecapNewsAdapter.ts`
+```ts
+import type { SeasonNewsEvent } from './seasonNewsGenerator';
+import type { NarrativeEventType } from '../../../../engines/narrativeEngine';
+
+// SIM-tuned placeholder dramatic weight for the draft recap (§16; conservative, tunable).
+export const DRAFT_RECAP_DRAMATIC_WEIGHT = { base: 0.5, magnitudeScale: 0.3 } as const;
+
+export interface FranchiseDraftRecapNewsInput {
+  franchiseId: string;
+  seasonId: string;
+  seasonNumber: number;
+  subjectIds?: string[];            // optional notable drafted player ids
+  facts: Record<string, unknown>;   // deterministic draft ground truth lifted verbatim by the caller — never fabricated here
+  magnitude?: number;               // optional 0..1 drama (e.g. biggest-signing notability); clamped
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+export function buildFranchiseDraftRecapSeasonNewsEvent(input: FranchiseDraftRecapNewsInput): SeasonNewsEvent {
+  const magnitude = clamp(input.magnitude ?? 0.4, 0, 1);
+  const dramaticWeight = clamp(
+    DRAFT_RECAP_DRAMATIC_WEIGHT.base + DRAFT_RECAP_DRAMATIC_WEIGHT.magnitudeScale * magnitude,
+    0, 1,
+  );
+  const eventType: NarrativeEventType = 'OFFSEASON_NEWS';
+  return {
+    franchiseId: input.franchiseId,
+    seasonId: input.seasonId,
+    seasonNumber: input.seasonNumber,
+    eventType,
+    subjectIds: input.subjectIds ? [...input.subjectIds] : [],
+    facts: { ...input.facts, recapKind: 'DRAFT' },
+    dramaticWeight,
+  };
+}
+```
+**VERIFY against the real `SeasonNewsEvent` type** in `./seasonNewsGenerator`: if any field above is named differently or required differently than what `buildFranchiseAwardSeasonNewsEvent` returns, MATCH that adapter's exact shape (it is the source of truth). If `SeasonNewsEvent` requires a field this omits, add it the way the award adapter does; if it forbids one, drop it. Do not invent fields.
+
+### 2. NEW FILE `src/src_figma/app/engines/reporter/__tests__/franchiseDraftRecapNewsAdapter.test.ts`
+- Given a minimal input (franchiseId/seasonId/seasonNumber + `facts: { biggestSigning: 'X', totalSpend: 1000 }`), assert the event has `eventType === 'OFFSEASON_NEWS'`, `facts.recapKind === 'DRAFT'`, `facts.biggestSigning === 'X'` (lifted verbatim), and `dramaticWeight` within [0,1].
+- Monotonicity: higher `magnitude` → `dramaticWeight` strictly greater (until clamped at 1).
+- `subjectIds` defaults to `[]` when omitted and is copied (not aliased) when provided.
+
+## Constraints
+- ZERO changes outside the 2 new files. Do NOT modify `narrativeEngine.ts` (no union change), `seasonNewsGenerator.ts`, or any Record. No `any`.
+- The adapter is PURE: no I/O, no store, no Date.now/random. It does not COMPUTE draft facts (the caller lifts them) — it shapes + weights.
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run franchiseDraftRecapNewsAdapter` → green.
+- FALSIFICATION: confirm `facts` is lifted verbatim (the test's `biggestSigning` survives) and `recapKind` is added without clobbering input facts.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: `SeasonNewsEvent`'s real shape can't accept this event without extra required fields you'd have to fabricate; `'OFFSEASON_NEWS'` is not a valid `NarrativeEventType`; or `seasonNewsGenerator` does not export `SeasonNewsEvent`.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-10-DRAFT-RECAP ===== -->
+
+<!-- ===== CONTRACT: STREAMB-CP1-HUB-LIVE — wire the Draft Setup hub to live teams + archetype-write + start-the-draft [Tier-3 #11/#13 keystone] ===== -->
+
+# CONTRACT STREAMB-CP1-HUB-LIVE
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** Turn the mock Draft Setup hub (`DraftSetupHubPreview.tsx`) into a LIVE configuration front-door so the polished draft is playable: it reads the active league's REAL teams, lets the user pick each team's MLB+farm archetype identity (persisting a real `capIdentity` via the already-built converter), toggle human/CPU ownership, and launch the live auction. Everything it writes must already exist on this lane — do NOT invent engines.
+
+**Already built on THIS lane (reuse, do NOT rebuild):**
+- `selectTeamArchetype(team, mlbKey, farmKey?)` and `archetypeToCapIdentity` in `src/engines/archetypeIdentity.ts` (writes `team.mlbArchetypeKey`/`capIdentity`/`farmArchetypeKey`/`farmCapIdentity`, persists via `saveTeam`). The catalog `key` IS the archetype id (`teamArchetypeCatalog.ts:78` `key: archetype.id`), so the picker's `onPick(slot, key)` passes straight in.
+- `scaledShillDefault(leagueSize)` in `src/data/auctionEngineConstants.ts`.
+- `getAllTeams`/`saveTeam` + the `Team` record (`src/utils/leagueBuilderStorage.ts`); `team.controlledBy?: 'human' | 'ai'`.
+
+## Edits (make ONLY these 2 files)
+
+### 1. `src/src_figma/app/pages/DraftSetupHubPreview.tsx` — mock → live
+Keep the component's layout/sections (WHO'S PLAYING / THE ROOM / THE CLUBS / the picker). Replace the mock DATA with live data. Wire:
+
+**(a) Active league + real teams.** Add `useLeagueBuilderData()` (`src/src_figma/hooks/useLeagueBuilderData.ts` → `{ leagues, teams, ...reload }` — check the hook's reload fn name). Resolve the active league exactly like `LeagueBuilderAuctionDraft.tsx:112,123,135-145`: `leagueIdFromSearch(window.location.search)` + `resolveInitialLeagueId(leagues, requested)` (import both from `../utils/draftRouting`), then `activeLeague = leagues.find(...)`, and the league's teams = `activeLeague.teamIds.map(id => teams.find(t => t.id === id)).filter(Boolean)`. REPLACE the hardcoded `TEAMS` const (lines ~16-25) with these real teams (use `team.id`, `team.name`, `team.abbreviation`). If no league/teams resolved, render a clear empty state ("Select a league first") — do not crash.
+
+**(b) Archetype picks → persist via the converter.** Keep the per-team config state (mlbKey/farmKey) keyed by real `team.id`, SEEDED from each team's existing `team.mlbArchetypeKey`/`team.farmArchetypeKey`. On `onPick(slot, key)`: update local state, then read the LATEST team object from the hook's `teams` by id, call `await selectTeamArchetype(latestTeam, currentMlbKey, currentFarmKey)` (import from `../../../engines/archetypeIdentity`; pass whichever keys are currently selected — farmKey may be undefined), then trigger the hook's reload so `teams` reflects the save. (Per-pick save is fine — mirrors the auction's per-pick crash-safety.)
+
+**(c) Ownership (human/CPU).** Keep the seat UI, but make the per-team owner toggle authoritative by persisting `team.controlledBy`: owner === 'cpu' → `'ai'`, any seat → `'human'`. On change, read the latest team, `await saveTeam({ ...latestTeam, controlledBy })`, reload. (The couch-coop multi-seat GM NAMES stay session-local — accepted hold-until-freeze gap; do NOT add a new store.)
+
+**(d) Shill.** Seed the shill count from `scaledShillDefault(realTeams.length)` (display + adjustable locally; informational — the auction page owns the final value). Replace the `useState(3)`.
+
+**(e) Start the Draft.** The "Start the Draft" button (line ~176) → `navigate(draftRouteForLeague(activeLeague))` (import `draftRouteForLeague` from `../utils/draftRouting`; `navigate` from `react-router`). Disable it until every team has at least an MLB archetype (`mlbKey` set) — that's the real "ready" gate (replace the mock `ready` that required both mlb+farm; MLB is the affordability driver, farm is optional polish).
+
+**Optimizer-gated / leave as static "coming":** the archetype "strong vs / weak vs" matchup line (already reserved in `ArchetypePicker`). Do NOT compute it.
+
+**Read-latest-then-reload discipline:** before EVERY `selectTeamArchetype`/`saveTeam`, re-read the team from the hook's current `teams` by id (never from a stale closure) and reload after — so an archetype save and an ownership save never clobber each other.
+
+### 2. `src/App.tsx` — make the hub reachable live
+Add a live route `/league-builder/draft-config` rendering `DraftSetupHubPreview` (lazy, mirror the existing lazy-import + `<Route>` pattern). KEEP the existing `/__preview/draft-setup` route. (The START-DRAFT redirect into this route is a SEPARATE later ticket — do NOT touch `LeagueBuilderDraftSetup` here.)
+
+## Constraints
+- ZERO changes outside the 2 files. No new engine/store/type. No DB bump. No `any`. Do NOT rename the component. Do NOT build the roster optimizer or any affordability/bargain badge.
+- Reuse the live patterns verbatim (don't reinvent league-resolution or team-filtering — copy `LeagueBuilderAuctionDraft`'s approach).
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run DraftSetup archetypeIdentity leagueConstruction` → green (add any test that imports the hub; if none, say so).
+- FALSIFICATION: confirm (by reading the final code) that (i) `onPick` calls `selectTeamArchetype` with the catalog key passed straight through (no remapping), (ii) the hardcoded `TEAMS` mock is GONE, (iii) "Start the Draft" navigates via `draftRouteForLeague`, (iv) no new store/DB was added.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: `useLeagueBuilderData` exposes no reload/refresh; `selectTeamArchetype`/`scaledShillDefault`/`draftRouteForLeague` are not importable as described (they ARE on this lane — re-grep before stopping); the hub cannot get the active league from the query without a new context; or wiring ownership cleanly requires touching `franchiseInitializer`/FranchiseConfig.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-CP1-HUB-LIVE ===== -->
+
+<!-- ===== CONTRACT: STREAMB-CP2-DRAFT-CONFIG-ROUTE — route the live draft through the config hub [Tier-3 #11 routing; JK-VISIBLE FLIP] ===== -->
+
+# CONTRACT STREAMB-CP2-DRAFT-CONFIG-ROUTE
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only. Do NOT touch any relationship/fame/playoff/seasonRunner/honors/L-SIM file.
+
+**Goal:** Make the now-live Draft Setup hub (`/league-builder/draft-config`, added in CP-1) the real pre-auction step, so the polished config screen is in the playable flow: pool-lock → **draft-config hub** → auction → farm → freeze. This is a USER-VISIBLE reroute of the existing START-DRAFT button → flag for JK browser sign-off (it ships on-branch; JK accepts the flip).
+
+## Edits (make ONLY this 1 file)
+
+### `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+The "START DRAFT" action currently jumps straight to the auction: `navigate(draftRouteForLeague(league))` (line ~342). Reroute it to the config hub instead, threading the league id the same way the hub reads it:
+- Change line ~342 to: `navigate(\`/league-builder/draft-config?leagueId=\${league.id}\`)`.
+- Leave EVERYTHING else (the pool-lock logic, the button label/styling) unchanged. The hub's own "Start the Draft" then calls `draftRouteForLeague(league)` → the auction (built in CP-1), so the net flow is pool-lock → draft-config → auction.
+- If `league.id` is not in scope at that call site, read the surrounding code and use the same league object the existing `draftRouteForLeague(league)` call uses (it has `league`).
+
+## Constraints
+- ZERO changes outside this 1 file. One-line behavioral reroute. No new logic, no new imports unless strictly needed for the template string (none should be).
+- Do NOT remove the direct `/league-builder/auction-draft` route or `draftRouteForLeague` — the hub still uses it. Nothing is deleted; the path just gains a step.
+
+## GATE (report, do not commit)
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run LeagueBuilderDraftSetup` → green (if a test imports it; else say so).
+- FALSIFICATION: confirm START-DRAFT now navigates to `/league-builder/draft-config?leagueId=...` and the pool-lock logic is otherwise untouched.
+
+**FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> FALSIFICATION_OK=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+**FAILURE PROTOCOL (STOP-IF):** STOP + `STOP-IF: <reason>`, IF: the `/league-builder/draft-config` route does not exist (CP-1 must land first); or the START-DRAFT site has branching that makes a single reroute unsafe (report the branches).
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: STREAMB-CP2-DRAFT-CONFIG-ROUTE ===== -->
+
+<!-- ===== CONTRACT: STREAMB-FINISH-PLAYABLE-DRAFT — make the end-to-end draft FULLY playable: it must reliably SAVE and LAUNCH into franchise mode 2 with the drafted rosters loaded [FINISHER handoff] ===== -->
+
+# CONTRACT STREAMB-FINISH-PLAYABLE-DRAFT (Codex 5.5, xhigh — autonomous finisher)
+
+**Lane:** Lane B (draft/setup). **Worktree:** `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. Build branch-only; commit when green; do NOT push. Do NOT touch any Lane A file (relationship/fame/playoff/seasonRunner/honors/L-SIM/rivalry).
+
+**THE GOAL (the only thing that matters):** a FULLY FUNCTIONAL, FULLY RELIABLE draft that, end to end, **SAVES and LAUNCHES into franchise mode 2 with the drafted rosters loaded.** The user must be able to: configure the draft (the hub) → run the MLB auction → run the farm auction → freeze → land in a franchise (mode 2) whose teams carry the drafted rosters. Reliability > new features. If something in this chain is broken or flaky, FIX it (within Lane B's surface) or report it precisely.
+
+## STATE — what is already built + verified on this branch (do NOT rebuild; reuse)
+The whole draft slate shipped this session, each gated (build + tests) + committed:
+- `#1` archetype→capIdentity converter — `src/engines/archetypeIdentity.ts` (`selectTeamArchetype(team, mlbKey, farmKey?)`, `archetypeToCapIdentity`); catalog `key` === `HistoricalArchetype.id` (`teamArchetypeCatalog.ts:78`), so the picker key passes straight in. Writes `team.capIdentity`/`farmCapIdentity` via `saveTeam`.
+- `#2` couch-coop seat spine — `FranchiseConfig.teams.seats`/`playerAssignments`; `franchiseInitializer.buildTeamControlSnapshot`/`deriveFranchiseType` derive control from seats (backward-compatible).
+- `#3` shill scaling — `scaledShillDefault(leagueSize)` (`auctionEngineConstants.ts`); stays in the auction session only.
+- `#7/#8/#9` draft-flow seams — farm-draft Continue button, START-FRANCHISE freeze-confirm modal, plain copy.
+- `#10` DRAFT_RECAP reporter adapter (build-dark).
+- `#27` merge — 9 draft preview screens + `teamArchetypeCatalog` + routes.
+- **CP-1** — `DraftSetupHubPreview.tsx` is now LIVE: reads the active league's real teams (`useLeagueBuilderData` + `league.teamIds`), per-team MLB+farm archetype picks → `selectTeamArchetype`→`saveTeam`, ownership → `team.controlledBy`, shill seed, "Start the Draft" → `draftRouteForLeague`. Reachable at `/league-builder/draft-config`.
+- **CP-2** — pool-lock's START-DRAFT now routes to `/league-builder/draft-config` (the hub), then the hub → auction.
+
+**The existing draft→franchise PIPELINE already works and is TESTED:** `src/utils/tests/draftPipeline.integration.test.ts` runs "MLB auction → farm auction → franchise launch with real seeded players and deterministic storage results." This is your RELIABILITY ANCHOR — it proves the freeze loads rosters into the franchise. It currently passes.
+
+## MISSION (bounded; verification-driven; in order)
+
+### 1. VERIFY the end-to-end chain (deterministic — this is the real gate)
+Run and report:
+- `NODE_ENV= npm run build` → must be exit 0.
+- `NODE_ENV= npx vitest run draftPipeline franchiseInitializer franchiseSeatAssignment FranchiseSetup franchiseSetupLaunch archetypeIdentity leagueConstruction auctionLuxuryTax cpuShillBidding` → report file-by-file. (NOTE: `historicalArchetypes.test.ts` FAILS in large mixed batches — cross-file state bleed — but PASSES solo; that is a documented characterized red, NOT a regression. Do not "fix" it; verify it solo if it appears.)
+- Confirm `draftPipeline.integration.test.ts` is GREEN (the freeze→franchise+rosters proof). If it is RED, that is the #1 thing to fix.
+
+### 2. HARDEN: prove the HUB's outputs flow end-to-end (add/extend ONE integration test)
+The pipeline test does not yet exercise the new hub's writes. Add or extend a vitest test that proves a hub-configured team flows through:
+- Give a team a `capIdentity` via `selectTeamArchetype(team, '<a real HISTORICAL_ARCHETYPES id>')` (e.g. `'murderers-row'`) and set `controlledBy`.
+- Assert the auction caps honor it: `shiftLuxuryCaps(pool.luxuryCaps, team.capIdentity)` (or the `auctionLuxuryTax` path) shifts the expected ModStats (the `rawShift` is authoritative — see `archetypeIdentity`/`leagueConstruction`).
+- Assert that after `initializeFranchise` (mirror `draftPipeline.integration`'s setup), the franchise carries (a) the team control derived from ownership and (b) the rosters. Keep it deterministic (no Date.now/random).
+- This test GREEN = the reliability guarantee JK needs. Make it real, not vacuous.
+
+### 3. BROWSER SMOKE (best-effort; report, do NOT gate on it)
+If Playwright/a browser is available in this environment, smoke the hub against a worktree dev server (`npm run dev -- --port 5181 --strictPort`): navigate `/league-builder`, click "IMPORT MLB", **WAIT for the in-browser seed to finish** (it writes 30 teams + 660 players to IndexedDB — poll the page until it shows "30 teams"; do NOT navigate away early — that was the trap that made it look empty), then go to `/league-builder/draft-config`, confirm REAL teams render (not the empty state), pick an MLB archetype on a club, confirm no console errors, click "Start the Draft" and confirm it lands on the auction route. Report exactly what you saw. If the browser is unavailable in this exec, SKIP and say so — the integration test (steps 1-2) is the authoritative gate.
+
+### 4. FIX any break found in steps 1-3 that prevents the draft from reliably saving/launching — ONLY within Lane B's draft/setup surface (draft/setup pages, `leagueBuilder*`/`franchiseInitializer`/`draftRouting`/setup utils, the archetype/auction engines). Keep fixes minimal and behavior-preserving for the existing green pipeline.
+
+## STOP-IF (report precisely in the DONE report, change nothing further) — IF:
+- A required fix would touch a Lane A file (relationship/fame/playoff/seasonRunner/honors/L-SIM/rivalry).
+- A required fix needs a JK product decision (e.g. how couch-coop seat NAMES should persist to the freeze — that is the accepted hold-until-freeze gap; do NOT invent a new store).
+- `draftPipeline.integration` / the freeze→rosters path is broken in a way that needs a franchise-init redesign (report the exact failure + root cause for JK Tuesday rather than a risky deep change).
+
+## GATE (must hold before commit)
+- `npm run build` exit 0.
+- The step-1 suite green (file-by-file; characterized `historicalArchetypes` batch-red excepted, verified solo).
+- The step-2 hardening test green.
+- Browser smoke done OR explicitly skipped-with-reason.
+
+## DELIVERABLES
+- Commit all changes branch-only with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- Write `spec-docs/STREAMB_FINISH_REPORT.md` with: (a) the end-to-end VERDICT — does the draft reliably SAVE + LAUNCH into franchise mode 2 with rosters? **YES/NO + the evidence (test names + results)**; (b) what you verified; (c) what you fixed (file:line); (d) anything left for JK's Tuesday session + any STOP-IF hit.
+
+**FINAL FORMAT:** End with `STATUS: BUILD_OK=<y/n> TESTS_OK=<y/n> E2E_SAVES_AND_LAUNCHES=<y/n> FILES_CHANGED=<comma list> NOTES=<...>`.
+
+Use xhigh reasoning effort. Be rigorous: JK is relying on this draft being reliable enough to load rosters into franchise mode 2.
+
+<!-- ===== END CONTRACT: STREAMB-FINISH-PLAYABLE-DRAFT ===== -->
+
+<!-- ===== CONTRACT: DRAFT-STAFF-GUIDE-WIRE ===== -->
+
+# CONTRACT: DRAFT-STAFF-GUIDE-WIRE — wire scout-hire + scout-guide-in-auction + staff-hire ceremony into the LIVE draft flow
+
+**ROUTE:** worktree `/Users/johnkruse/Projects/kbl-draftlane`, branch `claude/v1-draft-ui`. **Branch-only. Do NOT commit. Do NOT push.** (The Captain audits + commits.)
+
+**ROLE:** Builder (Codex). The Captain (Opus) audits the real diff + runs the gate + commits.
+
+**GOAL (JK-approved, for the first playable draft):** the scout draft-guide and the staff-hire screens already exist as standalone PREVIEW pages — wire them into the LIVE draft flow in this order:
+`DraftSetupHub → [NEW] Scout-Hire → MLB auction (NOW shows the hired scout's read per nomination) → farm auction → [NEW] Staff-Hire (manager + beat reporter) → /franchise/setup (freeze) → franchise`.
+The point: a scout hired BEFORE the draft makes the in-auction guide actually useful (resolves the "scout not in scope at nomination" landmine), and staff-hire is a short ceremony after the draft.
+
+**SOURCE OF TRUTH (re-read from source; verify every anchor before building):**
+- Flow transitions: `src/src_figma/app/pages/DraftSetupHubPreview.tsx:283` ("Start the Draft" → `navigate(draftRouteForLeague(activeLeague))`); `src/src_figma/app/utils/draftRouting.ts` (route resolvers → `/league-builder/auction-draft`|`/league-builder/farm-auction-draft`); `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx:871` (farm-done → `navigate("/franchise/setup")`); routes registered in `src/App.tsx`.
+- Existing preview screens to promote to live: `src/src_figma/app/pages/ScoutHirePreview.tsx`, `src/src_figma/app/pages/EndOfDraftStaffingPreview.tsx` (manager + beat reporter + optional recap), `src/src_figma/app/components/draft/DraftGuideCard.tsx` (price band / 20-80 grade / affordability), `src/src_figma/app/pages/DraftGuidePreview.tsx`.
+- Auction host (where the guide renders): `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (the current-nomination/lot render).
+- Persistence (confirm the exact fns): SCOUT = the `scoutProfiles` store (`getScoutProfilesForLeague`/`deleteScoutProfilesForLeague` in `src/utils/franchisePlayerStorage.ts` import chain — find the SAVE fn). MANAGER = `src/utils/managerStorage.ts` / `src/utils/managerIdentityStorage.ts`. REPORTER = uncertain (see STOP-IF).
+- Verification anchor: `src/utils/tests/draftPipeline.integration.test.ts` (the authoritative headless draft→franchise chain).
+
+**REQUIRED WORK (priority-ordered; each must leave the flow WORKING, never half-broken):**
+
+**P1 — Scout-Hire-before-draft + the in-auction guide (MUST):**
+1. New live route `/league-builder/scout-hire` (register in `App.tsx`, lazy import) rendering a real Scout-Hire screen (promote `ScoutHirePreview` — per human-controlled team, pick from the shared scout pool). **Persist** each team's chosen scout to the `scoutProfiles` store (reuse the existing save path; if none, see STOP-IF). On "continue" → `navigate(draftRouteForLeague(activeLeague))` (the auction). 
+2. Re-point `DraftSetupHubPreview.tsx:283` "Start the Draft" → `navigate('/league-builder/scout-hire' + same league search param)` instead of straight to the auction.
+3. In `LeagueBuilderAuctionDraft.tsx`, render `DraftGuideCard` for the current nomination, fed by the controlling team's HIRED scout profile (price band + grade) + affordability from that team's cap. If no scout was hired for a team, render the card in its public-only state (no crash). Keep it additive — do not change auction bid/award logic.
+
+**P2 — Staff-Hire ceremony after the draft (if clean; else STOP-IF + flag):**
+4. New live route `/league-builder/staff-hire` (register in `App.tsx`) rendering a real Staff-Hire screen (promote `EndOfDraftStaffingPreview` — manager + beat reporter per human team). **Persist** manager via `managerStorage`/`managerIdentityStorage`; persist the beat reporter IF a clean persistence path exists.
+5. Re-point `LeagueBuilderFarmAuctionDraft.tsx:871` farm-done → `navigate('/league-builder/staff-hire')`; on its "continue" → `navigate('/franchise/setup')`.
+
+**CONSTRAINTS:**
+- Touch ONLY the draft/setup surface listed above + `App.tsx` route registrations + the relevant storage save calls. Do NOT refactor `FranchiseSetup.tsx`'s step machine — staff-hire is its OWN route BEFORE `/franchise/setup`, not a step inside it.
+- Keep the existing `/__preview/*` routes working (don't delete the previews; the live screens may import/share their components).
+- The freeze gate `validatePreparedLeagueBuilderFarmScoutingState()` must still pass — scouts hired EARLIER (before the auction) is fine/better; VERIFY the gate doesn't regress.
+- TypeScript strict (no `any`/`@ts-ignore`). No DB schema/version bump. No flag-default change. Nothing pushed.
+
+**EXPECTED OUTPUT:** the routing inserts + 2 new live screens + the in-auction guide + the persistence calls, all compiling.
+
+**VERIFICATION (you run, report actual output):**
+- `NODE_ENV= npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/tests/draftPipeline.integration.test.ts` → green (the chain still saves+launches with rosters).
+- ADD + run a focused test proving: scout-hire persists a chosen scout (read back via `getScoutProfilesForLeague`), and the staff-hire persists a manager (read back). If reporter persistence is skipped (STOP-IF), say so in the test notes.
+
+**FORMAT:** Report files changed, the two routing inserts (before/after nav targets), exactly what persists for scout/manager/reporter, whether the reporter STOP-IF fired, and the command outputs. Do NOT commit. Do NOT push.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` + analysis, change nothing further, and DELIVER P1 cleanly while flagging the rest, IF: there is no clean save path for the beat reporter (deliver scout + manager, leave reporter cosmetic/unpersisted + flag); feeding the hired scout into `LeagueBuilderAuctionDraft` requires exporting auction-selector internals beyond a clean prop/hook; re-pointing the farm-done nav breaks the freeze gate (`validatePreparedLeagueBuilderFarmScoutingState`); or wiring staff-hire would force a refactor of `FranchiseSetup`'s step machine. NEVER leave the draft→franchise chain half-broken — if P2 can't land cleanly, ship P1 (scout-hire + in-auction guide) and flag P2 for Tuesday.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: DRAFT-STAFF-GUIDE-WIRE ===== -->

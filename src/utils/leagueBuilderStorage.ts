@@ -149,6 +149,8 @@ export interface Team {
   rivalries?: TeamRivalry[];
   capIdentity?: TeamCapIdentity;
   farmCapIdentity?: TeamCapIdentity;
+  mlbArchetypeKey?: string;   // HistoricalArchetype.id; provenance for the MLB capIdentity
+  farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
   teamHistory?: RebrandRelocationMarker[];

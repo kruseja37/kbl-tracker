@@ -14,14 +14,14 @@ export function auctionCoachLine(args: { tier: AuctionCoachTier; state: AuctionS
       return "The draft engine is surfacing the next player. No nominations to make — just get ready to bid.";
     case "OPEN_BIDDING":
       return tier === "mlb"
-        ? "He's on the block. Raise or pass — and remember, pass and he's gone for good."
+        ? "Player is on the block. Raise or pass — one pass can remove the player for good."
         : "Prospect's up. Hold the scout card to check your read, then raise or pass — one chance only.";
     case "RESOLVE":
-      return "You're the last bidder standing. Claim him at the reserve price, or pass and send him back to the pool.";
+      return "You're the last bidder standing. Claim the player at the reserve price, or pass and send the player back to the pool.";
     case "SOLD":
       return "Lot settled. On to the next one.";
     case "PASSED":
-      return "No takers — he's out of the draft. Next player coming up.";
+      return "No takers — the player is out of the draft. Next player coming up.";
     case "AUCTION_COMPLETE":
       return tier === "mlb"
         ? "Your MLB roster is set. Head to the farm auction to stock your prospects."

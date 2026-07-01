@@ -12,6 +12,7 @@ import {
   draftRouteForFormat,
   draftRouteForLeague,
 } from '../../app/utils/draftRouting';
+import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
 
 // ============================================
 // MOCKS
@@ -22,6 +23,16 @@ const mockNavigate = vi.fn();
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
 }));
+
+vi.mock('../../../utils/leagueBuilderStorage', async () => {
+  const actual = await vi.importActual<typeof import('../../../utils/leagueBuilderStorage')>(
+    '../../../utils/leagueBuilderStorage',
+  );
+  return {
+    ...actual,
+    getAuctionSession: vi.fn(async () => null),
+  };
+});
 
 const mockCreateLeague = vi.fn().mockResolvedValue(undefined);
 const mockUpdateLeague = vi.fn().mockResolvedValue(undefined);
@@ -84,29 +95,78 @@ const createLeagueFromModal = async (name: string) => {
   });
 };
 
+const renderSettledLeagueBuilderLeagues = async () => {
+  const result = render(<LeagueBuilderLeagues />);
+  await waitFor(() => {
+    expect(vi.mocked(getAuctionSession)).toHaveBeenCalledWith('league-1', expect.any(Number));
+    expect(vi.mocked(getAuctionSession)).toHaveBeenCalledWith('league-2', expect.any(Number));
+  });
+  return result;
+};
+
 // ============================================
 // TESTS
 // ============================================
 
 describe('LeagueBuilderLeagues Component', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(getAuctionSession).mockResolvedValue(null);
+    const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+    vi.mocked(useLeagueBuilderData).mockReturnValue({
+      leagues: [
+        {
+          id: 'league-1',
+          name: 'Kruse Baseball',
+          description: 'Main league',
+          teamIds: ['team-1', 'team-2'],
+          defaultRulesPreset: 'preset-1',
+          draftFormat: 'auction',
+          color: '#5A8352',
+          createdDate: '2026-01-15T00:00:00.000Z',
+        },
+        {
+          id: 'league-2',
+          name: 'Minor League',
+          teamIds: ['team-3'],
+          defaultRulesPreset: 'preset-1',
+          draftFormat: 'snake',
+          color: '#CC44CC',
+          createdDate: '2026-01-20T00:00:00.000Z',
+        },
+      ],
+      teams: [
+        { id: 'team-1', name: 'Sox', colors: { primary: '#FF0000', secondary: '#FFFFFF' } },
+        { id: 'team-2', name: 'Tigers', colors: { primary: '#FF6600', secondary: '#000000' } },
+        { id: 'team-3', name: 'Bears', colors: { primary: '#0000FF', secondary: '#FFFFFF' } },
+      ],
+      rulesPresets: [
+        { id: 'preset-1', name: 'Standard', isDefault: true },
+        { id: 'preset-2', name: 'Quick Game', isDefault: false },
+      ],
+      isLoading: false,
+      error: null,
+      createLeague: mockCreateLeague,
+      updateLeague: mockUpdateLeague,
+      removeLeague: mockRemoveLeague,
+      duplicateLeague: mockDuplicateLeague,
+    });
   });
 
   describe('Header', () => {
-    test('renders LEAGUES title', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders LEAGUES title', async () => {
+      await renderSettledLeagueBuilderLeagues();
       expect(screen.getByText('LEAGUES')).toBeInTheDocument();
     });
 
-    test('renders back button', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders back button', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const buttons = screen.getAllByRole('button');
       expect(buttons[0]).toBeInTheDocument();
     });
 
-    test('back button navigates to league builder', () => {
-      render(<LeagueBuilderLeagues />);
+    test('back button navigates to league builder', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const buttons = screen.getAllByRole('button');
       fireEvent.click(buttons[0]);
       expect(mockNavigate).toHaveBeenCalledWith('/league-builder');
@@ -114,13 +174,13 @@ describe('LeagueBuilderLeagues Component', () => {
   });
 
   describe('Create Button', () => {
-    test('renders CREATE NEW LEAGUE button', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders CREATE NEW LEAGUE button', async () => {
+      await renderSettledLeagueBuilderLeagues();
       expect(screen.getByText('CREATE NEW LEAGUE')).toBeInTheDocument();
     });
 
     test('clicking CREATE NEW LEAGUE opens modal', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
       await waitFor(() => {
         expect(screen.getByText('Create New League')).toBeInTheDocument();
@@ -129,37 +189,37 @@ describe('LeagueBuilderLeagues Component', () => {
   });
 
   describe('Leagues List', () => {
-    test('renders league names', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders league names', async () => {
+      await renderSettledLeagueBuilderLeagues();
       expect(screen.getByText('Kruse Baseball')).toBeInTheDocument();
       expect(screen.getByText('Minor League')).toBeInTheDocument();
     });
 
-    test('renders league descriptions', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders league descriptions', async () => {
+      await renderSettledLeagueBuilderLeagues();
       expect(screen.getByText('Main league')).toBeInTheDocument();
     });
 
-    test('renders team counts', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders team counts', async () => {
+      await renderSettledLeagueBuilderLeagues();
       expect(screen.getByText('2 teams')).toBeInTheDocument();
       expect(screen.getByText('1 team')).toBeInTheDocument();
     });
 
-    test('renders edit buttons for each league', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders edit buttons for each league', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const editButtons = screen.getAllByTitle('Edit league');
       expect(editButtons.length).toBe(2);
     });
 
-    test('renders duplicate buttons for each league', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders duplicate buttons for each league', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const duplicateButtons = screen.getAllByTitle('Duplicate league');
       expect(duplicateButtons.length).toBe(2);
     });
 
-    test('renders delete buttons for each league', () => {
-      render(<LeagueBuilderLeagues />);
+    test('renders delete buttons for each league', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const deleteButtons = screen.getAllByTitle('Delete league');
       expect(deleteButtons.length).toBe(2);
     });
@@ -170,13 +230,13 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
     });
 
-    test('per-league Draft action opens Draft Setup threading leagueId; routing helper still maps format', () => {
+    test('per-league Draft action opens Draft Setup threading leagueId; routing helper still maps format', async () => {
       // The format→route helper Draft Setup uses to start the draft is unchanged.
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
         '/league-builder/snake-draft?leagueId=league-2',
       );
 
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       const draftButtons = screen.getAllByTitle('Draft setup');
 
       fireEvent.click(draftButtons[0]);
@@ -189,7 +249,7 @@ describe('LeagueBuilderLeagues Component', () => {
 
   describe('Edit League', () => {
     test('clicking edit button opens modal with league data', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       const editButtons = screen.getAllByTitle('Edit league');
       fireEvent.click(editButtons[0]);
 
@@ -199,17 +259,75 @@ describe('LeagueBuilderLeagues Component', () => {
     });
 
     test('modal shows league name label', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
       await waitFor(() => {
         expect(screen.getByText(/League Name/)).toBeInTheDocument();
+      });
+    });
+
+    test('blocks edits to a league while its saved auction is in progress', async () => {
+      vi.mocked(getAuctionSession).mockImplementation(async (leagueId) => (
+        leagueId === 'league-1'
+          ? ({
+              leagueId: 'league-1',
+              session: {
+                state: 'OPEN_BIDDING',
+                players: {},
+              },
+            } as Awaited<ReturnType<typeof getAuctionSession>>)
+          : null
+      ));
+
+      await renderSettledLeagueBuilderLeagues();
+      fireEvent.click(screen.getAllByTitle('Edit league')[0]);
+
+      expect((await screen.findAllByText(/A saved auction is in progress/i)).length).toBeGreaterThan(0);
+      const bearsCheckbox = screen.getByLabelText('Bears');
+      expect(bearsCheckbox).toBeDisabled();
+
+      const saveButton = screen.getByRole('button', { name: /Save Changes/i });
+      expect(saveButton).toBeDisabled();
+      fireEvent.click(saveButton);
+      expect(mockUpdateLeague).not.toHaveBeenCalled();
+    });
+
+    test('allows edits to an unrelated league after the saved-auction lookup resolves', async () => {
+      vi.mocked(getAuctionSession).mockImplementation(async (leagueId) => (
+        leagueId === 'league-1'
+          ? ({
+              leagueId: 'league-1',
+              session: {
+                state: 'OPEN_BIDDING',
+                players: {},
+              },
+            } as Awaited<ReturnType<typeof getAuctionSession>>)
+          : null
+      ));
+
+      await renderSettledLeagueBuilderLeagues();
+
+      fireEvent.click(screen.getAllByTitle('Edit league')[1]);
+      const saveButton = screen.getByRole('button', { name: /Save Changes/i });
+
+      await waitFor(() => {
+        expect(saveButton).not.toBeDisabled();
+      });
+      fireEvent.click(saveButton);
+
+      await waitFor(() => {
+        expect(mockUpdateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'league-2',
+          }),
+        );
       });
     });
   });
 
   describe('Duplicate League', () => {
     test('clicking duplicate calls duplicateLeague', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       const duplicateButtons = screen.getAllByTitle('Duplicate league');
       fireEvent.click(duplicateButtons[0]);
 
@@ -220,8 +338,8 @@ describe('LeagueBuilderLeagues Component', () => {
   });
 
   describe('Delete League', () => {
-    test('clicking delete shows confirmation buttons', () => {
-      render(<LeagueBuilderLeagues />);
+    test('clicking delete shows confirmation buttons', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const deleteButtons = screen.getAllByTitle('Delete league');
       fireEvent.click(deleteButtons[0]);
 
@@ -229,8 +347,8 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(screen.getByTitle('Cancel')).toBeInTheDocument();
     });
 
-    test('clicking cancel hides confirmation buttons', () => {
-      render(<LeagueBuilderLeagues />);
+    test('clicking cancel hides confirmation buttons', async () => {
+      await renderSettledLeagueBuilderLeagues();
       const deleteButtons = screen.getAllByTitle('Delete league');
       fireEvent.click(deleteButtons[0]);
 
@@ -239,7 +357,7 @@ describe('LeagueBuilderLeagues Component', () => {
     });
 
     test('clicking confirm delete calls removeLeague', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       const deleteButtons = screen.getAllByTitle('Delete league');
       fireEvent.click(deleteButtons[0]);
       fireEvent.click(screen.getByTitle('Confirm delete'));
@@ -248,11 +366,32 @@ describe('LeagueBuilderLeagues Component', () => {
         expect(mockRemoveLeague).toHaveBeenCalledWith('league-1');
       });
     });
+
+    test('blocks deleting a league while its saved auction is in progress', async () => {
+      vi.mocked(getAuctionSession).mockImplementation(async (leagueId) => (
+        leagueId === 'league-1'
+          ? ({
+              leagueId: 'league-1',
+              session: {
+                state: 'OPEN_BIDDING',
+                players: {},
+              },
+            } as Awaited<ReturnType<typeof getAuctionSession>>)
+          : null
+      ));
+
+      await renderSettledLeagueBuilderLeagues();
+      fireEvent.click(screen.getAllByTitle('Delete league')[0]);
+      fireEvent.click(screen.getByTitle('Confirm delete'));
+
+      expect((await screen.findAllByText(/A saved auction is in progress/i)).length).toBeGreaterThan(0);
+      expect(mockRemoveLeague).not.toHaveBeenCalled();
+    });
   });
 
   describe('Modal', () => {
     test('modal has close button', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
 
       await waitFor(() => {
@@ -265,7 +404,7 @@ describe('LeagueBuilderLeagues Component', () => {
     });
 
     test('modal can be closed', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
 
       await waitFor(() => {
@@ -372,7 +511,7 @@ describe('LeagueBuilderLeagues Component', () => {
 
   describe('Form Validation', () => {
     test('save button exists in modal', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
 
       await waitFor(() => {
@@ -391,7 +530,7 @@ describe('LeagueBuilderLeagues Component', () => {
 
   describe('Draft Format', () => {
     test('creating a league persists selected snake draft format', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       await openCreateLeagueModal();
 
       fireEvent.change(screen.getByLabelText('Draft format'), {
@@ -407,7 +546,7 @@ describe('LeagueBuilderLeagues Component', () => {
     });
 
     test('creating a league persists default auction draft format', async () => {
-      render(<LeagueBuilderLeagues />);
+      await renderSettledLeagueBuilderLeagues();
       await openCreateLeagueModal();
       await createLeagueFromModal('Auction Draft League');
 

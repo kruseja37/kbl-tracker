@@ -130,22 +130,38 @@ function normalizeSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]
   return selected;
 }
 
-function deriveFranchiseType(
+function seatSelectedTeamIds(config: FranchiseConfig, teams: ScheduleTeam[]): string[] | null {
+  const assignments = config.teams.playerAssignments ?? {};
+  const hasSeatData = Object.values(assignments).some((ownerId) => ownerId && ownerId !== 'cpu');
+  if (!hasSeatData) return null;
+  return teams
+    .filter((team) => {
+      const ownerId = assignments[team.teamId];
+      return Boolean(ownerId) && ownerId !== 'cpu';
+    })
+    .map((team) => team.teamId);
+}
+
+export function deriveFranchiseType(
   config: FranchiseConfig,
   selectedTeamIds: string[],
   teams: ScheduleTeam[],
 ): FranchiseType {
   if (config.franchiseType) return config.franchiseType;
+  const distinctSeatOwners = new Set(
+    Object.values(config.teams.playerAssignments ?? {}).filter((ownerId) => ownerId && ownerId !== 'cpu'),
+  );
+  if (distinctSeatOwners.size >= 2) return 'couch-coop';
   if (selectedTeamIds.length === teams.length) return 'couch-coop';
   if (selectedTeamIds.length > 1 || config.teams.mode === 'multiplayer') return 'custom';
   return 'solo';
 }
 
-function buildTeamControlSnapshot(
+export function buildTeamControlSnapshot(
   config: FranchiseConfig,
   teams: ScheduleTeam[],
 ): FranchiseTeamControlSnapshot {
-  const selectedTeamIds = normalizeSelectedTeamIds(config, teams);
+  const selectedTeamIds = seatSelectedTeamIds(config, teams) ?? normalizeSelectedTeamIds(config, teams);
   const franchiseType = deriveFranchiseType(config, selectedTeamIds, teams);
   const selectedSet = new Set(selectedTeamIds);
   const teamControl: Record<string, FranchiseTeamControl> = {};

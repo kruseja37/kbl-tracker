@@ -15,7 +15,9 @@ import {
   farmDraftRouteForLeague,
   leagueIdFromSearch,
   resolveInitialLeagueId,
+  staffHireRouteForLeague,
 } from "../utils/draftRouting";
+import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
@@ -219,6 +221,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   const [bidIncrement, setBidIncrement] = useState(1000);
   const [bidAmount, setBidAmount] = useState("");
   const loadedKeyRef = useRef<string | null>(null);
+  const cpuCountTouchedRef = useRef(false);
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
 
   useEffect(() => {
@@ -251,6 +254,13 @@ export function LeagueBuilderFarmAuctionDraft() {
       .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
       .filter((team): team is Team => Boolean(team));
   }, [activeLeague, leagueData.teams]);
+
+  useEffect(() => {
+    if (session) return;
+    if (cpuCountTouchedRef.current) return;
+    if (leagueTeams.length === 0) return;
+    setCpuCount(scaledShillDefault(leagueTeams.length));
+  }, [session, leagueTeams.length]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
@@ -560,7 +570,10 @@ export function LeagueBuilderFarmAuctionDraft() {
                 CPU COUNT
                 <input
                   value={cpuCount}
-                  onChange={(event) => setCpuCount(Number(event.target.value) || 0)}
+                  onChange={(event) => {
+                    cpuCountTouchedRef.current = true;
+                    setCpuCount(Number(event.target.value) || 0);
+                  }}
                   disabled={Boolean(session)}
                   type="number"
                   min={0}
@@ -853,8 +866,14 @@ export function LeagueBuilderFarmAuctionDraft() {
               <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold">
                 FARM AUCTION COMPLETE. Farm rosters are filled in the auction session.
                 <div className="mt-2 text-sm text-[#E8E8D8]/85">
-                  Draft complete — the two-number freeze runs next (AUC-5.2).
+                  Draft complete. Next: set your league's starting team morale and fan morale, then launch the franchise.
                 </div>
+                <button
+                  onClick={() => navigate(activeLeague ? staffHireRouteForLeague(activeLeague) : "/league-builder/staff-hire")}
+                  className="mt-4 px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
+                >
+                  Continue to Franchise Setup
+                </button>
               </div>
             )}
           </section>

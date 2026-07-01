@@ -243,7 +243,7 @@ describe("useAuctionDraft", () => {
     expect(persisted?.session.config.nominationOrderSeed).toBe(seed);
   });
 
-  test("drives engine-surfaced lot to bids to SOLD while a CPU team auto-acts", async () => {
+  test("pauses on CPU bidding turns until the decision is advanced", async () => {
     const teamIds = ["human", "cpu", "other"];
     const seed = seedWithFirst(teamIds, "human");
     mockLeagueData({
@@ -279,6 +279,19 @@ describe("useAuctionDraft", () => {
 
     await act(async () => {
       await result.current.pass("other");
+    });
+
+    expect(result.current.session?.state).toBe("OPEN_BIDDING");
+    expect(result.current.currentBidderTeamId).toBe("cpu");
+    expect(result.current.controlledCpuTeamIds).toContain("cpu");
+    expect(result.current.session?.currentLot).toMatchObject({
+      highBidder: "human",
+      bidTurnTeamId: "cpu",
+      stillIn: ["human", "cpu"],
+    });
+
+    await act(async () => {
+      await result.current.pass("cpu");
     });
 
     expect(result.current.session?.state).toBe("SOLD");
@@ -393,7 +406,7 @@ describe("useAuctionDraft", () => {
     });
   });
 
-  test("CPU lone survivor auto-claims at reserve and fills a roster slot", async () => {
+  test("pauses on CPU lone survivor claims until the decision is advanced", async () => {
     const teamIds = ["human", "cpu"];
     const seed = seedWithFirst(teamIds, "human");
     mockLeagueData({
@@ -416,6 +429,14 @@ describe("useAuctionDraft", () => {
 
     await act(async () => {
       await result.current.pass("human");
+    });
+
+    expect(result.current.session?.state).toBe("RESOLVE");
+    expect(result.current.session?.pendingClaim).toMatchObject({ teamId: "cpu", price: reserve });
+    expect(result.current.controlledCpuTeamIds).toContain("cpu");
+
+    await act(async () => {
+      await result.current.claimAtReserve();
     });
 
     expect(result.current.session?.state).toBe("SOLD");

@@ -53,6 +53,10 @@ import {
   type ModStat,
   type TierKey,
 } from "../../../data/tierParams";
+import {
+  isSavedAuctionMutationGuardMessage,
+  useSavedAuctionMutationGuard,
+} from "../utils/savedAuctionMutationGuard";
 
 const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
 
@@ -256,6 +260,7 @@ export function LeagueBuilderTeams() {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [formData, setFormData] = useState<TeamFormData>(() => createDefaultFormData());
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isCapIdentityOpen, setIsCapIdentityOpen] = useState(true);
   const [isFarmCapIdentityOpen, setIsFarmCapIdentityOpen] = useState(true);
@@ -271,6 +276,29 @@ export function LeagueBuilderTeams() {
     () => new Map(managerProfiles.map((profile) => [profile.managerId, profile])),
     [managerProfiles],
   );
+  const allLeagueIds = useMemo(() => leagues.map((league) => league.id), [leagues]);
+  const savedAuctionGuard = useSavedAuctionMutationGuard(allLeagueIds);
+
+  const getTeamMutationLeagueIds = (team: Team | null | undefined) => {
+    if (!team) return [];
+    const ids = new Set(team.leagueIds ?? []);
+    leagues.forEach((league) => {
+      if (league.teamIds.includes(team.id)) ids.add(league.id);
+    });
+    return [...ids];
+  };
+
+  const editingTeamMutationLeagueIds = useMemo(
+    () => getTeamMutationLeagueIds(editingTeam),
+    [editingTeam, leagues],
+  );
+  const isMutationBlockedForLeagueIds = (leagueIds: string[]) =>
+    leagueIds.length > 0 &&
+    (!savedAuctionGuard.checked ||
+      Boolean(savedAuctionGuard.lookupError) ||
+      leagueIds.some((leagueId) => savedAuctionGuard.lockedLeagueIds.includes(leagueId)));
+  const savedAuctionMutationMessage = savedAuctionGuard.message;
+  const editingTeamMutationBlocked = isMutationBlockedForLeagueIds(editingTeamMutationLeagueIds);
   const managerAssignmentsByTeamId = useMemo(
     () =>
       new Map(
@@ -347,6 +375,7 @@ export function LeagueBuilderTeams() {
 
   const openCreateModal = () => {
     setEditingTeam(null);
+    setSaveError(null);
     setFormData(createDefaultFormData());
     setIsCapIdentityOpen(true);
     setIsFarmCapIdentityOpen(true);
@@ -360,6 +389,7 @@ export function LeagueBuilderTeams() {
     const managerId = getAssignedManagerId(team);
     const managerProfile = managerProfilesById.get(managerId);
     setEditingTeam(team);
+    setSaveError(null);
     setFormData({
       name: team.name,
       abbreviation: team.abbreviation,
@@ -401,12 +431,29 @@ export function LeagueBuilderTeams() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingTeam(null);
+    setSaveError(null);
     setFormData(createDefaultFormData());
     autosavedTeamMetadataRef.current = null;
   };
 
   useEffect(() => {
+    if (!isModalOpen || !editingTeamMutationBlocked || !savedAuctionMutationMessage) return;
+    setSaveError(savedAuctionMutationMessage);
+  }, [editingTeamMutationBlocked, isModalOpen, savedAuctionMutationMessage]);
+
+  useEffect(() => {
+    setSaveError((current) => {
+      if (!isSavedAuctionMutationGuardMessage(current)) return current;
+      return savedAuctionGuard.blocked ? savedAuctionMutationMessage : null;
+    });
+  }, [savedAuctionGuard.blocked, savedAuctionMutationMessage]);
+
+  useEffect(() => {
     if (!editingTeam || !isModalOpen) return;
+    if (editingTeamMutationBlocked) {
+      if (savedAuctionMutationMessage) setSaveError(savedAuctionMutationMessage);
+      return;
+    }
 
     const nextMetadata = {
       heritageFacts: normalizeHeritageFacts(formData.heritageFacts),
@@ -450,7 +497,9 @@ export function LeagueBuilderTeams() {
     editingTeam,
     formData.heritageFacts,
     formData.rivalries,
+    editingTeamMutationBlocked,
     isModalOpen,
+    savedAuctionMutationMessage,
     updateTeam,
   ]);
 
@@ -531,8 +580,13 @@ export function LeagueBuilderTeams() {
     if (!formData.name.trim() || !formData.abbreviation.trim()) return;
     if (!capIdentityValidation.identity) return;
     if (!farmCapIdentityValidation.identity) return;
+    if (editingTeamMutationBlocked) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      return;
+    }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       const normalizedHeritageFacts = normalizeHeritageFacts(formData.heritageFacts);
       const normalizedRivalries = normalizeRivalries(formData.rivalries);
@@ -601,17 +655,25 @@ export function LeagueBuilderTeams() {
       closeModal();
     } catch (err) {
       console.error("Failed to save team:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save team.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
+    const team = teams.find((candidate) => candidate.id === id);
+    if (isMutationBlockedForLeagueIds(getTeamMutationLeagueIds(team))) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      setDeleteConfirmId(null);
+      return;
+    }
     try {
       await removeTeam(id);
       setDeleteConfirmId(null);
     } catch (err) {
       console.error("Failed to delete team:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to delete team.");
     }
   };
 
@@ -936,10 +998,10 @@ export function LeagueBuilderTeams() {
         </div>
 
         {/* Error Display */}
-        {error && (
+        {(error || saveError) && (
           <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
-            <span className="text-red-200">{error}</span>
+            <span className="text-red-200">{saveError ?? error}</span>
           </div>
         )}
 
@@ -1076,6 +1138,11 @@ export function LeagueBuilderTeams() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {saveError && (
+              <div className="mx-6 mt-4 bg-red-900/50 border-4 border-red-500 p-3 text-sm text-red-100">
+                {saveError}
+              </div>
+            )}
 
             {/* Modal Content */}
             <div className="p-6 space-y-6">
@@ -2095,6 +2162,7 @@ export function LeagueBuilderTeams() {
                   !formData.abbreviation.trim() ||
                   Boolean(capIdentityValidation.error) ||
                   Boolean(farmCapIdentityValidation.error) ||
+                  editingTeamMutationBlocked ||
                   isSaving
                 }
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"

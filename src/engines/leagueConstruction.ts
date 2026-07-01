@@ -18,8 +18,8 @@ import {
 export type BalanceMode = 'taxed' | 'advisory' | 'off';
 export type Band = 'Power' | 'Contact' | 'Speed' | 'Defense' | 'Rotation' | 'Bullpen';
 export type BandPriorities = Record<Band, number>;
-export type IdentityComposition = { increase: string[]; decrease: string[] };
-export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[] };
+export type IdentityComposition = { increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
+export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
 export type TaxBinding = { group: string; stat: string; over: number; tax: number };
 export type TaxResult = { charged: number; wouldBeTax: number; binding: TaxBinding[] };
 export type PickValue = { pick: number; value: number };
@@ -119,6 +119,10 @@ const LUX_TO_MOD_STAT = new Map<string, ModStat>(
   }),
 );
 
+export function luxKeyToModStat(luxKey: string): ModStat | undefined {
+  return LUX_TO_MOD_STAT.get(luxKey);
+}
+
 function bandScores(): Record<string, BandScore> {
   const out: Record<string, BandScore> = {};
   for (const [name, deltas] of Object.entries(CAP_MODIFICATION_FRACTIONS)) {
@@ -205,6 +209,11 @@ export function applyIdentitySelection(sel: { increase: string[]; decrease: stri
 }
 
 export function identityCapShift(identity: IdentityComposition): Record<ModStat, number> {
+  if (identity.rawShift) {
+    const base = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
+    return { ...base, ...identity.rawShift };
+  }
+
   const normalized = applyIdentitySelection(identity);
   const net = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
 

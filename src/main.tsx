@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import './index.css'
 import './src_figma/styles/franchise-theme.css'
+import './src_figma/styles/auction-theme.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

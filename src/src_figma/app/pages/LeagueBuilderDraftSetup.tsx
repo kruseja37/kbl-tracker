@@ -21,6 +21,8 @@ import {
   leagueIdFromSearch,
   resolveInitialLeagueId,
 } from "../utils/draftRouting";
+import { scaledShillDefault } from "../../../data/auctionEngineConstants";
+import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
   removePlayersFromLeaguePool,
@@ -32,7 +34,7 @@ import {
   unlockLeaguePool,
   evaluatePoolSufficiency,
 } from "../../../utils/leagueBuilderPoolBuilder";
-import type { Player, Position } from "../../../utils/leagueBuilderStorage";
+import { getAuctionSession, type PitchType, type Player, type Position } from "../../../utils/leagueBuilderStorage";
 import type { RegisteredPool } from "../../../engines/leagueConstruction";
 import { TRAIT_PRICING } from "../../../data/traitPricing";
 
@@ -52,15 +54,25 @@ function playerName(player: Player): string {
 const DRAFTABLE_POSITION_OPTIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "SP/RP", "RP", "CP"] as const;
 const POSITION_OPTIONS = ["All", ...DRAFTABLE_POSITION_OPTIONS] as const;
 const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
+const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
+const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", "Sub"];
+const SAVED_DRAFT_POOL_LOCK_MESSAGE =
+  "A saved auction is in progress. Resume that draft before changing this player pool.";
+const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved auction before allowing pool edits.";
+const SAVED_DRAFT_LOOKUP_ERROR_MESSAGE =
+  "Could not confirm whether a saved auction exists. Refresh before changing this player pool.";
+const LOCKED_POOL_EDIT_MESSAGE = "Unlock the player pool before editing. Locked pools freeze the auction values.";
 
 type DraftablePosition = (typeof DRAFTABLE_POSITION_OPTIONS)[number];
 
 type PlayerEditForm = {
   firstName: string;
   lastName: string;
+  gender: Player["gender"];
   age: string;
   bats: Player["bats"];
   throws: Player["throws"];
+  armSlot: NonNullable<Player["armSlot"]> | "";
   primaryPosition: DraftablePosition;
   secondaryPosition: DraftablePosition | "";
   power: string;
@@ -71,6 +83,7 @@ type PlayerEditForm = {
   velocity: string;
   junk: string;
   accuracy: string;
+  arsenal: PitchType[];
   trait1: string;
   trait2: string;
 };
@@ -107,9 +120,11 @@ function playerToEditForm(player: Player): PlayerEditForm {
   return {
     firstName: player.firstName,
     lastName: player.lastName,
+    gender: player.gender ?? "M",
     age: player.age.toString(),
     bats: player.bats,
     throws: player.throws,
+    armSlot: player.armSlot ?? "",
     primaryPosition: isDraftablePosition(player.primaryPosition) ? player.primaryPosition : "C",
     secondaryPosition: isDraftablePosition(player.secondaryPosition) ? player.secondaryPosition : "",
     power: player.power.toString(),
@@ -120,6 +135,7 @@ function playerToEditForm(player: Player): PlayerEditForm {
     velocity: player.velocity.toString(),
     junk: player.junk.toString(),
     accuracy: player.accuracy.toString(),
+    arsenal: [...(player.arsenal ?? [])],
     trait1: player.trait1 ?? "",
     trait2: player.trait2 ?? "",
   };
@@ -130,9 +146,11 @@ function buildEditedPlayer(player: Player, form: PlayerEditForm): Player {
     ...player,
     firstName: form.firstName.trim(),
     lastName: form.lastName.trim(),
+    gender: form.gender,
     age: clampInt(form.age, player.age, 18, 50),
     bats: form.bats,
     throws: form.throws,
+    armSlot: form.armSlot || null,
     primaryPosition: form.primaryPosition as Position,
     secondaryPosition: form.secondaryPosition ? (form.secondaryPosition as Position) : undefined,
     power: clampInt(form.power, player.power, 0, 99),
@@ -143,6 +161,7 @@ function buildEditedPlayer(player: Player, form: PlayerEditForm): Player {
     velocity: clampInt(form.velocity, player.velocity, 0, 99),
     junk: clampInt(form.junk, player.junk, 0, 99),
     accuracy: clampInt(form.accuracy, player.accuracy, 0, 99),
+    arsenal: [...form.arsenal],
     trait1: form.trait1 || undefined,
     trait2: form.trait2 || undefined,
   };
@@ -190,6 +209,9 @@ export function LeagueBuilderDraftSetup() {
   const [registeredPool, setRegisteredPool] = useState<RegisteredPool | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [savedDraftChecked, setSavedDraftChecked] = useState(false);
+  const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
 
   const refreshPool = useCallback(async (leagueId: string) => {
     setRegisteredPool(await getRegisteredPool(leagueId));
@@ -200,7 +222,41 @@ export function LeagueBuilderDraftSetup() {
     else setRegisteredPool(null);
   }, [activeLeagueId, refreshPool, players]);
 
+  useEffect(() => {
+    if (!activeLeagueId) {
+      setHasSavedDraft(false);
+      setSavedDraftLookupError(null);
+      setSavedDraftChecked(true);
+      return;
+    }
+    let cancelled = false;
+    setSavedDraftChecked(false);
+    setSavedDraftLookupError(null);
+    void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
+      if (cancelled) return;
+      setHasSavedDraft(Boolean(row && row.session.state !== "AUCTION_COMPLETE"));
+      setSavedDraftLookupError(null);
+      setSavedDraftChecked(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setHasSavedDraft(false);
+        setSavedDraftLookupError(SAVED_DRAFT_LOOKUP_ERROR_MESSAGE);
+        setSavedDraftChecked(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId]);
+
   const locked = Boolean(registeredPool?.locked);
+  const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft;
+  const poolEditingBlocked = locked || savedDraftMutationBlocked;
+  const poolEditingBlockMessage = hasSavedDraft
+    ? SAVED_DRAFT_POOL_LOCK_MESSAGE
+    : savedDraftLookupError ?? (savedDraftChecked
+      ? LOCKED_POOL_EDIT_MESSAGE
+      : CHECKING_SAVED_DRAFT_MESSAGE);
 
   // Selection state (ids checked in each pane).
   const [inSelected, setInSelected] = useState<Set<string>>(new Set());
@@ -268,9 +324,11 @@ export function LeagueBuilderDraftSetup() {
       .sort((a, b) => playerName(a).localeCompare(playerName(b)));
   }, [availablePlayers, availSearch, availPosition]);
 
+  const estimatedShills = league ? scaledShillDefault(league.teamIds.length) : 0;
+  const draftingParticipantCount = (league?.teamIds.length ?? 0) + estimatedShills;
   const sufficiency = useMemo(
-    () => evaluatePoolSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0),
-    [inPoolPlayers.length, league],
+    () => evaluatePoolSufficiency(inPoolPlayers.length, draftingParticipantCount),
+    [draftingParticipantCount, inPoolPlayers.length],
   );
 
   // Auto-import from branded teams on first open (JK ruling): reconcile EVERY rostered player
@@ -280,7 +338,7 @@ export function LeagueBuilderDraftSetup() {
   // pre-existing assignment must not suppress the seed). Retries on failure.
   const autoImportedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isLoading || !activeLeagueId || !league || locked) return;
+    if (isLoading || !activeLeagueId || !league || poolEditingBlocked) return;
     if (autoImportedRef.current === activeLeagueId) return;
     autoImportedRef.current = activeLeagueId;
     void (async () => {
@@ -291,7 +349,7 @@ export function LeagueBuilderDraftSetup() {
         autoImportedRef.current = null; // allow retry on a later render
       }
     })();
-  }, [isLoading, activeLeagueId, league, locked, refresh]);
+  }, [isLoading, activeLeagueId, league, poolEditingBlocked, refresh]);
 
   const runAction = useCallback(
     async (fn: () => Promise<void>) => {
@@ -310,40 +368,55 @@ export function LeagueBuilderDraftSetup() {
     [refresh, refreshPool, activeLeagueId],
   );
 
+  const assertPoolCanMutate = () => {
+    if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
+    if (savedDraftLookupError) throw new Error(savedDraftLookupError);
+    if (hasSavedDraft) throw new Error(SAVED_DRAFT_POOL_LOCK_MESSAGE);
+  };
+
   const handleAdd = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await addPlayersToLeaguePool([...availSelected], activeLeagueId);
       setAvailSelected(new Set());
     });
 
   const handleRemove = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await removePlayersFromLeaguePool([...inSelected], activeLeagueId);
       setInSelected(new Set());
     });
 
   const handleImport = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await importRosteredPlayersToLeaguePool(activeLeagueId);
     });
 
   const handleLock = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await lockLeaguePool(activeLeagueId);
     });
 
   const handleUnlock = () =>
     runAction(async () => {
+      assertPoolCanMutate();
       await unlockLeaguePool(activeLeagueId);
     });
 
   const handleStartDraft = () => {
     if (!league || !locked || !sufficiency.meetsFloor) return;
-    navigate(draftRouteForLeague(league));
+    navigate(`/league-builder/draft-config?leagueId=${league.id}`);
   };
 
   const handleSaveEditedPlayer = useCallback(
     async (updatedPlayer: Player) => {
+      if (poolEditingBlocked) {
+        setEditError(poolEditingBlockMessage);
+        return;
+      }
       setEditSaving(true);
       setEditError(null);
       try {
@@ -362,7 +435,7 @@ export function LeagueBuilderDraftSetup() {
         setEditSaving(false);
       }
     },
-    [activeLeagueId, refresh, refreshPool, updatePlayer],
+    [activeLeagueId, poolEditingBlockMessage, poolEditingBlocked, refresh, refreshPool, updatePlayer],
   );
 
   const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
@@ -408,7 +481,7 @@ export function LeagueBuilderDraftSetup() {
             <span className="font-bold">{league.name}</span>
             <span className="text-[#E8E8D8]/50">
               {"  ·  "}
-              {league.teamIds.length} teams · {league.tier ?? "juiced"} tier · {sufficiency.mlbSlots} MLB slots
+              {league.teamIds.length} teams · {estimatedShills} est. shills · {league.tier ?? "juiced"} tier · {sufficiency.mlbSlots} draft slots
             </span>
           </div>
         )}
@@ -419,10 +492,10 @@ export function LeagueBuilderDraftSetup() {
         )}
       </div>
 
-      {(error || actionError) && (
+      {(error || actionError || savedDraftLookupError) && (
         <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-red-400" />
-          <span className="text-red-200">{actionError ?? error}</span>
+          <span className="text-red-200">{actionError ?? savedDraftLookupError ?? error}</span>
         </div>
       )}
 
@@ -442,12 +515,12 @@ export function LeagueBuilderDraftSetup() {
               onSearch={setInSearch}
               position={inPosition}
               onPosition={setInPosition}
-              disabled={locked}
+              disabled={poolEditingBlocked}
               onSelectAll={() => selectAll(inFiltered, setInSelected)}
               footer={
                 <button
                   onClick={handleRemove}
-                  disabled={locked || busy || inSelected.size === 0}
+                  disabled={poolEditingBlocked || busy || inSelected.size === 0}
                   className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   Remove <ChevronRight className="w-4 h-4" />
@@ -462,7 +535,7 @@ export function LeagueBuilderDraftSetup() {
                   rightTitle="IV"
                   checked={inSelected.has(p.id)}
                   focused={focusedPlayerId === p.id}
-                  disabled={locked}
+                  disabled={poolEditingBlocked}
                   onToggle={() => toggle(inSelected, setInSelected, p.id)}
                   onFocus={() => setFocusedPlayerId(p.id)}
                 />
@@ -484,12 +557,12 @@ export function LeagueBuilderDraftSetup() {
               onSearch={setAvailSearch}
               position={availPosition}
               onPosition={setAvailPosition}
-              disabled={locked}
+              disabled={poolEditingBlocked}
               onSelectAll={() => selectAll(availFiltered, setAvailSelected)}
               footer={
                 <button
                   onClick={handleAdd}
-                  disabled={locked || busy || availSelected.size === 0}
+                  disabled={poolEditingBlocked || busy || availSelected.size === 0}
                   className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   <ChevronLeft className="w-4 h-4" /> Add
@@ -504,7 +577,7 @@ export function LeagueBuilderDraftSetup() {
                   rightTitle="Grade"
                   checked={availSelected.has(p.id)}
                   focused={focusedPlayerId === p.id}
-                  disabled={locked}
+                  disabled={poolEditingBlocked}
                   onToggle={() => toggle(availSelected, setAvailSelected, p.id)}
                   onFocus={() => setFocusedPlayerId(p.id)}
                 />
@@ -521,7 +594,11 @@ export function LeagueBuilderDraftSetup() {
           {focusedPlayer && (
             <FocusedPlayerPanel
               player={focusedPlayer}
+              locked={poolEditingBlocked}
+              lockedLabel={hasSavedDraft ? "Draft Saved" : undefined}
+              lockedTitle={poolEditingBlockMessage}
               onEdit={() => {
+                if (poolEditingBlocked) return;
                 setEditError(null);
                 setEditingPlayer(focusedPlayer);
               }}
@@ -538,7 +615,7 @@ export function LeagueBuilderDraftSetup() {
               }`}
             >
               {sufficiency.meetsFloor ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-              Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} MLB slots
+              Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} draft slots
               {sufficiency.meetsFloor
                 ? ` · surplus ${sufficiency.surplus >= 0 ? "+" : ""}${sufficiency.surplus}`
                 : ` · need ${-sufficiency.surplus} more`}
@@ -550,7 +627,7 @@ export function LeagueBuilderDraftSetup() {
             )}
             <button
               onClick={handleImport}
-              disabled={locked || busy}
+              disabled={poolEditingBlocked || busy}
               className="flex items-center gap-2 bg-[#556B55] hover:bg-[#4A6844] disabled:opacity-40 border-4 border-[#C4A853] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
             >
               <Download className="w-4 h-4" /> Import from branded teams
@@ -562,7 +639,7 @@ export function LeagueBuilderDraftSetup() {
             {!locked ? (
               <button
                 onClick={handleLock}
-                disabled={busy || inPoolPlayers.length === 0}
+                disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0}
                 className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
               >
                 <Lock className="w-5 h-5" /> LOCK POOL
@@ -571,17 +648,17 @@ export function LeagueBuilderDraftSetup() {
               <>
                 <button
                   onClick={handleUnlock}
-                  disabled={busy}
+                  disabled={busy || savedDraftMutationBlocked}
                   className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
                   <Unlock className="w-5 h-5" /> UNLOCK
                 </button>
                 <button
                   onClick={handleStartDraft}
-                  disabled={busy || !sufficiency.meetsFloor}
+                  disabled={busy || savedDraftMutationBlocked || !sufficiency.meetsFloor}
                   className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] disabled:opacity-40 border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
                 >
-                  <Play className="w-5 h-5" /> START DRAFT
+                  <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START DRAFT"}
                 </button>
               </>
             )}
@@ -607,10 +684,24 @@ export function LeagueBuilderDraftSetup() {
   );
 }
 
-function FocusedPlayerPanel({ player, onEdit }: { player: Player; onEdit: () => void }) {
+function FocusedPlayerPanel({
+  player,
+  locked,
+  lockedLabel,
+  lockedTitle,
+  onEdit,
+}: {
+  player: Player;
+  locked: boolean;
+  lockedLabel?: string;
+  lockedTitle?: string;
+  onEdit: () => void;
+}) {
   const grade = computePlayerGrade(player);
   const iv = computePlayerIv(player);
-  const ratings = isPitcherPosition(player.primaryPosition) ? PITCHER_RATINGS : HITTER_RATINGS;
+  const ratings = isPitcherPosition(player.primaryPosition)
+    ? [...HITTER_RATINGS, ...PITCHER_RATINGS]
+    : HITTER_RATINGS;
 
   return (
     <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 mb-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
@@ -627,9 +718,11 @@ function FocusedPlayerPanel({ player, onEdit }: { player: Player; onEdit: () => 
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
+          disabled={locked}
+          title={locked ? lockedTitle ?? "Unlock the player pool before editing frozen auction values." : undefined}
+          className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] disabled:opacity-45 disabled:hover:bg-[#5A8352] border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
         >
-          <Pencil className="w-4 h-4" /> Edit Player
+          <Pencil className="w-4 h-4" /> {locked ? lockedLabel ?? "Unlock to Edit" : "Edit Player"}
         </button>
       </div>
 
@@ -637,10 +730,18 @@ function FocusedPlayerPanel({ player, onEdit }: { player: Player; onEdit: () => 
         <StatBlock label="GRADE" value={grade} />
         <StatBlock label="IV" value={formatMoney(iv)} />
         <StatBlock label="POSITION" value={positionLabel(player)} />
+        <StatBlock label="GENDER" value={player.gender === "F" ? "She/her" : "He/him"} />
         <StatBlock label="TRAITS" value={[player.trait1, player.trait2].filter(Boolean).join(" / ") || "None"} />
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+      {isPitcherPosition(player.primaryPosition) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <StatBlock label="ARM SLOT" value={player.armSlot ?? "Not set"} />
+          <StatBlock label="ARSENAL" value={(player.arsenal ?? []).join(" / ") || "Not set"} />
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-2">
         {ratings.map((rating) => (
           <div key={rating.key} className="bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2">
             <div className="text-[10px] font-bold tracking-wider text-[#E8E8D8]/50">{rating.label}</div>
@@ -683,15 +784,23 @@ function DraftSetupPlayerEditModal({
   const previewPlayer = useMemo(() => buildEditedPlayer(player, form), [player, form]);
   const previewIv = useMemo(() => computePlayerIv(previewPlayer), [previewPlayer]);
   const isPitcher = isPitcherPosition(form.primaryPosition);
-  const visibleRatings = isPitcher ? PITCHER_RATINGS : HITTER_RATINGS;
+  const visibleRatings = isPitcher ? [...HITTER_RATINGS, ...PITCHER_RATINGS] : HITTER_RATINGS;
   const inputClass = "w-full bg-[#4A6844] border-[3px] border-[#3F5A3A] px-3 py-2 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none";
   const numericInputClass = `${inputClass} text-center font-bold`;
 
   const updateForm = <K extends keyof PlayerEditForm>(field: K, value: PlayerEditForm[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
   };
+  const toggleArsenal = (pitch: PitchType) => {
+    setForm((current) => ({
+      ...current,
+      arsenal: current.arsenal.includes(pitch)
+        ? current.arsenal.filter((candidate) => candidate !== pitch)
+        : [...current.arsenal, pitch],
+    }));
+  };
 
-  const saveDisabled = saving || !form.firstName.trim() || !form.lastName.trim();
+  const saveDisabled = saving || !form.firstName.trim() || !form.lastName.trim() || !form.gender;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
@@ -719,7 +828,7 @@ function DraftSetupPlayerEditModal({
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label className="block">
               <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">First Name</span>
               <input
@@ -736,9 +845,20 @@ function DraftSetupPlayerEditModal({
                 className={inputClass}
               />
             </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Gender</span>
+              <select
+                value={form.gender}
+                onChange={(event) => updateForm("gender", event.target.value as Player["gender"])}
+                className={inputClass}
+              >
+                <option value="M">He/him</option>
+                <option value="F">She/her</option>
+              </select>
+            </label>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
             <label className="block">
               <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Age</span>
               <input
@@ -771,6 +891,19 @@ function DraftSetupPlayerEditModal({
               >
                 <option value="R">R</option>
                 <option value="L">L</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Arm Slot</span>
+              <select
+                value={form.armSlot}
+                onChange={(event) => updateForm("armSlot", event.target.value as PlayerEditForm["armSlot"])}
+                className={inputClass}
+              >
+                <option value="">Not set</option>
+                {ARM_SLOTS.map((slot) => (
+                  <option key={slot} value={slot}>{slot}</option>
+                ))}
               </select>
             </label>
             <label className="block">
@@ -828,9 +961,9 @@ function DraftSetupPlayerEditModal({
 
           <div>
             <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-2">
-              {isPitcher ? "Pitching Ratings" : "Hitting Ratings"}
+              {isPitcher ? "Full Pitcher Ratings" : "Hitting Ratings"}
             </div>
-            <div className={`grid gap-3 ${isPitcher ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-5"}`}>
+            <div className={`grid gap-3 ${isPitcher ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-5"}`}>
               {visibleRatings.map((rating) => (
                 <label key={rating.key} className="block">
                   <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">{rating.label}</span>
@@ -846,6 +979,28 @@ function DraftSetupPlayerEditModal({
               ))}
             </div>
           </div>
+
+          {isPitcher && (
+            <div>
+              <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-2">Arsenal</div>
+              <div className="flex flex-wrap gap-2 bg-[#4A6844] border-[3px] border-[#3F5A3A] p-2">
+                {PITCH_TYPES.map((pitch) => (
+                  <button
+                    key={pitch}
+                    type="button"
+                    onClick={() => toggleArsenal(pitch)}
+                    className={`px-3 py-1 text-xs border-2 transition ${
+                      form.arsenal.includes(pitch)
+                        ? "bg-[#5599FF] border-[#3366FF] text-white"
+                        : "bg-[#4A6844] border-[#3F5A3A] text-[#E8E8D8]/70 hover:border-[#E8E8D8]/50"
+                    }`}
+                  >
+                    {pitch}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-2">Traits</div>
