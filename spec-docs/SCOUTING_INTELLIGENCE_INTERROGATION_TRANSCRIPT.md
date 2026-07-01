@@ -654,4 +654,6 @@ near-edge is gone. (2) The legal-roster rules were EXTRACTED to a canonical shar
 draft, the scout/Assistant-GM board, and the in-season roster advisor must ALL adopt (JK directive; balance sim
 consumes it now, the other three are the forward wiring). (3) Dedicated reference doc written:
 `spec-docs/TEAM_ARCHETYPES_24.md` (all 24 with exemplars + estimated ±rating-point construction per area). Move-1
-committed to main; player-archetype build (Move 2) is next.
+committed `efc7cfb6` on the `experiment/manager-wpa-window` branch (NOT literal `main` — main is ~1104 commits
+behind and lacks the scouting/archetype foundation; JK to decide main propagation); player-archetype build
+(Move 2) is next.
