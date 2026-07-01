@@ -1,256 +1,49 @@
-import { useEffect, useMemo, useState } from "react";
-import type { LineupSlot, Player, Position, Team } from "../../../utils/leagueBuilderStorage";
-import { saveFranchiseTeam } from "../../../utils/franchisePlayerStorage";
+import type { Position } from "../../../utils/leagueBuilderStorage";
 import {
   FRANCHISE_FIELD_POSITIONS,
+  FRANCHISE_PITCHER_LINEUP_SLOT_ID,
   FRANCHISE_ROTATION_SIZE,
-  applyFranchiseTeamUpdateWithStaleOptimalSnapshots,
-  buildEditableFranchiseLineupSlots,
-  buildManualLineupForSave,
-  describeStoredLineupRotationWarnings,
-  duplicateIds,
-  expectedManualLineupPositions,
   getFranchisePlayerName,
-  isFranchisePitcher,
-  normalizeFranchiseRotationIds,
 } from "../utils/franchiseLineupDomain";
+import {
+  useFranchiseLineupRotationEditor,
+  type UseFranchiseLineupRotationEditorInput,
+} from "../hooks/useFranchiseLineupRotationEditor";
 
 /**
- * FranchiseLineupRotationEditor — the durable lineup + rotation editor shared by Team Hub AND the
- * Lineups tab (no divergent copies). Extracted from TeamHubContent, then aligned to franchise rules
- * (JK 2026-06-26):
- *  - NO DH: franchise mode is sealed no-DH at config level, so the editor never offers a DH slot.
- *  - FOUR-MAN ROTATION: SMB4 is always a 4-man rotation; exactly 4 starter slots, the rest is bullpen.
- *  - BENCH + BULLPEN visible: position players not in the nine and pitchers not in the four are shown
- *    so the user can swap anyone in or out.
- *
- * Fully controlled by props: the parent owns the team record + roster; this component owns only the
- * in-progress manual edit state. On save it writes through saveFranchiseTeam and hands the saved Team
- * back via setFranchiseTeam (which re-seeds the editor through the init effect).
+ * FranchiseLineupRotationEditor — the legacy (Team Hub) presentation of the durable lineup + rotation
+ * editor. All logic lives in useFranchiseLineupRotationEditor (shared with the Fenway-hub surface);
+ * this is a thin --franchise-* themed view over it. No DH, four-man rotation, bench + bullpen visible.
  */
-export interface FranchiseLineupRotationEditorProps {
-  franchiseId: string | undefined;
-  franchiseTeam: Team | null;
-  setFranchiseTeam: (team: Team) => void;
-  franchiseRosterPlayers: Player[];
-  /** Called at the start of a save — Team Hub clears its optimal-comparison panel here. */
-  onBeforeSave?: () => void;
-}
+export type FranchiseLineupRotationEditorProps = UseFranchiseLineupRotationEditorInput;
 
-export function FranchiseLineupRotationEditor({
-  franchiseId,
-  franchiseTeam,
-  setFranchiseTeam,
-  franchiseRosterPlayers,
-  onBeforeSave,
-}: FranchiseLineupRotationEditorProps) {
-  const [manualLineupSlots, setManualLineupSlots] = useState<LineupSlot[]>([]);
-  const [manualRotationIds, setManualRotationIds] = useState<string[]>([]);
-  const [lineupRotationDirty, setLineupRotationDirty] = useState(false);
-  const [isLineupRotationSaving, setIsLineupRotationSaving] = useState(false);
-  const [lineupRotationMessage, setLineupRotationMessage] = useState<string | null>(null);
-  const [lineupRotationError, setLineupRotationError] = useState<string | null>(null);
-
-  const touch = () => {
-    setLineupRotationDirty(true);
-    setLineupRotationMessage(null);
-    setLineupRotationError(null);
-  };
-
-  const franchiseRosterPlayerById = useMemo(
-    () => new Map(franchiseRosterPlayers.map((player) => [player.id, player])),
-    [franchiseRosterPlayers],
-  );
-  const positionPlayerOptions = useMemo(
-    () => franchiseRosterPlayers.filter((player) => !isFranchisePitcher(player)),
-    [franchiseRosterPlayers],
-  );
-  const pitcherOptions = useMemo(
-    () => franchiseRosterPlayers.filter((player) => isFranchisePitcher(player)),
-    [franchiseRosterPlayers],
-  );
-  const storedLineupRotationWarnings = useMemo(() => {
-    return describeStoredLineupRotationWarnings(
-      franchiseRosterPlayers,
-      franchiseTeam?.lineupWithoutDH,
-      franchiseTeam?.startingRotation,
-      false,
-    );
-  }, [franchiseRosterPlayers, franchiseTeam]);
-  const duplicateManualLineupIds = useMemo(
-    () => duplicateIds(manualLineupSlots.map((slot) => slot.playerId)),
-    [manualLineupSlots],
-  );
-  const duplicateManualRotationIds = useMemo(
-    () => duplicateIds(manualRotationIds),
-    [manualRotationIds],
-  );
-  const duplicateManualLineupPositions = useMemo(
-    () => duplicateIds(manualLineupSlots.map((slot) => slot.fieldingPosition)),
-    [manualLineupSlots],
-  );
-  const missingManualLineupPositions = useMemo(() => {
-    const assignedPositions = new Set(manualLineupSlots.map((slot) => slot.fieldingPosition));
-    return expectedManualLineupPositions(false).filter((position) => !assignedPositions.has(position));
-  }, [manualLineupSlots]);
-  const lineupRotationBlockingMessage = useMemo(() => {
-    if (duplicateManualLineupIds.length > 0) {
-      return `Lineup has duplicate players: ${duplicateManualLineupIds.join(', ')}.`;
-    }
-    if (duplicateManualLineupPositions.length > 0) {
-      return `Lineup has duplicate defensive positions: ${duplicateManualLineupPositions.join(', ')}.`;
-    }
-    if (missingManualLineupPositions.length > 0) {
-      return `Lineup is missing defensive positions: ${missingManualLineupPositions.join(', ')}.`;
-    }
-    if (duplicateManualRotationIds.length > 0) {
-      return `Rotation has duplicate pitchers: ${duplicateManualRotationIds.join(', ')}.`;
-    }
-    return null;
-  }, [
-    duplicateManualLineupIds,
-    duplicateManualLineupPositions,
-    duplicateManualRotationIds,
-    missingManualLineupPositions,
-  ]);
-
-  // Players not currently in the starting nine / four — the bench + bullpen.
-  const benchPlayers = useMemo(() => {
-    const inLineup = new Set(manualLineupSlots.map((slot) => slot.playerId));
-    return positionPlayerOptions.filter((player) => !inLineup.has(player.id));
-  }, [positionPlayerOptions, manualLineupSlots]);
-  const bullpenPitchers = useMemo(() => {
-    const inRotation = new Set(manualRotationIds);
-    return pitcherOptions.filter((player) => !inRotation.has(player.id));
-  }, [pitcherOptions, manualRotationIds]);
-  const rotationStarterName = useMemo(() => {
-    const starter = manualRotationIds[0] ? franchiseRosterPlayerById.get(manualRotationIds[0]) : undefined;
-    return starter ? getFranchisePlayerName(starter) : null;
-  }, [manualRotationIds, franchiseRosterPlayerById]);
-  const canAddStarter = manualRotationIds.length < FRANCHISE_ROTATION_SIZE && bullpenPitchers.length > 0;
-
-  useEffect(() => {
-    if (!franchiseTeam) {
-      setManualLineupSlots([]);
-      setManualRotationIds([]);
-      setLineupRotationDirty(false);
-      setLineupRotationMessage(null);
-      setLineupRotationError(null);
-      return;
-    }
-
-    setManualLineupSlots(buildEditableFranchiseLineupSlots(franchiseRosterPlayers, franchiseTeam.lineupWithoutDH, false));
-    setManualRotationIds(normalizeFranchiseRotationIds(franchiseRosterPlayers, franchiseTeam.startingRotation));
-    setLineupRotationDirty(false);
-    setLineupRotationMessage(null);
-    setLineupRotationError(null);
-  }, [franchiseRosterPlayers, franchiseTeam]);
-
-  const updateManualLineupSlot = (index: number, update: Partial<LineupSlot>) => {
-    setManualLineupSlots((slots) =>
-      slots.map((slot, slotIndex) =>
-        slotIndex === index ? { ...slot, ...update } : slot,
-      ),
-    );
-    touch();
-  };
-
-  const moveManualLineupSlot = (index: number, direction: -1 | 1) => {
-    setManualLineupSlots((slots) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= slots.length) return slots;
-      const next = [...slots];
-      const [slot] = next.splice(index, 1);
-      next.splice(nextIndex, 0, slot);
-      return next.map((lineupSlot, slotIndex) => ({
-        ...lineupSlot,
-        battingOrder: slotIndex + 1,
-      }));
-    });
-    touch();
-  };
-
-  const moveManualRotationSlot = (index: number, direction: -1 | 1) => {
-    setManualRotationIds((rotationIds) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= rotationIds.length) return rotationIds;
-      const next = [...rotationIds];
-      const [playerId] = next.splice(index, 1);
-      next.splice(nextIndex, 0, playerId);
-      return next;
-    });
-    touch();
-  };
-
-  // Swap a different pitcher into rotation slot `index` (pull from bullpen, or swap with another slot).
-  const setManualRotationSlotPitcher = (index: number, playerId: string) => {
-    if (!playerId) return;
-    setManualRotationIds((ids) => {
-      const next = [...ids];
-      const existing = next.indexOf(playerId);
-      if (existing === index) return ids;
-      if (existing >= 0) {
-        [next[index], next[existing]] = [next[existing], next[index]];
-      } else {
-        next[index] = playerId;
-      }
-      return next.slice(0, FRANCHISE_ROTATION_SIZE);
-    });
-    touch();
-  };
-
-  const addRotationStarter = (playerId: string) => {
-    if (!playerId) return;
-    setManualRotationIds((ids) =>
-      ids.includes(playerId) || ids.length >= FRANCHISE_ROTATION_SIZE ? ids : [...ids, playerId],
-    );
-    touch();
-  };
-
-  const removeRotationStarter = (index: number) => {
-    setManualRotationIds((ids) => ids.filter((_, slotIndex) => slotIndex !== index));
-    touch();
-  };
-
-  const rebuildManualLineupRotationFromMlb = () => {
-    setManualLineupSlots(buildEditableFranchiseLineupSlots(franchiseRosterPlayers, undefined, false));
-    setManualRotationIds(normalizeFranchiseRotationIds(franchiseRosterPlayers, undefined));
-    setLineupRotationDirty(true);
-    setLineupRotationMessage("Rebuilt from current MLB assignments. Save to make it durable.");
-    setLineupRotationError(null);
-  };
-
-  const handleSaveLineupRotation = async () => {
-    if (!franchiseId || !franchiseTeam || lineupRotationBlockingMessage) return;
-
-    onBeforeSave?.();
-    setIsLineupRotationSaving(true);
-    setLineupRotationError(null);
-    setLineupRotationMessage(null);
-
-    try {
-      const normalizedRotationIds = normalizeFranchiseRotationIds(franchiseRosterPlayers, manualRotationIds);
-      const lineupForSave = buildManualLineupForSave(
-        franchiseRosterPlayers,
-        manualLineupSlots,
-        normalizedRotationIds,
-        false,
-      );
-      const update: Partial<Team> = {
-        startingRotation: normalizedRotationIds,
-        lineupWithoutDH: lineupForSave,
-      };
-      const nextTeam = applyFranchiseTeamUpdateWithStaleOptimalSnapshots(franchiseTeam, update);
-      const savedTeam = await saveFranchiseTeam(franchiseId, nextTeam);
-      setFranchiseTeam(savedTeam);
-      setLineupRotationDirty(false);
-      setLineupRotationMessage("Lineup and rotation saved to franchise team state.");
-    } catch (err) {
-      setLineupRotationError(err instanceof Error ? err.message : "Failed to save franchise lineup and rotation.");
-    } finally {
-      setIsLineupRotationSaving(false);
-    }
-  };
+export function FranchiseLineupRotationEditor(props: FranchiseLineupRotationEditorProps) {
+  const franchiseTeam = props.franchiseTeam;
+  const {
+    manualLineupSlots,
+    manualRotationIds,
+    lineupRotationDirty,
+    isLineupRotationSaving,
+    lineupRotationMessage,
+    lineupRotationError,
+    franchiseRosterPlayerById,
+    positionPlayerOptions,
+    pitcherOptions,
+    storedLineupRotationWarnings,
+    lineupRotationBlockingMessage,
+    benchPlayers,
+    bullpenPitchers,
+    rotationStarterName,
+    canAddStarter,
+    updateManualLineupSlot,
+    moveManualLineupSlot,
+    moveManualRotationSlot,
+    setManualRotationSlotPitcher,
+    addRotationStarter,
+    removeRotationStarter,
+    rebuildManualLineupRotationFromMlb,
+    handleSaveLineupRotation,
+  } = useFranchiseLineupRotationEditor(props);
 
   return (
     <section
@@ -320,6 +113,35 @@ export function FranchiseLineupRotationEditor({
           ) : (
             <div className="space-y-2">
               {manualLineupSlots.map((slot, index) => {
+                if (slot.playerId === FRANCHISE_PITCHER_LINEUP_SLOT_ID) {
+                  return (
+                    <div key={`pitcher-${index}`} className="grid grid-cols-[34px_minmax(150px,1fr)_80px_80px] items-center gap-2 text-[8px]">
+                      <div className="text-[var(--franchise-text)]/70">#{index + 1}</div>
+                      <div className="text-[var(--franchise-text)]">{rotationStarterName ?? "Starting pitcher"} <span className="text-[var(--franchise-text)]/40">(SP)</span></div>
+                      <div className="text-[var(--franchise-gold-soft)]">P</div>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Move lineup slot ${index + 1} up`}
+                          disabled={index === 0}
+                          onClick={() => moveManualLineupSlot(index, -1)}
+                          className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
+                        >
+                          UP
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move lineup slot ${index + 1} down`}
+                          disabled={index === manualLineupSlots.length - 1}
+                          onClick={() => moveManualLineupSlot(index, 1)}
+                          className="flex-1 border border-[var(--franchise-text)]/30 bg-[var(--franchise-panel)] px-1 py-1 text-[var(--franchise-text)] disabled:opacity-30"
+                        >
+                          DN
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
                 const player = franchiseRosterPlayerById.get(slot.playerId);
                 return (
                   <div key={`${slot.battingOrder}-${slot.playerId}-${index}`} className="grid grid-cols-[34px_minmax(150px,1fr)_80px_80px] items-center gap-2 text-[8px]">
@@ -374,12 +196,6 @@ export function FranchiseLineupRotationEditor({
                   </div>
                 );
               })}
-              {/* Pitcher bats ninth (no DH in franchise) */}
-              <div className="grid grid-cols-[34px_minmax(150px,1fr)_80px] items-center gap-2 text-[8px] text-[var(--franchise-text)]/70">
-                <div>#{manualLineupSlots.length + 1}</div>
-                <div>{rotationStarterName ? `${rotationStarterName} (auto)` : "Starting pitcher"}</div>
-                <div>P</div>
-              </div>
             </div>
           )}
 

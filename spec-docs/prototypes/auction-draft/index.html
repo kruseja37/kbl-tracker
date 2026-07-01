@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KBL · Auction Draft — Premium Retro redesign prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{
+  --field-top:#26331F; --field-bot:#19231630;
+  --panel:#33442C; --panel-raised:#3C5236; --inset:#212C1C;
+  --hairline:rgba(232,232,216,.10); --hairline-strong:rgba(232,232,216,.20);
+  --text:#E8E8D8; --muted:rgba(232,232,216,.62); --faint:rgba(232,232,216,.40);
+  --gold:#C4A853; --gold-bright:#FFD27A;
+  --win:#9DFFB0; --win-fill:#3E9D5A; --loss:#FF8C8C; --loss-fill:#A3483D; --info:#7FB0E8;
+  --font-char:'Press Start 2P',monospace;
+  --font-num:'SF Mono','JetBrains Mono',ui-monospace,monospace;
+  --font-body:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  --r-card:16px; --r-lot:20px; --r-ctl:10px;
+  --shadow-card:0 1px 0 rgba(255,255,255,.05) inset, 0 2px 6px rgba(0,0,0,.35), 0 14px 34px rgba(0,0,0,.30);
+  --shadow-hard:3px 3px 0 rgba(0,0,0,.70);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--font-body); color:var(--text);
+  background:
+    radial-gradient(1200px 600px at 50% -10%, #2f4128 0%, rgba(47,65,40,0) 60%),
+    linear-gradient(180deg,#243020 0%, #1a2417 100%);
+  min-height:100vh; -webkit-font-smoothing:antialiased; line-height:1.5;
+}
+.num{font-family:var(--font-num); font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+.char{font-family:var(--font-char)}
+.eyebrow{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:600}
+.muted{color:var(--muted)} .faint{color:var(--faint)}
+.gold{color:var(--gold-bright)} .win{color:var(--win)} .loss{color:var(--loss)} .info{color:var(--info)}
+
+/* ---- shell ---- */
+.app{max-width:1240px; margin:0 auto; padding:26px 24px 60px}
+.topbar{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px; padding-right:230px}
+@media(max-width:1100px){.topbar{padding-right:0}}
+.wordmark{font-family:var(--font-char); font-size:15px; color:var(--gold-bright);
+  text-shadow:2px 2px 0 rgba(0,0,0,.6); letter-spacing:.02em}
+.wordmark small{display:block; font-family:var(--font-body); font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--muted); margin-top:6px; text-shadow:none}
+.steps{display:flex; gap:8px; margin-left:auto; flex-wrap:wrap}
+.step{appearance:none; border:1px solid var(--hairline); background:rgba(0,0,0,.18); color:var(--muted);
+  font-family:var(--font-body); font-size:12.5px; font-weight:600; padding:9px 14px; border-radius:999px;
+  cursor:pointer; transition:all .18s ease; display:flex; align-items:center; gap:8px}
+.step:hover{color:var(--text); border-color:var(--hairline-strong)}
+.step .dot{width:18px;height:18px;border-radius:999px;background:rgba(0,0,0,.3);display:grid;place-items:center;
+  font-size:10px; color:var(--muted); font-family:var(--font-num)}
+.step.active{background:linear-gradient(180deg,#4a6440,#3c5236); color:var(--text); border-color:var(--gold);
+  box-shadow:var(--shadow-card)}
+.step.active .dot{background:var(--gold); color:#1a2014}
+.hint{font-size:12px; color:var(--faint); margin:14px 2px 22px}
+
+/* ---- screen frame (iPad landscape feel) ---- */
+.screen{display:none; animation:screenIn .4s cubic-bezier(.2,.7,.2,1)}
+.screen.active{display:block}
+@keyframes screenIn{from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none}}
+.frame{background:linear-gradient(180deg, rgba(60,82,54,.30), rgba(33,44,28,.30));
+  border:1px solid var(--hairline); border-radius:24px; padding:22px; box-shadow:var(--shadow-card)}
+
+/* ---- generic cards / bits ---- */
+.card{background:var(--panel); border:1px solid var(--hairline); border-radius:var(--r-card); padding:20px;
+  box-shadow:var(--shadow-card)}
+.card.raised{background:linear-gradient(180deg,#43593b,#374c31)}
+.chip{display:inline-flex; align-items:center; gap:7px; background:var(--inset); border:1px solid var(--hairline);
+  border-radius:999px; padding:5px 11px; font-size:12.5px; color:var(--text)}
+.pos{font-family:var(--font-num); font-weight:700; font-size:12px; color:#cfe6c4; background:rgba(126,176,232,.14);
+  border:1px solid rgba(126,176,232,.3); border-radius:7px; padding:2px 8px}
+.grid{display:grid; gap:16px}
+.row{display:flex; align-items:center; gap:12px}
+.spacer{flex:1}
+h2.title{font-size:20px; margin:0 0 2px; font-weight:700; letter-spacing:-.01em}
+.sub{color:var(--muted); font-size:13.5px; margin:0}
+.btn{appearance:none; cursor:pointer; font-family:var(--font-body); font-weight:650; border-radius:var(--r-ctl);
+  border:1px solid var(--hairline-strong); background:var(--panel-raised); color:var(--text); padding:11px 16px;
+  font-size:14px; transition:transform .08s ease, filter .15s ease}
+.btn:hover{filter:brightness(1.08)} .btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(180deg,#d9bf63,#c4a853); color:#231c08; border-color:#e9d488;
+  box-shadow:var(--shadow-hard); font-weight:750}
+.btn.ghost{background:transparent; color:var(--muted)} .btn.ghost:hover{color:var(--text)}
+.btn.lg{padding:15px 22px; font-size:15.5px}
+.divider{height:1px; background:var(--hairline); margin:18px 0}
+
+/* ---- status bar ---- */
+.statusbar{display:flex; align-items:center; gap:16px; padding:12px 18px; border-radius:14px;
+  background:linear-gradient(180deg, rgba(33,44,28,.7), rgba(33,44,28,.4)); border:1px solid var(--hairline);
+  margin-bottom:18px; font-size:13px}
+.statusbar .pill{display:inline-flex; align-items:center; gap:8px; color:var(--muted)}
+.statusbar .now{margin-left:auto; display:inline-flex; align-items:center; gap:9px; color:var(--text); font-weight:650}
+.live{width:9px;height:9px;border-radius:999px;background:var(--win);box-shadow:0 0 0 0 rgba(157,255,176,.6);
+  animation:pulse 1.8s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(157,255,176,.55)}70%{box-shadow:0 0 0 8px rgba(157,255,176,0)}100%{box-shadow:0 0 0 0 rgba(157,255,176,0)}}
+
+/* ---- the stage layout ---- */
+.stage{display:grid; grid-template-columns:1.55fr 1fr; gap:18px}
+@media(max-width:980px){.stage{grid-template-columns:1fr}}
+
+/* the LOT */
+.lot{position:relative; background:linear-gradient(180deg,#445b3c,#36492f); border:1px solid var(--hairline-strong);
+  border-radius:var(--r-lot); padding:24px; box-shadow:var(--shadow-card); overflow:hidden}
+.lot::before{content:""; position:absolute; inset:0; background:radial-gradient(420px 180px at 30% -20%, rgba(196,168,83,.18), transparent 70%); pointer-events:none}
+.lot .reveal{animation:rise .5s cubic-bezier(.2,.8,.2,1)}
+@keyframes rise{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+.lot .name{font-family:var(--font-char); font-size:26px; color:#fff; text-shadow:2px 2px 0 rgba(0,0,0,.45); line-height:1.25; margin:4px 0 12px}
+.axes{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px}
+.valueline{display:flex; align-items:baseline; gap:12px; margin-top:6px}
+.valueline .big{font-family:var(--font-num); font-size:23px; font-weight:700; color:var(--gold-bright)}
+.highbid{margin-top:20px; padding:16px 18px; border-radius:14px; background:rgba(0,0,0,.22); border:1px solid var(--hairline)}
+.highbid .amt{font-family:var(--font-char); font-size:30px; color:var(--text); transition:color .2s}
+.highbid.bump .amt{color:var(--gold-bright)}
+.highbid .by{color:var(--info); font-weight:650}
+
+/* your move */
+.move{margin-top:18px; border:1px solid var(--gold); border-radius:var(--r-card);
+  background:linear-gradient(180deg, rgba(196,168,83,.10), rgba(0,0,0,.12)); padding:18px}
+.walletline{display:flex; gap:22px; flex-wrap:wrap; margin-bottom:6px}
+.walletline .lab{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+.walletline .v{font-family:var(--font-num); font-size:18px; font-weight:700}
+.ceiling{font-size:12.5px; color:var(--muted); margin:4px 0 14px}
+.presets{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px}
+.preset{appearance:none; cursor:pointer; font-family:var(--font-num); font-weight:700; font-size:13px;
+  background:var(--inset); color:var(--text); border:1px solid var(--hairline-strong); border-radius:9px; padding:9px 13px}
+.preset.dim{opacity:.4; cursor:not-allowed; position:relative}
+.preset.sel{border-color:var(--gold); color:var(--gold-bright); background:rgba(196,168,83,.12)}
+.actions{display:grid; grid-template-columns:1.4fr 1fr; gap:12px}
+.bid{font-family:var(--font-char); font-size:16px; padding:18px; border-radius:12px; cursor:pointer; border:none;
+  background:linear-gradient(180deg,#e6cd6e,#c4a853); color:#231c08; box-shadow:var(--shadow-hard);
+  transition:transform .08s}
+.bid:active{transform:scale(.97)}
+.letgo{font-family:var(--font-body); font-weight:650; font-size:14px; border-radius:12px; cursor:pointer;
+  background:transparent; color:var(--muted); border:1px solid var(--hairline-strong)}
+.letgo:hover{color:var(--loss); border-color:var(--loss-fill)}
+
+/* tax posture meter */
+.tax{display:flex; align-items:center; gap:10px; margin-top:14px; font-size:12px; color:var(--muted)}
+.meter{flex:1; height:7px; border-radius:999px; background:rgba(0,0,0,.3); overflow:hidden}
+.meter i{display:block; height:100%; width:34%; border-radius:999px;
+  background:linear-gradient(90deg,var(--win-fill),var(--gold),var(--loss-fill))}
+
+/* roster board */
+.board .slots{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px}
+.slot{background:var(--inset); border:1px solid var(--hairline); border-radius:10px; padding:9px 6px; text-align:center}
+.slot .p{font-family:var(--font-num); font-weight:700; font-size:12px; color:var(--muted)}
+.slot .who{font-size:10.5px; color:var(--text); margin-top:3px; height:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.slot.filled{background:rgba(62,157,90,.12); border-color:rgba(62,157,90,.35)}
+.slot.filled .p{color:var(--win)}
+.slot.gap{border-color:rgba(255,210,122,.5); background:rgba(255,210,122,.07); animation:gapGlow 2.4s infinite}
+.slot.gap .p{color:var(--gold-bright)}
+@keyframes gapGlow{0%,100%{border-color:rgba(255,210,122,.32)}50%{border-color:rgba(255,210,122,.7)}}
+.needline{margin-top:12px; font-size:12.5px; color:var(--gold-bright)}
+
+/* lot log */
+.log{margin-top:16px}
+.logitem{display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--hairline); font-size:13px}
+.logitem:last-child{border-bottom:none}
+.tag{font-size:10.5px; font-weight:700; letter-spacing:.06em; padding:2px 7px; border-radius:6px; text-transform:uppercase}
+.tag.you{background:rgba(62,157,90,.18); color:var(--win)}
+.tag.rival{background:rgba(126,176,232,.16); color:var(--info)}
+.tag.gone{background:rgba(163,72,61,.22); color:var(--loss)}
+
+/* coach */
+.coach{margin-top:18px; display:flex; align-items:center; gap:12px; padding:13px 18px; border-radius:14px;
+  background:rgba(0,0,0,.22); border:1px solid var(--hairline)}
+.coach .mic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(196,168,83,.16);font-size:15px}
+.coach .txt{font-size:13.5px; color:var(--text)} .coach .txt b{color:var(--gold-bright); font-weight:700}
+.coach .x{margin-left:auto; color:var(--faint); cursor:pointer; font-size:18px; line-height:1}
+
+/* gone overlay */
+.gonewrap{position:relative}
+.gonestamp{position:absolute; inset:0; display:none; place-items:center; z-index:5; border-radius:var(--r-lot);
+  background:rgba(20,26,16,.78); backdrop-filter:blur(2px)}
+.gonestamp.show{display:grid; animation:fadein .35s}
+.gonestamp .s{font-family:var(--font-char); font-size:30px; color:var(--loss); text-shadow:2px 2px 0 rgba(0,0,0,.5);
+  transform:rotate(-7deg)}
+.gonestamp .note{font-size:13.5px; color:var(--muted); margin-top:14px; text-align:center; max-width:280px}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.soldstamp{position:absolute; inset:0; display:none; place-items:center; z-index:5; border-radius:var(--r-lot);
+  background:rgba(20,26,16,.55)}
+.soldstamp.show{display:grid}
+.soldstamp .s{font-family:var(--font-char); font-size:34px; color:var(--win); text-shadow:2px 2px 0 rgba(0,0,0,.5);
+  transform:rotate(-6deg); animation:stamp .5s cubic-bezier(.2,1.4,.4,1)}
+@keyframes stamp{0%{opacity:0; transform:rotate(-6deg) scale(1.7)}100%{opacity:1; transform:rotate(-6deg) scale(1)}}
+
+/* scout fog (farm) */
+.scout{position:relative; margin-top:16px; border:1px dashed rgba(196,168,83,.5); border-radius:14px; overflow:hidden}
+.scout .cover{display:flex; align-items:center; justify-content:center; gap:10px; padding:22px; cursor:grab;
+  background:repeating-linear-gradient(135deg, rgba(0,0,0,.28) 0 12px, rgba(0,0,0,.18) 12px 24px); user-select:none}
+.scout .cover .lk{font-size:18px}
+.scout .body{display:none; padding:18px}
+.scout.revealed .cover{display:none}
+.scout.revealed .body{display:block; animation:fadein .25s}
+.range{margin:10px 0 6px}
+.rangebar{height:14px; border-radius:999px; background:rgba(0,0,0,.3); position:relative; border:1px solid var(--hairline)}
+.rangebar i{position:absolute; top:-1px; bottom:-1px; border-radius:999px;
+  background:linear-gradient(90deg, rgba(196,168,83,.35), rgba(196,168,83,.8), rgba(196,168,83,.35))}
+.rangebar .mid{position:absolute; top:-5px; width:2px; height:22px; background:var(--gold-bright)}
+.gauge{display:flex; align-items:center; gap:12px; margin-top:14px}
+.gtrack{flex:1; height:8px; border-radius:999px; position:relative;
+  background:linear-gradient(90deg,#7a4a3a,#c4a853 55%,#3e9d5a)}
+.gtrack .pin{position:absolute; top:-6px; width:4px; height:20px; border-radius:2px; background:#fff; box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+.gval{font-family:var(--font-char); font-size:18px; color:var(--gold-bright)}
+.conf{font-size:11.5px; color:var(--muted); margin-top:10px}
+
+/* setup */
+.brief{display:grid; grid-template-columns:repeat(4,1fr); gap:14px}
+@media(max-width:880px){.brief{grid-template-columns:repeat(2,1fr)}}
+.briefcard{background:var(--inset); border:1px solid var(--hairline); border-radius:14px; padding:16px}
+.briefcard .k{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-bottom:8px}
+.briefcard .v{font-weight:700; font-size:15.5px}
+.briefcard .v2{font-size:12.5px; color:var(--muted); margin-top:3px}
+.seg{display:inline-flex; background:var(--inset); border:1px solid var(--hairline); border-radius:11px; padding:4px; gap:4px}
+.seg button{appearance:none; border:none; background:transparent; color:var(--muted); font-family:var(--font-body);
+  font-weight:650; font-size:13px; padding:8px 14px; border-radius:8px; cursor:pointer}
+.seg button.on{background:var(--panel-raised); color:var(--text); box-shadow:var(--shadow-card)}
+.field{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:1px solid var(--hairline)}
+.field .lab b{display:block; font-size:14.5px} .field .lab span{font-size:12.5px; color:var(--muted)}
+.toggle{width:46px;height:27px;border-radius:999px;background:rgba(0,0,0,.35);border:1px solid var(--hairline);position:relative;cursor:pointer}
+.toggle i{position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:999px;background:var(--muted);transition:all .18s}
+.toggle.on{background:rgba(62,157,90,.4)} .toggle.on i{left:21px;background:var(--win)}
+.ready{display:flex; gap:16px; flex-wrap:wrap}
+.ready .stat{flex:1; min-width:130px}
+.ready .stat .v{font-family:var(--font-num); font-size:22px; font-weight:700}
+details.adv{margin-top:8px} details.adv summary{cursor:pointer; color:var(--muted); font-size:13px}
+
+/* carryover */
+.flowcard{text-align:center; padding:30px 22px}
+.flownums{display:flex; align-items:center; justify-content:center; gap:26px; flex-wrap:wrap; margin:18px 0}
+.flownums .b{text-align:center} .flownums .b .lab{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.flownums .b .v{font-family:var(--font-num); font-size:30px; font-weight:700; margin-top:6px}
+.arrow{font-size:26px; color:var(--gold-bright); animation:none}
+.coins{height:0; position:relative}
+.coin{position:absolute; width:14px;height:14px;border-radius:999px;background:var(--gold-bright);opacity:0}
+
+/* summary */
+.fingerprint{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+@media(max-width:820px){.fingerprint{grid-template-columns:1fr}}
+.fp{display:flex; align-items:center; gap:14px; background:var(--inset); border:1px solid var(--hairline); border-radius:12px; padding:12px 14px}
+.fp .nm{font-weight:700; font-size:14px} .fp .meta{font-size:12px; color:var(--muted)}
+.moralebar{width:120px}
+.mtrack{height:8px; border-radius:999px; background:rgba(0,0,0,.3); position:relative; overflow:hidden}
+.mtrack .neutral{position:absolute; left:50%; top:-3px; width:1px; height:14px; background:var(--faint)}
+.mtrack i{position:absolute; top:0; bottom:0; border-radius:999px}
+.mval{font-family:var(--font-num); font-weight:700; font-size:13px; text-align:right; margin-top:4px}
+.payrank{display:flex; align-items:center; gap:16px; flex-wrap:wrap}
+.rankbadge{font-family:var(--font-char); font-size:20px; color:var(--gold-bright)}
+.footer-note{margin-top:30px; font-size:11.5px; color:var(--faint); text-align:center}
+@media(prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+
+/* ===== HELP layer (minimized text by default; toggle reveals the teaching copy) ===== */
+.help{display:none}
+body.help-on .help{display:inline}
+.help-b{display:none}
+body.help-on .help-b{display:block}
+.help-coach{display:none}
+body.help-on .help-coach{display:flex}
+.gesture{display:none; align-items:center; gap:7px; font-size:12px; color:var(--gold-bright);
+  background:rgba(196,168,83,.10); border:1px solid rgba(196,168,83,.3); border-radius:999px; padding:5px 11px; margin-top:12px}
+body.help-on .gesture{display:inline-flex}
+.draghandle{color:var(--faint); cursor:grab; user-select:none; letter-spacing:-2px}
+
+/* corner controls (look + help toggles, top-right) */
+.cornerctl{position:fixed; top:14px; right:16px; z-index:80; display:flex; gap:8px; align-items:center}
+.lookseg{display:inline-flex; background:rgba(0,0,0,.4); border:1px solid var(--hairline); border-radius:999px; padding:3px}
+.lookseg button{appearance:none; border:none; background:transparent; color:var(--muted); font:inherit; font-size:12px; font-weight:650;
+  padding:6px 12px; border-radius:999px; cursor:pointer}
+.lookseg button.on{background:linear-gradient(180deg,#4a6440,#3c5236); color:var(--text); box-shadow:var(--shadow-card)}
+.helpbtn{appearance:none; cursor:pointer; font:inherit; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:7px;
+  padding:7px 13px; border-radius:999px; border:1px solid var(--hairline-strong); background:rgba(0,0,0,.35); color:var(--muted)}
+body.help-on .helpbtn{background:linear-gradient(180deg,#d9bf63,#c4a853); color:#231c08; border-color:#e9d488}
+.helpbtn .led{width:8px;height:8px;border-radius:999px;background:var(--faint)}
+body.help-on .helpbtn .led{background:#231c08}
+
+/* ===== EDGY skin (JK option 2: sharp corners + hard offset depth + bolder borders, draft-setup energy) ===== */
+body.edgy .frame,body.edgy .card,body.edgy .lot,body.edgy .move,body.edgy .highbid,body.edgy .statusbar,
+body.edgy .coach,body.edgy .briefcard,body.edgy .scout,body.edgy .chip,body.edgy .pos,body.edgy .preset,
+body.edgy .bid,body.edgy .letgo,body.edgy .slot,body.edgy .step,body.edgy .seg,body.edgy .lookseg,
+body.edgy .helpbtn,body.edgy .meter,body.edgy .meter i,body.edgy .rangebar,body.edgy .gtrack,body.edgy .toggle,
+body.edgy .tag,body.edgy .gesture,body.edgy .lookseg button{border-radius:3px!important}
+body.edgy .frame,body.edgy .card,body.edgy .lot,body.edgy .move{border-width:2px!important; box-shadow:6px 6px 0 rgba(0,0,0,.55)!important}
+body.edgy .lot{background:#3b5031!important; border-color:var(--gold)!important}
+body.edgy .card.raised{background:#3c5236!important}
+body.edgy .briefcard,body.edgy .highbid,body.edgy .scout,body.edgy .slot,body.edgy .chip,body.edgy .pos,
+body.edgy .preset{border-width:2px!important; box-shadow:2px 2px 0 rgba(0,0,0,.45)!important}
+body.edgy .bid{box-shadow:5px 5px 0 rgba(0,0,0,.85)!important; border:2px solid #2a2208!important}
+body.edgy .move{border-color:var(--gold)!important}
+body.edgy .name{text-shadow:3px 3px 0 rgba(0,0,0,.6)!important}
+body.edgy .eyebrow,body.edgy .walletline .lab{color:var(--gold-bright)!important}
+body.edgy .step.active,body.edgy .lookseg button.on{box-shadow:3px 3px 0 rgba(0,0,0,.7)!important}
+</style>
+</head>
+<body>
+<div class="cornerctl">
+  <div class="lookseg" id="lookseg">
+    <button class="on" data-look="soft">Soft</button>
+    <button data-look="edgy">Edgy</button>
+  </div>
+  <button class="helpbtn" id="helpbtn"><span class="led"></span> Help</button>
+</div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="wordmark">KBL AUCTION DRAFT<small>Premium-retro redesign · clickable prototype</small></div>
+    <div class="steps" id="steps">
+      <button class="step active" data-screen="setup"><span class="dot">1</span> Setup</button>
+      <button class="step" data-screen="mlb"><span class="dot">2</span> MLB Stage</button>
+      <button class="step" data-screen="handoff"><span class="dot">3</span> Carryover</button>
+      <button class="step" data-screen="farm"><span class="dot">4</span> Farm Stage</button>
+      <button class="step" data-screen="summary"><span class="dot">5</span> Summary</button>
+    </div>
+  </div>
+  <div class="hint">Click the numbered steps to walk the whole arc. On the MLB stage try <b>BID</b> and <b>LET HIM GO</b>; on the Farm stage <b>press &amp; hold</b> the scout card; on Carryover hit <b>Release the carryover</b>.</div>
+
+  <!-- ===================== SETUP ===================== -->
+  <section class="screen active" data-screen="setup">
+    <div class="frame">
+      <div class="row" style="margin-bottom:18px">
+        <div><h2 class="title">Before the gavel</h2><p class="sub">Your war room is set. Confirm the room, then begin.</p></div>
+      </div>
+
+      <div class="eyebrow" style="margin-bottom:10px">Your draft briefing</div>
+      <div class="brief" style="margin-bottom:22px">
+        <div class="briefcard"><div class="k">General Manager</div><div class="v">You — "The Architect"</div><div class="v2">named in league setup</div></div>
+        <div class="briefcard"><div class="k">MLB identity</div><div class="v gold">Power Club</div><div class="v2">power bats run cheaper for you</div></div>
+        <div class="briefcard"><div class="k">Farm identity</div><div class="v gold">Speed &amp; Glove</div><div class="v2">shapes your scout's farm focus</div></div>
+        <div class="briefcard"><div class="k">Your scout</div><div class="v">M. Okafor</div><div class="v2">specialty: infielders · sharp</div></div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:1.3fr 1fr; gap:18px">
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:14px">The room</div>
+          <div class="field">
+            <div class="lab"><b>Rival pressure</b><span>CPU shills keep prices honest — they bid, but don't keep players</span></div>
+            <div class="seg"><button>Light</button><button class="on">Standard</button><button>Cutthroat</button></div>
+          </div>
+          <div class="field">
+            <div class="lab"><b>Bid increment</b><span>the smallest raise</span></div>
+            <div class="seg"><button class="on">$5k</button><button>$10k</button><button>$25k</button></div>
+          </div>
+          <div class="field">
+            <div class="lab"><b>Turn timer</b><span>off for a relaxed table</span></div>
+            <div class="toggle" onclick="this.classList.toggle('on')"><i></i></div>
+          </div>
+          <details class="adv"><summary>Advanced — reproducibility seed</summary>
+            <div style="margin-top:10px"><span class="chip num">seed · startup-auction-v1</span> <span class="faint" style="font-size:12px">for sim/save-resume; leave as-is</span></div>
+          </details>
+        </div>
+
+        <div class="card raised">
+          <div class="eyebrow" style="margin-bottom:14px">Ready to draft</div>
+          <div class="ready" style="margin-bottom:18px">
+            <div class="stat"><div class="eyebrow">Pool</div><div class="v win">Locked ✓</div></div>
+            <div class="stat"><div class="eyebrow">Filling</div><div class="v">22 <span class="muted" style="font-size:13px">× 4 teams</span></div></div>
+            <div class="stat"><div class="eyebrow">Your budget</div><div class="v gold">$520,000</div></div>
+          </div>
+          <div class="tax"><span>Tax posture</span><div class="meter"><i></i></div></div>
+          <p class="sub" style="margin:12px 0 18px">Power identity — your power bats sit a touch cheaper; loading up off-identity bites gently, never breaks you.</p>
+          <button class="btn primary lg" style="width:100%" data-goto="mlb">Begin the Draft →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MLB STAGE ===================== -->
+  <section class="screen" data-screen="mlb">
+    <div class="frame">
+      <div class="statusbar">
+        <span class="pill">⚾ MLB Draft</span>
+        <span class="pill num">Lot 14 of ~92</span>
+        <span class="pill">filling 22-man rosters</span>
+        <span class="now"><span class="live"></span> Now: <span class="gold">your move</span></span>
+      </div>
+
+      <div class="stage">
+        <!-- left: lot + your move -->
+        <div>
+          <div class="gonewrap">
+            <div class="lot" id="lot">
+              <div class="reveal" id="lotinner">
+                <div class="eyebrow">On the block</div>
+                <div class="name">RAFA FENOMENO</div>
+                <div class="axes">
+                  <span class="pos">SP / RP</span>
+                  <span class="chip">🔥 Competitive</span>
+                  <span class="chip">⚡ Sparkplug</span>
+                  <span class="chip">B/T R/R</span>
+                </div>
+                <div class="valueline">
+                  <div class="eyebrow">Worth (IV)</div>
+                  <div class="big num">~$144,000</div>
+                  <div class="muted help" style="font-size:12.5px">advisory — values are public in the majors</div>
+                </div>
+                <div class="gesture">⇆ swipe right to bid · left to let him go</div>
+                <div class="highbid" id="highbid">
+                  <div class="eyebrow">High bid</div>
+                  <div class="row" style="margin-top:6px">
+                    <div class="amt num" id="hbamt">$32,000</div>
+                    <div class="spacer"></div>
+                    <div class="by">Page Keys</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="soldstamp" id="sold"><div><div class="s">SOLD</div></div></div>
+            <div class="gonestamp" id="gone"><div><div class="s">GONE</div><div class="note">Nobody bid. He's off the board for good — that's the cost of sitting out.</div></div></div>
+          </div>
+
+          <div class="move">
+            <div class="walletline">
+              <div><div class="lab">Your budget</div><div class="v gold num">$410,000</div></div>
+              <div><div class="lab">Most you can bid</div><div class="v num">$66,000</div></div>
+              <div><div class="lab">Slots left</div><div class="v num">9</div></div>
+            </div>
+            <div class="ceiling help-b">Capped at $66k so you can still fill your last 9 slots at the minimum. Raises above it are off the table.</div>
+            <div class="presets" id="presets">
+              <button class="preset" data-inc="5000">+$5k</button>
+              <button class="preset" data-inc="10000">+$10k</button>
+              <button class="preset" data-inc="25000">+$25k</button>
+              <button class="preset dim" title="above your cap">+$50k</button>
+              <span class="chip num" id="curbid" style="margin-left:auto">your bid · $37,000</span>
+            </div>
+            <div class="actions">
+              <button class="bid" id="bidbtn">BID $37k</button>
+              <button class="letgo" id="passbtn">Let him go</button>
+            </div>
+            <div class="tax"><span>On-identity</span><div class="meter"><i style="width:30%"></i></div><span>heavy off-identity</span></div>
+          </div>
+        </div>
+
+        <!-- right: roster board + log -->
+        <div>
+          <div class="card board">
+            <div class="row"><div class="eyebrow">Your roster · 13 of 22</div><div class="spacer"></div><span class="chip">gaps glow</span></div>
+            <div class="slots">
+              <div class="slot filled"><div class="p">C</div><div class="who">Vane</div></div>
+              <div class="slot filled"><div class="p">1B</div><div class="who">Drake</div></div>
+              <div class="slot gap"><div class="p">2B</div><div class="who faint">open</div></div>
+              <div class="slot filled"><div class="p">SS</div><div class="who">Pax</div></div>
+              <div class="slot filled"><div class="p">3B</div><div class="who">Ruiz</div></div>
+              <div class="slot filled"><div class="p">LF</div><div class="who">Stad</div></div>
+              <div class="slot filled"><div class="p">CF</div><div class="who">Pastimm</div></div>
+              <div class="slot gap"><div class="p">RF</div><div class="who faint">open</div></div>
+              <div class="slot filled"><div class="p">SP</div><div class="who">Bolt</div></div>
+              <div class="slot filled"><div class="p">SP</div><div class="who">Lars</div></div>
+              <div class="slot gap"><div class="p">SP</div><div class="who faint">open</div></div>
+              <div class="slot gap"><div class="p">CP</div><div class="who faint">open</div></div>
+            </div>
+            <div class="needline">Still hunting: a <b>2B</b>, an arm for the rotation, and a closer.</div>
+          </div>
+
+          <div class="card log" style="margin-top:16px">
+            <div class="eyebrow" style="margin-bottom:6px">Lot log</div>
+            <div class="logitem"><span class="tag you">Won</span> Blake Bolt <span class="spacer"></span><span class="num muted">$28,000</span></div>
+            <div class="logitem"><span class="tag rival">Rival</span> Cy Vane → Page Caps <span class="spacer"></span><span class="num muted">$41,000</span></div>
+            <div class="logitem"><span class="tag gone">Gone</span> Avery Anchor — no bid <span class="spacer"></span><span class="faint">—</span></div>
+            <div class="logitem"><span class="tag you">Won</span> Pax Flext <span class="spacer"></span><span class="num muted">$53,000</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="coach help-coach">
+        <div class="mic">🎙</div>
+        <div class="txt">He'd plug your <b>rotation hole</b> — and remember, pass and he's gone for good.</div>
+        <div class="x" onclick="this.parentElement.style.display='none'">×</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HANDOFF / CARRYOVER ===================== -->
+  <section class="screen" data-screen="handoff">
+    <div class="frame">
+      <div class="card flowcard">
+        <div class="eyebrow">MLB roster complete</div>
+        <h2 class="title" style="font-size:24px; margin-top:8px">Your 22 is set.</h2>
+        <p class="sub" style="max-width:520px;margin:6px auto 0">You came in under budget. By the rules of the valve, half of what you didn't spend follows you into the farm draft — spend it all up here and you walk into the farm poor.</p>
+
+        <div class="flownums">
+          <div class="b"><div class="lab">Unspent (MLB)</div><div class="v gold num" id="unspent">$84,000</div></div>
+          <div class="arrow">→</div>
+          <div class="b"><div class="lab">Carryover · 50%</div><div class="v num" id="carry">$0</div></div>
+          <div class="arrow">→</div>
+          <div class="b"><div class="lab">Farm wallet</div><div class="v win num" id="farmwallet">$120,000</div></div>
+        </div>
+        <div class="coins" id="coins"></div>
+        <button class="btn primary lg" id="firebtn" style="margin-top:6px">Release the carryover</button>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="row"><div class="mic" style="width:34px;height:34px">🔎</div>
+          <div style="margin-left:6px"><div class="eyebrow">Your scout read the roster</div>
+          <div style="font-size:14px;margin-top:4px">"Your majors lean power. In the farm I'd chase <b class="gold">up-the-middle defense and a live young arm</b> — that's where you're thin."</div></div></div>
+        <div style="margin-top:16px; text-align:right"><button class="btn primary" data-goto="farm">Enter the Farm Draft →</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FARM STAGE ===================== -->
+  <section class="screen" data-screen="farm">
+    <div class="frame">
+      <div class="statusbar">
+        <span class="pill">🌱 Farm Draft</span>
+        <span class="pill num">Lot 5 of ~24</span>
+        <span class="pill">filling 10-deep farm</span>
+        <span class="now"><span class="live"></span> Now: <span class="gold">your move</span></span>
+      </div>
+
+      <div class="stage">
+        <div>
+          <div class="lot">
+            <div class="reveal">
+              <div class="eyebrow">On the block · prospect</div>
+              <div class="name" style="font-size:24px">JET KOMURO</div>
+              <div class="axes">
+                <span class="pos">2B / SS</span>
+                <span class="chip">😎 Relaxed</span>
+                <span class="chip">🤝 Team-First</span>
+                <span class="chip">Age 19</span>
+              </div>
+              <p class="sub help-b" style="margin:2px 0 0">True value is in the fog. Your scout's read is yours alone — keep it covered.</p>
+
+              <div class="scout" id="scout">
+                <div class="cover" id="scoutcover">
+                  <span class="lk">🔒</span><span>Press &amp; hold to see your scout's read</span>
+                </div>
+                <div class="body">
+                  <div class="eyebrow">Scout's price range <span class="faint help" style="text-transform:none;letter-spacing:0">— narrow band = confident</span></div>
+                  <div class="range">
+                    <div class="rangebar"><i style="left:30%; right:42%"></i><div class="mid" style="left:46%"></div></div>
+                    <div class="row" style="margin-top:6px"><span class="num muted" style="font-size:12px">$22k</span><span class="spacer"></span><span class="num gold" style="font-size:13px">~$31k</span><span class="spacer"></span><span class="num muted" style="font-size:12px">$40k</span></div>
+                  </div>
+                  <div class="gauge">
+                    <div><div class="eyebrow">Grade</div><div class="gval num">55</div></div>
+                    <div class="gtrack"><div class="pin" style="left:62%"></div></div>
+                  </div>
+                  <div class="conf">Confidence: <b class="win">High</b><span class="help"> — Okafor scouts infielders; this is right in his lane.</span></div>
+                </div>
+              </div>
+
+              <div class="highbid" style="margin-top:16px">
+                <div class="eyebrow">High bid</div>
+                <div class="row" style="margin-top:6px"><div class="amt num" style="font-size:24px">$24,000</div><div class="spacer"></div><div class="by">you</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="move">
+            <div class="walletline">
+              <div><div class="lab">Farm wallet</div><div class="v gold num">$120,000</div></div>
+              <div><div class="lab">Most you can bid</div><div class="v num">$31,000</div></div>
+              <div><div class="lab">Farm slots left</div><div class="v num">6</div></div>
+            </div>
+            <div class="ceiling help-b">Bid against your scout's range, not a number you can see. Over the band looks like an overpay — and your kid will feel it.</div>
+            <div class="gesture">⇆ swipe to bid or pass · 🔒 hold the card to read your scout</div>
+            <div class="presets">
+              <button class="preset">+$1k</button><button class="preset sel">+$5k</button><button class="preset">+$10k</button>
+              <span class="chip num" style="margin-left:auto">your bid · $29,000</span>
+            </div>
+            <div class="actions"><button class="bid">BID $29k</button><button class="letgo">Let him go</button></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card board">
+            <div class="row"><div class="eyebrow">Your farm · 4 of 10</div><div class="spacer"></div><span class="chip">up-the-middle wanted</span></div>
+            <div class="slots" style="grid-template-columns:repeat(5,1fr)">
+              <div class="slot filled"><div class="p">C</div></div>
+              <div class="slot gap"><div class="p">2B</div></div>
+              <div class="slot gap"><div class="p">SS</div></div>
+              <div class="slot filled"><div class="p">CF</div></div>
+              <div class="slot filled"><div class="p">SP</div></div>
+              <div class="slot gap"><div class="p">RP</div></div>
+              <div class="slot filled"><div class="p">3B</div></div>
+              <div class="slot gap"><div class="p">LF</div></div>
+              <div class="slot gap"><div class="p">RF</div></div>
+              <div class="slot gap"><div class="p">CP</div></div>
+            </div>
+            <div class="needline">Komuro is a <b>2B/SS</b> — exactly the up-the-middle hole your scout flagged.</div>
+          </div>
+          <div class="coach help-coach" style="margin-top:16px">
+            <div class="mic">🎙</div><div class="txt">Right in your need — but he's a <b>relaxed, team-first</b> kid. Overpay and he won't sulk; reach too far and your wallet will.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SUMMARY ===================== -->
+  <section class="screen" data-screen="summary">
+    <div class="frame">
+      <div class="row" style="margin-bottom:16px"><div><h2 class="title">The team you built</h2><p class="sub">How you drafted becomes how your clubhouse feels on day one.</p></div></div>
+
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:18px">
+        <div class="card">
+          <div class="eyebrow" style="margin-bottom:6px">Clubhouse fingerprint</div>
+          <p class="sub" style="margin:0 0 8px">Taken early = "they committed to me." Fell late or underpaid = a chip on the shoulder. Each player opens above or below neutral.</p>
+          <div class="fingerprint">
+            <div class="fp"><div><div class="nm">Rafa Fenomeno</div><div class="meta">Lot 14 · paid over IV</div></div><div class="spacer"></div>
+              <div class="moralebar"><div class="mtrack"><div class="neutral"></div><i style="left:50%; width:28%; background:var(--win-fill)"></i></div><div class="mval win">+13</div></div></div>
+            <div class="fp"><div><div class="nm">Jet Komuro</div><div class="meta">early farm · slight overpay</div></div><div class="spacer"></div>
+              <div class="moralebar"><div class="mtrack"><div class="neutral"></div><i style="left:50%; width:18%; background:var(--win-fill)"></i></div><div class="mval win">+8</div></div></div>
+            <div class="fp"><div><div class="nm">Cy "Late" Mendez</div><div class="meta">Lot 88 · underpaid</div></div><div class="spacer"></div>
+              <div class="moralebar"><div class="mtrack"><div class="neutral"></div><i style="right:50%; width:24%; background:var(--loss-fill)"></i></div><div class="mval loss">−16</div></div></div>
+            <div class="fp"><div><div class="nm">Pax Flext</div><div class="meta">mid draft · fair price</div></div><div class="spacer"></div>
+              <div class="moralebar"><div class="mtrack"><div class="neutral"></div><i style="left:50%; width:4%; background:var(--faint)"></i></div><div class="mval muted">+2</div></div></div>
+          </div>
+        </div>
+
+        <div class="card raised">
+          <div class="eyebrow" style="margin-bottom:10px">The fan line</div>
+          <div class="payrank">
+            <div class="rankbadge">#2 / 4</div>
+            <div><div style="font-size:15px;font-weight:700">Top-of-league payroll</div><div class="sub">Fans are fired up — and they'll expect to win now.</div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="row" style="gap:14px"><div class="eyebrow">Starting fan morale</div><div class="spacer"></div><div class="num win" style="font-size:18px;font-weight:700">62 / 100</div></div>
+          <p class="sub" style="margin-top:8px">Median payroll is neutral. You're above it — energy now, pressure later. Tank to the bottom and you'd anger them just as much.</p>
+          <div class="divider"></div>
+          <div class="eyebrow" style="margin-bottom:8px">Carried into the season</div>
+          <div class="row" style="gap:10px;flex-wrap:wrap">
+            <span class="chip">22 MLB · priced</span><span class="chip">10 farm · priced</span><span class="chip">player morale seeded</span><span class="chip">fan morale seeded</span>
+          </div>
+          <button class="btn primary lg" style="width:100%; margin-top:18px">Begin the Season →</button>
+          <div class="faint" style="font-size:11.5px; text-align:center; margin-top:8px">this is where the four-number freeze actually fires</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">Prototype — visual + interaction design only. Behavior binds to the existing auction engine seams (see AUCTION_DRAFT_UX_REDESIGN.md §7). No production code runs here.</div>
+</div>
+
+<script>
+/* look toggle (soft / edgy) */
+document.querySelectorAll('#lookseg button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#lookseg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  document.body.classList.toggle('edgy', b.dataset.look==='edgy');
+}));
+/* help toggle (minimized text -> teaching layer) */
+document.getElementById('helpbtn').addEventListener('click',()=>document.body.classList.toggle('help-on'));
+
+const steps=[...document.querySelectorAll('.step')];
+const screens=[...document.querySelectorAll('.screen')];
+function show(name){
+  screens.forEach(s=>s.classList.toggle('active', s.dataset.screen===name));
+  steps.forEach(s=>s.classList.toggle('active', s.dataset.screen===name));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+steps.forEach(s=>s.addEventListener('click',()=>show(s.dataset.screen)));
+document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.goto)));
+
+/* MLB bidding interactions */
+let curBid=37000, high=32000;
+const fmtk=n=>'$'+Math.round(n/1000)+'k', fmt=n=>'$'+n.toLocaleString();
+const bidbtn=document.getElementById('bidbtn'), curbidChip=document.getElementById('curbid');
+const hbamt=document.getElementById('hbamt'), highbid=document.getElementById('highbid');
+document.querySelectorAll('#presets .preset:not(.dim)').forEach(p=>p.addEventListener('click',()=>{
+  document.querySelectorAll('#presets .preset').forEach(x=>x.classList.remove('sel'));
+  p.classList.add('sel');
+  curBid=high+parseInt(p.dataset.inc,10);
+  bidbtn.textContent='BID '+fmtk(curBid); curbidChip.textContent='your bid · '+fmt(curBid);
+}));
+bidbtn.addEventListener('click',()=>{
+  high=curBid; hbamt.textContent=fmt(high);
+  document.querySelector('#highbid .by').textContent='you';
+  highbid.classList.add('bump'); setTimeout(()=>highbid.classList.remove('bump'),350);
+  // brief SOLD beat then a fresh reveal
+  const sold=document.getElementById('sold'); sold.classList.add('show');
+  setTimeout(()=>{ sold.classList.remove('show'); nextLot(); },1100);
+});
+document.getElementById('passbtn').addEventListener('click',()=>{
+  const gone=document.getElementById('gone'); const inner=document.getElementById('lotinner');
+  inner.style.filter='grayscale(1) brightness(.6)'; inner.style.transition='filter .5s';
+  gone.classList.add('show');
+  setTimeout(()=>{ gone.classList.remove('show'); inner.style.filter=''; nextLot(); },1900);
+});
+const pool=[
+  {n:'CY VANE',pos:'C',iv:'~$96,000',p1:'😤 Tough',p2:'🧱 Anchor'},
+  {n:'DASH OKOYE',pos:'CF',iv:'~$120,000',p1:'⚡ Sparkplug',p2:'😎 Relaxed'},
+  {n:'MILO REYES',pos:'RP',iv:'~$58,000',p1:'🔥 Competitive',p2:'🤝 Team-First'},
+];
+let pi=0;
+function nextLot(){
+  const x=pool[pi%pool.length]; pi++;
+  const inner=document.getElementById('lotinner');
+  inner.innerHTML=`<div class="eyebrow">On the block</div>
+    <div class="name">${x.n}</div>
+    <div class="axes"><span class="pos">${x.pos}</span><span class="chip">${x.p1}</span><span class="chip">${x.p2}</span><span class="chip">B/T R/R</span></div>
+    <div class="valueline"><div class="eyebrow">Worth (IV)</div><div class="big num">${x.iv}</div><div class="muted" style="font-size:12.5px">advisory — public in the majors</div></div>
+    <div class="highbid" id="highbid"><div class="eyebrow">High bid</div><div class="row" style="margin-top:6px"><div class="amt num" id="hbamt">$0</div><div class="spacer"></div><div class="by muted">opening — be the first</div></div></div>`;
+  inner.classList.remove('reveal'); void inner.offsetWidth; inner.classList.add('reveal');
+}
+
+/* Farm long-press reveal */
+const scout=document.getElementById('scout'), cover=document.getElementById('scoutcover');
+const reveal=()=>scout.classList.add('revealed'), conceal=()=>scout.classList.remove('revealed');
+cover.addEventListener('pointerdown',e=>{e.preventDefault();reveal();});
+window.addEventListener('pointerup',conceal);
+cover.addEventListener('pointerleave',conceal);
+
+/* Carryover flow */
+document.getElementById('firebtn').addEventListener('click',function(){
+  this.disabled=true; this.textContent='Carryover released ✓'; this.style.opacity=.6;
+  let unspent=84000, carry=0, wallet=120000; const target=42000;
+  const uEl=document.getElementById('unspent'), cEl=document.getElementById('carry'), wEl=document.getElementById('farmwallet');
+  const steps=28; let i=0;
+  const iv=setInterval(()=>{
+    i++; const k=i/steps;
+    cEl.textContent=fmt(Math.round(target*k));
+    uEl.textContent=fmt(Math.round(84000-target*k));
+    wEl.textContent=fmt(Math.round(120000+target*k));
+    if(i>=steps){clearInterval(iv);}
+  },28);
+  // coin sparkle
+  const coins=document.getElementById('coins');
+  for(let c=0;c<10;c++){const d=document.createElement('div');d.className='coin';
+    d.style.left=(30+Math.random()*40)+'%';coins.appendChild(d);
+    d.animate([{opacity:1,transform:'translate(0,0)'},{opacity:0,transform:`translate(${120+Math.random()*120}px,${ -10+Math.random()*20}px)`}],
+      {duration:700+Math.random()*400,delay:c*40,easing:'cubic-bezier(.3,.7,.3,1)'});
+    setTimeout(()=>d.remove(),1400);
+  }
+});
+</script>
+</body>
+</html>

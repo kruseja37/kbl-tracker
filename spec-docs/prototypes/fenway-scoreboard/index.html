@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KBL · Fenway Scoreboard flavor — palette-locked prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+/* ===== OFFICIAL KBL PALETTE ONLY (8 colors + plain tints/shades of them) ===== */
+:root{
+  --wrigley:#4A5950;        /* green — the board / panels */
+  --wrigley-lit:#5E6F64;    /* tint */
+  --wrigley-dk:#3B463F;     /* shade — frame */
+  --wrigley-deep:#2C342E;   /* deep shade — recess */
+  --marquee:#CC3433;        /* red — lamps / final / negative */
+  --yellow:#F2C041;         /* historic yellow — painted numerals / amber lamps / Morse */
+  --dirt:#9C5642;           /* infield dirt — wood frame trim */
+  --cream:#CBB89C;          /* dark cream — number placards */
+  --navy:#1D2D44;           /* umpire navy — night sky / slot recess / ink */
+  --navy-deep:#152134;      /* shade — deep night */
+  --gray:#B0B7BC;           /* road gray — steel rivets / muted text */
+  --ash:#E3C099;            /* ash wood — bright placard / light wood / warm light text */
+
+  --font-board:'Oswald', system-ui, sans-serif;            /* painted ballpark signage */
+  --font-body:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;
+  --font-char:'Press Start 2P',monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font-body); color:var(--ash); line-height:1.5; -webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(1100px 480px at 50% -8%, #24395c 0%, rgba(29,45,68,0) 62%),
+    linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+  min-height:100vh;}
+.wrap{max-width:1180px;margin:0 auto;padding:26px 22px 70px}
+.eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--cream);opacity:.8;font-weight:600}
+.muted{color:var(--gray)} h2.t{font-size:19px;margin:0 0 4px;font-weight:700;color:var(--ash)}
+.sub{color:var(--gray);font-size:13.5px;margin:0}
+.head{display:flex;align-items:center;gap:16px;margin-bottom:6px}
+.wordmark{font-family:var(--font-char);font-size:14px;color:var(--yellow);text-shadow:2px 2px 0 rgba(0,0,0,.5)}
+.hint{font-size:12.5px;color:var(--gray);margin:12px 0 26px}
+.section{margin-bottom:34px}
+.section > .eyebrow{margin-bottom:12px;display:block}
+
+/* ===================== THE BOARD (Green Monster manual scoreboard) ===================== */
+.board{position:relative;background:
+    repeating-linear-gradient(180deg, rgba(0,0,0,.06) 0 2px, rgba(255,255,255,.015) 2px 4px),
+    linear-gradient(180deg, var(--wrigley-lit), var(--wrigley) 30%, var(--wrigley-dk));
+  border-radius:6px;
+  padding:22px 26px;
+  border:5px solid var(--dirt);
+  box-shadow:
+    inset 0 0 0 3px var(--wrigley-deep),
+    inset 0 3px 14px rgba(0,0,0,.45),
+    0 18px 40px rgba(0,0,0,.45);
+}
+/* rivets along the wood frame */
+.board::before,.board::after{content:"";position:absolute;left:10px;right:10px;height:7px;
+  background-image:radial-gradient(circle, var(--gray) 0 2px, rgba(0,0,0,.4) 2.5px, transparent 3px);
+  background-size:26px 7px;background-repeat:repeat-x;opacity:.8}
+.board::before{top:6px} .board::after{bottom:6px}
+
+.board-top{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.board-top .bt{font-family:var(--font-board);font-weight:600;letter-spacing:.18em;color:var(--ash);font-size:13px;text-transform:uppercase}
+.board-top .final{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-family:var(--font-board);
+  font-weight:700;letter-spacing:.1em;color:var(--marquee);font-size:14px}
+
+/* line score grid */
+.linescore{display:grid;grid-template-columns:118px repeat(9,1fr) 16px 0.85fr 0.85fr 0.85fr;gap:5px;align-items:stretch}
+.ls-h{font-family:var(--font-board);font-weight:600;font-size:13px;color:var(--yellow);text-align:center;
+  display:grid;place-items:center;padding:4px 0;letter-spacing:.04em}
+.ls-h.tot{color:var(--ash)}
+.ls-gap{}
+.ls-team{display:flex;align-items:center;gap:9px;background:linear-gradient(180deg,var(--ash),var(--cream));
+  color:var(--navy);border-radius:3px;padding:6px 10px;font-family:var(--font-board);font-weight:700;font-size:15px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 1px 2px rgba(0,0,0,.4);border:1px solid rgba(0,0,0,.25)}
+.ls-team .dot{width:13px;height:13px;border-radius:3px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+/* a recessed slot in the green board */
+.slot{background:var(--wrigley-deep);border-radius:2px;display:grid;place-items:center;min-height:38px;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.55), inset 0 0 0 1px rgba(0,0,0,.3);
+  font-family:var(--font-board);font-weight:600;font-size:18px;color:var(--ash)}
+.slot.amber{color:var(--yellow)}
+.slot.blank{color:var(--wrigley-lit)}
+/* the painted-card number that hangs in a slot (R/H/E totals) */
+.card-num{background:linear-gradient(180deg,var(--ash),var(--cream));color:var(--navy);border-radius:2px;
+  display:grid;place-items:center;min-height:38px;font-family:var(--font-board);font-weight:700;font-size:19px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45), 0 1px 2px rgba(0,0,0,.45);border:1px solid rgba(0,0,0,.2)}
+
+/* lamp row (balls / strikes / outs / inning indicator) */
+.lamps{display:flex;align-items:center;gap:22px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.3)}
+.lampgrp{display:flex;align-items:center;gap:9px}
+.lampgrp .lab{font-family:var(--font-board);font-weight:600;letter-spacing:.12em;font-size:11px;color:var(--ash);text-transform:uppercase}
+.lamp{width:15px;height:15px;border-radius:50%;background:var(--wrigley-deep);box-shadow:inset 0 0 4px rgba(0,0,0,.6)}
+.lamp.on.r{background:var(--marquee);box-shadow:0 0 9px var(--marquee), inset 0 0 3px rgba(0,0,0,.4)}
+.lamp.on.y{background:var(--yellow);box-shadow:0 0 9px var(--yellow), inset 0 0 3px rgba(0,0,0,.4)}
+
+/* the famous vertical Morse-code stripe (Yawkey initials nod) */
+.morse{display:flex;flex-direction:column;gap:5px;align-self:stretch;justify-content:center;padding:0 4px}
+.morse i{width:6px;background:var(--yellow);border-radius:1px;opacity:.85}
+.morse i.dot{height:6px} .morse i.dash{height:15px}
+
+/* ===================== INTENSITY DIAL (3 options) ===================== */
+.dial{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){.dial{grid-template-columns:1fr}}
+.opt .cap{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.opt .cap b{font-size:14px;color:var(--ash)} .opt .cap .tag{font-size:10.5px;color:var(--navy);background:var(--yellow);
+  border-radius:999px;padding:2px 9px;font-weight:700;letter-spacing:.04em}
+.opt .cap.rec .tag{background:var(--yellow)} .opt .why{font-size:12px;color:var(--gray);margin:10px 2px 0}
+
+/* base matchup mini (used at each intensity) */
+.mini{border-radius:14px;padding:18px;background:var(--wrigley);border:1px solid rgba(0,0,0,.3);
+  box-shadow:0 2px 6px rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.3)}
+.mini .row{display:flex;align-items:center;gap:12px}
+.mini .nm{font-weight:700;font-size:15px;color:var(--ash)} .mini .rec{font-family:var(--font-board);color:var(--cream);font-size:14px}
+.mini .vs{font-family:var(--font-board);color:var(--yellow);font-weight:700}
+.mini .big{font-family:var(--font-board);font-weight:700;font-size:34px;color:var(--ash);line-height:1}
+.tm-logo{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;font-family:var(--font-char);
+  font-size:12px;color:var(--navy);background:linear-gradient(160deg,var(--ash),var(--cream))}
+
+/* WHISPER — clean card, a couple of scoreboard accents */
+.opt.whisper .mini{position:relative}
+.opt.whisper .rivet{position:absolute;width:7px;height:7px;border-radius:50%;background:radial-gradient(circle at 35% 30%, var(--gray), #2a2f33);box-shadow:0 1px 1px rgba(0,0,0,.5)}
+.opt.whisper .rivet.tl{top:9px;left:9px}.opt.whisper .rivet.tr{top:9px;right:9px}.opt.whisper .rivet.bl{bottom:9px;left:9px}.opt.whisper .rivet.br{bottom:9px;right:9px}
+.scoreplate{background:linear-gradient(180deg,var(--ash),var(--cream));color:var(--navy);border-radius:4px;
+  font-family:var(--font-board);font-weight:700;padding:4px 10px;font-size:22px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 1px 2px rgba(0,0,0,.4)}
+
+/* BALLPARK — green board bg + placard numbers + a mini line-score strip + morse edge */
+.opt.ballpark .mini{background:linear-gradient(180deg,var(--wrigley-lit),var(--wrigley-dk));border:3px solid var(--dirt);
+  border-radius:6px;box-shadow:inset 0 0 0 2px var(--wrigley-deep), 0 12px 26px rgba(0,0,0,.35);position:relative;overflow:hidden}
+.miniscore{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:14px}
+.miniscore .slot{min-height:30px;font-size:15px}
+
+/* GREEN MONSTER — full manual board */
+.opt.monster .mini{padding:0;background:none;border:none;box-shadow:none}
+
+/* palette swatches */
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--cream)}
+.sw i{width:22px;height:22px;border-radius:5px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+.note{background:rgba(0,0,0,.18);border:1px solid rgba(176,183,188,.2);border-radius:12px;padding:16px 18px;font-size:13.5px;color:var(--cream)}
+.note b{color:var(--yellow)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="wordmark">KBL FRANCHISE</div>
+    <div class="eyebrow">Fenway "Green Monster" scoreboard flavor</div>
+  </div>
+  <div class="hint">Palette-locked to the official KBL eight. The board reads as hand-painted number placards slotted into a green steel panel — amber inning numerals, red final flag, steel rivets, the Yawkey Morse-code stripe.</div>
+
+  <!-- THE EXAMPLE -->
+  <div class="section">
+    <span class="eyebrow">The example · tonight's line score, on the board</span>
+    <div class="board">
+      <div class="board-top">
+        <span class="bt">Caldwell Park</span>
+        <span class="bt" style="color:var(--cream);opacity:.7">·</span>
+        <span class="bt" style="color:var(--cream);opacity:.7">Season 3 · Game 81</span>
+        <span class="final">● FINAL</span>
+      </div>
+      <div class="linescore">
+        <!-- header -->
+        <div class="ls-h"></div>
+        <div class="ls-h">1</div><div class="ls-h">2</div><div class="ls-h">3</div><div class="ls-h">4</div>
+        <div class="ls-h">5</div><div class="ls-h">6</div><div class="ls-h">7</div><div class="ls-h">8</div><div class="ls-h">9</div>
+        <div class="ls-gap"></div>
+        <div class="ls-h tot">R</div><div class="ls-h tot">H</div><div class="ls-h tot">E</div>
+        <!-- away -->
+        <div class="ls-team"><span class="dot" style="background:var(--gray)"></span>River Rats</div>
+        <div class="slot">0</div><div class="slot">1</div><div class="slot blank">0</div><div class="slot">2</div>
+        <div class="slot blank">0</div><div class="slot blank">0</div><div class="slot">1</div><div class="slot blank">0</div><div class="slot blank">0</div>
+        <div class="ls-gap morse"><i class="dot"></i><i class="dash"></i><i class="dot"></i><i class="dot"></i></div>
+        <div class="card-num">4</div><div class="card-num">9</div><div class="card-num">1</div>
+        <!-- home -->
+        <div class="ls-team"><span class="dot" style="background:var(--yellow)"></span>Page Capitals</div>
+        <div class="slot">2</div><div class="slot blank">0</div><div class="slot">1</div><div class="slot blank">0</div>
+        <div class="slot">3</div><div class="slot blank">0</div><div class="slot blank">0</div><div class="slot amber">1</div><div class="slot blank">x</div>
+        <div class="ls-gap morse"><i class="dash"></i><i class="dot"></i><i class="dash"></i><i class="dot"></i></div>
+        <div class="card-num">7</div><div class="card-num">11</div><div class="card-num">0</div>
+      </div>
+      <div class="lamps">
+        <div class="lampgrp"><span class="lab">Win</span><span class="lamp on y"></span></div>
+        <div class="lampgrp"><span class="lab">Streak</span><span class="lamp on y"></span><span class="lamp on y"></span><span class="lamp on y"></span><span class="lamp on y"></span><span class="lamp"></span></div>
+        <div class="lampgrp" style="margin-left:auto"><span class="lab">AL</span><span class="lamp on r"></span><span class="lab" style="margin-left:6px">NL</span><span class="lamp"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- THE DIAL -->
+  <div class="section">
+    <span class="eyebrow">Pick your intensity · how much board flavor to apply everywhere</span>
+    <div class="dial">
+      <!-- WHISPER -->
+      <div class="opt whisper">
+        <div class="cap"><b>1 · Whisper</b><span class="tag">subtle</span></div>
+        <div class="mini">
+          <span class="rivet tl"></span><span class="rivet tr"></span><span class="rivet bl"></span><span class="rivet br"></span>
+          <div class="row" style="margin-bottom:14px">
+            <div class="tm-logo">RR</div><div><div class="nm">River Rats</div><div class="rec">44–36</div></div>
+            <div class="vs" style="margin-left:auto">@</div>
+          </div>
+          <div class="row">
+            <div class="tm-logo">PC</div><div><div class="nm">Page Capitals</div><div class="rec">48–32</div></div>
+            <div style="margin-left:auto" class="scoreplate">7–4</div>
+          </div>
+        </div>
+        <p class="why">Our clean card, just kissed: steel rivets in the corners, the final score on a painted placard. Sits comfortably on the <b style="color:var(--ash)">soft</b> look.</p>
+      </div>
+
+      <!-- BALLPARK -->
+      <div class="opt ballpark">
+        <div class="cap rec"><b>2 · Ballpark</b><span class="tag">recommended</span></div>
+        <div class="mini">
+          <div class="row" style="margin-bottom:6px">
+            <div class="tm-logo">PC</div><div><div class="nm">Page Capitals</div><div class="rec">vs River Rats · final</div></div>
+            <span class="morse" style="margin-left:auto"><i class="dot"></i><i class="dash"></i><i class="dot"></i></span>
+          </div>
+          <div class="miniscore">
+            <div class="slot amber" style="font-size:11px;color:var(--cream)">R</div>
+            <div class="slot">2</div><div class="slot">1</div><div class="slot">3</div><div class="card-num" style="min-height:30px;font-size:16px">7</div>
+          </div>
+          <div class="row" style="margin-top:10px"><span class="muted" style="font-size:12px">your 4-game home streak</span>
+            <span style="margin-left:auto;display:flex;gap:4px"><span class="lamp on y"></span><span class="lamp on y"></span><span class="lamp on y"></span><span class="lamp on y"></span></span></div>
+        </div>
+        <p class="why">Green board surface, painted placard totals, a slot strip, the Morse nod, lamp streak. Reads unmistakably ballpark while staying glanceable. Pairs with either look.</p>
+      </div>
+
+      <!-- GREEN MONSTER -->
+      <div class="opt monster">
+        <div class="cap"><b>3 · Green Monster</b><span class="tag">hero</span></div>
+        <div class="mini">
+          <div class="board" style="padding:14px 16px">
+            <div class="board-top" style="margin-bottom:12px"><span class="bt" style="font-size:11px">Tonight · Final</span><span class="final" style="font-size:12px">● F</span></div>
+            <div class="linescore" style="grid-template-columns:78px 1fr 1fr 1fr;gap:4px">
+              <div class="ls-h"></div><div class="ls-h tot">R</div><div class="ls-h tot">H</div><div class="ls-h tot">E</div>
+              <div class="ls-team" style="font-size:12px;padding:5px 7px"><span class="dot" style="background:var(--gray);width:10px;height:10px"></span>RR</div>
+              <div class="card-num" style="min-height:32px;font-size:16px">4</div><div class="card-num" style="min-height:32px;font-size:16px">9</div><div class="card-num" style="min-height:32px;font-size:16px">1</div>
+              <div class="ls-team" style="font-size:12px;padding:5px 7px"><span class="dot" style="background:var(--yellow);width:10px;height:10px"></span>PC</div>
+              <div class="card-num" style="min-height:32px;font-size:16px">7</div><div class="card-num" style="min-height:32px;font-size:16px">11</div><div class="card-num" style="min-height:32px;font-size:16px">0</div>
+            </div>
+          </div>
+        </div>
+        <p class="why">The whole surface becomes the manual board — for hero moments (the hub home, a final, the standings). Leans <b style="color:var(--ash)">edgy</b>: it's metal, slots, and rivets by nature.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- STANDINGS ON THE BOARD -->
+  <div class="section">
+    <span class="eyebrow">And it scales · standings as a slotted board</span>
+    <div class="board">
+      <div class="linescore" style="grid-template-columns:150px 1fr 1fr 1fr 1.3fr;gap:6px">
+        <div class="ls-h"></div><div class="ls-h tot">W</div><div class="ls-h tot">L</div><div class="ls-h tot">GB</div><div class="ls-h tot">East</div>
+        <div class="ls-team"><span class="dot" style="background:var(--marquee)"></span>Brass Monkeys</div>
+        <div class="card-num">50</div><div class="slot">30</div><div class="slot amber">—</div><div class="slot" style="font-size:14px;color:var(--yellow)">1st</div>
+        <div class="ls-team"><span class="dot" style="background:var(--yellow)"></span>Page Capitals</div>
+        <div class="card-num">48</div><div class="slot">32</div><div class="slot">2.0</div><div class="slot" style="font-size:14px">2nd</div>
+        <div class="ls-team"><span class="dot" style="background:var(--gray)"></span>River Rats</div>
+        <div class="card-num">44</div><div class="slot">36</div><div class="slot">6.0</div><div class="slot" style="font-size:14px">3rd</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PALETTE PROOF + NOTE -->
+  <div class="section">
+    <span class="eyebrow">Locked to the official KBL eight</span>
+    <div class="swatches" style="margin-bottom:18px">
+      <span class="sw"><i style="background:#4A5950"></i>Wrigley Green</span>
+      <span class="sw"><i style="background:#CC3433"></i>Marquee Red</span>
+      <span class="sw"><i style="background:#F2C041"></i>Hist. Yellow</span>
+      <span class="sw"><i style="background:#9C5642"></i>Infield Dirt</span>
+      <span class="sw"><i style="background:#CBB89C"></i>Dark Cream</span>
+      <span class="sw"><i style="background:#1D2D44"></i>Umpire Navy</span>
+      <span class="sw"><i style="background:#B0B7BC"></i>Road Gray</span>
+      <span class="sw"><i style="background:#E3C099"></i>Ash Wood</span>
+    </div>
+    <div class="note">
+      <b>Soft or edgy?</b> The scoreboard motif is, by nature, a little industrial — metal, recessed slots, rivets, hard frames — so the <b>full board (Green Monster)</b> reads as the <b>edgy</b> end, and is best saved for hero moments (the hub landing, a game final, the standings). The <b>Whisper</b> end — rivets + a painted placard on an otherwise clean card — sits happily on the <b>soft</b> look and is what you'd sprinkle <b>everywhere</b>. My recommendation: <b>Whisper as the everyday accent, Ballpark for matchups & standings, Green Monster for the home/hero.</b>
+    </div>
+  </div>
+</div>
+</body>
+</html>

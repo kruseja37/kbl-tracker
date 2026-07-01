@@ -222,6 +222,21 @@ const FamePipPreview = lazy(() =>
     default: module.FamePipPreview,
   })),
 );
+const AuctionStagePreview = lazy(() =>
+  import("./src_figma/app/pages/AuctionStagePreview").then((module) => ({
+    default: module.AuctionStagePreview,
+  })),
+);
+const FranchiseLensPreview = lazy(() =>
+  import("./src_figma/app/pages/FranchiseLensPreview").then((module) => ({
+    default: module.FranchiseLensPreview,
+  })),
+);
+const FranchiseLensLivePreview = lazy(() =>
+  import("./src_figma/app/pages/FranchiseLensLivePreview").then((module) => ({
+    default: module.FranchiseLensLivePreview,
+  })),
+);
 const PlayerInstanceCardPreview = lazy(() =>
   import("./src_figma/app/pages/PlayerInstanceCardPreview").then((module) => ({
     default: module.PlayerInstanceCardPreview,
@@ -267,6 +282,22 @@ const FranchiseManualSmokeSetup = enableFranchiseManualSmokeSetupRoute
   ? lazy(() =>
       import("./src_figma/app/pages/FranchiseManualSmokeSetup").then((module) => ({
         default: module.FranchiseManualSmokeSetup,
+      })),
+    )
+  : null;
+// Dev/test-only verification harness: seeds a deterministic demo franchise for the real-data lens.
+const FranchiseLensSeed = enableFranchiseManualSmokeSetupRoute
+  ? lazy(() =>
+      import("./src_figma/app/pages/FranchiseLensSeed").then((module) => ({
+        default: module.FranchiseLensSeed,
+      })),
+    )
+  : null;
+// Dev/test-only: seeds a demo franchise AND plays a season (flags on) so all surfaces populate.
+const FranchiseLensSeedPlayed = enableFranchiseManualSmokeSetupRoute
+  ? lazy(() =>
+      import("./src_figma/app/pages/FranchiseLensSeedPlayed").then((module) => ({
+        default: module.FranchiseLensSeedPlayed,
       })),
     )
   : null;
@@ -405,6 +436,12 @@ function App() {
 
         {/* Isolated component proof route */}
         <Route path="/__preview/fame-pip" element={<FamePipPreview />} />
+        <Route path="/__preview/auction-stage" element={<AuctionStagePreview />} />
+        <Route path="/__preview/franchise-lens" element={<FranchiseLensPreview />} />
+        <Route
+          path="/__preview/franchise-lens/:franchiseId"
+          element={<FranchiseLensLivePreview />}
+        />
         <Route
           path="/__preview/player-instance-card"
           element={<PlayerInstanceCardPreview />}
@@ -433,6 +470,18 @@ function App() {
           <Route
             path="/__preview/franchise-v1-visual-smoke"
             element={FranchiseV1VisualSmokeSeed ? <FranchiseV1VisualSmokeSeed /> : <NotFound />}
+          />
+        ) : null}
+        {enableFranchiseManualSmokeSetupRoute ? (
+          <Route
+            path="/__preview/franchise-lens-seed"
+            element={FranchiseLensSeed ? <FranchiseLensSeed /> : <NotFound />}
+          />
+        ) : null}
+        {enableFranchiseManualSmokeSetupRoute ? (
+          <Route
+            path="/__preview/franchise-lens-seed-played"
+            element={FranchiseLensSeedPlayed ? <FranchiseLensSeedPlayed /> : <NotFound />}
           />
         ) : null}
         {enableFranchiseManualSmokeSetupRoute ? (

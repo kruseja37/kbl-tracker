@@ -20,6 +20,12 @@ export const FRANCHISE_PITCHER_POSITIONS = new Set<Position>(['SP', 'RP', 'CP', 
 export const FRANCHISE_ROTATION_POSITIONS = new Set<Position>(['SP', 'SP/RP']);
 /** SMB4 is always a four-man starting rotation (JK ruling 2026-06-26). */
 export const FRANCHISE_ROTATION_SIZE = 4;
+/**
+ * Placeholder id for the starting pitcher's batting slot. The pitcher's PLAYER always resolves to the
+ * rotation's #1 starter (at render + save), but its BATTING-ORDER position is movable — SMB4 pitchers
+ * don't always bat ninth (JK ruling 2026-06-26). No DH, so the pitcher is always in the nine.
+ */
+export const FRANCHISE_PITCHER_LINEUP_SLOT_ID = '__franchise_pitcher_slot__';
 
 export function getFranchisePlayerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim();
@@ -193,17 +199,36 @@ export function buildEditableFranchiseLineupSlots(
 ): LineupSlot[] {
   const playerById = new Map(players.map((player) => [player.id, player]));
   const targetCount = getManualLineupTargetCount(players, useDH);
-  return normalizeFranchiseLineupSlots(players, storedLineup, useDH)
+  const positionSlots = normalizeFranchiseLineupSlots(players, storedLineup, useDH)
     .filter((slot) => {
       const player = playerById.get(slot.playerId);
       return Boolean(player && !isFranchisePitcher(player));
     })
     .slice(0, targetCount)
-    .map((slot, index) => ({
+    .map((slot) => ({
       ...slot,
-      battingOrder: index + 1,
       fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? players.find((player) => player.id === slot.playerId)?.primaryPosition ?? 'LF' : slot.fieldingPosition,
     }));
+
+  if (useDH) {
+    return positionSlots.map((slot, index) => ({ ...slot, battingOrder: index + 1 }));
+  }
+
+  // No DH: the pitcher bats — but not always ninth. Insert a movable pitcher slot (its player resolves
+  // to the rotation's #1 starter) at its stored batting position, defaulting to the bottom of the order.
+  const storedPitcherOrder = (storedLineup ?? []).find((slot) => slot.fieldingPosition === 'P')?.battingOrder;
+  const pitcherSlot: LineupSlot = {
+    battingOrder: 9,
+    playerId: FRANCHISE_PITCHER_LINEUP_SLOT_ID,
+    fieldingPosition: 'P',
+  };
+  const combined = [...positionSlots];
+  const insertIndex =
+    storedPitcherOrder && storedPitcherOrder >= 1
+      ? Math.min(storedPitcherOrder - 1, combined.length)
+      : combined.length;
+  combined.splice(insertIndex, 0, pitcherSlot);
+  return combined.slice(0, 9).map((slot, index) => ({ ...slot, battingOrder: index + 1 }));
 }
 
 export function getFranchiseRotationCandidates(players: Player[]): Player[] {
@@ -298,31 +323,39 @@ export function buildManualLineupForSave(
   const activePlayerIds = new Set(players.map((player) => player.id));
   const playerById = new Map(players.map((player) => [player.id, player]));
   const targetCount = getManualLineupTargetCount(players, useDH);
-  const slots: LineupSlot[] = editableSlots
-    .filter((slot) => activePlayerIds.has(slot.playerId))
-    .filter((slot) => {
-      const player = playerById.get(slot.playerId);
-      return Boolean(player && !isFranchisePitcher(player));
-    })
-    .slice(0, targetCount)
-    .map((slot, index) => ({
-      ...slot,
-      battingOrder: index + 1,
-      fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? playerById.get(slot.playerId)?.primaryPosition ?? 'LF' : slot.fieldingPosition,
-    }));
 
-  if (!useDH) {
-    const rotationCandidates = getFranchiseRotationCandidates(players);
-    const starterId =
-      rotationIds.find((playerId) => rotationCandidates.some((candidate) => candidate.id === playerId)) ??
+  const rotationCandidates = getFranchiseRotationCandidates(players);
+  const starterId = useDH
+    ? undefined
+    : rotationIds.find((playerId) => rotationCandidates.some((candidate) => candidate.id === playerId)) ??
       rotationCandidates[0]?.id;
-    if (starterId) {
-      slots.push({
-        battingOrder: slots.length + 1,
-        playerId: starterId,
-        fieldingPosition: 'P',
-      });
+
+  // Walk the editable slots IN ORDER so the pitcher keeps whatever batting position the user gave it.
+  // The pitcher placeholder resolves to the rotation's #1 starter.
+  let positionCount = 0;
+  const slots: LineupSlot[] = [];
+  for (const slot of editableSlots) {
+    if (slot.playerId === FRANCHISE_PITCHER_LINEUP_SLOT_ID) {
+      if (!useDH && starterId) {
+        slots.push({ battingOrder: 0, playerId: starterId, fieldingPosition: 'P' });
+      }
+      continue;
     }
+    if (!activePlayerIds.has(slot.playerId)) continue;
+    const player = playerById.get(slot.playerId);
+    if (!player || isFranchisePitcher(player)) continue;
+    if (positionCount >= targetCount) continue;
+    positionCount += 1;
+    slots.push({
+      battingOrder: 0,
+      playerId: slot.playerId,
+      fieldingPosition: !useDH && slot.fieldingPosition === 'DH' ? player.primaryPosition ?? 'LF' : slot.fieldingPosition,
+    });
+  }
+
+  // Safety net for legacy/external slots with no pitcher placeholder — keep the pitcher batting ninth.
+  if (!useDH && starterId && !slots.some((slot) => slot.fieldingPosition === 'P')) {
+    slots.push({ battingOrder: 0, playerId: starterId, fieldingPosition: 'P' });
   }
 
   return slots.slice(0, 9).map((slot, index) => ({

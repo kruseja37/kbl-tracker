@@ -1,0 +1,930 @@
+/* ============================================================================
+ * fenway-theme.css — KBL "Aged Green Monster" design layer (team-lens hub)
+ * ----------------------------------------------------------------------------
+ * The franchise hub redesign (JK-approved 2026-06-25): an aged Fenway manual
+ * scoreboard. Real chalk (Creamy Chalk, bundled, CAPS-ONLY → board renders all-caps)
+ * for every board label/score/number/button; Mom's Typewriter for reporter content
+ * only. Palette = official KBL 8 (color_palette.md). Team color
+ * lives ONLY in the identity banner (--fen-tp / --fen-ts, set inline per club);
+ * the board itself stays white & yellow chalk — your club yellow, rival red.
+ *
+ * SCOPED under `.fen-root` so nothing leaks into the rest of the app. Tokens on
+ * :root (resolve in portals too). Fonts 'Chalk' + 'Moms Typewriter' are already
+ * @font-face'd in src/index.css. Tailwind v3 (CSS vars, not @theme).
+ * ========================================================================== */
+
+:root {
+  /* official KBL palette */
+  --fen-green: #4A5950;
+  --fen-green-lit: #586a5f;
+  --fen-green-dk: #3a463f;
+  --fen-green-deep: #2b332d;
+  --fen-green-black: #222a25;
+  --fen-marquee: #CC3433;
+  --fen-yellow: #F2C041;
+  --fen-dirt: #9C5642;
+  --fen-cream: #CBB89C;
+  --fen-navy: #1D2D44;
+  --fen-gray: #B0B7BC;
+  --fen-ash: #E3C099;
+  --fen-chalk: #ECE8DA;
+  --fen-chalk-soft: rgba(236, 232, 218, 0.66);
+  --fen-chalk-faint: rgba(236, 232, 218, 0.4);
+  /* team-lens identity (overridden inline per selected club) */
+  --fen-tp: #4A5950;
+  --fen-ts: #E3C099;
+  /* fonts */
+  /* the board's "chalk" voice = REAL chalk (Creamy Chalk) so the board reads as
+   * hand-chalked on the Green Monster, not typewritten (JK ruling 2026-06-26: the
+   * board must contrast hard with the reporter's typewriter). Creamy Chalk is a
+   * BUNDLED webfont (@font-face in src/index.css) used board-wide — note it is
+   * CAPS-ONLY (lowercase maps to caps), so the whole board renders all-caps, which
+   * JK approved for the scoreboard feel; digits render cleanly. Falls back to
+   * Chalkduster (macOS) → Tox Typewriter → Courier. chalk.otf stays rejected. */
+  --fen-chalk-font: 'Creamy Chalk', 'Chalkduster', 'Tox Typewriter', 'Courier New', monospace;
+  --fen-type: 'Moms Typewriter', 'Courier New', monospace;
+}
+
+.fen-root {
+  font-family: var(--fen-chalk-font);
+  color: var(--fen-chalk);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 500px at 50% -10%, #243024 0%, rgba(20, 29, 22, 0) 60%),
+    linear-gradient(180deg, #1d2820, #141c16);
+}
+.fen-wrap { max-width: 1180px; margin: 0 auto; padding: 20px 20px 70px; }
+
+/* type helpers */
+.fen-chalk { font-family: var(--fen-chalk-font); color: var(--fen-chalk); text-shadow: 0 0 1px rgba(236, 232, 218, 0.35), 0 1px 0 rgba(0, 0, 0, 0.25); }
+.fen-y { color: var(--fen-yellow); text-shadow: 0 0 2px rgba(242, 192, 65, 0.3), 0 1px 0 rgba(0, 0, 0, 0.3); }
+.fen-r { color: var(--fen-marquee); text-shadow: 0 0 3px rgba(204, 52, 51, 0.3); }
+.fen-eyebrow { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-muted { color: var(--fen-chalk-soft); }
+.fen-row { display: flex; align-items: center; gap: 12px; }
+.fen-spacer { flex: 1; }
+
+/* aged texture (grain + stains + vignette). NOTE: no overflow:hidden here — the
+ * grain/stain pseudo-elements are inset:0 (self-contained on square boards), and
+ * clipping would cut off the morale ledger popover that overflows the board. */
+.fen-aged { position: relative; }
+.fen-aged::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0.5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px; }
+.fen-aged::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(150px 90px at 16% 20%, rgba(0, 0, 0, 0.22), transparent 70%),
+    radial-gradient(180px 120px at 84% 72%, rgba(0, 0, 0, 0.2), transparent 72%),
+    radial-gradient(1200px 520px at 50% 50%, transparent 56%, rgba(0, 0, 0, 0.34) 100%); }
+
+/* lens picker */
+.fen-lens { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.fen-lens .lab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-teamchip { font-family: var(--fen-chalk-font); font-size: 18px; background: none; border: 2px solid transparent; border-radius: 5px; cursor: pointer; color: var(--fen-chalk-soft); padding: 4px 11px; display: inline-flex; align-items: center; gap: 8px; }
+.fen-teamchip:hover { color: var(--fen-chalk); }
+.fen-teamchip .swab { width: 13px; height: 13px; border-radius: 4px; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.3); }
+.fen-teamchip.sel { color: var(--fen-chalk); }
+
+/* identity banner — wears the team's colors */
+.fen-ident { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 8px 8px 0 0; position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--fen-tp) 78%, #222a25), color-mix(in srgb, var(--fen-tp) 52%, #222a25));
+  border: 1px solid rgba(0, 0, 0, 0.4); border-bottom: none; }
+.fen-ident::after { content: ""; position: absolute; inset: 0; mix-blend-mode: multiply; opacity: 0.42;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+.fen-mark { width: 46px; height: 46px; border-radius: 11px; display: grid; place-items: center; font-family: var(--fen-chalk-font); font-size: 16px; position: relative; z-index: 2;
+  background: var(--fen-ts); color: var(--fen-tp); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 0 0 3px color-mix(in srgb, var(--fen-tp) 60%, #000); }
+.fen-ident .nm { font-family: var(--fen-chalk-font); font-size: 28px; position: relative; z-index: 2; color: #fff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5); }
+.fen-ident .rec { font-family: var(--fen-chalk-font); font-size: 12px; color: rgba(255, 255, 255, 0.8); position: relative; z-index: 2; }
+.fen-ident .right { margin-left: auto; position: relative; z-index: 2; font-family: var(--fen-chalk-font); font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.fen-colorbar { height: 5px; background: linear-gradient(90deg, var(--fen-tp) 0 60%, var(--fen-ts) 60% 100%); }
+
+/* board */
+.fen-board { position: relative; padding: 20px 22px; background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green) 28%, var(--fen-green-dk)); border: 1px solid rgba(0, 0, 0, 0.4); box-shadow: inset 0 4px 16px rgba(0, 0, 0, 0.45); }
+.fen-board.first { border-radius: 0; }
+.fen-board.rounded { border-radius: 8px; }
+.fen-content { position: relative; z-index: 3; }
+
+/* tabs */
+.fen-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid rgba(0, 0, 0, 0.32); margin-bottom: 16px; }
+.fen-tab { font-family: var(--fen-chalk-font); font-size: 17px; background: none; border: none; cursor: pointer; color: var(--fen-chalk-soft); padding: 7px 12px; }
+.fen-tab:hover { color: var(--fen-chalk); }
+.fen-tab.on { color: var(--fen-chalk); border-bottom: 3px solid var(--fen-yellow); }
+.fen-tab.league { opacity: 0.6; }
+
+/* club pulse */
+.fen-pulse { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid rgba(0, 0, 0, 0.32); }
+.fen-pulse .club { font-family: var(--fen-chalk-font); font-size: 30px; }
+.fen-metric { cursor: pointer; background: none; border: none; text-align: left; padding: 0; }
+.fen-metric .ml { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-metric .mv { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-metric .tap { font-family: var(--fen-chalk-font); font-size: 9px; color: var(--fen-chalk-soft); opacity: 0.7; }
+.fen-rivalcall { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 18px; }
+
+/* roster */
+.fen-roster { display: grid; grid-template-columns: 26px 48px 1fr 92px 50px 78px 80px 78px 84px; gap: 2px 10px; align-items: center; }
+.fen-net.up { color: var(--fen-yellow); }
+.fen-net.dn { color: var(--fen-marquee); }
+.fen-roster .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 6px; }
+.fen-roster .h.rt { text-align: right; }
+.fen-roster .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.22); }
+.fen-rnum { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-chalk-soft); }
+.fen-rpos { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-ash); text-align: center; background: rgba(0, 0, 0, 0.18); border-radius: 4px; padding: 2px 0; }
+.fen-rname { font-family: var(--fen-chalk-font); font-size: 21px; }
+.fen-rbadge { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-yellow); border-radius: 4px; padding: 2px 7px; justify-self: start; }
+.fen-rbadge.alb { background: var(--fen-gray); }
+.fen-rnumcell { font-family: var(--fen-chalk-font); font-size: 20px; text-align: right; }
+.fen-rnumcell.soft { color: var(--fen-chalk-soft); }
+.fen-morale { font-family: var(--fen-chalk-font); font-size: 22px; text-align: right; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; width: 100%; background: none; border: none; }
+.fen-morale .ar { font-size: 13px; }
+.fen-morale.hi { color: var(--fen-yellow); }
+.fen-morale.lo { color: var(--fen-marquee); }
+.fen-morale.mid { color: var(--fen-chalk); }
+.fen-morale:hover { text-decoration: underline dotted; }
+
+/* front office: roster advice + trade demands */
+.fen-frontoffice { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.3); }
+@media (max-width: 720px) { .fen-frontoffice { grid-template-columns: 1fr; } }
+.fen-advice { display: grid; grid-template-columns: 16px 1fr; gap: 9px; align-items: baseline; padding: 5px 0; font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-advice .ic { font-size: 11px; text-align: center; }
+.fen-advice.call-up .ic { color: var(--fen-yellow); }
+.fen-advice.send-down .ic { color: var(--fen-marquee); }
+.fen-advice .tx b { color: var(--fen-chalk); }
+.fen-demand { display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 9px; padding: 5px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); }
+.fen-demand:last-child { border-bottom: none; }
+.fen-demand .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); }
+.fen-demand .nm { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-demand.hot .nm { color: var(--fen-marquee); }
+.fen-demand .rs { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); text-align: right; }
+
+/* the farm (the 10) */
+.fen-farm { margin-top: 22px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.3); }
+.fen-farm-list { display: grid; grid-template-columns: 48px 1fr 60px 1.3fr auto; gap: 3px 12px; align-items: center; }
+.fen-farm-list .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 5px; }
+.fen-farm-list .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.2); }
+.fen-farm-age { font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-farm-grade { font-family: var(--fen-chalk-font); font-size: 16px; color: var(--fen-ash); }
+.fen-farm-ready { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-callup { font-family: var(--fen-chalk-font); font-size: 11px; cursor: pointer; border-radius: 4px; padding: 4px 11px; background: linear-gradient(180deg, #f0d26a, #cba23f); border: 2px solid #2a2208; color: var(--fen-navy); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55); white-space: nowrap; }
+.fen-callup.ghost { background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(236, 232, 218, 0.16); color: var(--fen-chalk-soft); box-shadow: none; }
+.fen-farm-cap { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-top: 12px; text-align: center; }
+
+/* money — option B (small typewriter $/k + chalk digits) */
+.fen-money { font-family: var(--fen-chalk-font); display: inline-flex; align-items: baseline; }
+.fen-money .cur { font-family: var(--fen-chalk-font); font-size: 0.46em; color: var(--fen-chalk-soft); margin-right: 0.08em; transform: translateY(-0.12em); }
+.fen-money .unit { font-family: var(--fen-chalk-font); font-size: 0.46em; color: var(--fen-chalk-soft); margin-left: 0.06em; }
+
+/* morale ledger popover */
+.fen-pop { position: absolute; z-index: 20; width: 340px; background: linear-gradient(180deg, #33403a, #2a342e); border: 2px solid #14110d; border-radius: 4px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.4); padding: 16px 18px; }
+.fen-pop .ph { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid rgba(0, 0, 0, 0.4); padding-bottom: 10px; margin-bottom: 10px; }
+.fen-pop .ph .nm { font-family: var(--fen-chalk-font); font-size: 22px; }
+.fen-pop .ph .st { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-left: auto; text-transform: uppercase; letter-spacing: 0.08em; }
+.fen-pop .big { font-family: var(--fen-chalk-font); font-size: 40px; line-height: 1; }
+.fen-pop .arc { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin: 2px 0 12px; }
+.fen-entry { display: flex; gap: 11px; align-items: baseline; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-entry:last-child { border-bottom: none; }
+.fen-entry .d { font-family: var(--fen-chalk-font); font-size: 17px; width: 40px; flex: none; text-align: right; }
+.fen-entry .d.up { color: var(--fen-yellow); }
+.fen-entry .d.dn { color: var(--fen-marquee); }
+.fen-entry .rs { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk); line-height: 1.35; }
+.fen-entry .wk { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-pop .foot { font-family: var(--fen-chalk-font); font-size: 10.5px; color: var(--fen-chalk-soft); margin-top: 10px; text-align: center; opacity: 0.8; }
+.fen-pop .close { position: absolute; top: 8px; right: 10px; background: none; border: none; color: var(--fen-chalk-faint); font-size: 18px; cursor: pointer; line-height: 1; }
+.fen-popbackdrop { position: fixed; inset: 0; z-index: 19; }
+
+/* empty / loading */
+.fen-empty { font-family: var(--fen-chalk-font); color: var(--fen-chalk-soft); text-align: center; padding: 40px 20px; font-size: 13px; }
+
+/* ===== refined banner (archetype + crew, clean + spacious) ===== */
+.fen-id-main { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.fen-archetype { display: inline-flex; align-items: center; gap: 5px; font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px; padding: 3px 10px; }
+.fen-id-meta { font-family: var(--fen-chalk-font); font-size: 12px; color: rgba(255, 255, 255, 0.78); position: relative; z-index: 2; margin-top: 3px; }
+.fen-crewside { margin-left: auto; position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+.fen-reporter { display: flex; align-items: center; gap: 10px; }
+.fen-reporter .rt { text-align: right; }
+.fen-reporter .rn { font-family: var(--fen-chalk-font); font-size: 12.5px; color: #fff; }
+.fen-reporter .rm { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); font-style: italic; }
+.fen-ravatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(160deg, #3a4a5a, #222a30); display: grid; place-items: center; font-size: 17px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(255, 255, 255, 0.15); }
+.fen-crew { font-family: var(--fen-chalk-font); font-size: 11px; color: rgba(255, 255, 255, 0.72); }
+.fen-crew b { color: rgba(255, 255, 255, 0.95); }
+
+/* ===== Season Home ("The Clubhouse") ===== */
+.fen-sectlab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-chalk-soft); margin: 0 0 11px; display: flex; align-items: center; gap: 10px; }
+.fen-sectlab::after { content: ""; flex: 1; height: 1px; background: rgba(0, 0, 0, 0.25); }
+.fen-sectlab .lite { text-transform: none; letter-spacing: 0; }
+
+.fen-lead { background: linear-gradient(180deg, #ddd1b6, #cdbf9d); color: var(--fen-navy); border: 1px solid #b3a583; border-radius: 3px; padding: 18px 20px; position: relative; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4); margin-bottom: 18px; }
+.fen-lead .kick { font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 6px; }
+.fen-lead h2 { font-family: var(--fen-chalk-font); font-size: 24px; line-height: 1.14; margin: 0 0 7px; color: #23201a; }
+.fen-lead p { font-family: var(--fen-chalk-font); font-size: 13.5px; line-height: 1.5; margin: 0; max-width: 64ch; color: #23201a; }
+.fen-lead .by { font-family: var(--fen-chalk-font); font-size: 11px; color: #4a4536; margin-top: 9px; font-style: italic; }
+.fen-lead .wt { position: absolute; top: 14px; right: 16px; font-family: var(--fen-chalk-font); font-size: 10px; color: #6a5f48; text-transform: uppercase; letter-spacing: 0.1em; }
+
+.fen-homegrid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; }
+@media (max-width: 880px) { .fen-homegrid { grid-template-columns: 1fr; } }
+.fen-icards { display: flex; flex-direction: column; gap: 10px; }
+.fen-icard { display: flex; gap: 13px; align-items: flex-start; padding: 13px 15px; border-radius: 4px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 4px solid var(--fen-gray); cursor: pointer; text-align: left; width: 100%; }
+.fen-icard.crisis { border-left-color: var(--fen-marquee); }
+.fen-icard.dated { border-left-color: var(--fen-yellow); }
+.fen-icard.good { border-left-color: var(--fen-ash); }
+.fen-icard .ic { font-size: 20px; line-height: 1; margin-top: 1px; }
+.fen-icard .bd { flex: 1; min-width: 0; }
+.fen-icard .t { font-family: var(--fen-chalk-font); font-size: 20px; line-height: 1.1; color: var(--fen-chalk); }
+.fen-icard.crisis .t { color: var(--fen-marquee); }
+.fen-icard.dated .t { color: var(--fen-yellow); }
+.fen-icard .d { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 3px; line-height: 1.4; }
+.fen-icard .go { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); white-space: nowrap; align-self: center; }
+
+.fen-nextgame { background: linear-gradient(180deg, #445b3c, #36492f); border: 1px solid rgba(0, 0, 0, 0.4); border-radius: 6px; padding: 18px; box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4); }
+.fen-mteams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-bottom: 14px; }
+.fen-mt { text-align: center; }
+.fen-mt .lg { width: 42px; height: 42px; border-radius: 11px; margin: 0 auto 6px; display: grid; place-items: center; font-family: var(--fen-chalk-font); font-size: 13px; background: var(--fen-green-deep); color: var(--fen-chalk); }
+.fen-mt .nm { font-family: var(--fen-chalk-font); font-size: 19px; }
+.fen-mt.you .nm, .fen-mt.you .lg { color: var(--fen-yellow); }
+.fen-mt .rc { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-vs { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-yellow); }
+.fen-bigplay { width: 100%; font-family: var(--fen-chalk-font); font-size: 18px; padding: 15px; border-radius: 4px; border: 2px solid #2a2208; cursor: pointer; background: linear-gradient(180deg, #f0d26a, #cba23f); color: var(--fen-navy); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.8); }
+.fen-bigplay:active { transform: scale(0.98); }
+.fen-simrow { display: flex; gap: 8px; margin-top: 10px; justify-content: center; }
+.fen-simbtn { font-family: var(--fen-chalk-font); font-size: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 4px; color: var(--fen-chalk-soft); padding: 8px 12px; cursor: pointer; }
+.fen-gpulse { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 14px; text-align: center; }
+.fen-gpulse b { color: var(--fen-chalk); }
+.fen-calm { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
+.fen-calm b { color: var(--fen-chalk); }
+
+/* ===== Help layer — exposition hidden by default; a barely-there bottom toggle reveals it ===== */
+.fen-help { display: none; }
+.fen-root.help-on .fen-help { display: inline; }
+.fen-help-b { display: none; }
+.fen-root.help-on .fen-help-b { display: block; }
+.fen-helpbtn { position: fixed; bottom: 13px; right: 15px; z-index: 60; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-faint); background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(236, 232, 218, 0.14); border-radius: 999px; padding: 5px 12px; cursor: pointer; opacity: 0.4; transition: opacity 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.fen-helpbtn:hover { opacity: 1; }
+.fen-root.help-on .fen-helpbtn { opacity: 1; color: var(--fen-navy); background: var(--fen-yellow); border-color: var(--fen-yellow); }
+
+/* ===== The Tootwhistle Times (team beat — newspaper) ===== */
+.fen-paper { position: relative; border-radius: 3px; padding: 22px 26px; color: var(--fen-navy); background: linear-gradient(180deg, #ddd1b6, #cdbf9d); border: 1px solid #b3a583; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); overflow: hidden; }
+.fen-paper::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0.3; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"); }
+.fen-masthead { text-align: center; border-bottom: 3px double var(--fen-navy); padding-bottom: 10px; margin-bottom: 8px; position: relative; z-index: 2; }
+.fen-masthead .name { font-family: var(--fen-chalk-font); font-size: 34px; line-height: 1.05; }
+.fen-masthead .subm { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; margin-top: 7px; color: #4a4536; }
+.fen-dateline { display: flex; justify-content: space-between; font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--fen-navy); padding: 6px 0; margin-bottom: 16px; color: #4a4536; position: relative; z-index: 2; flex-wrap: wrap; gap: 8px; }
+.fen-paper .pbody { position: relative; z-index: 2; }
+.fen-lead2 { margin-bottom: 16px; }
+.fen-lead2 .kick { font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 5px; }
+.fen-lead2 h2 { font-family: var(--fen-chalk-font); font-size: 26px; line-height: 1.12; margin: 0 0 7px; }
+.fen-lead2 p { font-family: var(--fen-chalk-font); font-size: 13.5px; line-height: 1.5; margin: 0; max-width: 70ch; }
+.fen-lead2 .by { font-family: var(--fen-chalk-font); font-size: 11px; color: #4a4536; margin-top: 8px; font-style: italic; }
+.fen-newsgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; position: relative; z-index: 2; }
+@media (max-width: 760px) { .fen-newsgrid { grid-template-columns: 1fr; } }
+.fen-ncard { border-top: 1px solid var(--fen-navy); padding-top: 11px; cursor: pointer; }
+.fen-ncat { display: inline-block; font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 6px; }
+.fen-ncard h3 { font-family: var(--fen-chalk-font); font-size: 16px; line-height: 1.22; margin: 0 0 6px; }
+.fen-ncard .ex { font-family: var(--fen-chalk-font); font-size: 12.5px; color: #3a352a; margin: 0; line-height: 1.45; }
+.fen-ncard .by { font-family: var(--fen-chalk-font); font-size: 10.5px; color: #5a5446; margin-top: 8px; font-style: italic; }
+
+/* impact pips (story dramaticWeight, on newsprint) */
+.fen-impact { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 7px; }
+.fen-impact .pip { width: 5px; height: 5px; border-radius: 1px; background: rgba(29, 45, 68, 0.22); }
+.fen-impact .pip.on { background: var(--fen-marquee); }
+
+/* recap stream (per-game GameStory recaps — newspaper box-score column) */
+.fen-recaps { margin-top: 18px; border-top: 2px solid var(--fen-navy); padding-top: 12px; position: relative; z-index: 2; }
+.fen-recaps-h { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 9px; }
+.fen-recaps-h .lite { color: #4a4536; letter-spacing: 0; }
+.fen-recap { display: grid; grid-template-columns: 84px 132px 1fr; gap: 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px dotted rgba(29, 45, 68, 0.25); }
+.fen-recap:last-child { border-bottom: none; }
+.fen-recap .rd { font-size: 10.5px; color: #4a4536; text-transform: uppercase; letter-spacing: 0.04em; }
+.fen-recap .rsc { font-size: 13.5px; color: #23201a; display: inline-flex; gap: 6px; align-items: baseline; white-space: nowrap; }
+.fen-recap .rsc .w { font-weight: 700; }
+.fen-recap .rsc .at { color: #6a5f48; font-size: 11px; }
+.fen-recap .rh { font-size: 12px; color: #3a352a; }
+@media (max-width: 600px) { .fen-recap { grid-template-columns: 1fr; gap: 2px; } }
+
+/* the league wire (all event types) */
+.fen-wire { margin-top: 18px; border-top: 2px solid var(--fen-navy); padding-top: 12px; position: relative; z-index: 2; }
+.fen-wire-h { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-marquee); margin-bottom: 9px; }
+.fen-wire-h .lite { color: #4a4536; letter-spacing: 0; }
+.fen-wireitem { display: grid; grid-template-columns: 78px 1fr auto; align-items: baseline; gap: 12px; padding: 5px 0; border-bottom: 1px dotted rgba(29, 45, 68, 0.22); }
+.fen-wireitem:last-child { border-bottom: none; }
+.fen-wireitem .ty { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-navy); background: rgba(29, 45, 68, 0.12); border-radius: 3px; padding: 2px 6px; text-align: center; }
+.fen-wireitem.bad .ty { color: #fff; background: var(--fen-marquee); }
+.fen-wireitem.good .ty { color: #fff; background: #2f6d3f; }
+.fen-wireitem .tx { font-size: 12.5px; color: #23201a; }
+.fen-wireitem .wn { font-size: 10.5px; color: #6a5f48; text-transform: uppercase; letter-spacing: 0.04em; }
+@media (max-width: 600px) { .fen-wireitem { grid-template-columns: 1fr; gap: 2px; } }
+
+/* the reporter's desk (colophon) */
+.fen-desk { margin-top: 18px; border-top: 1px solid var(--fen-navy); padding-top: 12px; position: relative; z-index: 2; }
+.fen-desk .dh { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #4a4536; }
+.fen-desk .dm { font-size: 12.5px; color: #23201a; margin-top: 3px; }
+.fen-desk .dn { font-size: 12.5px; color: #4a4536; font-style: italic; margin-top: 5px; }
+
+/* ===== Standings & Races (league tab — all chalk, your club yellow, rival red) ===== */
+.fen-sr { display: flex; flex-direction: column; gap: 26px; }
+.fen-sr-sect { }
+
+/* season progress + playoff picture */
+.fen-progress { margin-bottom: 16px; }
+.fen-progress .pr-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.fen-progress .pl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
+.fen-progress .pg { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-yellow); }
+.fen-progress .pr-bar { height: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-progress .pr-bar .fill { display: block; height: 100%; background: var(--fen-yellow); border-radius: 4px; }
+.fen-picture { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+@media (max-width: 720px) { .fen-picture { grid-template-columns: 1fr; } }
+.fen-pic-h { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.28); padding-bottom: 6px; }
+.fen-pic-slot { display: grid; grid-template-columns: 34px 1fr auto; align-items: baseline; gap: 9px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); border-left: 3px solid transparent; padding-left: 8px; }
+.fen-pic-slot:last-child { border-bottom: none; }
+.fen-pic-slot.in { border-left-color: var(--fen-yellow); }
+.fen-pic-slot.hunt { border-left-color: var(--fen-ash); }
+.fen-pic-slot.out { border-left-color: rgba(176, 183, 188, 0.4); opacity: 0.72; }
+.fen-pic-slot .ab { font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); }
+.fen-pic-slot .nm { font-family: var(--fen-chalk-font); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-pic-slot .dt { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); white-space: nowrap; }
+.fen-pic-slot.you .nm, .fen-pic-slot.you .ab { color: var(--fen-yellow); }
+.fen-pic-slot.rival .nm, .fen-pic-slot.rival .ab { color: var(--fen-marquee); }
+.fen-pic-note { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-top: 10px; }
+
+/* standings table */
+.fen-stand { margin-bottom: 18px; }
+.fen-stand-div { font-family: var(--fen-chalk-font); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-ash); margin: 4px 0 8px; }
+.fen-stand-grid { display: grid; grid-template-columns: minmax(150px, 1.4fr) 40px 40px 58px 48px 56px 52px 62px 64px 64px; gap: 3px 10px; align-items: center; }
+.fen-stand-grid .h { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); padding-bottom: 5px; }
+.fen-stand-grid .h.rt { text-align: right; }
+.fen-stand-grid .line { grid-column: 1 / -1; height: 1px; background: rgba(0, 0, 0, 0.22); }
+.fen-stand-team { font-family: var(--fen-chalk-font); font-size: 18px; display: inline-flex; align-items: baseline; gap: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-stand-team .ab { font-size: 11px; color: var(--fen-chalk-soft); letter-spacing: 0.04em; }
+.fen-stand-team.you { color: var(--fen-yellow); }
+.fen-stand-team.you .ab { color: var(--fen-yellow); opacity: 0.7; }
+.fen-stand-team.rival { color: var(--fen-marquee); }
+.fen-stand-team.rival .ab { color: var(--fen-marquee); opacity: 0.7; }
+/* you/rival tint the W & PCT cells too; +/- run diff and W/L streak keep conventional coloring */
+.fen-stand-grid .fen-rnumcell.you { color: var(--fen-yellow); }
+.fen-stand-grid .fen-rnumcell.rival { color: var(--fen-marquee); }
+.fen-rnumcell.stw { color: var(--fen-chalk); }
+.fen-rnumcell.stl { color: var(--fen-marquee); }
+.fen-rnumcell.pos { color: var(--fen-chalk); }
+.fen-rnumcell.neg { color: var(--fen-marquee); }
+.fen-stand-grid .fen-rnumcell { font-size: 17px; }
+
+/* races — gap bars */
+.fen-races { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px 24px; }
+.fen-race { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 5px; padding: 12px 14px; }
+.fen-race-cat { font-family: var(--fen-chalk-font); font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 10px; }
+.fen-race-cat .nt { color: var(--fen-chalk-soft); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.fen-race-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) 88px 46px; align-items: center; gap: 9px; padding: 5px 0; }
+.fen-race-row .rk { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; }
+.fen-race-row .who { min-width: 0; }
+.fen-race-row .who .nm { font-family: var(--fen-chalk-font); font-size: 16px; display: block; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-race-row .who .tm { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-race-row .bar { height: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-race-row .bar .fill { display: block; height: 100%; background: var(--fen-chalk-soft); border-radius: 3px; }
+.fen-race-row .gap { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: right; }
+.fen-race-row.lead .gap { color: var(--fen-chalk); }
+.fen-race-row.you .who .nm { color: var(--fen-yellow); }
+.fen-race-row.you .bar .fill { background: var(--fen-yellow); }
+.fen-race-row.you .gap { color: var(--fen-yellow); }
+.fen-race-row.rival .who .nm { color: var(--fen-marquee); }
+.fen-race-row.rival .bar .fill { background: var(--fen-marquee); }
+
+/* the hardware board (all awards) */
+.fen-awards { display: grid; grid-template-columns: repeat(auto-fit, minmax(224px, 1fr)); gap: 10px; }
+.fen-award { display: flex; align-items: center; gap: 11px; background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 3px solid var(--fen-yellow); border-radius: 5px; padding: 10px 12px; }
+.fen-award.bad { border-left-color: var(--fen-marquee); }
+.fen-award .em { font-size: 18px; line-height: 1; }
+.fen-award .bd { min-width: 0; flex: 1; }
+.fen-award .cat { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-award .who { font-family: var(--fen-chalk-font); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-award .who.you { color: var(--fen-yellow); }
+.fen-award .who.rival { color: var(--fen-marquee); }
+.fen-award .who .tm { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-award .st { color: var(--fen-yellow); font-size: 14px; }
+
+/* all-star board */
+.fen-ascols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+@media (max-width: 760px) { .fen-ascols { grid-template-columns: 1fr; } }
+.fen-ascol-h { font-family: var(--fen-chalk-font); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 7px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.28); padding-bottom: 6px; }
+.fen-ascol-h .ct { font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-asrow { display: grid; grid-template-columns: 42px 1fr auto; align-items: baseline; gap: 10px; padding: 4px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); }
+.fen-asrow .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); background: rgba(0, 0, 0, 0.2); border-radius: 4px; padding: 2px 0; text-align: center; }
+.fen-asrow .nm { font-family: var(--fen-chalk-font); font-size: 16px; }
+.fen-asrow .tm { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-asrow.you .nm { color: var(--fen-yellow); }
+.fen-asrow.rival .nm { color: var(--fen-marquee); }
+.fen-snubs { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.28); }
+.fen-snub-h { font-family: var(--fen-chalk-font); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-bottom: 8px; }
+.fen-snub { display: flex; align-items: baseline; gap: 10px; padding: 4px 0; }
+.fen-snub .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); min-width: 30px; }
+.fen-snub .nm { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-snub .tm { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-snub .nt { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); font-style: italic; margin-left: auto; }
+.fen-snub.you .nm { color: var(--fen-yellow); }
+.fen-snub.rival .nm { color: var(--fen-marquee); }
+
+/* ===== Almanac tab (league leaders + trophy case) ===== */
+.fen-almanac-sect2 { margin-top: 24px; }
+.fen-lb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(188px, 1fr)); gap: 14px; }
+.fen-lb { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 5px; padding: 11px 13px; }
+.fen-lb-stat { font-family: var(--fen-chalk-font); font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.28); padding-bottom: 6px; }
+.fen-lb-row { display: grid; grid-template-columns: 16px 1fr auto auto; align-items: baseline; gap: 8px; padding: 3px 0; }
+.fen-lb-row .rk { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); text-align: center; }
+.fen-lb-row .nm { font-family: var(--fen-chalk-font); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-lb-row .tm { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-lb-row .vl { font-family: var(--fen-chalk-font); font-size: 15px; text-align: right; }
+.fen-lb-row.you .nm, .fen-lb-row.you .vl { color: var(--fen-yellow); }
+.fen-lb-row.rival .nm, .fen-lb-row.rival .vl { color: var(--fen-marquee); }
+.fen-trophies { display: grid; grid-template-columns: repeat(auto-fit, minmax(204px, 1fr)); gap: 12px; }
+.fen-trophy { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 3px solid var(--fen-ash); border-radius: 5px; padding: 11px 13px; }
+.fen-trophy.you { border-left-color: var(--fen-yellow); background: rgba(242, 192, 65, 0.06); }
+.fen-trophy .tl { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-trophy .th { font-family: var(--fen-chalk-font); font-size: 17px; margin-top: 4px; }
+.fen-trophy.you .th { color: var(--fen-yellow); }
+
+/* ===== Schedule tab ===== */
+.fen-sched-deadline { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-yellow); background: rgba(242, 192, 65, 0.1); border: 1px solid rgba(242, 192, 65, 0.3); border-radius: 5px; padding: 8px 14px; margin-bottom: 18px; }
+.fen-sched-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+@media (max-width: 720px) { .fen-sched-grid { grid-template-columns: 1fr; } }
+.fen-sgame { display: grid; grid-template-columns: 88px 1fr auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-sgame.next { background: rgba(242, 192, 65, 0.07); border: 1px solid rgba(242, 192, 65, 0.25); border-radius: 6px; padding: 9px 11px; margin-bottom: 3px; }
+.fen-sgame .sd { font-family: var(--fen-chalk-font); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--fen-chalk-soft); }
+.fen-sgame .sm { font-family: var(--fen-chalk-font); font-size: 16px; }
+.fen-sgame .sr { font-family: var(--fen-chalk-font); font-size: 16px; text-align: right; white-space: nowrap; }
+.fen-sgame .sr.w { color: var(--fen-yellow); }
+.fen-sgame .sr.l { color: var(--fen-marquee); }
+.fen-sgame .sr.soft { color: var(--fen-chalk-soft); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.fen-sched-play { font-family: var(--fen-chalk-font); font-size: 12px; background: linear-gradient(180deg, #f0d26a, #cba23f); border: 2px solid #2a2208; color: var(--fen-navy); border-radius: 4px; padding: 5px 11px; cursor: pointer; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6); white-space: nowrap; }
+
+/* ===== Stadium tab (chalk spray chart + park factors + record book) ===== */
+.fen-stadium { display: flex; flex-direction: column; gap: 18px; }
+.fen-stad-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.3); }
+.fen-stad-name { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-stad-sub { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-stad-dims { margin-left: auto; display: flex; gap: 16px; font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk); }
+.fen-stad-dims b { color: var(--fen-chalk-soft); font-size: 11px; letter-spacing: 0.06em; margin-right: 3px; }
+.fen-stad-arch { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-ash); border-radius: 4px; padding: 3px 9px; }
+
+/* home-park rivalry callout (Captain's home-park-rival feature) */
+.fen-stad-rival { display: flex; align-items: center; gap: 11px; background: rgba(204, 52, 51, 0.1); border: 1px solid rgba(204, 52, 51, 0.35); border-left: 3px solid var(--fen-marquee); border-radius: 6px; padding: 10px 14px; margin-bottom: 18px; font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); }
+.fen-stad-rival .ic { font-size: 17px; }
+.fen-stad-rival b { color: var(--fen-chalk); }
+
+/* park aggregates */
+.fen-aggbox { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 14px 16px; }
+.fen-aggs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 10px; }
+.fen-aggs .agg { text-align: center; }
+.fen-aggs .agg .v { font-family: var(--fen-chalk-font); font-size: 22px; line-height: 1; }
+.fen-aggs .agg .l { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 4px; }
+
+/* best & worst performers here */
+.fen-perfs { display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 10px; }
+.fen-perf { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 10px; background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-left: 3px solid var(--fen-yellow); border-radius: 5px; padding: 10px 13px; }
+.fen-perf.bad { border-left-color: var(--fen-marquee); }
+.fen-perf .pl { grid-column: 1 / -1; font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-perf .pn { font-family: var(--fen-chalk-font); font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fen-perf .pn.you { color: var(--fen-yellow); }
+.fen-perf .pn.rival { color: var(--fen-marquee); }
+.fen-perf .pn .tm { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-perf .pv { font-family: var(--fen-chalk-font); font-size: 16px; text-align: right; }
+
+/* visitor ledger */
+.fen-opps { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.fen-opp { display: flex; align-items: baseline; gap: 9px; background: rgba(0, 0, 0, 0.16); border: 1px solid rgba(0, 0, 0, 0.28); border-radius: 5px; padding: 8px 11px; }
+.fen-opp .oa { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-opp .orr { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-opp .on { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); margin-left: auto; }
+.fen-opp.you .oa, .fen-opp.you .orr { color: var(--fen-yellow); }
+.fen-opp.rival { border-color: rgba(204, 52, 51, 0.4); }
+.fen-opp.rival .oa, .fen-opp.rival .orr { color: var(--fen-marquee); }
+
+/* record book grid (expanded) */
+.fen-recgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 26px; }
+@media (max-width: 720px) { .fen-recgrid { grid-template-columns: 1fr; } }
+
+.fen-stad-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
+@media (max-width: 880px) { .fen-stad-grid { grid-template-columns: 1fr; } }
+
+/* role toggle */
+.fen-spray-toggle { display: inline-flex; gap: 3px; background: rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 3px; margin-bottom: 12px; }
+.fen-spray-tab { font-family: var(--fen-chalk-font); font-size: 13px; text-transform: capitalize; background: none; border: none; cursor: pointer; color: var(--fen-chalk-soft); padding: 5px 14px; border-radius: 4px; }
+.fen-spray-tab:hover { color: var(--fen-chalk); }
+.fen-spray-tab.on { color: var(--fen-navy); background: var(--fen-yellow); }
+
+/* the chalk field */
+.fen-spray-svg { width: 100%; height: auto; display: block; max-width: 520px; margin: 0 auto; }
+.fen-spray-grass { fill: rgba(120, 150, 110, 0.10); }
+.fen-spray-dirt { fill: rgba(156, 86, 66, 0.20); }
+.fen-spray-wall { fill: none; stroke: var(--fen-chalk-soft); stroke-width: 2.4; }
+.fen-spray-line { stroke: var(--fen-chalk-soft); stroke-width: 1.4; }
+.fen-spray-diamond { fill: none; stroke: var(--fen-chalk-soft); stroke-width: 1.4; }
+.fen-spray-mound { fill: none; stroke: var(--fen-chalk-faint); stroke-width: 1.1; }
+.fen-spray-base { fill: var(--fen-chalk); }
+.fen-spray-dot { opacity: 0.9; }
+.fen-spray-dot.hr { fill: var(--fen-marquee); }
+.fen-spray-dot.xbh { fill: var(--fen-yellow); }
+.fen-spray-dot.single { fill: var(--fen-ash); }
+.fen-spray-dot.out { fill: var(--fen-chalk-soft); opacity: 0.6; }
+.fen-spray-dot.err { fill: var(--fen-navy); stroke: var(--fen-chalk-faint); stroke-width: 0.6; }
+
+/* legend */
+.fen-spray-legend { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 10px 0 14px; }
+.fen-spray-legend .lg { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); display: inline-flex; align-items: center; gap: 6px; }
+.fen-spray-legend .lg::before { content: ""; width: 10px; height: 10px; border-radius: 50%; }
+.fen-spray-legend .lg.hr::before { background: var(--fen-marquee); }
+.fen-spray-legend .lg.xbh::before { background: var(--fen-yellow); }
+.fen-spray-legend .lg.single::before { background: var(--fen-ash); }
+.fen-spray-legend .lg.out::before { background: var(--fen-chalk-soft); opacity: 0.6; }
+.fen-spray-legend .lg.err::before { background: var(--fen-navy); box-shadow: 0 0 0 1px var(--fen-chalk-faint); }
+
+/* spray summary stats */
+.fen-spray-stats { display: flex; gap: 22px; justify-content: center; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
+.fen-spray-stats .st { text-align: center; }
+.fen-spray-stats .st .v { font-family: var(--fen-chalk-font); font-size: 26px; line-height: 1; }
+.fen-spray-stats .st .l { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 4px; }
+.fen-spray-note { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); text-align: center; margin-top: 12px; line-height: 1.45; }
+
+/* park factors + record book */
+.fen-stad-side { display: flex; flex-direction: column; gap: 18px; }
+.fen-parkbox, .fen-recbox { background: rgba(0, 0, 0, 0.18); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 14px 16px; }
+.fen-parkrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.fen-pf { text-align: center; background: rgba(0, 0, 0, 0.2); border-radius: 5px; padding: 10px 6px; }
+.fen-pf .pv { font-family: var(--fen-chalk-font); font-size: 28px; line-height: 1; }
+.fen-pf .pv.up { color: var(--fen-yellow); }
+.fen-pf .pv.dn { color: var(--fen-marquee); }
+.fen-pf .pl { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 5px; }
+.fen-park-note { font-family: var(--fen-chalk-font); font-size: 10.5px; color: var(--fen-chalk-soft); margin-top: 10px; text-align: center; }
+.fen-rec { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 6px 10px; padding: 8px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-rec:last-child { border-bottom: none; }
+.fen-rec .rl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
+.fen-rec .rv { font-family: var(--fen-chalk-font); font-size: 20px; color: var(--fen-yellow); text-align: right; }
+.fen-rec .rh { grid-column: 1 / -1; font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+
+/* ===== Player drawer (the per-player dossier) ===== */
+.fen-rname-btn { background: none; border: none; padding: 0; text-align: left; cursor: pointer; width: 100%; }
+.fen-rname-btn:hover { text-decoration: underline dotted; color: var(--fen-yellow); }
+
+.fen-drawer-back { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, 0.5); }
+.fen-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 71; width: 440px; max-width: 94vw; overflow-y: auto;
+  background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green) 22%, var(--fen-green-dk)); border-left: 1px solid #14110d;
+  box-shadow: -16px 0 50px rgba(0, 0, 0, 0.55), inset 0 4px 16px rgba(0, 0, 0, 0.4); padding: 20px 22px 40px; animation: fen-drawer-in 0.22s ease; }
+@keyframes fen-drawer-in { from { transform: translateX(28px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.fen-drawer-x { position: absolute; top: 12px; right: 14px; background: none; border: none; color: var(--fen-chalk-faint); font-size: 24px; line-height: 1; cursor: pointer; }
+.fen-drawer-x:hover { color: var(--fen-chalk); }
+.fen-drawer-act { position: absolute; top: 12px; left: 14px; z-index: 1; }
+
+.fen-dhead { display: flex; gap: 14px; align-items: flex-start; padding-right: 24px; }
+.fen-dhead .dnum { font-family: var(--fen-chalk-font); font-size: 34px; color: var(--fen-chalk-soft); line-height: 1; min-width: 34px; }
+.fen-dhead .dname { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-dhead .dmeta { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); margin-top: 5px; }
+.fen-dhead .dbadges { display: flex; align-items: center; gap: 9px; margin-top: 8px; }
+.fen-dhead .dwar { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-deffect { font-family: var(--fen-chalk-font); font-size: 11.5px; color: var(--fen-yellow); margin-top: 10px; }
+.fen-dbio { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); margin-top: 8px; line-height: 1.45; font-style: italic; }
+
+.fen-decon { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 4px; }
+.fen-decon .e { background: rgba(0, 0, 0, 0.2); border-radius: 5px; padding: 9px 4px; text-align: center; }
+.fen-decon .e .l { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-decon .e .v { font-family: var(--fen-chalk-font); font-size: 18px; margin-top: 3px; }
+
+.fen-dsect { margin-top: 20px; }
+
+/* sparkline */
+.fen-sparkwrap { background: rgba(0, 0, 0, 0.18); border-radius: 6px; padding: 10px 12px; }
+.fen-spark { width: 100%; height: auto; display: block; }
+.fen-spark-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.fen-spark-line.up { stroke: var(--fen-yellow); }
+.fen-spark-line.dn { stroke: var(--fen-marquee); }
+.fen-spark-dot { fill: var(--fen-chalk); }
+.fen-sparklabs { display: flex; justify-content: space-between; font-family: var(--fen-chalk-font); font-size: 9px; color: var(--fen-chalk-soft); margin-top: 4px; }
+
+/* ratings base→current */
+.fen-ratings { display: flex; flex-direction: column; gap: 8px; }
+.fen-rating { display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; gap: 10px; }
+.fen-rating .rl { font-family: var(--fen-chalk-font); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-rating .rbar { position: relative; height: 9px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-rating .rbar .fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--fen-chalk-soft); border-radius: 3px; }
+.fen-rating .rbar .basetick { position: absolute; top: -2px; width: 2px; height: 13px; background: var(--fen-ash); opacity: 0.8; transform: translateX(-1px); }
+.fen-rating .rv { font-family: var(--fen-chalk-font); font-size: 17px; text-align: right; display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 5px; }
+.fen-rating .rv .dl { font-size: 10px; }
+.fen-rating .rv .dl.up { color: var(--fen-yellow); }
+.fen-rating .rv .dl.dn { color: var(--fen-marquee); }
+
+/* traits */
+.fen-traitchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.fen-traitchips .chip { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 3px 10px; }
+.fen-traittl { display: flex; flex-direction: column; gap: 5px; }
+.fen-traittl .tl { display: grid; grid-template-columns: 16px 1fr auto; align-items: baseline; gap: 8px; font-family: var(--fen-chalk-font); font-size: 12px; }
+.fen-traittl .tl .ar { font-size: 11px; }
+.fen-traittl .tl.gain .ar { color: var(--fen-yellow); }
+.fen-traittl .tl.lose .ar { color: var(--fen-marquee); }
+.fen-traittl .tl .tx { color: var(--fen-chalk-soft); }
+.fen-traittl .tl .tx b { color: var(--fen-chalk); }
+.fen-traittl .tl .g { font-size: 10px; color: var(--fen-chalk-soft); }
+
+/* morale block (reuses .fen-entry) */
+.fen-dmorale { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.fen-dmorale .big { font-family: var(--fen-chalk-font); font-size: 38px; line-height: 1; }
+.fen-dmorale .ar { font-size: 16px; }
+.fen-dmorale .arc { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+
+/* ties */
+.fen-ties { display: flex; flex-direction: column; gap: 7px; }
+.fen-tie { display: grid; grid-template-columns: 24px 1fr 48px 46px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-tie .mi { font-family: var(--fen-chalk-font); font-size: 12px; text-align: right; white-space: nowrap; }
+.fen-tie .mi.up { color: var(--fen-yellow); }
+.fen-tie .mi.dn { color: var(--fen-marquee); }
+.fen-tie:last-child { border-bottom: none; }
+.fen-tie.pot { opacity: 0.7; }
+.fen-tie .ic { font-size: 16px; text-align: center; }
+.fen-tie .who .nm { font-family: var(--fen-chalk-font); font-size: 15px; display: block; line-height: 1.05; }
+.fen-tie .who .ty { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-tie .int { height: 7px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; }
+.fen-tie .int .fill { display: block; height: 100%; background: var(--fen-ash); border-radius: 3px; }
+.fen-tie.pot .int .fill { background: repeating-linear-gradient(90deg, var(--fen-ash) 0 4px, transparent 4px 7px); }
+
+/* fame */
+.fen-fame { background: rgba(0, 0, 0, 0.18); border-radius: 6px; padding: 12px 14px; }
+.fen-fame .fame-top { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
+.fen-fame .heat { text-align: center; }
+.fen-fame .heat .v { font-family: var(--fen-chalk-font); font-size: 30px; line-height: 1; }
+.fen-fame .heat .l { font-family: var(--fen-chalk-font); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); margin-top: 3px; }
+.fen-fame .immo { flex: 1; }
+.fen-fame .immo .l { font-family: var(--fen-chalk-font); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); margin-bottom: 6px; }
+.fen-fame .immo .meter { display: flex; gap: 5px; }
+.fen-fame .immo .meter .seg { flex: 1; height: 9px; background: rgba(0, 0, 0, 0.3); border-radius: 2px; }
+.fen-fame .immo .meter .seg.on { background: var(--fen-yellow); }
+.fen-fame .fame-channels { display: flex; flex-direction: column; gap: 5px; }
+.fen-fame .ch { display: grid; grid-template-columns: 78px 1fr 28px; align-items: center; gap: 8px; }
+.fen-fame .ch .cl { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); text-transform: capitalize; }
+.fen-fame .ch .cbar { height: 7px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; }
+.fen-fame .ch .cbar .fill { display: block; height: 100%; background: var(--fen-chalk-soft); border-radius: 3px; }
+.fen-fame .ch .cv { font-family: var(--fen-chalk-font); font-size: 13px; text-align: right; }
+
+/* dossier extras: nickname, phase, form chips, makeup, morale sources, career, milestones */
+.fen-dhead .dnick { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-ash); font-style: italic; margin-top: 2px; }
+.fen-dhead .dphase { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-navy); background: var(--fen-ash); border-radius: 4px; padding: 2px 7px; }
+.fen-dform { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.fen-dform .chip { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 999px; padding: 3px 10px; }
+.fen-dform .chip.up { color: var(--fen-yellow); border-color: rgba(242, 192, 65, 0.4); }
+.fen-dform .chip.down, .fen-dform .chip.warn { color: var(--fen-marquee); border-color: rgba(204, 52, 51, 0.4); }
+
+/* editable fitness picker (the user-set condition that carries into the game) */
+.fen-fitpick { position: relative; display: inline-block; }
+.fen-fitpick-btn { cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.fen-fitpick-btn:hover { border-color: rgba(242, 192, 65, 0.5); color: var(--fen-chalk); }
+.fen-fitpick-btn .caret { opacity: 0.7; }
+.fen-fitpick-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; min-width: 170px; background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green-dk)); border: 1px solid var(--fen-yellow); border-radius: 6px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55); padding: 4px; display: flex; flex-direction: column; gap: 1px; }
+.fen-fitpick-opt { display: grid; grid-template-columns: 18px 1fr auto; align-items: baseline; gap: 8px; font-family: var(--fen-chalk-font); font-size: 13px; cursor: pointer; text-align: left; background: none; border: none; color: var(--fen-chalk-soft); border-radius: 4px; padding: 6px 9px; }
+.fen-fitpick-opt:hover { background: rgba(0, 0, 0, 0.28); color: var(--fen-chalk); }
+.fen-fitpick-opt.on { background: rgba(242, 192, 65, 0.16); color: var(--fen-chalk); }
+.fen-fitpick-opt .mu { font-size: 11px; color: var(--fen-chalk-faint); }
+
+.fen-personality { font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk); margin-bottom: 10px; }
+.fen-mods { display: flex; flex-direction: column; gap: 7px; }
+.fen-mod { display: grid; grid-template-columns: 78px 1fr 30px; align-items: center; gap: 10px; }
+.fen-mod .ml { font-family: var(--fen-chalk-font); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-mod .mbar { height: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; overflow: hidden; }
+.fen-mod .mbar .fill { display: block; height: 100%; background: var(--fen-ash); border-radius: 3px; }
+.fen-mod .mv { font-family: var(--fen-chalk-font); font-size: 15px; text-align: right; }
+.fen-msources { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 12px; padding-bottom: 10px; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-msources .src { display: inline-flex; align-items: baseline; gap: 6px; }
+.fen-msources .sl { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); }
+.fen-msources .sv { font-family: var(--fen-chalk-font); font-size: 13px; }
+.fen-msources .sv.up { color: var(--fen-yellow); }
+.fen-msources .sv.dn { color: var(--fen-marquee); }
+.fen-career { display: flex; flex-wrap: wrap; gap: 18px; }
+.fen-career .cl { text-align: center; }
+.fen-career .cl .v { font-family: var(--fen-chalk-font); font-size: 22px; line-height: 1; }
+.fen-career .cl .l { font-family: var(--fen-chalk-font); font-size: 9.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-top: 4px; }
+.fen-careeraw { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.fen-careeraw .aw { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-navy); background: var(--fen-yellow); border-radius: 4px; padding: 3px 9px; }
+.fen-ms { display: grid; grid-template-columns: 18px 1fr auto; align-items: baseline; gap: 9px; padding: 5px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.07); }
+.fen-ms:last-child { border-bottom: none; }
+.fen-ms .ck { font-family: var(--fen-chalk-font); color: var(--fen-chalk-soft); text-align: center; }
+.fen-ms.got .ck { color: var(--fen-yellow); }
+.fen-ms .mt { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-ms.got .mt { color: var(--fen-chalk); }
+.fen-ms .mt .md { color: var(--fen-chalk-soft); }
+.fen-ms .ma { font-family: var(--fen-chalk-font); font-size: 10px; color: var(--fen-chalk-soft); }
+
+@media (max-width: 520px) { .fen-drawer { width: 100vw; } }
+
+/* an impact card that opens a takeover reads as actionable (not help-gated) */
+.fen-icard.act { cursor: pointer; border-left-color: var(--fen-yellow); }
+.fen-icard.act:hover { background: rgba(242, 192, 65, 0.08); }
+.fen-icard.act .go { color: var(--fen-yellow); }
+
+/* ===== Checkpoint confirmation worklist (the takeover that SHOUTS) ===== */
+.fen-cp { position: fixed; inset: 0; z-index: 80; background: rgba(12, 18, 14, 0.82); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 28px 18px; animation: fen-cp-in 0.2s ease; }
+@keyframes fen-cp-in { from { opacity: 0; } to { opacity: 1; } }
+.fen-cp-panel { position: relative; width: 980px; max-width: 100%; background: linear-gradient(180deg, var(--fen-green-lit), var(--fen-green) 26%, var(--fen-green-dk)); border: 2px solid var(--fen-yellow); border-radius: 8px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 4px 16px rgba(0, 0, 0, 0.4); padding: 22px 26px 26px; }
+.fen-cp-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+.fen-cp-head h2 { font-family: var(--fen-chalk-font); font-size: 30px; margin: 2px 0 4px; line-height: 1; }
+.fen-cp-kick { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-marquee); }
+.fen-cp-sub { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); }
+.fen-cp-sub b { color: var(--fen-yellow); }
+.fen-cp-x { margin-left: auto; background: none; border: none; color: var(--fen-chalk-faint); font-size: 26px; line-height: 1; cursor: pointer; }
+.fen-cp-x:hover { color: var(--fen-chalk); }
+.fen-cp-prog { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.fen-cp-prog .bar { flex: 1; height: 10px; background: rgba(0, 0, 0, 0.32); border-radius: 4px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); }
+.fen-cp-prog .bar .fill { display: block; height: 100%; background: var(--fen-yellow); border-radius: 4px; transition: width 0.18s ease; }
+.fen-cp-prog .lab { font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); white-space: nowrap; }
+.fen-cp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (max-width: 720px) { .fen-cp-grid { grid-template-columns: 1fr; } }
+.fen-cp-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-cp-card.ok { border-left-color: var(--fen-yellow); opacity: 0.62; }
+.fen-cp-card .ph { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.fen-cp-card .ph .pos { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); background: rgba(0, 0, 0, 0.22); border-radius: 4px; padding: 2px 7px; }
+.fen-cp-card .ph .nm { font-family: var(--fen-chalk-font); font-size: 19px; }
+.fen-cp-card .ph .chk { margin-left: auto; font-family: var(--fen-chalk-font); font-size: 11px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.18); border-radius: 999px; padding: 4px 11px; }
+.fen-cp-card .ph .chk.on { color: var(--fen-navy); background: var(--fen-yellow); border-color: var(--fen-yellow); }
+.fen-cp-card .changes { display: flex; flex-direction: column; gap: 4px; }
+.fen-cp-card .rc { display: grid; grid-template-columns: 64px 30px 16px 36px 1fr; align-items: baseline; gap: 6px; font-family: var(--fen-chalk-font); }
+.fen-cp-card .rc .rl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-cp-card .rc .rf { font-size: 15px; color: var(--fen-chalk-soft); text-align: right; }
+.fen-cp-card .rc .ar { font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-cp-card .rc .rt { font-size: 19px; }
+.fen-cp-card .rc .dl { font-size: 11px; }
+.fen-cp-card .rc .dl.up { color: var(--fen-yellow); }
+.fen-cp-card .rc .dl.dn { color: var(--fen-marquee); }
+.fen-cp-card .tc { display: flex; gap: 7px; align-items: baseline; font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); margin-top: 2px; }
+.fen-cp-card .tc .ar { font-size: 13px; }
+.fen-cp-card .tc.gain .ar { color: var(--fen-yellow); }
+.fen-cp-card .tc.lose .ar { color: var(--fen-marquee); }
+.fen-cp-card .tc b { color: var(--fen-chalk); }
+.fen-cp-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, 0.3); }
+.fen-cp-allbtn, .fen-cp-donebtn { font-family: var(--fen-chalk-font); font-size: 13px; cursor: pointer; border-radius: 5px; padding: 9px 16px; }
+.fen-cp-allbtn { background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.18); color: var(--fen-chalk-soft); }
+.fen-cp-allbtn:hover { color: var(--fen-chalk); }
+.fen-cp-donebtn { background: linear-gradient(180deg, #f0d26a, #cba23f); border: 2px solid #2a2208; color: var(--fen-navy); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.6); }
+
+/* the big-moments launcher (Clubhouse) */
+.fen-moments-launch { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(0, 0, 0, 0.25); }
+.fen-moments-launch .lab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-right: 4px; }
+.fen-moments-launch button { font-family: var(--fen-chalk-font); font-size: 12px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(236, 232, 218, 0.16); border-radius: 999px; padding: 5px 12px; }
+.fen-moments-launch button:hover { color: var(--fen-chalk); border-color: var(--fen-yellow); }
+
+/* moment takeover shell sizing + accent borders */
+.fen-moment .fen-cp-panel { width: 660px; }
+.fen-moment.fire .fen-cp-panel { border-color: var(--fen-marquee); }
+.fen-moment.rebrand .fen-cp-panel { border-color: var(--fen-cream); }
+.fen-moment.ceremony .fen-cp-panel { border-color: var(--fen-yellow); }
+.fen-moment.event .fen-cp-panel { border-color: var(--fen-ash); }
+.fen-moment-lead { font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk-soft); margin-bottom: 16px; }
+.fen-moment-lead .rec, .fen-moment-lead .tm { color: var(--fen-chalk-soft); font-size: 12px; }
+.fen-moment-lead b { color: var(--fen-chalk); }
+.fen-moment-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .fen-moment-grid2 { grid-template-columns: 1fr; } }
+.fen-moment-box { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 12px 14px; }
+.fen-moment-box .bh { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-ash); margin-bottom: 8px; }
+.fen-mrip { display: grid; grid-template-columns: 34px 1fr auto; align-items: baseline; gap: 8px; padding: 4px 0; font-family: var(--fen-chalk-font); }
+.fen-mrip .d { font-size: 15px; text-align: right; }
+.fen-mrip .d.up { color: var(--fen-yellow); }
+.fen-mrip .d.dn { color: var(--fen-marquee); }
+.fen-mrip .nm { font-size: 14px; }
+.fen-mrip .nt { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-mrip.foot { display: block; grid-template-columns: none; font-size: 12px; color: var(--fen-chalk-soft); margin-top: 8px; padding-top: 8px; border-top: 1px dotted rgba(255, 255, 255, 0.1); }
+.fen-moment-new { font-family: var(--fen-chalk-font); font-size: 22px; line-height: 1; margin-bottom: 6px; }
+.fen-moment-note { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); line-height: 1.45; }
+.fen-moment-notes { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); line-height: 1.7; margin-top: 16px; }
+.fen-rebrand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 8px 0; }
+.fen-rebrand .side { text-align: center; }
+.fen-rebrand .side .lab { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-rebrand .side .nm { font-family: var(--fen-chalk-font); font-size: 24px; line-height: 1.05; margin-top: 4px; }
+.fen-rebrand .side.old .nm { color: var(--fen-chalk-soft); text-decoration: line-through; text-decoration-color: rgba(204, 52, 51, 0.6); }
+.fen-rebrand .side .ct { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); margin-top: 3px; }
+.fen-rebrand .arrow { font-family: var(--fen-chalk-font); font-size: 22px; color: var(--fen-yellow); }
+.fen-champ { font-family: var(--fen-chalk-font); font-size: 15px; color: var(--fen-chalk-soft); margin-bottom: 14px; }
+.fen-champ b { color: var(--fen-yellow); }
+.fen-ceremony { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+@media (max-width: 640px) { .fen-ceremony { grid-template-columns: 1fr; } }
+.fen-cer { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dotted rgba(255, 255, 255, 0.08); }
+.fen-cer .cat { font-family: var(--fen-chalk-font); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fen-chalk-soft); }
+.fen-cer .win { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-cer .win .tm { font-size: 10px; color: var(--fen-chalk-soft); }
+.fen-cer.you .win { color: var(--fen-yellow); }
+.fen-moment-take { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-ash); font-style: italic; margin-top: 14px; }
+.fen-moment-take .att { color: var(--fen-chalk-soft); font-style: normal; font-size: 11px; }
+
+@media (prefers-reduced-motion: reduce) { .fen-root *, .fen-root *::before, .fen-root *::after { animation: none !important; transition: none !important; } }
+
+/* JK rule: the board speaks chalk (Tox) — every label, number, and clickable surface.
+ * Mom's Typewriter is reserved for the reporter's words ONLY: the Season Home lead
+ * story and the Tootwhistle Times newspaper. */
+.fen-lead, .fen-lead *, .fen-paper, .fen-paper * { font-family: var(--fen-type) !important; }
+
+/* ===== Lineups board (next-game matchup advisor + interactive lineup/rotation editor) ===== */
+.fen-lu { display: flex; flex-direction: column; gap: 8px; }
+.fen-lu .lite { opacity: 0.62; }
+.fen-lu-matchup { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 1.6fr); gap: 18px; margin-bottom: 6px; }
+.fen-lu-edit { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 18px; }
+@media (max-width: 720px) { .fen-lu-matchup, .fen-lu-edit { grid-template-columns: 1fr; } }
+.fen-lu-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-lu-optimal { border-left-color: var(--fen-yellow); }
+.fen-lu-sp { border-left-color: var(--fen-marquee); }
+.fen-lu-cardlab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); margin-bottom: 9px; }
+.fen-lu-cardhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.fen-lu-spbody { display: flex; flex-direction: column; gap: 3px; }
+.fen-lu-spname { font-family: var(--fen-chalk-font); font-size: 20px; margin-bottom: 2px; }
+.fen-lu-spmeta { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); }
+.fen-lu-optlist { display: flex; flex-direction: column; gap: 2px; }
+.fen-lu-optrow { display: grid; grid-template-columns: 22px 1fr 40px 50px; align-items: baseline; gap: 8px; }
+.fen-lu-num { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-lu-optname { font-family: var(--fen-chalk-font); font-size: 15px; }
+.fen-lu-optpos { font-family: var(--fen-chalk-font); font-size: 12px; text-align: center; }
+.fen-lu-edithead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 8px; flex-wrap: wrap; }
+.fen-lu-editbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+.fen-lu-status { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-lu-rows { display: flex; flex-direction: column; gap: 6px; }
+.fen-lu-editrow { display: flex; align-items: center; gap: 6px; font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk-soft); }
+.fen-lu-editrow .grow { flex: 1; min-width: 0; }
+.fen-lu-sel { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk); background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(236, 232, 218, 0.18); border-radius: 4px; padding: 4px 6px; }
+.fen-lu-sel.grow { flex: 1; min-width: 0; }
+.fen-lu-sel.pos { width: 60px; }
+.fen-lu-mini { font-family: var(--fen-chalk-font); font-size: 11px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.16); border-radius: 4px; padding: 3px 7px; }
+.fen-lu-mini:hover:not(:disabled) { color: var(--fen-chalk); }
+.fen-lu-mini:disabled { opacity: 0.3; cursor: default; }
+.fen-lu-mini.danger { color: var(--fen-marquee); }
+.fen-lu-btn { font-family: var(--fen-chalk-font); font-size: 12px; cursor: pointer; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(236, 232, 218, 0.18); border-radius: 5px; padding: 6px 12px; }
+.fen-lu-btn:hover:not(:disabled) { color: var(--fen-chalk); }
+.fen-lu-btn:disabled { opacity: 0.4; cursor: default; }
+.fen-lu-btn.accent { color: var(--fen-navy); background: var(--fen-yellow); border-color: var(--fen-yellow); }
+.fen-lu-btn.accent:disabled { background: rgba(242, 192, 65, 0.3); border-color: transparent; color: var(--fen-chalk-soft); }
+.fen-lu-pen { margin-top: 10px; padding-top: 8px; border-top: 1px dotted rgba(255, 255, 255, 0.1); }
+.fen-lu-penlab { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-faint); margin-bottom: 5px; }
+.fen-lu-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.fen-lu-tag { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-soft); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(236, 232, 218, 0.12); border-radius: 4px; padding: 2px 7px; }
+.fen-lu-mojo { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.fen-lu-mojorow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--fen-chalk-font); font-size: 13px; }
+.fen-lu-err { font-family: var(--fen-chalk-font); font-size: 12px; background: rgba(204, 52, 51, 0.1); border: 1px solid rgba(204, 52, 51, 0.3); border-radius: 5px; padding: 6px 12px; }
+.fen-lu-ok { font-family: var(--fen-chalk-font); font-size: 12px; color: var(--fen-chalk-soft); background: rgba(74, 89, 80, 0.35); border: 1px solid rgba(236, 232, 218, 0.14); border-radius: 5px; padding: 6px 12px; }
+.fen-lu-warn { font-family: var(--fen-chalk-font); font-size: 11.5px; color: var(--fen-yellow); background: rgba(242, 192, 65, 0.08); border: 1px solid rgba(242, 192, 65, 0.25); border-radius: 5px; padding: 5px 11px; }
+
+/* ===== Playoffs (read-only bracket view) ===== */
+.fen-po { display: flex; flex-direction: column; gap: 16px; }
+.fen-po-round { display: flex; flex-direction: column; gap: 8px; }
+.fen-po-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.fen-po-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-po-card.you { border-left-color: var(--fen-yellow); }
+.fen-po-card.done { opacity: 0.92; }
+.fen-po-team { display: grid; grid-template-columns: 22px 46px 1fr 26px 16px; align-items: baseline; gap: 7px; font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk-soft); padding: 2px 0; }
+.fen-po-team.win { color: var(--fen-chalk); }
+.fen-po-team .seed { font-size: 11px; color: var(--fen-chalk-faint); text-align: right; }
+.fen-po-team .ab { font-size: 13px; letter-spacing: 0.04em; }
+.fen-po-team .nm { font-size: 13px; color: var(--fen-chalk-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fen-po-team .sc { font-size: 16px; text-align: right; color: var(--fen-chalk); }
+.fen-po-team .adv { color: var(--fen-yellow); font-size: 12px; }
+.fen-po-meta { font-family: var(--fen-chalk-font); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fen-chalk-faint); margin-top: 7px; }
+.fen-po-champ { display: flex; align-items: center; gap: 16px; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-yellow); border-radius: 5px; padding: 14px 16px; }
+.fen-po-champ.you { box-shadow: inset 0 0 0 1px rgba(242, 192, 65, 0.25); }
+.fen-po-trophy { font-size: 34px; line-height: 1; }
+.fen-po-champlab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-po-champname { font-family: var(--fen-chalk-font); font-size: 24px; }
+.fen-po-mvp { font-family: var(--fen-chalk-font); font-size: 12.5px; color: var(--fen-chalk-soft); margin-top: 3px; }
+
+/* ===== Trades (read-only transaction ledger) ===== */
+.fen-trades { display: flex; flex-direction: column; gap: 10px; }
+.fen-trades .lite { opacity: 0.62; }
+.fen-trade-card { background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-left: 4px solid var(--fen-ash); border-radius: 5px; padding: 12px 14px; }
+.fen-trade-card.you { border-left-color: var(--fen-yellow); }
+.fen-trade-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.fen-trade-when { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fen-chalk-soft); }
+.fen-trade-cash { font-family: var(--fen-chalk-font); font-size: 13px; }
+.fen-trade-body { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 12px; align-items: start; }
+@media (max-width: 560px) { .fen-trade-body { grid-template-columns: 1fr; } .fen-trade-swap { transform: rotate(90deg); } }
+.fen-trade-side { display: flex; flex-direction: column; gap: 2px; }
+.fen-trade-team { font-family: var(--fen-chalk-font); font-size: 15px; display: flex; align-items: baseline; gap: 7px; }
+.fen-trade-team .ab { font-size: 12px; letter-spacing: 0.04em; color: var(--fen-chalk-soft); }
+.fen-trade-lab { font-family: var(--fen-chalk-font); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-faint); margin-bottom: 2px; }
+.fen-trade-pl { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-chalk); }
+.fen-trade-pl.soft { color: var(--fen-chalk-faint); }
+.fen-trade-swap { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-marquee); text-align: center; align-self: center; }
+
+/* the broadened wire: header + roster-move rows */
+.fen-moves-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fen-movelab { font-family: var(--fen-chalk-font); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fen-chalk-soft); margin: 8px 0 2px; }
+.fen-movelist { display: flex; flex-direction: column; gap: 1px; }
+.fen-moverow { display: grid; grid-template-columns: 22px 92px 1fr auto auto auto; align-items: baseline; gap: 9px; font-family: var(--fen-chalk-font); padding: 6px 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.16); }
+.fen-moverow.you { box-shadow: inset 3px 0 0 var(--fen-yellow); }
+.fen-moveic { font-size: 13px; text-align: center; }
+.fen-moveic.call_up { color: var(--fen-yellow); }
+.fen-moveic.send_down { color: var(--fen-ash); }
+.fen-moveic.release { color: var(--fen-marquee); }
+.fen-movewhat { font-size: 12px; color: var(--fen-chalk-soft); }
+.fen-movewho { font-size: 14px; }
+.fen-moveteam { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-ash); background: rgba(0, 0, 0, 0.22); border-radius: 4px; padding: 1px 6px; }
+.fen-movedetail { font-size: 11px; }
+.fen-movewhen { font-family: var(--fen-chalk-font); font-size: 11px; color: var(--fen-chalk-faint); white-space: nowrap; }
+
+/* trade builder (in the takeover shell) */
+.fen-tb-teampick { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.fen-tb-select { font-family: var(--fen-chalk-font); font-size: 14px; color: var(--fen-chalk); background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(236, 232, 218, 0.2); border-radius: 5px; padding: 6px 10px; }
+.fen-tb-cols { display: grid; grid-template-columns: 1fr 28px 1fr; gap: 10px; align-items: start; }
+@media (max-width: 560px) { .fen-tb-cols { grid-template-columns: 1fr; } .fen-tb-swap { transform: rotate(90deg); } }
+.fen-tb-col { display: flex; flex-direction: column; gap: 4px; }
+.fen-tb-swap { font-family: var(--fen-chalk-font); font-size: 18px; color: var(--fen-marquee); text-align: center; align-self: center; }
+.fen-tb-list { display: flex; flex-direction: column; gap: 3px; max-height: 320px; overflow-y: auto; }
+.fen-tb-pl { display: grid; grid-template-columns: 30px 1fr auto; align-items: baseline; gap: 8px; font-family: var(--fen-chalk-font); cursor: pointer; text-align: left; background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(0, 0, 0, 0.32); border-radius: 5px; padding: 7px 10px; color: var(--fen-chalk-soft); }
+.fen-tb-pl:hover { border-color: rgba(236, 232, 218, 0.28); color: var(--fen-chalk); }
+.fen-tb-pl.on { border-color: var(--fen-yellow); background: rgba(242, 192, 65, 0.14); color: var(--fen-chalk); }
+.fen-tb-pl .pos { font-size: 11px; color: var(--fen-ash); }
+.fen-tb-pl .nm { font-size: 14px; }
+.fen-tb-pl .sal { font-size: 12px; }

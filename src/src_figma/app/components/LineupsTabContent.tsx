@@ -1,25 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
 import type { LeagueStandings, StandingEntry } from "@/hooks/useFranchiseData";
-import type { MojoState, Player, Team } from "../../../utils/leagueBuilderStorage";
-import {
-  getAllFranchisePlayers,
-  getAllFranchiseTeams,
-  saveFranchisePlayer,
-  saveFranchiseTeam,
-} from "../../../utils/franchisePlayerStorage";
+import type { MojoState, Player } from "../../../utils/leagueBuilderStorage";
 import { optimalLineupField } from "../../../utils/optimalLineup";
 import type { OpposingPitcherHand } from "../../../types/managerWpa";
-import { resolveFranchiseNextGameOptimalLineup } from "../utils/franchiseNextGameLineup";
-import {
-  applyFranchiseTeamUpdateWithStaleOptimalSnapshots,
-  getFranchisePlayerName,
-  isActiveFranchisePlayerForTeam,
-  lineupSlotsFromOptimalSnapshot,
-  normalizeFranchiseLineupSlots,
-  toOptimalCandidate,
-} from "../utils/franchiseLineupDomain";
+import { getFranchisePlayerName } from "../utils/franchiseLineupDomain";
 import { buildPregameBenchmarkRows } from "../utils/pregameLineupBenchmarks";
+import { useFranchiseNextGameLineupAdvisor } from "../hooks/useFranchiseNextGameLineupAdvisor";
 import { FranchiseLineupRotationEditor } from "./FranchiseLineupRotationEditor";
 import { PregameBenchmarkChecklist } from "./PregameBenchmarkChecklist";
 
@@ -37,18 +24,13 @@ function flattenStandings(standings: LeagueStandings): StandingEntry[] {
 }
 
 /**
- * LineupsTabContent — the franchise Lineups tab (Step 5b).
+ * LineupsTabContent — the legacy (FranchiseHome) presentation of the franchise Lineups tab (Step 5b).
+ * Resolves the opponent from franchiseData.nextGame + standings, then leans on the shared advisor +
+ * editor hooks (also used by the Fenway hub). The optimal lineup is a SCOUT ADVISOR, not an mWAR input.
  *
- * Reads the active club's NEXT game, resolves the opponent's NEXT starting pitcher (rotation-aware,
- * full profile) and optimizes the lineup against THAT specific pitcher via the engine seam
- * (resolveFranchiseNextGameOptimalLineup). Surfaces the optimal-lineup advisor (accept), the shared
- * manual lineup + rotation editor (adjust), a mojo editor, and a readiness checklist.
- *
- * The optimal lineup is a SCOUT-DRIVEN ADVISOR — it is never wired into the manager-WPA track.
- *
- * Data note: franchiseData.nextGame.awayTeam / .homeTeam carry team IDs (not display names) — they
- * are assigned from the scheduled game's awayTeamId / homeTeamId. The opponent's games-played is read
- * from the standings (wins + losses), which drives the opponent's rotation slot inside the seam.
+ * Data note: franchiseData.nextGame.awayTeam / .homeTeam carry team IDs (not display names), assigned
+ * from the scheduled game's awayTeamId / homeTeamId; getNextFranchiseGame is unfiltered, so the next
+ * game may not involve the controlled team (hence the null fallback below).
  */
 export function LineupsTabContent() {
   const franchiseData = useFranchiseDataContext();
@@ -59,66 +41,10 @@ export function LineupsTabContent() {
   const standings = franchiseData.standings;
   const teamNameMap = franchiseData.teamNameMap ?? {};
 
-  // Franchise mode is sealed no-DH at config level (franchiseInitializer forces season.useDH=false),
-  // so the lineup UI never offers a DH toggle.
-  const useDH = false;
-
-  const [allTeams, setAllTeams] = useState<Team[]>([]);
-  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [franchiseTeam, setFranchiseTeam] = useState<Team | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isApplying, setIsApplying] = useState(false);
-  const [applyMessage, setApplyMessage] = useState<string | null>(null);
-  const [applyError, setApplyError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!franchiseId || !activeTeamId) {
-      setAllTeams([]);
-      setAllPlayers([]);
-      setFranchiseTeam(null);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(null);
-    (async () => {
-      try {
-        const [teams, players] = await Promise.all([
-          getAllFranchiseTeams(franchiseId),
-          getAllFranchisePlayers(franchiseId),
-        ]);
-        if (cancelled) return;
-        setAllTeams(teams);
-        setAllPlayers(players);
-        setFranchiseTeam(teams.find((team) => team.id === activeTeamId) ?? null);
-      } catch (err) {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Failed to load lineup data.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [franchiseId, activeTeamId]);
-
-  const rosterPlayers = useMemo(
-    () =>
-      activeTeamId
-        ? allPlayers.filter((player) => isActiveFranchisePlayerForTeam(player, activeTeamId, leagueId))
-        : [],
-    [allPlayers, activeTeamId, leagueId],
-  );
-
   const opponentTeamId = useMemo(() => {
     if (!nextGame || !activeTeamId) return null;
     if (nextGame.awayTeam === activeTeamId) return nextGame.homeTeam;
     if (nextGame.homeTeam === activeTeamId) return nextGame.awayTeam;
-    // franchiseData.nextGame is the franchise's next scheduled game, NOT filtered to the
-    // controlled team (getNextFranchiseGame is called without a teamFilter). If the active club
-    // isn't in it, there's no opponent to optimize against — fall back to the empty state.
     return null;
   }, [nextGame, activeTeamId]);
 
@@ -128,88 +54,44 @@ export function LineupsTabContent() {
     return entry ? entry.wins + entry.losses : 0;
   }, [standings, opponentTeamId]);
 
-  const seamResult = useMemo(() => {
-    if (!activeTeamId || !opponentTeamId || rosterPlayers.length === 0) return null;
-    try {
-      return resolveFranchiseNextGameOptimalLineup({
-        activeTeamId,
-        roster: rosterPlayers.map(toOptimalCandidate),
-        teams: allTeams,
-        allPlayers,
-        opponentTeamId,
-        opponentGamesPlayed,
-        dhEnabled: useDH,
-      });
-    } catch {
-      return null;
-    }
-  }, [activeTeamId, opponentTeamId, rosterPlayers, allTeams, allPlayers, opponentGamesPlayed, useDH]);
+  const {
+    loading,
+    loadError,
+    franchiseTeam,
+    setFranchiseTeam,
+    rosterPlayers,
+    seamResult,
+    optimalSlots,
+    lineupMojoPlayers,
+    isApplying,
+    applyMessage,
+    applyError,
+    handleAcceptOptimal,
+    handleMojoChange,
+  } = useFranchiseNextGameLineupAdvisor({
+    franchiseId,
+    leagueId,
+    activeTeamId,
+    opponentTeamId,
+    opponentGamesPlayed,
+  });
 
   const activeTeamName = activeTeamId ? teamNameMap[activeTeamId] ?? "Your team" : "Your team";
   const opponentTeamName = opponentTeamId ? teamNameMap[opponentTeamId] ?? opponentTeamId : null;
 
-  const optimalSlots = useMemo(() => {
-    if (!seamResult) return [];
-    return seamResult.snapshot.slots.slice().sort((a, b) => a.battingOrderSlot - b.battingOrderSlot);
-  }, [seamResult]);
-
   const benchmarkRows = useMemo(() => {
     if (!franchiseTeam || !seamResult) return [];
     const hand = seamResult.opponentStarter.throws as OpposingPitcherHand;
-    const field = optimalLineupField(hand, useDH);
+    const field = optimalLineupField(hand, false);
     return buildPregameBenchmarkRows([
       {
         teamName: activeTeamName,
         opposingPitcherHand: hand,
-        dhEnabled: useDH,
+        dhEnabled: false,
         snapshot: franchiseTeam[field],
       },
     ]);
-  }, [franchiseTeam, seamResult, useDH, activeTeamName]);
-
-  const lineupMojoPlayers = useMemo(() => {
-    const byId = new Map(rosterPlayers.map((player) => [player.id, player]));
-    return optimalSlots
-      .map((slot) => byId.get(slot.playerId))
-      .filter((player): player is Player => Boolean(player));
-  }, [optimalSlots, rosterPlayers]);
-
-  const handleAcceptOptimal = async () => {
-    if (!franchiseId || !franchiseTeam || !seamResult) return;
-    setIsApplying(true);
-    setApplyMessage(null);
-    setApplyError(null);
-    try {
-      const lineup = normalizeFranchiseLineupSlots(
-        rosterPlayers,
-        lineupSlotsFromOptimalSnapshot(seamResult.snapshot),
-        useDH,
-      );
-      const update: Partial<Team> = {
-        [useDH ? "lineupWithDH" : "lineupWithoutDH"]: lineup,
-      };
-      const nextTeam = applyFranchiseTeamUpdateWithStaleOptimalSnapshots(franchiseTeam, update);
-      const savedTeam = await saveFranchiseTeam(franchiseId, nextTeam);
-      setFranchiseTeam(savedTeam);
-      setApplyMessage("Optimal lineup applied. Fine-tune below, or launch when ready.");
-    } catch (err) {
-      setApplyError(err instanceof Error ? err.message : "Failed to apply the optimal lineup.");
-    } finally {
-      setIsApplying(false);
-    }
-  };
-
-  const handleMojoChange = async (player: Player, mojo: MojoState) => {
-    if (!franchiseId) return;
-    const updated: Player = { ...player, mojo };
-    setAllPlayers((prev) => prev.map((existing) => (existing.id === player.id ? updated : existing)));
-    try {
-      await saveFranchisePlayer(franchiseId, updated);
-    } catch {
-      // Revert the optimistic update on failure.
-      setAllPlayers((prev) => prev.map((existing) => (existing.id === player.id ? player : existing)));
-    }
-  };
+  }, [franchiseTeam, seamResult, activeTeamName]);
 
   if (!activeTeamId) {
     return (
@@ -363,7 +245,7 @@ export function LineupsTabContent() {
             Mojo feeds the matchup optimizer. (Fitness is assumed FIT in franchise play.)
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            {lineupMojoPlayers.map((player) => (
+            {lineupMojoPlayers.map((player: Player) => (
               <div key={player.id} className="grid grid-cols-[minmax(110px,1fr)_110px] items-center gap-2 text-[9px]">
                 <div className="text-[var(--franchise-text)]">{getFranchisePlayerName(player)}</div>
                 <select
