@@ -2879,3 +2879,52 @@ exemption actually exist in the player data model before wiring (don't assume �
 league, users must be able to assign each team to a conference. NO division editor in v1. Fold the
 conference-editor UI into the S2/league-setup work (it resolves the S1 open question in
 `V1_BUILD_STATUS.md`).
+
+## 2026-07-01 — Ruling A EXPANDED (JK, second pass): full roster-legality semantics + Fable's proposed model
+
+**JK's expanded ruling (verbatim-faithful):**
+- **Starting eight:** ≥1 player with a PRIMARY position matching each of the 8 field positions
+  (primary positions can ONLY be one of the 8; ratifies keeping the starting eight primary-only).
+- **Backup catcher:** at least one bench player OR a starter at another position needs AT LEAST their
+  SECONDARY position at C.
+- **Secondary-position vocabulary:** any specific position, or the groups IF / OF / IF/OF / 1B/OF.
+- **Two-way pitchers:** a pitcher with Two Way (IF) / (OF) / (C) can pitch AND cover any IF / OF
+  position / catch respectively. A roster with only ONE dedicated position player who can catch is
+  VALID if a pitcher has Two Way (C) — risky strategy but must stay viable.
+- **Veteran depth heuristic (not stated as legality):** long-time SMB4 users keep ≥2 players able to
+  play EVERY position (combining primaries + secondaries across the roster) — why IF/OF is the most
+  valuable secondary, with IF / OF / 1B/OF close behind.
+- **Pitcher roles:** SP, SP/RP, RP, CP. Mojo drops ONE LEVEL if an SP relieves, an RP starts, or a CP
+  enters BEFORE the second-to-last inning. SP/RP swings both ways with NO penalty (a real
+  flexibility premium for valuation).
+- JK is open to Fable's recommendation on how to construct the bench-position legality logic.
+
+**Fable's proposed legality model (recommended; JK to ratify the hard/soft split):**
+- **HARD legality (a roster is illegal without it):** (1) the existing 22 / 13–14 hitters / 8–9
+  pitchers / ≥4 startable / ≥4 relievable frame; (2) ≥1 primary at each of the 8 field positions;
+  (3) CATCHER DEPTH ≥2: two distinct players who can play C — primary-C, secondary-C, or a
+  Two Way (C) pitcher — at least one being the primary-C starter.
+- **SOFT (advisor risk tiers, NOT legality):** DEPTH-2-EVERYWHERE — for each of the 8 positions, ≥2
+  players who can cover it (primary; exact secondary; group secondaries expand IF→{1B,2B,3B,SS},
+  OF→{LF,CF,RF}, IF/OF→both, 1B/OF→{1B}+OF; Two Way pitchers count for their group). Any position
+  <2-deep → advisor red WARNING with the secondary-play ratings-nerf caveat (exempt: level-3
+  UTILITY). Rationale: JK explicitly wants risky-but-viable builds legal (the Two Way (C) example);
+  the depth rule is a veteran discipline heuristic, so it lives in the advisor, while legality stays
+  the floor of "fieldable at all."
+- **Valuation note for C1/C2B:** SP/RP no-penalty flexibility and coverage-group secondaries
+  (IF/OF > IF ≈ OF ≈ 1B/OF > exact) are pricing inputs, not legality inputs.
+
+**Code grounding (verified this session):** `secondaryPosition?: Position` exists
+(`playerDatabase.ts:55`) with the full group vocabulary in the `Position` type (`game.ts:9`);
+Two Way (IF)/(OF)/(C) variants exist in the trait engine (`traitCandidateBuilder` tests); role-misuse
+mojo penalties exist (`subRecommendations.ts:169-171` — ROLE_MISUSE_MOJO_PENALTY). **Two verify
+items for the builder:** (a) `rosterConstruction.ts`'s `RosterSlotPlayer` carries neither
+secondaryPosition nor traits — the shape must widen; (b) the code's CP penalty keys on "CP starting"
+(`!enteringInRelief`) which is CRUDER than JK's "enters before the second-to-last inning" — flag for
+a GameTracker/mojo verification pass, do not silently change.
+
+**Ruling 2 clarification (JK, same message):** the GM sets per-position priorities/player-type
+preferences in the TEAM-SETUP UI BEFORE the Assistant GM generates the initial draft boards +
+player rankings by position. Confirmed compatible with the ratified plan (the S2 per-league store
+holds the inputs; C1 consumes them; C4 surfaces them; the Move-2 taxonomy design session follows
+the market brain, with SIMPLIFIED priorities as the v1 fallback).
