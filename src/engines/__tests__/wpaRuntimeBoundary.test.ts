@@ -136,6 +136,11 @@ describe("WPA runtime boundary", () => {
       "src/hooks/useDataIntegrity.ts",
       "src/utils/eventLog.ts",
       "src/utils/processCompletedGame.ts",
+      // Dev-only seed harness: gated behind enableFranchiseManualSmokeSetupRoute (renders NotFound
+      // in production). Fabricates played games to preview the Fenway franchise-lens hub. Blessed as
+      // a single scoped allowlist entry per JK ruling 2026-07-01 (Wave-0 assembly) — NOT a general
+      // loosening; the guard keeps its teeth for every other surface.
+      "src/src_figma/app/pages/FranchiseLensSeedPlayed.tsx",
     ]);
     const eventLogWriteApiPattern =
       /\b(?:logAtBatEvent|logFieldingEvent|updateAtBatEvent|updateAtBatEventWithFieldingSync|createGameHeader|completeGame|markGameAggregated|markAggregationFailed)\b/;
