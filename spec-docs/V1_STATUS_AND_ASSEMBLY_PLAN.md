@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED (2026-07-01).** The single v1 source of truth is **`spec-docs/V1_BUILD_STATUS.md`** (status) + **`ASSEMBLY_PLAN_2026-07-01.md`** (the current merge runbook). This doc's branch-map predates the re-design and was already demoted to a companion by `V1_PLAN_2026-06-30`. Kept for history — do not plan from it.
+
 # V1 STATUS & ASSEMBLY PLAN
 
 > **Authored 2026-06-27 by Claude Opus 4.8 (Captain)** from a direct, source-verified cross-branch audit (2 multi-agent audits + targeted per-branch inspection).

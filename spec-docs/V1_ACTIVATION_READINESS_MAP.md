@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED (2026-07-01).** The single v1 source of truth is **`spec-docs/V1_BUILD_STATUS.md`**. This map predates the 2026-06-30 draft re-design; its branch-map is stale (git now shows soul-gaps merged, several codex branches contained). Kept for history — do not plan from it.
+
 # V1 ACTIVATION READINESS MAP
 ### The true road from today to a playable, flippable franchise — grounded in the last 24–48h of real git/code, not the stale planning docs.
 

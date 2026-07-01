@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED (2026-07-01).** The single v1 source of truth is **`spec-docs/V1_BUILD_STATUS.md`**. This queue predates the 2026-06-30 draft re-design and the 2026-07-01 assembly reality; its branch/scope claims are stale. Kept for history — do not plan from it.
+
 # V1 BUILD QUEUE — dependency-ordered execution backlog
 
 **Created:** 2026-06-22 (JK request). **Purpose:** the explicit ordered backlog the autonomous build loops consume.

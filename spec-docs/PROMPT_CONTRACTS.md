@@ -25716,3 +25716,234 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: HONOR-NEWS-20 ===== -->
+
+<!-- ==================================================================================== -->
+<!-- FABLE 5 BUILD QUEUE — scouting/draft intelligence (grounded 2026-07-01 by Opus)       -->
+<!-- Source: AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md (36 findings, all adversarially verified) -->
+<!-- + FABLE5_DISPATCH_QUEUE_2026-07-01.md GROUNDING ADDENDUM + SCOUTING_INTELLIGENCE_SPEC.md -->
+<!--                                                                                        -->
+<!-- BUILDER/AUDITOR (JK-ruled): C1/C2A/C2B/C3 (math trilogy) = Fable builds, Opus audits.  -->
+<!-- C4 (UI) = Fable designs → Codex builds → Fable audits fidelity. C5 = Fable/Codex-vhigh  -->
+<!-- builds, Opus interprets. Trunk = experiment/manager-wpa-window. BRANCH-ONLY, NEVER PUSH.-->
+<!--                                                                                        -->
+<!-- SEQUENCE: C1 → C2A → C2B → C3 → C4 (needs assembly + C2B) → C5 (needs 1-4).             -->
+<!-- FIRE-ANYTIME: QUICK-WIN-CATALOG-24, SPEC-FIX-NOMINATION-2-3 (independent, no deps).     -->
+<!--                                                                                        -->
+<!-- RE-GROUND NOTE: every file:line below was opened + adversarially verified in the        -->
+<!-- 2026-07-01 audit. The builder MUST still re-confirm each anchor at dispatch (kbl-captain -->
+<!-- STEP 3A: read every file:line; never trust a map/recon blindly) — the tree moves.       -->
+<!-- ==================================================================================== -->
+
+<!-- ===== CONTRACT: FABLE-C1 ===== -->
+
+# FABLE-C1: ROSTER-CONSTRUCTION-INTELLIGENCE (the foundation — build first)
+
+**ROUTE:** Fable 5 (Claude Code CLI) | xhigh reasoning effort. Confirm branch/worktree FIRST — `git branch --show-current` (= `experiment/manager-wpa-window`) + `git worktree list` — against `CURRENT_STATE.md`'s live header before anything. Trunk carries the full auction/archetype/legal-roster foundation (verified 2026-07-01). Branch-only; do NOT commit; do NOT push.
+
+**ROLE:** Builder (Fable 5). Auditor: Opus (Captain) — audits the real diff, runs the gate (build + FULL suite + L-SIM smoke), per the kbl-captain loop. Fable never audits its own diff.
+
+**GOAL:** Replace the value-maximizing roster builder with an IDENTITY-FIRST construction engine, wire a POSITION-AWARE `own_need` model into the live auction, make `rosterConstruction.ts` the single legality source of truth its consumers actually call, and bridge the archetype vocabularies so a picked archetype sets the caps the auction applies. Specifically:
+- (a) **Objective flip:** change `objective()` (`src/engines/archetypeBalanceSimulator.ts:159-162`, today `iv − OVER_BUDGET_PENALTY*over`) from "maximize Σ IV" to "maximize archetype-boosted-area coverage subject to a value floor + legality." Fit awareness already exists as a seed/shortlist heuristic (`makeFitScore`, `shortlist` at `:174-179,:255-259`) but is ignored by the acceptance criterion — make FIT the objective, value a floor. (audit RCI-06)
+- (b) **Position-aware own_need:** replace the flat scalar `rosterSlotsRemaining` the live auction enforces (`src/engines/auctionStateMachine.ts:296,:369` team-full guard; `:429` decrement; seeded in `src/utils/leagueBuilderAuctionPipeline.ts:23,:86`) with a per-position required-minus-filled model per spec §5 — a team isn't filled at C until it has its backup C (`LEGAL_ROSTER.minCatchers=2`); SP has 4 critical slots (`startingPitchers=4`). (audit RCI-01)
+- (c) **Single legality source:** `src/data/rosterConstruction.ts` (`LEGAL_ROSTER`/`isLegalRoster`/`canStart`/`canRelieve`, verified `:20-35,:60`) is today an ORPHAN — imported only by the balance sim + its test (audit RCI-02). The auction's roster model built in (b) MUST consume it, not re-derive. (The scout board + in-season advisor adopt it in C4 — see the cross-cutting note.)
+- (d) **Vocabulary reconciliation:** build the bridge that maps a picked archetype → the `capIdentity`/`CAP_MODIFICATION_FRACTIONS` the live auction applies (`src/data/tierParams.ts:158`; consumed via `useAuctionDraft.ts` → `shiftLuxuryCaps`). Today three representations coexist unbridged: `HISTORICAL_ARCHETYPES` (24, `src/data/historicalArchetypes.ts`), the auction's `capIdentity`, and the display catalog. (audit RCI-03, PDS-06)
+
+**SOURCE OF TRUTH (re-ground at dispatch):** `SCOUTING_INTELLIGENCE_SPEC.md` §5 (own_need, lines 132-135); `V1_HANDOFF_2026-06-30_DRAFT_AND_LIVING_SEASON.md` §3.3 (strategy-first identity building + the documented value-maximizer failure mode, lines 165-185); `TEAM_ARCHETYPES_24.md` (24 locked + cap-shift math); `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md` (RCI-01/02/03/06, PDS-06); `src/data/rosterConstruction.ts` (single legality module).
+
+**THE MAKE-OR-BREAK (state this back before building):** a builder that maximizes Σ(kblIV) under a shifted cap will STILL converge on pitching-heavy builds for every identity even after the own_need fix — because kblIV prices pitching far above hitting (the diagnosed confound, CURRENT_STATE 2026-06-30). The fix is the OBJECTIVE CHANGE (a), not a bigger cap or position enforcement alone. A Power identity's built roster must visibly show elevated POW/CON among position players — not just a higher total-value number.
+
+**CONSTRAINTS:** build ON `rosterConstruction.ts` — do NOT re-derive legality. Do NOT touch the frozen `src/engines/__tests__/historicalArchetypes.test.ts` 24-archetype value-parity gate (it stays a separate valid check; this ticket is about HOW a roster is built). The deferred win-rate model (Option-C ruling) is OUT of scope — flag, do not attempt. TypeScript strict (no `any`/`@ts-ignore`); pure/deterministic (no new `Date.now()`/`Math.random()`). EXACT files expected: `archetypeBalanceSimulator.ts`, `auctionStateMachine.ts`, `leagueBuilderAuctionPipeline.ts`, a new own_need/vocabulary-bridge module + its test; consuming `rosterConstruction.ts`. Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** a generalized roster builder accepting per-position priorities + a team archetype + a risk posture → a LEGAL roster that visibly embodies the archetype; the position-aware own_need model wired into the auction's slot enforcement; the picked-archetype → capIdentity bridge.
+
+**VERIFICATION (you run, report actual output):** `NODE_ENV= npm run build` exit 0; extend `runBalanceSim`/`historicalArchetypes.test` with an IDENTITY-EMBODIMENT assertion (e.g. a Power archetype's built roster has a POW z-score above the pool mean) for all 24; FULL suite ZERO-NEW-REDS vs the CURRENT_STATE characterized baseline (read the vitest failed-file summary, not the RC). Do NOT run the L-SIM (Opus runs it).
+
+**FORMAT:** standard STATUS line + every changed path (count) + before/after identity-embodiment numbers for 2-3 archetypes (e.g. Big Red Machine lineup POW z-score before vs after) to show the qualitative fix, not just a passing test.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>`, change nothing further, IF: the objective change requires editing the frozen `historicalArchetypes.test` value-parity assertions themselves (report, do not edit); OR a clean result requires the deferred win-rate model (STOP, log as OPEN-DECISION — this ticket is legality + embodiment, not win-rate proof); OR the own_need wiring forces a saved-shape / trackerDb change (report, do not bump).
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: FABLE-C1 ===== -->
+
+<!-- ===== CONTRACT: FABLE-C2A ===== -->
+
+# FABLE-C2A: AUCTION-TUNING-HARNESS (the calibration harness — build second)
+
+**ROUTE:** Fable 5 (Claude Code CLI) OR Codex 5.5 xhigh (state-heavy reducer work — minimum bar per JK routing) | xhigh reasoning effort. Confirm branch = `experiment/manager-wpa-window`. Branch-only; do NOT commit; do NOT push.
+
+**ROLE:** Builder (Fable 5 or Codex-xhigh). Auditor: Opus.
+
+**DEPENDS ON:** FABLE-C1 recommended (so the harness drives the identity-aware builder). The harness itself can be built against the EXISTING auction today (the state machine + `cpuShillBidding.ts` already exist), so it MAY start in parallel with C1 if budget demands — but its calibration numbers are only meaningful once C1's builder is in.
+
+**GOAL:** Build the auction Monte-Carlo tuning/calibration harness the spec treats as a pre-ship asset but which DOES NOT EXIST (audit AUC-4: `scripts/auctionTuningSim.test.ts` exists but only asserts completion/no-shortfall/no-salary-floor — it is a roster-fill/shill-win sweep, NOT a band-coverage calibration gate). Extend/replace it into a real harness that runs many seeded auctions across archetype/shill assignments and MEASURES the calibration signal C2B will need: given a price predictor, what fraction of true clearing prices land inside the predicted `[low,high]` band. In C2A there is no predictor yet, so deliver the harness + the coverage-measurement scaffolding (fed a trivial/placeholder predictor) so C2B can plug its model in and calibrate to the spec's 85-90% gate.
+
+**SOURCE OF TRUTH (re-ground at dispatch):** `SCOUTING_INTELLIGENCE_SPEC.md` §5 THE ACCURACY GATE (lines 147-151); `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md` (AUC-4); the existing `scripts/auctionTuningSim.test.ts`; `src/engines/auctionStateMachine.ts` + `src/engines/cpuShillBidding.ts` (the driveable auction).
+
+**THE MAKE-OR-BREAK:** the deliverable is the HARNESS + its coverage-measurement output (a distribution across many runs), not a single pass/fail. C3's completion-probability sim REUSES this harness — build it reusable, do not build a second harness in C3.
+
+**CONSTRAINTS:** deterministic/seeded (vary by run index, not wall-clock/`Math.random`). Do NOT flip any Phase-2 flag default. Do NOT alter the auction engine's behavior — the harness DRIVES the existing engine, it does not change it. TypeScript strict. EXACT files: `scripts/auctionTuningSim.test.ts` (+ a shared harness module it and C3 both import). Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the reusable calibration harness + a band-coverage measurement it reports (against a placeholder predictor until C2B), across archetype/shill assignments.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; the harness test runs green and prints its coverage/summary distribution; FULL suite ZERO-NEW-REDS.
+
+**FORMAT:** STATUS line + changed paths + a sample coverage/summary distribution from one harness run.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF: driving the existing auction to measure clearing prices requires changing engine behavior (report the seam, do not change the engine); OR the harness cannot be made deterministic without touching a frozen oracle.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: FABLE-C2A ===== -->
+
+<!-- ===== CONTRACT: FABLE-C2B ===== -->
+
+# FABLE-C2B: AUCTION-MARKET-MODEL (Second-Price + bid-vs-pass + CONTESTED — build third)
+
+**ROUTE:** Fable 5 (Claude Code CLI) | xhigh reasoning effort. Confirm branch = `experiment/manager-wpa-window`. Branch-only; do NOT commit; do NOT push.
+
+**ROLE:** Builder (Fable 5). Auditor: Opus.
+
+**DEPENDS ON:** FABLE-C1 (needs own_need + the identity builder to compute `needMultiplier` and re-project bid-vs-pass) + FABLE-C2A (calibrates against its harness).
+
+**GOAL:** Build the Second-Price market model that is entirely absent today (audit AUC-1: zero market/price-prediction logic in `src/`):
+- `v_ij = IV_i × archetypeFit × needMultiplier_j(pos) × personalityBias_j`, clamped to solvency; `price_i ≈ 2nd-highest{v_ij} + Δ`; the bid-vs-pass board projection (deterministic re-optimization on bid vs pass); nomination-timing odds (`weight=(ivPercentile/100)^exp`, closed-form P(target nominated while affordable)). Calibrate band width against C2A's harness to the spec's 85-90% coverage gate.
+- **CONTESTED signal (JK 2026-07-01):** when a target's `v_ij` is high for 2+ OTHER teams, say so PLAINLY ("2 other teams also want this profile — expect near-ceiling, or plan a fallback"), not just a wider band. Must stay inference-only — never expose a rival's exact valuation (spec §6 privacy). (audit AUC-6)
+- **Shill uncertainty (JK 2026-07-01):** treat shill demand as a PROBABILITY DISTRIBUTION over the 24 archetypes ("if this shill is Power-flavored it wants this guy…"), blended into the band — NOT a fixed extra-bidder term. Today shill demand is a fixed seeded 2-band vector (audit AUC-5, `cpuShillBidding.ts:387-396`).
+- **Replace the crude solvency floor (audit AUC-2 / RCI-04):** `auctionMaxBid` (`src/data/rosterEngineConstants.ts:364-370`) returns `remainingBudget − (slotsRemaining−1)×minSalary − projectedTax` and is the LIVE hard floor (`auctionStateMachine.ts:301,:371`). Spec §6 says STRIP this and replace with the accurate legal-roster completion calc — cheapest players ACTUALLY LEFT at each remaining required position (using C1's position model) — and strip the phantom projectedTax reservation.
+- **Bid-log infra (audit AUC-3):** add `Lot.bidLog` + `AuctionResult.{bidderSet,underbidder,numBidders}` now (log-first-consume-later; v1.1 Underbidder Memory needs the data). Today bid history is discarded (`auctionStateMachine.ts:45-53,:68-74,:315-334`).
+
+**SOURCE OF TRUTH (re-ground at dispatch):** `SCOUTING_INTELLIGENCE_SPEC.md` §5-6 (lines 125-197); the interrogation transcript Q5 + F1/F2/F3; `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md` (AUC-1/2/3/5/6, RCI-04); `auctionStateMachine.ts` (`selectNextNominee` verified `:187`, exponent default `DEFAULT_NOMINATION_WEIGHT_EXPONENT` in `auctionEngineConstants.ts`), `cpuShillBidding.ts` (`evaluateCpuValuation`, `buildSeededCpuShill` — reuse, do not rebuild).
+
+**CONSTRAINTS:** closed-form/deterministic in the hot path — no Monte-Carlo in-auction (the tuning Monte-Carlo is C2A only). Type the 3 undefined spec types (`EstimatedMarket`/`CompetingTeamProfile`/`ShillProfile`). NOTE: the nomination exponent is a ratified per-tier 2/3 (`DECISIONS_LOG.md` RB-2-Q3), NOT the spec's stale 2.5 — honor the code's 2/3 (see SPEC-FIX-NOMINATION-2-3). TypeScript strict; solvency-floor replacement must keep the FULL suite green (it changes live auction bid caps — Opus runs the L-SIM). Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the v1 Second-Price board per the spec's staging + the CONTESTED signal + archetype-distributed shill uncertainty + the completion-based solvency floor + the bid-log infra.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; calibrate against C2A's harness — report ACHIEVED coverage % (target 85-90%); FULL suite ZERO-NEW-REDS; confirm sub-ms per-projection latency.
+
+**FORMAT:** STATUS line + achieved calibration % + a worked example showing CONTESTED firing on a genuinely multi-team-desired player + the before/after of a solvency-cap decision.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF: calibration can't reach 80%+ after 2 tuning iterations (report the actual distribution, do not force it); OR the CONTESTED signal would require exposing a rival's true valuation number (must stay inference-only); OR replacing the solvency floor changes a frozen oracle or a saved shape (report, do not touch).
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: FABLE-C2B ===== -->
+
+<!-- ===== CONTRACT: FABLE-C3 ===== -->
+
+# FABLE-C3: DRAFT-POOL-SIZING + SHILL-LAUNCH-FIX (build fourth)
+
+**ROUTE:** Fable 5 (Claude Code CLI) | xhigh reasoning effort. Confirm branch = `experiment/manager-wpa-window`. Branch-only; do NOT commit; do NOT push.
+
+**ROLE:** Builder (Fable 5). Auditor: Opus.
+
+**DEPENDS ON:** FABLE-C2A (reuses its harness) + FABLE-C2B (reuses the `v_ij`/needMultiplier machinery to model contention — do NOT re-derive a second valuation model).
+
+**GOAL:** Solve how large + how COMPOSED a draft pool must be so every plausible archetype stays buildable in a contested auction, AND fix the latent shill launch-blocker so a recommended shill count > 0 doesn't break the season handoff:
+- (1) A composition-aware pool feasibility gate to replace/augment the body-count-only gate (audit POOL-02: `evaluatePoolSufficiency`, `leagueBuilderPoolBuilder.ts:252-259`, only checks `poolSize ≥ 22×teams` + a 1.2× oversupply warning — an all-outfielder pool passes). SURFACE the orphaned composition engine `analyzePoolFeasibility` (`src/engines/poolFeasibility.ts:157`, audit POOL-01) into the live Draft Setup path.
+- (2) A sizing formula/table (NOT a flat multiplier) + a COMPLETION-PROBABILITY model: "will THIS team WIN enough archetype-fitting players against N-1 rivals + S shills of unknown archetype," using C2B's contention machinery.
+- (3) A sim-backed recommended shill count S for an 8-team league (via C2A-style runs across archetype/shill assignments) — today `DEFAULT_CPU_SHILL_COUNT=0` (`auctionEngineConstants.ts:36`), no recommender exists (audit POOL-04).
+- (4) **FS-3 FIX (must-fix-before-shills, audit FS-3):** today if shill count > 0, shill teams win players that get committed to rosters (`leagueBuilderAuctionPipeline.ts:208-227`) but are excluded from the freeze (`franchiseInitializer.ts:741-756`), so their partial rosters fail the strict 22/10 handoff validation (`validateV1RosterHandoff`, `franchisePlayerStorage.ts:428-437`) and BLOCK the franchise launch. This goes LIVE the moment (3) recommends S>0. Fix so shill-owned players do not block launch (exclude shill teams from the handoff validation, OR dissolve shill-won players back to the pool pre-freeze — per the deferred bridge note at `cpuTeamRoles.ts:1-5`).
+
+**SOURCE OF TRUTH (re-ground at dispatch):** `SCOUTING_INTELLIGENCE_SPEC.md` §5-6 + pool-sizing (lines 197, 243, 265, 283); `TEAM_ARCHETYPES_24.md`; `DRAFT_POOL_SETUP_REDESIGN_DESIGN.md`; `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md` (POOL-01..05, FS-3); `src/engines/poolFeasibility.ts` (`analyzePoolFeasibility`/`buildBestRoster` — repurpose for PRE-DRAFT); `rosterConstruction.ts` (legality).
+
+**THE MAKE-OR-BREAK:** pool sizing is a MARKET-CLEARING question, not a counting one — "will this team WIN enough of them," not "does the pool contain enough." The deliverable is a completion-PROBABILITY given pool size/composition + league size + shills, not a static count. And the FS-3 fix must land WITH the shill-count recommendation, not after.
+
+**CONSTRAINTS:** reuse C2B's `v_ij`/needMultiplier + C2A's harness — no second valuation model, no second harness. The FS-3 fix must NOT change the 22/10 requirement for REAL teams and must NOT risk a saved-shape/data-corruption path (if it needs one, STOP). TypeScript strict. Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** (a) a sim-backed recommended shill count for an 8-team league with rationale; (b) a sizing formula/table; (c) the per-archetype pre-draft guidance surfaced via `analyzePoolFeasibility`; (d) the FS-3 launch-block fix with a regression test proving a shill>0 draft now launches.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; run the completion-probability sim across all 24 archetypes at the recommended pool size/shill count, report the distribution, flag any archetype below a reasonable completion threshold (e.g. <90%); add a test that a shill>0 draft completes the freeze/handoff; FULL suite ZERO-NEW-REDS.
+
+**FORMAT:** STATUS line + the sizing table + per-archetype completion-probability results + the FS-3 fix summary + regression test.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF: NO pool size within a sane range (e.g. under 3× total roster needs) gets all 24 archetypes above a reasonable completion threshold (structural finding — STOP, log OPEN-DECISION, do not force a number); OR the FS-3 fix requires a saved-shape/migration change (STOP, report).
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: FABLE-C3 ===== -->
+
+<!-- ===== CONTRACT: QUICK-WIN-CATALOG-24 ===== -->
+
+# QUICK-WIN-CATALOG-24: wire the archetype picker to all 24 (fire anytime)
+
+**ROUTE:** Codex 5.5 | high reasoning effort. Confirm branch = `experiment/manager-wpa-window`. Branch-only; do NOT commit; do NOT push. No dependency — dispatch anytime.
+
+**ROLE:** Builder (Codex). Auditor: Opus (or Fable). Small, self-contained.
+
+**GOAL:** The archetype picker can only offer 15 identities; the locked set is 24 (audit PDS-04). `src/src_figma/app/data/teamArchetypeCatalog.ts` is a HAND-MAINTAINED display catalog of 15 (its header says "Wire `key` → the engine archetype later"), while `src/data/historicalArchetypes.ts` holds the canonical 24. Wire the catalog so all 24 are pickable — ideally DERIVE the display catalog from `historicalArchetypes.ts` (single source) rather than adding 9 more hand-kept entries; if a derive is too invasive, add the 9 missing entries (`cannon-corps`, `gap-to-gap`, `hit-em-where-they-aint`, `launch-and-leather`, `no-glove-offense`, `rangy-defenders`, `toolsy-burners`, `web-gems`, `wheels-and-cannons`) with display copy. The 9 keys already match the engine ids.
+
+**SOURCE OF TRUTH:** `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md` (PDS-04); `historicalArchetypes.ts` (the 24); `teamArchetypeCatalog.ts` (the 15); `TEAM_ARCHETYPES_24.md` (display exemplars).
+
+**CONSTRAINTS:** display-only surface, no test pins on the catalog (verify). Do NOT touch the engine data layer's values. If `capIdentity` wiring is needed to make a pick FUNCTIONAL, that's FABLE-C1's job — this ticket only makes all 24 SELECTABLE. TypeScript strict. Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the picker offers all 24 archetypes.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; the picker renders 24; FULL suite (or affected files) ZERO-NEW-REDS.
+
+**FORMAT:** STATUS line + changed paths + how you wired the 24 (derived vs hand-added).
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF: a test hard-pins the catalog at 15 (report — the count assertion needs updating with JK's nod); OR making all 24 selectable requires touching the auction/capIdentity path (that's C1 — stop, this ticket is display-only).
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: QUICK-WIN-CATALOG-24 ===== -->
+
+<!-- ===== CONTRACT: SPEC-FIX-NOMINATION-2-3 ===== -->
+
+# SPEC-FIX-NOMINATION-2-3: correct the stale nomination exponent (doc-only, fire anytime)
+
+**ROUTE:** Opus (or any agent) | low reasoning effort. Doc-only, no code. Branch-only; do NOT commit; do NOT push. No dependency.
+
+**ROLE:** Doc correction. Auditor: n/a (doc).
+
+**GOAL:** The canonical `SCOUTING_INTELLIGENCE_SPEC.md:154` asserts nomination weight `(ivPercentile/100)^2.5`, but the live code correctly uses a RATIFIED per-tier exponent — MLB=2 (`useAuctionDraft.ts:410`), Farm=3 (`useFarmAuctionDraft.ts:471`) — per `DECISIONS_LOG.md` RB-2-Q3 (audit SC-CONTRA-001). The CODE is right; the SPEC text is stale. Update the spec (and the transcript's grounded note ~:405-407) to the per-tier 2/3, citing the ratified decision, so a future builder doesn't "fix" correct code back to 2.5.
+
+**SOURCE OF TRUTH:** `DECISIONS_LOG.md` RB-2-Q3 (MLB=2, FARM=3); `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md` (SC-CONTRA-001).
+
+**CONSTRAINTS:** doc-only — do NOT touch code. Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** the spec + transcript reflect the ratified per-tier 2/3.
+
+**VERIFICATION:** grep the spec for `2.5` in the nomination context → replaced.
+
+**FORMAT:** the doc edits + a one-line note.
+
+**FAILURE PROTOCOL:** flag any place the spec's 2.5 is load-bearing for another calc before changing it.
+
+Use low reasoning effort.
+
+<!-- ===== END CONTRACT: SPEC-FIX-NOMINATION-2-3 ===== -->
+
+<!-- ===== FORWARD ENTRY (NOT YET GROUND-READY — do NOT dispatch): FABLE-C4 ===== -->
+
+# FABLE-C4 (FORWARD — fires after ASSEMBLY + FABLE-C2B): UI — DRAFT SETUP/EXPERIENCE + MODE-2 HUB + IDENTITY CAPTURE
+
+**STATUS: SCOPING ENTRY, NOT DISPATCH-READY.** Cannot be fully grounded until (a) the draft-UI + hub assembly lands (the base these screens build on) and (b) FABLE-C2B defines the CONTESTED signal shape the board renders. Reasoning effort intentionally NOT doubled — this is not for handoff yet.
+
+**ROLE (three-stage, deliberate):** Designer (Fable 5, xhigh) → Builder (Codex 5.5, high) → Fidelity auditor (Fable 5, medium). Fable never touches the implementation → auditing Codex's build against Fable's OWN design spec is legitimate.
+
+**GOAL (covers audit PDS-01/02/03/07, ISAGM-01/03/04/05):**
+- The per-league team-edit page that CAPTURES + PERSISTS the identity bundle (GM name already captured at franchise-setup; ADD Assistant GM / Scout / Manager+style / Beat reporter names + draft boards) — today the capture surface is a mock preview that persists nothing (PDS-02/03/07).
+- The per-league TEAM-INSTANCE shadow store (PDS-01) so identity doesn't bleed across leagues — additive, layer-first, mirroring `leaguePlayerOverrides`.
+- The no-timer pass-the-iPad auction screen with public/private layers + the live board + bid-vs-pass projection + the CONTESTED signal (from C2B).
+- The DEDICATED invoked Assistant GM surface (ISAGM-01, replacing the passive read-only Team-Hub sidebar) + the evolve-your-archetype tool surfacing `analyzePoolFeasibility` (ISAGM-03).
+- **Living-season legal-roster adoption (cross-cutting, ISAGM-04/05):** wire the in-season advisor + the send-down/call-up path to `rosterConstruction.ts` so they stop disagreeing with it (advisor treats 1 catcher as legal; canonical requires 2) and so a GM can't send down their only catcher.
+
+**SOURCE OF TRUTH:** `SCOUTING_INTELLIGENCE_SPEC.md` §6 (live auction) + §9 (in-season Assistant GM); Thread-A rulings; the assembled draft-UI + hub base; `AUDIT_PREDRAFT_TO_SEASON_2026-07-01.md`. USER-VISIBLE → JK browser sign-off required.
+
+<!-- ===== END FORWARD ENTRY: FABLE-C4 ===== -->
+
+<!-- ===== FORWARD ENTRY (NOT YET GROUND-READY — do NOT dispatch): FABLE-C5 ===== -->
+
+# FABLE-C5 (FORWARD — fires after C1-C4 substantially land): MASS SIMULATION / ~100-DIAL TUNING
+
+**STATUS: SCOPING ENTRY, NOT DISPATCH-READY.** Needs the real pipeline (C1-C4) to exercise realistically. Reasoning effort intentionally NOT doubled.
+
+**ROLE:** Builder (Fable 5 or Codex 5.5 xhigh — heavy reducer/state work). Auditor: Opus — statistical interpretation of the output distributions.
+
+**GOAL:** extend the `season-simulator` harness to run at scale (thousands of games) and sweep the ~100 tuning dials (morale magnitudes, relationship-edge intensities, ratings/trait adjustment magnitudes, manager-firing thresholds, the rebrand circuit-breaker, and every `§16-tunable placeholder` left by prior AUTH-4 tickets — grep the literal string). Findings become RECOMMENDED dial values logged for JK, NOT live flag flips.
+
+**SOURCE OF TRUTH:** the `season-simulator` skill; the L-SIM protocol (kbl-captain STEP 5); every `§16-tunable placeholder` comment in-repo.
+
+<!-- ===== END FORWARD ENTRY: FABLE-C5 ===== -->

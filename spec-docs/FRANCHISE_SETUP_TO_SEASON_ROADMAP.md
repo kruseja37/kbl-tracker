@@ -1,3 +1,5 @@
+> ⚠️ **SUPERSEDED (2026-07-01).** The single v1 source of truth is **`spec-docs/V1_BUILD_STATUS.md`**. The setup/flow here is superseded by the 2026-06-30 re-design (see `V1_HANDOFF_2026-06-30` §3.1); the 15-deep-archetype framing is overtaken by the 24 locked archetypes. Kept for history — do not plan from it.
+
 # Franchise Mode — Setup → Draft → Launch-Season Roadmap
 
 > Status: **IN PROGRESS** (decisions locked; current-state research in flight; build plan pending).

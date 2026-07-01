@@ -79,8 +79,15 @@ gate result + any OPEN-DECISION-for-JK.
 **G. DISPATCH the next queue ticket.** End the turn with a bg task in flight so you're re-invoked.
 
 ## STEP 4 — TOPOLOGY (Shape A — single Captain, two worktrees)
-- **main** `/Users/johnkruse/Projects/kbl-tracker` on `codex/franchise-v1-next` = integration line +
-  Mode-2 (L-stack) + ALL Captain docs.
+> **⚠ TRUNK CORRECTION (2026-07-01, Opus-verified against live git):** the current trunk is
+> **`experiment/manager-wpa-window`** — its HEAD carries the full scouting/archetype/auction/L-stack
+> foundation, is a strict SUPERSET of `codex/franchise-v1-next` (0 behind / 111 ahead), and is ~1,100
+> commits ahead of `main`. The `codex/franchise-v1-next` name below is STALE. "Two worktrees" is also
+> historical — the repo now has many worktrees. A fresh session MUST run `git branch --show-current` +
+> `git worktree list` and reconcile against `CURRENT_STATE.md`'s live header before trusting ANY
+> branch/worktree name in this file (STEP 0's sole-worker branch check included).
+- **main (working trunk)** `/Users/johnkruse/Projects/kbl-tracker` on **`experiment/manager-wpa-window`**
+  (was `codex/franchise-v1-next`) = integration line + Mode-2 (L-stack) + ALL Captain docs.
 - **worktree** `/Users/johnkruse/Projects/kbl-mode1` on `codex/mode1-v1` = Mode-1 (auction + prospect);
   it has its OWN `node_modules` (`npm install` once). Create with `git worktree add -b codex/mode1-v1
   /Users/johnkruse/Projects/kbl-mode1 <base>` if missing.
