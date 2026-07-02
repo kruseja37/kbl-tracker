@@ -306,11 +306,16 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
           if (!nextCpuTeamIds.has(bidder ?? "")) return next;
 
           const decision = cpuBidOnLot(next, bidder!, `${next.config.nominationOrderSeed}:bid:${step}:${next.currentLot.highBid ?? "open"}`);
-          next = transitionOrThrow(
-            decision.kind === "bid"
-              ? recordBid(next, bidder!, decision.bid)
-              : passBid(next, bidder!),
-          );
+          // FABLE-C3-FIX F3 hardening: a CPU whose chosen bid gets rejected by the strand law
+          // passes instead of halting the draft (farm pools carry no position info today, so
+          // this cannot fire — symmetry with the MLB hook keeps the seam safe if that changes).
+          let attempt = decision.kind === "bid"
+            ? recordBid(next, bidder!, decision.bid)
+            : passBid(next, bidder!);
+          if (!attempt.ok && attempt.reason === "bid-strands-roster") {
+            attempt = passBid(next, bidder!);
+          }
+          next = transitionOrThrow(attempt);
           await persist(next, nextContext);
         }
       } else if (next.state === "RESOLVE") {
@@ -321,7 +326,11 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
             next.pendingClaim.teamId,
             `${next.config.nominationOrderSeed}:claim:${step}`,
           );
-          next = transitionOrThrow(decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivorOut(next));
+          let claimAttempt = decision.kind === "claim" ? claimLoneSurvivor(next) : passLoneSurvivorOut(next);
+          if (!claimAttempt.ok && claimAttempt.reason === "bid-strands-roster") {
+            claimAttempt = passLoneSurvivorOut(next);
+          }
+          next = transitionOrThrow(claimAttempt);
           await persist(next, nextContext);
         } else {
           next = transitionOrThrow(resolveLot(next));

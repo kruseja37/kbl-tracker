@@ -8,6 +8,7 @@ import {
   claimLoneSurvivor,
   getTeamAuctionMaxBid,
   passBid,
+  passLoneSurvivorOut,
   recordBid,
   resolveLot,
   surfaceNextPlayer,
@@ -293,6 +294,153 @@ describe('the broken-floor repro pair', () => {
     // A completion-respecting bid at the same moment sails through.
     const accepted = recordBid(session, 'team-a', ASK);
     expect(accepted.ok).toBe(true);
+  });
+
+  test('F1 (C3-fix): the enriched ceiling reserves at least minSalary per open slot, even when asks are cheaper', () => {
+    // Live MLB asks are reserveCurve×IV with no flat floor — a cheap completer can ask ~833,
+    // BELOW the 1666.49 minimum. The ceiling must still bank minSalary per remaining slot or
+    // the minSalary-priced exhaustion cleanup can't rescue the team later.
+    const cheapAsk = 833;
+    const rostered = TEMPLATE.slice(0, 20).map((shape, i) => player(`f1-${i}`, shape));
+    const pool = [
+      player('f1-rp-a', { isPitcher: true, position: 'P', role: 'RP' }),
+      player('f1-rp-b', { isPitcher: true, position: 'P', role: 'CP' }),
+      player('f1-rp-c', { isPitcher: true, position: 'P', role: 'RP' }),
+    ];
+    const budget = 50_000;
+    let session = midDraftSession({
+      teams: [
+        team('team-a', budget, rostered.map((p) => p.playerId), 2, 0),
+        team('team-b', 200_000, [], 22, 0),
+      ],
+      rostered,
+      available: pool,
+    });
+    session = { ...session, config: { ...session.config, flatReserveFloor: cheapAsk } };
+    session = ok(surfaceNextPlayer(session));
+
+    // Candidate-aware: one slot remains after winning; completion cost is 833 but the reserve
+    // floor is one league minimum — the ceiling takes the TIGHTER of the two.
+    expect(getTeamAuctionMaxBid(session, 'team-a')).toBeCloseTo(budget - LEAGUE_MINIMUM_SALARY, 6);
+  });
+
+  test('F1/F2 (C3-fix): unaffordable asks pass out (no negative-budget force-fill) and the exhaustion cleanup completes the team at minSalary', () => {
+    // The audit economy end-to-end: asks (2500) > budget (2000) > minSalary (1666.49).
+    const ask = 2_500;
+    const budget = 2_000;
+    const rostered = TEMPLATE.slice(0, 21).map((shape, i) => player(`f2-${i}`, shape));
+    const pool = [
+      player('f2-cp-1', { isPitcher: true, position: 'P', role: 'CP' }),
+      player('f2-cp-2', { isPitcher: true, position: 'P', role: 'CP' }),
+    ];
+    let session = midDraftSession({
+      teams: [team('team-a', budget, rostered.map((p) => p.playerId), 1, 0)],
+      rostered,
+      available: pool,
+    });
+    session = { ...session, config: { ...session.config, flatReserveFloor: ask } };
+
+    // Lot 1: the lone survivor cannot afford the ask → claim rejected → pass-out. The lot is not
+    // yet load-bearing (a second arm remains), so it dies as genuine surplus.
+    session = ok(surfaceNextPlayer(session));
+    session = ok(resolveLot(session));
+    const claim1 = claimLoneSurvivor(session);
+    expect(claim1.ok).toBe(false);
+    if (!claim1.ok) expect(claim1.reason).toBe('claim-above-solvency-cap');
+    session = ok(passLoneSurvivorOut(session));
+    expect(session.results.at(-1)!.disposition).toBe('PASSED');
+    session = ok(advanceLot(session));
+
+    // Lot 2: the pool is exhausted behind this lot (remaining 0 < 1 open slot), so the refusal
+    // here flows through selectForcedFillerTeam's PRE-EXISTING ceiling guard — the dedicated
+    // loadBearingTeam Criterion-1 (F2) guard has its own test below, on the surplus branch.
+    session = ok(surfaceNextPlayer(session));
+    session = ok(resolveLot(session));
+    session = ok(passLoneSurvivorOut(session));
+    expect(session.results.at(-1)!.disposition).toBe('PASSED');
+    expect(session.teams[0].budgetRemaining).toBe(budget);
+
+    // Exhaustion → the cleanup backfill completes the team at LEAGUE-MINIMUM salary.
+    session = ok(advanceLot(session));
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    const teamA = session.teams[0];
+    expect(teamA.rosterSlotsRemaining).toBe(0);
+    expect(teamA.budgetRemaining).toBeCloseTo(budget - LEAGUE_MINIMUM_SALARY, 6);
+    expect(teamA.budgetRemaining).toBeGreaterThanOrEqual(0);
+    const backfilled = session.results.filter((r) => r.disposition === 'SOLD');
+    expect(backfilled).toHaveLength(1);
+    expect(backfilled[0].salary).toBeCloseTo(LEAGUE_MINIMUM_SALARY, 6);
+  });
+
+  test('F2 (C3-fix-2 F7): loadBearingTeam Criterion 1 refuses an unaffordable completion-critical rescue on the SURPLUS branch', () => {
+    // remainingPool (1 wrong-class hitter) >= totalOpenSlots (1) → resolveNoBidLot takes the
+    // surplus branch and consults loadBearingTeam. The lot player is team-a's ONLY legal
+    // completer (hitters sit at the 14 cap, so the leftover hitter cannot complete them), and
+    // team-a cannot afford the ask — Criterion 1 fires but its F2 affordability guard must
+    // refuse the force-fill rather than mint a negative budget.
+    const ask = 2_500;
+    const budget = 2_000;
+    const rosterShapes = [
+      ...TEMPLATE.slice(0, 14), // 14 hitters — the position-player ceiling
+      { isPitcher: true, position: 'P', role: 'SP' } as RosterSlotPlayer,
+      { isPitcher: true, position: 'P', role: 'SP' } as RosterSlotPlayer,
+      { isPitcher: true, position: 'P', role: 'SP' } as RosterSlotPlayer,
+      { isPitcher: true, position: 'P', role: 'SP/RP' } as RosterSlotPlayer,
+      { isPitcher: true, position: 'P', role: 'RP' } as RosterSlotPlayer,
+      { isPitcher: true, position: 'P', role: 'RP' } as RosterSlotPlayer,
+      { isPitcher: true, position: 'P', role: 'RP' } as RosterSlotPlayer,
+    ];
+    const rostered = rosterShapes.map((shape, i) => player(`f7-${i}`, shape));
+    const pool = [
+      player('f7-only-arm', { isPitcher: true, position: 'P', role: 'CP' }),
+      player('f7-extra-bat', { isPitcher: false, position: 'LF', secondaryPosition: 'OF' }),
+    ];
+    let session = midDraftSession({
+      teams: [team('team-a', budget, rostered.map((p) => p.playerId), 1, 0)],
+      rostered,
+      available: pool,
+    });
+    session = { ...session, config: { ...session.config, flatReserveFloor: ask } };
+
+    // Force the ARM lot up first so the surplus branch (1 remaining >= 1 open) is exercised.
+    session = ok(surfaceNextPlayer(session));
+    if (session.currentLot!.playerId !== 'f7-only-arm') {
+      // Deterministic nominee selection may surface the bat first — pass it out and take lot 2.
+      session = ok(resolveLot(session));
+      session = ok(passLoneSurvivorOut(session));
+      session = ok(advanceLot(session));
+      session = ok(surfaceNextPlayer(session));
+    }
+    expect(session.currentLot!.playerId).toBe('f7-only-arm');
+    const remaining = session.availablePlayerIds.length;
+    const openSlots = session.teams[0].rosterSlotsRemaining;
+    expect(remaining).toBeGreaterThanOrEqual(openSlots); // the surplus branch, not forced-filler
+
+    session = ok(resolveLot(session));
+    session = ok(passLoneSurvivorOut(session));
+    expect(session.results.at(-1)!.disposition).toBe('PASSED'); // NOT force-sold
+    expect(session.teams[0].budgetRemaining).toBe(budget); // no negative budget
+  });
+
+  test('F1 (C3-fix): farm-style sessions (flat floor, no position info) never backfill', () => {
+    const bare = (id: string): AuctionPlayer => ({ playerId: id, iv: 5_000, ivPercentile: 50 });
+    let session = midDraftSession({
+      teams: [team('farm-a', 1_000, [], 2, 0)],
+      rostered: [],
+      available: [bare('fp-1')],
+    });
+    session = { ...session, config: { ...session.config, flatReserveFloor: 2_500 } };
+
+    session = ok(surfaceNextPlayer(session));
+    session = ok(resolveLot(session));
+    session = ok(passLoneSurvivorOut(session));
+    expect(session.results.at(-1)!.disposition).toBe('PASSED');
+    session = ok(advanceLot(session));
+
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    // Position-less → the backfill no-ops: the team stays short and the PASSED result stands.
+    expect(session.teams[0].rosterSlotsRemaining).toBe(2);
+    expect(session.results.filter((r) => r.disposition === 'PASSED')).toHaveLength(1);
   });
 
   test('fallback tier: position-less sessions keep the scalar reserve but the phantom tax is stripped', () => {

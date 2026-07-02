@@ -21,6 +21,14 @@ export interface AuctionSetupConfig {
   flatReserveFloor?: number;
   cpuShillCount: number;
   excludeFromLeague?: boolean;
+  /**
+   * The END-CHECKPOINT (FABLE-C3; JK ruling queue 2026-07-01, audit FS-3): teams listed here —
+   * the pure-pressure shills — never need to COMPLETE a roster. The auction ends when every team
+   * NOT in this list is full; the forced filler skips them; their bid ceiling is their full
+   * remaining budget (no completion to reserve for). ADDITIVE: absent (all saved sessions and
+   * shill-less setups) keeps the historical everyone-must-fill semantics.
+   */
+  nonCompletingTeamIds?: readonly string[];
 }
 
 /** §6 Q3, §16 sim-tune: flat bid step scaled to the active tier cap by setup. */

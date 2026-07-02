@@ -34,6 +34,16 @@ import { MLB_AUCTION_ROSTER_SLOTS } from './leagueBuilderAuctionPipeline';
 import { POOL_SURPLUS_MAX } from '../data/rosterEngineConstants';
 import type { RegisteredPool } from '../engines/leagueConstruction';
 import { scoreSmb4Player, type Smb4Grade } from '../engines/smb4GradeEmulator';
+import {
+  poolCompletionOutlook,
+  poolDemandModel,
+  type ArchetypeCompletionOutlook,
+  type PoolDemandModel,
+} from '../engines/auctionPoolSizing';
+import { analyzePoolFeasibility, type PoolFeasibilityReport } from '../engines/poolFeasibility';
+import { HISTORICAL_ARCHETYPES } from '../data/historicalArchetypes';
+import { toRosterSlotPlayer } from '../engines/rosterNeed';
+import type { SimPlayer } from '../engines/archetypeBalanceSimulator';
 
 /** A player is IN the league pool iff it carries an assignment for that league. */
 export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean {
@@ -257,5 +267,114 @@ export function evaluatePoolSufficiency(poolSize: number, teamCount: number): Po
     meetsFloor: poolSize >= mlbSlots,
     surplus: poolSize - mlbSlots,
     overSupplyWarning: mlbSlots > 0 && poolSize > mlbSlots * POOL_SURPLUS_MAX,
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// FABLE-C3 — the market-clearing sufficiency + composition surface (audit POOL-01/02).
+// ---------------------------------------------------------------------------------------------
+
+export interface PoolDemandSufficiency extends PoolSufficiency {
+  /** Players the pure-pressure shills are expected to WIN (end-checkpoint: never 22× seats). */
+  expectedShillWins: number;
+  /** The full sizing model's recommendation (identity-roomy), above the hard floor. */
+  targetSize: number;
+}
+
+/**
+ * The shill-aware sufficiency gate: the hard floor is REAL seats (teams × 22) + the shills'
+ * expected wins — a pool any smaller can strand a real roster once shills start winning. The
+ * previous participant-count×22 model over-demanded (a shill never holds 22 seats under the
+ * FABLE-C3 end-checkpoint).
+ */
+export function evaluatePoolDemandSufficiency(
+  poolSize: number,
+  teamCount: number,
+  shillCount: number,
+): PoolDemandSufficiency {
+  const model = poolDemandModel(teamCount, shillCount);
+  // FABLE-C3-FIX F4: the green-light floor is the model's CLASS-FEASIBILITY floor (e.g. 202
+  // bodies for 8 teams — below it the pool provably cannot field every archetype) plus the
+  // capped shill wins — NOT bare seats + wins (the sweep showed that size sheds 20/20 drafts).
+  // `targetSize` (identity-roomy) is the surfaced recommendation above the floor.
+  const hardFloor = Math.max(
+    model.baseSlots + model.expectedShillWins,
+    model.feasibilityFloor + model.expectedShillWins,
+  );
+  return {
+    poolSize,
+    mlbSlots: hardFloor,
+    meetsFloor: poolSize >= hardFloor,
+    surplus: poolSize - hardFloor,
+    overSupplyWarning: model.targetSize > 0 && poolSize > model.targetSize * POOL_SURPLUS_MAX,
+    expectedShillWins: model.expectedShillWins,
+    targetSize: model.targetSize,
+  };
+}
+
+export interface PoolCompositionReport {
+  demand: PoolDemandModel;
+  feasibility: PoolFeasibilityReport;
+  outlooks: ArchetypeCompletionOutlook[];
+}
+
+/** Legality-shape + ratings bridge from a stored league player to the composition engines. */
+function toFeasibilitySimPlayer(player: Player, priced: { iv: number; salary: number }): SimPlayer {
+  const shape = toRosterSlotPlayer({
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? null,
+    traits: [player.trait1, player.trait2],
+  });
+  return {
+    id: player.id,
+    iv: priced.iv,
+    salary: priced.salary,
+    isPitcher: shape.isPitcher,
+    position: shape.position,
+    role: shape.role as SimPlayer['role'],
+    secondaryPosition: shape.secondaryPosition,
+    twoWayVariant: shape.twoWayVariant,
+    bat: {
+      POW: player.power,
+      CON: player.contact,
+      SPD: player.speed,
+      FLD: player.fielding,
+      ARM: player.arm,
+    },
+    pit: shape.isPitcher
+      ? { VEL: player.velocity, JNK: player.junk, ACC: player.accuracy }
+      : undefined,
+  };
+}
+
+/**
+ * The composition intelligence for the Draft Setup panel (FABLE-C3, audit POOL-01: surfaces the
+ * orphaned `analyzePoolFeasibility` + the completion-probability outlooks). Rides the REGISTERED
+ * pool snapshot — the exact membership + IV the auction will consume — so it returns null until
+ * a pool is registered (the body gate alone covers the pre-registration shuttle phase).
+ */
+export async function evaluatePoolComposition(
+  leagueId: string,
+  shillCount: number,
+): Promise<PoolCompositionReport | null> {
+  const pool = await getRegisteredPool(leagueId);
+  if (!pool || pool.players.length === 0) return null;
+  const leagueTemplate = await getLeagueTemplate(leagueId);
+  const teamCount = leagueTemplate?.teamIds.length ?? 0;
+  if (teamCount === 0) return null;
+
+  const sims: SimPlayer[] = [];
+  for (const priced of pool.players) {
+    const player = await getPlayer(priced.id);
+    if (!player) continue;
+    sims.push(toFeasibilitySimPlayer(player, priced));
+  }
+  if (sims.length === 0) return null;
+
+  const feasibility = analyzePoolFeasibility(sims, [...HISTORICAL_ARCHETYPES], pool.tier);
+  return {
+    demand: poolDemandModel(teamCount, shillCount),
+    feasibility,
+    outlooks: poolCompletionOutlook(sims, feasibility, teamCount, shillCount),
   };
 }

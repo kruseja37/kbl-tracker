@@ -88,7 +88,7 @@ function makePool(overrides: Partial<RegisteredPool> = {}): RegisteredPool {
     leagueId: "league-page",
     tier: "standard",
     balanceMode: "taxed",
-    players: Array.from({ length: 44 }, (_, index) => ({
+    players: Array.from({ length: 80 }, (_, index) => ({
       id: `player-${index}`,
       iv: 100_000 - index,
       salary: 10_000,
@@ -96,7 +96,7 @@ function makePool(overrides: Partial<RegisteredPool> = {}): RegisteredPool {
     tierCap: 1_000_000,
     luxuryCaps: [],
     pickValueChart: [],
-    totalSlots: 44,
+    totalSlots: 80,
     poolSurplusWarning: false,
     ...overrides,
   };

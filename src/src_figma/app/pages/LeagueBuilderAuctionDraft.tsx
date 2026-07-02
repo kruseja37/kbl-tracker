@@ -49,7 +49,7 @@ import {
   clampDraftShillCount,
   shillCountFromSearch,
 } from "../utils/draftRouting";
-import { evaluatePoolSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
+import { evaluatePoolDemandSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
 import {
   getScoutProfilesForLeague,
   type LeagueBuilderScoutProfile,
@@ -862,8 +862,11 @@ export function LeagueBuilderAuctionDraft() {
       .filter(Boolean);
   }, [session]);
   const setupShillCount = clampDraftShillCount(cpuCount);
+  // FABLE-C3-FIX-2 F6: the SAME market-clearing gate as both Draft Setup screens — teams and
+  // shills are separate demand kinds (shills demand their capped WINS, never 22 seats each). All
+  // three Start-Draft gates now agree at every shill count.
   const setupPoolSufficiency = useMemo(
-    () => evaluatePoolSufficiency(registeredPool?.players.length ?? 0, leagueTeams.length + setupShillCount),
+    () => evaluatePoolDemandSufficiency(registeredPool?.players.length ?? 0, leagueTeams.length, setupShillCount),
     [leagueTeams.length, registeredPool?.players.length, setupShillCount],
   );
   const setupPoolReady = Boolean(registeredPool?.locked) && setupPoolSufficiency.meetsFloor;

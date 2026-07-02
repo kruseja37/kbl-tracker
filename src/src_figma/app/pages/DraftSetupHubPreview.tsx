@@ -16,7 +16,7 @@ import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { saveTeam } from "../../../utils/leagueBuilderStorage";
 import { getAuctionSession } from "../../../utils/leagueBuilderStorage";
-import { evaluatePoolSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
+import { evaluatePoolDemandSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 
 /**
@@ -207,10 +207,11 @@ export function DraftSetupHubPreview() {
   const humanTeams = useMemo(() => leagueTeams.filter((team) => configs[team.id]?.ownerId !== "cpu"), [configs, leagueTeams]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => configs[team.id]?.mlbKey);
   const poolSize = registeredPool?.players.length ?? 0;
-  const draftingParticipantCount = (activeLeague?.teamIds.length ?? 0) + shills;
+  // FABLE-C3-FIX F4: same market-clearing gate as the routed Draft Setup — teams and shills are
+  // separate demand kinds (shills demand their capped WINS, never 22 seats each).
   const poolSufficiency = useMemo(
-    () => evaluatePoolSufficiency(poolSize, draftingParticipantCount),
-    [draftingParticipantCount, poolSize],
+    () => evaluatePoolDemandSufficiency(poolSize, activeLeague?.teamIds.length ?? 0, shills),
+    [activeLeague?.teamIds.length, poolSize, shills],
   );
   const poolLocked = Boolean(registeredPool?.locked);
   const poolReady = poolLocked && poolSufficiency.meetsFloor;

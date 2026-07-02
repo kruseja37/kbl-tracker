@@ -138,7 +138,9 @@ function makePlayer(
   return player;
 }
 
-function makePlayers(count = 44): Player[] {
+// FABLE-C3-FIX-2 F6: the default fixture clears the demand-model floor for 2 teams (class
+// feasibility 52) with room for the shill-count variations the route tests exercise.
+function makePlayers(count = 80): Player[] {
   const players = [
     makePlayer("player-a", "CF", "LF"),
     makePlayer("player-b", "SP"),
@@ -346,6 +348,9 @@ function seedWhereCpuTeamBids(players: readonly Player[], teamId: string): strin
     }) as CpuShillAuctionSession;
     const surfaced = surfaceNextPlayer(initialized);
     if (!surfaced.ok || surfaced.session.state !== "OPEN_BIDDING") continue;
+    // The test's $70,000 pins anchor on player-a's 100th-percentile ask — pin the lot too so
+    // the seed search stays deterministic at any fixture pool size (FABLE-C3-FIX-2 F6).
+    if (surfaced.session.currentLot?.playerId !== "player-a") continue;
     const session = surfaced.session as CpuShillAuctionSession;
     const decision = cpuBidOnLot(session, teamId, cpuDecisionSeedForTest(session, "bid", teamId));
     if (decision.kind === "bid") return seed;
@@ -464,12 +469,16 @@ describe("LeagueBuilderAuctionDraft", () => {
   });
 
   test("blocks direct auction start when selected shills make the locked pool underfilled", async () => {
+    // 44 players vs the demand-model floor for 2 teams + 1 shill (52 + 10 = 62) → needs 18.
+    const smallPoolPlayers = makePlayers(44);
+    mockLeagueData({ players: smallPoolPlayers, pool: makePool(smallPoolPlayers) });
     window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=1");
 
     render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
-      expect(screen.getByText(/needs 22 more player\(s\) for 3 drafting teams/i)).toBeInTheDocument();
+      // FABLE-C3-FIX-2 F6: the demand-model gate — floor = classFeasibility(2 teams)=52 + 1 shill×10 wins = 62; pool 44 → needs 18.
+      expect(screen.getByText(/needs 18 more player\(s\) for 3 drafting teams/i)).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /BEGIN AUCTION DRAFT|STARTING/i })).toBeDisabled();
@@ -479,7 +488,7 @@ describe("LeagueBuilderAuctionDraft", () => {
   test("renders open bidding with names and records a SOLD result row with winner salary", async () => {
     const players = makePlayers();
     mockLeagueData({ players, pool: makePool(players) });
-    const seed = seedForOpeningLot(players);
+    const seed = seedForOpeningLot(players, { playerIds: ["player-a"] });
 
     render(<LeagueBuilderAuctionDraft />);
 

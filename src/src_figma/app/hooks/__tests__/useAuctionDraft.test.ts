@@ -531,3 +531,103 @@ describe("useAuctionDraft", () => {
     expect(offMaxBid!).toBe(onMaxBid!);
   });
 });
+
+// -----------------------------------------------------------------------------------------------
+// FABLE-C3-FIX F3: the strand-safe transition helpers (pure — no hook render needed).
+// -----------------------------------------------------------------------------------------------
+import { initAuctionSession, type AuctionPlayer as EnginePlayer } from "../../../../engines/auctionStateMachine";
+import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
+import { strandSafeBidTransition, strandSafeClaimTransition } from "../useAuctionDraft";
+
+describe("strand-safe CPU transitions (FABLE-C3-FIX F3)", () => {
+  // A team at the 14-hitter ceiling bidding on ANOTHER hitter → 'bid-strands-roster'.
+  const hitter = (pos: string, i: number): EnginePlayer => ({
+    playerId: `h-${pos}-${i}`,
+    iv: 10_000,
+    ivPercentile: 50,
+    pos: { isPitcher: false, position: pos, secondaryPosition: pos === "C" ? null : "IF" },
+  });
+  const arm = (role: string, i: number): EnginePlayer => ({
+    playerId: `p-${role}-${i}`,
+    iv: 10_000,
+    ivPercentile: 50,
+    pos: { isPitcher: true, position: "P", role },
+  });
+
+  function strandSession(): CpuShillAuctionSession {
+    const rostered = [
+      ...["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "C", "1B", "2B", "3B", "SS", "LF"].map(hitter),
+      ...["SP", "SP", "SP", "SP/RP", "RP", "RP"].map(arm),
+    ];
+    const lotHitter = hitter("CF", 99);
+    const spareArms = [arm("RP", 98), arm("CP", 97)];
+    const session = initAuctionSession({
+      teams: [
+        {
+          teamId: "cpu-1",
+          budgetRemaining: 500_000,
+          rosterSlotsRemaining: 2,
+          roster: rostered.map((p) => ({ playerId: p.playerId, salary: 5_000 })),
+        },
+        { teamId: "human-1", budgetRemaining: 500_000, rosterSlotsRemaining: 22 },
+      ],
+      players: [...rostered, lotHitter, ...spareArms],
+      nominationOrder: ["cpu-1", "human-1"],
+      config: { bidIncrement: 1_000, nominationOrderSeed: "f3-strand", flatReserveFloor: 2_000 },
+    }) as CpuShillAuctionSession;
+    return {
+      ...session,
+      state: "OPEN_BIDDING",
+      availablePlayerIds: spareArms.map((p) => p.playerId),
+      currentLot: {
+        playerId: lotHitter.playerId,
+        nominatorTeamId: "cpu-1",
+        openingAsk: 2_000,
+        highBid: null,
+        highBidder: null,
+        stillIn: ["cpu-1", "human-1"],
+        bidTurnTeamId: "cpu-1",
+        bidLog: [],
+      },
+    };
+  }
+
+  test("a CPU whose bid would strand PASSES instead of halting the draft", () => {
+    const session = strandSession();
+    const result = strandSafeBidTransition(session, "cpu-1", 2_000, true);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // The CPU left the lot (its pass), the draft moves on — no throw upstream.
+      expect(result.session.currentLot?.stillIn).not.toContain("cpu-1");
+    }
+  });
+
+  test("a HUMAN keeps the rejection (UI feedback, never a silent pass)", () => {
+    const session = strandSession();
+    const result = strandSafeBidTransition(session, "cpu-1", 2_000, false);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("bid-strands-roster");
+  });
+
+  test("other rejection reasons pass through untouched for CPUs too", () => {
+    const session = strandSession();
+    const result = strandSafeBidTransition(session, "cpu-1", 1, true); // below the opening ask
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("bid-below-minimum");
+  });
+
+  test("a CPU lone-survivor claim that would strand passes out instead of throwing", () => {
+    const base = strandSession();
+    const session: CpuShillAuctionSession = {
+      ...base,
+      state: "RESOLVE",
+      currentLot: { ...base.currentLot!, stillIn: ["cpu-1"], bidTurnTeamId: null },
+      pendingClaim: { playerId: base.currentLot!.playerId, teamId: "cpu-1", price: 2_000 },
+    };
+    const result = strandSafeClaimTransition(session, true);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.session.results.at(-1)?.disposition).toBe("PASSED");
+    }
+  });
+});

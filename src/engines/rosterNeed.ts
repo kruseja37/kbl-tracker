@@ -245,3 +245,27 @@ export function teamRosterNeed(
   const roster = resolveRoster(rosterIds, positions);
   return roster === null ? null : rosterNeedBreakdown(roster);
 }
+
+/**
+ * Does this player shape satisfy any of the team's outstanding HARD requirements? (Moved here
+ * from the market model in FABLE-C3 — pure need-domain logic, shared by the market's own_need
+ * multiplier and the CPU bidder's need-aware endgame override.) Class-aware per the C2B-fix F2
+ * semantics: an off-role arm never claims a rotation/bullpen deficit it cannot fill.
+ */
+export function playerFillsHardRequirement(
+  shape: RosterSlotPlayer,
+  need: RosterNeedBreakdown,
+): boolean {
+  if (!shape.isPitcher) {
+    if (need.missingPrimaries.some((pos) => shape.position === pos)) return true;
+    if (need.hitterFloorNeed > 0) return true;
+  } else {
+    if (need.pitcherNeed > 0) {
+      if (shape.role === 'SP/RP') return true;
+      if (shape.role === 'SP' && need.rotationDeficit > 0) return true;
+      if ((shape.role === 'RP' || shape.role === 'CP') && need.bullpenDeficit > 0) return true;
+    }
+    if (need.pitcherFloorNeed > 0) return true;
+  }
+  return need.catcherCoverNeed > 0 && canCover(shape, 'C');
+}

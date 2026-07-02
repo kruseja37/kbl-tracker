@@ -3115,3 +3115,118 @@ model's own inference, never displayed — but see ruling 2).
 
 → FABLE-C2B-FIX contract routes the fix to Fable (builder≠auditor). Opus re-audits the delta (Codex
 re-pass + Opus verify), runs the gate + L-SIM, then commits branch-only. Then FABLE-C3.
+
+## 2026-07-02 — FABLE-C3 completion-guarantee decisions — **ALL THREE RATIFIED BY JK (same day)**
+
+JK ratified 1 (pool-aware strand law), 2 (exhaustion cleanup backfill), and 3 (shill win cap),
+with one rider on 3: **the cap must be factored into pool-size requirements/recommendations** —
+CONFIRMED already true as built: `poolDemandModel.targetSize` adds exactly `winsPerShill × S`
+bodies, and the live Draft Setup sufficiency gate's hard floor is `teams×22 + winsPerShill × S`
+(`evaluatePoolDemandSufficiency`); the cap constant and the sizing budget are the SAME
+`SIZING_TUNING.winsPerShill` number by construction, so they cannot drift apart.
+
+Original decision record (as flagged for ratification) ↓
+
+The C3 sizing sweep exposed a cascade of real full-CPU draft-completion failures (each fix
+uncovered the next; full arc in `FABLE_C3_DESIGN_2026-07-02.md` §5b). Three of the fixes are
+DESIGN DECISIONS beyond the contract's letter, applied under its charter ("the draft must
+finish"), and need explicit ratification:
+
+1. **POOL-AWARE STRAND LAW (affects ALL bidders incl. humans).** The count-only strand guard
+   assumes need-sharing players exist in the pool; when they don't, a team can legally buy itself
+   into a roster NO remaining player can complete (canonical wedge: one catcher, no Two-Way arm,
+   one open slot, two needs). `bidWouldStrand` now also requires a verified-legal completion to
+   exist from the players ACTUALLY left. Rationale: spec §6's floor "fires only at true
+   impossibility" — pool-impossibility IS true impossibility. Trade-off: a heuristic
+   spurious-infeasible would wrongly block a bid (the completion builder is two-attempt +
+   law-verified; the F1-audited corners are covered), flagged for adversarial attack.
+2. **EXHAUSTION CLEANUP BACKFILL (bends one-chance ONLY in the otherwise-failed state).** Pool
+   empty + a completing team unfilled used to be a silently broken draft (the 22/10 launch
+   validation throws later). `advanceLot` now backfills unfilled teams from the PASSED lots at
+   LEAGUE-MINIMUM salary (zero-demand players; floor price; affordable by construction since the
+   ceiling always retains minimum-salary money per open slot).
+3. **SHILL WIN CAP (additive `shillMaxWins`, default 10 via `SIZING_TUNING.winsPerShill`).**
+   Sweep-measured: uncapped end-checkpoint shills hoard ~21 wins (a whole roster). The cap keeps
+   shills price-pressure, not competing franchises, and pool sizing budgets cap×S extra bodies.
+   HONEST SIM FINDING attached: capped shills DON'T materially raise real-team prices (±4%) in
+   CPU-vs-CPU play — the shill count is a product-feel choice; completion-safe at S=0..4.
+
+Also in the round (contract-scope, no ruling needed): the end-checkpoint (`nonCompletingTeamIds`,
+additive config — JK's queued question, now implemented), opt-in need-aware CPU bidding + exact
+class-scarcity grabs + anti-starve politeness (humans never blocked), the load-bearing pass-out
+guard, the demand model/table, per-archetype completion outlooks surfaced in Draft Setup, and the
+FS-3 launch regression. Sweep gate: S=0..4 × 20 runs at target sizing = zero shortfalls; all 24
+archetypes ≥ 0.9 legal-completion at the recommended config.
+
+## 2026-07-02 — C3 AUDIT VERDICT: BLOCK (1 CRITICAL + 3 MAJOR + 1 MINOR) — fixes routed to Fable, NOT yet dispatched (JK holds)
+
+Opus audit of the uncommitted FABLE-C3 diff (builder≠auditor). Method: an independent Opus 7-finder
+multi-lens Workflow (each candidate re-verified by 3 refuters) + Opus own full read + the gate. The
+cross-model Codex pass HUNG on the model API for 30 min and was watchdog-killed (rc=137) with zero
+analysis — documented, not hidden. Full record: `spec-docs/C3_AUDIT_VERDICT_2026-07-02.md`.
+
+**Gate independently confirmed GREEN** (build exit 0; targeted 132/132; sweep 0-shortfall S=0..4 with
+the ±4% honest inflation reproduced; C2A/C2B calibration byte-stable; full suite 2 failed/8682 passed =
+the characterized pair, zero new reds). **L-SIM: orthogonal, documented not run** (import-graph proof:
+L-SIM imports no auction modules; freeze imports only unchanged/type symbols; rosterNeed diff additive-
+only; the auction→freeze seam is covered by the full-suite draft-pipeline integration + the FS-3
+regression). The automated gate is green but structurally cannot catch F1-F4 (the sweep runs the CPU
+path with the opt-in need-aware politeness the LIVE hook does not pass).
+
+**The chartered work is directionally right.** Pool sizing reproduces the C1B ~202 evidence exactly; the
+end-checkpoint, the shill cap, and — critically — the **pool-aware strand law (the #1 flagged risk) are
+CORRECT** (the strand law was cleared by an 11M-shape fuzz vs a brute-force legality oracle: zero
+spurious-infeasibles). The defects are in the cascade's ECONOMICS + force-fill affordability + one UI gate.
+
+**CONFIRMED DEFECTS (each survived 3 refuters; each crux re-verified by Opus):**
+- **F1 CRITICAL — the ratified exhaustion backfill's affordability-by-construction is FALSE in live MLB.**
+  Live MLB opening asks are `reservePriceCurve(0.5–0.7)×iv` with NO `flatReserveFloor` (only farm floors),
+  so cheap players' asks fall BELOW `minSalary=1666.49`. The enriched `sessionBidCeiling` reserves at those
+  sub-minSalary asks (not min'd against the minSalary scalar), so a team can hit pool-exhaustion with
+  `budgetRemaining < openSlots×minSalary`; the backfill (priced at minSalary) then skips it → strand →
+  `validateV1RosterHandoff` throws at launch — the exact break the backfill exists to prevent. (The ratified
+  DESIGN intent stands; the affordability PROOF was invalid and the pricing/reserve must be reconciled.)
+- **F2 MAJOR — `loadBearingTeam` Criterion 1 force-fills without the affordability guard Criterion 2 has**
+  → force-sell at openingAsk can drive a team's budget negative (tier-cap violation).
+- **F3 MAJOR (partly pre-existing; C3 widens it) — a live CPU `bid-strands-roster` rejection throws via
+  `transitionOrThrow` and HALTS the auto-advancing draft** (no pass-fallback; the sweep harness has one).
+- **F4 MAJOR (bounded) — the Start-Draft sufficiency hard floor (`baseSlots+expectedShillWins`=196 at
+  T=8/S=2) green-lights a pool the design's OWN sweep proves strands 20/20**; the model's `feasibilityFloor`
+  (202)/`targetSize` (264) are ignored by the gate. Bounded by a downstream 220 re-gate. (Threshold has a
+  product nuance — flagged for JK.)
+- **F5 MINOR — stale backfill comment ("opening-ask prices" vs the actual minSalary pricing).**
+
+**ROUTING:** `FABLE-C3-FIX` contract written in `PROMPT_CONTRACTS.md` (F1 must-fix + F2/F3/F4/F5).
+Per JK (2026-07-02): **do NOT dispatch Fable yet** — JK is handing the findings to Fable for review in a
+separate thread first. Nothing committed (BLOCK). The three ratified C3 design decisions are NOT reversed;
+F1 is an implementation/pricing bug inside the ratified backfill.
+
+## 2026-07-02 — C3-FIX round-2 delta audit: F1-F5 CORRECT, but F4 left INCOMPLETE (F6) + 2 minors — 2nd small round to Fable, then commit
+
+Opus re-audit of the FABLE-C3-FIX delta (builder≠auditor). Method: Opus own read + a 4-finder adversarial
+delta Workflow (3 refuters each) + a Codex cross-model delta re-pass (completed cleanly this time, rc=0).
+Full record: `C3_AUDIT_VERDICT_2026-07-02.md` "ROUND 2".
+
+**The 5 prior fixes (F1-F5) are all CONFIRMED CORRECT** (triangulated: Opus read + Codex CLEAN + Workflow
+attackedAndHolds). The round-1 CRITICAL (backfill affordability) is genuinely closed — the minSalary reserve
+floor holds inductively across every acquisition path, and the PASSED-vs-AVAILABLE crux is closed because the
+backfill reprices every pick flat at minSalary. Gate re-run GREEN (targeted 147/147; sweep 0-shortfall S=0..4;
+C2A/C2B byte-stable; full suite 8692 passed / 2 characterized fails, smoke solo 4/4 → zero new reds; L-SIM
+orthogonality reconfirmed).
+
+**New from the delta pass (Opus-verified):**
+- **F6 MAJOR — the F4 gate reconciliation was left INCOMPLETE.** `LeagueBuilderAuctionDraft.tsx:866` (the live
+  auction-start gate) is the sole remaining caller of the OLD `evaluatePoolSufficiency`; the two setup screens
+  were migrated to `evaluatePoolDemandSufficiency`. At S≥3 the auction page over-demands (242 vs 232) → blocks a
+  pool the setup screens green-lit — the exact inconsistency F4 targeted, left on a third gate. Bounded (S≥3 is
+  off the default S=2 path; class-feasible; F1 backfill prevents a launch throw). FIX: migrate `:866` to the same
+  demand-model call.
+- **F7 MINOR — the F2 regression test doesn't exercise the F2 guard** (it hits the pre-existing
+  `selectForcedFillerTeam` guard because `remainingPool < totalOpenSlots` at Lot 2); F2 code is correct but
+  untested + a misattributed comment. FIX: add a real Criterion-1 test.
+- **F8 MINOR — dead `canCover` import** in `auctionMarketModel.ts:25` after the relocation. FIX: remove it.
+
+**ROUTING:** `FABLE-C3-FIX-2` (F6 must + F7/F8 minor) written in `PROMPT_CONTRACTS.md`, `high` effort (small,
+mechanical). Per JK's standing directive this round, HELD for JK to hand to Fable in the other thread — not
+auto-dispatched. Nothing committed. After the small round: Opus re-runs the gate + a light delta check, then
+commits branch-only on JK's go. NOTE: F1-F5 are locked-correct — do not reopen them.

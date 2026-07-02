@@ -87,6 +87,7 @@ import {
   getFranchiseConfig,
 } from '../franchiseManager';
 import {
+  deepCopyLeagueToFranchise,
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -1189,5 +1190,87 @@ describe('draft pipeline integration', () => {
       result.hubConfiguredTeam!.baseCaps.SPD * (1 + result.hubConfiguredTeam!.rawShift.SPD),
     );
     expect(result.franchisePlayerCount).toBe(TEAM_IDS.length * 32);
+  }, 30_000);
+
+  test('FS-3 regression (FABLE-C3): a shill>0 league passes the franchise launch gate — shill wins never block the 22/10 validation', async () => {
+    // The FS-3 chain (audit 2026-07-01): shills win players → the commit EXCLUDES them (pinned by
+    // the mixed-commit test above) → those players carry NO league assignment → the strict launch
+    // validation over the league-template teams must still pass with every REAL team at 22/10.
+    // This drives the exact throw site (`validateV1RosterHandoff` inside deepCopyLeagueToFranchise)
+    // against a post-shill-draft league state. The auction-side guarantees (a shill>0 draft
+    // COMPLETES under the end-checkpoint) are covered by auctionEndCheckpoint.test.ts and the
+    // opt-in pool-sizing sweep.
+    const leagueId = `${LEAGUE_ID}-fs3-launch`;
+    const franchiseId = 'franchise-fs3-launch';
+    const teamIds = ['fs3-team-a', 'fs3-team-b'];
+    const shillWonPlayerIds = ['fs3-shill-won-1', 'fs3-shill-won-2'];
+
+    await saveLeagueTemplate({
+      id: leagueId,
+      name: 'FS-3 Launch League',
+      teamIds,
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'auction',
+      tier: 'standard',
+      balanceMode: 'taxed',
+    });
+
+    const teams = [] as Team[];
+    for (const teamId of teamIds) {
+      const team = makeCommitRegressionTeam(teamId, leagueId, 'human');
+      await saveTeam(team);
+      teams.push(team);
+
+      const mlbIds = Array.from({ length: 22 }, (_, i) => `${teamId}-mlb-${i + 1}`);
+      const farmIds = Array.from({ length: 10 }, (_, i) => `${teamId}-farm-${i + 1}`);
+      for (const id of mlbIds) {
+        await savePlayer({
+          ...makeCommitRegressionPlayer(id),
+          leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
+        });
+      }
+      for (const id of farmIds) {
+        await savePlayer({
+          ...makeCommitRegressionPlayer(id),
+          draftedAsFarmProspect: true,
+          leagueAssignments: [{ leagueId, teamId, rosterStatus: 'FARM' }],
+        });
+      }
+      await saveTeamRoster({
+        ...createEmptyTeamRoster(teamId),
+        mlbRoster: mlbIds,
+        farmRoster: farmIds,
+      });
+    }
+
+    // The shills' spoils: committed-with-exclusion players hold NO assignment for this league.
+    for (const id of shillWonPlayerIds) {
+      await savePlayer(makeCommitRegressionPlayer(id));
+    }
+
+    // The launch gate also demands exactly one hired scout per team.
+    const scoutPool = buildLiveScoutPool(leagueId, teams.length);
+    await persistScoutHiresForLeague({
+      leagueId,
+      teams,
+      selectedScoutIdsByTeamId: {},
+      pool: scoutPool,
+    });
+
+    // THE GATE: before the C3 chain this configuration was the FS-3 launch blocker.
+    const copyResult = await deepCopyLeagueToFranchise(franchiseId, leagueId, {});
+
+    expect(copyResult.rosterRequirements.validationStatus).toBe('passed');
+    const franchisePlayers = await getAllFranchisePlayers(franchiseId);
+    // Every real roster copied (2 × 32); the shill-won players are NOT part of the franchise.
+    expect(franchisePlayers).toHaveLength(teamIds.length * 32);
+    const franchiseIds = new Set(franchisePlayers.map((player) => player.id));
+    for (const id of shillWonPlayerIds) {
+      expect(franchiseIds.has(id)).toBe(false);
+    }
+
+    await deleteFranchiseDatabase(franchiseId);
   }, 30_000);
 });

@@ -22,7 +22,6 @@
 
 import { HISTORICAL_ARCHETYPES } from '../data/historicalArchetypes';
 import type { RosterSlotPlayer } from '../data/rosterConstruction';
-import { canCover } from '../data/rosterConstruction';
 import {
   BANDS,
   type Band,
@@ -42,7 +41,12 @@ import {
   type CpuShillAuctionSession,
   type CpuShillPersonality,
 } from './cpuShillBidding';
-import { teamRosterNeed, type RosterNeedBreakdown, type RosterPositionMap } from './rosterNeed';
+import {
+  playerFillsHardRequirement,
+  teamRosterNeed,
+  type RosterNeedBreakdown,
+  type RosterPositionMap,
+} from './rosterNeed';
 
 /**
  * §16 sim-tune: every market-model knob in one place. Calibrated against the FABLE-C2A harness
@@ -382,20 +386,9 @@ export function estimateMarket(view: MarketLotView, table: ArchetypeLiftTable): 
  * against a live bullpen-class deficit (see `RosterNeedBreakdown.rotationDeficit` docs for the
  * equivalence proof). The 8-body floor stays legitimately class-agnostic — any arm helps it.
  */
-function fillsHardRequirement(shape: RosterSlotPlayer, need: RosterNeedBreakdown): boolean {
-  if (!shape.isPitcher) {
-    if (need.missingPrimaries.some((pos) => shape.position === pos)) return true;
-    if (need.hitterFloorNeed > 0) return true;
-  } else {
-    if (need.pitcherNeed > 0) {
-      if (shape.role === 'SP/RP') return true;
-      if (shape.role === 'SP' && need.rotationDeficit > 0) return true;
-      if ((shape.role === 'RP' || shape.role === 'CP') && need.bullpenDeficit > 0) return true;
-    }
-    if (need.pitcherFloorNeed > 0) return true;
-  }
-  return need.catcherCoverNeed > 0 && canCover(shape, 'C');
-}
+// The requirement predicate lives in rosterNeed.ts since FABLE-C3 (shared with the CPU bidder's
+// need-aware endgame override); imported as `playerFillsHardRequirement` — same math, one home.
+const fillsHardRequirement = playerFillsHardRequirement;
 
 /**
  * own_need_j(pos_i): 1 for a merely-eligible player; scaled up when the player satisfies a hard

@@ -52,6 +52,15 @@ export interface AuctionTuningCase {
   teamProfileAssignment: TeamProfileAssignmentMode;
   includePositionInfo?: boolean;
   carryoverPct?: number;
+  /** ADDITIVE (FABLE-C3): override the default 8-real / 2-shill team mix. */
+  realTeams?: number;
+  shillTeams?: number;
+  /** ADDITIVE (FABLE-C3): run with the end-checkpoint — shills never complete a roster. */
+  endCheckpoint?: boolean;
+  /** ADDITIVE (FABLE-C3): real teams use the need-aware endgame override (never the shills). */
+  needAwareRealTeams?: boolean;
+  /** ADDITIVE (FABLE-C3): cap each shill's wins (the aggression lever; absent = uncapped). */
+  shillMaxWins?: number;
 }
 
 export interface AuctionPriceBand {
@@ -345,8 +354,12 @@ export function runAuctionTuningCase(
   predictor: AuctionPriceBandPredictor = placeholderAuctionPriceBandPredictor,
 ): AuctionTuningRunResult {
   const caseSeed = `${input.kind}:${input.scenario}:${input.archetypeAssignment}:${input.teamProfileAssignment}:${input.poolSize}:${runIndex}`;
-  const teamIds = makeTeamIds(input.kind.toLowerCase());
-  const teamProfiles = buildTeamProfiles(teamIds.allTeamIds, teamIds.shillTeamIds, input.teamProfileAssignment, caseSeed);
+  const teamIds = makeTeamIds(
+    input.kind.toLowerCase(),
+    input.realTeams ?? REAL_TEAM_COUNT,
+    input.shillTeams ?? SHILL_TEAM_COUNT,
+  );
+  const teamProfiles = buildTeamProfiles(teamIds.allTeamIds, teamIds.shillTeamIds, input.teamProfileAssignment, caseSeed, input.shillMaxWins);
   let session = buildSession({
     caseSeed,
     kind: input.kind,
@@ -354,6 +367,7 @@ export function runAuctionTuningCase(
     poolSize: input.poolSize,
     archetypeAssignment: input.archetypeAssignment,
     includePositionInfo: input.includePositionInfo ?? false,
+    endCheckpoint: input.endCheckpoint ?? false,
     teamIds,
     teamProfiles,
   });
@@ -361,7 +375,14 @@ export function runAuctionTuningCase(
   let surfacedLots = 0;
 
   for (let step = 0; step < MAX_STEPS && session.state !== 'AUCTION_COMPLETE'; step += 1) {
-    if (session.state === 'NOMINATION' && session.availablePlayerIds.length < realOpenSlotCount(session)) {
+    // Supply invariant, cleanup-aware (FABLE-C3): PASSED lots are no longer destroyed supply —
+    // the machine's exhaustion backfill re-offers them at minimum salary — so a run is only
+    // provably wedged when live + passed supply together cannot cover the open real seats.
+    const passedRecoverable = session.results.filter((r) => r.disposition === 'PASSED').length;
+    if (
+      session.state === 'NOMINATION' &&
+      session.availablePlayerIds.length + passedRecoverable < realOpenSlotCount(session)
+    ) {
       throw new Error(JSON.stringify({
         case: input.label,
         runIndex,
@@ -417,7 +438,12 @@ export function runAuctionTuningCase(
         continue;
       }
 
-      const decision = cpuBidOnLot(session, bidder, `${caseSeed}:bid:${step}`);
+      const decision = cpuBidOnLot(
+        session,
+        bidder,
+        `${caseSeed}:bid:${step}`,
+        input.needAwareRealTeams && isRealTeam(bidder) ? { needAwareCompletion: true } : undefined,
+      );
       session = decision.kind === 'bid'
         ? recordBidOrPassIfStranded(session, bidder, decision.bid)
         : ok(passBid(session, bidder));
@@ -427,7 +453,14 @@ export function runAuctionTuningCase(
           session = ok(passLoneSurvivorOut(session));
           continue;
         }
-        const decision = cpuDecideLoneSurvivor(session, session.pendingClaim.teamId, `${caseSeed}:claim:${step}`);
+        const decision = cpuDecideLoneSurvivor(
+          session,
+          session.pendingClaim.teamId,
+          `${caseSeed}:claim:${step}`,
+          input.needAwareRealTeams && isRealTeam(session.pendingClaim.teamId)
+            ? { needAwareCompletion: true }
+            : undefined,
+        );
         session = decision.kind === 'claim'
           ? claimOrPassIfStranded(session)
           : ok(passLoneSurvivorOut(session));
@@ -501,9 +534,13 @@ function claimOrPassIfStranded(session: CpuShillAuctionSession): CpuShillAuction
   return ok(result);
 }
 
-function makeTeamIds(prefix: string): { allTeamIds: string[]; realTeamIds: string[]; shillTeamIds: string[] } {
-  const realTeamIds = Array.from({ length: REAL_TEAM_COUNT }, (_, index) => `${prefix}-real-${index + 1}`);
-  const shillTeamIds = Array.from({ length: SHILL_TEAM_COUNT }, (_, index) => `${prefix}-shill-${index + 1}`);
+function makeTeamIds(
+  prefix: string,
+  realCount: number = REAL_TEAM_COUNT,
+  shillCount: number = SHILL_TEAM_COUNT,
+): { allTeamIds: string[]; realTeamIds: string[]; shillTeamIds: string[] } {
+  const realTeamIds = Array.from({ length: realCount }, (_, index) => `${prefix}-real-${index + 1}`);
+  const shillTeamIds = Array.from({ length: shillCount }, (_, index) => `${prefix}-shill-${index + 1}`);
   return { allTeamIds: [...realTeamIds, ...shillTeamIds], realTeamIds, shillTeamIds };
 }
 
@@ -514,6 +551,7 @@ function buildSession(input: {
   poolSize: number;
   archetypeAssignment: ArchetypeAssignmentMode;
   includePositionInfo: boolean;
+  endCheckpoint: boolean;
   teamIds: { allTeamIds: readonly string[]; shillTeamIds: readonly string[] };
   teamProfiles: Readonly<Record<string, CpuShillProfile>>;
 }): CpuShillAuctionSession {
@@ -545,8 +583,9 @@ function buildSession(input: {
         nominationOrderSeed: input.caseSeed,
         nominationWeightExponent: input.kind === 'MLB' ? 2 : 3,
         flatReserveFloor: input.kind === 'FARM' ? LEAGUE_MINIMUM_SALARY : undefined,
-        cpuShillCount: SHILL_TEAM_COUNT,
+        cpuShillCount: input.teamIds.shillTeamIds.length,
         excludeFromLeague: true,
+        ...(input.endCheckpoint ? { nonCompletingTeamIds: [...input.teamIds.shillTeamIds] } : {}),
       },
     }) as CpuShillAuctionSession),
     cpuShills: input.teamProfiles,
@@ -622,12 +661,19 @@ function buildTeamProfiles(
   shillTeamIds: readonly string[],
   mode: TeamProfileAssignmentMode,
   seed: string,
+  shillMaxWins?: number,
 ): Record<string, CpuShillProfile> {
   const shillSet = new Set(shillTeamIds);
   return Object.fromEntries(allTeamIds.map((teamId, index) => {
-    const personality = personalityForTeam(teamId, index, shillSet.has(teamId), mode, seed);
-    const bandPriorities = bandPrioritiesForTeam(teamId, index, shillSet.has(teamId), mode, seed);
-    return [teamId, { teamId, personality, bandPriorities }];
+    const isShill = shillSet.has(teamId);
+    const personality = personalityForTeam(teamId, index, isShill, mode, seed);
+    const bandPriorities = bandPrioritiesForTeam(teamId, index, isShill, mode, seed);
+    return [teamId, {
+      teamId,
+      personality,
+      bandPriorities,
+      ...(isShill && shillMaxWins != null ? { shillMaxWins } : {}),
+    }];
   }));
 }
 

@@ -21,7 +21,7 @@ import {
   leagueIdFromSearch,
   resolveInitialLeagueId,
 } from "../utils/draftRouting";
-import { scaledShillDefault } from "../../../data/auctionEngineConstants";
+import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
@@ -32,7 +32,9 @@ import {
   computePlayerGrade,
   lockLeaguePool,
   unlockLeaguePool,
-  evaluatePoolSufficiency,
+  evaluatePoolDemandSufficiency,
+  evaluatePoolComposition,
+  type PoolCompositionReport,
 } from "../../../utils/leagueBuilderPoolBuilder";
 import { getAuctionSession, type PitchType, type Player, type Position } from "../../../utils/leagueBuilderStorage";
 import type { RegisteredPool } from "../../../engines/leagueConstruction";
@@ -324,12 +326,33 @@ export function LeagueBuilderDraftSetup() {
       .sort((a, b) => playerName(a).localeCompare(playerName(b)));
   }, [availablePlayers, availSearch, availPosition]);
 
-  const estimatedShills = league ? scaledShillDefault(league.teamIds.length) : 0;
-  const draftingParticipantCount = (league?.teamIds.length ?? 0) + estimatedShills;
+  // FABLE-C3: the sim-backed shill default (0 humans known at this layer → full-pressure sizing,
+  // the conservative basis) + the market-clearing sufficiency (shills demand their expected WINS,
+  // not 22 phantom seats — the end-checkpoint semantics).
+  const estimatedShills = league ? recommendedShillCount(0, league.teamIds.length).count : 0;
   const sufficiency = useMemo(
-    () => evaluatePoolSufficiency(inPoolPlayers.length, draftingParticipantCount),
-    [draftingParticipantCount, inPoolPlayers.length],
+    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, estimatedShills),
+    [league?.teamIds.length, estimatedShills, inPoolPlayers.length],
   );
+
+  // FABLE-C3 (audit POOL-01): composition intelligence rides the REGISTERED (locked) snapshot.
+  const [composition, setComposition] = useState<PoolCompositionReport | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setComposition(null);
+    if (!activeLeagueId || !locked) return;
+    void (async () => {
+      try {
+        const report = await evaluatePoolComposition(activeLeagueId, estimatedShills);
+        if (!cancelled) setComposition(report);
+      } catch {
+        if (!cancelled) setComposition(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId, locked, estimatedShills]);
 
   // Auto-import from branded teams on first open (JK ruling): reconcile EVERY rostered player
   // into a league assignment so the pool the user SEES equals the pool the lock FREEZES (the UI
@@ -619,6 +642,7 @@ export function LeagueBuilderDraftSetup() {
               {sufficiency.meetsFloor
                 ? ` · surplus ${sufficiency.surplus >= 0 ? "+" : ""}${sufficiency.surplus}`
                 : ` · need ${-sufficiency.surplus} more`}
+              {` · recommended ${sufficiency.targetSize}`}
             </div>
             {sufficiency.overSupplyWarning && (
               <div className="text-xs text-[#C4A853]">
@@ -633,6 +657,38 @@ export function LeagueBuilderDraftSetup() {
               <Download className="w-4 h-4" /> Import from branded teams
             </button>
           </div>
+
+          {/* FABLE-C3: archetype market outlook (locked-pool composition intelligence) */}
+          {composition && (
+            <div className="mb-6 border-4 border-[#5A8352] bg-[#2e3f30] p-4">
+              <div className="text-sm font-bold text-[#E8E8D8] mb-2">
+                Archetype market outlook — {composition.outlooks.filter((o) => o.pIdentityCompletion >= 0.9).length} of{" "}
+                {composition.outlooks.length} archetypes look buildable in a contested draft
+              </div>
+              <div className="grid gap-1">
+                {[...composition.outlooks]
+                  .sort((a, b) => a.pIdentityCompletion - b.pIdentityCompletion)
+                  .slice(0, 6)
+                  .map((outlook) => (
+                    <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
+                      <span
+                        className={`font-bold ${
+                          outlook.pIdentityCompletion >= 0.9
+                            ? "text-[#9Fe09F]"
+                            : outlook.pIdentityCompletion >= 0.6
+                              ? "text-[#C4A853]"
+                              : "text-red-300"
+                        }`}
+                      >
+                        {Math.round(outlook.pIdentityCompletion * 100)}%
+                      </span>
+                      <span className="text-[#E8E8D8]">{outlook.archetypeName}</span>
+                      {outlook.note && <span className="text-[#A8B8A0]">{outlook.note}</span>}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-4">

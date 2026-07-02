@@ -19,6 +19,7 @@ import {
   type CpuShillAuctionSession,
   type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
+import { SIZING_TUNING } from "../../../engines/auctionPoolSizing";
 import {
   classifyCpuTeams,
   deriveShillTeamIds,
@@ -105,6 +106,38 @@ function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSess
     throw new Error(`Auction transition rejected: ${result.reason}`);
   }
   return result.session as CpuShillAuctionSession;
+}
+
+/**
+ * FABLE-C3-FIX F3: the pool-aware strand law can reject a CPU's chosen bid mid-auto-advance; a
+ * CPU converts exactly that rejection into its PASS (the sweep harness's
+ * recordBidOrPassIfStranded semantics) so the draft keeps moving. Humans keep the rejection — it
+ * surfaces as UI feedback, never a silent pass. Every OTHER rejection reason passes through
+ * untouched (and still throws upstream). Pure and exported for direct testing.
+ */
+export function strandSafeBidTransition(
+  current: CpuShillAuctionSession,
+  teamId: string,
+  amount: number,
+  isCpuActor: boolean,
+): AuctionTransitionResult {
+  const attempt = recordBid(current, teamId, amount);
+  if (!attempt.ok && attempt.reason === "bid-strands-roster" && isCpuActor) {
+    return passBid(current, teamId);
+  }
+  return attempt;
+}
+
+/** The lone-survivor equivalent of `strandSafeBidTransition` (FABLE-C3-FIX F3). */
+export function strandSafeClaimTransition(
+  current: CpuShillAuctionSession,
+  isCpuClaimant: boolean,
+): AuctionTransitionResult {
+  const attempt = claimLoneSurvivor(current);
+  if (!attempt.ok && attempt.reason === "bid-strands-roster" && isCpuClaimant) {
+    return passLoneSurvivorOut(current);
+  }
+  return attempt;
 }
 
 export function teamDisplayName(team: Team | null | undefined): string {
@@ -195,7 +228,11 @@ function shillTeamId(leagueId: string, index: number): string {
 function buildPureShillProfiles(leagueId: string, count: number): Record<string, CpuShillProfile> {
   return Object.fromEntries(Array.from({ length: count }, (_, index) => {
     const teamId = shillTeamId(leagueId, index);
-    return [teamId, buildArchetypeShillProfile(teamId, `${leagueId}:shill-archetype`)];
+    return [teamId, {
+      ...buildArchetypeShillProfile(teamId, `${leagueId}:shill-archetype`),
+      // FABLE-C3: cap shill appetite — uncapped end-checkpoint shills hoard ~a full roster.
+      shillMaxWins: SIZING_TUNING.winsPerShill,
+    }];
   }));
 }
 
@@ -417,14 +454,12 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       getRoster: leagueData.getRoster,
     });
     const explicitShillCount = Math.max(0, partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount);
-    const teams = [
-      ...realTeams,
-      ...buildPureShillAuctionTeams({
-        leagueId,
-        count: explicitShillCount,
-        budget: pool.tierCap,
-      }),
-    ];
+    const shillTeams = buildPureShillAuctionTeams({
+      leagueId,
+      count: explicitShillCount,
+      budget: pool.tierCap,
+    });
+    const teams = [...realTeams, ...shillTeams];
     // FABLE-C1: position-enriched players power the machine's own_need strand guard (spec §5).
     const players = await buildAuctionPlayersWithPositions(pool);
     const config: AuctionSetupConfig = {
@@ -438,6 +473,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       turnTimerSeconds: partialConfig.turnTimerSeconds ?? null,
       excludeFromLeague: partialConfig.excludeFromLeague ?? true,
       nominationWeightExponent: 2,
+      // FABLE-C3 end-checkpoint (audit FS-3): pure-pressure shills never need to COMPLETE a
+      // roster — the draft ends when every REAL team is full, shills can't be force-filled, and
+      // the pool no longer has to carry 22 phantom seats per shill.
+      nonCompletingTeamIds: shillTeams.map((team) => team.teamId),
     };
     const nextContext = { leagueId, seasonNumber: MLB_AUCTION_SEASON };
     const initialized = {
@@ -464,14 +503,24 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     return autoAdvanceCpu(transitioned, context, leagueTeams);
   }), [autoAdvanceCpu, context, leagueTeams, persist, runAction, session]);
 
-  const bid = useCallback((teamId: string, amount: number) => runSessionTransition((current) => recordBid(current, teamId, amount)), [runSessionTransition]);
+  const bid = useCallback(
+    (teamId: string, amount: number) =>
+      runSessionTransition((current) => strandSafeBidTransition(current, teamId, amount, cpuTeamIdSet.has(teamId))),
+    [cpuTeamIdSet, runSessionTransition],
+  );
   const pass = useCallback((teamId: string) => runSessionTransition((current) => {
     if (current.state === "RESOLVE" && current.pendingClaim?.teamId === teamId) {
       return passLoneSurvivorOut(current);
     }
     return passBid(current, teamId);
   }), [runSessionTransition]);
-  const claimAtReserve = useCallback(() => runSessionTransition((current) => claimLoneSurvivor(current)), [runSessionTransition]);
+  const claimAtReserve = useCallback(
+    () =>
+      runSessionTransition((current) =>
+        strandSafeClaimTransition(current, cpuTeamIdSet.has(current.pendingClaim?.teamId ?? "")),
+      ),
+    [cpuTeamIdSet, runSessionTransition],
+  );
   const resolve = useCallback(() => runSessionTransition((current) => resolveLot(current)), [runSessionTransition]);
   const advance = useCallback(() => runSessionTransition((current) => advanceLot(current)), [runSessionTransition]);
 

@@ -13,10 +13,13 @@ import {
   type BandPriorities,
 } from './leagueConstruction';
 import {
+  servesOwnTightClass,
   sessionBidCeiling,
+  wouldStarveJointDemand,
   type AuctionPlayer,
   type AuctionSession,
 } from './auctionStateMachine';
+import { playerFillsHardRequirement, teamRosterNeed } from './rosterNeed';
 
 export type CpuShillPersonality = 'sniper' | 'spender' | 'zealot';
 
@@ -31,6 +34,12 @@ export interface CpuShillProfile {
    * 24 (JK ruling 2026-07-01). Optional/additive on persisted sessions.
    */
   archetypeId?: string;
+  /**
+   * FABLE-C3 aggression cap: a shill stops bidding once it has won this many players. Uncapped
+   * (absent) shills empirically hoard ~a full roster (~21 wins) under the end-checkpoint — the
+   * cap keeps them price-pressure, not a competing franchise. Additive/optional.
+   */
+  shillMaxWins?: number;
   personalityBias?: number;
   interestAggression?: number;
   maxInterestProbability?: number;
@@ -261,10 +270,60 @@ export function bargainInterestProbability(lot: CpuInterestLot, shill: CpuShillP
   return clamp(base * resolved.interestAggression * budgetFactor, 0, resolved.maxInterestProbability);
 }
 
+/** FABLE-C3: opt-in bidding refinements for COMPLETING CPU teams (never pure-pressure shills). */
+export interface CpuBidOptions {
+  /**
+   * The need-aware endgame override: once every remaining roster slot is spoken for by a hard
+   * requirement, a completing team never PASSES an affordable player who fills one — passing is
+   * permanent in this auction, and need-blind passes can wedge a full-CPU draft by draining the
+   * pool's needed classes while wrong-class surplus remains (FABLE-C3 sweep finding).
+   */
+  needAwareCompletion?: boolean;
+}
+
+/**
+ * True when the need-aware override should force a bid/claim: the team is COMPLETING (not an
+ * end-checkpoint shill), every remaining slot is a hard requirement, this candidate fills one,
+ * and the price fits under the completion ceiling. Permissive-fallback on missing position info.
+ */
+function needOverrideApplies(
+  session: CpuShillAuctionSession,
+  team: { teamId: string; rosterSlotsRemaining: number; roster: readonly { playerId: string }[] },
+  playerId: string,
+  price: number,
+  maxBid: number,
+  options: CpuBidOptions | undefined,
+): boolean {
+  if (!options?.needAwareCompletion) return false;
+  if (price > maxBid) return false;
+  if (session.config.nonCompletingTeamIds?.includes(team.teamId)) return false;
+  const candidateShape = session.players[playerId]?.pos;
+  if (!candidateShape) return false;
+  const positions: Record<string, NonNullable<AuctionPlayer['pos']>> = { [playerId]: candidateShape };
+  for (const assignment of team.roster) {
+    const shape = session.players[assignment.playerId]?.pos;
+    if (!shape) return false;
+    positions[assignment.playerId] = shape;
+  }
+  const need = teamRosterNeed(team.roster.map((assignment) => assignment.playerId), positions);
+  if (need === null) return false;
+  if (!playerFillsHardRequirement(candidateShape, need)) return false;
+
+  // Trigger 1 — endgame-tight: every remaining slot is spoken for by a hard requirement.
+  if (need.minimumAdditions >= team.rosterSlotsRemaining) return true;
+
+  // Trigger 2 — CLASS scarcity (FABLE-C3 sweep findings rounds 2-4): needed classes get consumed
+  // by rival sales long before a team is endgame-tight. The exact signal: this candidate serves a
+  // class whose remaining supply is below MY OWN demand for it — grab now, passing is permanent.
+  // (Fungible needs with plentiful substitutes deliberately never trigger this.)
+  return servesOwnTightClass(session, team.teamId, playerId);
+}
+
 export function cpuBidOnLot(
   session: CpuShillAuctionSession,
   shillTeamId: string,
   seed: string,
+  options?: CpuBidOptions,
 ): CpuBidOnLotDecision {
   if (session.state !== 'OPEN_BIDDING') {
     return passDecision(shillTeamId, null, 'not-open-bidding', null, null, null, null);
@@ -291,6 +350,9 @@ export function cpuBidOnLot(
   if (team.rosterSlotsRemaining <= 0) {
     return passDecision(shillTeamId, playerId, 'team-full', null, null, null, shill.personality);
   }
+  if (shill.shillMaxWins != null && team.roster.length >= shill.shillMaxWins) {
+    return passDecision(shillTeamId, playerId, 'team-full', null, null, null, shill.personality);
+  }
 
   const player = session.players[playerId] as CpuShillAuctionPlayer | undefined;
   if (player === undefined) {
@@ -304,10 +366,17 @@ export function cpuBidOnLot(
   if (minimumBid > maxBid) {
     return passDecision(shillTeamId, playerId, 'over-budget', minimumBid, maxBid, valuation, shill.personality);
   }
-  if (minimumBid >= valuation) {
+  const mustBuy = needOverrideApplies(session, team, playerId, minimumBid, maxBid, options);
+  // The flex-absorption politeness (FABLE-C3 sweep finding round 3): a CPU never SNIPES into a
+  // jointly-tight class it doesn't need — legal for humans, but blind CPU sniping at the tail
+  // starves rivals' floors and wedges the draft. Opt-in with the same need-aware flag.
+  if (!mustBuy && options?.needAwareCompletion && wouldStarveJointDemand(session, shillTeamId, playerId)) {
+    return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, maxBid, valuation, shill.personality);
+  }
+  if (!mustBuy && minimumBid >= valuation) {
     return passDecision(shillTeamId, playerId, 'over-valuation', minimumBid, maxBid, valuation, shill.personality);
   }
-  if (!evaluateCpuInterest({ playerId, currentAsk: minimumBid, valuation, maxBid }, shill, seed)) {
+  if (!mustBuy && !evaluateCpuInterest({ playerId, currentAsk: minimumBid, valuation, maxBid }, shill, seed)) {
     return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, maxBid, valuation, shill.personality);
   }
 
@@ -327,6 +396,7 @@ export function cpuDecideLoneSurvivor(
   session: CpuShillAuctionSession,
   teamId: string,
   seed: string,
+  options?: CpuBidOptions,
 ): CpuLoneSurvivorDecision {
   if (session.state !== 'RESOLVE') {
     return loneSurvivorPassDecision(teamId, null, 'not-resolve', null, null);
@@ -345,6 +415,9 @@ export function cpuDecideLoneSurvivor(
   if (team === null || team.rosterSlotsRemaining <= 0) {
     return loneSurvivorPassDecision(teamId, claim.playerId, 'team-full', null, null);
   }
+  if (shill.shillMaxWins != null && team.roster.length >= shill.shillMaxWins) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'team-full', null, null);
+  }
 
   const player = session.players[claim.playerId] as CpuShillAuctionPlayer | undefined;
   if (player === undefined) {
@@ -358,7 +431,8 @@ export function cpuDecideLoneSurvivor(
   if (price > maxBid) {
     return loneSurvivorPassDecision(teamId, claim.playerId, 'over-budget', valuation, maxBid);
   }
-  if (valuation <= price) {
+  const mustBuy = needOverrideApplies(session, team, claim.playerId, price, maxBid, options);
+  if (!mustBuy && valuation <= price) {
     return loneSurvivorPassDecision(teamId, claim.playerId, 'over-valuation', valuation, maxBid);
   }
 
