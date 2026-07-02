@@ -26490,3 +26490,33 @@ The point: a scout hired BEFORE the draft makes the in-auction guide actually us
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: DRAFT-STAFF-GUIDE-WIRE ===== -->
+
+<!-- ===== CONTRACT: C1-AUDIT ===== -->
+
+# C1-AUDIT: adversarial cross-model math review of the FABLE-C1 diff (ruling 5b)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. Operate in `/Users/johnkruse/Projects/kbl-tracker` on the UNCOMMITTED FABLE-C1 working-tree diff (branch `experiment/manager-wpa-window`, HEAD `aa87ee93`). **READ-ONLY: do NOT modify any file, do NOT `git add`, do NOT commit, do NOT run the build or tests** — this is a static adversarial code review. Opus runs the build/suite/L-SIM gate separately.
+
+**ROLE:** Adversarial math auditor — the cross-model (different-blind-spots) screen per JK ruling 5b (2026-07-01). Fable built this diff; you did NOT — your job is to try to REFUTE its correctness, not to bless it.
+
+**GOAL:** Find any case where the NOVEL MATH in the C1 diff is WRONG. Read the actual diff (`git --no-pager diff` for modified files + read the new files) and adversarially attack these four properties. For each, construct a concrete counterexample if one exists:
+
+1. **Legality v2 (ratified Ruling A) — `src/data/rosterConstruction.ts`.** The ratified two-tier model (DECISIONS_LOG 2026-07-01 Ruling A + expansion): the EIGHT starting field positions are PRIMARY-position HARD (a player's secondary position does NOT satisfy a starting spot); CATCHER DEPTH ≥2 is satisfied by a second player who is primary-C OR secondary-C OR a Two-Way(C) pitcher (at least one being the primary-C starter); depth-2 at OTHER positions is a SOFT advisor tier, NEVER a hard block; 22-man shape (13–14 position + 8–9 pitchers, 4 SP). Attack: can an ILLEGAL roster pass `isLegalRoster`/`canCover`/`depthReport`? Can a roster that is LEGAL under Ruling A be REJECTED (e.g., a valid Two-Way(C) or secondary-C backup catcher not counted; a soft depth gap treated as a hard fail)? Is the starting-eight primary-only rule actually enforced (not accidentally relaxed to secondary)?
+
+2. **own_need + strand guard — `src/engines/rosterNeed.ts` + `src/engines/auctionStateMachine.ts`.** The `'bid-strands-roster'` rejection in `recordBid`/`claimLoneSurvivor` and the minimal-additions need math. Attack: can the guard REJECT a bid that would still leave the team able to complete a legal roster from cheapest players left at each remaining required position (a false strand)? Can it ALLOW a bid that actually strands the roster (a missed strand — a team that then cannot fill a required position/backup-C within budget)? Check the position accounting and the budget/cheapest-completion arithmetic. Confirm `AuctionPlayer.pos` optionality falls back safely (old sessions / farm path) as claimed.
+
+3. **Identity objective + embodiment — `src/engines/archetypeBalanceSimulator.ts`.** The new `buildIdentityRoster`/postures/embodiment must maximize archetype-boosted-area coverage subject to a value floor + legality — NOT Σ IV. Confirm `buildBestRoster` is genuinely UNTOUCHED (additive-only). Attack: does the identity objective actually raise the boosted-area z-score above the pool mean for the archetypes, or can it degenerate (e.g., pick pitching-heavy for an offense identity, the documented confound)? Does the value-floor guard prevent a nonsense low-value roster? Are the postures (conservative/optimal/aggressive) coherent?
+
+4. **Snipe-test / draftability — `src/engines/draftabilityRanker.ts`.** The draftability verdicts + fielding sweep vs the ratified snipe-test formula (DECISIONS_LOG 2026-07-01). Attack: wrong verdict at the boundary; fielding sweep mis-ranking; off-by-one or inverted comparison.
+
+**SOURCE OF TRUTH (re-read from the repo, do not trust this summary):** `spec-docs/DECISIONS_LOG.md` (2026-07-01 Ruling A + expansion, snipe-test formula, the C1 rulings); `spec-docs/FABLE_C1_DESIGN_2026-07-01.md` (§6 AS-BUILT); `spec-docs/SCOUTING_INTELLIGENCE_SPEC.md` §5 (own_need). The actual diff is the ground truth.
+
+**CONSTRAINTS:** READ-ONLY (no writes/commits/build/test). Cite `file:line` for every claim. Be adversarial — if you cannot prove a property correct, mark it SUSPECT with the specific doubt, don't wave it through. Ignore style/naming; correctness only.
+
+**EXPECTED OUTPUT (print to stdout):** an overall verdict — `CLEAN` (no correctness defect found after genuine attack) or `DEFECTS FOUND` — then, per defect: the property (1–4), `file:line`, a concrete failing input→wrong-output case, and severity (CRITICAL breaks legality/strand/embodiment · MAJOR degrades · MINOR). If clean, briefly state what you attacked and why each property holds.
+
+**FAILURE PROTOCOL:** if a property can't be evaluated from the diff (missing context), mark it UNVERIFIED with what's missing — do not assert either way.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: C1-AUDIT ===== -->
