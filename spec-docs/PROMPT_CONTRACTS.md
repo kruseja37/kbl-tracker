@@ -26520,3 +26520,32 @@ Use xhigh reasoning effort.
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: C1-AUDIT ===== -->
+
+<!-- ===== CONTRACT: C1-AUDIT-R2 ===== -->
+
+# C1-AUDIT-R2: adversarial RE-review of the FABLE-C1 FIX round (ruling 5b, round 2)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. Operate in `/Users/johnkruse/Projects/kbl-tracker` on the UNCOMMITTED FABLE-C1 working-tree diff (trunk HEAD `3f3edbdd`). **READ-ONLY: no writes, no `git add`, no commit, no build/test.** Opus runs the gate separately.
+
+**ROLE:** Adversarial math auditor, cross-model second lens (ruling 5b), round 2. The C1-AUDIT round-1 pass found 5 issues; Fable has now applied fixes. Your job: (a) confirm each fix ACTUALLY holds, (b) verify the fixes did NOT introduce NEW defects (the identity path was substantially rewritten), (c) re-attack the four correctness properties fresh. Do not assume the fixes are correct because they exist — try to break them.
+
+**FIXES TO VERIFY (round-1 finding → claimed fix; find any hole):**
+- **F3 (was CRITICAL): identity builder + draftability must honor Ruling-A backup-C.** Claimed fix: a new `IDENTITY_SLOT_PLAN` + `identityEligible` in `src/engines/archetypeBalanceSimulator.ts` (~:492,:519) that use `canCover` (secondary-C hitters + Two-Way(C) arms under the 9-pitcher ceiling); legality folded into the climb's violation term; `draftabilityRanker` C-coverage banning uses `canCover`. VERIFY: can a roster legal under Ruling A (backup-C via secondary-C or Two-Way(C)) now be BUILT and NOT marked LOCKED? Does `identityEligible` still HARD-require primary position for the 8 STARTING spots (must NOT relax those to secondary)? Does the Two-Way(C)-as-backup-C respect the 8-9 pitcher ceiling / 13-14 hitter bounds?
+- **F3-adjacent (self-caught): the two-candidate chooser now requires legal-22 ∧ solvent ∧ floor.** VERIFY: can an ILLEGAL or SHORT (non-22) candidate still win on raw fit anywhere?
+- **F4 (was CRITICAL): SP/RP swing assignment.** Claimed fix: pure-first arm assignment in the identity greedy (claimed provably-optimal swing split); the 4-pure-SP + 4-SP/RP case now builds a legal staff. VERIFY: attack the arm split — any pool of {pure SP, pure RP, CP, SP/RP} counts where a legal 4-SP/4-RP staff exists but the greedy+climb still fails to find it?
+- **F5 (was MAJOR): snipe-test bullpen.** Claimed fix: `banSnipeTargets` bans the used relief corps for PEN_-boosted archetypes + C-coverage banning uses `canCover`. VERIFY on `nasty-boys`/`the-opener` (`historicalArchetypes.ts`): are elite RP/CP now banned for those; are non-bullpen archetypes unaffected?
+- **F2 (resolved by ruling): pitcher primaries are EXACTLY {SP,SP/RP,RP,CP}; 'P'/'TWO-WAY' are invalid states** (DECISIONS_LOG 2026-07-01 "clarification 2"). The aligned need-math keeps defensive handling. VERIFY: the need-math's treatment of an unexpected primary is safe (no crash / no silently-illegal count).
+
+**ALSO CHECK (regression from the rewrite):** the FROZEN value-max machinery (`buildBestRoster` + the OLD `SLOT_PLAN`/`eligible`) must be BYTE-STABLE (additive only — the identity path is separate). Confirm no behavioral change leaked into the value-max path or the frozen `historicalArchetypes` parity oracle. The new `DRAFTABILITY_TUNING.minEmbodimentZ` (default 0) must not change default behavior.
+
+**SOURCE OF TRUTH (re-read from repo):** `spec-docs/DECISIONS_LOG.md` (Ruling A + expansion + clarification 2 + snipe-test formula); `spec-docs/FABLE_C1_DESIGN_2026-07-01.md` §7 (fix round); `spec-docs/SCOUTING_INTELLIGENCE_SPEC.md` §5. The actual diff is ground truth.
+
+**CONSTRAINTS:** READ-ONLY. Cite `file:line` for every claim. Adversarial — mark SUSPECT if you can't prove a property; don't wave fixes through. Correctness only.
+
+**EXPECTED OUTPUT (stdout):** overall verdict `CLEAN` or `DEFECTS FOUND`; then per remaining/new defect: property, `file:line`, concrete failing input→wrong-output, severity. If clean, per-fix state what you attacked and why it holds, and confirm the value-max path is byte-stable.
+
+**FAILURE PROTOCOL:** if a property can't be evaluated from the diff, mark UNVERIFIED with what's missing.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: C1-AUDIT-R2 ===== -->

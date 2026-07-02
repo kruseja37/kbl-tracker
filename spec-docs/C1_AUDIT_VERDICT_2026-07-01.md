@@ -48,3 +48,27 @@
 2. Re-run the Codex adversarial pass (C1-AUDIT) on the fixed diff.
 3. Opus runs the full gate (build + FULL suite ZERO-NEW-REDS + L-SIM legs, 60g LAST, byte-identical) on the fixed diff.
 4. On clean Codex + clean gate → Opus commits C1 (branch-only). Then Fable's C1B (pool extractor) fires.
+
+---
+
+# ROUND 2 — re-audit of Fable's fix round (Codex C1-AUDIT-R2 + Opus verification)
+
+**VERDICT: BLOCK (again) — round-1 fixes all CONFIRMED, but 2 NEW CRITICAL edge cases the fixes exposed.** As-of the uncommitted fix diff (trunk `3f3edbdd`). Opus gate still DEFERRED until Codex is clean.
+
+**Round-1 fixes CONFIRMED (Codex + Opus):** F3 (identity path honors `canCover` for backup-C; starting-eight stays primary-only), F4 (pure-first arm split builds the 4-SP+4-SP/RP legal staff), F5 (snipe-test bans the used relief corps for PEN_-boosted archetypes; non-bullpen unaffected), F2 (unknown-primary handling no longer credits invalid 'P'/'TWO-WAY' arms). Value-max machinery behavior-stable (comments/types changed, bodies stable).
+
+## R2-2 — MUST-FIX (CRITICAL): the position strand guard has a hole on the forced no-bid filler path
+`bidWouldStrand`/`wouldStrandRoster` is applied to `recordBid` (`auctionStateMachine.ts:335`) and `claimLoneSurvivor` (`:407`), but NOT to the forced no-bid filler: `selectForcedFillerTeam` (`:539-553`) filters eligible teams by `rosterSlotsRemaining > 0` + `auctionMaxBid >= openingAsk` (solvency) only. So a forced sale can hand a team a wrong-position player and complete an ILLEGAL 22-roster in the LIVE auction (Codex counterexample: team at 21/22, one open slot, only one C-coverer, current lot a non-C hitter, all pass). The `:528-530` comment shows the COUNT-strand is handled but not the POSITION-strand.
+**Fix:** add the strand guard to `selectForcedFillerTeam`'s eligible filter (prefer a non-stranding team); if EVERY eligible team would strand, leave the lot unsold / flag (the fully-stranded case is a C3 pool-sizing concern, not a force-an-illegal-roster moment). Add a regression test.
+
+## R2-1 — CONFIRMED (CRITICAL per Codex; Opus severity: narrow/advisory): identity builder can't build the Two-Way(C) double-duty shape
+`IDENTITY_SLOT_PLAN` (`archetypeBalanceSimulator.ts:492-499`) has a dedicated `backupC` slot AND 4 separate `rp` slots — DISJOINT bodies. `identityEligible` (`:526-531`) lets a Two-Way(C) pitcher fill `backupC`, consuming it, so it can't ALSO fill an `rp` slot. But `isLegalRoster` lets ONE Two-Way(C) satisfy BOTH catcher-depth AND the reliever count simultaneously (14h/8p shape: 4 SP + 3 RP + 1 Two-Way(C) RP that double-covers). So `buildIdentityRoster` returns 21/non-legal and `rankArchettypeDraftability` can mark such an archetype LOCKED though a legal roster exists.
+**Opus severity note:** impact is the ADVISORY draftability/embodiment surface (a false LOCKED), NOT an illegal live roster; and it needs a specific pool (a Two-Way(C) needed for double-duty). **JK SCOPE CALL:** fix in round 3 (let a Two-Way(C) satisfy `backupC` AND count toward a reliever slot), OR accept as a documented v1 limitation (advisory-only, narrow) and revisit post-v1.
+
+## PROCESS NOTE
+This is the 2nd fix round. R2-2 is a clear correctness must-fix (illegal live roster). R2-1 is a narrow advisory edge — surfaced to JK to avoid an open-ended refinement loop on ever-narrower cases.
+
+## NEXT
+1. JK rules R2-1 disposition (fix vs document).
+2. Fable round 3: fix R2-2 (+ R2-1 if JK says fix). Same 12-path surface.
+3. Codex C1-AUDIT-R3 → Opus full gate (build + suite + L-SIM 60g LAST) → commit → C1B fires.
