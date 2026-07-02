@@ -6,6 +6,7 @@ import './index.css'
 import './src_figma/styles/franchise-theme.css'
 import './src_figma/styles/auction-theme.css'
 import './src_figma/styles/fenway-theme.css'
+import './src_figma/styles/ballpark-kit.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(

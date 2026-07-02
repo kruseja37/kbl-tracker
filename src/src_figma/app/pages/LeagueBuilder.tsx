@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Database, Users, User, Folder, Shuffle, Settings, ArrowLeft, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
+import { Database, Users, User, Folder, Shuffle, Settings, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 import { farmDraftRouteForLeague } from "../utils/draftRouting";
+import { BallparkShell } from "../components/ballpark";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
@@ -57,20 +58,7 @@ export function LeagueBuilder() {
   };
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={() => navigate("/")}
-            className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-          >
-            <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-          </button>
-          <div className="bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-            <h1 className="text-2xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>LEAGUE BUILDER</h1>
-          </div>
-        </div>
+    <BallparkShell onBack={() => navigate("/")} title="LEAGUE BUILDER">
 
         {/* Database Import Banners */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -272,8 +260,7 @@ export function LeagueBuilder() {
             <span className="text-[#E8E8D8] font-bold text-base tracking-wide" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>+ CREATE NEW LEAGUE</span>
           </button>
         </div>
-      </div>
-    </div>
+    </BallparkShell>
   );
 }
 

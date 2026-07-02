@@ -9,7 +9,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
-  ArrowLeft,
   Users,
   Plus,
   Trash2,
@@ -23,6 +22,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import { BallparkShell } from "../components/ballpark";
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import type { EraFlavor, TeamRivalry } from "../../../utils/leagueBuilderStorage";
 import type { ManagerAssignment, ManagerProfile } from "../../../types/managerWpa";
@@ -975,29 +975,18 @@ export function LeagueBuilderTeams() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={() => navigate("/league-builder")}
-            className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-          >
-            <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-          </button>
-          <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-            <Users className="w-6 h-6" style={{ color: "#5599FF" }} />
-            <h1
-              className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
-              style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
-            >
-              TEAMS
-            </h1>
-          </div>
-          <div className="ml-auto text-sm text-[#E8E8D8]/70">{teams.length} teams</div>
+    <BallparkShell
+      onBack={() => navigate("/league-builder")}
+      icon={Users}
+      iconColor="#5599FF"
+      title="TEAMS"
+      rightSlot={
+        <div className="ml-auto text-sm text-[#E8E8D8]/70">
+          {teams.length} teams
         </div>
-
-        {/* Error Display */}
+      }
+    >
+      {/* Error Display */}
         {(error || saveError) && (
           <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
@@ -1120,8 +1109,6 @@ export function LeagueBuilderTeams() {
             })}
           </div>
         )}
-      </div>
-
       {/* Create/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -2183,6 +2170,6 @@ export function LeagueBuilderTeams() {
           </div>
         </div>
       )}
-    </div>
+    </BallparkShell>
   );
 }

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { ArrowLeft, Folder, Users, ChevronRight, Save, RotateCcw } from "lucide-react";
+import { Folder, Users, ChevronRight, Save, RotateCcw } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import {
   useLeagueBuilderData,
@@ -31,6 +31,7 @@ import type {
 } from "../../../types/managerWpa";
 import type { RosterAnalyzerReport } from "../../../engines/rosterAnalyzerEngine";
 import { OptimalLineupComparisonPanel } from "../components/OptimalLineupComparisonPanel";
+import { BallparkShell } from "../components/ballpark";
 
 type TabType = "roster" | "lineup" | "rotation" | "depth";
 
@@ -355,43 +356,30 @@ export function LeagueBuilderRosters() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/league-builder")}
-              className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+    <BallparkShell
+      onBack={() => navigate("/league-builder")}
+      icon={Folder}
+      iconColor="#0066FF"
+      title="ROSTERS"
+      maxWidthClassName="max-w-7xl"
+      rightSlot={
+        <>
+          {/* League Selector */}
+          {leagues.length > 1 && (
+            <select
+              value={activeLeagueId}
+              onChange={(e) => setActiveLeagueId(e.target.value)}
+              className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
             >
-              <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-            </button>
-            <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-              <Folder className="w-6 h-6" style={{ color: "#0066FF" }} />
-              <h1
-                className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
-                style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
-              >
-                ROSTERS
-              </h1>
-            </div>
-            {/* League Selector */}
-            {leagues.length > 1 && (
-              <select
-                value={activeLeagueId}
-                onChange={(e) => setActiveLeagueId(e.target.value)}
-                className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
-              >
-                {leagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.name.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+              {leagues.map((league) => (
+                <option key={league.id} value={league.id}>
+                  {league.name.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          )}
           {selectedTeamId && hasChanges && (
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={handleRevert}
                 className="flex items-center gap-2 px-4 py-2 bg-[#556B55] hover:bg-[#667B66] border-4 border-[#E8E8D8]/50 transition"
@@ -409,9 +397,10 @@ export function LeagueBuilderRosters() {
               </button>
             </div>
           )}
-        </div>
-
-        <div className="grid grid-cols-12 gap-6">
+        </>
+      }
+    >
+      <div className="grid grid-cols-12 gap-6">
           {/* Team List - Left Column */}
           <div className="col-span-3">
             <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
@@ -561,8 +550,7 @@ export function LeagueBuilderRosters() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </BallparkShell>
   );
 }
 
