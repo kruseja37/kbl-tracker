@@ -327,6 +327,14 @@ const IMAGE_DRIVER_SETS: Readonly<Record<string, readonly CanonicalPersonality[]
   'Outside Pitch': ['COMPETITIVE', 'EGOTISTICAL'],
 };
 
+/**
+ * The Composure-negative image-driver axis (Choker is the canonical row) — EXPORTED as the
+ * single-math pin surface for the taxonomy's FRAGILE personality group
+ * (FABLE-TAXONOMY-FIX F2, 2026-07-02). Derived FROM the table, not restated.
+ */
+export const COMPOSURE_NEGATIVE_IMAGE_DRIVERS: readonly CanonicalPersonality[] =
+  IMAGE_DRIVER_SETS['Choker'];
+
 const ROSTER_ROLE_TRAITS = new Set(['Pinch Perfect', 'Utility']);
 
 // §0.6: low-Charisma-driven traits (K Neglector). K Neglector enters BUILDABLE_TRAITS in R1 — dormant until then.

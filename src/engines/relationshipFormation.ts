@@ -307,21 +307,31 @@ function isYoungAge(age: number | null | undefined): boolean {
   return typeof age === 'number' && Number.isFinite(age) && age <= RELATIONSHIP_FORMATION_TUNING.youngAgeMax;
 }
 
+/**
+ * The named personality sets this engine scores with — EXPORTED as the single-math pin
+ * surface for the taxonomy's PERSONALITY_GROUPS (FABLE-TAXONOMY-FIX F2, 2026-07-02):
+ * a test asserts the taxonomy groups equal these sets, so the two can never drift apart.
+ * Values unchanged (pure refactor of the previous inline literals).
+ */
+export const STEADY_PERSONALITIES: readonly CanonicalPersonality[] = ['JOLLY', 'RELAXED', 'TOUGH'];
+export const ANTAGONIST_PERSONALITIES: readonly CanonicalPersonality[] = ['COMPETITIVE', 'EGOTISTICAL', 'TOUGH'];
+
+const STEADY_SET = new Set<CanonicalPersonality>(STEADY_PERSONALITIES);
+const ANTAGONIST_SET = new Set<CanonicalPersonality>(ANTAGONIST_PERSONALITIES);
+
 function personalityClashScore(left: CanonicalPersonality, right: CanonicalPersonality): number {
   if (left === right) return left === 'EGOTISTICAL' ? 0.75 : 0.25;
-  const antagonist = new Set<CanonicalPersonality>(['COMPETITIVE', 'EGOTISTICAL', 'TOUGH']);
   if (left === 'EGOTISTICAL' || right === 'EGOTISTICAL') return 1;
-  return antagonist.has(left) && antagonist.has(right) ? 0.75 : 0;
+  return ANTAGONIST_SET.has(left) && ANTAGONIST_SET.has(right) ? 0.75 : 0;
 }
 
 function personalityCompatibilityScore(left: CanonicalPersonality, right: CanonicalPersonality): number {
   if (left === right) return 1;
-  const steady = new Set<CanonicalPersonality>(['JOLLY', 'RELAXED', 'TOUGH']);
-  return steady.has(left) && steady.has(right) ? 0.75 : 0;
+  return STEADY_SET.has(left) && STEADY_SET.has(right) ? 0.75 : 0;
 }
 
 function mentorshipPersonalityScore(personality: CanonicalPersonality): number {
-  return personality === 'JOLLY' || personality === 'TOUGH' || personality === 'RELAXED' ? 1 : 0;
+  return STEADY_SET.has(personality) ? 1 : 0;
 }
 
 function relationshipIntensity(score: number, potential: boolean): number {

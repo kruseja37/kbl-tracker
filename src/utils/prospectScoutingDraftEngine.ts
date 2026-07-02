@@ -21,6 +21,12 @@ import { TRAIT_OPPOSITES } from '../engines/traitAcquisition';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
 import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
+import {
+  GENERATOR_FAMILIES,
+  type ArchetypeFamilyDefinition,
+  type GeneratorArchetypeFamily,
+  type TaxonomyRole as ArchetypeRole,
+} from '../data/playerArchetypeTaxonomy';
 
 export { prospectSalaryForDraftRound } from './prospectSalary';
 
@@ -422,137 +428,14 @@ const SECONDARY_POSITION_WEIGHTS: Record<FieldingDraftPosition, Array<[Position 
 };
 type RatingTool = keyof PositionPlayerRatings | keyof PitcherRatings;
 type ArchetypeBiasVector = Partial<Record<RatingTool, number>>;
-type ArchetypeRole = 'hitter' | 'pitcher' | 'both';
 
-interface ArchetypeFamilyDefinition {
-  family: string;
-  role: ArchetypeRole;
-  template: ArchetypeBiasVector;
-  positionAffinity: Partial<Record<DraftPosition, number>>;
-  baseWeight?: number;
-}
+// TAXONOMY relocation (2026-07-02, Move 2): the 17 generation families now live in the
+// canonical registry (src/data/playerArchetypeTaxonomy.ts, byte-identical lift) so the
+// reverse classifier and the generator speak one language. Generation behavior is pinned
+// by this module's seeded tests — the registry values must never drift.
+const ARCHETYPE_FAMILIES = GENERATOR_FAMILIES;
 
-const ARCHETYPE_FAMILIES = [
-  {
-    family: 'Slugger',
-    role: 'hitter',
-    template: { power: 1, arm: 0.3, contact: -0.35, speed: -0.55, fielding: -0.25 },
-    positionAffinity: { '1B': 1.55, LF: 1.35, RF: 1.3, '3B': 1.2, C: 0.9, CF: 0.75, SS: 0.7, '2B': 0.75 },
-    baseWeight: 1.1,
-  },
-  {
-    family: 'Pure-Power',
-    role: 'hitter',
-    template: { power: 1, contact: -0.6, speed: -0.45, fielding: -0.3, arm: 0.2 },
-    positionAffinity: { '1B': 1.65, LF: 1.45, RF: 1.35, '3B': 1.25, C: 0.8, CF: 0.65, SS: 0.6, '2B': 0.65 },
-  },
-  {
-    family: 'Power-Speed',
-    role: 'hitter',
-    template: { power: 0.9, speed: 1, arm: 0.25, contact: -0.25, fielding: -0.2 },
-    positionAffinity: { CF: 1.35, LF: 1.25, RF: 1.25, SS: 1.05, '2B': 1.0, '3B': 0.95, '1B': 0.75, C: 0.65 },
-  },
-  {
-    family: 'Five-Tool',
-    role: 'hitter',
-    template: { power: 0.65, contact: 0.65, speed: 0.65, fielding: 0.55, arm: 0.55 },
-    positionAffinity: { CF: 1.35, SS: 1.2, RF: 1.1, '2B': 1.0, '3B': 1.0, LF: 0.95, C: 0.85, '1B': 0.75 },
-    baseWeight: 0.9,
-  },
-  {
-    family: 'Speedster',
-    role: 'hitter',
-    template: { speed: 1, contact: 0.35, fielding: 0.25, power: -0.65, arm: -0.2 },
-    positionAffinity: { CF: 1.6, '2B': 1.3, SS: 1.25, LF: 1.15, RF: 1.0, '3B': 0.75, C: 0.65, '1B': 0.55 },
-  },
-  {
-    family: 'Slap-Hitter',
-    role: 'hitter',
-    template: { contact: 1, speed: 0.55, fielding: 0.2, power: -0.75, arm: -0.25 },
-    positionAffinity: { '2B': 1.45, CF: 1.35, SS: 1.25, LF: 1.1, RF: 0.95, C: 0.8, '3B': 0.75, '1B': 0.65 },
-  },
-  {
-    family: 'Contact-Glove',
-    role: 'hitter',
-    template: { contact: 1, fielding: 0.75, speed: 0.25, power: -0.55, arm: -0.1 },
-    positionAffinity: { '2B': 1.45, SS: 1.35, CF: 1.2, C: 1.05, '3B': 0.95, LF: 0.85, RF: 0.85, '1B': 0.75 },
-  },
-  {
-    family: 'Defensive-Wizard',
-    role: 'hitter',
-    template: { fielding: 1, arm: 0.75, speed: 0.35, power: -0.65, contact: -0.25 },
-    positionAffinity: { C: 1.45, SS: 1.45, CF: 1.35, '2B': 1.25, '3B': 1.1, RF: 1.0, LF: 0.75, '1B': 0.65 },
-  },
-  {
-    family: 'Cannon-Corner',
-    role: 'hitter',
-    template: { arm: 1, power: 0.65, fielding: 0.25, speed: -0.55, contact: -0.25 },
-    positionAffinity: { RF: 1.55, '3B': 1.45, C: 1.25, LF: 1.0, '1B': 0.9, SS: 0.85, CF: 0.8, '2B': 0.75 },
-  },
-  {
-    family: 'Project',
-    role: 'hitter',
-    template: { power: 0.75, speed: 0.6, arm: 0.45, contact: -0.55, fielding: -0.45 },
-    positionAffinity: { '1B': 1.15, LF: 1.1, RF: 1.1, CF: 1.0, '3B': 1.0, C: 0.95, SS: 0.95, '2B': 0.95 },
-    baseWeight: 0.85,
-  },
-  {
-    family: 'Balanced',
-    role: 'both',
-    template: {
-      power: 0.35,
-      contact: 0.35,
-      speed: 0.25,
-      fielding: 0.25,
-      arm: 0.25,
-      velocity: 0.35,
-      junk: 0.35,
-      accuracy: 0.35,
-    },
-    positionAffinity: {},
-    baseWeight: 1.15,
-  },
-  {
-    family: 'Power-Ace',
-    role: 'pitcher',
-    template: { velocity: 1, junk: 0.55, accuracy: -0.5, power: 0.2, speed: -0.25 },
-    positionAffinity: { SP: 1.35, 'SP/RP': 1.25, RP: 1.2, CP: 1.45 },
-    baseWeight: 1.1,
-  },
-  {
-    family: 'Power-Reliever',
-    role: 'pitcher',
-    template: { velocity: 1, junk: 0.75, accuracy: -0.65, fielding: -0.2 },
-    positionAffinity: { CP: 1.65, RP: 1.45, 'SP/RP': 1.05, SP: 0.75 },
-  },
-  {
-    family: 'Crafty-Ace',
-    role: 'pitcher',
-    template: { junk: 1, accuracy: 0.55, velocity: -0.55, fielding: 0.2 },
-    positionAffinity: { SP: 1.3, 'SP/RP': 1.25, RP: 1.1, CP: 0.9 },
-  },
-  {
-    family: 'Command-Artist',
-    role: 'pitcher',
-    template: { accuracy: 1, junk: 0.55, velocity: -0.45, contact: 0.2 },
-    positionAffinity: { SP: 1.35, 'SP/RP': 1.25, RP: 1.0, CP: 0.95 },
-  },
-  {
-    family: 'Pitchability',
-    role: 'pitcher',
-    template: { accuracy: 0.85, junk: 0.85, velocity: -0.35, fielding: 0.25 },
-    positionAffinity: { SP: 1.25, 'SP/RP': 1.25, RP: 1.05, CP: 0.9 },
-  },
-  {
-    family: 'Pitching-Project',
-    role: 'pitcher',
-    template: { velocity: 0.85, junk: 0.65, accuracy: -0.85, fielding: -0.25 },
-    positionAffinity: { SP: 1.1, 'SP/RP': 1.25, RP: 1.2, CP: 1.15 },
-    baseWeight: 0.85,
-  },
-] as const satisfies readonly ArchetypeFamilyDefinition[];
-
-export type ProspectArchetypeFamily = typeof ARCHETYPE_FAMILIES[number]['family'];
+export type ProspectArchetypeFamily = GeneratorArchetypeFamily;
 
 function calibratedThreshold(higherGrade: Smb4Grade, lowerGrade: Smb4Grade): number {
   const threshold = SMB4_CALIBRATED_GRADE_THRESHOLDS.find((entry) =>
@@ -777,11 +660,16 @@ function archetypeWeightsForPosition(
   position: DraftPosition,
 ): Array<[ArchetypeFamilyDefinition, number]> {
   const role = activeArchetypeRole(position);
+  // 'DH' is NOT a taxonomy position (JK rulings 2026-06-20 + 2026-07-02: DH is not a player
+  // position in this app). It survives in DraftPosition only to type polluted legacy data;
+  // the generator never draws it, and the DH-PURGE ticket retires the union member. Until
+  // then a DH input takes the neutral affinity (1) like any unlisted position.
+  const affinityPosition = position === 'DH' ? undefined : position;
   return (ARCHETYPE_FAMILIES as readonly ArchetypeFamilyDefinition[])
     .filter((family) => family.role === 'both' || family.role === role)
     .map((family) => [
       family,
-      (family.baseWeight ?? 1) * (family.positionAffinity[position] ?? 1),
+      (family.baseWeight ?? 1) * ((affinityPosition ? family.positionAffinity[affinityPosition] : undefined) ?? 1),
     ]);
 }
 
