@@ -5,6 +5,7 @@ import type {
   AuctionTeamInput,
 } from '../engines/auctionStateMachine';
 import type { RegisteredPool } from '../engines/leagueConstruction';
+import { toRosterSlotPlayer } from '../engines/rosterNeed';
 import type { FarmAuctionPool } from './farmAuctionPool';
 import {
   getPlayer,
@@ -59,6 +60,34 @@ export function buildAuctionPlayers(pool: RegisteredPool): AuctionPlayer[] {
       ivPercentile: percentiles.get(player.id) ?? 0,
     };
   });
+}
+
+/**
+ * `buildAuctionPlayers` + position/legality enrichment for the own_need guard (FABLE-C1, spec §5).
+ * The RegisteredPool is priced-only ({id, iv, salary}), so positions come from the stored Player
+ * records. Enrichment is per-player permissive: a missing record leaves that player position-blind
+ * (the machine's guard stands down for any roster containing him — never a false rejection).
+ * MLB auction only — the farm auction's 10-man roster has different legality and stays unenriched.
+ */
+export async function buildAuctionPlayersWithPositions(
+  pool: RegisteredPool,
+  fetchPlayer: (playerId: string) => Promise<Player | null> = getPlayer,
+): Promise<AuctionPlayer[]> {
+  const base = buildAuctionPlayers(pool);
+  return Promise.all(
+    base.map(async (auctionPlayer) => {
+      const stored = await fetchPlayer(auctionPlayer.playerId);
+      if (!stored) return auctionPlayer;
+      return {
+        ...auctionPlayer,
+        pos: toRosterSlotPlayer({
+          primaryPosition: stored.primaryPosition,
+          secondaryPosition: stored.secondaryPosition ?? null,
+          traits: [stored.trait1, stored.trait2],
+        }),
+      };
+    }),
+  );
 }
 
 export async function buildAuctionTeams(input: {

@@ -25,7 +25,7 @@ import {
   type ConstructionPlayer,
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
-import { canRelieve, canStart, isLegalRoster } from '../data/rosterConstruction';
+import { canCover, canRelieve, canStart, isLegalRoster, type TwoWayVariant } from '../data/rosterConstruction';
 
 /** A pool player for the simulator: construction ratings + canonical value/salary. */
 export interface SimPlayer extends ConstructionPlayer {
@@ -35,6 +35,13 @@ export interface SimPlayer extends ConstructionPlayer {
   salary: number;
   /** primary position label (for hitter slotting). */
   position: string;
+  /**
+   * Optional Ruling-A coverage info (secondary position / Two Way trait) — consumed by the IDENTITY
+   * construction path's backup-C slot via `canCover` (audit F3). Pools without it (e.g. the IV
+   * oracle) simply require a primary-C backup, which is the only coverage such pools contain anyway.
+   */
+  secondaryPosition?: string | null;
+  twoWayVariant?: TwoWayVariant | null;
 }
 
 /** A single archetype: one cap-modification name in the increase slot (deep, balanced bundle). */
@@ -103,17 +110,18 @@ type SlotKind =
   | { kind: 'rp' };
 
 /**
- * 22 slots = the canonical LEGAL SMB4 roster (`LEGAL_ROSTER`, JK-confirmed 2026-06-30), so the balance
- * result translates to a real auction draft rather than to impossible teams:
+ * 22 slots for the VALUE-MAX baseline (`buildBestRoster`) — kept byte-stable for the frozen parity
+ * gate. NOTE (Ruling A, DECISIONS_LOG 2026-07-01 / audit F3): legality now accepts a SECONDARY-C
+ * hitter or a Two Way (C) pitcher as the backup catcher; this plan's second primary-C slot is a
+ * STRICTER-than-law construction that remains legal (a subset), so the frozen gate stays valid. The
+ * IDENTITY path builds with `IDENTITY_SLOT_PLAN` + `identityEligible`, which honor `canCover`:
  *   8 field starters (one of each C/1B/2B/3B/SS/LF/CF/RF, HARD by primary position)
- * + 1 REQUIRED backup catcher (a 2nd primary-C — the most load-bearing bench slot)
+ * + 1 REQUIRED backup catcher (here: a 2nd primary-C; identity path: any legal C-coverage)
  * + 4 bench position players (any non-pitcher)
  * + 1 SWING slot — a 5th bench bat OR a 5th reliever, so bench flexes 4-5 and relievers flex 4-5
  * + 4 starting pitchers (SP or SP/RP)
  * + 4 relievers (RP/CP, or an SP/RP swing)
- * = 13-14 position players + 8-9 pitchers. The 8 field slots + the backup C are HARD position
- * requirements (no "any hitter" fallback — see `eligible`); an archetype that cannot field a legal
- * roster is a real finding, not a silent pass (verified by `isLegalRoster`).
+ * = 13-14 position players + 8-9 pitchers; verified by `isLegalRoster`.
  */
 const SLOT_PLAN: SlotKind[] = [
   ...HITTER_POSITIONS.map((position) => ({ kind: 'pos', position } as SlotKind)),
@@ -337,5 +345,390 @@ export function runBalanceSim(
     withinBand: outliers.length === 0,
     results,
     outliers,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// IDENTITY-FIRST construction (FABLE-C1 — audit RCI-06; DECISIONS_LOG 2026-07-01).
+//
+// `buildBestRoster` above stays byte-compatible as the VALUE-MAX baseline (the frozen parity gate
+// consumes it). The functions below flip the OBJECTIVE: maximize archetype fit SUBJECT TO legality
+// (structural via SLOT_PLAN + verified by isLegalRoster), solvency, and a hard VALUE FLOOR anchored
+// to the value-maximizer's own build on the same pool. A weighted fit+value blend could collapse
+// back into the value slop (the diagnosed confound: kblIV prices pitching above hitting); a floor
+// CONSTRAINT cannot — the identity objective never trades below it.
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** GM risk posture for identity building. */
+export type RosterPosture = 'conservative' | 'optimal' | 'aggressive';
+
+/**
+ * Posture parameters — §16-tunable placeholder defaults (DECISIONS_LOG 2026-07-01). `valueFloor` =
+ * the fraction of the value-max baseline IV the identity build must keep; `boostFitWeight`
+ * over-weights the boosted bands inside the fit objective (aggressive leans harder into identity).
+ */
+export const POSTURE_PARAMS: Record<RosterPosture, { valueFloor: number; boostFitWeight: number }> = {
+  conservative: { valueFloor: 0.95, boostFitWeight: 1 },
+  optimal: { valueFloor: 0.9, boostFitWeight: 1 },
+  aggressive: { valueFloor: 0.82, boostFitWeight: 1.25 },
+};
+
+/** Per cap-row embodiment: roster cohort mean vs pool cohort mean, in pool standard deviations. */
+export interface EmbodimentRow {
+  key: string;
+  rosterMean: number;
+  poolMean: number;
+  poolStd: number;
+  z: number;
+}
+
+export interface EmbodimentReport {
+  boostRows: EmbodimentRow[];
+  nerfRows: EmbodimentRow[];
+  /** Mean z across boosted rows — the headline "does the roster LOOK like the identity" number. */
+  boostZ: number;
+  nerfZ: number;
+}
+
+export interface IdentityRosterResult {
+  name: string;
+  posture: RosterPosture;
+  players: SimPlayer[];
+  totalIv: number;
+  totalSalary: number;
+  totalTax: number;
+  rosterSize: number;
+  solvent: boolean;
+  legalRoster: boolean;
+  /** Solvent with zero luxury tax — the ranker's green-flag dimension (JK tax-band ruling). */
+  noTax: boolean;
+  /** The pure value-maximizer's IV on the same (possibly ban-reduced) pool. */
+  baselineIv: number;
+  valueFloor: number;
+  floorMet: boolean;
+  embodiment: EmbodimentReport;
+}
+
+function capShiftFractions(caps: LuxuryCapRow[], tier: TierKey): Map<string, number> {
+  const base = LUXURY_CAP_TABLES[tier];
+  const frac = new Map<string, number>();
+  caps.forEach((row, i) => {
+    const b = base[i];
+    if (b && b.cap > 0) {
+      const f = row.cap / b.cap - 1;
+      if (f !== 0) frac.set(`${row.group}/${row.stat}`, f);
+    }
+  });
+  return frac;
+}
+
+/** Caps with the BOOSTED rows' shift scaled by `boostWeight` — used only inside the fit objective. */
+function weightedCaps(caps: LuxuryCapRow[], tier: TierKey, boostWeight: number): LuxuryCapRow[] {
+  if (boostWeight === 1) return caps;
+  const base = LUXURY_CAP_TABLES[tier];
+  return caps.map((row, i) => {
+    const b = base[i];
+    if (!b || b.cap <= 0) return row;
+    const f = row.cap / b.cap - 1;
+    return f > 0 ? { ...row, cap: b.cap * (1 + f * boostWeight) } : row;
+  });
+}
+
+function cohortOf(key: string, players: SimPlayer[]): number[] {
+  const [group, stat] = key.split('/');
+  if (group === 'hitters') {
+    return players.filter((p) => !p.isPitcher).map((p) => p.bat[stat as keyof SimPlayer['bat']] ?? 0);
+  }
+  const wantRotation = group === 'rotation';
+  return players
+    .filter((p) => (wantRotation ? canStart(p) : canRelieve(p)))
+    .map((p) => p.pit?.[stat as 'VEL' | 'JNK' | 'ACC'] ?? 0);
+}
+
+function meanStd(xs: number[]): { mean: number; std: number } {
+  if (xs.length === 0) return { mean: 0, std: 0 };
+  const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
+  const variance = xs.reduce((s, x) => s + (x - mean) ** 2, 0) / xs.length;
+  return { mean, std: Math.sqrt(variance) };
+}
+
+/**
+ * Does a built roster VISIBLY express the archetype? For every boosted (and nerfed) cap row, compare
+ * the roster's relevant cohort (position players for hitter stats; startable / relievable arms for
+ * rotation / bullpen stats) against the SAME cohort of the full pool, in pool standard deviations.
+ * The identity-embodiment gate asserts boostZ > 0 (FABLE-C1 verification requirement).
+ */
+export function identityEmbodiment(
+  players: SimPlayer[],
+  archetype: SimArchetype,
+  tier: TierKey,
+  pool: SimPlayer[],
+): EmbodimentReport {
+  const frac = capShiftFractions(archetypeCaps(archetype, tier), tier);
+  const rowFor = (key: string): EmbodimentRow => {
+    const rosterCohort = cohortOf(key, players);
+    const poolCohort = cohortOf(key, pool);
+    const rosterMean = meanStd(rosterCohort).mean;
+    const { mean: poolMean, std: poolStd } = meanStd(poolCohort);
+    return { key, rosterMean, poolMean, poolStd, z: poolStd > 0 ? (rosterMean - poolMean) / poolStd : 0 };
+  };
+  const boostRows = [...frac.entries()].filter(([, f]) => f > 0).map(([k]) => rowFor(k));
+  const nerfRows = [...frac.entries()].filter(([, f]) => f < 0).map(([k]) => rowFor(k));
+  const avg = (rows: EmbodimentRow[]) => (rows.length ? rows.reduce((s, r) => s + r.z, 0) / rows.length : 0);
+  return { boostRows, nerfRows, boostZ: avg(boostRows), nerfZ: avg(nerfRows) };
+}
+
+const IDENTITY_MAX_PASSES = 40;
+
+/**
+ * Ruling-A slot machinery for the IDENTITY path (audit F3 + F4). The value-max SLOT_PLAN above is
+ * frozen-gate machinery and stays byte-stable; the identity builder uses ITS OWN plan whose
+ * backup-C slot honors `canCover` (secondary-C hitters, Two Way (C) arms) and whose slot ORDER +
+ * pure-first arm assignment cannot strand the bullpen when a legal assignment exists.
+ */
+type IdentitySlotKind = SlotKind | { kind: 'backupC' };
+
+/** pos ×8 → backupC → sp ×4 → rp ×4 → flex ×4 → swing LAST (pitcher-count context is known). */
+const IDENTITY_SLOT_PLAN: IdentitySlotKind[] = [
+  ...HITTER_POSITIONS.map((position) => ({ kind: 'pos', position } as IdentitySlotKind)),
+  { kind: 'backupC' } as IdentitySlotKind,
+  ...Array.from({ length: 4 }, () => ({ kind: 'sp' } as IdentitySlotKind)),
+  ...Array.from({ length: 4 }, () => ({ kind: 'rp' } as IdentitySlotKind)),
+  ...Array.from({ length: 4 }, () => ({ kind: 'flex' } as IdentitySlotKind)),
+  { kind: 'benchOrRp' } as IdentitySlotKind,
+];
+
+/** Old SLOT_PLAN index → IDENTITY_SLOT_PLAN index (re-seeding the value baseline as a climb start). */
+const VALUE_TO_IDENTITY_SLOT: number[] = [
+  0, 1, 2, 3, 4, 5, 6, 7, // pos ×8
+  8, // backup primary-C → backupC (a primary-C is valid coverage)
+  17, 18, 19, 20, // flex ×4
+  21, // swing
+  9, 10, 11, 12, // sp ×4
+  13, 14, 15, 16, // rp ×4
+];
+
+/**
+ * Identity-path eligibility. `greedyCtx` is set only during the sequential greedy start (running
+ * pitcher count); swap shortlists pass undefined and rely on the climb's legality-violation term.
+ * - backupC (F3): any covering HITTER (primary- or secondary-C); a Two Way (C) pitcher only when no
+ *   covering hitter remains and the staff has headroom under the 9-pitcher ceiling.
+ * - sp / rp (F4): PURE-role arms first — swings are spent only after every pure arm of that side is
+ *   used, so the greedy start can never consume the swings a legal bullpen needed.
+ */
+function identityEligible(
+  pool: SimPlayer[],
+  slot: IdentitySlotKind,
+  used: Set<string>,
+  greedyCtx?: { pitchers: number },
+): SimPlayer[] {
+  const free = pool.filter((p) => !used.has(p.id));
+  if (slot.kind === 'backupC') {
+    const coveringHitters = free.filter((p) => !p.isPitcher && canCover(p, 'C'));
+    const twoWayArms = free.filter((p) => p.isPitcher && p.twoWayVariant === 'C');
+    if (greedyCtx === undefined) return [...coveringHitters, ...twoWayArms];
+    if (coveringHitters.length > 0) return coveringHitters;
+    return greedyCtx.pitchers < LEGAL_MAX_PITCHERS ? twoWayArms : [];
+  }
+  if (slot.kind === 'benchOrRp' && greedyCtx !== undefined && greedyCtx.pitchers >= LEGAL_MAX_PITCHERS) {
+    return free.filter((p) => !p.isPitcher);
+  }
+  if (slot.kind === 'sp' && greedyCtx !== undefined) {
+    const pure = free.filter((p) => p.isPitcher && p.role === 'SP');
+    return pure.length > 0 ? pure : free.filter(canStart);
+  }
+  if (slot.kind === 'rp' && greedyCtx !== undefined) {
+    const pure = free.filter((p) => p.isPitcher && (p.role === 'RP' || p.role === 'CP'));
+    return pure.length > 0 ? pure : free.filter(canRelieve);
+  }
+  return eligible(pool, slot as SlotKind, used);
+}
+
+const LEGAL_MAX_PITCHERS = 9;
+
+/** Sequential greedy over IDENTITY_SLOT_PLAN with the running pitcher-count context. */
+function identityGreedyStart(pool: SimPlayer[], score: (p: SimPlayer) => number): SlotPick[] {
+  const picks: SlotPick[] = [];
+  const used = new Set<string>();
+  let pitchers = 0;
+  for (let i = 0; i < IDENTITY_SLOT_PLAN.length; i += 1) {
+    const cands = identityEligible(pool, IDENTITY_SLOT_PLAN[i], used, { pitchers });
+    if (cands.length === 0) continue;
+    const chosen = cands.reduce((best, c) => (score(c) > score(best) ? c : best));
+    picks.push({ slotIndex: i, player: chosen });
+    used.add(chosen.id);
+    if (chosen.isPitcher) pitchers += 1;
+  }
+  return picks;
+}
+
+/** Identity-path candidate shortlist (same three lenses as `shortlist`, identity eligibility). */
+function identityShortlist(
+  pool: SimPlayer[],
+  slot: IdentitySlotKind,
+  used: Set<string>,
+  fitScore: (p: SimPlayer) => number,
+): SimPlayer[] {
+  const cands = identityEligible(pool, slot, used);
+  const byIv = [...cands].sort((a, b) => b.iv - a.iv).slice(0, 24);
+  const bySalary = [...cands].sort((a, b) => a.salary - b.salary).slice(0, 10);
+  const byFit = [...cands].sort((a, b) => fitScore(b) - fitScore(a)).slice(0, 18);
+  const seen = new Set<string>();
+  return [...byIv, ...byFit, ...bySalary].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+}
+
+/** Dominates over-budget/floor dollars-and-IV units; keeps illegal states strictly ordered below. */
+const ILLEGAL_ROSTER_PENALTY = 1e9;
+
+/**
+ * The constrained identity climb: LEXICOGRAPHIC acceptance — first drive VIOLATION (illegality +
+ * over-budget + value-floor shortfall) to zero (repair), then maximize total FIT while violation
+ * stays zero. Legality is IN the violation term (audit F3): swaps that would break the roster's
+ * legality — e.g. a backup-C coverage swap that busts the 9-pitcher ceiling — are never accepted
+ * from a legal state, and repair prefers legality-restoring swaps.
+ */
+function constrainedIdentityClimb(
+  start: SlotPick[],
+  pool: SimPlayer[],
+  caps: LuxuryCapRow[],
+  budget: number,
+  floorIv: number,
+  fitScore: (p: SimPlayer) => number,
+): SlotPick[] {
+  const picks = start.map((p) => ({ ...p }));
+  const used = new Set(picks.map((p) => p.player.id));
+  const assess = (players: SimPlayer[]) => {
+    const iv = players.reduce((s, p) => s + p.iv, 0);
+    const over = Math.max(0, rosterCost(players, caps) - budget);
+    const short = Math.max(0, floorIv - iv);
+    const illegal = players.length === 22 && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
+    return { violation: illegal + over + short, fit: players.reduce((s, p) => s + fitScore(p), 0) };
+  };
+  for (let pass = 0; pass < IDENTITY_MAX_PASSES; pass += 1) {
+    let improved = false;
+    for (let idx = 0; idx < picks.length; idx += 1) {
+      const current = picks[idx].player;
+      const usedExcept = new Set(used);
+      usedExcept.delete(current.id);
+      const players = picks.map((p) => p.player);
+      let best = assess(players);
+      let bestRepl: SimPlayer | null = null;
+      for (const repl of identityShortlist(pool, IDENTITY_SLOT_PLAN[picks[idx].slotIndex], usedExcept, fitScore)) {
+        if (repl.id === current.id) continue;
+        players[idx] = repl;
+        const t = assess(players);
+        const better =
+          t.violation < best.violation - 1e-9 ||
+          (t.violation <= best.violation + 1e-9 && t.fit > best.fit + 1e-6);
+        if (better) {
+          best = t;
+          bestRepl = repl;
+        }
+      }
+      players[idx] = current;
+      if (bestRepl) {
+        used.delete(current.id);
+        used.add(bestRepl.id);
+        picks[idx] = { slotIndex: picks[idx].slotIndex, player: bestRepl };
+        improved = true;
+      }
+    }
+    if (!improved) break;
+  }
+  return picks;
+}
+
+export interface BuildIdentityOptions {
+  posture?: RosterPosture;
+  /** Override the posture's value floor (fraction of the value-max baseline). */
+  valueFloorOverride?: number;
+  /** Player ids unavailable for this build — the snipe-test's ban list (draftability ranker). */
+  banned?: ReadonlySet<string>;
+}
+
+/**
+ * Build a LEGAL roster that EMBODIES the archetype (FABLE-C1's generalized builder): maximize
+ * archetype fit subject to legality + solvency + a posture-scaled value floor anchored to the pure
+ * value-maximizer's build on the same pool. Two starts (fit-greedy and the value baseline itself)
+ * keep the floor reachable from both directions; the fitter FEASIBLE result wins.
+ */
+export function buildIdentityRoster(
+  fullPool: SimPlayer[],
+  archetype: SimArchetype,
+  tier: TierKey,
+  budget: number,
+  options: BuildIdentityOptions = {},
+): IdentityRosterResult {
+  const posture = options.posture ?? 'optimal';
+  const params = POSTURE_PARAMS[posture];
+  const pool = options.banned?.size ? fullPool.filter((p) => !options.banned!.has(p.id)) : fullPool;
+
+  const caps = archetypeCaps(archetype, tier);
+  const valueFit = makeFitScore(caps, tier);
+
+  // The pure value-max baseline on the SAME pool anchors the floor (identical two-start procedure
+  // to buildBestRoster, kept inline so that function stays byte-compatible for the frozen gate).
+  const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
+  const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, valueFit);
+  const fromFit = climb(greedyStart(pool, valueFit), pool, caps, budget, valueFit);
+  const baselinePicks = objOf(fromFit) > objOf(fromValue) ? fromFit : fromValue;
+  const baselineIv = baselinePicks.reduce((s, p) => s + p.player.iv, 0);
+
+  const valueFloor = options.valueFloorOverride ?? params.valueFloor;
+  const floorIv = baselineIv * valueFloor;
+  const fitScore = makeFitScore(weightedCaps(caps, tier, params.boostFitWeight), tier);
+
+  const idFromFit = constrainedIdentityClimb(identityGreedyStart(pool, fitScore), pool, caps, budget, floorIv, fitScore);
+  // Re-seed the value baseline into the identity plan's slot indices (a primary-C backup is valid
+  // backupC coverage, so the mapping is total).
+  const idFromValue = constrainedIdentityClimb(
+    baselinePicks.map((p) => ({ slotIndex: VALUE_TO_IDENTITY_SLOT[p.slotIndex], player: p.player })),
+    pool,
+    caps,
+    budget,
+    floorIv,
+    fitScore,
+  );
+
+  const evaluate = (picks: SlotPick[]) => {
+    const players = picks.map((p) => p.player);
+    const totalIv = players.reduce((s, p) => s + p.iv, 0);
+    const totalSalary = players.reduce((s, p) => s + p.salary, 0);
+    const totalTax = taxOf(players, caps);
+    return {
+      players,
+      totalIv,
+      totalSalary,
+      totalTax,
+      solvent: totalSalary + totalTax <= budget,
+      floorMet: totalIv >= floorIv - 1e-9,
+      fit: players.reduce((s, p) => s + fitScore(p), 0),
+    };
+  };
+  const a = evaluate(idFromFit);
+  const b = evaluate(idFromValue);
+  // Feasible = LEGAL 22 + solvent + floor (audit F3 follow-through: a shorter/illegal candidate
+  // must never out-rank a legal build on raw fit — legality is a feasibility dimension, not a flag).
+  const feasible = (x: typeof a) =>
+    x.players.length === ROSTER_SIZE && isLegalRoster(x.players) && x.solvent && x.floorMet;
+  const feasibleA = feasible(a);
+  const feasibleB = feasible(b);
+  const chosen = feasibleA === feasibleB ? (a.fit >= b.fit ? a : b) : feasibleA ? a : b;
+
+  return {
+    name: archetype.name,
+    posture,
+    players: chosen.players,
+    totalIv: chosen.totalIv,
+    totalSalary: chosen.totalSalary,
+    totalTax: chosen.totalTax,
+    rosterSize: chosen.players.length,
+    solvent: chosen.solvent,
+    legalRoster: isLegalRoster(chosen.players),
+    noTax: chosen.solvent && chosen.totalTax <= 1e-9,
+    baselineIv,
+    valueFloor,
+    floorMet: chosen.floorMet,
+    embodiment: identityEmbodiment(chosen.players, archetype, tier, fullPool),
   };
 }

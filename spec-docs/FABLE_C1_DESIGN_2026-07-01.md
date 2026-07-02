@@ -126,3 +126,84 @@ shift to the persisted pick — do NOT author a second converter. (e) Legality p
 (DECISIONS_LOG 2026-07-01): widen `RosterSlotPlayer` (secondary + two-way), catcher-depth-2 hard
 rule counting Two Way (C), group-secondary coverage expansion, and the soft `depthReport` tier.
 own_need must be a derived view over an injected position map — no saved-shape change."*
+
+---
+
+## §6. AS-BUILT ADDENDUM (same day — for the Codex adversarial review + the Opus gate)
+
+Built exactly to §2 with two DOCUMENTED deviations and one factory lesson:
+
+1. **D3 deviation — position info rides ON the session, not through an injected context.**
+   `AuctionPlayer` gains an OPTIONAL `pos?: RosterSlotPlayer`, populated by the new
+   `buildAuctionPlayersWithPositions()` (pipeline) from stored Player records at init. Rationale:
+   the per-call injected-map design required editing both src_figma hooks' every transition call
+   (outside the contract file surface); the optional field keeps the guard's authority INSIDE the
+   machine, needs a 1-line hook change, and stays additive — pre-C1 saved sessions lack the field
+   and fall back to scalar behavior (no migration, no version bump; the STOP-IF stays honored).
+   The farm auction is deliberately NOT enriched (10-man farm legality ≠ LEGAL_ROSTER-22).
+2. **Coverage-sharing correction in the minimal-additions math** (self-caught): the extra
+   C-coverer must SHARE a body with any other required addition (a floor hitter with secondary-C /
+   a required Two Way (C) arm) — a dedicated coverage body is counted only beyond every shareable
+   addition. Without this the guard over-strands (false bid rejections — the forbidden direction).
+3. **Synthetic-pool lesson (ranker tests):** stats must be DECORRELATED (profile-shaped players)
+   or nerf-heavy fit scores invert on stars and any-22-players bust flat-price pools. The oracle
+   pool needs no such care (real shapes). Ranker mechanics are tested on shaped synthetics;
+   identity embodiment for ALL 24 is gated on the real oracle pool.
+
+**Result highlights (oracle pool, standard tier, optimal posture):** mean boostZ gain
+(value-objective → identity-objective) = **+0.40** across the 24, keeping 91–99% of the value-max
+baseline IV. Exemplars: HDH Royals −0.44→+1.00 · Cannon Corps +0.10→+1.06 · Whiteyball +0.13→+0.91
+· Big Red Machine −0.20→+0.52. All 24: legal ∧ solvent ∧ floor-met ∧ boostZ>0. Carried assembly red
+(`archetypeIdentity.test`) reconciled → 7/7 green solo.
+
+**C2A note for the Codex contract:** `scripts/auctionTuningSim.test.ts` exists but is UNTRACKED on
+trunk (never committed) — the C2A builder must not assume it's in git history.
+
+---
+
+## §7. FIX ROUND (same day — response to `C1_AUDIT_VERDICT_2026-07-01.md`, BLOCK verdict)
+
+All four findings addressed; the frozen value-max machinery (`SLOT_PLAN`/`eligible`/`greedyStart`/
+`climb`/`buildBestRoster`) stays byte-stable — the identity path got its OWN Ruling-A machinery:
+
+- **F3 (must):** new `IDENTITY_SLOT_PLAN` + `identityEligible` — the backup-C slot accepts any
+  covering HITTER via `canCover` (primary- or secondary-C), falling back to a Two Way (C) arm under
+  the 9-pitcher ceiling (the 13/9 shape); swing slot goes LAST with a pitcher-count context so the
+  ceiling can't be busted at start; the climb's violation term now INCLUDES `isLegalRoster` (illegal
+  swaps never accepted from a legal state). Stale "2nd primary-C" comments reconciled. The value
+  baseline re-seeds into the identity plan via an index remap.
+- **F3 follow-through (self-caught during fix verification):** the final two-candidate chooser
+  treated feasibility as solvent+floor only — a SHORTER/illegal candidate with higher raw fit could
+  out-rank the legal 22 build. Feasible now = legal-22 ∧ solvent ∧ floor.
+- **F4 (must):** identity greedy assigns arms PURE-FIRST (sp slots spend pure SPs before swings;
+  rp slots spend pure RP/CP before swings) — equivalent to the optimal swing split, so a legal
+  staff is always found when one exists (the 4-pure-SP + 4-SP/RP counterexample now builds).
+- **F5 (should):** `banSnipeTargets` bans the used RELIEF corps when the archetype boosts any
+  PEN_ stat, and C-coverage banning now uses `canCover` (secondary-C + Two Way (C) included).
+- **F2 (confirm → fixed):** CONFIRMED reachable — `franchisePlayerProfileEdit.ts:18` allows
+  'TWO-WAY' as an assignable primary. Aligned: unknown-role arms count toward pitcher HEADCOUNT
+  only (neither staff minimum), matching `isLegalRoster` exactly; policy header updated.
+- **New tests:** F3a (secondary-C-only backup → legal + not LOCKED), F3b (Two Way (C)-only backup →
+  legal 13/9), F4 (pure+swing-only staff), F5 (pen-boost archetype loses its pen on the rebuild;
+  hitter archetype doesn't), F2 (bare-'P' arms credit no staff minimum; still hit the ceiling).
+- **Residual round (post-fix verification):** the remaining synthetic failures were knife-edge
+  identity-z artifacts (Murderers' Row at z=−0.03 on a pool with no POW+CON profile; the Opener at
+  z=0.000 exactly when a 5-arm pool pen IS the roster pen). Engine re-proven on the ORACLE pool
+  post-fix: all 24 legal ∧ solvent ∧ floor ∧ z>0, mean gain +0.31 (vs +0.40 pre-fix — the honest
+  cost of refusing illegal-but-fitter candidates). Resolution: the identity-true floor became a
+  §16-tunable dial (`DRAFTABILITY_TUNING.minEmbodimentZ`, default 0 = the strict product gate,
+  oracle-proven); verdict-MECHANICS tests inject a lower floor to decouple resilience/tax machinery
+  from small-pool z noise; a 'masher' profile joined the synthetic factory.
+- **ROUND 3 (R2 verdict response):** **R2-2 FIXED** — `selectForcedFillerTeam` now applies
+  `bidWouldStrand` (the guard's missing third call site); when every otherwise-eligible team would
+  strand, the existing no-taker fallback (permanent pass-out) fires. Regression pair in
+  `rosterNeed.test.ts` (strander passes out, roster unchanged; coverage-carrier still force-sells).
+  **R2-1 DEFERRED by JK ruling** (DECISIONS_LOG 2026-07-01): known v1 limitation — the builder
+  reserves a separate backup-C body and so under-credits a Two Way (C) arm's double duty on
+  exactly-enough-arms pools (false LOCKED, advisory-only; the LAW counts him correctly for both).
+  Revisit if C3's extractor pools trip it.
+- **JK Ruling A clarification 2 folded in (2026-07-01):** pitcher primaries are EXACTLY
+  {SP, SP/RP, RP, CP}; two-way is a TRAIT on a pitcher-first player (counts toward its staff minimum
+  via primary role AND catcher depth via Two Way (C) — which the well-formed path already did). The
+  F2 handling is now framed as DEFENSIVE-only for invalid data; purging 'P'/'TWO-WAY'/'DH' from
+  assignable primaries (`franchisePlayerProfileEdit.ts:14-16`) is a Wave-1 cleanup ticket.

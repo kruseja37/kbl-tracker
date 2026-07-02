@@ -68,7 +68,10 @@ describe('archetype identity bridge', () => {
 
   test('keeps archetype boost and nerf directions on their exact ModStat keys', () => {
     for (const arch of HISTORICAL_ARCHETYPES) {
-      expect(arch.boosts.length, `${arch.id} boosts`).toBeLessThanOrEqual(2);
+      // Cardinality pins track the LOCKED 24 (efc7cfb6): rangy-defenders carries 3 boosts;
+      // nerfs stay ≤2. The pre-lock draft-lane expectation was ≤2/≤2 — reconciled in FABLE-C1
+      // (the known carried-forward assembly red).
+      expect(arch.boosts.length, `${arch.id} boosts`).toBeLessThanOrEqual(3);
       expect(arch.nerfs.length, `${arch.id} nerfs`).toBeLessThanOrEqual(2);
 
       const shift = identityCapShift(archetypeToCapIdentity(arch));
@@ -160,5 +163,24 @@ describe('archetype identity bridge', () => {
 
   test('throws on unknown archetype keys', async () => {
     await expect(selectTeamArchetype(minimalTeam(), 'not-a-key')).rejects.toThrow();
+  });
+
+  test('24-coverage: every LOCKED archetype converts and shifts at least one cap (FABLE-C1 d-rescope)', async () => {
+    expect(HISTORICAL_ARCHETYPES.length).toBe(24);
+    for (const arch of HISTORICAL_ARCHETYPES) {
+      const identity = archetypeToCapIdentity(arch);
+      const shift = identityCapShift(identity);
+      const touched = MOD_STATS.filter((stat) => Math.abs(shift[stat]) > 1e-9);
+      expect(touched.length, `${arch.id} shifts no caps`).toBeGreaterThan(0);
+      expect(identity.increase.length, `${arch.id} increase`).toBeGreaterThan(0);
+    }
+
+    // The 3-boost regression case (rangy-defenders) — the exact pre-lock red — round-trips
+    // through the persistence path like any 2-boost archetype.
+    vi.mocked(saveTeam).mockClear();
+    const rangy = await selectTeamArchetype(minimalTeam({ id: 'team-rangy' }), 'rangy-defenders');
+    expect(rangy.mlbArchetypeKey).toBe('rangy-defenders');
+    expect(rangy.capIdentity?.rawShift).toBeDefined();
+    expect(saveTeam).toHaveBeenCalledTimes(1);
   });
 });

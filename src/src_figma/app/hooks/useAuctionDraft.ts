@@ -32,6 +32,7 @@ import {
 } from "../../../utils/leagueBuilderStorage";
 import {
   buildAuctionPlayers,
+  buildAuctionPlayersWithPositions,
   buildAuctionTeams,
   commitCompletedMlbAuctionSessionToLeagueRosters,
   computeIvPercentiles,
@@ -431,7 +432,8 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
         budget: pool.tierCap,
       }),
     ];
-    const players = buildAuctionPlayers(pool);
+    // FABLE-C1: position-enriched players power the machine's own_need strand guard (spec §5).
+    const players = await buildAuctionPlayersWithPositions(pool);
     const config: AuctionSetupConfig = {
       ...DEFAULT_AUCTION_SETUP_CONFIG,
       ...partialConfig,

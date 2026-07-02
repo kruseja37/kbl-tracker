@@ -8,6 +8,8 @@ import {
   auctionMaxBid,
   reservePriceCurve,
 } from '../data/rosterEngineConstants';
+import type { RosterSlotPlayer } from '../data/rosterConstruction';
+import { wouldStrandRoster } from './rosterNeed';
 
 export type AuctionState =
   | 'SETUP'
@@ -22,6 +24,12 @@ export interface AuctionPlayer {
   playerId: string;
   iv: number;
   ivPercentile: number;
+  /**
+   * Position/legality info for the position-aware own_need guard (FABLE-C1, spec §5 — audit RCI-01).
+   * OPTIONAL and additive: sessions saved before C1, or built without enrichment (e.g. the farm
+   * auction, whose 10-man roster has different legality), lack it and keep the flat-scalar behavior.
+   */
+  pos?: RosterSlotPlayer;
 }
 
 export interface AuctionTeamState {
@@ -100,6 +108,7 @@ export type AuctionRejectionReason =
   | 'auction-complete'
   | 'bid-above-solvency-cap'
   | 'bid-below-minimum'
+  | 'bid-strands-roster'
   | 'claim-above-solvency-cap'
   | 'current-lot-open'
   | 'expected-nomination'
@@ -285,6 +294,28 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
   });
 }
 
+/**
+ * The position-aware forced-filler guard (FABLE-C1, spec §5 own_need): winning this player must
+ * leave the team able to complete a LEGAL roster within its remaining slots. Permissive by design —
+ * if the candidate or ANY current roster member lacks position info (pre-C1 saved sessions, the farm
+ * auction, unenriched pools), the guard stands down and the flat-scalar behavior applies.
+ */
+function bidWouldStrand(session: AuctionSession, team: AuctionTeamState, playerId: string): boolean {
+  const candidate = session.players[playerId];
+  if (!candidate?.pos) return false;
+  const positions: Record<string, RosterSlotPlayer> = { [playerId]: candidate.pos };
+  for (const assignment of team.roster) {
+    const info = session.players[assignment.playerId]?.pos;
+    if (!info) return false;
+    positions[assignment.playerId] = info;
+  }
+  return wouldStrandRoster(
+    team.roster.map((assignment) => assignment.playerId),
+    playerId,
+    positions,
+  );
+}
+
 export function recordBid(session: AuctionSession, teamId: string, bid: number): AuctionTransitionResult {
   if (session.state !== 'OPEN_BIDDING') return rejected(session, 'expected-open-bidding');
   const lot = session.currentLot;
@@ -300,6 +331,8 @@ export function recordBid(session: AuctionSession, teamId: string, bid: number):
 
   const maxBid = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, team.projectedTax);
   if (bid > maxBid) return rejected(session, 'bid-above-solvency-cap');
+
+  if (bidWouldStrand(session, team, lot.playerId)) return rejected(session, 'bid-strands-roster');
 
   return accepted({
     ...session,
@@ -370,6 +403,8 @@ export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionRes
 
   const maxBid = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, team.projectedTax);
   if (claim.price > maxBid) return rejected(session, 'claim-above-solvency-cap');
+
+  if (bidWouldStrand(session, team, claim.playerId)) return rejected(session, 'bid-strands-roster');
 
   return accepted(finalizeSoldLot(session, claim.teamId, claim.price));
 }
@@ -495,13 +530,17 @@ function resolveNoBidLot(session: AuctionSession): AuctionSession {
   // a PASSED result could strand a roster slot.
   if (remainingPool >= totalOpenSlots) return finalizePassedLotPermanent(session);
 
-  const forcedTeam = selectForcedFillerTeam(session, lot.openingAsk);
+  const forcedTeam = selectForcedFillerTeam(session, lot.openingAsk, lot.playerId);
   if (forcedTeam === null) return finalizePassedLotPermanent(session);
 
   return finalizeSoldLot(session, forcedTeam.teamId, lot.openingAsk);
 }
 
-function selectForcedFillerTeam(session: AuctionSession, openingAsk: number): AuctionTeamState | null {
+function selectForcedFillerTeam(
+  session: AuctionSession,
+  openingAsk: number,
+  playerId: string,
+): AuctionTeamState | null {
   const nominationOrderIndex = new Map<string, number>();
   session.nominationOrder.forEach((teamId, index) => {
     nominationOrderIndex.set(teamId, index);
@@ -509,6 +548,11 @@ function selectForcedFillerTeam(session: AuctionSession, openingAsk: number): Au
 
   const eligible = session.teams.filter((team) => {
     if (team.rosterSlotsRemaining <= 0) return false;
+    // Audit R2-2: the forced filler is a SALE — it must honor the same position-aware strand guard
+    // as the two bidding paths, or a no-bid lot can hand a team a wrong-position player and
+    // complete an ILLEGAL roster. When every otherwise-eligible team would strand, the existing
+    // no-taker fallback (permanent pass-out) applies.
+    if (bidWouldStrand(session, team, playerId)) return false;
     return auctionMaxBid(
       team.budgetRemaining,
       team.rosterSlotsRemaining,

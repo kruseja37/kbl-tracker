@@ -26549,3 +26549,23 @@ Use xhigh reasoning effort.
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: C1-AUDIT-R2 ===== -->
+
+<!-- ===== CONTRACT: C1-AUDIT-R3 ===== -->
+
+# C1-AUDIT-R3: adversarial re-pass of the FABLE-C1 round-3 fix (ruling 5b, final)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, uncommitted C1 diff (trunk HEAD `5abd8c2c`). READ-ONLY (no writes/commit/build/test). Opus runs the gate separately.
+
+**ROLE:** Adversarial auditor, cross-model, round 3 (final). Round 1 (5 findings) and round 2 (2 new CRITICALs) are addressed; R2-1 was JK-ruled DOCUMENT-AND-DEFER (known v1 builder limitation — the LAW `isLegalRoster` counts a Two-Way(C) for both jobs; only the advisory builder under-credits; NOT to be "fixed" here). Verify the round-3 delta and confirm no regression.
+
+**PRIMARY VERIFY — R2-2 fix (the only functional delta since R2):** `selectForcedFillerTeam` (`src/engines/auctionStateMachine.ts:~539-560`) now calls `bidWouldStrand(session, team, playerId)` in its eligible filter (`:555`). VERIFY: (a) a forced no-bid sale can no longer complete an ILLEGAL roster — a team that would be position-stranded is excluded from the forced-filler; (b) when EVERY otherwise-eligible team would strand, the lot falls through to the permanent pass-out (`finalizePassedLotPermanent`), NOT a crash or an illegal forced sale; (c) the guard didn't over-tighten (a team that can legally absorb the lot is still eligible); (d) `lot.playerId` is threaded correctly. Attack the regression tests' claims in `rosterNeed.test.ts` / auction tests (strander passes out + roster unchanged; coverage-carrier still force-sells).
+
+**CONFIRM NO REGRESSION:** the rest of the C1 diff is unchanged since R2 (where you confirmed F3/F4/F5/F2 fixed + value-max byte-stable). Spot-check that the R2-2 change touched only the forced-filler path and did not perturb `recordBid`/`claimLoneSurvivor`/the identity builder. Confirm R2-1 remains a documented limitation (the builder still under-credits the Two-Way(C) double-duty — expected/deferred, NOT a new regression).
+
+**SOURCE OF TRUTH:** `spec-docs/DECISIONS_LOG.md` (R2-1 defer ruling; Ruling A); `spec-docs/FABLE_C1_DESIGN_2026-07-01.md` §7; `spec-docs/C1_AUDIT_VERDICT_2026-07-01.md` (rounds 1-2). Diff is ground truth.
+
+**CONSTRAINTS:** READ-ONLY; cite file:line; adversarial. **EXPECTED OUTPUT:** `CLEAN` or `DEFECTS FOUND` + per-defect file:line + failing case + severity. If clean, state what you attacked on the R2-2 path and confirm no regression elsewhere.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: C1-AUDIT-R3 ===== -->
