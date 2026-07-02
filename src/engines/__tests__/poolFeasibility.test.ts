@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -9,6 +9,11 @@ import {
 } from '../poolFeasibility';
 import type { SimPlayer } from '../archetypeBalanceSimulator';
 import { HISTORICAL_ARCHETYPES, type ArchetypeStat, type HistoricalArchetype } from '../../data/historicalArchetypes';
+
+// Timeout-only housekeeping (JK/Fable 2026-07-01): the pool-feasibility sim needs ~10s under batch
+// load, over vitest's 5s default → a phantom "batch-flake" red. Raise the file-wide test timeout;
+// assertions untouched.
+vi.setConfig({ testTimeout: 30000 });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ORACLE_PATH = path.resolve(__dirname, '../../../spec-docs/reference/iv_oracle.json');

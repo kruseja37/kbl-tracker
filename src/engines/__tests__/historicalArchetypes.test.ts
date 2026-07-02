@@ -41,7 +41,10 @@ describe('historical team archetypes — locked set, all tiers', () => {
     expect(new Set(HISTORICAL_ARCHETYPES.map((a) => a.id)).size).toBe(24);
   });
 
-  it('stays within the ±10% parity band across juiced / standard / nerfed, and prints the landscape', () => {
+  // Timeout-only housekeeping (JK/Fable 2026-07-01): the 3-tier balance sim needs ~6.5s, over vitest's
+  // 5s default → the assertions never ran and the test read as a phantom parity RED. Raise the per-test
+  // timeout; the parity assertions below are UNTOUCHED (frozen gate).
+  it('stays within the ±10% parity band across juiced / standard / nerfed, and prints the landscape', { timeout: 30000 }, () => {
     const pool = loadPool();
     for (const tier of ['juiced', 'standard', 'nerfed'] as const satisfies readonly TierKey[]) {
       const report = runBalanceSim(pool, SIM_SET, tier, 0.1);
