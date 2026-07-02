@@ -1,4 +1,20 @@
+import {
+  LEGAL_ROSTER,
+  canCover,
+  canRelieve,
+  canStart,
+  depthReport,
+  isLegalRoster,
+  type FieldPosition,
+  type RosterSlotPlayer,
+} from '../data/rosterConstruction';
 import { recommendRosterMoves, type MoveRecommendation } from './rosterAnalyzer';
+import {
+  rosterNeedBreakdown,
+  toRosterSlotPlayer,
+  wouldStrandRoster,
+  type RosterPositionMap,
+} from './rosterNeed';
 
 export type RosterAnalyzerMode = 'builder' | 'franchise';
 
@@ -313,19 +329,13 @@ export interface AnalyzerRosterProfile {
   limitations: string[];
 }
 
-const DEFAULT_POSITION_MINIMUMS: Record<string, number> = {
-  C: 1,
-  '1B': 1,
-  '2B': 1,
-  '3B': 1,
-  SS: 1,
-  OF: 3,
-};
-
-const PITCHER_POSITIONS = new Set(['SP', 'RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
-const STARTER_POSITIONS = new Set(['SP', 'SP/RP', 'TWO-WAY']);
-const BULLPEN_POSITIONS = new Set(['RP', 'CP', 'P', 'SP/RP', 'TWO-WAY']);
-const OUTFIELD_POSITIONS = new Set(['LF', 'CF', 'RF', 'OF', 'IF/OF', '1B/OF']);
+const CANONICAL_POSITION_MINIMUMS: Record<string, number> = Object.fromEntries(
+  LEGAL_ROSTER.fieldPositions.map((position) => [
+    position,
+    position === 'C' ? LEGAL_ROSTER.minCatchers : 1,
+  ]),
+);
+const OUTFIELD_FIELD_POSITIONS: FieldPosition[] = ['LF', 'CF', 'RF'];
 const FASTBALLS = new Set(['4F', '2F', 'CF', 'CUT', 'FB']);
 const OFFSPEED_OR_BREAKING = new Set(['CB', 'SL', 'CH', 'FK', 'SB', 'SC', 'KN']);
 const VALID_PITCHES = new Set(['4F', '2F', 'CB', 'SL', 'CH', 'FK', 'CF', 'SB', 'SC', 'KN']);
@@ -371,12 +381,12 @@ export function createDefaultRosterAnalyzerConfig(
       activeMlb: 22,
       farm: 10,
       total: 32,
-      rotationSize: 4,
-      bullpenMinimum: 4,
+      rotationSize: LEGAL_ROSTER.startingPitchers,
+      bullpenMinimum: LEGAL_ROSTER.minRelievers,
       benchMinimum: 4,
       ...(overrides.rosterTargets ?? {}),
       positionMinimums: {
-        ...DEFAULT_POSITION_MINIMUMS,
+        ...CANONICAL_POSITION_MINIMUMS,
         ...(overrides.rosterTargets?.positionMinimums ?? {}),
       },
     },
@@ -432,22 +442,77 @@ function playerRatingScore(player: AnalyzerPlayer): number | null {
   return ratingAverage(values);
 }
 
+function canonicalSlotPlayer(player: AnalyzerPlayer): RosterSlotPlayer {
+  return toRosterSlotPlayer({
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPositions?.[0] ?? null,
+    traits: player.traits ?? [],
+  });
+}
+
+function canonicalSlotPlayerVariants(player: AnalyzerPlayer): RosterSlotPlayer[] {
+  const secondaryPositions = player.secondaryPositions?.length ? player.secondaryPositions : [null];
+  return secondaryPositions.map((secondaryPosition) =>
+    toRosterSlotPlayer({
+      primaryPosition: player.primaryPosition,
+      secondaryPosition,
+      traits: player.traits ?? [],
+    }),
+  );
+}
+
+function isFieldPosition(position: string): position is FieldPosition {
+  return (LEGAL_ROSTER.fieldPositions as readonly string[]).includes(position);
+}
+
 function isPitcher(player: AnalyzerPlayer): boolean {
-  return Boolean(player.isPitcher) || PITCHER_POSITIONS.has(player.primaryPosition);
+  return Boolean(player.isPitcher) || canonicalSlotPlayer(player).isPitcher;
 }
 
 function isStarter(player: AnalyzerPlayer): boolean {
-  return STARTER_POSITIONS.has(player.primaryPosition);
+  return canStart(canonicalSlotPlayer(player));
 }
 
 function isBullpenCandidate(player: AnalyzerPlayer): boolean {
-  return BULLPEN_POSITIONS.has(player.primaryPosition);
+  return canRelieve(canonicalSlotPlayer(player));
 }
 
 function positionMatches(player: AnalyzerPlayer, position: string): boolean {
-  const positions = [player.primaryPosition, ...(player.secondaryPositions ?? [])];
-  if (position === 'OF') return positions.some((candidate) => OUTFIELD_POSITIONS.has(candidate));
-  return positions.includes(position);
+  const slots = canonicalSlotPlayerVariants(player);
+  if (isFieldPosition(position)) return slots.some((slot) => canCover(slot, position));
+  if (position === 'OF') return OUTFIELD_FIELD_POSITIONS.some((fieldPosition) =>
+    slots.some((slot) => canCover(slot, fieldPosition)),
+  );
+  return [player.primaryPosition, ...(player.secondaryPositions ?? [])].includes(position);
+}
+
+function rosterPositionMap(players: AnalyzerPlayer[]): RosterPositionMap {
+  return Object.fromEntries(players.map((player) => [player.id, canonicalSlotPlayer(player)]));
+}
+
+function sendDownLegalityAssessment(activePlayers: AnalyzerPlayer[], playerId: string): {
+  safe: boolean;
+  projectedSlots: RosterSlotPlayer[];
+  need: ReturnType<typeof rosterNeedBreakdown>;
+  depth: ReturnType<typeof depthReport>;
+  strands: boolean;
+} {
+  const projectedPlayers = activePlayers.filter((player) => player.id !== playerId);
+  const projectedSlots = projectedPlayers.map(canonicalSlotPlayer);
+  const positions = rosterPositionMap(activePlayers);
+  const need = rosterNeedBreakdown(projectedSlots);
+  const depth = depthReport(projectedSlots);
+  const strands = wouldStrandRoster(projectedPlayers.map((player) => player.id), playerId, positions);
+  const safe =
+    !need.infeasible &&
+    need.missingPrimaries.length === 0 &&
+    need.catcherCoverNeed === 0 &&
+    need.pitcherNeed === 0 &&
+    need.hitterFloorNeed === 0 &&
+    need.pitcherFloorNeed === 0 &&
+    !strands;
+
+  return { safe, projectedSlots, need, depth, strands };
 }
 
 function byId(players: AnalyzerPlayer[]): Map<string, AnalyzerPlayer> {
@@ -742,6 +807,44 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
         evidence: [evidence('roster_status', 'activeCount', activePlayers.length, 'roster.activePlayerIds', 'high')],
       });
     }
+    if (activePlayers.length === LEGAL_ROSTER.size) {
+      const activeSlots = activePlayers.map(canonicalSlotPlayer);
+      const positionPlayerCount = activeSlots.filter((player) => !player.isPitcher).length;
+      const pitcherCount = activeSlots.filter((player) => player.isPitcher).length;
+      if (
+        positionPlayerCount < LEGAL_ROSTER.minPositionPlayers ||
+        positionPlayerCount > LEGAL_ROSTER.maxPositionPlayers ||
+        pitcherCount < LEGAL_ROSTER.minPitchers ||
+        pitcherCount > LEGAL_ROSTER.maxPitchers
+      ) {
+        addFinding(findings, {
+          kind: 'roster_count',
+          severity: 'warning',
+          trust: 'high',
+          title: 'Active roster position/pitcher mix is outside legal range',
+          detail: `Active roster has ${positionPlayerCount} position player(s) and ${pitcherCount} pitcher(s); legal roster needs ${LEGAL_ROSTER.minPositionPlayers}-${LEGAL_ROSTER.maxPositionPlayers} position players and ${LEGAL_ROSTER.minPitchers}-${LEGAL_ROSTER.maxPitchers} pitchers.`,
+          evidence: [
+            evidence('roster_status', 'positionPlayers', positionPlayerCount, 'canonical rosterConstruction', 'high'),
+            evidence('roster_status', 'pitchers', pitcherCount, 'canonical rosterConstruction', 'high'),
+          ],
+        });
+      }
+
+      if (!isLegalRoster(activeSlots)) {
+        const depth = depthReport(activeSlots);
+        addFinding(findings, {
+          kind: 'position_coverage',
+          severity: 'warning',
+          trust: 'high',
+          title: 'Active roster is not canonically legal',
+          detail: `Roster does not satisfy the canonical legal 22. Thin coverage: ${depth.thinPositions.join(', ') || 'none'}.`,
+          evidence: [
+            evidence('roster_status', 'isLegalRoster', false, 'rosterConstruction.isLegalRoster', 'high'),
+            evidence('roster_status', 'thinPositions', depth.thinPositions.length, 'rosterConstruction.depthReport', 'high'),
+          ],
+        });
+      }
+    }
 
     const farmTarget = config.rosterTargets.farm;
     if (input.roster.farmPlayerIds && typeof farmTarget === 'number' && farmPlayers.length !== farmTarget) {
@@ -783,18 +886,18 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
   }
 
   if (hasConstraint(config, 'rotation')) {
-    const rotationPlayers = definedPlayers(input.roster.rotationIds, playerMap);
-    const rotationTarget = config.rosterTargets.rotationSize ?? 4;
+    const rotationPlayers = activePlayers.filter(isStarter);
+    const rotationTarget = config.rosterTargets.rotationSize ?? LEGAL_ROSTER.startingPitchers;
     const inferredStarters = activePlayers.filter(isStarter);
-    const rotationCount = input.roster.rotationIds ? rotationPlayers.length : inferredStarters.length;
+    const rotationCount = inferredStarters.length;
     if (rotationCount < rotationTarget) {
       const finding = addFinding(findings, {
         kind: 'rotation',
         severity: 'warning',
-        trust: input.roster.rotationIds ? 'high' : 'medium',
+        trust: 'high',
         title: 'Starting rotation coverage is thin',
         detail: `Rotation has ${rotationCount} starter candidate(s); target is ${rotationTarget}.`,
-        evidence: [evidence('roster_status', 'rotationCount', rotationCount, input.roster.rotationIds ? 'roster.rotationIds' : 'active positions', input.roster.rotationIds ? 'high' : 'medium')],
+        evidence: [evidence('roster_status', 'rotationCount', rotationCount, 'rosterConstruction.canStart', 'high')],
       });
       addRecommendation(recommendations, {
         kind: 'rotation_adjustment',
@@ -810,19 +913,17 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
   }
 
   if (hasConstraint(config, 'bullpen')) {
-    const bullpenPlayers = input.roster.bullpenRoles
-      ? definedPlayers(input.roster.bullpenRoles.map((role) => role.playerId), playerMap)
-      : activePlayers.filter((player) => isBullpenCandidate(player) && !isStarter(player));
-    const bullpenMinimum = config.rosterTargets.bullpenMinimum ?? 4;
+    const bullpenPlayers = activePlayers.filter(isBullpenCandidate);
+    const bullpenMinimum = config.rosterTargets.bullpenMinimum ?? LEGAL_ROSTER.minRelievers;
     if (bullpenPlayers.length < bullpenMinimum) {
       addFinding(findings, {
         kind: 'bullpen',
         severity: 'warning',
-        trust: input.roster.bullpenRoles ? 'high' : 'medium',
+        trust: 'high',
         title: 'Bullpen coverage is thin',
         detail: `Bullpen has ${bullpenPlayers.length} reliever candidate(s); target is ${bullpenMinimum}.`,
         affectedPlayerIds: bullpenPlayers.map((player) => player.id),
-        evidence: [evidence('roster_status', 'bullpenCount', bullpenPlayers.length, input.roster.bullpenRoles ? 'roster.bullpenRoles' : 'active positions', input.roster.bullpenRoles ? 'high' : 'medium')],
+        evidence: [evidence('roster_status', 'bullpenCount', bullpenPlayers.length, 'rosterConstruction.canRelieve', 'high')],
       });
     }
   }
@@ -1020,9 +1121,7 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
     }
 
     const farmStarterCandidates = farmPlayers.filter(isStarter);
-    const activeStarterCount = input.roster.rotationIds
-      ? definedPlayers(input.roster.rotationIds, playerMap).length
-      : activePlayers.filter(isStarter).length;
+    const activeStarterCount = activePlayers.filter(isStarter).length;
     if (activeStarterCount < (config.rosterTargets.rotationSize ?? 4) && farmStarterCandidates.length > 0) {
       const finding = addFinding(findings, {
         kind: 'farm_options',
@@ -1046,6 +1145,52 @@ export function analyzeRoster(input: RosterAnalyzerInput): RosterAnalyzerReport 
         playerIds: farmStarterCandidates.map((player) => player.id),
         evidence: finding.evidence,
         caveats: ['Scout-visible advisory only; hidden farm internals are not used.', 'No rotation or roster move is applied by the analyzer.'],
+      });
+    }
+
+    const handledSendDownIds = new Set<string>();
+    for (const moveRecommendation of moveRecommendations.filter((recommendation) => recommendation.kind === 'send_down')) {
+      if (handledSendDownIds.has(moveRecommendation.playerId)) continue;
+      handledSendDownIds.add(moveRecommendation.playerId);
+      const activePlayer = activePlayers.find((player) => player.id === moveRecommendation.playerId);
+      if (!activePlayer) continue;
+      const assessment = sendDownLegalityAssessment(activePlayers, activePlayer.id);
+      if (!assessment.safe) {
+        addFinding(findings, {
+          kind: 'farm_options',
+          severity: 'warning',
+          trust: 'high',
+          title: `Send-down advice suppressed for ${activePlayer.name}`,
+          detail: `${activePlayer.name} was a surplus candidate, but removing this player would break canonical roster legality before a replacement is selected.`,
+          affectedPlayerIds: [activePlayer.id],
+          evidence: [
+            evidence('roster_status', 'postSendDownLegalRoster', isLegalRoster(assessment.projectedSlots), 'rosterConstruction.isLegalRoster', 'high'),
+            evidence('roster_status', 'postSendDownCatcherCoverNeed', assessment.need.catcherCoverNeed, 'rosterNeedBreakdown', 'high'),
+            evidence('roster_status', 'postSendDownPitcherNeed', assessment.need.pitcherNeed, 'rosterNeedBreakdown', 'high'),
+            evidence('roster_status', 'postSendDownWouldStrandRoster', assessment.strands, 'rosterNeed.wouldStrandRoster', 'high'),
+          ],
+        });
+        continue;
+      }
+
+      const replacement = moveRecommendation.replacesPlayerId
+        ? farmPlayers.find((player) => player.id === moveRecommendation.replacesPlayerId)
+        : undefined;
+      addRecommendation(recommendations, {
+        kind: 'send_down_advice',
+        severity: 'info',
+        trust: 'high',
+        execution: 'read_only',
+        title: `Send-down advice: review ${activePlayer.name}`,
+        rationale: replacement
+          ? `${activePlayer.name} is a legal surplus send-down candidate if paired with a manual review of ${replacement.name}.`
+          : sendDownAdviceRationale(activePlayer.name),
+        playerIds: [activePlayer.id],
+        evidence: [
+          evidence('roster_status', 'postSendDownLegalRoster', isLegalRoster(assessment.projectedSlots), 'rosterConstruction.isLegalRoster', 'high'),
+          evidence('farm_record', 'surplusGap', moveRecommendation.surplusGap, 'recommendRosterMoves', 'high'),
+        ],
+        caveats: ['Read-only advice only; this engine does not move players.', 'Manual moves remain allowed by the roster transaction UI.'],
       });
     }
 

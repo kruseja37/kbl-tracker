@@ -98,6 +98,56 @@ const players = [
   },
 ];
 
+const legalMlbPositions = [
+  "C",
+  "C",
+  "1B",
+  "2B",
+  "3B",
+  "SS",
+  "LF",
+  "CF",
+  "RF",
+  "OF",
+  "IF",
+  "1B",
+  "SS",
+  "OF",
+  "SP",
+  "SP",
+  "SP",
+  "SP",
+  "RP",
+  "RP",
+  "RP",
+  "CP",
+];
+
+function franchisePlayer(id: string, primaryPosition: string, rosterStatus: "MLB" | "FARM") {
+  return {
+    id,
+    firstName: id
+      .split("-")
+      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+      .join(" "),
+    lastName: "Player",
+    primaryPosition,
+    overallGrade: "B",
+    traits: [],
+    leagueAssignments: [{ leagueId: "league-a", teamId: "team-a", rosterStatus }],
+  };
+}
+
+function legalRosterPlayersWithTwoCatchers() {
+  return legalMlbPositions.map((position, index) =>
+    franchisePlayer(
+      index === 1 ? "backup-catcher" : `mlb-${index + 1}`,
+      position,
+      "MLB",
+    ),
+  );
+}
+
 function transaction(overrides: Record<string, unknown>) {
   return {
     id: "txn-default",
@@ -245,6 +295,29 @@ describe("TradeFlow franchise regular-season transactions", () => {
     expect(await screen.findByText(/OPTION_LIMIT_EXCEEDED: Player has already used every option/i)).toBeInTheDocument();
     expect(mocks.mockExecuteManualFranchiseTrade).not.toHaveBeenCalled();
     expect(mocks.mockTransferPlayer).not.toHaveBeenCalled();
+  });
+
+  test("send-down UI warns on catcher-stranding move but still executes durable send-down", async () => {
+    const user = userEvent.setup();
+    mocks.mockGetAllFranchisePlayers.mockResolvedValueOnce([
+      ...legalRosterPlayersWithTwoCatchers(),
+      franchisePlayer("farm-depth", "OF", "FARM"),
+    ]);
+    await renderFranchiseTradeFlow();
+
+    const selects = screen.getAllByRole("combobox");
+    await waitFor(() => expect((selects[2] as HTMLSelectElement).options.length).toBeGreaterThan(1));
+    await user.selectOptions(selects[2], "backup-catcher");
+    await user.click(screen.getByRole("button", { name: /^SEND DOWN$/i }));
+
+    await waitFor(() => expect(mocks.mockSendDownFranchisePlayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playerId: "backup-catcher",
+        rosterLevel: "AAA",
+        rosterMovementPhase: "REGULAR_SEASON",
+      }),
+    ));
+    expect(await screen.findByText(/Heads up: this leaves you with 1 catcher \(roster needs 2\)\. The move will still go through\. Send-down logged as txn-send-down/i)).toBeInTheDocument();
   });
 
   test("manual trade UI executes explicit manual trade instead of dry-run preview", async () => {

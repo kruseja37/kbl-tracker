@@ -145,7 +145,7 @@ describe('rosterAnalyzerDraftAdapter', () => {
         }),
         makeFarmPlayer({
           id: 'farm-of-1',
-          primaryPosition: 'OF',
+          primaryPosition: 'CF',
           scoutedGrade: 'C+',
           scoutConfidence: 'low',
         }),
@@ -154,7 +154,7 @@ describe('rosterAnalyzerDraftAdapter', () => {
 
     const positionCoverageFindings = report.findings.filter((finding) => finding.kind === 'position_coverage');
     expect(positionCoverageFindings.some((finding) => finding.detail.includes('SS'))).toBe(true);
-    expect(positionCoverageFindings.some((finding) => finding.detail.includes('OF'))).toBe(true);
+    expect(positionCoverageFindings.some((finding) => finding.detail.includes('CF'))).toBe(true);
     expect(report.findings).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

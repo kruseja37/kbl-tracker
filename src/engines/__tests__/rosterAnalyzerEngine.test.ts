@@ -343,6 +343,112 @@ describe('roster analyzer engine MVP', () => {
     );
   });
 
+  test('uses canonical catcher minimum of two for active coverage findings', () => {
+    const players = makeBalancedPlayers().map((player) =>
+      player.id === 'active-19'
+        ? { ...player, primaryPosition: '1B' }
+        : player,
+    );
+
+    const report = analyzeRoster(balancedInput({ players }));
+
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'position_coverage',
+          title: 'C coverage below target',
+          detail: 'Active roster has 1 C eligible player(s); target is 2.',
+        }),
+      ]),
+    );
+  });
+
+  test('suppresses illegal catcher send-down advice while still emitting legal surplus send-downs', () => {
+    const players = makeBalancedPlayers().map((player) => {
+      if (player.id === 'active-19') {
+        return {
+          ...player,
+          name: 'Backup Catcher',
+          valueDelta: -500,
+          optionState: {
+            ...player.optionState,
+            eligibleForSendDown: true,
+          },
+        };
+      }
+      if (player.id === 'active-9') {
+        return {
+          ...player,
+          name: 'Surplus Outfielder',
+          valueDelta: -500,
+          optionState: {
+            ...player.optionState,
+            eligibleForSendDown: true,
+          },
+        };
+      }
+      if (player.id === 'farm-1') {
+        return {
+          ...player,
+          name: 'Farm Catcher',
+          primaryPosition: 'C',
+          optionState: {
+            ...player.optionState,
+            scoutedGrade: 'S',
+            scoutConfidence: 'high',
+            scoutVisibleSalary: 1,
+            eligibleForCallUp: true,
+          },
+        };
+      }
+      if (player.id === 'farm-2') {
+        return {
+          ...player,
+          name: 'Farm Outfielder',
+          primaryPosition: 'OF',
+          optionState: {
+            ...player.optionState,
+            scoutedGrade: 'S',
+            scoutConfidence: 'high',
+            scoutVisibleSalary: 1,
+            eligibleForCallUp: true,
+          },
+        };
+      }
+      return player;
+    });
+
+    const report = analyzeRoster(balancedInput({ players }));
+    const sendDownRecommendations = report.recommendations.filter((recommendation) => recommendation.kind === 'send_down_advice');
+
+    expect(sendDownRecommendations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: 'Send-down advice: review Surplus Outfielder',
+          playerIds: ['active-9'],
+          execution: 'read_only',
+        }),
+      ]),
+    );
+    expect(sendDownRecommendations).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          playerIds: ['active-19'],
+        }),
+      ]),
+    );
+    expect(report.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'farm_options',
+          severity: 'warning',
+          title: 'Send-down advice suppressed for Backup Catcher',
+          affectedPlayerIds: ['active-19'],
+        }),
+      ]),
+    );
+  });
+
   test('flags option risk, out-of-options status, hidden ratings, and farm imbalance without executable advice', () => {
     const active = Array.from({ length: 4 }, (_, index) =>
       makePlayer({ id: `active-${index + 1}`, primaryPosition: index === 0 ? 'C' : 'IF' }),

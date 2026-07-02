@@ -27,6 +27,19 @@ import {
   type TransactionLogEntry,
 } from "../../../utils/transactionStorage";
 import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
+import {
+  LEGAL_ROSTER,
+  canCover,
+  depthReport,
+  isLegalRoster,
+  type RosterSlotPlayer,
+} from "../../../data/rosterConstruction";
+import {
+  rosterNeedBreakdown,
+  toRosterSlotPlayer,
+  wouldStrandRoster,
+  type RosterPositionMap,
+} from "../../../engines/rosterNeed";
 
 interface TradeFlowProps {
   seasonId: string;
@@ -37,7 +50,7 @@ interface TradeFlowProps {
 
 type FranchiseTransactionConsoleTab = "moves" | "trade" | "history" | "preview";
 type FranchiseRosterAssignmentStatus = "MLB" | "FARM" | "FREE_AGENT" | "RELEASED" | "RETIRED" | "INACTIVE" | "UNKNOWN";
-type TransactionStatus = { kind: "success" | "error"; message: string } | null;
+type TransactionStatus = { kind: "success" | "warning" | "error"; message: string } | null;
 
 const FRANCHISE_HISTORY_TYPES = new Set<Mode2V1TransactionType>([
   "trade",
@@ -118,6 +131,61 @@ function franchisePlayersForTeam(players: FranchisePlayer[], teamId: string): Fr
   return players
     .filter((player) => ["MLB", "FARM"].includes(franchiseRosterStatus(player, teamId)))
     .sort((a, b) => franchisePlayerName(a, a.id).localeCompare(franchisePlayerName(b, b.id)));
+}
+
+function franchiseRosterSlotPlayer(player: FranchisePlayer): RosterSlotPlayer {
+  return toRosterSlotPlayer({
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? null,
+    traits: [player.trait1, player.trait2],
+  });
+}
+
+function franchiseRosterPositionMap(players: FranchisePlayer[]): RosterPositionMap {
+  return Object.fromEntries(players.map((player) => [player.id, franchiseRosterSlotPlayer(player)]));
+}
+
+export function sendDownRosterLegalityAdvisory(
+  mlbPlayers: FranchisePlayer[],
+  outgoingPlayerId: string,
+): string | null {
+  const projectedPlayers = mlbPlayers.filter((player) => player.id !== outgoingPlayerId);
+  const projectedSlots = projectedPlayers.map(franchiseRosterSlotPlayer);
+  const legalAfterSendDown = isLegalRoster(projectedSlots);
+  const depth = depthReport(projectedSlots);
+  const need = rosterNeedBreakdown(projectedSlots);
+  const stranded = wouldStrandRoster(
+    projectedPlayers.map((player) => player.id),
+    outgoingPlayerId,
+    franchiseRosterPositionMap(mlbPlayers),
+  );
+  const catcherCoverers = projectedSlots.filter((player) => canCover(player, "C")).length;
+
+  if (catcherCoverers < LEGAL_ROSTER.minCatchers) {
+    return `Heads up: this leaves you with ${catcherCoverers} catcher${catcherCoverers === 1 ? "" : "s"} (roster needs ${LEGAL_ROSTER.minCatchers}). The move will still go through.`;
+  }
+
+  if (
+    !need.infeasible &&
+    need.missingPrimaries.length === 0 &&
+    need.pitcherNeed === 0 &&
+    need.hitterFloorNeed === 0 &&
+    need.pitcherFloorNeed === 0 &&
+    !stranded
+  ) {
+    return null;
+  }
+
+  const issues = [
+    need.missingPrimaries.length > 0 ? `missing ${need.missingPrimaries.join("/")}` : "",
+    need.pitcherNeed > 0 ? "pitching minimums" : "",
+    need.hitterFloorNeed > 0 ? "position-player minimum" : "",
+    need.pitcherFloorNeed > 0 ? "pitcher minimum" : "",
+    need.infeasible || stranded ? "legal roster completion" : "",
+    !legalAfterSendDown && depth.thinPositions.length > 0 ? `thin ${depth.thinPositions.join("/")}` : "",
+  ].filter(Boolean);
+
+  return `Heads up: this move creates a roster-legality warning${issues.length > 0 ? ` (${issues.join(", ")})` : ""}. The move will still go through.`;
 }
 
 function formatTransactionTimestamp(timestamp: string): string {
@@ -295,6 +363,9 @@ function FranchiseTransactionConsole({
 
     setMovementLoading(true);
     try {
+      const sendDownWarning = movement === "send_down"
+        ? sendDownRosterLegalityAdvisory(sendDownCandidates, playerId)
+        : null;
       const commonInput = {
         franchiseId,
         seasonId,
@@ -319,8 +390,8 @@ function FranchiseTransactionConsole({
       }
 
       setRosterStatusMessage({
-        kind: "success",
-        message: `${movement === "call_up" ? "Call-up" : "Send-down"} logged as ${result.transactionId ?? "transaction"}.`,
+        kind: sendDownWarning ? "warning" : "success",
+        message: `${sendDownWarning ? `${sendDownWarning} ` : ""}${movement === "call_up" ? "Call-up" : "Send-down"} logged as ${result.transactionId ?? "transaction"}.`,
       });
       setCallUpPlayerId("");
       setSendDownPlayerId("");
@@ -397,6 +468,8 @@ function FranchiseTransactionConsole({
         className={`border-[3px] p-3 text-xs ${
           status.kind === "success"
             ? "bg-[#315C37] border-[#00AA55] text-[#E8E8D8]"
+            : status.kind === "warning"
+              ? "bg-[#5A4A2F] border-[#C4A853] text-[#E8E8D8]"
             : "bg-[#5A2F2F] border-[#DD0000] text-[#E8E8D8]"
         }`}
       >

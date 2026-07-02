@@ -654,7 +654,7 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     expect(screen.getByText('FARM 1')).toBeInTheDocument();
     expect(screen.getByText(/No call-ups, send-downs, or roster writes are executed here/)).toBeInTheDocument();
     expect(screen.getByText('Farm advisory only')).toBeInTheDocument();
-    expect(screen.getAllByText(/Call-up advice: review farm OF coverage|Call-up advice: monitor Farm Hidden/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Call-up advice: review farm CF coverage|Call-up advice: monitor Farm Hidden/).length).toBeGreaterThan(0);
     expect(mocks.mockGetFranchiseFarmRoster).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-2', 'team-1');
     expect(mocks.mockGetFranchiseTrueValueRows).toHaveBeenCalledWith({
       franchiseId: 'franchise-1',
