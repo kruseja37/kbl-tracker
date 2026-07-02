@@ -427,7 +427,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         controlledBy: teamId === 'team-home' ? 'ai' : 'human',
       }),
     );
-    mocks.getAuctionSession.mockResolvedValueOnce({
+    mocks.getAuctionSession.mockResolvedValue({
       session: auctionSession(
         {
           'mlb-drafted': { playerId: 'mlb-drafted', iv: 125, ivPercentile: 0.75 },
@@ -435,7 +435,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         [sold('mlb-drafted', 'team-away', 90)],
       ),
     });
-    mocks.getAuctionSessionById.mockResolvedValueOnce({
+    mocks.getAuctionSessionById.mockResolvedValue({
       session: {
         ...auctionSession(
           {

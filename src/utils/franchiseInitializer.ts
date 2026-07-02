@@ -103,6 +103,27 @@ interface FranchiseLeagueTeams {
   teams: ScheduleTeam[];
 }
 
+const INCOMPLETE_AUCTION_FRANCHISE_MESSAGE =
+  "Your draft isn't finished yet - finish the auction before starting the season.";
+
+function isAuctionComplete(session: { state?: string } | null | undefined): boolean {
+  return session?.state === 'AUCTION_COMPLETE';
+}
+
+async function assertAuctionDraftReadyForFranchise(leagueId: string): Promise<void> {
+  const mlbSession = await getAuctionSession(leagueId, 1);
+  if (!mlbSession?.session) return;
+
+  if (!isAuctionComplete(mlbSession.session)) {
+    throw new Error(INCOMPLETE_AUCTION_FRANCHISE_MESSAGE);
+  }
+
+  const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
+  if (farmSession?.session && !isAuctionComplete(farmSession.session)) {
+    throw new Error(INCOMPLETE_AUCTION_FRANCHISE_MESSAGE);
+  }
+}
+
 async function resolveDraftBaselinePosition(
   playerId: string,
   freezePosition: PlayerPosition | null | undefined,
@@ -664,6 +685,8 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     },
   };
 
+  await assertAuctionDraftReadyForFranchise(franchiseLeagueId);
+
   // 1. Create franchise metadata record in kbl-app-meta
   const franchiseId = await createFranchise(franchiseConfig.franchiseName);
 
@@ -757,7 +780,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
 
     // RB-7b §10 payoff: draft-derived morale baselines override neutral-50 defaults.
     const mlbSession = await getAuctionSession(config.league, 1);
-    if (mlbSession?.session) {
+    if (mlbSession?.session?.state === 'AUCTION_COMPLETE') {
       const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(config.league, 1));
       const neutralModifiers = {
         loyalty: 50,

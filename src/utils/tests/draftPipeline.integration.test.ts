@@ -85,6 +85,7 @@ import { resetTrackerDbForTests } from '../trackerDb';
 import {
   deleteFranchise,
   getFranchiseConfig,
+  listFranchises,
 } from '../franchiseManager';
 import {
   deepCopyLeagueToFranchise,
@@ -97,6 +98,12 @@ import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 import { initializeFranchise } from '../franchiseInitializer';
 import { clearAllSchedules } from '../scheduleStorage';
 import { deleteSeasonMetadata } from '../seasonStorage';
+import {
+  getFranchiseTrueValueRows,
+} from '../franchiseTrueValueStorage';
+import {
+  listFranchiseMoraleSnapshots,
+} from '../franchiseMoraleState';
 import {
   buildLiveScoutPool,
   persistDraftStaffForLeague,
@@ -474,13 +481,21 @@ async function franchiseControlFromSavedOwnership(): Promise<Pick<FranchiseConfi
 
 function makeFranchiseConfig(
   controlOverrides?: Pick<FranchiseConfig['teams'], 'selectedTeams' | 'playerAssignments' | 'seats'>,
+  overrides: {
+    leagueId?: string;
+    teamIds?: readonly string[];
+    franchiseName?: string;
+  } = {},
 ): FranchiseConfig {
+  const leagueId = overrides.leagueId ?? LEAGUE_ID;
+  const teamIds = overrides.teamIds ?? TEAM_IDS;
+  const selectedTeams = controlOverrides?.selectedTeams ?? [teamIds[0]];
   return {
-    franchiseName: 'Draft Pipeline Franchise',
-    league: LEAGUE_ID,
+    franchiseName: overrides.franchiseName ?? 'Draft Pipeline Franchise',
+    league: leagueId,
     leagueDetails: {
       name: 'Draft Pipeline Integration League',
-      teams: TEAM_IDS.length,
+      teams: teamIds.length,
       conferences: 0,
       divisions: 0,
     },
@@ -506,7 +521,7 @@ function makeFranchiseConfig(
       homeFieldAdvantage: 'higher-seed',
     },
     teams: {
-      selectedTeams: controlOverrides?.selectedTeams ?? [TEAM_IDS[0]],
+      selectedTeams,
       mode: (controlOverrides?.selectedTeams?.length ?? 1) > 1 ? 'multiplayer' : 'single',
       playerAssignments: controlOverrides?.playerAssignments ?? {},
       seats: controlOverrides?.seats,
@@ -515,6 +530,111 @@ function makeFranchiseConfig(
       mode: 'existing',
     },
   };
+}
+
+async function seedCompleteFranchiseReadyLeague(
+  leagueId: string,
+  teamIds: readonly string[],
+  draftFormat: 'auction' | 'snake' = 'auction',
+): Promise<void> {
+  await saveLeagueTemplate({
+    id: leagueId,
+    name: `${leagueId} Complete League`,
+    teamIds: [...teamIds],
+    conferences: [],
+    divisions: [],
+    defaultRulesPreset: 'standard',
+    draftFormat,
+    tier: 'standard',
+    balanceMode: 'taxed',
+  });
+
+  const teams: Team[] = [];
+  for (const [teamIndex, teamId] of teamIds.entries()) {
+    const team = makeCommitRegressionTeam(teamId, leagueId, teamIndex === 0 ? 'human' : 'ai');
+    await saveTeam(team);
+    teams.push(team);
+
+    const mlbIds = Array.from({ length: 22 }, (_, i) => `${teamId}-mlb-${i + 1}`);
+    const farmIds = Array.from({ length: 10 }, (_, i) => `${teamId}-farm-${i + 1}`);
+    for (const id of mlbIds) {
+      await savePlayer({
+        ...makeCommitRegressionPlayer(id),
+        leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
+      });
+    }
+    for (const id of farmIds) {
+      await savePlayer({
+        ...makeCommitRegressionPlayer(id),
+        draftedAsFarmProspect: true,
+        leagueAssignments: [{ leagueId, teamId, rosterStatus: 'FARM' }],
+      });
+    }
+    await saveTeamRoster({
+      ...createEmptyTeamRoster(teamId),
+      mlbRoster: mlbIds,
+      farmRoster: farmIds,
+    });
+  }
+
+  await persistScoutHiresForLeague({
+    leagueId,
+    teams,
+    selectedScoutIdsByTeamId: {},
+    pool: buildLiveScoutPool(leagueId, teams.length),
+  });
+}
+
+function makeIncompleteAuctionSession(
+  leagueId: string,
+  teamIds: readonly string[],
+  seed: string,
+): CpuShillAuctionSession {
+  return initAuctionSession({
+    teams: teamIds.map((teamId) => ({
+      teamId,
+      budgetRemaining: 1_000_000,
+      rosterSlotsRemaining: 22,
+      minSalary: LEAGUE_MINIMUM_SALARY,
+    })),
+    players: [
+      {
+        playerId: `${teamIds[0]}-mlb-1`,
+        iv: 10_000,
+        ivPercentile: 50,
+      },
+    ],
+    config: {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      nominationOrderSeed: seed,
+      cpuShillCount: 0,
+      bidIncrement: 1_000,
+      turnTimerSeconds: null,
+      excludeFromLeague: true,
+      nominationWeightExponent: 2,
+    },
+  }) as CpuShillAuctionSession;
+}
+
+function makeCompleteEmptyAuctionSession(teamIds: readonly string[], seed: string): CpuShillAuctionSession {
+  return initAuctionSession({
+    teams: teamIds.map((teamId) => ({
+      teamId,
+      budgetRemaining: 0,
+      rosterSlotsRemaining: 0,
+      minSalary: LEAGUE_MINIMUM_SALARY,
+    })),
+    players: [],
+    config: {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      nominationOrderSeed: seed,
+      cpuShillCount: 0,
+      bidIncrement: 1_000,
+      turnTimerSeconds: null,
+      excludeFromLeague: true,
+      nominationWeightExponent: 2,
+    },
+  }) as CpuShillAuctionSession;
 }
 
 async function cleanup(): Promise<void> {
@@ -843,6 +963,114 @@ describe('draft pipeline integration', () => {
     expect(first.franchisePlayerCount).toBe(TEAM_IDS.length * 32);
     expect(first.franchiseTeamCount).toBe(TEAM_IDS.length);
     expect(first.franchiseFarmRecordCount).toBe(TEAM_IDS.length * 10);
+  }, 30_000);
+
+  test('blocks franchise launch before metadata when a saved MLB auction is not finished', async () => {
+    const leagueId = `${LEAGUE_ID}-guard-mlb`;
+    const teamIds = ['guard-mlb-a', 'guard-mlb-b'] as const;
+    await seedCompleteFranchiseReadyLeague(leagueId, teamIds);
+
+    const incompleteMlbSession = makeIncompleteAuctionSession(leagueId, teamIds, 'guard-incomplete-mlb');
+    expect(incompleteMlbSession.state).not.toBe('AUCTION_COMPLETE');
+    await saveAuctionSession({
+      id: createAuctionSessionId(leagueId, MLB_AUCTION_SEASON),
+      leagueId,
+      seasonNumber: MLB_AUCTION_SEASON,
+      seed: incompleteMlbSession.config.nominationOrderSeed,
+      session: incompleteMlbSession,
+    });
+
+    const before = await listFranchises();
+    await expect(initializeFranchise(makeFranchiseConfig(undefined, {
+      leagueId,
+      teamIds,
+      franchiseName: 'Guard MLB Incomplete',
+    }))).rejects.toThrow("Your draft isn't finished yet - finish the auction before starting the season.");
+    const after = await listFranchises();
+
+    expect(after).toEqual(before);
+    expect(after.map((franchise) => franchise.name)).not.toContain('Guard MLB Incomplete');
+  }, 30_000);
+
+  test('blocks franchise launch before metadata when MLB is complete but saved farm auction is not finished', async () => {
+    const leagueId = `${LEAGUE_ID}-guard-farm`;
+    const teamIds = ['guard-farm-a', 'guard-farm-b'] as const;
+    await seedCompleteFranchiseReadyLeague(leagueId, teamIds);
+
+    const completedMlbSession = makeCompleteEmptyAuctionSession(teamIds, 'guard-complete-mlb');
+    expect(completedMlbSession.state).toBe('AUCTION_COMPLETE');
+    await saveAuctionSession({
+      id: createAuctionSessionId(leagueId, MLB_AUCTION_SEASON),
+      leagueId,
+      seasonNumber: MLB_AUCTION_SEASON,
+      seed: completedMlbSession.config.nominationOrderSeed,
+      session: completedMlbSession,
+    });
+
+    const incompleteFarmSession = makeIncompleteAuctionSession(leagueId, teamIds, 'guard-incomplete-farm');
+    expect(incompleteFarmSession.state).not.toBe('AUCTION_COMPLETE');
+    await saveAuctionSessionById({
+      id: createFarmAuctionSessionId(leagueId, 1),
+      leagueId,
+      seasonNumber: 1,
+      seed: incompleteFarmSession.config.nominationOrderSeed,
+      session: incompleteFarmSession,
+    });
+
+    const before = await listFranchises();
+    await expect(initializeFranchise(makeFranchiseConfig(undefined, {
+      leagueId,
+      teamIds,
+      franchiseName: 'Guard Farm Incomplete',
+    }))).rejects.toThrow("Your draft isn't finished yet - finish the auction before starting the season.");
+    const after = await listFranchises();
+
+    expect(after).toEqual(before);
+    expect(after.map((franchise) => franchise.name)).not.toContain('Guard Farm Incomplete');
+  }, 30_000);
+
+  test('allows franchise launch without auction sessions for complete non-auction rosters and keeps neutral baselines', async () => {
+    const leagueId = `${LEAGUE_ID}-guard-absent`;
+    const teamIds = ['guard-absent-a', 'guard-absent-b'] as const;
+    await seedCompleteFranchiseReadyLeague(leagueId, teamIds, 'snake');
+    await expect(getAuctionSession(leagueId, MLB_AUCTION_SEASON)).resolves.toBeNull();
+    await expect(getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1))).resolves.toBeNull();
+
+    const franchiseId = await initializeFranchise(makeFranchiseConfig(undefined, {
+      leagueId,
+      teamIds,
+      franchiseName: 'Guard Session Absent',
+    }));
+    CREATED_FRANCHISE_IDS.push(franchiseId);
+    const seasonId = getFranchiseSeasonId(franchiseId, 1);
+
+    const [
+      storedConfig,
+      franchisePlayers,
+      moraleSnapshots,
+      draftBaselineRows,
+    ] = await Promise.all([
+      getFranchiseConfig(franchiseId),
+      getAllFranchisePlayers(franchiseId),
+      listFranchiseMoraleSnapshots(franchiseId, seasonId, seasonId, 1),
+      getFranchiseTrueValueRows({
+        franchiseId,
+        seasonId,
+        statsScopeId: 'draft-baseline',
+      }),
+    ]);
+
+    expect(storedConfig?.rosterRequirements).toMatchObject({
+      validationStatus: 'passed',
+      teamCounts: {
+        [teamIds[0]]: { MLB: 22, FARM: 10 },
+        [teamIds[1]]: { MLB: 22, FARM: 10 },
+      },
+    });
+    expect(franchisePlayers).toHaveLength(teamIds.length * 32);
+    expect(franchisePlayers.every((player) => player.morale === 50)).toBe(true);
+    expect(moraleSnapshots).toHaveLength(0);
+    expect(draftBaselineRows).toHaveLength(0);
   }, 30_000);
 
   test('persists scout-hire and staff-hire selections through the live draft ceremony stores', async () => {
