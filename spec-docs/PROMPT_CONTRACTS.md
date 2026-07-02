@@ -25774,6 +25774,33 @@ Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: FABLE-C1 ===== -->
 
+<!-- ===== CONTRACT: FABLE-C1B ===== -->
+
+# FABLE-C1B: DRAFT-POOL EXTRACTOR (archetypes → balanced pool; fires after C1 landed)
+
+**ROUTE:** Fable 5 (Claude Code CLI) | xhigh reasoning effort. Branch-only; do NOT commit; do NOT push. Trunk carries C1 (`7473b765`).
+
+**ROLE:** Builder (Fable 5). Audit chain per the C1 precedent: Codex adversarial pass → Opus gate (build + FULL suite ZERO-NEW-REDS + L-SIM) → Opus commits.
+
+**GOAL (JK requirement 3 + the extractor rulings, DECISIONS_LOG 2026-07-01):** the one-click REVERSE direction — select the archetypes desired eligible for a league → EXTRACT a right-sized draft pool from a much larger source set (e.g. 240 from 1000+) such that every selected archetype is DRAFTABLE and the field is BALANCED (no identity starts with a stacked deck). Engine-only (build-dark): the league-builder button is C4/spec-recovery surface.
+- Deterministic `extractDraftPool(source, selectedArchetypes, tier, opts)`: structural per-position floors scaled to league size × oversupply (default 1.2× — JK's floor; C3 refines the sizing model) → seed from each archetype\'s C1 identity build → verify with the C1 snipe-test ranker → repair loop (feed the worst archetype its missing pieces; swap out unclaimed filler at the size cap) → report per-archetype verdicts + plain unmet-notes.
+- BALANCE target: all selected archetypes within one band and a bounded resilience spread (§16-tunable).
+- STRUCTURE is a parameter: the MLB 22-man structure (LEGAL_ROSTER) ships WIRED; the FARM 10-man structure is a config seam ONLY (farm legality/composition is not yet grounded on trunk; the farm-prospect-generation RELOCATION — generate at league-builder time, store HIDDEN, grade-distribution-only validation — is the companion PLUMBING ticket riding the setup-spine batch after spec-recovery; JK pre-approved the relocation 2026-07-01).
+
+**SOURCE OF TRUTH:** DECISIONS_LOG 2026-07-01 (extractor ruling: MLB+farm balanced, conditional relocation; snipe-test formula); `FABLE_C1_DESIGN_2026-07-01.md` D7/D8; `draftabilityRanker.ts` + `archetypeBalanceSimulator.ts` (reuse — no second builder/ranker); `rosterConstruction.ts` (the law).
+
+**CONSTRAINTS:** reuse `buildIdentityRoster` + `rankArchetypeDraftability` — no parallel math. Deterministic (no Date.now/Math.random; id tie-breaks). TypeScript strict. Engine + tests only — NO UI, NO storage writes (the extraction is a pure function over a provided source set). Do NOT commit; do NOT push.
+
+**EXPECTED OUTPUT:** `src/engines/draftPoolExtractor.ts` + tests: oracle-pool extraction (selected archetypes all draftable, size ≤ target, deterministic twice), catcher-starved source (pulls all catchers + names the shortfall), fairness (disjoint-need archetypes land within a band), determinism.
+
+**VERIFICATION (builder runs, reports):** `NODE_ENV= npm run build` exit 0; targeted suites green; FULL suite ZERO-NEW-REDS vs the characterized pair.
+
+**FAILURE PROTOCOL (STOP-IF):** the ranker/builder API cannot express a needed check without modifying C1\'s committed behavior (report, do not fork the math); OR balance is unreachable for a selected set on the oracle source (structural finding → report the distribution, do not force).
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: FABLE-C1B ===== -->
+
 <!-- ===== CONTRACT: FABLE-C2A ===== -->
 
 # FABLE-C2A: AUCTION-TUNING-HARNESS (the calibration harness — build second)
@@ -26569,3 +26596,29 @@ Use xhigh reasoning effort.
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: C1-AUDIT-R3 ===== -->
+
+<!-- ===== CONTRACT: C1B-AUDIT ===== -->
+
+# C1B-AUDIT: adversarial cross-model review of the FABLE-C1B pool-extractor diff (ruling 5b)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, UNCOMMITTED C1B diff (trunk HEAD `c3259686`). READ-ONLY (no writes/commit/build/test). Opus runs the gate separately.
+
+**ROLE:** Adversarial math auditor, cross-model second lens (ruling 5b). Fable built C1B (the MLB+farm draft-pool extractor); you did not. Try to REFUTE its correctness.
+
+**DIFF:** `src/engines/draftPoolExtractor.ts` (new) + its test (new) + `src/engines/archetypeBalanceSimulator.ts` (one ADDITIVE export `archetypeFitScorer`). Attack these properties:
+
+1. **SINGLE-MATH (the core contract):** the extractor must REUSE the C1 machinery, not re-derive a second model — seeds from `buildIdentityRoster`, verdicts from `rankArchetypeDraftability`, fill from the exported `archetypeFitScorer`. VERIFY: is the exported `archetypeFitScorer` the SAME scoring the builder uses internally (not a divergent copy)? Does the extractor anywhere compute its own parallel valuation/sizing that could disagree with C1? Is `archetypeBalanceSimulator.ts` genuinely additive (buildBestRoster / buildIdentityRoster / the frozen value-max + parity machinery byte-stable)?
+
+2. **DETERMINISM:** claimed id tie-breaks + twice-identical on the oracle. VERIFY: any nondeterminism (Set/Map iteration order, unstable sort, Math.random/Date) that could make the extracted pool vary run-to-run?
+
+3. **SIZING/COMPOSITION correctness:** MLB structure wired from `LEGAL_ROSTER`. Oracle probe (source 440 → pool ~214/212, 2 over, all four archetypes YELLOW / tax-dependent at 1.2× oversupply). VERIFY: does the sizing math correctly reserve for builds/floors + per-position needs, or can it under/over-count? Can the extractor emit a pool it CLAIMS supports an archetype but that actually can't field it (a false "supported")? Is the "2 over, named" accounting right?
+
+4. **FARM seam:** FARM structure is a config SEAM only (farm legality ungrounded — the relocation is a JK-pre-approved companion plumbing ticket). VERIFY this is a clean seam (no wrong hard-coded farm legality shipped), not an actual farm-rule that will mislead.
+
+**SOURCE OF TRUTH:** `spec-docs/PROMPT_CONTRACTS.md` (FABLE-C1B); `spec-docs/FABLE_C1_DESIGN_2026-07-01.md` §8 (as-built); `spec-docs/DECISIONS_LOG.md` (C1B entry). Diff is ground truth.
+
+**CONSTRAINTS:** READ-ONLY; cite file:line; adversarial (SUSPECT if unprovable). **OUTPUT:** `CLEAN` or `DEFECTS FOUND` + per-defect file:line + failing case + severity. If clean, state what you attacked per property + confirm archetypeBalanceSimulator is additive.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: C1B-AUDIT ===== -->

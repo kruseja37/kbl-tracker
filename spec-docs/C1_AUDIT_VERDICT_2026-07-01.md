@@ -72,3 +72,24 @@ This is the 2nd fix round. R2-2 is a clear correctness must-fix (illegal live ro
 1. JK rules R2-1 disposition (fix vs document).
 2. Fable round 3: fix R2-2 (+ R2-1 if JK says fix). Same 12-path surface.
 3. Codex C1-AUDIT-R3 → Opus full gate (build + suite + L-SIM 60g LAST) → commit → C1B fires.
+
+---
+
+# FABLE-C1B — AUDIT VERDICT (Codex C1B-AUDIT + Opus verification)
+
+**VERDICT: BLOCK — 2 must-fix + 1 fix-or-guard + 1 contain.** As-of the uncommitted C1B diff (trunk `c3259686`). `archetypeBalanceSimulator` confirmed structurally additive (buildBestRoster/buildIdentityRoster/frozen machinery untouched). L-SIM N/A (draftPoolExtractor has no live consumer; not in the season path). Opus build/suite gate deferred until Codex-clean.
+
+## C1B-2 — MUST-FIX (single-math violation, the core contract): the exported scorer ≠ the builder's scorer
+`archetypeFitScorer` (`archetypeBalanceSimulator.ts:741-746`) returns `makeFitScore(archetypeCaps(archetype, tier), tier)`, but `buildIdentityRoster` maximizes `makeFitScore(weightedCaps(caps, tier, params.boostFitWeight), tier)` (`:679`). The extractor builds `fitScorers` WITHOUT posture (`draftPoolExtractor.ts:193`) and uses them for round-robin fill/eviction while the seeds use `buildIdentityRoster(..., { posture })`. For any non-default posture (aggressive `boostFitWeight`=1.25) the fill ranks players DIFFERENTLY than the builder it claims to reuse — the docstring's "the SAME fit math the identity climb maximizes" is false. **Fix:** make the exported scorer take the posture/`boostFitWeight` (return `makeFitScore(weightedCaps(...), tier)`) and thread `posture` into `fitScorers`, OR have the extractor obtain the builder's exact scorer — so fill and seeds share ONE scoring rule.
+
+## C1B-1 — MUST-FIX (or explicitly scope to C3): structural floor undercounts total roster bodies
+`structuralFloor` (`draftPoolExtractor.ts:122-168`) reserves per-position primaries + C-coverage + startable arms (`:159`) + relievable arms (`:160`) — all into one dedup `Map`. It never reserves TOTAL pitcher bodies (teams × 8-9) or TOTAL position-player bodies (teams × 13-14). Because an SP/RP satisfies both `canStart` and `canRelieve`, a source of ~39 SP/RP arms fills BOTH arm floors for 8 teams at 1.2× as ~39 bodies, when the league needs ≥64 pitcher bodies to field 8 legal staffs. The ranker only proves one archetype builds one roster, so an infeasible-for-the-league pool passes. **Fix:** add total-body floors (pitchers = teams × `minPitchers` × oversupply; position players = teams × `minPositionPlayers` × oversupply) to the structural reservation. If Fable/JK judge league-feasibility to be C3's job, then EXPLICITLY document that C1B does NOT guarantee it and C3 owns it (don't leave it silently under-reserved).
+
+## C1B-3 — FIX-OR-GUARD (MAJOR): the farm seam is not clean
+The structural floor loops MLB `LEGAL_ROSTER.fieldPositions` (`:132`) and final verification is hardwired to `rankArchetypeDraftability` (`:258`, MLB legality). A future caller passing a farm `PoolStructure` still gets MLB field-position floors + MLB roster verification — a MISLEADING seam, not a clean placeholder. Farm is a JK-pre-approved companion ticket + not wired yet (latent). **Fix:** drive the floor/verification off the passed `structure` (not hardcoded MLB), OR make the farm path fail loudly / carry an explicit "MLB-only until the farm-legality ticket" guard so a farm caller can't silently get MLB rules.
+
+## C1B-4 — CONTAIN (MEDIUM): determinism is input-order-dependent
+C1B passes raw `source` into `buildIdentityRoster` (`:204`); C1's equal-score greedy keeps input order (`archetypeBalanceSimulator.ts:231`) and shortlist sorts lack id tie-breaks (`:573`). So C1B repeats on identical-order input (the oracle test), but the SAME player SET in a different upstream order can yield different seed claims → different cap-protected pool membership. **Fix (contain in C1B):** sort `source` by a stable id key before seeding/fill, so extraction is order-independent (cheapest fix; keeps it out of the frozen C1 greedy). (Or add id tie-breaks in C1 — larger blast radius.)
+
+## NEXT
+Fable round: C1B-2 + C1B-1 (must); C1B-3 (fix-or-guard); C1B-4 (contain). Same C1B surface. → Codex C1B-AUDIT-R2 → Opus gate (build + FULL suite; L-SIM N/A) → commit → then C2A/C2B chain.
