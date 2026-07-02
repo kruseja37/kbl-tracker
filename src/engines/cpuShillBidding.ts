@@ -1,13 +1,19 @@
-import { auctionMaxBid } from '../data/rosterEngineConstants';
+import {
+  HISTORICAL_ARCHETYPES,
+  archetypeCapShift,
+  type HistoricalArchetype,
+} from '../data/historicalArchetypes';
 import {
   BANDS,
   BAND_STATS,
   composeIdentity,
   identityCapShift,
+  luxKeyToModStat,
   type Band,
   type BandPriorities,
 } from './leagueConstruction';
 import {
+  sessionBidCeiling,
   type AuctionPlayer,
   type AuctionSession,
 } from './auctionStateMachine';
@@ -18,6 +24,13 @@ export interface CpuShillProfile {
   teamId: string;
   personality: CpuShillPersonality;
   bandPriorities: BandPriorities;
+  /**
+   * The shill's own HIDDEN team archetype (one of the locked 24; FABLE-C2B, audit AUC-5 / spec
+   * §6:195-197). Its bandPriorities are derived from this archetype. NEVER surfaced to a GM and
+   * never read by the market predictor — the predictor models shills as a distribution over the
+   * 24 (JK ruling 2026-07-01). Optional/additive on persisted sessions.
+   */
+  archetypeId?: string;
   personalityBias?: number;
   interestAggression?: number;
   maxInterestProbability?: number;
@@ -166,6 +179,37 @@ export function evaluateCpuValuation(
   return player.iv * archetypeFit * resolved.personalityBias * noise;
 }
 
+/**
+ * A band-priority vector's positive cap lift per band — the demand-shape core of the CPU fit
+ * math, exported (FABLE-C2B) so the market predictor prices demand with EXACTLY the formula the
+ * CPU bids with (single-math rule).
+ */
+export function bandLiftFromPriorities(priorities: BandPriorities): Record<Band, number> {
+  const identity = composeIdentity(normalizeBandPriorities(priorities));
+  const capShift = identityCapShift(identity);
+  return Object.fromEntries(
+    BANDS.map((band) => [
+      band,
+      BAND_STATS[band].reduce((sum, stat) => sum + Math.max(0, capShift[stat]), 0),
+    ]),
+  ) as Record<Band, number>;
+}
+
+/**
+ * The fit multiplier a demand shape (band lift) assigns a player's band weights, centered on 1
+ * with the personality's spread. Exported for the market predictor (single-math with CPU bids).
+ */
+export function bandFitMultiplier(
+  playerWeights: Record<Band, number>,
+  bandLift: Record<Band, number>,
+  spread: number,
+): number {
+  const totalLift = BANDS.reduce((sum, band) => sum + bandLift[band], 0);
+  if (totalLift <= 0) return 1;
+  const fitScore = BANDS.reduce((sum, band) => sum + (bandLift[band] / totalLift) * playerWeights[band], 0);
+  return 1 - spread / 2 + fitScore * spread;
+}
+
 export function evaluateCpuArchetypeFit(
   player: CpuShillAuctionPlayer,
   shill: CpuShillProfile,
@@ -174,20 +218,9 @@ export function evaluateCpuArchetypeFit(
   if (weights === null) return 1;
 
   const resolved = resolveShillProfile(shill, `${shill.teamId}:archetype`);
-  const identity = composeIdentity(normalizeBandPriorities(resolved.bandPriorities));
-  const capShift = identityCapShift(identity);
-  const bandLift = Object.fromEntries(
-    BANDS.map((band) => [
-      band,
-      BAND_STATS[band].reduce((sum, stat) => sum + Math.max(0, capShift[stat]), 0),
-    ]),
-  ) as Record<Band, number>;
-  const totalLift = BANDS.reduce((sum, band) => sum + bandLift[band], 0);
-  if (totalLift <= 0) return 1;
-
-  const fitScore = BANDS.reduce((sum, band) => sum + (bandLift[band] / totalLift) * weights[band], 0);
+  const bandLift = bandLiftFromPriorities(resolved.bandPriorities);
   const spread = CPU_SHILL_PERSONALITY_PROFILES[resolved.personality].archetypeFitSpread;
-  return 1 - spread / 2 + fitScore * spread;
+  return bandFitMultiplier(weights, bandLift, spread);
 }
 
 export function evaluateCpuInterest(
@@ -265,12 +298,7 @@ export function cpuBidOnLot(
   }
 
   const minimumBid = minimumLegalBid(lot, session.config.bidIncrement);
-  const maxBid = auctionMaxBid(
-    team.budgetRemaining,
-    team.rosterSlotsRemaining,
-    team.minSalary,
-    team.projectedTax,
-  );
+  const maxBid = sessionBidCeiling(session, shillTeamId) ?? 0;
   const valuation = evaluateCpuValuation(player, shill, seed);
 
   if (minimumBid > maxBid) {
@@ -324,12 +352,7 @@ export function cpuDecideLoneSurvivor(
   }
 
   const price = claim.price;
-  const maxBid = auctionMaxBid(
-    team.budgetRemaining,
-    team.rosterSlotsRemaining,
-    team.minSalary,
-    team.projectedTax,
-  );
+  const maxBid = sessionBidCeiling(session, teamId) ?? 0;
   const valuation = evaluateCpuValuation(player, shill, seed);
 
   if (price > maxBid) {
@@ -365,7 +388,9 @@ function resolveShillProfile(shill: CpuShillProfile, seed: string): ResolvedCpuS
   const defaults = CPU_SHILL_PERSONALITY_PROFILES[shill.personality];
   return {
     ...shill,
-    bandPriorities: normalizeBandPriorities(shill.bandPriorities ?? buildSeededBandPriorities(shill.teamId, seed)),
+    bandPriorities: normalizeBandPriorities(
+      shill.bandPriorities ?? buildArchetypeShillProfile(shill.teamId, seed).bandPriorities,
+    ),
     personalityBias: shill.personalityBias ?? defaults.personalityBias,
     interestAggression: shill.interestAggression ?? defaults.interestAggression,
     maxInterestProbability: Math.min(
@@ -375,24 +400,46 @@ function resolveShillProfile(shill: CpuShillProfile, seed: string): ResolvedCpuS
   };
 }
 
-function buildSeededCpuShill(teamId: string, seed: string): CpuShillProfile {
+/**
+ * A team archetype's band-priority shape: the archetype's positive cap-shift mass per band,
+ * normalized so the strongest band scores 1. This is the ONE archetype→band bridge — the hidden
+ * shill demand AND the market predictor's 24-archetype mixture both price through it (FABLE-C2B).
+ */
+export function archetypeBandPriorities(arch: HistoricalArchetype): BandPriorities {
+  const lift = Object.fromEntries(BANDS.map((band) => [band, 0])) as Record<Band, number>;
+  for (const [luxKey, frac] of Object.entries(archetypeCapShift(arch))) {
+    const stat = luxKeyToModStat(luxKey);
+    if (stat === undefined || frac <= 0) continue;
+    for (const band of BANDS) {
+      if (BAND_STATS[band].includes(stat)) lift[band] += frac;
+    }
+  }
+  const top = Math.max(...BANDS.map((band) => lift[band]));
+  if (top <= 0) {
+    return Object.fromEntries(BANDS.map((band) => [band, 1])) as BandPriorities;
+  }
+  return Object.fromEntries(BANDS.map((band) => [band, lift[band] / top])) as BandPriorities;
+}
+
+/**
+ * Seed a shill with its own HIDDEN archetype from the locked 24 (spec §6:195-197 "each shill
+ * builds toward its OWN secret archetype"; audit AUC-5 replaced the arbitrary 2-band vector).
+ * Deterministic per (teamId, seed); personality stays independently seeded.
+ */
+export function buildArchetypeShillProfile(teamId: string, seed: string): CpuShillProfile {
   const personalities: readonly CpuShillPersonality[] = ['sniper', 'spender', 'zealot'];
+  const archetype =
+    HISTORICAL_ARCHETYPES[hashString(`${seed}:${teamId}:archetype`) % HISTORICAL_ARCHETYPES.length];
   return {
     teamId,
     personality: personalities[hashString(`${seed}:${teamId}:personality`) % personalities.length],
-    bandPriorities: buildSeededBandPriorities(teamId, seed),
+    archetypeId: archetype.id,
+    bandPriorities: archetypeBandPriorities(archetype),
   };
 }
 
-function buildSeededBandPriorities(teamId: string, seed: string): BandPriorities {
-  const primaryIndex = hashString(`${seed}:${teamId}:primary-band`) % BANDS.length;
-  const secondaryIndex = hashString(`${seed}:${teamId}:secondary-band`) % BANDS.length;
-  return Object.fromEntries(
-    BANDS.map((band, index) => [
-      band,
-      index === primaryIndex ? 1 : index === secondaryIndex ? 0.65 : 0,
-    ]),
-  ) as BandPriorities;
+function buildSeededCpuShill(teamId: string, seed: string): CpuShillProfile {
+  return buildArchetypeShillProfile(teamId, seed);
 }
 
 function normalizeBandPriorities(priorities: BandPriorities): BandPriorities {

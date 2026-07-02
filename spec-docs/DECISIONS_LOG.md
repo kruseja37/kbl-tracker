@@ -3064,3 +3064,54 @@ Also JK (same message): shill-count sizing for 4-human and 8-human leagues + the
 (draft ends when all non-shill rosters are full) + sandbagging risk — CONFIRMED as C3's core
 questions (the sim-backed shill recommendation is contracted there); Fable to provide the
 analytical frame now, C3 to prove the numbers.
+
+## 2026-07-01 — JK (C2B kickoff): the LIVE auction solvency floor is BROKEN — teams cannot finish the draft
+
+JK, greenlighting FABLE-C2B: "the current auction floor logic is broken, which disallows teams to
+finish the draft every time." This upgrades audit AUC-2/RCI-04 from "crude/imprecise cap" to a
+LIVE COMPLETION-BLOCKING DEFECT. The suspect mechanism (to be confirmed during the C2B build):
+`auctionMaxBid` reserves a generic `(slotsRemaining−1)×minSalary` + a phantom `projectedTax`,
+but the true cost of finishing is each remaining lot's OPENING ASK (`reservePriceCurve(pctile)×iv`,
+which exceeds `minSalary`) at each still-required position — so the cap is simultaneously too
+permissive early (lets a team spend past the point where it can still afford real remaining
+players) and too restrictive late (prices teams out of every remaining lot, forced-filler skips
+them, slots strand, `isAuctionComplete` never satisfied / pool exhausts with open slots).
+→ C2B's completion-based floor (cheapest players ACTUALLY LEFT per remaining required position,
+per C1's position model; phantom tax reservation stripped) is a BUG FIX to live behavior, not just
+an accuracy upgrade. C2B must include a root-cause repro (a regression test demonstrating the
+un-finishable draft under the old floor, finishing under the new one).
+
+## 2026-07-02 — C2B AUDIT VERDICT + JK rulings: BLOCK → fix-now round, then commit
+
+Opus audit of the FABLE-C2B diff (cross-model Codex pass + independent Opus 8-lens Workflow with
+per-finding skeptic verification + Opus full read + the gate). Full record:
+`spec-docs/C2B_AUDIT_VERDICT_2026-07-02.md`. Gate independently confirmed GREEN: build exit 0; full
+suite zero-new-reds (the characterized pair only; smoke-fixture solo-passes 4/4); calibration in the
+85-90% window (value aggregate ≈0.872), matching Fable's numbers. The chartered bug fix (completion
+floor + 6-site rewire) is CORRECT on adversarial attack — it fixes the common-case defect that blocked
+every draft.
+
+**ONE residual defect (F1, must-fix):** the completion floor's arm selection (`cheapestArmPicks`) is
+coverage-blind — it picks required rotation/bullpen arms by price only and never prefers a Two-Way(C)
+arm. In a narrow endgame (a team one catcher short whose ONLY coverer is a Two-Way(C) arm that is also
+a required arm, with tight slots), it returns spurious INFEASIBLE though a legal 22 exists → falls back
+to the scalar reserve, which UNDER-reserves (minSalary < real opening asks) → allows an overspend that
+strands the roster and re-opens the "draft can't finish" bug on a narrow trigger. The builder's
+safe-direction proof (design §6b item 7) is one-directional and invalid: it proves no false REJECTION
+but the actual hazard is the too-permissive under-reserve. Found by the Opus deep review (3 independent
+skeptics confirmed); MISSED by the single Codex pass — the multi-lens adversarial approach earned its
+keep here. Plus three prediction-layer polish items: F2 own_need over-rates off-role pitchers
+(class-blind `pitcherNeed`); F3 bid-vs-pass can suggest legality-blocked targets; F4 the internal
+`modeledSecondPrice` could equal a single rival's ceiling (Opus skeptic refuted it as a live leak —
+model's own inference, never displayed — but see ruling 2).
+
+**JK RULINGS (2026-07-02):**
+1. **Fix the strand corner NOW before committing** (not document-and-defer). Precedent for defer existed
+   (C1 R2-1 Two-Way(C) builder limit was deferred), but JK chose fix-now because it is the charter's
+   core promise ("the draft must finish").
+2. **Fold the prediction-layer polish (F2/F3/F4) into the same fix round** — including walling
+   `modeledSecondPrice` off the GM-facing type entirely so a future draft screen can never display it
+   (keep it for the calibration harness via a separate/internal channel).
+
+→ FABLE-C2B-FIX contract routes the fix to Fable (builder≠auditor). Opus re-audits the delta (Codex
+re-pass + Opus verify), runs the gate + L-SIM, then commits branch-only. Then FABLE-C3.

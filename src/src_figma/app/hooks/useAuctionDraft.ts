@@ -15,6 +15,7 @@ import {
 import { computeAuctionTeamProjectedTaxWithCaps } from "../../../engines/auctionLuxuryTax";
 import type { ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
 import {
+  buildArchetypeShillProfile,
   type CpuShillAuctionSession,
   type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
@@ -187,22 +188,14 @@ function shillTeamId(leagueId: string, index: number): string {
   return `__auction_shill__${leagueId}__${index + 1}`;
 }
 
+/**
+ * FABLE-C2B (audit AUC-5, spec §6:195-197): each shill gets its own HIDDEN archetype seeded from
+ * the locked 24, replacing the old hand-rolled band vectors. Deterministic per (league, seat).
+ */
 function buildPureShillProfiles(leagueId: string, count: number): Record<string, CpuShillProfile> {
-  const personalities: CpuShillProfile["personality"][] = ["sniper", "spender", "zealot"];
   return Object.fromEntries(Array.from({ length: count }, (_, index) => {
     const teamId = shillTeamId(leagueId, index);
-    return [teamId, {
-      teamId,
-      personality: personalities[index % personalities.length],
-      bandPriorities: {
-        Power: index % 3 === 1 ? 3 : 1,
-        Contact: index % 3 === 0 ? 3 : 1,
-        Speed: index % 3 === 2 ? 3 : 1,
-        Defense: 2,
-        Rotation: index % 2 === 0 ? 2 : 1,
-        Bullpen: index % 2 === 1 ? 2 : 1,
-      },
-    } satisfies CpuShillProfile];
+    return [teamId, buildArchetypeShillProfile(teamId, `${leagueId}:shill-archetype`)];
   }));
 }
 

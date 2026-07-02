@@ -76,6 +76,16 @@ export interface RosterNeedBreakdown {
   catcherCoverNeed: number;
   /** Additional startable + relievable arms needed (after optimally assigning SP/RP swings). */
   pitcherNeed: number;
+  /**
+   * Rotation-side class deficit BEFORE swing allocation: `max(0, 4 − pure-SP count)` (C2B-FIX F2,
+   * additive). With `f = pitcherNeed = max(0, rotationDeficit + bullpenDeficit − swings)`, adding a
+   * pure SP strictly reduces `pitcherNeed` iff `pitcherNeed > 0 && rotationDeficit > 0`; a swing
+   * (SP/RP) reduces it iff `pitcherNeed > 0`. This is the class-aware "fills the arm requirement"
+   * read — a pure SP never fills a bullpen-only deficit.
+   */
+  rotationDeficit: number;
+  /** Bullpen-side class deficit BEFORE swing allocation: `max(0, 4 − pure-RP/CP count)` (C2B-FIX F2). */
+  bullpenDeficit: number;
   /** Additional position players needed to reach the 13 floor beyond the primary fills. */
   hitterFloorNeed: number;
   /** Additional pitchers needed to reach the 8 floor beyond the rotation/bullpen fills. */
@@ -86,7 +96,12 @@ export interface RosterNeedBreakdown {
   infeasible: boolean;
 }
 
-function pitcherAdditionsNeeded(pitchers: RosterSlotPlayer[]): number {
+/** Pure-class arm counts (shared by the need math and the F2 class-deficit exposure). */
+function classifyArms(pitchers: readonly RosterSlotPlayer[]): {
+  pureSp: number;
+  pureRelief: number;
+  swing: number;
+} {
   let pureSp = 0;
   let pureRelief = 0;
   let swing = 0;
@@ -100,6 +115,11 @@ function pitcherAdditionsNeeded(pitchers: RosterSlotPlayer[]): number {
     // Defensively, a bare 'P'/'TWO-WAY' primary counts toward pitcher HEADCOUNT only, matching
     // `isLegalRoster` exactly (audit F2). Upstream purge of the invalid states is a Wave-1 ticket.
   }
+  return { pureSp, pureRelief, swing };
+}
+
+function pitcherAdditionsNeeded(pitchers: RosterSlotPlayer[]): number {
+  const { pureSp, pureRelief, swing } = classifyArms(pitchers);
   let best = Number.POSITIVE_INFINITY;
   for (let x = 0; x <= swing; x += 1) {
     const rotDeficit = Math.max(0, LEGAL_ROSTER.startingPitchers - pureSp - x);
@@ -134,6 +154,9 @@ export function rosterNeedBreakdown(roster: RosterSlotPlayer[]): RosterNeedBreak
   const catcherCoverNeed = Math.max(0, LEGAL_ROSTER.minCatchers - coverers - mandatedCFill);
 
   const pitcherNeed = pitcherAdditionsNeeded(pitchers);
+  const armClasses = classifyArms(pitchers);
+  const rotationDeficit = Math.max(0, LEGAL_ROSTER.startingPitchers - armClasses.pureSp);
+  const bullpenDeficit = Math.max(0, LEGAL_ROSTER.minRelievers - armClasses.pureRelief);
 
   const hittersAfterPrimaries = hitters.length + primaryFills;
   const pitchersAfterFills = pitchers.length + pitcherNeed;
@@ -168,6 +191,8 @@ export function rosterNeedBreakdown(roster: RosterSlotPlayer[]): RosterNeedBreak
     missingPrimaries,
     catcherCoverNeed,
     pitcherNeed,
+    rotationDeficit,
+    bullpenDeficit,
     hitterFloorNeed,
     pitcherFloorNeed,
     minimumAdditions,

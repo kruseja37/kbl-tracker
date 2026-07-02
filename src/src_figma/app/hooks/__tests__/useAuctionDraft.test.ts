@@ -452,7 +452,7 @@ describe("useAuctionDraft", () => {
     });
   });
 
-  test("applies pool luxury caps per surfaced lot so off-archetype max bid is reduced", async () => {
+  test("computes projected tax per surfaced lot for display, but the tax never gates the bid cap", async () => {
     const teamIds = ["human", "other"];
     const seed = seedWithFirst(teamIds, "human");
     const caps: LuxuryCapRow[] = [
@@ -525,6 +525,9 @@ describe("useAuctionDraft", () => {
     expect(offTax!).toBeGreaterThan(0);
     expect(onMaxBid).not.toBeNull();
     expect(offMaxBid).not.toBeNull();
-    expect(offMaxBid!).toBeLessThan(onMaxBid!);
+    // FABLE-C2B (spec §6:186-193, JK 2026-07-01 "the floor is broken"): the projected tax stays
+    // computed per lot as ADVICE, but the phantom reservation is stripped from the HARD floor —
+    // the solvency cap no longer shrinks for an off-archetype lot.
+    expect(offMaxBid!).toBe(onMaxBid!);
   });
 });

@@ -9,6 +9,11 @@ import {
   reservePriceCurve,
 } from '../data/rosterEngineConstants';
 import type { RosterSlotPlayer } from '../data/rosterConstruction';
+import {
+  completionBidCeiling,
+  conservativePoolReserve,
+  type CompletionCandidate,
+} from './auctionCompletionFloor';
 import { wouldStrandRoster } from './rosterNeed';
 
 export type AuctionState =
@@ -50,6 +55,17 @@ export interface AuctionTeamInput {
   roster?: readonly AuctionRosterAssignment[];
 }
 
+/**
+ * One entry of a lot's bid history (FABLE-C2B, audit AUC-3: log-first-consume-later — the v1.1
+ * Underbidder Memory consumes this). OPTIONAL/additive on the persisted session shape.
+ */
+export interface BidLogEntry {
+  teamId: string;
+  action: 'bid' | 'pass' | 'claim' | 'forced-fill';
+  /** The bid/claim/fill amount; null for a pass. */
+  amount: number | null;
+}
+
 export interface Lot {
   playerId: string;
   nominatorTeamId: string;
@@ -58,6 +74,8 @@ export interface Lot {
   highBidder: string | null;
   stillIn: readonly string[];
   bidTurnTeamId: string | null;
+  /** Full bid history for this lot (absent on sessions saved before FABLE-C2B). */
+  bidLog?: readonly BidLogEntry[];
 }
 
 export interface PendingClaim {
@@ -79,6 +97,12 @@ export interface AuctionResult {
   nominatorTeamId: string;
   winnerTeamId: string | null;
   salary: number | null;
+  /** Teams that put money on this lot (bid/claim/forced-fill). Absent on pre-C2B results. */
+  bidderSet?: readonly string[];
+  /** The last non-winner to place a bid — the second-price revealer. Absent on pre-C2B results. */
+  underbidder?: string | null;
+  /** `bidderSet.length` denormalized for cheap reads. Absent on pre-C2B results. */
+  numBidders?: number;
 }
 
 export interface AuctionSession {
@@ -222,15 +246,70 @@ export function selectNextNominee(session: AuctionSession): string | null {
   return selectedId;
 }
 
-export function getTeamAuctionMaxBid(session: AuctionSession, teamId: string): number | null {
+/** The opening ask a lot for `player` would carry — single-math with `surfaceNextPlayer`. */
+export function lotOpeningAsk(player: AuctionPlayer, config: AuctionSetupConfig): number {
+  return config.flatReserveFloor != null
+    ? config.flatReserveFloor
+    : reservePriceCurve(player.ivPercentile) * player.iv;
+}
+
+/**
+ * The ACCURATE completion-based solvency ceiling (FABLE-C2B; spec §6:186-193, audit AUC-2/RCI-04):
+ * the most this team can pay right now while the cheapest VERIFIED-legal completion of its roster
+ * — from the players ACTUALLY LEFT, at their opening asks — stays affordable. When a lot is open,
+ * the ceiling prices winning THAT candidate (his position joins the roster; the completion covers
+ * the remaining slots). The phantom projectedTax reservation is STRIPPED per spec §6.
+ *
+ * Fallbacks (C2B-FIX F1 split the two tiers):
+ * - Position info MISSING (pre-C1 saved sessions, the farm auction, unenriched pools): the
+ *   permissive scalar reserve `budget − (slots−1)×minSalary` — the pre-C2B formula with the tax
+ *   term removed (the rosterNeed.ts uncertainty policy: never wrongly block a live bid).
+ * - ENRICHED but no verified completion exists: the price-aware conservative reserve — the
+ *   cheapest real opening asks still in the pool, capped at the scalar — so a (genuinely or
+ *   spuriously) infeasible read can never under-reserve into an endgame strand.
+ */
+export function sessionBidCeiling(session: AuctionSession, teamId: string): number | null {
   const team = findTeam(session, teamId);
   if (team === null) return null;
-  return auctionMaxBid(
-    team.budgetRemaining,
-    team.rosterSlotsRemaining,
-    team.minSalary,
-    team.projectedTax,
-  );
+  const scalar = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, 0);
+
+  const rosterShapes: RosterSlotPlayer[] = [];
+  for (const assignment of team.roster) {
+    const info = session.players[assignment.playerId]?.pos;
+    if (!info) return scalar;
+    rosterShapes.push(info);
+  }
+
+  let openSlots = team.rosterSlotsRemaining;
+  const candidate = session.currentLot ? session.players[session.currentLot.playerId] : null;
+  if (session.currentLot) {
+    if (!candidate?.pos) return scalar;
+    rosterShapes.push(candidate.pos);
+    openSlots -= 1;
+  }
+  if (openSlots < 0) return scalar;
+
+  const pool: CompletionCandidate[] = [];
+  for (const playerId of session.availablePlayerIds) {
+    const player = session.players[playerId];
+    if (!player?.pos) return scalar;
+    pool.push({ id: playerId, price: lotOpeningAsk(player, session.config), shape: player.pos });
+  }
+
+  const ceiling = completionBidCeiling(team.budgetRemaining, rosterShapes, pool, openSlots);
+  if (ceiling !== null) return ceiling;
+
+  // Defense-in-depth (C2B-FIX F1): on the ENRICHED path an infeasible completion read must never
+  // hand back a ceiling looser than the prices actually left can honor — the bare scalar reserves
+  // league minimums (~1.7k/slot) while every remaining lot clears at ≥ its opening ask, so the
+  // scalar alone can bless an overspend into a strand. Reserve the cheapest real asks instead,
+  // and never exceed the scalar (the pre-C2B permissiveness bound).
+  const reserve = conservativePoolReserve(pool, openSlots);
+  return Math.min(scalar, Math.max(0, team.budgetRemaining - reserve));
+}
+
+export function getTeamAuctionMaxBid(session: AuctionSession, teamId: string): number | null {
+  return sessionBidCeiling(session, teamId);
 }
 
 export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionResult {
@@ -249,9 +328,7 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
   }
 
   const player = session.players[playerId];
-  const openingAsk = session.config.flatReserveFloor != null
-    ? session.config.flatReserveFloor
-    : reservePriceCurve(player.ivPercentile) * player.iv;
+  const openingAsk = lotOpeningAsk(player, session.config);
   const stillIn = session.teams
     .filter((team) => team.rosterSlotsRemaining > 0)
     .map((team) => team.teamId);
@@ -288,6 +365,7 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
       highBidder: null,
       stillIn,
       bidTurnTeamId: openingBidder,
+      bidLog: [],
     },
     pendingClaim: null,
     availablePlayerIds: session.availablePlayerIds.filter((id) => id !== playerId),
@@ -329,8 +407,8 @@ export function recordBid(session: AuctionSession, teamId: string, bid: number):
   const minimumBid = minimumLegalBid(lot, session.config.bidIncrement);
   if (!Number.isFinite(bid) || bid < minimumBid) return rejected(session, 'bid-below-minimum');
 
-  const maxBid = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, team.projectedTax);
-  if (bid > maxBid) return rejected(session, 'bid-above-solvency-cap');
+  const maxBid = sessionBidCeiling(session, teamId);
+  if (maxBid === null || bid > maxBid) return rejected(session, 'bid-above-solvency-cap');
 
   if (bidWouldStrand(session, team, lot.playerId)) return rejected(session, 'bid-strands-roster');
 
@@ -341,6 +419,7 @@ export function recordBid(session: AuctionSession, teamId: string, bid: number):
       highBid: bid,
       highBidder: teamId,
       bidTurnTeamId: nextBidTurn(session.nominationOrder, lot.stillIn, teamId, teamId),
+      bidLog: appendBidLog(lot, { teamId, action: 'bid', amount: bid }),
     },
   });
 }
@@ -362,6 +441,7 @@ export function passBid(session: AuctionSession, teamId: string): AuctionTransit
       bidTurnTeamId: stillIn.length <= 1
         ? null
         : nextBidTurn(session.nominationOrder, stillIn, teamId, lot.highBidder),
+      bidLog: appendBidLog(lot, { teamId, action: 'pass', amount: null }),
     },
   });
 }
@@ -401,12 +481,16 @@ export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionRes
   if (team === null) return rejected(session, 'team-not-found');
   if (team.rosterSlotsRemaining <= 0) return rejected(session, 'team-full');
 
-  const maxBid = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, team.projectedTax);
-  if (claim.price > maxBid) return rejected(session, 'claim-above-solvency-cap');
+  const maxBid = sessionBidCeiling(session, claim.teamId);
+  if (maxBid === null || claim.price > maxBid) return rejected(session, 'claim-above-solvency-cap');
 
   if (bidWouldStrand(session, team, claim.playerId)) return rejected(session, 'bid-strands-roster');
 
-  return accepted(finalizeSoldLot(session, claim.teamId, claim.price));
+  return accepted(finalizeSoldLot(
+    withBidLogEntry(session, { teamId: claim.teamId, action: 'claim', amount: claim.price }),
+    claim.teamId,
+    claim.price,
+  ));
 }
 
 export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionResult {
@@ -480,6 +564,7 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
         nominatorTeamId: lot.nominatorTeamId,
         winnerTeamId,
         salary,
+        ...bidHistorySummary(lot, winnerTeamId),
       },
     ],
   };
@@ -512,8 +597,37 @@ function finalizePassedLotPermanent(session: AuctionSession): AuctionSession {
         nominatorTeamId: lot.nominatorTeamId,
         winnerTeamId: null,
         salary: null,
+        ...bidHistorySummary(lot, null),
       },
     ],
+  };
+}
+
+function appendBidLog(lot: Lot, entry: BidLogEntry): readonly BidLogEntry[] {
+  return [...(lot.bidLog ?? []), entry];
+}
+
+/** Append a bid-log entry to the open lot without any other state change. */
+function withBidLogEntry(session: AuctionSession, entry: BidLogEntry): AuctionSession {
+  const lot = requireLot(session);
+  return { ...session, currentLot: { ...lot, bidLog: appendBidLog(lot, entry) } };
+}
+
+/** The AUC-3 result summary derived from a lot's bid log at finalize time. */
+function bidHistorySummary(
+  lot: Lot,
+  winnerTeamId: string | null,
+): Pick<AuctionResult, 'bidderSet' | 'underbidder' | 'numBidders'> {
+  const log = lot.bidLog ?? [];
+  const moneyActions = log.filter((entry) => entry.action !== 'pass');
+  const bidderSet = [...new Set(moneyActions.map((entry) => entry.teamId))];
+  const lastRivalBid = [...log]
+    .reverse()
+    .find((entry) => entry.action === 'bid' && entry.teamId !== winnerTeamId);
+  return {
+    bidderSet,
+    underbidder: lastRivalBid?.teamId ?? null,
+    numBidders: bidderSet.length,
   };
 }
 
@@ -533,7 +647,11 @@ function resolveNoBidLot(session: AuctionSession): AuctionSession {
   const forcedTeam = selectForcedFillerTeam(session, lot.openingAsk, lot.playerId);
   if (forcedTeam === null) return finalizePassedLotPermanent(session);
 
-  return finalizeSoldLot(session, forcedTeam.teamId, lot.openingAsk);
+  return finalizeSoldLot(
+    withBidLogEntry(session, { teamId: forcedTeam.teamId, action: 'forced-fill', amount: lot.openingAsk }),
+    forcedTeam.teamId,
+    lot.openingAsk,
+  );
 }
 
 function selectForcedFillerTeam(
@@ -553,12 +671,7 @@ function selectForcedFillerTeam(
     // complete an ILLEGAL roster. When every otherwise-eligible team would strand, the existing
     // no-taker fallback (permanent pass-out) applies.
     if (bidWouldStrand(session, team, playerId)) return false;
-    return auctionMaxBid(
-      team.budgetRemaining,
-      team.rosterSlotsRemaining,
-      team.minSalary,
-      team.projectedTax,
-    ) >= openingAsk;
+    return (sessionBidCeiling(session, team.teamId) ?? 0) >= openingAsk;
   });
 
   return eligible.sort((left, right) => {
