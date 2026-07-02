@@ -1149,6 +1149,15 @@ describe('draft pipeline integration', () => {
     expect(locked.players).toHaveLength(mlbSlots + 1);
     expect((await getRegisteredPool(LEAGUE_ID))?.locked).toBe(true);
 
+    // CHEM-POTENCY ruling 5 (JK 2026-07-02): the lock regenerates the league-scoped player
+    // axes, so hidden personality modifiers exist at draft-pool time for BOTH draft formats
+    // (the franchise-freeze backfill is a no-op guard from here on).
+    const lockedLeaguePlayers = (await getAllPlayers()).filter((player) =>
+      player.leagueAssignments?.some((assignment) => assignment.leagueId === LEAGUE_ID),
+    );
+    expect(lockedLeaguePlayers.length).toBeGreaterThan(0);
+    expect(lockedLeaguePlayers.every((player) => player.hiddenPersonalityModifiers)).toBe(true);
+
     // The LOCKED snapshot is what the auction consumes (useAuctionDraft prefers it): it must feed
     // buildAuctionPlayers cleanly — same membership, every IV finite (the auction's hard guard).
     const lockedSnapshot = await getRegisteredPool(LEAGUE_ID);

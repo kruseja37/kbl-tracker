@@ -36,7 +36,7 @@ export function derivedPotencyTier(sharedChemistryCount: number): PotencyTier {
   return 'L1';
 }
 
-export function countRosterChemistry(roster: { chemistry: string }[]): RosterChemistryCounts {
+export function countRosterChemistry(roster: readonly { chemistry: string }[]): RosterChemistryCounts {
   const counts: RosterChemistryCounts = {};
 
   for (const player of roster) {

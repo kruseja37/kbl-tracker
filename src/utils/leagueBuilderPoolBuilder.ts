@@ -17,6 +17,7 @@ import {
   registerLeaguePoolForLeague,
   toSalaryPlayer,
 } from './leagueBuilderPoolRegistration';
+import { regenerateAndPersistLeaguePoolAxes } from './leaguePoolAxisRegenPersist';
 import { calculateIvBaseSalary } from '../engines/salaryCalculator';
 import {
   getAllPlayers,
@@ -223,11 +224,21 @@ export async function importRosteredPlayersToLeaguePool(leagueId: string): Promi
 }
 
 /**
- * Lock the pool: register it (authoritative IV compute + persist via the existing seam),
- * then stamp `locked`/`lockedAt`. After this the snapshot is frozen and pool edits are
- * rejected; the auction consumes this exact snapshot. Returns the locked RegisteredPool.
+ * Lock the pool: regenerate the league-scoped player axes (personality / chemistry /
+ * hidden personality modifiers), register the pool (authoritative IV compute + persist via
+ * the existing seam), then stamp `locked`/`lockedAt`. After this the snapshot is frozen and
+ * pool edits are rejected; the auction consumes this exact snapshot.
+ *
+ * CHEM-POTENCY ruling 5 (JK 2026-07-02): hidden modifiers are generated when the draft pool
+ * is generated — the lock is the common chokepoint for BOTH draft formats. The axis regen is
+ * deterministic in `${leagueId}:${player.id}`, so the auction-init regen (useAuctionDraft)
+ * re-stamps byte-identical values, and the franchise-freeze backfill remains a no-op guard
+ * for leagues that never pass through a draft. Axes do not feed IV, so the IV registration
+ * that follows is unaffected by ordering (regen runs first anyway, so the frozen snapshot
+ * carries the final axes).
  */
 export async function lockLeaguePool(leagueId: string): Promise<RegisteredPool> {
+  await regenerateAndPersistLeaguePoolAxes(leagueId);
   const pool = await registerLeaguePoolForLeague(leagueId);
   const locked: RegisteredPool = { ...pool, locked: true, lockedAt: Date.now() };
   await saveRegisteredPool(locked);

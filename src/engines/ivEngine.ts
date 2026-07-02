@@ -653,3 +653,53 @@ export function computeIV(
     kbl,
   };
 }
+
+/**
+ * CHEM-POTENCY (JK ruling 4, 2026-07-02): the engine-currency dollar value of re-tiering
+ * ONE trait on ONE holder — the primitive under the chemistry tipping premium
+ * (chemistryTierValue.ts). ADDITIVE EXPORT: no existing computeIV path changes and the
+ * frozen oracle (G1-G10) never reaches this function.
+ *
+ * Semantics:
+ * - `flatFee`/`multipliers` are potency-invariant (CHEMISTRY_TRAIT_POTENCY_VALUATION_SPEC
+ *   §2.5/§3.3), so they cancel in the tier difference and are excluded here.
+ * - Pitchers price at raw-layer semantics (the kbl usage-weighted trait treatment is not
+ *   reproduced) — advice-grade by design; the oracle pins nothing on this surface.
+ * - Negative traits need no polarity hand-flip: their scaled deltas carry the sign, so
+ *   L1→L3 on a negative trait prices positive (the malus shrinks).
+ * - Unknown traits and unpriceable inputs return 0, matching traitPotencies' skip
+ *   semantics — advice surfaces must not throw on imperfect league data.
+ */
+export function traitPotencyDollarDelta(
+  player: IVPlayerInput,
+  traitName: string,
+  fromTier: PotencyTier,
+  toTier: PotencyTier,
+  curves: Record<PositionKey, PositionCurveBlock> = IV_CURVES,
+  traitEntries: readonly TraitPricingEntry[] = TRAIT_PRICING,
+): number {
+  if (fromTier === toTier) {
+    return 0;
+  }
+  const entry = traitMap(traitEntries).get(TRAIT_NAME_FIXES[traitName] ?? traitName);
+  if (!entry) {
+    return 0;
+  }
+  try {
+    const blockKey = resolveBlockKey(player);
+    const block = blockAttributes(curves, blockKey);
+    const batRatings = mapBatterRatings(player);
+    const ratings = player.isPitcher ? { ...batRatings, ...mapPitcherRatings(player) } : batRatings;
+    if (player.isPitcher) {
+      delete ratings.ARM;
+    }
+    const deltaBlock = blockKey === 'SP/RP' && entry.polarity === 'negative'
+      ? blockAttributes(curves, 'RP')
+      : undefined;
+    const priceAt = (tier: PotencyTier): number =>
+      pricedComponent(scaledDeltas(entry, tier), undefined, 0, ratings, block, {}, deltaBlock, blockKey);
+    return priceAt(toTier) - priceAt(fromTier);
+  } catch {
+    return 0;
+  }
+}

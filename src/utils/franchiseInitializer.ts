@@ -276,6 +276,33 @@ export async function generateFranchiseHiddenModifierBackfill(
   };
 }
 
+/**
+ * CAPTAIN-AGE (JK ruling 6, 2026-07-02): a small five-tier age tilt on the captain score.
+ * Loyalty + charisma stay the primary drivers (0-200 combined); the tilt spans 12 points
+ * (−6..+6) — enough to break a near-tie toward clubhouse seniority, never enough to override
+ * a clear leadership gap. Monotonic with age: rookies rarely wear the C; elders often do.
+ * Spec: FRANCHISE_V1_LIVING_SEASON_SPEC (captain selection, amended per the ruling).
+ */
+export const CAPTAIN_AGE_TILT_TIERS: readonly { maxAge: number; tilt: number }[] = [
+  { maxAge: 22, tilt: -6 },
+  { maxAge: 26, tilt: -2 },
+  { maxAge: 30, tilt: 0 },
+  { maxAge: 34, tilt: 4 },
+  { maxAge: Number.POSITIVE_INFINITY, tilt: 6 },
+];
+
+export function captainAgeTilt(age: number | undefined): number {
+  if (typeof age !== 'number' || !Number.isFinite(age)) {
+    return 0;
+  }
+  for (const tier of CAPTAIN_AGE_TILT_TIERS) {
+    if (age <= tier.maxAge) {
+      return tier.tilt;
+    }
+  }
+  return 0;
+}
+
 export function computeTeamCaptains(
   teams: Team[],
   players: Player[],
@@ -292,8 +319,8 @@ export function computeTeamCaptains(
       .sort((left, right) => {
         const leftModifiers = left.hiddenPersonalityModifiers!;
         const rightModifiers = right.hiddenPersonalityModifiers!;
-        const leftScore = leftModifiers.loyalty + leftModifiers.charisma;
-        const rightScore = rightModifiers.loyalty + rightModifiers.charisma;
+        const leftScore = leftModifiers.loyalty + leftModifiers.charisma + captainAgeTilt(left.age);
+        const rightScore = rightModifiers.loyalty + rightModifiers.charisma + captainAgeTilt(right.age);
         if (rightScore !== leftScore) return rightScore - leftScore;
         if (rightModifiers.charisma !== leftModifiers.charisma) {
           return rightModifiers.charisma - leftModifiers.charisma;

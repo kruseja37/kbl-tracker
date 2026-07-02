@@ -6,6 +6,7 @@ import {
   assignTeamFanHopefuls,
   assignTeamCaptains,
   computeTeamFanHopefuls,
+  captainAgeTilt,
   computeTeamCaptains,
   generateFranchiseHiddenModifierBackfill,
 } from '../franchiseInitializer';
@@ -159,6 +160,52 @@ describe('franchiseInitializer hidden modifiers and Team Captain assignment', ()
         captainPlayerId: 'low-charisma-high-score',
       },
     ]);
+  });
+
+  test('captainAgeTilt maps the five age bands and zeroes bad input (JK ruling 6, 2026-07-02)', () => {
+    expect(captainAgeTilt(19)).toBe(-6);
+    expect(captainAgeTilt(22)).toBe(-6);
+    expect(captainAgeTilt(23)).toBe(-2);
+    expect(captainAgeTilt(26)).toBe(-2);
+    expect(captainAgeTilt(27)).toBe(0);
+    expect(captainAgeTilt(30)).toBe(0);
+    expect(captainAgeTilt(31)).toBe(4);
+    expect(captainAgeTilt(34)).toBe(4);
+    expect(captainAgeTilt(35)).toBe(6);
+    expect(captainAgeTilt(42)).toBe(6);
+    expect(captainAgeTilt(undefined)).toBe(0);
+    expect(captainAgeTilt(Number.NaN)).toBe(0);
+  });
+
+  test('the age tilt breaks a near-tie toward the veteran but never overrides a clear leadership gap', () => {
+    const mlb = (id: string, age: number, loyalty: number, charisma: number) =>
+      makePlayer({
+        id,
+        age,
+        leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-a', rosterStatus: 'MLB' }],
+        hiddenPersonalityModifiers: { loyalty, ambition: 50, resilience: 50, charisma },
+      });
+
+    // Near-tie: prime 28yo at 170 vs veteran 33yo at 168 — the +4 veteran tilt flips it (172 > 170).
+    const nearTie = computeTeamCaptains(
+      [makeTeam({ id: 'team-a' })],
+      [mlb('prime-170', 28, 100, 70), mlb('veteran-168', 33, 90, 78)],
+    );
+    expect(nearTie[0].captainPlayerId).toBe('veteran-168');
+
+    // Clear gap: prime 28yo at 180 vs elder 36yo at 150 — +6 cannot bridge 30 points.
+    const clearGap = computeTeamCaptains(
+      [makeTeam({ id: 'team-a' })],
+      [mlb('prime-180', 28, 100, 80), mlb('elder-150', 36, 80, 70)],
+    );
+    expect(clearGap[0].captainPlayerId).toBe('prime-180');
+
+    // Rookie malus: 21yo at 170 vs 28yo at 166 — the −6 rookie tilt flips it (166 > 164).
+    const rookieMalus = computeTeamCaptains(
+      [makeTeam({ id: 'team-a' })],
+      [mlb('rookie-170', 21, 100, 70), mlb('prime-166', 28, 96, 70)],
+    );
+    expect(rookieMalus[0].captainPlayerId).toBe('prime-166');
   });
 
   test('assignTeamCaptains writes null and warns when a team has no MLB players', async () => {
