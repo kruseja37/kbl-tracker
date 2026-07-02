@@ -33,8 +33,13 @@ export interface LotVM {
   batsThrows?: string;
   age?: number;
   objectPronoun?: "him" | "her";
-  /** MLB: public IV advisory string (e.g. "~$144,000"). Omitted on farm. */
-  ivAdvisory?: string;
+  /** MLB: public market read from the scout/market model. Omitted on farm. */
+  publicMarket?: {
+    band: { low: number; median: number; high: number };
+    interestedTeams: number;
+    contested: { rivalCount: number; message: string } | null;
+    likelyPass: boolean;
+  };
   /** Farm: the fogged scout read (covered by default, long-press to reveal). */
   scout?: ScoutReadVM;
   highBid?: { amount: number; by: string; isYou: boolean } | null;
@@ -110,12 +115,7 @@ export interface AuctionStageVM {
   move: MoveVM;
   board: BoardVM;
   log: LogItemVM[];
-  coach?: React.ReactNode;
-  scoutInsight?: {
-    verdict: string;
-    summary: string;
-    details: React.ReactNode;
-  } | null;
+  help?: React.ReactNode;
   /** preview-only: force a SOLD / GONE stamp over the lot */
   overlay?: "sold" | "gone" | null;
 }
@@ -284,20 +284,10 @@ export function AuctionStage({ vm, toolbar, supplemental, onSelectPreset, onBid,
           </div>
         </div>
 
-        {vm.scoutInsight && (
-          <details className="scout-insight">
-            <summary>
-              <span>{vm.scoutInsight.verdict}</span>
-              <b>{vm.scoutInsight.summary}</b>
-            </summary>
-            <div className="scout-insight-body">{vm.scoutInsight.details}</div>
-          </details>
-        )}
-
-        {vm.coach && helpOpen && (
-          <div className="coach">
-            <div className="mic">🎙</div>
-            <div className="txt">{vm.coach}</div>
+        {vm.help && helpOpen && (
+          <div className="help-panel">
+            <div className="help-mark">?</div>
+            <div className="txt">{vm.help}</div>
           </div>
         )}
 
@@ -321,11 +311,40 @@ function Lot({ lot }: { lot: LotVM }) {
         {lot.batsThrows && <span className="chip">B/T {lot.batsThrows}</span>}
       </div>
 
-      {lot.ivAdvisory && (
-        <div className="valueline">
-          <div className="eyebrow">Worth (IV)</div>
-          <div className="big num">{lot.ivAdvisory}</div>
-          <div className="muted" style={{ fontSize: 12.5 }}>advisory — values are public in the majors</div>
+      {lot.publicMarket && (
+        <div className="market-read ballpark-feed-card">
+          <div className="market-read-main">
+            <div className="eyebrow">Public market</div>
+            <div className="market-band" aria-label="Public market price band">
+              <span className="num">{money(lot.publicMarket.band.low)}</span>
+              <b className="num">{money(lot.publicMarket.band.median)}</b>
+              <span className="num">{money(lot.publicMarket.band.high)}</span>
+            </div>
+            <div className="muted" style={{ fontSize: 12.5 }}>
+              Scout band: low / expected / stretch
+            </div>
+          </div>
+          <div className={`market-signal${lot.publicMarket.contested ? " contested" : ""}`}>
+            {lot.publicMarket.contested ? (
+              <>
+                <span>CONTESTED</span>
+                <p>
+                  {lot.publicMarket.contested.rivalCount} teams are near the top of the room.
+                  Expect a fight or have a fallback.
+                </p>
+              </>
+            ) : lot.publicMarket.likelyPass ? (
+              <>
+                <span>QUIET</span>
+                <p>No clean bidder at the ask yet.</p>
+              </>
+            ) : (
+              <>
+                <span>{lot.publicMarket.interestedTeams} LIVE</span>
+                <p>{lot.publicMarket.interestedTeams === 1 ? "One team" : "Teams"} can meet the ask.</p>
+              </>
+            )}
+          </div>
         </div>
       )}
 

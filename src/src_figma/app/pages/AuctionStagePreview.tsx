@@ -24,7 +24,12 @@ function buildMlbVm(highBid: number, currentBid: number, selected: number): Auct
       personality: "🔥 Competitive",
       chemistry: "⚡ Sparkplug",
       batsThrows: "R/R",
-      ivAdvisory: "~$144,000",
+      publicMarket: {
+        band: { low: 37000, median: 52000, high: 66000 },
+        interestedTeams: 3,
+        contested: { rivalCount: 2, message: "2 other teams also want this profile" },
+        likelyPass: false,
+      },
       highBid: { amount: highBid, by: highBid >= 37000 ? "you" : "Page Keys", isYou: highBid >= 37000 },
     },
     move: {
@@ -32,7 +37,7 @@ function buildMlbVm(highBid: number, currentBid: number, selected: number): Auct
       wallet: 410000,
       maxBid: 66000,
       slotsLeft: 9,
-      ceilingNote: "Capped at $66k so you can still fill your last 9 slots at the minimum. Raises above it are off the table.",
+      ceilingNote: "Room up to $66k while keeping money for the empty slots.",
       presets: [
         { label: "+$5k", amount: 5000, enabled: true, selected: selected === 5000 },
         { label: "+$10k", amount: 10000, enabled: true, selected: selected === 10000 },
@@ -67,7 +72,7 @@ function buildMlbVm(highBid: number, currentBid: number, selected: number): Auct
       { kind: "gone", text: "Avery Anchor — no bid" },
       { kind: "won", text: "Pax Flext", amount: 53000 },
     ],
-    coach: <>He'd plug your <b>rotation hole</b> — and remember, pass and he's gone for good.</>,
+    help: <>Use the market band for the room read. Your private bid plan lives in the whisper panel.</>,
   };
 }
 
@@ -129,7 +134,7 @@ function buildFarmVm(selected: number, currentBid: number): AuctionStageVM {
       needLine: <>Komuro is a <b>2B/SS</b> — exactly the up-the-middle hole your scout flagged.</>,
     },
     log: [],
-    coach: <>Right in your need — but he's a <b>relaxed, team-first</b> kid. Overpay and he won't sulk; reach too far and your wallet will.</>,
+    help: <>Hold the scout card to see your private farm read.</>,
   };
 }
 

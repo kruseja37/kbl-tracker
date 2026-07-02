@@ -376,17 +376,15 @@ describe("LeagueBuilderAuctionDraft", () => {
     const players = makePlayers();
     mockLeagueData({ players, pool: makePool(players) });
     const seed = seedForOpeningLot(players);
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
 
     render(<LeagueBuilderAuctionDraft />);
 
     expect(screen.getByText("MLB AUCTION DRAFT")).toBeInTheDocument();
     expect(screen.getByText("STATE: SETUP")).toBeInTheDocument();
-
-    const seedInput = await screen.findByLabelText("SEED");
-    fireEvent.change(seedInput, { target: { value: seed } });
-    await waitFor(() => {
-      expect(seedInput).toHaveValue(seed);
-    });
+    expect(screen.queryByLabelText("SEED")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("CPU COUNT")).not.toBeInTheDocument();
+    expect(screen.queryByText("BID INCREMENT")).not.toBeInTheDocument();
 
     const begin = await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i });
     fireEvent.click(begin);
@@ -402,7 +400,9 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByRole("button", { name: /IV SORT/i })).not.toBeInTheDocument();
     expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Most you can bid")).toBeInTheDocument();
-    expect(screen.getByText(/Scout Insight:/)).toBeInTheDocument();
+    expect(screen.getByText(/Public market/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Public market price band")).toBeInTheDocument();
+    expect(screen.queryByText(/Scout Insight:/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /BID/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Let him go/i })).toBeInTheDocument();
   });
@@ -442,7 +442,8 @@ describe("LeagueBuilderAuctionDraft", () => {
     render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(2);
+      expect(screen.getAllByText("MARKET SHILLS").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("2").length).toBeGreaterThan(0);
     });
   });
 
@@ -452,7 +453,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     const { unmount } = render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(12);
+      expect(screen.getAllByText("12").length).toBeGreaterThan(0);
     });
 
     unmount();
@@ -464,7 +465,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(0);
+      expect(screen.getAllByText("0").length).toBeGreaterThan(0);
     });
   });
 
@@ -489,14 +490,9 @@ describe("LeagueBuilderAuctionDraft", () => {
     const players = makePlayers();
     mockLeagueData({ players, pool: makePool(players) });
     const seed = seedForOpeningLot(players, { playerIds: ["player-a"] });
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
 
     render(<LeagueBuilderAuctionDraft />);
-
-    const seedInput = await screen.findByLabelText("SEED");
-    fireEvent.change(seedInput, { target: { value: seed } });
-    await waitFor(() => {
-      expect(seedInput).toHaveValue(seed);
-    });
 
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 
@@ -522,7 +518,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(screen.getByRole("button", { name: /BID \$70k/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("$70,000")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /BID \$75k/i })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Let him go" }));
@@ -538,14 +534,10 @@ describe("LeagueBuilderAuctionDraft", () => {
     const leagueData = mockLeagueData({ players, pool: makePool(players) });
     leagueData.teams = [makeTeam("team-a", { controlledBy: "ai" }), makeTeam("team-b")];
     const seed = seedWhereCpuTeamBids(players, "team-a");
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
 
     render(<LeagueBuilderAuctionDraft />);
 
-    const seedInput = await screen.findByLabelText("SEED");
-    fireEvent.change(seedInput, { target: { value: seed } });
-    await waitFor(() => {
-      expect(seedInput).toHaveValue(seed);
-    });
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 
     await waitFor(() => {
@@ -570,16 +562,12 @@ describe("LeagueBuilderAuctionDraft", () => {
     const players = makePlayers(66);
     mockLeagueData({ players, pool: makePool(players) });
     const seed = seedWhereFirstShillBids(players);
+    window.history.pushState({}, "", `/league-builder/auction-draft?shills=1&devSeed=${seed}`);
 
     render(<LeagueBuilderAuctionDraft />);
 
-    fireEvent.change(await screen.findByLabelText("CPU COUNT"), { target: { value: "1" } });
-    const seedInput = screen.getByLabelText("SEED");
-    fireEvent.change(seedInput, { target: { value: seed } });
-
     await waitFor(() => {
-      expect(screen.getByLabelText("CPU COUNT")).toHaveValue(1);
-      expect(seedInput).toHaveValue(seed);
+      expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     });
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 

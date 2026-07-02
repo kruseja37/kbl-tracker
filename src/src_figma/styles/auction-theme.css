@@ -92,8 +92,20 @@
 @keyframes aucRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 .auc-root .lot .name { font-family: var(--auc-font-char); font-size: 26px; color: #fff; text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45); line-height: 1.25; margin: 4px 0 12px; }
 .auc-root .axes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-.auc-root .valueline { display: flex; align-items: baseline; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
-.auc-root .valueline .big { font-family: var(--auc-font-num); font-size: 23px; font-weight: 700; color: var(--auc-gold-bright); }
+.auc-root .market-read { margin-top: 8px; align-items: stretch; border-color: rgba(0, 0, 0, 0.3); border-left-color: var(--ballpark-brass); }
+.auc-root .market-read-main { min-width: 0; flex: 1; }
+.auc-root .market-band { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 7px; }
+.auc-root .market-band span,
+.auc-root .market-band b { display: block; border-radius: 9px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); padding: 8px 9px; text-align: center; font-size: 13px; }
+.auc-root .market-band b { color: var(--ballpark-scoreboard-yellow); border-color: rgba(242, 192, 65, 0.34); font-size: 15px; }
+.auc-root .market-signal { flex: 0 0 178px; border-radius: 10px; border: 1px solid var(--auc-hairline); background: rgba(0, 0, 0, 0.18); padding: 9px 10px; }
+.auc-root .market-signal span { display: inline-flex; align-items: center; border-radius: 999px; background: rgba(136, 170, 136, 0.16); color: var(--ballpark-sage); padding: 3px 8px; font-size: 10.5px; font-weight: 850; letter-spacing: 0.08em; }
+.auc-root .market-signal.contested span { background: rgba(242, 192, 65, 0.18); color: var(--ballpark-scoreboard-yellow); }
+.auc-root .market-signal p { margin: 7px 0 0; color: var(--auc-muted); font-size: 12px; line-height: 1.35; }
+@media (max-width: 700px) {
+  .auc-root .market-read { flex-direction: column; }
+  .auc-root .market-signal { flex: 1 1 auto; }
+}
 .auc-root .highbid { margin-top: 20px; padding: 16px 18px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
 .auc-root .highbid .amt { font-family: var(--auc-font-char); font-size: 30px; color: var(--auc-text); transition: color 0.2s; }
 .auc-root .highbid.bump .amt { color: var(--auc-gold-bright); }
@@ -151,21 +163,11 @@
 .auc-root .tag.rival { background: rgba(126, 176, 232, 0.16); color: var(--auc-info); }
 .auc-root .tag.gone { background: rgba(163, 72, 61, 0.22); color: var(--auc-loss); }
 
-/* coach */
-.auc-root .coach { margin-top: 18px; display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
-.auc-root .coach .mic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: rgba(196, 168, 83, 0.16); font-size: 15px; }
-.auc-root .coach .txt { font-size: 13.5px; color: var(--auc-text); }
-.auc-root .coach .txt b { color: var(--auc-gold-bright); font-weight: 700; }
-
-/* scout insight */
-.auc-root .scout-insight { margin-top: 18px; border-radius: var(--auc-r-card); background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(255, 210, 122, 0.42); box-shadow: var(--auc-shadow-card); overflow: hidden; }
-.auc-root .scout-insight summary { cursor: pointer; list-style: none; display: flex; gap: 12px; align-items: center; padding: 14px 18px; }
-.auc-root .scout-insight summary::-webkit-details-marker { display: none; }
-.auc-root .scout-insight summary span { flex: 0 0 auto; color: #1A1A1A; background: var(--auc-gold-bright); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: 0.08em; }
-.auc-root .scout-insight summary b { color: var(--auc-text); font-size: 14px; }
-.auc-root .scout-insight-body { padding: 0 18px 16px; color: var(--auc-text); font-size: 14px; }
-.auc-root .scout-insight-body p { margin: 0 0 10px; }
-.auc-root .scout-insight-body p:last-child { margin-bottom: 0; }
+/* help layer */
+.auc-root .help-panel { margin-top: 18px; display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
+.auc-root .help-panel .help-mark { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; background: rgba(196, 168, 83, 0.16); color: var(--ballpark-scoreboard-yellow); font-weight: 900; }
+.auc-root .help-panel .txt { font-size: 13.5px; color: var(--auc-text); }
+.auc-root .help-panel .txt b { color: var(--auc-gold-bright); font-weight: 700; }
 
 /* scout fog (farm) */
 .auc-root .scout { position: relative; margin-top: 16px; border: 1px dashed rgba(196, 168, 83, 0.5); border-radius: 14px; overflow: hidden; }

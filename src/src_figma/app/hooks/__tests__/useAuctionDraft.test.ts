@@ -4,10 +4,16 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { getTeamAuctionMaxBid, seededNominationOrder } from "../../../../engines/auctionStateMachine";
+import {
+  buildArchetypeLiftTable,
+  buildLotViewFromSession,
+  estimateMarket,
+} from "../../../../engines/auctionMarketModel";
 import type { LuxuryCapRow } from "../../../../data/tierParams";
 import {
   __resetLeagueBuilderDatabaseForTests,
   getAuctionSession,
+  savePlayer,
 } from "../../../../utils/leagueBuilderStorage";
 import {
   useLeagueBuilderData,
@@ -219,6 +225,9 @@ describe("useAuctionDraft", () => {
       teams: teamIds.map((id) => makeTeam(id)),
       pools: { "league-init": makePool("league-init") },
     });
+    for (const player of ["p1", "p2", "p3", "p4"].map((id) => makePlayer(id))) {
+      await savePlayer(player);
+    }
 
     const { result } = renderHook(() => useAuctionDraft());
 
@@ -235,7 +244,24 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.currentLot?.playerId).toEqual(expect.any(String));
     expect(result.current.session?.config.nominationWeightExponent).toBe(2);
     expect(result.current.session?.players.p1.ivPercentile).toBe(100);
+    expect(result.current.session?.players.p1.pos).toMatchObject({
+      isPitcher: false,
+      position: "CF",
+    });
     expect(result.current.session?.teams.map((team) => team.projectedTax)).toEqual([0, 0]);
+
+    const marketView = result.current.session
+      ? buildLotViewFromSession(result.current.session, {
+          shillTeamIds: new Set(result.current.shillTeamIds),
+          advisedTeamId: null,
+          humanTeamIds: new Set(["human", "other"]),
+        })
+      : null;
+    expect(marketView).not.toBeNull();
+    expect(marketView?.bidders.length).toBeGreaterThan(0);
+    const market = marketView ? estimateMarket(marketView, buildArchetypeLiftTable()) : null;
+    expect(market?.band.low).toBeGreaterThan(0);
+    expect(market?.band.high).toBeGreaterThanOrEqual(market?.band.low ?? 0);
 
     const persisted = await getAuctionSession("league-init");
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
