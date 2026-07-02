@@ -93,3 +93,20 @@ C1B passes raw `source` into `buildIdentityRoster` (`:204`); C1's equal-score gr
 
 ## NEXT
 Fable round: C1B-2 + C1B-1 (must); C1B-3 (fix-or-guard); C1B-4 (contain). Same C1B surface. → Codex C1B-AUDIT-R2 → Opus gate (build + FULL suite; L-SIM N/A) → commit → then C2A/C2B chain.
+
+---
+
+# FABLE-C1B — ROUND 2 (Codex C1B-AUDIT-R2 + Opus verification)
+
+**VERDICT: BLOCK — 2 residual feasibility edges (1 MAJOR + 1 MEDIUM). Core fixes CONFIRMED HELD.** Uncommitted C1B fix diff (trunk `6324a3da`). L-SIM N/A. Opus gate deferred until Codex-clean. Loop is converging (findings narrowing each round).
+
+**CONFIRMED HELD (Codex + Opus):** C1B-2 (archetypeFitScorer now matches the builder's posture-weighted fit for optimal/aggressive/conservative — single-math restored), C1B-4 (canonical source id-sort → order-independent extraction), embodimentReference additive/back-compat (undefined = old behavior; buildBestRoster + frozen machinery untouched). C1B-1 total-body top-up works (all-swing-arm source → pitcher-body top-up + named shortfall).
+
+## C1B-R2-1 — MUST-FIX (MAJOR): primary-catcher shortfall is silent
+`structuralFloor` (`draftPoolExtractor.ts:132-155`) handles C via a coverage top-up + a coverage-based "short on catching" note (`:147`, counts ALL C-coverers), and the primary-position shortfall note (`:152`, `else if primaries.length < teams`) is in the `else` branch → SKIPPED for C. Ruling A requires each team's catcher DEPTH-2 to include a PRIMARY-C STARTER ("at least one being the primary-C starter"). So a source with, e.g., 6 primary-C + 10 secondary/Two-Way coverers (coverage 16 ≥ 8×2) fires NO note, yet 8 teams need 8 primary-C starters → 2 teams cannot field a legal catcher. Silent infeasibility — the exact class C1B-1 set out to close, at the scarcest position. **Fix:** floor/name PRIMARY-C bodies separately (teams × primariesPerPosition for C), emitting a "short on primary catchers" note when the source can't supply one starter per team (the extractor can't fabricate catchers, but it must NAME the shortfall like every other position). Regression test: catcher-starved-primary source → note fires.
+
+## C1B-R2-2 — SHOULD-FIX (MEDIUM): non-MLB guard is slot-count-only
+The farm guard (`draftPoolExtractor.ts:234`) throws on non-MLB by slot count, so the real 10-slot farm shape is protected, but a hypothetical `slotsPerTeam:22` non-MLB structure would pass and then still use MLB field positions (`:138`) + MLB ranker verification (`:323`). The "non-MLB fails loudly" guarantee holds only if non-MLB always means ≠22 slots. **Fix:** throw unless the structure IS the MLB structure (structural identity, e.g. `structure === MLB_POOL_STRUCTURE` or a deep-equality/`kind` check), not just a slot-count test.
+
+## NEXT
+Fable round 3: fix R2-1 (must) + R2-2 (should). Same C1B surface. → Codex C1B-AUDIT-R3 → Opus gate (build + FULL suite; L-SIM N/A) → commit.

@@ -26622,3 +26622,26 @@ Use xhigh reasoning effort.
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: C1B-AUDIT ===== -->
+
+<!-- ===== CONTRACT: C1B-AUDIT-R2 ===== -->
+
+# C1B-AUDIT-R2: adversarial re-pass of the FABLE-C1B fix round (ruling 5b)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, uncommitted C1B fix diff (trunk HEAD `6324a3da`). READ-ONLY (no writes/commit/build/test).
+
+**ROLE:** Adversarial auditor, cross-model, round 2. Round 1 found 4 issues; Fable fixed all four + added an additive `embodimentReference` refinement. Verify the fixes hold, the refinement is safe, and no regression.
+
+**VERIFY THE FIXES (find any hole):**
+- **C1B-2 (single-math):** `archetypeFitScorer(archetype, tier, posture)` (`archetypeBalanceSimulator.ts:748`) now returns `makeFitScore(weightedCaps(caps, tier, POSTURE_PARAMS[posture].boostFitWeight), tier)`, and the extractor threads `posture` into the fill scorers. VERIFY: is this now the EXACT scorer `buildIdentityRoster` maximizes for EVERY posture (default/optimal AND aggressive/conservative)? Any residual path where fill scoring ≠ builder scoring?
+- **C1B-1 (total-body floor):** `PoolStructure` gains `minPitchers`/`minPositionPlayers`; `structuralFloor` tops up total pitcher + hitter BODIES (teams × min × oversupply). VERIFY: does an all-swing-arm source now get topped up to the pitcher-body floor (or a named shortfall)? Can the pool still end structurally infeasible for T teams (total bodies, per-position, catcher-coverage) without a note? Watch dedup double-counting.
+- **C1B-3 (farm seam):** a non-MLB `PoolStructure` now THROWS (`:235`). VERIFY: the MLB path is unaffected; the throw can't fire for the MLB default; the guard actually covers both the floor AND the ranker verification.
+- **C1B-4 (determinism):** canonical id-sort of source at entry (`:243`) + id-tie-broken sorts. VERIFY: reversed/shuffled same-set source now yields identical output (no residual order dependence via Map iteration or an untie-broken sort).
+- **REFINEMENT (embodimentReference):** additive optional threaded BuildIdentityOptions→RankDraftabilityOptions→extractor; identity judged vs the FIXED source (`archetypeBalanceSimulator.ts:739` uses `options.embodimentReference ?? fullPool`). VERIFY: default (undefined) = OLD behavior exactly (back-compat); the reference path fixes the pool-relative-z false-LOCK without introducing a new bias; the change is purely additive (buildBestRoster / frozen value+parity machinery untouched).
+
+**SOURCE OF TRUTH:** `spec-docs/C1_AUDIT_VERDICT_2026-07-01.md` (C1B section, the 4 findings); `spec-docs/FABLE_C1_DESIGN_2026-07-01.md` §8b; `spec-docs/DECISIONS_LOG.md` (farm ruling). Diff is ground truth.
+
+**CONSTRAINTS:** READ-ONLY; cite file:line; adversarial. **OUTPUT:** `CLEAN` or `DEFECTS FOUND` + per-defect file:line + failing case + severity. If clean, confirm each fix holds + additivity.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: C1B-AUDIT-R2 ===== -->
