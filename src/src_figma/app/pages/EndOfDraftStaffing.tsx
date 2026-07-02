@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, ChevronRight, ClipboardList, Mic, Newspaper, RefreshCw, Shuffle } from "lucide-react";
+import { ArrowLeft, ChevronRight, ClipboardList, Mic, RefreshCw, Shuffle } from "lucide-react";
 
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import {
@@ -77,7 +77,6 @@ export function EndOfDraftStaffing() {
   const { leagues, teams, isLoading, error } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [formsByTeamId, setFormsByTeamId] = useState<Record<string, StaffForm | undefined>>({});
-  const [recap, setRecap] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -296,21 +295,6 @@ export function EndOfDraftStaffing() {
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setRecap((value) => !value)}
-          className={`w-full flex items-center gap-3 border-4 px-4 py-3 text-left mb-5 ${recap ? "border-[#C4A853] bg-[#3a4d3c]" : "border-[#4A6844] bg-[#2d3d2f]"}`}
-        >
-          <Newspaper className={`w-5 h-5 ${recap ? "text-[#C4A853]" : "text-[#E8E8D8]/40"}`} />
-          <div className="flex-1">
-            <div className="text-sm font-bold text-[#E8E8D8]">Draft recap flag</div>
-            <div className="text-[11px] text-[#E8E8D8]/55">Reporter identities are saved now; recap generation remains a later narrative surface.</div>
-          </div>
-          <span className={`w-10 h-6 border-2 flex items-center px-0.5 ${recap ? "border-[#C4A853] justify-end" : "border-[#4A6844] justify-start"}`}>
-            <span className={`w-4 h-4 ${recap ? "bg-[#C4A853]" : "bg-[#E8E8D8]/30"}`} />
-          </span>
-        </button>
-
         {saveError ? (
           <div className="mb-4 bg-[#6B3A3A] border-4 border-[#FFD27A] p-3 text-[#FFE8B0] font-bold">
             {saveError}
@@ -324,7 +308,7 @@ export function EndOfDraftStaffing() {
           className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
         >
           {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : null}
-          Confirm Staff and Review Freeze <ChevronRight className="w-5 h-5" />
+          Confirm Staff and Continue to Franchise Setup <ChevronRight className="w-5 h-5" />
         </button>
       </div>
     </div>

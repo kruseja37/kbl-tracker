@@ -10,7 +10,8 @@ import {
 /**
  * ArchetypePicker — pick ONE archetype each for the MLB identity (sets
  * affordability / luxury-cap shift) and the FARM identity (steers the scout),
- * from the curated 15 historical identities. Controlled component: the picks
+ * from the canonical 24 historical identities (derived dynamically from
+ * HISTORICAL_ARCHETYPES — never hardcoded here). Controlled component: the picks
  * live in the Draft Setup hub; this reports intent via onPick. Style = the
  * neo-brutalist KBL house look (matches LeagueBuilderDraftSetup).
  *

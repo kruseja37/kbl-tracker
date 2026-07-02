@@ -14,7 +14,6 @@ import {
   Trash2,
   Copy,
   Edit3,
-  ChevronRight,
   Shuffle,
   Users,
   Loader2,
@@ -434,15 +433,6 @@ export function LeagueBuilderLeagues() {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
-
-                    {/* View */}
-                    <button
-                      onClick={() => openEditModal(league)}
-                      className="p-2 bg-[#5A8352] hover:bg-[#6A9362] border-[3px] border-[#E8E8D8]/50 transition"
-                      title="View details"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
               ))}

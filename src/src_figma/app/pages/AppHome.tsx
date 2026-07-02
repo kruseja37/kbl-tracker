@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Trophy, Users, Globe, Database, Book } from "lucide-react";
 import { SyncModal, SyncStatusIcon } from "../components/SyncModal";
 import { useDataIntegrity } from "../../../hooks/useDataIntegrity";
 
@@ -44,11 +43,11 @@ export function AppHome() {
         <div className="space-y-4">
           <Link
             to="/franchise/select"
-            className="bg-[#5599FF] h-[71.102px] relative block w-[220px]"
+            className="bg-[#5599FF] h-[72px] relative block w-[220px]"
           >
-            <div aria-hidden="true" className="absolute border-[#3366CC] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
-            <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
-              <div className="flex gap-4 h-[27.995px] items-center w-full">
+            <div aria-hidden="true" className="absolute border-[#3366CC] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
+            <div className="content-stretch flex flex-col items-start p-5 relative size-full">
+              <div className="flex gap-4 h-7 items-center w-full">
                 <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">FRANCHISE</p>
               </div>
             </div>
@@ -56,35 +55,35 @@ export function AppHome() {
 
           <Link
             to="/exhibition"
-            className="bg-[#1A44CC] h-[71.102px] relative block w-[260px]"
+            className="bg-[#1A44CC] h-[72px] relative block w-[260px]"
           >
-            <div aria-hidden="true" className="absolute border-[#113399] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
-            <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
-              <div className="flex gap-4 h-[27.995px] items-center w-full">
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">Exhibition</p>
+            <div aria-hidden="true" className="absolute border-[#113399] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
+            <div className="content-stretch flex flex-col items-start p-5 relative size-full">
+              <div className="flex gap-4 h-7 items-center w-full">
+                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">EXHIBITION</p>
               </div>
             </div>
           </Link>
 
           <Link
             to="/elimination/select"
-            className="bg-[#7733DD] h-[71.102px] relative block w-[240px]"
+            className="bg-[#7733DD] h-[72px] relative block w-[240px]"
           >
-            <div aria-hidden="true" className="absolute border-[#5522AA] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
-            <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
-              <div className="flex gap-4 h-[27.995px] items-center w-full">
+            <div aria-hidden="true" className="absolute border-[#5522AA] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
+            <div className="content-stretch flex flex-col items-start p-5 relative size-full">
+              <div className="flex gap-4 h-7 items-center w-full">
                 <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">ELIMINATION</p>
               </div>
             </div>
           </Link>
 
           <Link
-            to="/builder"
-            className="bg-[#CC44CC] h-[71.102px] relative block w-[220px]"
+            to="/league-builder"
+            className="bg-[#CC44CC] h-[72px] relative block w-[220px]"
           >
-            <div aria-hidden="true" className="absolute border-[#992299] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
-            <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
-              <div className="flex gap-4 h-[27.995px] items-center w-full">
+            <div aria-hidden="true" className="absolute border-[#992299] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
+            <div className="content-stretch flex flex-col items-start p-5 relative size-full">
+              <div className="flex gap-4 h-7 items-center w-full">
                 <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">BUILDER</p>
               </div>
             </div>
@@ -92,11 +91,11 @@ export function AppHome() {
 
           <Link
             to="/almanac"
-            className="bg-[#DD0000] h-[71.102px] relative block w-[240px]"
+            className="bg-[#DD0000] h-[72px] relative block w-[240px]"
           >
-            <div aria-hidden="true" className="absolute border-[#AA0000] border-[5.556px] border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
-            <div className="content-stretch flex flex-col items-start pb-[5.556px] pt-[21.554px] px-[21.554px] relative size-full">
-              <div className="flex gap-4 h-[27.995px] items-center w-full">
+            <div aria-hidden="true" className="absolute border-[#AA0000] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
+            <div className="content-stretch flex flex-col items-start p-5 relative size-full">
+              <div className="flex gap-4 h-7 items-center w-full">
                 <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] tracking-[0.7px] uppercase flex-1 text-white">
                   ALMANAC
                 </p>

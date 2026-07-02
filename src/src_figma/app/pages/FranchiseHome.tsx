@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, createContext, useContext, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, Home, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise, ListOrdered } from "lucide-react";
+import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise, ListOrdered } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
 import { TeamHubContent } from "@/app/components/TeamHubContent";
 import { LineupsTabContent } from "@/app/components/LineupsTabContent";
@@ -1265,12 +1265,6 @@ export function FranchiseHome() {
             </div>
           </div>
 
-          <button
-            onClick={handleLogoClick}
-            className="p-2 hover:bg-[var(--franchise-border)] border-2 border-[var(--franchise-border)] active:scale-95 transition"
-          >
-            <Home className="w-5 h-5 text-[var(--franchise-text)]" />
-          </button>
         </div>
       </div>
 
@@ -4398,17 +4392,14 @@ function LeagueLeadersContent() {
   const [expandedSection, setExpandedSection] = useState<string | null>("leaders");
   const [expandedBattingStat, setExpandedBattingStat] = useState<string | null>(null);
   const [expandedPitchingStat, setExpandedPitchingStat] = useState<string | null>(null);
-  const [expandedLeague, setExpandedLeague] = useState<string | null>("al");
 
   // Get leaders from context (real data or mock fallback)
   const franchiseData = useFranchiseDataContext();
 
   // Use real batting/pitching leaders from franchise data
-  // Single league — both AL/NL views show the same real data
+  // Single league: read the real data once.
   const battingLeadersDataAL = franchiseData.battingLeaders;
   const pitchingLeadersDataAL = franchiseData.pitchingLeaders;
-  const battingLeadersDataNL = franchiseData.battingLeaders;
-  const pitchingLeadersDataNL = franchiseData.pitchingLeaders;
 
   // Derive summary cards from real leaders data (top value per category)
   const makeSummary = (data: Record<string, { value: string }[]>) =>
@@ -4418,9 +4409,7 @@ function LeagueLeadersContent() {
     }));
 
   const battingLeadersAL = makeSummary(battingLeadersDataAL as unknown as Record<string, { value: string }[]>);
-  const battingLeadersNL = makeSummary(battingLeadersDataNL as unknown as Record<string, { value: string }[]>);
   const pitchingLeadersAL = makeSummary(pitchingLeadersDataAL as unknown as Record<string, { value: string }[]>);
-  const pitchingLeadersNL = makeSummary(pitchingLeadersDataNL as unknown as Record<string, { value: string }[]>);
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -4448,57 +4437,37 @@ function LeagueLeadersContent() {
         
         {expandedSection === "leaders" && (
           <div className="bg-[var(--franchise-header)] border-[5px] border-[var(--franchise-border)] border-t-0 p-4">
-            {/* League toggles */}
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setExpandedLeague("al")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[var(--franchise-border)] transition ${
-                  expandedLeague === "al" ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]" : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-field-raised)]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">EASTERN LEAGUE</div>
-              </button>
-              <button
-                onClick={() => setExpandedLeague("nl")}
-                className={`flex-1 py-2 px-4 border-[4px] border-[var(--franchise-border)] transition ${
-                  expandedLeague === "nl" ? "bg-[var(--franchise-border)] text-[var(--franchise-text)]" : "bg-[var(--franchise-panel)] text-[var(--franchise-text)]/70 hover:bg-[var(--franchise-field-raised)]"
-                }`}
-              >
-                <div className="text-[10px] font-bold">WESTERN LEAGUE</div>
-              </button>
-            </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          {/* Batting Leaders */}
-          <div>
-            <div className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-panel)] p-2 mb-2">
-              <div className="text-[8px] text-[var(--franchise-text)] text-center">BATTING LEADERS</div>
-            </div>
-            <div className="space-y-1">
-              {(expandedLeague === "al" ? battingLeadersAL : battingLeadersNL).map((leader, index) => {
-                const battingData = expandedLeague === "al" ? battingLeadersDataAL : battingLeadersDataNL;
-                return (
-                  <div key={index}>
-                    <button
-                      onClick={() => setExpandedBattingStat(expandedBattingStat === leader.stat ? null : leader.stat)}
-                      className="w-full bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2 hover:bg-[var(--franchise-field-raised)] transition"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <div className="text-[8px] text-[var(--franchise-text)] font-bold">{leader.stat}</div>
-                          {expandedBattingStat === leader.stat ? (
-                            <ChevronUp className="w-3 h-3 text-[var(--franchise-text)]" />
-                          ) : (
-                            <ChevronDown className="w-3 h-3 text-[var(--franchise-text)]" />
-                          )}
-                        </div>
-                        <div className="text-[10px] text-[var(--franchise-text)] font-bold">{leader.value}</div>
-                      </div>
-                      <div className="text-[8px] text-[var(--franchise-text)]/70 text-left">
-                        {battingData[leader.stat as keyof typeof battingData]?.[0]?.player ?? 'N/A'} (
-                        {battingData[leader.stat as keyof typeof battingData]?.[0]?.team ?? 'N/A'})
-                      </div>
-                    </button>
+            <div className="grid grid-cols-2 gap-4">
+              {/* Batting Leaders */}
+              <div>
+                <div className="bg-[var(--franchise-border)] border-[4px] border-[var(--franchise-panel)] p-2 mb-2">
+                  <div className="text-[8px] text-[var(--franchise-text)] text-center">BATTING LEADERS</div>
+                </div>
+                <div className="space-y-1">
+                  {battingLeadersAL.map((leader, index) => {
+                    const battingData = battingLeadersDataAL;
+                    return (
+                      <div key={index}>
+                        <button
+                          onClick={() => setExpandedBattingStat(expandedBattingStat === leader.stat ? null : leader.stat)}
+                          className="w-full bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2 hover:bg-[var(--franchise-field-raised)] transition"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <div className="text-[8px] text-[var(--franchise-text)] font-bold">{leader.stat}</div>
+                              {expandedBattingStat === leader.stat ? (
+                                <ChevronUp className="w-3 h-3 text-[var(--franchise-text)]" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3 text-[var(--franchise-text)]" />
+                              )}
+                            </div>
+                            <div className="text-[10px] text-[var(--franchise-text)] font-bold">{leader.value}</div>
+                          </div>
+                          <div className="text-[8px] text-[var(--franchise-text)]/70 text-left">
+                            {battingData[leader.stat as keyof typeof battingData]?.[0]?.player ?? 'N/A'} (
+                            {battingData[leader.stat as keyof typeof battingData]?.[0]?.team ?? 'N/A'})
+                          </div>
+                        </button>
                     
                     {expandedBattingStat === leader.stat && (
                       <div className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel)] border-t-0 p-2">
@@ -4528,8 +4497,8 @@ function LeagueLeadersContent() {
               <div className="text-[8px] text-[var(--franchise-text)] text-center">PITCHING LEADERS</div>
             </div>
             <div className="space-y-1">
-              {(expandedLeague === "al" ? pitchingLeadersAL : pitchingLeadersNL).map((leader, index) => {
-                const pitchingData = expandedLeague === "al" ? pitchingLeadersDataAL : pitchingLeadersDataNL;
+              {pitchingLeadersAL.map((leader, index) => {
+                const pitchingData = pitchingLeadersDataAL;
                 return (
                   <div key={index}>
                     <button
