@@ -26645,3 +26645,25 @@ Use xhigh reasoning effort.
 Use xhigh reasoning effort.
 
 <!-- ===== END CONTRACT: C1B-AUDIT-R2 ===== -->
+
+<!-- ===== CONTRACT: C1B-AUDIT-R3 ===== -->
+
+# C1B-AUDIT-R3: adversarial re-pass of the C1B round-3 fix (ruling 5b, final)
+
+**ROUTE:** Codex 5.5 | xhigh reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, uncommitted C1B diff (trunk HEAD `7115d4f0`). READ-ONLY (no writes/commit/build/test).
+
+**ROLE:** Adversarial auditor, cross-model, final round. Round 1 (4) + round 2 (2 residual) addressed. Verify the round-3 delta + confirm no regression. Prior rounds confirmed: single-math scorer, determinism, embodimentReference additivity, total-body floors.
+
+**VERIFY (the only delta):**
+- **C1B-R2-1 (primary-C shortfall note):** `structuralFloor` (`draftPoolExtractor.ts:~148`) now emits "short on primary catchers: N for T needed (one starter per team)" separately from the coverage note. VERIFY: the primary-C note fires when primary-C bodies < teams (even if total coverage is sufficient); the coverage note stays correct; no double-firing / no false note when primary-C is sufficient. Attack: any per-position primary shortfall (not just C) that's still silent?
+- **C1B-R2-2 (structural-identity guard):** the non-MLB guard (`draftPoolExtractor.ts:~19-22`) now throws unless the structure is structurally identical to `MLB_POOL_STRUCTURE` (field-by-field), not a slot count. VERIFY: the MLB default passes; any non-MLB structure (incl. a 22-slot clone differing in one field, e.g. catcherCoverage:1) throws; the field-equality check covers ALL PoolStructure fields (no missed field lets a non-MLB structure slip through).
+
+**CONFIRM NO REGRESSION:** the delta is confined to `structuralFloor`'s C branch + the guard; the rest of C1B (single-math scorer, determinism sort, total-body floors, embodimentReference, buildBestRoster/frozen machinery) is unchanged from R2-confirmed state.
+
+**SOURCE OF TRUTH:** `spec-docs/C1_AUDIT_VERDICT_2026-07-01.md` (C1B R2 section); `FABLE_C1_DESIGN_2026-07-01.md` §8c. Diff is ground truth.
+
+**CONSTRAINTS:** READ-ONLY; cite file:line; adversarial. **OUTPUT:** `CLEAN` or `DEFECTS FOUND` + per-defect file:line + failing case + severity.
+
+Use xhigh reasoning effort.
+
+<!-- ===== END CONTRACT: C1B-AUDIT-R3 ===== -->

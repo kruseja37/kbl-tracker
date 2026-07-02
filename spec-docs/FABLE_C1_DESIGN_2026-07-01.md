@@ -207,3 +207,64 @@ All four findings addressed; the frozen value-max machinery (`SLOT_PLAN`/`eligib
   via primary role AND catcher depth via Two Way (C) — which the well-formed path already did). The
   F2 handling is now framed as DEFENSIVE-only for invalid data; purging 'P'/'TWO-WAY'/'DH' from
   assignable primaries (`franchisePlayerProfileEdit.ts:14-16`) is a Wave-1 cleanup ticket.
+
+---
+
+## §8. FABLE-C1B AS-BUILT (same day — the pool extractor; contract in PROMPT_CONTRACTS.md)
+
+`src/engines/draftPoolExtractor.ts` + its test suite. Deterministic orchestration over C1's
+committed machinery (single-math rule: seeds = `buildIdentityRoster`, verdicts =
+`rankArchetypeDraftability`, fill ranking = the exported `archetypeFitScorer`): structural floors
+(league-scaled per-position/coverage/arms minimums, source shortfalls NAMED) → per-archetype
+identity seeds (eviction-protected) → round-robin balanced fill → snipe-test verify → repair loop
+(feed the worst archetype its missing pieces; idempotent cap eviction of unclaimed filler — hoisted
+after a probe showed seeds alone can exceed the target and an early break skipped the in-loop
+eviction). MLB structure wired from LEGAL_ROSTER; the FARM structure is a deliberate config seam
+(farm legality ungrounded; the JK-pre-approved farm-gen relocation is the companion plumbing
+ticket). `EXTRACTOR_TUNING` = §16-tunable placeholder (oversupply 1.2, resilience spread 1,
+repair rounds 6, repair batch 6).
+
+**Oracle probe (8 teams, 4 disparate identities, standard tier):** source 440 → pool 214/212
+(2 over, named: claimed by builds/floors); verdicts all YELLOW — none LOCKED, resilience 3/3/2/1;
+**every build needs the luxury tax at 1.2× sizing** — a real market-economics signal (tight pools
+price identity into the tax), surfaced plainly per the tax-band ruling and squarely C3-sizing
+subject matter. balanced=false under the default resilience-spread tolerance (spread 2) —
+faithfully reported, not forced.
+
+### §8b. C1B FIX ROUND (response to the C1B BLOCK verdict, same day)
+
+- **C1B-2 FIXED (single-math):** `archetypeFitScorer` now takes the POSTURE and returns the
+  builder's exact posture-weighted fit (`weightedCaps` × `boostFitWeight`); the extractor threads
+  its posture into the fill/eviction scorers. One scoring rule for seeds, fill, and eviction.
+- **C1B-1 FIXED (total bodies):** `PoolStructure` gains `minPitchers`/`minPositionPlayers`;
+  `structuralFloor` tops up TOTAL pitcher and position-player BODIES (capability floors dedup —
+  one SP/RP body satisfied both arm floors). Shortfalls named ("short on pitcher bodies: 20 for 64
+  needed league-wide"). Regression: an all-swing 20-arm source pulls every body + names the gap.
+- **C1B-3 FIXED (farm guard, grounded by the NEW JK farm ruling):** non-MLB structures now FAIL
+  LOUDLY, the error citing the ruled farm semantics (fair supply for 10 picks/team, ~50%
+  archetype-fit targeting §16-tunable, NO roster/balance guarantees — DECISIONS_LOG 2026-07-01).
+  Farm wiring lands with the farm-generation relocation ticket.
+- **C1B-4 FIXED (determinism):** the extractor canonicalizes source order (id sort) at entry —
+  extraction is a function of the player SET (reversed-input regression asserts identical output).
+- **DESIGN REFINEMENT the fixes exposed (for the R2 re-review):** embodiment-z was POOL-relative,
+  so the new feasibility body floors mechanically raised the identity bar (a stuffed candidate pool
+  → higher cohort mean → false LOCKED for Bomba on the oracle at both 1.2× and 1.5×). Extraction
+  verdicts now judge identity against the FIXED SOURCE universe: additive optional
+  `embodimentReference` threaded `BuildIdentityOptions` → `RankDraftabilityOptions` → the extractor
+  passes its canonical source. Default behavior (reference = the build pool) is unchanged for the
+  original C1 surfaces — the oracle all-24 gate re-proven green.
+- **Sizing truth surfaced (C3 seed):** with honest body floors, 8 teams' feasibility floor ≈ 202
+  bodies — at 1.2× (target 212) the pool is feasibility-DOMINATED (near-zero identity discretion);
+  identity-roomy extraction on the 440-source needed 1.5×+. The tight default dial now NAMES its
+  squeeze (test-asserted) instead of hiding it. This + the all-taxed finding = C3's opening inputs.
+
+### §8c. C1B ROUND 3 (response to C1B-R2, same day)
+
+- **C1B-R2-1 FIXED:** the primary-catcher shortfall note escaped the `else`-branch C could never
+  reach — `structuralFloor`'s C branch now names PRIMARY-C body shortfalls separately from coverage
+  ("short on primary catchers: 6 for 8 needed (one starter per team)"), per Ruling A's primary-C
+  starter requirement. Regression: 6 primary + 10 secondary-C coverers → primary note fires,
+  coverage note correctly silent.
+- **C1B-R2-2 FIXED:** the non-MLB guard is now STRUCTURAL identity (every field equals
+  MLB_POOL_STRUCTURE), not a slot-count test — a 22-slot non-MLB shape fails loudly; a field-equal
+  clone passes (value identity). Regression pair added.

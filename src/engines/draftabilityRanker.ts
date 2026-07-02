@@ -132,6 +132,11 @@ export interface RankDraftabilityOptions {
   budgetOverride?: number;
   /** Override the identity-true floor (defaults to DRAFTABILITY_TUNING.minEmbodimentZ). */
   minEmbodimentZ?: number;
+  /**
+   * Cohort embodiment compares against (default: the ranked pool). The EXTRACTOR passes its fixed
+   * SOURCE so feasibility-stuffed candidate pools don't mechanically raise the identity bar.
+   */
+  embodimentReference?: import('./archetypeBalanceSimulator').SimPlayer[];
 }
 
 /**
@@ -157,7 +162,11 @@ export function rankArchetypeDraftability(
     let failedBuild: IdentityRosterResult | null = null;
 
     for (let round = 0; round < DRAFTABILITY_TUNING.maxRebuilds; round += 1) {
-      const build = buildIdentityRoster(pool, simArch, tier, budget, { posture, banned });
+      const build = buildIdentityRoster(pool, simArch, tier, budget, {
+        posture,
+        banned,
+        ...(options.embodimentReference ? { embodimentReference: options.embodimentReference } : {}),
+      });
       if (round === 0) firstBuild = build;
       const identityPositive =
         build.embodiment.boostZ > (options.minEmbodimentZ ?? DRAFTABILITY_TUNING.minEmbodimentZ);

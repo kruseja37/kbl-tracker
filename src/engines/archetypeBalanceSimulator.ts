@@ -644,6 +644,13 @@ export interface BuildIdentityOptions {
   valueFloorOverride?: number;
   /** Player ids unavailable for this build — the snipe-test's ban list (draftability ranker). */
   banned?: ReadonlySet<string>;
+  /**
+   * Cohort the embodiment z-scores compare against (default: the build pool). The EXTRACTOR passes
+   * its fixed SOURCE universe here — a candidate pool deliberately stuffed with league-feasibility
+   * bodies raises a pool-relative bar mechanically, penalizing identity verdicts for an artifact of
+   * the comparison, not the roster (FABLE-C1B fix round).
+   */
+  embodimentReference?: SimPlayer[];
 }
 
 /**
@@ -729,6 +736,20 @@ export function buildIdentityRoster(
     baselineIv,
     valueFloor,
     floorMet: chosen.floorMet,
-    embodiment: identityEmbodiment(chosen.players, archetype, tier, fullPool),
+    embodiment: identityEmbodiment(chosen.players, archetype, tier, options.embodimentReference ?? fullPool),
   };
+}
+
+/**
+ * The archetype-fit scorer as a standalone (FABLE-C1B; audit C1B-2): the EXACT fit function the
+ * identity climb maximizes — including the posture's `boostFitWeight` cap weighting — exposed so
+ * the pool extractor ranks source players by the SAME rule that builds rosters (single-math rule).
+ */
+export function archetypeFitScorer(
+  archetype: SimArchetype,
+  tier: TierKey,
+  posture: RosterPosture = 'optimal',
+): (p: SimPlayer) => number {
+  const caps = archetypeCaps(archetype, tier);
+  return makeFitScore(weightedCaps(caps, tier, POSTURE_PARAMS[posture].boostFitWeight), tier);
 }

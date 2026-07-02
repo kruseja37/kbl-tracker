@@ -3019,3 +3019,48 @@ zero-open-questions.
   other way when Claude is the builder, so Codex supplies the different-blind-spots screen on the
   novel math while Opus keeps the practiced gate/commit machinery. C3 gets the Codex pass only if
   C1/C2B findings warrant.
+
+## 2026-07-01 — Ruling A clarification 2 (JK): pitcher primaries are EXACTLY {SP, SP/RP, RP, CP}
+
+- **No pitcher may carry 'P' (or 'TWO-WAY') as a primary position.** Two-way is a TRAIT on a
+  pitcher-first player, not a position: a two-way player counts toward the PITCHER minimums per
+  their primary (SP/SP-RP/RP/CP) AND toward the catcher minimum when the trait is Two Way (C).
+  (JK permits, without requiring, primary-SP + secondary-RP as an alternative SP/RP representation —
+  NOT adopted; the single 'SP/RP' label stays.)
+- **Code reality (evidence):** `franchisePlayerProfileEdit.ts:14-16` offers 'TWO-WAY' (and 'DH') in
+  FRANCHISE_PROFILE_PRIMARY_POSITIONS — now-invalid states per this ruling, same legacy surface as
+  the recon's DH landmine. **Follow-up ticket (Wave-1 cleanup, out of C1 scope):** purge
+  'TWO-WAY'/'P'/'DH' from assignable primaries; map imported SMB4 two-way designations to
+  (pitcher primary + Two Way trait); audit existing saved players.
+- **C1 consequence:** `rosterNeed.ts`'s unknown-role handling (audit F2) is DEFENSIVE handling of
+  invalid data only — credit no staff minimum, still occupy pitcher headcount. Well-formed two-way
+  arms already count toward both minimums via their primary role + canCover('C'), exactly per this
+  ruling.
+
+## 2026-07-01 — R2-1 ruled: DOCUMENT-AND-DEFER (JK; known v1 limitation)
+
+Audit round-2 finding R2-1 (identity BUILDER can't credit a Two Way (C) arm for catcher depth AND a
+bullpen slot simultaneously — a separate backup-C body is reserved — so exactly-enough-arms pools can
+show a FALSE LOCKED on the advisory board): JK ruled the fix is not worth builder time now.
+Confirmed semantics that made deferral acceptable: the two-way arm is ALWAYS counted as a PITCHER
+per his primary (never as a position player), and `isLegalRoster` correctly credits him for both
+jobs — the law is right; only the builder's slot layout under-credits, advisory-only. Documented as
+a KNOWN v1 LIMITATION; revisit if C3's extractor pools trip it. R2-2 (forced no-bid filler missing
+the strand guard) is FIXED with a regression pair in `rosterNeed.test.ts`.
+
+## 2026-07-01 — FARM-POOL ruling (JK): no archetype guarantees; ~50% fit-targeting; fair supply
+
+The farm pool does NOT meet archetype needs the way the MLB pool does. JK: unpredictability is the
+point; teams have NO archetype-specific roster requirements at the farm level — each team just
+drafts 10 prospects from a FAIR amount of options. The scout targets archetypes but nothing
+guarantees them; aim to meet archetype-fit at ROUGHLY 50% (a §16-tunable) so good matching options
+exist, accepting that the lower talent level + weaker distribution make tight fits unlikely anyway.
+→ Farm extraction semantics (for the farm-generation relocation ticket): fair-supply sizing
+(options per team for 10 picks), ~50% archetype-fit targeting, NO balance/roster guarantees, no
+farm legality verification against the 22-man law. The C1B engine's farm seam now carries a LOUD
+guard citing this ruling (audit C1B-3) instead of silently applying MLB rules.
+
+Also JK (same message): shill-count sizing for 4-human and 8-human leagues + the end-checkpoint
+(draft ends when all non-shill rosters are full) + sandbagging risk — CONFIRMED as C3's core
+questions (the sim-backed shill recommendation is contracted there); Fable to provide the
+analytical frame now, C3 to prove the numbers.
