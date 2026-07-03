@@ -335,6 +335,7 @@ export function evaluatePoolDemandSufficiency(
   poolSize: number,
   teamCount: number,
   shillCount: number,
+  targetOverride?: number,
 ): PoolDemandSufficiency {
   const model = poolDemandModel(teamCount, shillCount);
   // FABLE-C3-FIX F4: the green-light floor is the model's CLASS-FEASIBILITY floor (e.g. 202
@@ -345,14 +346,15 @@ export function evaluatePoolDemandSufficiency(
     model.baseSlots + model.expectedShillWins,
     model.feasibilityFloor + model.expectedShillWins,
   );
+  const targetSize = targetOverride ?? model.targetSize;
   return {
     poolSize,
     mlbSlots: hardFloor,
     meetsFloor: poolSize >= hardFloor,
     surplus: poolSize - hardFloor,
-    overSupplyWarning: model.targetSize > 0 && poolSize > model.targetSize * POOL_SURPLUS_MAX,
+    overSupplyWarning: targetSize > 0 && poolSize > targetSize * POOL_SURPLUS_MAX,
     expectedShillWins: model.expectedShillWins,
-    targetSize: model.targetSize,
+    targetSize,
   };
 }
 

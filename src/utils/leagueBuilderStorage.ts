@@ -119,6 +119,7 @@ export interface LeagueTemplate {
   poolExtractedAt?: string;
   tier?: TierKey;
   salaryCap?: number;
+  poolSizeMultiplier?: number;
   balanceMode?: BalanceMode;
   checkpointCadence?: CheckpointCadence;
   logoUrl?: string;

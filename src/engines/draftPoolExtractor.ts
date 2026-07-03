@@ -98,6 +98,10 @@ export interface ExtractedPool {
   players: SimPlayer[];
   size: number;
   targetSize: number;
+  /** Ids claimed by selected archetype identity builds; protected from final pool-size trim. */
+  claimedIds: readonly string[];
+  /** Ids claimed by structural floors; protected from final pool-size trim. */
+  floorIds: readonly string[];
   /** Final snipe-test verdicts for the SELECTED archetypes, on the extracted pool. */
   verdicts: ArchetypeDraftability[];
   /** No LOCKED verdict, band spread ≤ 1 step, resilience spread within tolerance. */
@@ -388,6 +392,8 @@ export function extractDraftPool(
     players: [...pool.values()].sort((a, b) => a.id.localeCompare(b.id)),
     size: pool.size,
     targetSize,
+    claimedIds: [...claimed].sort((a, b) => a.localeCompare(b)),
+    floorIds: [...floorIds].sort((a, b) => a.localeCompare(b)),
     verdicts,
     balanced: isBalanced(verdicts),
     repairRounds: round,

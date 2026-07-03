@@ -75,7 +75,9 @@ import { TRAIT_PRICING } from "../../../data/traitPricing";
 import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
   countCellMatches,
+  DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
+  resolvePoolSizingTarget,
   type ClassifiedDemandPlayer,
   type DemandCellReport,
   type DemandShortfall,
@@ -153,7 +155,7 @@ type LeaguePoolRecord = {
 
 type ClubEditorMode = "identity" | "design" | null;
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
-type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts">;
+type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing">;
 type VerdictTone = ReturnType<typeof rosterDesignStatusTone>;
 
 const ASK_SPOT_ORDER = new Map(
@@ -598,9 +600,17 @@ export function LeagueBuilderDraftSetup() {
   }, [availablePlayers, availSearch, availPosition]);
 
   const recommendedShills = league ? recommendedShillCount(leagueTeams.filter((team) => team.controlledBy !== "ai").length, league.teamIds.length).count : 0;
+  const poolSizeTargetOverride = useMemo(() => {
+    if (!league) return undefined;
+    return resolvePoolSizingTarget({
+      teams: league.teamIds.length,
+      shills,
+      poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+    }).effectiveTarget;
+  }, [league, shills]);
   const sufficiency = useMemo(
-    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills),
-    [league?.teamIds.length, shills, inPoolPlayers.length],
+    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills, poolSizeTargetOverride),
+    [league?.teamIds.length, shills, inPoolPlayers.length, poolSizeTargetOverride],
   );
   const [rosteredButUnassigned, setRosteredButUnassigned] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -717,7 +727,7 @@ export function LeagueBuilderDraftSetup() {
   };
 
   const saveLeagueDraftSetup = useCallback(
-    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt">>) => {
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolSizeMultiplier">>) => {
       if (!league) return;
       await saveLeagueTemplate({ ...league, ...patch });
       await refresh();
@@ -817,9 +827,14 @@ export function LeagueBuilderDraftSetup() {
       lockedDesigns,
       selectedArchetypes,
       league.tier ?? "juiced",
-      { teams: league.teamIds.length, budgetPerTeam: tierBudget },
+      {
+        teams: league.teamIds.length,
+        shills,
+        budgetPerTeam: tierBudget,
+        poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+      },
     );
-  }, [humanTeams, league, leagueTeams, players, tierBudget]);
+  }, [humanTeams, league, leagueTeams, players, shills, tierBudget]);
 
   useEffect(() => {
     setReExtractConfirm(false);
@@ -834,6 +849,7 @@ export function LeagueBuilderDraftSetup() {
         cells: result.cells,
         shortfalls: result.shortfalls,
         designVerdicts: result.designVerdicts,
+        sizing: result.sizing,
       });
     } catch {
       setModeAReport(null);
@@ -980,6 +996,7 @@ export function LeagueBuilderDraftSetup() {
         cells: result.cells,
         shortfalls: result.shortfalls,
         designVerdicts: result.designVerdicts,
+        sizing: result.sizing,
       });
       setModeAManualEdits(false);
       setReExtractConfirm(false);
@@ -1635,6 +1652,16 @@ export function LeagueBuilderDraftSetup() {
                         ))}
                       </div>
                     </div>
+
+                    {modeAReport?.sizing?.messages.length ? (
+                      <div className="grid gap-2">
+                        {modeAReport.sizing.messages.map((message) => (
+                          <div key={message} className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[#FFE8B0]">
+                            {message}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
 
                     {modeAReport?.shortfalls.length ? (
                       <div>

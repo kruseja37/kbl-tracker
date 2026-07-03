@@ -25,6 +25,7 @@ import {
   type ShapeClassification,
 } from './playerArchetypeClassifier';
 import {
+  buildDefaultDesignSlots,
   evaluateRosterDesign,
   type DesignFeasibilityResult,
   type DesignPoolPlayer,
@@ -32,9 +33,12 @@ import {
   type SlotPreference,
 } from './rosterDesignFeasibility';
 import { extractDraftPool, type ExtractedPool } from './draftPoolExtractor';
-import type { SimPlayer } from './archetypeBalanceSimulator';
+import { archetypeFitScorer, type RosterPosture, type SimPlayer } from './archetypeBalanceSimulator';
+import { historicalToSimArchetype } from './draftabilityRanker';
+import { poolDemandModel } from './auctionPoolSizing';
 import type { HistoricalArchetype } from '../data/historicalArchetypes';
 import type { TierKey } from '../data/tierParams';
+import { canCover, canRelieve, canStart } from '../data/rosterConstruction';
 
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
@@ -83,11 +87,114 @@ export interface PoolFromDemandResult {
   shortfalls: DemandShortfall[];
   /** Every human design re-verified against the FINAL pool (the §6.1 hub-drift check). */
   designVerdicts: { teamId: string; result: DesignFeasibilityResult }[];
+  sizing?: PoolSizingResult;
+  g1?: PoolG1Result;
 }
 
 export interface ClassifiedDemandPlayer {
   player: DemandUniversePlayer;
   classification: ShapeClassification;
+}
+
+export const POOL_SIZE_MULTIPLIER_STOPS = [1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const;
+export const DEFAULT_POOL_SIZE_MULTIPLIER = 1.35;
+
+export interface PoolSizingResult {
+  demandBase: number;
+  requestedMultiplier: number;
+  requestedTarget: number;
+  hardFloor: number;
+  effectiveTarget: number;
+  finalSize: number;
+  trimmedCount: number;
+  evictedIds: string[];
+  injectedIds: string[];
+  ceilingTarget: number;
+  clamped: boolean;
+  messages: string[];
+}
+
+export interface PoolG1Result {
+  holds: boolean;
+  assemblies: string[][];
+  failing?: { pass: number; blockers: string[]; overrun?: number };
+  repairRounds: number;
+}
+
+function assertPoolMultiplier(multiplier: number): number {
+  if (!POOL_SIZE_MULTIPLIER_STOPS.some((stop) => Math.abs(stop - multiplier) < 1e-9)) {
+    throw new Error(`poolSizeMultiplier must be one of ${POOL_SIZE_MULTIPLIER_STOPS.join(', ')}`);
+  }
+  return multiplier;
+}
+
+export function resolvePoolSizingTarget(options: {
+  teams: number;
+  shills?: number;
+  poolSizeMultiplier?: number;
+  sizeTarget?: number;
+}): Pick<PoolSizingResult, 'demandBase' | 'requestedMultiplier' | 'requestedTarget' | 'hardFloor' | 'effectiveTarget' | 'ceilingTarget' | 'clamped'> {
+  const teams = Math.max(0, Math.floor(options.teams));
+  const model = poolDemandModel(teams, options.shills ?? 0);
+  const demandBase = model.baseSlots + model.expectedShillWins;
+  const ceilingTarget = Math.ceil(1.5 * demandBase);
+  const multiplier = assertPoolMultiplier(options.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER);
+  const rawRequested = options.sizeTarget !== undefined
+    ? Math.max(0, Math.ceil(options.sizeTarget))
+    : Math.ceil(multiplier * demandBase);
+  const requestedTarget = Math.min(rawRequested, ceilingTarget);
+  const hardFloor = Math.max(model.baseSlots, model.feasibilityFloor) + model.expectedShillWins;
+  const effectiveTarget = Math.max(requestedTarget, hardFloor);
+  return {
+    demandBase,
+    requestedMultiplier: multiplier,
+    requestedTarget,
+    hardFloor,
+    effectiveTarget,
+    ceilingTarget,
+    clamped: effectiveTarget > requestedTarget,
+  };
+}
+
+export function trimPoolToTarget<T extends { id: string; salary: number }>(
+  players: readonly T[],
+  protectedIds: ReadonlySet<string>,
+  fitOf: (player: T) => number,
+  target: number,
+): { kept: T[]; evicted: T[] } {
+  const kept = new Map(players.map((player) => [player.id, player]));
+  const evictable = [...players]
+    .filter((player) => !protectedIds.has(player.id))
+    .map((player) => ({ player, fit: fitOf(player) }))
+    .sort((a, b) => {
+      const fitDelta = a.fit - b.fit;
+      if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+      if (a.player.salary !== b.player.salary) return b.player.salary - a.player.salary;
+      return a.player.id.localeCompare(b.player.id);
+    });
+  const evicted: T[] = [];
+  for (const { player } of evictable) {
+    if (kept.size <= target) break;
+    kept.delete(player.id);
+    evicted.push(player);
+  }
+  return {
+    kept: [...kept.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    evicted,
+  };
+}
+
+export function selectFitAwareRepairCandidate<T extends { id: string; salary: number }>(
+  eligible: readonly T[],
+  currentMinFit: number,
+  fitOf: (player: T) => number,
+): { player: T | null; lastResort: boolean } {
+  const byPrice = [...eligible].sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));
+  const qualified = byPrice.filter((player) => fitOf(player) + 1e-9 >= currentMinFit);
+  return {
+    player: qualified[0] ?? byPrice[0] ?? null,
+    lastResort: qualified.length === 0 && byPrice.length > 0,
+  };
 }
 
 function cellKeyOf(slot: DesignSlot): string | null {
@@ -104,6 +211,95 @@ function toDesignPoolPlayer(player: DemandUniversePlayer): DesignPoolPlayer {
     profile: player.profile,
     slotPlayer: player,
   };
+}
+
+function playerName(player: DemandUniversePlayer): string {
+  const maybe = player as DemandUniversePlayer & { name?: string; firstName?: string; lastName?: string };
+  return maybe.name ?? ([maybe.firstName, maybe.lastName].filter(Boolean).join(' ') || player.id);
+}
+
+function makeMaxFitOf(
+  selectedArchetypes: readonly HistoricalArchetype[],
+  tier: TierKey,
+  posture: RosterPosture,
+): (player: DemandUniversePlayer) => number {
+  if (selectedArchetypes.length === 0) return () => 0;
+  const scorers = selectedArchetypes.map((archetype) =>
+    archetypeFitScorer(historicalToSimArchetype(archetype), tier, posture),
+  );
+  return (player) => Math.max(...scorers.map((score) => score(player)));
+}
+
+function trimClampMessage(sizing: Pick<PoolSizingResult, 'demandBase' | 'requestedMultiplier' | 'requestedTarget'>, finalSize: number, cap: number): string {
+  const effective = sizing.demandBase > 0 ? finalSize / sizing.demandBase : 0;
+  return `You asked for a ${sizing.requestedMultiplier}× pool (${sizing.requestedTarget}); fielding every club's roster under your $${Math.round(cap).toLocaleString()} needs ${finalSize} (${effective.toFixed(2)}×). Sized up to ${finalSize}.`;
+}
+
+function eligibleForRepairGroup(slot: DesignSlot, player: DemandUniversePlayer): boolean {
+  switch (slot.kind) {
+    case 'pos':
+      return !player.isPitcher && player.position === slot.position;
+    case 'backupC':
+      return canCover(player, 'C');
+    case 'sp':
+      return canStart(player);
+    case 'rp':
+      return canRelieve(player);
+    case 'flex':
+      return !player.isPitcher;
+    case 'swing':
+      return !player.isPitcher || canRelieve(player);
+  }
+}
+
+function repairSlotsForFailure(failing: PoolG1Result['failing'] | undefined): Array<DesignSlot | null> {
+  const slots = buildDefaultDesignSlots();
+  if (!failing) return [];
+  if (failing.overrun !== undefined) return [null];
+  const byId = new Map(slots.map((slot) => [slot.slotId, slot]));
+  const chosen: DesignSlot[] = [];
+  for (const blocker of failing.blockers) {
+    const slotId = blocker.slice(0, blocker.indexOf(':'));
+    const exact = byId.get(slotId);
+    if (exact && !chosen.some((slot) => slot.slotId === exact.slotId)) chosen.push(exact);
+  }
+  if (chosen.length === 0) {
+    chosen.push(...slots);
+  }
+  return chosen;
+}
+
+function runG1Check(
+  players: readonly DemandUniversePlayer[],
+  teams: number,
+  budget: number,
+): PoolG1Result {
+  const remaining = new Map(players.map((player) => [player.id, player]));
+  const assemblies: string[][] = [];
+  const slots = buildDefaultDesignSlots();
+  for (let pass = 1; pass <= teams; pass += 1) {
+    const pool = [...remaining.values()].map(toDesignPoolPlayer);
+    const result = evaluateRosterDesign(slots, pool, budget);
+    if (!result.feasible) {
+      return {
+        holds: false,
+        assemblies,
+        failing: {
+          pass,
+          blockers: result.blockers.map((blocker) => `${blocker.slotId}: ${blocker.message}`),
+          ...(result.totalCost > budget ? { overrun: result.totalCost - budget } : {}),
+        },
+        repairRounds: 0,
+      };
+    }
+    const assembly = result.slots
+      .map((slot) => slot.playerId)
+      .filter((id): id is string => Boolean(id))
+      .sort((a, b) => a.localeCompare(b));
+    assemblies.push(assembly);
+    for (const id of assembly) remaining.delete(id);
+  }
+  return { holds: true, assemblies, repairRounds: 0 };
 }
 
 function demandCellMatches(
@@ -143,11 +339,20 @@ export function extractPoolFromDemand(
   tier: TierKey,
   options: {
     teams?: number;
+    shills?: number;
     budgetPerTeam?: number;
     contestMultiplier?: number;
+    poolSizeMultiplier?: number;
+    sizeTarget?: number;
+    maxRepairRounds?: number;
+    posture?: RosterPosture;
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
+  const posture = options.posture ?? 'optimal';
+  const teamsForSizing = Math.max(0, Math.floor(options.teams ?? designs.length));
+  const sizingEnabled = options.sizeTarget !== undefined || options.poolSizeMultiplier !== undefined;
+  const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
 
   // 1. Type the universe once (whole-profile classification).
   const classified: ClassifiedDemandPlayer[] = universe.map((player) => ({
@@ -184,7 +389,18 @@ export function extractPoolFromDemand(
     const picks = priceSpread(matching, wanted);
     for (const pick of picks) reservedIds.add(pick.id);
     cells.push({ key, preference, slotIds: cell.slotIds, asks: cell.asks, wanted, reserved: picks.length });
-    if (picks.length < wanted) {
+    const singleSlotBound = Number.isFinite(options.budgetPerTeam ?? Number.POSITIVE_INFINITY)
+      ? (options.budgetPerTeam ?? Number.POSITIVE_INFINITY) - 21 * poolMinSalary
+      : Number.POSITIVE_INFINITY;
+    if (matching.length > 0 && matching.every((player) => player.salary > singleSlotBound)) {
+      shortfalls.push({
+        key,
+        wanted,
+        available: matching.length,
+        message: `Your league wants ${wanted} ${preference.shape}${cell.slot.position ? ` at ${cell.slot.position}` : ''}`
+          + `, but every candidate costs more than a $${Math.round(options.budgetPerTeam ?? 0).toLocaleString()} cap can carry.`,
+      });
+    } else if (picks.length < wanted) {
       shortfalls.push({
         key,
         wanted,
@@ -209,7 +425,103 @@ export function extractPoolFromDemand(
   for (const player of floors.players as DemandUniversePlayer[]) {
     if (!byId.has(player.id)) byId.set(player.id, player);
   }
-  const players = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  let players = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  let sizing: PoolSizingResult | undefined;
+  let g1: PoolG1Result | undefined;
+
+  if (sizingEnabled) {
+    const target = resolvePoolSizingTarget({
+      teams: teamsForSizing,
+      shills: options.shills ?? 0,
+      poolSizeMultiplier: options.poolSizeMultiplier,
+      sizeTarget: options.sizeTarget,
+    });
+    const protectedIds = new Set<string>([
+      ...reservedIds,
+      ...floors.claimedIds,
+      ...floors.floorIds,
+    ]);
+    const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
+    const trimmed = trimPoolToTarget(players, protectedIds, fitOf, target.effectiveTarget);
+    players = trimmed.kept;
+    const messages: string[] = [];
+    if (target.clamped) {
+      messages.push(trimClampMessage(target, target.effectiveTarget, options.budgetPerTeam ?? Number.POSITIVE_INFINITY));
+    }
+    if (players.length > target.effectiveTarget) {
+      messages.push(
+        `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: every remaining player is claimed by an ask, an identity build, or a structural floor`,
+      );
+    }
+
+    const injectedIds: string[] = [];
+    const budget = options.budgetPerTeam ?? Number.POSITIVE_INFINITY;
+    if (Number.isFinite(budget) && teamsForSizing > 0) {
+      let current = new Map(players.map((player) => [player.id, player]));
+      g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), teamsForSizing, budget);
+      const maxRounds = options.maxRepairRounds ?? 6;
+      let rounds = 0;
+      while (!g1.holds && rounds < maxRounds) {
+        rounds += 1;
+        const repairSlots = repairSlotsForFailure(g1.failing);
+        let addedThisRound = 0;
+        const currentPlayers = [...current.values()];
+        const currentMinFit = currentPlayers.length > 0
+          ? Math.min(...currentPlayers.map(fitOf))
+          : Number.NEGATIVE_INFINITY;
+        const slotBound = budget - 21 * poolMinSalary;
+        for (const slot of repairSlots) {
+          const label = slot ? (slot.position ?? slot.slotId) : 'roster';
+          const eligible = universe
+            .filter((player) => !current.has(player.id))
+            .filter((player) => (slot ? eligibleForRepairGroup(slot, player) : buildDefaultDesignSlots().some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player))))
+            .filter((player) => player.salary <= slotBound)
+            .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));
+          if (eligible.length === 0) continue;
+          const repairPick = selectFitAwareRepairCandidate(eligible, currentMinFit, fitOf);
+          const chosen = repairPick.player;
+          if (!chosen) continue;
+          if (repairPick.lastResort) {
+            messages.push(
+              `no affordable ${label} body also fits your league's identities — added the cheapest legal option (${playerName(chosen)}).`,
+            );
+          }
+          current.set(chosen.id, chosen);
+          injectedIds.push(chosen.id);
+          addedThisRound += 1;
+        }
+        if (addedThisRound === 0) {
+          messages.push(
+            `pool still cannot field every club after repair: ${g1.failing?.blockers.join(' ') ?? 'no further legal body is available'}`,
+          );
+          g1 = { ...g1, repairRounds: rounds };
+          break;
+        }
+        g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), teamsForSizing, budget);
+        g1 = { ...g1, repairRounds: rounds };
+      }
+      if (!g1.holds && rounds >= maxRounds) {
+        messages.push(
+          `pool still cannot field every club after ${rounds} repair rounds: ${g1.failing?.blockers.join(' ') ?? 'repair exhausted'}`,
+        );
+      }
+      players = [...current.values()].sort((a, b) => a.id.localeCompare(b.id));
+    }
+
+    const finalSize = players.length;
+    if (finalSize > target.ceilingTarget && !messages.some((message) => message.includes('Sized up to'))) {
+      messages.push(trimClampMessage(target, finalSize, options.budgetPerTeam ?? Number.POSITIVE_INFINITY));
+    }
+    sizing = {
+      ...target,
+      finalSize,
+      trimmedCount: trimmed.evicted.length,
+      evictedIds: trimmed.evicted.map((player) => player.id),
+      injectedIds,
+      clamped: target.clamped || finalSize > target.requestedTarget,
+      messages,
+    };
+  }
 
   // 6. Re-verify every human design against the FINAL pool (the hub-drift check).
   const designPool = players.map(toDesignPoolPlayer);
@@ -219,5 +531,5 @@ export function extractPoolFromDemand(
     result: evaluateRosterDesign(design.slots, designPool, budget),
   }));
 
-  return { players, size: players.length, floors, cells, shortfalls, designVerdicts };
+  return { players, size: players.length, floors, cells, shortfalls, designVerdicts, ...(sizing ? { sizing } : {}), ...(g1 ? { g1 } : {}) };
 }

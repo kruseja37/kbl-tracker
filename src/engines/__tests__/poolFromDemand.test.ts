@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   countCellMatches,
+  DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
+  POOL_SIZE_MULTIPLIER_STOPS,
+  resolvePoolSizingTarget,
+  selectFitAwareRepairCandidate,
+  trimPoolToTarget,
   type ClassifiedDemandPlayer,
   type DemandUniversePlayer,
   type TeamDesignInput,
@@ -10,7 +15,7 @@ import { buildDefaultDesignSlots } from '../rosterDesignFeasibility';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import { classifyPlayerArchetype } from '../playerArchetypeClassifier';
 import { demandPlayerFromLeaguePlayer } from '../../src_figma/app/pages/LeagueBuilderDraftSetup';
-import { canRelieve, canStart } from '../../data/rosterConstruction';
+import { canRelieve, canStart, isLegalRoster } from '../../data/rosterConstruction';
 import { toRosterSlotPlayer } from '../rosterNeed';
 import type { Player } from '../../utils/leagueBuilderStorage';
 
@@ -72,6 +77,8 @@ function arm(
 const GLOVE = { power: 50, contact: 56, speed: 65, fielding: 75, arm: 71 }; // Defensive-Wizard echo
 const BAT = { power: 82, contact: 55, speed: 47, fielding: 51, arm: 60 }; // Slugger-ish echo
 const EVEN = { power: 60, contact: 60, speed: 60, fielding: 60, arm: 60 };
+const LOW = { power: 5, contact: 5, speed: 5, fielding: 5, arm: 5 };
+const HIGH_BAT = { power: 95, contact: 95, speed: 70, fielding: 50, arm: 50 };
 
 function universe(): DemandUniversePlayer[] {
   n = 0;
@@ -281,4 +288,177 @@ describe('extractPoolFromDemand', () => {
       expect(canRelieve(mapped)).toBe(false);
     },
   );
+
+  it('maps dial targets from roster demand plus expected shill wins', () => {
+    const eightTeams = resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
+    expect(eightTeams.demandBase).toBe(176);
+    expect(eightTeams.requestedTarget).toBe(238);
+    expect(resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: 1.5 }).requestedTarget).toBe(264);
+
+    const withShills = resolvePoolSizingTarget({ teams: 8, shills: 3, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
+    expect(withShills.demandBase).toBe(206);
+    expect(withShills.requestedTarget).toBe(279);
+  });
+
+  it('caps requested targets at the hard ceiling and rejects off-stop multipliers', () => {
+    const target = resolvePoolSizingTarget({ teams: 8, shills: 0, sizeTarget: 999, poolSizeMultiplier: 1.5 });
+    expect(target.ceilingTarget).toBe(264);
+    expect(target.requestedTarget).toBe(264);
+    expect(POOL_SIZE_MULTIPLIER_STOPS).toEqual([1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5]);
+    expect(() => resolvePoolSizingTarget({ teams: 8, poolSizeMultiplier: 1.33 })).toThrow(/poolSizeMultiplier/);
+  });
+
+  it('trims by fit before price, evicting cheap zero-fit filler before pricey good-fit filler', () => {
+    const cheapZero = { id: 'cheap-zero', salary: 1 };
+    const priceyFit = { id: 'pricey-fit', salary: 1_000 };
+    const result = trimPoolToTarget([cheapZero, priceyFit], new Set<string>(), (player) => (player.id === cheapZero.id ? 0 : 10), 1);
+    expect(result.evicted.map((player) => player.id)).toEqual(['cheap-zero']);
+    expect(result.kept.map((player) => player.id)).toEqual(['pricey-fit']);
+  });
+
+  it('never evicts reserved, identity-claimed, or floor-protected ids', () => {
+    const players = [
+      { id: 'reserved', salary: 500 },
+      { id: 'claimed', salary: 400 },
+      { id: 'floor', salary: 300 },
+      { id: 'loose', salary: 200 },
+    ];
+    const result = trimPoolToTarget(players, new Set(['reserved', 'claimed', 'floor']), () => 0, 1);
+    expect(result.evicted.map((player) => player.id)).toEqual(['loose']);
+    expect(result.kept.map((player) => player.id).sort()).toEqual(['claimed', 'floor', 'reserved']);
+  });
+
+  it('uses salary-desc then id-asc only inside equal-fit trim ties', () => {
+    const players = [
+      { id: 'b-cheap', salary: 100 },
+      { id: 'a-expensive', salary: 300 },
+      { id: 'a-cheap', salary: 100 },
+    ];
+    const result = trimPoolToTarget(players, new Set<string>(), () => 1, 1);
+    expect(result.evicted.map((player) => player.id)).toEqual(['a-expensive', 'a-cheap']);
+  });
+
+  it('clamps an undersized absolute request up to the hard floor with the clamp flag', () => {
+    const target = resolvePoolSizingTarget({ teams: 4, shills: 0, sizeTarget: 10, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
+    expect(target.requestedTarget).toBe(10);
+    expect(target.effectiveTarget).toBe(target.hardFloor);
+    expect(target.clamped).toBe(true);
+  });
+
+  it('constructs disjoint legal 22-player G1 assemblies under the resolved cap', () => {
+    const result = extractPoolFromDemand(universe(), [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    expect(result.g1?.holds).toBe(true);
+    expect(result.g1?.assemblies).toHaveLength(2);
+    const seen = new Set<string>();
+    for (const assembly of result.g1?.assemblies ?? []) {
+      expect(assembly).toHaveLength(22);
+      for (const id of assembly) {
+        expect(seen.has(id)).toBe(false);
+        seen.add(id);
+      }
+      const players = assembly.map((id) => result.players.find((player) => player.id === id)!);
+      expect(isLegalRoster(players)).toBe(true);
+      expect(players.reduce((sum, player) => sum + player.salary, 0)).toBeLessThanOrEqual(5_000_000);
+    }
+  });
+
+  it('selects a pricier fitting repair body before a cheaper zero-fit fallback', () => {
+    const cheapZero = { id: 'cheap-zero-rf', salary: 10 };
+    const fitting = { id: 'fitting-rf', salary: 20 };
+    const pick = selectFitAwareRepairCandidate(
+      [cheapZero, fitting],
+      5,
+      (player) => (player.id === 'fitting-rf' ? 5 : 0),
+    );
+    expect(pick).toEqual({ player: fitting, lastResort: false });
+  });
+
+  it('injects the cheapest legal body with a last-resort note when no repair body is fit-qualified', () => {
+    n = 0;
+    const source = universe().slice(0, 28);
+    const fallback = hitter('RF', LOW, 1);
+    fallback.id = 'fallback-rf';
+    source.push(fallback);
+    const result = extractPoolFromDemand(source, [], [HISTORICAL_ARCHETYPES.find((a) => a.id === 'big-red-machine')!], 'standard', {
+      teams: 1,
+      budgetPerTeam: 20_000,
+      sizeTarget: 26,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      maxRepairRounds: 1,
+    });
+    if (result.sizing?.injectedIds.includes('fallback-rf')) {
+      expect(result.sizing.messages.some((message) => message.includes('cheapest legal option'))).toBe(true);
+    }
+  });
+
+  it('keeps repair additive and reports exhaustion instead of failing extraction', () => {
+    const result = extractPoolFromDemand(universe().slice(0, 20), [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 50_000,
+      sizeTarget: 10,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      maxRepairRounds: 1,
+    });
+    expect(result.players.length).toBeGreaterThan(0);
+    expect(result.g1?.holds).toBe(false);
+    expect(result.g1?.repairRounds).toBeGreaterThanOrEqual(1);
+    expect(result.sizing?.messages.join(' ')).toMatch(/pool still cannot field every club|repair/);
+  });
+
+  it('lets the constructive floor beat the requested ceiling when repair needs more bodies', () => {
+    const result = extractPoolFromDemand(universe(), [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 75_000,
+      sizeTarget: 1,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      maxRepairRounds: 2,
+    });
+    expect(result.sizing?.finalSize).toBeGreaterThanOrEqual(result.sizing?.effectiveTarget ?? 0);
+    expect(result.sizing?.clamped).toBe(true);
+  });
+
+  it('keeps price shortfall wording separate from body-count wording and preserves the price-spread pin', () => {
+    const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
+    const result = extractPoolFromDemand(universe(), designs, archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 22_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    expect(result.shortfalls.some((shortfall) => shortfall.message.includes('costs more than'))).toBe(true);
+
+    const cell = result.cells.find((candidate) => candidate.key.startsWith('SS|Defensive-Wizard'));
+    expect(cell?.reserved).toBe(2);
+  });
+
+  it('skips sizing and G1 for no-dial callers', () => {
+    const result = extractPoolFromDemand(universe(), [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+    });
+    expect(result.sizing).toBeUndefined();
+    expect(result.g1).toBeUndefined();
+  });
+
+  it('is deterministic with sizing enabled for shuffled input order', () => {
+    const source = universe();
+    const shuffled = [...source].reverse();
+    const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
+    const first = extractPoolFromDemand(source, designs, archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    const second = extractPoolFromDemand(shuffled, designs, archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    expect(first.players.map((player) => player.id)).toEqual(second.players.map((player) => player.id));
+    expect(first.sizing).toEqual(second.sizing);
+    expect(first.g1).toEqual(second.g1);
+  });
 });

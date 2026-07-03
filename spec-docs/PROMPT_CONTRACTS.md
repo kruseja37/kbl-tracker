@@ -27802,3 +27802,54 @@ deriveShillTeamIds (same as the commit); GameTracker UI SET (untouched); no DB c
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
 - `git diff --stat` — the §2 surface only; GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-DJ06-EXITGATE ===== -->
+
+<!-- ===== CONTRACT: CODEX-POOLSIZE-2A ===== -->
+## CODEX-POOLSIZE-2A — cap-aware pool sizing engine (Phase 2A: math + trim + floor)
+
+**Binding design:** `spec-docs/FABLE_POOL_SIZING_DESIGN_2026-07-03.md` — build **PHASE 2A per §8**
+EXACTLY (§1 fit-first law, §2 target math, §3 fit-first trim, §4 G1 + fit-aware repair + shortfall +
+result surface, §7.3 tests 1-13 & 15). Do NOT build Phase 2B (§5.1 dial control, §5.2 recalc UX, §6
+RE-CHECK panel) — that is a later contract. JK rulings baked in: demandBase counts expectedShillWins;
+default multiplier 1.35. Branch-only; do NOT commit/push; leave the tree dirty for Opus.
+
+**Read first (in full):** FABLE_POOL_SIZING_DESIGN §1-§4, §7, §8; src/engines/poolFromDemand.ts
+(extractPoolFromDemand + PoolFromDemandResult ~76-212); src/engines/draftPoolExtractor.ts (ExtractedPool
+~97-108, claimed/floorIds ~281-331, archetypeFitScorer); src/engines/rosterDesignFeasibility.ts
+(evaluateRosterDesign + seedRosterDesignSlots + isLegalRoster use); src/data/rosterConstruction.ts;
+src/engines/auctionPoolSizing.ts (poolDemandModel/expectedShillWins ~127); src/utils/leagueBuilderStorage.ts
+(LeagueTemplate ~106-130, salaryCap/resolveLeagueSalaryCap); src/utils/leagueBuilderPoolBuilder.ts
+(evaluatePoolDemandSufficiency ~344); src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx (buildModeAResult
+~804-822).
+
+### Deliverables (Phase 2A, per §8)
+1. **§2 target math + persistence:** `poolSizeMultiplier?: number` on LeagueTemplate (after salaryCap;
+   additive, NO DB bump; absent → 1.35). demandBase = teams×22 + expectedShillWins; requestedTarget =
+   ceil(m×demandBase); hard ceiling ceil(1.5×demandBase); hardFloor per §2.2; effectiveTarget = max(requested, hardFloor).
+2. **§3 fit-first trim:** exported pure `trimPoolToTarget(players, protectedIds, fitOf, target)` →
+   {kept, evicted}; eviction order maxFit asc → salary desc → id asc (§3.3), 1e-9 epsilon. Protected =
+   reservedIds ∪ claimedIds ∪ floorIds. ADDITIVE contract change: ExtractedPool gains readonly
+   `claimedIds`/`floorIds` (sorted) from the existing sets. New step 5.5 in extractPoolFromDemand.
+3. **§4 G1 + fit-aware repair:** constructive G1 (N disjoint legal-22-under-cap via the all-no-ask
+   evaluator, §4.1); fit-aware repair injection (eligibility → fit-qualified maxFit≥pool-min → cheapest-among-fit
+   → bounded last-resort with a NOTE, §4.2); additive-only; shortfall naming (§4.4); result surface
+   `sizing`/`g1` on PoolFromDemandResult (§4.5, both optional). New options poolSizeMultiplier/sizeTarget/
+   maxRepairRounds/posture (§4.6). Order of operations §4.3 — including: no `teams`+no multiplier ⇒ sizing
+   SKIPPED (today's behavior byte-for-byte); Infinity budget ⇒ trim runs, G1/repair skipped.
+4. **Wiring (2A-limited):** buildModeAResult passes the PERSISTED poolSizeMultiplier + the RESOLVED cap
+   (never recompute either locally — the adapter-fidelity lesson, §8); the extraction report area prints
+   `sizing.messages` as plain text (NO new components). leagueBuilderPoolBuilder sufficiency gains an
+   additive `targetOverride?` (§2.3) — hard-floor logic untouched.
+
+### Constraints
+- §1 FIT-FIRST LAW is binding: no selector's primary key is price; fit filters, price orders within fit,
+  relax only as a bounded NOTED last resort. Trim never crosses the buildability floor. One law
+  (isLegalRoster/teamRosterNeed) — no parallel rules. GameTracker UI SET (untouched). Deterministic (id-tiebroken).
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0.
+- Write §7.3 tests 1-13 + 15; run green. ESPECIALLY test 3 (cheap zero-fit evicted before pricey good-fit),
+  test 8 (fit-aware repair: pricier fitting body injected over cheap zero-fit), test 12 (no-sizing
+  byte-identical), test 13 (shuffled-input determinism).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
+- `git diff --stat` — the §8 Phase-2A surface only; GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-POOLSIZE-2A ===== -->
