@@ -366,6 +366,20 @@ Auto-capture pen for the Self-Improvement Loop (see CLAUDE.md). Rules here are
 PROPOSALS, written the moment a JK correction happens (Write-First), in the form
 "When [situation], always [action] because [reason]." They are NOT yet in force.
 
+- **Derive semantic data from mechanics, never from intuition (JK correction
+  2026-07-02, taxonomy session):** When designing any new canonical data table
+  whose values ascribe MEANING to existing game entities (personality valence,
+  archetype viability, trait polarity groupings…), always derive the values from
+  how those entities actually FUNCTION in the live engines (morale, relationships,
+  development, trait adaptation) and cite the file:line evidence in the design —
+  never propose the table from domain intuition, because the engines already
+  encode the ground truth and an intuited table silently forks it (the
+  personality-valence proposal was built from baseball vibes while the morale
+  matrix, relationship formation, and development engines held the real answer).
+  Corollary from the same session: before extending ANY enum-like set, verify the
+  canonical membership against the generation pools + game reference — persisted
+  unions can carry legacy pollution (the Personality/Chemistry crossover).
+
 Promotion: JK says "ratify [item]" → the rule moves up into the non-negotiable
 rules above and is struck from this pen. No agent promotes its own rule, and no
 agent edits the ratified rules without JK. (JK ruling 2026-06-14.)

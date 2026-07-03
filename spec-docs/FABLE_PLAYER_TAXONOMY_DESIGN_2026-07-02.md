@@ -241,11 +241,34 @@ FINDINGS (drive the S3 leg):
 
 ### §5c. THE NEXT LEG (before menus are declared LOCKED)
 
-1. Age-qualify the Project/Pitching-Project classes in the classifier (S4 finding).
-2. The preference-aware slot boost on `buildIdentityRoster` (also the C4-B input seam).
+1. ~~Age-qualify the Project/Pitching-Project classes~~ **DONE (polish leg, 2026-07-02):**
+   Project classes are now marker-qualified — a KNOWN non-young age or a KNOWN flat
+   potential-gap disqualifies (the real-DB win: a 34-year-old with raw tools is his tool
+   shape, never a "Project"); a strong gap (≥2) boosts the Project score. MEASURED: top-1
+   recovery 0.353→0.367, Pitching-Project→Power-Ace misses 23→16; the gap≥1 boost variant
+   was tried and REJECTED by measurement (no lift + it stole true Power-Relievers into
+   Pitching-Project). Residual top-2 ≈0.59 is characterized as honest generation overlap:
+   the taper mutes extreme-grade draws and several generator families are deliberate
+   geometric near-twins — the declared family stays on farm cards, and the runner-up
+   mechanism keeps boards honest. The 0.5 floor stands with margin.
+2. ~~The preference-aware slot boost on `buildIdentityRoster`~~ **DONE (polish leg,
+   2026-07-02):** `BuildIdentityOptions.slotPreferenceBonus` — an opt-in per-(player,
+   identity-slot) bonus ADDED to the fit objective through the whole identity path (greedy
+   start, shortlist fit lens, the constrained climb's assess — which now scores fit over
+   PICKS, slot-positionally). The CALLER computes the bonus (adapters classify with the
+   full profile; the calibrated module stays classifier-free). Absent → an exact IEEE 0 is
+   added → byte-identical builds, PROVEN by the equality test (zero-bonus ≡ no-option) and
+   by the full calibrated-consumer battery (historicalArchetypes in-band, draftability,
+   poolFeasibility, pool sizing, sufficiency, extractor, the frozen value gate — 48/48,
+   the one workbook-baseline timeout being the documented load flake, solo-green).
+   Steering pinned: a preferred player wins his asked slot; steering never worsens
+   solvency. The frozen value baseline never consults the bonus.
 3. S3 choice parity (EV-flatness over sampled per-position preference profiles) + S5
    alignment sanity across the 24 team archetypes → menu viability flags / pruning.
-4. Tighten the S1 catch-all gate 40%→25% and re-run.
+4. S1 catch-all gate: hitter side can tighten 40%→25% (max share ~16%); the pitcher side
+   CANNOT yet — Strike-Thrower holds ~37% of real-DB pitchers, a genuine data concentration
+   (accuracy-lean arms dominate the 440), not a classifier defect. Documented rather than
+   forced; revisit with the S3/S5 harness run.
 **C4-B consumes:** the dropdown menus, the alignment highlights, the board filtering
 (ASST_GM_DESIGN §6 `board`), farm scout bands derived from shape+grade (gap #9 gets its
 basis). **v1.1:** preference-aware LIVE board re-planning depth, flexibility-as-value pricing
@@ -281,6 +304,20 @@ team) and shows what drifted → GMs adjust designs or the owner adjusts the poo
    itself can't meet a cell — "your league wants 6 lefty glove-first shortstops; the
    uploaded universe holds 3").
 Privacy: extraction is machine-side; no GM sees another's asks; the pool itself is public.
+
+**AS BUILT (2026-07-02, uncommitted):** `src/engines/poolFromDemand.ts` —
+`extractPoolFromDemand(universe, designs, selectedArchetypes, tier, opts)` composing the
+audited parts exactly as designed: classifier types the universe · demand cells aggregate
+per (position | shape | hard-tags) with slot attribution · reservations = ceil(asks ×
+contestMultiplier 2, §16-tunable) selected by PRICE SPREAD (the ask stays affordable at
+more than one tier — pinned) · the C1B `extractDraftPool` carries archetype floors +
+balance verdicts from the same universe · union (reservations always survive) ·
+`evaluateRosterDesign` re-verifies EVERY human design against the final pool (the hub-drift
+check) · shortfalls named in the ruled phrasing ("the uploaded universe holds N") ·
+deterministic (pinned). v1 choices documented in-module: CPU/shill clubs ride the floors
+(no shape cells — they bid by band priorities, not asks); no trim-to-target (oversupply is
+owner-editable; trim = v1.1). Battery 4/4 first run. UI (zone 4 Mode A) = C4-B wiring
+against the Draft Room design; the toggle placeholder lights up when wired.
 
 ### 6.2 Mode B — pool-first (gray-out, rides C4-B)
 

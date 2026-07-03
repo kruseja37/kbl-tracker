@@ -3230,3 +3230,244 @@ orthogonality reconfirmed).
 mechanical). Per JK's standing directive this round, HELD for JK to hand to Fable in the other thread — not
 auto-dispatched. Nothing committed. After the small round: Opus re-runs the gate + a light delta check, then
 commits branch-only on JK's go. NOTE: F1-F5 are locked-correct — do not reopen them.
+
+## 2026-07-02 — JK RULINGS: post-C3 direction (shills, UI mandate, Asst-GM rescope, chemistry/potency, personality/captain, taxonomy)
+
+1. **Shill default = 2** for an 8-team league (accepting the C3 sim finding that shills are
+   texture, not a price lever; completion-safe at 0-4). `SIZING_TUNING.shillRecommendationByLeagueSize`
+   already carries 2 at size 8 — no change needed.
+2. **PRIORITIES:** Franchise mode / draft / living season is the app's #1 priority; the ALMANAC is
+   #2; EVERYTHING else is back-burner and must not be prioritized over these.
+3. **UI/UX MANDATE — Fable is the UI boss** with total freedom across league setup → team setup →
+   draft setup → draft → handoff-to-season → Fenway hub: kill leftover UI that doesn't serve the
+   franchise experience; fix redundancies (e.g. team name on banner AND tabs; duplicated
+   standings); one coherent premium look and UX end-to-end; the GameTracker is the design
+   REFERENCE (its UI is SET — do not change it); anything tutorial/informational hides behind the
+   help button; every on-screen element must earn its place; the companions (Assistant GM, scout,
+   beat reporter) are the helpful through-line. Known gaps JK named: hub missing recent builds +
+   partially unwired; CSV schedule upload → live schedule/Play Ball unverified; no Asst-GM surface
+   yet (new build).
+4. **ASSISTANT-GM RESCOPE (intelligence-first):** the FEATURE is advice quality that stays right
+   again and again — NOT one-click enforcement. GMs may make manual roster changes so long as UI
+   exists for it; do NOT wire legality blocks into every button (only where trivial and already
+   part of the analyzer logic that keeps advice correct). JK is not concerned about users breaking
+   rosters in v1. → The queued in-season legal-roster enforcement ticket is RESCOPED to: analyzer
+   adopts the canonical rules (never advise an illegal move) + manual-move UI exists.
+5. **CHEMISTRY / TRAIT-POTENCY IN ROSTER INTELLIGENCE (new math requirement).** VERIFIED ABSENT
+   2026-07-02: zero chemistry awareness in the builder/market/pool/shill intelligence stack;
+   potency exists only in ivEngine and runs dormant at L2. Required: team chemistry counts →
+   potency tier (L1/L2/L3) → marginal player value, so a player who tips a team L1→L2 or L2→L3 is
+   worth a premium over his statistical twin — EVERYWHERE roster-construction intelligence lives
+   (pre-draft board, draft/auction advice, in-season analyzer). Single-math: one shared
+   tier-delta calculation feeding all consumers.
+6. **PERSONALITY VISIBILITY + HIDDEN-MODIFIER TIMING:** the Asst GM sees PRIMARY personality only
+   (it influences development/regression and captain selection); hidden modifiers stay hidden
+   from it. Hidden modifiers should be GENERATED AND APPLIED when the draft roster/pool is
+   generated (today they're generated at season-freeze; generation is deterministic per player id,
+   so moving the point earlier is consistent). Exact timing to be settled in the ticket.
+7. **CAPTAIN SELECTION — age tilt:** add a small five-tier age-curve tilt to captain odds;
+   charisma + loyalty remain the main drivers (today it's loyalty+charisma only — verified).
+8. **PLAYER-ARCHETYPE TAXONOMY (Move 2)** was blocked by the market brain — now unblocked and
+   confirmed in the forward plan (feeds C4's ROBUST priority dropdowns).
+
+## 2026-07-02 — UX NORTH STAR authored (Fable, under the ruling-3 UI mandate): the binding design rulings
+
+`spec-docs/UX_NORTH_STAR.md` is now the BINDING design bible for every UI build on league
+setup → draft → handoff → Fenway hub (C4-B/C execute against it; §9 is the conformance
+checklist every UI diff self-reports). Top-line rulings made under the delegated authority
+(evidence: 4 code-read audits, 2026-07-02):
+
+1. **The design language is the GameTracker's ACTUAL idiom** — "chalk-and-ash Fenway
+   scoreboard" (Moms/Tox Typewriter machine-vs-human voice split, chalk cream on field greens
+   over ash tan, brass-gold accent semantics, hard offset shadows, chalk texture, team colors
+   as tints) — NOT the pixel/SNES style, which the finished GameTracker deliberately overrides.
+   Two zones: the Cartridge (AppHome only, stays SNES) and the Ballpark (every other journey
+   screen converges on the chalk-and-ash language). AuctionStage's pixel lot names are ruled in
+   as the one "jumbotron marquee" exception.
+2. **IA rulings R-IA1..7:** home links to the League Builder (Builder demoted to a Lab tab
+   inside it); the two draft-setup screens merge into one (the live screen named "Preview" gets
+   renamed; seat/GM names must persist — C4-A spine dependency); draft rooms never ask setup
+   questions (seed/CPU/increment inputs leave player screens); the farm auction folds onto
+   AuctionStage (highest-leverage fix — the stage already implements the farm fog); snake
+   dead-ends get completion CTAs; FranchiseLensHub is confirmed the destination hub (aligns
+   C4-C); all `/__preview/*` routes gate behind DEV (~17 dev screens currently ship to players).
+3. **Companion pattern:** at most ONE voiced advisor per screen (auction's three overlapping
+   voices consolidate under the hired scout); voices are named characters (the lens' named
+   reporter with mood is the standard); the lens' `?`-toggle help layer is the app-wide pattern
+   for ALL tutorial/mechanics text; §6 bans engineering vocabulary from player-facing copy
+   (≥15 verified leaks listed).
+
+Not unilaterally executed: everything lands via the ticketed builds (quick-wins / shared-kit /
+C4-B / C4-C per §8). JK's browser sign-off remains the closing acceptance gate.
+
+## 2026-07-02 — FABLE CHEM-POTENCY ticket (#4) design decisions — for JK ratification
+
+Implementing rulings 4-6 (design: `FABLE_CHEM_POTENCY_DESIGN_2026-07-02.md`). Three specifics
+were mine to choose; JK may retune any of them:
+
+1. **The tipping premium is INTELLIGENCE-ONLY, priced in exact IV dollars.** New shared engine
+   (`chemistryTierValue`) computes TeamLift (a crossing re-tiers every matching-family trait on
+   the existing roster, priced per holder through the IV engine's own curves via a new additive
+   `traitPotencyDollarDelta` export) + OwnContext (the candidate's own traits repriced from the
+   L2 assumption to the joined roster's real tier). The economy stays frozen at L2 — IV, salary,
+   market prediction, CPU/shill bidding, trueValue all byte-stable (oracle + calibration + sweep
+   gates re-run as proof). Premiums are uncapped and can exceed the tipper's own IV — game-true
+   (the 6→7 crossing is "enormous" by design). Send-down ripple (`chemistryRemovalImpact`)
+   included — the research spec's unmodeled gap, now modeled.
+2. **Hidden-modifier timing (ruling 5) resolves to POOL-LOCK, not a new generation system.**
+   Grounding showed pool-time generation already existed on both major paths; `lockLeaguePool`
+   now runs the same league-scoped axis regen, making the lock the guaranteed generation point
+   for BOTH draft formats. Auction leagues: byte-identical values (same seed — the auction-init
+   regen becomes an idempotent re-stamp). Snake leagues: deterministic value drift (league-scoped
+   seed replaces the bare-id freeze backfill). The freeze backfill survives as a no-op guard.
+   The §5 open decision (pool-creation vs league-creation) closes with NO JK fork needed.
+3. **Captain age tilt (ruling 6) bands:** ≤22: −6 · 23-26: −2 · 27-30: 0 · 31-34: +4 · 35+: +6 —
+   monotonic seniority, 12-point span vs the 0-200 loyalty+charisma scale (breaks near-ties
+   toward the veteran; cannot override a clear leadership gap). Living-season spec amended.
+   Also executed: the standing 2026-06-22 ruling correcting the farm-scout fit tiers 4/8 → the
+   canonical 3/7 (single-math delegation to derivedTraitPotency).
+
+**Deliberately NOT wired (named consumers per the handoff):** the auction-advice + pool-panel
+rendering belongs to C4-B (screens execute against the UX north star); the analyzer wiring
+waits for CODEX-ASSTGM-LEGALITY to land (same-file collision), then a one-line follow-up.
+
+## 2026-07-02 — ASST-GM product rulings (JK) + the roster-brain v1/v1.1 split (planning session)
+
+**JK rulings (binding):**
+1. The Assistant GM is HIRED at the post-draft staffing screen (a named companion like
+   manager/reporter/scout).
+2. Delivery: in-season PULL-ONLY (click-driven insights: roster intelligence, moves, lineup
+   optimization vs the upcoming starter) — EXCEPT the auction room, where he reacts to every
+   lot event but whispers only to his own GM: the per-seat pass-the-device perspective, with
+   his insights + private draft board/rankings behind a click-to-reveal.
+3. v1 advice scope: roster moves + scorecard + lineup-vs-upcoming-starter + farm call-up
+   candidates. Trades/fatigue/slump-aware/pushes = v1.1.
+4. MOCK-DRAFT TOGGLE CUT from v1 — replaced by RUN-IT-BACK (re-run the draft, same league +
+   pool + settings; franchises are deep-copy snapshots and are untouched). NO draft save
+   slots — franchise slots are the permanent record; the league holds one draft state.
+5. Two-Way trait counts toward BOTH cohorts where ratings qualify (Opus-verified undercount,
+   not an exploit) — fold into the v1.1 economy re-calibration batch, not a standalone fix.
+
+**Roster-brain sequencing (locked with JK):** v1 = payload contract → wire chemistry+market
+brain (C4-B) → handedness balance (advice-only). v1.1 = ONE economy re-calibration campaign
+riding C5: flexibility-as-value (completion-floor deltas) + Two-Way cohorts + the IV gaps
+(scarcity multipliers at 1.00, throws unpriced, live-path potency at L2) + the full composed
+synergy score. Scorecard = FIVE LIGHTS (SHAPE/IDENTITY/CHEMISTRY/BALANCE/BUDGET), composed
+not monolithic — full design in `spec-docs/ASST_GM_DESIGN.md` (binding for C4-B slice 2 +
+C4-C), incl. the verified gaps: CONFERENCE-SURFACE (model built, editor missing) and
+STAFF-CARRY-THROUGH (hired staff never reach the franchise).
+
+## 2026-07-02 — TAXONOMY rider (JK): the classifier consumes the WHOLE player profile
+
+The player-archetype classifier's inputs are the full profile — primary AND secondary
+position (the combo is an input, e.g. SS/2B vs SS-only are different assets), bats/throws
+handedness, ratings, traits, arsenal, age — not just ratings + traits. Design consequence
+(Fable): archetype = a tool-SHAPE class + orthogonal PROFILE TAGS (handedness incl. switch
+and LHP, flexibility/utility from the position combo, Two-Way, platoon traits, age band)
+rather than multiplying classes combinatorially — menus stay small, labels compose
+("Lefty glove-first SS/2B").
+
+## 2026-07-02 — TAXONOMY riders 2+3 (JK): personality tilts at key roles + exhaustive menu
+
+1. **Personality tilts:** GMs can specify positive/neutral/negative personality preferences at
+   key roles ("nobody wants a Droopy or Timid SP1 or starting SS"). Design (Fable): a NEW
+   personality-VALENCE tag over the 11 visible personalities (proposed: positive =
+   Competitive/Tough/Spirited/Disciplined · neutral = Crafty/Scholarly/Relaxed/Jolly ·
+   negative = Egotistical/Timid/Droopy — MAP PENDING JK RATIFICATION), distinct from the
+   free-agency salary-demand modifiers; per-slot tilt = a soft preference the board/builder
+   weight, never a hard filter (thin-pool anti-starve); visible primary personality only
+   (ruling-5 boundary intact).
+2. **Exhaustive menu:** the shape menu must exceed the generator's 17 so GMs can get specific
+   — Fable's design opens the sweep at 19 hitter + 12 pitcher shapes via a systematic
+   tool-combination-lattice enumeration (every 1-strong and 2-strong region named where the
+   pool has presence; empty regions documented as swept-and-empty; the parity/coverage sims
+   prune per position). Full design: FABLE_PLAYER_TAXONOMY_DESIGN_2026-07-02.md.
+
+## 2026-07-02 — CORRECTION (JK): the Personality union is polluted with chemistry types
+
+JK correction to the taxonomy rider above: Crafty, Scholarly, Competitive, Disciplined,
+Spirited are CHEMISTRY types; the persisted `Personality` union (11 values) wrongly absorbed
+four of them via the legitimate Competitive crossover. **The canonical personality set is 7:
+Competitive, Tough, Relaxed, Egotistical, Jolly, Timid, Droopy** (code-verified: the prospect
+generator's PERSONALITY_POOL and the FA salary PERSONALITY_MODIFIERS both already use exactly
+these 7 — the pollution lives in the type union + the profile editor's 11-value list, i.e.
+imported/hand-edited players). Supersedes the valence proposal above; corrected proposal over
+the 7: positive = Competitive, Tough · neutral = Relaxed, Jolly · negative = Egotistical,
+Timid, Droopy (Egotistical = the flagged judgment call). NEW TICKET: PERSONALITY-CANON
+(narrow the union, normalize-on-read for polluted records, fix the editor list, check the
+import mapping) — spec in FABLE_PLAYER_TAXONOMY_DESIGN_2026-07-02.md §2.2. Containment: the
+lock-time axis regen already re-stamps draft-league players from the canonical 7.
+
+## 2026-07-02 — CORRECTION 2 (JK: "never assume") — personality groups now DERIVED from the engines
+
+JK caught the valence proposal being built from intuition instead of mechanics. The corrected
+design reads the grouping off the four in-season systems (morale matrix per-personality
+multipliers, fan-morale dampener, relationship clash/compatibility/mentor sets, trait
+image-drivers), with file:line evidence in FABLE_PLAYER_TAXONOMY_DESIGN_2026-07-02.md §2.2.
+Result — 4 derived groups, which OVERTURN the intuited 3-bucket map: **STEADY** = Tough,
+Jolly, Relaxed (the code's own steady/mentor set — Jolly/Relaxed had been mis-bucketed
+"neutral") · **FIRED-UP** = Competitive (spiky-positive amplifier, not steady) · **VOLATILE**
+= Egotistical (high-variance + clash-toxic, NOT flatly negative) · **FRAGILE** = Timid,
+Droopy (mechanically confirmed exactly as JK said). Tilt options: prefer-steady /
+avoid-fragile (key-role default) / any / embrace-volatility. Where an engine already defines
+a set, the taxonomy derives membership from it (single-math). Lesson written to
+SESSION_RULES pending pen ("derive semantic data from mechanics, never intuition").
+
+## 2026-07-02 — JK RULING: DH is not part of the app — eradicate wherever found
+
+Context: the taxonomy build briefly added a DH position menu (accommodating the legacy 'DH'
+member in the generator's DraftPosition union) — wrong direction; JK's 2026-06-20 fork ruling
+already excluded DH/UTIL from the draft position model. EXECUTED NOW (Fable): 'DH' removed
+from TaxonomyPosition + menus + a no-DH pin test added; the generator's affinity lookup
+neutralizes a DH input (never drawn; the union member survives only to type polluted legacy
+data). SCOPE NOTE (Fable's reading, for JK to correct if wrong): this eradicates DH as a
+PLAYER POSITION (draft, taxonomy, profile editor primaries, position multipliers). The
+lineup-RULE DH (useDH game setting, lineupWithDH/lineupWithoutDH, GameTracker DH handling)
+is a real SMB4 game setting and a different concept — NOT touched. TICKET: DH-PURGE — extend
+the standing Wave-1 purge ('P'/'TWO-WAY'/'DH' primaries in the profile editor) to an
+app-wide position-DH sweep: the DraftPosition union member + defensive branches,
+POSITION_MULTIPLIERS.DH, resolveHitterPosition's DH mapping, any DH primary in imports/UI.
+Codex builds, Opus sequences.
+
+## 2026-07-02 — JK RE-SYNC: player archetypes need NO value parity — feasibility-and-feedback instead
+
+JK ruling: player archetypes are the GM's design lever — shapes come in all strengths and
+weaker-but-cheaper is the POINT (the price system prices the difference). Only the TEAM
+archetypes (a closed competing menu) need parity. The planned S3 choice-parity sim is
+DROPPED; replaced by the FEASIBILITY-AND-FEEDBACK loop, per JK's flow: GM sets per-slot
+player-archetype targets across the 22 roster spots → the Asst GM calculates whether the
+design is satisfiable from the actual draft pool, within budget, honoring the team
+archetype's cap identity → if not, plain-language blockers name what's in the way → the GM
+adjusts and iterates → once feasible, the Asst GM builds the draft board across the 22 slots
+and ranks the entire pool by position against the requested archetypes. S5 rescoped to
+"honest highlights" (aligned shapes must verifiably be cheaper under the identity; never
+presented as raw value). Design doc §4 updated. The feasibility evaluator is the next build
+(Fable): it extends the completion-feasibility machinery (C2B/C3) with design-aware slots.
+
+## 2026-07-02 — JK RULING: two pool-construction modes (league-level toggle) — POOL-FROM-DEMAND + pool-first gray-out
+
+JK ruled the two-mode pool system: **Mode A (design-first):** once every GM locks team
+archetype + per-position player-archetype preferences, the engine EXTRACTS the requisite
+pool from a much larger uploaded universe (thousands of players) to meet the league's
+aggregated designs — user add/subtract edits → lock → each hub re-checks its own design
+against the final pool and shows drift. **Mode B (pool-first):** lock the pool, then the
+team-setup hubs gray out team archetypes (draftability ranker verdicts) and player-archetype
+menu entries (pool presence) that the locked pool cannot support. Selectable per league.
+Confirmed design stances: completion is guaranteed, design satisfaction stays COMPETITIVE
+(contested asks provisioned with multiplicity, not exclusivity); extraction is machine-side
+(no GM sees another's asks); CPU teams get auto-derived designs from their archetypes; the
+manual shuttle survives as the edit layer in both modes. Sequencing: Mode B rides C4-B
+(wiring on built math); Mode A = the POOL-FROM-DEMAND ticket (Fable design §6 of
+FABLE_PLAYER_TAXONOMY_DESIGN_2026-07-02.md; build after the taxonomy polish leg).
+
+## 2026-07-02 — AGE rider (JK-agreed): advice-layer now, economy in the v1.1 batch
+
+Verified: the market brain / draft intelligence is age-BLIND while the (build-dark)
+development engine carries a real age-gravity curve (young pulled up, 36+ pulled down;
+speed/fielding/arm decay fastest), and an ORPHANED age salary curve (`calculateAgeFactor`,
+zero callers) sits in the salary engine. Agreed split: (1) NOW — the advice payload surfaces
+age band + a dev-outlook direction note (copy only; ASST_GM_DESIGN §6 updated); (2) the v1.1
+ECONOMY RE-CALIBRATION BATCH gains a fourth item: price development runway + reconcile-or-
+delete the orphaned age salary curve against the dev gravity (ONE age model, no
+double-counting). Batch now = Two-Way cohorts · flexibility-as-value · IV gaps · AGE economy
+— one sim campaign riding C5.

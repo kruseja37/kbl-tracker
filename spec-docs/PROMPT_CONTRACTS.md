@@ -26953,3 +26953,223 @@ The "F1/F2" test's Lot 2 reaches `resolveNoBidLot` with `availablePlayerIds` emp
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: FABLE-C3-FIX-2 ===== -->
+
+<!-- ===== CONTRACT: CODEX-ASSTGM-LEGALITY (C4 lane 3) ===== -->
+
+# CODEX-ASSTGM-LEGALITY: analyzer never advises an illegal move + non-blocking send-down warning
+
+**ROUTE:** Codex 5.5 | high reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, branch `experiment/manager-wpa-window`. Branch-only; do NOT commit; do NOT push. Opus audits (builder≠auditor).
+
+**RULING THIS IMPLEMENTS (JK, 2026-07-02, DECISIONS_LOG):** Assistant-GM = intelligence-first. Advice quality is the feature. Manual moves stay allowed with plain UI. NO per-button legality enforcement / NO hard blocks — users breaking their own roster is acceptable in v1. So this ticket makes the ADVICE trustworthy (never recommend an illegal move) and adds ONE non-blocking WARNING on the user's own risky send-down. It does NOT block anything.
+
+**GROUNDING (map verified read-only 2026-07-02; re-read before editing):**
+- Analyzer engine: `src/engines/rosterAnalyzerEngine.ts` — `analyzeRoster` (:683); recommendation kinds incl. `call_up_advice`/`send_down_advice` (:236-249); `position_coverage` check (:759-783) currently reads `DEFAULT_POSITION_MINIMUMS` = `{C:1,1B:1,2B:1,3B:1,SS:1,OF:3}` (:316-323) — catcher min is 1, NOT the canonical 2, and the engine never imports the canonical module. Sub-engine `recommendRosterMoves` (`src/engines/rosterAnalyzer.ts:191`) supplies the surplus call-up/send-down pairs, consumed at `rosterAnalyzerEngine.ts:518-544`.
+- Canonical rules (SINGLE SOURCE OF TRUTH — do NOT modify these files): `src/data/rosterConstruction.ts` — `LEGAL_ROSTER` (:27; size 22, fieldPositions 8, minCatchers 2, startingPitchers 4, minRelievers 4, maxRelievers 5, minPositionPlayers 13, maxPositionPlayers 14, minPitchers 8, maxPitchers 9); `isLegalRoster` (:125), `canCover` (:105), `depthReport` (:166). And `src/engines/rosterNeed.ts` — `wouldStrandRoster` (:222), `rosterNeedBreakdown` (:136), `toRosterSlotPlayer` (:47).
+- Manual-move UI (already exists — do NOT rebuild): `src/src_figma/app/components/TradeFlow.tsx` (rendered `FranchiseHome.tsx:1488`); `handleRosterMovement` (:285); send-down branch (~:311) → `sendDownFranchisePlayer`; status channel `setRosterStatusMessage` (:314/:321). Eligibility gate `validateFranchiseRosterMovementEligibility` in `src/utils/franchiseRosterMovement.ts:449-471` checks only option-limit + MLB-status and MUST STAY coverage-agnostic.
+
+**L3-1 — MUST (analyzer never advises an illegal move). `src/engines/rosterAnalyzerEngine.ts`.**
+Import the canonical rules (`LEGAL_ROSTER, isLegalRoster, canCover, depthReport` from `../data/rosterConstruction`; `toRosterSlotPlayer, rosterNeedBreakdown, wouldStrandRoster` from `./rosterNeed`) and REPLACE the ad-hoc `DEFAULT_POSITION_MINIMUMS`/`PITCHER_POSITIONS` constants (:316-327) so the analyzer's `position_coverage`/`roster_count`/`bullpen`/`rotation` checks use the canonical thresholds (catcher depth 2, 13-14 position players / 8-9 pitchers, ≥4 SP + ≥4 RP; catcher depth via `canCover`, incl. secondary-C / Two-Way(C)). CRITICAL behavior: BEFORE emitting any `send_down_advice` (or any recommendation that removes a player from the active roster), run the projected post-move roster through `isLegalRoster`/`depthReport`/`wouldStrandRoster` — if the move would strand a legal 22, SUPPRESS the recommendation or DOWNGRADE it to an explicit warning finding (readOnly stays true). The analyzer must never output "send down X" when doing so breaks legality. Keep every recommendation `readOnly: true` (this stays advisory — no writes).
+
+**L3-2 — MUST (JK's named "only catcher" job, rescoped to WARN-not-block). `src/src_figma/app/components/TradeFlow.tsx`, send-down branch of `handleRosterMovement` (~:311).**
+Before the send-down write executes, build the projected post-move `RosterSlotPlayer[]` (via `toRosterSlotPlayer` on the team's current MLB roster minus the outgoing player), call the canonical validators (`wouldStrandRoster`/`depthReport`/`isLegalRoster`), and IF the move would strand the roster (e.g. leave < 2 catchers, or otherwise make a legal 22 unreachable) surface a NON-BLOCKING advisory string through the existing `setRosterStatusMessage` channel (:314/:321) — e.g. "Heads up: this leaves you with 1 catcher (roster needs 2). The move will still go through." The move MUST proceed regardless (do not add a return/guard, do not touch `sendDownFranchisePlayer` or its eligibility gate). Warn, don't block.
+
+**OUT OF SCOPE (do NOT touch):** the season-stats feed stub at `src/utils/rosterAnalyzerFranchiseAdapter.ts:266-269` (that's C4-C, slump-aware advice — leave `source:'unavailable'` as-is); any blanket per-button legality enforcement anywhere else; `rosterConstruction.ts` and `rosterNeed.ts` (already the SoT — zero changes); the call-up cap logic in `franchiseRosterMovement.ts`.
+
+**CONSTRAINTS:** TypeScript strict. Additive-only on persisted shapes (no saved-shape/migration change — STOP-IF one is needed). Keep D11 copy-locked strings intact (add new advisory strings; don't reword existing locked copy). Scope = L3-1 + L3-2 ONLY.
+
+**VERIFICATION (you run, report actual output):** `NODE_ENV= npm run build` exit 0; ADD tests: (a) analyzer engine — given a roster with exactly 2 catchers, the analyzer does NOT emit a `send_down_advice` for a catcher (it is suppressed or downgraded to a warning), and DOES still advise legal surplus send-downs; (b) analyzer uses catcher min 2 (a 1-catcher roster raises a coverage finding); (c) TradeFlow (or a extracted pure helper) — a send-down that strands catchers produces the advisory message AND still calls `sendDownFranchisePlayer`. Update any EXISTING analyzer test whose expectation shifts because the catcher minimum moved 1→2 (flag each such change; if any looks like a product decision, STOP-IF and ask). FULL suite ZERO-NEW-REDS vs the characterized set (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`, solo-pass).
+
+**FORMAT:** STATUS line + per-item (L3-1, L3-2) what changed + file:line + the new test names/results + which existing tests shifted (with reason) + the full-suite red count.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF adopting the canonical catcher-2 / 13-14 / 8-9 thresholds forces an existing analyzer test expectation to change in a way that implies a product ruling (report the diff, ask JK); OR the projected post-move roster shape cannot be built from data available in TradeFlow at :311 (report what's missing); OR either change would require modifying a persisted shape or the coverage-agnostic eligibility gate.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-ASSTGM-LEGALITY ===== -->
+
+<!-- ===== CONTRACT: CODEX-QUICKWINS-B1 (UX north star §8 quick wins) ===== -->
+
+# CODEX-QUICKWINS-B1: eight verified small-diff cleanups from the UX north star
+
+**ROUTE:** Codex 5.5 | medium reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, branch `experiment/manager-wpa-window`. Branch-only; do NOT commit; do NOT push. Opus audits.
+
+**SOURCE:** `spec-docs/UX_NORTH_STAR.md` §8 quick-wins, each cite re-verified read-only 2026-07-02 (all citeAccurate, all zero-test-pin unless noted). Do each as a minimal self-contained diff. Re-read each line before editing (line numbers drift).
+
+- **QW-1 (AppHome BUILDER retarget, R-IA1).** `src/src_figma/app/pages/AppHome.tsx:82` — change `to="/builder"` to `to="/league-builder"` (routes to the League Office hub, not the Builder tools sandbox). Single-attribute edit; label/styling unchanged.
+- **QW-2 (AppHome cleanups).** `AppHome.tsx` — (a) L64 change literal `Exhibition` to `EXHIBITION` (siblings are ALL-CAPS; class already uppercases, cosmetic). (b) L3 delete the dead lucide import `import { Trophy, Users, Globe, Database, Book } from "lucide-react";` (verified: none referenced). (c) Normalize the Figma fractional-pixel classes across the 5 buttons (`h-[71.102px]`→`h-[72px]`, `border-[5.556px]`→`border-4`, `pt-[21.554px]`/`px-[21.554px]`→`p-5`, `h-[27.995px]`→`h-7`). (c) is cosmetic normalization — Fable reviews the visual; keep it clean, don't redesign.
+- **QW-4 (dead recap toggle).** `src/src_figma/app/pages/EndOfDraftStaffing.tsx` — delete the `recap` state (L80 `const [recap, setRecap] = useState(true);`) and the whole toggle `<button>` block (~L299-312). `recap` is read only by its own JSX (verified zero other readers). Remove the now-unused `Newspaper` lucide import (L3).
+- **QW-5 (fake E/W leaders toggle).** `src/src_figma/app/pages/FranchiseHome.tsx` — remove the Eastern/Western toggle block (~L4452-4469); both branches resolve to the same data object (AL alias === NL alias, L4408-4411). Simplify the four ternaries (~L4478/4479/4531/4532) to always use the AL alias. Drop the now-unused `expandedLeague`/`setExpandedLeague` state (~L4401) and NL alias vars.
+- **QW-6 (duplicate Home button).** `FranchiseHome.tsx` — remove the redundant `<Home />` icon button (~L1268-1273); keep the branded logo button (~L1248-1257). Both call `handleLogoClick`. Only drop the `Home` lucide import if truly unused in the file afterward (grep `<Home` first — 4942-line file).
+- **QW-7 (duplicate View button).** `src/src_figma/app/pages/LeagueBuilderLeagues.tsx` — delete the View button block (~L438-445, incl. the `{/* View */}` comment); it calls the same `openEditModal(league)` as Edit (~L393-399). Drop the `ChevronRight` lucide import if unused afterward. (NOTE: the Ballpark-kit ticket also edits this file's HEADER; this edit is in the row-actions region — no overlap, but sequence QUICKWINS before the kit to avoid a merge race.)
+- **QW-8 (farm-auction CTA honesty).** `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx:875` — the AUCTION_COMPLETE CTA label reads "Continue to Franchise Setup" but `navigate` goes to staff-hire (`EndOfDraftStaffing`, H1 "Staff Your Clubs"). Reword the label to "Continue to Staff Your Clubs". Do NOT change the navigate target.
+- **QW-9 (staffing CTA honesty).** `EndOfDraftStaffing.tsx:327` — CTA "Confirm Staff and Review Freeze" navigates to `/franchise/setup` (the NEW FRANCHISE wizard; freeze is its final step). Reword to "Confirm Staff and Continue to Franchise Setup". Do NOT change navigation.
+
+**OUT OF SCOPE (do NOT include here):** the preview-route DEV gate (its own ticket CODEX-PREVIEW-GATE) and the archetype-explainer harvest (deferred — needs a help layer that doesn't exist).
+
+**CONSTRAINTS:** TypeScript strict. Deletive/cosmetic only; no behavior change beyond the stated ones; no persisted-shape change; keep D11 copy-locked strings intact (these edits touch none per grep). Branch-only; no commit/push.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; for every removed import/var, confirm zero remaining references (grep); FULL suite ZERO-NEW-REDS vs the characterized set (`wpaRuntimeBoundary` + `franchiseManualSmokeFixture`, solo-pass). Note: `LeagueBuilderLeagues.test.tsx` pins `title="Edit league"` (kept), not "View details" (removed) — must stay green. `FranchiseHome.test.tsx` LEAGUE LEADERS section test must stay green.
+
+**FORMAT:** STATUS + per-QW file:line + what changed + orphan-import grep results + full-suite red count.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF any "unused" import/var turns out referenced elsewhere; OR any edit trips a characterized test.
+
+Use medium reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-QUICKWINS-B1 ===== -->
+
+<!-- ===== CONTRACT: CODEX-PREVIEW-GATE (R-IA7) ===== -->
+
+# CODEX-PREVIEW-GATE: DEV-gate the entire /__preview/* route family + keep dev-only code out of the prod bundle
+
+**ROUTE:** Codex 5.5 | medium reasoning effort. Repo root; branch `experiment/manager-wpa-window`. Branch-only; no commit/push. Opus audits.
+
+**GROUNDING (verified):** `src/App.tsx` declares ~20 literal `/__preview/*` routes + 1 variable-path route. Only 4 are gated today (L469-492, wrapped in `enableFranchiseVisualSmokePreviewRoute`/`enableFranchiseManualSmokeSetupRoute`, where those flags = `import.meta.env.DEV || import.meta.env.MODE === 'test'`, defined ~L270-273). The other ~17 preview routes (~L331-341 and ~L438-468) ALWAYS render and ship to players. Several preview components are also eagerly lazy-imported at module top, so even if routes are hidden the code still ships.
+
+**FIX (R-IA7):** (1) Introduce ONE shared gate constant reusing the existing semantics (`const enablePreviewRoutes = import.meta.env.DEV || import.meta.env.MODE === 'test';`). (2) Wrap the WHOLE preview family (both regions) so the routes mount only when `enablePreviewRoutes` — cleanest is one gated `<>...</>` fragment; the existing `<Route path="*">` NotFound fallback (~L495) already catches unmounted paths in prod, so no per-route element guard is needed. (3) Make the eager preview lazy-imports CONDITIONAL (mirror the pattern already used for `FranchiseLensSeed` etc. at ~L274-303) so dev-only screens are excluded from the production bundle, not merely route-hidden. Preserve the existing `getFranchiseManualSmokeSetupRoute` gate semantics exactly (a test pins them).
+
+**CONSTRAINTS:** TS strict. Do NOT change any production route. Do NOT alter the franchise-smoke gate flags' behavior (dev/test true, prod false). Branch-only.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; `franchiseManualSmokeFixture.test.ts` green (gate semantics intact); confirm (describe how) that a production build maps `/__preview/*` to NotFound while dev/test still serves them; FULL suite ZERO-NEW-REDS. If feasible, report a bundle-size delta or the removed chunks as evidence the code is now excluded.
+
+**FORMAT:** STATUS + the gate constant + how the two regions were consolidated + which lazy-imports were made conditional + prod-vs-dev route behavior evidence + full-suite red count.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF gating breaks a test that navigates to a preview route in test mode; OR making an import conditional forces a shape/type change to a production path.
+
+Use medium reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-PREVIEW-GATE ===== -->
+
+<!-- ===== CONTRACT: CODEX-BALLPARK-KIT (UX north star §1.2 shared kit) ===== -->
+
+# CODEX-BALLPARK-KIT: extract the shared "Ballpark" primitives + first adoption (dedup the 6 league-builder headers)
+
+**ROUTE:** Codex 5.5 | high reasoning effort. Repo root; branch `experiment/manager-wpa-window`. Branch-only; no commit/push. Opus audits diff correctness; **Fable reviews UI conformance (§9 checklist) — this is her design authority.**
+
+**SEQUENCING:** run AFTER CODEX-QUICKWINS-B1 (both touch `LeagueBuilderLeagues.tsx` — different regions, but serialize to avoid a merge race). Per UX north star §8 this kit lands "before any reskin."
+
+**GOAL (§1.2 migration rule):** stop hand-restyling screens. Extract the GameTracker/fenway idiom into a small shared kit, then reskin by adoption. FIRST adoption = collapse the 6 identical hand-rolled league-builder page headers.
+
+**CRITICAL BUILD FACT (verified):** the app runs **Tailwind v3** via `src/index.css` (@tailwind base/components/utilities). `fenway-theme.css` + `auction-theme.css` ARE live (imported in `src/main.tsx:5-8`, plain CSS + CSS vars on `:root`). `src/src_figma/styles/theme.css` and `tailwind.css` use Tailwind-v4 syntax and are **INERT (not imported) — do NOT put kit tokens there, they silently no-op.** Ship the kit as: (a) a NEW plain stylesheet (e.g. `src/src_figma/styles/ballpark-kit.css`) declaring CSS custom properties on `:root` (mirroring `fenway-theme.css`), added to the `main.tsx` import list; (b) shared React primitives under `src/src_figma/app/components/ballpark/` that consume those vars (or emit the existing arbitrary-value Tailwind classes — JIT-safe since they live under `src/**`).
+
+**TOKENS (corrected — the north-star doc had errors; use these verified values):** ground `#CBB89C`; field-green primary `#3d5240` (workhorse, 15×), field-green light `#3d4a42`; well `#243028`; **frame `#1a2a1d`** (the doc's `#1a2420` appears 0× — do NOT use it; banner frame `#1a3020`); chalk cream `#E8E8D8`; brass gold `#C4A853` (accent, 30×); scoreboard yellow **`#F2C041`** (canonical `--fen-yellow`; collapse the stray `#FFD700`/`#f4d03f` yellows to this in NEW kit code only — do NOT sweep GameTracker); sage `#88AA88`; status green `#34d399`/`#10b981`, status red `#DD0000`/`#FF3C3C`. Fonts: `'Moms Typewriter'` (primary chrome), `'Tox Typewriter'` (human fallback), `'Creamy Chalk'` (the real chalk font — `chalk.otf`/'Chalk' is intentionally rejected), `'Press Start 2P'` ONLY as the auction marquee exception. Signature: **hard-offset shadow** `shadow-[Npx_Npx_0px_0px_rgba(0,0,0,α)]` — 2px small / 4px headers / 6-8px modals.
+
+**PRIMITIVES (model on the cited real code; recipes in the grounding):**
+- `BallparkShell` — the title/back-plate header. Model on `LeagueBuilder.tsx:63-73`. Props: `onBack`, `icon`, `iconColor`, `title`, optional `rightSlot`. Recipe: page wrapper `min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8` > `max-w-6xl mx-auto` > header row `flex items-center gap-4 mb-8` > back button `p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]` + ArrowLeft + title plate `flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]` > icon + `h1 text-2xl font-bold text-[#E8E8D8] tracking-wider` (textShadow 2px 2px 4px).
+- `PressButton` — press physics. Model on `QuickBar.tsx:140-146`: `... border-[3px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] active:scale-95 active:shadow-none transition-transform disabled:opacity-40`. Variants: default / affirm (`bg-[#34d399] border-[#10b981]`) / destruct (`bg-[#DD0000] border-white`) / gold (`bg-[#F0C36B] border-[#8B5A18] text-[#2B1B08]`); sizes sm/md/lg; shadow weight 2/4.
+- `PanelWithHeaderStrip`, `ChunkyModal`, `LeftAccentFeedCard` — model on `GameTracker.tsx:12127` (tinted rule strip), `GameTracker.tsx:12522` (chunky modal: `border-[6px] border-[#4A6844] bg-[#556B55] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]` + boxed title strip), and fenway `.fen-icard` (`fenway-theme.css:225-235` — meaning in the colored left-border only). Build these but they can land unused-by-adoption in this ticket (first adoption is the header).
+
+**FIRST ADOPTION (this ticket):** replace the 6 hand-rolled headers with `<BallparkShell>`: `LeagueBuilder.tsx:63-73`, `LeagueBuilderLeagues.tsx:300-316` (Database `#CC44CC`, "LEAGUES"), `LeagueBuilderTeams.tsx:981-998` (Users `#5599FF`, "TEAMS", + count rightSlot), `LeagueBuilderPlayers.tsx:834-849` (User `#3366FF`, "PLAYERS", + league select rightSlot), `LeagueBuilderRosters.tsx:361-377` (Folder `#0066FF`, "ROSTERS"), `LeagueBuilderRules.tsx:75-89` (Settings `#DD0000`, "RULES PRESETS", + create button rightSlot). Preserve each page's exact title/icon/color/right-slot; the rendered result must be visually identical.
+
+**CONSTRAINTS:** TS strict. Do NOT touch `GameTracker.tsx` (frozen design reference — git diff must show it untouched) or `AuctionStage.tsx` (already compliant). Do NOT restyle beyond the 6 headers in this ticket (later reskins adopt the primitives). Keep all D11 copy-locked strings intact (titles unchanged). Additive stylesheet; no persisted-shape change. Branch-only.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; the 6 pages render (before/after screenshots per §7 V3 — Playwright pre-check acceptable, JK signs off); FULL suite ZERO-NEW-REDS; `git diff --stat` confirms GameTracker.tsx untouched. Fill the §9 UI-CONFORMANCE checklist in your report.
+
+**FORMAT:** STATUS + the new stylesheet path + primitives created (with props) + the 6 header adoptions (file:line before/after) + §9 checklist + screenshot refs + full-suite red count + GameTracker-untouched confirmation.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF a header dedup would change a D11-pinned string or break a test; OR a page header carries bespoke behavior that `BallparkShell`'s prop API can't express (report it — extend the API rather than fork the header).
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-BALLPARK-KIT ===== -->
+
+<!-- ===== CONTRACT: CODEX-C4A-GUARD (lane 1, rescoped) ===== -->
+
+# CODEX-C4A-GUARD: block franchise creation from an INCOMPLETE draft (narrow, safe)
+
+**ROUTE:** Codex 5.5 | high reasoning effort. Repo root; branch `experiment/manager-wpa-window`. Branch-only; no commit/push. Opus audits.
+
+**CONTEXT (verified):** the draft→franchise spine already works (integration test 6/6). Roster-completeness is ALREADY hard-enforced: `deepCopyLeagueToFranchise` runs `validateV1RosterHandoff` (`src/utils/franchisePlayerStorage.ts:400,428-437,447-454`) which THROWS unless every team has exactly 22 MLB + 10 FARM and farm/scouting handoff is 'prepared'. So a short/incomplete roster already can't create a franchise. There is NO positive "was-drafted" marker, and the "committed rosters but sessions wiped" data-loss case cannot arise in-app (`deleteAuctionSession` has zero production callers). Legit non-auction leagues (snake `/league-builder/snake-draft`, seed-import `buildSeedRoster`, manual roster edits) have NO auction session and MUST remain allowed (their neutral-50 morale + no true-value baseline is correct).
+
+**THE ONE UNAMBIGUOUS BUG TO GUARD:** a franchise can be created while an auction draft is mid-flight — the seeding block at `franchiseInitializer.ts:732-733` gates only on `if(mlbSession?.session)` truthiness, never on `.state`, so an incomplete-but-saved session feeds a half-baked freeze.
+
+**FIX (narrow):**
+1. **Precheck BEFORE `createFranchise` (`src/utils/franchiseInitializer.ts` ~:641, before any franchise metadata is written)**: read the MLB auction session `getAuctionSession(config.league, 1)`. If it EXISTS and `session.state !== 'AUCTION_COMPLETE'` → BLOCK with a clear player-facing message (per §6 copy rules — no "state"/"session"/"validate" jargon; e.g. "Your draft isn't finished yet — finish the auction before starting the season."). Also read the FARM session (`getAuctionSessionById(createFarmAuctionSessionId(config.league, 1))`): if the MLB session is complete but the FARM session EXISTS and is not complete → BLOCK (partial/one-tier). Blocking BEFORE `createFranchise` guarantees no orphaned franchise metadata.
+2. **Tighten the seeding gate** at `franchiseInitializer.ts:733` from `if (mlbSession?.session)` to `if (mlbSession?.session?.state === 'AUCTION_COMPLETE')` so an incomplete session can never feed the draft-freeze even if step 1 is bypassed.
+3. **PRESERVE silent-allow for the session-ABSENT case** (no auction session at all → non-auction league → proceed exactly as today, neutral seeding). Do NOT add a "was-drafted" marker (JK ruling: skip it). Do NOT warn on session-absent.
+
+**AuctionState terminal value** is `'AUCTION_COMPLETE'` (`src/engines/auctionStateMachine.ts:25-32`) — read-only reference; add a small `isAuctionComplete(session)` helper there only if it improves clarity.
+
+**CONSTRAINTS:** TS strict. No persisted-shape change. The block must NEVER fire on a legit non-auction (snake/seed/manual) league — session-absent is always allowed. Branch-only; no commit/push.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; ADD tests to `src/utils/tests/draftPipeline.integration.test.ts`: (a) an incomplete MLB auction session present → franchise creation is blocked and NO franchise metadata is written; (b) MLB complete + farm incomplete → blocked; (c) session ABSENT + rosters complete (seed/snake style) → creation ALLOWED with neutral seeding; existing 6/6 stay green. FULL suite ZERO-NEW-REDS.
+
+**FORMAT:** STATUS + the precheck location + the tightened gate + the block-message copy + new test names/results + confirmation the session-absent path still allows + full-suite red count.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF the block cannot be placed before `createFranchise` without a shape change; OR distinguishing incomplete-session from absent-session is not possible with the reads above; OR a JK product ruling is needed (e.g. whether a truly-flat non-auction league should get a one-time informational note — default is silent-allow; do NOT add the note without a ruling).
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-C4A-GUARD ===== -->
+
+<!-- ===== CONTRACT: CODEX-C4B-SLICE1 (auction public market-read UI) ===== -->
+
+# CODEX-C4B-SLICE1: put the PUBLIC market read on the auction lot card (price band + CONTESTED); retire the old advisory; R-IA3 setup removal; §6 copy
+
+**ROUTE:** Codex 5.5 | high reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, branch `experiment/manager-wpa-window`. Branch-only; no commit/push. Opus audits diff; **Fable reviews UI conformance (§9) — her authority.** USER-VISIBLE → JK browser sign-off on real data is the closing gate.
+
+**GATED ON:** `CODEX-BALLPARK-KIT` landed (adopt its primitives + CSS vars). If the kit is NOT present at build time, `STOP-IF` and report — do NOT hand-restyle against `auction-theme.css` (that is the debt the kit exists to prevent). Also run AFTER any auction-screen work is on a clean base.
+
+**THE SLICE BOUNDARY (from `ASST_GM_DESIGN.md` §3 "one voice per CONCERN"):** the SCOUT owns the PUBLIC market read (price band, CONTESTED) → THIS ticket. The ASSISTANT-GM owns the bid-or-pass VERDICT + the per-seat private whisper panel + chemistry advice → SLICE 2 (`CODEX-C4B-SLICE2`, against ASST_GM_DESIGN). **Slice 1 REMOVES the old verdict and shows the public band; it does NOT add a new verdict and does NOT wire `projectBidVsPass`.**
+
+**GROUNDING (verified read-only 2026-07-02; re-read before editing):**
+- Market engine (all pure, unit-tested, ZERO app consumers today): `src/engines/auctionMarketModel.ts` — `estimateMarket(view,table)` (:372) → `EstimatedMarket{playerId, band:{low,median,high}, interestedTeams, contested, likelyPass}` (:128-137); `ContestedSignal{rivalCount,message}` counts+prose only (:114-119); `buildLotViewFromSession(session,options)` (:452) the live-session→view adapter.
+- Auction screen: `src/src_figma/app/components/auction/AuctionStage.tsx` (pure VM view; has legacy `scoutInsight` slot :114-118/:287-295 + `coach` slot :297-302); container `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (VM assembly `auctionStageVm` ~:981-1053, renders `<AuctionStage>` :1155); hook `src/src_figma/app/hooks/useAuctionDraft.ts` (exposes `session`, `shillTeamIds`, `currentBidderTeamId`, `isCpuTeam` :82-102 — the inputs `buildLotViewFromSession` needs).
+- OLD advisory to REPLACE: `LeagueBuilderAuctionDraft.tsx:695-778` (`scoutInsight` useMemo — push/cap/pass from `draftGuideAffordability`, ignores the market model). Three overlapping voices to collapse: `AuctionCoachBanner` (:1329), this scoutInsight, and the CPU explainer `cpuDecisionVm` (:802-829, keep as unattributed table-talk).
+- Setup inputs on the floor (R-IA3): `LeagueBuilderAuctionDraft.tsx:1248-1284` (state :449-452).
+
+**SCOPE (slice 1):**
+1. **Public market band + CONTESTED.** Wire `buildLotViewFromSession` + `estimateMarket` into the VM assembly and surface the `{low/median/high}` price band + the CONTESTED signal (counts/prose only — never a rival's number) on the PUBLIC lot card. This is the FIRST real end-to-end run of session→view→React. **VERIFY it actually populates:** `buildLotViewFromSession` returns `null`/neutral when position info is missing (:461-482) and reads solvency via `sessionBidCeiling` (:509) — confirm the enriched live-session pool populates positions; if it returns null in the live path, `STOP-IF` and report the missing population path.
+2. **Remove the old advisory (replace, don't fuse).** Delete the `scoutInsight` push/cap/pass useMemo (:695-778); retire `AuctionCoachBanner` as a voice (procedural lines → the `?` help layer). Do NOT add a replacement verdict (that is slice 2). The CPU-decision explainer stays as unattributed table-talk.
+3. **R-IA3 setup removal.** Remove seed / CPU-count / bid-increment / shill inputs from the draft floor (:1248-1284 + state :449-452); the room inherits everything from Draft Setup. A dev seed moves behind the help/dev layer, not the player's form.
+4. **§6 copy.** Translate market/solvency lines to plain broadcast prose (e.g. "Blocked: $412,000 short after reserving…" → "Can't afford him and still fill the roster — $412K short"); §6 banned-word grep clean.
+5. **Adopt the Ballpark kit** primitives/vars for the new + changed surfaces.
+
+**OUT OF SCOPE (SLICE 2 — do NOT build here):** the per-seat private whisper panel; `projectBidVsPass` bid-vs-pass board (it re-prices the whole pool per call, `:666-735` → slice 2 must memoize per lot); the bid-or-pass verdict; chemistry-tipping-premium advice; nomination strategy; pass-the-iPad re-keying of a private board.
+
+**FARM:** `LeagueBuilderFarmAuctionDraft.tsx` does NOT render `<AuctionStage>` (the R-IA4 unmigrated half). The farm fold + its market band is a SEPARATE paired ticket (`CODEX-C4B-FARMFOLD`) — slice 1 is MLB-only unless JK/Fable rule the fold rides slice 1.
+
+**CONSTRAINTS:** TS strict. Additive on persisted shapes. D11 copy-lock (add new strings; don't reword locked copy). `GameTracker.tsx` untouched (git diff proves it). Branch-only.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0; the band + CONTESTED render on the lot card and the old advisory + setup inputs are gone (Playwright pre-check + before/after screenshots per §7 V3); `buildLotViewFromSession` proven to populate in the live session (real-data check); §6 banned-word grep clean; the §9 UI-CONFORMANCE checklist filled; FULL suite ZERO-NEW-REDS vs the characterized set.
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF the Ballpark kit is not present; OR `buildLotViewFromSession` yields null/neutral in the live session (report the missing position-population); OR removing the old advisory trips a pinned test; OR the slice boundary is ambiguous (bid-vs-pass / verdict / whisper is SLICE 2 — never add it here).
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-C4B-SLICE1 ===== -->
+
+<!-- ===== CONTRACT: CODEX-DRAFTROOM-MERGE (setup-merge, R-IA2) ===== -->
+
+# CODEX-DRAFTROOM-MERGE: merge the two draft-setup screens into ONE Draft Room (Fable §2) — findable team/GM/archetype setup + persisted seat names
+
+**ROUTE:** Codex 5.5 | high reasoning effort. `/Users/johnkruse/Projects/kbl-tracker`, branch `experiment/manager-wpa-window`. Branch-only; no commit/push. Opus audits the code; **Fable design-reviews against her doc + §9 (her authority).** USER-VISIBLE.
+
+**DESIGN AUTHORITY:** `spec-docs/FABLE_C4B_CHECKPOINT_2026-07-02.md` §2 (the 5 zones) — build EXACTLY to it. Adopt the committed **Ballpark kit** (`src/src_figma/app/components/ballpark/BallparkKit.tsx` + `ballpark-kit.css`) — this is Stage-1 register (kit values, NOT the chalk-and-ash flip; do not restyle surfaces). ONE `?` help toggle (per-zone annotations); no companions (pre-hire).
+
+**GOAL:** collapse `LeagueBuilderDraftSetup.tsx` (pool shuttle) + `DraftSetupHubPreview.tsx` (seats/ownership/archetypes, misnamed, routed `/draft-config`) into ONE screen at `/league-builder/draft-setup`, five zones, single vertical flow. This is the "set up teams & archetypes in one findable place" fix.
+
+**ZONES (source → target, file:line from the scope map; re-read before editing):**
+- **Z1 THE ROOM:** title plate "Draft Room — {league}" (from `DraftSetupHubPreview.tsx:279`) + league selector (`LeagueBuilderDraftSetup.tsx:488-510`) + a NEW **Pool-Mode toggle** ("Pool first" [default] / "Design first"), league-level, locked once the pool locks.
+- **Z2 WHO'S PLAYING:** seats = GM identities + add/remove + owner-per-club (`DraftSetupHubPreview.tsx:317-351`, `handleOwnerChange:198`). **PERSIST seat/GM names (see PERSISTENCE).**
+- **Z3 THE CLUBS:** per-club cards (owner · MLB identity · farm identity · "set identity" → the existing `ArchetypePicker`, `handlePick:184`→`selectTeamArchetype`) — `DraftSetupHubPreview.tsx:372-427`. **STUB "Design your roster" (the 22-slot designer) + Mode A behind the Pool-Mode toggle** — a "coming with POOL-FROM-DEMAND" placeholder (the taxonomy engines are committed but Mode A needs the unbuilt extraction; do NOT build the designer now). Harvest the archetype explainer `DraftSetupArchetypePreview.tsx:40-44` verbatim into Z3's help — reconcile its stale "15" → **24**.
+- **Z4 THE POOL (Mode B):** the two-pane shuttle + filters + focused-player panel + edit modal (`LeagueBuilderDraftSetup.tsx:531-629,743-1116`) + **ONE** sufficiency chip (`evaluatePoolDemandSufficiency`, `:333-336/632-651`) + the archetype outlook panel (`:661-691`) + LOCK/UNLOCK (`:693-722`). Mode A = a stub (extraction placeholder). Preserve the import-from-branded-teams button.
+- **Z5 THE FLOOR:** shill stepper (`DraftSetupHubPreview.tsx:353-369`; keep `scaledShillDefault`/`MAX_DRAFT_SHILL_COUNT`/`clampDraftShillCount` + `recommendedShillCount`) + ONE room summary + **START THE DRAFT** (gates: pool locked+sufficient · every club has an identity · no stale session; blockers inline as plain hints) → scout hire. On a drafted league the plate reads "Drafted ✓ · Run it back" (label only here — RUN-IT-BACK is a separate ticket).
+
+**PERSISTENCE (the one real risk — get this right):** seat/GM names are React-state-only today (`DraftSetupHubPreview.tsx:54`) → lost on refresh. **REUSE an EXISTING `kbl-league-builder` store — do NOT mint a new IndexedDB.** Add an optional field to the already-registered `Team` record (`leagueBuilderStorage.ts:120-166`, e.g. `ownerDisplayName?`/`gmSeatName?`) via `saveTeam`, and/or an optional seat array on `LeagueTemplate` (`:97-113`) via `saveLeagueTemplate` if a club-independent seat must persist. Both stores are already in all four registries (backup/sync/L-SIM/save-slot) → additive field = no version bump, no new registry entry. **STOP-IF a standalone new seat store seems required** (report — it would trip the 4-registry new-own-DB gotcha; the existing stores cover every case). Verify the seat-name onChange writes through and SURVIVES REFRESH.
+
+**ROUTES (`src/App.tsx`, react-router v6):** repoint `/league-builder/draft-setup` (`:392-395`) to the merged component; change `/draft-config` (`:396-399`) to `<Route path="/league-builder/draft-config" element={<Navigate to="/league-builder/draft-setup" replace />} />` (add `Navigate` to the import `:2`); drop the `DraftSetupHubPreview` lazy decl (`:128-131`) + the `/__preview/draft-setup` route (`:332`); rename the "Preview" file (content merges — nothing routed live may be named "Preview"). Reconcile inbound links to land on `/draft-setup`: `ScoutHire.tsx:156`; remove the internal `/draft-config` hop in `handleStartDraft` (`LeagueBuilderDraftSetup.tsx:434`).
+
+**KILLS:** the 2nd DRAFT SETUP header (`LeagueBuilderDraftSetup.tsx:1129-1133`); the duplicated pool-status card + sufficiency (`DraftSetupHubPreview.tsx:284-314,209-217` — keep the ONE Z4 readout); inline explainers → the `?` layer (`DraftSetupHubPreview.tsx:280-282,322,358-360`).
+
+**PRESERVE (crash-safety):** merge the saved-draft mutation guard (present on BOTH — `LeagueBuilderDraftSetup.tsx:227-261`, `DraftSetupHubPreview.tsx:111-137`) to ONE instance; keep the START→RESUME behavior on a live session.
+
+**CONSTRAINTS:** TS strict. Persisted-shape changes ADDITIVE only (the optional seat-name field; no version bump). D11 copy-lock (add new strings; don't reword locked). `GameTracker.tsx` + `AuctionStage.tsx` untouched (git diff proves). §6 copy register + banned-word grep clean. Zone names = chrome register per §2.
+
+**VERIFICATION (you run, report):** `NODE_ENV= npm run build` exit 0 (if red, attribute the error — Fable's taxonomy-polish may be concurrently dirty; `tsc --noEmit` + file attribution before blaming this diff); the merged screen renders all 5 zones (Playwright pre-check + before/after screenshots per §7 V3); **seat/GM name persists across a refresh (real-data check — the key acceptance)**; `/draft-config` redirects to `/draft-setup`; the 2nd header + duplicate sufficiency are gone; §6 banned-word grep clean; §9 UI-CONFORMANCE checklist filled; FULL suite ZERO-NEW-REDS vs the characterized set (wpaRuntimeBoundary + franchiseManualSmokeFixture + the order-flakes: franchiseOffseasonGuards / EliminationTeamHub / archetypeBalanceSimulator — all solo-pass).
+
+**FAILURE PROTOCOL (STOP-IF):** print `STOP-IF: <reason>` IF persistence appears to need a NEW own-DB store (reuse Team/LeagueTemplate); OR the merge needs a non-additive persisted-shape/version change; OR a D11-pinned string must change; OR zone-3's designer can't be cleanly stubbed behind the toggle.
+
+Use high reasoning effort.
+
+<!-- ===== END CONTRACT: CODEX-DRAFTROOM-MERGE ===== -->

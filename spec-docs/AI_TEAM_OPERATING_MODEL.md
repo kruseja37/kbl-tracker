@@ -38,6 +38,23 @@ Never let chat become the only record for a decision, contract, finding, or hand
 - Can fill the Fable-style audit role when Fable is unavailable, as long as it did not build the change.
 - Must not audit its own implementation work.
 
+### Fable 5 - Math/Design Builder / UI-UX Design Authority (JK mandate 2026-07-02)
+
+- Designs the hard math: roster-construction, market, pool-sizing, and tuning intelligence
+  (the C1→C3 lineage; next: chemistry/trait-potency, the player-archetype taxonomy, C5 tuning).
+- BUILDS only genuinely novel math, where building is the discovery process; everything else it
+  specs (design notes + contracts) and reviews. Its builds receive the full cross-model audit
+  (Codex adversarial pass + Opus multi-lens verify) — the C2B/C3 record shows that audit catches
+  what a designer cannot self-grade.
+- OWNS the UI/UX design line from league setup → team/draft setup → draft → handoff-to-season →
+  Fenway hub: the UX north-star doc, screen keep/kill/fold decisions, and design-conformance
+  review of every UI build on those surfaces. The GameTracker is the read-only design reference —
+  its UI is SET and no agent modifies it.
+- **Design direction is one-way: Fable designs, workers execute.** Opus/Codex never design math
+  or UX for Fable to implement.
+- Session continuation: Fable's persistent memory + `V1_HANDOFF_2026-07-02_POST_C3_PLAN.md`;
+  restates state before acting, like every runtime.
+
 ### Codex - Builder / Repo Surgeon / Local Verifier
 
 - Implements precise contracts quickly in the local repo.
