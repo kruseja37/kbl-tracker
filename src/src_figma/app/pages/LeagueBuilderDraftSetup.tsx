@@ -27,6 +27,11 @@ import {
   seedRosterDesignSlots,
 } from "../components/leagueBuilder/RosterDesigner";
 import {
+  designVerdictCopy,
+  designVerdictTone,
+  type VerdictTone,
+} from "../components/leagueBuilder/designVerdict";
+import {
   buildRosterDesignPool,
   demandUniverseFromPlayers,
 } from "../engines/leaguePlayerAdapter";
@@ -163,7 +168,6 @@ type LeaguePoolRecord = {
 type ClubEditorMode = "identity" | "design" | null;
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
 type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing">;
-type VerdictTone = ReturnType<typeof rosterDesignStatusTone>;
 type HandEditLedger = { handAdds: string[]; handRemoves: string[] };
 type RecheckRow = {
   id: string;
@@ -184,28 +188,6 @@ const ASK_SPOT_ORDER = new Map(
 
 function formatClubName(team: Team, ownerNameForId: (ownerId: string) => string, seats: readonly DraftSetupSeat[]): string {
   return `${team.name} — ${ownerNameForId(teamOwnerId(team, seats))}`;
-}
-
-function designVerdictTone(result: DesignFeasibilityResult | null, poolSize: number): VerdictTone {
-  if (poolSize === 0 || !result) return "quiet";
-  if (result.blockers.some((blocker) => blocker.kind === "no-match" && blocker.slotId !== "legality")) return "red";
-  if (result.blockers.some((blocker) => blocker.slotId === "legality")) return "amber";
-  if (result.blockers.some((blocker) => blocker.kind === "budget")) return "amber";
-  if (result.feasible) return "green";
-  return "quiet";
-}
-
-function designVerdictCopy(result: DesignFeasibilityResult | null, tone: VerdictTone): string {
-  if (!result || tone === "quiet") return "NOTHING TO CHECK AGAINST YET";
-  if (tone === "red") {
-    const count = result.blockers.filter((blocker) => blocker.kind === "no-match" && blocker.slotId !== "legality").length;
-    return `${count} SPOT${count === 1 ? "" : "S"} WON'T FILL`;
-  }
-  if (result.blockers.some((blocker) => blocker.slotId === "legality")) return "FILLS · NOT A LEGAL 22";
-  if (result.blockers.some((blocker) => blocker.kind === "budget")) {
-    return `OVER BUDGET · ${formatMoney(Math.max(0, result.totalCost - result.budget))} OVER`;
-  }
-  return `BUILDS · ${formatMoney(result.headroom)} TO SPARE`;
 }
 
 function parseDemandCell(cell: DemandCellReport): { spot: string; shape: string; tagCount: number } {
@@ -1801,6 +1783,7 @@ export function LeagueBuilderDraftSetup() {
                     players={rosterDesignerPlayers}
                     lockedPool={locked}
                     budget={tierBudget}
+                    tier={league.tier ?? "juiced"}
                     showHelp={showHelp}
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage}

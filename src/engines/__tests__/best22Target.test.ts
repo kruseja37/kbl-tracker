@@ -19,6 +19,7 @@ function simPlayer(
   id: string,
   shape: Partial<SimPlayer> & { position: string; isPitcher: boolean },
   ratings = 60,
+  name?: string,
 ): SimPlayer {
   return {
     id,
@@ -26,6 +27,7 @@ function simPlayer(
     salary: 10_000,
     bat: { POW: ratings, CON: ratings, SPD: ratings, FLD: ratings, ARM: ratings },
     pit: shape.isPitcher ? { VEL: ratings, JNK: ratings, ACC: ratings } : undefined,
+    ...(name ? { name } : {}),
     ...shape,
   } as SimPlayer;
 }
@@ -51,20 +53,20 @@ function classification(shape = 'Balanced'): ShapeClassification {
   };
 }
 
-function legalPool(extra: SimPlayer[] = []): SimPlayer[] {
+function legalPool(extra: SimPlayer[] = [], names: Record<string, string> = {}): SimPlayer[] {
   return [
-    simPlayer('c', { position: 'C', isPitcher: false }),
-    simPlayer('1b', { position: '1B', isPitcher: false }),
-    simPlayer('2b', { position: '2B', isPitcher: false }),
-    simPlayer('3b', { position: '3B', isPitcher: false }),
-    simPlayer('ss', { position: 'SS', isPitcher: false }),
-    simPlayer('lf', { position: 'LF', isPitcher: false }),
-    simPlayer('cf', { position: 'CF', isPitcher: false }),
-    simPlayer('rf', { position: 'RF', isPitcher: false }),
-    simPlayer('backup-c', { position: '1B', isPitcher: false, secondaryPosition: 'C' }),
-    ...Array.from({ length: 5 }, (_, index) => simPlayer(`bench-${index}`, { position: 'LF', isPitcher: false })),
-    ...Array.from({ length: 4 }, (_, index) => simPlayer(`sp-${index}`, { position: 'SP', isPitcher: true, role: 'SP' })),
-    ...Array.from({ length: 4 }, (_, index) => simPlayer(`rp-${index}`, { position: 'RP', isPitcher: true, role: 'RP' })),
+    simPlayer('c', { position: 'C', isPitcher: false }, 60, names.c),
+    simPlayer('1b', { position: '1B', isPitcher: false }, 60, names['1b']),
+    simPlayer('2b', { position: '2B', isPitcher: false }, 60, names['2b']),
+    simPlayer('3b', { position: '3B', isPitcher: false }, 60, names['3b']),
+    simPlayer('ss', { position: 'SS', isPitcher: false }, 60, names.ss),
+    simPlayer('lf', { position: 'LF', isPitcher: false }, 60, names.lf),
+    simPlayer('cf', { position: 'CF', isPitcher: false }, 60, names.cf),
+    simPlayer('rf', { position: 'RF', isPitcher: false }, 60, names.rf),
+    simPlayer('backup-c', { position: '1B', isPitcher: false, secondaryPosition: 'C' }, 60, names['backup-c']),
+    ...Array.from({ length: 5 }, (_, index) => simPlayer(`bench-${index}`, { position: 'LF', isPitcher: false }, 60, names[`bench-${index}`])),
+    ...Array.from({ length: 4 }, (_, index) => simPlayer(`sp-${index}`, { position: 'SP', isPitcher: true, role: 'SP' }, 60, names[`sp-${index}`])),
+    ...Array.from({ length: 4 }, (_, index) => simPlayer(`rp-${index}`, { position: 'RP', isPitcher: true, role: 'RP' }, 60, names[`rp-${index}`])),
     ...extra,
   ];
 }
@@ -253,6 +255,15 @@ describe('buildBest22Target', () => {
     expect(ssPick.honorsAsk).toBe(true);
     expect(target.asksHonored).toEqual({ honored: 1, asked: 1 });
     expect(target.feasible).toBe(true);
+  });
+
+  it('A2b: forwards present sim player names to target picks', () => {
+    const pool = legalPool([], { ss: 'Simone Short', 'sp-0': 'Avery Ace' });
+    const slots = buildDefaultDesignSlots();
+    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+
+    expect(target.picks.find((pick) => pick.playerId === 'ss')?.playerName).toBe('Simone Short');
+    expect(target.picks.find((pick) => pick.playerId === 'sp-0')?.playerName).toBe('Avery Ace');
   });
 
   it('A3: an ask that would break solvency stays advisory and the floor verdict is unchanged', () => {

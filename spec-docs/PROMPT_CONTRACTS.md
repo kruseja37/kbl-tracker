@@ -28148,3 +28148,142 @@ GATE (report actual output, do not summarize):
 - `git diff --stat` — best22Target.ts (+test), archetypeBalanceSimulator.ts (additive only). Report the
   archetypeBalanceSimulator diff verbatim so the additive-only claim can be verified.
 <!-- ===== END CONTRACT: CODEX-B22-ALIGN ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-DESIGNER ===== -->
+# CODEX-B22-DESIGNER — render the BEST-22 TARGET in the designer + DJ-16 + DJ-17 + DJ-14
+
+BUILD TO: spec-docs/FABLE_BEST22_DESIGN_2026-07-03.md §1.3 (chip + strip + slot cards + help),
+§1.4 (THE ASK'S SHORTLIST rail), §1.7 (tier prop + identity resolution), §3 (DJ-16 closer),
+§4 (DJ-17 two-way scope). Read those sections VERBATIM for exact copy strings and tone tokens —
+this contract is the wiring spine, Fable's doc is the copy/visual source of truth. One component
+diff (RosterDesigner.tsx) + one new module + a minimal page edit. The BEST-22 ENGINE
+(best22Target.ts, rankPoolForSlot, askSatisfaction, leaguePlayerAdapter, slotPicks alignment) is
+ALREADY BUILT + COMMITTED (3493a2bc) — consume it, do not rebuild it.
+
+CANONICAL WIRES (reuse EXACTLY — never hand-build an engine input; this is the C4 adapter-reuse mandate):
+- Player → SimPlayer pool: `demandUniverseFromPlayers(players)` from
+  `src/src_figma/app/engines/leaguePlayerAdapter.ts`. `DemandUniversePlayer extends SimPlayer` (+profile),
+  so the returned array IS a `readonly SimPlayer[]` for buildBest22Target's `simPool`.
+- classifiedById: `new Map(simPool.map((p) => [p.id, classifyPlayerArchetype(p.profile)]))`
+  (`classifyPlayerArchetype` from `src/engines/playerArchetypeClassifier.ts:175`).
+- archetype: `team.mlbArchetypeKey` (already read ~:513) → `HISTORICAL_ARCHETYPES.find(a => a.id === key)`
+  → `historicalToSimArchetype(archetype)` (`src/engines/draftabilityRanker.ts:72`). No key / not found → NO
+  target (identity-required ruling §1.1) — never synthesize a neutral archetype.
+- floor pool for the shortlist: `buildRosterDesignPool(players)` (the existing DesignPoolPlayer[] path).
+- shortlist ranking: `rankPoolForSlot(slot, preference, designPool)` (already built).
+- budget/tier: SAME basis evaluateRosterDesign already uses in this component; new prop `tier: TierKey`.
+
+DELIVERABLE 1 — NEW `src/src_figma/app/components/leagueBuilder/designVerdict.ts` (DJ-15 drift-kill):
+  Consolidate the floor verdict tone + copy that currently lives TWICE — RosterDesigner `chipCopy`
+  (:234-253) and page `designVerdictTone`/`designVerdictCopy` (:220-240) — into ONE module. Export:
+  (a) the tone resolver (VerdictTone from floor state), (b) the floor copy builder (chip line 1 states,
+  UNCHANGED strings), (c) the NEW target copy builders: chip line 2 (§1.3 four states), the target strip
+  (§1.3 three states + embodiment/asks segments), and the CLUB CHECK segment (§1.5 three states — export
+  it now so C-B22-PAGE consumes it; this slice does NOT render it on the page). RosterDesigner + the page
+  both import from this module. Pure, no React, fully unit-testable.
+
+DELIVERABLE 2 — `src/src_figma/app/components/leagueBuilder/RosterDesigner.tsx`:
+  - New prop `tier: TierKey`.
+  - TARGET computation in the SAME debounced pass that runs evaluateRosterDesign: build simPool +
+    classifiedById + archetype (canonical wires above), then `buildBest22Target(slots, simPool,
+    classifiedById, archetype, tier, budget)`. Memoize on (slot asks, pool player ids, budget,
+    mlbArchetypeKey, tier); 300ms debounce; cancel-on-unmount. No identity → target = null.
+  - Chip line 2 (§1.3 table, via the module): TARGET $Z ALL-IN · FLOOR $X OF $Y / FLOOR $X OF $Y ·
+    TARGET NEEDS AN IDENTITY / FLOOR $X OF $Y · IDENTITY WON'T EXPRESS HERE / FLOOR N/A. "EST." dies everywhere.
+  - Target strip (§1.3): new line under the chip in the sticky header (:407-464), 3 states; embodimentZ>0 →
+    "LOOKS LIKE YOUR IDENTITY" else "THIN ON YOUR IDENTITY"; asked===0 omits the asks segment; infeasible = amber.
+  - Slot-card second line (§1.3): only when target feasible — dim gold (--ballpark-brass ~70%) 11px
+    `→ {NAME} · {$salary}` from the target's pick for that slotId; `≈ → …` when that pick's honorsAsk===false;
+    NO line otherwise (absence is the encoding). Match target.picks to cards by slotId.
+  - THE ASK'S SHORTLIST (§1.4) in the SlotEditor (:509-517): top 5 of rankPoolForSlot for the selected slot's
+    current preference. Row `{NAME} · {SHAPE} · {$salary}`; gold `TARGET` chip when that player === the target's
+    pick for this slot; ≈ glyph on runner-up matches; empty ranking → one dim line
+    `NOBODY IN THE POOL FITS THIS ASK YET`. READ-ONLY (no pick/pin). FIT-FIRST DISPLAY LAW: render in
+    rankPoolForSlot order; NEVER re-sort by salary in the UI.
+  - Help copy (§1.3): replace the 2nd HelpNote (:473-475) with the "Two numbers, two questions…" text verbatim.
+  - DJ-16 (§3): `defaultPreferenceForSlot` (:116-121) adds RP1 to the avoid-fragile set →
+    `personalityTilt: (slotId==="C"||slotId==="SS"||slotId==="SP1"||slotId==="RP1") ? "avoid-fragile" : "any"`.
+    `slotLabel` (:157-161) renders RP1 as `RP1 · CLOSER` (display only; slotId UNCHANGED). NO retro-migration —
+    mergePreference lets a saved pref win (a saved RP1 "any" survives). Deliberate; document in the diff note.
+  - DJ-17 (§4): new helper beside slotKindIsHitter/Pitcher (:169-175):
+    `slotKindAllowsTwoWay(slot) = kind ∈ {backupC, sp, rp, swing}`. The TWO-WAY ToggleControl (:716-721)
+    renders ONLY when true. seedRosterDesignSlots (:131-140) STRIPS `tags.twoWay` from any saved `pos`/`flex`
+    slot while merging (heals already-bricked designs). Engine (matchesTags) UNTOUCHED — scope the ask, not the math.
+  - DJ-14 (save-loss fix): the debounce save effect (:336-341) currently flushes a pending save ONLY on a
+    team change, so navigating away cancels the last edit. Add an UNMOUNT flush: on cleanup, if a save is
+    pending, flush it (write the pending RosterDesignSave) before clearing the timer. Preserve the existing
+    team-change flush behavior.
+
+DELIVERABLE 3 — `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (MINIMAL — page target render is C-B22-PAGE):
+  - Pass `tier={league.tier ?? "juiced"}` to <RosterDesigner>.
+  - Replace the page's local designVerdictTone/designVerdictCopy (:220-240) with imports from the new
+    designVerdict module. FLOOR output must stay byte-identical (no CLUB CHECK target segment in this slice).
+
+DELIVERABLE 4 — tests (RosterDesigner test file + designVerdict unit test):
+  - A6 (copy): the 4 chip line-2 states render the EXACT §1.3 strings (copy characterization; grep existing
+    league-builder copy test-pins first — flag, don't silently reword).
+  - C1-C3 (DJ-16): fresh seed → RP1 avoid-fragile, RP2-4 any; a SAVED RP1 "any" survives re-seed; label "RP1 · CLOSER".
+  - D1-D3 (DJ-17): toggle absent on all 8 pos + 4 flex, present on backupC/SP×4/RP×4/SWING; a saved design with
+    twoWay:true on LF + RP1 seeds with LF stripped, RP1 preserved; LF candidate count nonzero post-sanitize on a
+    pool where it was ×0.
+  - DJ-14: unmount flushes a pending save (assert the save fn fires on cleanup with a pending edit).
+
+CONSTRAINTS: GameTracker UI untouched. No IndexedDB/schema change (RosterDesignSave shape + slotIds UNCHANGED).
+Fit-first display law everywhere (order by match, never re-sort by price). Reuse canonical mappers — do NOT
+hand-build SimPlayer/classification/archetype inputs.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run` for the RosterDesigner test file + the new designVerdict test +
+  `src/engines/__tests__/rosterDesignFeasibility.test.ts` — all green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts + name any red).
+- `git diff --stat` — RosterDesigner.tsx, new designVerdict.ts (+test), LeagueBuilderDraftSetup.tsx (minimal),
+  RosterDesigner test. GameTracker NOT present. State the import-graph note (no cycle; page↔component↔module).
+<!-- ===== END CONTRACT: CODEX-B22-DESIGNER ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-DESIGNER-FIX ===== -->
+# CODEX-B22-DESIGNER-FIX — two audit findings on the designer slice (name resolution + stale floor)
+
+The DESIGNER slice is built but NOT committed. Adversarial audit confirmed two real defects. Fix both.
+
+FINDING 1 (MAJOR — the whole BEST-22 grid renders raw machine ids instead of names):
+`buildBest22Target`'s picks derive `playerName` from the SimPlayer (best22Target.ts:48-51, cast to read
+.name/.firstName/.lastName). But the pool it gets is `demandUniverseFromPlayers(players)` →
+`demandPlayerFromLeaguePlayer` (leaguePlayerAdapter.ts:61-90) which NEVER sets a name (only the sibling
+`buildRosterDesignPool` at :29 does). So every `Best22TargetPick.playerName` is undefined and every slot-card
+target line renders `targetPick.playerName ?? targetPick.playerId` → the raw id
+`player-1719936000000-a1b2c3d4e`. The SHORTLIST beside it shows real names (it reads designPool), so the same
+screen labels the same player two ways. FIX AT SOURCE (one mapper, all consumers — designer + future CLUB CHECK
++ whisper):
+  - `src/engines/poolFromDemand.ts`: add `name?: string` to the `DemandUniversePlayer` interface (:44). Optional
+    → existing producers/tests unaffected.
+  - `src/src_figma/app/engines/leaguePlayerAdapter.ts`: in `demandPlayerFromLeaguePlayer`, set
+    `name: playerName(player)` (reuse the file's existing `playerName` helper at :10-12 = `${firstName} ${lastName}`).
+  - Do NOT change best22Target.ts (its cast already reads `.name` — it will now resolve).
+
+FINDING 2 (MINOR — stale floor verdict flashes on team switch):
+The team-switch effect (RosterDesigner.tsx ~:197-206) resets slots/lockedAt/selectedSlotId/target/targetState/
+resetConfirm but NOT `result`, so for the ~300ms until the debounce recomputes, the PREVIOUS team's floor
+verdict/blockers/per-slot dots render under the NEW team's name (tone border, chip.state, blockers all read the
+stale `result`). FIX: in that same effect, add `setResult(null)` (the chip then honestly shows the quiet
+"NOTHING TO CHECK AGAINST YET" state until the debounce fills it — an honest transient, not wrong data).
+
+DELIVERABLE 3 — tests (close the gap that let the name bug ship green — finding 6):
+  - `src/engines/__tests__/best22Target.test.ts`: add a test where the sim pool players carry a `name` (extend the
+    fixture helper to accept/set name on a couple of players) and assert the corresponding `pick.playerName`
+    equals that name (proves the engine forwards a present name). Keep all existing tests green.
+  - EITHER a `leaguePlayerAdapter` unit test OR extend an existing one: assert
+    `demandPlayerFromLeaguePlayer(player).name === "${player.firstName} ${player.lastName}".trim()`.
+
+SCOPE: do NOT touch the ≈-glyph shortlist logic (a separate minor ticket) and do NOT wire CLUB CHECK
+(clubCheckTargetCopy stays exported-for-next-slice — that is intentional, not an orphan to delete). GameTracker
+untouched. No other behavior change.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/best22Target.test.ts src/src_figma/__tests__/components/RosterDesigner.test.tsx
+   src/src_figma/__tests__/components/designVerdict.test.ts` + whatever adapter test you touch — all green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; most league-builder/
+   component reds are solo-green order-flakes — run any suspect solo and report).
+- `git diff --stat` — poolFromDemand.ts, leaguePlayerAdapter.ts, RosterDesigner.tsx, best22Target.test.ts (+adapter test).
+<!-- ===== END CONTRACT: CODEX-B22-DESIGNER-FIX ===== -->

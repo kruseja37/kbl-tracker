@@ -42,6 +42,7 @@ import { canCover, canRelieve, canStart } from '../data/rosterConstruction';
 
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
+  name?: string;
   profile: ClassifiableProfile;
 }
 

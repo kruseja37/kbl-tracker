@@ -5,11 +5,13 @@ import {
   buildDefaultDesignSlots,
   countEligibleForAsk,
   evaluateRosterDesign,
+  rankPoolForSlot,
+  askSatisfaction,
   type DesignBlocker,
   type DesignFeasibilityResult,
   type DesignPoolPlayer,
   type DesignSlot,
-  type DesignSlotKind,
+  type RankedPoolEntry,
   type SlotPreference,
 } from "../../../../engines/rosterDesignFeasibility";
 import {
@@ -27,13 +29,25 @@ import {
   type ShapeClassification,
 } from "../../../../engines/playerArchetypeClassifier";
 import { HISTORICAL_ARCHETYPES } from "../../../../data/historicalArchetypes";
-import { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
+import { historicalToSimArchetype } from "../../../../engines/draftabilityRanker";
+import { buildBest22Target, type Best22Target, type Best22TargetPick } from "../../../../engines/best22Target";
+import type { TierKey } from "../../../../data/tierParams";
+import { buildRosterDesignPool, demandUniverseFromPlayers } from "../../engines/leaguePlayerAdapter";
+import {
+  designTargetChipCopy,
+  designTargetStripCopy,
+  designVerdictCopy,
+  designVerdictTone,
+  formatVerdictMoney,
+  targetVerdictState,
+  type TargetVerdictState,
+  type VerdictTone,
+} from "./designVerdict";
 import type { DraftPoolMode, Player, Team } from "../../../../utils/leagueBuilderStorage";
 
 export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
 type RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string };
-type VerdictTone = "red" | "amber" | "green" | "quiet";
 
 type RosterDesignerProps = {
   team: Team;
@@ -41,6 +55,7 @@ type RosterDesignerProps = {
   players: readonly Player[];
   lockedPool: boolean;
   budget: number;
+  tier: TierKey;
   showHelp: boolean;
   disabled?: boolean;
   disabledReason?: string | null;
@@ -58,15 +73,10 @@ function classNames(...parts: Array<string | false | null | undefined>): string 
   return parts.filter(Boolean).join(" ");
 }
 
-function formatMoney(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
-  return `$${Math.round(value).toLocaleString()}`;
-}
-
 function defaultPreferenceForSlot(slotId: string): SlotPreference {
   return {
     allowRunnerUp: true,
-    personalityTilt: slotId === "C" || slotId === "SS" || slotId === "SP1" ? "avoid-fragile" : "any",
+    personalityTilt: slotId === "C" || slotId === "SS" || slotId === "SP1" || slotId === "RP1" ? "avoid-fragile" : "any",
   };
 }
 
@@ -78,35 +88,41 @@ function mergePreference(defaultPreference: SlotPreference, savedPreference: Slo
   };
 }
 
+function slotKindAllowsTwoWay(slot: DesignSlot): boolean {
+  return slot.kind === "backupC" || slot.kind === "sp" || slot.kind === "rp" || slot.kind === "swing";
+}
+
+function sanitizePreferenceForSlot(slot: DesignSlot, preference: SlotPreference): SlotPreference {
+  if (slotKindAllowsTwoWay(slot) || !preference.tags?.twoWay) return preference;
+  const tags = { ...preference.tags };
+  delete tags.twoWay;
+  return {
+    ...preference,
+    tags: Object.keys(tags).length > 0 ? tags : undefined,
+  };
+}
+
 export function seedRosterDesignSlots(savedSlots?: readonly DesignSlot[]): DesignSlot[] {
   const savedById = new Map((savedSlots ?? []).map((slot) => [slot.slotId, slot]));
   return buildDefaultDesignSlots().map((slot) => {
     const saved = savedById.get(slot.slotId);
     return {
       ...slot,
-      preference: mergePreference(defaultPreferenceForSlot(slot.slotId), saved?.preference),
+      preference: sanitizePreferenceForSlot(slot, mergePreference(defaultPreferenceForSlot(slot.slotId), saved?.preference)),
     };
   });
-}
-
-function verdictTone(result: DesignFeasibilityResult | null, poolSize: number): VerdictTone {
-  if (poolSize === 0 || !result) return "quiet";
-  if (result.blockers.some((blocker) => blocker.kind === "no-match" && blocker.slotId !== "legality")) return "red";
-  if (result.blockers.some((blocker) => blocker.slotId === "legality")) return "amber";
-  if (result.blockers.some((blocker) => blocker.kind === "budget")) return "amber";
-  if (result.feasible) return "green";
-  return "quiet";
 }
 
 export function rosterDesignStatusTone(slots: readonly DesignSlot[], players: readonly Player[], budget: number): VerdictTone {
   const pool = buildRosterDesignPool(players);
   if (pool.length === 0) return "quiet";
-  return verdictTone(evaluateRosterDesign(slots, pool, budget), pool.length);
+  return designVerdictTone(evaluateRosterDesign(slots, pool, budget), pool.length);
 }
 
 function slotLabel(slot: DesignSlot): string {
   if (slot.slotId === "backupC") return "BACKUP C";
   if (slot.slotId.startsWith("FLEX")) return `BENCH ${slot.slotId.replace("FLEX", "")}`;
+  if (slot.slotId === "RP1") return "RP1 · CLOSER";
   return slot.slotId;
 }
 
@@ -181,27 +197,6 @@ function blockedSlotIds(blockers: readonly DesignBlocker[]): Set<string> {
     .map((blocker) => blocker.slotId));
 }
 
-function chipCopy(result: DesignFeasibilityResult | null, tone: VerdictTone): { state: string; cost: string } {
-  if (!result || tone === "quiet") return { state: "NOTHING TO CHECK AGAINST YET", cost: "EST. N/A" };
-  if (tone === "red") {
-    const count = result.blockers.filter((blocker) => blocker.kind === "no-match" && blocker.slotId !== "legality").length;
-    return { state: `${count} SPOT${count === 1 ? "" : "S"} WON'T FILL`, cost: `EST. ${formatMoney(result.totalCost)} OF ${formatMoney(result.budget)}` };
-  }
-  if (result.blockers.some((blocker) => blocker.slotId === "legality")) {
-    return { state: "FILLS · NOT A LEGAL 22", cost: `EST. ${formatMoney(result.totalCost)} OF ${formatMoney(result.budget)}` };
-  }
-  if (result.blockers.some((blocker) => blocker.kind === "budget")) {
-    return {
-      state: `OVER BUDGET · ${formatMoney(Math.max(0, result.totalCost - result.budget))} OVER`,
-      cost: `EST. ${formatMoney(result.totalCost)} OF ${formatMoney(result.budget)}`,
-    };
-  }
-  return {
-    state: `BUILDS · ${formatMoney(result.headroom)} TO SPARE`,
-    cost: `EST. ${formatMoney(result.totalCost)} OF ${formatMoney(result.budget)}`,
-  };
-}
-
 function sourceLine(mode: DraftPoolMode, lockedPool: boolean): string {
   if (lockedPool) return "Checked against the locked pool";
   return mode === "design-first" ? "Checked against your player list" : "Checked against today's pool";
@@ -217,6 +212,7 @@ export function RosterDesigner({
   players,
   lockedPool,
   budget,
+  tier,
   showHelp,
   disabled = false,
   disabledReason,
@@ -228,14 +224,23 @@ export function RosterDesigner({
   const dirtyVersionRef = useRef(0);
   const renderedTeamIdRef = useRef(team.id);
   const saveInFlightRef = useRef<{ teamId: string; version: number } | null>(null);
+  const latestPendingSaveRef = useRef<{
+    teamId: string;
+    save: RosterDesignerProps["onSave"];
+    slots: DesignSlot[];
+    lockedAt: string | undefined;
+  } | null>(null);
   const resetConfirmRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<DesignSlot[]>(() => seedRosterDesignSlots(team.rosterDesign?.slots));
   const [lockedAt, setLockedAt] = useState<string | undefined>(team.rosterDesign?.lockedAt);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [result, setResult] = useState<DesignFeasibilityResult | null>(null);
+  const [target, setTarget] = useState<Best22Target | null>(null);
+  const [targetState, setTargetState] = useState<TargetVerdictState>("quiet");
   const [resetConfirm, setResetConfirm] = useState(false);
 
   renderedTeamIdRef.current = team.id;
+  latestPendingSaveRef.current = { teamId: team.id, save: onSave, slots, lockedAt };
 
   const persistDirtySave = useCallback((
     teamId: string,
@@ -262,15 +267,34 @@ export function RosterDesigner({
   }, []);
 
   useEffect(() => {
+    return () => {
+      const pending = latestPendingSaveRef.current;
+      if (pending) persistDirtySave(pending.teamId, pending.save, pending.slots, pending.lockedAt);
+    };
+  }, [persistDirtySave]);
+
+  useEffect(() => {
     if (loadedTeamId.current === team.id) return;
     loadedTeamId.current = team.id;
     setSlots(seedRosterDesignSlots(team.rosterDesign?.slots));
     setLockedAt(team.rosterDesign?.lockedAt);
     setSelectedSlotId(null);
+    setResult(null);
+    setTarget(null);
+    setTargetState("quiet");
     setResetConfirm(false);
   }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.slots]);
 
   const designPool = useMemo(() => buildRosterDesignPool(players), [players]);
+  const simPool = useMemo(() => demandUniverseFromPlayers(players), [players]);
+  const targetArchetype = useMemo(() => {
+    const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
+    return historical ? historicalToSimArchetype(historical) : null;
+  }, [team.mlbArchetypeKey]);
+  const targetClassifiedById = useMemo(
+    () => new Map(simPool.map((player) => [player.id, classifyPlayerArchetype(player.profile)])),
+    [simPool],
+  );
   const classifiedPool = useMemo(
     () => designPool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) })),
     [designPool],
@@ -280,16 +304,25 @@ export function RosterDesigner({
     const effectTeamId = team.id;
     const timer = window.setTimeout(() => {
       const nextResult = designPool.length > 0 ? evaluateRosterDesign(slots, designPool, budget) : null;
+      const nextTarget = designPool.length > 0 && targetArchetype
+        ? buildBest22Target(slots, simPool, targetClassifiedById, targetArchetype, tier, budget)
+        : null;
       setResult(nextResult);
+      setTarget(nextTarget);
+      setTargetState(targetVerdictState({
+        poolSize: designPool.length,
+        hasIdentity: Boolean(targetArchetype),
+        target: nextTarget,
+      }));
       persistDirtySave(effectTeamId, onSave, slots, lockedAt);
-    }, 200);
+    }, 300);
     return () => {
       window.clearTimeout(timer);
       if (renderedTeamIdRef.current !== effectTeamId) {
         persistDirtySave(effectTeamId, onSave, slots, lockedAt);
       }
     };
-  }, [budget, designPool, lockedAt, onSave, persistDirtySave, slots, team.id]);
+  }, [budget, designPool, lockedAt, onSave, persistDirtySave, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
 
   useEffect(() => {
     if (!resetConfirm) return undefined;
@@ -302,8 +335,13 @@ export function RosterDesigner({
   }, [resetConfirm]);
 
   const selectedSlot = slots.find((slot) => slot.slotId === selectedSlotId) ?? null;
-  const tone = verdictTone(result, designPool.length);
-  const chip = chipCopy(result, tone);
+  const tone = designVerdictTone(result, designPool.length);
+  const chip = {
+    state: designVerdictCopy(result, tone),
+    cost: designTargetChipCopy(result, targetState, target),
+  };
+  const targetStrip = designTargetStripCopy(targetState, target);
+  const feasibleTarget = targetState === "feasible" ? target : null;
   const blockers = result?.blockers ?? [];
   const blockedIds = blockedSlotIds(blockers);
   const readOnly = disabled || Boolean(lockedAt);
@@ -375,6 +413,18 @@ export function RosterDesigner({
             <div className="text-[11px] mt-0.5">{chip.cost}</div>
           </div>
         </div>
+        {targetStrip ? (
+          <div
+            className={classNames(
+              "mt-2 text-[11px] font-bold tracking-[0.12em]",
+              targetState === "infeasible" && "text-[var(--ballpark-status-warn)]",
+              targetState === "no-identity" && "text-[var(--ballpark-chalk)]/55",
+              targetState === "feasible" && "text-[var(--ballpark-brass)]",
+            )}
+          >
+            {targetStrip}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2 mt-3">
           <div ref={resetConfirmRef}>
             {resetConfirm ? (
@@ -421,7 +471,7 @@ export function RosterDesigner({
               : "The pool is already set — use the design to sketch your build. The check tells you whether the pool can actually hand you this roster, and roughly what it would run."}
           </HelpNote>
           <HelpNote>
-            The check fills your 22 with the cheapest players that fit each ask. Prices here are asking prices — the room sets the real ones. Green means it builds; the red cards name exactly what's in the way.
+            Two numbers, two questions. FLOOR is the cheapest legal way to fill your 22 — proof it builds, not a plan. TARGET is the 22 this pool would hand you if the room broke your way — the best expression of your identity and your asks under the cap. Chase the target; trust the floor. Prices are asking prices — the room sets the real ones.
           </HelpNote>
           <HelpNote>
             A shape is a player's strengths and the weaknesses that come with them — taking a weakness on purpose is how you free up money for the spots you care about. FITS YOUR IDENTITY means a shape runs cheap under your club's identity — fit, not a bargain guarantee. Tags narrow the ask (lefty, switch, utility). Temperament is a preference, not a rule — if the best fit is a fragile head, you'll hear about it, not be blocked from him.
@@ -436,6 +486,7 @@ export function RosterDesigner({
           result={result}
           blockedIds={blockedIds}
           selectedSlotId={selectedSlotId}
+          target={feasibleTarget}
           onSelect={setSelectedSlotId}
         />
         <SlotGroup
@@ -444,6 +495,7 @@ export function RosterDesigner({
           result={result}
           blockedIds={blockedIds}
           selectedSlotId={selectedSlotId}
+          target={feasibleTarget}
           onSelect={setSelectedSlotId}
         />
         <SlotGroup
@@ -452,6 +504,7 @@ export function RosterDesigner({
           result={result}
           blockedIds={blockedIds}
           selectedSlotId={selectedSlotId}
+          target={feasibleTarget}
           onSelect={setSelectedSlotId}
         />
       </div>
@@ -461,7 +514,9 @@ export function RosterDesigner({
           slot={selectedSlot}
           readOnly={readOnly}
           identityKey={team.mlbArchetypeKey}
+          designPool={designPool}
           classifiedPool={classifiedPool}
+          targetPick={feasibleTarget?.picks.find((pick) => pick.slotId === selectedSlot.slotId) ?? null}
           onPreferenceChange={(update) => updatePreference(selectedSlot.slotId, update)}
         />
       ) : null}
@@ -500,6 +555,7 @@ function SlotGroup({
   result,
   blockedIds,
   selectedSlotId,
+  target,
   onSelect,
 }: {
   title: string;
@@ -507,15 +563,18 @@ function SlotGroup({
   result: DesignFeasibilityResult | null;
   blockedIds: ReadonlySet<string>;
   selectedSlotId: string | null;
+  target: Best22Target | null;
   onSelect: (slotId: string) => void;
 }) {
   const resolutionById = new Map((result?.slots ?? []).map((slot) => [slot.slotId, slot]));
+  const targetPickById = new Map((target?.picks ?? []).map((pick) => [pick.slotId, pick]));
   return (
     <div>
       <div className="text-[11px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] mb-2">{title}</div>
       <div className="space-y-2">
         {slots.map((slot) => {
           const resolution = resolutionById.get(slot.slotId);
+          const targetPick = targetPickById.get(slot.slotId);
           const blocked = blockedIds.has(slot.slotId);
           const selected = selectedSlotId === slot.slotId;
           return (
@@ -533,8 +592,15 @@ function SlotGroup({
               )}
             >
               <span className="text-xs font-bold text-[var(--ballpark-chalk)]">{slotLabel(slot)}</span>
-              <span className={classNames("min-w-0 truncate text-sm", slot.preference?.shape ? "text-[var(--ballpark-chalk)]" : "text-[var(--ballpark-chalk)]/45")}>
-                {slotShapeSummary(slot)}
+              <span className="min-w-0">
+                <span className={classNames("block truncate text-sm", slot.preference?.shape ? "text-[var(--ballpark-chalk)]" : "text-[var(--ballpark-chalk)]/45")}>
+                  {slotShapeSummary(slot)}
+                </span>
+                {targetPick?.playerId ? (
+                  <span className="mt-0.5 block truncate text-[11px] text-[var(--ballpark-brass)]/70">
+                    {targetPick.honorsAsk ? "" : "≈ "}→ {targetPick.playerName ?? targetPick.playerId} · {formatVerdictMoney(targetPick.salary)}
+                  </span>
+                ) : null}
               </span>
               <span className="flex items-center justify-end gap-1 text-[11px] text-[var(--ballpark-chalk)]/55">
                 {resolution?.viaRunnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈</span> : null}
@@ -557,19 +623,31 @@ function SlotEditor({
   slot,
   readOnly,
   identityKey,
+  designPool,
   classifiedPool,
+  targetPick,
   onPreferenceChange,
 }: {
   slot: DesignSlot;
   readOnly: boolean;
   identityKey: string | undefined;
+  designPool: readonly DesignPoolPlayer[];
   classifiedPool: readonly ClassifiedDesignPlayer[];
+  targetPick: Best22TargetPick | null;
   onPreferenceChange: (update: (preference: SlotPreference) => SlotPreference) => void;
 }) {
   const groups = menuGroupsForSlot(slot);
   const visibleShapes = groups.flatMap((group) => group.shapes);
   const alignedFamilies = topAlignedFamilies(slot, visibleShapes, identityKey);
   const preference = slot.preference ?? defaultPreferenceForSlot(slot.slotId);
+  const classificationById = useMemo(
+    () => new Map(classifiedPool.map((player) => [player.id, player.classification])),
+    [classifiedPool],
+  );
+  const shortlist = useMemo(
+    () => rankPoolForSlot(slot, preference, designPool).slice(0, 5),
+    [designPool, preference, slot],
+  );
 
   const setShape = (shape: string | undefined) => {
     onPreferenceChange((current) => ({ ...current, shape }));
@@ -663,12 +741,14 @@ function SlotEditor({
             />
           ) : null}
 
-          <ToggleControl
-            label="TWO-WAY"
-            checked={Boolean(preference.tags?.twoWay)}
-            disabled={readOnly}
-            onChange={(checked) => setTag("twoWay", checked ? true : undefined)}
-          />
+          {slotKindAllowsTwoWay(slot) ? (
+            <ToggleControl
+              label="TWO-WAY"
+              checked={Boolean(preference.tags?.twoWay)}
+              disabled={readOnly}
+              onChange={(checked) => setTag("twoWay", checked ? true : undefined)}
+            />
+          ) : null}
           <SegmentedControl
             label="TEMPERAMENT"
             value={preference.personalityTilt ?? "any"}
@@ -682,8 +762,58 @@ function SlotEditor({
             disabled={readOnly}
             onChange={(value) => onPreferenceChange((current) => ({ ...current, personalityTilt: value as PersonalityTilt }))}
           />
+
+          <ShortlistRail
+            entries={shortlist}
+            preference={preference}
+            classificationById={classificationById}
+            targetPick={targetPick}
+          />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ShortlistRail({
+  entries,
+  preference,
+  classificationById,
+  targetPick,
+}: {
+  entries: readonly RankedPoolEntry[];
+  preference: SlotPreference;
+  classificationById: ReadonlyMap<string, ShapeClassification>;
+  targetPick: Best22TargetPick | null;
+}) {
+  return (
+    <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
+      <div className="mb-2 text-[10px] font-bold tracking-[0.14em] text-[var(--ballpark-brass)]">THE ASK&apos;S SHORTLIST</div>
+      {entries.length === 0 ? (
+        <div className="text-[11px] leading-snug text-[var(--ballpark-chalk)]/45">NOBODY IN THE POOL FITS THIS ASK YET</div>
+      ) : (
+        <div className="space-y-1.5">
+          {entries.map((entry) => {
+            const classification = classificationById.get(entry.playerId);
+            const satisfaction = classification ? askSatisfaction(preference, classification) : null;
+            const runnerUp = satisfaction?.shapeMatch === "runnerUp";
+            const isTarget = targetPick?.playerId === entry.playerId;
+            return (
+              <div key={entry.playerId} className="flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75">
+                <span className="min-w-0 truncate">
+                  {runnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈ </span> : null}
+                  {entry.playerName ?? entry.playerId} · {entry.shape} · {formatVerdictMoney(entry.salary)}
+                </span>
+                {isTarget ? (
+                  <span className="shrink-0 border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
+                    TARGET
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

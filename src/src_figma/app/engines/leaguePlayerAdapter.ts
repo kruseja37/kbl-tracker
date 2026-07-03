@@ -68,6 +68,7 @@ export function demandPlayerFromLeaguePlayer(player: Player): DemandUniversePlay
   });
   return {
     id: player.id,
+    name: playerName(player),
     iv,
     salary: player.salary,
     isPitcher: shape.isPitcher,

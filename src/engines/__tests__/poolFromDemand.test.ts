@@ -264,6 +264,7 @@ describe('extractPoolFromDemand', () => {
 
       expect(mapped).toMatchObject({
         id: player.id,
+        name: `${player.firstName} ${player.lastName}`.trim(),
         salary: player.salary,
         isPitcher: canonicalShape.isPitcher,
         position: canonicalShape.position,
