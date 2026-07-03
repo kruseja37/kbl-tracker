@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   generateProspectScoutingDraft,
+  gradeDistance,
   type GeneratedProspectCandidate,
 } from '../src/utils/prospectScoutingDraftEngine';
 import {
@@ -48,6 +49,8 @@ function candidateToProfile(candidate: GeneratedProspectCandidate): Classifiable
     secondaryPosition: candidate.secondaryPosition ?? null,
     bats: candidate.bats,
     throws: candidate.throws,
+    // Candidates carry no age (drawn at DTO build); the rawness gap is the Project marker.
+    potentialGap: gradeDistance(candidate.trueGrade, candidate.potentialGrade),
     power: candidate.ratings.power,
     contact: candidate.ratings.contact,
     speed: candidate.ratings.speed,

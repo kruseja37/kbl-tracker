@@ -18,6 +18,7 @@ import {
   ALL_SHAPES,
   EXTENDED_SHAPES,
   PERSONALITY_GROUPS,
+  PROJECT_SHAPE_FAMILIES,
   TAXONOMY_TUNING,
   type AgeBand,
   type ArchetypeFamilyDefinition,
@@ -54,6 +55,11 @@ export interface ClassifiableProfile {
   traits?: readonly (string | undefined | null)[];
   arsenal?: readonly string[];
   personality?: string;
+  /**
+   * Grade steps between potential and current (prospects: potentialGrade − trueGrade).
+   * Optional — when present it participates in the Project-class qualification.
+   */
+  potentialGap?: number;
 }
 
 export interface ProfileTags {
@@ -203,12 +209,29 @@ export function classifyPlayerArchetype(
     };
   }
 
+  // PROJECT QUALIFICATION (polish leg): the Project classes' identity is age + rawness.
+  // Each KNOWN marker can disqualify — a known non-young age, or a known potential-gap
+  // below the floor; unknown markers don't (prospect candidates carry a gap but no age).
+  // When the gap is STRONG (≥ 2) the Project score gets the marker boost, so a declared
+  // prospect project beats its geometric near-twin star shape.
+  const projectEligible =
+    (tags.ageBand === null || tags.ageBand === 'rookie' || tags.ageBand === 'rising')
+    && (profile.potentialGap === undefined
+      || profile.potentialGap >= TAXONOMY_TUNING.projectMinPotentialGap);
+  // Boost fires only on a STRONG gap (≥2): the gap≥1 variant was measured and rejected —
+  // it rotated the miss profile (stealing true Power-Relievers into Pitching-Project)
+  // without lifting recovery (sweep 2026-07-02: top2 0.597 vs 0.594, +14 reverse-steals).
+  const projectBoost =
+    (profile.potentialGap ?? 0) >= 2 ? TAXONOMY_TUNING.projectMarkerBoost : 1;
+
   const candidates = candidateShapes(role, stratum, profile.arsenal?.length ?? 0, options.shapes ?? ALL_SHAPES);
   let best: { family: string; score: number } | null = null;
   let second: { family: string; score: number } | null = null;
   for (const shape of candidates) {
+    const isProject = PROJECT_SHAPE_FAMILIES.includes(shape.family);
+    if (isProject && !projectEligible) continue;
     const template = center(templateVector(shape.template, tools)).centered;
-    const score = cosine(centered, template);
+    const score = cosine(centered, template) * (isProject ? projectBoost : 1);
     if (!best || score > best.score) {
       second = best;
       best = { family: shape.family, score };

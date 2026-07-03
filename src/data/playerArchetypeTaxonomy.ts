@@ -371,7 +371,18 @@ export const TAXONOMY_TUNING = {
   depthLevelMax: 48,
   /** Minimum position affinity for a shape to appear on that position's menu. */
   menuAffinityMin: 0.75,
+  /**
+   * PROJECT QUALIFICATION (polish leg — the S4 finding): the Project classes' identity is
+   * AGE + RAWNESS, not tool geometry. They are candidates only for rookie/rising ages, and
+   * when a potential-gap is known it must clear this many grade steps.
+   */
+  projectMinPotentialGap: 1,
+  /** Similarity boost on Project classes when the rawness markers are STRONG (gap ≥ 2). */
+  projectMarkerBoost: 1.2,
 } as const;
+
+/** The age-and-rawness-qualified classes (see projectMinPotentialGap above). */
+export const PROJECT_SHAPE_FAMILIES: readonly string[] = ['Project', 'Pitching-Project'];
 
 /** The per-position dropdown menu: role-appropriate shapes at real affinity, sorted. */
 export function menuForPosition(position: TaxonomyPosition): ArchetypeFamilyDefinition[] {

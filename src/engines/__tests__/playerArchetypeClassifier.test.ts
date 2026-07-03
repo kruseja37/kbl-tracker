@@ -128,6 +128,9 @@ describe('classifyPlayerArchetype — shapes', () => {
       // (the flat path assigns it in the star stratum), so its echo profile sits at 75.
       const base = shape.family === 'Five-Tool' ? 75 : isDepth ? 40 : 60;
       const scale = isDepth ? 8 : 15;
+      // Project classes are age-and-rawness-qualified: their echoes carry the markers.
+      const isProject = shape.family === 'Project' || shape.family === 'Pitching-Project';
+      const projectMarkers = isProject ? { age: 21, potentialGap: 2 } : {};
       const profile: ClassifiableProfile =
         shape.role === 'pitcher'
           ? pitcher(
@@ -136,18 +139,32 @@ describe('classifyPlayerArchetype — shapes', () => {
                 junk: base + scale * (shape.template.junk ?? 0),
                 accuracy: base + scale * (shape.template.accuracy ?? 0),
               },
-              { arsenal: ['4F', 'SL'] },
+              { arsenal: ['4F', 'SL'], ...projectMarkers },
             )
-          : hitter({
-              power: base + scale * (shape.template.power ?? 0),
-              contact: base + scale * (shape.template.contact ?? 0),
-              speed: base + scale * (shape.template.speed ?? 0),
-              fielding: base + scale * (shape.template.fielding ?? 0),
-              arm: base + scale * (shape.template.arm ?? 0),
-            });
+          : hitter(
+              {
+                power: base + scale * (shape.template.power ?? 0),
+                contact: base + scale * (shape.template.contact ?? 0),
+                speed: base + scale * (shape.template.speed ?? 0),
+                fielding: base + scale * (shape.template.fielding ?? 0),
+                arm: base + scale * (shape.template.arm ?? 0),
+              },
+              projectMarkers,
+            );
       const result = classifyPlayerArchetype(profile);
       expect(result.shape, `template self-recovery for ${shape.family}`).toBe(shape.family);
     }
+  });
+
+  it('age-qualifies the Project classes: a veteran with raw tools is his tool shape, not a Project', () => {
+    const projectTools = { power: 71, contact: 52, speed: 69, fielding: 53, arm: 67 }; // ~Project template echo
+    const veteran = classifyPlayerArchetype(hitter(projectTools, { age: 34 }));
+    expect(veteran.shape).not.toBe('Project');
+    const youngRaw = classifyPlayerArchetype(hitter(projectTools, { age: 21, potentialGap: 2 }));
+    expect(youngRaw.shape).toBe('Project');
+    // A young player whose scouting says NO headroom is not a Project either.
+    const youngCapped = classifyPlayerArchetype(hitter(projectTools, { age: 21, potentialGap: 0 }));
+    expect(youngCapped.shape).not.toBe('Project');
   });
 
   it('classifies the canonical examples', () => {

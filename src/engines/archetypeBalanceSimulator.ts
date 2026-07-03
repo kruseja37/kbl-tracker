@@ -547,14 +547,19 @@ function identityEligible(
 const LEGAL_MAX_PITCHERS = 9;
 
 /** Sequential greedy over IDENTITY_SLOT_PLAN with the running pitcher-count context. */
-function identityGreedyStart(pool: SimPlayer[], score: (p: SimPlayer) => number): SlotPick[] {
+function identityGreedyStart(
+  pool: SimPlayer[],
+  score: (p: SimPlayer) => number,
+  slotBonus?: (playerId: string, slotIndex: number) => number,
+): SlotPick[] {
   const picks: SlotPick[] = [];
   const used = new Set<string>();
   let pitchers = 0;
   for (let i = 0; i < IDENTITY_SLOT_PLAN.length; i += 1) {
     const cands = identityEligible(pool, IDENTITY_SLOT_PLAN[i], used, { pitchers });
     if (cands.length === 0) continue;
-    const chosen = cands.reduce((best, c) => (score(c) > score(best) ? c : best));
+    const slotScore = (c: SimPlayer) => score(c) + (slotBonus?.(c.id, i) ?? 0);
+    const chosen = cands.reduce((best, c) => (slotScore(c) > slotScore(best) ? c : best));
     picks.push({ slotIndex: i, player: chosen });
     used.add(chosen.id);
     if (chosen.isPitcher) pitchers += 1;
@@ -568,11 +573,15 @@ function identityShortlist(
   slot: IdentitySlotKind,
   used: Set<string>,
   fitScore: (p: SimPlayer) => number,
+  slotIndex?: number,
+  slotBonus?: (playerId: string, slotIndex: number) => number,
 ): SimPlayer[] {
   const cands = identityEligible(pool, slot, used);
+  const lensScore = (p: SimPlayer) =>
+    fitScore(p) + (slotBonus && slotIndex !== undefined ? slotBonus(p.id, slotIndex) : 0);
   const byIv = [...cands].sort((a, b) => b.iv - a.iv).slice(0, 24);
   const bySalary = [...cands].sort((a, b) => a.salary - b.salary).slice(0, 10);
-  const byFit = [...cands].sort((a, b) => fitScore(b) - fitScore(a)).slice(0, 18);
+  const byFit = [...cands].sort((a, b) => lensScore(b) - lensScore(a)).slice(0, 18);
   const seen = new Set<string>();
   return [...byIv, ...byFit, ...bySalary].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
 }
@@ -594,15 +603,22 @@ function constrainedIdentityClimb(
   budget: number,
   floorIv: number,
   fitScore: (p: SimPlayer) => number,
+  slotBonus?: (playerId: string, slotIndex: number) => number,
 ): SlotPick[] {
   const picks = start.map((p) => ({ ...p }));
   const used = new Set(picks.map((p) => p.player.id));
+  // The preference bonus is slot-positional, so fit is assessed over PICKS (player + slot),
+  // not the bare player list. Absent bonus adds an exact 0 — byte-identical acceptance.
   const assess = (players: SimPlayer[]) => {
     const iv = players.reduce((s, p) => s + p.iv, 0);
     const over = Math.max(0, rosterCost(players, caps) - budget);
     const short = Math.max(0, floorIv - iv);
     const illegal = players.length === 22 && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
-    return { violation: illegal + over + short, fit: players.reduce((s, p) => s + fitScore(p), 0) };
+    const fit = players.reduce(
+      (s, p, idx) => s + fitScore(p) + (slotBonus?.(p.id, picks[idx].slotIndex) ?? 0),
+      0,
+    );
+    return { violation: illegal + over + short, fit };
   };
   for (let pass = 0; pass < IDENTITY_MAX_PASSES; pass += 1) {
     let improved = false;
@@ -613,7 +629,14 @@ function constrainedIdentityClimb(
       const players = picks.map((p) => p.player);
       let best = assess(players);
       let bestRepl: SimPlayer | null = null;
-      for (const repl of identityShortlist(pool, IDENTITY_SLOT_PLAN[picks[idx].slotIndex], usedExcept, fitScore)) {
+      for (const repl of identityShortlist(
+        pool,
+        IDENTITY_SLOT_PLAN[picks[idx].slotIndex],
+        usedExcept,
+        fitScore,
+        picks[idx].slotIndex,
+        slotBonus,
+      )) {
         if (repl.id === current.id) continue;
         players[idx] = repl;
         const t = assess(players);
@@ -651,6 +674,15 @@ export interface BuildIdentityOptions {
    * the comparison, not the roster (FABLE-C1B fix round).
    */
   embodimentReference?: SimPlayer[];
+  /**
+   * PREFERENCE-AWARE BUILD (taxonomy polish leg — the C4-B designer/whisper seam): a
+   * per-(player, identity-slot) bonus ADDED to the fit objective in the identity climb, so
+   * the build path honors the GM's per-slot archetype/tilt asks. The CALLER computes the
+   * bonus (the adapter classifies with the full profile — this module stays classifier-free
+   * and its calibrated dependency surface unchanged). ABSENT → byte-identical builds (the
+   * objective adds an exact 0). Never consulted by the frozen value baseline.
+   */
+  slotPreferenceBonus?: (playerId: string, slotIndex: number) => number;
 }
 
 /**
@@ -685,7 +717,16 @@ export function buildIdentityRoster(
   const floorIv = baselineIv * valueFloor;
   const fitScore = makeFitScore(weightedCaps(caps, tier, params.boostFitWeight), tier);
 
-  const idFromFit = constrainedIdentityClimb(identityGreedyStart(pool, fitScore), pool, caps, budget, floorIv, fitScore);
+  const slotBonus = options.slotPreferenceBonus;
+  const idFromFit = constrainedIdentityClimb(
+    identityGreedyStart(pool, fitScore, slotBonus),
+    pool,
+    caps,
+    budget,
+    floorIv,
+    fitScore,
+    slotBonus,
+  );
   // Re-seed the value baseline into the identity plan's slot indices (a primary-C backup is valid
   // backupC coverage, so the mapping is total).
   const idFromValue = constrainedIdentityClimb(
@@ -695,6 +736,7 @@ export function buildIdentityRoster(
     budget,
     floorIv,
     fitScore,
+    slotBonus,
   );
 
   const evaluate = (picks: SlotPick[]) => {
