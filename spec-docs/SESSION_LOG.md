@@ -2,6 +2,24 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-03 (attended, Opus/Fable/Codex) — POOL-SIZING FEATURE (cap-aware sizing + fit-first + hand-edits) + economy rulings
+
+After the P0 train (below), JK took the deferred build items. Economy §6 rulings ratified (DECISIONS_LOG):
+farm budget stays pool-relative; tier is a starting suggestion (never scales ratings); cap edits apply next
+draft. Then the POOL-SIZING feature, driven by JK's two concerns — pool bloat (2× starves rosters) and
+"cheap-over-fit" — designed by Fable, built by Codex in two passes, Opus-audited (adversarial each):
+- `786587ec` **Phase 2A engine** — a 1.2–1.5× size dial target (default 1.35×, hard 1.5× ceiling), a
+  FIT-FIRST trim (worst-fit unclaimed extras evicted first; reservations + identity seeds + floors
+  protected), a buildability floor (constructive G1: N disjoint legal-22s-under-cap) + bounded fit-aware
+  repair (cheapest-that-still-fits; last-resort noted). FIT-FIRST LAW: no selector keyed on price.
+  Adversarial 13 HOLDS/0 defects; no-dial extraction byte-identical.
+- `9bfadf11` **Phase 2B** — the seven-stop dial UI, hand-edit PRESERVATION across recalc (JK override of
+  Fable's redo rec: foldHandEditLedger derives the ledgers from pool membership; engine pins adds / excludes
+  removes; kept-notice), and a per-club RE-CHECK panel reusing the DJ-06 exit-gate law (one law, three doors).
+  Adversarial 14 HOLDS/0 defects.
+JK rulings recorded: count shill wins in the band; default 1.35×; PRESERVE hand-edits (override).
+**Next build item: ③ AUCTION-SETTLE-FROM-SHILLS (in-draft repair, fit-first).** Two-way cleanups LAST (JK).
+
 ## 2026-07-03 (attended, Opus/Fable/Codex) — THE PRE-PLAYTHROUGH P0 FIX TRAIN + HARD SALARY CAP (all committed, branch-only)
 
 **Arc:** cleared the entire draft-journey pre-playthrough P0 list (Fable design → Codex build →
