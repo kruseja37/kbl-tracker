@@ -27968,3 +27968,48 @@ auctionExitRepairGuidance :214, buildMarketBandPrioritiesByTeamId :447, override
   (auction-module-only; grep the import graph + document).
 - `git diff --stat` — the §6-§8 surface only; auctionCompletionFloor.ts NOT changed; GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-SETTLE-FROM-SHILLS ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ-AUCTION-POLISH ===== -->
+## CODEX-DJ-AUCTION-POLISH — auction-page minor fixes (DJ-09/19/20/21/24-auction/25)
+
+Draft-journey polish sweep, AUCTION-PAGE cluster only (file-disjoint from the parallel BEST-22 work — do NOT
+touch RosterDesigner.tsx, LeagueBuilderDraftSetup.tsx, rosterIntelligencePayload.ts, ArchetypePicker.tsx,
+poolFromDemand.ts, or rosterDesignFeasibility.ts — those are other batches). All MINOR. Evidence file:lines are
+from a 2026-07-03 triage (±10; grep the symbol). Branch-only; do NOT commit/push; leave the tree dirty for Opus.
+
+Fix each (source: FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §3/§4):
+- **DJ-09 (fake visual encodings, AuctionStage.tsx):** (a) DELETE the hardcoded 30% "identity tax" meter
+  (~:302-305, `<div className="meter"><i style={{width:"30%"}}/>` in the help layer) — no real per-lot signal
+  feeds it; a fake gauge is worse than none (audit ruling: compute-or-remove → remove). (b) The farm scout band
+  bar (~:629-643, hardcoded left 30% / right 42%) — COMPUTE the bar from the REAL scout range span
+  (rangeHigh/rangeLow already on hand) so "narrow band = confident" is true; keep the caption.
+- **DJ-19 (raw machine strings):** the human bid path throws `Auction transition rejected: <reason>`
+  (useAuctionDraft.ts ~:126) rendered raw (LeagueBuilderAuctionDraft.tsx ~:1458, LeagueBuilderFarmAuctionDraft.tsx
+  ~:526). Add a reason→plain-English map (e.g. bid-strands-roster → "that bid would leave you unable to fill a
+  legal roster") before render. CPU path already auto-PASSes — human path only.
+- **DJ-20 (lot counter off-by-one):** stageLotLabel (LeagueBuilderAuctionDraft.tsx ~:196) does
+  min(results.length+1,...) but during SOLD/PASSED the just-resolved lot is already in results → names the NEXT
+  lot under the sold stamp. Special-case SOLD/PASSED states (don't +1).
+- **DJ-21 (ROOM SETTINGS copy):** LeagueBuilderAuctionDraft.tsx ~:1536-1537 hardcodes "Inherited from Draft
+  Setup" unconditionally. Either render the room's actual values or DROP the "Inherited" claim (drop is fine).
+- **DJ-24 (copy register — AUCTION items only):** (1) replace the "engine" noun in GM-facing copy
+  ("ENGINE NOMINATION"/"ENGINE NOMINATED" LeagueBuilderAuctionDraft.tsx ~:1604/1616 + farm ~:654/666; "engine
+  surfacing the next player" ~:863) with plain wording ("the room"/"up next"); (3) unify the shills naming
+  (MARKET SHILLS / "Market Shill N" vs prose "the shills") to one register; (5) move the farm lot card's inline
+  tutorial ("Hold to reveal scout report" + AuctionCoachBanner on the card, LeagueBuilderFarmAuctionDraft.tsx
+  ~:674/644) behind the ? help layer per the UI rules. [DJ-24 items (2) × contest and (4) $-in-blocker are OTHER
+  batches — do NOT touch poolFromDemand.ts / rosterDesignFeasibility.ts here.]
+- **DJ-25 (kill dead legacy MLB auction UI):** LeagueBuilderAuctionDraft.tsx — any non-null session routes to
+  the new AuctionStage (~:1266/1441), so the second return's session-gated blocks (~:1471-1831: legacy AUCTION
+  COMPLETE badge, the SOLD/PASSED+AUCTION_COMPLETE banner, the LOT LOG) are DEAD. Delete the unreachable
+  session-gated JSX ONLY. **CAVEATS:** (i) do NOT delete DraftRosterBoard.tsx — LeagueBuilderFarmAuctionDraft.tsx
+  still renders it live; (ii) the DJ-06 exit gate (exitControlledClubs/exitReport/canProceedToFarm/
+  requestFarmDraftExit) lives at component top level and is consumed by the NEW path — it MUST survive; verify it
+  still compiles + the new-path gate works.
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx src/src_figma/app/components/auction/__tests__/AuctionStage.test.tsx` green; add/extend a small test for the DJ-19 reason map + the DJ-20 SOLD-beat label if practical.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
+- `git diff --stat` — ONLY LeagueBuilderAuctionDraft.tsx, AuctionStage.tsx, useAuctionDraft.ts, LeagueBuilderFarmAuctionDraft.tsx (+ tests). NONE of the BEST-22/designer/draftsetup/engine files. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-DJ-AUCTION-POLISH ===== -->

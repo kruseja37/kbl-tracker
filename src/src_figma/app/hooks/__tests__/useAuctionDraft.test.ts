@@ -779,7 +779,12 @@ describe("useAuctionDraft", () => {
 // -----------------------------------------------------------------------------------------------
 // FABLE-C3-FIX F3: the strand-safe transition helpers (pure — no hook render needed).
 // -----------------------------------------------------------------------------------------------
-import { strandSafeBidTransition, strandSafeClaimTransition } from "../useAuctionDraft";
+import {
+  auctionTransitionErrorCopy,
+  auctionTransitionReasonCopy,
+  strandSafeBidTransition,
+  strandSafeClaimTransition,
+} from "../useAuctionDraft";
 
 describe("strand-safe CPU transitions (FABLE-C3-FIX F3)", () => {
   // A team at the 14-hitter ceiling bidding on ANOTHER hitter → 'bid-strands-roster'.
@@ -849,6 +854,18 @@ describe("strand-safe CPU transitions (FABLE-C3-FIX F3)", () => {
     const result = strandSafeBidTransition(session, "cpu-1", 2_000, false);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("bid-strands-roster");
+  });
+
+  test("DJ-19 maps machine rejection reasons to GM-facing copy", () => {
+    expect(auctionTransitionReasonCopy("bid-strands-roster")).toBe(
+      "That bid would leave you unable to fill a legal roster.",
+    );
+    expect(auctionTransitionErrorCopy("Auction transition rejected: bid-strands-roster")).toBe(
+      "That bid would leave you unable to fill a legal roster.",
+    );
+    expect(auctionTransitionErrorCopy("Farm auction transition rejected: bid-strands-roster")).toBe(
+      "That bid would leave you unable to fill a legal roster.",
+    );
   });
 
   test("other rejection reasons pass through untouched for CPUs too", () => {

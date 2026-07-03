@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { AuctionStage, type AuctionStageVM, type RosterSlotVM } from "../AuctionStage";
@@ -102,5 +102,40 @@ describe("AuctionStage roster board", () => {
     expect(screen.getByText(/^Move\b/)).toBeInTheDocument();
     expect(screen.queryByText(/^Read\b/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Cap\b/)).not.toBeInTheDocument();
+  });
+
+  test("DJ-09 removes the fake identity-tax meter from the help layer", () => {
+    const stageVm = vm();
+    stageVm.lot.publicMarket = {
+      band: { low: 50_000, median: 70_000, high: 90_000 },
+      interestedTeams: 2,
+      contested: null,
+      likelyPass: false,
+    };
+
+    const { container } = render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+
+    expect(screen.queryByText("On-identity")).not.toBeInTheDocument();
+    expect(container.querySelector(".tax .meter i")).toBeNull();
+    expect(screen.getByLabelText("Public market price band")).toBeInTheDocument();
+  });
+
+  test("DJ-09 sizes the scout band from the real scout range span", () => {
+    const stageVm = vm();
+    stageVm.tier = "farm";
+    stageVm.lot.scout = {
+      rangeLow: 90_000,
+      rangeHigh: 110_000,
+      mid: 100_000,
+      grade2080: 55,
+      confidence: "High",
+    };
+
+    const { container } = render(<AuctionStage vm={stageVm} />);
+    const band = container.querySelector<HTMLElement>(".rangebar i");
+
+    expect(parseFloat(band?.style.left ?? "")).toBeCloseTo(40.91, 2);
+    expect(parseFloat(band?.style.right ?? "")).toBeCloseTo(40.91, 2);
   });
 });

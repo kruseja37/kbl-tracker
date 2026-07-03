@@ -74,7 +74,7 @@ export interface MoveVM {
 
 export interface CpuDecisionVM {
   teamName: string;
-  roleLabel: "CPU team" | "Shill";
+  roleLabel: "CPU team" | "Market Shill";
   action: string;
   reason: string;
   amount?: string;
@@ -298,13 +298,6 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                     </>
                   )}
 
-                  {helpOpen && (
-                    <div className="tax">
-                      <span>On-identity</span>
-                      <div className="meter"><i style={{ width: "30%" }} /></div>
-                      <span>heavy off-identity</span>
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -596,12 +589,12 @@ function Lot({ lot }: { lot: LotVM }) {
             <button
               type="button"
               className="cover"
-              aria-label="Hold to reveal scout report"
+              aria-label="Scout report"
               onPointerDown={(e) => { e.preventDefault(); setRevealed(true); }}
               onPointerUp={() => setRevealed(false)}
               onPointerLeave={() => setRevealed(false)}
             >
-              <span style={{ fontSize: 18 }}>🔒</span> Press &amp; hold to see your scout's read
+              <span style={{ fontSize: 18 }}>🔒</span> Scout report
             </button>
             <div className="body">
               <ScoutBody scout={lot.scout} />
@@ -625,12 +618,15 @@ function Lot({ lot }: { lot: LotVM }) {
 }
 
 function ScoutBody({ scout }: { scout: ScoutReadVM }) {
-  const span = scout.rangeHigh - scout.rangeLow || 1;
-  // band occupies the middle ~40–70%; here we encode position by the displayed numbers.
-  const leftPct = 30;
-  const rightPct = 42;
-  const midPct = 30 + ((scout.mid - scout.rangeLow) / span) * (100 - leftPct - rightPct);
-  // 20–80 grade → pin position
+  const low = Math.min(scout.rangeLow, scout.rangeHigh);
+  const high = Math.max(scout.rangeLow, scout.rangeHigh);
+  const span = Math.max(0, high - low);
+  const anchor = Math.max(Math.abs(scout.mid), Math.abs(high), 1);
+  const bandWidthPct = Math.max(12, Math.min(92, (span / anchor) * 100));
+  const leftPct = (100 - bandWidthPct) / 2;
+  const rightPct = leftPct;
+  const midInRange = span > 0 ? (Math.min(Math.max(scout.mid, low), high) - low) / span : 0.5;
+  const midPct = leftPct + midInRange * bandWidthPct;
   const pinPct = Math.max(0, Math.min(100, ((scout.grade2080 - 20) / 60) * 100));
   return (
     <>

@@ -122,9 +122,30 @@ export interface UseAuctionDraftReturn {
   controlledCpuTeamIds: string[];
 }
 
+const AUCTION_TRANSITION_REASON_COPY: Record<string, string> = {
+  "bid-strands-roster": "That bid would leave you unable to fill a legal roster.",
+  "claim-strands-roster": "That claim would leave you unable to fill a legal roster.",
+  "bid-below-minimum": "That bid is below the current asking price.",
+  "bid-above-max": "That bid is above your room after reserving money for the empty slots.",
+  "bidder-not-active": "It is not that club's turn to bid.",
+  "team-not-in-lot": "That club is no longer in this lot.",
+  "no-current-lot": "There is no active lot right now.",
+  "invalid-state": "The room is not ready for that move yet.",
+};
+
+export function auctionTransitionReasonCopy(reason: string): string {
+  return AUCTION_TRANSITION_REASON_COPY[reason] ?? reason.replace(/-/g, " ");
+}
+
+export function auctionTransitionErrorCopy(message: string): string {
+  const match = /^(?:Farm auction transition rejected|Auction transition rejected):\s*(.+)$/.exec(message);
+  if (!match) return message;
+  return auctionTransitionReasonCopy(match[1]);
+}
+
 function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSession {
   if (!result.ok) {
-    throw new Error(`Auction transition rejected: ${result.reason}`);
+    throw new Error(auctionTransitionReasonCopy(result.reason));
   }
   return result.session as CpuShillAuctionSession;
 }

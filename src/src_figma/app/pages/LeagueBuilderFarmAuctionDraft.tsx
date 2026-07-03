@@ -10,6 +10,7 @@ import {
 } from "../components/DraftRosterBoard";
 import { AuctionCoachBanner } from "../components/AuctionCoachBanner";
 import { LongPressReveal } from "../components/LongPressReveal";
+import { auctionTransitionErrorCopy } from "../hooks/useAuctionDraft";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
 import {
   farmDraftRouteForLeague,
@@ -220,6 +221,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   const [cpuCount, setCpuCount] = useState(0);
   const [bidIncrement, setBidIncrement] = useState(1000);
   const [bidAmount, setBidAmount] = useState("");
+  const [helpOpen, setHelpOpen] = useState(false);
   const loadedKeyRef = useRef<string | null>(null);
   const cpuCountTouchedRef = useRef(false);
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
@@ -426,7 +428,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   const handoffPrompt = useMemo(() => {
     if (!session) return "Host setup";
     if (session.state === "NOMINATION") {
-      return "Hold - engine surfacing the next prospect.";
+      return "Hold - up next.";
     }
     if (session.state === "OPEN_BIDDING") {
       if (auction.currentBidderTeamId && !auction.isCpuTeam(auction.currentBidderTeamId)) {
@@ -523,7 +525,7 @@ export function LeagueBuilderFarmAuctionDraft() {
 
         {auction.error && (
           <div className="mb-6 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
-            {auction.error}
+            {auctionTransitionErrorCopy(auction.error)}
           </div>
         )}
 
@@ -639,9 +641,24 @@ export function LeagueBuilderFarmAuctionDraft() {
             <div className="flex items-center justify-between gap-4 mb-4">
               <h2 className="font-bold text-lg">STATE: {session?.state ?? "SETUP"}</h2>
               {session && <div className="text-sm text-[#E8E8D8]/60">Seed {session.config.nominationOrderSeed}</div>}
+              <button
+                type="button"
+                aria-label={helpOpen ? "Hide farm auction help" : "Show farm auction help"}
+                onClick={() => setHelpOpen((open) => !open)}
+                className="ml-auto h-9 w-9 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
+              >
+                ?
+              </button>
             </div>
 
-            <AuctionCoachBanner tier="farm" state={session?.state ?? "SETUP"} />
+            {helpOpen && (
+              <div className="mb-4 space-y-3">
+                <AuctionCoachBanner tier="farm" state={session?.state ?? "SETUP"} />
+                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm text-[#E8E8D8]/80">
+                  Press and hold Scout report to reveal your scout's private range and grade.
+                </div>
+              </div>
+            )}
 
             {!session && (
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-[#E8E8D8]/80">
@@ -651,8 +668,8 @@ export function LeagueBuilderFarmAuctionDraft() {
 
             {session?.state === "NOMINATION" && (
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                <div className="text-xs text-[#E8E8D8]/60">ENGINE NOMINATION</div>
-                <div className="text-xl font-bold">Surfacing the next prospect...</div>
+                <div className="text-xs text-[#E8E8D8]/60">UP NEXT</div>
+                <div className="text-xl font-bold">Next prospect is coming up...</div>
                 <div className="mt-1 text-sm text-[#E8E8D8]/70">
                   Available pool: {availablePoolCandidates.length} prospects
                 </div>
@@ -663,7 +680,7 @@ export function LeagueBuilderFarmAuctionDraft() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60">ENGINE NOMINATED</div>
+                    <div className="text-xs text-[#E8E8D8]/60">UP NOW</div>
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <div className="text-xl font-bold">{prospectDisplayName(currentLotProspect)}</div>
                       {positionBadges(currentLotProspect)}
@@ -671,7 +688,7 @@ export function LeagueBuilderFarmAuctionDraft() {
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm text-[#E8E8D8]/75">
                       <div>Age {currentLotProspect?.age ?? "N/A"}</div>
                       <LongPressReveal
-                        label="Hold to reveal scout report"
+                        label="Scout report"
                         className="sm:col-span-2 text-left bg-transparent border-0 p-0 text-[#E8E8D8]/75 cursor-pointer hover:text-[#E8E8D8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E8E8D8]"
                       >
                         <span className="grid grid-cols-1 sm:grid-cols-2 gap-2">

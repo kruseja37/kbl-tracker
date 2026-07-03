@@ -320,7 +320,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("ENGINE NOMINATED")).toBeInTheDocument();
+    expect(screen.getByText("UP NOW")).toBeInTheDocument();
     expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /SCOUT SORT/i })).not.toBeInTheDocument();
     expect(screen.getByText(targetName)).toBeInTheDocument();
@@ -328,7 +328,10 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       expect(screen.getAllByText(position).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(targetAgeText)).toBeInTheDocument();
-    const scoutReportControl = screen.getByRole("button", { name: "Hold to reveal scout report" });
+    expect(screen.queryByText("Press and hold Scout report to reveal your scout's private range and grade.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show farm auction help" }));
+    expect(screen.getByText("Press and hold Scout report to reveal your scout's private range and grade.")).toBeInTheDocument();
+    const scoutReportControl = screen.getByRole("button", { name: "Scout report" });
     expect(scoutReportControl).toBeInTheDocument();
     expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
     expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();

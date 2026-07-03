@@ -32,7 +32,7 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
-import { buildAuctionPlayers, MLB_AUCTION_SEASON } from "../../app/hooks/useAuctionDraft";
+import { auctionTransitionErrorCopy, buildAuctionPlayers, MLB_AUCTION_SEASON } from "../../app/hooks/useAuctionDraft";
 import { DEFAULT_AUCTION_SETUP_CONFIG } from "../../../data/auctionEngineConstants";
 
 const mockNavigate = vi.fn();
@@ -520,6 +520,12 @@ describe("LeagueBuilderAuctionDraft", () => {
     await resetLeagueBuilderTestState();
   });
 
+  test("DJ-19 maps machine transition reasons to GM-facing copy", () => {
+    expect(auctionTransitionErrorCopy("Auction transition rejected: bid-strands-roster")).toBe(
+      "That bid would leave you unable to fill a legal roster.",
+    );
+  });
+
   test("renders setup and begins into an engine-nominated open lot", async () => {
     const players = makePlayers();
     mockLeagueData({ players, pool: makePool(players) });
@@ -674,6 +680,8 @@ describe("LeagueBuilderAuctionDraft", () => {
     await waitFor(() => {
       expect(screen.getByText("SOLD")).toBeInTheDocument();
     });
+    expect(screen.getAllByText(/^Lot 1 of /)).not.toHaveLength(0);
+    expect(screen.queryByText(/^Lot 2 of /)).not.toBeInTheDocument();
     expect(screen.getAllByText(/(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/).length).toBeGreaterThan(0);
   });
 
@@ -821,7 +829,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     const { unmount } = render(<LeagueBuilderAuctionDraft />);
 
     expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
-    expect(screen.getByText(/Settle the empty seats from the shills below/i)).toBeInTheDocument();
+    expect(screen.getByText(/Settle the empty seats from Market Shills below/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "SETTLE FROM THE SHILLS" }));
     expect(screen.getByText(/Settle 1 empty seat from the leftovers at league minimum/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "SETTLE 1 SEAT" }));
@@ -830,14 +838,14 @@ describe("LeagueBuilderAuctionDraft", () => {
       expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
     });
     expect(screen.getByRole("button", { name: /FARM DRAFT/i })).toBeInTheDocument();
-    expect(screen.getByText("Settled 1 seat from the shills at league minimum.")).toBeInTheDocument();
+    expect(screen.getByText("Settled 1 seat from Market Shills at league minimum.")).toBeInTheDocument();
 
     unmount();
     cleanup();
     mockLeagueData({ players, pool: makePool(players) });
     render(<LeagueBuilderAuctionDraft />);
 
-    expect(await screen.findByText("Settled 1 seat from the shills at league minimum.")).toBeInTheDocument();
+    expect(await screen.findByText("Settled 1 seat from Market Shills at league minimum.")).toBeInTheDocument();
     expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
   });
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, CheckCircle2, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
+import { ArrowLeft, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 
 import {
+  auctionTransitionErrorCopy,
   buildSettleFromShillsInput,
   playerDisplayName,
   teamDisplayName,
@@ -157,12 +158,6 @@ function resultText(result: AuctionResult, playerById: Map<string, Player>, team
   return `${playerName} PASSED`;
 }
 
-function resultNoticeClass(disposition: AuctionResult["disposition"] | undefined): string {
-  if (disposition === "SOLD") return "bg-[#2F7D46] border-[#E8E8D8]/40 text-[#E8E8D8]";
-  if (disposition === "SET_ASIDE") return "bg-[#6B3A3A] border-[#FFD27A] text-[#FFE8B0]";
-  return "bg-[#4A6844] border-[#FFD27A] text-[#FFD27A]";
-}
-
 function playerPronouns(player: Player | null | undefined): { subject: "he" | "she"; object: "him" | "her"; possessive: "his" | "her" } {
   return player?.gender === "F"
     ? { subject: "she", object: "her", possessive: "her" }
@@ -193,7 +188,9 @@ function stagePhaseLabel(state: AuctionSession["state"] | "SETUP"): string {
 
 function stageLotLabel(session: AuctionSession | null): string {
   if (!session) return "No active lot";
-  const current = Math.min(session.results.length + 1, session.playerOrder.length || session.results.length + 1);
+  const isResolvedBeat = session.state === "SOLD" || session.state === "PASSED";
+  const nextLotNumber = session.results.length + (isResolvedBeat ? 0 : 1);
+  const current = Math.min(Math.max(1, nextLotNumber), session.playerOrder.length || Math.max(1, nextLotNumber));
   const total = session.playerOrder.length || session.availablePlayerIds.length || current;
   return `Lot ${current} of ${total}`;
 }
@@ -222,7 +219,7 @@ function auctionExitRepairGuidance(
   }
   if (report.clubs.some((club) => !club.legal && club.rosterCount < club.target)) {
     if (hasSettleableClub) {
-      return "The pool ran dry before this club reached 22. Settle the empty seats from the shills below, or add players in Draft Setup and re-run.";
+      return "The pool ran dry before this club reached 22. Settle the empty seats from Market Shills below, or add players in Draft Setup and re-run.";
     }
     return "The pool ran dry before this club reached 22. Add more players in Draft Setup and run the draft again.";
   }
@@ -345,7 +342,7 @@ function buildCpuDecisionVm(input: {
   bidDecision?: CpuBidOnLotDecision;
   claimDecision?: CpuLoneSurvivorDecision;
 }): NonNullable<AuctionStageVM["move"]["cpuDecision"]> {
-  const roleLabel = input.isShill ? "Shill" : "CPU team";
+  const roleLabel = input.isShill ? "Market Shill" : "CPU team";
   if (input.bidDecision) {
     const decision = input.bidDecision;
     return decision.kind === "bid"
@@ -613,7 +610,7 @@ export function LeagueBuilderAuctionDraft() {
     if (session?.state !== "AUCTION_COMPLETE") return null;
     const count = session.results.filter((result) => result.settled).length;
     if (count === 0) return null;
-    return `Settled ${count} seat${count === 1 ? "" : "s"} from the shills at league minimum.`;
+    return `Settled ${count} seat${count === 1 ? "" : "s"} from Market Shills at league minimum.`;
   }, [session]);
 
   const canProceedToFarm = Boolean(exitReport && (exitReport.allLegal || exitOverrideConfirmed));
@@ -860,7 +857,7 @@ export function LeagueBuilderAuctionDraft() {
   const handoffPrompt = useMemo(() => {
     if (!session) return "Host setup";
     if (session.state === "NOMINATION") {
-      return "Hold — engine surfacing the next player.";
+      return "Hold — up next.";
     }
     if (session.state === "OPEN_BIDDING") {
       if (auction.currentBidderTeamId && !auction.isCpuTeam(auction.currentBidderTeamId)) {
@@ -1455,7 +1452,7 @@ export function LeagueBuilderAuctionDraft() {
             <span className="chip">{handoffPrompt}</span>
             {auction.error ? (
               <div className="card" style={{ width: "100%", borderColor: "rgba(255,140,140,0.5)", color: "#FFD7D7" }}>
-                {auction.error}
+                {auctionTransitionErrorCopy(auction.error)}
               </div>
             ) : null}
           </div>
@@ -1490,17 +1487,11 @@ export function LeagueBuilderAuctionDraft() {
               </h1>
             </div>
           </div>
-          {session?.state === "AUCTION_COMPLETE" && (
-            <span className="flex items-center gap-2 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 px-4 py-2 font-bold">
-              <CheckCircle2 className="w-5 h-5" />
-              AUCTION COMPLETE
-            </span>
-          )}
         </div>
 
         {auction.error && (
           <div className="mb-6 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
-            {auction.error}
+            {auctionTransitionErrorCopy(auction.error)}
           </div>
         )}
 
@@ -1534,7 +1525,7 @@ export function LeagueBuilderAuctionDraft() {
             <div className="grid grid-cols-1 gap-3">
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
                 <div className="text-xs text-[#E8E8D8]/60">ROOM SETTINGS</div>
-                <div className="font-bold">Inherited from Draft Setup</div>
+                <div className="font-bold">Ready for the selected league</div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
@@ -1598,233 +1589,8 @@ export function LeagueBuilderAuctionDraft() {
                 The room is ready when the locked player pool can support every drafting club.
               </div>
             )}
-
-            {session?.state === "NOMINATION" && (
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                <div className="text-xs text-[#E8E8D8]/60">ENGINE NOMINATION</div>
-                <div className="text-xl font-bold">Surfacing the next player...</div>
-                <div className="mt-1 text-sm text-[#E8E8D8]/70">
-                  Available pool: {availablePoolCandidates.length} players
-                </div>
-              </div>
-            )}
-
-              {session?.state === "OPEN_BIDDING" && lot && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60">ENGINE NOMINATED</div>
-                      <div className="flex flex-wrap items-center gap-2 mb-2">
-                        <div className="text-xl font-bold">{playerDisplayName(currentLotPlayer)}</div>
-                        {positionBadges(currentLotPlayer)}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm text-[#E8E8D8]/75">
-                        <div>Value {formatMoney(lotAuctionPlayer?.iv)}</div>
-                        <div>Reserve {formatMoney(reserveAsk(lotAuctionPlayer) ?? lot.openingAsk)}</div>
-                        <div>Opening {formatMoney(lot.openingAsk)}</div>
-                      </div>
-                    </div>
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60">HIGH BID</div>
-                      <div className="text-xl font-bold">{lot.highBid === null ? "No bid yet" : formatMoney(lot.highBid)}</div>
-                      <div className="text-sm text-[#E8E8D8]/70">
-                        {lot.highBidder ? teamNameById(lot.highBidder) : "No bidder yet"}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60">CURRENT BIDDER</div>
-                      <div className="text-xl font-bold">{auction.currentBidderTeamId ? teamNameById(auction.currentBidderTeamId) : teamDisplayName(currentBidder)}</div>
-                      <div className="text-sm text-[#E8E8D8]/70">
-                        Still in: {lot.stillIn.map((teamId) => teamNameById(teamId)).join(", ")}
-                      </div>
-                    </div>
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60">YOUR REMAINING BUDGET</div>
-                      <div className="text-xl font-bold">{formatMoney(currentBidderTeamState?.budgetRemaining)}</div>
-                      <div className="text-sm text-[#E8E8D8]/70">{auction.currentBidderTeamId ? teamNameById(auction.currentBidderTeamId) : teamDisplayName(currentBidder)}</div>
-                    </div>
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60">YOUR MAX BID</div>
-                      <div className="text-xl font-bold">{formatMoney(currentBidderMaxBid)}</div>
-                      <div className="text-sm text-[#FFD27A] font-bold">Teams below the current ask are auto-passed.</div>
-                    </div>
-                  </div>
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
-                      <div>
-                        <div className="text-xs text-[#E8E8D8]/60">ROSTER SLOTS REMAINING</div>
-                        <div className="text-3xl font-bold">{currentBidderTeamState?.rosterSlotsRemaining ?? "N/A"}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs text-[#E8E8D8]/60 mb-2">CURRENT ROSTER POSITION TALLY</div>
-                        <div className="text-sm text-[#E8E8D8]/70">The stage board carries the live roster read.</div>
-                      </div>
-                    </div>
-                  </div>
-                  {auction.currentBidderTeamId ? (
-                    <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                      <div className="text-xs text-[#E8E8D8]/60 mb-3">RAISE</div>
-                      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px_auto] gap-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {[1, 2, 5].map((multiple) => {
-                            const amount = minBid === null ? null : minBid + session.config.bidIncrement * multiple;
-                            const disabled = auction.isWorking
-                              || currentBidderIsCpu
-                              || amount === null
-                              || currentBidderMaxBid === null
-                              || amount > currentBidderMaxBid;
-                            return (
-                              <button
-                                key={multiple}
-                                type="button"
-                                onClick={() => amount !== null && void auction.bid(auction.currentBidderTeamId!, amount)}
-                                disabled={disabled}
-                                className="px-4 py-2 bg-[#2F7D46] hover:bg-[#3F8D56] disabled:opacity-50 disabled:hover:bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold"
-                              >
-                                +{multiple}× {formatMoney(amount)}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <label className="block text-xs text-[#E8E8D8]/70 font-bold">
-                          CUSTOM BID
-                          <input
-                            aria-label="Custom bid amount"
-                            value={bidAmount}
-                            onChange={(event) => setBidAmount(event.target.value)}
-                            onBlur={() => {
-                              const clamped = clampBidAmount(Number(bidAmount));
-                              if (clamped !== null) setBidAmount(String(clamped));
-                            }}
-                            type="number"
-                            min={minBid ?? undefined}
-                            max={currentBidderMaxBid ?? undefined}
-                            disabled={auction.isWorking || currentBidderIsCpu}
-                            className="mt-1 w-full bg-[#2d3d2f] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none disabled:opacity-50"
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const clamped = clampBidAmount(Number(bidAmount));
-                            if (clamped === null) return;
-                            setBidAmount(String(clamped));
-                            void auction.bid(auction.currentBidderTeamId!, clamped);
-                          }}
-                          disabled={auction.isWorking || currentBidderIsCpu || clampBidAmount(Number(bidAmount)) === null}
-                          className="self-end px-4 py-2 bg-[#2F7D46] hover:bg-[#3F8D56] disabled:opacity-50 disabled:hover:bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold"
-                        >
-                          RAISE CUSTOM
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => void auction.pass(auction.currentBidderTeamId!)}
-                        disabled={auction.isWorking || currentBidderIsCpu}
-                        className="mt-3 px-4 py-2 bg-[#6B3A3A] hover:bg-[#7B4A4A] disabled:opacity-50 border-4 border-[#E8E8D8] font-bold"
-                      >
-                        PASS
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                    onClick={() => void auction.resolve()}
-                    disabled={auction.isWorking}
-                    className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                  >
-                    RESOLVE LOT
-                  </button>
-                )}
-              </div>
-            )}
-
-            {session?.state === "RESOLVE" && (
-              <div className="space-y-4">
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                  <div className="text-xs text-[#E8E8D8]/60">PENDING CLAIM</div>
-                  <div className="text-xl font-bold">
-                    {session.pendingClaim
-                      ? `${teamNameById(session.pendingClaim.teamId)} can claim ${playerDisplayName(currentLotPlayer)} at ${formatMoney(session.pendingClaim.price)}`
-                      : "Ready to resolve"}
-                  </div>
-                </div>
-                {session.pendingClaim ? (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => void auction.claimAtReserve()}
-                      disabled={auction.isWorking || auction.isCpuTeam(session.pendingClaim.teamId)}
-                      className="px-4 py-2 bg-[#2F7D46] hover:bg-[#3F8D56] disabled:opacity-50 border-4 border-[#E8E8D8] font-bold"
-                    >
-                      CLAIM AT RESERVE
-                    </button>
-                    <button
-                      onClick={() => void auction.pass(session.pendingClaim!.teamId)}
-                      disabled={auction.isWorking || auction.isCpuTeam(session.pendingClaim.teamId)}
-                      className="px-4 py-2 bg-[#6B3A3A] hover:bg-[#7B4A4A] disabled:opacity-50 border-4 border-[#E8E8D8] font-bold"
-                    >
-                      PASS
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => void auction.resolve()}
-                    disabled={auction.isWorking}
-                    className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                  >
-                    RESOLVE
-                  </button>
-                )}
-              </div>
-            )}
-
-              {(session?.state === "SOLD" || session?.state === "PASSED") && (
-                <div className="space-y-4">
-                  <div className={`${resultNoticeClass(latestResult?.disposition)} border-4 p-4`}>
-                    <div className="text-xs text-[#E8E8D8]/60">LAST RESULT</div>
-                    <div className="text-xl font-bold">{latestResult ? resultText(latestResult, playerById, teamNameById) : session.state}</div>
-                  </div>
-                  <button
-                    onClick={() => void auction.advance()}
-                  disabled={auction.isWorking}
-                  className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                >
-                  NEXT LOT
-                </button>
-              </div>
-            )}
-
-              {session?.state === "AUCTION_COMPLETE" && (
-                <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <span>AUCTION COMPLETE. MLB rosters are filled in the auction session.</span>
-                  <button
-                    onClick={requestFarmDraftExit}
-                    className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold whitespace-nowrap"
-                  >
-                    {canProceedToFarm ? "FARM DRAFT →" : "REVIEW ROSTERS"}
-                  </button>
-                </div>
-              )}
-            </section>
-          </div>
-
-        {session && (
-          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <h2 className="font-bold text-lg mb-4">LOT LOG</h2>
-            <div className="space-y-2">
-                {session.results.slice(-12).reverse().map((result, index) => (
-                  <div key={`${result.playerId}-${session.results.length - index}`} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm">
-                    {resultText(result, playerById, teamNameById)}
-                  </div>
-                ))}
-              {session.results.length === 0 && (
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm text-[#E8E8D8]/70">
-                  No lots resolved yet.
-                </div>
-              )}
-            </div>
           </section>
-        )}
+        </div>
 
       </div>
     </div>
