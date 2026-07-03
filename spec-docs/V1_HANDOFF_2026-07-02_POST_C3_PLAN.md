@@ -259,3 +259,16 @@ Per FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §6 routing (Opus: "ticket the untic
   EXPLICIT in that ticket's scope (the per-seat panel must recompute for the farm lot, same secrecy +
   live-recompute rules as MLB). Nomination-turn whisper stays owned by the nomination-strategy spec
   (separate). Owner: rides R-IA4 (Codex builds; Fable design-reviews the farm surface).
+
+## §12. NEW TICKETS from the DJ-05/DJ-06 design (Opus, 2026-07-03)
+
+- **AUCTION-SETTLE-FROM-SHILLS (v1.1 economy batch).** An in-room repair mechanic for a club that
+  exits the MLB auction short/illegal: let it force-claim shill-held bodies at league-minimum (the
+  zero-real-demand clearing price), cheapest-verified-legal via `cheapestLegalCompletion`, nomination
+  order, deterministic. Ruled OUT of v1 by Fable (FABLE_DJ0506_DESIGN §2.8) — the reachable population
+  post-DJ-13 is too small to buy it before the playthrough; the DJ-06 exit gate + override covers v1.
+  Spec-ready from §2.8. Owner: Fable spec → Codex build later.
+- **DJ-25 rider (kill-list reminder).** The legacy auction-complete banner
+  (LeagueBuilderAuctionDraft.tsx ~1610-1620) now carries the DJ-06 gate predicate (canProceedToFarm).
+  When DJ-25 removes that legacy complete UI, the gate logic must survive on the AuctionStage HANDOFF
+  CHECK panel path only — do not drop the gate with the banner. Fold into the DJ-25 kill-on-sight sweep.
