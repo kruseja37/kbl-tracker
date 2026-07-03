@@ -27636,3 +27636,53 @@ DB_VERSION); `src/data/tierParams.ts` (TIER_CAPS); `src/engines/leagueConstructi
 - `git diff --stat` — the §7 Phase-1 surface only; GameTracker NOT present. Report the ratings-invariant
   test result explicitly.
 <!-- ===== END CONTRACT: CODEX-HARDCAP-P1 ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ03-CPUID ===== -->
+## CODEX-DJ03-CPUID — stable per-club CPU bidding identity (DJ-03)
+
+**Binding design:** `spec-docs/FABLE_P0_DESIGN_2026-07-02.md` SECTION 2 (DJ-03) — build it EXACTLY.
+Fable is the design authority; ambiguity goes back to Fable, not builder judgment. Branch-only
+(experiment/manager-wpa-window); do NOT commit/push; leave the tree dirty for Opus.
+
+**Problem:** CPU-controlled clubs fall back to buildSeededCpuShill(teamId, per-decision-seed), so a
+real AI club's archetype/band-priorities/personality RE-ROLL on every bid event; and the market model
+prices them via their public band priorities the bidder never reads. Plus archetype-provenance clubs
+are invisible to the market (capIdentity.bandPriorities never set by the archetype path).
+
+**Read first:** FABLE_P0_DESIGN §2 in full; `src/engines/archetypeIdentity.ts` (archetypeToCapIdentity,
+archetypeCapShift, luxKeyToModStat); `src/engines/cpuShillBidding.ts` (CpuShillProfile ~26-46,
+buildSeededCpuShill ~503-513, buildArchetypeShillProfile, archetypeBandPriorities ~482-496,
+resolveSessionShill ~453-475, personalities list + hashString); `src/engines/leagueConstruction.ts`
+(BandPriorities, LUX_TO_MOD_STAT ~115-124); `src/src_figma/app/hooks/useAuctionDraft.ts` (initAuction:
+buildPureShillProfiles install ~ the cpuShills init; sessionPool is now built there — add clubs to the
+SAME cpuShills map); `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (marketBandPrioritiesByTeamId
+memo); `src/engines/auctionMarketModel.ts` (~298-300 unknown-bidder, ~510 bidder.bandPriorities);
+`src/src_figma/app/hooks/cpuTeamRoles.ts` (controlledBy==='ai' predicate / deriveControlledCpuTeamIds).
+
+**Deliverables (per §2.1-§2.4):**
+1. `resolveClubBandPriorities(input:{capIdentity?, mlbArchetypeKey?}): BandPriorities | null` in
+   archetypeIdentity.ts — the priority chain EXACTLY per §2.1 (1: capIdentity.bandPriorities if any band>0;
+   2: mlbArchetypeKey → archetypeBandPriorities(arch) [the ONE bridge — reuse it, do not re-implement];
+   3: capIdentity.rawShift → the lift computation per §2.1 step 3; 4: null).
+2. `buildClubCpuProfile({teamId, leagueId, bandPriorities, archetypeId?}): CpuShillProfile` in
+   cpuShillBidding.ts — reuse CpuShillProfile; STABLE personality = personalities[hashString(`${leagueId}:${teamId}:club-personality`)%3]; bandPriorities verbatim; NEVER set shillMaxWins for real clubs; leave personalityBias/interestAggression/maxInterestProbability unset (resolve from personality).
+3. Init wiring (§2.2): in initAuction, add to cpuShills an entry for every controlledBy==='ai' team via
+   buildClubCpuProfile({..., bandPriorities: resolveClubBandPriorities(team) ?? UNIFORM_BAND_PRIORITIES}).
+   Humans get NO entry. Pure-shill entries untouched. No DB bump (additive on the session record).
+4. Resume heal (§2.2): on load, synthesize missing club entries for deriveControlledCpuTeamIds ∩ session
+   with the SAME builder; idempotent; persist once.
+5. Market coherence (§2.3): marketBandPrioritiesByTeamId memo body → resolveClubBandPriorities(team) per
+   team, skip nulls. Do NOT feed profile personality into the market view (keep MEAN_PERSONALITY_SPREAD —
+   personality is hidden identity; only band priorities are public).
+6. Seed stays NOISE-only (§2.4): no engine-signature changes; the fix is that session.cpuShills[teamId]
+   now exists for real clubs so resolveSessionShill finds a complete profile.
+
+**Verify before returning (report ACTUAL output):**
+- `NODE_ENV= npm run build` exit 0 (tail).
+- Write the §2.5 acceptance tests (1-6: determinism/stability, coherence, the 3 provenance paths incl.
+  the rawShift==archetype bijectivity check, shill isolation, resume heal, walled personality) + run
+  them green.
+- FULL suite `NODE_ENV= npx vitest run` — report counts; the characterized reds only (wpaRuntimeBoundary,
+  franchiseManualSmokeFixture, archetypeBalanceSimulator, LeagueBuilderDraftSetup, prospectScoutingDraftEngine); no NEW red.
+- `git diff --stat` — archetypeIdentity.ts, cpuShillBidding.ts, useAuctionDraft.ts, LeagueBuilderAuctionDraft.tsx (+ tests). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-DJ03-CPUID ===== -->

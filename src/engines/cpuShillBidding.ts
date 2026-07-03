@@ -23,6 +23,8 @@ import { playerFillsHardRequirement, teamRosterNeed } from './rosterNeed';
 
 export type CpuShillPersonality = 'sniper' | 'spender' | 'zealot';
 
+const CPU_SHILL_PERSONALITIES: readonly CpuShillPersonality[] = ['sniper', 'spender', 'zealot'];
+
 export interface CpuShillProfile {
   teamId: string;
   personality: CpuShillPersonality;
@@ -501,14 +503,31 @@ export function archetypeBandPriorities(arch: HistoricalArchetype): BandPrioriti
  * Deterministic per (teamId, seed); personality stays independently seeded.
  */
 export function buildArchetypeShillProfile(teamId: string, seed: string): CpuShillProfile {
-  const personalities: readonly CpuShillPersonality[] = ['sniper', 'spender', 'zealot'];
   const archetype =
     HISTORICAL_ARCHETYPES[hashString(`${seed}:${teamId}:archetype`) % HISTORICAL_ARCHETYPES.length];
   return {
     teamId,
-    personality: personalities[hashString(`${seed}:${teamId}:personality`) % personalities.length],
+    personality: CPU_SHILL_PERSONALITIES[
+      hashString(`${seed}:${teamId}:personality`) % CPU_SHILL_PERSONALITIES.length
+    ],
     archetypeId: archetype.id,
     bandPriorities: archetypeBandPriorities(archetype),
+  };
+}
+
+export function buildClubCpuProfile(input: {
+  teamId: string;
+  leagueId: string;
+  bandPriorities: BandPriorities;
+  archetypeId?: string | null;
+}): CpuShillProfile {
+  return {
+    teamId: input.teamId,
+    personality: CPU_SHILL_PERSONALITIES[
+      hashString(`${input.leagueId}:${input.teamId}:club-personality`) % CPU_SHILL_PERSONALITIES.length
+    ],
+    bandPriorities: input.bandPriorities,
+    ...(input.archetypeId ? { archetypeId: input.archetypeId } : {}),
   };
 }
 

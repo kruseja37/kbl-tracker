@@ -108,7 +108,7 @@ export interface CompetingTeamProfile {
   /** Public demand shape (the team's league-setup archetype as band priorities); null = unknown. */
   bandPriorities: BandPriorities | null;
   /** Known bidding personality (CPU teams); null = unknown → neutral bias + width. */
-  personality: CpuShillPersonality | null;
+  personality?: CpuShillPersonality | null;
 }
 
 export interface ContestedSignal {
@@ -162,7 +162,7 @@ export interface MarketBidderView {
   /** The team's solvency ceiling for THIS lot (completion-based when the info exists). */
   maxBid: number;
   bandPriorities: BandPriorities | null;
-  personality: CpuShillPersonality | null;
+  personality?: CpuShillPersonality | null;
   /** own_need × leagueScarcity for this player's position; 1 when position info is unknown. */
   needMultiplier: number;
   /** True when winning this player would strand the team (legality) — never a suitor. */
@@ -508,7 +508,10 @@ export function buildLotViewFromSession(
         slotsRemaining: team.rosterSlotsRemaining,
         maxBid: sessionBidCeiling(session, team.teamId) ?? 0,
         bandPriorities: isShill ? null : options.bandPrioritiesByTeamId?.get(team.teamId) ?? null,
-        personality: isShill ? null : options.personalityByTeamId?.get(team.teamId) ?? null,
+        personality: isShill
+          ? null
+          : options.personalityByTeamId?.get(team.teamId)
+            ?? (options.humanTeamIds?.has(team.teamId) ? null : undefined),
         needMultiplier: ownNeedMultiplier(need, candidateShape, team.rosterSlotsRemaining) * scarcity,
         wouldStrand,
       };
@@ -706,7 +709,10 @@ export function projectBidVsPass(input: BidVsPassInput): { bid: BoardProjection;
               : isSelf
                 ? input.ownBandPriorities
                 : options.bandPrioritiesByTeamId?.get(t.teamId) ?? null,
-            personality: isShill ? null : options.personalityByTeamId?.get(t.teamId) ?? null,
+            personality: isShill
+              ? null
+              : options.personalityByTeamId?.get(t.teamId)
+                ?? (options.humanTeamIds?.has(t.teamId) ? null : undefined),
             needMultiplier: 1,
             wouldStrand: false,
           };

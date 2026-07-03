@@ -5,7 +5,15 @@ import {
   type HistoricalArchetype,
   type ArchetypeStat,
 } from '../data/historicalArchetypes';
-import { luxKeyToModStat, type TeamCapIdentity } from './leagueConstruction';
+import {
+  BANDS,
+  BAND_STATS,
+  luxKeyToModStat,
+  type Band,
+  type BandPriorities,
+  type TeamCapIdentity,
+} from './leagueConstruction';
+import { archetypeBandPriorities } from './cpuShillBidding';
 import type { ModStat } from '../data/tierParams';
 import { saveTeam, type Team } from '../utils/leagueBuilderStorage';
 
@@ -36,6 +44,41 @@ export function archetypeToCapIdentity(arch: HistoricalArchetype): TeamCapIdenti
     decrease: uniqueModNames(arch.nerfs),
     rawShift: rawShift as Record<ModStat, number>,
   };
+}
+
+export function resolveClubBandPriorities(input: {
+  capIdentity?: TeamCapIdentity | null;
+  mlbArchetypeKey?: string | null;
+}): BandPriorities | null {
+  const priorities = input.capIdentity?.bandPriorities;
+  if (priorities && BANDS.some((band) => priorities[band] > 0)) {
+    return priorities;
+  }
+
+  const archetype = input.mlbArchetypeKey
+    ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === input.mlbArchetypeKey)
+    : undefined;
+  if (archetype) {
+    return archetypeBandPriorities(archetype);
+  }
+
+  const rawShift = input.capIdentity?.rawShift;
+  if (rawShift) {
+    const lift = Object.fromEntries(BANDS.map((band) => [band, 0])) as Record<Band, number>;
+    for (const band of BANDS) {
+      lift[band] = BAND_STATS[band].reduce(
+        (sum, stat) => sum + Math.max(0, rawShift[stat] ?? 0),
+        0,
+      );
+    }
+    const top = Math.max(...BANDS.map((band) => lift[band]));
+    if (top <= 0) {
+      return Object.fromEntries(BANDS.map((band) => [band, 1])) as BandPriorities;
+    }
+    return Object.fromEntries(BANDS.map((band) => [band, lift[band] / top])) as BandPriorities;
+  }
+
+  return null;
 }
 
 export async function selectTeamArchetype(team: Team, mlbKey: string, farmKey?: string): Promise<Team> {

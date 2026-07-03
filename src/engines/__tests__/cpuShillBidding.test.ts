@@ -13,6 +13,7 @@ import {
 } from '../auctionStateMachine';
 import {
   bargainInterestProbability,
+  buildClubCpuProfile,
   cpuBidOnLot,
   cpuDecideLoneSurvivor,
   evaluateCpuArchetypeFit,
@@ -90,6 +91,50 @@ function openEngineLot(session: CpuShillAuctionSession): CpuShillAuctionSession 
 }
 
 describe('cpuShillBidding AUC-2.2 pure policy', () => {
+  test('DJ-03 builds stable complete real-club profiles without shill-only fields', () => {
+    const bandPriorities = { ...NEUTRAL_PRIORITIES, Power: 1 };
+    const first = buildClubCpuProfile({
+      teamId: 'cpu-club',
+      leagueId: 'league-1',
+      bandPriorities,
+      archetypeId: 'murderers-row',
+    });
+    const second = buildClubCpuProfile({
+      teamId: 'cpu-club',
+      leagueId: 'league-1',
+      bandPriorities,
+      archetypeId: 'murderers-row',
+    });
+
+    expect(second).toEqual(first);
+    expect(first.bandPriorities).toBe(bandPriorities);
+    expect(first.archetypeId).toBe('murderers-row');
+    expect(first.shillMaxWins).toBeUndefined();
+    expect(first.personalityBias).toBeUndefined();
+    expect(first.interestAggression).toBeUndefined();
+    expect(first.maxInterestProbability).toBeUndefined();
+  });
+
+  test('DJ-03 per-decision seeds only change valuation noise for a profiled real club', () => {
+    const profile = buildClubCpuProfile({
+      teamId: 'cpu',
+      leagueId: 'league-1',
+      bandPriorities: { ...NEUTRAL_PRIORITIES, Power: 1 },
+      archetypeId: 'murderers-row',
+    });
+    const player = PLAYERS[0];
+    const fit = evaluateCpuArchetypeFit(player, profile);
+    const bias = profile.personality === 'spender' ? 1.08 : profile.personality === 'zealot' ? 1.02 : 0.98;
+
+    for (const seed of ['decision:0:open', 'decision:5:high-bid', 'decision:9:still-in']) {
+      const valuation = evaluateCpuValuation(player, profile, seed);
+      expect(valuation / (player.iv * fit * bias)).toBeGreaterThanOrEqual(0.88);
+      expect(valuation / (player.iv * fit * bias)).toBeLessThanOrEqual(1.12);
+      expect(profile.bandPriorities).toEqual({ ...NEUTRAL_PRIORITIES, Power: 1 });
+      expect(profile.archetypeId).toBe('murderers-row');
+    }
+  });
+
   test('valuation is IV x archetypeFit(composeIdentity) x personalityBias x seeded noise within +/-12%', () => {
     const player = PLAYERS[0];
     const seed = 'valuation-proof';

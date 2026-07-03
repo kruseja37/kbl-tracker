@@ -13,15 +13,18 @@ import {
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
 import { computeAuctionTeamProjectedTaxWithCaps } from "../../../engines/auctionLuxuryTax";
-import type { ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
+import type { BandPriorities, ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
 import {
   buildArchetypeShillProfile,
+  buildClubCpuProfile,
   type CpuShillAuctionSession,
   type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
+import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import { SIZING_TUNING } from "../../../engines/auctionPoolSizing";
 import {
   classifyCpuTeams,
+  deriveControlledCpuTeamIds,
   deriveShillTeamIds,
 } from "../../../engines/cpuTeamRoles";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
@@ -61,6 +64,14 @@ export {
 } from "../../../utils/leagueBuilderAuctionPipeline";
 
 const MAX_CPU_AUTO_ADVANCE_STEPS = 400;
+const UNIFORM_BAND_PRIORITIES: BandPriorities = {
+  Power: 1,
+  Contact: 1,
+  Speed: 1,
+  Defense: 1,
+  Rotation: 1,
+  Bullpen: 1,
+};
 
 type AuctionDraftContext = {
   leagueId: string;
@@ -235,6 +246,53 @@ function buildPureShillProfiles(leagueId: string, count: number): Record<string,
       shillMaxWins: SIZING_TUNING.winsPerShill,
     }];
   }));
+}
+
+function buildClubCpuProfileForTeam(leagueId: string, team: Team): CpuShillProfile {
+  return buildClubCpuProfile({
+    teamId: team.id,
+    leagueId,
+    bandPriorities: resolveClubBandPriorities(team) ?? UNIFORM_BAND_PRIORITIES,
+    archetypeId: team.mlbArchetypeKey ?? null,
+  });
+}
+
+function buildClubCpuProfiles(leagueId: string, leagueTeams: readonly Team[]): Record<string, CpuShillProfile> {
+  return Object.fromEntries(
+    leagueTeams
+      .filter((team) => team.controlledBy === "ai")
+      .map((team) => [team.id, buildClubCpuProfileForTeam(leagueId, team)]),
+  );
+}
+
+function healMissingClubCpuProfiles(input: {
+  session: CpuShillAuctionSession;
+  leagueId: string;
+  leagueTeams: readonly Team[];
+}): { session: CpuShillAuctionSession; changed: boolean } {
+  const nominationIds = new Set(input.session.nominationOrder);
+  const missingTeams = input.leagueTeams.filter((team) => (
+    deriveControlledCpuTeamIds([team]).includes(team.id) &&
+    nominationIds.has(team.id) &&
+    !input.session.cpuShills?.[team.id]
+  ));
+
+  if (missingTeams.length === 0) {
+    return { session: input.session, changed: false };
+  }
+
+  return {
+    changed: true,
+    session: {
+      ...input.session,
+      cpuShills: {
+        ...input.session.cpuShills,
+        ...Object.fromEntries(
+          missingTeams.map((team) => [team.id, buildClubCpuProfileForTeam(input.leagueId, team)]),
+        ),
+      },
+    },
+  };
 }
 
 function buildPureShillAuctionTeams(input: {
@@ -416,8 +474,18 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       players: leagueData.players,
     });
 
+    const healed = healMissingClubCpuProfiles({
+      session: row.session,
+      leagueId,
+      leagueTeams: nextLeagueTeams,
+    });
+    const withTax = applyAuctionLuxuryTaxForLot(healed.session, taxContextRef.current);
+    if (healed.changed) {
+      await persist(withTax, nextContext);
+    }
+
     const resumed = await autoAdvanceCpu(
-      applyAuctionLuxuryTaxForLot(row.session, taxContextRef.current),
+      withTax,
       nextContext,
       nextLeagueTeams,
     );
@@ -486,7 +554,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     const nextContext = { leagueId, seasonNumber: MLB_AUCTION_SEASON };
     const initialized = {
       ...(initAuctionSession({ teams, players, config }) as CpuShillAuctionSession),
-      cpuShills: buildPureShillProfiles(leagueId, explicitShillCount),
+      cpuShills: {
+        ...buildPureShillProfiles(leagueId, explicitShillCount),
+        ...buildClubCpuProfiles(leagueId, nextLeagueTeams),
+      },
     };
 
     setContext(nextContext);

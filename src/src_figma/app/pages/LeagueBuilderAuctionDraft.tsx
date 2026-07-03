@@ -45,6 +45,7 @@ import {
   estimateMarket,
   type EstimatedMarket,
 } from "../../../engines/auctionMarketModel";
+import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import {
   buildAuctionBoardFrame,
   type AuctionBoardFrame,
@@ -448,6 +449,17 @@ export function applyAuctionWhisperRosterCleanGates(
   };
 }
 
+export function buildMarketBandPrioritiesByTeamId(leagueTeams: readonly Team[]): Map<string, BandPriorities> {
+  const map = new Map<string, BandPriorities>();
+  for (const team of leagueTeams) {
+    const priorities = resolveClubBandPriorities(team);
+    if (priorities) {
+      map.set(team.id, priorities);
+    }
+  }
+  return map;
+}
+
 function boardPositionLabel(player: Player | null | undefined): string {
   return playerPositions(player).join("/") || "POS";
 }
@@ -534,15 +546,10 @@ export function LeagueBuilderAuctionDraft() {
   const latestResult = session?.results.at(-1) ?? null;
   const shillTeamIdSet = useMemo(() => new Set(auction.shillTeamIds), [auction.shillTeamIds]);
   const marketLiftTable = useMemo(() => buildArchetypeLiftTable(), []);
-  const marketBandPrioritiesByTeamId = useMemo(() => {
-    const map = new Map<string, BandPriorities>();
-    for (const team of leagueTeams) {
-      if (team.capIdentity?.bandPriorities) {
-        map.set(team.id, team.capIdentity.bandPriorities);
-      }
-    }
-    return map;
-  }, [leagueTeams]);
+  const marketBandPrioritiesByTeamId = useMemo(
+    () => buildMarketBandPrioritiesByTeamId(leagueTeams),
+    [leagueTeams],
+  );
   const marketHumanTeamIds = useMemo(
     () => new Set(leagueTeams.filter((team) => team.controlledBy !== "ai").map((team) => team.id)),
     [leagueTeams],

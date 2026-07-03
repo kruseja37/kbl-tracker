@@ -3,12 +3,20 @@ import "fake-indexeddb/auto";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { getTeamAuctionMaxBid, seededNominationOrder } from "../../../../engines/auctionStateMachine";
+import {
+  getTeamAuctionMaxBid,
+  initAuctionSession,
+  seededNominationOrder,
+  type AuctionPlayer as EnginePlayer,
+} from "../../../../engines/auctionStateMachine";
+import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
+import { archetypeBandPriorities } from "../../../../engines/cpuShillBidding";
 import {
   buildArchetypeLiftTable,
   buildLotViewFromSession,
   estimateMarket,
 } from "../../../../engines/auctionMarketModel";
+import { HISTORICAL_ARCHETYPES } from "../../../../data/historicalArchetypes";
 import type { LuxuryCapRow } from "../../../../data/tierParams";
 import {
   __resetLeagueBuilderDatabaseForTests,
@@ -27,6 +35,7 @@ import {
   type UseLeagueBuilderDataReturn,
 } from "../../../hooks/useLeagueBuilderData";
 import { useAuctionDraft } from "../useAuctionDraft";
+import { buildMarketBandPrioritiesByTeamId } from "../../pages/LeagueBuilderAuctionDraft";
 
 vi.mock("../../../../utils/syncEngine", () => ({
   syncEngine: {
@@ -72,7 +81,7 @@ function makeLeague(id: string, teamIds: string[]): LeagueTemplate {
   };
 }
 
-function makeTeam(id: string, controlledBy: Team["controlledBy"] = "human"): Team {
+function makeTeam(id: string, controlledBy: Team["controlledBy"] = "human", overrides: Partial<Team> = {}): Team {
   return {
     id,
     name: id.toUpperCase(),
@@ -85,6 +94,7 @@ function makeTeam(id: string, controlledBy: Team["controlledBy"] = "human"): Tea
     leagueIds: ["league"],
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
+    ...overrides,
   };
 }
 
@@ -414,6 +424,137 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.results).toHaveLength(1);
   });
 
+  test("DJ-03 initializes stable real-club CPU profiles and keeps market priorities coherent", async () => {
+    const archetype = HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === "murderers-row")!;
+    const teamIds = ["human", "cpu", "blank"];
+    const shillId = "__auction_shill__league-dj03-init__1";
+    const seed = seedWithFirst([...teamIds, shillId], "human");
+    const leagueTeams = [
+      makeTeam("human"),
+      makeTeam("cpu", "ai", { mlbArchetypeKey: archetype.id }),
+      makeTeam("blank", "ai"),
+    ];
+    mockLeagueData({
+      leagues: [makeLeague("league-dj03-init", teamIds)],
+      teams: leagueTeams,
+      pools: { "league-dj03-init": makePool("league-dj03-init") },
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.initAuction("league-dj03-init", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 1,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const firstProfile = result.current.session?.cpuShills?.cpu;
+    expect(firstProfile).toMatchObject({
+      teamId: "cpu",
+      archetypeId: archetype.id,
+      bandPriorities: archetypeBandPriorities(archetype),
+    });
+    expect(firstProfile?.shillMaxWins).toBeUndefined();
+    expect(firstProfile?.personalityBias).toBeUndefined();
+    expect(firstProfile?.interestAggression).toBeUndefined();
+    expect(firstProfile?.maxInterestProbability).toBeUndefined();
+    expect(result.current.session?.cpuShills?.[shillId]?.shillMaxWins).toEqual(expect.any(Number));
+    expect(result.current.session?.cpuShills?.blank?.bandPriorities).toEqual({
+      Power: 1,
+      Contact: 1,
+      Speed: 1,
+      Defense: 1,
+      Rotation: 1,
+      Bullpen: 1,
+    });
+
+    const marketMap = buildMarketBandPrioritiesByTeamId(leagueTeams);
+    expect(marketMap.get("cpu")).toEqual(firstProfile?.bandPriorities);
+    expect(marketMap.has("blank")).toBe(false);
+
+    const marketView = result.current.session
+      ? buildLotViewFromSession(result.current.session, {
+          shillTeamIds: new Set(result.current.shillTeamIds),
+          advisedTeamId: null,
+          bandPrioritiesByTeamId: marketMap,
+          humanTeamIds: new Set(["human"]),
+        })
+      : null;
+    const cpuBidder = marketView?.bidders.find((bidder) => bidder.teamId === "cpu");
+    expect(cpuBidder?.bandPriorities).toEqual(firstProfile?.bandPriorities);
+    expect(cpuBidder?.personality).toBeUndefined();
+
+    await act(async () => {
+      await result.current.initAuction("league-dj03-init", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 1,
+        bidIncrement: 1_000,
+      });
+    });
+
+    expect(result.current.session?.cpuShills?.cpu).toEqual(firstProfile);
+  });
+
+  test("DJ-03 resumes legacy sessions by healing missing real-club profiles once", async () => {
+    const archetype = HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === "the-opener")!;
+    const teamIds = ["human", "cpu"];
+    const legacySession = initAuctionSession({
+      teams: [
+        { teamId: "human", budgetRemaining: 999_000, rosterSlotsRemaining: 22 },
+        { teamId: "cpu", budgetRemaining: 888_000, rosterSlotsRemaining: 22 },
+      ],
+      players: [{
+        playerId: "p1",
+        iv: 50_000,
+        ivPercentile: 100,
+        pos: { isPitcher: false, position: "CF" },
+      }],
+      nominationOrder: teamIds,
+      config: { nominationOrderSeed: seedWithFirst(teamIds, "human"), bidIncrement: 1_000 },
+    }) as CpuShillAuctionSession;
+    mockLeagueData({
+      leagues: [makeLeague("league-dj03-heal", teamIds)],
+      teams: [
+        makeTeam("human"),
+        makeTeam("cpu", "ai", { mlbArchetypeKey: archetype.id }),
+      ],
+      pools: { "league-dj03-heal": { ...makePool("league-dj03-heal", ["p1"]), locked: true } },
+      players: [makePlayer("p1")],
+    });
+    await saveAuctionSession({
+      id: createAuctionSessionId("league-dj03-heal", 1),
+      leagueId: "league-dj03-heal",
+      seasonNumber: 1,
+      seed: legacySession.config.nominationOrderSeed,
+      session: legacySession,
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.loadAuction("league-dj03-heal");
+    });
+
+    const healedProfile = result.current.session?.cpuShills?.cpu;
+    expect(healedProfile).toMatchObject({
+      teamId: "cpu",
+      archetypeId: archetype.id,
+      bandPriorities: archetypeBandPriorities(archetype),
+    });
+    expect(result.current.session?.cpuShills?.human).toBeUndefined();
+    const persisted = await getAuctionSession("league-dj03-heal");
+    expect(persisted?.session.cpuShills?.cpu).toEqual(healedProfile);
+    expect(persisted?.session.cpuShills?.human).toBeUndefined();
+
+    await act(async () => {
+      await result.current.loadAuction("league-dj03-heal");
+    });
+
+    expect(result.current.session?.cpuShills?.cpu).toEqual(healedProfile);
+  });
+
   test("autosaves committed transitions after user actions", async () => {
     const teamIds = ["human", "other"];
     const seed = seedWithFirst(teamIds, "human");
@@ -638,8 +779,6 @@ describe("useAuctionDraft", () => {
 // -----------------------------------------------------------------------------------------------
 // FABLE-C3-FIX F3: the strand-safe transition helpers (pure — no hook render needed).
 // -----------------------------------------------------------------------------------------------
-import { initAuctionSession, type AuctionPlayer as EnginePlayer } from "../../../../engines/auctionStateMachine";
-import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
 import { strandSafeBidTransition, strandSafeClaimTransition } from "../useAuctionDraft";
 
 describe("strand-safe CPU transitions (FABLE-C3-FIX F3)", () => {

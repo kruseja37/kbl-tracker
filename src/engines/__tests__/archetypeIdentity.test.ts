@@ -8,7 +8,8 @@ import {
 } from '../../data/historicalArchetypes';
 import { type LuxuryCapRow, type ModStat } from '../../data/tierParams';
 import { saveTeam, type Team } from '../../utils/leagueBuilderStorage';
-import { archetypeToCapIdentity, selectTeamArchetype } from '../archetypeIdentity';
+import { archetypeBandPriorities } from '../cpuShillBidding';
+import { archetypeToCapIdentity, resolveClubBandPriorities, selectTeamArchetype } from '../archetypeIdentity';
 import { identityCapShift, shiftLuxuryCaps, luxKeyToModStat, MOD_STAT_TO_LUX } from '../leagueConstruction';
 
 const saveTeamMock = vi.hoisted(() => vi.fn(async <T>(team: T) => team));
@@ -163,6 +164,70 @@ describe('archetype identity bridge', () => {
 
   test('throws on unknown archetype keys', async () => {
     await expect(selectTeamArchetype(minimalTeam(), 'not-a-key')).rejects.toThrow();
+  });
+
+  test('DJ-03 resolver prefers manual band priorities when any band is positive', () => {
+    const manual = {
+      Power: 0.2,
+      Contact: 1,
+      Speed: 0,
+      Defense: 0,
+      Rotation: 0,
+      Bullpen: 0,
+    };
+    const archetype = HISTORICAL_ARCHETYPES.find((arch) => arch.id === 'murderers-row')!;
+
+    expect(resolveClubBandPriorities({
+      capIdentity: {
+        bandPriorities: manual,
+        ...archetypeToCapIdentity(archetype),
+      },
+      mlbArchetypeKey: archetype.id,
+    })).toBe(manual);
+  });
+
+  test('DJ-03 resolver maps archetype provenance through the one archetype band bridge', () => {
+    const archetype = HISTORICAL_ARCHETYPES.find((arch) => arch.id === 'murderers-row')!;
+
+    expect(resolveClubBandPriorities({ mlbArchetypeKey: archetype.id }))
+      .toEqual(archetypeBandPriorities(archetype));
+  });
+
+  test('DJ-03 rawShift fallback is bijective with archetype provenance for archetype identities', () => {
+    const archetype = HISTORICAL_ARCHETYPES.find((arch) => arch.id === 'the-opener')!;
+
+    expect(resolveClubBandPriorities({ capIdentity: archetypeToCapIdentity(archetype) }))
+      .toEqual(archetypeBandPriorities(archetype));
+  });
+
+  test('DJ-03 resolver returns uniform priorities for rawShift with no positive lift and null for no identity', () => {
+    expect(resolveClubBandPriorities({
+      capIdentity: {
+        increase: [],
+        decrease: [],
+        rawShift: {
+          POW: -0.1,
+          CON: -0.2,
+          SPD: 0,
+          FLD: 0,
+          ARM: 0,
+          RVEL: 0,
+          RJNK: 0,
+          RACC: 0,
+          PVEL: 0,
+          PJNK: 0,
+          PACC: 0,
+        },
+      },
+    })).toEqual({
+      Power: 1,
+      Contact: 1,
+      Speed: 1,
+      Defense: 1,
+      Rotation: 1,
+      Bullpen: 1,
+    });
+    expect(resolveClubBandPriorities({})).toBeNull();
   });
 
   test('24-coverage: every LOCKED archetype converts and shifts at least one cap (FABLE-C1 d-rescope)', async () => {
