@@ -18,7 +18,13 @@ draft. Then the POOL-SIZING feature, driven by JK's two concerns — pool bloat 
   removes; kept-notice), and a per-club RE-CHECK panel reusing the DJ-06 exit-gate law (one law, three doors).
   Adversarial 14 HOLDS/0 defects.
 JK rulings recorded: count shill wins in the band; default 1.35×; PRESERVE hand-edits (override).
-**Next build item: ③ AUCTION-SETTLE-FROM-SHILLS (in-draft repair, fit-first).** Two-way cleanups LAST (JK).
+- `5c3c6091` **Item ③ AUCTION-SETTLE-FROM-SHILLS** (JK ruled BUILD NOW over Fable's v1.1 rec) — a short club
+  settles its empty seats from the leftovers (shill-held ∪ passed) at league-minimum, FIT-FIRST BY
+  CONSTRUCTION (fit-rank fed as price into the unchanged cheapestLegalCompletion; uniform league-min charge);
+  full double-entry; gate purity preserved (passes via isLegalRoster recompute, not a flag). Adversarial 10
+  HOLDS/0 defects. ⇒ **THE WHOLE JK-APPROVED BUILD LIST IS DONE** (P0 train + hard cap + pool-sizing 2A/2B + settle).
+**Remaining = LOW-priority only:** two-way cleanups (DJ-29 feasibility frame + TWO-WAY-PRIMARY-ROLE) and the
+broader DJ polish sweep (DJ-08 BEST-22, DJ-09/10/11/13 majors, DJ-14..28 minors). Next real gate: JK browser pass.
 
 ## 2026-07-03 (attended, Opus/Fable/Codex) — THE PRE-PLAYTHROUGH P0 FIX TRAIN + HARD SALARY CAP (all committed, branch-only)
 
