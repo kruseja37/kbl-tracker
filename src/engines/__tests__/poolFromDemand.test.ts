@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countCellMatches,
   extractPoolFromDemand,
+  type ClassifiedDemandPlayer,
   type DemandUniversePlayer,
   type TeamDesignInput,
 } from '../poolFromDemand';
 import { buildDefaultDesignSlots } from '../rosterDesignFeasibility';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
+import { classifyPlayerArchetype } from '../playerArchetypeClassifier';
+import { demandPlayerFromLeaguePlayer } from '../../src_figma/app/pages/LeagueBuilderDraftSetup';
+import { canRelieve, canStart } from '../../data/rosterConstruction';
+import { toRosterSlotPlayer } from '../rosterNeed';
+import type { Player } from '../../utils/leagueBuilderStorage';
 
 let n = 0;
 
@@ -107,6 +114,41 @@ function designAsking(teamId: string, slotId: string, shape: string): TeamDesign
   };
 }
 
+function leaguePlayer(primaryPosition: Player['primaryPosition']): Player {
+  return {
+    id: `league-player-${primaryPosition}`,
+    firstName: 'Canon',
+    lastName: primaryPosition,
+    gender: 'M',
+    age: 27,
+    bats: 'R',
+    throws: 'R',
+    armSlot: 'High',
+    primaryPosition,
+    power: 42,
+    contact: 43,
+    speed: 44,
+    fielding: 45,
+    arm: 46,
+    velocity: 71,
+    junk: 72,
+    accuracy: 73,
+    arsenal: ['4F', 'SL', 'CH'],
+    overallGrade: 'B',
+    trait1: primaryPosition === 'TWO-WAY' ? 'Two Way (C)' : undefined,
+    trait2: undefined,
+    personality: 'Competitive',
+    chemistry: 'Competitive',
+    morale: 50,
+    mojo: 'Normal',
+    fame: 0,
+    salary: 12_345,
+    createdDate: '2026-07-02T00:00:00.000Z',
+    lastModified: '2026-07-02T00:00:00.000Z',
+    isCustom: true,
+  };
+}
+
 describe('extractPoolFromDemand', () => {
   const archetypes = HISTORICAL_ARCHETYPES.slice(0, 2);
 
@@ -165,4 +207,62 @@ describe('extractPoolFromDemand', () => {
     // At least two distinct price tiers among the extracted glove-first SS supply.
     expect(new Set(reservedSalaries).size).toBeGreaterThanOrEqual(2);
   });
+
+  it('countCellMatches equals the extractor reserved match set for a demand cell', () => {
+    const pool = universe();
+    const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
+    const result = extractPoolFromDemand(pool, designs, archetypes, 'standard', { teams: 4 });
+    const cell = result.cells.find((candidate) => candidate.key.startsWith('SS|Defensive-Wizard'));
+    expect(cell).toBeDefined();
+
+    const classified: ClassifiedDemandPlayer[] = pool.map((player) => ({
+      player,
+      classification: classifyPlayerArchetype(player.profile),
+    }));
+    const actualReservedMatchSet = classified.filter(({ classification }) =>
+      classification.shape === cell!.preference.shape
+      || ((cell!.preference.allowRunnerUp ?? true) && classification.runnerUp === cell!.preference.shape),
+    );
+
+    expect(countCellMatches(classified, cell!.preference)).toBe(actualReservedMatchSet.length);
+    expect(countCellMatches(classified, cell!.preference)).toBeGreaterThanOrEqual(cell!.reserved);
+  });
+
+  it.each(['P', 'TWO-WAY'] as const)(
+    'maps legacy %s pitchers through the canonical roster-slot role',
+    (primaryPosition) => {
+      const player = leaguePlayer(primaryPosition);
+      const mapped = demandPlayerFromLeaguePlayer(player);
+      const canonicalShape = toRosterSlotPlayer({
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition ?? null,
+        traits: [player.trait1, player.trait2],
+      });
+
+      expect(mapped).toMatchObject({
+        id: player.id,
+        salary: player.salary,
+        isPitcher: canonicalShape.isPitcher,
+        position: canonicalShape.position,
+        role: canonicalShape.role,
+        secondaryPosition: canonicalShape.secondaryPosition,
+        twoWayVariant: canonicalShape.twoWayVariant,
+        bat: {
+          POW: player.power,
+          CON: player.contact,
+          SPD: player.speed,
+          FLD: player.fielding,
+          ARM: player.arm,
+        },
+        pit: {
+          VEL: player.velocity,
+          JNK: player.junk,
+          ACC: player.accuracy,
+        },
+      });
+      expect(mapped.role).toBeUndefined();
+      expect(canStart(mapped)).toBe(false);
+      expect(canRelieve(mapped)).toBe(false);
+    },
+  );
 });

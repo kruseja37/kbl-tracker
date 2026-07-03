@@ -22,12 +22,14 @@
 import {
   classifyPlayerArchetype,
   type ClassifiableProfile,
+  type ShapeClassification,
 } from './playerArchetypeClassifier';
 import {
   evaluateRosterDesign,
   type DesignFeasibilityResult,
   type DesignPoolPlayer,
   type DesignSlot,
+  type SlotPreference,
 } from './rosterDesignFeasibility';
 import { extractDraftPool, type ExtractedPool } from './draftPoolExtractor';
 import type { SimPlayer } from './archetypeBalanceSimulator';
@@ -56,6 +58,8 @@ export const POOL_FROM_DEMAND_TUNING = {
 export interface DemandCellReport {
   /** The ask as keyed: position | shape | serialized hard tags. */
   key: string;
+  /** The engine preference that produced the cell; matching is shape/runner-up only. */
+  preference: SlotPreference;
   slotIds: string[];
   asks: number;
   wanted: number;
@@ -81,6 +85,11 @@ export interface PoolFromDemandResult {
   designVerdicts: { teamId: string; result: DesignFeasibilityResult }[];
 }
 
+export interface ClassifiedDemandPlayer {
+  player: DemandUniversePlayer;
+  classification: ShapeClassification;
+}
+
 function cellKeyOf(slot: DesignSlot): string | null {
   const preference = slot.preference;
   if (!preference?.shape) return null; // no-ask slots ride the floors, not a cell
@@ -95,6 +104,26 @@ function toDesignPoolPlayer(player: DemandUniversePlayer): DesignPoolPlayer {
     profile: player.profile,
     slotPlayer: player,
   };
+}
+
+function demandCellMatches(
+  classification: Pick<ShapeClassification, 'shape' | 'runnerUp'>,
+  preference: SlotPreference,
+): boolean {
+  if (!preference.shape) return true;
+  if (classification.shape === preference.shape) return true;
+  return (preference.allowRunnerUp ?? true) && classification.runnerUp === preference.shape;
+}
+
+/**
+ * Counts the same shape-only match set the extractor uses for a demand cell. Tags and positions
+ * label the ask; they do not tighten reservation eligibility.
+ */
+export function countCellMatches(
+  classifiedPlayers: readonly ClassifiedDemandPlayer[],
+  preference: SlotPreference,
+): number {
+  return classifiedPlayers.filter(({ classification }) => demandCellMatches(classification, preference)).length;
 }
 
 /** Evenly-spaced price-spread pick: the ask must be affordable at more than one tier. */
@@ -121,7 +150,7 @@ export function extractPoolFromDemand(
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
 
   // 1. Type the universe once (whole-profile classification).
-  const classified = universe.map((player) => ({
+  const classified: ClassifiedDemandPlayer[] = universe.map((player) => ({
     player,
     classification: classifyPlayerArchetype(player.profile),
   }));
@@ -148,15 +177,13 @@ export function extractPoolFromDemand(
     const preference = cell.slot.preference!;
     const allowRunnerUp = preference.allowRunnerUp ?? true;
     const matching = classified
-      .filter(({ classification }) =>
-        classification.shape === preference.shape
-        || (allowRunnerUp && classification.runnerUp === preference.shape))
+      .filter(({ classification }) => demandCellMatches(classification, { ...preference, allowRunnerUp }))
       .map(({ player }) => player)
       .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));
     const wanted = Math.ceil(cell.asks * contest);
     const picks = priceSpread(matching, wanted);
     for (const pick of picks) reservedIds.add(pick.id);
-    cells.push({ key, slotIds: cell.slotIds, asks: cell.asks, wanted, reserved: picks.length });
+    cells.push({ key, preference, slotIds: cell.slotIds, asks: cell.asks, wanted, reserved: picks.length });
     if (picks.length < wanted) {
       shortfalls.push({
         key,

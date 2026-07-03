@@ -115,6 +115,7 @@ export interface LeagueTemplate {
   draftFormat?: 'auction' | 'snake';
   draftPoolMode?: DraftPoolMode;
   draftSeats?: DraftSetupSeat[];
+  poolExtractedAt?: string;
   tier?: TierKey;
   balanceMode?: BalanceMode;
   checkpointCadence?: CheckpointCadence;

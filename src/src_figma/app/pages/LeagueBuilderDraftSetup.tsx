@@ -23,6 +23,7 @@ import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/Archety
 import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
 import {
   RosterDesigner,
+  buildRosterDesignPool,
   rosterDesignStatusTone,
   seedRosterDesignSlots,
 } from "../components/leagueBuilder/RosterDesigner";
@@ -70,6 +71,20 @@ import {
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { TRAIT_PRICING } from "../../../data/traitPricing";
+import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
+import {
+  countCellMatches,
+  extractPoolFromDemand,
+  type ClassifiedDemandPlayer,
+  type DemandCellReport,
+  type DemandShortfall,
+  type DemandUniversePlayer,
+  type PoolFromDemandResult,
+  type TeamDesignInput,
+} from "../../../engines/poolFromDemand";
+import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassifier";
+import { evaluateRosterDesign, type DesignFeasibilityResult } from "../../../engines/rosterDesignFeasibility";
+import { toRosterSlotPlayer } from "../../../engines/rosterNeed";
 
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
 
@@ -120,6 +135,113 @@ type LeaguePoolRecord = {
 };
 
 type ClubEditorMode = "identity" | "design" | null;
+type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
+type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts">;
+type VerdictTone = ReturnType<typeof rosterDesignStatusTone>;
+
+const ASK_SPOT_ORDER = new Map(
+  ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "RP", "BACKUP C", "BENCH", "SWING"]
+    .map((spot, index) => [spot, index]),
+);
+
+export function demandPlayerFromLeaguePlayer(player: Player): DemandUniversePlayer {
+  const designPlayer = buildRosterDesignPool([player])[0];
+  const iv = computePlayerIv(player);
+  const shape = toRosterSlotPlayer({
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? null,
+    traits: [player.trait1, player.trait2],
+  });
+  return {
+    id: player.id,
+    iv,
+    salary: player.salary,
+    isPitcher: shape.isPitcher,
+    position: shape.position,
+    role: shape.role as DemandUniversePlayer["role"],
+    secondaryPosition: shape.secondaryPosition,
+    twoWayVariant: shape.twoWayVariant,
+    bat: {
+      POW: player.power,
+      CON: player.contact,
+      SPD: player.speed,
+      FLD: player.fielding,
+      ARM: player.arm,
+    },
+    pit: shape.isPitcher
+      ? { VEL: player.velocity, JNK: player.junk, ACC: player.accuracy }
+      : undefined,
+    profile: designPlayer.profile,
+  };
+}
+
+function demandUniverseFromPlayers(sourcePlayers: readonly Player[]): DemandUniversePlayer[] {
+  return sourcePlayers.map(demandPlayerFromLeaguePlayer);
+}
+
+function formatClubName(team: Team, ownerNameForId: (ownerId: string) => string, seats: readonly DraftSetupSeat[]): string {
+  return `${team.name} — ${ownerNameForId(teamOwnerId(team, seats))}`;
+}
+
+function designVerdictTone(result: DesignFeasibilityResult | null, poolSize: number): VerdictTone {
+  if (poolSize === 0 || !result) return "quiet";
+  if (result.blockers.some((blocker) => blocker.kind === "no-match" && blocker.slotId !== "legality")) return "red";
+  if (result.blockers.some((blocker) => blocker.slotId === "legality")) return "amber";
+  if (result.blockers.some((blocker) => blocker.kind === "budget")) return "amber";
+  if (result.feasible) return "green";
+  return "quiet";
+}
+
+function designVerdictCopy(result: DesignFeasibilityResult | null, tone: VerdictTone): string {
+  if (!result || tone === "quiet") return "NOTHING TO CHECK AGAINST YET";
+  if (tone === "red") {
+    const count = result.blockers.filter((blocker) => blocker.kind === "no-match" && blocker.slotId !== "legality").length;
+    return `${count} SPOT${count === 1 ? "" : "S"} WON'T FILL`;
+  }
+  if (result.blockers.some((blocker) => blocker.slotId === "legality")) return "FILLS · NOT A LEGAL 22";
+  if (result.blockers.some((blocker) => blocker.kind === "budget")) {
+    return `OVER BUDGET · ${formatMoney(Math.max(0, result.totalCost - result.budget))} OVER`;
+  }
+  return `BUILDS · ${formatMoney(result.headroom)} TO SPARE`;
+}
+
+function parseDemandCell(cell: DemandCellReport): { spot: string; shape: string; tagCount: number } {
+  const [rawSpot = "", shape = "", rawTags = ""] = cell.key.split("|");
+  let tagCount = 0;
+  try {
+    const tags = rawTags ? JSON.parse(rawTags) as Record<string, unknown> : {};
+    tagCount = Object.values(tags).filter(Boolean).length;
+  } catch {
+    tagCount = 0;
+  }
+  const spot = rawSpot === "backupC"
+    ? "BACKUP C"
+    : rawSpot === "flex"
+      ? "BENCH"
+      : rawSpot.toUpperCase();
+  return { spot, shape, tagCount };
+}
+
+function compareDemandCells(left: DemandCellReport, right: DemandCellReport): number {
+  const a = parseDemandCell(left);
+  const b = parseDemandCell(right);
+  return (ASK_SPOT_ORDER.get(a.spot) ?? 999) - (ASK_SPOT_ORDER.get(b.spot) ?? 999)
+    || a.shape.localeCompare(b.shape);
+}
+
+function toneTextClass(tone: VerdictTone): string {
+  if (tone === "red") return "text-[var(--ballpark-status-red-bright)]";
+  if (tone === "amber") return "text-[var(--ballpark-status-warn)]";
+  if (tone === "green") return "text-[var(--ballpark-status-green)]";
+  return "text-[var(--ballpark-chalk)]/45";
+}
+
+function toneDotClass(tone: VerdictTone): string {
+  if (tone === "red") return "bg-[var(--ballpark-status-red-bright)]";
+  if (tone === "amber") return "bg-[var(--ballpark-status-warn)]";
+  if (tone === "green") return "bg-[var(--ballpark-status-green)]";
+  return "bg-[var(--ballpark-chalk)]/45";
+}
 
 function compactTeams(team: Team | undefined): team is Team {
   return Boolean(team);
@@ -310,6 +432,13 @@ export function LeagueBuilderDraftSetup() {
   const [hasCompletedDraft, setHasCompletedDraft] = useState(false);
   const [savedDraftChecked, setSavedDraftChecked] = useState(false);
   const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
+  const [modeAReport, setModeAReport] = useState<ModeAReport | null>(null);
+  const [modeAManualEdits, setModeAManualEdits] = useState(false);
+  const [reExtractConfirm, setReExtractConfirm] = useState(false);
+  const [lockConfirm, setLockConfirm] = useState(false);
+  const [liveClubVerdicts, setLiveClubVerdicts] = useState<Map<string, DesignFeasibilityResult>>(new Map());
+  const reExtractConfirmRef = useRef<HTMLDivElement>(null);
+  const lockConfirmRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setShills(clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)));
@@ -407,6 +536,12 @@ export function LeagueBuilderDraftSetup() {
     () => (activeLeagueId ? players.filter((p) => !isPlayerInLeaguePool(p, activeLeagueId)) : []),
     [players, activeLeagueId],
   );
+  const inPoolClassifiedDemandPlayers = useMemo<ClassifiedDemandPlayer[]>(() => {
+    return demandUniverseFromPlayers(inPoolPlayers).map((player) => ({
+      player,
+      classification: classifyPlayerArchetype(player.profile),
+    }));
+  }, [inPoolPlayers]);
 
   const focusedPlayer = useMemo(
     () => players.find((p) => p.id === focusedPlayerId) ?? null,
@@ -490,19 +625,34 @@ export function LeagueBuilderDraftSetup() {
     }
     return tones;
   }, [humanTeams, rosterDesignerPlayers, tierBudget]);
+  const inPoolDesignPool = useMemo(() => buildRosterDesignPool(inPoolPlayers), [inPoolPlayers]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const next = new Map<string, DesignFeasibilityResult>();
+      if (inPoolDesignPool.length > 0) {
+        for (const team of humanTeams) {
+          if (!team.rosterDesign) continue;
+          next.set(team.id, evaluateRosterDesign(seedRosterDesignSlots(team.rosterDesign.slots), inPoolDesignPool, tierBudget));
+        }
+      }
+      setLiveClubVerdicts(next);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [humanTeams, inPoolDesignPool, tierBudget]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey));
   const poolReady = locked && sufficiency.meetsFloor;
+  const allHumanDesignsLocked = designsLocked >= humanTeams.length;
   const startReady =
     Boolean(league) &&
-    (hasSavedDraft || (poolReady && identitiesReady && poolMode === "pool-first")) &&
+    (hasSavedDraft || (poolReady && identitiesReady && (poolMode === "pool-first" || allHumanDesignsLocked))) &&
     savedDraftChecked &&
     !savedDraftLookupError;
   const startBlocker = !savedDraftChecked
     ? "checking for a saved draft"
     : savedDraftLookupError
       ? "could not confirm saved draft status"
-      : poolMode === "design-first"
-        ? "Pool-from-demand comes next"
+      : poolMode === "design-first" && !allHumanDesignsLocked
+        ? "lock every club's design first"
         : !poolReady
           ? "lock a sufficient player pool first"
           : !identitiesReady
@@ -516,7 +666,7 @@ export function LeagueBuilderDraftSetup() {
   };
 
   const saveLeagueDraftSetup = useCallback(
-    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode">>) => {
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt">>) => {
       if (!league) return;
       await saveLeagueTemplate({ ...league, ...patch });
       await refresh();
@@ -569,6 +719,7 @@ export function LeagueBuilderDraftSetup() {
   // pre-existing assignment must not suppress the seed). Retries on failure.
   const autoImportedRef = useRef<string | null>(null);
   useEffect(() => {
+    if (poolMode !== "pool-first") return;
     if (isLoading || !activeLeagueId || !league || poolEditingBlocked) return;
     if (autoImportedRef.current === activeLeagueId) return;
     autoImportedRef.current = activeLeagueId;
@@ -580,7 +731,7 @@ export function LeagueBuilderDraftSetup() {
         autoImportedRef.current = null; // allow retry on a later render
       }
     })();
-  }, [isLoading, activeLeagueId, league, poolEditingBlocked, refresh]);
+  }, [isLoading, activeLeagueId, league, poolEditingBlocked, poolMode, refresh]);
 
   const runAction = useCallback(
     async (fn: () => Promise<void>) => {
@@ -599,6 +750,57 @@ export function LeagueBuilderDraftSetup() {
     [refresh, refreshPool, activeLeagueId],
   );
 
+  const buildModeAResult = useCallback((): PoolFromDemandResult => {
+    if (!league) throw new Error("League not found.");
+    const lockedDesigns: TeamDesignInput[] = humanTeams
+      .filter((team) => Boolean(team.rosterDesign?.lockedAt))
+      .map((team) => ({
+        teamId: team.id,
+        slots: seedRosterDesignSlots(team.rosterDesign?.slots),
+      }));
+    const selectedArchetypes = leagueTeams
+      .map((team) => HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey))
+      .filter((archetype): archetype is (typeof HISTORICAL_ARCHETYPES)[number] => Boolean(archetype));
+    return extractPoolFromDemand(
+      demandUniverseFromPlayers(players),
+      lockedDesigns,
+      selectedArchetypes,
+      league.tier ?? "juiced",
+      { teams: league.teamIds.length, budgetPerTeam: tierBudget },
+    );
+  }, [humanTeams, league, leagueTeams, players, tierBudget]);
+
+  useEffect(() => {
+    setReExtractConfirm(false);
+    setLockConfirm(false);
+    if (poolMode !== "design-first" || !league?.poolExtractedAt) {
+      setModeAReport(null);
+      return;
+    }
+    try {
+      const result = buildModeAResult();
+      setModeAReport({
+        cells: result.cells,
+        shortfalls: result.shortfalls,
+        designVerdicts: result.designVerdicts,
+      });
+    } catch {
+      setModeAReport(null);
+    }
+  }, [buildModeAResult, league?.poolExtractedAt, poolMode]);
+
+  useEffect(() => {
+    if (!reExtractConfirm && !lockConfirm) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (reExtractConfirmRef.current?.contains(target) || lockConfirmRef.current?.contains(target)) return;
+      setReExtractConfirm(false);
+      setLockConfirm(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [lockConfirm, reExtractConfirm]);
+
   const assertPoolCanMutate = () => {
     if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
     if (savedDraftLookupError) throw new Error(savedDraftLookupError);
@@ -610,7 +812,11 @@ export function LeagueBuilderDraftSetup() {
       if (!league || nextMode === poolMode) return;
       if (locked) throw new Error("Pool mode is locked once the pool locks.");
       assertPoolCanMutate();
-      await saveLeagueDraftSetup({ draftPoolMode: nextMode });
+      await saveLeagueDraftSetup({
+        draftPoolMode: nextMode,
+        poolExtractedAt: nextMode === "pool-first" ? undefined : league.poolExtractedAt,
+      });
+      if (nextMode === "pool-first") setModeAReport(null);
     });
 
   const handleSeatNameChange = (seatId: string, name: string) =>
@@ -687,6 +893,7 @@ export function LeagueBuilderDraftSetup() {
     runAction(async () => {
       assertPoolCanMutate();
       await addPlayersToLeaguePool([...availSelected], activeLeagueId);
+      if (poolMode === "design-first" && league?.poolExtractedAt) setModeAManualEdits(true);
       setAvailSelected(new Set());
     });
 
@@ -694,6 +901,7 @@ export function LeagueBuilderDraftSetup() {
     runAction(async () => {
       assertPoolCanMutate();
       await removePlayersFromLeaguePool([...inSelected], activeLeagueId);
+      if (poolMode === "design-first" && league?.poolExtractedAt) setModeAManualEdits(true);
       setInSelected(new Set());
     });
 
@@ -703,10 +911,34 @@ export function LeagueBuilderDraftSetup() {
       await importRosteredPlayersToLeaguePool(activeLeagueId);
     });
 
+  const handleExtractPool = () =>
+    runAction(async () => {
+      if (!league) return;
+      assertPoolCanMutate();
+      if (!allHumanDesignsLocked) throw new Error("Lock every club's design first.");
+      const result = buildModeAResult();
+      const extractedIds = new Set(result.players.map((player) => player.id));
+      const currentIds = new Set(players.filter((player) => isPlayerInLeaguePool(player, activeLeagueId)).map((player) => player.id));
+      const toAdd = [...extractedIds].filter((id) => !currentIds.has(id));
+      const toRemove = [...currentIds].filter((id) => !extractedIds.has(id));
+      if (toAdd.length > 0) await addPlayersToLeaguePool(toAdd, activeLeagueId);
+      if (toRemove.length > 0) await removePlayersFromLeaguePool(toRemove, activeLeagueId);
+      const extractedAt = new Date().toISOString();
+      await saveLeagueTemplate({ ...league, poolExtractedAt: extractedAt });
+      setModeAReport({
+        cells: result.cells,
+        shortfalls: result.shortfalls,
+        designVerdicts: result.designVerdicts,
+      });
+      setModeAManualEdits(false);
+      setReExtractConfirm(false);
+    });
+
   const handleLock = () =>
     runAction(async () => {
       assertPoolCanMutate();
       await lockLeaguePool(activeLeagueId);
+      setLockConfirm(false);
     });
 
   const handleUnlock = () =>
@@ -760,6 +992,199 @@ export function LeagueBuilderDraftSetup() {
 
   const selectAll = (filtered: Player[], setter: (s: Set<string>) => void) =>
     setter(new Set(filtered.map((p) => p.id)));
+
+  const modeAState: ModeAPoolState = locked
+    ? "locked"
+    : league?.poolExtractedAt
+      ? "review"
+      : allHumanDesignsLocked
+        ? "ready"
+        : "waiting";
+  const modeAWaitingTeams = humanTeams.filter((team) => !team.rosterDesign?.lockedAt);
+  const modeAStaleTeams = league?.poolExtractedAt
+    ? humanTeams.filter((team) => {
+        const lockedAt = team.rosterDesign?.lockedAt;
+        return !lockedAt || lockedAt > league.poolExtractedAt!;
+      })
+    : [];
+  const modeAStale = modeAState === "review" || modeAState === "locked" ? modeAStaleTeams.length > 0 : false;
+  const clubCheckRows = humanTeams.map((team) => {
+    const verdict = liveClubVerdicts.get(team.id) ?? modeAReport?.designVerdicts.find((entry) => entry.teamId === team.id)?.result ?? null;
+    const tone = designVerdictTone(verdict, inPoolPlayers.length);
+    return { team, verdict, tone, copy: designVerdictCopy(verdict, tone) };
+  });
+  const nonGreenClubCount = clubCheckRows.filter((row) => row.tone !== "green").length;
+  const canModeALock =
+    !busy &&
+    !savedDraftMutationBlocked &&
+    inPoolPlayers.length > 0 &&
+    sufficiency.meetsFloor &&
+    allHumanDesignsLocked &&
+    !modeAStale;
+  const runModeALock = () => {
+    if (!canModeALock) return;
+    if (nonGreenClubCount > 0 && !lockConfirm) {
+      setLockConfirm(true);
+      return;
+    }
+    void handleLock();
+  };
+  const runModeAReExtract = () => {
+    if (modeAManualEdits && !reExtractConfirm) {
+      setReExtractConfirm(true);
+      return;
+    }
+    void handleExtractPool();
+  };
+
+  const poolShuttle = (
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4 mb-6">
+        <Pane
+          title={"IN THE POOL (" + inPoolPlayers.length + ")"}
+          accent="var(--ballpark-action-green-hover)"
+          search={inSearch}
+          onSearch={setInSearch}
+          position={inPosition}
+          onPosition={setInPosition}
+          disabled={poolEditingBlocked}
+          onSelectAll={() => selectAll(inFiltered, setInSelected)}
+          footer={
+            <PressButton
+              onClick={handleRemove}
+              disabled={poolEditingBlocked || busy || inSelected.size === 0}
+              size="sm"
+            >
+              Remove <ChevronRight className="w-4 h-4" />
+            </PressButton>
+          }
+        >
+          {inFiltered.map((player) => (
+            <Row
+              key={player.id}
+              player={player}
+              rightLabel={formatMoney(ivById.get(player.id))}
+              rightTitle="Value"
+              checked={inSelected.has(player.id)}
+              focused={focusedPlayerId === player.id}
+              disabled={poolEditingBlocked}
+              onToggle={() => toggle(inSelected, setInSelected, player.id)}
+              onFocus={() => setFocusedPlayerId(player.id)}
+            />
+          ))}
+          {inFiltered.length === 0 && <Empty label="The pool is empty." />}
+        </Pane>
+
+        <div className="hidden lg:flex flex-col items-center justify-center gap-3 text-[var(--ballpark-chalk)]/40">
+          <ChevronLeft className="w-6 h-6" />
+          <ChevronRight className="w-6 h-6" />
+        </div>
+
+        <Pane
+          title={"AVAILABLE PLAYERS (" + availablePlayers.length + ")"}
+          accent="#3B7DD8"
+          search={availSearch}
+          onSearch={setAvailSearch}
+          position={availPosition}
+          onPosition={setAvailPosition}
+          disabled={poolEditingBlocked}
+          onSelectAll={() => selectAll(availFiltered, setAvailSelected)}
+          footer={
+            <PressButton
+              onClick={handleAdd}
+              disabled={poolEditingBlocked || busy || availSelected.size === 0}
+              size="sm"
+            >
+              <ChevronLeft className="w-4 h-4" /> Add
+            </PressButton>
+          }
+        >
+          {availFiltered.slice(0, 500).map((player) => (
+            <Row
+              key={player.id}
+              player={player}
+              rightLabel={player.overallGrade}
+              rightTitle="Grade"
+              checked={availSelected.has(player.id)}
+              focused={focusedPlayerId === player.id}
+              disabled={poolEditingBlocked}
+              onToggle={() => toggle(availSelected, setAvailSelected, player.id)}
+              onFocus={() => setFocusedPlayerId(player.id)}
+            />
+          ))}
+          {availFiltered.length > 500 && (
+            <div className="text-xs text-[var(--ballpark-chalk)]/55 px-2 py-2">
+              Showing first 500 of {availFiltered.length}. Narrow the filters to see more.
+            </div>
+          )}
+          {availFiltered.length === 0 && <Empty label="No available players match." />}
+        </Pane>
+      </div>
+
+      {focusedPlayer ? (
+        <FocusedPlayerPanel
+          player={focusedPlayer}
+          locked={poolEditingBlocked}
+          lockedLabel={hasSavedDraft ? "Draft Saved" : undefined}
+          lockedTitle={poolEditingBlockMessage}
+          onEdit={() => {
+            if (poolEditingBlocked) return;
+            setEditError(null);
+            setEditingPlayer(focusedPlayer);
+          }}
+        />
+      ) : null}
+    </>
+  );
+
+  const sufficiencyChip = (
+    <div
+      className={
+        "flex items-center gap-2 px-4 py-2 border-4 text-sm font-bold " +
+        (sufficiency.meetsFloor
+          ? "border-[var(--ballpark-action-green-hover)] text-[#9FE0A0] bg-[#3a4d3c]"
+          : "border-[#FFD27A] text-[#FFE8B0] bg-[#6B3A3A]")
+      }
+    >
+      {sufficiency.meetsFloor ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+      Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} draft slots
+      {sufficiency.meetsFloor
+        ? " · surplus " + (sufficiency.surplus >= 0 ? "+" : "") + sufficiency.surplus
+        : " · need " + -sufficiency.surplus + " more"}
+      {" · recommended " + sufficiency.targetSize}
+    </div>
+  );
+
+  const marketOutlookPanel = composition ? (
+    <div className="border-4 border-[var(--ballpark-action-green-hover)] bg-[#2e3f30] p-4">
+      <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-2">
+        Archetype market outlook — {composition.outlooks.filter((outlook) => outlook.pIdentityCompletion >= 0.9).length} of {composition.outlooks.length} archetypes look buildable in a contested draft
+      </div>
+      <div className="grid gap-1">
+        {[...composition.outlooks]
+          .sort((a, b) => a.pIdentityCompletion - b.pIdentityCompletion)
+          .slice(0, 6)
+          .map((outlook) => (
+            <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
+              <span
+                className={
+                  "font-bold " +
+                  (outlook.pIdentityCompletion >= 0.9
+                    ? "text-[#9FE0A0]"
+                    : outlook.pIdentityCompletion >= 0.6
+                      ? "text-[var(--ballpark-brass)]"
+                      : "text-[#FFE8B0]")
+                }
+              >
+                {Math.round(outlook.pIdentityCompletion * 100)}%
+              </span>
+              <span className="text-[var(--ballpark-chalk)]">{outlook.archetypeName}</span>
+              {outlook.note ? <span className="text-[#A8B8A0]">{outlook.note}</span> : null}
+            </div>
+          ))}
+      </div>
+    </div>
+  ) : null;
 
   // ---- render ----
   if (!isLoading && leagues.length === 0) {
@@ -1033,130 +1458,191 @@ export function LeagueBuilderDraftSetup() {
           <PanelWithHeaderStrip title="4 · THE POOL">
             {showHelp ? (
               <HelpNote>
-                Pool first uses the player shuttle below. Design first will extract a pool after club designs are locked.
+                {poolMode === "design-first"
+                  ? "Design first builds the pool to order. Once every club's design is in, EXTRACT POOL draws a right-sized pool from your player list — enough players for every ask, with competition built in on the popular ones, plus the depth every club identity needs. Then read the receipt: THE CLUB CHECK says whether each design still builds from this exact pool, THE GAPS name anything your player list couldn't supply — adding players can't fix those, only a bigger player list can — and THE ASKS is the full ledger. Add or remove players below, then lock. Locking freezes prices for the auction."
+                  : "Pool first uses the player shuttle below. Add the players who should be in the auction, then lock the pool."}
               </HelpNote>
             ) : null}
             {poolMode === "design-first" ? (
-              <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-5">
-                <div className="text-sm font-bold text-[var(--ballpark-brass)] mb-2">POOL-FROM-DEMAND COMING</div>
-                <div className="text-sm text-[var(--ballpark-chalk)]/70">
-                  Designs locked: {designsLocked} of {humanTeams.length} clubs.
-                </div>
+              <div className="space-y-5">
+                {modeAState === "waiting" || modeAState === "ready" ? (
+                  <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-5">
+                    <div className="text-sm font-bold text-[var(--ballpark-brass)] mb-2">
+                      {modeAState === "waiting" ? "WAITING ON DESIGNS" : "EVERY DESIGN IS IN"}
+                    </div>
+                    <div className="text-sm text-[var(--ballpark-chalk)]/70 mb-4">
+                      {modeAState === "waiting"
+                        ? `${designsLocked} of ${humanTeams.length} designs in. Still to come: ${modeAWaitingTeams.map((team) => formatClubName(team, ownerName, seats)).join(", ")}`
+                        : humanTeams.length === 0
+                          ? "No club designs to collect — the pool draws from the league's identities."
+                          : "Ready to build the pool to order."}
+                    </div>
+                    <PressButton
+                      onClick={handleExtractPool}
+                      disabled={modeAState !== "ready" || busy || savedDraftMutationBlocked}
+                      variant="gold"
+                      size="lg"
+                      shadow={4}
+                    >
+                      {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                      {busy ? "DRAWING UP THE POOL…" : "EXTRACT POOL"}
+                    </PressButton>
+                  </div>
+                ) : (
+                  <>
+                    {modeAStale ? (
+                      <div className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[#FFE8B0]">
+                        Designs changed since this pool was drawn — {modeAStaleTeams.map((team) => team.name).join(", ")}. Extract again before locking.
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-4">
+                      {sufficiencyChip}
+                      {modeAState !== "locked" ? (
+                        <div ref={reExtractConfirmRef} className="flex flex-wrap items-center gap-2">
+                          {reExtractConfirm ? (
+                            <>
+                              <span className="text-xs font-bold text-[var(--ballpark-chalk)]/75">REDRAW?</span>
+                              <PressButton size="sm" variant="affirm" onClick={handleExtractPool} disabled={busy || !allHumanDesignsLocked}>
+                                <Check className="w-3 h-3" />
+                              </PressButton>
+                              <PressButton size="sm" variant="destruct" onClick={() => setReExtractConfirm(false)} disabled={busy}>
+                                <X className="w-3 h-3" />
+                              </PressButton>
+                              <span className="text-[11px] text-[var(--ballpark-chalk)]/55">
+                                Extracting again rebuilds the pool from the designs — your add and remove edits go with it.
+                              </span>
+                            </>
+                          ) : (
+                            <PressButton
+                              onClick={runModeAReExtract}
+                              disabled={busy || savedDraftMutationBlocked || !allHumanDesignsLocked}
+                              size="sm"
+                            >
+                              <Download className="w-4 h-4" /> RE-EXTRACT
+                            </PressButton>
+                          )}
+                        </div>
+                      ) : null}
+                      {modeAState !== "locked" ? (
+                        <div ref={lockConfirmRef} className="flex flex-wrap items-center gap-2">
+                          {lockConfirm ? (
+                            <>
+                              <span className="text-xs font-bold text-[var(--ballpark-chalk)]/75">SURE?</span>
+                              <PressButton size="sm" variant="affirm" onClick={handleLock} disabled={!canModeALock}>
+                                <Check className="w-3 h-3" />
+                              </PressButton>
+                              <PressButton size="sm" variant="destruct" onClick={() => setLockConfirm(false)} disabled={busy}>
+                                <X className="w-3 h-3" />
+                              </PressButton>
+                              <span className="text-[11px] text-[var(--ballpark-chalk)]/55">
+                                {nonGreenClubCount} club design{nonGreenClubCount === 1 ? "" : "s"} won't build from this pool as-is.
+                              </span>
+                            </>
+                          ) : (
+                            <PressButton
+                              onClick={runModeALock}
+                              disabled={!canModeALock}
+                              variant="gold"
+                              shadow={4}
+                            >
+                              <Lock className="w-5 h-5" /> LOCK POOL
+                            </PressButton>
+                          )}
+                        </div>
+                      ) : (
+                        <PressButton
+                          onClick={handleUnlock}
+                          disabled={busy || savedDraftMutationBlocked}
+                          shadow={4}
+                        >
+                          <Unlock className="w-5 h-5" /> UNLOCK
+                        </PressButton>
+                      )}
+                    </div>
+
+                    <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-4">
+                      <div className="text-[11px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)] mb-3">THE CLUB CHECK</div>
+                      <div className="grid gap-2">
+                        {clubCheckRows.map((row) => (
+                          <div key={row.team.id} className="flex items-center gap-3 text-sm">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${toneDotClass(row.tone)}`} aria-hidden="true" />
+                            <span className="text-[var(--ballpark-chalk)]">{row.team.name} · {ownerName(teamOwnerId(row.team, seats))}</span>
+                            <span className={`ml-auto text-right text-xs font-bold ${toneTextClass(row.tone)}`}>{row.copy}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {modeAReport?.shortfalls.length ? (
+                      <div>
+                        <div className="text-[11px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)] mb-2">THE GAPS</div>
+                        <div className="grid gap-2">
+                          {modeAReport.shortfalls.map((shortfall: DemandShortfall) => (
+                            <div key={shortfall.key} className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[#FFE8B0]">
+                              {shortfall.message}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <div className="text-[11px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)] mb-2">THE ASKS</div>
+                      <div className="bg-[var(--ballpark-well)] border-2 border-[var(--ballpark-panel-border)] max-h-[280px] overflow-y-auto">
+                        {modeAReport?.cells.length ? (
+                          <table className="w-full text-sm">
+                            <thead className="sticky top-0 bg-[var(--ballpark-well)]">
+                              <tr className="text-[11px] font-bold tracking-wider text-[var(--ballpark-chalk)]/55 text-left">
+                                <th className="px-3 py-2">SPOT</th>
+                                <th className="px-3 py-2">SHAPE</th>
+                                <th className="px-3 py-2">ASKING</th>
+                                <th className="px-3 py-2 text-right">WANTED</th>
+                                <th className="px-3 py-2 text-right">IN POOL</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...modeAReport.cells].sort(compareDemandCells).map((cell) => {
+                                const parsed = parseDemandCell(cell);
+                                const inPoolCount = countCellMatches(inPoolClassifiedDemandPlayers, cell.preference);
+                                const countClass = inPoolCount >= cell.wanted
+                                  ? "text-[var(--ballpark-status-green)]"
+                                  : inPoolCount >= cell.asks
+                                    ? "text-[var(--ballpark-status-warn)]"
+                                    : "text-[var(--ballpark-status-red-bright)]";
+                                return (
+                                  <tr key={cell.key} className="border-t border-[var(--ballpark-panel-border)] text-[var(--ballpark-chalk)]">
+                                    <td className="px-3 py-2 font-bold">{parsed.spot}</td>
+                                    <td className="px-3 py-2">
+                                      {parsed.shape}
+                                      {parsed.tagCount > 0 ? <span className="text-[var(--ballpark-chalk)]/55"> +{parsed.tagCount}</span> : null}
+                                    </td>
+                                    <td className="px-3 py-2">{cell.asks} club{cell.asks === 1 ? "" : "s"}</td>
+                                    <td className="px-3 py-2 text-right font-bold">{cell.wanted}</td>
+                                    <td className={`px-3 py-2 text-right font-bold ${countClass}`}>{inPoolCount}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="px-4 py-5 text-sm text-[var(--ballpark-chalk)]/60">
+                            Every design rides open asks — no shape orders to fill. The pool covers the league's identities.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {poolShuttle}
+                    {modeAState === "locked" ? marketOutlookPanel : null}
+                  </>
+                )}
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4 mb-6">
-                  <Pane
-                    title={"IN THE POOL (" + inPoolPlayers.length + ")"}
-                    accent="var(--ballpark-action-green-hover)"
-                    search={inSearch}
-                    onSearch={setInSearch}
-                    position={inPosition}
-                    onPosition={setInPosition}
-                    disabled={poolEditingBlocked}
-                    onSelectAll={() => selectAll(inFiltered, setInSelected)}
-                    footer={
-                      <PressButton
-                        onClick={handleRemove}
-                        disabled={poolEditingBlocked || busy || inSelected.size === 0}
-                        size="sm"
-                      >
-                        Remove <ChevronRight className="w-4 h-4" />
-                      </PressButton>
-                    }
-                  >
-                    {inFiltered.map((player) => (
-                      <Row
-                        key={player.id}
-                        player={player}
-                        rightLabel={formatMoney(ivById.get(player.id))}
-                        rightTitle="Value"
-                        checked={inSelected.has(player.id)}
-                        focused={focusedPlayerId === player.id}
-                        disabled={poolEditingBlocked}
-                        onToggle={() => toggle(inSelected, setInSelected, player.id)}
-                        onFocus={() => setFocusedPlayerId(player.id)}
-                      />
-                    ))}
-                    {inFiltered.length === 0 && <Empty label="The pool is empty." />}
-                  </Pane>
-
-                  <div className="hidden lg:flex flex-col items-center justify-center gap-3 text-[var(--ballpark-chalk)]/40">
-                    <ChevronLeft className="w-6 h-6" />
-                    <ChevronRight className="w-6 h-6" />
-                  </div>
-
-                  <Pane
-                    title={"AVAILABLE PLAYERS (" + availablePlayers.length + ")"}
-                    accent="#3B7DD8"
-                    search={availSearch}
-                    onSearch={setAvailSearch}
-                    position={availPosition}
-                    onPosition={setAvailPosition}
-                    disabled={poolEditingBlocked}
-                    onSelectAll={() => selectAll(availFiltered, setAvailSelected)}
-                    footer={
-                      <PressButton
-                        onClick={handleAdd}
-                        disabled={poolEditingBlocked || busy || availSelected.size === 0}
-                        size="sm"
-                      >
-                        <ChevronLeft className="w-4 h-4" /> Add
-                      </PressButton>
-                    }
-                  >
-                    {availFiltered.slice(0, 500).map((player) => (
-                      <Row
-                        key={player.id}
-                        player={player}
-                        rightLabel={player.overallGrade}
-                        rightTitle="Grade"
-                        checked={availSelected.has(player.id)}
-                        focused={focusedPlayerId === player.id}
-                        disabled={poolEditingBlocked}
-                        onToggle={() => toggle(availSelected, setAvailSelected, player.id)}
-                        onFocus={() => setFocusedPlayerId(player.id)}
-                      />
-                    ))}
-                    {availFiltered.length > 500 && (
-                      <div className="text-xs text-[var(--ballpark-chalk)]/55 px-2 py-2">
-                        Showing first 500 of {availFiltered.length}. Narrow the filters to see more.
-                      </div>
-                    )}
-                    {availFiltered.length === 0 && <Empty label="No available players match." />}
-                  </Pane>
-                </div>
-
-                {focusedPlayer ? (
-                  <FocusedPlayerPanel
-                    player={focusedPlayer}
-                    locked={poolEditingBlocked}
-                    lockedLabel={hasSavedDraft ? "Draft Saved" : undefined}
-                    lockedTitle={poolEditingBlockMessage}
-                    onEdit={() => {
-                      if (poolEditingBlocked) return;
-                      setEditError(null);
-                      setEditingPlayer(focusedPlayer);
-                    }}
-                  />
-                ) : null}
-
+                {poolShuttle}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
-                  <div
-                    className={
-                      "flex items-center gap-2 px-4 py-2 border-4 text-sm font-bold " +
-                      (sufficiency.meetsFloor
-                        ? "border-[var(--ballpark-action-green-hover)] text-[#9FE0A0] bg-[#3a4d3c]"
-                        : "border-[#FFD27A] text-[#FFE8B0] bg-[#6B3A3A]")
-                    }
-                  >
-                    {sufficiency.meetsFloor ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                    Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} draft slots
-                    {sufficiency.meetsFloor
-                      ? " · surplus " + (sufficiency.surplus >= 0 ? "+" : "") + sufficiency.surplus
-                      : " · need " + -sufficiency.surplus + " more"}
-                    {" · recommended " + sufficiency.targetSize}
-                  </div>
+                  {sufficiencyChip}
                   <PressButton
                     onClick={handleImport}
                     disabled={poolEditingBlocked || busy}
@@ -1183,37 +1669,7 @@ export function LeagueBuilderDraftSetup() {
                     </PressButton>
                   )}
                 </div>
-
-                {composition ? (
-                  <div className="border-4 border-[var(--ballpark-action-green-hover)] bg-[#2e3f30] p-4">
-                    <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-2">
-                      Archetype market outlook — {composition.outlooks.filter((outlook) => outlook.pIdentityCompletion >= 0.9).length} of {composition.outlooks.length} archetypes look buildable in a contested draft
-                    </div>
-                    <div className="grid gap-1">
-                      {[...composition.outlooks]
-                        .sort((a, b) => a.pIdentityCompletion - b.pIdentityCompletion)
-                        .slice(0, 6)
-                        .map((outlook) => (
-                          <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
-                            <span
-                              className={
-                                "font-bold " +
-                                (outlook.pIdentityCompletion >= 0.9
-                                  ? "text-[#9FE0A0]"
-                                  : outlook.pIdentityCompletion >= 0.6
-                                    ? "text-[var(--ballpark-brass)]"
-                                    : "text-[#FFE8B0]")
-                              }
-                            >
-                              {Math.round(outlook.pIdentityCompletion * 100)}%
-                            </span>
-                            <span className="text-[var(--ballpark-chalk)]">{outlook.archetypeName}</span>
-                            {outlook.note ? <span className="text-[#A8B8A0]">{outlook.note}</span> : null}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                ) : null}
+                {marketOutlookPanel}
               </>
             )}
           </PanelWithHeaderStrip>
