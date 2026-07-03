@@ -40,6 +40,30 @@ import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 const LEAGUE_ID = 'farm-scouting-handoff-league';
 const FRANCHISE_ID = 'farm-scouting-franchise';
 const TEAM_IDS = ['farm-scouting-away', 'farm-scouting-home'];
+const LEGAL_MLB_POSITIONS: readonly Position[] = [
+  'C',
+  'C',
+  '1B',
+  '2B',
+  '3B',
+  'SS',
+  'LF',
+  'CF',
+  'RF',
+  '1B',
+  '2B',
+  '3B',
+  'LF',
+  'CF',
+  'SP',
+  'SP',
+  'SP',
+  'SP',
+  'RP',
+  'RP',
+  'RP',
+  'RP',
+];
 
 function makeRoster(teamId: string, farmRoster: string[]): TeamRoster {
   return {
@@ -79,7 +103,7 @@ function makePlayer(
   rosterStatus: 'MLB' | 'FARM',
   overrides: Partial<Player> = {},
 ): Omit<Player, 'createdDate' | 'lastModified'> {
-  const position: Position = rosterStatus === 'FARM' ? 'CF' : index <= 11 ? 'C' : 'SP';
+  const position: Position = rosterStatus === 'FARM' ? 'CF' : LEGAL_MLB_POSITIONS[index - 1];
   return {
     id: `${teamId}-${rosterStatus.toLowerCase()}-${index}`,
     firstName: rosterStatus,

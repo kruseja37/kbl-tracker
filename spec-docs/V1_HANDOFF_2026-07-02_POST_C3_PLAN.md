@@ -272,3 +272,14 @@ Per FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §6 routing (Opus: "ticket the untic
   (LeagueBuilderAuctionDraft.tsx ~1610-1620) now carries the DJ-06 gate predicate (canProceedToFarm).
   When DJ-25 removes that legacy complete UI, the gate logic must survive on the AuctionStage HANDOFF
   CHECK panel path only — do not drop the gate with the banner. Fold into the DJ-25 kill-on-sight sweep.
+
+## §13. TWO-WAY-PRIMARY-ROLE (minor, from the DJ-06 adversarial pass, 2026-07-03)
+`toRosterSlotPlayer` (rosterNeed.ts) maps a bare `'TWO-WAY'`/`'P'` PRIMARY position to `role: undefined`, so
+`isLegalRoster` credits it toward pitcher headcount only — neither the ≥4 startable nor ≥4 relievable staff
+minimum — while rosterAnalyzer / subRecommendations / scoutMove / lineupVsStarter / depthChart all map a
+`'TWO-WAY'` primary to `'SP/RP'`. A legacy/custom/imported player persisted with such a primary would be
+BLOCKED by the DJ-06 handoff gate + the franchise-side isLegalRoster check as a non-legal 22. NOT reachable in
+the current draft flow (the SMB4 generator emits SP/RP primaries + a `'Two Way'` TRAIT, never a TWO-WAY
+primary), so no live acceptance break. Owner: Fable — rule whether `toRosterSlotPlayer` should treat a
+TWO-WAY/P primary as SP/RP (align with the app) or whether blocking invalid data is intended; fold into
+DJ-29's two-way review. Minor / v1.1.

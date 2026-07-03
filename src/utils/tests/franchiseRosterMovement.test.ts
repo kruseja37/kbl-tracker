@@ -85,6 +85,31 @@ function makePlayer(overrides: Partial<Player> & { id: string }): Player {
   };
 }
 
+const LEGAL_MLB_POSITIONS: readonly Player['primaryPosition'][] = [
+  'C',
+  'C',
+  '1B',
+  '2B',
+  '3B',
+  'SS',
+  'LF',
+  'CF',
+  'RF',
+  '1B',
+  '2B',
+  '3B',
+  'LF',
+  'CF',
+  'SP',
+  'SP',
+  'SP',
+  'SP',
+  'RP',
+  'RP',
+  'RP',
+  'RP',
+];
+
 describe('franchise roster movement boundary', () => {
   beforeEach(() => {
     counter = 0;
@@ -161,7 +186,7 @@ describe('franchise roster movement boundary', () => {
     for (const [index, playerId] of mlbPlayerIds.entries()) {
       await leagueBuilderStorage.savePlayer(makePlayer({
         id: playerId,
-        primaryPosition: index >= 13 ? 'SP' : 'SS',
+        primaryPosition: LEGAL_MLB_POSITIONS[index],
         leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
       }));
     }

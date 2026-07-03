@@ -33,8 +33,11 @@ import {
   buildLeagueBuilderFarmScoutingHandoffSnapshot,
   validateLeagueBuilderFarmScoutingHandoffState,
 } from './leagueBuilderFarmScoutingHandoff';
+import { isLegalRoster } from '../data/rosterConstruction';
+import { describeRosterLawGaps } from '../engines/auctionExitGate';
 import { getDerivedParkFactorsIfAvailable } from '../engines/parkFactorDeriver';
 import { getStableParkId } from '../data/parkLookup';
+import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from '../engines/rosterNeed';
 import type {
   FranchiseRosterRequirementSnapshot,
   FranchiseSalaryBaselineProof,
@@ -429,6 +432,29 @@ function validateV1RosterHandoff(
       issues.push(
         `${team.name}: expected ${REQUIRED_MLB_PLAYERS_PER_TEAM} MLB and ${REQUIRED_FARM_PLAYERS_PER_TEAM} FARM players; found ${MLB} MLB and ${FARM} FARM.`,
       );
+    } else {
+      const mlbPlayers = players.filter((player) => getTeamAssignment(player, leagueId, team.id)?.rosterStatus === 'MLB');
+      const positions: Record<string, ReturnType<typeof toRosterSlotPlayer>> = {};
+      const rosterIds: string[] = [];
+      for (const player of mlbPlayers) {
+        rosterIds.push(player.id);
+        positions[player.id] = toRosterSlotPlayer({
+          primaryPosition: player.primaryPosition,
+          secondaryPosition: player.secondaryPosition,
+          traits: [player.trait1, player.trait2],
+        });
+      }
+      const shapes = rosterIds.map((playerId) => positions[playerId]);
+      if (!isLegalRoster(shapes)) {
+        const need = teamRosterNeed(rosterIds, positions as RosterPositionMap);
+        const firstSentence = need
+          ? describeRosterLawGaps(rosterIds.length, need)[0] ?? "legality can't be verified."
+          : "legality can't be verified.";
+        const lawSentence = firstSentence.endsWith('.') ? firstSentence : `${firstSentence}.`;
+        issues.push(
+          `${team.name}: roster is not a legal 22 — ${lawSentence} Re-run the MLB draft for this league.`,
+        );
+      }
     }
   }
 

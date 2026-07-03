@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
+  createAuctionSessionId,
+  saveAuctionSession,
 } from "../../../utils/leagueBuilderStorage";
 import {
   initAuctionSession,
@@ -28,7 +30,8 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
-import { buildAuctionPlayers } from "../../app/hooks/useAuctionDraft";
+import { buildAuctionPlayers, MLB_AUCTION_SEASON } from "../../app/hooks/useAuctionDraft";
+import { DEFAULT_AUCTION_SETUP_CONFIG } from "../../../data/auctionEngineConstants";
 
 const mockNavigate = vi.fn();
 
@@ -150,6 +153,48 @@ function makePlayers(count = 80): Player[] {
     players.push(makePlayer(`depth-${index + 1}`, position as Player["primaryPosition"]));
   }
   return players;
+}
+
+function legalMlbPositions(): Array<{ primary: Player["primaryPosition"]; secondary?: Player["secondaryPosition"]; trait1?: Player["trait1"] }> {
+  return [
+    { primary: "C" },
+    { primary: "1B" },
+    { primary: "2B" },
+    { primary: "3B" },
+    { primary: "SS" },
+    { primary: "LF" },
+    { primary: "CF" },
+    { primary: "RF" },
+    { primary: "1B", secondary: "C" },
+    { primary: "2B" },
+    { primary: "SS" },
+    { primary: "LF" },
+    { primary: "RF" },
+    { primary: "SP" },
+    { primary: "SP" },
+    { primary: "SP" },
+    { primary: "SP" },
+    { primary: "RP" },
+    { primary: "RP" },
+    { primary: "RP" },
+    { primary: "CP" },
+    { primary: "RP" },
+  ];
+}
+
+function makeExitRosterPlayers(teamId: string, options: { missingSs?: boolean } = {}): Player[] {
+  return legalMlbPositions().map((shape, index) => {
+    const player = makePlayer(
+      `${teamId}-exit-${index + 1}`,
+      options.missingSs && shape.primary === "SS" ? "1B" : shape.primary,
+      shape.secondary,
+    );
+    return {
+      ...player,
+      trait1: shape.trait1,
+      leagueAssignments: [{ leagueId: "league-page", teamId, rosterStatus: "MLB" }],
+    };
+  });
 }
 
 function makePool(players: Player[]): RegisteredPool {
@@ -276,6 +321,74 @@ const TEST_SHILL_PROFILE: CpuShillProfile = {
     Bullpen: 1,
   },
 };
+
+async function saveCompletedAuctionForPage(options: {
+  teamAPlayers?: Player[];
+  teamBPlayers?: Player[];
+  shillRosterCount?: number;
+} = {}): Promise<Player[]> {
+  const teamAPlayers = options.teamAPlayers ?? makeExitRosterPlayers("team-a");
+  const teamBPlayers = options.teamBPlayers ?? makeExitRosterPlayers("team-b");
+  const shillIds = Array.from({ length: options.shillRosterCount ?? 0 }, (_, index) => `${TEST_SHILL_ID}-exit-${index + 1}`);
+  const allPlayers = [...teamAPlayers, ...teamBPlayers];
+  const playerIds = [...allPlayers.map((player) => player.id), ...shillIds];
+  const session: CpuShillAuctionSession = {
+    state: "AUCTION_COMPLETE",
+    config: {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      excludeFromLeague: true,
+      cpuShillCount: shillIds.length > 0 ? 1 : 0,
+    },
+    teams: [
+      {
+        teamId: "team-a",
+        budgetRemaining: 900_000,
+        rosterSlotsRemaining: 0,
+        minSalary: 3_000,
+        projectedTax: 0,
+        roster: teamAPlayers.map((player) => ({ playerId: player.id, salary: 10_000 })),
+      },
+      {
+        teamId: "team-b",
+        budgetRemaining: 900_000,
+        rosterSlotsRemaining: 0,
+        minSalary: 3_000,
+        projectedTax: 0,
+        roster: teamBPlayers.map((player) => ({ playerId: player.id, salary: 10_000 })),
+      },
+      ...(shillIds.length > 0
+        ? [{
+            teamId: TEST_SHILL_ID,
+            budgetRemaining: 900_000,
+            rosterSlotsRemaining: 22 - shillIds.length,
+            minSalary: 3_000,
+            projectedTax: 0,
+            roster: shillIds.map((playerId) => ({ playerId, salary: 10_000 })),
+          }]
+        : []),
+    ],
+    nominationOrder: shillIds.length > 0 ? ["team-a", "team-b", TEST_SHILL_ID] : ["team-a", "team-b"],
+    nominationIndex: 0,
+    nominationRound: 1,
+    players: Object.fromEntries(playerIds.map((playerId, index) => [playerId, { playerId, iv: 10_000 + index, ivPercentile: 50 }])),
+    playerOrder: playerIds,
+    availablePlayerIds: [],
+    currentLot: null,
+    pendingClaim: null,
+    results: [],
+    saleCount: playerIds.length,
+    cpuShills: shillIds.length > 0 ? { [TEST_SHILL_ID]: TEST_SHILL_PROFILE } : {},
+  };
+
+  await saveAuctionSession({
+    id: createAuctionSessionId("league-page", MLB_AUCTION_SEASON),
+    leagueId: "league-page",
+    seasonNumber: MLB_AUCTION_SEASON,
+    seed: session.config.nominationOrderSeed,
+    session,
+  });
+  return allPlayers;
+}
 
 function cpuDecisionSeedForTest(session: AuctionSession, kind: "bid" | "claim", teamId: string): string {
   const lot = session.currentLot;
@@ -594,5 +707,70 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
     expect(screen.getByText(/Market Shill 1 · 1 of 22/)).toBeInTheDocument();
     expect(screen.getByText(/SOLD to Market Shill 1/)).toBeInTheDocument();
+  });
+
+  test("P1: complete all-legal handoff check shows green rows and navigates to farm draft", async () => {
+    const players = await saveCompletedAuctionForPage();
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
+    expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
+    expect(screen.getByText("Every club fields a legal 22. The farm draft is next.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /FARM DRAFT/i })[0]);
+
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/farm-auction-draft?leagueId=league-page");
+  });
+
+  test("P2: blocked complete handoff focuses the panel and requires the two-step override", async () => {
+    const teamAPlayers = makeExitRosterPlayers("team-a");
+    const teamBPlayers = makeExitRosterPlayers("team-b", { missingSs: true });
+    const players = await saveCompletedAuctionForPage({ teamAPlayers, teamBPlayers });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    const panel = await screen.findByTestId("auction-complete-panel");
+    expect(screen.getByTestId("auction-exit-blocked-team-b")).toBeInTheDocument();
+    expect(screen.getByText("Still needs a starting SS.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "REVIEW ROSTERS" }));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(panel);
+
+    fireEvent.click(screen.getByRole("button", { name: "PROCEED ANYWAY" }));
+    expect(screen.getByText(/This hands off 1 club that can't field a legal 22/)).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByText(/This hands off 1 club that can't field a legal 22/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "PROCEED ANYWAY" }));
+    fireEvent.click(screen.getByRole("button", { name: "YES — HAND OFF AS-IS" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/farm-auction-draft?leagueId=league-page");
+  });
+
+  test("P3: complete handoff reads positions from stored player records, not session enrichment", async () => {
+    const players = await saveCompletedAuctionForPage();
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
+    expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
+    expect(screen.queryByText(/legality can't be verified/i)).not.toBeInTheDocument();
+  });
+
+  test("P4: pure shill clubs are not rendered and never block the handoff", async () => {
+    const players = await saveCompletedAuctionForPage({ shillRosterCount: 20 });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
+    expect(screen.queryByTestId(`auction-exit-club-${TEST_SHILL_ID}`)).not.toBeInTheDocument();
+    expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
+    expect(screen.queryByText("BLOCKED")).not.toBeInTheDocument();
   });
 });

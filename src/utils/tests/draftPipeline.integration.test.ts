@@ -283,6 +283,46 @@ function makeCommitRegressionPlayer(id: string): Player {
   };
 }
 
+function legalMlbPrimaryPosition(index: number): Player['primaryPosition'] {
+  const positions = [
+    'C',
+    '1B',
+    '2B',
+    '3B',
+    'SS',
+    'LF',
+    'CF',
+    'RF',
+    '1B',
+    '2B',
+    'SS',
+    'LF',
+    'RF',
+    'SP',
+    'SP',
+    'SP',
+    'SP',
+    'RP',
+    'RP',
+    'RP',
+    'CP',
+    'RP',
+  ] as const;
+  return positions[index] ?? 'CF';
+}
+
+function makeCommitRegressionPlayerAt(
+  id: string,
+  primaryPosition: Player['primaryPosition'],
+  secondaryPosition?: Player['secondaryPosition'],
+): Player {
+  return {
+    ...makeCommitRegressionPlayer(id),
+    primaryPosition,
+    secondaryPosition,
+  };
+}
+
 async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   addedFreeAgentId: string;
   removedCuratedPlayerId: string;
@@ -557,9 +597,13 @@ async function seedCompleteFranchiseReadyLeague(
 
     const mlbIds = Array.from({ length: 22 }, (_, i) => `${teamId}-mlb-${i + 1}`);
     const farmIds = Array.from({ length: 10 }, (_, i) => `${teamId}-farm-${i + 1}`);
-    for (const id of mlbIds) {
+    for (const [index, id] of mlbIds.entries()) {
       await savePlayer({
-        ...makeCommitRegressionPlayer(id),
+        ...makeCommitRegressionPlayerAt(
+          id,
+          legalMlbPrimaryPosition(index),
+          index === 8 ? 'C' : undefined,
+        ),
         leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
       });
     }
@@ -583,6 +627,30 @@ async function seedCompleteFranchiseReadyLeague(
     selectedScoutIdsByTeamId: {},
     pool: buildLiveScoutPool(leagueId, teams.length),
   });
+}
+
+async function normalizeCommittedMlbRostersToLegalPositionsForTest(
+  leagueId: string,
+  teamIds: readonly string[],
+): Promise<void> {
+  for (const teamId of teamIds) {
+    const roster = await getTeamRoster(teamId);
+    if (!roster) throw new Error(`Team ${teamId} roster missing before legal-position normalization.`);
+    for (const [index, playerId] of roster.mlbRoster.entries()) {
+      const player = await getPlayer(playerId);
+      if (!player) throw new Error(`Player ${playerId} missing before legal-position normalization.`);
+      await savePlayer({
+        ...player,
+        primaryPosition: legalMlbPrimaryPosition(index),
+        secondaryPosition: index === 8 ? 'C' : undefined,
+        leagueAssignments: player.leagueAssignments?.map((assignment) =>
+          assignment.leagueId === leagueId && assignment.teamId === teamId && assignment.rosterStatus === 'MLB'
+            ? { ...assignment, rosterStatus: 'MLB' as const }
+            : assignment,
+        ),
+      });
+    }
+  }
 }
 
 function makeIncompleteAuctionSession(
@@ -851,6 +919,8 @@ async function runDraftPipeline(options: RunDraftPipelineOptions = {}): Promise<
       ]),
     }),
   );
+
+  await normalizeCommittedMlbRostersToLegalPositionsForTest(LEAGUE_ID, TEAM_IDS);
 
   const controlOverrides = options.mirrorHubOwnershipToFranchise
     ? await franchiseControlFromSavedOwnership()
@@ -1462,9 +1532,13 @@ describe('draft pipeline integration', () => {
 
       const mlbIds = Array.from({ length: 22 }, (_, i) => `${teamId}-mlb-${i + 1}`);
       const farmIds = Array.from({ length: 10 }, (_, i) => `${teamId}-farm-${i + 1}`);
-      for (const id of mlbIds) {
+      for (const [index, id] of mlbIds.entries()) {
         await savePlayer({
-          ...makeCommitRegressionPlayer(id),
+          ...makeCommitRegressionPlayerAt(
+            id,
+            legalMlbPrimaryPosition(index),
+            index === 8 ? 'C' : undefined,
+          ),
           leagueAssignments: [{ leagueId, teamId, rosterStatus: 'MLB' }],
         });
       }

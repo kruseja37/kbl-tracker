@@ -427,6 +427,25 @@ describe('franchise setup-to-launch persistence integration', () => {
     await expect(getAllGamesByFranchise('franchise-1', 1)).resolves.toHaveLength(0);
   });
 
+  test('initializeFranchise blocks a count-correct but illegal MLB roster with the roster-law sentence', async () => {
+    await seedLeagueTeam(AWAY_TEAM_ID, 'Away Club');
+    await seedLeagueTeam(HOME_TEAM_ID, 'Home Club');
+    await savePlayer(makePlayer(HOME_TEAM_ID, 5, '1B'));
+    await saveLeagueTemplate({
+      id: LEAGUE_ID,
+      name: 'Integration League',
+      teamIds: [AWAY_TEAM_ID, HOME_TEAM_ID],
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'default',
+    });
+
+    await expect(initializeFranchise(makeFranchiseConfig())).rejects.toThrow(
+      /Home Club: roster is not a legal 22 — Still needs a starting SS\. Re-run the MLB draft for this league\./,
+    );
+    await expect(getAllGamesByFranchise('franchise-1', 1)).resolves.toHaveLength(0);
+  });
+
   test('repair and next-season empty schedule initialization use copied franchise data after source templates are cleared', async () => {
     await seedLeagueTeam(AWAY_TEAM_ID, 'Away Club');
     await seedLeagueTeam(HOME_TEAM_ID, 'Home Club');

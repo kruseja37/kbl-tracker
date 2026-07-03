@@ -51,6 +51,8 @@ import {
   type AuctionBoardFrame,
   type AuctionBoardRosterEntry,
 } from "../../../engines/auctionBoardFrame";
+import { buildAuctionExitReport, describeRosterLawGaps } from "../../../engines/auctionExitGate";
+import { deriveShillTeamIds } from "../../../engines/cpuTeamRoles";
 import { toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
@@ -200,30 +202,23 @@ function stageRosterLabel(teamState: AuctionSession["teams"][number] | null | un
   return `${Math.max(0, filled)} of ${LEGAL_ROSTER.size} rostered`;
 }
 
-function plural(value: number, singular: string, pluralValue = `${singular}s`): string {
-  return `${value} ${value === 1 ? singular : pluralValue}`;
-}
-
 function buildLawNeedLine(frame: AuctionBoardFrame): ReactNode {
   const need = frame.need;
   if (!need) return <>Roster law read needs player position data.</>;
-  if (need.missingPrimaries.length > 0) {
-    return <>Still need a starting {need.missingPrimaries.join(", ")}.</>;
-  }
-  if (need.catcherCoverNeed > 0) {
-    return <>Need a second catcher — backup C or a Two Way (C) arm.</>;
-  }
-  const armParts: string[] = [];
-  const rotationNeed = frame.seats.filter((seat) => seat.group === "ROTATION" && !seat.player).length;
-  const bullpenNeed = frame.seats.filter((seat) => seat.group === "BULLPEN" && !seat.player).length;
-  if (rotationNeed > 0) armParts.push(plural(rotationNeed, "more starter"));
-  if (bullpenNeed > 0) armParts.push(plural(bullpenNeed, "more reliever"));
-  if (armParts.length > 0) return <>Need {armParts.join(" / ")}.</>;
-  const bodyNeed = Math.max(0, LEGAL_ROSTER.size - (
-    frame.seats.filter((seat) => seat.player).length + frame.overflow.length
-  ));
-  if (bodyNeed > 0) return <>Need {plural(bodyNeed, "more body", "more bodies")} to reach {LEGAL_ROSTER.size}.</>;
+  const rosterCount = frame.seats.filter((seat) => seat.player).length + frame.overflow.length;
+  const lawGaps = describeRosterLawGaps(rosterCount, need);
+  if (lawGaps[0]) return <>{lawGaps[0]}</>;
   return <>Legal {LEGAL_ROSTER.size} — roster complete.</>;
+}
+
+function auctionExitRepairGuidance(report: ReturnType<typeof buildAuctionExitReport>): string {
+  if (report.clubs.some((club) => !club.known)) {
+    return "Some player records are missing position data. Check THE POOL in Draft Setup.";
+  }
+  if (report.clubs.some((club) => !club.legal && club.rosterCount < club.target)) {
+    return "The pool ran dry before this club reached 22. Add more players in Draft Setup and run the draft again.";
+  }
+  return "This roster can't take the field as drafted. Re-run the draft — positions now read correctly — or hand off anyway and fix it before the season.";
 }
 
 function buildStageNeedLine(
@@ -481,6 +476,8 @@ export function LeagueBuilderAuctionDraft() {
   const [registeredPool, setRegisteredPool] = useState<DraftPool>(null);
   const [poolLoading, setPoolLoading] = useState(false);
   const [poolError, setPoolError] = useState<string | null>(null);
+  const [exitOverrideArmed, setExitOverrideArmed] = useState(false);
+  const [exitOverrideConfirmed, setExitOverrideConfirmed] = useState(false);
   const loadedKeyRef = useRef<string | null>(null);
   const cpuAdvanceInFlightRef = useRef(false);
 
@@ -562,6 +559,82 @@ export function LeagueBuilderAuctionDraft() {
     }
     return teamDisplayName(teamById.get(teamId));
   }, [auction.shillTeamIds, shillTeamIdSet, teamById]);
+
+  const exitControlledClubs = useMemo(() => {
+    if (session?.state !== "AUCTION_COMPLETE") return [];
+    const shills = new Set(deriveShillTeamIds(session, leagueTeams));
+    return session.teams
+      .filter((team) => !shills.has(team.teamId))
+      .map((team) => ({
+        teamId: team.teamId,
+        rosterIds: team.roster.map((assignment) => assignment.playerId),
+      }));
+  }, [leagueTeams, session]);
+
+  const exitPositionMap = useMemo<RosterPositionMap>(() => {
+    const map: Record<string, RosterSlotPlayer> = {};
+    for (const club of exitControlledClubs) {
+      for (const playerId of club.rosterIds) {
+        if (map[playerId]) continue;
+        const player = playerById.get(playerId);
+        if (!player) continue;
+        map[playerId] = toRosterSlotPlayer({
+          primaryPosition: player.primaryPosition,
+          secondaryPosition: player.secondaryPosition,
+          traits: [player.trait1, player.trait2],
+        });
+      }
+    }
+    return map;
+  }, [exitControlledClubs, playerById]);
+
+  const exitReport = useMemo(() => {
+    if (session?.state !== "AUCTION_COMPLETE") return null;
+    return buildAuctionExitReport(exitControlledClubs, exitPositionMap);
+  }, [exitControlledClubs, exitPositionMap, session?.state]);
+
+  const canProceedToFarm = Boolean(exitReport && (exitReport.allLegal || exitOverrideConfirmed));
+
+  useEffect(() => {
+    if (session?.state !== "AUCTION_COMPLETE") {
+      setExitOverrideArmed(false);
+      setExitOverrideConfirmed(false);
+      return;
+    }
+    if (exitReport?.allLegal) {
+      setExitOverrideArmed(false);
+      setExitOverrideConfirmed(false);
+    }
+  }, [exitReport?.allLegal, session?.state]);
+
+  useEffect(() => {
+    if (!exitOverrideArmed) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-auction-exit-override]")) return;
+      setExitOverrideArmed(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [exitOverrideArmed]);
+
+  const focusExitPanel = useCallback(() => {
+    const panel = document.querySelector<HTMLElement>('[data-testid="auction-complete-panel"]');
+    panel?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    panel?.focus({ preventScroll: true });
+  }, []);
+
+  const navigateToFarmDraft = useCallback(() => {
+    navigate(activeLeague ? farmDraftRouteForLeague(activeLeague) : "/league-builder/farm-auction-draft");
+  }, [activeLeague, navigate]);
+
+  const requestFarmDraftExit = useCallback(() => {
+    if (canProceedToFarm) {
+      navigateToFarmDraft();
+      return;
+    }
+    focusExitPanel();
+  }, [canProceedToFarm, focusExitPanel, navigateToFarmDraft]);
 
   const currentBidder = auction.currentBidderTeamId ? teamById.get(auction.currentBidderTeamId) : null;
   const currentLotPlayer = session?.currentLot ? playerById.get(session.currentLot.playerId) : null;
@@ -1071,12 +1144,58 @@ export function LeagueBuilderAuctionDraft() {
     session?.state === "RESOLVE" && stagePendingClaim ? `CLAIM ${formatMoney(stagePendingClaim.price)}` :
     session?.state === "RESOLVE" ? "RESOLVE LOT" :
     session?.state === "SOLD" || session?.state === "PASSED" ? "NEXT LOT" :
-    session?.state === "AUCTION_COMPLETE" ? "FARM DRAFT" :
+    session?.state === "AUCTION_COMPLETE" ? (canProceedToFarm ? "FARM DRAFT" : "REVIEW ROSTERS") :
     undefined;
   const stageSecondaryLabel =
     session?.state === "RESOLVE" && stagePendingClaim ? "Pass on reserve" :
     session?.state === "OPEN_BIDDING" ? `Let ${playerPronouns(stageLotPlayer).object} go` :
     "No pass";
+  const stageCompleteVm = useMemo<AuctionStageVM["complete"]>(() => {
+    if (!session || !exitReport) return undefined;
+    const order = new Map(session.nominationOrder.map((teamId, index) => [teamId, index]));
+    const clubs = exitReport.clubs
+      .map((club) => {
+        const team = teamById.get(club.teamId);
+        return {
+          teamId: club.teamId,
+          name: teamNameById(club.teamId),
+          primary: team?.colors.primary ?? "var(--ballpark-brass)",
+          secondary: team?.colors.secondary ?? "var(--ballpark-chalk)",
+          countLabel: `${club.rosterCount} of ${club.target}`,
+          legal: club.legal,
+          blockers: club.blockers,
+        };
+      })
+      .sort((left, right) => {
+        if (left.legal !== right.legal) return left.legal ? 1 : -1;
+        return (order.get(left.teamId) ?? Number.MAX_SAFE_INTEGER)
+          - (order.get(right.teamId) ?? Number.MAX_SAFE_INTEGER);
+      });
+    return {
+      clubs,
+      allLegal: exitReport.allLegal,
+      blockedCount: exitReport.blockedCount,
+      summary: exitReport.allLegal
+        ? "Every club fields a legal 22. The farm draft is next."
+        : `${exitReport.blockedCount} of ${exitReport.clubs.length} clubs can't field a legal 22. ${auctionExitRepairGuidance(exitReport)}`,
+      onProceed: requestFarmDraftExit,
+      overrideArmed: exitOverrideArmed,
+      onArmOverride: () => setExitOverrideArmed(true),
+      onConfirmOverride: () => {
+        setExitOverrideConfirmed(true);
+        navigateToFarmDraft();
+      },
+      onStayOverride: () => setExitOverrideArmed(false),
+    };
+  }, [
+    exitOverrideArmed,
+    exitReport,
+    navigateToFarmDraft,
+    requestFarmDraftExit,
+    session,
+    teamById,
+    teamNameById,
+  ]);
   const auctionStageVm: AuctionStageVM | null = session ? {
     tier: "mlb",
     status: {
@@ -1152,6 +1271,7 @@ export function LeagueBuilderAuctionDraft() {
       needLine: buildStageNeedLine(rosterBoardFrame, rosterBoardPriorityGaps, rosterBoardBudgetWarning),
     },
     log: stageLog,
+    complete: session.state === "AUCTION_COMPLETE" ? stageCompleteVm : undefined,
     help: (
       <>
         <b>Market band</b> is the public room read. Low / expected / stretch are estimates.
@@ -1179,7 +1299,7 @@ export function LeagueBuilderAuctionDraft() {
       return;
     }
     if (session.state === "AUCTION_COMPLETE") {
-      navigate(activeLeague ? farmDraftRouteForLeague(activeLeague) : "/league-builder/farm-auction-draft");
+      requestFarmDraftExit();
     }
   };
 
@@ -1611,10 +1731,10 @@ export function LeagueBuilderAuctionDraft() {
                 <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <span>AUCTION COMPLETE. MLB rosters are filled in the auction session.</span>
                   <button
-                    onClick={() => navigate(activeLeague ? farmDraftRouteForLeague(activeLeague) : "/league-builder/farm-auction-draft")}
+                    onClick={requestFarmDraftExit}
                     className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold whitespace-nowrap"
                   >
-                    PROCEED TO FARM AUCTION →
+                    {canProceedToFarm ? "FARM DRAFT →" : "REVIEW ROSTERS"}
                   </button>
                 </div>
               )}

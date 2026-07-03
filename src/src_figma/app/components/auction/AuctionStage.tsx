@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { RosterIntelligencePayload } from "../../../../engines/rosterIntelligencePayload";
 import { WhisperPanel } from "./WhisperPanel";
+import { PressButton } from "../ballpark";
 
 /**
  * AuctionStage — the "Premium Retro" auction-draft stage (MLB + farm), the
@@ -106,6 +107,26 @@ export interface LogItemVM {
   amount?: number;
 }
 
+export interface AuctionCompleteVM {
+  clubs: {
+    teamId: string;
+    name: string;
+    primary: string;
+    secondary: string;
+    countLabel: string;
+    legal: boolean;
+    blockers: string[];
+  }[];
+  allLegal: boolean;
+  blockedCount: number;
+  summary: string;
+  onProceed: () => void;
+  overrideArmed: boolean;
+  onArmOverride: () => void;
+  onConfirmOverride: () => void;
+  onStayOverride?: () => void;
+}
+
 export interface AuctionStageVM {
   tier: AuctionTier;
   status: {
@@ -121,6 +142,7 @@ export interface AuctionStageVM {
   move: MoveVM;
   board: BoardVM;
   log: LogItemVM[];
+  complete?: AuctionCompleteVM;
   help?: React.ReactNode;
   /** preview-only: force a SOLD / GONE stamp over the lot */
   overlay?: "sold" | "gone" | null;
@@ -184,90 +206,96 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
         </div>
 
         <div className="stage">
-          {/* LEFT — the lot + your move */}
+          {/* LEFT — the lot + your move, or the complete-screen handoff check */}
           <div>
-            <div className="gonewrap">
-              <div className="lot">
-                <Lot lot={vm.lot} />
-              </div>
-              {vm.overlay === "sold" && (
-                <div className="stamp sold"><div><div className="s">SOLD</div></div></div>
-              )}
-              {vm.overlay === "gone" && (
-                <div className="stamp gone">
-                  <div>
-                    <div className="s">GONE</div>
-                    <div className="note">Nobody bid. {vm.lot.objectPronoun === "her" ? "She's" : "He's"} off the board for good.</div>
+            {vm.complete ? (
+              <HandoffCheckPanel complete={vm.complete} />
+            ) : (
+              <>
+                <div className="gonewrap">
+                  <div className="lot">
+                    <Lot lot={vm.lot} />
                   </div>
-                </div>
-              )}
-            </div>
-
-            <div className="move">
-              <div className="walletline">
-                <div><div className="lab">{vm.move.walletLabel}</div><div className="v gold num">{money(vm.move.wallet)}</div></div>
-                <div><div className="lab">Most you can bid</div><div className="v num">{money(vm.move.maxBid)}</div></div>
-                <div><div className="lab">Slots left</div><div className="v num">{vm.move.slotsLeft}</div></div>
-              </div>
-              <div className="ceiling">{vm.move.ceilingNote}</div>
-
-              {isCpuTurn ? (
-                <div className="cpu-panel">
-                  <div className="eyebrow">{vm.move.cpuDecision?.roleLabel ?? "CPU"} turn preview</div>
-                  <div className="cpu-action">{vm.move.cpuDecision?.action ?? `${vm.move.cpuTurnName} is deciding`}</div>
-                  <div className="cpu-reason">{vm.move.cpuDecision?.reason ?? "Read-only preview. Advance to let the decision resolve."}</div>
-                  {vm.move.cpuDecision?.amount && (
-                    <div className="cpu-numbers">
-                      <span>Move <b>{vm.move.cpuDecision.amount}</b></span>
+                  {vm.overlay === "sold" && (
+                    <div className="stamp sold"><div><div className="s">SOLD</div></div></div>
+                  )}
+                  {vm.overlay === "gone" && (
+                    <div className="stamp gone">
+                      <div>
+                        <div className="s">GONE</div>
+                        <div className="note">Nobody bid. {vm.lot.objectPronoun === "her" ? "She's" : "He's"} off the board for good.</div>
+                      </div>
                     </div>
                   )}
-                  <button type="button" className="advance-cpu" onClick={() => onAdvanceCpu?.()} disabled={!vm.move.canBid}>
-                    Advance decision
-                  </button>
                 </div>
-              ) : (
-                <>
-                  <div className="presets">
-                    {vm.move.presets.map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        className={`preset${!p.enabled ? " dim" : ""}${p.selected ? " sel" : ""}`}
-                        disabled={!p.enabled}
-                        title={p.enabled ? undefined : "above your cap"}
-                        onClick={() => p.enabled && onSelectPreset?.(p.amount)}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
-                    <span className="chip num" style={{ marginLeft: "auto" }}>
-                      your bid · {money(vm.move.currentBid)}
-                    </span>
-                  </div>
-                  <div className="actions">
-                    <button type="button" className="bid" disabled={!vm.move.canBid} onClick={() => onBid?.()}>
-                      {vm.move.primaryLabel ?? `BID ${moneyK(vm.move.currentBid)}`}
-                    </button>
-                    <button
-                      type="button"
-                      className="letgo"
-                      disabled={vm.move.canPass === false}
-                      onClick={() => onPass?.()}
-                    >
-                      {vm.move.secondaryLabel ?? `Let ${vm.lot.objectPronoun ?? "him"} go`}
-                    </button>
-                  </div>
-                </>
-              )}
 
-              {helpOpen && (
-                <div className="tax">
-                  <span>On-identity</span>
-                  <div className="meter"><i style={{ width: "30%" }} /></div>
-                  <span>heavy off-identity</span>
+                <div className="move">
+                  <div className="walletline">
+                    <div><div className="lab">{vm.move.walletLabel}</div><div className="v gold num">{money(vm.move.wallet)}</div></div>
+                    <div><div className="lab">Most you can bid</div><div className="v num">{money(vm.move.maxBid)}</div></div>
+                    <div><div className="lab">Slots left</div><div className="v num">{vm.move.slotsLeft}</div></div>
+                  </div>
+                  <div className="ceiling">{vm.move.ceilingNote}</div>
+
+                  {isCpuTurn ? (
+                    <div className="cpu-panel">
+                      <div className="eyebrow">{vm.move.cpuDecision?.roleLabel ?? "CPU"} turn preview</div>
+                      <div className="cpu-action">{vm.move.cpuDecision?.action ?? `${vm.move.cpuTurnName} is deciding`}</div>
+                      <div className="cpu-reason">{vm.move.cpuDecision?.reason ?? "Read-only preview. Advance to let the decision resolve."}</div>
+                      {vm.move.cpuDecision?.amount && (
+                        <div className="cpu-numbers">
+                          <span>Move <b>{vm.move.cpuDecision.amount}</b></span>
+                        </div>
+                      )}
+                      <button type="button" className="advance-cpu" onClick={() => onAdvanceCpu?.()} disabled={!vm.move.canBid}>
+                        Advance decision
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="presets">
+                        {vm.move.presets.map((p) => (
+                          <button
+                            key={p.label}
+                            type="button"
+                            className={`preset${!p.enabled ? " dim" : ""}${p.selected ? " sel" : ""}`}
+                            disabled={!p.enabled}
+                            title={p.enabled ? undefined : "above your cap"}
+                            onClick={() => p.enabled && onSelectPreset?.(p.amount)}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                        <span className="chip num" style={{ marginLeft: "auto" }}>
+                          your bid · {money(vm.move.currentBid)}
+                        </span>
+                      </div>
+                      <div className="actions">
+                        <button type="button" className="bid" disabled={!vm.move.canBid} onClick={() => onBid?.()}>
+                          {vm.move.primaryLabel ?? `BID ${moneyK(vm.move.currentBid)}`}
+                        </button>
+                        <button
+                          type="button"
+                          className="letgo"
+                          disabled={vm.move.canPass === false}
+                          onClick={() => onPass?.()}
+                        >
+                          {vm.move.secondaryLabel ?? `Let ${vm.lot.objectPronoun ?? "him"} go`}
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {helpOpen && (
+                    <div className="tax">
+                      <span>On-identity</span>
+                      <div className="meter"><i style={{ width: "30%" }} /></div>
+                      <span>heavy off-identity</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
           {/* RIGHT — roster need board + lot log */}
@@ -364,6 +392,89 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
         {supplemental}
       </div>
     </div>
+  );
+}
+
+function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
+  return (
+    <section
+      className="handoff-check"
+      data-testid="auction-complete-panel"
+      tabIndex={-1}
+    >
+      <div className="handoff-strip">MLB DRAFT COMPLETE — THE HANDOFF CHECK</div>
+      <div className="handoff-rows">
+        {complete.clubs.map((club) => (
+          <div
+            key={club.teamId}
+            className={`handoff-row${club.legal ? " legal" : " blocked"}`}
+            data-testid={`auction-exit-club-${club.teamId}`}
+          >
+            <div className="handoff-club">
+              <span
+                className="handoff-chip"
+                style={{
+                  "--team-primary": club.primary,
+                  "--team-secondary": club.secondary,
+                } as React.CSSProperties}
+              />
+              <div>
+                <div className="handoff-name">{club.name}</div>
+                <div className="handoff-count">{club.countLabel}</div>
+              </div>
+            </div>
+            <div className="handoff-verdict">
+              {club.legal ? (
+                <div className="handoff-legal" data-testid={`auction-exit-legal-${club.teamId}`}>✓ LEGAL 22</div>
+              ) : (
+                <>
+                  <div className="handoff-blocked" data-testid={`auction-exit-blocked-${club.teamId}`}>BLOCKED</div>
+                  <div className="handoff-blockers">
+                    {club.blockers.map((blocker) => (
+                      <div key={blocker}>{blocker}</div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className={`handoff-footer${complete.allLegal ? " legal" : " blocked"}`}>
+        <div className="handoff-summary">{complete.summary}</div>
+        {complete.allLegal ? (
+          <PressButton variant="gold" size="lg" onClick={complete.onProceed}>
+            FARM DRAFT →
+          </PressButton>
+        ) : (
+          <div className="handoff-override" data-auction-exit-override>
+            <button type="button" className="handoff-review" onClick={complete.onProceed}>
+              REVIEW ROSTERS
+            </button>
+            {complete.overrideArmed ? (
+              <>
+                <div className="handoff-confirm">
+                  This hands off {complete.blockedCount} club{complete.blockedCount === 1 ? "" : "s"} that can't field a legal 22. The franchise wizard will refuse them until they're fixed. Proceed?
+                </div>
+                <div className="handoff-buttons">
+                  <button type="button" className="handoff-yes" onClick={complete.onConfirmOverride}>
+                    YES — HAND OFF AS-IS
+                  </button>
+                  <button type="button" className="handoff-stay" onClick={complete.onStayOverride ?? complete.onArmOverride}>
+                    STAY
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button type="button" className="handoff-anyway" onClick={complete.onArmOverride}>
+                PROCEED ANYWAY
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
