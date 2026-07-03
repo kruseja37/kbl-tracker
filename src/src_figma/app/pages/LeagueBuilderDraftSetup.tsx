@@ -49,6 +49,7 @@ import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline"
 import {
   addPlayersToLeaguePool,
   removePlayersFromLeaguePool,
+  foldHandEditLedger,
   importRosteredPlayersToLeaguePool,
   isPlayerInLeaguePool,
   computePlayerIv,
@@ -77,6 +78,7 @@ import {
   countCellMatches,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
+  POOL_SIZE_MULTIPLIER_STOPS,
   resolvePoolSizingTarget,
   type ClassifiedDemandPlayer,
   type DemandCellReport,
@@ -92,7 +94,8 @@ import {
   type DesignPoolPlayer,
   type DesignFeasibilityResult,
 } from "../../../engines/rosterDesignFeasibility";
-import { toRosterSlotPlayer } from "../../../engines/rosterNeed";
+import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
+import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
 
@@ -157,6 +160,18 @@ type ClubEditorMode = "identity" | "design" | null;
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
 type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing">;
 type VerdictTone = ReturnType<typeof rosterDesignStatusTone>;
+type HandEditLedger = { handAdds: string[]; handRemoves: string[] };
+type RecheckRow = {
+  id: string;
+  label: string;
+  tag: string;
+  ok: boolean;
+  message: string;
+};
+type RecheckReport = {
+  rows: RecheckRow[];
+  allOk: boolean;
+};
 
 const ASK_SPOT_ORDER = new Map(
   ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "RP", "BACKUP C", "BENCH", "SWING"]
@@ -284,6 +299,116 @@ function normalizeDraftSeats(league: LeagueTemplate | null, leagueTeams: readonl
 function teamOwnerId(team: Team, seats: readonly DraftSetupSeat[]): string {
   if (team.controlledBy === "ai") return "cpu";
   return team.gmSeatId || seats[0]?.id || DEFAULT_DRAFT_SEATS[0].id;
+}
+
+function sortedIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+}
+
+function pluralWord(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
+}
+
+function handEditNotice(adds: number, removes: number): string {
+  const parts: string[] = [];
+  if (adds > 0) parts.push(`${adds} hand-${pluralWord(adds, "add")} stay${adds === 1 ? "s" : ""} in`);
+  if (removes > 0) parts.push(`${removes} hand-${pluralWord(removes, "remove")} stay${removes === 1 ? "s" : ""} out`);
+  return parts.length ? `Your ${parts.join("; your ")}.` : "";
+}
+
+function handEditReportSentence(adds: number, removes: number): string {
+  const parts: string[] = [];
+  if (adds > 0) parts.push(`${adds} hand-${pluralWord(adds, "add")}`);
+  if (removes > 0) parts.push(`${removes} hand-${pluralWord(removes, "remove")}`);
+  return parts.length ? ` Kept your ${parts.join(" and ")}.` : "";
+}
+
+function rosterPositionMap(players: readonly Player[]): RosterPositionMap {
+  return Object.fromEntries(players.map((player) => [
+    player.id,
+    toRosterSlotPlayer({
+      primaryPosition: player.primaryPosition,
+      secondaryPosition: player.secondaryPosition ?? null,
+      traits: [player.trait1, player.trait2],
+    }),
+  ]));
+}
+
+function buildLeagueSeatabilityRow(
+  poolPlayers: readonly Player[],
+  leagueTeams: readonly Team[],
+  cap: number,
+): RecheckRow {
+  const remaining = new Map(poolPlayers.map((player) => [player.id, player]));
+  const defaultSlots = buildDefaultDesignSlots();
+  for (let pass = 1; pass <= leagueTeams.length; pass += 1) {
+    const remainingPlayers = [...remaining.values()];
+    const result = evaluateRosterDesign(defaultSlots, buildRosterDesignPool(remainingPlayers), cap);
+    if (!result.feasible) {
+      const candidateIds = sortedIds(result.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id)));
+      const positions = rosterPositionMap(remainingPlayers);
+      const need = teamRosterNeed(candidateIds, positions);
+      const lawBlockers = need ? describeRosterLawGaps(candidateIds.length, need) : [];
+      const blockers = lawBlockers.length > 0
+        ? lawBlockers
+        : result.blockers.map((blocker) => blocker.message);
+      const club = leagueTeams[pass - 1];
+      return {
+        id: "league-seatability",
+        label: club ? club.name : "LEAGUE",
+        tag: "LEAGUE",
+        ok: false,
+        message: `after ${pass - 1} clubs build, the pool can't seat club ${pass}: ${blockers.join(" ")}`,
+      };
+    }
+    for (const id of result.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id))) {
+      remaining.delete(id);
+    }
+  }
+  return {
+    id: "league-seatability",
+    label: "LEAGUE",
+    tag: "ALL CLUBS",
+    ok: true,
+    message: "BUILDS",
+  };
+}
+
+function buildRecheckReport({
+  humanTeams,
+  leagueTeams,
+  poolPlayers,
+  cap,
+  ownerName,
+  seats,
+}: {
+  humanTeams: readonly Team[];
+  leagueTeams: readonly Team[];
+  poolPlayers: readonly Player[];
+  cap: number;
+  ownerName: (ownerId: string) => string;
+  seats: readonly DraftSetupSeat[];
+}): RecheckReport {
+  const designPool = buildRosterDesignPool(poolPlayers);
+  const rows: RecheckRow[] = [];
+  for (const team of humanTeams) {
+    if (!team.rosterDesign) continue;
+    const result = evaluateRosterDesign(seedRosterDesignSlots(team.rosterDesign.slots), designPool, cap);
+    rows.push({
+      id: `design-${team.id}`,
+      label: team.name,
+      tag: ownerName(teamOwnerId(team, seats)).toUpperCase(),
+      ok: result.feasible,
+      message: result.feasible
+        ? `BUILDS · ${formatMoney(result.headroom)} to spare`
+        : result.blockers.map((blocker) => blocker.message).join(" "),
+    });
+  }
+  rows.push(buildLeagueSeatabilityRow(poolPlayers, leagueTeams, cap));
+  return {
+    rows,
+    allOk: rows.every((row) => row.ok),
+  };
 }
 
 type PlayerEditForm = {
@@ -452,10 +577,12 @@ export function LeagueBuilderDraftSetup() {
   const [savedDraftChecked, setSavedDraftChecked] = useState(false);
   const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
   const [modeAReport, setModeAReport] = useState<ModeAReport | null>(null);
-  const [modeAManualEdits, setModeAManualEdits] = useState(false);
   const [reExtractConfirm, setReExtractConfirm] = useState(false);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [liveClubVerdicts, setLiveClubVerdicts] = useState<Map<string, DesignFeasibilityResult>>(new Map());
+  const [recheckReport, setRecheckReport] = useState<RecheckReport | null>(null);
+  const [lastRecheckKey, setLastRecheckKey] = useState<string | null>(null);
+  const autoRecheckTriggerRef = useRef<string | null>(null);
   const reExtractConfirmRef = useRef<HTMLDivElement>(null);
   const lockConfirmRef = useRef<HTMLDivElement>(null);
 
@@ -551,6 +678,24 @@ export function LeagueBuilderDraftSetup() {
     () => (activeLeagueId ? players.filter((p) => isPlayerInLeaguePool(p, activeLeagueId)) : []),
     [players, activeLeagueId],
   );
+  const modeAHandLedger: HandEditLedger = useMemo(() => {
+    if (poolMode !== "design-first") return { handAdds: [], handRemoves: [] };
+    return foldHandEditLedger({
+      previousAdds: league?.modeAHandAdds,
+      previousRemoves: league?.modeAHandRemoves,
+      lastExtractedIds: league?.modeAExtractedIds,
+      currentMemberIds: inPoolPlayers.map((player) => player.id),
+      universeIds: players.map((player) => player.id),
+    });
+  }, [
+    inPoolPlayers,
+    league?.modeAExtractedIds,
+    league?.modeAHandAdds,
+    league?.modeAHandRemoves,
+    players,
+    poolMode,
+  ]);
+  const modeAManualEdits = modeAHandLedger.handAdds.length + modeAHandLedger.handRemoves.length > 0;
   const availablePlayers = useMemo(
     () => (activeLeagueId ? players.filter((p) => !isPlayerInLeaguePool(p, activeLeagueId)) : []),
     [players, activeLeagueId],
@@ -607,6 +752,14 @@ export function LeagueBuilderDraftSetup() {
       shills,
       poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     }).effectiveTarget;
+  }, [league, shills]);
+  const poolSizeTarget = useMemo(() => {
+    if (!league) return null;
+    return resolvePoolSizingTarget({
+      teams: league.teamIds.length,
+      shills,
+      poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
   }, [league, shills]);
   const sufficiency = useMemo(
     () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills, poolSizeTargetOverride),
@@ -727,13 +880,21 @@ export function LeagueBuilderDraftSetup() {
   };
 
   const saveLeagueDraftSetup = useCallback(
-    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolSizeMultiplier">>) => {
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
       if (!league) return;
       await saveLeagueTemplate({ ...league, ...patch });
       await refresh();
     },
     [league, refresh],
   );
+
+  const handlePoolSizeMultiplierChange = (poolSizeMultiplier: number) =>
+    runAction(async () => {
+      if (!league) return;
+      assertPoolCanMutate();
+      if (locked) throw new Error("Pool is locked. Unlock it before changing pool size.");
+      await saveLeagueDraftSetup({ poolSizeMultiplier });
+    });
 
   const persistSeatNameForOwnedTeams = useCallback(
     async (seat: DraftSetupSeat, nextSeats: DraftSetupSeat[]) => {
@@ -811,7 +972,7 @@ export function LeagueBuilderDraftSetup() {
     [refresh, refreshPool, activeLeagueId],
   );
 
-  const buildModeAResult = useCallback((): PoolFromDemandResult => {
+  const buildModeAResult = useCallback((ledger: HandEditLedger = { handAdds: [], handRemoves: [] }): PoolFromDemandResult => {
     if (!league) throw new Error("League not found.");
     const lockedDesigns: TeamDesignInput[] = humanTeams
       .filter((team) => Boolean(team.rosterDesign?.lockedAt))
@@ -832,6 +993,8 @@ export function LeagueBuilderDraftSetup() {
         shills,
         budgetPerTeam: tierBudget,
         poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+        pinnedIds: ledger.handAdds,
+        excludedIds: ledger.handRemoves,
       },
     );
   }, [humanTeams, league, leagueTeams, players, shills, tierBudget]);
@@ -844,7 +1007,7 @@ export function LeagueBuilderDraftSetup() {
       return;
     }
     try {
-      const result = buildModeAResult();
+      const result = buildModeAResult(modeAHandLedger);
       setModeAReport({
         cells: result.cells,
         shortfalls: result.shortfalls,
@@ -854,7 +1017,7 @@ export function LeagueBuilderDraftSetup() {
     } catch {
       setModeAReport(null);
     }
-  }, [buildModeAResult, league?.poolExtractedAt, poolMode]);
+  }, [buildModeAResult, league?.poolExtractedAt, modeAHandLedger, poolMode]);
 
   useEffect(() => {
     if (!reExtractConfirm && !lockConfirm) return undefined;
@@ -882,6 +1045,9 @@ export function LeagueBuilderDraftSetup() {
       await saveLeagueDraftSetup({
         draftPoolMode: nextMode,
         poolExtractedAt: nextMode === "pool-first" ? undefined : league.poolExtractedAt,
+        modeAExtractedIds: nextMode === "pool-first" ? undefined : league.modeAExtractedIds,
+        modeAHandAdds: nextMode === "pool-first" ? undefined : league.modeAHandAdds,
+        modeAHandRemoves: nextMode === "pool-first" ? undefined : league.modeAHandRemoves,
       });
       if (nextMode === "pool-first") setModeAReport(null);
     });
@@ -960,7 +1126,6 @@ export function LeagueBuilderDraftSetup() {
     runAction(async () => {
       assertPoolCanMutate();
       await addPlayersToLeaguePool([...availSelected], activeLeagueId);
-      if (poolMode === "design-first" && league?.poolExtractedAt) setModeAManualEdits(true);
       setAvailSelected(new Set());
     });
 
@@ -968,7 +1133,6 @@ export function LeagueBuilderDraftSetup() {
     runAction(async () => {
       assertPoolCanMutate();
       await removePlayersFromLeaguePool([...inSelected], activeLeagueId);
-      if (poolMode === "design-first" && league?.poolExtractedAt) setModeAManualEdits(true);
       setInSelected(new Set());
     });
 
@@ -983,7 +1147,14 @@ export function LeagueBuilderDraftSetup() {
       if (!league) return;
       assertPoolCanMutate();
       if (!allHumanDesignsLocked) throw new Error("Lock every club's design first.");
-      const result = buildModeAResult();
+      const folded = foldHandEditLedger({
+        previousAdds: league.modeAHandAdds,
+        previousRemoves: league.modeAHandRemoves,
+        lastExtractedIds: league.modeAExtractedIds,
+        currentMemberIds: players.filter((player) => isPlayerInLeaguePool(player, activeLeagueId)).map((player) => player.id),
+        universeIds: players.map((player) => player.id),
+      });
+      const result = buildModeAResult(folded);
       const extractedIds = new Set(result.players.map((player) => player.id));
       const currentIds = new Set(players.filter((player) => isPlayerInLeaguePool(player, activeLeagueId)).map((player) => player.id));
       const toAdd = [...extractedIds].filter((id) => !currentIds.has(id));
@@ -991,14 +1162,19 @@ export function LeagueBuilderDraftSetup() {
       if (toAdd.length > 0) await addPlayersToLeaguePool(toAdd, activeLeagueId);
       if (toRemove.length > 0) await removePlayersFromLeaguePool(toRemove, activeLeagueId);
       const extractedAt = new Date().toISOString();
-      await saveLeagueTemplate({ ...league, poolExtractedAt: extractedAt });
+      await saveLeagueTemplate({
+        ...league,
+        poolExtractedAt: extractedAt,
+        modeAExtractedIds: sortedIds(result.players.map((player) => player.id)),
+        modeAHandAdds: folded.handAdds,
+        modeAHandRemoves: folded.handRemoves,
+      });
       setModeAReport({
         cells: result.cells,
         shortfalls: result.shortfalls,
         designVerdicts: result.designVerdicts,
         sizing: result.sizing,
       });
-      setModeAManualEdits(false);
       setReExtractConfirm(false);
     });
 
@@ -1076,6 +1252,55 @@ export function LeagueBuilderDraftSetup() {
     return { team, verdict, tone, copy: designVerdictCopy(verdict, tone) };
   });
   const nonGreenClubCount = clubCheckRows.filter((row) => row.tone !== "green").length;
+  const recheckVisible = identitiesReady && inPoolPlayers.length > 0;
+  const currentRecheckKey = useMemo(() => JSON.stringify({
+    pool: sortedIds(inPoolPlayers.map((player) => player.id)),
+    cap: tierBudget,
+    teamIds: league?.teamIds ?? [],
+    dial: league?.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+    shills,
+    designs: humanTeams.map((team) => ({
+      id: team.id,
+      lockedAt: team.rosterDesign?.lockedAt ?? null,
+      slots: team.rosterDesign?.slots ?? null,
+    })),
+  }), [humanTeams, inPoolPlayers, league?.poolSizeMultiplier, league?.teamIds, shills, tierBudget]);
+  const runRecheck = useCallback(() => {
+    if (!recheckVisible) return;
+    const report = buildRecheckReport({
+      humanTeams,
+      leagueTeams,
+      poolPlayers: inPoolPlayers,
+      cap: tierBudget,
+      ownerName,
+      seats,
+    });
+    setRecheckReport(report);
+    setLastRecheckKey(currentRecheckKey);
+  }, [currentRecheckKey, humanTeams, inPoolPlayers, leagueTeams, ownerName, recheckVisible, seats, tierBudget]);
+  const recheckStale = Boolean(recheckReport && lastRecheckKey !== currentRecheckKey);
+
+  useEffect(() => {
+    if (!recheckVisible) {
+      setRecheckReport(null);
+      setLastRecheckKey(null);
+      autoRecheckTriggerRef.current = null;
+      return;
+    }
+    const trigger = `${league?.poolExtractedAt ?? ""}|${locked ? "locked" : "open"}`;
+    if (!trigger.trim() || autoRecheckTriggerRef.current === trigger) return;
+    autoRecheckTriggerRef.current = trigger;
+    const report = buildRecheckReport({
+      humanTeams,
+      leagueTeams,
+      poolPlayers: inPoolPlayers,
+      cap: tierBudget,
+      ownerName,
+      seats,
+    });
+    setRecheckReport(report);
+    setLastRecheckKey(currentRecheckKey);
+  }, [currentRecheckKey, humanTeams, inPoolPlayers, league?.poolExtractedAt, leagueTeams, locked, ownerName, recheckVisible, seats, tierBudget]);
   const canModeALock =
     !busy &&
     !savedDraftMutationBlocked &&
@@ -1213,9 +1438,100 @@ export function LeagueBuilderDraftSetup() {
       {sufficiency.meetsFloor
         ? " · surplus " + (sufficiency.surplus >= 0 ? "+" : "") + sufficiency.surplus
         : " · need " + -sufficiency.surplus + " more"}
-      {" · recommended " + sufficiency.targetSize}
     </div>
   );
+
+  const poolSizeDial = poolSizeTarget ? (
+    <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">
+      <div className="text-[10px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
+        POOL SIZE
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        {POOL_SIZE_MULTIPLIER_STOPS.map((stop) => {
+          const active = Math.abs((league?.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER) - stop) < 1e-9;
+          return (
+            <button
+              key={stop}
+              type="button"
+              disabled={poolEditingBlocked || busy}
+              onClick={() => void handlePoolSizeMultiplierChange(stop)}
+              className={
+                "px-2.5 py-1.5 border-2 text-[11px] font-bold font-[var(--ballpark-font-chrome)] disabled:opacity-45 " +
+                (active
+                  ? "bg-[var(--ballpark-brass)] text-[#1A1A1A] border-[var(--ballpark-brass)]"
+                  : "bg-transparent text-[var(--ballpark-chalk)] border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)]")
+              }
+            >
+              {stop}×
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className={
+          "mt-2 text-[11px] font-bold font-[var(--ballpark-font-chrome)] " +
+          (poolSizeTarget.clamped ? "text-[var(--ballpark-status-warn)]" : "text-[var(--ballpark-chalk)]")
+        }
+      >
+        {poolSizeTarget.effectiveTarget} PLAYERS · {league?.teamIds.length ?? 0} CLUBS × 22
+        {shills > 0 ? ` + ${shills} SHILLS` : ""}
+      </div>
+    </div>
+  ) : null;
+
+  const recheckPanel = recheckVisible ? (
+    <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-4">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="text-[11px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)]">
+          CAN EVERY CLUB BUILD A LEGAL 22 UNDER {formatMoney(tierBudget)}?
+        </div>
+        <PressButton
+          size="sm"
+          variant="affirm"
+          onClick={runRecheck}
+          disabled={busy}
+          className="ml-auto"
+        >
+          RE-CHECK
+        </PressButton>
+        {recheckStale ? (
+          <span className="flex items-center gap-1 text-[10px] font-bold text-[var(--ballpark-status-warn)] font-[var(--ballpark-font-chrome)]">
+            <span className="w-2 h-2 rounded-full bg-[var(--ballpark-status-warn)]" aria-hidden="true" />
+            pool changed — re-check
+          </span>
+        ) : null}
+      </div>
+      <div className="grid gap-2">
+        {recheckReport ? recheckReport.rows.map((row) => (
+          <div key={row.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+            <span className={row.ok ? "text-[var(--ballpark-status-green)]" : "text-[var(--ballpark-status-red-bright)]"}>
+              {row.ok ? "✓" : "✗"}
+            </span>
+            <span className="font-bold text-[var(--ballpark-chalk)]">{row.label}</span>
+            <span className="text-[9px] font-bold tracking-wider bg-[var(--ballpark-brass)] text-[#1A1A1A] px-1.5 py-0.5">
+              {row.tag}
+            </span>
+            <span className={row.ok ? "text-[var(--ballpark-status-green)]" : "text-[var(--ballpark-status-red-bright)]"}>
+              {row.message}
+            </span>
+          </div>
+        )) : (
+          <div className="text-sm text-[var(--ballpark-chalk)]/60">Run the check against the current pool.</div>
+        )}
+      </div>
+    </div>
+  ) : null;
+
+  const sizingSummaryLine = modeAReport?.sizing ? (
+    <div className="border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-chalk)]">
+      Sized to {modeAReport.sizing.finalSize} ({(modeAReport.sizing.finalSize / Math.max(1, modeAReport.sizing.demandBase)).toFixed(2)}×):
+      {" "}trimmed {modeAReport.sizing.trimmedCount} worst-fit extras, added {modeAReport.sizing.injectedIds.length} for affordability.
+      {handEditReportSentence(
+        modeAReport.sizing.pinnedHandPicks?.length ?? 0,
+        modeAReport.sizing.excludedHandRemoves?.length ?? 0,
+      )}
+    </div>
+  ) : null;
 
   const designFirstStrayNotice = rosteredButUnassigned.length > 0 ? (
     <div className="text-[11px] leading-snug text-[var(--ballpark-chalk)]/70 font-[var(--ballpark-font-chrome)]">
@@ -1572,6 +1888,7 @@ export function LeagueBuilderDraftSetup() {
                         {sufficiencyChip}
                         {designFirstStrayNotice}
                       </div>
+                      {poolSizeDial}
                       {solvencyBanner ? (
                         <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
                           {solvencyBanner}
@@ -1589,7 +1906,7 @@ export function LeagueBuilderDraftSetup() {
                                 <X className="w-3 h-3" />
                               </PressButton>
                               <span className="text-[11px] text-[var(--ballpark-chalk)]/55">
-                                Extracting again rebuilds the pool from the designs — your add and remove edits go with it.
+                                Recalc rebuilds the automatic picks to your dial. {handEditNotice(modeAHandLedger.handAdds.length, modeAHandLedger.handRemoves.length)}
                               </span>
                             </>
                           ) : (
@@ -1652,6 +1969,9 @@ export function LeagueBuilderDraftSetup() {
                         ))}
                       </div>
                     </div>
+
+                    {recheckPanel}
+                    {sizingSummaryLine}
 
                     {modeAReport?.sizing?.messages.length ? (
                       <div className="grid gap-2">
@@ -1763,6 +2083,7 @@ export function LeagueBuilderDraftSetup() {
                     </PressButton>
                   )}
                 </div>
+                {recheckPanel}
                 {marketOutlookPanel}
               </>
             )}

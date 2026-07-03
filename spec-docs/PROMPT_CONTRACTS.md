@@ -27853,3 +27853,62 @@ src/engines/auctionPoolSizing.ts (poolDemandModel/expectedShillWins ~127); src/u
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
 - `git diff --stat` — the §8 Phase-2A surface only; GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-POOLSIZE-2A ===== -->
+
+<!-- ===== CONTRACT: CODEX-POOLSIZE-2B ===== -->
+## CODEX-POOLSIZE-2B — the dial UI + RE-CHECK panel + hand-edit preservation (Phase 2B)
+
+**Binding design:** `spec-docs/FABLE_POOL_SIZING_DESIGN_2026-07-03.md` — build **PHASE 2B per §8** EXACTLY,
+INCLUDING all `[AMENDED 2026-07-03]` blocks (JK override: hand-edits PRESERVED). Phase 2A (the sizing
+engine) is COMMITTED — build 2B on top. Branch-only; do NOT commit/push; leave the tree dirty for Opus.
+
+**Read first (in full):** FABLE_POOL_SIZING_DESIGN §3.2(4), §4.2 (hand-removes out of repair), §4.3 step 5
+(hand-edit reconcile), §4.5 (result fields), §4.6 (pinnedIds/excludedIds options), §5 (dial + recalc +
+amended hand-edit mechanics), §6 (RE-CHECK panel), §7.3 tests 14 + amended; the committed Phase 2A in
+src/engines/poolFromDemand.ts; src/utils/leagueBuilderStorage.ts (LeagueTemplate); src/utils/leagueBuilderPoolBuilder.ts
+(isPlayerInLeaguePool, add/removePlayersFromLeaguePool); src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx
+(buildModeAResult ~804-822, the apply/converge site ~971-978, poolExtractedAt clear ~868, reExtractConfirm
+~824-853/1078, sufficiency line ~1199, assertPoolCanMutate ~855-859); src/engines/auctionExitGate.ts
+(describeRosterLawGaps); src/engines/rosterDesignFeasibility.ts (evaluateRosterDesign).
+
+### Deliverables (Phase 2B, per §5/§6 + amendments)
+1. **Engine delta (poolFromDemand):** add `pinnedIds?`/`excludedIds?` options; §4.3 step 5 reconcile (drop
+   excludedIds from the union AND the §4.2 repair universe; force-include resolvable pinnedIds; unresolvable
+   skipped silently); §3.2 protected set gains pinnedIds; §4.5 result gains `pinnedHandPicks`/`excludedHandRemoves`
+   (what the engine ACTUALLY did, sorted id-asc). GATE step 5 on `pinnedIds?.length || excludedIds?.length` —
+   both absent ⇒ byte-identical (extend test 12).
+2. **Persistence:** `modeAExtractedIds?`/`modeAHandAdds?`/`modeAHandRemoves?` on LeagueTemplate (additive, NO
+   DB bump); cleared with poolExtractedAt on the pool-first switch (~868); pool-first never reads/writes them.
+3. **`foldHandEditLedger` pure helper (leagueBuilderPoolBuilder):** the §5.2 set algebra EXACTLY
+   (dAdd/dRem from currentMemberIds vs lastExtractedIds; handAdds = ((prevAdds ∪ dAdd) − dRem) ∩ universe;
+   handRemoves = ((prevRemoves ∪ dRem) − dAdd) ∩ universe; disjoint; first-extraction ⇒ empty ledgers).
+4. **Recalc wiring (LeagueBuilderDraftSetup):** buildModeAResult folds → passes pinnedIds=handAdds,
+   excludedIds=handRemoves + the persisted poolSizeMultiplier (?? 1.35) + resolved cap; converge to
+   result.players as today; persist modeAExtractedIds + folded ledgers alongside poolExtractedAt.
+   `modeAManualEdits` becomes DERIVED (handAdds.length + handRemoves.length > 0). Thread the PERSISTED
+   multiplier + RESOLVED cap — never recompute (adapter-fidelity).
+5. **Dial UI (§5.1):** seven-stop `POOL SIZE` segmented stepper (1.2×…1.5×), active `--ballpark-brass` on
+   `--ballpark-well`, live readout `{effectiveTarget} PLAYERS · {teams} CLUBS × 22[+ {shills} SHILLS]`, amber
+   tone when clamped; disabled when locked/saved-draft; persists poolSizeMultiplier via saveLeagueDraftSetup.
+6. **Confirm copy flip + report line (§5.2):** reExtractConfirm becomes reassurance ("...your {A} hand-adds
+   stay in; your {R} hand-removes stay out", zero-count omission); report line gains "Kept your {A} hand-adds
+   and {R} hand-removes." from the ENGINE's pinnedHandPicks/excludedHandRemoves.
+7. **RE-CHECK panel (§6):** header "CAN EVERY CLUB BUILD A LEGAL 22 UNDER ${cap}?" + RE-CHECK button + stale
+   chip; per-club rows via `evaluateRosterDesign(design, current pool, resolveLeagueSalaryCap)` for designed
+   clubs + the §4.1 G1 for league seatability; FAIL wording from `describeRosterLawGaps` (the SAME words as the
+   DJ-06 handoff check — one law); read-only (never mutates pool, never blocks the shuttle, never replaces the
+   DJ-06 gate). Both modes.
+
+### Constraints
+- FIT-FIRST law intact (§1); one law only (isLegalRoster/teamRosterNeed/describeRosterLawGaps — reuse, no
+  parallel rules). Byte-identical engine when no dial + no hand-edits. The fold DERIVES from the assignment
+  set (no shuttle-handler instrumentation). No DB bump. Kit tokens (no hex). GameTracker UI SET (untouched).
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0.
+- Tests: §7.3 test 14 (re-check blocker strings === describeRosterLawGaps) + the amended hand-edit tests
+  (fold algebra: since-last deltas, cancellation, add↔remove migration, first-extraction-empty; pin protected
+  from trim; exclude out of union+repair; result pinnedHandPicks/excludedHandRemoves) + engine byte-identical
+  when pins/excludes absent + a Draft Setup UI smoke (dial renders + persists; panel renders a verdict). Green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
+- `git diff --stat` — §5/§6 surface + the §4 engine delta; GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-POOLSIZE-2B ===== -->

@@ -316,16 +316,17 @@ describe('extractPoolFromDemand', () => {
     expect(result.kept.map((player) => player.id)).toEqual(['pricey-fit']);
   });
 
-  it('never evicts reserved, identity-claimed, or floor-protected ids', () => {
+  it('never evicts reserved, identity-claimed, floor-protected, or pinned ids', () => {
     const players = [
       { id: 'reserved', salary: 500 },
       { id: 'claimed', salary: 400 },
       { id: 'floor', salary: 300 },
+      { id: 'pinned', salary: 250 },
       { id: 'loose', salary: 200 },
     ];
-    const result = trimPoolToTarget(players, new Set(['reserved', 'claimed', 'floor']), () => 0, 1);
+    const result = trimPoolToTarget(players, new Set(['reserved', 'claimed', 'floor', 'pinned']), () => 0, 1);
     expect(result.evicted.map((player) => player.id)).toEqual(['loose']);
-    expect(result.kept.map((player) => player.id).sort()).toEqual(['claimed', 'floor', 'reserved']);
+    expect(result.kept.map((player) => player.id).sort()).toEqual(['claimed', 'floor', 'pinned', 'reserved']);
   });
 
   it('uses salary-desc then id-asc only inside equal-fit trim ties', () => {
@@ -441,6 +442,42 @@ describe('extractPoolFromDemand', () => {
     });
     expect(result.sizing).toBeUndefined();
     expect(result.g1).toBeUndefined();
+  });
+
+  it('keeps the amendment surface byte-neutral when no pins or excludes are passed', () => {
+    const result = extractPoolFromDemand(universe(), [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    expect(result.sizing).not.toHaveProperty('pinnedHandPicks');
+    expect(result.sizing).not.toHaveProperty('excludedHandRemoves');
+  });
+
+  it('force-includes pins, protects them from trim, and withholds excludes', () => {
+    const source = universe();
+    const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    const excluded = baseline.players[0].id;
+    const pinned = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
+    expect(pinned).toBeDefined();
+
+    const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      pinnedIds: [pinned!.id],
+      excludedIds: [excluded],
+    });
+
+    expect(result.players.map((player) => player.id)).toContain(pinned!.id);
+    expect(result.players.map((player) => player.id)).not.toContain(excluded);
+    expect(result.sizing?.pinnedHandPicks).toEqual([pinned!.id]);
+    expect(result.sizing?.excludedHandRemoves).toEqual([excluded]);
+    expect(result.sizing?.evictedIds).not.toContain(pinned!.id);
   });
 
   it('is deterministic with sizing enabled for shuffled input order', () => {

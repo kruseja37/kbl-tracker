@@ -117,6 +117,9 @@ export interface LeagueTemplate {
   draftPoolMode?: DraftPoolMode;
   draftSeats?: DraftSetupSeat[];
   poolExtractedAt?: string;
+  modeAExtractedIds?: string[];
+  modeAHandAdds?: string[];
+  modeAHandRemoves?: string[];
   tier?: TierKey;
   salaryCap?: number;
   poolSizeMultiplier?: number;

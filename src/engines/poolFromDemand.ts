@@ -112,6 +112,8 @@ export interface PoolSizingResult {
   ceilingTarget: number;
   clamped: boolean;
   messages: string[];
+  pinnedHandPicks?: string[];
+  excludedHandRemoves?: string[];
 }
 
 export interface PoolG1Result {
@@ -269,6 +271,34 @@ function repairSlotsForFailure(failing: PoolG1Result['failing'] | undefined): Ar
   return chosen;
 }
 
+function excludedWouldQualifyMessage(
+  universe: readonly DemandUniversePlayer[],
+  current: ReadonlyMap<string, DemandUniversePlayer>,
+  excludedIds: ReadonlySet<string>,
+  repairSlots: readonly (DesignSlot | null)[],
+  slotBound: number,
+  currentMinFit: number,
+  fitOf: (player: DemandUniversePlayer) => number,
+): string | null {
+  const slots = repairSlots.length > 0 ? repairSlots : [null];
+  const candidate = universe
+    .filter((player) => !current.has(player.id))
+    .filter((player) => excludedIds.has(player.id))
+    .filter((player) =>
+      slots.some((slot) =>
+        slot
+          ? eligibleForRepairGroup(slot, player)
+          : buildDefaultDesignSlots().some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player)),
+      ),
+    )
+    .filter((player) => player.salary <= slotBound)
+    .filter((player) => fitOf(player) + 1e-9 >= currentMinFit)
+    .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id))[0];
+  return candidate
+    ? `${playerName(candidate)}, whom you removed by hand, would qualify — re-add them to close this gap.`
+    : null;
+}
+
 function runG1Check(
   players: readonly DemandUniversePlayer[],
   teams: number,
@@ -346,12 +376,17 @@ export function extractPoolFromDemand(
     sizeTarget?: number;
     maxRepairRounds?: number;
     posture?: RosterPosture;
+    pinnedIds?: string[];
+    excludedIds?: string[];
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
   const posture = options.posture ?? 'optimal';
   const teamsForSizing = Math.max(0, Math.floor(options.teams ?? designs.length));
   const sizingEnabled = options.sizeTarget !== undefined || options.poolSizeMultiplier !== undefined;
+  const handReconcileEnabled = Boolean(options.pinnedIds?.length || options.excludedIds?.length);
+  const requestedPinnedIds = new Set(options.pinnedIds ?? []);
+  const requestedExcludedIds = new Set(options.excludedIds ?? []);
   const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
 
   // 1. Type the universe once (whole-profile classification).
@@ -425,6 +460,15 @@ export function extractPoolFromDemand(
   for (const player of floors.players as DemandUniversePlayer[]) {
     if (!byId.has(player.id)) byId.set(player.id, player);
   }
+  if (handReconcileEnabled) {
+    for (const id of requestedExcludedIds) byId.delete(id);
+    const classifiedById = new Map(classified.map(({ player }) => [player.id, player]));
+    for (const id of [...requestedPinnedIds].sort((a, b) => a.localeCompare(b))) {
+      if (requestedExcludedIds.has(id)) continue;
+      const player = classifiedById.get(id);
+      if (player) byId.set(id, player);
+    }
+  }
   let players = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
   let sizing: PoolSizingResult | undefined;
   let g1: PoolG1Result | undefined;
@@ -440,6 +484,7 @@ export function extractPoolFromDemand(
       ...reservedIds,
       ...floors.claimedIds,
       ...floors.floorIds,
+      ...(handReconcileEnabled ? requestedPinnedIds : []),
     ]);
     const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
     const trimmed = trimPoolToTarget(players, protectedIds, fitOf, target.effectiveTarget);
@@ -450,11 +495,12 @@ export function extractPoolFromDemand(
     }
     if (players.length > target.effectiveTarget) {
       messages.push(
-        `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: every remaining player is claimed by an ask, an identity build, or a structural floor`,
+        `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: every remaining player is claimed by an ask, an identity build, a structural floor${handReconcileEnabled && players.some((player) => requestedPinnedIds.has(player.id)) ? ', or your own hand-picks' : ''}`,
       );
     }
 
     const injectedIds: string[] = [];
+    let excludedRepairNoteAdded = false;
     const budget = options.budgetPerTeam ?? Number.POSITIVE_INFINITY;
     if (Number.isFinite(budget) && teamsForSizing > 0) {
       let current = new Map(players.map((player) => [player.id, player]));
@@ -474,6 +520,7 @@ export function extractPoolFromDemand(
           const label = slot ? (slot.position ?? slot.slotId) : 'roster';
           const eligible = universe
             .filter((player) => !current.has(player.id))
+            .filter((player) => !requestedExcludedIds.has(player.id))
             .filter((player) => (slot ? eligibleForRepairGroup(slot, player) : buildDefaultDesignSlots().some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player))))
             .filter((player) => player.salary <= slotBound)
             .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));
@@ -491,8 +538,12 @@ export function extractPoolFromDemand(
           addedThisRound += 1;
         }
         if (addedThisRound === 0) {
+          const suffix = handReconcileEnabled && !excludedRepairNoteAdded
+            ? excludedWouldQualifyMessage(universe, current, requestedExcludedIds, repairSlots, budget - 21 * poolMinSalary, currentMinFit, fitOf)
+            : null;
+          if (suffix) excludedRepairNoteAdded = true;
           messages.push(
-            `pool still cannot field every club after repair: ${g1.failing?.blockers.join(' ') ?? 'no further legal body is available'}`,
+            `pool still cannot field every club after repair: ${g1.failing?.blockers.join(' ') ?? 'no further legal body is available'}${suffix ? ` ${suffix}` : ''}`,
           );
           g1 = { ...g1, repairRounds: rounds };
           break;
@@ -520,6 +571,18 @@ export function extractPoolFromDemand(
       injectedIds,
       clamped: target.clamped || finalSize > target.requestedTarget,
       messages,
+      ...(handReconcileEnabled
+        ? {
+            pinnedHandPicks: players
+              .filter((player) => requestedPinnedIds.has(player.id))
+              .map((player) => player.id)
+              .sort((a, b) => a.localeCompare(b)),
+            excludedHandRemoves: universe
+              .filter((player) => requestedExcludedIds.has(player.id) && !players.some((kept) => kept.id === player.id))
+              .map((player) => player.id)
+              .sort((a, b) => a.localeCompare(b)),
+          }
+        : {}),
     };
   }
 

@@ -52,6 +52,45 @@ export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean 
   return Boolean(player.leagueAssignments?.some((assignment) => assignment.leagueId === leagueId));
 }
 
+function sortedUniqueIds(ids: readonly string[] | undefined): string[] {
+  return [...new Set(ids ?? [])].sort((a, b) => a.localeCompare(b));
+}
+
+export function foldHandEditLedger(input: {
+  previousAdds?: readonly string[];
+  previousRemoves?: readonly string[];
+  lastExtractedIds?: readonly string[];
+  currentMemberIds: readonly string[];
+  universeIds: readonly string[];
+}): { handAdds: string[]; handRemoves: string[] } {
+  if (!input.lastExtractedIds) {
+    return { handAdds: [], handRemoves: [] };
+  }
+
+  const universe = new Set(input.universeIds);
+  const last = new Set(input.lastExtractedIds);
+  const current = new Set(input.currentMemberIds);
+  const dAdd = new Set([...current].filter((id) => !last.has(id)));
+  const dRem = new Set([...last].filter((id) => !current.has(id)));
+
+  const handAdds = new Set([...sortedUniqueIds(input.previousAdds), ...dAdd]);
+  for (const id of dRem) handAdds.delete(id);
+  for (const id of [...handAdds]) {
+    if (!universe.has(id)) handAdds.delete(id);
+  }
+
+  const handRemoves = new Set([...sortedUniqueIds(input.previousRemoves), ...dRem]);
+  for (const id of dAdd) handRemoves.delete(id);
+  for (const id of [...handRemoves]) {
+    if (!universe.has(id) || handAdds.has(id)) handRemoves.delete(id);
+  }
+
+  return {
+    handAdds: sortedUniqueIds([...handAdds]),
+    handRemoves: sortedUniqueIds([...handRemoves]),
+  };
+}
+
 /**
  * The live per-player IV for the Draft Setup pool table — the SAME calc the registration seam
  * uses per player, so the value shown as you build is identical to the value frozen at lock.

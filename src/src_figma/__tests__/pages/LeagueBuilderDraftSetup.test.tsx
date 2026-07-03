@@ -6,6 +6,10 @@ import {
   draftSetupSolvencyBannerText,
 } from "../../app/pages/LeagueBuilderDraftSetup";
 import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
+import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
+import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
+import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
+import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -397,5 +401,70 @@ describe("LeagueBuilderDraftSetup", () => {
       "This pool can't seat a legal roster under your $1,000,000 cap — raise the cap or add cheaper players.",
     );
     expect(draftSetupSolvencyBannerText(buildRosterDesignPool(legalPlayers), 60_000_000)).toBeNull();
+  });
+
+  test("renders the pool-size dial and persists the selected stop", async () => {
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        poolSizeMultiplier: 1.35,
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      ],
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("POOL SIZE")).toBeInTheDocument();
+    expect(screen.getByText(/PLAYERS · 2 CLUBS × 22/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "1.5×" }));
+
+    await waitFor(() => {
+      expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+        id: "league-page",
+        poolSizeMultiplier: 1.5,
+      }));
+    });
+  });
+
+  test("renders RE-CHECK with roster-law blocker wording", async () => {
+    const shortPool = makeLegalRosterPlayers(10_000).filter((player) => player.id !== "legal-h-RF");
+    const positions: RosterPositionMap = Object.fromEntries(shortPool.map((player) => [
+      player.id,
+      toRosterSlotPlayer({
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition ?? null,
+        traits: [player.trait1, player.trait2],
+      }),
+    ]));
+    const attempt = evaluateRosterDesign(buildDefaultDesignSlots(), buildRosterDesignPool(shortPool), 1_000_000);
+    const attemptIds = attempt.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id));
+    const need = teamRosterNeed(attemptIds, positions);
+    if (!need) throw new Error("Expected roster need");
+    const expectedLawLine = describeRosterLawGaps(attemptIds.length, need).join(" ");
+
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: [makeTeam("team-a")],
+      players: shortPool,
+      pool: makePool({ locked: false, players: shortPool.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })) }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/CAN EVERY CLUB BUILD A LEGAL 22 UNDER/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /RE-CHECK/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText((content) => content.includes(expectedLawLine))).toBeInTheDocument();
+    });
   });
 });
