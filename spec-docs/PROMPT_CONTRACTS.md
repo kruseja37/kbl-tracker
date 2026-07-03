@@ -28733,3 +28733,115 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any; run suspects solo).
 - `git diff --stat` — best22Target.ts (+test), rosterDesignFeasibility.ts, archetypeBalanceSimulator.ts (comments only).
 <!-- ===== END CONTRACT: CODEX-ITER-ENGINE-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-DESIGNER ===== -->
+# CODEX-ITER-DESIGNER — edit-after-extract affordances + pin UI (iterate-loop slice 2)
+
+BUILD TO: spec-docs/FABLE_ITERATE_DRAFT_DESIGN_2026-07-03.md §1.3 (unlock affordances), §2.3 (pin persistence), §2.4 (pin
+UI) — read VERBATIM for copy + rendering. One component diff: RosterDesigner.tsx (+ its test). The pin ENGINE is committed
+(c070c0be): buildBest22Target now takes a 7th arg `pins?: ReadonlyMap<slotId,playerId>` and returns `Best22Target.pins
+{honored,dropped}` + `pick.pinned`. Consume it — do not touch the engine.
+
+CANONICAL: reuse the committed wires (demandUniverseFromPlayers, buildBest22Target, rankPoolForSlot, askSatisfaction,
+designVerdict). No new mappers. GameTracker untouched.
+
+DELIVERABLE 1 — §1.3 EDIT-AFTER-EXTRACT affordances (RosterDesigner.tsx):
+  - New optional prop `poolDrawn?: boolean` (page will pass Boolean(league.poolExtractedAt); absent = today's rendering
+    byte-identical → pool-first + pre-extraction unchanged).
+  - (a) Header: relabel the bare `UNLOCK` button (~:447-449) to `UNLOCK & EDIT` (same variant/handler unlockDesign). When
+    `poolDrawn && mode==='design-first' && !lockedPool`: one dim consequence line beside it (11px chalk/55):
+    `EDITS RE-OPEN THE PLAN — LOCK AGAIN AND RE-EXTRACT TO APPLY`. While RE-PLANNING (unlocked + poolDrawn), the LOCK DESIGN
+    helper line (~:456-458) when tone green reads `LOCK TO QUEUE THE RE-EXTRACT — THE POOL STILL REFLECTS YOUR OLD PLAN`.
+  - (b) SlotEditor gains `lockedByDesign?: boolean` + `onUnlock?: () => void`. When readOnly BECAUSE of the design lock (NOT
+    because `disabled`/saved-draft), render a row at the TOP of the editor panel (above the shape menu):
+    `🔒 THE ASK IS LOCKED — THE POOL WAS DRAWN FROM IT   [ UNLOCK & EDIT ]` (left 11px brass; right PressButton sm gold →
+    onUnlock). One click makes the same editor live (no reopen). When readOnly because `disabled` (saved draft): show the
+    existing disabledReason, NO unlock button (unlockDesign already refuses on disabled).
+  - RESET unchanged (stays readOnly-gated).
+
+DELIVERABLE 2 — §2.3 PIN PERSISTENCE (additive, migration-safe):
+  - `RosterDesignSave` (RosterDesigner.tsx) + `Team.rosterDesign` (leagueBuilderStorage.ts) gain
+    `pins?: Record<string /*slotId*/, string /*playerId*/>`. Absent = today's shape, no DB version bump (record-level
+    schemaless, the lockedAt precedent). Legacy designs without `pins` load clean (P7).
+  - Pins are local component state seeded from team.rosterDesign?.pins; every pin/unpin is an EDIT gated by the SAME
+    readOnly as preference changes (locked designs pin nothing); pin changes flow through the existing dirty-save path
+    (persistDirtySave) exactly like slot edits, and the debounced compute passes the pins Map to buildBest22Target and
+    includes pins in the memo key.
+  - Orphan pins (player no longer in the pool) are KEPT in storage, EXCLUDED from the compute (engine drops → target.pins.dropped),
+    reported in the UI (deliverable 3). RESET clears pins with everything else.
+
+DELIVERABLE 3 — §2.4 PIN UI (RosterDesigner.tsx):
+  - ShortlistRail rows (edit-mode only; hidden when readOnly): unpinned row → a bordered `PIN` chip-button; the pinned row →
+    filled brass `PINNED ✓` that UNPINS on click. Pinning a player already pinned elsewhere MOVES the pin (map semantics).
+    Keep the gold TARGET chip + the fit-first order (rankPoolForSlot; never re-sort by salary).
+  - Slot card: a pinned slot's target line becomes `📌 {NAME} · {$salary}` in FULL brass (not the 70% dim of a computed
+    pick); orphaned pin → `📌 {NAME} — OUT OF THE POOL` (amber); keep the `≈` prefix when the pinned player misses the ask.
+  - SlotEditor: one row between temperament and the shortlist — no pin → nothing; pin → `PINNED TO THIS SLOT: {NAME} · {$salary}
+    [ UNPIN ]`; orphaned → `PINNED: {NAME} — LEFT THE POOL. RE-EXTRACT CAN BRING HIM BACK. [ UNPIN ]` (amber).
+  - Target strip: append when pins exist — all honored `· {n} PIN{S} LOCKED IN` (brass); any dropped `· {k} OF {n} PINS CAN'T
+    LAND` (amber); pinned-infeasible line `THE 22 AROUND YOUR PINS BREAKS THE CAP OR THE ROSTER LAW — EASE A PIN OR RIDE IT`.
+  - Recompute policy: pins join the existing 300ms debounced buildBest22Target pass + its memo key (one extra call per edit).
+
+SCOPE: RosterDesigner.tsx + its test ONLY. The PAGE wiring (poolDrawn prop pass, pins→extraction) is slice 3 — do NOT edit
+LeagueBuilderDraftSetup.tsx here (the new props are optional; absent = today). No DB/schema bump. Fit-first everywhere.
+
+TESTS (§1.6 W1-W2, §2.7 P7, P9) in the RosterDesigner test:
+  - W1: extracted+locked (simulate via lockedAt + poolDrawn) → open a slot → lock row renders with UNLOCK & EDIT; clicking
+    makes the SlotEditor controls live (no reopen).
+  - W2: with `disabled` (saved draft) → lock row shows disabledReason, NO unlock button.
+  - P7: save/reload a design with pins → pins restore; a legacy rosterDesign without pins loads clean.
+  - P9: pin/unpin affordances absent when readOnly; orphan-pin row renders when a pinned player is absent from the pool and
+    clears when present; pinning a player pinned elsewhere moves the pin (one player, one slot).
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run` for the RosterDesigner test + designVerdict test + best22Target test — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any; run suspects solo — the
+  RosterDesigner test file is a known batch-order flake, green solo).
+- `git diff --stat` — RosterDesigner.tsx + its test (+ leagueBuilderStorage.ts type-only for rosterDesign.pins). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ITER-DESIGNER ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-DESIGNER-FIX ===== -->
+# CODEX-ITER-DESIGNER-FIX — kill the P/TWO-WAY adapter divergence (pin lies) + honest orphan messaging
+
+Adversarial audit found a CONFIRMED MAJOR on the designer pin slice: a bare 'P'/'TWO-WAY' primary pitcher appears in the
+SP/RP shortlist WITH a PIN button (design-eligible), but pinning him gets DROPPED by the engine and the UI falsely says
+"OUT OF THE POOL / RE-EXTRACT CAN BRING HIM BACK." Root cause = the two adapters disagree on his role:
+- buildRosterDesignPool (src/src_figma/app/engines/leaguePlayerAdapter.ts) builds slotPlayer via the ad-hoc `roleForPlayer`
+  which maps 'P'/'TWO-WAY' → 'SP/RP' (design-eligible for sp/rp).
+- the CANONICAL `toRosterSlotPlayer` (rosterNeed.ts — already used by demandPlayerFromLeaguePlayer in the SAME file) maps
+  'P'/'TWO-WAY' → role undefined (ineligible for sp/rp), which the sim pool + buildIdentityRoster + isLegalRoster all use.
+This is the C4 canonical-mapper law violation (roleForPlayer is the ad-hoc divergence) and it also makes the FLOOR disagree
+with isLegalRoster for 'P'/'TWO-WAY' pools.
+
+FIX 1 (ROOT — align to the canonical mapper): in `buildRosterDesignPool`, build the `slotPlayer` via the CANONICAL
+`toRosterSlotPlayer` (the exact call demandPlayerFromLeaguePlayer already uses in this file) instead of the ad-hoc
+role/inline construction. Delete `roleForPlayer` if it becomes unused. This makes 'P'/'TWO-WAY' consistent across the
+shortlist, validatePins, the engine, and isLegalRoster (excluded from sp/rp everywhere → no PIN offered → no drop → no
+mislabel), and aligns the FLOOR with isLegalRoster.
+  - CRITICAL — no regression for normal pitchers: SP/RP/CP/SP-RP primaries and 'Two Way' TRAIT players must map IDENTICALLY
+    under both mappers (verify: only bare 'P'/'TWO-WAY' PRIMARY differs). The committed BEST-22 tests (best22Target,
+    rosterDesignFeasibility) + the designer tests use SP/RP fixtures → must stay green unchanged.
+  - The `profile` field of DesignPoolPlayer is unchanged (buildRosterDesignPool still sets it as today); ONLY slotPlayer's
+    construction moves to the canonical mapper.
+
+FIX 2 (HARDEN — honest messaging): in RosterDesigner.tsx pinDisplayBySlot, `orphaned` must be `!poolPlayer` ONLY (the player
+is genuinely not in the pool). A pin that is in the pool but was DROPPED by the engine (poolPlayer truthy && dropped) is a
+DIFFERENT state — render an honest message (slot card `📌 {NAME} — CAN'T PIN HERE`; SlotEditor `PINNED: {NAME} — CAN'T PIN
+TO THIS SLOT [ UNPIN ]`) — NEVER the "OUT OF THE POOL / RE-EXTRACT" copy for an in-pool player. (After FIX 1 this path
+shouldn't trigger for 'P'/'TWO-WAY' via the shortlist, but keep it as defense-in-depth for any drop-in-pool case.)
+
+TESTS:
+  - buildRosterDesignPool: a bare 'P' AND a 'TWO-WAY' primary → slotPlayer.role is UNDEFINED (matches toRosterSlotPlayer),
+    so NOT sp/rp-eligible; an SP primary → role 'SP' (eligible, unchanged); a 'Two Way' TRAIT arm → unchanged twoWayVariant.
+  - RosterDesigner: a pin that is in the pool but engine-dropped renders the "CAN'T PIN HERE" message, NOT the orphan
+    "OUT OF THE POOL" message; a genuinely-absent pinned player still shows the orphan message. Keep W1-W2/P7/P9 green.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/components/RosterDesigner.test.tsx src/engines/__tests__/best22Target.test.ts
+   src/engines/__tests__/rosterDesignFeasibility.test.ts src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx` — all
+   green (LeagueBuilderDraftSetup + any leaguePlayerAdapter consumer proves the canonical-mapper change didn't regress the floor/shortlist).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any; run suspects solo).
+- `git diff --stat` — leaguePlayerAdapter.ts, RosterDesigner.tsx (+ tests). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ITER-DESIGNER-FIX ===== -->

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDefaultDesignSlots,
   evaluateRosterDesign,
+  isDesignPlayerEligibleForSlot,
   personalityTiltPenalty,
   rankPoolForPreference,
   rankPoolForSlot,
@@ -315,6 +316,18 @@ describe('rankPoolForPreference', () => {
       .toEqual(['secondary-c', 'two-way-c']);
     expect(rankPoolForSlot({ slotId: 'SWING', kind: 'swing' }, {}, [benchBat, relief, starter]).map((p) => p.playerId))
       .toEqual(['bench-bat', 'relief-arm']);
+  });
+
+  it('P4 seam: exported slot eligibility delegates to the feasibility slot rules', () => {
+    const shortstop = hitter('SS', { id: 'shortstop' });
+    const starter = arm('SP', { id: 'starter' });
+    const secondaryC = hitter('1B', { id: 'secondary-c', secondary: 'C' });
+
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'SS', kind: 'pos', position: 'SS' }, shortstop)).toBe(true);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'SS', kind: 'pos', position: 'SS' }, secondaryC)).toBe(false);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'backupC', kind: 'backupC' }, secondaryC)).toBe(true);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'SP1', kind: 'sp' }, starter)).toBe(true);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'FLEX1', kind: 'flex' }, starter)).toBe(false);
   });
 
   it('A7: rankPoolForPreference delegates byte-identically for all taxonomy positions', () => {

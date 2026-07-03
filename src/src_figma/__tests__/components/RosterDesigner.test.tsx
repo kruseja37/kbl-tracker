@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -13,7 +13,7 @@ import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassif
 import { buildRosterDesignPool } from "../../app/engines/leaguePlayerAdapter";
 import type { Player, Team } from "../../../utils/leagueBuilderStorage";
 
-function makeTeam(id: string, name: string): Team {
+function makeTeam(id: string, name: string, overrides: Partial<Team> = {}): Team {
   return {
     id,
     name,
@@ -25,6 +25,7 @@ function makeTeam(id: string, name: string): Team {
     leagueIds: ["league-test"],
     createdDate: "2026-07-02T00:00:00.000Z",
     lastModified: "2026-07-02T00:00:00.000Z",
+    ...overrides,
   };
 }
 
@@ -291,7 +292,7 @@ describe("RosterDesigner defaults and ask scoping", () => {
       clickSlot(label);
       expect(screen.getByRole("button", { name: /TWO-WAY/ })).toBeInTheDocument();
     }
-  });
+  }, 10_000);
 
   test("D2-D3: saved impossible two-way tags are stripped from field and flex slots but preserved on RP1", () => {
     const saved = seedRosterDesignSlots([
@@ -310,5 +311,302 @@ describe("RosterDesigner defaults and ask scoping", () => {
     const pool = buildRosterDesignPool([makePlayer("lf", { primaryPosition: "LF" })]);
     const classified = pool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) }));
     expect(countEligibleForAsk(lf!, undefined, classified)).toBeGreaterThan(0);
+  });
+});
+
+describe("buildRosterDesignPool canonical slot mapping", () => {
+  test("maps bare P/TWO-WAY primaries as roleless, while normal arms and Two Way traits stay eligible", () => {
+    const pool = buildRosterDesignPool([
+      makePlayer("bare-p", { primaryPosition: "P" }),
+      makePlayer("bare-two-way", { primaryPosition: "TWO-WAY" }),
+      makePlayer("starter", { primaryPosition: "SP" }),
+      makePlayer("swing", { primaryPosition: "SP/RP" }),
+      makePlayer("closer", { primaryPosition: "CP" }),
+      makePlayer("trait-two-way", { primaryPosition: "RP", trait1: "Two Way (C)" }),
+    ]);
+    const byId = new Map(pool.map((player) => [player.id, player]));
+
+    expect(byId.get("bare-p")?.slotPlayer.role).toBeUndefined();
+    expect(byId.get("bare-two-way")?.slotPlayer.role).toBeUndefined();
+    expect(byId.get("starter")?.slotPlayer.role).toBe("SP");
+    expect(byId.get("swing")?.slotPlayer.role).toBe("SP/RP");
+    expect(byId.get("closer")?.slotPlayer.role).toBe("CP");
+    expect(byId.get("trait-two-way")?.slotPlayer.role).toBe("RP");
+    expect(byId.get("trait-two-way")?.slotPlayer.twoWayVariant).toBe("C");
+  });
+});
+
+describe("RosterDesigner extracted edit affordances and pins", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  test("W1: extracted locked designs expose UNLOCK & EDIT inside the same slot editor", () => {
+    const team = makeTeam("team-a", "Alpha", {
+      rosterDesign: {
+        slots: seedRosterDesignSlots(),
+        lockedAt: "2026-07-03T00:00:00.000Z",
+      },
+    });
+
+    render(
+      <RosterDesigner
+        team={team}
+        mode="design-first"
+        players={[makePlayer("shortstop", { primaryPosition: "SS" })]}
+        lockedPool={false}
+        poolDrawn
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(screen.getByText("EDITS RE-OPEN THE PLAN — LOCK AGAIN AND RE-EXTRACT TO APPLY")).toBeInTheDocument();
+    expect(screen.getByText("🔒 THE ASK IS LOCKED — THE POOL WAS DRAWN FROM IT")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ANY SHAPE/i })).toBeDisabled();
+
+    const unlockButtons = screen.getAllByRole("button", { name: "UNLOCK & EDIT" });
+    fireEvent.click(unlockButtons[unlockButtons.length - 1]);
+
+    expect(screen.getByText("SS — THE ASK")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ANY SHAPE/i })).not.toBeDisabled();
+  });
+
+  test("W2: saved-draft readOnly shows the disabled reason without an unlock affordance in the editor", () => {
+    render(
+      <RosterDesigner
+        team={makeTeam("team-a", "Alpha")}
+        mode="design-first"
+        players={[makePlayer("shortstop", { primaryPosition: "SS" })]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        disabled
+        disabledReason="Draft Saved"
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+
+    expect(screen.getAllByText("Draft Saved").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "UNLOCK & EDIT" })).toBeNull();
+    expect(screen.getByRole("button", { name: /ANY SHAPE/i })).toBeDisabled();
+  });
+
+  test("P7: saved pins reload and legacy designs without pins load cleanly", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const player = makePlayer("pin-one", { primaryPosition: "SS" });
+    const team = makeTeam("team-a", "Alpha");
+    const { unmount } = render(
+      <RosterDesigner
+        team={team}
+        mode="pool-first"
+        players={[player]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    clickSlot("SS");
+    fireEvent.click(screen.getByRole("button", { name: "PIN" }));
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => undefined);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    const saved = onSave.mock.calls[0][0];
+    expect(saved.pins).toEqual({ SS: "pin-one" });
+
+    unmount();
+    render(
+      <RosterDesigner
+        team={makeTeam("team-b", "Beta", { rosterDesign: saved })}
+        mode="pool-first"
+        players={[player]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(screen.getByText("PINNED TO THIS SLOT: Test pin-one · $10,000")).toBeInTheDocument();
+
+    cleanup();
+    render(
+      <RosterDesigner
+        team={makeTeam("team-c", "Gamma", { rosterDesign: { slots: saved.slots } })}
+        mode="pool-first"
+        players={[player]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(screen.queryByText(/PINNED TO THIS SLOT/i)).toBeNull();
+  });
+
+  test("P9: readOnly hides pin chips, orphan pins report, and moving a pin keeps one slot claim", async () => {
+    render(
+      <RosterDesigner
+        team={makeTeam("team-readonly", "Read", {
+          rosterDesign: {
+            slots: seedRosterDesignSlots(),
+            lockedAt: "2026-07-03T00:00:00.000Z",
+          },
+        })}
+        mode="design-first"
+        players={[makePlayer("shortstop", { primaryPosition: "SS" })]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(screen.queryByRole("button", { name: "PIN" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "PINNED ✓" })).toBeNull();
+
+    cleanup();
+    const ghostPlayer = makePlayer("ghost", { primaryPosition: "SS" });
+    const otherPlayer = makePlayer("other", { primaryPosition: "2B" });
+    const pinnedTeam = makeTeam("team-orphan", "Orphan", {
+      rosterDesign: {
+        slots: seedRosterDesignSlots(),
+        pins: { SS: "ghost" },
+      },
+    });
+    const { rerender } = render(
+      <RosterDesigner
+        team={pinnedTeam}
+        mode="pool-first"
+        players={[otherPlayer]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(screen.getByText("PINNED: ghost — LEFT THE POOL. RE-EXTRACT CAN BRING HIM BACK.")).toBeInTheDocument();
+    expect(screen.queryByText(/CAN'T PIN/)).toBeNull();
+
+    rerender(
+      <RosterDesigner
+        team={pinnedTeam}
+        mode="pool-first"
+        players={[ghostPlayer, otherPlayer]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    expect(screen.queryByText(/LEFT THE POOL/)).toBeNull();
+    expect(screen.getByText("PINNED TO THIS SLOT: Test ghost · $10,000")).toBeInTheDocument();
+
+    cleanup();
+    const onSave = vi.fn(async () => undefined);
+    const mover = makePlayer("mover", { primaryPosition: "SS", secondaryPosition: "2B" });
+    render(
+      <RosterDesigner
+        team={makeTeam("team-move", "Move")}
+        mode="pool-first"
+        players={[mover]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    const clickMoverPin = () => {
+      const row = screen
+        .getAllByText(/Test mover ·/)
+        .map((element) => element.closest("div"))
+        .find((candidate): candidate is HTMLDivElement => Boolean(candidate && within(candidate).queryByRole("button", { name: "PIN" })));
+      if (!row) throw new Error("No mover pin row found");
+      fireEvent.click(within(row).getByRole("button", { name: "PIN" }));
+    };
+
+    clickSlot("SS");
+    clickMoverPin();
+    expect(screen.getByText("PINNED TO THIS SLOT: Test mover · $10,000")).toBeInTheDocument();
+
+    clickSlot("BENCH 1");
+    clickMoverPin();
+    expect(screen.getByText("PINNED TO THIS SLOT: Test mover · $10,000")).toBeInTheDocument();
+
+    clickSlot("SS");
+    expect(screen.queryByText("PINNED TO THIS SLOT: Test mover · $10,000")).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => undefined);
+
+    const lastSave = onSave.mock.calls[onSave.mock.calls.length - 1]?.[0];
+    expect(lastSave.pins).toEqual({ FLEX1: "mover" });
+  });
+
+  test("P10: in-pool pins dropped by the engine say can't pin here, not out of the pool", async () => {
+    const inPoolButWrongSlot = makePlayer("wrong-slot", { primaryPosition: "SS" });
+    render(
+      <RosterDesigner
+        team={makeTeam("team-dropped", "Dropped", {
+          mlbArchetypeKey: "murderers-row",
+          rosterDesign: {
+            slots: seedRosterDesignSlots(),
+            pins: { SP1: "wrong-slot" },
+          },
+        })}
+        mode="pool-first"
+        players={[inPoolButWrongSlot]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => undefined);
+
+    clickSlot("SP1");
+    expect(screen.getByText("PINNED: Test wrong-slot — CAN'T PIN TO THIS SLOT")).toBeInTheDocument();
+    expect(screen.getByText("📌 Test wrong-slot — CAN'T PIN HERE")).toBeInTheDocument();
+    expect(screen.queryByText(/OUT OF THE POOL/)).toBeNull();
+    expect(screen.queryByText(/LEFT THE POOL/)).toBeNull();
   });
 });

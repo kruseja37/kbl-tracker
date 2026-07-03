@@ -47,7 +47,16 @@ import type { DraftPoolMode, Player, Team } from "../../../../utils/leagueBuilde
 
 export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
-type RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string };
+type RosterDesignPins = Record<string, string>;
+type RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string; pins?: RosterDesignPins };
+type PinDisplay = {
+  playerId: string;
+  playerName: string;
+  salary?: number;
+  honorsAsk: boolean;
+  orphaned: boolean;
+  dropped: boolean;
+};
 
 type RosterDesignerProps = {
   team: Team;
@@ -59,6 +68,7 @@ type RosterDesignerProps = {
   showHelp: boolean;
   disabled?: boolean;
   disabledReason?: string | null;
+  poolDrawn?: boolean;
   onSave: (design: RosterDesignSave) => Promise<void>;
 };
 
@@ -71,6 +81,20 @@ const DEPTH_SHAPE_FAMILIES = new Set(EXTENDED_SHAPES.filter((shape) => shape.dep
 
 function classNames(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
+}
+
+function cleanPins(pins: RosterDesignPins | undefined): RosterDesignPins {
+  if (!pins) return {};
+  return Object.fromEntries(Object.entries(pins).filter(([, playerId]) => typeof playerId === "string" && playerId.length > 0));
+}
+
+function savePayload(slots: DesignSlot[], lockedAt: string | undefined, pins: RosterDesignPins): RosterDesignSave {
+  const cleanedPins = cleanPins(pins);
+  return {
+    slots,
+    lockedAt,
+    ...(Object.keys(cleanedPins).length > 0 ? { pins: cleanedPins } : {}),
+  };
 }
 
 function defaultPreferenceForSlot(slotId: string): SlotPreference {
@@ -216,6 +240,7 @@ export function RosterDesigner({
   showHelp,
   disabled = false,
   disabledReason,
+  poolDrawn = false,
   onSave,
 }: RosterDesignerProps) {
   const loadedTeamId = useRef<string | null>(null);
@@ -229,10 +254,12 @@ export function RosterDesigner({
     save: RosterDesignerProps["onSave"];
     slots: DesignSlot[];
     lockedAt: string | undefined;
+    pins: RosterDesignPins;
   } | null>(null);
   const resetConfirmRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<DesignSlot[]>(() => seedRosterDesignSlots(team.rosterDesign?.slots));
   const [lockedAt, setLockedAt] = useState<string | undefined>(team.rosterDesign?.lockedAt);
+  const [pins, setPins] = useState<RosterDesignPins>(() => cleanPins(team.rosterDesign?.pins));
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [result, setResult] = useState<DesignFeasibilityResult | null>(null);
   const [target, setTarget] = useState<Best22Target | null>(null);
@@ -240,19 +267,20 @@ export function RosterDesigner({
   const [resetConfirm, setResetConfirm] = useState(false);
 
   renderedTeamIdRef.current = team.id;
-  latestPendingSaveRef.current = { teamId: team.id, save: onSave, slots, lockedAt };
+  latestPendingSaveRef.current = { teamId: team.id, save: onSave, slots, lockedAt, pins };
 
   const persistDirtySave = useCallback((
     teamId: string,
     save: RosterDesignerProps["onSave"],
     nextSlots: DesignSlot[],
     nextLockedAt: string | undefined,
+    nextPins: RosterDesignPins,
   ) => {
     if (!dirtyRef.current || dirtyTeamIdRef.current !== teamId) return;
     if (saveInFlightRef.current?.teamId === teamId) return;
     const version = dirtyVersionRef.current;
     saveInFlightRef.current = { teamId, version };
-    void save({ slots: nextSlots, lockedAt: nextLockedAt }).then(() => {
+    void save(savePayload(nextSlots, nextLockedAt, nextPins)).then(() => {
       if (dirtyTeamIdRef.current === teamId && dirtyVersionRef.current === version) {
         dirtyRef.current = false;
         dirtyTeamIdRef.current = null;
@@ -269,7 +297,7 @@ export function RosterDesigner({
   useEffect(() => {
     return () => {
       const pending = latestPendingSaveRef.current;
-      if (pending) persistDirtySave(pending.teamId, pending.save, pending.slots, pending.lockedAt);
+      if (pending) persistDirtySave(pending.teamId, pending.save, pending.slots, pending.lockedAt, pending.pins);
     };
   }, [persistDirtySave]);
 
@@ -278,12 +306,13 @@ export function RosterDesigner({
     loadedTeamId.current = team.id;
     setSlots(seedRosterDesignSlots(team.rosterDesign?.slots));
     setLockedAt(team.rosterDesign?.lockedAt);
+    setPins(cleanPins(team.rosterDesign?.pins));
     setSelectedSlotId(null);
     setResult(null);
     setTarget(null);
     setTargetState("quiet");
     setResetConfirm(false);
-  }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.slots]);
+  }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.slots]);
 
   const designPool = useMemo(() => buildRosterDesignPool(players), [players]);
   const simPool = useMemo(() => demandUniverseFromPlayers(players), [players]);
@@ -299,13 +328,15 @@ export function RosterDesigner({
     () => designPool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) })),
     [designPool],
   );
+  const pinMemoKey = useMemo(() => JSON.stringify(Object.entries(pins).sort(([left], [right]) => left.localeCompare(right))), [pins]);
+  const pinMap = useMemo(() => new Map(Object.entries(pins)), [pinMemoKey]);
 
   useEffect(() => {
     const effectTeamId = team.id;
     const timer = window.setTimeout(() => {
       const nextResult = designPool.length > 0 ? evaluateRosterDesign(slots, designPool, budget) : null;
       const nextTarget = designPool.length > 0 && targetArchetype
-        ? buildBest22Target(slots, simPool, targetClassifiedById, targetArchetype, tier, budget)
+        ? buildBest22Target(slots, simPool, targetClassifiedById, targetArchetype, tier, budget, pinMap)
         : null;
       setResult(nextResult);
       setTarget(nextTarget);
@@ -314,15 +345,15 @@ export function RosterDesigner({
         hasIdentity: Boolean(targetArchetype),
         target: nextTarget,
       }));
-      persistDirtySave(effectTeamId, onSave, slots, lockedAt);
+      persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins);
     }, 300);
     return () => {
       window.clearTimeout(timer);
       if (renderedTeamIdRef.current !== effectTeamId) {
-        persistDirtySave(effectTeamId, onSave, slots, lockedAt);
+        persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins);
       }
     };
-  }, [budget, designPool, lockedAt, onSave, persistDirtySave, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
+  }, [budget, designPool, lockedAt, onSave, pinMap, pins, persistDirtySave, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
 
   useEffect(() => {
     if (!resetConfirm) return undefined;
@@ -334,24 +365,81 @@ export function RosterDesigner({
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [resetConfirm]);
 
+  const pinDisplayBySlot = useMemo(() => {
+    const displays = new Map<string, PinDisplay>();
+    const designPlayerById = new Map(designPool.map((player) => [player.id, player]));
+    const classificationById = new Map(classifiedPool.map((player) => [player.id, player.classification]));
+    const targetPickBySlotId = new Map((target?.picks ?? []).map((pick) => [pick.slotId, pick]));
+    const droppedBySlotId = new Map((target?.pins.dropped ?? []).map((drop) => [drop.slotId, drop]));
+
+    for (const slot of slots) {
+      const playerId = pinMap.get(slot.slotId);
+      if (!playerId) continue;
+      const poolPlayer = designPlayerById.get(playerId);
+      const targetPick = targetPickBySlotId.get(slot.slotId);
+      const dropped = droppedBySlotId.get(slot.slotId);
+      const classification = classificationById.get(playerId);
+      const satisfaction = classification ? askSatisfaction(slot.preference, classification) : null;
+      const hasShapeAsk = Boolean(slot.preference?.shape);
+      const hasTagAsk = Object.values(slot.preference?.tags ?? {}).some(Boolean);
+      const honorsAsk = targetPick?.playerId === playerId
+        ? targetPick.honorsAsk
+        : !hasShapeAsk && !hasTagAsk
+          ? true
+          : Boolean(satisfaction?.satisfiesShape && satisfaction.satisfiesTags);
+      displays.set(slot.slotId, {
+        playerId,
+        playerName: targetPick?.playerId === playerId
+          ? targetPick.playerName ?? playerId
+          : poolPlayer?.name ?? playerId,
+        salary: targetPick?.playerId === playerId ? targetPick.salary : poolPlayer?.salary,
+        honorsAsk,
+        orphaned: !poolPlayer,
+        dropped: Boolean(poolPlayer && dropped),
+      });
+    }
+
+    return displays;
+  }, [classifiedPool, designPool, pinMap, slots, target]);
+
   const selectedSlot = slots.find((slot) => slot.slotId === selectedSlotId) ?? null;
   const tone = designVerdictTone(result, designPool.length);
   const chip = {
     state: designVerdictCopy(result, tone),
     cost: designTargetChipCopy(result, targetState, target),
   };
-  const targetStrip = designTargetStripCopy(targetState, target);
+  const baseTargetStrip = designTargetStripCopy(targetState, target);
+  const pinCount = pinMap.size;
+  const droppedPinCount = target?.pins.dropped.length ?? 0;
+  const pinStripSegment = pinCount > 0 && target
+    ? droppedPinCount > 0
+      ? ` · ${droppedPinCount} OF ${pinCount} PINS CAN'T LAND`
+      : ` · ${pinCount} PIN${pinCount === 1 ? "" : "S"} LOCKED IN`
+    : "";
+  const pinnedTargetInfeasible = pinCount > 0 && Boolean(target && !target.feasible && target.pins.honored.length > 0);
+  const targetStrip = pinnedTargetInfeasible
+    ? "THE 22 AROUND YOUR PINS BREAKS THE CAP OR THE ROSTER LAW — EASE A PIN OR RIDE IT"
+    : baseTargetStrip
+      ? `${baseTargetStrip}${pinStripSegment}`
+      : null;
   const feasibleTarget = targetState === "feasible" ? target : null;
   const blockers = result?.blockers ?? [];
   const blockedIds = blockedSlotIds(blockers);
   const readOnly = disabled || Boolean(lockedAt);
   const canLock = mode === "design-first" && !disabled && !lockedAt && tone === "green";
+  const lockedByDesign = Boolean(lockedAt) && !disabled;
+  const poolReplanning = poolDrawn && mode === "design-first" && !lockedPool && !lockedAt;
+  const unlockConsequenceVisible = poolDrawn && mode === "design-first" && !lockedPool && Boolean(lockedAt);
 
-  const updateSlot = (slotId: string, update: (slot: DesignSlot) => DesignSlot) => {
-    if (readOnly) return;
+  const markDirty = () => {
     dirtyRef.current = true;
     dirtyTeamIdRef.current = team.id;
     dirtyVersionRef.current += 1;
+  };
+
+  const updateSlot = (slotId: string, update: (slot: DesignSlot) => DesignSlot) => {
+    if (readOnly) return;
+    markDirty();
     setResetConfirm(false);
     setSlots((current) => current.map((slot) => (slot.slotId === slotId ? update(slot) : slot)));
   };
@@ -365,10 +453,9 @@ export function RosterDesigner({
 
   const resetDesign = () => {
     if (readOnly) return;
-    dirtyRef.current = true;
-    dirtyTeamIdRef.current = team.id;
-    dirtyVersionRef.current += 1;
+    markDirty();
     setSlots(seedRosterDesignSlots());
+    setPins({});
     setLockedAt(undefined);
     setSelectedSlotId(null);
     setResetConfirm(false);
@@ -376,18 +463,32 @@ export function RosterDesigner({
 
   const lockDesign = () => {
     if (!canLock) return;
-    dirtyRef.current = true;
-    dirtyTeamIdRef.current = team.id;
-    dirtyVersionRef.current += 1;
+    markDirty();
     setLockedAt(new Date().toISOString());
   };
 
   const unlockDesign = () => {
     if (disabled) return;
-    dirtyRef.current = true;
-    dirtyTeamIdRef.current = team.id;
-    dirtyVersionRef.current += 1;
+    markDirty();
     setLockedAt(undefined);
+  };
+
+  const pinPlayerToSlot = (slotId: string, playerId: string) => {
+    if (readOnly) return;
+    const nextPins = Object.fromEntries(
+      Object.entries(pins).filter(([currentSlotId, currentPlayerId]) => currentSlotId !== slotId && currentPlayerId !== playerId),
+    );
+    if (nextPins[slotId] === playerId) return;
+    markDirty();
+    setPins({ ...nextPins, [slotId]: playerId });
+  };
+
+  const unpinSlot = (slotId: string) => {
+    if (readOnly || !pins[slotId]) return;
+    const nextPins = { ...pins };
+    delete nextPins[slotId];
+    markDirty();
+    setPins(nextPins);
   };
 
   return (
@@ -417,9 +518,9 @@ export function RosterDesigner({
           <div
             className={classNames(
               "mt-2 text-[11px] font-bold tracking-[0.12em]",
-              targetState === "infeasible" && "text-[var(--ballpark-status-warn)]",
+              (targetState === "infeasible" || droppedPinCount > 0 || pinnedTargetInfeasible) && "text-[var(--ballpark-status-warn)]",
               targetState === "no-identity" && "text-[var(--ballpark-chalk)]/55",
-              targetState === "feasible" && "text-[var(--ballpark-brass)]",
+              targetState === "feasible" && droppedPinCount === 0 && !pinnedTargetInfeasible && "text-[var(--ballpark-brass)]",
             )}
           >
             {targetStrip}
@@ -445,15 +546,22 @@ export function RosterDesigner({
           </div>
           {mode === "design-first" && (
             lockedAt ? (
-              <PressButton size="md" variant="gold" onClick={unlockDesign} disabled={disabled}>
-                UNLOCK
-              </PressButton>
+              <div className="flex flex-wrap items-center gap-2">
+                <PressButton size="md" variant="gold" onClick={unlockDesign} disabled={disabled}>
+                  UNLOCK & EDIT
+                </PressButton>
+                {unlockConsequenceVisible ? (
+                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55">EDITS RE-OPEN THE PLAN — LOCK AGAIN AND RE-EXTRACT TO APPLY</span>
+                ) : null}
+              </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <PressButton size="md" variant="gold" onClick={lockDesign} disabled={!canLock}>
                   LOCK DESIGN
                 </PressButton>
-                {tone !== "green" && tone !== "quiet" ? (
+                {poolReplanning && tone === "green" ? (
+                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55">LOCK TO QUEUE THE RE-EXTRACT — THE POOL STILL REFLECTS YOUR OLD PLAN</span>
+                ) : tone !== "green" && tone !== "quiet" ? (
                   <span className="text-[11px] text-[var(--ballpark-chalk)]/55">Fix the blockers first — the pool gets built from locked designs.</span>
                 ) : null}
               </div>
@@ -487,6 +595,7 @@ export function RosterDesigner({
           blockedIds={blockedIds}
           selectedSlotId={selectedSlotId}
           target={feasibleTarget}
+          pinDisplayBySlot={pinDisplayBySlot}
           onSelect={setSelectedSlotId}
         />
         <SlotGroup
@@ -496,6 +605,7 @@ export function RosterDesigner({
           blockedIds={blockedIds}
           selectedSlotId={selectedSlotId}
           target={feasibleTarget}
+          pinDisplayBySlot={pinDisplayBySlot}
           onSelect={setSelectedSlotId}
         />
         <SlotGroup
@@ -505,6 +615,7 @@ export function RosterDesigner({
           blockedIds={blockedIds}
           selectedSlotId={selectedSlotId}
           target={feasibleTarget}
+          pinDisplayBySlot={pinDisplayBySlot}
           onSelect={setSelectedSlotId}
         />
       </div>
@@ -517,7 +628,14 @@ export function RosterDesigner({
           designPool={designPool}
           classifiedPool={classifiedPool}
           targetPick={feasibleTarget?.picks.find((pick) => pick.slotId === selectedSlot.slotId) ?? null}
+          pinDisplay={pinDisplayBySlot.get(selectedSlot.slotId) ?? null}
+          pinnedPlayerId={pins[selectedSlot.slotId] ?? null}
+          lockedByDesign={lockedByDesign}
+          disabledReason={disabledReason}
           onPreferenceChange={(update) => updatePreference(selectedSlot.slotId, update)}
+          onPin={(playerId) => pinPlayerToSlot(selectedSlot.slotId, playerId)}
+          onUnpin={() => unpinSlot(selectedSlot.slotId)}
+          onUnlock={unlockDesign}
         />
       ) : null}
 
@@ -556,6 +674,7 @@ function SlotGroup({
   blockedIds,
   selectedSlotId,
   target,
+  pinDisplayBySlot,
   onSelect,
 }: {
   title: string;
@@ -564,6 +683,7 @@ function SlotGroup({
   blockedIds: ReadonlySet<string>;
   selectedSlotId: string | null;
   target: Best22Target | null;
+  pinDisplayBySlot: ReadonlyMap<string, PinDisplay>;
   onSelect: (slotId: string) => void;
 }) {
   const resolutionById = new Map((result?.slots ?? []).map((slot) => [slot.slotId, slot]));
@@ -575,6 +695,7 @@ function SlotGroup({
         {slots.map((slot) => {
           const resolution = resolutionById.get(slot.slotId);
           const targetPick = targetPickById.get(slot.slotId);
+          const pinDisplay = pinDisplayBySlot.get(slot.slotId);
           const blocked = blockedIds.has(slot.slotId);
           const selected = selectedSlotId === slot.slotId;
           return (
@@ -596,7 +717,20 @@ function SlotGroup({
                 <span className={classNames("block truncate text-sm", slot.preference?.shape ? "text-[var(--ballpark-chalk)]" : "text-[var(--ballpark-chalk)]/45")}>
                   {slotShapeSummary(slot)}
                 </span>
-                {targetPick?.playerId ? (
+                {pinDisplay ? (
+                  <span
+                    className={classNames(
+                      "mt-0.5 block truncate text-[11px]",
+                      pinDisplay.orphaned || pinDisplay.dropped ? "text-[var(--ballpark-status-warn)]" : "text-[var(--ballpark-brass)]",
+                    )}
+                  >
+                    {pinDisplay.orphaned
+                      ? `📌 ${pinDisplay.playerName} — OUT OF THE POOL`
+                      : pinDisplay.dropped
+                        ? `📌 ${pinDisplay.playerName} — CAN'T PIN HERE`
+                        : `${pinDisplay.honorsAsk ? "" : "≈ "}📌 ${pinDisplay.playerName} · ${formatVerdictMoney(pinDisplay.salary)}`}
+                  </span>
+                ) : targetPick?.playerId ? (
                   <span className="mt-0.5 block truncate text-[11px] text-[var(--ballpark-brass)]/70">
                     {targetPick.honorsAsk ? "" : "≈ "}→ {targetPick.playerName ?? targetPick.playerId} · {formatVerdictMoney(targetPick.salary)}
                   </span>
@@ -626,7 +760,14 @@ function SlotEditor({
   designPool,
   classifiedPool,
   targetPick,
+  pinDisplay,
+  pinnedPlayerId,
+  lockedByDesign = false,
+  disabledReason,
   onPreferenceChange,
+  onPin,
+  onUnpin,
+  onUnlock,
 }: {
   slot: DesignSlot;
   readOnly: boolean;
@@ -634,7 +775,14 @@ function SlotEditor({
   designPool: readonly DesignPoolPlayer[];
   classifiedPool: readonly ClassifiedDesignPlayer[];
   targetPick: Best22TargetPick | null;
+  pinDisplay: PinDisplay | null;
+  pinnedPlayerId: string | null;
+  lockedByDesign?: boolean;
+  disabledReason?: string | null;
   onPreferenceChange: (update: (preference: SlotPreference) => SlotPreference) => void;
+  onPin: (playerId: string) => void;
+  onUnpin: () => void;
+  onUnlock?: () => void;
 }) {
   const groups = menuGroupsForSlot(slot);
   const visibleShapes = groups.flatMap((group) => group.shapes);
@@ -664,6 +812,18 @@ function SlotEditor({
   return (
     <div className="border-2 border-[var(--ballpark-panel-border)] bg-[#1f2a23] p-3">
       <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-3">{slotLabel(slot)} — THE ASK</div>
+      {lockedByDesign ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2">
+          <span className="text-[11px] font-bold tracking-[0.08em] text-[var(--ballpark-brass)]">🔒 THE ASK IS LOCKED — THE POOL WAS DRAWN FROM IT</span>
+          <PressButton size="sm" variant="gold" onClick={onUnlock ?? (() => undefined)}>
+            UNLOCK & EDIT
+          </PressButton>
+        </div>
+      ) : readOnly && disabledReason ? (
+        <div className="mb-3 border-2 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-3 py-2 text-[11px] font-bold tracking-[0.08em] text-[var(--ballpark-status-warn)]">
+          {disabledReason}
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(220px,2fr)] gap-4">
         <div className="max-h-[320px] overflow-y-auto bg-[var(--ballpark-well)] border-2 border-[var(--ballpark-panel-border)]">
           <ShapeRow
@@ -763,11 +923,39 @@ function SlotEditor({
             onChange={(value) => onPreferenceChange((current) => ({ ...current, personalityTilt: value as PersonalityTilt }))}
           />
 
+          {pinDisplay ? (
+            <div
+              className={classNames(
+                "flex flex-wrap items-center justify-between gap-2 border-2 bg-[var(--ballpark-well)] px-3 py-2 text-[11px] font-bold tracking-[0.08em]",
+                pinDisplay.orphaned || pinDisplay.dropped
+                  ? "border-[var(--ballpark-status-warn)] text-[var(--ballpark-status-warn)]"
+                  : "border-[var(--ballpark-brass)] text-[var(--ballpark-brass)]",
+              )}
+            >
+              <span>
+                {pinDisplay.orphaned
+                  ? `PINNED: ${pinDisplay.playerName} — LEFT THE POOL. RE-EXTRACT CAN BRING HIM BACK.`
+                  : pinDisplay.dropped
+                    ? `PINNED: ${pinDisplay.playerName} — CAN'T PIN TO THIS SLOT`
+                  : `PINNED TO THIS SLOT: ${pinDisplay.playerName} · ${formatVerdictMoney(pinDisplay.salary)}`}
+              </span>
+              {!readOnly ? (
+                <PressButton size="sm" onClick={onUnpin}>
+                  UNPIN
+                </PressButton>
+              ) : null}
+            </div>
+          ) : null}
+
           <ShortlistRail
             entries={shortlist}
             preference={preference}
             classificationById={classificationById}
             targetPick={targetPick}
+            readOnly={readOnly}
+            pinnedPlayerId={pinnedPlayerId}
+            onPin={onPin}
+            onUnpin={onUnpin}
           />
         </div>
       </div>
@@ -780,11 +968,19 @@ function ShortlistRail({
   preference,
   classificationById,
   targetPick,
+  readOnly,
+  pinnedPlayerId,
+  onPin,
+  onUnpin,
 }: {
   entries: readonly RankedPoolEntry[];
   preference: SlotPreference;
   classificationById: ReadonlyMap<string, ShapeClassification>;
   targetPick: Best22TargetPick | null;
+  readOnly: boolean;
+  pinnedPlayerId: string | null;
+  onPin: (playerId: string) => void;
+  onUnpin: () => void;
 }) {
   return (
     <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
@@ -798,17 +994,37 @@ function ShortlistRail({
             const satisfaction = classification ? askSatisfaction(preference, classification) : null;
             const runnerUp = satisfaction?.shapeMatch === "runnerUp";
             const isTarget = targetPick?.playerId === entry.playerId;
+            const pinnedHere = pinnedPlayerId === entry.playerId;
             return (
               <div key={entry.playerId} className="flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75">
                 <span className="min-w-0 truncate">
                   {runnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈ </span> : null}
                   {entry.playerName ?? entry.playerId} · {entry.shape} · {formatVerdictMoney(entry.salary)}
                 </span>
-                {isTarget ? (
-                  <span className="shrink-0 border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
-                    TARGET
-                  </span>
-                ) : null}
+                <span className="shrink-0 flex items-center gap-1">
+                  {isTarget ? (
+                    <span className="border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
+                      TARGET
+                    </span>
+                  ) : null}
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (pinnedHere) onUnpin();
+                        else onPin(entry.playerId);
+                      }}
+                      className={classNames(
+                        "border px-1.5 py-0.5 text-[9px] font-bold tracking-wider active:scale-95",
+                        pinnedHere
+                          ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-brass)] text-[#1A1A1A]"
+                          : "border-[var(--ballpark-panel-border)] text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)]",
+                      )}
+                    >
+                      {pinnedHere ? "PINNED ✓" : "PIN"}
+                    </button>
+                  ) : null}
+                </span>
               </div>
             );
           })}

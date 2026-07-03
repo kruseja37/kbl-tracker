@@ -1,7 +1,6 @@
 import type { DemandUniversePlayer } from "../../../engines/poolFromDemand";
 import type { DesignPoolPlayer } from "../../../engines/rosterDesignFeasibility";
 import { toRosterSlotPlayer } from "../../../engines/rosterNeed";
-import { twoWayVariantFromTraits } from "../../../data/rosterConstruction";
 import { computePlayerIv } from "../../../utils/leagueBuilderPoolBuilder";
 import type { Player } from "../../../utils/leagueBuilderStorage";
 
@@ -15,15 +14,15 @@ function isPitcher(player: Player): boolean {
   return PITCHER_POSITIONS.has(player.primaryPosition);
 }
 
-function roleForPlayer(player: Player): string {
-  if (player.primaryPosition === "P" || player.primaryPosition === "TWO-WAY") return "SP/RP";
-  return player.primaryPosition;
-}
-
 export function buildRosterDesignPool(players: readonly Player[]): DesignPoolPlayer[] {
   return players.map((player) => {
     const pitcher = isPitcher(player);
     const traits = [player.trait1, player.trait2];
+    const slotPlayer = toRosterSlotPlayer({
+      primaryPosition: player.primaryPosition,
+      secondaryPosition: player.secondaryPosition ?? null,
+      traits,
+    });
     return {
       id: player.id,
       name: playerName(player),
@@ -47,13 +46,7 @@ export function buildRosterDesignPool(players: readonly Player[]): DesignPoolPla
         arsenal: player.arsenal,
         personality: player.personality,
       },
-      slotPlayer: {
-        isPitcher: pitcher,
-        position: player.primaryPosition,
-        role: pitcher ? roleForPlayer(player) : undefined,
-        secondaryPosition: player.secondaryPosition ?? null,
-        twoWayVariant: pitcher ? twoWayVariantFromTraits(traits) : null,
-      },
+      slotPlayer,
     };
   });
 }
