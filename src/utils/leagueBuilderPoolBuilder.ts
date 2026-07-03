@@ -3,9 +3,9 @@
  *
  * First-principles model (see spec-docs/DRAFT_POOL_SETUP_REDESIGN_DESIGN.md):
  *   A draft pool is a league-scoped, lockable SET of players, each carrying a computed IV.
- *   Membership lives on `player.leagueAssignments` (Source A) ∪ the league's team rosters
- *   (Source B) — exactly what `registerLeaguePoolForLeague` already unions. This module adds
- *   the BULK membership writes + the LOCK that the redesign needs, reusing the existing
+ *   Membership lives on `player.leagueAssignments` (Source A) always, plus the league's team
+ *   rosters (Source B) in pool-first only. This module adds the BULK membership writes + the
+ *   LOCK that the redesign needs, reusing the existing
  *   registration/IV seam. Nothing here reshapes `leagueBuilderStorage.ts` (additive-only,
  *   cross-branch overlap file) — only its existing exports are called.
  *
@@ -156,11 +156,12 @@ export async function addPlayersToLeaguePool(playerIds: string[], leagueId: stri
 
 /**
  * Remove players from the league pool in bulk. Rejected while the pool is locked. Removal is
- * AUTHORITATIVE against BOTH membership sources: it drops the league assignment AND pulls the
- * player off the league's branded-team rosters. The latter is essential — registration unions
- * team rosters into the pool (Source B), so a removed-but-still-rostered player would otherwise
- * reappear in the locked snapshot the auction consumes. (Team rosters are team-scoped; a team
- * shared across leagues has the player removed everywhere, consistent with clearTeamRoster.)
+ * AUTHORITATIVE against BOTH pool-first membership sources: it drops the league assignment AND
+ * pulls the player off the league's branded-team rosters. The latter is essential in pool-first
+ * because registration unions team rosters into the pool (Source B), so a removed-but-still-
+ * rostered player would otherwise reappear in the locked snapshot the auction consumes. (Team
+ * rosters are team-scoped; a team shared across leagues has the player removed everywhere,
+ * consistent with clearTeamRoster.)
  */
 export async function removePlayersFromLeaguePool(playerIds: string[], leagueId: string): Promise<void> {
   await assertPoolUnlocked(leagueId);
@@ -225,25 +226,56 @@ export async function importRosteredPlayersToLeaguePool(leagueId: string): Promi
 }
 
 /**
- * Lock the pool: regenerate the league-scoped player axes (personality / chemistry /
- * hidden personality modifiers), register the pool (authoritative IV compute + persist via
- * the existing seam), then stamp `locked`/`lockedAt`. After this the snapshot is frozen and
- * pool edits are rejected; the auction consumes this exact snapshot.
+ * Lock the pool: register the pool first (authoritative membership + IV compute), regenerate the
+ * league-scoped player axes (personality / chemistry / hidden personality modifiers) over that
+ * exact registered membership, then stamp `locked`/`lockedAt`. After this the snapshot is frozen
+ * and pool edits are rejected; the auction consumes this exact snapshot.
  *
  * CHEM-POTENCY ruling 5 (JK 2026-07-02): hidden modifiers are generated when the draft pool
  * is generated — the lock is the common chokepoint for BOTH draft formats. The axis regen is
  * deterministic in `${leagueId}:${player.id}`, so the auction-init regen (useAuctionDraft)
- * re-stamps byte-identical values, and the franchise-freeze backfill remains a no-op guard
- * for leagues that never pass through a draft. Axes do not feed IV, so the IV registration
- * that follows is unaffected by ordering (regen runs first anyway, so the frozen snapshot
- * carries the final axes).
+ * re-stamps byte-identical values over the same locked ids, and the franchise-freeze backfill
+ * remains a no-op guard for leagues that never pass through a draft. Axes do not feed IV, so
+ * registering before regen does not perturb the IV snapshot; it guarantees regen covers the
+ * frozen membership itself.
  */
 export async function lockLeaguePool(leagueId: string): Promise<RegisteredPool> {
-  await regenerateAndPersistLeaguePoolAxes(leagueId);
   const pool = await registerLeaguePoolForLeague(leagueId);
+  await regenerateAndPersistLeaguePoolAxes(leagueId, pool.players.map((p) => p.id));
   const locked: RegisteredPool = { ...pool, locked: true, lockedAt: Date.now() };
   await saveRegisteredPool(locked);
   return locked;
+}
+
+/** Players on this league's team rosters that hold NO league assignment (design-first strays). */
+export async function listRosteredButUnassigned(
+  leagueId: string,
+): Promise<{ id: string; name: string }[]> {
+  const league = await getLeagueTemplate(leagueId);
+  if (!league) return [];
+  if ((league.draftPoolMode ?? 'pool-first') !== 'design-first') return [];
+
+  const allPlayers = await getAllPlayers();
+  const playerById = new Map(allPlayers.map((player) => [player.id, player]));
+  const rosteredIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const teamId of league.teamIds) {
+    const roster = await getTeamRoster(teamId);
+    for (const playerId of [...(roster?.mlbRoster ?? []), ...(roster?.farmRoster ?? [])]) {
+      if (!seen.has(playerId) && playerById.has(playerId)) {
+        seen.add(playerId);
+        rosteredIds.push(playerId);
+      }
+    }
+  }
+
+  return rosteredIds.flatMap((id) => {
+    const player = playerById.get(id);
+    if (!player) return [];
+    if (isPlayerInLeaguePool(player, leagueId)) return [];
+    return [{ id, name: `${player.firstName} ${player.lastName}`.trim() || id }];
+  });
 }
 
 /** Re-open a locked pool for editing. Returns the unlocked pool, or null if none exists. */

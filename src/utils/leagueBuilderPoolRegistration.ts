@@ -96,11 +96,14 @@ export async function registerLeaguePoolForLeague(leagueId: string): Promise<Reg
     }
   }
 
-  for (const teamId of league.teamIds) {
-    const roster = await getTeamRoster(teamId);
-    for (const playerId of [...(roster?.mlbRoster ?? []), ...(roster?.farmRoster ?? [])]) {
-      if (playerById.has(playerId)) {
-        poolPlayerIds.add(playerId);
+  const includeRosterUnion = (league.draftPoolMode ?? 'pool-first') !== 'design-first';
+  if (includeRosterUnion) {
+    for (const teamId of league.teamIds) {
+      const roster = await getTeamRoster(teamId);
+      for (const playerId of [...(roster?.mlbRoster ?? []), ...(roster?.farmRoster ?? [])]) {
+        if (playerById.has(playerId)) {
+          poolPlayerIds.add(playerId);
+        }
       }
     }
   }

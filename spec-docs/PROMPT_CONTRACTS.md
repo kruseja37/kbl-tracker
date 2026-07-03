@@ -27719,3 +27719,86 @@ the staleness detection `modeAStaleTeams`/`modeAStale` (~1024-1030: a locked des
 - FULL suite `NODE_ENV= npx vitest run` — characterized reds only, no NEW red (report counts).
 - `git diff --stat` — only LeagueBuilderDraftSetup.tsx (+ its test). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-DJ07-STALE ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ05-MEMBERSHIP ===== -->
+## CODEX-DJ05-MEMBERSHIP — design-first pool lock freezes only the reviewed set (DJ-05)
+
+**Binding design:** `spec-docs/FABLE_DJ0506_DESIGN_2026-07-03.md` SECTION 1 — build it EXACTLY (Fable
+ruled every fork: Option A reviewed-set-only, NOT refuse-to-lock; regen covers frozen membership).
+Branch-only; do NOT commit/push; leave the tree dirty for Opus.
+
+**Read first:** FABLE_DJ0506_DESIGN §1 in full; src/utils/leagueBuilderPoolRegistration.ts (~85-125 the
+Source-A ∪ Source-B union); src/utils/leaguePoolAxisRegenPersist.ts; src/utils/leagueBuilderPoolBuilder.ts
+(~6-7 header, ~157-197 removePlayersFromLeaguePool, ~241-247 lockLeaguePool); src/src_figma/app/pages/
+LeagueBuilderDraftSetup.tsx (~744-763 reconcile gate); src/src_figma/app/hooks/useAuctionDraft.ts (~506-513).
+
+**Deliverables — the FIVE changes in §1.4, exactly as specified:**
+1. registerLeaguePoolForLeague: wrap the Source-B roster-union loop in `includeRosterUnion =
+   (league.draftPoolMode ?? 'pool-first') !== 'design-first'`. Pool-first + capless leagues unchanged bit-for-bit.
+2. regenerateAndPersistLeaguePoolAxes: add optional 2nd param `playerIds?: readonly string[]` — when
+   provided, membership = getAllPlayers filtered to that id-set; when absent, today's assignment filter (legacy unchanged).
+3. lockLeaguePool: reorder to register FIRST → regen the REGISTERED set (pool.players ids) → stamp locked.
+   Update the function header + the module header (~6-7) to the new "Source A always; ∪ Source B pool-first only" truth.
+4. The reconcile gate (~751) STAYS; rewrite the comment (~744-748) to state the two-mode See==Freeze invariant.
+5. (SHOULD) useAuctionDraft.initAuction: when a locked pool exists, re-stamp axes over the locked ids
+   (regenerateAndPersistLeaguePoolAxes(leagueId, existingPool.players.map(p=>p.id))); mind the load-order note in §1.4(5).
+6. NEW read-only helper `listRosteredButUnassigned(leagueId)` (§1.5) + the design-first-only, non-blocking
+   one-line notice under the pool sufficiency line (kit small-print, only when the list is non-empty AND not locked).
+
+**Verify before returning (report ACTUAL output):**
+- `NODE_ENV= npm run build` exit 0 (tail).
+- NEW `src/utils/tests/leagueBuilderPoolMembership.dj05.test.ts` per §1.6 (T1-T5) — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (LeagueBuilderDraftSetup
+  has a load-flake in big batches — verify solo before calling it a regression). Report counts.
+- `git diff --stat` — the §1 surface only; GameTracker NOT present. Confirm pool-first membership is byte-identical (T2).
+<!-- ===== END CONTRACT: CODEX-DJ05-MEMBERSHIP ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ06-EXITGATE ===== -->
+## CODEX-DJ06-EXITGATE — the draft-exit legality gate ("THE HANDOFF CHECK") (DJ-06)
+
+**Binding design:** `spec-docs/FABLE_DJ0506_DESIGN_2026-07-03.md` SECTION 2 — build it EXACTLY (Fable
+ruled every fork: verdict panel gating the FARM door; unknown=blocked at exit; law reuse; commit stays;
+franchise-side upgraded to the same law; in-room repair is OUT of v1). Branch-only; do NOT commit/push;
+leave tree dirty for Opus.
+
+**Read first:** FABLE_DJ0506_DESIGN §2 in full; src/data/rosterConstruction.ts (isLegalRoster/LEGAL_ROSTER);
+src/engines/rosterNeed.ts (teamRosterNeed, toRosterSlotPlayer, RosterNeedBreakdown/RosterPositionMap);
+src/engines/auctionBoardFrame.ts (gapLabel voice) + rosterDesignFeasibility.ts (explainIllegality voice);
+src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx (buildLawNeedLine ~207-227; the :610-622 playerById→
+toRosterSlotPlayer map; handleStagePrimary complete-branch ~1181; stage primary label ~1074; legacy complete
+banner ~1610-1620; deriveShillTeamIds usage ~382); src/src_figma/app/components/auction/AuctionStage.tsx
+(AuctionStageVM + the AUCTION_COMPLETE vestigial lot card); src/utils/leagueBuilderAuctionPipeline.ts (~228-270
+commit — do NOT move it); src/utils/franchisePlayerStorage.ts (validateV1RosterHandoff ~400-437).
+
+**Deliverables — per §2.3–§2.9, exactly:**
+1. NEW pure engine `src/engines/auctionExitGate.ts`: ExitClubInput/ExitClubVerdict/AuctionExitReport +
+   `buildAuctionExitReport(clubs, positions)`. `legal` MUST be isLegalRoster(resolved shapes) && count===22;
+   `need` from teamRosterNeed; `known` = every rosterId resolved in the position map; blockers via a new
+   exported `describeRosterLawGaps(rosterCount, need)` returning ALL applicable sentences (§2.4 exact strings,
+   order 1-6, plural() pattern; unknown emitted alone). NO parallel rules — the same single law as the board.
+2. Drift-kill (§2.4): buildLawNeedLine on the auction page delegates its law sentence(s) to describeRosterLawGaps.
+3. HANDOFF CHECK panel (§2.5): add optional `complete?: AuctionCompleteVM` to the stage VM; AuctionStage
+   renders the panel at AUCTION_COMPLETE in place of the lot-card+move-panel region (board/log/status stay).
+   Layout + copy per §2.5, kit tokens only (no new tokens/hex), rows sorted blocked-first; test ids sensible.
+4. Gating (§2.6): page `exitReport` useMemo over CONTROLLED clubs (session.teams minus deriveShillTeamIds);
+   `exitPositionMap` from STORED player records for ALL controlled rosters (generalize the :610-622 pattern —
+   NOT session enrichment, so position-blind resumes read sighted); canProceedToFarm = allLegal ||
+   overrideConfirmed; handleStagePrimary complete-branch navigates only when canProceedToFarm else focuses the
+   panel; label FARM DRAFT / REVIEW ROSTERS; legacy banner button same predicate.
+5. Override (§2.6): two-step arm (PROCEED ANYWAY → confirm copy + YES/STAY), transient page state (never
+   persisted; reload re-gates), disarm on outside-pointer-down (lockConfirm precedent).
+6. Franchise-side upgrade (§2.7): validateV1RosterHandoff runs isLegalRoster (via toRosterSlotPlayer) AFTER
+   the existing count check; on failure push the plain issue reusing describeRosterLawGaps' first sentence;
+   the throw STAYS. Count-only fixture stays green.
+
+**Constraints:** commit path NOT moved/conditioned; position source = STORED records; shill exclusion via
+deriveShillTeamIds (same as the commit); GameTracker UI SET (untouched); no DB change.
+
+**Verify before returning (report ACTUAL output):**
+- `NODE_ENV= npm run build` exit 0.
+- NEW `src/engines/__tests__/auctionExitGate.test.ts` (E1-E7 incl. the E7 law-identity pin over ≥10 rosters
+  + the DJ-29 Two-Way(C) shapes A/B — they MUST be legal here since the gate uses isLegalRoster directly);
+  page tests P1-P4; franchise storage test. All green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
+- `git diff --stat` — the §2 surface only; GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-DJ06-EXITGATE ===== -->

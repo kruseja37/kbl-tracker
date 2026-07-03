@@ -57,6 +57,7 @@ import {
   unlockLeaguePool,
   evaluatePoolDemandSufficiency,
   evaluatePoolComposition,
+  listRosteredButUnassigned,
   type PoolCompositionReport,
 } from "../../../utils/leagueBuilderPoolBuilder";
 import {
@@ -601,6 +602,27 @@ export function LeagueBuilderDraftSetup() {
     () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills),
     [league?.teamIds.length, shills, inPoolPlayers.length],
   );
+  const [rosteredButUnassigned, setRosteredButUnassigned] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    if (poolMode !== "design-first" || !activeLeagueId || locked) {
+      setRosteredButUnassigned([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void (async () => {
+      try {
+        const rows = await listRosteredButUnassigned(activeLeagueId);
+        if (!cancelled) setRosteredButUnassigned(rows);
+      } catch {
+        if (!cancelled) setRosteredButUnassigned([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId, locked, players, poolMode]);
 
   const selectedTeam = leagueTeams.find((team) => team.id === selectedTeamId) ?? null;
   const selectedTeamConfig: TeamConfig | null = selectedTeam
@@ -741,11 +763,11 @@ export function LeagueBuilderDraftSetup() {
     };
   }, [activeLeagueId, locked, shills]);
 
-  // Auto-import from branded teams on first open (JK ruling): reconcile EVERY rostered player
-  // into a league assignment so the pool the user SEES equals the pool the lock FREEZES (the UI
-  // is assignment-based; registration also unions team rosters). Idempotent — the importer skips
-  // already-pooled players. Runs once per league while unlocked; NOT gated on pool size (a stray
-  // pre-existing assignment must not suppress the seed). Retries on failure.
+  // Auto-import from branded teams on first open (JK ruling): See == Freeze holds in pool-first
+  // via this importer + the registration union, and in design-first via mode-aware registration
+  // (assignments ARE the membership — DJ-05). Idempotent — the importer skips already-pooled
+  // players. Runs once per league while unlocked; NOT gated on pool size (a stray pre-existing
+  // assignment must not suppress the seed). Retries on failure.
   const autoImportedRef = useRef<string | null>(null);
   useEffect(() => {
     if (poolMode !== "pool-first") return;
@@ -1178,6 +1200,15 @@ export function LeagueBuilderDraftSetup() {
     </div>
   );
 
+  const designFirstStrayNotice = rosteredButUnassigned.length > 0 ? (
+    <div className="text-[11px] leading-snug text-[var(--ballpark-chalk)]/70 font-[var(--ballpark-font-chrome)]">
+      {rosteredButUnassigned.length} rostered players aren&apos;t part of this pool — a drawn pool contains only what the draw picked. (
+      {rosteredButUnassigned.slice(0, 2).map((player) => player.name).join(", ")}
+      {rosteredButUnassigned.length > 2 ? `, +${rosteredButUnassigned.length - 2} more` : ""}
+      )
+    </div>
+  ) : null;
+
   const marketOutlookPanel = composition ? (
     <div className="border-4 border-[var(--ballpark-action-green-hover)] bg-[#2e3f30] p-4">
       <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-2">
@@ -1520,7 +1551,10 @@ export function LeagueBuilderDraftSetup() {
                     ) : null}
 
                     <div className="flex flex-wrap items-center gap-4">
-                      {sufficiencyChip}
+                      <div className="flex flex-col gap-1">
+                        {sufficiencyChip}
+                        {designFirstStrayNotice}
+                      </div>
                       {solvencyBanner ? (
                         <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
                           {solvencyBanner}
