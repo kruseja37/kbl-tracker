@@ -27332,3 +27332,70 @@ the one zone-4 wiring correction below.
   leagueBuilderStorage.ts, ballpark-kit.css (one token line). GameTracker.tsx NOT in the list.
 - Report against Fable's §7 checklist item by item (which you satisfied, any you could not).
 <!-- ===== END CONTRACT: CODEX-DESIGNER-ZONE ===== -->
+
+<!-- ===== CONTRACT: CODEX-WHISPER ===== -->
+## CODEX-WHISPER — the per-seat Assistant-GM whisper panel (auction room, C4-B slice 2)
+
+**Builder:** Codex. **Auditor:** Opus (audits against Fable §8 + a live secrecy test).
+**Fable design-reviews the screen.** **Branch-only, never push.**
+**Design source of truth — READ IN FULL, BUILD TO IT EXACTLY:**
+`spec-docs/FABLE_WHISPER_PANEL_LAYOUT_2026-07-02.md` (§1 intent, §2 placement+layout tree,
+§3 reveal/re-key/secrecy R1-R8, §4 piece order + absent-piece behavior, §5 five lights,
+§6 verdict headline, §7 copy+help, §8 the auditor checklist you must satisfy).
+Also read `spec-docs/ASST_GM_DESIGN.md` §2/§3 (delivery + two-voice partition).
+
+### Two parts
+1. **The panel component** — new file `src/src_figma/app/components/auction/WhisperPanel.tsx`,
+   mounted as the FIRST child of the stage's right column in
+   `src/src_figma/app/components/auction/AuctionStage.tsx` (above the roster-need board). Renders
+   per Fable §2-§7 on the stage's `.auc-*` idiom + ballpark-kit tokens. Consumes exactly ONE
+   `RosterIntelligencePayload` prop (may be null → dormant/absent behavior).
+2. **The adapter** — in the page `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`: build
+   ONE payload for the HUMAN seat currently on the clock and pass it to AuctionStage → WhisperPanel.
+   Re-evaluate after every lot event. Build NO payload for a CPU seat or a non-active seat.
+
+### Consume the committed payload (do NOT reimplement)
+Import from `../../../engines/rosterIntelligencePayload`: the types (`RosterIntelligencePayload`,
+`MarketRead`, `WorthToYou`, `BoardEntry`, `FiveLights`, `Light`) + the assembly fns
+(`marketReadFromEstimate`, `assembleWorthToYou`, `assembleBoard`, `assembleFiveLights`,
+`assembleRosterIntelligencePayload`). Wire their inputs from live session/team state
+(`auction.currentBidderTeamId`, `auction.isCpuTeam`, `teamStateById`/`teamById`,
+`getTeamAuctionMaxBid`, the current lot, the remaining pool, the seat roster). Verify each
+accessor at point of use.
+
+### Wiring rule (HONESTY over completeness)
+Wire every payload piece whose live inputs are CLEANLY available (at minimum: `market` from the
+current lot via marketReadFromEstimate; `worthToYou`; `board`; and the SHAPE/CHEMISTRY/BUDGET +
+IDENTITY lights). For any input NOT cleanly derivable from live state, use the payload's OPTIONAL/
+ABSENT path (omit the field) and Fable's absent-piece behavior (§4.3: nomination whisper, hollow
+lights §5, empty-board line) — **NEVER fabricate data, never invent a number.** BALANCE stays
+hollow (payload leaves it unknown). The Asst GM is hired post-draft but whispers during it — the
+strip identifies the seat by ROLE + CLUB ("ASST GM · {CLUB NAME}"), which works pre-hire.
+
+### Secrecy invariants (Fable §3 R1-R8 — non-negotiable, MUST be testable)
+- Closed = ZERO whisper-body nodes in the DOM (conditional render, NOT display:none).
+- Exactly ONE payload built, for the human seat on the clock only; no other seat's intelligence
+  ever passed as props or rendered.
+- Keyed on `payload.seatTeamId`; re-key = collapse-first-then-swap (keyed remount); no frame shows
+  seat A body + seat B name.
+- Closed strip face IDENTICAL regardless of advice content (only seat name + team-tint + the
+  closed/open/dormant affordance vary). Farm tier: no true ratings / hidden modifiers / 20-80 grades.
+
+### Hard don'ts
+- Do NOT modify the scout's public lot card / market band widget (checkpoint §1.2 CONFORMS — leave
+  it). The panel renders NO band figures / NO CONTESTED badge (only the §4.2 relation line).
+- `src/src_figma/app/pages/GameTracker.tsx` UNTOUCHED. No second Help toggle (reuse the stage's `?`).
+
+### Tests (add `src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx`)
+- SECRECY: render with a multi-seat fixture, seat A payload, panel open → assert seat B's
+  distinctive board-name fixtures are ABSENT from `document.body`; assert closed → zero body nodes.
+- Closed-face neutrality: strip DOM identical across a push-verdict vs pass-verdict payload.
+- Hollow: BALANCE light renders hollow; absent scorecard → section renders nothing; absent lot →
+  nomination whisper.
+
+### Verify before returning (report ACTUAL output + Fable §8 item by item)
+- `NODE_ENV= npm run build` exit 0 (tail).
+- `npx vitest run src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx` green (counts).
+- `git diff --stat` — only: WhisperPanel.tsx (new) + its test, AuctionStage.tsx, LeagueBuilderAuctionDraft.tsx.
+  GameTracker.tsx NOT present; the scout lot-card logic NOT rewritten.
+<!-- ===== END CONTRACT: CODEX-WHISPER ===== -->

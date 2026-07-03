@@ -21,6 +21,11 @@ import {
 } from "lucide-react";
 import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
 import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
+import {
+  RosterDesigner,
+  rosterDesignStatusTone,
+  seedRosterDesignSlots,
+} from "../components/leagueBuilder/RosterDesigner";
 import { archetypeByKey } from "../data/teamArchetypeCatalog";
 import {
   useLeagueBuilderData,
@@ -39,6 +44,7 @@ import {
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
+import { computePoolTierCap } from "../../../engines/leagueConstruction";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
@@ -112,6 +118,8 @@ type LeaguePoolRecord = {
   locked?: boolean;
   players: readonly unknown[];
 };
+
+type ClubEditorMode = "identity" | "design" | null;
 
 function compactTeams(team: Team | undefined): team is Team {
   return Boolean(team);
@@ -267,6 +275,7 @@ export function LeagueBuilderDraftSetup() {
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
   const [showHelp, setShowHelp] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [clubEditorMode, setClubEditorMode] = useState<ClubEditorMode>("identity");
   const [shills, setShills] = useState(() => scaledShillDefault(0));
 
   // Resolve the active league once leagues load (honoring ?leagueId=).
@@ -309,13 +318,14 @@ export function LeagueBuilderDraftSetup() {
   useEffect(() => {
     if (leagueTeams.length === 0) {
       setSelectedTeamId("");
+      setClubEditorMode(null);
       return;
     }
-    setSelectedTeamId((current) =>
-      current && leagueTeams.some((team) => team.id === current)
-        ? current
-        : leagueTeams[0].id,
-    );
+    setSelectedTeamId((current) => {
+      if (current && leagueTeams.some((team) => team.id === current)) return current;
+      setClubEditorMode("identity");
+      return leagueTeams[0].id;
+    });
   }, [leagueTeams]);
 
   const refreshPool = useCallback(async (leagueId: string) => {
@@ -457,6 +467,29 @@ export function LeagueBuilderDraftSetup() {
     () => leagueTeams.filter((team) => teamOwnerId(team, seats) !== "cpu"),
     [leagueTeams, seats],
   );
+  const rosterDesignerPlayers = useMemo(
+    () => (poolMode === "design-first" && !locked ? players : inPoolPlayers),
+    [inPoolPlayers, locked, players, poolMode],
+  );
+  const tierBudget = useMemo(
+    () => computePoolTierCap(rosterDesignerPlayers.map((player) => computePlayerIv(player)), league?.tier ?? "juiced"),
+    [league?.tier, rosterDesignerPlayers],
+  );
+  const designsLocked = useMemo(
+    () => humanTeams.filter((team) => Boolean(team.rosterDesign?.lockedAt)).length,
+    [humanTeams],
+  );
+  const rosterDesignToneByTeamId = useMemo(() => {
+    const tones = new Map<string, ReturnType<typeof rosterDesignStatusTone>>();
+    for (const team of humanTeams) {
+      if (!team.rosterDesign) continue;
+      tones.set(
+        team.id,
+        rosterDesignStatusTone(seedRosterDesignSlots(team.rosterDesign.slots), rosterDesignerPlayers, tierBudget),
+      );
+    }
+    return tones;
+  }, [humanTeams, rosterDesignerPlayers, tierBudget]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey));
   const poolReady = locked && sufficiency.meetsFloor;
   const startReady =
@@ -637,6 +670,18 @@ export function LeagueBuilderDraftSetup() {
       }
       await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey);
     });
+
+  const handleSaveRosterDesign = useCallback(
+    async (team: Team, rosterDesign: NonNullable<Team["rosterDesign"]>) => {
+      try {
+        await saveTeam({ ...team, rosterDesign });
+        await refresh();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [refresh],
+  );
 
   const handleAdd = () =>
     runAction(async () => {
@@ -872,6 +917,17 @@ export function LeagueBuilderDraftSetup() {
                 const mlb = archetypeByKey(team.mlbArchetypeKey);
                 const farm = archetypeByKey(team.farmArchetypeKey);
                 const isSelected = team.id === selectedTeamId;
+                const designLocked = Boolean(team.rosterDesign?.lockedAt);
+                const designEdited = Boolean(team.rosterDesign);
+                const designTone = rosterDesignToneByTeamId.get(team.id);
+                const designDotClass =
+                  designTone === "red"
+                    ? "bg-[var(--ballpark-status-red-bright)]"
+                    : designTone === "amber"
+                      ? "bg-[var(--ballpark-status-warn)]"
+                      : designTone === "green"
+                        ? "bg-[var(--ballpark-status-green)]"
+                        : "bg-[var(--ballpark-chalk)]/45";
                 return (
                   <div
                     key={team.id}
@@ -909,31 +965,67 @@ export function LeagueBuilderDraftSetup() {
                     <div className="flex flex-wrap items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => setSelectedTeamId(team.id)}
+                        onClick={() => {
+                          setSelectedTeamId(team.id);
+                          setClubEditorMode("identity");
+                        }}
                         className="flex items-center gap-1 text-[11px] font-bold text-[var(--ballpark-brass)] hover:underline"
                       >
                         {mlb ? <><Check className="w-3 h-3" /> identity set · edit</> : <>set identity <ChevronRight className="w-3 h-3" /></>}
                       </button>
-                      {poolMode === "design-first" ? (
-                        <span className="text-[10px] font-bold tracking-wider text-[var(--ballpark-chalk)]/45">
-                          Design your roster · POOL-FROM-DEMAND COMING
-                        </span>
+                      {isHuman ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeamId(team.id);
+                            setClubEditorMode("design");
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-bold text-[var(--ballpark-brass)] hover:underline"
+                        >
+                          {designEdited ? (
+                            <>
+                              {designLocked ? "design locked · view" : "✓ design set · edit"}
+                              {!designLocked ? <span className={`w-1.5 h-1.5 rounded-full ${designDotClass}`} aria-hidden="true" /> : null}
+                              {designLocked ? (
+                                <span className="border border-[var(--ballpark-brass)] px-1 py-0.5 text-[8px] tracking-wider text-[var(--ballpark-brass)]">
+                                  LOCKED
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>design your roster ›</>
+                          )}
+                        </button>
                       ) : null}
                     </div>
                   </div>
                 );
               })}
             </div>
-            {selectedTeam && selectedTeamConfig ? (
+            {selectedTeam && selectedTeamConfig && clubEditorMode ? (
               <div className="mt-4 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4">
-                <ArchetypePicker
-                  teamLabel={selectedTeam.name + " (" + selectedTeam.abbreviation + ") · GM " + ownerName(selectedTeamConfig.ownerId)}
-                  mlbKey={selectedTeamConfig.mlbKey}
-                  farmKey={selectedTeamConfig.farmKey}
-                  onPick={handlePick}
-                  disabled={Boolean(setupMutationBlockMessage) || busy}
-                  disabledReason={setupMutationBlockMessage ?? undefined}
-                />
+                {clubEditorMode === "identity" ? (
+                  <ArchetypePicker
+                    teamLabel={selectedTeam.name + " (" + selectedTeam.abbreviation + ") · GM " + ownerName(selectedTeamConfig.ownerId)}
+                    mlbKey={selectedTeamConfig.mlbKey}
+                    farmKey={selectedTeamConfig.farmKey}
+                    onPick={handlePick}
+                    disabled={Boolean(setupMutationBlockMessage) || busy}
+                    disabledReason={setupMutationBlockMessage ?? undefined}
+                  />
+                ) : selectedTeamConfig.ownerId !== "cpu" ? (
+                  <RosterDesigner
+                    team={selectedTeam}
+                    mode={poolMode}
+                    players={rosterDesignerPlayers}
+                    lockedPool={locked}
+                    budget={tierBudget}
+                    showHelp={showHelp}
+                    disabled={Boolean(setupMutationBlockMessage) || busy}
+                    disabledReason={setupMutationBlockMessage}
+                    onSave={(rosterDesign) => handleSaveRosterDesign(selectedTeam, rosterDesign)}
+                  />
+                ) : null}
               </div>
             ) : null}
           </PanelWithHeaderStrip>
@@ -948,7 +1040,7 @@ export function LeagueBuilderDraftSetup() {
               <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-5">
                 <div className="text-sm font-bold text-[var(--ballpark-brass)] mb-2">POOL-FROM-DEMAND COMING</div>
                 <div className="text-sm text-[var(--ballpark-chalk)]/70">
-                  Designs locked: 0 of {leagueTeams.length} clubs.
+                  Designs locked: {designsLocked} of {humanTeams.length} clubs.
                 </div>
               </div>
             ) : (

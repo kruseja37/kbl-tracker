@@ -21,6 +21,7 @@ import {
 import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../data/chemistryCanonical';
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
+import type { DesignSlot } from '../engines/rosterDesignFeasibility';
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
@@ -162,6 +163,7 @@ export interface Team {
   farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
   gmSeatId?: string;
   gmSeatName?: string;
+  rosterDesign?: { slots: DesignSlot[]; lockedAt?: string };
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
   teamHistory?: RebrandRelocationMarker[];
