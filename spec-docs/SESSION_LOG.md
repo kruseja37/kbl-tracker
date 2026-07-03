@@ -2,6 +2,38 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-03 (attended, Opus/Fable/Codex) — THE PRE-PLAYTHROUGH P0 FIX TRAIN + HARD SALARY CAP (all committed, branch-only)
+
+**Arc:** cleared the entire draft-journey pre-playthrough P0 list (Fable design → Codex build →
+Opus audit incl. adversarial passes → commit). Branch `experiment/manager-wpa-window`, nothing pushed.
+Full audit trail: `spec-docs/C4_AUDIT_2026-07-02.md`. Designs: FABLE_P0_DESIGN, FABLE_HARD_CAP_DESIGN,
+FABLE_DJ0506_DESIGN (all 2026-07-02/03).
+
+**Committed (in order):**
+- `a20ff1a6` Fable's legality-by-construction roster-design feasibility (pos slots primary-only) + green
+  page ground. Opus audit's adversarial fuzz surfaced **DJ-29** (pre-existing frame-vs-law two-way defect,
+  verified on base HEAD, ticketed — the design frame is stricter than isLegalRoster; over-rejects only).
+- `1a2d456e` **DJ-01** legal 22-seat auction board (round 1 BLOCKED on an Opus fuzz — a legal roster
+  stranded a body when the 2nd catcher was a secondary-C hitter; Fable amended step-4; round 2 clean; a
+  6k-fuzz is now permanent). `0562ab70` Fable gap-color ruling follow-up (amber, not ash).
+- `edea2db7` **DJ-02** CPU turn-panel no longer leaks the rival's valuation/fold-point (F4).
+- `1fe2b74e` **HARD SALARY CAP Phase 1** (JK ruling 2026-07-03 — the browser $1.55M repro): supersedes the
+  pool-relative team budget with a settings salaryCap the designer + auction + snake all read/enforce via
+  one resolver; migration read-time; ratings untouched. Subsumes DJ-04(1). Adversarial 12-HOLDS/0-defects.
+  Phase 2 (cap-aware pool selection) deferred to a later contract.
+- `52057864` **DJ-03** stable per-club CPU bidding identity (band priorities public, personality walled).
+- `63c8904f` **DJ-07** START blocks on post-lock design staleness.
+- `ee6c404f` **DJ-05** design-first pool lock freezes ONLY the reviewed set + hidden-modifier regen covers
+  the frozen membership (closes the unreviewed-body + latent pool-first holes).
+- `bb411975` **DJ-06** THE HANDOFF CHECK — per-club isLegalRoster gate on the auction-complete screen
+  before the franchise handoff; franchise-side upgraded count-only → same law. Adversarial 9-HOLDS + 1
+  minor pre-existing (TWO-WAY-PRIMARY-ROLE, ticketed, unreachable in the draft flow).
+
+**Deferred / ticketed (v1.1 or follow-up):** HARD-CAP Phase 2 · DJ-29 (two-way feasibility frame) ·
+AUCTION-SETTLE-FROM-SHILLS · IDENTITY-CARRY (DJ-12) · farm-whisper (DJ-28) · TWO-WAY-PRIMARY-ROLE ·
+Fable's §6 open questions (farm wallet cap, tier bite, mid-session cap edits — all with defer/keep recs) ·
+the DJ-09/10/11/13 majors + DJ-14..28 minors sweep. **Next: JK's browser playthrough is the acceptance gate.**
+
 ## 2026-07-02 (attended, Claude Code / Fable 5) — LEGALITY FIX + GREEN GROUND + THE DRAFT-JOURNEY AUDIT (xhigh)
 
 **Trigger:** JK's first browser look at the designer hit "FILLS · NOT A LEGAL 22" on a
