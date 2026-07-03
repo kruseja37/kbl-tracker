@@ -28287,3 +28287,48 @@ GATE (report ACTUAL output):
    component reds are solo-green order-flakes — run any suspect solo and report).
 - `git diff --stat` — poolFromDemand.ts, leaguePlayerAdapter.ts, RosterDesigner.tsx, best22Target.test.ts (+adapter test).
 <!-- ===== END CONTRACT: CODEX-B22-DESIGNER-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-SILENT-REFRESH ===== -->
+# CODEX-SILENT-REFRESH — stop the league-builder scroll-jump-to-top on every save (JK-flagged)
+
+BUG (JK observed, root-caused by Opus): in the league builder, every time a GM sets an archetype identity or a
+positional roster priority, the page scrolls back to the top. ROOT CAUSE (definitive):
+`src/src_figma/hooks/useLeagueBuilderData.ts` `loadData()` calls `setIsLoading(true)` at :196 and
+`setIsLoading(false)` at :217; `refresh()` (:227) = `loadData()`; EVERY mutation in the hook
+(updateTeam :386, updateLeague, createTeam :374, updatePlayer :433, registerLeaguePool, etc.) ends with
+`await refresh()`; and the page gates ALL content behind `{isLoading ? <Loading…/> : <content>}`
+(`LeagueBuilderDraftSetup.tsx:1567`). So every save flips isLoading true→false, which UNMOUNTS the entire page
+content (replaced by the spinner) then REMOUNTS it fresh → the browser discards scroll → jump to top. Confirmed:
+handleSaveRosterDesign (:1064) does saveTeam + refresh; handlePick (:1052) → selectTeamArchetype/updateTeam → refresh.
+
+FIX — make `refresh()` a SILENT background reload that does NOT toggle the full-page `isLoading`. The initial mount
+still shows the spinner once; saves refetch quietly and update in place, preserving scroll. This fixes EVERY screen
+that uses this hook, not just the draft setup.
+
+DELIVERABLE 1 — `src/src_figma/hooks/useLeagueBuilderData.ts`:
+  - Give `loadData` an options arg: `const loadData = useCallback(async (options?: { silent?: boolean }) => { ... }, [])`.
+  - When `options?.silent` is true: DO NOT call `setIsLoading(true)` at the start and DO NOT call `setIsLoading(false)`
+    in `finally`. Still `setError(null)` at the start, still init the DB / refetch the four getAll* queries / setState,
+    still catch + setError on failure. (When silent and isLoading is already false from the initial load, it stays false.)
+  - When `options` is absent/silent false: behave EXACTLY as today (setIsLoading true → … → false) so the FIRST mount
+    still shows the spinner.
+  - `refresh` (:227) → `await loadData({ silent: true })`. Keep its useCallback dep = [loadData].
+  - The initial-load `useEffect` (:222-224) stays `loadData()` (loud) — spinner on first mount only.
+  - Change NOTHING else (no new state, no signature change to refresh's public type, error handling identical).
+
+DELIVERABLE 2 — test (`src/src_figma/hooks/__tests__/useLeagueBuilderData.*` — create if none, else extend):
+  - renderHook the hook; wait for the initial load to settle (isLoading false, data present).
+  - Call `refresh()` and assert isLoading STAYS false across the whole refresh (spy/track it never becomes true again)
+    WHILE the data still updates (e.g. seed a new team in the fake DB before refresh and assert it appears after) — this
+    is the scroll-preserving guarantee. Keep it deterministic (fake-indexeddb, no real timers).
+
+SCOPE: `useLeagueBuilderData.ts` + its test ONLY. Do NOT change LeagueBuilderDraftSetup.tsx or the :1567 conditional
+(it stays — it just won't fire on a save anymore). GameTracker untouched. No other behavior change.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run` for the hook test — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set. CRITICAL: if ANY existing test
+  asserted isLoading toggling on refresh, name it and report (do not silently delete it — surface it to Opus).
+- `git diff --stat` — useLeagueBuilderData.ts (+ its test) only.
+<!-- ===== END CONTRACT: CODEX-SILENT-REFRESH ===== -->

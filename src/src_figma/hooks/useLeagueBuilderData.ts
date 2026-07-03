@@ -191,9 +191,11 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
   const [error, setError] = useState<string | null>(null);
 
   // Load initial data
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setIsLoading(true);
+      if (!options?.silent) {
+        setIsLoading(true);
+      }
       setError(null);
 
       await initLeagueBuilderDatabase();
@@ -214,7 +216,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       console.error('[useLeagueBuilderData] Failed to load data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -225,7 +229,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
   // Refresh function
   const refresh = useCallback(async () => {
-    await loadData();
+    await loadData({ silent: true });
   }, [loadData]);
 
   // ============================================
