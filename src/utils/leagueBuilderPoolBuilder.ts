@@ -24,6 +24,7 @@ import {
   getLeagueTemplate,
   getPlayer,
   getRegisteredPool,
+  resolveLeagueSalaryCap,
   getTeamRoster,
   savePlayer,
   saveRegisteredPool,
@@ -382,7 +383,13 @@ export async function evaluatePoolComposition(
   }
   if (sims.length === 0) return null;
 
-  const feasibility = analyzePoolFeasibility(sims, [...HISTORICAL_ARCHETYPES], pool.tier);
+  const feasibility = analyzePoolFeasibility(
+    sims,
+    [...HISTORICAL_ARCHETYPES],
+    pool.tier,
+    undefined,
+    resolveLeagueSalaryCap(leagueTemplate),
+  );
   return {
     demand: poolDemandModel(teamCount, shillCount),
     feasibility,

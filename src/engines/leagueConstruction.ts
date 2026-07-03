@@ -31,12 +31,14 @@ export type PoolConfig = {
   balanceMode: BalanceMode;
   totalSlots: number;
   players: PoolPlayerPriced[];
+  salaryCap?: number;
 };
 export type RegisteredPool = {
   leagueId: string;
   tier: TierKey;
   balanceMode: BalanceMode;
   players: PoolPlayerPriced[];
+  /** Team draft budget: the league settings hard cap when provided, otherwise the pool-relative fallback. */
   tierCap: number;
   luxuryCaps: LuxuryCapRow[];
   pickValueChart: PickValue[];
@@ -315,7 +317,7 @@ export function registerPool(cfg: PoolConfig): RegisteredPool {
     tier: cfg.tier,
     balanceMode: cfg.balanceMode,
     players: cfg.players,
-    tierCap: computePoolTierCap(cfg.players.map((player) => player.iv), cfg.tier),
+    tierCap: cfg.salaryCap ?? computePoolTierCap(cfg.players.map((player) => player.iv), cfg.tier),
     luxuryCaps: LUXURY_CAP_TABLES[cfg.tier],
     pickValueChart: derivePickValueChart(cfg.players.map((player) => player.iv)),
     totalSlots: cfg.totalSlots,

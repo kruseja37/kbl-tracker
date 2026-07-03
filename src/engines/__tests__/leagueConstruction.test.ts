@@ -514,6 +514,21 @@ describe('registerPool T8b assembler', () => {
     expect(computePoolTierCap(ivs, 'standard')).toBeGreaterThan(computePoolTierCap(ivs, 'nerfed'));
   });
 
+  test('stamps an explicit salary cap as the team draft budget without changing luxury caps', () => {
+    const pool = registerPool({
+      leagueId: 'league-hard-cap',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      totalSlots: 22,
+      salaryCap: 777_777,
+      players,
+    });
+
+    expect(pool.tierCap).toBe(777_777);
+    expect(pool.tierCap).not.toBe(computePoolTierCap(players.map((player) => player.iv), 'standard'));
+    expect(pool.luxuryCaps).toBe(LUXURY_CAP_TABLES.standard);
+  });
+
   test('pool-relative cap tracks pool talent: removing the top player lowers the cap', () => {
     const full = computePoolTierCap(players.map((player) => player.iv), 'standard');
     const lighter = computePoolTierCap(

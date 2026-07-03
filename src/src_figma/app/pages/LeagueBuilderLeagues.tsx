@@ -25,10 +25,11 @@ import { useLeagueBuilderData, type LeagueTemplate } from "../../hooks/useLeague
 import {
   BALANCE_MODE_DEFAULT,
   CHECKPOINT_CADENCE_DEFAULT,
+  LEAGUE_MINIMUM_SALARY,
   type CheckpointCadence,
 } from "../../../data/rosterEngineConstants";
 import type { BalanceMode } from "../../../engines/leagueConstruction";
-import type { TierKey } from "../../../data/tierParams";
+import { TIER_CAPS, type TierKey } from "../../../data/tierParams";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
 import {
   isSavedAuctionMutationGuardMessage,
@@ -46,6 +47,7 @@ interface LeagueFormData {
   defaultRulesPreset: string;
   draftFormat: 'auction' | 'snake';
   tier: TierKey;
+  salaryCap: string;
   balanceMode: BalanceMode;
   checkpointCadence: CheckpointCadence;
   color: string;
@@ -58,6 +60,7 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   defaultRulesPreset: "",
   draftFormat: "auction",
   tier: "juiced",
+  salaryCap: TIER_CAPS.juiced.tierCap.toLocaleString(),
   balanceMode: BALANCE_MODE_DEFAULT,
   checkpointCadence: CHECKPOINT_CADENCE_DEFAULT,
   color: "#5A8352",
@@ -97,6 +100,21 @@ function formatCheckpointCadence(value: CheckpointCadence | undefined): string {
   return CHECKPOINT_CADENCE_OPTIONS.find((option) => option.value === (value ?? CHECKPOINT_CADENCE_DEFAULT))?.label ?? "Standard";
 }
 
+function formatMoney(value: number): string {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function formatSalaryCapInput(value: number): string {
+  return Math.round(value).toLocaleString();
+}
+
+function parseSalaryCapInput(value: string): number | null {
+  const normalized = value.replace(/,/g, "").trim();
+  if (!/^\d+$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -119,6 +137,7 @@ export function LeagueBuilderLeagues() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLeague, setEditingLeague] = useState<LeagueTemplate | null>(null);
   const [formData, setFormData] = useState<LeagueFormData>(DEFAULT_FORM_DATA);
+  const [salaryCapDirty, setSalaryCapDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -135,6 +154,23 @@ export function LeagueBuilderLeagues() {
   };
   const savedAuctionMutationMessage = savedAuctionGuard.message;
   const editingLeagueMutationBlocked = isLeagueMutationBlocked(editingLeague?.id);
+  const tierReference = TIER_CAPS[formData.tier].tierCap;
+  const parsedSalaryCap = parseSalaryCapInput(formData.salaryCap);
+  const salaryCapFloor = Math.ceil(22 * LEAGUE_MINIMUM_SALARY);
+  const salaryCapHardError = parsedSalaryCap === null
+    ? "Enter a whole-dollar salary cap."
+    : parsedSalaryCap <= 0
+      ? "Salary cap must be greater than zero."
+      : parsedSalaryCap < salaryCapFloor
+        ? `Salary cap must be at least ${formatMoney(salaryCapFloor)}.`
+        : null;
+  const salaryCapAdvisory = salaryCapHardError || parsedSalaryCap === null
+    ? null
+    : parsedSalaryCap < tierReference * 0.5
+      ? "Very tight for this tier."
+      : parsedSalaryCap > tierReference * 2
+        ? "Rarely binding for this tier."
+        : null;
 
   // Set default rules preset when data loads
   useEffect(() => {
@@ -151,9 +187,11 @@ export function LeagueBuilderLeagues() {
   const openCreateModal = () => {
     setEditingLeague(null);
     setSaveError(null);
+    setSalaryCapDirty(false);
     setFormData({
       ...DEFAULT_FORM_DATA,
       defaultRulesPreset: rulesPresets.find((p) => p.isDefault)?.id || rulesPresets[0]?.id || "",
+      salaryCap: formatSalaryCapInput(TIER_CAPS[DEFAULT_FORM_DATA.tier].tierCap),
     });
     setIsModalOpen(true);
   };
@@ -161,13 +199,18 @@ export function LeagueBuilderLeagues() {
   const openEditModal = (league: LeagueTemplate) => {
     setEditingLeague(league);
     setSaveError(null);
+    const tier = league.tier ?? "juiced";
+    const referenceCap = TIER_CAPS[tier].tierCap;
+    const salaryCap = league.salaryCap ?? referenceCap;
+    setSalaryCapDirty(league.salaryCap !== undefined && league.salaryCap !== referenceCap);
     setFormData({
       name: league.name,
       description: league.description || "",
       teamIds: league.teamIds,
       defaultRulesPreset: league.defaultRulesPreset,
       draftFormat: league.draftFormat ?? "auction",
-      tier: league.tier ?? "juiced",
+      tier,
+      salaryCap: formatSalaryCapInput(salaryCap),
       balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
       checkpointCadence: league.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT,
       color: league.color || "#5A8352",
@@ -179,6 +222,7 @@ export function LeagueBuilderLeagues() {
     setIsModalOpen(false);
     setEditingLeague(null);
     setSaveError(null);
+    setSalaryCapDirty(false);
     setFormData(DEFAULT_FORM_DATA);
   };
 
@@ -196,6 +240,10 @@ export function LeagueBuilderLeagues() {
 
   const handleSave = async () => {
     if (!formData.name.trim()) return;
+    if (salaryCapHardError || parsedSalaryCap === null) {
+      setSaveError(salaryCapHardError ?? "Enter a valid salary cap.");
+      return;
+    }
     if (editingLeagueMutationBlocked) {
       setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
       return;
@@ -213,6 +261,7 @@ export function LeagueBuilderLeagues() {
           defaultRulesPreset: formData.defaultRulesPreset,
           draftFormat: formData.draftFormat,
           tier: formData.tier,
+          salaryCap: parsedSalaryCap,
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
           color: formData.color,
@@ -227,6 +276,7 @@ export function LeagueBuilderLeagues() {
           defaultRulesPreset: formData.defaultRulesPreset,
           draftFormat: formData.draftFormat,
           tier: formData.tier,
+          salaryCap: parsedSalaryCap,
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
           color: formData.color,
@@ -262,6 +312,23 @@ export function LeagueBuilderLeagues() {
     } catch (err) {
       console.error("Failed to duplicate league:", err);
     }
+  };
+
+  const handleTierChange = (tier: TierKey) => {
+    setFormData((prev) => ({
+      ...prev,
+      tier,
+      salaryCap: salaryCapDirty ? prev.salaryCap : formatSalaryCapInput(TIER_CAPS[tier].tierCap),
+    }));
+  };
+
+  const handleSalaryCapChange = (value: string) => {
+    setSalaryCapDirty(true);
+    const parsed = parseSalaryCapInput(value);
+    setFormData((prev) => ({
+      ...prev,
+      salaryCap: parsed === null ? value : formatSalaryCapInput(parsed),
+    }));
   };
 
   const toggleTeam = (teamId: string) => {
@@ -511,9 +578,7 @@ export function LeagueBuilderLeagues() {
                 <label className="block text-sm font-bold mb-2">League Tier</label>
                 <select
                   value={formData.tier}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, tier: e.target.value as TierKey }))
-                  }
+                  onChange={(e) => handleTierChange(e.target.value as TierKey)}
                   className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
                 >
                   {TIER_OPTIONS.map((option) => (
@@ -522,6 +587,30 @@ export function LeagueBuilderLeagues() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Salary Cap */}
+              <div>
+                <label htmlFor="league-salary-cap" className="block text-sm font-bold mb-2">
+                  SALARY CAP
+                </label>
+                <input
+                  id="league-salary-cap"
+                  aria-label="Salary cap"
+                  type="text"
+                  inputMode="numeric"
+                  value={formData.salaryCap}
+                  onChange={(e) => handleSalaryCapChange(e.target.value)}
+                  className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
+                />
+                <div className="mt-2 text-xs font-bold text-[#E8E8D8]/70">
+                  TIER REFERENCE: {formatMoney(tierReference)}
+                </div>
+                {salaryCapHardError ? (
+                  <div className="mt-2 text-xs font-bold text-red-200">{salaryCapHardError}</div>
+                ) : salaryCapAdvisory ? (
+                  <div className="mt-2 text-xs font-bold text-[#FFD27A]">{salaryCapAdvisory}</div>
+                ) : null}
               </div>
 
               {/* Draft Format */}
@@ -645,7 +734,7 @@ export function LeagueBuilderLeagues() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formData.name.trim() || editingLeagueMutationBlocked || isSaving}
+                disabled={!formData.name.trim() || Boolean(salaryCapHardError) || editingLeagueMutationBlocked || isSaving}
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (

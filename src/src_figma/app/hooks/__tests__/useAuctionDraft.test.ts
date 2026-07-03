@@ -12,7 +12,9 @@ import {
 import type { LuxuryCapRow } from "../../../../data/tierParams";
 import {
   __resetLeagueBuilderDatabaseForTests,
+  createAuctionSessionId,
   getAuctionSession,
+  saveAuctionSession,
   savePlayer,
 } from "../../../../utils/leagueBuilderStorage";
 import {
@@ -267,6 +269,81 @@ describe("useAuctionDraft", () => {
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
     expect(persisted?.session.currentLot?.playerId).toBe(result.current.session?.currentLot?.playerId);
     expect(persisted?.session.config.nominationOrderSeed).toBe(seed);
+  });
+
+  test("initializes new auction budgets from league salaryCap instead of a stale locked pool stamp", async () => {
+    const teamIds = ["human", "other"];
+    const shillId = "__auction_shill__league-hard-cap__1";
+    const seed = seedWithFirst([...teamIds, shillId], "human");
+    const cap = 1_200_000;
+    const stalePool = {
+      ...makePool("league-hard-cap", ["p1", "p2", "p3", "p4"]),
+      tierCap: 1_550_000,
+      locked: true,
+    };
+    mockLeagueData({
+      leagues: [{ ...makeLeague("league-hard-cap", teamIds), salaryCap: cap }],
+      teams: teamIds.map((id) => makeTeam(id)),
+      pools: { "league-hard-cap": stalePool },
+    });
+    for (const player of stalePool.players.map((poolPlayer) => makePlayer(poolPlayer.id))) {
+      await savePlayer(player);
+    }
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.initAuction("league-hard-cap", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 1,
+        bidIncrement: 1_000,
+      });
+    });
+
+    expect(result.current.session?.teams.filter((team) => teamIds.includes(team.teamId)).map((team) => team.budgetRemaining))
+      .toEqual([cap, cap]);
+    expect(result.current.shillTeamIds).toHaveLength(1);
+    expect(result.current.session?.teams.find((team) => result.current.shillTeamIds.includes(team.teamId))?.budgetRemaining)
+      .toBe(cap);
+  });
+
+  test("does not retro-edit an in-flight persisted auction session when the league cap changes", async () => {
+    const teamIds = ["human", "other"];
+    const session = initAuctionSession({
+      teams: [
+        { teamId: "human", budgetRemaining: 999_000, rosterSlotsRemaining: 22 },
+        { teamId: "other", budgetRemaining: 888_000, rosterSlotsRemaining: 22 },
+      ],
+      players: [{
+        playerId: "p1",
+        iv: 50_000,
+        ivPercentile: 100,
+        pos: { isPitcher: false, position: "CF" },
+      }],
+      nominationOrder: teamIds,
+      config: { nominationOrderSeed: seedWithFirst(teamIds, "human"), bidIncrement: 1_000 },
+    }) as CpuShillAuctionSession;
+    mockLeagueData({
+      leagues: [{ ...makeLeague("league-resume-cap", teamIds), salaryCap: 1_200_000 }],
+      teams: teamIds.map((id) => makeTeam(id)),
+      pools: { "league-resume-cap": { ...makePool("league-resume-cap", ["p1"]), tierCap: 1_550_000, locked: true } },
+      players: [makePlayer("p1")],
+    });
+    await saveAuctionSession({
+      id: createAuctionSessionId("league-resume-cap", 1),
+      leagueId: "league-resume-cap",
+      seasonNumber: 1,
+      seed: session.config.nominationOrderSeed,
+      session,
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.loadAuction("league-resume-cap");
+    });
+
+    expect(result.current.session?.teams.map((team) => team.budgetRemaining)).toEqual([999_000, 888_000]);
   });
 
   test("pauses on CPU bidding turns until the decision is advanced", async () => {

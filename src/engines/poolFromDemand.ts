@@ -198,6 +198,7 @@ export function extractPoolFromDemand(
   // 4. The archetype-feasibility floors + balance, from the SAME universe (C1B, audited).
   const floors = extractDraftPool(universe, selectedArchetypes, tier, {
     teams: options.teams,
+    budgetPerTeam: options.budgetPerTeam,
   });
 
   // 5. Union + dedupe (reservation order first so cell picks always survive).

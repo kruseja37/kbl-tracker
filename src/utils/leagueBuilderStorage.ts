@@ -12,6 +12,7 @@
  */
 
 import { generateHometown } from '../data/usCities';
+import { TIER_CAPS } from '../data/tierParams';
 import {
   BALANCE_MODE_DEFAULT,
   CHECKPOINT_CADENCE_DEFAULT,
@@ -117,10 +118,15 @@ export interface LeagueTemplate {
   draftSeats?: DraftSetupSeat[];
   poolExtractedAt?: string;
   tier?: TierKey;
+  salaryCap?: number;
   balanceMode?: BalanceMode;
   checkpointCadence?: CheckpointCadence;
   logoUrl?: string;
   color?: string;
+}
+
+export function resolveLeagueSalaryCap(league: Pick<LeagueTemplate, 'salaryCap' | 'tier'> | null | undefined): number {
+  return league?.salaryCap ?? TIER_CAPS[league?.tier ?? 'juiced'].tierCap;
 }
 
 export function getLeagueDraftFormat(template: Pick<LeagueTemplate, 'draftFormat'> | null | undefined): 'auction' | 'snake' {

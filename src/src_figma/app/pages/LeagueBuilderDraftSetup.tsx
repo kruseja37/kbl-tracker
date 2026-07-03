@@ -45,7 +45,6 @@ import {
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
-import { computePoolTierCap } from "../../../engines/leagueConstruction";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
@@ -62,6 +61,7 @@ import {
 } from "../../../utils/leagueBuilderPoolBuilder";
 import {
   getAuctionSession,
+  resolveLeagueSalaryCap,
   saveLeagueTemplate,
   saveTeam,
   type PitchType,
@@ -83,7 +83,12 @@ import {
   type TeamDesignInput,
 } from "../../../engines/poolFromDemand";
 import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassifier";
-import { evaluateRosterDesign, type DesignFeasibilityResult } from "../../../engines/rosterDesignFeasibility";
+import {
+  buildDefaultDesignSlots,
+  evaluateRosterDesign,
+  type DesignPoolPlayer,
+  type DesignFeasibilityResult,
+} from "../../../engines/rosterDesignFeasibility";
 import { toRosterSlotPlayer } from "../../../engines/rosterNeed";
 
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
@@ -91,6 +96,17 @@ const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))]
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
   return `$${Math.round(value).toLocaleString()}`;
+}
+
+export function draftSetupSolvencyBannerText(
+  pool: readonly DesignPoolPlayer[],
+  cap: number,
+): string | null {
+  if (pool.length === 0) return null;
+  const cheapest = evaluateRosterDesign(buildDefaultDesignSlots(), pool, Number.POSITIVE_INFINITY);
+  return cheapest.totalCost > cap
+    ? `This pool can't seat a legal roster under your ${formatMoney(cap)} cap — raise the cap or add cheaper players.`
+    : null;
 }
 
 function playerName(player: Player): string {
@@ -607,8 +623,8 @@ export function LeagueBuilderDraftSetup() {
     [inPoolPlayers, locked, players, poolMode],
   );
   const tierBudget = useMemo(
-    () => computePoolTierCap(rosterDesignerPlayers.map((player) => computePlayerIv(player)), league?.tier ?? "juiced"),
-    [league?.tier, rosterDesignerPlayers],
+    () => resolveLeagueSalaryCap(league),
+    [league],
   );
   const designsLocked = useMemo(
     () => humanTeams.filter((team) => Boolean(team.rosterDesign?.lockedAt)).length,
@@ -626,6 +642,10 @@ export function LeagueBuilderDraftSetup() {
     return tones;
   }, [humanTeams, rosterDesignerPlayers, tierBudget]);
   const inPoolDesignPool = useMemo(() => buildRosterDesignPool(inPoolPlayers), [inPoolPlayers]);
+  const solvencyBanner = useMemo(() => {
+    if (!locked) return null;
+    return draftSetupSolvencyBannerText(inPoolDesignPool, tierBudget);
+  }, [inPoolDesignPool, locked, tierBudget]);
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const next = new Map<string, DesignFeasibilityResult>();
@@ -1498,6 +1518,11 @@ export function LeagueBuilderDraftSetup() {
 
                     <div className="flex flex-wrap items-center gap-4">
                       {sufficiencyChip}
+                      {solvencyBanner ? (
+                        <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
+                          {solvencyBanner}
+                        </div>
+                      ) : null}
                       {modeAState !== "locked" ? (
                         <div ref={reExtractConfirmRef} className="flex flex-wrap items-center gap-2">
                           {reExtractConfirm ? (
@@ -1643,6 +1668,11 @@ export function LeagueBuilderDraftSetup() {
                 {poolShuttle}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
                   {sufficiencyChip}
+                  {solvencyBanner ? (
+                    <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
+                      {solvencyBanner}
+                    </div>
+                  ) : null}
                   <PressButton
                     onClick={handleImport}
                     disabled={poolEditingBlocked || busy}

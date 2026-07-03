@@ -13,6 +13,7 @@ import {
   draftRouteForLeague,
 } from '../../app/utils/draftRouting';
 import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
+import { TIER_CAPS } from '../../../data/tierParams';
 
 // ============================================
 // MOCKS
@@ -184,6 +185,62 @@ describe('LeagueBuilderLeagues Component', () => {
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));
       await waitFor(() => {
         expect(screen.getByText('Create New League')).toBeInTheDocument();
+      });
+    });
+
+    test('salary cap seeds from tier and reseeds only before the field is edited', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+
+      const capInput = screen.getByLabelText('Salary cap');
+      expect(capInput).toHaveValue(TIER_CAPS.juiced.tierCap.toLocaleString());
+      expect(screen.getByText(`TIER REFERENCE: $${TIER_CAPS.juiced.tierCap.toLocaleString()}`)).toBeInTheDocument();
+
+      fireEvent.change(screen.getByDisplayValue('Juiced'), { target: { value: 'standard' } });
+      expect(capInput).toHaveValue(TIER_CAPS.standard.tierCap.toLocaleString());
+      expect(screen.getByText(`TIER REFERENCE: $${TIER_CAPS.standard.tierCap.toLocaleString()}`)).toBeInTheDocument();
+
+      fireEvent.change(capInput, { target: { value: '900000' } });
+      expect(capInput).toHaveValue('900,000');
+      fireEvent.change(screen.getByDisplayValue('Standard'), { target: { value: 'nerfed' } });
+      expect(capInput).toHaveValue('900,000');
+      expect(screen.getByText(`TIER REFERENCE: $${TIER_CAPS.nerfed.tierCap.toLocaleString()}`)).toBeInTheDocument();
+    });
+
+    test('salary cap hard-blocks impossible values and soft-warns loose values without blocking save', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+
+      const capInput = screen.getByLabelText('Salary cap');
+      fireEvent.change(capInput, { target: { value: '10000' } });
+      expect(screen.getByText(/Salary cap must be at least/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^create league$/i })).toBeDisabled();
+
+      fireEvent.change(capInput, { target: { value: '3000000' } });
+      expect(screen.getByText('Rarely binding for this tier.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^create league$/i })).toBeDisabled();
+
+      fireEvent.change(screen.getByPlaceholderText('e.g., Kruse Baseball League'), {
+        target: { value: 'Cap League' },
+      });
+      expect(screen.getByRole('button', { name: /^create league$/i })).not.toBeDisabled();
+    });
+
+    test('persists the salary cap through league creation', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+
+      fireEvent.change(screen.getByPlaceholderText('e.g., Kruse Baseball League'), {
+        target: { value: 'Cap League' },
+      });
+      fireEvent.change(screen.getByLabelText('Salary cap'), { target: { value: '1000000' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create league$/i }));
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(expect.objectContaining({
+          name: 'Cap League',
+          salaryCap: 1_000_000,
+        }));
       });
     });
   });

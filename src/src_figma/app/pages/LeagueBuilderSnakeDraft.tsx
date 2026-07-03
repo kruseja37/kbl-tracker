@@ -19,7 +19,7 @@ import {
   type TradeVerdict,
   validateTrade,
 } from "../../../engines/leagueConstruction";
-import { createMlbDraftSessionId } from "../../../utils/leagueBuilderStorage";
+import { createMlbDraftSessionId, resolveLeagueSalaryCap } from "../../../utils/leagueBuilderStorage";
 
 const MLB_DRAFT_ROUNDS = 22;
 const MLB_DRAFT_SEASON = 1;
@@ -273,15 +273,16 @@ export function LeagueBuilderSnakeDraft() {
   const loadDraftState = useCallback(async (leagueId: string) => {
     setActionError(null);
     try {
+      const league = leagues.find((candidate) => candidate.id === leagueId);
       const existingPool = await getRegisteredPool(leagueId);
       const nextPool = existingPool ?? await registerLeaguePool(leagueId);
       const nextSession = await getMlbDraftSession(leagueId, MLB_DRAFT_SEASON);
-      setPool(nextPool);
+      setPool(league ? { ...nextPool, tierCap: resolveLeagueSalaryCap(league) } : nextPool);
       setSession(nextSession);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     }
-  }, [getMlbDraftSession, getRegisteredPool, registerLeaguePool]);
+  }, [getMlbDraftSession, getRegisteredPool, leagues, registerLeaguePool]);
 
   useEffect(() => {
     setSession(null);
@@ -393,7 +394,8 @@ export function LeagueBuilderSnakeDraft() {
 
   const handleStartDraft = () => runAction(async () => {
     if (!activeLeague) throw new Error("League not found");
-    const nextPool = pool ?? await registerLeaguePool(activeLeague.id);
+    const registeredPool = pool ?? await registerLeaguePool(activeLeague.id);
+    const nextPool: RegisteredPool = { ...registeredPool, tierCap: resolveLeagueSalaryCap(activeLeague) };
     const order = buildSnakeOrder(teamOrder.length ? teamOrder : activeLeague.teamIds, MLB_DRAFT_ROUNDS);
     const saved = await saveMlbDraftSession({
       id: createMlbDraftSessionId(activeLeague.id, MLB_DRAFT_SEASON),

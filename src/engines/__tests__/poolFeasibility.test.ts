@@ -204,6 +204,13 @@ describe('pool feasibility analyzer', () => {
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
 
+  it('uses an explicit budget override for the surfaced feasibility budget', () => {
+    const pool = loadPool();
+    const report = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES.slice(0, 2), 'standard', pool, 777_777);
+
+    expect(report.budget).toBe(777_777);
+  });
+
   it('classifies equal-sized flavor shortfalls as thin and binding shortfalls as starved', () => {
     const pool = buildSyntheticPool();
     const flavor = archetype('flavor-gloves', 'Flavor Gloves', 'FLD');

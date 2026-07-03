@@ -330,6 +330,7 @@ export function runBalanceSim(
   tier: TierKey,
   band = 0.1,
 ): BalanceReport {
+  // Intentionally pool-relative: this offline balance harness is a calibration frame, not a live league budget.
   const budget = computePoolTierCap(pool.map((p) => p.iv), tier);
   const results = archetypes.map((a) => buildBestRoster(pool, a, tier, budget));
   const meanIv = results.reduce((s, r) => s + r.totalIv, 0) / results.length;

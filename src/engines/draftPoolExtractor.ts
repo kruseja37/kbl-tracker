@@ -89,6 +89,7 @@ export interface ExtractPoolOptions {
   posture?: RosterPosture;
   /** Forwarded to the ranker (verdict floor; default = the strict product dial). */
   minEmbodimentZ?: number;
+  budgetPerTeam?: number;
   maxRepairRounds?: number;
   maxResilienceSpread?: number;
 }
@@ -271,7 +272,7 @@ export function extractDraftPool(
   const fitScorers = new Map(
     selected.map((a) => [a.id, archetypeFitScorer(simArchetypes.get(a.id)!, tier, posture)]),
   );
-  const sourceBudget = computePoolTierCap(canonicalSource.map((p) => p.iv), tier);
+  const sourceBudget = options.budgetPerTeam ?? computePoolTierCap(canonicalSource.map((p) => p.iv), tier);
 
   // 1. Structural floors + 2. identity seeds (each archetype's best build on the full source).
   const pool = new Map<string, SimPlayer>();
@@ -336,6 +337,7 @@ export function extractDraftPool(
   const rankNow = () =>
     rankArchetypeDraftability([...pool.values()], selected, tier, {
       posture,
+      budgetOverride: sourceBudget,
       // Identity is judged against the fixed SOURCE universe, not the moving candidate pool —
       // otherwise every feasibility body the floors add raises the bar mechanically (C1B fix round).
       embodimentReference: canonicalSource,

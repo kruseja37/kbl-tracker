@@ -208,6 +208,22 @@ describe('extractPoolFromDemand', () => {
     expect(new Set(reservedSalaries).size).toBeGreaterThanOrEqual(2);
   });
 
+  it('threads budgetPerTeam through the extracted floors draftability verdicts', () => {
+    const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
+    const loose = extractPoolFromDemand(universe(), designs, archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+    });
+    const tight = extractPoolFromDemand(universe(), designs, archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 150_000,
+    });
+
+    const looseHeadroom = Math.max(...loose.floors.verdicts.map((row) => row.taxHeadroom));
+    const tightHeadroom = Math.max(...tight.floors.verdicts.map((row) => row.taxHeadroom));
+    expect(tightHeadroom).toBeLessThan(looseHeadroom);
+  });
+
   it('countCellMatches equals the extractor reserved match set for a demand cell', () => {
     const pool = universe();
     const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];

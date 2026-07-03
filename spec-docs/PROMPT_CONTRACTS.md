@@ -27582,3 +27582,57 @@ dirty for Opus. This is mechanical (no Fable design).
 - `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx src/src_figma/app/components/auction/__tests__/AuctionStage.test.tsx` — green; ADD/extend a test asserting the CPU preview VM carries NO valuation/cap field and the reason has no '$' from valuation.
 - `git diff --stat` — only LeagueBuilderAuctionDraft.tsx + AuctionStage.tsx (+ the test). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-DJ02-CPULEAK ===== -->
+
+<!-- ===== CONTRACT: CODEX-HARDCAP-P1 ===== -->
+## CODEX-HARDCAP-P1 — hard salary cap in league settings, PHASE 1 (JK ruling 2026-07-03)
+
+**Binding design:** `spec-docs/FABLE_HARD_CAP_DESIGN_2026-07-03.md` — build PHASE 1 EXACTLY (§1, §2,
+§3.2, §4, §5-Phase-1). Fable is the design authority; anything ambiguous comes back to Fable, not
+builder judgment. Branch-only (experiment/manager-wpa-window); do NOT commit/push; leave tree dirty
+for Opus. Phase 2 (cap-aware extraction selection) is a SEPARATE later contract — do NOT build §3.3 now.
+
+**Read first (in full):** the design doc; `src/utils/leagueBuilderStorage.ts` (LeagueTemplate ~105-124,
+DB_VERSION); `src/data/tierParams.ts` (TIER_CAPS); `src/engines/leagueConstruction.ts` (registerPool
+~312-324, computePoolTierCap); `src/utils/leagueBuilderPoolRegistration.ts` (~85-119);
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (~609-611 tierBudget + its consumers);
+`src/engines/poolFeasibility.ts` (~163) + `src/utils/leagueBuilderPoolBuilder.ts` (~240-244, 385);
+`src/engines/draftPoolExtractor.ts` (~274); `src/engines/poolFromDemand.ts` (~199-219);
+`src/src_figma/app/pages/LeagueBuilderLeagues.tsx` (~509 League Tier block);
+`src/src_figma/app/hooks/useAuctionDraft.ts` (~444-460).
+
+### Deliverables (PHASE 1 only)
+1. **Field + resolver (§1.1-1.2):** add `salaryCap?: number` to `LeagueTemplate` (additive, NO DB bump).
+   Add exported pure `resolveLeagueSalaryCap(league) = league.salaryCap ?? TIER_CAPS[league.tier ?? 'juiced'].tierCap` in leagueBuilderStorage.ts.
+2. **Settings input (§1.3):** SALARY CAP numeric input below the League Tier dropdown in
+   LeagueBuilderLeagues.tsx — seeded from `TIER_CAPS[formData.tier].tierCap`, re-seed on tier change
+   ONLY when un-edited (local dirty flag), `TIER REFERENCE: $X` helper line, HARD block cap < 22 ×
+   LEAGUE_MINIMUM_SALARY (rosterEngineConstants.ts:316) + non-numeric/zero/neg, SOFT amber advisory
+   outside [0.5×,2×] tier ref (saves fine). Persists via existing create/update paths.
+3. **The 7-site switch (§2.2 table) — EXACTLY as tabled:** registerPool gains `salaryCap?` on PoolConfig
+   and stamps `tierCap: cfg.salaryCap ?? computePoolTierCap(...)` (KEEP the RegisteredPool.tierCap field
+   NAME; re-document it); registerLeaguePoolForLeague passes `resolveLeagueSalaryCap(league)`; DraftSetup
+   tierBudget = `resolveLeagueSalaryCap(league)` (drop the computePoolTierCap import); poolFeasibility +
+   draftPoolExtractor + poolFromDemand take an optional budget/budgetPerTeam param (fallback = today's
+   pool-relative); draftabilityRanker verify. Engines must NOT import the storage layer — thread the
+   number as a PARAMETER. computePoolTierCap is NOT deleted (fallback + offline simulator).
+4. **Migration (§4):** capless → resolver tier-ref fallback (read-time, no backfill); already-LOCKED
+   pool with stale stamp → §4.2 "session-build reads win": at auction session build (useAuctionDraft
+   ~444-447) set team budgets from `resolveLeagueSalaryCap(league)` (overwrite the reused pool's tierCap
+   at session build, membership untouched); in-flight persisted sessions NEVER retro-edited.
+5. **Solvency banner (§3.2.4, display-only):** in Draft Setup after pool assembly, if
+   `evaluateRosterDesign(no-preference 22 design, pool, Infinity).totalCost > cap` show one plain line
+   ("This pool can't seat a legal roster under your $X cap — raise the cap or add cheaper players."). No block.
+6. **Do NOT** touch player ratings/IV (never tier-scaled — JK canon 2026-06-26), luxury caps,
+   pick-value chart, farm wallet, or archetypeBalanceSimulator (add the §2.4 one-line "intentionally
+   pool-relative" comment there). GameTracker UI is SET — do not touch it.
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0 (tail).
+- Write the §5 Phase-1 acceptance tests (1-11); run them + the affected suites green (paste summary).
+- FULL suite: `NODE_ENV= npx vitest run` (count/copy reconciliation rule — full, not filtered); report
+  pass/fail counts (the characterized reds: wpaRuntimeBoundary, franchiseManualSmokeFixture,
+  archetypeBalanceSimulator, LeagueBuilderDraftSetup load-flake, prospectScoutingDraftEngine — confirm
+  no NEW red).
+- `git diff --stat` — the §7 Phase-1 surface only; GameTracker NOT present. Report the ratings-invariant
+  test result explicitly.
+<!-- ===== END CONTRACT: CODEX-HARDCAP-P1 ===== -->

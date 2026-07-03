@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { LeagueBuilderDraftSetup } from "../../app/pages/LeagueBuilderDraftSetup";
+import {
+  LeagueBuilderDraftSetup,
+  draftSetupSolvencyBannerText,
+} from "../../app/pages/LeagueBuilderDraftSetup";
+import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -105,7 +109,7 @@ function makeTeam(id: string, overrides: Partial<Team> = {}): Team {
   };
 }
 
-function makePlayer(index = 0): Player {
+function makePlayer(index = 0, overrides: Partial<Player> = {}): Player {
   return {
     id: `player-${index}`,
     firstName: index === 0 ? "Avery" : `Player${index}`,
@@ -136,11 +140,36 @@ function makePlayer(index = 0): Player {
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
     isCustom: true,
+    ...overrides,
   };
 }
 
 function makePlayers(count: number): Player[] {
   return Array.from({ length: count }, (_, index) => makePlayer(index));
+}
+
+function makeLegalRosterPlayers(salary: number): Player[] {
+  const hitters: Player[] = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"].map((position, index) =>
+    makePlayer(index, { id: `legal-h-${position}`, primaryPosition: position as Player["primaryPosition"], salary }),
+  );
+  const backupC = makePlayer(20, {
+    id: "legal-backup-c",
+    primaryPosition: "1B",
+    secondaryPosition: "C",
+    salary,
+  });
+  const starters = Array.from({ length: 4 }, (_, index) =>
+    makePlayer(30 + index, { id: `legal-sp-${index}`, primaryPosition: "SP", salary }),
+  );
+  const relievers = Array.from({ length: 4 }, (_, index) =>
+    makePlayer(40 + index, { id: `legal-rp-${index}`, primaryPosition: "RP", salary }),
+  );
+  const flexPositions: Player["primaryPosition"][] = ["1B", "2B", "3B", "SS"];
+  const flex = flexPositions.map((position, index) =>
+    makePlayer(50 + index, { id: `legal-flex-${index}`, primaryPosition: position, salary }),
+  );
+  const swing = makePlayer(60, { id: "legal-swing", primaryPosition: "SP/RP", salary });
+  return [...hitters, backupC, ...starters, ...relievers, ...flex, swing];
 }
 
 function makePool(overrides: Partial<LeaguePoolRecord> = {}): LeaguePoolRecord {
@@ -314,5 +343,14 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(await screen.findByText("Avery Anchor"));
 
     expect(screen.getByRole("button", { name: /Unlock to Edit/i })).toBeDisabled();
+  });
+
+  test("builds the hard-cap solvency banner when the cheapest legal roster exceeds the league cap", () => {
+    const legalPlayers = makeLegalRosterPlayers(2_000_000);
+
+    expect(draftSetupSolvencyBannerText(buildRosterDesignPool(legalPlayers), 1_000_000)).toBe(
+      "This pool can't seat a legal roster under your $1,000,000 cap — raise the cap or add cheaper players.",
+    );
+    expect(draftSetupSolvencyBannerText(buildRosterDesignPool(legalPlayers), 60_000_000)).toBeNull();
   });
 });

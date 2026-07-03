@@ -546,6 +546,12 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     expect(screen.getByText(/turn preview/i)).toBeInTheDocument();
     expect(screen.getByText(/Page Caps will bid \$70,000/)).toBeInTheDocument();
+    const cpuReason = screen.getByText("CPU team likes the player and bids.");
+    expect(cpuReason).toBeInTheDocument();
+    expect(cpuReason.textContent).not.toContain("$");
+    expect(screen.getByText(/^Move\b/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Read\b/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Cap\b/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Advance decision" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Let him go/i })).not.toBeInTheDocument();
 

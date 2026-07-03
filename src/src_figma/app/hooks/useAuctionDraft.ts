@@ -30,6 +30,7 @@ import type { LuxuryCapRow } from "../../../data/tierParams";
 import {
   createAuctionSessionId,
   getAuctionSession,
+  resolveLeagueSalaryCap,
   saveAuctionSession,
 } from "../../../utils/leagueBuilderStorage";
 import {
@@ -443,6 +444,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       ? existingPool
       : await leagueData.registerLeaguePool(leagueId);
     if (pool.players.length === 0) throw new Error("RegisteredPool has no players for this league.");
+    const sessionPool: RegisteredPool = {
+      ...pool,
+      tierCap: resolveLeagueSalaryCap(league),
+    };
 
     for (const team of nextLeagueTeams) {
       await leagueData.clearRoster(team.id, leagueId);
@@ -450,18 +455,18 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
 
     const realTeams = await buildAuctionTeams({
       leagueTeams: nextLeagueTeams,
-      pool,
+      pool: sessionPool,
       getRoster: leagueData.getRoster,
     });
     const explicitShillCount = Math.max(0, partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount);
     const shillTeams = buildPureShillAuctionTeams({
       leagueId,
       count: explicitShillCount,
-      budget: pool.tierCap,
+      budget: sessionPool.tierCap,
     });
     const teams = [...realTeams, ...shillTeams];
     // FABLE-C1: position-enriched players power the machine's own_need strand guard (spec §5).
-    const players = await buildAuctionPlayersWithPositions(pool);
+    const players = await buildAuctionPlayersWithPositions(sessionPool);
     const config: AuctionSetupConfig = {
       ...DEFAULT_AUCTION_SETUP_CONFIG,
       ...partialConfig,
@@ -486,7 +491,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
 
     setContext(nextContext);
     taxContextRef.current = buildAuctionLuxuryTaxContext({
-      pool,
+      pool: sessionPool,
       leagueTeams: nextLeagueTeams,
       players: leagueData.players,
     });

@@ -159,8 +159,9 @@ export function analyzePoolFeasibility(
   archetypes: HistoricalArchetype[],
   tier: TierKey,
   referencePool?: SimPlayer[],
+  budgetOverride?: number,
 ): PoolFeasibilityReport {
-  const budget = computePoolTierCap(lockedPool.map((player) => player.iv), tier);
+  const budget = budgetOverride ?? computePoolTierCap(lockedPool.map((player) => player.iv), tier);
   const thresholdPool = referencePool ?? lockedPool;
   const results = archetypes.map((arch) => {
     const built = buildBestRoster(lockedPool, { name: arch.name, rawShift: archetypeCapShift(arch) }, tier, budget);
