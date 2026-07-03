@@ -27173,3 +27173,162 @@ Use high reasoning effort.
 Use high reasoning effort.
 
 <!-- ===== END CONTRACT: CODEX-DRAFTROOM-MERGE ===== -->
+
+<!-- ===== CONTRACT: CODEX-PAYLOAD ===== -->
+## CODEX-PAYLOAD — RosterIntelligencePayload type + pure assembly fns (ASST_GM_DESIGN §6)
+
+**Builder:** Codex. **Auditor:** Opus (builder≠auditor). **Branch-only, never push.**
+**Design source of truth:** `spec-docs/ASST_GM_DESIGN.md` §5 (five-lights) + §6 (payload shape).
+This is the wire-once backbone both the C4-B whisper panel and the C4-C surface will consume.
+
+### Scope (create TWO files; touch nothing else)
+1. `src/engines/rosterIntelligencePayload.ts` — the type + PURE assembly fns. No I/O, no
+   IndexedDB, no React, NOTHING writes. Every fn takes plain inputs and returns plain data.
+2. `src/engines/__tests__/rosterIntelligencePayload.test.ts` — vitest, fixture-driven.
+
+### The type (finalize from this sketch; all fields optional per §6)
+```
+export interface RosterIntelligencePayload {
+  seatTeamId: string;
+  generatedAtLotIndex?: number;          // auction re-key identity
+  market?: MarketRead;                   // the lot read (from estimateMarket)
+  worthToYou?: WorthToYou;               // the whisper headline
+  board?: BoardEntry[];                  // ranked remaining pool for THIS seat
+  scorecard?: FiveLights;                // §5
+  // moves? / lineup? are C4-C in-season — OMIT from this module for now (leave the type open
+  //   for later extension; do not build move/lineup assembly here).
+}
+```
+Sub-shapes:
+- `MarketRead` — wrap `estimateMarket(view, table): EstimatedMarket` (src/engines/auctionMarketModel.ts:372).
+  Carry band {low,median,high}, interestedTeams, contested, likelyPass. PUBLIC surface only.
+- `WorthToYou` — { iv:number; chemistry: ChemistryTipBreakdown (from
+  `chemistryAdviceForCandidate(candidate, rosterPlayers)`, src/utils/chemistryIntelligence.ts:48);
+  verdict: 'push'|'cap'|'pass'; capValue: number|null (from
+  `completionBidCeiling(budgetRemaining, rosterWithCandidate, remainingPool, openSlotsAfterWin)`,
+  src/engines/auctionCompletionFloor.ts:392 — verdict rule: push if the ceiling comfortably
+  exceeds the market median, cap if the ceiling is the binding limit, pass if iv/chem don't
+  justify the band; document the exact thresholds as named constants);
+  handedness?: null  // BALANCE/handedness is a SEPARATE Fable-specced ticket — leave OPTIONAL
+                     // and ABSENT here; do NOT invent a handedness metric. }
+- `BoardEntry` — { playerId; worth:number; matchedShape:string|null; note?:string }, sorted
+  desc by worth (iv + chemistry tip lift). Fog-respecting: consume ONLY the fields passed in
+  (caller passes scouted/fogged values for farm) — the module never reaches for true ratings.
+- `FiveLights` — { shape:Light; identity:Light; chemistry:Light; balance:Light; budget:Light }
+  where `Light = { status:'green'|'amber'|'red'|'unknown'; sentence:string; detailKey?:string }`.
+
+### The five lights — computation (§5). Build 3 fully; mark 2 provisional.
+- **SHAPE** (BUILD): `isLegalRoster`/`depthReport` (src/data/rosterConstruction.ts:125/166) +
+  `wouldStrandRoster` (src/engines/rosterNeed.ts:222) / `rosterNeedBreakdown` (:136).
+  red = illegal or stranded; amber = legal but any hard requirement at exact minimum OR a
+  position covered only by a secondary (use depthReport.thinPositions); green = slack. The
+  sentence names the nearest gap in plain baseball language.
+- **CHEMISTRY** (BUILD): `chemistryProfileForPlayers(players)` (src/utils/chemistryIntelligence.ts:73).
+  red = negative traits exposed at L1 outweigh positives at L2+; amber = all families L1 or some
+  exposure; green = ≥1 family L2+ carrying positives, no heavy exposure. Sentence always names
+  the nearest opportunity (use distanceToNextTier): "Two more Scholarly bats and every Scholarly
+  trait triples."
+- **BUDGET** (BUILD): draft-time `completionBidCeiling` headroom. green = headroom above an
+  insurance buffer; amber = tight; red = trapped. Document the buffer as a named constant.
+- **IDENTITY** (PROVISIONAL): reuse the builder's EXISTING archetype-fit scoring — single-math.
+  Search `src/engines/archetypeBalanceSimulator.ts` (its fit objective) + `shapeAlignmentScore`
+  (src/engines/playerArchetypeClassifier.ts:278) + `archetypeBandPriorities`/`bandLiftFromPriorities`
+  (src/engines/cpuShillBidding.ts). IF a clean roster-vs-chosen-archetype fit score is reusable,
+  wire it with provisional band cuts (documented constants). IF NOT cleanly reusable, return
+  `{ status:'unknown', sentence:'Identity read coming.' }` with a `// TODO(IDENTITY)` — DO NOT
+  invent a new fit metric (that would be designing math; it belongs to Fable).
+- **BALANCE** (PROVISIONAL): return `{ status:'unknown', sentence:'Balance read coming.' }` with
+  a `// TODO(BALANCE): pending Fable HANDEDNESS-SIGNAL constants spec`. Do NOT build handedness math.
+
+### Constraints
+- PURE + deterministic. No RNG, no Date.now/new Date/Math.random. Stable sort tie-breaks by id.
+- Privacy by construction: the module reads ONLY the fields callers pass; it never imports a store
+  and never reaches hidden modifiers or true farm ratings.
+- All new thresholds/band cuts are NAMED, documented constants in one `PAYLOAD_TUNING` block.
+- Reuse existing types (ChemistryTipBreakdown, EstimatedMarket, RosterNeedBreakdown, etc.); do
+  not duplicate them.
+
+### Verify before returning (report actual output)
+- `NODE_ENV= npm run build` exits 0.
+- `npx vitest run src/engines/__tests__/rosterIntelligencePayload.test.ts` — all green; paste count.
+- Do NOT run the full suite (big UI merges time out under load; Opus runs the full gate).
+- Report: files created, the finalized type, the verdict thresholds you chose, and which of
+  IDENTITY/BALANCE you built vs left provisional (and why).
+<!-- ===== END CONTRACT: CODEX-PAYLOAD ===== -->
+
+<!-- ===== CONTRACT: CODEX-COLOR-FLIP ===== -->
+## CODEX-COLOR-FLIP — apply the chalk-and-ash flip (Fable spec)
+
+**Builder:** Codex. **Auditor:** Opus. **Branch-only, never push.**
+**Design source of truth (READ IT FIRST, execute EXACTLY):** `spec-docs/FABLE_COLOR_FLIP_SPEC_2026-07-02.md`.
+
+### Scope — ONE file, VALUES ONLY: `src/src_figma/styles/ballpark-kit.css` `:root`
+Change EXACTLY these five token values (old → new) per Fable's spec; touch nothing else:
+- `--ballpark-page-bg`         `#2d3d2f` → `#CBB89C`
+- `--ballpark-panel`           `#556B55` → `#3d4a42`
+- `--ballpark-panel-border`    `#4A6844` → `#3d5240`
+- `--ballpark-action-green`    `#4A6844` → `#3d5240`
+- `--ballpark-action-green-hover` `#5A8352` → `#4A6844`
+
+Do NOT change destructive-red (`#DD0000` stays), any class rule, any font/shadow/press token,
+or any .tsx. Do NOT add the deferred kit-gaps (texture, well-scroll, micro-labels, signal-red).
+
+### Verify before returning (report actual output)
+- `git diff --stat src/src_figma/styles/ballpark-kit.css` → must show exactly 5 changed lines,
+  one file. (Opus audit floor: the diff is EXACTLY these five value swaps.)
+- `NODE_ENV= npm run build` exits 0.
+- Report the diff and the build tail. Do not commit.
+<!-- ===== END CONTRACT: CODEX-COLOR-FLIP ===== -->
+
+<!-- ===== CONTRACT: CODEX-DESIGNER-ZONE ===== -->
+## CODEX-DESIGNER-ZONE — the "THE TWENTY-TWO" roster designer (Draft Room zone 3)
+
+**Builder:** Codex. **Auditor:** Opus (audits against Fable §7). **Fable design-reviews the screen.**
+**Branch-only, never push.**
+**Design source of truth — READ IN FULL, BUILD TO IT EXACTLY:**
+`spec-docs/FABLE_ROSTER_DESIGNER_LAYOUT_2026-07-02.md` (§1 intent, §2 layout tree, §3 controls,
+§4 verdict-chip precedence, §5 Mode A/B, §6 copy, §7 the conformance checklist you must satisfy).
+
+### Scope
+Replace the "Design your roster · POOL-FROM-DEMAND COMING" placeholder (zone 3 of
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, ~:917-920) with the full designer.
+Create a new component (e.g. `src/src_figma/app/components/leagueBuilder/RosterDesigner.tsx`)
+mounted in the zone-3 detail well; wire it into LeagueBuilderDraftSetup.tsx. Add persistence +
+the one sanctioned kit token. Do NOT build zone-4 extraction (a separate ticket) — but DO apply
+the one zone-4 wiring correction below.
+
+### Hard requirements (all verified to exist — consume, don't redefine)
+- Engine (pure, do not modify): `evaluateRosterDesign(slots, pool, budget)`,
+  `buildDefaultDesignSlots()`, `DesignSlot`/`SlotPreference`/`DesignFeasibilityResult` from
+  `src/engines/rosterDesignFeasibility.ts`. SlotPreference tag fields are EXACTLY:
+  `shape, allowRunnerUp, tags{bats,leftArm,utility,twoWay,platoonSide}, personalityTilt` — map
+  the UI 1:1, add NOTHING (no arsenal control; Fable §3).
+- Taxonomy: `menuForPosition(position)`, `PersonalityTilt` (4 values), `ExtendedShapeDefinition.identityLine`
+  from `src/data/playerArchetypeTaxonomy.ts`; `shapeAlignmentScore`, `pitcherAlignmentGroupFor`
+  from `src/engines/playerArchetypeClassifier.ts`. Verify each accessor at point of use.
+- Slot grouping from `buildDefaultDesignSlots()` slotIds: THE LINEUP = the 8 `pos` slots
+  (C 1B 2B 3B SS LF CF RF); THE STAFF = SP1-4 + RP1-4; THE BENCH = backupC + FLEX1-4 (display
+  "BENCH 1-4") + SWING. Never mutate slotIds.
+- **Persistence — ADDITIVE, NO NEW IndexedDB** (the gotcha): add `rosterDesign?: { slots: DesignSlot[];
+  lockedAt?: string }` to the `Team` record in `src/utils/leagueBuilderStorage.ts` (exact precedent
+  of `mlbArchetypeKey`/`gmSeatId`). Save debounced with evaluation; reload restores + recomputes.
+- **Kit token:** add `--ballpark-status-warn: #fbbf24;` to `ballpark-kit.css` :root (Fable §2.2);
+  reference it as a var, never inline the hex. Change NOTHING else in ballpark-kit.css.
+- **Zone-4 wiring correction (Fable §5):** the "Designs locked: N of M clubs" denominator M must
+  count HUMAN-owned clubs only (today it divides by all league teams). Fix that one readout.
+- CPU-owned club cards never show the designer link (Fable §2.1). One editor open at a time
+  (identity picker XOR designer in the well). Verdict-chip precedence exactly per §4
+  (red > amber-legality > amber-budget > green > QUIET). Blocker messages rendered VERBATIM.
+- Temperament is a preference the engine weighs — the UI must NOT filter candidates by tilt, and
+  must NOT pre-filter the pool (counts are display only; §3 anti-starve rule).
+- GameTracker (`src/src_figma/app/pages/GameTracker.tsx`) UNTOUCHED. No modal, no window.confirm;
+  press physics + inline ✓/✗ reset per spec.
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exits 0 (paste tail).
+- `npx vitest run src/engines/__tests__/rosterDesignFeasibility.test.ts` green (the engine you
+  build against is unchanged — confirm still green). Do NOT run the full suite (Opus does).
+- `git diff --stat` — confirm only: LeagueBuilderDraftSetup.tsx, the new RosterDesigner file,
+  leagueBuilderStorage.ts, ballpark-kit.css (one token line). GameTracker.tsx NOT in the list.
+- Report against Fable's §7 checklist item by item (which you satisfied, any you could not).
+<!-- ===== END CONTRACT: CODEX-DESIGNER-ZONE ===== -->
