@@ -94,6 +94,13 @@ export interface Division {
   teamIds: string[];
 }
 
+export type DraftPoolMode = 'pool-first' | 'design-first';
+
+export interface DraftSetupSeat {
+  id: string;
+  name: string;
+}
+
 export interface LeagueTemplate {
   id: string;
   name: string;
@@ -105,6 +112,8 @@ export interface LeagueTemplate {
   divisions: Division[];
   defaultRulesPreset: string;
   draftFormat?: 'auction' | 'snake';
+  draftPoolMode?: DraftPoolMode;
+  draftSeats?: DraftSetupSeat[];
   tier?: TierKey;
   balanceMode?: BalanceMode;
   checkpointCadence?: CheckpointCadence;
@@ -151,6 +160,8 @@ export interface Team {
   farmCapIdentity?: TeamCapIdentity;
   mlbArchetypeKey?: string;   // HistoricalArchetype.id; provenance for the MLB capIdentity
   farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
+  gmSeatId?: string;
+  gmSeatName?: string;
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
   teamHistory?: RebrandRelocationMarker[];

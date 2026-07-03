@@ -71,6 +71,8 @@ export type {
   RosterStatus,
   LineupSlot,
   DepthChart,
+  DraftPoolMode,
+  DraftSetupSeat,
   LeagueBuilderMlbDraftSession,
 } from '../../utils/leagueBuilderStorage';
 export type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';

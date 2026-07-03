@@ -6,18 +6,41 @@ import {
   useLeagueBuilderData,
   type LeagueTemplate,
   type Player,
-  type RegisteredPool,
   type Team,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
-import { getAuctionSession } from "../../../utils/leagueBuilderStorage";
+import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
+import { getAuctionSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
 
 const mockNavigate = vi.fn();
+
+type LeaguePoolRecord = {
+  leagueId: string;
+  tier: "standard";
+  balanceMode: "taxed";
+  players: Array<{ id: string; iv: number; salary: number }>;
+  tierCap: number;
+  luxuryCaps: never[];
+  pickValueChart: never[];
+  totalSlots: number;
+  poolSurplusWarning: boolean;
+  locked?: boolean;
+};
 
 vi.mock("react-router", () => ({
   useLocation: () => ({ search: window.location.search }),
   useNavigate: () => mockNavigate,
 }));
+
+vi.mock("../../../engines/archetypeIdentity", async () => {
+  const actual = await vi.importActual<typeof import("../../../engines/archetypeIdentity")>(
+    "../../../engines/archetypeIdentity",
+  );
+  return {
+    ...actual,
+    selectTeamArchetype: vi.fn(async (team) => team),
+  };
+});
 
 vi.mock("../../../utils/leagueBuilderStorage", async () => {
   const actual = await vi.importActual<typeof import("../../../utils/leagueBuilderStorage")>(
@@ -26,6 +49,8 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    saveLeagueTemplate: vi.fn(async (league) => league),
+    saveTeam: vi.fn(async (team) => team),
   };
 });
 
@@ -49,13 +74,17 @@ function makeLeague(overrides: Partial<LeagueTemplate> = {}): LeagueTemplate {
     defaultRulesPreset: "rules",
     tier: "standard",
     balanceMode: "taxed",
+    draftSeats: [
+      { id: "seat-you", name: "You" },
+      { id: "seat-player-2", name: "Player 2" },
+    ],
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
     ...overrides,
   };
 }
 
-function makeTeam(id: string): Team {
+function makeTeam(id: string, overrides: Partial<Team> = {}): Team {
   return {
     id,
     name: id === "team-a" ? "Caps" : "Keys",
@@ -65,17 +94,22 @@ function makeTeam(id: string): Team {
     colors: { primary: "#000000", secondary: "#ffffff" },
     stadium: "Page Park",
     controlledBy: "human",
+    gmSeatId: id === "team-a" ? "seat-you" : "seat-player-2",
+    gmSeatName: id === "team-a" ? "You" : "Player 2",
     leagueIds: ["league-page"],
+    mlbArchetypeKey: "murderers-row",
+    farmArchetypeKey: "whiteyball",
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
+    ...overrides,
   };
 }
 
-function makePlayer(): Player {
+function makePlayer(index = 0): Player {
   return {
-    id: "player-a",
-    firstName: "Avery",
-    lastName: "Anchor",
+    id: `player-${index}`,
+    firstName: index === 0 ? "Avery" : `Player${index}`,
+    lastName: index === 0 ? "Anchor" : "Pool",
     gender: "M",
     age: 25,
     bats: "R",
@@ -105,44 +139,77 @@ function makePlayer(): Player {
   };
 }
 
-function makePool(): RegisteredPool {
+function makePlayers(count: number): Player[] {
+  return Array.from({ length: count }, (_, index) => makePlayer(index));
+}
+
+function makePool(overrides: Partial<LeaguePoolRecord> = {}): LeaguePoolRecord {
   return {
     leagueId: "league-page",
     tier: "standard",
     balanceMode: "taxed",
-    players: [{ id: "player-a", iv: 100_000, salary: 10_000 }],
+    players: Array.from({ length: 80 }, (_, index) => ({
+      id: `player-${index}`,
+      iv: 100_000 - index,
+      salary: 10_000,
+    })),
     tierCap: 1_000_000,
     luxuryCaps: [],
     pickValueChart: [],
-    totalSlots: 44,
+    totalSlots: 80,
     poolSurplusWarning: false,
     locked: true,
+    ...overrides,
   };
 }
 
-function mockLeagueData() {
-  vi.mocked(useLeagueBuilderData).mockReturnValue({
-    leagues: [makeLeague()],
-    teams: [makeTeam("team-a"), makeTeam("team-b")],
-    players: [makePlayer()],
+function mockLeagueData({
+  league = makeLeague(),
+  teams = [makeTeam("team-a"), makeTeam("team-b")],
+  players = makePlayers(80),
+  pool = makePool(),
+}: {
+  league?: LeagueTemplate;
+  teams?: Team[];
+  players?: Player[];
+  pool?: LeaguePoolRecord | null;
+} = {}) {
+  const leagueData = {
+    leagues: [league],
+    teams,
+    players,
     rulesPresets: [],
     isLoading: false,
     error: null,
-    getRegisteredPool: vi.fn(async () => makePool()),
+    getRegisteredPool: vi.fn(async () => pool),
     updatePlayer: vi.fn(async (player: Player) => player),
     refresh: vi.fn(async () => undefined),
-  } as unknown as UseLeagueBuilderDataReturn);
+  } as unknown as UseLeagueBuilderDataReturn;
+  vi.mocked(useLeagueBuilderData).mockReturnValue(leagueData);
+  return leagueData;
 }
 
 describe("LeagueBuilderDraftSetup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getAuctionSession).mockResolvedValue(null);
     window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page");
     mockLeagueData();
   });
 
   afterEach(() => {
     cleanup();
+  });
+
+  test("renders the merged Draft Room zones", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("1 · THE ROOM")).toBeInTheDocument();
+    expect(screen.getByText("2 · WHO'S PLAYING")).toBeInTheDocument();
+    expect(screen.getByText("3 · THE CLUBS")).toBeInTheDocument();
+    expect(screen.getByText("4 · THE POOL")).toBeInTheDocument();
+    expect(screen.getByText("5 · THE FLOOR")).toBeInTheDocument();
+    expect(screen.queryByText("PLAYER POOL")).not.toBeInTheDocument();
   });
 
   test("disables player edits while the pool is locked", async () => {
@@ -155,8 +222,58 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
-  test("keeps the pool frozen while a saved auction is in progress", async () => {
-    vi.mocked(getAuctionSession).mockResolvedValueOnce({
+  test("starts at scout hire once the pool is locked and every club has an identity", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0");
+  });
+
+  test("carries the selected shill count into scout hire", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Increase shill bidders/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Increase shill bidders/i }));
+    fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=2");
+  });
+
+  test("persists a changed GM seat name through the existing league and team records", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    const youInput = (await screen.findAllByDisplayValue("You")).find(
+      (element): element is HTMLInputElement => element.tagName === "INPUT",
+    );
+    if (!youInput) throw new Error("GM seat input not found");
+    fireEvent.change(youInput, { target: { value: "Captain Jane" } });
+
+    await waitFor(() => {
+      expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+        id: "league-page",
+        draftSeats: expect.arrayContaining([
+          expect.objectContaining({ id: "seat-you", name: "Captain Jane" }),
+        ]),
+      }));
+    });
+    expect(saveTeam).toHaveBeenCalledWith(expect.objectContaining({
+      id: "team-a",
+      gmSeatId: "seat-you",
+      gmSeatName: "Captain Jane",
+    }));
+  });
+
+  test("freezes setup changes while a saved auction is in progress and resumes the live draft", async () => {
+    vi.mocked(getAuctionSession).mockResolvedValue({
       leagueId: "league-page",
       season: "MLB_AUCTION",
       session: { state: "OPEN_BIDDING" },
@@ -166,18 +283,25 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /RESUME DRAFT/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /RESUME DRAFT/i })).toBeEnabled();
     });
 
     expect(screen.getByRole("button", { name: /UNLOCK/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Increase shill bidders/i })).toBeDisabled();
+    expect(screen.getAllByRole("combobox")[1]).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Bomba Squad/i })).toBeDisabled();
 
-    fireEvent.click(await screen.findByText("Avery Anchor"));
+    expect(selectTeamArchetype).not.toHaveBeenCalled();
+    expect(saveTeam).not.toHaveBeenCalled();
 
-    expect(screen.getByRole("button", { name: /Draft Saved/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /RESUME DRAFT/i }));
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0");
+    });
   });
 
   test("keeps the pool frozen when saved auction status cannot be verified", async () => {
-    vi.mocked(getAuctionSession).mockRejectedValueOnce(new Error("storage unavailable"));
+    vi.mocked(getAuctionSession).mockRejectedValue(new Error("storage unavailable"));
 
     render(<LeagueBuilderDraftSetup />);
 

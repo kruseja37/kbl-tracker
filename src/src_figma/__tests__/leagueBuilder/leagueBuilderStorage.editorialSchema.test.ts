@@ -13,9 +13,11 @@ vi.mock('../../../utils/syncEngine', () => ({
 import {
   __resetLeagueBuilderDatabaseForTests,
   getAllOverridesForLeague,
+  getLeagueTemplate,
   getPlayer,
   getTeam,
   initLeagueBuilderDatabase,
+  saveLeagueTemplate,
   savePlayer,
   saveTeam,
   setLeaguePlayerOverride,
@@ -254,6 +256,43 @@ describe('leagueBuilderStorage editorial schema migration', () => {
     expect(overrides).toHaveLength(1);
     expect(overrides[0]?.overrides.contact).toBe(82);
     expect(overrides[0]?.fameTierOverride).toBe(5);
+  });
+
+  test('persists Draft Room seats and per-team GM names through fresh reads', async () => {
+    await saveLeagueTemplate({
+      id: 'draft-room-league',
+      name: 'Draft Room League',
+      teamIds: ['draft-room-team'],
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'rules',
+      draftPoolMode: 'pool-first',
+      draftSeats: [{ id: 'seat-captain', name: 'Captain Jane' }],
+    });
+
+    await saveTeam({
+      id: 'draft-room-team',
+      name: 'Draft Room Club',
+      abbreviation: 'DRC',
+      location: 'Page',
+      nickname: 'Club',
+      colors: { primary: '#0f5132', secondary: '#f4e4bc' },
+      stadium: 'Draft Yard',
+      controlledBy: 'human',
+      gmSeatId: 'seat-captain',
+      gmSeatName: 'Captain Jane',
+      leagueIds: ['draft-room-league'],
+    });
+
+    __resetLeagueBuilderDatabaseForTests();
+
+    const loadedLeague = await getLeagueTemplate('draft-room-league');
+    const loadedTeam = await getTeam('draft-room-team');
+
+    expect(loadedLeague?.draftPoolMode).toBe('pool-first');
+    expect(loadedLeague?.draftSeats).toEqual([{ id: 'seat-captain', name: 'Captain Jane' }]);
+    expect(loadedTeam?.gmSeatId).toBe('seat-captain');
+    expect(loadedTeam?.gmSeatName).toBe('Captain Jane');
   });
 
   test('exports the five-tier editorial fame labels distinctly from legacy FameLevel', () => {

@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import { PostGameRouteBoundary } from "./components/PostGameRouteBoundary";
 import { FRANCHISE_MANUAL_SMOKE_SETUP_ROUTE } from "./utils/franchiseManualSmokeFixtureGate";
 
@@ -123,11 +123,6 @@ const LeagueBuilderDraftSetup = lazy(() =>
 const DraftSetupArchetypePreview = lazy(() =>
   import("./src_figma/app/pages/DraftSetupArchetypePreview").then((module) => ({
     default: module.DraftSetupArchetypePreview,
-  })),
-);
-const DraftSetupHubPreview = lazy(() =>
-  import("./src_figma/app/pages/DraftSetupHubPreview").then((module) => ({
-    default: module.DraftSetupHubPreview,
   })),
 );
 const SeasonRulesPreview = lazy(() =>
@@ -329,7 +324,6 @@ function App() {
         {/* Main Menu - Figma Design */}
         <Route path="/" element={<AppHome />} />
         <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
-        <Route path="/__preview/draft-setup" element={<DraftSetupHubPreview />} />
         <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
         <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
         <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
@@ -395,7 +389,7 @@ function App() {
         />
         <Route
           path="/league-builder/draft-config"
-          element={<DraftSetupHubPreview />}
+          element={<Navigate to="/league-builder/draft-setup" replace />}
         />
         <Route path="/league-builder/scout-hire" element={<ScoutHire />} />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />

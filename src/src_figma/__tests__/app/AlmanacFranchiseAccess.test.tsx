@@ -42,6 +42,10 @@ vi.mock("../../app/pages/GameBrowser", () => ({
   ),
 }));
 
+vi.mock("../../app/pages/LeagueBuilderDraftSetup", () => ({
+  LeagueBuilderDraftSetup: () => <h1>MERGED DRAFT ROOM</h1>,
+}));
+
 describe("Almanac franchise access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -147,5 +151,17 @@ describe("Almanac franchise access", () => {
     expect(
       screen.getByText(/Mounted app franchise archive route/i),
     ).toBeInTheDocument();
+  });
+
+  test("draft-config redirects to the merged draft setup route", async () => {
+    window.history.pushState({}, "", "/league-builder/draft-config?leagueId=league-page");
+    render(
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>,
+    );
+
+    expect(await screen.findByText("MERGED DRAFT ROOM")).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/league-builder/draft-setup");
   });
 });

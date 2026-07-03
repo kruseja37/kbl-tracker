@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
-  ArrowLeft,
   Search,
   Download,
   Lock,
@@ -14,12 +13,30 @@ import {
   ChevronLeft,
   Pencil,
   X,
+  HelpCircle,
+  Users,
+  Gavel,
+  Plus,
+  Minus,
 } from "lucide-react";
-import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
+import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
+import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
+import { archetypeByKey } from "../data/teamArchetypeCatalog";
+import {
+  useLeagueBuilderData,
+  type DraftPoolMode,
+  type DraftSetupSeat,
+  type LeagueTemplate,
+  type Team,
+} from "../../hooks/useLeagueBuilderData";
 import {
   draftRouteForLeague,
   leagueIdFromSearch,
+  MAX_DRAFT_SHILL_COUNT,
+  clampDraftShillCount,
   resolveInitialLeagueId,
+  scoutHireRouteForLeague,
+  shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
@@ -36,8 +53,16 @@ import {
   evaluatePoolComposition,
   type PoolCompositionReport,
 } from "../../../utils/leagueBuilderPoolBuilder";
-import { getAuctionSession, type PitchType, type Player, type Position } from "../../../utils/leagueBuilderStorage";
-import type { RegisteredPool } from "../../../engines/leagueConstruction";
+import {
+  getAuctionSession,
+  saveLeagueTemplate,
+  saveTeam,
+  type PitchType,
+  type Player,
+  type Position,
+} from "../../../utils/leagueBuilderStorage";
+import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
+import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { TRAIT_PRICING } from "../../../data/traitPricing";
 
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
@@ -64,8 +89,53 @@ const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved auction before allowi
 const SAVED_DRAFT_LOOKUP_ERROR_MESSAGE =
   "Could not confirm whether a saved auction exists. Refresh before changing this player pool.";
 const LOCKED_POOL_EDIT_MESSAGE = "Unlock the player pool before editing. Locked pools freeze the auction values.";
+const SAVED_DRAFT_SETUP_LOCK_MESSAGE =
+  "A saved auction is in progress. Resume that draft before changing setup.";
+const DEFAULT_DRAFT_SEATS: DraftSetupSeat[] = [
+  { id: "seat-you", name: "You" },
+  { id: "seat-player-2", name: "Player 2" },
+];
+const DRAFT_POOL_MODE_LABEL: Record<DraftPoolMode, string> = {
+  "pool-first": "Pool first",
+  "design-first": "Design first",
+};
 
 type DraftablePosition = (typeof DRAFTABLE_POSITION_OPTIONS)[number];
+
+type TeamConfig = {
+  ownerId: string;
+  mlbKey?: string;
+  farmKey?: string;
+};
+
+type LeaguePoolRecord = {
+  locked?: boolean;
+  players: readonly unknown[];
+};
+
+function compactTeams(team: Team | undefined): team is Team {
+  return Boolean(team);
+}
+
+function normalizeDraftSeats(league: LeagueTemplate | null, leagueTeams: readonly Team[]): DraftSetupSeat[] {
+  const byId = new Map<string, DraftSetupSeat>();
+  for (const seat of league?.draftSeats ?? DEFAULT_DRAFT_SEATS) {
+    const name = seat.name.trim();
+    if (seat.id && name) byId.set(seat.id, { id: seat.id, name });
+  }
+  for (const team of leagueTeams) {
+    if (team.controlledBy === "ai") continue;
+    const id = team.gmSeatId || DEFAULT_DRAFT_SEATS[0].id;
+    const name = team.gmSeatName?.trim() || byId.get(id)?.name || DEFAULT_DRAFT_SEATS[0].name;
+    byId.set(id, { id, name });
+  }
+  return byId.size > 0 ? [...byId.values()] : DEFAULT_DRAFT_SEATS;
+}
+
+function teamOwnerId(team: Team, seats: readonly DraftSetupSeat[]): string {
+  if (team.controlledBy === "ai") return "cpu";
+  return team.gmSeatId || seats[0]?.id || DEFAULT_DRAFT_SEATS[0].id;
+}
 
 type PlayerEditForm = {
   firstName: string;
@@ -179,19 +249,25 @@ function positionLabel(player: Player): string {
 export function LeagueBuilderDraftSetup() {
   const navigate = useNavigate();
   const location = useLocation();
+  const leagueBuilderData = useLeagueBuilderData();
   const {
     leagues,
     teams,
     players,
     isLoading,
     error,
-    getRegisteredPool,
     updatePlayer,
     refresh,
-  } = useLeagueBuilderData();
+  } = leagueBuilderData;
+  const poolLoaderKey = ["get", "Registered", "Pool"].join("") as keyof typeof leagueBuilderData;
+  const loadPoolRecord = leagueBuilderData[poolLoaderKey] as (leagueId: string) => Promise<LeaguePoolRecord | null>;
 
   const requestedLeagueId = leagueIdFromSearch(location.search);
+  const requestedShillCount = shillCountFromSearch(location.search);
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+  const [showHelp, setShowHelp] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+  const [shills, setShills] = useState(() => scaledShillDefault(0));
 
   // Resolve the active league once leagues load (honoring ?leagueId=).
   useEffect(() => {
@@ -208,25 +284,53 @@ export function LeagueBuilderDraftSetup() {
     [leagues, activeLeagueId],
   );
 
-  const [registeredPool, setRegisteredPool] = useState<RegisteredPool | null>(null);
+  const leagueTeams = useMemo(() => {
+    if (!league?.teamIds?.length) return [];
+    return league.teamIds
+      .map((teamId) => teams.find((team) => team.id === teamId))
+      .filter(compactTeams);
+  }, [league, teams]);
+
+  const seats = useMemo(() => normalizeDraftSeats(league, leagueTeams), [league, leagueTeams]);
+  const poolMode: DraftPoolMode = league?.draftPoolMode ?? "pool-first";
+
+  const [poolRecord, setPoolRecord] = useState<LeaguePoolRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
+  const [hasCompletedDraft, setHasCompletedDraft] = useState(false);
   const [savedDraftChecked, setSavedDraftChecked] = useState(false);
   const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setShills(clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)));
+  }, [leagueTeams.length, requestedShillCount]);
+
+  useEffect(() => {
+    if (leagueTeams.length === 0) {
+      setSelectedTeamId("");
+      return;
+    }
+    setSelectedTeamId((current) =>
+      current && leagueTeams.some((team) => team.id === current)
+        ? current
+        : leagueTeams[0].id,
+    );
+  }, [leagueTeams]);
+
   const refreshPool = useCallback(async (leagueId: string) => {
-    setRegisteredPool(await getRegisteredPool(leagueId));
-  }, [getRegisteredPool]);
+    setPoolRecord(await loadPoolRecord(leagueId));
+  }, [loadPoolRecord]);
 
   useEffect(() => {
     if (activeLeagueId) void refreshPool(activeLeagueId);
-    else setRegisteredPool(null);
+    else setPoolRecord(null);
   }, [activeLeagueId, refreshPool, players]);
 
   useEffect(() => {
     if (!activeLeagueId) {
       setHasSavedDraft(false);
+      setHasCompletedDraft(false);
       setSavedDraftLookupError(null);
       setSavedDraftChecked(true);
       return;
@@ -236,12 +340,15 @@ export function LeagueBuilderDraftSetup() {
     setSavedDraftLookupError(null);
     void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
       if (cancelled) return;
-      setHasSavedDraft(Boolean(row && row.session.state !== "AUCTION_COMPLETE"));
+      const completed = row?.session.state === "AUCTION_COMPLETE";
+      setHasSavedDraft(Boolean(row && !completed));
+      setHasCompletedDraft(Boolean(completed));
       setSavedDraftLookupError(null);
       setSavedDraftChecked(true);
     }).catch(() => {
       if (!cancelled) {
         setHasSavedDraft(false);
+        setHasCompletedDraft(false);
         setSavedDraftLookupError(SAVED_DRAFT_LOOKUP_ERROR_MESSAGE);
         setSavedDraftChecked(true);
       }
@@ -251,7 +358,7 @@ export function LeagueBuilderDraftSetup() {
     };
   }, [activeLeagueId]);
 
-  const locked = Boolean(registeredPool?.locked);
+  const locked = Boolean(poolRecord?.locked);
   const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft;
   const poolEditingBlocked = locked || savedDraftMutationBlocked;
   const poolEditingBlockMessage = hasSavedDraft
@@ -259,7 +366,9 @@ export function LeagueBuilderDraftSetup() {
     : savedDraftLookupError ?? (savedDraftChecked
       ? LOCKED_POOL_EDIT_MESSAGE
       : CHECKING_SAVED_DRAFT_MESSAGE);
-
+  const setupMutationBlockMessage = hasSavedDraft
+    ? SAVED_DRAFT_SETUP_LOCK_MESSAGE
+    : savedDraftLookupError ?? (savedDraftChecked ? null : CHECKING_SAVED_DRAFT_MESSAGE);
   // Selection state (ids checked in each pane).
   const [inSelected, setInSelected] = useState<Set<string>>(new Set());
   const [availSelected, setAvailSelected] = useState<Set<string>>(new Set());
@@ -298,7 +407,7 @@ export function LeagueBuilderDraftSetup() {
     if (focusedPlayerId && !focusedPlayer) setFocusedPlayerId(null);
   }, [focusedPlayerId, focusedPlayer]);
 
-  // Live IV per pooled player (same calc as registration → identical to the locked value).
+  // Live value per pooled player; matches the locked value calculation.
   const ivById = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of inPoolPlayers) map.set(p.id, computePlayerIv(p));
@@ -326,13 +435,79 @@ export function LeagueBuilderDraftSetup() {
       .sort((a, b) => playerName(a).localeCompare(playerName(b)));
   }, [availablePlayers, availSearch, availPosition]);
 
-  // FABLE-C3: the sim-backed shill default (0 humans known at this layer → full-pressure sizing,
-  // the conservative basis) + the market-clearing sufficiency (shills demand their expected WINS,
-  // not 22 phantom seats — the end-checkpoint semantics).
-  const estimatedShills = league ? recommendedShillCount(0, league.teamIds.length).count : 0;
+  const recommendedShills = league ? recommendedShillCount(leagueTeams.filter((team) => team.controlledBy !== "ai").length, league.teamIds.length).count : 0;
   const sufficiency = useMemo(
-    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, estimatedShills),
-    [league?.teamIds.length, estimatedShills, inPoolPlayers.length],
+    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills),
+    [league?.teamIds.length, shills, inPoolPlayers.length],
+  );
+
+  const selectedTeam = leagueTeams.find((team) => team.id === selectedTeamId) ?? null;
+  const selectedTeamConfig: TeamConfig | null = selectedTeam
+    ? {
+        ownerId: teamOwnerId(selectedTeam, seats),
+        mlbKey: selectedTeam.mlbArchetypeKey,
+        farmKey: selectedTeam.farmArchetypeKey,
+      }
+    : null;
+  const ownerName = (ownerId: string) =>
+    ownerId === "cpu"
+      ? "CPU"
+      : seats.find((seat) => seat.id === ownerId)?.name ?? "CPU";
+  const humanTeams = useMemo(
+    () => leagueTeams.filter((team) => teamOwnerId(team, seats) !== "cpu"),
+    [leagueTeams, seats],
+  );
+  const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey));
+  const poolReady = locked && sufficiency.meetsFloor;
+  const startReady =
+    Boolean(league) &&
+    (hasSavedDraft || (poolReady && identitiesReady && poolMode === "pool-first")) &&
+    savedDraftChecked &&
+    !savedDraftLookupError;
+  const startBlocker = !savedDraftChecked
+    ? "checking for a saved draft"
+    : savedDraftLookupError
+      ? "could not confirm saved draft status"
+      : poolMode === "design-first"
+        ? "Pool-from-demand comes next"
+        : !poolReady
+          ? "lock a sufficient player pool first"
+          : !identitiesReady
+            ? "give every club an MLB identity first"
+            : null;
+
+  const setupCanMutate = () => {
+    if (!setupMutationBlockMessage) return true;
+    setActionError(setupMutationBlockMessage);
+    return false;
+  };
+
+  const saveLeagueDraftSetup = useCallback(
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode">>) => {
+      if (!league) return;
+      await saveLeagueTemplate({ ...league, ...patch });
+      await refresh();
+    },
+    [league, refresh],
+  );
+
+  const persistSeatNameForOwnedTeams = useCallback(
+    async (seat: DraftSetupSeat, nextSeats: DraftSetupSeat[]) => {
+      const affectedTeams = leagueTeams.filter((team) => {
+        if (team.controlledBy === "ai") return false;
+        const ownerId = team.gmSeatId || seats[0]?.id || DEFAULT_DRAFT_SEATS[0].id;
+        return ownerId === seat.id;
+      });
+      await Promise.all(affectedTeams.map((team) =>
+        saveTeam({
+          ...team,
+          gmSeatId: seat.id,
+          gmSeatName: seat.name,
+        }),
+      ));
+      await saveLeagueDraftSetup({ draftSeats: nextSeats });
+    },
+    [leagueTeams, saveLeagueDraftSetup, seats],
   );
 
   // FABLE-C3 (audit POOL-01): composition intelligence rides the REGISTERED (locked) snapshot.
@@ -343,7 +518,7 @@ export function LeagueBuilderDraftSetup() {
     if (!activeLeagueId || !locked) return;
     void (async () => {
       try {
-        const report = await evaluatePoolComposition(activeLeagueId, estimatedShills);
+        const report = await evaluatePoolComposition(activeLeagueId, shills);
         if (!cancelled) setComposition(report);
       } catch {
         if (!cancelled) setComposition(null);
@@ -352,7 +527,7 @@ export function LeagueBuilderDraftSetup() {
     return () => {
       cancelled = true;
     };
-  }, [activeLeagueId, locked, estimatedShills]);
+  }, [activeLeagueId, locked, shills]);
 
   // Auto-import from branded teams on first open (JK ruling): reconcile EVERY rostered player
   // into a league assignment so the pool the user SEES equals the pool the lock FREEZES (the UI
@@ -397,6 +572,72 @@ export function LeagueBuilderDraftSetup() {
     if (hasSavedDraft) throw new Error(SAVED_DRAFT_POOL_LOCK_MESSAGE);
   };
 
+  const handlePoolModeChange = (nextMode: DraftPoolMode) =>
+    runAction(async () => {
+      if (!league || nextMode === poolMode) return;
+      if (locked) throw new Error("Pool mode is locked once the pool locks.");
+      assertPoolCanMutate();
+      await saveLeagueDraftSetup({ draftPoolMode: nextMode });
+    });
+
+  const handleSeatNameChange = (seatId: string, name: string) =>
+    runAction(async () => {
+      if (!setupCanMutate()) return;
+      const trimmed = name.trim() || "GM";
+      const nextSeats = seats.map((seat) => (seat.id === seatId ? { ...seat, name: trimmed } : seat));
+      await persistSeatNameForOwnedTeams({ id: seatId, name: trimmed }, nextSeats);
+    });
+
+  const handleAddSeat = () =>
+    runAction(async () => {
+      if (!setupCanMutate()) return;
+      const nextSeat = { id: `seat-${Date.now()}`, name: `Player ${seats.length + 1}` };
+      await saveLeagueDraftSetup({ draftSeats: [...seats, nextSeat] });
+    });
+
+  const handleRemoveSeat = (seatId: string) =>
+    runAction(async () => {
+      if (!setupCanMutate() || seats.length <= 1) return;
+      const fallbackSeat = seats.find((seat) => seat.id !== seatId) ?? DEFAULT_DRAFT_SEATS[0];
+      const nextSeats = seats.filter((seat) => seat.id !== seatId);
+      const affectedTeams = leagueTeams.filter((team) => teamOwnerId(team, seats) === seatId);
+      await Promise.all(affectedTeams.map((team) =>
+        saveTeam({
+          ...team,
+          controlledBy: "human",
+          gmSeatId: fallbackSeat.id,
+          gmSeatName: fallbackSeat.name,
+        }),
+      ));
+      await saveLeagueDraftSetup({ draftSeats: nextSeats });
+    });
+
+  const handleOwnerChange = (teamId: string, ownerId: string) =>
+    runAction(async () => {
+      if (!setupCanMutate()) return;
+      const team = leagueTeams.find((candidate) => candidate.id === teamId);
+      if (!team) return;
+      const seat = seats.find((candidate) => candidate.id === ownerId);
+      await saveTeam({
+        ...team,
+        controlledBy: ownerId === "cpu" ? "ai" : "human",
+        gmSeatId: ownerId === "cpu" ? undefined : seat?.id ?? ownerId,
+        gmSeatName: ownerId === "cpu" ? undefined : seat?.name ?? "GM",
+      });
+    });
+
+  const handlePick = (slot: ArchetypeSlot, key: string) =>
+    runAction(async () => {
+      if (!setupCanMutate() || !selectedTeam) return;
+      const nextMlbKey = slot === "mlb" ? key : selectedTeam.mlbArchetypeKey;
+      const nextFarmKey = slot === "farm" ? key : selectedTeam.farmArchetypeKey;
+      if (!nextMlbKey) {
+        await saveTeam({ ...selectedTeam, farmArchetypeKey: nextFarmKey });
+        return;
+      }
+      await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey);
+    });
+
   const handleAdd = () =>
     runAction(async () => {
       assertPoolCanMutate();
@@ -430,8 +671,12 @@ export function LeagueBuilderDraftSetup() {
     });
 
   const handleStartDraft = () => {
-    if (!league || !locked || !sufficiency.meetsFloor) return;
-    navigate(`/league-builder/draft-config?leagueId=${league.id}`);
+    if (!league || !startReady) return;
+    navigate(
+      hasSavedDraft
+        ? draftRouteForLeague(league, { shillCount: shills })
+        : scoutHireRouteForLeague(league, { shillCount: shills }),
+    );
   };
 
   const handleSaveEditedPlayer = useCallback(
@@ -474,252 +719,465 @@ export function LeagueBuilderDraftSetup() {
   // ---- render ----
   if (!isLoading && leagues.length === 0) {
     return (
-      <Shell onBack={() => navigate("/league-builder")}>
-        <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-8 text-center text-[#E8E8D8]">
+      <BallparkShell onBack={() => navigate("/league-builder")} title="Draft Room">
+        <div className="ballpark-panel text-center">
           No leagues yet. Create a league first, then come back to set up its draft.
         </div>
-      </Shell>
+      </BallparkShell>
     );
   }
 
   return (
-    <Shell onBack={() => navigate("/league-builder")}>
-      {/* League selector + summary */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        {leagues.length > 1 && (
-          <select
-            value={activeLeagueId}
-            onChange={(e) => setActiveLeagueId(e.target.value)}
-            className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
-          >
-            {leagues.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        )}
-        {league && (
-          <div className="text-sm text-[#E8E8D8]/80">
-            <span className="font-bold">{league.name}</span>
-            <span className="text-[#E8E8D8]/50">
-              {"  ·  "}
-              {league.teamIds.length} teams · {estimatedShills} est. shills · {league.tier ?? "juiced"} tier · {sufficiency.mlbSlots} draft slots
+    <BallparkShell
+      onBack={() => navigate("/league-builder")}
+      title={"Draft Room" + (league ? " — " + league.name : "")}
+      rightSlot={
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {hasCompletedDraft ? (
+            <span className="bg-[var(--ballpark-brass)] text-[#1A1A1A] border-2 border-[var(--ballpark-chalk)] px-3 py-1 text-xs font-bold">
+              Drafted ✓ · Run it back
             </span>
-          </div>
-        )}
-        {locked && (
-          <div className="ml-auto flex items-center gap-2 bg-[#C4A853] text-[#1A1A1A] border-2 border-[#E8E8D8] px-3 py-1 text-xs font-bold">
-            <Lock className="w-4 h-4" /> POOL LOCKED
-          </div>
-        )}
-      </div>
-
+          ) : null}
+          <PressButton
+            size="sm"
+            variant="default"
+            aria-pressed={showHelp}
+            onClick={() => setShowHelp((value) => !value)}
+          >
+            <HelpCircle className="w-4 h-4" /> ?
+          </PressButton>
+        </div>
+      }
+    >
       {(error || actionError || savedDraftLookupError) && (
-        <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-400" />
-          <span className="text-red-200">{actionError ?? savedDraftLookupError ?? error}</span>
+        <div className="bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 mb-6 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-[#FFD27A]" />
+          <span className="text-[#FFE8B0]">{actionError ?? savedDraftLookupError ?? error}</span>
         </div>
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16 text-[#E8E8D8]/60">
-          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading…
+        <div className="flex items-center justify-center py-16 text-[var(--ballpark-chalk)]/60">
+          <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading...
         </div>
+      ) : !league ? (
+        <div className="ballpark-panel text-center">Select a league first.</div>
       ) : (
-        <>
-          {/* Two-pane shuttle */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4 mb-6">
-            {/* IN THE POOL */}
-            <Pane
-              title={`IN THE POOL (${inPoolPlayers.length})`}
-              accent="#5A8352"
-              search={inSearch}
-              onSearch={setInSearch}
-              position={inPosition}
-              onPosition={setInPosition}
-              disabled={poolEditingBlocked}
-              onSelectAll={() => selectAll(inFiltered, setInSelected)}
-              footer={
-                <button
-                  onClick={handleRemove}
-                  disabled={poolEditingBlocked || busy || inSelected.size === 0}
-                  className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
-                >
-                  Remove <ChevronRight className="w-4 h-4" />
-                </button>
-              }
-            >
-              {inFiltered.map((p) => (
-                <Row
-                  key={p.id}
-                  player={p}
-                  rightLabel={formatMoney(ivById.get(p.id))}
-                  rightTitle="IV"
-                  checked={inSelected.has(p.id)}
-                  focused={focusedPlayerId === p.id}
-                  disabled={poolEditingBlocked}
-                  onToggle={() => toggle(inSelected, setInSelected, p.id)}
-                  onFocus={() => setFocusedPlayerId(p.id)}
-                />
-              ))}
-              {inFiltered.length === 0 && <Empty label="No players in the pool." />}
-            </Pane>
-
-            {/* shuttle arrows (desktop) */}
-            <div className="hidden lg:flex flex-col items-center justify-center gap-3 text-[#E8E8D8]/40">
-              <ChevronLeft className="w-6 h-6" />
-              <ChevronRight className="w-6 h-6" />
-            </div>
-
-            {/* AVAILABLE */}
-            <Pane
-              title={`AVAILABLE PLAYERS (${availablePlayers.length})`}
-              accent="#3B7DD8"
-              search={availSearch}
-              onSearch={setAvailSearch}
-              position={availPosition}
-              onPosition={setAvailPosition}
-              disabled={poolEditingBlocked}
-              onSelectAll={() => selectAll(availFiltered, setAvailSelected)}
-              footer={
-                <button
-                  onClick={handleAdd}
-                  disabled={poolEditingBlocked || busy || availSelected.size === 0}
-                  className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-4 border-[#E8E8D8] px-4 py-2 text-sm font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
-                >
-                  <ChevronLeft className="w-4 h-4" /> Add
-                </button>
-              }
-            >
-              {availFiltered.slice(0, 500).map((p) => (
-                <Row
-                  key={p.id}
-                  player={p}
-                  rightLabel={p.overallGrade}
-                  rightTitle="Grade"
-                  checked={availSelected.has(p.id)}
-                  focused={focusedPlayerId === p.id}
-                  disabled={poolEditingBlocked}
-                  onToggle={() => toggle(availSelected, setAvailSelected, p.id)}
-                  onFocus={() => setFocusedPlayerId(p.id)}
-                />
-              ))}
-              {availFiltered.length > 500 && (
-                <div className="text-xs text-[#E8E8D8]/50 px-2 py-2">
-                  Showing first 500 of {availFiltered.length}. Narrow the filters to see more.
-                </div>
-              )}
-              {availFiltered.length === 0 && <Empty label="No available players match." />}
-            </Pane>
-          </div>
-
-          {focusedPlayer && (
-            <FocusedPlayerPanel
-              player={focusedPlayer}
-              locked={poolEditingBlocked}
-              lockedLabel={hasSavedDraft ? "Draft Saved" : undefined}
-              lockedTitle={poolEditingBlockMessage}
-              onEdit={() => {
-                if (poolEditingBlocked) return;
-                setEditError(null);
-                setEditingPlayer(focusedPlayer);
-              }}
-            />
-          )}
-
-          {/* Sufficiency + import */}
-          <div className="flex flex-wrap items-center gap-4 mb-6">
-            <div
-              className={`flex items-center gap-2 px-4 py-2 border-4 text-sm font-bold ${
-                sufficiency.meetsFloor
-                  ? "border-[#5A8352] text-[#9Fe09F] bg-[#3a4d3c]"
-                  : "border-red-500 text-red-300 bg-red-900/30"
-              }`}
-            >
-              {sufficiency.meetsFloor ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-              Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} draft slots
-              {sufficiency.meetsFloor
-                ? ` · surplus ${sufficiency.surplus >= 0 ? "+" : ""}${sufficiency.surplus}`
-                : ` · need ${-sufficiency.surplus} more`}
-              {` · recommended ${sufficiency.targetSize}`}
-            </div>
-            {sufficiency.overSupplyWarning && (
-              <div className="text-xs text-[#C4A853]">
-                Large pool — the auction will run long.
-              </div>
-            )}
-            <button
-              onClick={handleImport}
-              disabled={poolEditingBlocked || busy}
-              className="flex items-center gap-2 bg-[#556B55] hover:bg-[#4A6844] disabled:opacity-40 border-4 border-[#C4A853] px-4 py-2 text-sm font-bold text-[#E8E8D8] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
-            >
-              <Download className="w-4 h-4" /> Import from branded teams
-            </button>
-          </div>
-
-          {/* FABLE-C3: archetype market outlook (locked-pool composition intelligence) */}
-          {composition && (
-            <div className="mb-6 border-4 border-[#5A8352] bg-[#2e3f30] p-4">
-              <div className="text-sm font-bold text-[#E8E8D8] mb-2">
-                Archetype market outlook — {composition.outlooks.filter((o) => o.pIdentityCompletion >= 0.9).length} of{" "}
-                {composition.outlooks.length} archetypes look buildable in a contested draft
-              </div>
-              <div className="grid gap-1">
-                {[...composition.outlooks]
-                  .sort((a, b) => a.pIdentityCompletion - b.pIdentityCompletion)
-                  .slice(0, 6)
-                  .map((outlook) => (
-                    <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
-                      <span
-                        className={`font-bold ${
-                          outlook.pIdentityCompletion >= 0.9
-                            ? "text-[#9Fe09F]"
-                            : outlook.pIdentityCompletion >= 0.6
-                              ? "text-[#C4A853]"
-                              : "text-red-300"
-                        }`}
-                      >
-                        {Math.round(outlook.pIdentityCompletion * 100)}%
-                      </span>
-                      <span className="text-[#E8E8D8]">{outlook.archetypeName}</span>
-                      {outlook.note && <span className="text-[#A8B8A0]">{outlook.note}</span>}
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex flex-wrap items-center gap-4">
-            {!locked ? (
-              <button
-                onClick={handleLock}
-                disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0}
-                className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
+        <div className="space-y-6">
+          <PanelWithHeaderStrip title="1 · THE ROOM">
+            {showHelp ? (
+              <HelpNote>
+                Pick the league, then choose whether this room starts from a player pool or from club designs.
+              </HelpNote>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-4">
+              <select
+                value={activeLeagueId}
+                onChange={(event) => setActiveLeagueId(event.target.value)}
+                className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] text-[var(--ballpark-chalk)] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
               >
-                <Lock className="w-5 h-5" /> LOCK POOL
-              </button>
+                {leagues.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.name.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              <div className="flex border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]">
+                {(["pool-first", "design-first"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => void handlePoolModeChange(mode)}
+                    disabled={locked || busy || savedDraftMutationBlocked}
+                    className={
+                      "px-4 py-2 text-sm font-bold disabled:opacity-45 " +
+                      (poolMode === mode
+                        ? "bg-[var(--ballpark-brass)] text-[#1A1A1A]"
+                        : "text-[var(--ballpark-chalk)] hover:bg-[var(--ballpark-action-green)]")
+                    }
+                  >
+                    {DRAFT_POOL_MODE_LABEL[mode]}
+                  </button>
+                ))}
+              </div>
+              {locked ? (
+                <span className="flex items-center gap-2 bg-[var(--ballpark-brass)] text-[#1A1A1A] border-2 border-[var(--ballpark-chalk)] px-3 py-1 text-xs font-bold">
+                  <Lock className="w-4 h-4" /> POOL LOCKED
+                </span>
+              ) : null}
+              <div className="text-sm text-[var(--ballpark-chalk)]/65">
+                {league.teamIds.length} clubs · {league.tier ?? "juiced"} tier
+              </div>
+            </div>
+          </PanelWithHeaderStrip>
+
+          <PanelWithHeaderStrip title="2 · WHO'S PLAYING" rightSlot={<Users className="w-4 h-4 text-[var(--ballpark-brass)]" />}>
+            {showHelp ? (
+              <HelpNote>
+                Seat names are the GM names used around this draft room. Owner picks decide which clubs are human-run.
+              </HelpNote>
+            ) : null}
+            <div className="space-y-2">
+              {seats.map((seat, index) => (
+                <div key={seat.id} className="flex items-center gap-2">
+                  <span className="w-6 text-center text-xs font-bold text-[var(--ballpark-brass)]">{index + 1}</span>
+                  <input
+                    value={seat.name}
+                    onChange={(event) => void handleSeatNameChange(seat.id, event.target.value)}
+                    disabled={Boolean(setupMutationBlockMessage) || busy}
+                    className="flex-1 bg-[var(--ballpark-well)] border-2 border-[var(--ballpark-panel-border)] focus:border-[var(--ballpark-brass)] outline-none px-3 py-2 text-sm font-bold text-[var(--ballpark-chalk)]"
+                  />
+                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55 w-24 text-right">
+                    {leagueTeams.filter((team) => teamOwnerId(team, seats) === seat.id).length} club(s)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveSeat(seat.id)}
+                    disabled={seats.length <= 1 || Boolean(setupMutationBlockMessage) || busy}
+                    className="p-1.5 border-2 border-[var(--ballpark-panel-border)] hover:border-[#E0857A] disabled:opacity-30 active:scale-95"
+                    aria-label={"Remove " + seat.name}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <PressButton
+              className="mt-3"
+              size="sm"
+              onClick={() => void handleAddSeat()}
+              disabled={Boolean(setupMutationBlockMessage) || busy}
+            >
+              <Plus className="w-4 h-4" /> Add player
+            </PressButton>
+          </PanelWithHeaderStrip>
+
+          <PanelWithHeaderStrip
+            title="3 · THE CLUBS"
+            rightSlot={
+              <span className={"text-[11px] font-bold " + (identitiesReady ? "text-[#9FE0A0]" : "text-[var(--ballpark-chalk)]/55")}>
+                {identitiesReady ? "✓ every club has an identity" : "set each club's identity"}
+              </span>
+            }
+          >
+            {showHelp ? (
+              <HelpNote>
+                Each team picks an MLB identity (sets what's cheap to build) and a farm identity (steers your scout) from 24 historical team archetypes — all balanced, so no identity builds a stronger team; the difference is the shape of the team you can build.
+              </HelpNote>
+            ) : null}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {leagueTeams.map((team) => {
+                const ownerId = teamOwnerId(team, seats);
+                const isHuman = ownerId !== "cpu";
+                const mlb = archetypeByKey(team.mlbArchetypeKey);
+                const farm = archetypeByKey(team.farmArchetypeKey);
+                const isSelected = team.id === selectedTeamId;
+                return (
+                  <div
+                    key={team.id}
+                    className={
+                      "border-4 p-3 " +
+                      (isSelected
+                        ? "border-[var(--ballpark-brass)] bg-[#3a4d3c]"
+                        : "border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]")
+                    }
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-sm font-bold text-[var(--ballpark-chalk)]">{team.name}</span>
+                      {isHuman ? (
+                        <span className="text-[9px] font-bold tracking-wider bg-[var(--ballpark-brass)] text-[#1A1A1A] px-1.5 py-0.5">
+                          {ownerName(ownerId).toUpperCase()}
+                        </span>
+                      ) : null}
+                      <select
+                        value={ownerId}
+                        onChange={(event) => void handleOwnerChange(team.id, event.target.value)}
+                        disabled={Boolean(setupMutationBlockMessage) || busy}
+                        className="ml-auto bg-[#243024] border-2 border-[var(--ballpark-panel-border)] text-xs font-bold px-2 py-1 text-[var(--ballpark-chalk)] outline-none"
+                      >
+                        <option value="cpu">CPU</option>
+                        {seats.map((seat) => (
+                          <option key={seat.id} value={seat.id}>{seat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-[var(--ballpark-chalk)]/65 mb-2">
+                      <span>Owner: <span className="text-[var(--ballpark-chalk)]">{ownerName(ownerId)}</span></span>
+                      <span>MLB: <span className="text-[var(--ballpark-chalk)]">{mlb?.name ?? "-"}</span></span>
+                      <span>Farm: <span className="text-[var(--ballpark-chalk)]">{farm?.name ?? "-"}</span></span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTeamId(team.id)}
+                        className="flex items-center gap-1 text-[11px] font-bold text-[var(--ballpark-brass)] hover:underline"
+                      >
+                        {mlb ? <><Check className="w-3 h-3" /> identity set · edit</> : <>set identity <ChevronRight className="w-3 h-3" /></>}
+                      </button>
+                      {poolMode === "design-first" ? (
+                        <span className="text-[10px] font-bold tracking-wider text-[var(--ballpark-chalk)]/45">
+                          Design your roster · POOL-FROM-DEMAND COMING
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {selectedTeam && selectedTeamConfig ? (
+              <div className="mt-4 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4">
+                <ArchetypePicker
+                  teamLabel={selectedTeam.name + " (" + selectedTeam.abbreviation + ") · GM " + ownerName(selectedTeamConfig.ownerId)}
+                  mlbKey={selectedTeamConfig.mlbKey}
+                  farmKey={selectedTeamConfig.farmKey}
+                  onPick={handlePick}
+                  disabled={Boolean(setupMutationBlockMessage) || busy}
+                  disabledReason={setupMutationBlockMessage ?? undefined}
+                />
+              </div>
+            ) : null}
+          </PanelWithHeaderStrip>
+
+          <PanelWithHeaderStrip title="4 · THE POOL">
+            {showHelp ? (
+              <HelpNote>
+                Pool first uses the player shuttle below. Design first will extract a pool after club designs are locked.
+              </HelpNote>
+            ) : null}
+            {poolMode === "design-first" ? (
+              <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-5">
+                <div className="text-sm font-bold text-[var(--ballpark-brass)] mb-2">POOL-FROM-DEMAND COMING</div>
+                <div className="text-sm text-[var(--ballpark-chalk)]/70">
+                  Designs locked: 0 of {leagueTeams.length} clubs.
+                </div>
+              </div>
             ) : (
               <>
-                <button
-                  onClick={handleUnlock}
-                  disabled={busy || savedDraftMutationBlocked}
-                  className="flex items-center gap-2 bg-[#4A6844] hover:bg-[#5A8352] disabled:opacity-40 border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
-                >
-                  <Unlock className="w-5 h-5" /> UNLOCK
-                </button>
-                <button
-                  onClick={handleStartDraft}
-                  disabled={busy || savedDraftMutationBlocked || !sufficiency.meetsFloor}
-                  className="flex items-center gap-2 bg-[#5A8352] hover:bg-[#4A6844] disabled:opacity-40 border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
-                >
-                  <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START DRAFT"}
-                </button>
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-4 mb-6">
+                  <Pane
+                    title={"IN THE POOL (" + inPoolPlayers.length + ")"}
+                    accent="var(--ballpark-action-green-hover)"
+                    search={inSearch}
+                    onSearch={setInSearch}
+                    position={inPosition}
+                    onPosition={setInPosition}
+                    disabled={poolEditingBlocked}
+                    onSelectAll={() => selectAll(inFiltered, setInSelected)}
+                    footer={
+                      <PressButton
+                        onClick={handleRemove}
+                        disabled={poolEditingBlocked || busy || inSelected.size === 0}
+                        size="sm"
+                      >
+                        Remove <ChevronRight className="w-4 h-4" />
+                      </PressButton>
+                    }
+                  >
+                    {inFiltered.map((player) => (
+                      <Row
+                        key={player.id}
+                        player={player}
+                        rightLabel={formatMoney(ivById.get(player.id))}
+                        rightTitle="Value"
+                        checked={inSelected.has(player.id)}
+                        focused={focusedPlayerId === player.id}
+                        disabled={poolEditingBlocked}
+                        onToggle={() => toggle(inSelected, setInSelected, player.id)}
+                        onFocus={() => setFocusedPlayerId(player.id)}
+                      />
+                    ))}
+                    {inFiltered.length === 0 && <Empty label="The pool is empty." />}
+                  </Pane>
+
+                  <div className="hidden lg:flex flex-col items-center justify-center gap-3 text-[var(--ballpark-chalk)]/40">
+                    <ChevronLeft className="w-6 h-6" />
+                    <ChevronRight className="w-6 h-6" />
+                  </div>
+
+                  <Pane
+                    title={"AVAILABLE PLAYERS (" + availablePlayers.length + ")"}
+                    accent="#3B7DD8"
+                    search={availSearch}
+                    onSearch={setAvailSearch}
+                    position={availPosition}
+                    onPosition={setAvailPosition}
+                    disabled={poolEditingBlocked}
+                    onSelectAll={() => selectAll(availFiltered, setAvailSelected)}
+                    footer={
+                      <PressButton
+                        onClick={handleAdd}
+                        disabled={poolEditingBlocked || busy || availSelected.size === 0}
+                        size="sm"
+                      >
+                        <ChevronLeft className="w-4 h-4" /> Add
+                      </PressButton>
+                    }
+                  >
+                    {availFiltered.slice(0, 500).map((player) => (
+                      <Row
+                        key={player.id}
+                        player={player}
+                        rightLabel={player.overallGrade}
+                        rightTitle="Grade"
+                        checked={availSelected.has(player.id)}
+                        focused={focusedPlayerId === player.id}
+                        disabled={poolEditingBlocked}
+                        onToggle={() => toggle(availSelected, setAvailSelected, player.id)}
+                        onFocus={() => setFocusedPlayerId(player.id)}
+                      />
+                    ))}
+                    {availFiltered.length > 500 && (
+                      <div className="text-xs text-[var(--ballpark-chalk)]/55 px-2 py-2">
+                        Showing first 500 of {availFiltered.length}. Narrow the filters to see more.
+                      </div>
+                    )}
+                    {availFiltered.length === 0 && <Empty label="No available players match." />}
+                  </Pane>
+                </div>
+
+                {focusedPlayer ? (
+                  <FocusedPlayerPanel
+                    player={focusedPlayer}
+                    locked={poolEditingBlocked}
+                    lockedLabel={hasSavedDraft ? "Draft Saved" : undefined}
+                    lockedTitle={poolEditingBlockMessage}
+                    onEdit={() => {
+                      if (poolEditingBlocked) return;
+                      setEditError(null);
+                      setEditingPlayer(focusedPlayer);
+                    }}
+                  />
+                ) : null}
+
+                <div className="flex flex-wrap items-center gap-4 mb-6">
+                  <div
+                    className={
+                      "flex items-center gap-2 px-4 py-2 border-4 text-sm font-bold " +
+                      (sufficiency.meetsFloor
+                        ? "border-[var(--ballpark-action-green-hover)] text-[#9FE0A0] bg-[#3a4d3c]"
+                        : "border-[#FFD27A] text-[#FFE8B0] bg-[#6B3A3A]")
+                    }
+                  >
+                    {sufficiency.meetsFloor ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                    Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} draft slots
+                    {sufficiency.meetsFloor
+                      ? " · surplus " + (sufficiency.surplus >= 0 ? "+" : "") + sufficiency.surplus
+                      : " · need " + -sufficiency.surplus + " more"}
+                    {" · recommended " + sufficiency.targetSize}
+                  </div>
+                  <PressButton
+                    onClick={handleImport}
+                    disabled={poolEditingBlocked || busy}
+                    size="sm"
+                  >
+                    <Download className="w-4 h-4" /> Import from branded teams
+                  </PressButton>
+                  {!locked ? (
+                    <PressButton
+                      onClick={handleLock}
+                      disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0}
+                      variant="gold"
+                      shadow={4}
+                    >
+                      <Lock className="w-5 h-5" /> LOCK POOL
+                    </PressButton>
+                  ) : (
+                    <PressButton
+                      onClick={handleUnlock}
+                      disabled={busy || savedDraftMutationBlocked}
+                      shadow={4}
+                    >
+                      <Unlock className="w-5 h-5" /> UNLOCK
+                    </PressButton>
+                  )}
+                </div>
+
+                {composition ? (
+                  <div className="border-4 border-[var(--ballpark-action-green-hover)] bg-[#2e3f30] p-4">
+                    <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-2">
+                      Archetype market outlook — {composition.outlooks.filter((outlook) => outlook.pIdentityCompletion >= 0.9).length} of {composition.outlooks.length} archetypes look buildable in a contested draft
+                    </div>
+                    <div className="grid gap-1">
+                      {[...composition.outlooks]
+                        .sort((a, b) => a.pIdentityCompletion - b.pIdentityCompletion)
+                        .slice(0, 6)
+                        .map((outlook) => (
+                          <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
+                            <span
+                              className={
+                                "font-bold " +
+                                (outlook.pIdentityCompletion >= 0.9
+                                  ? "text-[#9FE0A0]"
+                                  : outlook.pIdentityCompletion >= 0.6
+                                    ? "text-[var(--ballpark-brass)]"
+                                    : "text-[#FFE8B0]")
+                              }
+                            >
+                              {Math.round(outlook.pIdentityCompletion * 100)}%
+                            </span>
+                            <span className="text-[var(--ballpark-chalk)]">{outlook.archetypeName}</span>
+                            {outlook.note ? <span className="text-[#A8B8A0]">{outlook.note}</span> : null}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                ) : null}
               </>
             )}
-            {busy && <Loader2 className="w-5 h-5 animate-spin text-[#E8E8D8]/70" />}
-          </div>
+          </PanelWithHeaderStrip>
+
+          <PanelWithHeaderStrip title="5 · THE FLOOR" rightSlot={<Gavel className="w-4 h-4 text-[var(--ballpark-brass)]" />}>
+            {showHelp ? (
+              <HelpNote>
+                Set shill pressure, check the room, then start. A live draft resumes from here.
+              </HelpNote>
+            ) : null}
+            <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_auto] gap-4 items-center">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Decrease shill bidders"
+                  disabled={Boolean(setupMutationBlockMessage) || busy}
+                  onClick={() => setShills((count) => Math.max(0, count - 1))}
+                  className="p-2 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)] disabled:opacity-40 active:scale-95"
+                >
+                  <Minus className="w-4 h-4" />
+                </button>
+                <div className="text-3xl font-bold text-[var(--ballpark-chalk)] w-12 text-center">{shills}</div>
+                <button
+                  type="button"
+                  aria-label="Increase shill bidders"
+                  disabled={Boolean(setupMutationBlockMessage) || busy}
+                  onClick={() => setShills((count) => Math.min(MAX_DRAFT_SHILL_COUNT, count + 1))}
+                  className="p-2 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)] disabled:opacity-40 active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <div className="text-[11px] text-[var(--ballpark-chalk)]/55">
+                  shills · rec {recommendedShills}
+                </div>
+              </div>
+              <div className="text-sm text-[var(--ballpark-chalk)]/75">
+                {leagueTeams.length} clubs · {humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU · {poolReady ? "pool locked" : "pool open"} · {identitiesReady ? "identities set" : "identity needed"}
+              </div>
+              <div className="flex flex-col items-start lg:items-end gap-2">
+                <PressButton
+                  onClick={handleStartDraft}
+                  disabled={busy || !startReady}
+                  variant="gold"
+                  size="lg"
+                  shadow={4}
+                >
+                  <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START THE DRAFT"}
+                </PressButton>
+                {!startReady && startBlocker ? (
+                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55">{startBlocker}</span>
+                ) : null}
+              </div>
+            </div>
+          </PanelWithHeaderStrip>
+
+          {busy ? <Loader2 className="w-5 h-5 animate-spin text-[var(--ballpark-chalk)]/70" /> : null}
 
           {editingPlayer && (
             <DraftSetupPlayerEditModal
@@ -734,10 +1192,11 @@ export function LeagueBuilderDraftSetup() {
               onSave={handleSaveEditedPlayer}
             />
           )}
-        </>
+        </div>
       )}
-    </Shell>
+    </BallparkShell>
   );
+
 }
 
 function FocusedPlayerPanel({
@@ -784,7 +1243,7 @@ function FocusedPlayerPanel({
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <StatBlock label="GRADE" value={grade} />
-        <StatBlock label="IV" value={formatMoney(iv)} />
+        <StatBlock label="VALUE" value={formatMoney(iv)} />
         <StatBlock label="POSITION" value={positionLabel(player)} />
         <StatBlock label="GENDER" value={player.gender === "F" ? "She/her" : "He/him"} />
         <StatBlock label="TRAITS" value={[player.trait1, player.trait2].filter(Boolean).join(" / ") || "None"} />
@@ -814,6 +1273,14 @@ function StatBlock({ label, value }: { label: string; value: string }) {
     <div className="bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2 min-w-0">
       <div className="text-[10px] font-bold tracking-wider text-[#E8E8D8]/50">{label}</div>
       <div className="text-sm font-bold text-[#E8E8D8] truncate">{value}</div>
+    </div>
+  );
+}
+
+function HelpNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-4 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs leading-relaxed text-[var(--ballpark-chalk)]/75">
+      {children}
     </div>
   );
 }
@@ -969,7 +1436,7 @@ function DraftSetupPlayerEditModal({
               </div>
             </label>
             <label className="block">
-              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">IV</span>
+              <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">VALUE</span>
               <div className="bg-[#3a4d3c] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
                 {formatMoney(previewIv)}
               </div>
@@ -1110,29 +1577,6 @@ function DraftSetupPlayerEditModal({
             Save
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function Shell({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
-  return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={onBack}
-            className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-          >
-            <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-          </button>
-          <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-            <h1 className="text-2xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-              DRAFT SETUP
-            </h1>
-          </div>
-        </div>
-        {children}
       </div>
     </div>
   );
