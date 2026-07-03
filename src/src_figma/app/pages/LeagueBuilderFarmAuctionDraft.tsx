@@ -13,7 +13,6 @@ import { LongPressReveal } from "../components/LongPressReveal";
 import { auctionTransitionErrorCopy } from "../hooks/useAuctionDraft";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
 import {
-  farmDraftRouteForLeague,
   leagueIdFromSearch,
   resolveInitialLeagueId,
   staffHireRouteForLeague,
@@ -244,11 +243,6 @@ export function LeagueBuilderFarmAuctionDraft() {
     () => leagueData.leagues.find((league) => league.id === activeLeagueId) ?? null,
     [activeLeagueId, leagueData.leagues],
   );
-
-  useEffect(() => {
-    if (!activeLeague || activeLeague.draftFormat !== "snake") return;
-    navigate(farmDraftRouteForLeague(activeLeague), { replace: true });
-  }, [activeLeague, navigate]);
 
   const leagueTeams = useMemo(() => {
     if (!activeLeague?.teamIds?.length) return [];

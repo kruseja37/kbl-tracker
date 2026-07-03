@@ -6,11 +6,13 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { LeagueBuilderLeagues } from '../../app/pages/LeagueBuilderLeagues';
 import {
   draftRouteForFormat,
   draftRouteForLeague,
+  farmDraftRouteForFormat,
+  farmDraftRouteForLeague,
 } from '../../app/utils/draftRouting';
 import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
 import { TIER_CAPS } from '../../../data/tierParams';
@@ -281,16 +283,21 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(deleteButtons.length).toBe(2);
     });
 
-    test('draft route helper maps snake to snake and auction/default to auction', () => {
-      expect(draftRouteForFormat('snake')).toBe('/league-builder/snake-draft');
+    test('draft route helper maps every legacy format to auction routes', () => {
+      expect(draftRouteForFormat('snake')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
+      expect(farmDraftRouteForFormat('snake')).toBe('/league-builder/farm-auction-draft');
+      expect(farmDraftRouteForFormat('auction')).toBe('/league-builder/farm-auction-draft');
+      expect(farmDraftRouteForFormat(undefined)).toBe('/league-builder/farm-auction-draft');
     });
 
-    test('per-league Draft action opens Draft Setup threading leagueId; routing helper still maps format', async () => {
-      // The format→route helper Draft Setup uses to start the draft is unchanged.
+    test('per-league Draft action opens Draft Setup threading leagueId; retired formats fall back to auction', async () => {
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
-        '/league-builder/snake-draft?leagueId=league-2',
+        '/league-builder/auction-draft?leagueId=league-2',
+      );
+      expect(farmDraftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
+        '/league-builder/farm-auction-draft?leagueId=league-2',
       );
 
       await renderSettledLeagueBuilderLeagues();
@@ -586,20 +593,15 @@ describe('LeagueBuilderLeagues Component', () => {
   });
 
   describe('Draft Format', () => {
-    test('creating a league persists selected snake draft format', async () => {
+    test('draft format selector only offers auction', async () => {
       await renderSettledLeagueBuilderLeagues();
       await openCreateLeagueModal();
 
-      fireEvent.change(screen.getByLabelText('Draft format'), {
-        target: { value: 'snake' },
-      });
-      await createLeagueFromModal('Snake Draft League');
-
-      await waitFor(() => {
-        expect(mockCreateLeague).toHaveBeenCalledWith(
-          expect.objectContaining({ draftFormat: 'snake' })
-        );
-      });
+      const options = within(screen.getByLabelText('Draft format')).getAllByRole('option');
+      expect(options).toHaveLength(1);
+      expect(options[0]).toHaveValue('auction');
+      expect(options[0]).toHaveTextContent('Auction (default)');
+      expect(screen.queryByRole('option', { name: /snake/i })).not.toBeInTheDocument();
     });
 
     test('creating a league persists default auction draft format', async () => {

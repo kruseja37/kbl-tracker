@@ -98,7 +98,7 @@ export function FranchiseManualSmokeSetup() {
               </Link>
               <Link
                 className="border border-[#A9BCD0] px-3 py-2 text-[10px] uppercase text-[#D8E7FF]"
-                to={`/league-builder/draft?leagueId=${encodeURIComponent(FRANCHISE_MANUAL_SMOKE_LEAGUE_ID)}`}
+                to={`/league-builder/farm-auction-draft?leagueId=${encodeURIComponent(FRANCHISE_MANUAL_SMOKE_LEAGUE_ID)}`}
               >
                 Inspect Draft Readiness
               </Link>

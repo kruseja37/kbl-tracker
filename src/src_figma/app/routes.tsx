@@ -6,7 +6,6 @@ import { LeagueBuilderLeagues } from "@/app/pages/LeagueBuilderLeagues";
 import { LeagueBuilderTeams } from "@/app/pages/LeagueBuilderTeams";
 import { LeagueBuilderPlayers } from "@/app/pages/LeagueBuilderPlayers";
 import { LeagueBuilderRosters } from "@/app/pages/LeagueBuilderRosters";
-import { LeagueBuilderDraft } from "@/app/pages/LeagueBuilderDraft";
 import { LeagueBuilderRules } from "@/app/pages/LeagueBuilderRules";
 import { FranchiseHome } from "@/app/pages/FranchiseHome";
 import { FranchiseSelector } from "@/app/pages/FranchiseSelector";
@@ -56,10 +55,6 @@ export const router = createBrowserRouter([
   {
     path: "/league-builder/rosters",
     Component: LeagueBuilderRosters,
-  },
-  {
-    path: "/league-builder/draft",
-    Component: LeagueBuilderDraft,
   },
   {
     path: "/league-builder/rules",

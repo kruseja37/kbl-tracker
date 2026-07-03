@@ -76,7 +76,7 @@ describe('FranchiseManualSmokeSetup', () => {
     expect(screen.getByRole('link', { name: /open franchise setup/i })).toHaveAttribute('href', '/franchise/setup');
     expect(screen.getByRole('link', { name: /inspect draft readiness/i })).toHaveAttribute(
       'href',
-      '/league-builder/draft?leagueId=manual-smoke-v1-league',
+      '/league-builder/farm-auction-draft?leagueId=manual-smoke-v1-league',
     );
   });
 });

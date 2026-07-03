@@ -1,24 +1,17 @@
-import {
-  getLeagueDraftFormat,
-  type LeagueTemplate,
-} from "../../../utils/leagueBuilderStorage";
+import type { LeagueTemplate } from "../../../utils/leagueBuilderStorage";
 
 export function mlbDraftRouteForFormat(
-  format: LeagueTemplate["draftFormat"],
-): "/league-builder/snake-draft" | "/league-builder/auction-draft" {
-  return getLeagueDraftFormat({ draftFormat: format }) === "snake"
-    ? "/league-builder/snake-draft"
-    : "/league-builder/auction-draft";
+  _format: LeagueTemplate["draftFormat"],
+): "/league-builder/auction-draft" {
+  return "/league-builder/auction-draft";
 }
 
 export const draftRouteForFormat = mlbDraftRouteForFormat;
 
 export function farmDraftRouteForFormat(
-  format: LeagueTemplate["draftFormat"],
-): "/league-builder/draft" | "/league-builder/farm-auction-draft" {
-  return getLeagueDraftFormat({ draftFormat: format }) === "snake"
-    ? "/league-builder/draft"
-    : "/league-builder/farm-auction-draft";
+  _format: LeagueTemplate["draftFormat"],
+): "/league-builder/farm-auction-draft" {
+  return "/league-builder/farm-auction-draft";
 }
 
 type DraftRouteOptions = {
