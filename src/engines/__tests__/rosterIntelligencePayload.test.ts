@@ -6,6 +6,7 @@ import type { MarketBidderView, MarketLotView } from '../auctionMarketModel';
 import type { CompletionCandidate } from '../auctionCompletionFloor';
 import type { Player } from '../../utils/leagueBuilderStorage';
 import type { SimPlayer } from '../archetypeBalanceSimulator';
+import type { RosterNeedBreakdown } from '../rosterNeed';
 import {
   PAYLOAD_TUNING,
   assembleBoard,
@@ -26,6 +27,19 @@ const pitcher = (role: 'SP' | 'RP' | 'CP' | 'SP/RP'): RosterSlotPlayer => ({
   isPitcher: true,
   position: 'P',
   role,
+});
+
+const need = (overrides: Partial<RosterNeedBreakdown> = {}): RosterNeedBreakdown => ({
+  missingPrimaries: [],
+  catcherCoverNeed: 0,
+  pitcherNeed: 0,
+  rotationDeficit: 0,
+  bullpenDeficit: 0,
+  hitterFloorNeed: 0,
+  pitcherFloorNeed: 0,
+  minimumAdditions: 0,
+  infeasible: false,
+  ...overrides,
 });
 
 const GREEN_ROSTER: readonly RosterSlotPlayer[] = [
@@ -276,10 +290,157 @@ describe('roster intelligence payload assembly', () => {
         ],
       }),
     ).toEqual([
-      { playerId: 'a', worth: 1_500, matchedShape: null },
-      { playerId: 'b', worth: 1_500, matchedShape: 'power' },
-      { playerId: 'c', worth: 1_600, matchedShape: 'speed', note: 'scouted' },
+      { playerId: 'a', worth: 1_500, matchedShape: null, needTag: null, fitTag: null },
+      { playerId: 'b', worth: 1_500, matchedShape: 'power', needTag: null, fitTag: null },
+      { playerId: 'c', worth: 1_600, matchedShape: 'speed', needTag: null, fitTag: null, note: 'scouted' },
     ].sort((a, b) => b.worth - a.worth || a.playerId.localeCompare(b.playerId)));
+  });
+
+  test('assembleBoard applies need before fit before worth while keeping worth pure', () => {
+    const board = assembleBoard({
+      rosterPlayers: [],
+      need: need({ missingPrimaries: ['SS'] }),
+      candidates: [
+        {
+          playerId: 'no-need-identity',
+          iv: 10_000,
+          chemistry: chemistry(900),
+          shape: hitter('CF'),
+          identityZ: PAYLOAD_TUNING.identityGreenBoostZ,
+          matchedShape: 'CF',
+        },
+        {
+          playerId: 'need-low-worth',
+          iv: 1_000,
+          chemistry: chemistry(0),
+          shape: hitter('SS'),
+          identityZ: PAYLOAD_TUNING.identityGreenBoostZ - 0.01,
+          matchedShape: 'SS',
+        },
+        {
+          playerId: 'need-high-worth',
+          iv: 2_000,
+          chemistry: chemistry(100),
+          shape: hitter('SS'),
+          matchedShape: 'SS',
+        },
+        {
+          playerId: 'plain',
+          iv: 99_000,
+          chemistry: chemistry(0),
+          shape: hitter('LF'),
+          matchedShape: 'LF',
+        },
+      ],
+    });
+
+    expect(board.map((entry) => entry.playerId)).toEqual([
+      'need-high-worth',
+      'need-low-worth',
+      'no-need-identity',
+      'plain',
+    ]);
+    expect(board.find((entry) => entry.playerId === 'need-low-worth')).toMatchObject({
+      worth: 1_000,
+      needTag: 'FILLS SS',
+      fitTag: null,
+    });
+    expect(board.find((entry) => entry.playerId === 'no-need-identity')).toMatchObject({
+      worth: 10_900,
+      needTag: null,
+      fitTag: 'IDENTITY',
+    });
+  });
+
+  test('assembleBoard derives every need tag branch with first-match priority', () => {
+    const cases: Array<{
+      name: string;
+      shape?: RosterSlotPlayer;
+      rosterNeed?: RosterNeedBreakdown;
+      expected: string | null;
+    }> = [
+      {
+        name: 'FILLS POS',
+        shape: hitter('SS', 'C'),
+        rosterNeed: need({ missingPrimaries: ['SS'], catcherCoverNeed: 1 }),
+        expected: 'FILLS SS',
+      },
+      {
+        name: 'CATCHER COVER',
+        shape: hitter('1B', 'C'),
+        rosterNeed: need({ catcherCoverNeed: 1 }),
+        expected: 'CATCHER COVER',
+      },
+      {
+        name: 'ROTATION',
+        shape: pitcher('SP'),
+        rosterNeed: need({ rotationDeficit: 1 }),
+        expected: 'ROTATION',
+      },
+      {
+        name: 'BULLPEN',
+        shape: pitcher('RP'),
+        rosterNeed: need({ bullpenDeficit: 1 }),
+        expected: 'BULLPEN',
+      },
+      {
+        name: 'BENCH BAT',
+        shape: hitter('LF'),
+        rosterNeed: need({ hitterFloorNeed: 1 }),
+        expected: 'BENCH BAT',
+      },
+      {
+        name: 'STAFF DEPTH',
+        shape: pitcher('CP'),
+        rosterNeed: need({ pitcherFloorNeed: 1 }),
+        expected: 'STAFF DEPTH',
+      },
+      {
+        name: 'null without shape',
+        rosterNeed: need({ missingPrimaries: ['SS'] }),
+        expected: null,
+      },
+      {
+        name: 'null without need',
+        shape: hitter('SS'),
+        expected: null,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const [entry] = assembleBoard({
+        rosterPlayers: [],
+        ...(testCase.rosterNeed ? { need: testCase.rosterNeed } : {}),
+        candidates: [
+          {
+            playerId: testCase.name,
+            iv: 1_000,
+            chemistry: chemistry(0),
+            ...(testCase.shape ? { shape: testCase.shape } : {}),
+          },
+        ],
+      });
+      expect(entry.needTag).toBe(testCase.expected);
+    }
+  });
+
+  test('assembleBoard derives identity fit tag at the shared green threshold only', () => {
+    const board = assembleBoard({
+      rosterPlayers: [],
+      candidates: [
+        { playerId: 'above', iv: 1, chemistry: chemistry(0), identityZ: PAYLOAD_TUNING.identityGreenBoostZ + 0.01 },
+        { playerId: 'at', iv: 1, chemistry: chemistry(0), identityZ: PAYLOAD_TUNING.identityGreenBoostZ },
+        { playerId: 'below', iv: 1, chemistry: chemistry(0), identityZ: PAYLOAD_TUNING.identityGreenBoostZ - 0.01 },
+        { playerId: 'absent', iv: 1, chemistry: chemistry(0) },
+      ],
+    });
+
+    expect(Object.fromEntries(board.map((entry) => [entry.playerId, entry.fitTag]))).toEqual({
+      above: 'IDENTITY',
+      at: 'IDENTITY',
+      absent: null,
+      below: null,
+    });
   });
 
   test('assembleFiveLights builds shape, chemistry, budget, and optional identity reads', () => {

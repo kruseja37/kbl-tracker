@@ -56,7 +56,7 @@ import {
 } from "../../../engines/auctionBoardFrame";
 import { buildAuctionExitReport, describeRosterLawGaps } from "../../../engines/auctionExitGate";
 import { deriveShillTeamIds } from "../../../engines/cpuTeamRoles";
-import { toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
+import { rosterNeedBreakdown, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
   farmDraftRouteForLeague,
@@ -85,7 +85,7 @@ import {
 } from "../../../engines/rosterIntelligencePayload";
 import type { CompletionCandidate } from "../../../engines/auctionCompletionFloor";
 import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
-import type { SimArchetype, SimPlayer } from "../../../engines/archetypeBalanceSimulator";
+import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
 import type { LeagueTemplate, Player, Team, UseLeagueBuilderDataReturn } from "../../hooks/useLeagueBuilderData";
 
 type DraftPool = Awaited<ReturnType<UseLeagueBuilderDataReturn["getRegisteredPool"]>>;
@@ -955,37 +955,6 @@ export function LeagueBuilderAuctionDraft() {
       : undefined;
 
     const boardIds = Array.from(new Set([lotPlayerId, ...session.availablePlayerIds]));
-    const boardMeta: Record<string, { name?: string; positions?: string }> = {};
-    const boardCandidates = boardIds
-      .map((playerId) => {
-        const auctionPlayer = session.players[playerId];
-        if (!auctionPlayer) return null;
-        const player = playerById.get(playerId) ?? null;
-        boardMeta[playerId] = {
-          name: player ? playerDisplayName(player) : playerId,
-          positions: boardPositionLabel(player),
-        };
-        return {
-          playerId,
-          iv: auctionPlayer.iv,
-          candidate: player ?? undefined,
-          matchedShape: boardPositionLabel(player),
-          note: player ? playerDisplayName(player) : playerId,
-        };
-      })
-      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
-    const board = assembleBoard({ candidates: boardCandidates, rosterPlayers });
-
-    const positionMap: Record<string, NonNullable<AuctionPlayer["pos"]>> = {};
-    for (const assignment of teamState.roster) {
-      const shape = session.players[assignment.playerId]?.pos;
-      if (shape) positionMap[assignment.playerId] = shape;
-    }
-    for (const playerId of boardIds) {
-      const shape = session.players[playerId]?.pos;
-      if (shape) positionMap[playerId] = shape;
-    }
-
     const comparisonPool = boardIds
       .map((playerId) => {
         const player = playerById.get(playerId);
@@ -1004,6 +973,58 @@ export function LeagueBuilderAuctionDraft() {
       identityRoster.push(playerToSimPlayer(lotPlayer, lotAuction.iv));
     }
     const identityArchetype = resolveAuctionWhisperIdentityArchetype(team);
+    const identityTier = registeredPool?.tier ?? "standard";
+    const identityZByPlayerId = identityArchetype && comparisonPool.length > 0
+      ? (() => {
+          const scorer = archetypeFitScorer(identityArchetype, identityTier);
+          const scoredPool = comparisonPool.map((player) => ({ player, score: scorer(player) }));
+          const mean = scoredPool.reduce((sum, item) => sum + item.score, 0) / scoredPool.length;
+          const variance = scoredPool.reduce((sum, item) => sum + (item.score - mean) ** 2, 0) / scoredPool.length;
+          const sigma = Math.sqrt(variance);
+          return new Map(scoredPool.map(({ player, score }) => [player.id, sigma > 0 ? (score - mean) / sigma : 0]));
+        })()
+      : null;
+
+    const boardMeta: Record<string, { name?: string; positions?: string }> = {};
+    const boardCandidates = boardIds
+      .map((playerId) => {
+        const auctionPlayer = session.players[playerId];
+        if (!auctionPlayer) return null;
+        const player = playerById.get(playerId) ?? null;
+        const identityZ = identityZByPlayerId?.get(playerId);
+        boardMeta[playerId] = {
+          name: player ? playerDisplayName(player) : playerId,
+          positions: boardPositionLabel(player),
+        };
+        return {
+          playerId,
+          iv: auctionPlayer.iv,
+          candidate: player ?? undefined,
+          matchedShape: boardPositionLabel(player),
+          ...(auctionPlayer.pos ? { shape: auctionPlayer.pos } : {}),
+          ...(identityZ !== undefined ? { identityZ } : {}),
+          note: player ? playerDisplayName(player) : playerId,
+        };
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+    const board = assembleBoard({
+      candidates: boardCandidates,
+      rosterPlayers,
+      // Gate need on rosterShapeClean like the sibling reads (worthToYou/scorecard/budget): a
+      // position-blind roster member truncates rosterShapes, which would fabricate false FILLS/deficit
+      // tags. Undefined → boardNeedTag returns null (byte-identical to the no-need board).
+      need: rosterShapeClean ? rosterNeedBreakdown(rosterShapes) : undefined,
+    });
+
+    const positionMap: Record<string, NonNullable<AuctionPlayer["pos"]>> = {};
+    for (const assignment of teamState.roster) {
+      const shape = session.players[assignment.playerId]?.pos;
+      if (shape) positionMap[assignment.playerId] = shape;
+    }
+    for (const playerId of boardIds) {
+      const shape = session.players[playerId]?.pos;
+      if (shape) positionMap[playerId] = shape;
+    }
 
     const scorecard = applyAuctionWhisperRosterCleanGates(assembleFiveLights({
       shapePlayers: rosterWithCandidate,
@@ -1028,7 +1049,7 @@ export function LeagueBuilderAuctionDraft() {
         ? {
             rosterPlayers: identityRoster,
             archetype: identityArchetype,
-            tier: registeredPool?.tier ?? "standard",
+            tier: identityTier,
             comparisonPool,
           }
         : undefined,

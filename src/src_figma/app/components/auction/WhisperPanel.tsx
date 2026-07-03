@@ -245,6 +245,8 @@ function BoardRow({
     <div className={`whisper-board-row${onBlock ? " on-block" : ""}`}>
       <span className="num whisper-rank">{rank}</span>
       <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>
+      {entry.needTag && <span className="chip whisper-need-chip">{entry.needTag}</span>}
+      {entry.fitTag && <span className="chip whisper-fit-chip">{entry.fitTag}</span>}
       <span className="pos">{meta?.positions ?? entry.matchedShape ?? "POS"}</span>
       {onBlock && <span className="chip whisper-on-block">ON THE BLOCK</span>}
       <span className="spacer" />
@@ -480,6 +482,23 @@ function WhisperStyles() {
         color: var(--ballpark-brass);
         font-size: 10px;
         padding: 3px 7px;
+      }
+      .auc-root .whisper-need-chip,
+      .auc-root .whisper-fit-chip {
+        flex: 0 0 auto;
+        font-size: 9.5px;
+        line-height: 1;
+        padding: 3px 6px;
+      }
+      .auc-root .whisper-need-chip {
+        color: var(--ballpark-brass);
+        border-color: rgba(202, 164, 94, 0.58);
+        background: rgba(202, 164, 94, 0.12);
+      }
+      .auc-root .whisper-fit-chip {
+        color: #f3cf74;
+        border-color: rgba(243, 207, 116, 0.72);
+        background: rgba(243, 207, 116, 0.08);
       }
       @keyframes whisperPulse {
         0% { border-color: var(--ballpark-brass); }

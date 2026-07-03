@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { WhisperPanel } from "../WhisperPanel";
@@ -82,8 +82,8 @@ function payload(
       },
     },
     board: [
-      { playerId: "lot-star", worth: 75_000, matchedShape: "SS", note: "Seat A Star" },
-      { playerId: "seat-a-only", worth: 64_000, matchedShape: "CF", note: "Seat A Slider" },
+      { playerId: "lot-star", worth: 75_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Seat A Star" },
+      { playerId: "seat-a-only", worth: 64_000, matchedShape: "CF", needTag: null, fitTag: null, note: "Seat A Slider" },
     ],
     scorecard: {
       shape: light("green", "Shape is clean."),
@@ -141,6 +141,28 @@ describe("WhisperPanel", () => {
   test("identity light uses the canonical historical archetype instead of a constant amber raw shift", () => {
     expect(identityLightStatus([simHitter("fit-1", 96, 95), simHitter("fit-2", 91, 92)])).toBe("green");
     expect(identityLightStatus([simHitter("miss-1", 25, 30), simHitter("miss-2", 30, 25)])).toBe("red");
+  });
+
+  test("board rows render need and identity chips without replacing shape copy", () => {
+    render(<WhisperPanel payload={payload("push", {
+      board: [
+        {
+          playerId: "chip-row",
+          worth: 88_000,
+          matchedShape: "SS",
+          needTag: "FILLS SS",
+          fitTag: "IDENTITY",
+          note: "Chip Row",
+        },
+      ],
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    const board = within(screen.getByTestId("whisper-board"));
+
+    expect(board.getByText("Chip Row")).toBeInTheDocument();
+    expect(board.getByText("FILLS SS")).toBeInTheDocument();
+    expect(board.getByText("IDENTITY")).toBeInTheDocument();
+    expect(board.getByText("SS")).toBeInTheDocument();
   });
 
   test("missing roster records make roster-dependent lights hollow", () => {

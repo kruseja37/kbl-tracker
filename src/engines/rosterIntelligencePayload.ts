@@ -24,6 +24,7 @@ import {
 import {
   rosterNeedBreakdown,
   wouldStrandRoster,
+  type RosterNeedBreakdown,
   type RosterPositionMap,
 } from './rosterNeed';
 import {
@@ -78,6 +79,8 @@ export interface BoardEntry {
   playerId: string;
   worth: number;
   matchedShape: string | null;
+  needTag: string | null;
+  fitTag: 'IDENTITY' | null;
   note?: string;
 }
 
@@ -128,12 +131,15 @@ export interface BoardCandidate {
   candidate?: Player;
   chemistry?: ChemistryTipBreakdown;
   matchedShape?: string | null;
+  shape?: RosterSlotPlayer;
+  identityZ?: number;
   note?: string;
 }
 
 export interface BoardInput {
   candidates: readonly BoardCandidate[];
   rosterPlayers: readonly Player[];
+  need?: RosterNeedBreakdown;
 }
 
 export interface ShapeLightInput {
@@ -209,10 +215,33 @@ export function assembleBoard(input: BoardInput): BoardEntry[] {
         playerId: candidate.playerId,
         worth: candidate.iv + (chemistry?.premium ?? 0),
         matchedShape: candidate.matchedShape ?? null,
+        needTag: boardNeedTag(candidate.shape, input.need),
+        fitTag: boardFitTag(candidate.identityZ),
         ...(candidate.note ? { note: candidate.note } : {}),
       };
     })
-    .sort((a, b) => b.worth - a.worth || a.playerId.localeCompare(b.playerId));
+    .sort((a, b) =>
+      Number(Boolean(b.needTag)) - Number(Boolean(a.needTag)) ||
+      Number(Boolean(b.fitTag)) - Number(Boolean(a.fitTag)) ||
+      b.worth - a.worth ||
+      a.playerId.localeCompare(b.playerId),
+    );
+}
+
+function boardNeedTag(shape: RosterSlotPlayer | undefined, need: RosterNeedBreakdown | undefined): string | null {
+  if (!shape || !need) return null;
+  const missingPrimary = need.missingPrimaries.find((pos) => shape.position === pos);
+  if (missingPrimary) return `FILLS ${missingPrimary}`;
+  if (need.catcherCoverNeed > 0 && canCover(shape, 'C')) return 'CATCHER COVER';
+  if (shape.isPitcher && need.rotationDeficit > 0 && canStart(shape)) return 'ROTATION';
+  if (shape.isPitcher && need.bullpenDeficit > 0 && canRelieve(shape)) return 'BULLPEN';
+  if (!shape.isPitcher && need.hitterFloorNeed > 0) return 'BENCH BAT';
+  if (shape.isPitcher && need.pitcherFloorNeed > 0) return 'STAFF DEPTH';
+  return null;
+}
+
+function boardFitTag(identityZ: number | undefined): BoardEntry['fitTag'] {
+  return identityZ !== undefined && identityZ >= PAYLOAD_TUNING.identityGreenBoostZ ? 'IDENTITY' : null;
 }
 
 export function assembleFiveLights(input: FiveLightsInput): FiveLights {

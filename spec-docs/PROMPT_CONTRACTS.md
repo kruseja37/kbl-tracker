@@ -28435,3 +28435,62 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (run suspects solo, name any red).
 - `git diff --stat` — LeagueBuilderDraftSetup.tsx (+ its test) only.
 <!-- ===== END CONTRACT: CODEX-B22-PAGE-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-WHISPER ===== -->
+# CODEX-B22-WHISPER — the auction assistant-GM board ranks by roster NEED + identity FIT (§1.6)
+
+BUILD TO: spec-docs/FABLE_BEST22_DESIGN_2026-07-03.md §1.6 (read VERBATIM for chip copy + the strata sort law).
+Today `assembleBoard` (src/engines/rosterIntelligencePayload.ts:201) sorts purely by `worth = iv + chemistry.premium`
+while the IDENTITY light beside it judges archetype fit the board ignores. New contract: fit + need enter as ORDER and
+LABEL — NEVER as invented money (worth stays exactly `iv + chemistry premium`).
+
+CANONICAL WIRES (reuse — never hand-build): `archetypeFitScorer` (archetypeBalanceSimulator), `rosterNeedBreakdown` +
+`RosterNeedBreakdown` (rosterNeed), `canCover/canStart/canRelieve` + `RosterSlotPlayer` (rosterConstruction),
+`PAYLOAD_TUNING.identityGreenBoostZ` (= 0.35, rosterIntelligencePayload.ts:110 — REUSE, do not mint a new threshold).
+
+DELIVERABLE 1 — src/engines/rosterIntelligencePayload.ts (pure engine; ALL new inputs OPTIONAL — absent → today's behavior byte-identical):
+  - `BoardCandidate` gains `shape?: RosterSlotPlayer` and `identityZ?: number`.
+  - `BoardInput` gains `need?: RosterNeedBreakdown`.
+  - `BoardEntry` gains `needTag: string | null` and `fitTag: 'IDENTITY' | null`.
+  - In `assembleBoard`, derive per entry (pure):
+    - `needTag` — FIRST match wins, plain draft-room nouns (null if `input.need` OR `candidate.shape` absent):
+      primaryPosition ∈ `need.missingPrimaries` → `FILLS {POS}` · `need.catcherCoverNeed > 0 && canCover(shape,'C')` →
+      `CATCHER COVER` · `shape.isPitcher && need.rotationDeficit > 0 && canStart(shape)` → `ROTATION` ·
+      `shape.isPitcher && need.bullpenDeficit > 0 && canRelieve(shape)` → `BULLPEN` ·
+      `!shape.isPitcher && need.hitterFloorNeed > 0` → `BENCH BAT` ·
+      `shape.isPitcher && need.pitcherFloorNeed > 0` → `STAFF DEPTH` · else null.
+    - `fitTag` — `candidate.identityZ >= PAYLOAD_TUNING.identityGreenBoostZ` → `'IDENTITY'`, else null (absent identityZ → null).
+    - `worth` UNCHANGED (= iv + chemistry premium). matchedShape / note / worthToYou behavior UNTOUCHED.
+  - SORT (the fit-first law applied to advice): `needTier (has needTag first) → fitTier (has fitTag first) → worth desc →
+    playerId asc`. With need/identityZ absent everywhere the sort MUST collapse to today's `worth desc → id` exactly
+    (back-compat — pin with the existing assembleBoard fixtures).
+
+DELIVERABLE 2 — src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx (caller — in the payload memo ~:960-1056):
+  - Pass `shape` per candidate = `session.players[id].pos` (the caller already reads `.pos`, e.g. :913/:981/:985).
+  - Pass `need: rosterNeedBreakdown(rosterShapes)` (the SAME rosterShapes already feeding the lights, :913).
+  - Compute `identityZ` per board candidate ONLY when `identityArchetype` resolves (:1006): score each candidate with
+    `archetypeFitScorer(identityArchetype, registeredPool?.tier ?? "standard")` and z-score against the mean/σ of that
+    same scorer over `comparisonPool` (the pool already built at ~:989-998 and already used by the identity block at
+    :1027-1032 — REUSE that scorer + pool, do not rebuild). No identity → omit identityZ (fitTag stays null).
+  - All three are additive optional inputs; when absent the board is byte-identical to today.
+
+DELIVERABLE 3 — src/src_figma/app/components/auction/WhisperPanel.tsx (BoardRow, board section ~:139-180):
+  - After the player name, up to TWO tiny chips in the EXISTING whisper `.chip` vocabulary: the NEED chip FIRST (brass,
+    e.g. `FILLS SS`), then the `IDENTITY` chip (gold border). Each renders ONLY when its tag is non-null; a bare row = no
+    open need + off-identity (silence is the encoding). Do NOT touch matchedShape/note rendering.
+
+SCOPE: the 3 files + tests ONLY. Farm/nomination whisper surfaces are OUT of scope (DJ-28 ticket family). GameTracker
+untouched. No DB change. No invented money terms.
+
+TESTS (§1.9 A5 + payload suite):
+  - A5 (strata): a need-filling OFF-identity candidate ranks ABOVE a no-need ON-identity one; within a stratum, worth desc;
+    with `need`/`identityZ` ABSENT, assembleBoard order equals today's EXACTLY (regression pin on the existing fixtures).
+  - needTag derivation: one fixture per branch (FILLS POS / CATCHER COVER / ROTATION / BULLPEN / BENCH BAT / STAFF DEPTH /
+    null when shape or need absent). fitTag: identityZ at/above vs below the 0.35 threshold.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run` for the rosterIntelligencePayload test + any WhisperPanel/auction-draft test touched — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; run suspects solo).
+- `git diff --stat` — rosterIntelligencePayload.ts, LeagueBuilderAuctionDraft.tsx, WhisperPanel.tsx (+ tests). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-B22-WHISPER ===== -->
