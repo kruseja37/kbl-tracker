@@ -3589,3 +3589,19 @@ so NO code change (the hard-cap Phase 1 already implements each):
 
 These ratify decisions already built into Phase 1; recorded so they are canon and not re-litigated.
 FABLE_HARD_CAP_DESIGN §6 items 1-3 are now CLOSED.
+
+## 2026-07-03 — JK RULINGS: pool-sizing design (FABLE_POOL_SIZING_DESIGN §9 open items)
+
+JK ruled the three §9 open items:
+1. **Count shill wins in the band base (keep Fable's rec).** demandBase = teams×22 + expectedShillWins;
+   with JK's shill-count-0 setup this is exactly teams×22.
+2. **Default dial stop = 1.35× (keep Fable's rec).** Mid-band; user retunes per league via the dial.
+3. **PRESERVE hand-edits automatically across a recalc (OVERRIDES Fable's "rebuild + re-confirm" rec).**
+   JK wants his manual add/removes kept when the size dial changes. Reconciliation (so this does NOT
+   reintroduce the "ghost past the fit law" risk Fable raised): a hand-edit is the USER'S EXPLICIT override,
+   so it is legitimately protected — the fit-first law governs the ENGINE's automatic picks, not the user's
+   deliberate hand-picks — and the RE-CHECK panel makes any buildability impact visible. Fable to amend
+   §5.2 for Phase 2B: on recalc, hand-ADDs are re-applied AND protected from the trim; hand-REMOVEs persist;
+   then the buildability check runs and the re-check panel surfaces any club that the edits made unbuildable.
+   This is a Phase 2B (§5.2) concern — Phase 2A (the trim/floor engine, which takes protectedIds as a param)
+   is unaffected and proceeds as designed.
