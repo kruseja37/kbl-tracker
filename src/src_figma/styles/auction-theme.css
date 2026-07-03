@@ -158,12 +158,18 @@
 .auc-root .handoff-footer { margin-top: 14px; border-top: 1px solid var(--ballpark-panel-border); padding-top: 14px; display: grid; gap: 12px; }
 .auc-root .handoff-summary { color: var(--ballpark-chalk); font-size: 13.5px; line-height: 1.45; }
 .auc-root .handoff-footer.blocked .handoff-summary { color: var(--ballpark-status-warn); }
+.auc-root .handoff-result-line,
+.auc-root .handoff-partial { color: color-mix(in srgb, var(--ballpark-chalk) 70%, transparent); font-family: var(--ballpark-font-chrome); font-size: 12.5px; line-height: 1.45; }
+.auc-root .handoff-settle { display: grid; gap: 10px; padding: 12px; background: var(--ballpark-well); border: 1px solid var(--ballpark-panel-border); border-radius: 8px; }
 .auc-root .handoff-override { display: grid; gap: 10px; }
 .auc-root .handoff-review { cursor: pointer; justify-self: start; border: 1px solid var(--ballpark-status-warn); background: var(--ballpark-well); color: var(--ballpark-status-warn); border-radius: 8px; padding: 10px 13px; font-weight: 900; font-family: var(--ballpark-font-chrome); }
 .auc-root .handoff-anyway,
 .auc-root .handoff-stay { cursor: pointer; justify-self: start; border: 1px solid var(--ballpark-panel-border); background: transparent; color: color-mix(in srgb, var(--ballpark-chalk) 70%, transparent); border-radius: 8px; padding: 9px 12px; font-weight: 850; font-family: var(--ballpark-font-chrome); }
 .auc-root .handoff-confirm { color: color-mix(in srgb, var(--ballpark-chalk) 78%, transparent); font-size: 12.5px; line-height: 1.45; }
 .auc-root .handoff-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.auc-root .handoff-settle-confirm { cursor: pointer; border: 1px solid var(--ballpark-status-green); background: var(--ballpark-well); color: var(--ballpark-status-green); border-radius: 8px; padding: 9px 12px; font-weight: 900; font-family: var(--ballpark-font-chrome); }
+.auc-root .handoff-settle-confirm:disabled,
+.auc-root .handoff-stay:disabled { opacity: 0.45; cursor: not-allowed; }
 .auc-root .handoff-yes { cursor: pointer; border: 1px solid var(--ballpark-status-red-bright); background: var(--ballpark-well); color: var(--ballpark-status-red-bright); border-radius: 8px; padding: 9px 12px; font-weight: 900; font-family: var(--ballpark-font-chrome); }
 @media (max-width: 640px) {
   .auc-root .handoff-row { grid-template-columns: 1fr; }
@@ -171,6 +177,7 @@
   .auc-root .handoff-footer .ballpark-press-button,
   .auc-root .handoff-review,
   .auc-root .handoff-anyway,
+  .auc-root .handoff-settle-confirm,
   .auc-root .handoff-yes,
   .auc-root .handoff-stay { width: 100%; justify-content: center; }
 }

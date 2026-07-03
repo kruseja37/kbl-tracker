@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { ArrowLeft, CheckCircle2, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 
 import {
+  buildSettleFromShillsInput,
   playerDisplayName,
   teamDisplayName,
   useAuctionDraft,
@@ -45,6 +46,7 @@ import {
   estimateMarket,
   type EstimatedMarket,
 } from "../../../engines/auctionMarketModel";
+import { settleFromShills } from "../../../engines/auctionSettleFromShills";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import {
   buildAuctionBoardFrame,
@@ -211,11 +213,17 @@ function buildLawNeedLine(frame: AuctionBoardFrame): ReactNode {
   return <>Legal {LEGAL_ROSTER.size} — roster complete.</>;
 }
 
-function auctionExitRepairGuidance(report: ReturnType<typeof buildAuctionExitReport>): string {
+function auctionExitRepairGuidance(
+  report: ReturnType<typeof buildAuctionExitReport>,
+  hasSettleableClub = false,
+): string {
   if (report.clubs.some((club) => !club.known)) {
     return "Some player records are missing position data. Check THE POOL in Draft Setup.";
   }
   if (report.clubs.some((club) => !club.legal && club.rosterCount < club.target)) {
+    if (hasSettleableClub) {
+      return "The pool ran dry before this club reached 22. Settle the empty seats from the shills below, or add players in Draft Setup and re-run.";
+    }
     return "The pool ran dry before this club reached 22. Add more players in Draft Setup and run the draft again.";
   }
   return "This roster can't take the field as drafted. Re-run the draft — positions now read correctly — or hand off anyway and fix it before the season.";
@@ -478,6 +486,7 @@ export function LeagueBuilderAuctionDraft() {
   const [poolError, setPoolError] = useState<string | null>(null);
   const [exitOverrideArmed, setExitOverrideArmed] = useState(false);
   const [exitOverrideConfirmed, setExitOverrideConfirmed] = useState(false);
+  const [settleArmed, setSettleArmed] = useState(false);
   const loadedKeyRef = useRef<string | null>(null);
   const cpuAdvanceInFlightRef = useRef(false);
 
@@ -592,6 +601,20 @@ export function LeagueBuilderAuctionDraft() {
     if (session?.state !== "AUCTION_COMPLETE") return null;
     return buildAuctionExitReport(exitControlledClubs, exitPositionMap);
   }, [exitControlledClubs, exitPositionMap, session?.state]);
+  const settlePreview = useMemo(() => {
+    if (session?.state !== "AUCTION_COMPLETE") return null;
+    return settleFromShills(buildSettleFromShillsInput({
+      session,
+      leagueTeams,
+      players: leagueData.players,
+    }));
+  }, [leagueData.players, leagueTeams, session]);
+  const settledResultLine = useMemo(() => {
+    if (session?.state !== "AUCTION_COMPLETE") return null;
+    const count = session.results.filter((result) => result.settled).length;
+    if (count === 0) return null;
+    return `Settled ${count} seat${count === 1 ? "" : "s"} from the shills at league minimum.`;
+  }, [session]);
 
   const canProceedToFarm = Boolean(exitReport && (exitReport.allLegal || exitOverrideConfirmed));
 
@@ -599,11 +622,13 @@ export function LeagueBuilderAuctionDraft() {
     if (session?.state !== "AUCTION_COMPLETE") {
       setExitOverrideArmed(false);
       setExitOverrideConfirmed(false);
+      setSettleArmed(false);
       return;
     }
     if (exitReport?.allLegal) {
       setExitOverrideArmed(false);
       setExitOverrideConfirmed(false);
+      setSettleArmed(false);
     }
   }, [exitReport?.allLegal, session?.state]);
 
@@ -617,6 +642,17 @@ export function LeagueBuilderAuctionDraft() {
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [exitOverrideArmed]);
+
+  useEffect(() => {
+    if (!settleArmed) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-auction-settle]")) return;
+      setSettleArmed(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [settleArmed]);
 
   const focusExitPanel = useCallback(() => {
     const panel = document.querySelector<HTMLElement>('[data-testid="auction-complete-panel"]');
@@ -1153,6 +1189,16 @@ export function LeagueBuilderAuctionDraft() {
   const stageCompleteVm = useMemo<AuctionStageVM["complete"]>(() => {
     if (!session || !exitReport) return undefined;
     const order = new Map(session.nominationOrder.map((teamId, index) => [teamId, index]));
+    const settledOutcomes = settlePreview?.outcomes.filter((outcome) => outcome.status === "settled") ?? [];
+    const settleSeatTotal = settledOutcomes.reduce((sum, outcome) => sum + outcome.seatsFilled, 0);
+    const unsettledShort = (settlePreview?.outcomes ?? []).find((outcome) => {
+      if (outcome.status === "settled" || outcome.status === "already-complete") return false;
+      const verdict = exitReport.clubs.find((club) => club.teamId === outcome.teamId);
+      return Boolean(verdict && !verdict.legal && verdict.rosterCount < verdict.target);
+    });
+    const settlePartialLine = unsettledShort
+      ? `${teamNameById(unsettledShort.teamId)} still can't reach a legal 22 from what's left — settle the rest, then use the override or re-run.`
+      : undefined;
     const clubs = exitReport.clubs
       .map((club) => {
         const team = teamById.get(club.teamId);
@@ -1177,7 +1223,7 @@ export function LeagueBuilderAuctionDraft() {
       blockedCount: exitReport.blockedCount,
       summary: exitReport.allLegal
         ? "Every club fields a legal 22. The farm draft is next."
-        : `${exitReport.blockedCount} of ${exitReport.clubs.length} clubs can't field a legal 22. ${auctionExitRepairGuidance(exitReport)}`,
+        : `${exitReport.blockedCount} of ${exitReport.clubs.length} clubs can't field a legal 22. ${auctionExitRepairGuidance(exitReport, settleSeatTotal > 0)}`,
       onProceed: requestFarmDraftExit,
       overrideArmed: exitOverrideArmed,
       onArmOverride: () => setExitOverrideArmed(true),
@@ -1186,12 +1232,33 @@ export function LeagueBuilderAuctionDraft() {
         navigateToFarmDraft();
       },
       onStayOverride: () => setExitOverrideArmed(false),
+      settle: {
+        seatTotal: settleSeatTotal,
+        perClubLabel: settledOutcomes
+          .map((outcome) => `${teamNameById(outcome.teamId)} ${outcome.seatsFilled} seat${outcome.seatsFilled === 1 ? "" : "s"}`)
+          .join(" · "),
+        partial: Boolean(unsettledShort),
+        partialLine: settlePartialLine,
+        armed: settleArmed,
+        busy: auction.isWorking,
+        onArm: () => setSettleArmed(true),
+        onConfirm: () => {
+          setSettleArmed(false);
+          void auction.settleShortClubs();
+        },
+        onStay: () => setSettleArmed(false),
+        resultLine: settledResultLine,
+      },
     };
   }, [
+    auction,
     exitOverrideArmed,
     exitReport,
     navigateToFarmDraft,
     requestFarmDraftExit,
+    settleArmed,
+    settledResultLine,
+    settlePreview,
     session,
     teamById,
     teamNameById,

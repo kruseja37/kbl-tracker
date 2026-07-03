@@ -8,6 +8,8 @@ import {
   clearAllLeagueBuilderData,
   createAuctionSessionId,
   saveAuctionSession,
+  savePlayer,
+  saveTeamRoster,
 } from "../../../utils/leagueBuilderStorage";
 import {
   initAuctionSession,
@@ -326,12 +328,17 @@ async function saveCompletedAuctionForPage(options: {
   teamAPlayers?: Player[];
   teamBPlayers?: Player[];
   shillRosterCount?: number;
+  shillPlayers?: Player[];
 } = {}): Promise<Player[]> {
   const teamAPlayers = options.teamAPlayers ?? makeExitRosterPlayers("team-a");
   const teamBPlayers = options.teamBPlayers ?? makeExitRosterPlayers("team-b");
-  const shillIds = Array.from({ length: options.shillRosterCount ?? 0 }, (_, index) => `${TEST_SHILL_ID}-exit-${index + 1}`);
-  const allPlayers = [...teamAPlayers, ...teamBPlayers];
-  const playerIds = [...allPlayers.map((player) => player.id), ...shillIds];
+  const shillPlayers = options.shillPlayers ?? Array.from(
+    { length: options.shillRosterCount ?? 0 },
+    (_, index) => makePlayer(`${TEST_SHILL_ID}-exit-${index + 1}`, "CF"),
+  );
+  const shillIds = shillPlayers.map((player) => player.id);
+  const allPlayers = [...teamAPlayers, ...teamBPlayers, ...shillPlayers];
+  const playerIds = allPlayers.map((player) => player.id);
   const session: CpuShillAuctionSession = {
     state: "AUCTION_COMPLETE",
     config: {
@@ -375,10 +382,38 @@ async function saveCompletedAuctionForPage(options: {
     availablePlayerIds: [],
     currentLot: null,
     pendingClaim: null,
-    results: [],
+    results: [
+      ...teamAPlayers.map((player) => ({
+        playerId: player.id,
+        disposition: "SOLD" as const,
+        nominatorTeamId: "team-a",
+        winnerTeamId: "team-a",
+        salary: 10_000,
+      })),
+      ...teamBPlayers.map((player) => ({
+        playerId: player.id,
+        disposition: "SOLD" as const,
+        nominatorTeamId: "team-b",
+        winnerTeamId: "team-b",
+        salary: 10_000,
+      })),
+      ...shillPlayers.map((player) => ({
+        playerId: player.id,
+        disposition: "SOLD" as const,
+        nominatorTeamId: TEST_SHILL_ID,
+        winnerTeamId: TEST_SHILL_ID,
+        salary: 10_000,
+      })),
+    ],
     saleCount: playerIds.length,
     cpuShills: shillIds.length > 0 ? { [TEST_SHILL_ID]: TEST_SHILL_PROFILE } : {},
   };
+
+  await saveTeamRoster(emptyRoster("team-a"));
+  await saveTeamRoster(emptyRoster("team-b"));
+  for (const player of allPlayers) {
+    await savePlayer(player);
+  }
 
   await saveAuctionSession({
     id: createAuctionSessionId("league-page", MLB_AUCTION_SEASON),
@@ -772,5 +807,59 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByTestId(`auction-exit-club-${TEST_SHILL_ID}`)).not.toBeInTheDocument();
     expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
     expect(screen.queryByText("BLOCKED")).not.toBeInTheDocument();
+  });
+
+  test("SETTLE P1/P2/P4: settle preview fills a stored-record short club and result line survives reload", async () => {
+    const teamBShort = makeExitRosterPlayers("team-b").slice(0, 21);
+    const shillPlayer = makePlayer(`${TEST_SHILL_ID}-rp-fix`, "RP");
+    const players = await saveCompletedAuctionForPage({
+      teamBPlayers: teamBShort,
+      shillPlayers: [shillPlayer],
+    });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    const { unmount } = render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
+    expect(screen.getByText(/Settle the empty seats from the shills below/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SETTLE FROM THE SHILLS" }));
+    expect(screen.getByText(/Settle 1 empty seat from the leftovers at league minimum/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SETTLE 1 SEAT" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
+    });
+    expect(screen.getByRole("button", { name: /FARM DRAFT/i })).toBeInTheDocument();
+    expect(screen.getByText("Settled 1 seat from the shills at league minimum.")).toBeInTheDocument();
+
+    unmount();
+    cleanup();
+    mockLeagueData({ players, pool: makePool(players) });
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("Settled 1 seat from the shills at league minimum.")).toBeInTheDocument();
+    expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
+  });
+
+  test("SETTLE P3/P5: failed settle preview adds no gate term and leaves the short guidance unchanged", async () => {
+    const teamBShort = makeExitRosterPlayers("team-b", { missingSs: true }).slice(0, 21);
+    const shillPlayer = makePlayer(`${TEST_SHILL_ID}-rp-only`, "RP");
+    const players = await saveCompletedAuctionForPage({
+      teamBPlayers: teamBShort,
+      shillPlayers: [shillPlayer],
+    });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    const panel = await screen.findByTestId("auction-complete-panel");
+    expect(screen.queryByRole("button", { name: "SETTLE FROM THE SHILLS" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Add more players in Draft Setup and run the draft again/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "REVIEW ROSTERS" }));
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(panel);
+    expect(screen.queryByRole("button", { name: /FARM DRAFT/i })).not.toBeInTheDocument();
   });
 });

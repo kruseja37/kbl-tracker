@@ -17,16 +17,24 @@ import type { BandPriorities, ConstructionPlayer, TeamCapIdentity } from "../../
 import {
   buildArchetypeShillProfile,
   buildClubCpuProfile,
+  type CpuShillAuctionPlayer,
   type CpuShillAuctionSession,
   type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
+import { clubArchetypeFit } from "../../../engines/auctionMarketModel";
 import { SIZING_TUNING } from "../../../engines/auctionPoolSizing";
+import {
+  settleFromShills,
+  type SettleClubOutcome,
+  type SettleFromShillsInput,
+} from "../../../engines/auctionSettleFromShills";
 import {
   classifyCpuTeams,
   deriveControlledCpuTeamIds,
   deriveShillTeamIds,
 } from "../../../engines/cpuTeamRoles";
+import { toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import type { LuxuryCapRow } from "../../../data/tierParams";
@@ -108,6 +116,7 @@ export interface UseAuctionDraftReturn {
   claimAtReserve: () => Promise<CpuShillAuctionSession | null>;
   resolve: () => Promise<CpuShillAuctionSession | null>;
   advance: () => Promise<CpuShillAuctionSession | null>;
+  settleShortClubs: () => Promise<SettleClubOutcome[] | null>;
   isCpuTeam: (teamId: string | null | undefined) => boolean;
   shillTeamIds: string[];
   controlledCpuTeamIds: string[];
@@ -315,6 +324,65 @@ function buildPureShillAuctionTeams(input: {
     projectedTax: 0,
     roster: [],
   }));
+}
+
+function addStoredPosition(
+  positions: Record<string, RosterPositionMap[string]>,
+  player: Player | undefined,
+): void {
+  if (!player || positions[player.id]) return;
+  positions[player.id] = toRosterSlotPlayer({
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition,
+    traits: [player.trait1, player.trait2],
+  });
+}
+
+export function buildSettleFromShillsInput(input: {
+  session: CpuShillAuctionSession;
+  leagueTeams: readonly Team[];
+  players: readonly Player[];
+}): SettleFromShillsInput {
+  const shillTeamIds = deriveShillTeamIds(input.session, input.leagueTeams);
+  const shillSet = new Set(shillTeamIds);
+  const playerById = new Map(input.players.map((player) => [player.id, player]));
+  const unionIds = new Set<string>();
+  const leftoverIds = new Set<string>();
+
+  for (const team of input.session.teams) {
+    for (const assignment of team.roster) {
+      if (!shillSet.has(team.teamId)) unionIds.add(assignment.playerId);
+      else leftoverIds.add(assignment.playerId);
+    }
+  }
+  for (const result of input.session.results) {
+    if (result.disposition === "PASSED") leftoverIds.add(result.playerId);
+  }
+  for (const playerId of leftoverIds) unionIds.add(playerId);
+
+  const positions: Record<string, RosterPositionMap[string]> = {};
+  for (const playerId of unionIds) {
+    addStoredPosition(positions, playerById.get(playerId));
+  }
+
+  const fitScores: Record<string, Record<string, number>> = {};
+  for (const team of input.leagueTeams) {
+    if (shillSet.has(team.id)) continue;
+    const priorities = resolveClubBandPriorities(team);
+    const row: Record<string, number> = {};
+    for (const playerId of leftoverIds) {
+      const weights = (input.session.players[playerId] as CpuShillAuctionPlayer | undefined)?.archetypeWeights;
+      row[playerId] = clubArchetypeFit(weights, priorities);
+    }
+    fitScores[team.id] = row;
+  }
+
+  return {
+    session: input.session,
+    positions,
+    shillTeamIds,
+    fitScores,
+  };
 }
 
 function stateProgressKey(session: CpuShillAuctionSession): string {
@@ -603,6 +671,29 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
   );
   const resolve = useCallback(() => runSessionTransition((current) => resolveLot(current)), [runSessionTransition]);
   const advance = useCallback(() => runSessionTransition((current) => advanceLot(current)), [runSessionTransition]);
+  const settleShortClubs = useCallback(async (): Promise<SettleClubOutcome[] | null> => {
+    if (!session || !context || session.state !== "AUCTION_COMPLETE") return null;
+    setIsWorking(true);
+    setError(null);
+    try {
+      const result = settleFromShills(buildSettleFromShillsInput({
+        session,
+        leagueTeams,
+        players: leagueData.players,
+      }));
+      if (result.ok) {
+        const next = await persist(result.session as CpuShillAuctionSession, context);
+        setSession(next);
+      }
+      return [...result.outcomes];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      return null;
+    } finally {
+      setIsWorking(false);
+    }
+  }, [context, leagueData.players, leagueTeams, persist, session]);
 
   return {
     session,
@@ -623,6 +714,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     claimAtReserve,
     resolve,
     advance,
+    settleShortClubs,
     isCpuTeam: (teamId) => cpuTeamIdSet.has(teamId ?? ""),
   };
 }

@@ -125,6 +125,18 @@ export interface AuctionCompleteVM {
   onArmOverride: () => void;
   onConfirmOverride: () => void;
   onStayOverride?: () => void;
+  settle?: {
+    seatTotal: number;
+    perClubLabel: string;
+    partial: boolean;
+    partialLine?: string;
+    armed: boolean;
+    busy?: boolean;
+    onArm: () => void;
+    onConfirm: () => void;
+    onStay: () => void;
+    resultLine: string | null;
+  };
 }
 
 export interface AuctionStageVM {
@@ -443,11 +455,56 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
 
       <div className={`handoff-footer${complete.allLegal ? " legal" : " blocked"}`}>
         <div className="handoff-summary">{complete.summary}</div>
+        {complete.settle?.resultLine && (
+          <div className="handoff-result-line">{complete.settle.resultLine}</div>
+        )}
         {complete.allLegal ? (
           <PressButton variant="gold" size="lg" onClick={complete.onProceed}>
             FARM DRAFT →
           </PressButton>
         ) : (
+          <>
+          {complete.settle && complete.settle.seatTotal > 0 && (
+            <div className="handoff-settle" data-auction-settle>
+              {complete.settle.armed ? (
+                <>
+                  <div className="handoff-confirm">
+                    Settle {complete.settle.seatTotal} empty seat{complete.settle.seatTotal === 1 ? "" : "s"} from the leftovers at league minimum — {complete.settle.perClubLabel}. Best fit first; money only breaks ties.
+                  </div>
+                  {complete.settle.partial && complete.settle.partialLine && (
+                    <div className="handoff-partial">{complete.settle.partialLine}</div>
+                  )}
+                  <div className="handoff-buttons">
+                    <button
+                      type="button"
+                      className="handoff-settle-confirm"
+                      onClick={complete.settle.onConfirm}
+                      disabled={complete.settle.busy}
+                    >
+                      SETTLE {complete.settle.seatTotal} SEAT{complete.settle.seatTotal === 1 ? "" : "S"}
+                    </button>
+                    <button
+                      type="button"
+                      className="handoff-stay"
+                      onClick={complete.settle.onStay}
+                      disabled={complete.settle.busy}
+                    >
+                      STAY
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <PressButton
+                  variant="default"
+                  size="md"
+                  onClick={complete.settle.onArm}
+                  disabled={complete.settle.busy}
+                >
+                  SETTLE FROM THE SHILLS
+                </PressButton>
+              )}
+            </div>
+          )}
           <div className="handoff-override" data-auction-exit-override>
             <button type="button" className="handoff-review" onClick={complete.onProceed}>
               REVIEW ROSTERS
@@ -472,6 +529,7 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
               </button>
             )}
           </div>
+          </>
         )}
       </div>
     </section>

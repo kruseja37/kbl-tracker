@@ -540,6 +540,20 @@ function normalizeBandWeights(
   return BANDS.some((band) => normalized[band] > 0) ? normalized : null;
 }
 
+export function clubArchetypeFit(
+  archetypeWeights: Partial<Record<Band, number>> | undefined,
+  priorities: BandPriorities | null | undefined,
+): number {
+  if (!priorities) return 0;
+  const bandWeights = normalizeBandWeights(archetypeWeights);
+  if (bandWeights === null) return 0;
+  return bandFitMultiplier(
+    bandWeights,
+    cachedBandLift(priorities),
+    MEAN_PERSONALITY_SPREAD,
+  );
+}
+
 // ---------------------------------------------------------------------------------------------
 // Nomination-timing odds (spec §5:153-160) — the engine's weighted sampling is a KNOWN process.
 // ---------------------------------------------------------------------------------------------

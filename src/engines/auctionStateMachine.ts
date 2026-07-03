@@ -109,6 +109,8 @@ export interface AuctionResult {
   underbidder?: string | null;
   /** `bidderSet.length` denormalized for cheap reads. Absent on pre-C2B results. */
   numBidders?: number;
+  /** Provenance for complete-screen settle-from-shills repair. Absent on pre-settle sessions. */
+  settled?: true;
 }
 
 export interface AuctionSession {

@@ -27912,3 +27912,59 @@ src/engines/poolFromDemand.ts; src/utils/leagueBuilderStorage.ts (LeagueTemplate
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
 - `git diff --stat` — §5/§6 surface + the §4 engine delta; GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-POOLSIZE-2B ===== -->
+
+<!-- ===== CONTRACT: CODEX-SETTLE-FROM-SHILLS ===== -->
+## CODEX-SETTLE-FROM-SHILLS — in-draft roster repair (item ③)
+
+**Binding design:** `spec-docs/FABLE_SETTLE_FROM_SHILLS_DESIGN_2026-07-03.md` — build it EXACTLY (R1-R15
+all ruled; the builder makes no design decisions). Branch-only; do NOT commit/push; leave tree dirty for Opus.
+
+**Read first (in full):** the design doc; its §2 read-list — `src/engines/auctionExitGate.ts`,
+`src/engines/auctionCompletionFloor.ts` (cheapestLegalCompletion :349, CompletionCandidate :33, byPriceThenId),
+`src/engines/auctionStateMachine.ts` (backfillFromPassedLots :615-689 mutation pattern, AuctionResult :100,
+AuctionTeamState :46, lotOpeningAsk :265, minSalary/normalizeTeam :1058), `src/engines/rosterNeed.ts`
+(RosterPositionMap, toRosterSlotPlayer :47), `src/engines/cpuTeamRoles.ts` (deriveShillTeamIds :24),
+`src/engines/cpuShillBidding.ts` (CpuShillAuctionPlayer.archetypeWeights :50-52), `src/engines/auctionMarketModel.ts`
+(:689-690 own-demand fit + MEAN_PERSONALITY_SPREAD :228), `src/engines/archetypeIdentity.ts` (resolveClubBandPriorities),
+`src/src_figma/app/hooks/useAuctionDraft.ts` (persist :370-386, runAction :436, commit exclusion :382),
+`src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` (exitPositionMap :574, exitReport :591,
+auctionExitRepairGuidance :214, buildMarketBandPrioritiesByTeamId :447, override :598-619),
+`src/src_figma/app/components/auction/AuctionStage.tsx` (AuctionCompleteVM :110, HandoffCheckPanel :398-478).
+
+### Deliverables (per §5-§8)
+1. **NEW pure engine `src/engines/auctionSettleFromShills.ts`** (§6.1): the exact types
+   (SettleFitTable/SettleFromShillsInput/SettleClubStatus/SettleClubOutcome/SettleFromShillsResult) +
+   `settleFromShills(input)`. Per-club algorithm §6.1 (openSlots; stored-record shapes; leftovers =
+   shillHeld ∪ passedUnclaimed minus earlier-consumed; fit-rank-encoded price → cheapestLegalCompletion;
+   cost = openSlots × team.minSalary; double-entry mutation §6.4). Guard non-AUCTION_COMPLETE →
+   {ok:false, rejected:'expected-auction-complete'}. Deterministic (nominationOrder; fit DESC → openingAsk
+   ASC → id ASC). NO change to auctionCompletionFloor.ts (rank-encoding via its price field).
+2. **FIT-FIRST BY CONSTRUCTION (§5, JK's law):** the filter = requirement-class legality (cheapestLegalCompletion's
+   structure); the ORDER = fit sort-rank fed as `price`; charged price uniform league-minimum → cheap can
+   NEVER outbid fit. Fit score via a NEW tiny exported helper `clubArchetypeFit(archetypeWeights, priorities)`
+   in auctionMarketModel.ts wrapping the :689-690 call (single-math; do NOT duplicate). fitScore=0 fallback.
+3. **AuctionResult.settled?: true** additive provenance flag (§6.4; no migration).
+4. **Hook action `settleShortClubs()` on useAuctionDraft** (§7.2): guard; deriveShillTeamIds (SAME call as
+   commit); build positions from leagueData.players via toRosterSlotPlayer over the §6.2 union; build fitScores
+   via clubArchetypeFit; settleFromShills; on ok → single persist() (the commit re-run lands them). + a page
+   dry-run PREVIEW memo (same pure call, same inputs — never two impls).
+5. **HandoffCheckPanel settle block** (§8): AuctionCompleteVM.settle (additive); armed two-step affordance
+   ABOVE the override, non-gold button, outside-pointer-down disarm; partial line; result line from the
+   session's settled rows; guidance-line update (§8.4). Settle block ONLY in HandoffCheckPanel (DJ-25 note).
+
+### Constraints
+- Gate purity (§3.3): canProceedToFarm gains NO settle term — the settled club is legal because isLegalRoster
+  says so on its 22 (exitReport recomputes). Override UNCHANGED. Positions from STORED records only (R11, never
+  session.players[*].pos for decisions). Double-entry conserved (club pays/fills; shill refunds/vacates).
+  Adapter-fidelity: the hook input assembly is hand-built — match the engine contract field-by-field.
+  GameTracker UI SET (untouched). No DB change/new state/new tokens.
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0.
+- Write §9 tests S1-S10 (engine) + P1-P5 (hook/page); run green. ESPECIALLY S2 (fit-law pin: higher-fit beats
+  cheaper-ask; must FAIL if rank-encoding removed), S5 (shared-pool determinism + shuffled-input identical),
+  S10 (settle satisfies buildAuctionExitReport legal:true), P3 (gate-purity: gate stays blocked when settle fails).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts). L-SIM: skip
+  (auction-module-only; grep the import graph + document).
+- `git diff --stat` — the §6-§8 surface only; auctionCompletionFloor.ts NOT changed; GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-SETTLE-FROM-SHILLS ===== -->
