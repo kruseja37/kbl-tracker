@@ -4,6 +4,7 @@ import {
   evaluateRosterDesign,
   personalityTiltPenalty,
   rankPoolForPreference,
+  rankPoolForSlot,
   type DesignPoolPlayer,
 } from '../rosterDesignFeasibility';
 import type { TaxonomyPosition } from '../../data/playerArchetypeTaxonomy';
@@ -295,6 +296,41 @@ describe('rankPoolForPreference', () => {
       [wizardCheap, wizardSteady, slugger],
     );
     expect(ranked.map((entry) => entry.playerId)).toEqual(['wiz-steady', 'wiz-cheap', 'ss-slugger']);
+  });
+
+  it('A7: rankPoolForSlot uses slot eligibility for flex, backupC, and swing', () => {
+    const secC = hitter('1B', { id: 'secondary-c', secondary: 'C' });
+    const twoWayC: DesignPoolPlayer = {
+      ...arm('RP', { id: 'two-way-c' }),
+      profile: { ...arm('RP').profile, primaryPosition: 'RP', traits: ['Two Way (C)'] },
+      slotPlayer: { isPitcher: true, position: 'RP', role: 'RP', twoWayVariant: 'C' },
+    };
+    const relief = arm('RP', { id: 'relief-arm' });
+    const starter = arm('SP', { id: 'starter-arm' });
+    const benchBat = hitter('LF', { id: 'bench-bat' });
+
+    expect(rankPoolForSlot({ slotId: 'FLEX1', kind: 'flex' }, {}, [benchBat, relief]).map((p) => p.playerId))
+      .toEqual(['bench-bat']);
+    expect(rankPoolForSlot({ slotId: 'backupC', kind: 'backupC' }, {}, [secC, twoWayC, benchBat]).map((p) => p.playerId))
+      .toEqual(['secondary-c', 'two-way-c']);
+    expect(rankPoolForSlot({ slotId: 'SWING', kind: 'swing' }, {}, [benchBat, relief, starter]).map((p) => p.playerId))
+      .toEqual(['bench-bat', 'relief-arm']);
+  });
+
+  it('A7: rankPoolForPreference delegates byte-identically for all taxonomy positions', () => {
+    const pool = [
+      ...standardPool(),
+      arm('SP', { id: 'swing-sp-rp' }),
+      arm('RP', { id: 'cp-like' }),
+    ];
+    const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'] as const;
+    for (const position of positions) {
+      const slot = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].includes(position)
+        ? { slotId: position, kind: 'pos' as const, position }
+        : { slotId: position, kind: position === 'RP' || position === 'CP' ? 'rp' as const : 'sp' as const };
+      expect(rankPoolForPreference(position as TaxonomyPosition, { shape: 'Balanced' }, pool))
+        .toEqual(rankPoolForSlot(slot, { shape: 'Balanced' }, pool));
+    }
   });
 });
 

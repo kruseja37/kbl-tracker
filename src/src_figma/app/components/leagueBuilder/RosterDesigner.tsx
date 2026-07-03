@@ -27,8 +27,10 @@ import {
   type ShapeClassification,
 } from "../../../../engines/playerArchetypeClassifier";
 import { HISTORICAL_ARCHETYPES } from "../../../../data/historicalArchetypes";
-import { twoWayVariantFromTraits } from "../../../../data/rosterConstruction";
+import { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 import type { DraftPoolMode, Player, Team } from "../../../../utils/leagueBuilderStorage";
+
+export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
 type RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string };
 type VerdictTone = "red" | "amber" | "green" | "quiet";
@@ -49,7 +51,6 @@ const LINEUP_SLOT_IDS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
 const STAFF_SLOT_IDS = ["SP1", "SP2", "SP3", "SP4", "RP1", "RP2", "RP3", "RP4"];
 const BENCH_SLOT_IDS = ["backupC", "FLEX1", "FLEX2", "FLEX3", "FLEX4", "SWING"];
 const FIELD_POSITIONS = new Set<string>(LINEUP_SLOT_IDS);
-const PITCHER_POSITIONS = new Set<string>(["SP", "SP/RP", "RP", "CP", "P", "TWO-WAY"]);
 const HITTER_SHAPES = ALL_SHAPES.filter((shape) => shape.role === "hitter" || shape.role === "both");
 const DEPTH_SHAPE_FAMILIES = new Set(EXTENDED_SHAPES.filter((shape) => shape.depthClass).map((shape) => shape.family));
 
@@ -60,57 +61,6 @@ function classNames(...parts: Array<string | false | null | undefined>): string 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
   return `$${Math.round(value).toLocaleString()}`;
-}
-
-function playerName(player: Player): string {
-  return `${player.firstName} ${player.lastName}`.trim();
-}
-
-function isPitcher(player: Player): boolean {
-  return PITCHER_POSITIONS.has(player.primaryPosition);
-}
-
-function roleForPlayer(player: Player): string {
-  if (player.primaryPosition === "P" || player.primaryPosition === "TWO-WAY") return "SP/RP";
-  return player.primaryPosition;
-}
-
-export function buildRosterDesignPool(players: readonly Player[]): DesignPoolPlayer[] {
-  return players.map((player) => {
-    const pitcher = isPitcher(player);
-    const traits = [player.trait1, player.trait2];
-    return {
-      id: player.id,
-      name: playerName(player),
-      salary: player.salary,
-      profile: {
-        isPitcher: pitcher,
-        primaryPosition: player.primaryPosition,
-        secondaryPosition: player.secondaryPosition ?? null,
-        bats: player.bats,
-        throws: player.throws,
-        age: player.age,
-        power: player.power,
-        contact: player.contact,
-        speed: player.speed,
-        fielding: player.fielding,
-        arm: player.arm,
-        velocity: player.velocity,
-        junk: player.junk,
-        accuracy: player.accuracy,
-        traits,
-        arsenal: player.arsenal,
-        personality: player.personality,
-      },
-      slotPlayer: {
-        isPitcher: pitcher,
-        position: player.primaryPosition,
-        role: pitcher ? roleForPlayer(player) : undefined,
-        secondaryPosition: player.secondaryPosition ?? null,
-        twoWayVariant: pitcher ? twoWayVariantFromTraits(traits) : null,
-      },
-    };
-  });
 }
 
 function defaultPreferenceForSlot(slotId: string): SlotPreference {

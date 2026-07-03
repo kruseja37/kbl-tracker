@@ -117,23 +117,67 @@ function classifyPool(pool: readonly DesignPoolPlayer[]): ClassifiedPoolPlayer[]
   return pool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) }));
 }
 
-function matchesShape(player: ClassifiedPoolPlayer, preference: SlotPreference): boolean {
+export function matchesShape(preference: SlotPreference, classification: ShapeClassification): boolean {
   if (!preference.shape) return true;
-  if (player.classification.shape === preference.shape) return true;
+  if (classification.shape === preference.shape) return true;
   const allowRunnerUp = preference.allowRunnerUp ?? true;
-  return allowRunnerUp && player.classification.runnerUp === preference.shape;
+  return allowRunnerUp && classification.runnerUp === preference.shape;
 }
 
-function matchesTags(player: ClassifiedPoolPlayer, preference: SlotPreference): boolean {
+export function matchesTags(preference: SlotPreference, classification: ShapeClassification): boolean {
   const tags = preference.tags;
   if (!tags) return true;
-  const playerTags = player.classification.tags;
+  const playerTags = classification.tags;
   if (tags.bats && playerTags.bats !== tags.bats) return false;
   if (tags.leftArm && !playerTags.leftArm) return false;
   if (tags.utility && playerTags.utility === null) return false;
   if (tags.twoWay && !playerTags.twoWay) return false;
   if (tags.platoonSide && !playerTags.platoonSides.includes(tags.platoonSide)) return false;
   return true;
+}
+
+export interface AskSatisfaction {
+  shapeMatch: 'none' | 'primary' | 'runnerUp';
+  tagsMatched: number;
+  tagsAsked: number;
+  tiltPenalty: number;
+  satisfiesShape: boolean;
+  satisfiesTags: boolean;
+}
+
+export function askSatisfaction(
+  preference: SlotPreference | undefined,
+  classification: ShapeClassification,
+): AskSatisfaction {
+  const ask = preference ?? {};
+  let shapeMatch: AskSatisfaction['shapeMatch'] = 'none';
+  if (ask.shape && classification.shape === ask.shape) {
+    shapeMatch = 'primary';
+  } else if (ask.shape && (ask.allowRunnerUp ?? true) && classification.runnerUp === ask.shape) {
+    shapeMatch = 'runnerUp';
+  }
+
+  const tags = ask.tags;
+  let tagsAsked = 0;
+  let tagsMatched = 0;
+  const countTag = (matched: boolean) => {
+    tagsAsked += 1;
+    if (matched) tagsMatched += 1;
+  };
+  if (tags?.bats) countTag(classification.tags.bats === tags.bats);
+  if (tags?.leftArm) countTag(classification.tags.leftArm);
+  if (tags?.utility) countTag(classification.tags.utility !== null);
+  if (tags?.twoWay) countTag(classification.tags.twoWay);
+  if (tags?.platoonSide) countTag(classification.tags.platoonSides.includes(tags.platoonSide));
+
+  return {
+    shapeMatch,
+    tagsMatched,
+    tagsAsked,
+    tiltPenalty: personalityTiltPenalty(classification.tags.personalityGroup, ask.personalityTilt),
+    satisfiesShape: !ask.shape || shapeMatch !== 'none',
+    satisfiesTags: tagsMatched === tagsAsked,
+  };
 }
 
 /** Soft ordering penalty (0 best) — a tilt reorders candidates, never removes them. */
@@ -213,6 +257,10 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+function formatMoney(value: number): string {
+  return `$${Math.round(value).toLocaleString()}`;
 }
 
 /**
@@ -296,7 +344,7 @@ export function evaluateRosterDesign(
       return classified
         .map((player, index) => ({ player, index }))
         .filter(({ player }) => eligibleForSlot(slot, player, restrict))
-        .filter(({ player }) => matchesShape(player, preference) && matchesTags(player, preference))
+        .filter(({ player }) => matchesShape(preference, player.classification) && matchesTags(preference, player.classification))
         .sort((a, b) => candidateOrder(a.player, b.player, preference.personalityTilt))
         .map(({ index }) => index);
     });
@@ -386,7 +434,7 @@ export function evaluateRosterDesign(
       const label = slot.position ?? slot.slotId;
       const unmatched = classified.filter((_, index) => !slotOfPlayer.has(index));
       const eligible = unmatched.filter((player) => eligibleForSlot(slot, player, restrict));
-      const shapeMatched = eligible.filter((player) => matchesShape(player, preference));
+      const shapeMatched = eligible.filter((player) => matchesShape(preference, player.classification));
       const ask = [preference.shape, preference.tags ? 'your tag filters' : null]
         .filter(Boolean)
         .join(' + ');
@@ -451,10 +499,10 @@ export function evaluateRosterDesign(
     blockers.push({
       slotId: culprits[0]?.slot.slotId ?? 'budget',
       kind: 'budget',
-      message: `The design fills, but costs ${Math.round(totalCost).toLocaleString()} against a budget of `
-        + `${Math.round(budget).toLocaleString()} (${Math.round(totalCost - budget).toLocaleString()} over). `
+      message: `The design fills, but costs ${formatMoney(totalCost)} against a budget of `
+        + `${formatMoney(budget)} (${formatMoney(totalCost - budget)} over). `
         + `Priciest asks vs their market: ${culprits
-          .map(({ slot, premium }) => `${slot.slotId} (+${Math.round(Math.max(0, premium)).toLocaleString()})`)
+          .map(({ slot, premium }) => `${slot.slotId} (+${formatMoney(Math.max(0, premium))})`)
           .join(', ')}.`,
     });
   }
@@ -494,8 +542,8 @@ export function countEligibleForAsk(
   const preference: SlotPreference = { ...(slot.preference ?? {}), shape: shapeFamily };
   return classifiedPool.filter((player) =>
     eligibleForSlot(slot, player)
-    && matchesShape(player, preference)
-    && matchesTags(player, preference),
+    && matchesShape(preference, player.classification)
+    && matchesTags(preference, player.classification),
   ).length;
 }
 
@@ -509,19 +557,16 @@ export interface RankedPoolEntry {
 }
 
 /**
- * The per-position pool ranking against a requested archetype (the board's right rail):
+ * The per-slot pool ranking against a requested archetype (the board's right rail):
  * best expression of the GM's ask first — match quality, then tilt, then price. Field
  * positions rank TRUE (primary) players only — a moonlighter appears on his own
  * position's list, matching the pos-slot legality semantics.
  */
-export function rankPoolForPreference(
-  position: TaxonomyPosition,
+export function rankPoolForSlot(
+  slot: DesignSlot,
   preference: SlotPreference,
   pool: readonly DesignPoolPlayer[],
 ): RankedPoolEntry[] {
-  const slot: DesignSlot = HITTER_POSITIONS.includes(position)
-    ? { slotId: position, kind: 'pos', position }
-    : { slotId: position, kind: position === 'RP' || position === 'CP' ? 'rp' : 'sp' };
   return classifyPool(pool)
     .filter((player) => eligibleForSlot(slot, player))
     .map((player) => {
@@ -552,4 +597,15 @@ export function rankPoolForPreference(
       || left.salary - right.salary
       || left.playerId.localeCompare(right.playerId),
     );
+}
+
+export function rankPoolForPreference(
+  position: TaxonomyPosition,
+  preference: SlotPreference,
+  pool: readonly DesignPoolPlayer[],
+): RankedPoolEntry[] {
+  const slot: DesignSlot = HITTER_POSITIONS.includes(position)
+    ? { slotId: position, kind: 'pos', position }
+    : { slotId: position, kind: position === 'RP' || position === 'CP' ? 'rp' : 'sp' };
+  return rankPoolForSlot(slot, preference, pool);
 }

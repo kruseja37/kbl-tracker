@@ -28013,3 +28013,138 @@ Fix each (source: FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §3/§4):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
 - `git diff --stat` — ONLY LeagueBuilderAuctionDraft.tsx, AuctionStage.tsx, useAuctionDraft.ts, LeagueBuilderFarmAuctionDraft.tsx (+ tests). NONE of the BEST-22/designer/draftsetup/engine files. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-DJ-AUCTION-POLISH ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-ENGINE ===== -->
+## CODEX-B22-ENGINE — BEST-22 engine + canonical adapter (DJ-08 slice 1, §5.1)
+
+**Binding design:** `spec-docs/FABLE_BEST22_DESIGN_2026-07-03.md` §1.2, §1.4 (engine half), §1.7 — build
+EXACTLY. Pure/build-dark foundation for the UI slices that follow. Branch-only; do NOT commit/push; leave
+tree dirty for Opus. Do NOT build the UI surfaces (§1.3/1.5/1.6) or DJ-11/16/17 — later slices.
+
+**Read first:** FABLE_BEST22_DESIGN §1.1 (two truths), §1.2 (compute + BEST22_TUNING + the fit-first bonus
+math), §1.4 (rankPoolForSlot), §1.7 (adapter module), §1.8 wiring rows 1-4, §1.9 tests A1-A4/A7; the code:
+src/engines/archetypeBalanceSimulator.ts (buildIdentityRoster ~695, slotPreferenceBonus seam ~678-686,
+IDENTITY_SLOT_PLAN ~493-500, archetypeFitScorer ~791), src/engines/rosterDesignFeasibility.ts
+(buildDefaultDesignSlots :70-79, eligibleForSlot, matchesShape/matchesTags, rankPoolForPreference :517,
+countEligibleForAsk :483-500 — the one-door precedent), src/engines/draftabilityRanker.ts
+(historicalToSimArchetype :72), src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx
+(demandPlayerFromLeaguePlayer :181-210, demandUniverseFromPlayers), src/src_figma/app/components/leagueBuilder/
+RosterDesigner.tsx (buildRosterDesignPool + role/two-way helpers).
+
+### Deliverables
+1. **NEW engine `src/engines/best22Target.ts`** (pure, no UI imports): `buildBest22Target(slots, simPool,
+   classifiedById, archetype, tier, budget) → Best22Target` per §1.2 (exported interface exactly: picks[] with
+   honorsAsk, totalSalary/totalTax/allIn/budget, feasible, embodimentZ, asksHonored). ONE buildIdentityRoster
+   call with { slotPreferenceBonus }; posture 'optimal'; archetypeBalanceSimulator NOT modified. The bonus =
+   BEST22_TUNING (exported) computed in u = σ of the identity fit score (§1.2 exact rules: additive-only never
+   negative, 2.0u primary/1.2u runner-up/0.4u per-tag/tilt-clean, bonusCap 3.0). Shape/tag matching MUST reuse
+   the feasibility engine predicates (deliverable 2), not re-derive.
+2. **Ask-satisfaction helper** exported from rosterDesignFeasibility.ts: expose matchesShape/matchesTags (or a
+   single askSatisfaction(preference, classification)) so best22Target reuses them — one rule set, one owner.
+3. **rankPoolForSlot(slot, preference, pool)** in rosterDesignFeasibility.ts (§1.4): same scoring (matchScore
+   desc → tiltPenalty asc → salary asc → id asc; runner-up ×0.9) but eligibility via eligibleForSlot for ANY
+   slot kind (flex/backupC/swing incl.); rankPoolForPreference becomes a thin delegate (existing callers/tests
+   byte-identical).
+4. **NEW canonical adapter `src/src_figma/app/engines/leaguePlayerAdapter.ts`** (§1.7): move buildRosterDesignPool,
+   demandPlayerFromLeaguePlayer, demandUniverseFromPlayers + role/two-way helpers here; RosterDesigner.tsx and
+   LeagueBuilderDraftSetup.tsx import from it; KEEP re-exports at the old sites (grep all importers; no behavior
+   change, no cycle). This is the adapter-reuse mandate — one mapper.
+5. **DJ-24(4):** the OVER-BUDGET blocker message in rosterDesignFeasibility.ts (~:455-458) uses .toLocaleString()
+   with NO $ — add the $ / use the money format so it reads "$42,000,000", matching the app.
+
+### Constraints
+- FIT-FIRST law (§1.1/§1.2): the ask bonus is a FILTER (attracts an expression to its slot), never punishes fit
+  elsewhere, price never outranks fit. Additive-only. GameTracker untouched. No DB change.
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0.
+- Tests A1 (byte-identity: all-ANY asks → picks == plain buildIdentityRoster), A2 (ask lands + honorsAsk), A3
+  (feasibility-soft: unsolvent ask → build stays feasible, honorsAsk false, evaluateRosterDesign deep-equal
+  before/after), A4 (frame alignment: buildDefaultDesignSlots[i] ↔ IDENTITY_SLOT_PLAN[i] all 22), A7
+  (rankPoolForSlot flex/backupC/swing + rankPoolForPreference byte-identical for all 12 positions). Green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
+- `git diff --stat` — best22Target.ts (+test), rosterDesignFeasibility.ts, leaguePlayerAdapter.ts + the two
+  importer edits (re-exports kept). GameTracker NOT present. Report the import-graph/L-SIM orthogonality grep.
+<!-- ===== END CONTRACT: CODEX-B22-ENGINE ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-ALIGN ===== -->
+# CODEX-B22-ALIGN — fix the BEST-22 slot-label misalignment (adversarial finding, CONFIRMED)
+
+BUG (confirmed by adversarial audit, reproduced ~28% of 6400 randomized builds):
+`buildBest22Target` (src/engines/best22Target.ts:97-116) labels each pick by ARRAY POSITION —
+`build.players.map((player, index) => { const slot = slots[index]; ... })` — assuming
+`buildIdentityRoster().players[i]` belongs to design-frame slot `i` (IDENTITY_SLOT_PLAN order:
+[C,1B,2B,3B,SS,LF,CF,RF, backupC, SP,SP,SP,SP, RP,RP,RP,RP, FLEX,FLEX,FLEX,FLEX, SWING]).
+That invariant is FALSE. `buildIdentityRoster` returns `chosen.players` in the array order of
+whichever internal seed won. The `idFromValue` seed (archetypeBalanceSimulator.ts:733-734) is in
+SLOT_PLAN order [pos8, backupC, flex4, swing, sp4, rp4] and is re-labeled via VALUE_TO_IDENTITY_SLOT
+which rewrites each pick's `.slotIndex` but KEEPS its array position. So when idFromValue wins
+(reachable with any real archetype), for every array index >=9 the player does NOT belong to
+slots[index] — pitchers get labeled FLEX*, hitters get labeled SP*/RP*, and slotId/honorsAsk/
+asksHonored are all attributed to the WRONG slot. SECOND (minor) case: candidate-starved pools make
+identityGreedyStart/greedyStart `continue` past empty slots, so `players` can be SHORTER than 22 and
+index-shifted — same positional map mislabels every pick after the gap.
+
+SCOPE / WHAT IS NOT BROKEN (do not "fix" these — they are correct):
+- The FLOOR verdict (evaluateRosterDesign) is independent and UNAFFECTED. Leave it alone.
+- The BUILD math is correct: the climb applies slotPreferenceBonus at the TRUE `picks[idx].slotIndex`.
+  The bonus closure in best22Target (lines 64-88, keyed by the slotIndex the climb passes) is CORRECT —
+  DO NOT change it.
+- totalSalary / totalTax / allIn / feasible are order-independent — keep them exactly as computed.
+- Only the POST-build REPORTING loop (best22Target.ts:97-116) is wrong.
+
+ROOT-CAUSE FIX — expose the true slot index from the engine (ADDITIVE, zero risk) and key by it:
+
+DELIVERABLE 1 — src/engines/archetypeBalanceSimulator.ts (frozen/calibrated engine — additive only):
+  - Add ONE field to `IdentityRosterResult` (interface at line 394):
+        slotPicks: readonly { slotIndex: number; player: SimPlayer }[];
+    Doc-comment it: "chosen picks carrying their TRUE identity-slot index; array `players` order is
+    NOT guaranteed to equal slot order — consumers that need per-slot attribution must key on this."
+  - `evaluate` (line 743) must preserve the source picks so `chosen` knows them. Change it to also
+    return `picks` (the SlotPick[] it received): `return { picks, players, totalIv, ... }`.
+  - In the return object (line 768), add:
+        slotPicks: chosen.picks.map((p) => ({ slotIndex: p.slotIndex, player: p.player })),
+  - DO NOT change `players` (leave its existing order untouched — other consumers iterate it as a bag),
+    DO NOT change any other field, DO NOT touch buildBestRoster or the value/frozen path. Every existing
+    field of IdentityRosterResult stays byte-identical. This is purely additive.
+
+DELIVERABLE 2 — src/engines/best22Target.ts: rewrite the reporting loop (lines 95-116) to key by the
+  TRUE slot index, not array position:
+  - Build `const playerBySlotIndex = new Map(build.slotPicks.map((sp) => [sp.slotIndex, sp.player]));`
+  - Produce exactly `slots.length` picks by mapping over `slots` (index-stable):
+        slots.map((slot, index) => { const player = playerBySlotIndex.get(index); ... })
+  - FILLED slot (player defined): compute honorsAsk / asksHonored exactly as today but for THIS player
+    and THIS slot's preference (the classification lookup + askSatisfaction logic is unchanged).
+  - UNFILLED slot (player undefined — only happens on starved pools where feasible is already false):
+    emit a pick with { slotId: slot.slotId ?? String(index), playerId: '', playerName: undefined,
+    salary: 0, honorsAsk: false }. An unfilled slot that HAD a shape ask still counts toward `asked`
+    (asks were asked) but never toward `honored`.
+  - `asksHonored`, `totalSalary`, `totalTax`, `allIn`, `feasible`, `embodimentZ`, `budget` computed as
+    before (from `build`), just with the corrected per-slot picks driving asked/honored.
+  - Keep the SimPlayer name helper.
+
+DELIVERABLE 3 — src/engines/__tests__/best22Target.test.ts: add regression tests that FAIL on the
+  current (buggy) code and pass after the fix. Keep A1-A4/A7 passing.
+  - B1 (value-branch alignment / structural invariant): build a pool where the highest-IV players are
+    POOR archetype fits (so idFromValue wins) with a real (non-neutral) archetype, solvent budget.
+    Assert `target.feasible === true` AND the STRUCTURAL invariant for every pick: a pick whose slot
+    kind is 'sp' or 'rp' holds an isPitcher player; a pick whose slot kind is 'pos'/'flex'/'swing'/
+    'backupC' holds a slot-eligible player (pitchers only in sp/rp/swing). i.e. NO pitcher is labeled a
+    field slot and NO hitter is labeled SP/RP. (This is the invariant the bug violates.)
+  - B2 (starved pool): zero-catcher pool (no primary C, no secondary-C). Assert `feasible === false`,
+    `picks.length === slots.length` (22), and the slot labeled 'C' is NOT attributed to a non-catcher
+    (its playerId is '' or a real catcher) — i.e. no index-shift mislabel.
+  - If deterministically forcing idFromValue to win is fragile, assert the structural invariant over a
+    small randomized sweep (fixed seed via an inline LCG — NO Math.random) so at least some builds take
+    the value branch; the invariant must hold on ALL of them.
+
+GATE (report actual output, do not summarize):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/best22Target.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts
+   src/engines/__tests__/draftabilityRanker.test.ts src/engines/__tests__/archetypeIdentityEmbodiment.test.ts
+   src/engines/__tests__/identityPreferenceBoost.test.ts` — all green (the last three prove the additive
+   IdentityRosterResult change didn't perturb the frozen/calibrated consumers).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (report counts).
+- `git diff --stat` — best22Target.ts (+test), archetypeBalanceSimulator.ts (additive only). Report the
+  archetypeBalanceSimulator diff verbatim so the additive-only claim can be verified.
+<!-- ===== END CONTRACT: CODEX-B22-ALIGN ===== -->

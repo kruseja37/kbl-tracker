@@ -395,6 +395,11 @@ export interface IdentityRosterResult {
   name: string;
   posture: RosterPosture;
   players: SimPlayer[];
+  /**
+   * Chosen picks carrying their TRUE identity-slot index; array `players` order is NOT guaranteed to
+   * equal slot order — consumers that need per-slot attribution must key on this.
+   */
+  slotPicks: readonly { slotIndex: number; player: SimPlayer }[];
   totalIv: number;
   totalSalary: number;
   totalTax: number;
@@ -746,6 +751,7 @@ export function buildIdentityRoster(
     const totalSalary = players.reduce((s, p) => s + p.salary, 0);
     const totalTax = taxOf(players, caps);
     return {
+      picks,
       players,
       totalIv,
       totalSalary,
@@ -769,6 +775,7 @@ export function buildIdentityRoster(
     name: archetype.name,
     posture,
     players: chosen.players,
+    slotPicks: chosen.picks.map((p) => ({ slotIndex: p.slotIndex, player: p.player })),
     totalIv: chosen.totalIv,
     totalSalary: chosen.totalSalary,
     totalTax: chosen.totalTax,

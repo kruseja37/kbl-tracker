@@ -23,10 +23,13 @@ import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/Archety
 import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
 import {
   RosterDesigner,
-  buildRosterDesignPool,
   rosterDesignStatusTone,
   seedRosterDesignSlots,
 } from "../components/leagueBuilder/RosterDesigner";
+import {
+  buildRosterDesignPool,
+  demandUniverseFromPlayers,
+} from "../engines/leaguePlayerAdapter";
 import { archetypeByKey } from "../data/teamArchetypeCatalog";
 import {
   useLeagueBuilderData,
@@ -83,7 +86,6 @@ import {
   type ClassifiedDemandPlayer,
   type DemandCellReport,
   type DemandShortfall,
-  type DemandUniversePlayer,
   type PoolFromDemandResult,
   type TeamDesignInput,
 } from "../../../engines/poolFromDemand";
@@ -96,6 +98,8 @@ import {
 } from "../../../engines/rosterDesignFeasibility";
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
+
+export { demandPlayerFromLeaguePlayer, demandUniverseFromPlayers } from "../engines/leaguePlayerAdapter";
 
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
 
@@ -177,41 +181,6 @@ const ASK_SPOT_ORDER = new Map(
   ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "RP", "BACKUP C", "BENCH", "SWING"]
     .map((spot, index) => [spot, index]),
 );
-
-export function demandPlayerFromLeaguePlayer(player: Player): DemandUniversePlayer {
-  const designPlayer = buildRosterDesignPool([player])[0];
-  const iv = computePlayerIv(player);
-  const shape = toRosterSlotPlayer({
-    primaryPosition: player.primaryPosition,
-    secondaryPosition: player.secondaryPosition ?? null,
-    traits: [player.trait1, player.trait2],
-  });
-  return {
-    id: player.id,
-    iv,
-    salary: player.salary,
-    isPitcher: shape.isPitcher,
-    position: shape.position,
-    role: shape.role as DemandUniversePlayer["role"],
-    secondaryPosition: shape.secondaryPosition,
-    twoWayVariant: shape.twoWayVariant,
-    bat: {
-      POW: player.power,
-      CON: player.contact,
-      SPD: player.speed,
-      FLD: player.fielding,
-      ARM: player.arm,
-    },
-    pit: shape.isPitcher
-      ? { VEL: player.velocity, JNK: player.junk, ACC: player.accuracy }
-      : undefined,
-    profile: designPlayer.profile,
-  };
-}
-
-function demandUniverseFromPlayers(sourcePlayers: readonly Player[]): DemandUniversePlayer[] {
-  return sourcePlayers.map(demandPlayerFromLeaguePlayer);
-}
 
 function formatClubName(team: Team, ownerNameForId: (ownerId: string) => string, seats: readonly DraftSetupSeat[]): string {
   return `${team.name} — ${ownerNameForId(teamOwnerId(team, seats))}`;
