@@ -238,3 +238,24 @@ the zone-3 22-slot designer, and flipping Mode A's toggle live to consume `extra
 tickets (personality-canon cleanup, DH purge, RUN-IT-BACK action, conference screen, staff carry-through); then
 (4) JK's look pass at :5199 once the flip + wiring make the journey coherent. Fable: reviews-not-construction (S3/S5
 harness + C5 tuning are her later builds). Opus queue: the C4-B wiring + the small tickets.
+
+## §11. NEW TICKETS — draft-journey audit unticketed items (Opus, 2026-07-03)
+
+Per FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §6 routing (Opus: "ticket the unticketed"):
+
+- **IDENTITY-CARRY (extends STAFF-CARRY-THROUGH) — DJ-12 [seam, v1-relevant].** Seat/GM names and
+  team archetypes deep-copy into the draft session but have ZERO franchise-side readers — the
+  franchise wizard re-declares control from scratch; scout profiles snapshot write-only; hired
+  reporters are league-scoped and filtered OUT by the hub's franchiseId query (reporterStorage.ts:122);
+  manager only partially carries. STAFF-CARRY-THROUGH + CONFERENCE-SURFACE are open but seat/archetype
+  death was NOT ticketed anywhere. SCOPE: widen STAFF-CARRY-THROUGH to a full IDENTITY-CARRY ticket —
+  the franchise side must READ the drafted seat/GM identity + team archetype (+ the already-open staff
+  carry). Owner: Codex builds once the carry contract is written; needs the franchise-init reader path.
+  Not a P0 (post-draft, franchise door), but a v1 coherence gap for the living-season handoff.
+
+- **FARM-WHISPER RIDER on R-IA4 — DJ-28 [seam].** ASST_GM_DESIGN binds the whisper to MLB + farm, but
+  the whisper has NO farm-auction surface today (null outside the MLB bid/claim path) and no
+  nomination-turn surface. R-IA4 already folds farm onto AuctionStage — make the farm-whisper surface
+  EXPLICIT in that ticket's scope (the per-seat panel must recompute for the farm lot, same secrecy +
+  live-recompute rules as MLB). Nomination-turn whisper stays owned by the nomination-strategy spec
+  (separate). Owner: rides R-IA4 (Codex builds; Fable design-reviews the farm surface).
