@@ -90,6 +90,8 @@ import type { LeagueTemplate, Player, Team, UseLeagueBuilderDataReturn } from ".
 
 type DraftPool = Awaited<ReturnType<UseLeagueBuilderDataReturn["getRegisteredPool"]>>;
 
+const CPU_BID_OPTIONS = { needAwareCompletion: true } as const;
+
 const DRAFT_BOARD_GAP_KINDS = new Set([
   "position_coverage",
   "lineup",
@@ -832,6 +834,7 @@ export function LeagueBuilderAuctionDraft() {
         session,
         auction.currentBidderTeamId,
         cpuDecisionSeed(session, "bid", auction.currentBidderTeamId),
+        CPU_BID_OPTIONS,
       );
       return buildCpuDecisionVm({
         teamName: teamNameById(auction.currentBidderTeamId),
@@ -844,6 +847,7 @@ export function LeagueBuilderAuctionDraft() {
         session,
         session.pendingClaim.teamId,
         cpuDecisionSeed(session, "claim", session.pendingClaim.teamId),
+        CPU_BID_OPTIONS,
       );
       return buildCpuDecisionVm({
         teamName: teamNameById(session.pendingClaim.teamId),
@@ -1416,6 +1420,7 @@ export function LeagueBuilderAuctionDraft() {
         session,
         auction.currentBidderTeamId,
         cpuDecisionSeed(session, "bid", auction.currentBidderTeamId),
+        CPU_BID_OPTIONS,
       );
       if (decision.kind === "bid") {
         setBidAmount(String(decision.bid));
@@ -1431,6 +1436,7 @@ export function LeagueBuilderAuctionDraft() {
         session,
         session.pendingClaim.teamId,
         cpuDecisionSeed(session, "claim", session.pendingClaim.teamId),
+        CPU_BID_OPTIONS,
       );
       if (decision.kind === "claim") {
         runCpuAction(auction.claimAtReserve());

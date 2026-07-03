@@ -28589,3 +28589,33 @@ GATE (report ACTUAL output):
 - `git diff --stat` — the scoped files above. Report a grep proving no remaining route/nav points to
   `/league-builder/snake-draft` or the farm-snake `/league-builder/draft`.
 <!-- ===== END CONTRACT: CODEX-RETIRE-SNAKE ===== -->
+
+<!-- ===== CONTRACT: CODEX-CPU-NEEDAWARE ===== -->
+# CODEX-CPU-NEEDAWARE — enable the built-but-dormant need-aware CPU completion in the live auctions (JK-approved)
+
+The FABLE-C3 refinement `CpuBidOptions.needAwareCompletion` (src/engines/cpuShillBidding.ts:276-322,
+`needOverrideApplies`) is built + unit-tested but NEVER enabled at any live call site — so a COMPLETING CPU team can
+pass an affordable player who fills a slot it still hard-needs and wedge its own roster. JK approved wiring it on.
+
+FACT: `cpuBidOnLot(session, teamId, seed, options?)` and `cpuDecideLoneSurvivor(session, teamId, seed, options?)` take an
+optional 4th `CpuBidOptions` arg. Today NO live call site passes it. `needOverrideApplies` is self-gating: it fires ONLY
+when the team is completing (NOT a nonCompletingTeamIds shill), every remaining roster slot is a hard requirement, this
+candidate fills one, and the price fits under the completion ceiling — so it can never force an over-budget/illegal pick.
+
+DELIVERABLE — pass `{ needAwareCompletion: true }` at EVERY live cpuBidOnLot / cpuDecideLoneSurvivor call site:
+  - src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx — the 4 sites (~:831 cpuBidOnLot, ~:843 cpuDecideLoneSurvivor,
+    ~:1415 cpuBidOnLot, ~:1430 cpuDecideLoneSurvivor).
+  - src/src_figma/app/hooks/useFarmAuctionDraft.ts — the 2 sites (~:308 cpuBidOnLot, ~:324 cpuDecideLoneSurvivor).
+  - In EACH file declare ONE shared `const CPU_BID_OPTIONS = { needAwareCompletion: true } as const;` (module scope) and
+    pass it as the 4th arg at every site (single source, no per-site drift). Change NOTHING else about the bid logic.
+  - Do NOT touch cpuShillBidding.ts (the logic is already built) or the session-config `nonCompletingTeamIds` wiring.
+
+VERIFY (this is a CPU-BEHAVIOR change — surface, do not hide, any changed expectation):
+  - `NODE_ENV= npm run build` exit 0.
+  - `NODE_ENV= npx vitest run src/engines/__tests__/cpuShillBidding.test.ts` + any auction-simulation / auction-driver test
+    that exercises CPU bidding — green. If ANY test's EXPECTED CPU decision changes because the override now fires, DO NOT
+    silently rewrite it to pass — REPORT the test name + the before/after decision so Opus can confirm the new behavior is
+    intended (a completing team now bidding where it used to pass is the POINT; a shill or a non-completing case changing is NOT).
+  - FULL suite `NODE_ENV= npx vitest run` — report counts + name any red (run suspects solo).
+  - `git diff --stat` — LeagueBuilderAuctionDraft.tsx, useFarmAuctionDraft.ts (+ any test genuinely needing the intended-behavior update). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-CPU-NEEDAWARE ===== -->
