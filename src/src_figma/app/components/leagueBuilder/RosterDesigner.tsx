@@ -3,6 +3,7 @@ import { Check, X } from "lucide-react";
 import { PressButton } from "../ballpark";
 import {
   buildDefaultDesignSlots,
+  countEligibleForAsk,
   evaluateRosterDesign,
   type DesignBlocker,
   type DesignFeasibilityResult,
@@ -26,7 +27,7 @@ import {
   type ShapeClassification,
 } from "../../../../engines/playerArchetypeClassifier";
 import { HISTORICAL_ARCHETYPES } from "../../../../data/historicalArchetypes";
-import { canCover, twoWayVariantFromTraits, type FieldPosition } from "../../../../data/rosterConstruction";
+import { twoWayVariantFromTraits } from "../../../../data/rosterConstruction";
 import type { DraftPoolMode, Player, Team } from "../../../../utils/leagueBuilderStorage";
 
 type RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string };
@@ -173,56 +174,10 @@ function slotKindIsPitcher(slot: DesignSlot): boolean {
   return slot.kind === "sp" || slot.kind === "rp" || slot.kind === "swing";
 }
 
-function eligibleForSlot(slot: DesignSlot, player: DesignPoolPlayer): boolean {
-  const pitcher = player.profile.isPitcher;
-  const role = player.slotPlayer.role ?? player.profile.primaryPosition;
-  switch (slot.kind) {
-    case "pos":
-      return !pitcher && canCover(player.slotPlayer, slot.position as FieldPosition);
-    case "backupC":
-      return !pitcher ? canCover(player.slotPlayer, "C") : player.slotPlayer.twoWayVariant === "C";
-    case "sp":
-      return pitcher && (role === "SP" || role === "SP/RP");
-    case "rp":
-      return pitcher && (role === "RP" || role === "CP" || role === "SP/RP");
-    case "flex":
-      return !pitcher;
-    case "swing":
-      return !pitcher || role === "RP" || role === "CP" || role === "SP/RP";
-  }
-}
-
-function matchesTags(classification: ShapeClassification, preference: SlotPreference): boolean {
-  const tags = preference.tags;
-  if (!tags) return true;
-  if (tags.bats && classification.tags.bats !== tags.bats) return false;
-  if (tags.leftArm && !classification.tags.leftArm) return false;
-  if (tags.utility && classification.tags.utility === null) return false;
-  if (tags.twoWay && !classification.tags.twoWay) return false;
-  if (tags.platoonSide && !classification.tags.platoonSides.includes(tags.platoonSide)) return false;
-  return true;
-}
-
-function matchesShape(classification: ShapeClassification, preference: SlotPreference, shapeFamily?: string): boolean {
-  if (!shapeFamily) return true;
-  if (classification.shape === shapeFamily) return true;
-  return (preference.allowRunnerUp ?? true) && classification.runnerUp === shapeFamily;
-}
-
+// Candidate counting goes through the ENGINE's countEligibleForAsk — this file used to
+// keep a private copy of the eligibility/matching rules and drifted from the solver
+// (coverage vs primary, JK 2026-07-02). One rule set, one owner.
 type ClassifiedDesignPlayer = DesignPoolPlayer & { classification: ShapeClassification };
-
-function countCandidates(
-  slot: DesignSlot,
-  shapeFamily: string | undefined,
-  classifiedPool: readonly ClassifiedDesignPlayer[],
-): number {
-  const preference = { ...(slot.preference ?? {}), shape: shapeFamily };
-  return classifiedPool.filter((player) =>
-    eligibleForSlot(slot, player)
-    && matchesTags(player.classification, preference)
-    && matchesShape(player.classification, preference, shapeFamily),
-  ).length;
-}
 
 function shapeIdentityLine(shape: ArchetypeFamilyDefinition): string | null {
   return "identityLine" in shape && typeof shape.identityLine === "string" ? shape.identityLine : null;
@@ -686,7 +641,7 @@ function SlotEditor({
           <ShapeRow
             selected={!preference.shape}
             disabled={readOnly}
-            count={countCandidates(slot, undefined, classifiedPool)}
+            count={countEligibleForAsk(slot, undefined, classifiedPool)}
             onClick={() => setShape(undefined)}
             title="ANY SHAPE"
           />
@@ -694,7 +649,7 @@ function SlotEditor({
             <div key={group.label ?? "default"}>
               {group.label ? <div className="px-3 pt-3 pb-1 text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)]">{group.label}</div> : null}
               {group.shapes.map((shape) => {
-                const count = countCandidates(slot, shape.family, classifiedPool);
+                const count = countEligibleForAsk(slot, shape.family, classifiedPool);
                 const disabled = readOnly || count === 0;
                 return (
                   <ShapeRow

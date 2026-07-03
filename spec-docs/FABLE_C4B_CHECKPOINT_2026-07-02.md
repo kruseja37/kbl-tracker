@@ -19,6 +19,11 @@ the migration.** The surface VALUES freeze the legacy army-green (`--ballpark-pa
 adoption, and the ash-tan token is already present. THE FLIP (token values → the GameTracker
 surfaces) is a later, deliberate, re-verified stage — one edit in one file by design. Do not
 declare the league-builder screens "migrated" until it happens.
+**AMENDED post-flip (JK browser ruling 2026-07-02):** the ash-tan page ground (`#CBB89C`) is
+DISTRACTING at full-page scale. New ruling: **page ground = the well green `#243028`** — the
+darkest existing palette value, so panels (`#3d4a42`/`#3d5240`) still lift and recessed
+wells read as cut-through-to-ground. Ash tan stays in the kit as an ACCENT-ONLY token, never
+the page ground. One-line change to `--ballpark-page-bg`. See DECISIONS_LOG same date.
 Kit gaps for the next rev (non-blocking): the chalk PNG texture layer · the recessed-well
 scroll body (inset shadow + dark edge) · the tracked ALL-CAPS micro-label style. Minor
 semantic: `--ballpark-status-red #DD0000` is the GameTracker's END-GAME-only alarm red;

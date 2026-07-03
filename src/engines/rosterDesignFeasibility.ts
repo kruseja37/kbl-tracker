@@ -25,8 +25,10 @@ import {
 import type { PersonalityTilt, TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
 import {
   canCover,
+  canRelieve,
+  canStart,
   isLegalRoster,
-  type FieldPosition,
+  LEGAL_ROSTER,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
 
@@ -106,9 +108,10 @@ export interface DesignFeasibilityResult {
   blockers: DesignBlocker[];
 }
 
-interface ClassifiedPoolPlayer extends DesignPoolPlayer {
+export interface ClassifiedDesignPoolPlayer extends DesignPoolPlayer {
   classification: ShapeClassification;
 }
+type ClassifiedPoolPlayer = ClassifiedDesignPoolPlayer;
 
 function classifyPool(pool: readonly DesignPoolPlayer[]): ClassifiedPoolPlayer[] {
   return pool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) }));
@@ -150,20 +153,36 @@ export function personalityTiltPenalty(
   }
 }
 
+/**
+ * Retry-pass restrictions (see evaluateRosterDesign): the ONLY count-legality hole in the
+ * 22-slot frame is BOTH backupC and SWING resolving to arms (10 pitchers > the 8–9 band);
+ * when that happens the matching re-runs with one of these tightened.
+ */
+interface EligibilityRestrictions {
+  backupCHittersOnly?: boolean;
+  swingHittersOnly?: boolean;
+}
+
 function eligibleForSlot(
   slot: DesignSlot,
   player: ClassifiedPoolPlayer,
-  pitchersUsed: number,
+  restrict: EligibilityRestrictions = {},
 ): boolean {
   const isPitcher = player.profile.isPitcher;
   const role = player.slotPlayer.role ?? player.profile.primaryPosition;
   switch (slot.kind) {
     case 'pos':
-      return !isPitcher && canCover(player.slotPlayer, slot.position as FieldPosition);
+      // LEGALITY BY CONSTRUCTION (JK browser bug 2026-07-02): the eight field spots take
+      // PRIMARY-position players ONLY — isLegalRoster demands a primary at each spot, and
+      // a positional ask means a true player of that position, never a moonlighter
+      // covering it via a secondary. (Coverage-based filling assembled illegal 22s out of
+      // pools that held legal ones.)
+      return !isPitcher && player.slotPlayer.position === slot.position;
     case 'backupC':
-      // Covering hitters first-class; a Two Way (C) arm only with staff headroom (F3 rule).
+      // Covering hitters first-class (secondary-C counts here — the C slot guarantees the
+      // primary); a Two Way (C) arm unless the retry pass tightened this slot.
       if (!isPitcher) return canCover(player.slotPlayer, 'C');
-      return player.slotPlayer.twoWayVariant === 'C' && pitchersUsed < 9;
+      return !restrict.backupCHittersOnly && player.slotPlayer.twoWayVariant === 'C';
     case 'sp':
       return isPitcher && (role === 'SP' || role === 'SP/RP');
     case 'rp':
@@ -171,7 +190,8 @@ function eligibleForSlot(
     case 'flex':
       return !isPitcher;
     case 'swing':
-      return !isPitcher || role === 'RP' || role === 'CP' || role === 'SP/RP';
+      if (!isPitcher) return true;
+      return !restrict.swingHittersOnly && (role === 'RP' || role === 'CP' || role === 'SP/RP');
   }
 }
 
@@ -196,6 +216,44 @@ function median(values: number[]): number {
 }
 
 /**
+ * Name the ACTUAL legality rule an assembled 22 fails (plain language, ordered by how the
+ * checks cascade). By construction the solver should rarely land here — this is the honest
+ * fallback, replacing the old canned guess that misdiagnosed real failures (JK 2026-07-02).
+ */
+function explainIllegality(players: RosterSlotPlayer[]): string {
+  if (players.length !== LEGAL_ROSTER.size) {
+    return `it counts ${players.length} players, not ${LEGAL_ROSTER.size}`;
+  }
+  const hitters = players.filter((p) => !p.isPitcher);
+  const pitchers = players.filter((p) => p.isPitcher);
+  if (pitchers.length > LEGAL_ROSTER.maxPitchers) {
+    return `the staff counts ${pitchers.length} arms — the legal band is `
+      + `${LEGAL_ROSTER.minPitchers}–${LEGAL_ROSTER.maxPitchers}, so at most one of backup `
+      + 'catcher and the swing slot can be an arm';
+  }
+  if (pitchers.length < LEGAL_ROSTER.minPitchers) {
+    return `the staff counts only ${pitchers.length} arms — the legal band is `
+      + `${LEGAL_ROSTER.minPitchers}–${LEGAL_ROSTER.maxPitchers}`;
+  }
+  for (const pos of LEGAL_ROSTER.fieldPositions) {
+    if (!hitters.some((p) => p.position === pos)) {
+      return `no player whose PRIMARY position is ${pos} made the 22 — a starter at each of `
+        + 'the eight spots must be a true player of that position';
+    }
+  }
+  if (players.filter((p) => canCover(p, 'C')).length < LEGAL_ROSTER.minCatchers) {
+    return 'catcher depth is short — the roster needs two distinct players who can take C';
+  }
+  if (pitchers.filter(canStart).length < LEGAL_ROSTER.startingPitchers) {
+    return `fewer than ${LEGAL_ROSTER.startingPitchers} startable arms (SP or SP/RP) made the 22`;
+  }
+  if (pitchers.filter(canRelieve).length < LEGAL_ROSTER.minRelievers) {
+    return `fewer than ${LEGAL_ROSTER.minRelievers} relievable arms (RP, CP, or SP/RP) made the 22`;
+  }
+  return 'a roster-construction rule failed that this reporter does not recognize';
+}
+
+/**
  * The Asst GM's verdict — F1 (Opus audit): feasibility is decided by MAX-CARDINALITY
  * BIPARTITE MATCHING (slots ↔ eligible players, Kuhn's augmenting paths), not a greedy
  * fill — a loose earlier slot can no longer strand a later specific ask by consuming the
@@ -204,8 +262,13 @@ function median(values: number[]): number {
  * cheap/tilted picks; a post-matching cheapest-swap pass then shrinks cost further (a
  * documented heuristic — exact min-cost assignment is not required for the verdict, only
  * for the estimate). Blockers name the true obstacle for slots left unmatched at maximum.
- * Two-Way(C) staff headroom is enforced by the final isLegalRoster check (the matching
- * itself is headroom-agnostic).
+ * LEGALITY BY CONSTRUCTION (JK browser bug 2026-07-02): pos-slot eligibility is PRIMARY-
+ * position only (isLegalRoster's rule for the starting eight), so a complete matching can
+ * no longer assemble an illegal 22 out of cheap moonlighters while a legal fill exists.
+ * The one remaining count hole — backupC AND SWING both resolving to arms (10 pitchers) —
+ * triggers a tighten-and-retry pass (backupC→hitters, then SWING→hitters). The final
+ * isLegalRoster check stays as the invariant gate; if it ever fails, the blocker names the
+ * ACTUAL rule via explainIllegality, never a canned guess.
  * SEMANTIC NOTE: under a saturated pool, augmenting may permute WHICH slot holds which
  * eligible player — the engine's promises are the feasibility verdict, the total cost,
  * and tilt-aware candidate ordering, never slot-local cheapest assignment.
@@ -218,61 +281,99 @@ export function evaluateRosterDesign(
   const classified = classifyPool(pool);
   const slotList = [...slots];
 
-  // Hard-constraint candidate lists (indices into `classified`), preference-ordered.
-  const candidateIdx: number[][] = slotList.map((slot) => {
-    const preference = slot.preference ?? {};
-    return classified
-      .map((player, index) => ({ player, index }))
-      .filter(({ player }) => eligibleForSlot(slot, player, 0))
-      .filter(({ player }) => matchesShape(player, preference) && matchesTags(player, preference))
-      .sort((a, b) => candidateOrder(a.player, b.player, preference.personalityTilt))
-      .map(({ index }) => index);
-  });
-
-  // Kuhn's maximum matching; most-constrained slots first for fast convergence.
-  const slotOfPlayer = new Map<number, number>();
-  const playerOfSlot: (number | null)[] = slotList.map(() => null);
-  const bySize = slotList.map((_, index) => index).sort(
-    (a, b) => candidateIdx[a].length - candidateIdx[b].length,
-  );
-  const tryAugment = (slotIndex: number, visited: Set<number>): boolean => {
-    for (const playerIndex of candidateIdx[slotIndex]) {
-      if (visited.has(playerIndex)) continue;
-      visited.add(playerIndex);
-      const holder = slotOfPlayer.get(playerIndex);
-      if (holder === undefined || tryAugment(holder, visited)) {
-        slotOfPlayer.set(playerIndex, slotIndex);
-        playerOfSlot[slotIndex] = playerIndex;
-        return true;
-      }
-    }
-    return false;
-  };
-  for (const slotIndex of bySize) {
-    tryAugment(slotIndex, new Set());
+  interface Solution {
+    candidateIdx: number[][];
+    playerOfSlot: (number | null)[];
+    slotOfPlayer: Map<number, number>;
+    complete: boolean;
+    restrict: EligibilityRestrictions;
   }
 
-  // Cost-improvement: swap any matched player for a cheaper unmatched candidate of the
-  // same slot (repeat until stable) — keeps the budget estimate honest without disturbing
-  // the matching's completeness.
-  let improved = true;
-  while (improved) {
-    improved = false;
-    for (let slotIndex = 0; slotIndex < slotList.length; slotIndex += 1) {
-      const current = playerOfSlot[slotIndex];
-      if (current === null) continue;
-      for (const candidate of candidateIdx[slotIndex]) {
-        if (slotOfPlayer.has(candidate)) continue;
-        if (classified[candidate].salary < classified[current].salary) {
-          slotOfPlayer.delete(current);
-          slotOfPlayer.set(candidate, slotIndex);
-          playerOfSlot[slotIndex] = candidate;
-          improved = true;
-          break;
+  const solve = (restrict: EligibilityRestrictions): Solution => {
+    // Hard-constraint candidate lists (indices into `classified`), preference-ordered.
+    const candidateIdx: number[][] = slotList.map((slot) => {
+      const preference = slot.preference ?? {};
+      return classified
+        .map((player, index) => ({ player, index }))
+        .filter(({ player }) => eligibleForSlot(slot, player, restrict))
+        .filter(({ player }) => matchesShape(player, preference) && matchesTags(player, preference))
+        .sort((a, b) => candidateOrder(a.player, b.player, preference.personalityTilt))
+        .map(({ index }) => index);
+    });
+
+    // Kuhn's maximum matching; most-constrained slots first for fast convergence.
+    const slotOfPlayer = new Map<number, number>();
+    const playerOfSlot: (number | null)[] = slotList.map(() => null);
+    const bySize = slotList.map((_, index) => index).sort(
+      (a, b) => candidateIdx[a].length - candidateIdx[b].length,
+    );
+    const tryAugment = (slotIndex: number, visited: Set<number>): boolean => {
+      for (const playerIndex of candidateIdx[slotIndex]) {
+        if (visited.has(playerIndex)) continue;
+        visited.add(playerIndex);
+        const holder = slotOfPlayer.get(playerIndex);
+        if (holder === undefined || tryAugment(holder, visited)) {
+          slotOfPlayer.set(playerIndex, slotIndex);
+          playerOfSlot[slotIndex] = playerIndex;
+          return true;
+        }
+      }
+      return false;
+    };
+    for (const slotIndex of bySize) {
+      tryAugment(slotIndex, new Set());
+    }
+
+    // Cost-improvement: swap any matched player for a cheaper unmatched candidate of the
+    // same slot (repeat until stable) — keeps the budget estimate honest without disturbing
+    // the matching's completeness.
+    let improved = true;
+    while (improved) {
+      improved = false;
+      for (let slotIndex = 0; slotIndex < slotList.length; slotIndex += 1) {
+        const current = playerOfSlot[slotIndex];
+        if (current === null) continue;
+        for (const candidate of candidateIdx[slotIndex]) {
+          if (slotOfPlayer.has(candidate)) continue;
+          if (classified[candidate].salary < classified[current].salary) {
+            slotOfPlayer.delete(current);
+            slotOfPlayer.set(candidate, slotIndex);
+            playerOfSlot[slotIndex] = candidate;
+            improved = true;
+            break;
+          }
         }
       }
     }
+
+    return {
+      candidateIdx,
+      playerOfSlot,
+      slotOfPlayer,
+      complete: playerOfSlot.every((pick) => pick !== null),
+      restrict,
+    };
+  };
+
+  // The count-legality retry: a complete fill with arms at BOTH backupC and SWING carries
+  // 10 pitchers (illegal); prefer the hitter-tightened variant that still completes.
+  const armAt = (solution: Solution, kind: DesignSlotKind): boolean =>
+    slotList.some((slot, index) => {
+      if (slot.kind !== kind) return false;
+      const pick = solution.playerOfSlot[index];
+      return pick !== null && classified[pick].profile.isPitcher;
+    });
+  let solution = solve({});
+  if (solution.complete && armAt(solution, 'backupC') && armAt(solution, 'swing')) {
+    const backupTightened = solve({ backupCHittersOnly: true });
+    if (backupTightened.complete) {
+      solution = backupTightened;
+    } else {
+      const swingTightened = solve({ swingHittersOnly: true });
+      if (swingTightened.complete) solution = swingTightened;
+    }
   }
+  const { candidateIdx, playerOfSlot, slotOfPlayer, restrict } = solution;
 
   const blockers: DesignBlocker[] = [];
   const resolutions: SlotResolution[] = [];
@@ -284,7 +385,7 @@ export function evaluateRosterDesign(
     if (matchedIndex === null) {
       const label = slot.position ?? slot.slotId;
       const unmatched = classified.filter((_, index) => !slotOfPlayer.has(index));
-      const eligible = unmatched.filter((player) => eligibleForSlot(slot, player, 0));
+      const eligible = unmatched.filter((player) => eligibleForSlot(slot, player, restrict));
       const shapeMatched = eligible.filter((player) => matchesShape(player, preference));
       const ask = [preference.shape, preference.tags ? 'your tag filters' : null]
         .filter(Boolean)
@@ -341,7 +442,7 @@ export function evaluateRosterDesign(
       .map((slot) => {
         const slotDef = slots.find((candidate) => candidate.slotId === slot.slotId);
         const marketSalaries = classified
-          .filter((player) => slotDef && eligibleForSlot(slotDef, player, 0))
+          .filter((player) => slotDef && eligibleForSlot(slotDef, player, restrict))
           .map((player) => player.salary);
         return { slot, premium: (slot.salary ?? 0) - median(marketSalaries) };
       })
@@ -359,12 +460,12 @@ export function evaluateRosterDesign(
   }
 
   if (blockers.length === 0 && totalCost <= budget && !legal) {
+    const roster = classified.filter((player) => used.has(player.id)).map((player) => player.slotPlayer);
     blockers.push({
       slotId: 'legality',
       kind: 'no-match',
-      message: 'The design fills and fits the budget, but the assembled 22 is not a legal roster '
-        + '(most often the pitcher-staff ceiling via a Two-Way arm at backup catcher). '
-        + 'Swap one design ask toward the stranded requirement.',
+      message: 'The design fills and fits the budget, but the assembled 22 is not a legal roster: '
+        + `${explainIllegality(roster)}. Swap one design ask toward the stranded requirement.`,
     });
   }
 
@@ -379,6 +480,25 @@ export function evaluateRosterDesign(
   };
 }
 
+/**
+ * The ONE candidate-count the UI may display for an ask (menu rows, slot badges): the
+ * same eligibility + shape/tag matching the solver itself uses, unrestricted. The designer
+ * previously kept a private copy of these rules and drifted (coverage vs primary — the JK
+ * 2026-07-02 bug lived twice); UI surfaces must count through THIS door, never re-derive.
+ */
+export function countEligibleForAsk(
+  slot: DesignSlot,
+  shapeFamily: string | undefined,
+  classifiedPool: readonly ClassifiedDesignPoolPlayer[],
+): number {
+  const preference: SlotPreference = { ...(slot.preference ?? {}), shape: shapeFamily };
+  return classifiedPool.filter((player) =>
+    eligibleForSlot(slot, player)
+    && matchesShape(player, preference)
+    && matchesTags(player, preference),
+  ).length;
+}
+
 export interface RankedPoolEntry {
   playerId: string;
   playerName?: string;
@@ -390,7 +510,9 @@ export interface RankedPoolEntry {
 
 /**
  * The per-position pool ranking against a requested archetype (the board's right rail):
- * best expression of the GM's ask first — match quality, then tilt, then price.
+ * best expression of the GM's ask first — match quality, then tilt, then price. Field
+ * positions rank TRUE (primary) players only — a moonlighter appears on his own
+ * position's list, matching the pos-slot legality semantics.
  */
 export function rankPoolForPreference(
   position: TaxonomyPosition,
@@ -401,7 +523,7 @@ export function rankPoolForPreference(
     ? { slotId: position, kind: 'pos', position }
     : { slotId: position, kind: position === 'RP' || position === 'CP' ? 'rp' : 'sp' };
   return classifyPool(pool)
-    .filter((player) => eligibleForSlot(slot, player, 0))
+    .filter((player) => eligibleForSlot(slot, player))
     .map((player) => {
       const top = player.classification.shape === preference.shape;
       const runnerUp = player.classification.runnerUp === preference.shape;

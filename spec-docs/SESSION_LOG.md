@@ -2,6 +2,57 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-02 (attended, Claude Code / Fable 5) — LEGALITY FIX + GREEN GROUND + THE DRAFT-JOURNEY AUDIT (xhigh)
+
+**Trigger:** JK's first browser look at the designer hit "FILLS · NOT A LEGAL 22" on a
+clean design, plus the ash ground ruling, plus JK's intent correction (cheapest-fill is
+feasibility-only; GM-facing surfaces must be fit-first/strategy-adaptive) → JK go on: two
+fixes, then a full journey audit.
+
+**Fix 1 — the legality bug (proven by repro before fixing):** the solver filled the eight
+field slots by COVERAGE (canCover; secondaries count) while isLegalRoster demands a PRIMARY
+at each spot; cheapest-first steering assembled illegal 22s from pools holding legal ones.
+Rebuilt in src/engines/rosterDesignFeasibility.ts: pos slots primary-only (legality by
+construction), tighten-and-retry pass for the one remaining count hole (Two-Way(C) at
+backupC + arm at SWING = 10 arms), explainIllegality replaces the canned blocker guess,
+restrictions threaded through blocker/market paths. rankPoolForPreference now documents
+primary-only field rankings. +4 regression tests (the JK repro, primary-only no-match,
+retry-to-bat, honest 10-arms message).
+**Fix 1b — the same bug's second home:** RosterDesigner.tsx kept a PRIVATE copy of
+eligibleForSlot/matchesShape/matchesTags (old coverage rule) for its ×N counts → deleted;
+engine now exports countEligibleForAsk + ClassifiedDesignPoolPlayer; UI counts through the
+engine door. (The audit found this within minutes of the engine fix creating the divergence
+— the canonical-mapper lesson again.)
+**Fix 2 — JK ground ruling:** --ballpark-page-bg #CBB89C → #243028 (well green); ash stays
+accent-only. ballpark-kit.css one-liner + checkpoint §1.1 amended + DECISIONS_LOG.
+
+**Gates:** npm run build exit 0 (twice — after engine fix, after UI consolidation) ·
+rosterDesignFeasibility 13/13 · poolFromDemand 7/7 · classifier 17/17 · identityPreference
+2/2 · RosterDesigner + LeagueBuilderDraftSetup page suites 30/30 combined · FULL suite
+3 failed / 8,780 passed = characterized pair + LeagueBuilderDraftSetup.test load-flake
+(solo-green 7/7) → zero new reds. ALL UNCOMMITTED — Opus audits the delta per triangle.
+
+**The audit:** five parallel evidence agents (designer-adapter seam · pool→draft seam ·
+intelligence-vs-intent · draft→launch seam · UI truth), ~50 raw findings → deduplicated
+ranked report at spec-docs/FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md (DJ-00..DJ-28 + routing
+§6). P0 headline: the auction roster-board frame is structurally ILLEGAL (13-hitter/10-arm
+frame incl. a DH slot — glows fake gaps forever, drops bench players); CPU panel leaks rival
+valuations; CPU clubs re-roll identity per lot; universe-vs-pool budget basis can flip
+verdicts at lock; design-first lock freezes MORE than the room reviewed (+ those players
+skip axis regen); NO legality gate at the draft exit (short/illegal rosters reach the
+wizard as an unfriendly throw); designs re-lockable after pool lock with START blind to
+staleness. Intent cluster: est-cost = cheapest fill presented as plan (two surfaces),
+rankPoolForPreference (the fit-first engine) UI-orphaned, whisper board lacks identity/need
+terms → BEST-22 spec is Fable's next design deliverable. Verified-clean spine documented in
+§5 (pool→lots byte-identical, single legality law in-flight, whisper live+secret, gates
+enforced, Mode A fully wired — the checkpoint's "placeholder" note is stale).
+
+**Handoff:** delta (2 code files + css + 2 test files + 3 spec docs) → Opus cross-model
+audit; P0 sequencing + tickets (IDENTITY-CARRY, farm-whisper rider) → Opus; BEST-22 +
+HANDEDNESS-SIGNAL specs → Fable next; one JK ruling open (price-basis unification v1 vs
+v1.1, rec v1.1).
+
+
 ## 2026-07-02 (attended, Claude Code / Fable 5) — POOL-FROM-DEMAND BUILT (Mode A extraction) · awaiting cross-model audit
 - **SCOPE:** the JK-ruled design-first pool mode (taxonomy design §6.1). Branch-only, UNCOMMITTED atop 7b8eee96. A COMPOSITION of audited parts by design — the one genuinely new math is demand aggregation with contest multiplicity + price-spread reservation.
 - **BUILT:** `src/engines/poolFromDemand.ts` — classify the (thousands-scale) universe → aggregate demand cells across all human 22-slot designs → reserve ceil(asks × contest 2) per cell by PRICE SPREAD → union with the C1B `extractDraftPool` archetype floors/balance from the same universe → re-verify EVERY design against the final pool via `evaluateRosterDesign` → named shortfalls ("your league wants N X; the uploaded universe holds M"). Deterministic. v1 choices in-module: CPU/shills ride the floors (no shape cells); no trim-to-target (owner edits before lock).

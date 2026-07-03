@@ -21,7 +21,9 @@
   --ballpark-status-red: #DD0000;
   --ballpark-status-red-bright: #FF3C3C;
   --ballpark-status-warn: #fbbf24;
-  --ballpark-page-bg: #CBB89C;
+  /* JK ruling 2026-07-02: ash-tan ground was distracting at page scale — the page ground
+   * is the deep well green; ash (--ballpark-ground) stays accent-only, never the page. */
+  --ballpark-page-bg: #243028;
   --ballpark-action-green: #3d5240;
   --ballpark-action-green-hover: #4A6844;
   --ballpark-panel: #3d4a42;

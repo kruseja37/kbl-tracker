@@ -3471,3 +3471,63 @@ ECONOMY RE-CALIBRATION BATCH gains a fourth item: price development runway + rec
 delete the orphaned age salary curve against the dev gravity (ONE age model, no
 double-counting). Batch now = Two-Way cohorts · flexibility-as-value · IV gaps · AGE economy
 — one sim campaign riding C5.
+
+## 2026-07-02 — JK RULING (browser look): page ground goes GREEN, not ash — + the designer legality bug diagnosed
+
+Two items from JK's first look at the Draft Room designer (:5199 screenshot):
+
+**(1) Ground color ruling.** The chalk-and-ash flip landed with the page ground at ash tan
+(`--ballpark-page-bg #CBB89C`) per the GameTracker reference. JK: "the ash color in the
+background is quite distracting; we may want to go with a shade of green instead." Fable
+(design authority) concurs and rules: **page ground = the well green `#243028`** — the
+darkest value in the existing palette, so panels (`#3d4a42`/`#3d5240`) still lift off it and
+recessed wells read as "cut through to the ground" (coherent, no new color invented). Ash
+tan stays in the kit as an accent-only token (chalk-adjacent surfaces, never the page
+ground). One-line token change in `ballpark-kit.css`; FABLE_C4B_CHECKPOINT §1.1 amended.
+
+**(2) The "FILLS · NOT A LEGAL 22" bug — diagnosed + repro'd (Fable).** JK's design fills
+all 22 slots within budget but the verdict says not-legal. Root cause (proven by a minimal
+repro, since deleted): `rosterDesignFeasibility.eligibleForSlot` fills the eight field-
+position slots by COVERAGE (`canCover` — secondary positions count) while `isLegalRoster`
+requires a PRIMARY at each of the eight spots. Cheapest-first ordering + the cost-improvement
+pass actively steer toward cheap secondary-coverage players, so the assembled 22 can lack a
+primary (repro: both C and backupC filled by 1B/secondary-C bodies; the real catcher left
+out) — reporting ILLEGAL even though a legal assembly exists in the same pool. The canned
+blocker copy ("most often the pitcher-staff ceiling…") then misleads. Fix design (Fable, to
+build on JK go): (a) pos-slot eligibility → primary-position match only (matches both the
+legality rule and the design intent of a positional ask); (b) backupC stays coverage-based
+(the C slot now guarantees the primary-C for catcher-depth); (c) one tighten-and-retry pass
+if final legality still fails on the 8–9 pitcher band (Two-Way(C)-at-backupC + arm-at-SWING
+= 10 arms); (d) the legality blocker names the ACTUAL failed rule instead of the canned
+guess.
+
+## 2026-07-02 — DRAFT-JOURNEY AUDIT (xhigh, three lenses) + the two ruled fixes LANDED
+
+JK go: build the two known fixes, then audit the whole setup→design→pool→draft→launch
+journey on three lenses (seams / intent-conformance / UI truth) at xhigh. DONE, same day:
+**Fixes (Fable, built+tested, uncommitted):** the legality-by-construction rebuild of the
+design-feasibility solver (primary-only field slots + 10-arms retry pass + explainIllegality
+honest blockers + 4 regression tests), the deletion of the designer UI's PRIVATE copy of the
+eligibility rules (now imports the engine's `countEligibleForAsk` — one rule set, one
+owner), and the page-ground flip ash→well green. Gates: build 0 · affected suites 30/30 ·
+full suite 8,780 pass / 3 characterized-or-solo-green.
+**Audit:** five parallel evidence agents, ~50 raw findings deduplicated into
+`FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md` (IDs DJ-00..DJ-28): 7 P0s before JK's playthrough
+(illegal roster-board frame incl. a DH slot; CPU valuation leak; CPU club identity re-roll;
+universe-vs-pool budget basis; design-first lock membership drift; no draft-exit legality
+gate; post-lock design staleness), the intent cluster (cheapest-fill dollars as "plan",
+fit-first ranking engine orphaned, whisper board lacking identity/need terms → the BEST-22
+spec is Fable's next design), and a minors batch. Routing in audit §6. One JK ruling
+requested: price-basis unification v1 vs v1.1 (rec: v1.1 given DJ-04(1)).
+
+## 2026-07-02 — JK RULING: price-basis unification (DJ-04(2)) → the v1.1 economy batch
+
+JK agreed (token-conscious, conditional on the auction staying fully as specced — condition
+HOLDS, see below): DJ-04(1) (budget computed from the candidate pool, not the universe) is
+v1 NOW; full price-basis unification (stored salary vs pure-IV cap scale vs reserveCurve×IV
+ask — one currency end-to-end) joins the v1.1 ECONOMY RE-CALIBRATION BATCH (now: Two-Way
+cohorts · flexibility-as-value · IV gaps · AGE economy · PRICE-BASIS UNIFICATION). What v1
+keeps: the auction room itself is untouched and fully specced — its pricing, asks, budgets,
+and bidding all already run on one basis (IV-derived). What v1 defers: precision of the
+PRE-DRAFT planning estimates only (the designer's dollar figures can skew for age/fame-heavy
+designs vs what the room will ask). No auction functionality is lost.

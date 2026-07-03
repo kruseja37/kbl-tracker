@@ -170,6 +170,82 @@ describe('evaluateRosterDesign', () => {
     expect(resolution.viaRunnerUp).toBe(true);
   });
 
+  it('JK regression 2026-07-02: cheap secondary-C moonlighters cannot displace the primary catcher into an illegal 22', () => {
+    // The browser bug: 8 cheap 1B/secondary-C bodies flooded every generic hitter slot, the
+    // C spot took a moonlighter, and the one true catcher missed the 22 → "not a legal
+    // roster" despite a legal fill existing. Pos slots are now PRIMARY-only.
+    const pool = [
+      hitter('C', { id: 'true-catcher', salary: 16_000 }),
+      ...Array.from({ length: 8 }, (_, i) => hitter('1B', { id: `moonlighter-${i}`, salary: 6_000 + i * 10, secondary: 'C' })),
+      ...(['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const).flatMap((pos) => [
+        hitter(pos, { salary: 8_000 }),
+        hitter(pos, { salary: 8_200 }),
+      ]),
+      ...Array.from({ length: 4 }, () => arm('SP', { salary: 9_000 })),
+      ...Array.from({ length: 5 }, () => arm('RP', { salary: 7_000 })),
+    ];
+    const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 1_000_000);
+    expect(result.blockers).toEqual([]);
+    expect(result.legal).toBe(true);
+    expect(result.feasible).toBe(true);
+    expect(result.slots.find((slot) => slot.slotId === 'C')?.playerId).toBe('true-catcher');
+  });
+
+  it('a field spot with only secondary-coverage bodies reports a plain no-match, not an illegal assembly', () => {
+    const pool = [
+      ...standardPool().filter((p) => p.profile.primaryPosition !== 'C'),
+      hitter('1B', { id: 'sec-c-1', secondary: 'C' }),
+      hitter('1B', { id: 'sec-c-2', secondary: 'C' }),
+    ];
+    const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 500_000);
+    expect(result.feasible).toBe(false);
+    const blocker = result.blockers.find((candidate) => candidate.slotId === 'C');
+    expect(blocker?.kind).toBe('no-match');
+    expect(blocker?.message).toContain('No eligible player left in the pool for C');
+  });
+
+  it('retry pass: a Two-Way(C) arm at backup catcher forces the swing slot to a bat (never 10 arms)', () => {
+    const twoWayArm: DesignPoolPlayer = {
+      ...arm('RP', { id: 'two-way-c', salary: 9_500 }),
+      slotPlayer: { isPitcher: true, position: 'RP', role: 'RP', twoWayVariant: 'C' },
+    };
+    const pool = [
+      ...(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const).map((pos) => hitter(pos)),
+      ...Array.from({ length: 5 }, (_, i) => hitter('LF', { id: `bench-${i}` })), // FLEX×4 + the swing bat
+      twoWayArm, // the ONLY body that can back up C
+      ...Array.from({ length: 4 }, () => arm('SP')),
+      ...Array.from({ length: 4 }, () => arm('RP')),
+      arm('RP', { id: 'tempting-cheap-arm', salary: 5_000 }), // cheaper than any bat at SWING
+    ];
+    const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 500_000);
+    expect(result.blockers).toEqual([]);
+    expect(result.legal).toBe(true);
+    expect(result.feasible).toBe(true);
+    expect(result.slots.find((slot) => slot.slotId === 'backupC')?.playerId).toBe('two-way-c');
+    const swingPick = result.slots.find((slot) => slot.slotId === 'SWING')?.playerId;
+    expect(swingPick?.startsWith('bench-')).toBe(true);
+  });
+
+  it('when 10 arms is truly unavoidable, the blocker names the ACTUAL rule (no canned guess)', () => {
+    const twoWayArm: DesignPoolPlayer = {
+      ...arm('RP', { id: 'two-way-c', salary: 9_500 }),
+      slotPlayer: { isPitcher: true, position: 'RP', role: 'RP', twoWayVariant: 'C' },
+    };
+    const pool = [
+      ...(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const).map((pos) => hitter(pos)),
+      ...Array.from({ length: 4 }, (_, i) => hitter('LF', { id: `bench-${i}` })), // FLEX only — no 13th bat
+      twoWayArm,
+      ...Array.from({ length: 4 }, () => arm('SP')),
+      ...Array.from({ length: 5 }, () => arm('RP')),
+    ];
+    const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 500_000);
+    expect(result.feasible).toBe(false);
+    expect(result.legal).toBe(false);
+    const blocker = result.blockers.find((candidate) => candidate.slotId === 'legality');
+    expect(blocker?.message).toContain('the staff counts 10 arms');
+    expect(blocker?.message).not.toContain('most often');
+  });
+
   it('personality tilt reorders but never blocks (the anti-starve rule)', () => {
     const steady = hitter('SS', { id: 'ss-steady', salary: 20_000, personality: 'Tough' });
     const fragile = hitter('SS', { id: 'ss-fragile', salary: 8_000, personality: 'Droopy' });
