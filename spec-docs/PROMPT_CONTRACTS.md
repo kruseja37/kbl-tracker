@@ -27458,3 +27458,101 @@ engine helper + one additive persisted field. Do NOT touch the auction room or G
 - `git diff --stat` — only: LeagueBuilderDraftSetup.tsx, poolFromDemand.ts (+ its test),
   leagueBuilderStorage.ts (+poolExtractedAt). GameTracker + the auction room NOT present.
 <!-- ===== END CONTRACT: CODEX-MODEA ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ01-BOARD ===== -->
+## CODEX-DJ01-BOARD — the legal auction roster board frame (DJ-01 BLOCKER)
+
+**Binding design:** `spec-docs/FABLE_P0_DESIGN_2026-07-02.md` SECTION 1 (DJ-01). Fable is the
+design authority; build that section EXACTLY. Anything ambiguous comes back to Fable, never to
+builder judgment. Branch-only (experiment/manager-wpa-window); do NOT commit, do NOT push —
+leave the working tree dirty for Opus to audit + commit.
+
+**Read first (in full):** FABLE_P0_DESIGN_2026-07-02.md §1; `src/data/rosterConstruction.ts`
+(LEGAL_ROSTER, canCover/canStart/canRelieve/isLegalRoster); `src/engines/rosterNeed.ts`
+(toRosterSlotPlayer at :47-69, teamRosterNeed); `src/engines/rosterDesignFeasibility.ts:70-79`
+(buildDefaultDesignSlots — the frame to mirror slotId-for-slotId); the current board code
+`src/src_figma/app/components/DraftRosterBoard.tsx`, `src/src_figma/app/components/auction/AuctionStage.tsx`
+(BoardVM/RosterSlotVM ~84-97), `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`
+(slotMatchesEntry + buildStageRosterSlots ~205-231, stageRosterLabel ~193-197).
+
+### Deliverables (per Fable §1.1–§1.7)
+1. NEW engine module `src/engines/auctionBoardFrame.ts` exporting a PURE
+   `buildAuctionBoardFrame(roster, positions)` → `{ seats[], overflow[], ... }` with the exact
+   22-seat frame (§1.1 table), seat eligibility via the LAW predicates only (§1.2), the
+   deterministic greedy seating pass incl. the §1.3-4c two-way-C depth-note corner, the
+   overflow rail (§1.4, nothing silently dropped), and gap states from `teamRosterNeed` (§1.5).
+   Imports ONLY rosterConstruction.ts + rosterNeed.ts. Player→shape via canonical
+   `toRosterSlotPlayer` — NEVER hand-map (three prior C4 bugs came from hand-mapping).
+2. Rewire `AuctionStage`'s BoardVM to consume `buildAuctionBoardFrame` (replace
+   `buildStageRosterSlots`); rebuild `needLine` from the same need object (§1.6 priority order,
+   law line leads). Render the four group headers (THE EIGHT / ROTATION / BULLPEN / THE BENCH),
+   the backupC depth-note sub-line, the overflow rail, and per-seat test ids
+   `auction-board-slot-<slotId>` + `auction-board-overflow`.
+3. DELETE (not deprecate): `slotMatchesEntry`, page `positionTokens`, the `MLB_BOARD_SLOTS` MLB
+   frame + the splice-and-drop. If the legacy `DraftRosterBoard` MLB path is unreachable
+   (audit DJ-25), kill it in the same change so only the stage consumes the module; keep the
+   farm board path untouched.
+
+### Constraints
+- NO DH seat, NO CP seat, exactly 22 seat definitions; a closer sits in an RP seat with a "CP"
+  chip. Seat count/targets from LEGAL_ROSTER constants — NO bare literals; MLB_BOARD_TARGET → LEGAL_ROSTER.size.
+- Gap glow restyled to chalk-and-ash kit tokens (ballpark-kit.css vars) — NO raw hexes. Delete the OF-collapse ("CF GAP", never "OF GAP").
+- GameTracker UI is SET — do not touch it. No IndexedDB/schema change. No new meters/legends (every element earns its place).
+
+### Acceptance tests (write per §1.7; all engine-level except the last)
+Legal-⇢-clean property test (legal corpus incl. 13/9 & 14/8, secondary-C, two-way-C-in-staff
+§1.3-4c corner, 5-pure-SP, CP-heavy pen, 5 relievers via SWING → zero glow + empty overflow;
+illegal mutations → ≥1 glow); no-drop (seats+overflow length == input length, incl. 23 bodies);
+determinism; DH-extinction (no DH seat, exactly 22, from LEGAL_ROSTER); AuctionStage RTL
+(four headers + auction-board-slot-backupC + a legal-22 fixture shows no gap test-ids).
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0 (paste tail).
+- `NODE_ENV= npx vitest run src/engines/__tests__/auctionBoardFrame.test.ts` + any AuctionStage test — green (paste summary).
+- `git diff --stat` — scope: auctionBoardFrame.ts (+test), AuctionStage.tsx, LeagueBuilderAuctionDraft.tsx, DraftRosterBoard.tsx. GameTracker NOT present. Report the board invariant (legal→zero glow) explicitly.
+<!-- ===== END CONTRACT: CODEX-DJ01-BOARD ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ01-FIX ===== -->
+## CODEX-DJ01-FIX — apply Fable's backupC amendment (DJ-01 round 2)
+
+**Binding design:** `spec-docs/FABLE_P0_DESIGN_2026-07-02.md` §1.3 (the 2026-07-03 STEP 4 amendment)
++ §1.7 test-1b. Opus's fuzz (6000 rosters) found a BLOCKER: a LEGAL 22 strands a body in overflow
+when the 2nd catcher-coverer is a SEATED secondary-C hitter (at its field seat) — the old step-4 only
+rescued the seated two-way-(C) ARM corner. Branch-only; do NOT commit/push; leave the tree dirty for Opus.
+
+The DJ-01 build is already in the working tree (uncommitted): `src/engines/auctionBoardFrame.ts`,
+its test, AuctionStage.tsx, LeagueBuilderAuctionDraft.tsx, DraftRosterBoard.tsx, auction-theme.css.
+Apply ONLY this fix on top; do not revert or re-do the rest.
+
+### Deliverable 1 — generalize backupC step 4 in `src/engines/auctionBoardFrame.ts`
+Replace the current backupC block (4a/4b then the two-way-arm-only fallback) with Fable's amended rule:
+```
+4a. earliest UNSEATED hitter with canCover(p,'C')            -> seat. done.
+4b. else earliest UNSEATED pitcher with twoWayVariant==='C'  -> seat. done.
+4c. else if need.catcherCoverNeed === 0:            // depth met; 2nd coverer is SEATED elsewhere
+      body = earliest UNSEATED hitter ?? earliest UNSEATED body of any kind   // FLEX-like defensive fallback
+      seat body at backupC
+      coverer = earliest-drafted SEATED body (≠ the C-seat occupant) with canCover(p,'C') || twoWayVariant==='C'
+      if coverer is an arm:   depthNote = `depth via <name> (Two Way C)`
+      else if coverer exists: depthNote = `depth via <name> (<primary pos>, covers C)`
+      else:                   no note
+4d. else (catcherCoverNeed > 0): leave backupC OPEN   // the ONLY open state; matches §1.5 glow
+```
+Note `need` (teamRosterNeed) is currently computed AFTER seating — you'll need catcherCoverNeed at
+backupC time; compute the need object (or just the catcher-cover count via canCover over the drafted
+set) BEFORE the backupC step, reuse it for the final gap pass. Do NOT change the §1.5 glow rule
+(backupC glows iff catcherCoverNeed > 0 — already correct).
+
+### Deliverable 2 — tests per §1.7 (amended)
+In `src/engines/__tests__/auctionBoardFrame.test.ts`: (a) ADD the FUZZ-1 repro as a fixed legal case
+(13H/9A: a SS/C secondary-C hitter as the 2nd coverer; assert zero glow + empty overflow + backupC
+seated with a "covers C" depth note). (b) ADD test-1b: a SEEDED, reproducible fuzz of ≥5,000 random
+rosters asserting, for every legal roster, zero glow + empty overflow + all 22 seats occupied; and
+≥1 glow for every illegal one; print the failing roster shape on any counterexample.
+
+### Verify before returning (report ACTUAL output)
+- `NODE_ENV= npm run build` exit 0 (tail).
+- `NODE_ENV= npx vitest run src/engines/__tests__/auctionBoardFrame.test.ts` — green incl. the new
+  fuzz (report the legal-roster count the fuzz verified).
+- `git diff --stat` — the fix touches auctionBoardFrame.ts + its test (plus the already-present DJ-01 files). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-DJ01-FIX ===== -->

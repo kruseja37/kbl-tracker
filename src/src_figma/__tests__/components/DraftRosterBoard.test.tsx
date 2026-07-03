@@ -4,56 +4,10 @@ import { describe, expect, test } from "vitest";
 import {
   DraftRosterBoard,
   FARM_BOARD_TARGET,
-  MLB_BOARD_TARGET,
   type DraftBoardEntry,
 } from "../../app/components/DraftRosterBoard";
 
 describe("DraftRosterBoard", () => {
-  test("renders MLB filled slots, highlighted required gaps, and header totals", () => {
-    const entries: DraftBoardEntry[] = [
-      {
-        id: "catcher-1",
-        name: "Casey Catcher",
-        primaryPosition: "C",
-        salary: 50_000,
-      },
-      {
-        id: "starter-1",
-        name: "Sam Starter",
-        primaryPosition: "SP",
-        salary: 70_000,
-      },
-    ];
-
-    render(
-      <DraftRosterBoard
-        tier="mlb"
-        entries={entries}
-        target={MLB_BOARD_TARGET}
-        payroll={120_000}
-        walletRemaining={880_000}
-      />,
-    );
-
-    expect(screen.getByText("2/22 slots")).toBeInTheDocument();
-    expect(screen.getByText("$120,000")).toBeInTheDocument();
-    expect(screen.getByText("$880,000")).toBeInTheDocument();
-    expect(screen.queryByText("PRIORITY GAPS")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("draft-roster-budget-warning")).not.toBeInTheDocument();
-
-    const catcherSlot = screen.getByTestId("draft-roster-slot-C");
-    expect(within(catcherSlot).getByText("Casey Catcher")).toBeInTheDocument();
-    expect(within(catcherSlot).getAllByText("C").length).toBeGreaterThan(0);
-
-    const shortstopSlot = screen.getByTestId("draft-roster-slot-SS");
-    expect(within(shortstopSlot).getByText("OPEN")).toBeInTheDocument();
-    expect(within(shortstopSlot).getByText("SS GAP")).toBeInTheDocument();
-
-    const outfieldSlot = screen.getByTestId("draft-roster-slot-LF");
-    expect(within(outfieldSlot).getByText("OPEN")).toBeInTheDocument();
-    expect(within(outfieldSlot).getByText("OF GAP")).toBeInTheDocument();
-  });
-
   test("renders farm entries by primary position with generic open slots only", () => {
     const entries: DraftBoardEntry[] = [
       {
@@ -95,9 +49,9 @@ describe("DraftRosterBoard", () => {
   test("renders priority gap chips and budget warning when provided", () => {
     render(
       <DraftRosterBoard
-        tier="mlb"
+        tier="farm"
         entries={[]}
-        target={MLB_BOARD_TARGET}
+        target={FARM_BOARD_TARGET}
         payroll={0}
         walletRemaining={20_000}
         priorityGaps={[

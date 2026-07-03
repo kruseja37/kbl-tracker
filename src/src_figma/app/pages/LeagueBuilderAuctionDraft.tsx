@@ -8,9 +8,6 @@ import {
   useAuctionDraft,
 } from "../hooks/useAuctionDraft";
 import {
-  DraftRosterBoard,
-  MLB_BOARD_TARGET,
-  MLB_BOARD_SLOTS,
   type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
@@ -39,7 +36,7 @@ import {
   type CpuLoneSurvivorDecision,
 } from "../../../engines/cpuShillBidding";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
-import { twoWayVariantFromTraits, type RosterSlotPlayer } from "../../../data/rosterConstruction";
+import { LEGAL_ROSTER, twoWayVariantFromTraits, type RosterSlotPlayer } from "../../../data/rosterConstruction";
 import { DEFAULT_AUCTION_SETUP_CONFIG, scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
@@ -48,6 +45,12 @@ import {
   estimateMarket,
   type EstimatedMarket,
 } from "../../../engines/auctionMarketModel";
+import {
+  buildAuctionBoardFrame,
+  type AuctionBoardFrame,
+  type AuctionBoardRosterEntry,
+} from "../../../engines/auctionBoardFrame";
+import { toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
   farmDraftRouteForLeague,
@@ -192,53 +195,67 @@ function stageLotLabel(session: AuctionSession | null): string {
 
 function stageRosterLabel(teamState: AuctionSession["teams"][number] | null | undefined): string {
   if (!teamState) return "roster board";
-  const filled = MLB_BOARD_TARGET - teamState.rosterSlotsRemaining;
-  return `${Math.max(0, filled)} of ${MLB_BOARD_TARGET} rostered`;
+  const filled = LEGAL_ROSTER.size - teamState.rosterSlotsRemaining;
+  return `${Math.max(0, filled)} of ${LEGAL_ROSTER.size} rostered`;
 }
 
-function positionTokens(position: string | undefined): string[] {
-  const normalized = position?.trim().toUpperCase();
-  if (!normalized) return [];
-  return [normalized, ...normalized.split("/").map((part) => part.trim()).filter(Boolean)];
+function plural(value: number, singular: string, pluralValue = `${singular}s`): string {
+  return `${value} ${value === 1 ? singular : pluralValue}`;
 }
 
-function slotMatchesEntry(slotLabel: string, entry: DraftBoardEntry): boolean {
-  const tokens = positionTokens(entry.primaryPosition);
-  if (slotLabel === "SP") return tokens.includes("SP") || tokens.includes("SP/RP");
-  if (slotLabel === "RP") return tokens.includes("RP") || tokens.includes("SP/RP");
-  if (slotLabel === "CP") return tokens.includes("CP");
-  if (slotLabel === "LF" || slotLabel === "CF" || slotLabel === "RF") {
-    return tokens.includes(slotLabel) || tokens.includes("OF");
+function buildLawNeedLine(frame: AuctionBoardFrame): ReactNode {
+  const need = frame.need;
+  if (!need) return <>Roster law read needs player position data.</>;
+  if (need.missingPrimaries.length > 0) {
+    return <>Still need a starting {need.missingPrimaries.join(", ")}.</>;
   }
-  if (slotLabel === "DH") return !tokens.some((token) => token === "SP" || token === "RP" || token === "CP" || token === "SP/RP");
-  return tokens.includes(slotLabel);
-}
-
-function buildStageRosterSlots(entries: readonly DraftBoardEntry[]): RosterSlotVM[] {
-  const remaining = [...entries];
-  return MLB_BOARD_SLOTS.map((slot) => {
-    const index = slot.kind === "depth"
-      ? (remaining.length > 0 ? 0 : -1)
-      : remaining.findIndex((entry) => slotMatchesEntry(slot.label, entry));
-    const entry = index >= 0 ? remaining.splice(index, 1)[0] : null;
-    return {
-      pos: slot.label,
-      who: entry?.name ?? "open",
-      filled: Boolean(entry),
-      isGap: !entry && slot.kind !== "depth",
-    };
-  });
+  if (need.catcherCoverNeed > 0) {
+    return <>Need a second catcher — backup C or a Two Way (C) arm.</>;
+  }
+  const armParts: string[] = [];
+  const rotationNeed = frame.seats.filter((seat) => seat.group === "ROTATION" && !seat.player).length;
+  const bullpenNeed = frame.seats.filter((seat) => seat.group === "BULLPEN" && !seat.player).length;
+  if (rotationNeed > 0) armParts.push(plural(rotationNeed, "more starter"));
+  if (bullpenNeed > 0) armParts.push(plural(bullpenNeed, "more reliever"));
+  if (armParts.length > 0) return <>Need {armParts.join(" / ")}.</>;
+  const bodyNeed = Math.max(0, LEGAL_ROSTER.size - (
+    frame.seats.filter((seat) => seat.player).length + frame.overflow.length
+  ));
+  if (bodyNeed > 0) return <>Need {plural(bodyNeed, "more body", "more bodies")} to reach {LEGAL_ROSTER.size}.</>;
+  return <>Legal {LEGAL_ROSTER.size} — roster complete.</>;
 }
 
 function buildStageNeedLine(
+  frame: AuctionBoardFrame,
   gaps: readonly BoardPriorityGap[],
   budgetWarning: string | null,
 ): ReactNode {
-  if (budgetWarning) return <>{budgetWarning}</>;
-  if (gaps.length > 0) {
-    return <>Priority need: <b>{gaps[0].label}</b></>;
-  }
-  return <>Roster board is tracking live gaps as the auction fills.</>;
+  const lawLine = buildLawNeedLine(frame);
+  const advisorLine = budgetWarning
+    ? budgetWarning
+    : gaps.length > 0
+      ? <>Priority need: <b>{gaps[0].label}</b></>
+      : null;
+  return (
+    <>
+      {lawLine}
+      {advisorLine && <><br />{advisorLine}</>}
+    </>
+  );
+}
+
+function buildStageRosterSlots(frame: AuctionBoardFrame): RosterSlotVM[] {
+  return frame.seats.map((seat) => ({
+    slotId: seat.slotId,
+    pos: seat.label,
+    group: seat.group,
+    who: seat.player?.name ?? "open",
+    chip: seat.player?.chip,
+    filled: Boolean(seat.player),
+    isGap: seat.isGap,
+    gapLabel: seat.gapLabel,
+    depthNote: seat.depthNote,
+  }));
 }
 
 function buildStageLog(
@@ -581,6 +598,33 @@ export function LeagueBuilderAuctionDraft() {
       };
     })
   ), [playerById, rosterBoardTeamState]);
+  const rosterBoardFrameInput = useMemo<AuctionBoardRosterEntry[]>(() => (
+    (rosterBoardTeamState?.roster ?? []).map((assignment) => {
+      const player = playerById.get(assignment.playerId);
+      return {
+        playerId: assignment.playerId,
+        name: playerDisplayName(player),
+        salary: assignment.salary,
+      };
+    })
+  ), [playerById, rosterBoardTeamState]);
+  const rosterBoardPositionMap = useMemo<RosterPositionMap>(() => {
+    const map: Record<string, RosterSlotPlayer> = {};
+    for (const assignment of rosterBoardTeamState?.roster ?? []) {
+      const player = playerById.get(assignment.playerId);
+      if (!player) continue;
+      map[assignment.playerId] = toRosterSlotPlayer({
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition,
+        traits: [player.trait1, player.trait2],
+      });
+    }
+    return map;
+  }, [playerById, rosterBoardTeamState]);
+  const rosterBoardFrame = useMemo(
+    () => buildAuctionBoardFrame(rosterBoardFrameInput, rosterBoardPositionMap),
+    [rosterBoardFrameInput, rosterBoardPositionMap],
+  );
   const rosterBoardPayroll = useMemo(
     () => rosterBoardEntries.reduce((sum, entry) => sum + entry.salary, 0),
     [rosterBoardEntries],
@@ -995,7 +1039,7 @@ export function LeagueBuilderAuctionDraft() {
       selected: clampBidAmount(Number(bidAmount)) === amount,
     }));
   }, [auction.isWorking, bidAmount, bidIncrement, clampBidAmount, currentBidderIsCpu, minBid, session, stageMaxBid]);
-  const stageRosterSlots = useMemo(() => buildStageRosterSlots(rosterBoardEntries), [rosterBoardEntries]);
+  const stageRosterSlots = useMemo(() => buildStageRosterSlots(rosterBoardFrame), [rosterBoardFrame]);
   const stageLog = useMemo(
     () => buildStageLog(session, playerById, teamNameById, stageFocusTeamState?.teamId),
     [playerById, session, stageFocusTeamState?.teamId, teamNameById],
@@ -1102,10 +1146,11 @@ export function LeagueBuilderAuctionDraft() {
       cpuDecision: cpuDecisionVm,
     },
     board: {
-      title: `${stageFocusTeamName} · ${rosterBoardEntries.length} of ${MLB_BOARD_TARGET}`,
+      title: `${stageFocusTeamName} · ${rosterBoardEntries.length} of ${LEGAL_ROSTER.size}`,
       hint: rosterBoardBudgetWarning ? "budget watch" : "gaps glow",
       slots: stageRosterSlots,
-      needLine: buildStageNeedLine(rosterBoardPriorityGaps, rosterBoardBudgetWarning),
+      overflow: rosterBoardFrame.overflow,
+      needLine: buildStageNeedLine(rosterBoardFrame, rosterBoardPriorityGaps, rosterBoardBudgetWarning),
     },
     log: stageLog,
     help: (
@@ -1595,17 +1640,6 @@ export function LeagueBuilderAuctionDraft() {
           </section>
         )}
 
-        {session && (
-          <DraftRosterBoard
-            tier="mlb"
-            entries={rosterBoardEntries}
-            target={MLB_BOARD_TARGET}
-            payroll={rosterBoardPayroll}
-            walletRemaining={rosterBoardTeamState?.budgetRemaining ?? null}
-            priorityGaps={rosterBoardPriorityGaps}
-            budgetWarning={rosterBoardBudgetWarning}
-          />
-        )}
       </div>
     </div>
   );

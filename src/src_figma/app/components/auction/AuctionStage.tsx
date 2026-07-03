@@ -82,10 +82,15 @@ export interface CpuDecisionVM {
 }
 
 export interface RosterSlotVM {
+  slotId?: string;
   pos: string;
+  group?: "THE EIGHT" | "ROTATION" | "BULLPEN" | "THE BENCH";
   who?: string;
+  chip?: string;
   filled: boolean;
   isGap: boolean;
+  gapLabel?: string | null;
+  depthNote?: string | null;
 }
 
 export interface BoardVM {
@@ -93,6 +98,7 @@ export interface BoardVM {
   hint: string;
   columns?: number;
   slots: RosterSlotVM[];
+  overflow?: Array<{ playerId: string; name: string; chip: string }>;
   needLine: React.ReactNode;
 }
 
@@ -136,9 +142,25 @@ export interface AuctionStageProps {
 const money = (n: number) => "$" + Math.round(n).toLocaleString();
 const moneyK = (n: number) => "$" + Math.round(n / 1000) + "k";
 
+type BoardGroupName = NonNullable<RosterSlotVM["group"]>;
+
+function fallbackSlotGroup(slot: RosterSlotVM): BoardGroupName {
+  if (slot.pos === "C" || slot.pos === "1B" || slot.pos === "2B" || slot.pos === "3B" || slot.pos === "SS" || slot.pos === "LF" || slot.pos === "CF" || slot.pos === "RF") {
+    return "THE EIGHT";
+  }
+  if (slot.pos.startsWith("SP")) return "ROTATION";
+  if (slot.pos.startsWith("RP") || slot.pos === "CP") return "BULLPEN";
+  return "THE BENCH";
+}
+
 export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const isCpuTurn = Boolean(vm.move.cpuTurnName);
+  const boardSlots = vm.board.slots.map((slot, index) => ({
+    ...slot,
+    slotId: slot.slotId ?? `${slot.pos}-${index + 1}`,
+    group: slot.group ?? fallbackSlotGroup(slot),
+  }));
 
   return (
     <div className="auc-root">
@@ -270,14 +292,53 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                 <div className="spacer" />
                 <span className="chip">{vm.board.hint}</span>
               </div>
-              <div className="slots" style={vm.board.columns ? { gridTemplateColumns: `repeat(${vm.board.columns}, 1fr)` } : undefined}>
-                {vm.board.slots.map((s, i) => (
-                  <div key={i} className={`slot${s.filled ? " filled" : ""}${s.isGap ? " gap" : ""}`}>
-                    <div className="p">{s.pos}</div>
-                    {s.who !== undefined && <div className={`who${s.filled ? "" : " faint"}`}>{s.who || "open"}</div>}
-                  </div>
-                ))}
+              <div className="board-groups">
+                {(["THE EIGHT", "ROTATION", "BULLPEN", "THE BENCH"] as const).map((group) => {
+                  const groupSlots = boardSlots.filter((slot) => slot.group === group);
+                  if (groupSlots.length === 0) return null;
+                  const benchFilled = group === "THE BENCH" ? groupSlots.filter((slot) => slot.filled).length : null;
+                  return (
+                    <div key={group} className="board-group">
+                      <div className="board-group-title">
+                        {group}
+                        {benchFilled !== null && <span>BENCH {benchFilled}/{groupSlots.length}</span>}
+                      </div>
+                      <div className="slots" style={vm.board.columns ? { gridTemplateColumns: `repeat(${vm.board.columns}, 1fr)` } : undefined}>
+                        {groupSlots.map((s) => (
+                          <div
+                            key={s.slotId}
+                            data-testid={`auction-board-slot-${s.slotId}`}
+                            className={`slot${s.filled ? " filled" : ""}${s.isGap ? " gap" : ""}`}
+                          >
+                            <div className="p">{s.pos}</div>
+                            {s.chip && <div className="slot-chip">{s.chip}</div>}
+                            {s.who !== undefined && <div className={`who${s.filled ? "" : " faint"}`}>{s.who || "open"}</div>}
+                            {s.depthNote && <div className="depth-note">{s.depthNote}</div>}
+                            {s.gapLabel && (
+                              <div data-testid={`auction-board-gap-${s.slotId}`} className="gap-label">
+                                {s.gapLabel}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+              {vm.board.overflow && vm.board.overflow.length > 0 && (
+                <div data-testid="auction-board-overflow" className="overflow-rail">
+                  <div className="overflow-title">OVERFLOW — {vm.board.overflow.length} UNSEATED</div>
+                  <div className="overflow-note">These players don't fit the legal 22 frame — resolve before launch.</div>
+                  <div className="overflow-list">
+                    {vm.board.overflow.map((player) => (
+                      <span key={player.playerId} className="chip">
+                        <b>{player.chip}</b> {player.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="needline">{vm.board.needLine}</div>
             </div>
 
