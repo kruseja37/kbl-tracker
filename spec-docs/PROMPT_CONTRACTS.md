@@ -28619,3 +28619,117 @@ VERIFY (this is a CPU-BEHAVIOR change — surface, do not hide, any changed expe
   - FULL suite `NODE_ENV= npx vitest run` — report counts + name any red (run suspects solo).
   - `git diff --stat` — LeagueBuilderAuctionDraft.tsx, useFarmAuctionDraft.ts (+ any test genuinely needing the intended-behavior update). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-CPU-NEEDAWARE ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-ENGINE ===== -->
+# CODEX-ITER-ENGINE — pin-constrained BEST-22 recompute (novel math; slice 1 of 5)
+
+BUILD TO: spec-docs/FABLE_ITERATE_DRAFT_DESIGN_2026-07-03.md §2.1 + §2.2 (read VERBATIM). This is the ONE novel primitive
+of the iterate-loop build: a PIN forces a named player into a slot and the engine recomputes the best REST of the 22
+around the fixed points. Pure engine slice, test-first. ⚑ NOVEL-MATH: Fable design-reviews your diff before Opus audits —
+implement §2.2 to the letter; do not improvise semantics.
+
+REUSE (never hand-build): the best22Target.ts + archetypeBalanceSimulator.ts patterns already committed — the additive
+`slotPicks` field (B22-ALIGN) is the precedent for an additive, byte-identical-when-absent change to the frozen engine;
+`askSatisfaction` (rosterDesignFeasibility.ts) is the precedent for exposing a feasibility predicate. IDENTITY_SLOT_PLAN +
+the slotPicks frame alignment (best22Target test A4) is the slotId↔slotIndex map. Do NOT touch evaluateRosterDesign (the
+FLOOR stays pin-blind).
+
+DELIVERABLE 1 — src/engines/archetypeBalanceSimulator.ts (frozen/calibrated — ADDITIVE ONLY, byte-identical when absent):
+  - Add to BuildIdentityOptions (the options record ~:671-691, same seam family as slotPreferenceBonus):
+        pinned?: ReadonlyArray<{ slotIndex: number; playerId: string }>
+  - Semantics EXACTLY per §2.2(a) 1-4:
+    (1) Pins assigned FIRST, before the greedy seed (~:555-565): each pinned player occupies its IDENTITY_SLOT_PLAN slot,
+        is removed from every OTHER slot's candidate set, its salary joins the running spend, and the pitcher-count context
+        `{ pitchers }` is seeded from pins before the greedy walks the remaining slots.
+    (2) The climb NEVER swaps a pinned slot's occupant and NEVER moves a pinned player elsewhere; all other slots climb
+        exactly as today around the fixed points.
+    (3) value-floor / solvency / legality checks run over the full 22 (pins included) — UNCHANGED predicates.
+    (4) A pin whose player is absent from the pool, ineligible for the slot's plan kind, or duplicated across slots is
+        DROPPED deterministically (first-listed pin wins a player collision). Absent/empty `pinned` ⇒ BYTE-IDENTICAL output
+        to today (the seam guarantee — P1).
+  - Do NOT change buildBestRoster or the frozen value path. Every existing IdentityRosterResult field stays byte-identical.
+
+DELIVERABLE 2 — src/engines/rosterDesignFeasibility.ts: expose an `eligibleForSlot`-backed predicate (the way `askSatisfaction`
+  was exposed) so best22Target validates a pin's slot-eligibility through the ONE feasibility door — never re-derive
+  eligibility. Signature at your discretion but it must delegate to the existing `eligibleForSlot`.
+
+DELIVERABLE 3 — src/engines/best22Target.ts: `buildBest22Target(slots, simPool, classifiedById, archetype, tier, budget,
+  pins?: ReadonlyMap<string /*slotId*/, string /*playerId*/>)`:
+  - VALIDATE before building (through the exposed predicates, one rule set): player present in simPool; slot-eligible
+    (deliverable 2); one slot per player, one player per slot. Map the valid pins slotId→slotIndex via the slotPicks frame
+    alignment and pass them to buildIdentityRoster.pinned.
+  - `Best22Target` gains (additive):
+        pins: { honored: Array<{slotId,playerId}>; dropped: Array<{slotId,playerId,reason:'out-of-pool'|'ineligible'|'duplicate'}> }
+    and each `Best22TargetPick` gains `pinned: boolean`.
+  - honorsAsk / asksHonored / embodimentZ / allIn computed EXACTLY as today over the resulting build (pinned picks are just
+    picks). Absent/empty pins ⇒ the pins report is `{honored:[],dropped:[]}`, every pick.pinned false, and picks byte-identical
+    to today (extend the existing byte-identity test).
+
+TESTS (§2.7 P1-P6) in the engine test files:
+  - P1 byte-identity: buildIdentityRoster pinned absent/[] ⇒ deep-equal to today; buildBest22Target no-pins ⇒ picks
+    unchanged + empty pins report.
+  - P2 pin lands: an eligible pin occupies exactly that slot in slotPicks; no other slot holds him; pick.pinned true.
+  - P3 recompute-around: an EXPENSIVE pin → total spend includes him AND the rest of the 22 re-optimizes (differs from the
+    unpinned build); legality/solvency run over all 22.
+  - P4 drop taxonomy: out-of-pool / ineligible-for-slot / duplicate pins each land in pins.dropped with the right reason;
+    the build completes without them.
+  - P5 floor blindness: with ANY pin set, evaluateRosterDesign output + all tones/gates byte-identical to the pin-free run.
+  - P6 honorsAsk honesty: a pin mismatching the asked shape → honorsAsk false; a matching pin counts in asksHonored.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/best22Target.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts
+   src/engines/__tests__/draftabilityRanker.test.ts src/engines/__tests__/archetypeIdentityEmbodiment.test.ts
+   src/engines/__tests__/identityPreferenceBoost.test.ts` — all green (the last three prove the additive change is inert to
+   the frozen/calibrated consumers).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; run suspects solo).
+- `git diff --stat` — archetypeBalanceSimulator.ts (additive), best22Target.ts (+test), rosterDesignFeasibility.ts (+test).
+  Report the archetypeBalanceSimulator diff VERBATIM so the additive-only + byte-identical claim is verifiable. State the
+  L-SIM import-graph orthogonality (designer/best22 modules are outside the L-SIM graph).
+<!-- ===== END CONTRACT: CODEX-ITER-ENGINE ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-ENGINE-FIX ===== -->
+# CODEX-ITER-ENGINE-FIX — pin engine: kill the fabricating mapper + make pins.honored never lie
+
+The pin engine (C-ITER-ENGINE) is math-correct (Fable design-review APPROVED §2.2a-1..5; the idFromValue seed
+substitution is correct). TWO fixes before commit, both on the validation path in best22Target.ts. Behavior on the P1-P6
+battery is UNCHANGED — these are fidelity + honesty hardening.
+
+FIX 1 (Fable CHANGE-REQUIRED — canonical-adapter law §0.4): `toDesignPoolPlayer` (best22Target.ts:64-96) fabricates false
+data into a fully-typed engine input (bats:'R', throws:'R', age:27, arsenal ['4F','SL','CH'], traits rebuilt from
+twoWayVariant only). Even though eligibleForSlot reads only faithful fields today, a fabricated ClassifiableProfile is a
+C4-class landmine (classifyPlayerArchetype would eat it). DELETE it. Narrow the eligibility door to exactly what the rule
+reads:
+  - rosterDesignFeasibility.ts: define + EXPORT `SlotEligibilityPlayer = { profile: Pick<ClassifiableProfile,'isPitcher'|'primaryPosition'>; slotPlayer: RosterSlotPlayer }`; change `isDesignPlayerEligibleForSlot(slot, player: SlotEligibilityPlayer)` (the internal solver callers pass DesignPoolPlayer, a superset — still compile-clean). This makes any future profile-field drift in eligibleForSlot a COMPILE error, not a silent lie.
+  - best22Target.ts: delete `toDesignPoolPlayer` + the whole-pool `designPlayerById` map; at the pin eligibility check pass
+    `{ profile: { isPitcher: player.isPitcher, primaryPosition: player.position }, slotPlayer: player }` (SimPlayer is
+    structurally a RosterSlotPlayer — same move as poolFromDemand.ts:215). Zero fabrication; real fields only.
+
+FIX 2 (adversarial CONFIRMED minor — honored⇒placed): the design gate (eligibleForSlot sp/rp reads `role ?? primaryPosition`)
+and the engine gate (normalizeIdentityPins → canStart/canRelieve, role-ONLY) DIVERGE for a pitcher shaped
+{position:'SP'|'RP'|'CP'|'SP/RP', role:undefined}: validatePins reports it HONORED but the engine drops it → pins.honored
+lies (latent — no canonical adapter builds that shape today, and no caller wires pins yet, but the seam is non-equivalent).
+Make `pins.honored` reflect ACTUAL PLACEMENT instead of the pre-build guess:
+  - After buildIdentityRoster returns, a validated buildPin is HONORED iff its player actually occupies its slotIndex in the
+    result (i.e. the pick at that slot has `pinned === true` / player.id matches). A validated pin NOT placed → move it to
+    `pins.dropped` with reason `'ineligible'` (the engine's stricter eligibility dropped it). So `pins.honored` ⟺ the pin is
+    truly in the 22, matching `pick.pinned`. Validation-time drops (out-of-pool / duplicate / already-ineligible) are unchanged.
+
+FIX 3 (Fable doc nits + audit-watch, no behavior): (a) comment on `constrainedIdentityClimb`'s `pinnedSlots` param that it
+ASSUMES the start already honors the pins (a pin-less start would freeze wrong occupants); (b) one-line note that combining
+`pinned` with `banned` runs normalize on the ban-filtered pool (no live divergence — buildBest22Target passes no banned);
+(c) fix the two stale comments that now describe only the unpinned idFromValue branch (~archetypeBalanceSimulator.ts:748-749,
+:790-791).
+
+TESTS: keep P1-P6 green. ADD: a pitcher shaped {position:'SP', role:undefined} pinned to SP1 → NOT in pins.honored (in
+pins.dropped reason 'ineligible'); the SP1 pick is pinned:false; a normal role='SP' pin to SP1 IS honored + placed. Extend
+P4/the drop test rather than a whole new describe if cleaner.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/best22Target.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts
+   src/engines/__tests__/draftabilityRanker.test.ts src/engines/__tests__/archetypeIdentityEmbodiment.test.ts
+   src/engines/__tests__/identityPreferenceBoost.test.ts` — all green (frozen consumers prove no perturbation).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any; run suspects solo).
+- `git diff --stat` — best22Target.ts (+test), rosterDesignFeasibility.ts, archetypeBalanceSimulator.ts (comments only).
+<!-- ===== END CONTRACT: CODEX-ITER-ENGINE-FIX ===== -->

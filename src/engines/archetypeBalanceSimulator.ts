@@ -550,6 +550,27 @@ function identityEligible(
   return eligible(pool, slot as SlotKind, used);
 }
 
+function normalizeIdentityPins(
+  pool: SimPlayer[],
+  pinned: ReadonlyArray<{ slotIndex: number; playerId: string }> | undefined,
+): Map<number, SimPlayer> | undefined {
+  if (!pinned?.length) return undefined;
+  const byId = new Map(pool.map((player) => [player.id, player]));
+  const pinnedBySlot = new Map<number, SimPlayer>();
+  const usedPlayers = new Set<string>();
+  for (const pin of pinned) {
+    if (usedPlayers.has(pin.playerId) || pinnedBySlot.has(pin.slotIndex)) continue;
+    const player = byId.get(pin.playerId);
+    const slot = IDENTITY_SLOT_PLAN[pin.slotIndex];
+    if (!player || !slot) continue;
+    const eligibleForPinnedSlot = identityEligible(pool, slot, new Set()).some((candidate) => candidate.id === player.id);
+    if (!eligibleForPinnedSlot) continue;
+    pinnedBySlot.set(pin.slotIndex, player);
+    usedPlayers.add(player.id);
+  }
+  return pinnedBySlot.size > 0 ? pinnedBySlot : undefined;
+}
+
 const LEGAL_MAX_PITCHERS = 9;
 
 /** Sequential greedy over IDENTITY_SLOT_PLAN with the running pitcher-count context. */
@@ -557,7 +578,29 @@ function identityGreedyStart(
   pool: SimPlayer[],
   score: (p: SimPlayer) => number,
   slotBonus?: (playerId: string, slotIndex: number) => number,
+  pinnedBySlot?: ReadonlyMap<number, SimPlayer>,
 ): SlotPick[] {
+  if (pinnedBySlot?.size) {
+    const picks: SlotPick[] = [];
+    const used = new Set<string>();
+    let pitchers = 0;
+    for (const [slotIndex, player] of pinnedBySlot) {
+      picks.push({ slotIndex, player });
+      used.add(player.id);
+      if (player.isPitcher) pitchers += 1;
+    }
+    for (let i = 0; i < IDENTITY_SLOT_PLAN.length; i += 1) {
+      if (pinnedBySlot.has(i)) continue;
+      const cands = identityEligible(pool, IDENTITY_SLOT_PLAN[i], used, { pitchers });
+      if (cands.length === 0) continue;
+      const slotScore = (c: SimPlayer) => score(c) + (slotBonus?.(c.id, i) ?? 0);
+      const chosen = cands.reduce((best, c) => (slotScore(c) > slotScore(best) ? c : best));
+      picks.push({ slotIndex: i, player: chosen });
+      used.add(chosen.id);
+      if (chosen.isPitcher) pitchers += 1;
+    }
+    return picks;
+  }
   const picks: SlotPick[] = [];
   const used = new Set<string>();
   let pitchers = 0;
@@ -601,6 +644,8 @@ const ILLEGAL_ROSTER_PENALTY = 1e9;
  * stays zero. Legality is IN the violation term (audit F3): swaps that would break the roster's
  * legality — e.g. a backup-C coverage swap that busts the 9-pitcher ceiling — are never accepted
  * from a legal state, and repair prefers legality-restoring swaps.
+ * `pinnedSlots` assumes `start` already contains the correct pinned occupants; it only freezes those
+ * slots against later swaps.
  */
 function constrainedIdentityClimb(
   start: SlotPick[],
@@ -610,6 +655,7 @@ function constrainedIdentityClimb(
   floorIv: number,
   fitScore: (p: SimPlayer) => number,
   slotBonus?: (playerId: string, slotIndex: number) => number,
+  pinnedSlots?: ReadonlySet<number>,
 ): SlotPick[] {
   const picks = start.map((p) => ({ ...p }));
   const used = new Set(picks.map((p) => p.player.id));
@@ -629,6 +675,7 @@ function constrainedIdentityClimb(
   for (let pass = 0; pass < IDENTITY_MAX_PASSES; pass += 1) {
     let improved = false;
     for (let idx = 0; idx < picks.length; idx += 1) {
+      if (pinnedSlots?.has(picks[idx].slotIndex)) continue;
       const current = picks[idx].player;
       const usedExcept = new Set(used);
       usedExcept.delete(current.id);
@@ -689,13 +736,21 @@ export interface BuildIdentityOptions {
    * objective adds an exact 0). Never consulted by the frozen value baseline.
    */
   slotPreferenceBonus?: (playerId: string, slotIndex: number) => number;
+  /**
+   * PIN-CONSTRAINED BUILD (FABLE_ITERATE_DRAFT_DESIGN_2026-07-03 §2.2a): fixed
+   * player-slot commitments honored before the identity greedy seed. Invalid pins are
+   * dropped silently here; `buildBest22Target` owns user-facing drop reporting.
+   * When combined with `banned`, pins normalize against the ban-filtered pool; no live divergence
+   * today because `buildBest22Target` passes no banned set.
+   */
+  pinned?: ReadonlyArray<{ slotIndex: number; playerId: string }>;
 }
 
 /**
  * Build a LEGAL roster that EMBODIES the archetype (FABLE-C1's generalized builder): maximize
  * archetype fit subject to legality + solvency + a posture-scaled value floor anchored to the pure
- * value-maximizer's build on the same pool. Two starts (fit-greedy and the value baseline itself)
- * keep the floor reachable from both directions; the fitter FEASIBLE result wins.
+ * value-maximizer's build on the same pool. Two starts keep the floor reachable from both
+ * directions; pinned builds seed both starts through the same fixed-slot constraint.
  */
 export function buildIdentityRoster(
   fullPool: SimPlayer[],
@@ -724,25 +779,31 @@ export function buildIdentityRoster(
   const fitScore = makeFitScore(weightedCaps(caps, tier, params.boostFitWeight), tier);
 
   const slotBonus = options.slotPreferenceBonus;
+  const pinnedBySlot = normalizeIdentityPins(pool, options.pinned);
+  const pinnedSlots = pinnedBySlot ? new Set(pinnedBySlot.keys()) : undefined;
   const idFromFit = constrainedIdentityClimb(
-    identityGreedyStart(pool, fitScore, slotBonus),
+    identityGreedyStart(pool, fitScore, slotBonus, pinnedBySlot),
     pool,
     caps,
     budget,
     floorIv,
     fitScore,
     slotBonus,
+    pinnedSlots,
   );
-  // Re-seed the value baseline into the identity plan's slot indices (a primary-C backup is valid
-  // backupC coverage, so the mapping is total).
+  // Unpinned builds re-seed the value baseline into identity slot indices; pinned builds use a
+  // value-greedy fixed-slot seed so the frozen occupants stay correct.
   const idFromValue = constrainedIdentityClimb(
-    baselinePicks.map((p) => ({ slotIndex: VALUE_TO_IDENTITY_SLOT[p.slotIndex], player: p.player })),
+    pinnedBySlot
+      ? identityGreedyStart(pool, (p) => p.iv, undefined, pinnedBySlot)
+      : baselinePicks.map((p) => ({ slotIndex: VALUE_TO_IDENTITY_SLOT[p.slotIndex], player: p.player })),
     pool,
     caps,
     budget,
     floorIv,
     fitScore,
     slotBonus,
+    pinnedSlots,
   );
 
   const evaluate = (picks: SlotPick[]) => {

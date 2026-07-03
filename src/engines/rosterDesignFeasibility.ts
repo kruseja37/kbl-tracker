@@ -112,6 +112,10 @@ export interface ClassifiedDesignPoolPlayer extends DesignPoolPlayer {
   classification: ShapeClassification;
 }
 type ClassifiedPoolPlayer = ClassifiedDesignPoolPlayer;
+export type SlotEligibilityPlayer = {
+  profile: Pick<ClassifiableProfile, 'isPitcher' | 'primaryPosition'>;
+  slotPlayer: RosterSlotPlayer;
+};
 
 function classifyPool(pool: readonly DesignPoolPlayer[]): ClassifiedPoolPlayer[] {
   return pool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) }));
@@ -209,7 +213,7 @@ interface EligibilityRestrictions {
 
 function eligibleForSlot(
   slot: DesignSlot,
-  player: ClassifiedPoolPlayer,
+  player: SlotEligibilityPlayer,
   restrict: EligibilityRestrictions = {},
 ): boolean {
   const isPitcher = player.profile.isPitcher;
@@ -237,6 +241,11 @@ function eligibleForSlot(
       if (!isPitcher) return true;
       return !restrict.swingHittersOnly && (role === 'RP' || role === 'CP' || role === 'SP/RP');
   }
+}
+
+/** Public slot-eligibility door for target-side validators; delegates to the solver's rule. */
+export function isDesignPlayerEligibleForSlot(slot: DesignSlot, player: SlotEligibilityPlayer): boolean {
+  return eligibleForSlot(slot, player);
 }
 
 function candidateOrder(

@@ -232,6 +232,33 @@ describe('buildBest22Target', () => {
     expect(target.totalSalary).toBe(plain.totalSalary);
     expect(target.totalTax).toBe(plain.totalTax);
     expect(target.asksHonored).toEqual({ honored: 0, asked: 0 });
+    expect(target.pins).toEqual({ honored: [], dropped: [] });
+    expect(target.picks.every((pick) => pick.pinned === false)).toBe(true);
+  });
+
+  it('P1: absent and empty pins are byte-identical for identity roster and BEST-22 target picks', () => {
+    const pool = legalPool();
+    const slots = buildDefaultDesignSlots();
+    const plainIdentity = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, { posture: 'optimal' });
+    const emptyPinnedIdentity = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, {
+      posture: 'optimal',
+      pinned: [],
+    });
+    const noPinsTarget = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const emptyPinsTarget = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map(),
+    );
+
+    expect(emptyPinnedIdentity).toEqual(plainIdentity);
+    expect(emptyPinsTarget.picks).toEqual(noPinsTarget.picks);
+    expect(emptyPinsTarget.pins).toEqual({ honored: [], dropped: [] });
+    expect(emptyPinsTarget.picks.every((pick) => pick.pinned === false)).toBe(true);
   });
 
   it('A2: an available asked shape lands in the asked slot and honorsAsk is true', () => {
@@ -316,6 +343,159 @@ describe('buildBest22Target', () => {
       { kind: 'flex', position: null },
       { kind: 'swing', position: null },
     ]);
+  });
+
+  it('P2: an eligible pin lands in exactly that slot and nowhere else', () => {
+    const pool = legalPool();
+    const slots = buildDefaultDesignSlots();
+    const target = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['FLEX1', 'bench-4']]),
+    );
+
+    const flex = target.picks[17];
+    expect(target.pins).toEqual({ honored: [{ slotId: 'FLEX1', playerId: 'bench-4' }], dropped: [] });
+    expect(flex).toMatchObject({ slotId: 'FLEX1', playerId: 'bench-4', pinned: true });
+    expect(target.picks.filter((pick) => pick.playerId === 'bench-4')).toHaveLength(1);
+  });
+
+  it('P3: an expensive pin is counted in spend and the rest recomputes around the fixed slot', () => {
+    const expensive = { ...simPlayer('expensive-flex', { position: 'LF', isPitcher: false }), salary: 500_000 };
+    const pool = legalPool([expensive]);
+    const slots = buildDefaultDesignSlots();
+    const unpinned = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, 600_000);
+    const pinned = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      600_000,
+      new Map([['FLEX1', 'expensive-flex']]),
+    );
+
+    expect(pinned.picks[17]).toMatchObject({ slotId: 'FLEX1', playerId: 'expensive-flex', pinned: true });
+    expect(pinned.totalSalary).toBeGreaterThanOrEqual(expensive.salary);
+    expect(pinned.allIn).toBeGreaterThan(pinned.budget);
+    expect(pinned.feasible).toBe(false);
+    expect(pinned.picks.map((pick) => pick.playerId)).not.toEqual(unpinned.picks.map((pick) => pick.playerId));
+    expect(pinned.picks.filter((pick) => pick.playerId && pick.playerId !== 'expensive-flex')).toHaveLength(21);
+  });
+
+  it('P4: invalid pins are dropped with out-of-pool, ineligible, and duplicate reasons', () => {
+    const pool = legalPool();
+    const slots = buildDefaultDesignSlots();
+    const target = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([
+        ['SS', 'missing-player'],
+        ['SP1', 'ss'],
+        ['FLEX1', 'bench-4'],
+        ['FLEX2', 'bench-4'],
+      ]),
+    );
+
+    expect(target.pins.honored).toEqual([{ slotId: 'FLEX1', playerId: 'bench-4' }]);
+    expect(target.pins.dropped).toEqual([
+      { slotId: 'SS', playerId: 'missing-player', reason: 'out-of-pool' },
+      { slotId: 'SP1', playerId: 'ss', reason: 'ineligible' },
+      { slotId: 'FLEX2', playerId: 'bench-4', reason: 'duplicate' },
+    ]);
+    expect(target.picks[17]).toMatchObject({ slotId: 'FLEX1', playerId: 'bench-4', pinned: true });
+    expect(target.picks.filter((pick) => pick.playerId === 'missing-player' || pick.playerId === 'ss' && pick.slotId === 'SP1'))
+      .toHaveLength(0);
+  });
+
+  it('P4b: pins.honored only reports pins that the engine actually placed', () => {
+    const rolelessStarter = simPlayer('roleless-starter', { position: 'SP', isPitcher: true });
+    const pool = legalPool([rolelessStarter]);
+    const slots = buildDefaultDesignSlots();
+    const rolelessPin = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['SP1', 'roleless-starter']]),
+    );
+    const normalPin = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['SP1', 'sp-0']]),
+    );
+
+    expect(rolelessPin.pins.honored).toEqual([]);
+    expect(rolelessPin.pins.dropped).toEqual([
+      { slotId: 'SP1', playerId: 'roleless-starter', reason: 'ineligible' },
+    ]);
+    expect(rolelessPin.picks[9]).toMatchObject({ slotId: 'SP1', pinned: false });
+    expect(rolelessPin.picks[9].playerId).not.toBe('roleless-starter');
+    expect(normalPin.pins).toEqual({ honored: [{ slotId: 'SP1', playerId: 'sp-0' }], dropped: [] });
+    expect(normalPin.picks[9]).toMatchObject({ slotId: 'SP1', playerId: 'sp-0', pinned: true });
+  });
+
+  it('P5: pins are target-only; evaluateRosterDesign stays byte-identical with any pin set', () => {
+    const pool = legalPool();
+    const slots = buildDefaultDesignSlots();
+    const floorPool = designPoolFromSim(pool);
+    const before = evaluateRosterDesign(slots, floorPool, SOLVENT_BUDGET);
+    buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['SS', 'ss']]),
+    );
+    const after = evaluateRosterDesign(slots, floorPool, SOLVENT_BUDGET);
+
+    expect(after).toEqual(before);
+  });
+
+  it('P6: pins outrank asks, but honorsAsk stays honest for matching and mismatching pins', () => {
+    const pool = legalPool();
+    const slots = buildDefaultDesignSlots().map((slot) =>
+      slot.slotId === 'SS' ? { ...slot, preference: { shape: 'Defensive-Wizard', allowRunnerUp: false } } : slot,
+    );
+    const mismatch = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['SS', 'ss']]),
+    );
+    const match = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool, { ss: classification('Defensive-Wizard') }),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['SS', 'ss']]),
+    );
+
+    expect(mismatch.picks[4]).toMatchObject({ slotId: 'SS', playerId: 'ss', pinned: true, honorsAsk: false });
+    expect(mismatch.asksHonored).toEqual({ honored: 0, asked: 1 });
+    expect(match.picks[4]).toMatchObject({ slotId: 'SS', playerId: 'ss', pinned: true, honorsAsk: true });
+    expect(match.asksHonored).toEqual({ honored: 1, asked: 1 });
   });
 
   it('B1: value-seeded builds report each player under their true identity slot', () => {

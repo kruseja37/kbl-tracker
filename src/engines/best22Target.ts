@@ -6,6 +6,7 @@ import {
 } from './archetypeBalanceSimulator';
 import {
   askSatisfaction,
+  isDesignPlayerEligibleForSlot,
   type DesignSlot,
 } from './rosterDesignFeasibility';
 import type { ShapeClassification } from './playerArchetypeClassifier';
@@ -25,10 +26,19 @@ export interface Best22TargetPick {
   playerName?: string;
   salary: number;
   honorsAsk: boolean;
+  pinned: boolean;
+}
+
+export type Best22PinDropReason = 'out-of-pool' | 'ineligible' | 'duplicate';
+
+export interface Best22PinReport {
+  honored: Array<{ slotId: string; playerId: string }>;
+  dropped: Array<{ slotId: string; playerId: string; reason: Best22PinDropReason }>;
 }
 
 export interface Best22Target {
   picks: Best22TargetPick[];
+  pins: Best22PinReport;
   totalSalary: number;
   totalTax: number;
   allIn: number;
@@ -50,6 +60,51 @@ function playerName(player: SimPlayer): string | undefined {
   return maybe.name ?? ([maybe.firstName, maybe.lastName].filter(Boolean).join(' ') || undefined);
 }
 
+type ValidatedBuildPin = { slotId: string; slotIndex: number; playerId: string };
+
+function validatePins(
+  slots: readonly DesignSlot[],
+  simPool: readonly SimPlayer[],
+  pins: ReadonlyMap<string, string> | undefined,
+): { report: Best22PinReport; buildPins: ValidatedBuildPin[] } {
+  const report: Best22PinReport = { honored: [], dropped: [] };
+  const buildPins: ValidatedBuildPin[] = [];
+  if (!pins?.size) return { report, buildPins };
+
+  const playerById = new Map(simPool.map((player) => [player.id, player]));
+  const slotIndexById = new Map(slots.map((slot, index) => [slot.slotId ?? String(index), index]));
+  const validatedPlayerIds = new Set<string>();
+
+  for (const [slotId, playerId] of pins) {
+    if (validatedPlayerIds.has(playerId)) {
+      report.dropped.push({ slotId, playerId, reason: 'duplicate' });
+      continue;
+    }
+    const player = playerById.get(playerId);
+    if (!player) {
+      report.dropped.push({ slotId, playerId, reason: 'out-of-pool' });
+      continue;
+    }
+    const slotIndex = slotIndexById.get(slotId);
+    if (slotIndex === undefined) {
+      report.dropped.push({ slotId, playerId, reason: 'ineligible' });
+      continue;
+    }
+    const slot = slots[slotIndex];
+    if (!slot || !isDesignPlayerEligibleForSlot(slot, {
+      profile: { isPitcher: player.isPitcher, primaryPosition: player.position },
+      slotPlayer: player,
+    })) {
+      report.dropped.push({ slotId, playerId, reason: 'ineligible' });
+      continue;
+    }
+    buildPins.push({ slotId, slotIndex, playerId });
+    validatedPlayerIds.add(playerId);
+  }
+
+  return { report, buildPins };
+}
+
 export function buildBest22Target(
   slots: readonly DesignSlot[],
   simPool: readonly SimPlayer[],
@@ -57,9 +112,11 @@ export function buildBest22Target(
   archetype: SimArchetype,
   tier: TierKey,
   budget: number,
+  pins?: ReadonlyMap<string, string>,
 ): Best22Target {
   const fitScore = archetypeFitScorer(archetype, tier, 'optimal');
   const u = meanStd(simPool.map(fitScore)).std || 1;
+  const { report: pinValidationReport, buildPins } = validatePins(slots, simPool, pins);
 
   const slotPreferenceBonus = (playerId: string, slotIndex: number): number => {
     const preference = slots[slotIndex]?.preference;
@@ -90,11 +147,26 @@ export function buildBest22Target(
   const build = buildIdentityRoster([...simPool], archetype, tier, budget, {
     posture: 'optimal',
     slotPreferenceBonus,
+    pinned: buildPins,
   });
 
   let asked = 0;
   let honored = 0;
   const playerBySlotIndex = new Map(build.slotPicks.map((sp) => [sp.slotIndex, sp.player]));
+  const pinReport: Best22PinReport = { honored: [], dropped: [...pinValidationReport.dropped] };
+  for (const pin of buildPins) {
+    const player = playerBySlotIndex.get(pin.slotIndex);
+    if (player?.id === pin.playerId) {
+      pinReport.honored.push({ slotId: pin.slotId, playerId: pin.playerId });
+    } else {
+      pinReport.dropped.push({ slotId: pin.slotId, playerId: pin.playerId, reason: 'ineligible' });
+    }
+  }
+  const pinnedPlayerBySlotIndex = new Map(
+    buildPins
+      .filter((pin) => playerBySlotIndex.get(pin.slotIndex)?.id === pin.playerId)
+      .map((pin) => [pin.slotIndex, pin.playerId]),
+  );
   const picks = slots.map((slot, index) => {
     const player = playerBySlotIndex.get(index);
     const preference = slot.preference;
@@ -107,6 +179,7 @@ export function buildBest22Target(
         playerName: undefined,
         salary: 0,
         honorsAsk: false,
+        pinned: false,
       };
     }
 
@@ -125,11 +198,13 @@ export function buildBest22Target(
       playerName: playerName(player),
       salary: player.salary,
       honorsAsk,
+      pinned: pinnedPlayerBySlotIndex.get(index) === player.id,
     };
   });
 
   return {
     picks,
+    pins: pinReport,
     totalSalary: build.totalSalary,
     totalTax: build.totalTax,
     allIn: build.totalSalary + build.totalTax,
