@@ -172,6 +172,10 @@ function makeLegalRosterPlayers(salary: number): Player[] {
   return [...hitters, backupC, ...starters, ...relievers, ...flex, swing];
 }
 
+function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesign"]> {
+  return { slots: [], lockedAt };
+}
+
 function makePool(overrides: Partial<LeaguePoolRecord> = {}): LeaguePoolRecord {
   return {
     leagueId: "league-page",
@@ -275,6 +279,47 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=2");
+  });
+
+  test("blocks design-first draft start when a locked design changed after pool extraction", async () => {
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-03T00:00:00.000Z") }),
+      ],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+    expect(screen.getByText(/re-extract the pool — some designs changed after it was drawn/i)).toBeInTheDocument();
+    expect(screen.getByText(/Designs changed since this pool was drawn/i)).toBeInTheDocument();
+  });
+
+  test("enables design-first draft start when all locked designs predate the extracted pool", async () => {
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-02T00:00:00.000Z") }),
+      ],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    });
+    expect(screen.queryByText(/re-extract the pool/i)).not.toBeInTheDocument();
   });
 
   test("persists a changed GM seat name through the existing league and team records", async () => {

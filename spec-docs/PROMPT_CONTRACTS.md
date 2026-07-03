@@ -27686,3 +27686,36 @@ memo); `src/engines/auctionMarketModel.ts` (~298-300 unknown-bidder, ~510 bidder
   franchiseManualSmokeFixture, archetypeBalanceSimulator, LeagueBuilderDraftSetup, prospectScoutingDraftEngine); no NEW red.
 - `git diff --stat` — archetypeIdentity.ts, cpuShillBidding.ts, useAuctionDraft.ts, LeagueBuilderAuctionDraft.tsx (+ tests). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-DJ03-CPUID ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ07-STALE ===== -->
+## CODEX-DJ07-STALE — START must block on post-lock design staleness (DJ-07)
+
+**Finding:** FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §2 DJ-07. In design-first mode a design can be
+unlocked + re-locked AFTER the pool was extracted/locked; the staleness (lockedAt > poolExtractedAt)
+already WARNS in zone 4 but `startReady` counts only HOW MANY designs are locked, so START proceeds on a
+stale design (the pool no longer matches the designs). Branch-only; do NOT commit/push; leave dirty for Opus.
+Mechanical (one gate condition) — no Fable design.
+
+**Read:** src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx — `startReady`/`startBlocker` (~662-679),
+the staleness detection `modeAStaleTeams`/`modeAStale` (~1024-1030: a locked design is stale when its
+`lockedAt` is missing or `> league.poolExtractedAt`), and the existing zone-4 stale banner copy (~1515).
+
+**Fix:**
+1. Hoist (or duplicate into a small memo above startReady) the design-first staleness check so `startReady`
+   can consume it: in design-first mode, START requires that NO human club's locked design is stale
+   (every locked design's lockedAt <= poolExtractedAt). Reuse the SAME rule as modeAStaleTeams — do not
+   invent a second staleness rule (single source). Pool-first mode is unaffected.
+2. Add `!designsStale` to the `startReady` conjunction (design-first only).
+3. Add a `startBlocker` reason when stale, plain language consistent with the existing banner, e.g.
+   "re-extract the pool — some designs changed after it was drawn".
+4. Keep the existing zone-4 warning banner. Do NOT change the designer readOnly behavior (this is the
+   START-gate fix, not the freeze-designs approach).
+
+**Verify before returning (report ACTUAL output):**
+- `NODE_ENV= npm run build` exit 0 (tail).
+- Extend `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx`: a design-first fixture where a
+  design's lockedAt > poolExtractedAt → startReady false + the stale blocker; and the happy path (all
+  designs locked before/at extract) → START enabled. Run green.
+- FULL suite `NODE_ENV= npx vitest run` — characterized reds only, no NEW red (report counts).
+- `git diff --stat` — only LeagueBuilderDraftSetup.tsx (+ its test). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-DJ07-STALE ===== -->

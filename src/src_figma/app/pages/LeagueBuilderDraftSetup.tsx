@@ -630,6 +630,13 @@ export function LeagueBuilderDraftSetup() {
     () => humanTeams.filter((team) => Boolean(team.rosterDesign?.lockedAt)).length,
     [humanTeams],
   );
+  const modeAStaleTeams = league?.poolExtractedAt
+    ? humanTeams.filter((team) => {
+        const lockedAt = team.rosterDesign?.lockedAt;
+        return !lockedAt || lockedAt > league.poolExtractedAt!;
+      })
+    : [];
+  const designsStale = poolMode === "design-first" && modeAStaleTeams.length > 0;
   const rosterDesignToneByTeamId = useMemo(() => {
     const tones = new Map<string, ReturnType<typeof rosterDesignStatusTone>>();
     for (const team of humanTeams) {
@@ -664,7 +671,7 @@ export function LeagueBuilderDraftSetup() {
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
   const startReady =
     Boolean(league) &&
-    (hasSavedDraft || (poolReady && identitiesReady && (poolMode === "pool-first" || allHumanDesignsLocked))) &&
+    (hasSavedDraft || (poolReady && identitiesReady && (poolMode === "pool-first" || (allHumanDesignsLocked && !designsStale)))) &&
     savedDraftChecked &&
     !savedDraftLookupError;
   const startBlocker = !savedDraftChecked
@@ -673,11 +680,13 @@ export function LeagueBuilderDraftSetup() {
       ? "could not confirm saved draft status"
       : poolMode === "design-first" && !allHumanDesignsLocked
         ? "lock every club's design first"
-        : !poolReady
-          ? "lock a sufficient player pool first"
-          : !identitiesReady
-            ? "give every club an MLB identity first"
-            : null;
+        : designsStale
+          ? "re-extract the pool — some designs changed after it was drawn"
+          : !poolReady
+            ? "lock a sufficient player pool first"
+            : !identitiesReady
+              ? "give every club an MLB identity first"
+              : null;
 
   const setupCanMutate = () => {
     if (!setupMutationBlockMessage) return true;
@@ -1021,12 +1030,6 @@ export function LeagueBuilderDraftSetup() {
         ? "ready"
         : "waiting";
   const modeAWaitingTeams = humanTeams.filter((team) => !team.rosterDesign?.lockedAt);
-  const modeAStaleTeams = league?.poolExtractedAt
-    ? humanTeams.filter((team) => {
-        const lockedAt = team.rosterDesign?.lockedAt;
-        return !lockedAt || lockedAt > league.poolExtractedAt!;
-      })
-    : [];
   const modeAStale = modeAState === "review" || modeAState === "locked" ? modeAStaleTeams.length > 0 : false;
   const clubCheckRows = humanTeams.map((team) => {
     const verdict = liveClubVerdicts.get(team.id) ?? modeAReport?.designVerdicts.find((entry) => entry.teamId === team.id)?.result ?? null;
