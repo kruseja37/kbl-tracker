@@ -27,8 +27,11 @@ import {
   seedRosterDesignSlots,
 } from "../components/leagueBuilder/RosterDesigner";
 import {
+  clubCheckTargetCopy,
   designVerdictCopy,
   designVerdictTone,
+  targetVerdictState,
+  type TargetVerdictState,
   type VerdictTone,
 } from "../components/leagueBuilder/designVerdict";
 import {
@@ -53,6 +56,8 @@ import {
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
+import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
+import { historicalToSimArchetype, rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
@@ -226,6 +231,12 @@ function toneDotClass(tone: VerdictTone): string {
   if (tone === "amber") return "bg-[var(--ballpark-status-warn)]";
   if (tone === "green") return "bg-[var(--ballpark-status-green)]";
   return "bg-[var(--ballpark-chalk)]/45";
+}
+
+function targetSegmentClass(state: TargetVerdictState): string {
+  if (state === "feasible") return "text-[var(--ballpark-brass)]/70";
+  if (state === "infeasible") return "text-[var(--ballpark-status-warn)]/75";
+  return "text-[var(--ballpark-chalk)]/45";
 }
 
 function compactTeams(team: Team | undefined): team is Team {
@@ -531,6 +542,10 @@ export function LeagueBuilderDraftSetup() {
   const [reExtractConfirm, setReExtractConfirm] = useState(false);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [liveClubVerdicts, setLiveClubVerdicts] = useState<Map<string, DesignFeasibilityResult>>(new Map());
+  const [targetByTeamId, setTargetByTeamId] = useState<Map<string, Best22Target | null>>(new Map());
+  const [draftability, setDraftability] = useState<
+    Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> | undefined
+  >(undefined);
   const [recheckReport, setRecheckReport] = useState<RecheckReport | null>(null);
   const [lastRecheckKey, setLastRecheckKey] = useState<string | null>(null);
   const autoRecheckTriggerRef = useRef<string | null>(null);
@@ -758,6 +773,25 @@ export function LeagueBuilderDraftSetup() {
     () => (poolMode === "design-first" && !locked ? players : inPoolPlayers),
     [inPoolPlayers, locked, players, poolMode],
   );
+  const rosterDesignerPoolKey = useMemo(
+    () => sortedIds(rosterDesignerPlayers.map((player) => [
+      player.id,
+      player.power,
+      player.contact,
+      player.speed,
+      player.fielding,
+      player.arm,
+      player.velocity ?? "",
+      player.junk ?? "",
+      player.accuracy ?? "",
+      player.salary,
+    ].join(":"))).join("|"),
+    [rosterDesignerPlayers],
+  );
+  const inPoolPlayerIdsKey = useMemo(
+    () => sortedIds(inPoolPlayers.map((player) => player.id)).join("|"),
+    [inPoolPlayers],
+  );
   const tierBudget = useMemo(
     () => resolveLeagueSalaryCap(league),
     [league],
@@ -785,6 +819,11 @@ export function LeagueBuilderDraftSetup() {
     return tones;
   }, [humanTeams, rosterDesignerPlayers, tierBudget]);
   const inPoolDesignPool = useMemo(() => buildRosterDesignPool(inPoolPlayers), [inPoolPlayers]);
+  const clubTargetDesignKey = useMemo(() => JSON.stringify(humanTeams.map((team) => ({
+    id: team.id,
+    mlbArchetypeKey: team.mlbArchetypeKey ?? null,
+    slots: team.rosterDesign?.slots ?? null,
+  }))), [humanTeams]);
   const solvencyBanner = useMemo(() => {
     if (!locked) return null;
     return draftSetupSolvencyBannerText(inPoolDesignPool, tierBudget);
@@ -802,6 +841,68 @@ export function LeagueBuilderDraftSetup() {
     }, 200);
     return () => window.clearTimeout(timer);
   }, [humanTeams, inPoolDesignPool, tierBudget]);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const next = new Map<string, Best22Target | null>();
+        if (inPoolPlayers.length > 0) {
+          const simPool = demandUniverseFromPlayers(inPoolPlayers);
+          const classifiedById = new Map(simPool.map((player) => [player.id, classifyPlayerArchetype(player.profile)]));
+          for (const team of humanTeams) {
+            if (!team.rosterDesign) continue;
+            const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
+            const archetype = historical ? historicalToSimArchetype(historical) : null;
+            if (!archetype) {
+              next.set(team.id, null);
+              continue;
+            }
+            next.set(
+              team.id,
+              buildBest22Target(
+                seedRosterDesignSlots(team.rosterDesign.slots),
+                simPool,
+                classifiedById,
+                archetype,
+                league?.tier ?? "juiced",
+                tierBudget,
+              ),
+            );
+          }
+        }
+        if (!cancelled) setTargetByTeamId(next);
+      })();
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [clubTargetDesignKey, inPoolDesignPool, inPoolPlayerIdsKey, league?.tier, tierBudget]);
+  useEffect(() => {
+    if (rosterDesignerPlayers.length === 0) {
+      setDraftability(undefined);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const rows = rankAllArchetypesForPool(
+          demandUniverseFromPlayers(rosterDesignerPlayers),
+          league?.tier ?? "juiced",
+          { budgetOverride: tierBudget },
+        );
+        const next: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> = {};
+        for (const row of rows) {
+          next[row.archetypeId] = { band: row.band, reason: row.reasons[0] };
+        }
+        if (!cancelled) setDraftability(next);
+      })();
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [league?.tier, rosterDesignerPoolKey, tierBudget]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey));
   const poolReady = locked && sufficiency.meetsFloor;
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
@@ -1200,7 +1301,20 @@ export function LeagueBuilderDraftSetup() {
   const clubCheckRows = humanTeams.map((team) => {
     const verdict = liveClubVerdicts.get(team.id) ?? modeAReport?.designVerdicts.find((entry) => entry.teamId === team.id)?.result ?? null;
     const tone = designVerdictTone(verdict, inPoolPlayers.length);
-    return { team, verdict, tone, copy: designVerdictCopy(verdict, tone) };
+    const target = targetByTeamId.get(team.id) ?? null;
+    const targetState = targetVerdictState({
+      poolSize: inPoolPlayers.length,
+      hasIdentity: Boolean(team.mlbArchetypeKey),
+      target,
+    });
+    return {
+      team,
+      verdict,
+      tone,
+      copy: designVerdictCopy(verdict, tone),
+      targetCopy: clubCheckTargetCopy(targetState, target),
+      targetState,
+    };
   });
   const nonGreenClubCount = clubCheckRows.filter((row) => row.tone !== "green").length;
   const recheckVisible = identitiesReady && inPoolPlayers.length > 0;
@@ -1772,6 +1886,7 @@ export function LeagueBuilderDraftSetup() {
                     teamLabel={selectedTeam.name + " (" + selectedTeam.abbreviation + ") · GM " + ownerName(selectedTeamConfig.ownerId)}
                     mlbKey={selectedTeamConfig.mlbKey}
                     farmKey={selectedTeamConfig.farmKey}
+                    draftability={draftability ?? {}}
                     onPick={handlePick}
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage ?? undefined}
@@ -1916,7 +2031,12 @@ export function LeagueBuilderDraftSetup() {
                           <div key={row.team.id} className="flex items-center gap-3 text-sm">
                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${toneDotClass(row.tone)}`} aria-hidden="true" />
                             <span className="text-[var(--ballpark-chalk)]">{row.team.name} · {ownerName(teamOwnerId(row.team, seats))}</span>
-                            <span className={`ml-auto text-right text-xs font-bold ${toneTextClass(row.tone)}`}>{row.copy}</span>
+                            <span className="ml-auto flex items-center justify-end gap-3 text-right text-xs font-bold">
+                              <span className={toneTextClass(row.tone)}>{row.copy}</span>
+                              {row.targetCopy ? (
+                                <span className={`min-w-[112px] ${targetSegmentClass(row.targetState)}`}>{row.targetCopy}</span>
+                              ) : null}
+                            </span>
                           </div>
                         ))}
                       </div>

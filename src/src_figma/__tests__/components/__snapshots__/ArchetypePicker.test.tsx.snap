@@ -1,0 +1,1600 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ArchetypePicker draftability > B4 absent draftability prop preserves the default DOM snapshot 1`] = `
+<div>
+  <div
+    class="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3"
+  >
+    <div
+      class="text-xs font-bold tracking-[0.2em] text-[#C4A853]"
+    >
+      TEAM IDENTITY
+    </div>
+  </div>
+  <div
+    class="flex flex-wrap gap-3 mb-2"
+  >
+    <button
+      class="flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors border-[#C4A853] bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)]"
+      type="button"
+    >
+      <div
+        class="text-[10px] font-bold tracking-[0.18em] text-[#C4A853]"
+      >
+        MLB IDENTITY · sets affordability
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] truncate"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        — pick one —
+      </div>
+      <div
+        class="text-[11px] text-[#E8E8D8]/55"
+      >
+        what's cheap to build
+      </div>
+    </button>
+    <button
+      class="flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors border-[#4A6844] bg-[#2d3d2f] hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="text-[10px] font-bold tracking-[0.18em] text-[#C4A853]"
+      >
+        FARM IDENTITY · steers your scout
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] truncate"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        — pick one —
+      </div>
+      <div
+        class="text-[11px] text-[#E8E8D8]/55"
+      >
+        what your scout hunts
+      </div>
+    </button>
+  </div>
+  <div
+    class="text-[12px] text-[#E8E8D8]/55 mb-4"
+  >
+    Choosing your MLB identity — it shifts your luxury-tax ceilings, making your style cheap to over-stack.
+  </div>
+  <div
+    class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"
+  >
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(196, 168, 83);"
+      >
+        POWER
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Murderers' Row
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(196, 168, 83);"
+      >
+        1927 Yankees
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Mash and hit for average — but never run.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Speed
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(196, 168, 83);"
+      >
+        POWER
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Bomba Squad
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(196, 168, 83);"
+      >
+        2019 Twins
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Launch-angle thunder: 430 feet or a whiff.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Contact
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Speed
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(196, 168, 83);"
+      >
+        POWER
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Bash Brothers
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(196, 168, 83);"
+      >
+        1989 Athletics
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Forearm-bashing bombs and cannon arms; the pitching leaks.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Arm
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(111, 179, 111);"
+      >
+        SPEED
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Whiteyball
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(111, 179, 111);"
+      >
+        1985 Cardinals
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Turf-burning thieves and elite gloves; power is for other teams.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(176, 183, 188);"
+      >
+        DEFENSE
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Go-Go Small Ball
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(176, 183, 188);"
+      >
+        1959 White Sox
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Put it in play, beat out the hit, win with the glove.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Dead-Ball Suppressors
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        1906 Cubs
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Win 2–1: a bunt, a steal, and a junkballer who never gives in.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Rotation junk
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen velocity
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(111, 179, 111);"
+      >
+        SPEED
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Billy Ball Burners
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(111, 179, 111);"
+      >
+        1982 Athletics (Rickey Henderson)
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Steal first; the staff is an afterthought.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Junkball Surgeons
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        1995 Braves
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Maddux–Glavine: paint corners, change speeds; ordinary bats.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Rotation command
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Rotation junk
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation velocity
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Flamethrowers
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        1963 Dodgers (Koufax/Drysdale)
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Koufax–Drysdale heat; the lineup is along for the ride.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Rotation velocity
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Contact
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Nasty Boys
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        1990 Reds
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        A power pen that misses bats and a few zones.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Bullpen velocity
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        HDH Royals
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        2014 Royals
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Shorten the game: a lockdown pen and fast gloves.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Bullpen command
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        The Opener
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        2018 Rays
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Bullpenning: relievers over starters.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Bullpen velocity
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Bullpen junk
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation velocity
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        The Oriole Way
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        1969 Orioles
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Run prevention: elite gloves behind pinpoint starters.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Rotation command
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Speed
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen velocity
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(59, 125, 216);"
+      >
+        PITCHING
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Shift-Era Suppressors
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(59, 125, 216);"
+      >
+        2008 Rays
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Modern run prevention: defense and power arms, light bats.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Rotation velocity
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Contact
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(176, 183, 188);"
+      >
+        DEFENSE
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Big Red Machine
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(176, 183, 188);"
+      >
+        1975 Reds
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        The complete offense that out-scores its ordinary rotation.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation velocity
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(111, 179, 111);"
+      >
+        SPEED
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Hit 'Em Where They Ain't
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(111, 179, 111);"
+      >
+        2001 Mariners
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Slap it through the hole, leg out the extra base; the fences stay safe.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(111, 179, 111);"
+      >
+        SPEED
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Toolsy Burners
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(111, 179, 111);"
+      >
+        2007 Phillies
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Power and wheels up and down the order; the arms and gloves are the price.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Defense
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(176, 183, 188);"
+      >
+        DEFENSE
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Cannon Corps
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(176, 183, 188);"
+      >
+        1971 Pirates
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Rocket arms and sure hands; runners freeze and the bats stay quiet.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Arm
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Speed
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(196, 168, 83);"
+      >
+        POWER
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Gap-to-Gap
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(196, 168, 83);"
+      >
+        2003 Red Sox
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Line drives in the gaps all day; the pitching just tries to keep up.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen velocity
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(176, 183, 188);"
+      >
+        DEFENSE
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Web Gems
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(176, 183, 188);"
+      >
+        1969 Mets
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Highlight-reel gloves turn every ball into an out; the bats are an afterthought.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Arm
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Contact
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(176, 183, 188);"
+      >
+        DEFENSE
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Launch & Leather
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(176, 183, 188);"
+      >
+        2016 Cubs
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Mash and pick it clean; if the staff could find the zone they would be unbeatable.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Rotation command
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Bullpen command
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(196, 168, 83);"
+      >
+        POWER
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        No-Glove Offense
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(196, 168, 83);"
+      >
+        1930 Phillies
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Out-score everybody and pray the ball is never hit your way.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Power
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Contact
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Defense
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Arm
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(111, 179, 111);"
+      >
+        SPEED
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Wheels & Cannons
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(111, 179, 111);"
+      >
+        1980 Expos
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Steal a base, gun down a runner; the long ball belongs to the other guys.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Arm
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+    <button
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      type="button"
+    >
+      <div
+        class="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style="color: rgb(26, 26, 26); background: rgb(212, 184, 99);"
+      >
+        BALANCED
+      </div>
+      <div
+        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
+      >
+        Rangy Defenders
+      </div>
+      <div
+        class="text-[11px] font-bold tracking-wide mb-2"
+        style="color: rgb(212, 184, 99);"
+      >
+        2017 Diamondbacks
+      </div>
+      <div
+        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+      >
+        Cover every blade of grass and throw out anybody; the runs come the hard way.
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
+      >
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Speed
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Arm
+        </span>
+        <span
+          class="text-[#9FE0A0]"
+        >
+          +
+          Defense
+        </span>
+        <span
+          class="text-[#E8E8D8]/40"
+        >
+          →
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Power
+        </span>
+        <span
+          class="text-[#E0857A]"
+        >
+          −
+          Contact
+        </span>
+      </div>
+      <div
+        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+      >
+        ⚔ Strong vs · weak vs — revealed after Season 1
+      </div>
+    </button>
+  </div>
+</div>
+`;

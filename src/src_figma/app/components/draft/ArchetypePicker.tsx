@@ -21,10 +21,13 @@ import {
  */
 
 export type ArchetypeSlot = "mlb" | "farm";
+export type ArchetypeDraftabilityBand = "GREEN" | "YELLOW" | "LOCKED";
+export type ArchetypeDraftabilityMap = Record<string, { band: ArchetypeDraftabilityBand; reason?: string }>;
 
 export interface ArchetypePickerProps {
   mlbKey?: string | null;
   farmKey?: string | null;
+  draftability?: ArchetypeDraftabilityMap;
   onPick: (slot: ArchetypeSlot, key: string) => void;
   teamLabel?: string;
   disabled?: boolean;
@@ -70,23 +73,31 @@ function SlotButton({
 }
 
 function ArchetypeCard({
-  a, pickedFor, isActiveSlotPick, disabled, disabledReason, onClick,
+  a, pickedFor, isActiveSlotPick, draftability, disabled, disabledReason, onClick,
 }: {
   a: TeamArchetype;
   pickedFor: ArchetypeSlot[];
   isActiveSlotPick: boolean;
+  draftability?: { band: ArchetypeDraftabilityBand; reason?: string };
   disabled?: boolean;
   disabledReason?: string;
   onClick: () => void;
 }) {
   const color = FAMILY_COLOR[a.family];
+  const isLocked = draftability?.band === "LOCKED";
+  const verdictLine = draftability?.band === "YELLOW" && draftability.reason
+    ? { copy: `▲ ${draftability.reason}`, className: "text-[#FFD27A]" }
+    : draftability?.band === "LOCKED" && draftability.reason
+      ? { copy: `✕ ${draftability.reason}`, className: "text-[#E0857A]" }
+      : null;
+  const lockedClass = isLocked ? " opacity-[0.55] grayscale-[0.25]" : "";
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       title={disabled ? disabledReason : undefined}
-      className={`relative text-left border-4 p-4 transition-transform active:scale-[0.99] ${
+      className={`relative text-left border-4 p-4 transition-transform active:scale-[0.99]${lockedClass} ${
         isActiveSlotPick
           ? "border-[#C4A853] bg-[#3a4d3c] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           : "border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
@@ -102,7 +113,10 @@ function ArchetypeCard({
           ))}
         </div>
       )}
-      <div className="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2" style={{ color: "#1A1A1A", background: color }}>
+      <div
+        className="inline-block text-[9px] font-bold tracking-[0.14em] px-2 py-0.5 mb-2"
+        style={{ color: "#1A1A1A", background: isLocked ? "#8A8D84" : color }}
+      >
         {a.family.toUpperCase()}
       </div>
       <div className="text-lg font-bold text-[#E8E8D8] leading-tight pr-16" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
@@ -111,8 +125,11 @@ function ArchetypeCard({
       <div className="text-[11px] font-bold tracking-wide mb-2" style={{ color }}>{a.era}</div>
       <div className="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]">{a.lore}</div>
       <BoostSacrifice a={a} />
+      {verdictLine ? (
+        <div className={`mt-3 text-[11px] font-bold leading-snug ${verdictLine.className}`}>{verdictLine.copy}</div>
+      ) : null}
       {/* reserved matchup line — empirical, lands after Season 1 */}
-      <div className="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30">
+      <div className={`${verdictLine ? "mt-2" : "mt-3"} pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30`}>
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
@@ -122,6 +139,7 @@ function ArchetypeCard({
 export function ArchetypePicker({
   mlbKey,
   farmKey,
+  draftability,
   onPick,
   teamLabel,
   disabled = false,
@@ -131,6 +149,7 @@ export function ArchetypePicker({
   const mlb = archetypeByKey(mlbKey);
   const farm = archetypeByKey(farmKey);
   const activeKey = slot === "mlb" ? mlbKey : farmKey;
+  const showDraftabilityPending = draftability !== undefined && Object.keys(draftability).length === 0;
 
   return (
     <div>
@@ -138,6 +157,11 @@ export function ArchetypePicker({
         <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853]">TEAM IDENTITY</div>
         {teamLabel ? <div className="text-sm text-[#E8E8D8]/70">{teamLabel}</div> : null}
       </div>
+      {showDraftabilityPending ? (
+        <div className="text-[11px] text-[#E8E8D8]/45 mb-3">
+          Draftability reads appear once your player list is in.
+        </div>
+      ) : null}
 
       {/* the two slots */}
       <div className="flex flex-wrap gap-3 mb-2">
@@ -156,14 +180,17 @@ export function ArchetypePicker({
           const pickedFor: ArchetypeSlot[] = [];
           if (mlbKey === a.key) pickedFor.push("mlb");
           if (farmKey === a.key) pickedFor.push("farm");
+          const verdict = draftability?.[a.key];
+          const cardDisabled = disabled || (slot === "mlb" && verdict?.band === "LOCKED");
           return (
             <ArchetypeCard
               key={a.key}
               a={a}
               pickedFor={pickedFor}
               isActiveSlotPick={activeKey === a.key}
-              disabled={disabled}
-              disabledReason={disabledReason}
+              draftability={verdict}
+              disabled={cardDisabled}
+              disabledReason={disabled ? disabledReason : verdict?.reason}
               onClick={() => onPick(slot, a.key)}
             />
           );

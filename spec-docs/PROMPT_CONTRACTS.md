@@ -28332,3 +28332,106 @@ GATE (report ACTUAL output):
   asserted isLoading toggling on refresh, name it and report (do not silently delete it — surface it to Opus).
 - `git diff --stat` — useLeagueBuilderData.ts (+ its test) only.
 <!-- ===== END CONTRACT: CODEX-SILENT-REFRESH ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-PAGE ===== -->
+# CODEX-B22-PAGE — zone-4 CLUB CHECK target segment (§1.5) + DJ-11 archetype draftability picker (§2)
+
+BUILD TO: spec-docs/FABLE_BEST22_DESIGN_2026-07-03.md §1.5 (Surface C) + §2 (DJ-11). Read those VERBATIM for
+exact copy strings, tones, and card encoding. This contract is the wiring spine. The BEST-22 engine + the shared
+`designVerdict` module (with `clubCheckTargetCopy` + `targetVerdictState` already exported) are COMMITTED — consume them.
+Page = `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`; picker = `src/src_figma/app/components/draft/ArchetypePicker.tsx`.
+
+CANONICAL WIRES (reuse EXACTLY — never hand-build engine inputs):
+- SimPlayer pool: `demandUniverseFromPlayers(<players>)` (leaguePlayerAdapter). classifiedById:
+  `new Map(simPool.map((p) => [p.id, classifyPlayerArchetype(p.profile)]))`.
+- archetype: `HISTORICAL_ARCHETYPES.find(a => a.id === team.mlbArchetypeKey)` → `historicalToSimArchetype(a)` (null → no target).
+- target: `buildBest22Target(slots, simPool, classifiedById, archetype, tier, budget)`; copy via `clubCheckTargetCopy` +
+  `targetVerdictState` (designVerdict module).
+- DJ-11 verdicts: `rankAllArchetypesForPool(simPool, tier, { budgetOverride: tierBudget })` → `ArchetypeDraftability[]`
+  (fields: `archetypeId`, `band` ∈ GREEN|YELLOW|LOCKED, `reasons[]`).
+- tier = `league.tier ?? "juiced"`; budget = `tierBudget` (= resolveLeagueSalaryCap). NO new bases.
+
+DELIVERABLE 1 — §1.5 CLUB CHECK per-club TARGET segment (LeagueBuilderDraftSetup.tsx):
+  - New state `targetByTeamId` (Map<string, Best22Target | null>) + a debounced async effect that MIRRORS the existing
+    liveClubVerdicts effect (~:792-804). SAME pool basis as the club-check FLOOR: `inPoolPlayers` (the floor uses
+    `inPoolDesignPool = buildRosterDesignPool(inPoolPlayers)` at :787 — do NOT mint a third pool, the DJ-23 lesson).
+    Build `simPool = demandUniverseFromPlayers(inPoolPlayers)` + `classifiedById` ONCE (same for all clubs); then per
+    HUMAN club with a rosterDesign: archetype from mlbArchetypeKey (null → target null), slots =
+    seedRosterDesignSlots(team.rosterDesign.slots), `buildBest22Target(slots, simPool, classifiedById, archetype,
+    league.tier ?? "juiced", tierBudget)`. Key the effect on (inPoolPlayers ids / inPoolDesignPool, humanTeams' design
+    slots + mlbArchetypeKey, tierBudget). 200-300ms debounce; clearTimeout cleanup.
+  - Render: in the CLUB CHECK row (§1.5 ref :1960-1971), AFTER the existing floor segment, add a SECOND dim right-aligned
+    segment from `clubCheckTargetCopy(targetVerdictState({ poolSize: inPoolPlayers.length, hasIdentity: Boolean(mlbArchetypeKey),
+    target: targetByTeamId.get(team.id) ?? null }), target)`: feasible → `TARGET $Z` (dim gold), no-identity → `NO IDENTITY`
+    (dim chalk), infeasible → `IDENTITY WON'T EXPRESS` (amber, dim). Null copy → render nothing.
+  - FLOOR-ONLY invariant: the club dot, `nonGreenClubCount` (:1254), and the LOCK-confirm sentence must NOT read the
+    target. Target is advisory only.
+
+DELIVERABLE 2 — §2 DJ-11 archetype draftability:
+  - Page: debounced async effect (mirror the composition effect shape ~:920-935) computing
+    `rankAllArchetypesForPool(demandUniverseFromPlayers(rosterDesignerPlayers), league.tier ?? "juiced", { budgetOverride: tierBudget })`,
+    distilled to `Record<string, { band: 'GREEN'|'YELLOW'|'LOCKED'; reason?: string }>` (key = archetypeId, reason = reasons[0]).
+    Key on (rosterDesignerPlayers ids, tier, tierBudget); 400ms debounce; cancel-on-change; OFF the render path. Keep the
+    PREVIOUS verdicts while a recompute is in flight (no flicker-to-blank). Pass as a new optional `draftability` prop to
+    <ArchetypePicker> (~:1820-1827; note the picker is currently rendered at ~:1771 in this build — same call site).
+  - ArchetypePicker.tsx: new optional prop `draftability?: Record<string, { band; reason? }>`. ABSENT prop → byte-identical
+    to today (component stays dumb). ArchetypeCard encoding (per §2): GREEN → no line; YELLOW → card fully pickable +
+    amber `▲ {reason}` line above the reserved matchup line; LOCKED → card grays (opacity ~0.55 + desaturated family chip) +
+    red `✕ {reason}` line. PER-SLOT disable: a card's disabled for the active slot = `props.disabled || (slot === 'mlb' &&
+    band === 'LOCKED')` — LOCKED blocks the MLB pick, stays pickable for FARM; the gray/verdict encoding shows regardless of
+    active slot. Grid order NEVER re-sorts (catalog order; verdicts are decoration). No verdicts yet (empty pool / effect
+    pending) → cards as today + ONE quiet line under the TEAM IDENTITY header: `Draftability reads appear once your player
+    list is in.`
+
+SCOPE: LeagueBuilderDraftSetup.tsx + ArchetypePicker.tsx (+ tests) ONLY. GameTracker untouched. No DB/schema change. Floor
+gates stay floor-only. Grid order stable. Reuse canonical mappers — no hand-built SimPlayer/classification/archetype.
+
+TESTS (§1.9 A6-style copy pins + §2 B1-B5):
+  - CLUB CHECK: the three target segments render the exact §1.5 strings; the floor dot/nonGreenClubCount unaffected by target.
+  - B1: a LOCKED card blocks onPick for the mlb slot and fires it for the farm slot. B2: GREEN renders no verdict line,
+    YELLOW/LOCKED render reasons[0]. B3: grid order equals catalog order regardless of bands. B4: absent `draftability` prop
+    → byte-identical DOM (snapshot). B5: the draftability effect recomputes on pool-membership change, NOT on designer
+    keystrokes (memo key = player ids, not slot asks).
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run` for ArchetypePicker test + LeagueBuilderDraftSetup test + designVerdict test — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; run suspects solo).
+- `git diff --stat` — LeagueBuilderDraftSetup.tsx, ArchetypePicker.tsx (+ tests). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-B22-PAGE ===== -->
+
+<!-- ===== CONTRACT: CODEX-B22-PAGE-FIX ===== -->
+# CODEX-B22-PAGE-FIX — DJ-11 draftability goes stale after a pooled player's RATINGS are edited
+
+BUG (adversarial audit, CONFIRMED minor): the DJ-11 draftability effect in LeagueBuilderDraftSetup.tsx is keyed on
+`rosterDesignerPlayerIdsKey` (sorted IDs ONLY). `rankAllArchetypesForPool` scores bands from each player's iv + bat/pit
+ratings (via demandUniverseFromPlayers), so editing a pooled player's RATINGS moves the true GREEN/YELLOW/LOCKED
+verdicts — but membership is unchanged, so the ids-only key doesn't change, the effect never re-runs, and the picker
+shows stale bands (an archetype can stay wrongly LOCKED/pickable for the MLB slot) until the next add/remove. The sibling
+CLUB CHECK target effect does NOT have this gap (it keys on inPoolDesignPool, whose ref changes on any players edit).
+Advisory-only (never feeds a gate/dot/count) and self-heals — but a real inconsistency on the shipped DJ-11 surface.
+
+FIX — make the DJ-11 effect's pool key sensitive to the ranker's per-player INPUTS, while staying INSENSITIVE to slot
+asks (design edits) so B5 still holds:
+  - Replace `rosterDesignerPlayerIdsKey` (the sorted-ids-only memo) with a content signature over the ranker's inputs —
+    e.g. `sortedIds(rosterDesignerPlayers.map((p) => \`${p.id}:${p.power}:${p.contact}:${p.speed}:${p.fielding}:${p.arm}:${p.velocity ?? ''}:${p.junk ?? ''}:${p.accuracy ?? ''}:${p.salary}\`)).join("|")` (a `rosterDesignerPoolKey`).
+    Derive it ONLY from `rosterDesignerPlayers` fields — NEVER from `team.rosterDesign`/slot asks — so a designer keystroke
+    still does NOT retrigger it (B5), but a rating/salary/membership change of an in-pool player DOES.
+  - Use the new key in BOTH the empty-guard (`=== 0` → check the underlying array/length, not the string) and the effect
+    dep array. Remove the old ids-only memo if it has no other consumer (grep first; `inPoolPlayerIdsKey` is a SEPARATE
+    memo used by the CLUB CHECK effect — do NOT touch it).
+  - Change NOTHING else. The CLUB CHECK effect, the ArchetypePicker, and all render/gate logic stay as-is.
+
+TEST — extend the existing B5 test (LeagueBuilderDraftSetup.test.tsx, the "recomputes draftability on pool membership
+changes, not roster-design edits" case): ADD a case where a pooled player's ratings are edited (updatePlayer with a
+changed rating) → assert the draftability recompute DOES retrigger (bands re-read). KEEP the existing assertions: a
+roster-DESIGN/slot-ask edit does NOT retrigger it, and a membership add/remove DOES.
+
+SCOPE: LeagueBuilderDraftSetup.tsx + its test ONLY. GameTracker untouched. No other behavior change.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (run suspects solo, name any red).
+- `git diff --stat` — LeagueBuilderDraftSetup.tsx (+ its test) only.
+<!-- ===== END CONTRACT: CODEX-B22-PAGE-FIX ===== -->

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -7,6 +7,8 @@ import {
 } from "../../app/pages/LeagueBuilderDraftSetup";
 import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
+import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
+import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
@@ -47,6 +49,26 @@ vi.mock("../../../engines/archetypeIdentity", async () => {
   return {
     ...actual,
     selectTeamArchetype: vi.fn(async (team) => team),
+  };
+});
+
+vi.mock("../../../engines/best22Target", async () => {
+  const actual = await vi.importActual<typeof import("../../../engines/best22Target")>(
+    "../../../engines/best22Target",
+  );
+  return {
+    ...actual,
+    buildBest22Target: vi.fn(actual.buildBest22Target),
+  };
+});
+
+vi.mock("../../../engines/draftabilityRanker", async () => {
+  const actual = await vi.importActual<typeof import("../../../engines/draftabilityRanker")>(
+    "../../../engines/draftabilityRanker",
+  );
+  return {
+    ...actual,
+    rankAllArchetypesForPool: vi.fn(actual.rankAllArchetypesForPool),
   };
 });
 
@@ -180,6 +202,20 @@ function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesig
   return { slots: [], lockedAt };
 }
 
+function makeBest22Target(overrides: Partial<Best22Target> = {}): Best22Target {
+  return {
+    picks: [],
+    totalSalary: 28_000,
+    totalTax: 2_000,
+    allIn: 30_000,
+    budget: 1_000_000,
+    feasible: true,
+    embodimentZ: 0.4,
+    asksHonored: { honored: 0, asked: 0 },
+    ...overrides,
+  };
+}
+
 function makePool(overrides: Partial<LeaguePoolRecord> = {}): LeaguePoolRecord {
   return {
     leagueId: "league-page",
@@ -230,6 +266,8 @@ describe("LeagueBuilderDraftSetup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());
+    vi.mocked(rankAllArchetypesForPool).mockReturnValue([]);
     window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page");
     mockLeagueData();
   });
@@ -465,6 +503,124 @@ describe("LeagueBuilderDraftSetup", () => {
 
     await waitFor(() => {
       expect(screen.getByText((content) => content.includes(expectedLawLine))).toBeInTheDocument();
+    });
+  });
+
+  test("renders CLUB CHECK target segments without changing the floor dot gate", async () => {
+    const legalPlayers = [
+      ...makeLegalRosterPlayers(1_000),
+      ...Array.from({ length: 60 }, (_, index) =>
+        makePlayer(100 + index, {
+          id: `depth-${index}`,
+          primaryPosition: "CF",
+          salary: 1_000,
+        }),
+      ),
+    ];
+    vi.mocked(buildBest22Target)
+      .mockReturnValueOnce(makeBest22Target({ allIn: 30_000, feasible: true }))
+      .mockReturnValueOnce(makeBest22Target({ allIn: 45_000, feasible: false }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c"],
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", {
+          name: "Target Ready",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: "murderers-row",
+        }),
+        makeTeam("team-b", {
+          name: "No Identity",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: undefined,
+        }),
+        makeTeam("team-c", {
+          name: "Target Trouble",
+          gmSeatId: "seat-you",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: "whiteyball",
+        }),
+      ],
+      players: legalPlayers,
+      pool: makePool({
+        locked: false,
+        players: legalPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("THE CLUB CHECK")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("TARGET $30,000")).toBeInTheDocument();
+      expect(screen.getByText("NO IDENTITY")).toBeInTheDocument();
+      expect(screen.getByText("IDENTITY WON'T EXPRESS")).toBeInTheDocument();
+    });
+
+    const troubleRow = screen.getByText((content) => content.includes("Target Trouble · Player 2")).closest("div");
+    expect(troubleRow?.querySelector("[aria-hidden='true']")?.className).toContain("bg-[var(--ballpark-status-green)]");
+  });
+
+  test("B5 recomputes draftability on pool membership changes, not roster-design edits", async () => {
+    const basePlayers = makePlayers(24);
+    const baseTeams = [makeTeam("team-a"), makeTeam("team-b")];
+    mockLeagueData({ players: basePlayers, teams: baseTeams });
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(1);
+    });
+
+    mockLeagueData({
+      players: basePlayers,
+      teams: [
+        makeTeam("team-a", {
+          rosterDesign: {
+            slots: buildDefaultDesignSlots(),
+            lockedAt: "2026-01-03T00:00:00.000Z",
+          },
+        }),
+        makeTeam("team-b"),
+      ],
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 500));
+    });
+    expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(1);
+
+    const ratingEditedPlayers = basePlayers.map((player, index) =>
+      index === 0 ? { ...player, power: player.power + 1 } : player,
+    );
+    const ratingEditData = mockLeagueData({
+      players: ratingEditedPlayers,
+      teams: baseTeams,
+    });
+    await act(async () => {
+      await ratingEditData.updatePlayer(ratingEditedPlayers[0]);
+    });
+    expect(ratingEditData.updatePlayer).toHaveBeenCalledWith(ratingEditedPlayers[0]);
+    rerender(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(2);
+    });
+
+    mockLeagueData({
+      players: [
+        ...ratingEditedPlayers,
+        makePlayer(200, { id: "new-pool-member", primaryPosition: "SS" }),
+      ],
+      teams: baseTeams,
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(3);
     });
   });
 });
