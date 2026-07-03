@@ -2,13 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { Database, Users, User, Folder, Shuffle, Settings, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
-import { farmDraftRouteForLeague } from "../utils/draftRouting";
 import { BallparkShell } from "../components/ballpark";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
   const { leagues, teams, players, rulesPresets, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
-  const defaultFarmDraftRoute = leagues[0] ? farmDraftRouteForLeague(leagues[0]) : "/league-builder/draft";
 
   const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | null>(null);
   const [seedResult, setSeedResult] = useState<{ source: string; teams: number; players: number } | null>(null);
@@ -194,17 +192,8 @@ export function LeagueBuilder() {
 
           <ModuleCard
             icon={<Shuffle className="w-8 h-8" />}
-            title="DRAFT"
-            description="Farm prospect draft"
-            count="Configure"
-            color="#7733DD"
-            onClick={() => navigate(defaultFarmDraftRoute)}
-          />
-
-          <ModuleCard
-            icon={<Shuffle className="w-8 h-8" />}
-            title="MLB DRAFT"
-            description="Build the pool, see IV, lock, and draft"
+            title="Draft Setup"
+            description="Build the pool, set identities, lock, and draft"
             count="Setup"
             color="#3B7DD8"
             onClick={() => navigate(leagues[0] ? `/league-builder/draft-setup?leagueId=${leagues[0].id}` : "/league-builder/draft-setup")}

@@ -903,7 +903,7 @@ export function LeagueBuilderDraftSetup() {
       window.clearTimeout(timer);
     };
   }, [league?.tier, rosterDesignerPoolKey, tierBudget]);
-  const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey));
+  const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey) && Boolean(team.farmArchetypeKey));
   const poolReady = locked && sufficiency.meetsFloor;
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
   const startReady =
@@ -922,7 +922,7 @@ export function LeagueBuilderDraftSetup() {
           : !poolReady
             ? "lock a sufficient player pool first"
             : !identitiesReady
-              ? "give every club an MLB identity first"
+              ? "give every club an MLB and a farm identity first"
               : null;
 
   const setupCanMutate = () => {
@@ -1778,7 +1778,7 @@ export function LeagueBuilderDraftSetup() {
             title="3 · THE CLUBS"
             rightSlot={
               <span className={"text-[11px] font-bold " + (identitiesReady ? "text-[#9FE0A0]" : "text-[var(--ballpark-chalk)]/55")}>
-                {identitiesReady ? "✓ every club has an identity" : "set each club's identity"}
+                {identitiesReady ? "✓ every club has both identities" : "set each club's identities"}
               </span>
             }
           >

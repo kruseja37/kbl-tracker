@@ -129,16 +129,16 @@ describe('LeagueBuilder Component', () => {
       expect(screen.getByText('Assign players to teams and set lineups')).toBeInTheDocument();
     });
 
-    test('renders DRAFT module card', () => {
+    test('does not render the removed farm DRAFT module card', () => {
       render(<LeagueBuilder />);
-      expect(screen.getByText('DRAFT')).toBeInTheDocument();
-      expect(screen.getByText('Farm prospect draft')).toBeInTheDocument();
+      expect(screen.queryByText('DRAFT')).not.toBeInTheDocument();
+      expect(screen.queryByText('Farm prospect draft')).not.toBeInTheDocument();
     });
 
-    test('renders MLB DRAFT module card', () => {
+    test('renders Draft Setup module card', () => {
       render(<LeagueBuilder />);
-      expect(screen.getByText('MLB DRAFT')).toBeInTheDocument();
-      expect(screen.getByText('Build the pool, see IV, lock, and draft')).toBeInTheDocument();
+      expect(screen.getByText('Draft Setup')).toBeInTheDocument();
+      expect(screen.getByText('Build the pool, set identities, lock, and draft')).toBeInTheDocument();
     });
 
     test('renders RULES module card', () => {
@@ -172,9 +172,9 @@ describe('LeagueBuilder Component', () => {
       expect(screen.getByText('1 preset')).toBeInTheDocument();
     });
 
-    test('shows Configure for draft', () => {
+    test('shows Setup for draft setup', () => {
       render(<LeagueBuilder />);
-      expect(screen.getByText('Configure')).toBeInTheDocument();
+      expect(screen.getByText('Setup')).toBeInTheDocument();
     });
   });
 
@@ -203,15 +203,9 @@ describe('LeagueBuilder Component', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/league-builder/rosters');
     });
 
-    test('DRAFT card routes the first auction league to the farm auction page', () => {
+    test('Draft Setup card navigates to the Draft Setup screen', () => {
       render(<LeagueBuilder />);
-      fireEvent.click(screen.getByText('DRAFT'));
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/farm-auction-draft?leagueId=league-1');
-    });
-
-    test('MLB DRAFT card navigates to the Draft Setup screen', () => {
-      render(<LeagueBuilder />);
-      fireEvent.click(screen.getByText('MLB DRAFT'));
+      fireEvent.click(screen.getByText('Draft Setup'));
       expect(mockNavigate).toHaveBeenCalledWith(
         expect.stringContaining('/league-builder/draft-setup'),
       );

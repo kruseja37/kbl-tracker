@@ -28494,3 +28494,98 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; run suspects solo).
 - `git diff --stat` — rosterIntelligencePayload.ts, LeagueBuilderAuctionDraft.tsx, WhisperPanel.tsx (+ tests). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-B22-WHISPER ===== -->
+
+<!-- ===== CONTRACT: CODEX-LB-UI-CLEANUP ===== -->
+# CODEX-LB-UI-CLEANUP — home-screen renames + hub draft-button cleanup + farm-identity START gate (JK rulings 2026-07-03)
+
+Four independent, JK-ruled changes. NO snake-draft work in this contract (that is a separate scope decision).
+
+DELIVERABLE 1 — home-screen button labels (src/src_figma/app/pages/AppHome.tsx):
+  - The "FRANCHISE" menu button (~:51, Link to /franchise/select) → label text `Living Season Mode`.
+  - The "BUILDER" menu button (~:87, Link to /league-builder) → label text `League Builder`.
+  - The labels render through an `uppercase` class + Press_Start_2P pixel font, so they'll show as
+    "LIVING SEASON MODE" / "LEAGUE BUILDER". WIDEN each button (the fixed `w-[NNNpx]`) so the longer label
+    does NOT overflow or clip on one line — "LIVING SEASON MODE" needs roughly w-[320px]; "LEAGUE BUILDER"
+    roughly w-[280px]. Keep the exact SNES button styling (border, shadow, colors, h-[72px], padding) otherwise
+    unchanged. Do not change the routes.
+
+DELIVERABLE 2 — league-builder hub draft buttons (src/src_figma/app/pages/LeagueBuilder.tsx):
+  - REMOVE the farm-draft ModuleCard: the one with `title="DRAFT"` / `description="Farm prospect draft"` that
+    navigates to `defaultFarmDraftRoute` (~:196-203). Delete the card entirely.
+  - RENAME the `title="MLB DRAFT"` ModuleCard (~:205-212) → `title="Draft Setup"` (keep its route to
+    `/league-builder/draft-setup?leagueId=...` and its icon; you may simplify its description to
+    "Build the pool, set identities, lock, and draft").
+  - Clean up any imports/locals left unused by the farm-card removal (e.g. `farmDraftRouteForLeague`,
+    `defaultFarmDraftRoute`) — no unused-symbol warnings. Do NOT touch other ModuleCards (ROSTERS/RULES/etc.).
+
+DELIVERABLE 3 — farm identity required at START (src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx):
+  - `identitiesReady` (~:906) currently = `leagueTeams.every(t => Boolean(t.mlbArchetypeKey))`. Change it to require
+    BOTH: `leagueTeams.every(t => Boolean(t.mlbArchetypeKey) && Boolean(t.farmArchetypeKey))`.
+  - Update the START-gate reason copy (~:924-925, currently "give every club an MLB identity first") to name BOTH,
+    e.g. `give every club an MLB and a farm identity first`.
+  - The zone-3 badge (~:1780-1781: "✓ every club has an identity" / "set each club's identity") already keys off
+    `identitiesReady`, so it stays correct once the check is stricter — verify it reads well (both identities).
+  - Update the affected tests in src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx: any fixture/team
+    that set only `mlbArchetypeKey` to reach START/scout-hire must now ALSO set `farmArchetypeKey`. Add/keep a case
+    proving START is blocked when a club has an MLB identity but NO farm identity.
+
+SCOPE: AppHome.tsx, LeagueBuilder.tsx, LeagueBuilderDraftSetup.tsx (+ its test) ONLY. GameTracker untouched. No DB/schema
+change (farmArchetypeKey already exists on Team). No snake-draft/routing changes here.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx` — green (incl. the new farm-gate case).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; run suspects solo).
+- `git diff --stat` — AppHome.tsx, LeagueBuilder.tsx, LeagueBuilderDraftSetup.tsx (+ its test). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-LB-UI-CLEANUP ===== -->
+
+<!-- ===== CONTRACT: CODEX-RETIRE-SNAKE ===== -->
+# CODEX-RETIRE-SNAKE — remove the snake draft format entirely; auction is the only draft style (JK ruling 2026-07-03)
+
+JK ruled: retire snake draft — auction becomes the ONLY draft style. Snake is currently a selectable league
+draft-format ('auction' | 'snake') that routes BOTH the MLB draft (snake→LeagueBuilderSnakeDraft) and the farm draft
+(snake→LeagueBuilderDraft). Remove it cleanly so nothing routes to a snake screen, existing snake-saved leagues fall
+back to auction gracefully, and the screen source files are KEPT (unrouted/dead — reversible, do NOT delete them).
+
+DELIVERABLE 1 — routing is auction-only (src/src_figma/app/utils/draftRouting.ts):
+  - `mlbDraftRouteForFormat` → ALWAYS return `/league-builder/auction-draft` (drop the snake branch).
+  - `farmDraftRouteForFormat` → ALWAYS return `/league-builder/farm-auction-draft` (drop the snake branch).
+  - Keep the exported function names/signatures (callers unchanged). This makes any league — even one saved as
+    draftFormat:'snake' — route to auction, so no route ever targets a retired screen.
+
+DELIVERABLE 2 — remove the snake option from the league format selector (src/src_figma/app/pages/LeagueBuilderLeagues.tsx):
+  - Remove 'snake' from `DRAFT_FORMAT_OPTIONS` (find its definition — likely in this file or a nearby data module) so
+    the settings dropdown offers ONLY auction. Leave the stored type `'auction' | 'snake'` as-is (existing records still
+    parse; they just route to auction). If the form defaults draftFormat, default it to 'auction'.
+
+DELIVERABLE 3 — de-route the two snake screens (src/App.tsx):
+  - Remove the `<Route path="/league-builder/snake-draft" .../>` (~:396-399) and the `<Route path="/league-builder/draft" .../>`
+    (~:395) routes, plus their now-unused `lazy(() => import(...))` declarations for `LeagueBuilderSnakeDraft` (~:103-105)
+    and `LeagueBuilderDraft` (~:98-100). KEEP the screen source files on disk (LeagueBuilderSnakeDraft.tsx,
+    LeagueBuilderDraft.tsx) — just unrouted. Leave `/league-builder/farm-auction-draft` + `/league-builder/auction-draft` routed.
+
+DELIVERABLE 4 — neutralize the now-dead snake guard so nothing self-redirects to a gone route
+  (src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.tsx ~:248-251): the effect
+  `if (draftFormat !== "snake") return; else navigate(farmDraftRouteForLeague(...))` is now pointless (farm routing is
+  auction-only). Remove that snake-redirect effect (a snake-saved league now simply stays on farm-auction-draft). Do NOT
+  touch LeagueBuilderDraft.tsx (it is unrouted dead code now).
+
+DELIVERABLE 5 — tests:
+  - Retire/skip the snake-screen tests that assert the retired routes/screens (e.g.
+    src/src_figma/__tests__/leagueBuilder/LeagueBuilderSnakeDraft.test.tsx — remove or mark clearly as retired). Prefer
+    removing the file over leaving it asserting a dead route.
+  - Update any draftRouting test that asserted the snake branch to expect the auction route.
+  - Update any LeagueBuilderLeagues test that asserted a 'snake' option in the selector.
+  - Add/keep a draftRouting test: mlbDraftRouteForFormat('snake') AND farmDraftRouteForFormat('snake') now both return
+    the AUCTION routes (the graceful-fallback proof for legacy snake leagues).
+
+SCOPE: draftRouting.ts, LeagueBuilderLeagues.tsx, App.tsx, LeagueBuilderFarmAuctionDraft.tsx + the named tests + the
+DRAFT_FORMAT_OPTIONS source. Do NOT delete the snake screen .tsx files. GameTracker untouched.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0 (no unused-import/route errors).
+- `NODE_ENV= npx vitest run` for draftRouting + LeagueBuilderLeagues tests — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any red; run suspects solo).
+- `git diff --stat` — the scoped files above. Report a grep proving no remaining route/nav points to
+  `/league-builder/snake-draft` or the farm-snake `/league-builder/draft`.
+<!-- ===== END CONTRACT: CODEX-RETIRE-SNAKE ===== -->

@@ -43,12 +43,12 @@ export function AppHome() {
         <div className="space-y-4">
           <Link
             to="/franchise/select"
-            className="bg-[#5599FF] h-[72px] relative block w-[220px]"
+            className="bg-[#5599FF] h-[72px] relative block w-[320px]"
           >
             <div aria-hidden="true" className="absolute border-[#3366CC] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
             <div className="content-stretch flex flex-col items-start p-5 relative size-full">
               <div className="flex gap-4 h-7 items-center w-full">
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">FRANCHISE</p>
+                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">Living Season Mode</p>
               </div>
             </div>
           </Link>
@@ -79,12 +79,12 @@ export function AppHome() {
 
           <Link
             to="/league-builder"
-            className="bg-[#CC44CC] h-[72px] relative block w-[220px]"
+            className="bg-[#CC44CC] h-[72px] relative block w-[280px]"
           >
             <div aria-hidden="true" className="absolute border-[#992299] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
             <div className="content-stretch flex flex-col items-start p-5 relative size-full">
               <div className="flex gap-4 h-7 items-center w-full">
-                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">BUILDER</p>
+                <p className="font-['Press_Start_2P'] leading-[20px] text-[14px] text-white tracking-[0.7px] uppercase flex-1">League Builder</p>
               </div>
             </div>
           </Link>

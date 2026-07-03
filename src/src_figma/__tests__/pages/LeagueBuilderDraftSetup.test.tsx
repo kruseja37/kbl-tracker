@@ -297,7 +297,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
-  test("starts at scout hire once the pool is locked and every club has an identity", async () => {
+  test("starts at scout hire once the pool is locked and every club has both identities", async () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
@@ -307,6 +307,23 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0");
+  });
+
+  test("blocks draft start when a club has an MLB identity but no farm identity", async () => {
+    mockLeagueData({
+      teams: [
+        makeTeam("team-a"),
+        makeTeam("team-b", { farmArchetypeKey: undefined }),
+      ],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/give every club an MLB and a farm identity first/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    expect(screen.getByText(/set each club's identities/i)).toBeInTheDocument();
   });
 
   test("carries the selected shill count into scout hire", async () => {
@@ -338,9 +355,9 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+      expect(screen.getByText(/re-extract the pool — some designs changed after it was drawn/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/re-extract the pool — some designs changed after it was drawn/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     expect(screen.getByText(/Designs changed since this pool was drawn/i)).toBeInTheDocument();
   });
 
@@ -531,6 +548,7 @@ describe("LeagueBuilderDraftSetup", () => {
           name: "Target Ready",
           rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
           mlbArchetypeKey: "murderers-row",
+          farmArchetypeKey: "whiteyball",
         }),
         makeTeam("team-b", {
           name: "No Identity",
@@ -542,6 +560,7 @@ describe("LeagueBuilderDraftSetup", () => {
           gmSeatId: "seat-you",
           rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
           mlbArchetypeKey: "whiteyball",
+          farmArchetypeKey: "murderers-row",
         }),
       ],
       players: legalPlayers,
