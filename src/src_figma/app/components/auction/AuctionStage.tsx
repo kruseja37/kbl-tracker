@@ -76,8 +76,6 @@ export interface CpuDecisionVM {
   roleLabel: "CPU team" | "Shill";
   action: string;
   reason: string;
-  valuation?: string;
-  maxBid?: string;
   amount?: string;
 }
 
@@ -218,11 +216,9 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                   <div className="eyebrow">{vm.move.cpuDecision?.roleLabel ?? "CPU"} turn preview</div>
                   <div className="cpu-action">{vm.move.cpuDecision?.action ?? `${vm.move.cpuTurnName} is deciding`}</div>
                   <div className="cpu-reason">{vm.move.cpuDecision?.reason ?? "Read-only preview. Advance to let the decision resolve."}</div>
-                  {(vm.move.cpuDecision?.amount || vm.move.cpuDecision?.valuation || vm.move.cpuDecision?.maxBid) && (
+                  {vm.move.cpuDecision?.amount && (
                     <div className="cpu-numbers">
-                      {vm.move.cpuDecision.amount && <span>Move <b>{vm.move.cpuDecision.amount}</b></span>}
-                      {vm.move.cpuDecision.valuation && <span>Read <b>{vm.move.cpuDecision.valuation}</b></span>}
-                      {vm.move.cpuDecision.maxBid && <span>Cap <b>{vm.move.cpuDecision.maxBid}</b></span>}
+                      <span>Move <b>{vm.move.cpuDecision.amount}</b></span>
                     </div>
                   )}
                   <button type="button" className="advance-cpu" onClick={() => onAdvanceCpu?.()} disabled={!vm.move.canBid}>

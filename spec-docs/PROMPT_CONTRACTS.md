@@ -27556,3 +27556,29 @@ rosters asserting, for every legal roster, zero glow + empty overflow + all 22 s
   fuzz (report the legal-roster count the fuzz verified).
 - `git diff --stat` — the fix touches auctionBoardFrame.ts + its test (plus the already-present DJ-01 files). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-DJ01-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-DJ02-CPULEAK ===== -->
+## CODEX-DJ02-CPULEAK — CPU turn panel leaks rival valuation/cap (DJ-02, F4 walled-internals)
+
+**Finding:** FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §2 DJ-02. The CPU-turn preview panel shows the
+rival seat's INTERNAL valuation and fold-point, so a human can bid every shill to exactly its cap —
+the walled-internals rule (F4) is broken at the UI. Branch-only; do NOT commit/push; leave the tree
+dirty for Opus. This is mechanical (no Fable design).
+
+**Fix:** the CPU panel shows the MOVE only (bid/pass + a plain reason) — NEVER the valuation or the cap.
+1. `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx` `buildCpuDecisionVm` (~338-392): stop
+   populating `valuation` and `maxBid` on the returned VM (remove those fields from every branch), and
+   REWRITE every `reason` string so it contains NO dollar figure derived from decision.valuation or
+   decision.maxBid — plain language only (e.g. "<role> still has room and stays in.", "<role> is at its
+   limit and lets it go.", "<role> likes the player and bids.", "<role> passes."). The MOVE amount (the
+   actual bid, `amount`) MAY remain — a placed bid is public; the valuation and the fold-point are not.
+2. `src/src_figma/app/components/auction/AuctionStage.tsx`: remove `valuation` and `maxBid` from the
+   `CpuDecisionVM` type (~79-80) and delete the "Read <valuation>" and "Cap <maxBid>" render spans
+   (~224-225). Keep the "Move <amount>" span, the action, and the reason.
+3. Grep the whole repo to confirm no other reader depends on CpuDecisionVM.valuation/maxBid.
+
+**Verify before returning (report ACTUAL output):**
+- `NODE_ENV= npm run build` exit 0 (tail).
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx src/src_figma/app/components/auction/__tests__/AuctionStage.test.tsx` — green; ADD/extend a test asserting the CPU preview VM carries NO valuation/cap field and the reason has no '$' from valuation.
+- `git diff --stat` — only LeagueBuilderAuctionDraft.tsx + AuctionStage.tsx (+ the test). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-DJ02-CPULEAK ===== -->

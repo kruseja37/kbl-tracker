@@ -82,4 +82,25 @@ describe("AuctionStage roster board", () => {
     expect(screen.queryAllByTestId(/auction-board-gap-/)).toHaveLength(0);
     expect(screen.queryByTestId("auction-board-overflow")).not.toBeInTheDocument();
   });
+
+  test("shows only the public CPU move amount, not private read or cap fields", () => {
+    const stageVm = vm();
+    stageVm.move.cpuTurnName = "Page Caps";
+    stageVm.move.canBid = true;
+    stageVm.move.cpuDecision = {
+      teamName: "Page Caps",
+      roleLabel: "CPU team",
+      action: "Page Caps will bid $70,000",
+      reason: "CPU team likes the player and bids.",
+      amount: "$70,000",
+    };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("Page Caps will bid $70,000")).toBeInTheDocument();
+    expect(screen.getByText("CPU team likes the player and bids.")).toBeInTheDocument();
+    expect(screen.getByText(/^Move\b/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Read\b/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Cap\b/)).not.toBeInTheDocument();
+  });
 });

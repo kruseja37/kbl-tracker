@@ -322,8 +322,8 @@ function cpuPassReason(reason: string): string {
     "missing-lot": "there is no active lot",
     "no-interest": "the price is not attractive enough for this profile",
     "not-open-bidding": "bidding is not open",
-    "over-budget": "the bid would break the budget cap",
-    "over-valuation": "the ask is above the team's read",
+    "over-budget": "the bid would break the team's budget",
+    "over-valuation": "the ask is above this team's comfort level",
     "team-full": "the roster has no open slots",
     "team-not-found": "the bidder is missing from the session",
     "team-not-in-lot": "the bidder is already out",
@@ -349,18 +349,14 @@ function buildCpuDecisionVm(input: {
           teamName: input.teamName,
           roleLabel,
           action: `${input.teamName} will bid ${formatMoney(decision.bid)}`,
-          reason: `${roleLabel} read values the player around ${formatMoney(decision.valuation)} and still has room to keep bidding.`,
+          reason: `${roleLabel} likes the player and bids.`,
           amount: formatMoney(decision.bid),
-          valuation: formatMoney(decision.valuation),
-          maxBid: formatMoney(decision.maxBid),
         }
       : {
           teamName: input.teamName,
           roleLabel,
           action: `${input.teamName} will pass`,
-          reason: `${roleLabel} read: ${cpuPassReason(decision.reason)}.`,
-          valuation: formatMoney(decision.valuation),
-          maxBid: formatMoney(decision.maxBid),
+          reason: `${roleLabel} passes because ${cpuPassReason(decision.reason)}.`,
         };
   }
 
@@ -378,18 +374,14 @@ function buildCpuDecisionVm(input: {
         teamName: input.teamName,
         roleLabel,
         action: `${input.teamName} will claim at ${formatMoney(decision.price)}`,
-        reason: `${roleLabel} read values the player around ${formatMoney(decision.valuation)}.`,
+        reason: `${roleLabel} likes the player and claims.`,
         amount: formatMoney(decision.price),
-        valuation: formatMoney(decision.valuation),
-        maxBid: formatMoney(decision.maxBid),
       }
     : {
         teamName: input.teamName,
         roleLabel,
         action: `${input.teamName} will let the player go`,
-        reason: `${roleLabel} read: ${cpuPassReason(decision.reason)}.`,
-        valuation: formatMoney(decision.valuation),
-        maxBid: formatMoney(decision.maxBid),
+        reason: `${roleLabel} is at its limit and lets it go.`,
       };
 }
 
