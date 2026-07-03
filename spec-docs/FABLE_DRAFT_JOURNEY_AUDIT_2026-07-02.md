@@ -227,3 +227,34 @@ end-to-end, no fee drift (scout/staffing carry no fees).
   a v1.1 economy-batch item? Recommendation: v1.1, provided DJ-04(1) lands (the verdicts
   and the room then share the pool-relative cap; the remaining skew is per-player pricing
   nuance, not a verdict-flipper).
+
+---
+
+## §7. ADDENDUM — Opus cross-model audit of the legality-fix delta (2026-07-03)
+
+Opus audited Fable's legality-by-construction delta (builder≠auditor) before commit: build
+exit 0, feasibility suite 13/13, full suite green modulo 5 characterized flakes, plus a
+4-lens adversarial pass (17 HOLDS). The delta fixes the STATED JK browser bug with zero
+regression and was committed (a20ff1a6). The adversarial pass surfaced ONE new confirmed
+defect, VERIFIED by direct reproduction against the real engine AND proven pre-existing on
+base HEAD 7109524a (identical output with the delta stashed):
+
+**DJ-29 [MAJOR · seam · PRE-EXISTING, owner Fable] The design-feasibility FRAME is stricter
+than isLegalRoster on the Two-Way(C)/reliever axis → false-infeasible on some legal 22s.**
+`buildDefaultDesignSlots()` models the roster as a BIJECTION onto 22 named slots (4 dedicated
+SP + 4 dedicated RP + a distinct backupC body), while `isLegalRoster` is SET-based and lets a
+player double-count (a Two-Way(C) arm satisfies catcher depth AND stays in the 8–9 pitcher
+staff; an SP/RP counts toward both start and relieve floors). So when a pool's ONLY
+backup-catcher-capable body is a Two-Way(C) arm that the staff also needs to reach 4
+relievers, the frame pulls that arm to backupC and strands an RP slot → `RP4 no-match` →
+`feasible:false` on a pool that forms a legal 22. Repro (both verified): (A) 8 field + 6 bench
++ {3 SP, 1 SP-twoC, 3 RP, 1 RP-twoC}; (B) 8 field + 5 bench + {5 SP, 3 RP, 1 RP-twoC}. Both:
+`isLegalRoster(pool)=true`, `evaluateRosterDesign=feasible:false, RP4:no-match`.
+Direction: the frame only ever OVER-rejects a legal roster — the final `isLegalRoster` gate
+still blocks any illegal assembly, so there is NO false-positive (illegal-approved) risk.
+`rosterConstruction.ts` explicitly ratifies "one dedicated catcher + a Two Way (C) pitcher is
+LEGAL", so the triggering composition is intended, not exotic — but it needs no second catcher
+in the pool, which a normally-imported pool usually has, so it is an EDGE case for JK's browser
+pass. Fix (Fable design call): make the feasibility check honor set-based legality with role
+double-counting (or add a retry that lets a Two-Way(C) arm at backupC also satisfy the
+reliever floor) rather than a rigid 22-slot bijection. NOT introduced by the committed delta.

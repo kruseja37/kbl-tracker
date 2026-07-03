@@ -3531,3 +3531,23 @@ keeps: the auction room itself is untouched and fully specced — its pricing, a
 and bidding all already run on one basis (IV-derived). What v1 defers: precision of the
 PRE-DRAFT planning estimates only (the designer's dollar figures can skew for age/fame-heavy
 designs vs what the room will ask). No auction functionality is lost.
+
+## 2026-07-03 — Opus cross-model audit of the legality-fix delta: committed + one PRE-EXISTING defect ticketed (DJ-29)
+
+Opus audited Fable's legality-by-construction delta (builder≠auditor): build 0, feasibility
+13/13, full suite green modulo 5 characterized flakes, 4-lens adversarial pass (17 HOLDS).
+The delta fixes the stated "FILLS · NOT A LEGAL 22" browser bug with zero regression →
+COMMITTED (a20ff1a6). The adversarial pass found ONE new defect, verified by reproduction
+against the real engine and PROVEN pre-existing on base HEAD 7109524a (identical output with
+the delta stashed):
+
+**DJ-29 (MAJOR, pre-existing, owner Fable):** the design-feasibility FRAME is a rigid
+22-slot bijection (4 dedicated SP + 4 dedicated RP + a distinct backupC) and is STRICTER than
+the set-based isLegalRoster (which lets a Two-Way(C) arm double as backup catcher AND stay in
+the staff, and an SP/RP count toward both floors). When a pool's only backup-catcher body is
+a Two-Way(C) arm the staff also needs for its 4th reliever, the frame strands an RP slot and
+reports a LEGAL 22 as infeasible (RP4 no-match). Direction is one-way: it only OVER-rejects a
+legal roster — the final isLegalRoster gate still blocks any illegal assembly, so no
+illegal-approved risk. Edge case for JK's browser pass (needs a pool with NO second catcher).
+Not introduced by the committed delta. Fix is a Fable design call (honor role double-counting
+in the feasibility check). Full repro + evidence in FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §7.
