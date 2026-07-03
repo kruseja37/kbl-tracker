@@ -3551,3 +3551,22 @@ legal roster — the final isLegalRoster gate still blocks any illegal assembly,
 illegal-approved risk. Edge case for JK's browser pass (needs a pool with NO second catcher).
 Not introduced by the committed delta. Fix is a Fable design call (honor role double-counting
 in the feasibility check). Full repro + evidence in FABLE_DRAFT_JOURNEY_AUDIT_2026-07-02.md §7.
+
+## 2026-07-03 — JK RULING: HARD SALARY CAP in league settings (supersedes pool-relative for the draft budget)
+
+JK's browser test hit the design-first budget reading ~$1.55M ("EST $1,050,537 OF $1,547,961") instead
+of a cap he expected from league settings. Opus diagnosed: there is NO absolute salary-cap setting today;
+the only economy lever is the TIER (juiced/standard/nerfed), and the team budget is computePoolTierCap —
+POOL-RELATIVE by the 2026-06-25 "Option B" ruling (cap = max(maxIV/starShare, meanIV×22) × tierScale).
+JK's curated design-first pool skews talent-rich → the cap floats up to fit it, so the budget is nearly
+non-binding in design-first mode ("buildable ✓" is hollow — the cap grew to afford the designs).
+
+**RULING (JK, 2026-07-03): move to a HARD salary cap set in league settings** — an absolute dollar
+ceiling the GM types; the pool extraction must be CAP-AWARE (pick players so a legal 22 is buildable
+under it); the designer + auction display and enforce THAT number. This SUPERSEDES the 2026-06-25
+pool-relative "Option B" ruling for the draft/design budget. **DJ-04(1) (budget-basis consistency) is
+SUBSUMED** — designer and auction share the one settings cap by construction. DJ-04(2) price-basis
+unification (v1.1) revisited under the new model. Owner: **Fable designs the economy change** (settings
+field + persistence + cap-aware extraction + how/whether tier still scales player ratings vs the cap +
+migration for leagues with no cap field); Codex builds; Opus audits. Priority: pre-playthrough (it blocks
+JK's browser read of the budget). Full diagnosis: this session's audit trail.
