@@ -3570,3 +3570,22 @@ unification (v1.1) revisited under the new model. Owner: **Fable designs the eco
 field + persistence + cap-aware extraction + how/whether tier still scales player ratings vs the cap +
 migration for leagues with no cap field); Codex builds; Opus audits. Priority: pre-playthrough (it blocks
 JK's browser read of the budget). Full diagnosis: this session's audit trail.
+
+## 2026-07-03 — JK RULINGS: hard-cap §6 open questions (all ratified per Fable's recommendations)
+
+JK ruled the three FABLE_HARD_CAP_DESIGN_2026-07-03.md §6 open items — all confirming the current design,
+so NO code change (the hard-cap Phase 1 already implements each):
+
+1. **Farm draft budget stays POOL-RELATIVE (leave as-is).** No farm salary-cap field in v1; the farm economy
+   was deliberately talent-proportional and no farm-budget surprise has surfaced. Revisit only in the v1.1
+   economy batch if desired.
+2. **Tier stays a STARTING SUGGESTION, not a budget/ratings law.** With the hard cap in settings, tier only
+   (a) seeds the default cap and (b) keys the luxury-cap tables. Player ratings/IVs stay UNTOUCHED by tier
+   (reaffirms the 2026-06-26 canon). The dormant TIER_RATING_SCALES path stays dormant — reactivating it
+   would be a separate, later JK fork.
+3. **Salary-cap edits take effect at the NEXT lock/draft, never retroactively inside a live session.** A
+   mid-draft cap change does not touch a crash-safe session's per-team budgets (avoids force-sell negatives).
+   The cap set before a draft is the cap for that draft.
+
+These ratify decisions already built into Phase 1; recorded so they are canon and not re-litigated.
+FABLE_HARD_CAP_DESIGN §6 items 1-3 are now CLOSED.
