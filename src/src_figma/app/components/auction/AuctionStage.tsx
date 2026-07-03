@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { RosterIntelligencePayload } from "../../../../engines/rosterIntelligencePayload";
+import { WhisperPanel } from "./WhisperPanel";
 
 /**
  * AuctionStage — the "Premium Retro" auction-draft stage (MLB + farm), the
@@ -122,6 +124,7 @@ export interface AuctionStageVM {
 
 export interface AuctionStageProps {
   vm: AuctionStageVM;
+  whisperPayload?: RosterIntelligencePayload | null;
   toolbar?: React.ReactNode;
   supplemental?: React.ReactNode;
   onSelectPreset?: (amount: number) => void;
@@ -133,7 +136,7 @@ export interface AuctionStageProps {
 const money = (n: number) => "$" + Math.round(n).toLocaleString();
 const moneyK = (n: number) => "$" + Math.round(n / 1000) + "k";
 
-export function AuctionStage({ vm, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
+export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const isCpuTurn = Boolean(vm.move.cpuTurnName);
 
@@ -251,6 +254,16 @@ export function AuctionStage({ vm, toolbar, supplemental, onSelectPreset, onBid,
 
           {/* RIGHT — roster need board + lot log */}
           <div>
+            <WhisperPanel key={whisperPayload?.seatTeamId ?? "dormant"} payload={whisperPayload} />
+            {helpOpen && (
+              <div className="help-panel whisper-help">
+                <div className="help-mark">?</div>
+                <div className="txt">
+                  Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.
+                </div>
+              </div>
+            )}
+
             <div className="card board">
               <div className="row">
                 <div className="eyebrow">{vm.board.title}</div>

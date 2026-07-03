@@ -39,7 +39,9 @@ import {
   type CpuLoneSurvivorDecision,
 } from "../../../engines/cpuShillBidding";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
+import { twoWayVariantFromTraits, type RosterSlotPlayer } from "../../../data/rosterConstruction";
 import { DEFAULT_AUCTION_SETUP_CONFIG, scaledShillDefault } from "../../../data/auctionEngineConstants";
+import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
   buildArchetypeLiftTable,
   buildLotViewFromSession,
@@ -57,10 +59,24 @@ import {
 import { evaluatePoolDemandSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
 import {
   getTeamAuctionMaxBid,
+  lotOpeningAsk,
   type AuctionPlayer,
   type AuctionResult,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
+import {
+  assembleBoard,
+  assembleFiveLights,
+  assembleRosterIntelligencePayload,
+  assembleWorthToYou,
+  marketReadFromEstimate,
+  type FiveLights,
+  type Light,
+  type RosterIntelligencePayload,
+} from "../../../engines/rosterIntelligencePayload";
+import type { CompletionCandidate } from "../../../engines/auctionCompletionFloor";
+import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
+import type { SimArchetype, SimPlayer } from "../../../engines/archetypeBalanceSimulator";
 import type { LeagueTemplate, Player, Team, UseLeagueBuilderDataReturn } from "../../hooks/useLeagueBuilderData";
 
 type DraftPool = Awaited<ReturnType<UseLeagueBuilderDataReturn["getRegisteredPool"]>>;
@@ -72,6 +88,20 @@ const DRAFT_BOARD_GAP_KINDS = new Set([
   "bullpen",
   "depth_chart",
 ]);
+
+const HISTORICAL_ARCHETYPE_BY_ID = new Map(HISTORICAL_ARCHETYPES.map((archetype) => [archetype.id, archetype]));
+
+const UNKNOWN_SHAPE_LIGHT: Light = {
+  status: "unknown",
+  sentence: "Shape read needs the full roster.",
+  detailKey: "shape",
+};
+
+const UNKNOWN_CHEMISTRY_LIGHT: Light = {
+  status: "unknown",
+  sentence: "Chemistry read needs the full roster.",
+  detailKey: "chemistry",
+};
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
@@ -359,6 +389,62 @@ function lotPublicMarket(market: EstimatedMarket | null): AuctionStageVM["lot"][
     contested: market.contested,
     likelyPass: market.likelyPass,
   };
+}
+
+function playerToSimPlayer(player: Player, iv: number): SimPlayer {
+  const isPitcher = ["SP", "RP", "CP", "SP/RP", "P"].includes(player.primaryPosition);
+  const role = player.primaryPosition === "SP" || player.primaryPosition === "RP" || player.primaryPosition === "CP" || player.primaryPosition === "SP/RP"
+    ? player.primaryPosition
+    : undefined;
+  return {
+    id: player.id,
+    isPitcher,
+    role,
+    bat: {
+      POW: player.power,
+      CON: player.contact,
+      SPD: player.speed,
+      FLD: player.fielding,
+      ARM: player.arm,
+    },
+    pit: {
+      VEL: player.velocity,
+      JNK: player.junk,
+      ACC: player.accuracy,
+    },
+    iv,
+    salary: iv,
+    position: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? null,
+    twoWayVariant: twoWayVariantFromTraits([player.trait1, player.trait2]),
+  };
+}
+
+export function resolveAuctionWhisperIdentityArchetype(
+  team: Pick<Team, "mlbArchetypeKey">,
+): SimArchetype | undefined {
+  const historical = team.mlbArchetypeKey ? HISTORICAL_ARCHETYPE_BY_ID.get(team.mlbArchetypeKey) : undefined;
+  return historical ? historicalToSimArchetype(historical) : undefined;
+}
+
+export function applyAuctionWhisperRosterCleanGates(
+  scorecard: FiveLights,
+  rosterPlayersClean: boolean,
+): FiveLights {
+  if (rosterPlayersClean) return scorecard;
+  return {
+    ...scorecard,
+    shape: UNKNOWN_SHAPE_LIGHT,
+    chemistry: UNKNOWN_CHEMISTRY_LIGHT,
+  };
+}
+
+function boardPositionLabel(player: Player | null | undefined): string {
+  return playerPositions(player).join("/") || "POS";
+}
+
+function isRosterSlotPlayer(shape: RosterSlotPlayer | undefined): shape is RosterSlotPlayer {
+  return Boolean(shape);
 }
 
 export function LeagueBuilderAuctionDraft() {
@@ -652,6 +738,182 @@ export function LeagueBuilderAuctionDraft() {
       .map((playerId) => session.players[playerId])
       .filter(Boolean);
   }, [session]);
+  const whisperPayload = useMemo<RosterIntelligencePayload | null>(() => {
+    if (!session || !session.currentLot) return null;
+
+    const seatTeamId =
+      session.state === "OPEN_BIDDING"
+        ? auction.currentBidderTeamId
+        : session.state === "RESOLVE"
+          ? session.pendingClaim?.teamId ?? null
+          : null;
+    if (!seatTeamId || auction.isCpuTeam(seatTeamId)) return null;
+
+    const teamState = teamStateById.get(seatTeamId);
+    const team = teamById.get(seatTeamId);
+    if (!teamState || !team) return null;
+
+    const lotPlayerId = session.currentLot.playerId;
+    const lotAuction = session.players[lotPlayerId];
+    const lotPlayer = playerById.get(lotPlayerId) ?? null;
+    const lotShape = lotAuction?.pos;
+
+    const rosterPlayers = teamState.roster
+      .map((assignment) => playerById.get(assignment.playerId))
+      .filter((player): player is Player => Boolean(player));
+    const rosterShapes = teamState.roster
+      .map((assignment) => session.players[assignment.playerId]?.pos)
+      .filter(isRosterSlotPlayer);
+    const rosterShapeClean = rosterShapes.length === teamState.roster.length;
+    const rosterPlayersClean = rosterPlayers.length === teamState.roster.length && rosterShapeClean;
+    const rosterWithCandidate = lotShape ? [...rosterShapes, lotShape] : rosterShapes;
+    const openSlotsAfterWin = Math.max(0, teamState.rosterSlotsRemaining - 1);
+
+    const remainingPool: CompletionCandidate[] = [];
+    let remainingPoolClean = true;
+    for (const playerId of session.availablePlayerIds) {
+      const auctionPlayer = session.players[playerId];
+      if (!auctionPlayer?.pos) {
+        remainingPoolClean = false;
+        continue;
+      }
+      remainingPool.push({
+        id: playerId,
+        price: lotOpeningAsk(auctionPlayer, session.config),
+        shape: auctionPlayer.pos,
+      });
+    }
+
+    const marketView = buildLotViewFromSession(session, {
+      shillTeamIds: shillTeamIdSet,
+      advisedTeamId: seatTeamId,
+      bandPrioritiesByTeamId: marketBandPrioritiesByTeamId,
+      humanTeamIds: marketHumanTeamIds,
+    });
+    const market = marketView ? marketReadFromEstimate(marketView, marketLiftTable) : undefined;
+
+    const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean
+      ? assembleWorthToYou({
+          candidate: lotPlayer,
+          iv: lotAuction.iv,
+          rosterPlayers,
+          budgetRemaining: teamState.budgetRemaining,
+          rosterWithCandidate,
+          remainingPool,
+          openSlotsAfterWin,
+          market,
+        })
+      : undefined;
+
+    const boardIds = Array.from(new Set([lotPlayerId, ...session.availablePlayerIds]));
+    const boardMeta: Record<string, { name?: string; positions?: string }> = {};
+    const boardCandidates = boardIds
+      .map((playerId) => {
+        const auctionPlayer = session.players[playerId];
+        if (!auctionPlayer) return null;
+        const player = playerById.get(playerId) ?? null;
+        boardMeta[playerId] = {
+          name: player ? playerDisplayName(player) : playerId,
+          positions: boardPositionLabel(player),
+        };
+        return {
+          playerId,
+          iv: auctionPlayer.iv,
+          candidate: player ?? undefined,
+          matchedShape: boardPositionLabel(player),
+          note: player ? playerDisplayName(player) : playerId,
+        };
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+    const board = assembleBoard({ candidates: boardCandidates, rosterPlayers });
+
+    const positionMap: Record<string, NonNullable<AuctionPlayer["pos"]>> = {};
+    for (const assignment of teamState.roster) {
+      const shape = session.players[assignment.playerId]?.pos;
+      if (shape) positionMap[assignment.playerId] = shape;
+    }
+    for (const playerId of boardIds) {
+      const shape = session.players[playerId]?.pos;
+      if (shape) positionMap[playerId] = shape;
+    }
+
+    const comparisonPool = boardIds
+      .map((playerId) => {
+        const player = playerById.get(playerId);
+        const auctionPlayer = session.players[playerId];
+        return player && auctionPlayer ? playerToSimPlayer(player, auctionPlayer.iv) : null;
+      })
+      .filter((player): player is SimPlayer => Boolean(player));
+    const identityRoster = teamState.roster
+      .map((assignment) => {
+        const player = playerById.get(assignment.playerId);
+        const auctionPlayer = session.players[assignment.playerId];
+        return player && auctionPlayer ? playerToSimPlayer(player, auctionPlayer.iv) : null;
+      })
+      .filter((player): player is SimPlayer => Boolean(player));
+    if (lotPlayer && lotAuction) {
+      identityRoster.push(playerToSimPlayer(lotPlayer, lotAuction.iv));
+    }
+    const identityArchetype = resolveAuctionWhisperIdentityArchetype(team);
+
+    const scorecard = applyAuctionWhisperRosterCleanGates(assembleFiveLights({
+      shapePlayers: rosterWithCandidate,
+      chemistryPlayers: lotPlayer ? [...rosterPlayers, lotPlayer] : rosterPlayers,
+      shape: lotShape && rosterPlayersClean
+        ? {
+            rosterIds: teamState.roster.map((assignment) => assignment.playerId),
+            candidateId: lotPlayerId,
+            positionMap,
+          }
+        : undefined,
+      budget: lotShape && rosterShapeClean && remainingPoolClean
+        ? {
+            budgetRemaining: teamState.budgetRemaining,
+            rosterWithCandidate,
+            remainingPool,
+            openSlotsAfterWin,
+            market,
+          }
+        : undefined,
+      identity: identityArchetype && identityRoster.length > 0 && comparisonPool.length > 0
+        ? {
+            rosterPlayers: identityRoster,
+            archetype: identityArchetype,
+            tier: registeredPool?.tier ?? "standard",
+            comparisonPool,
+          }
+        : undefined,
+    }), rosterPlayersClean);
+
+    return Object.assign(
+      assembleRosterIntelligencePayload({
+        seatTeamId,
+        generatedAtLotIndex: session.results.length,
+        market,
+        worthToYou,
+        board,
+        scorecard,
+      }),
+      {
+        seatClubName: teamDisplayName(team),
+        seatPrimary: team.colors.primary,
+        currentLotPlayerId: lotPlayerId,
+        objectPronoun: playerPronouns(lotPlayer).object,
+        boardMeta,
+      },
+    );
+  }, [
+    auction,
+    marketBandPrioritiesByTeamId,
+    marketHumanTeamIds,
+    marketLiftTable,
+    playerById,
+    registeredPool?.tier,
+    session,
+    shillTeamIdSet,
+    teamById,
+    teamStateById,
+  ]);
   const bidIncrement = session?.config.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement;
   const setupShillCount = useMemo(
     () => clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)),
@@ -949,6 +1211,7 @@ export function LeagueBuilderAuctionDraft() {
     return (
       <AuctionStage
         vm={auctionStageVm}
+        whisperPayload={whisperPayload}
         toolbar={
           <div className="row" style={{ marginBottom: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <button

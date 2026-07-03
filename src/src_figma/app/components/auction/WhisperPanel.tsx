@@ -1,0 +1,498 @@
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+
+import type {
+  BoardEntry,
+  Light,
+  RosterIntelligencePayload,
+  WorthToYou,
+} from "../../../../engines/rosterIntelligencePayload";
+
+interface WhisperPanelProps {
+  payload: RosterIntelligencePayload | null;
+}
+
+interface WhisperPayloadMeta {
+  seatClubName?: string;
+  seatPrimary?: string;
+  currentLotPlayerId?: string;
+  objectPronoun?: "him" | "her";
+  boardMeta?: Record<string, { name?: string; positions?: string }>;
+}
+
+const LIGHT_ORDER = ["shape", "identity", "chemistry", "balance", "budget"] as const;
+type LightKey = (typeof LIGHT_ORDER)[number];
+
+const NO_READ_LINE = "No read yet -- still doing my homework on this club.";
+const EMPTY_BOARD_LINE = "The board's bare. Finish the roster with what's left on the floor.";
+const HELP_LINE = "Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.";
+
+export function WhisperPanel({ payload }: WhisperPanelProps) {
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [selectedLight, setSelectedLight] = useState<LightKey>("shape");
+  const [flashVerdict, setFlashVerdict] = useState(false);
+  const previousVerdict = useRef<WorthToYou["verdict"] | null>(null);
+  const meta = (payload ?? {}) as WhisperPayloadMeta;
+  const clubName = meta.seatClubName ?? payload?.seatTeamId ?? "";
+  const teamPrimary = meta.seatPrimary ?? "var(--ballpark-brass)";
+  const board = payload?.board ?? [];
+  const scorecard = payload?.scorecard;
+  const worth = payload?.worthToYou;
+
+  const defaultLight = useMemo(() => {
+    if (!scorecard) return "shape";
+    return LIGHT_ORDER
+      .map((key) => ({ key, light: scorecard[key] }))
+      .sort((left, right) => lightRank(left.light) - lightRank(right.light) || LIGHT_ORDER.indexOf(left.key) - LIGHT_ORDER.indexOf(right.key))[0]
+      ?.key ?? "shape";
+  }, [scorecard]);
+
+  useEffect(() => {
+    setOpen(false);
+    setExpanded(false);
+    previousVerdict.current = null;
+  }, [payload?.seatTeamId]);
+
+  useEffect(() => {
+    setSelectedLight(defaultLight);
+  }, [defaultLight, payload?.generatedAtLotIndex]);
+
+  useEffect(() => {
+    const next = worth?.verdict ?? null;
+    if (open && previousVerdict.current !== null && next !== null && previousVerdict.current !== next) {
+      setFlashVerdict(true);
+      const timer = window.setTimeout(() => setFlashVerdict(false), 300);
+      previousVerdict.current = next;
+      return () => window.clearTimeout(timer);
+    }
+    previousVerdict.current = next;
+  }, [open, worth?.verdict]);
+
+  if (!payload) {
+    return (
+      <section className="whisper-panel whisper-dormant">
+        <WhisperStyles />
+        <button type="button" className="whisper-strip" disabled>
+          <span className="eyebrow">ASST GM</span>
+          <span className="whisper-affordance">WAITING ON THE TABLE</span>
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className={`whisper-panel${open ? " open" : ""}`}
+      style={{ "--whisper-team": teamPrimary } as CSSProperties}
+    >
+      <WhisperStyles />
+      <button
+        type="button"
+        className="whisper-strip"
+        data-testid="whisper-strip"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="eyebrow">ASST GM · {clubName}</span>
+        <span className="whisper-affordance">{open ? "🔒 COVER IT" : "🔒 TAP FOR THE READ"}</span>
+      </button>
+
+      {open && (
+        <div className="card whisper-body" data-testid="whisper-body">
+          <WhisperHeadline
+            worth={worth}
+            board={board}
+            market={payload.market}
+            objectPronoun={meta.objectPronoun ?? "him"}
+            flash={flashVerdict}
+          />
+
+          {scorecard && (
+            <section className="whisper-section" data-testid="whisper-lights">
+              <div className="whisper-lights-row">
+                {LIGHT_ORDER.map((key) => {
+                  const light = scorecard[key];
+                  const active = selectedLight === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`whisper-light ${active ? "selected" : ""}`}
+                      data-status={light.status}
+                      aria-label={key.toUpperCase()}
+                      onClick={() => setSelectedLight(key)}
+                    >
+                      <span className="whisper-dot" />
+                      <span>{key.toUpperCase()}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="whisper-light-sentence">
+                {scorecard[selectedLight].status === "unknown"
+                  ? NO_READ_LINE
+                  : scorecard[selectedLight].sentence}
+              </p>
+            </section>
+          )}
+
+          <section className="whisper-section whisper-board" data-testid="whisper-board">
+            <div className="row whisper-board-head">
+              <div className="eyebrow">YOUR BOARD</div>
+              <span className="chip">{board.length} NAMES LEFT</span>
+              <span className="spacer" />
+              {board.length > 3 && (
+                <button type="button" className="whisper-board-toggle" onClick={() => setExpanded((current) => !current)}>
+                  {expanded ? "FOLD IT UP" : "FULL BOARD"}
+                </button>
+              )}
+            </div>
+            {board.length === 0 ? (
+              <p className="whisper-empty">{EMPTY_BOARD_LINE}</p>
+            ) : (
+              <>
+                <div className="whisper-board-list">
+                  {board.slice(0, 3).map((entry, index) => (
+                    <BoardRow
+                      key={entry.playerId}
+                      entry={entry}
+                      rank={index + 1}
+                      meta={meta.boardMeta?.[entry.playerId]}
+                      currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
+                    />
+                  ))}
+                </div>
+                {expanded && (
+                  <div className="whisper-board-well">
+                    {board.slice(3).map((entry, index) => (
+                      <BoardRow
+                        key={entry.playerId}
+                        entry={entry}
+                        rank={index + 4}
+                        meta={meta.boardMeta?.[entry.playerId]}
+                        currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function WhisperHeadline({
+  worth,
+  board,
+  market,
+  objectPronoun,
+  flash,
+}: {
+  worth: WorthToYou | undefined;
+  board: readonly BoardEntry[];
+  market: RosterIntelligencePayload["market"];
+  objectPronoun: "him" | "her";
+  flash: boolean;
+}) {
+  if (!worth) {
+    const bestName = board[0]?.note ?? board[0]?.playerId;
+    return (
+      <section className="whisper-headline" data-testid="whisper-headline">
+        <p className="whisper-nomination">
+          {bestName ? `Nothing on the block. Best name still out there: ${bestName}.` : EMPTY_BOARD_LINE}
+        </p>
+      </section>
+    );
+  }
+
+  const relation = roomRelation(worth.capValue, market);
+  const verdictText = verdictLine(worth, objectPronoun);
+  return (
+    <section className="whisper-headline" data-testid="whisper-headline">
+      <div className={`whisper-verdict ${worth.verdict} ${flash ? "flash" : ""}`}>
+        {verdictText}
+      </div>
+      <div className="whisper-number-row">
+        <div>
+          <div className="eyebrow">YOUR NUMBER</div>
+          <div className={`whisper-number num ${worth.verdict === "cap" ? "gold" : ""}`}>
+            {worth.capValue === null ? "PASS" : money(worth.capValue)}
+          </div>
+        </div>
+      </div>
+      <p className="whisper-why">{whyLine(worth)}</p>
+      {relation && <p className="whisper-room-line">{relation}</p>}
+    </section>
+  );
+}
+
+function BoardRow({
+  entry,
+  rank,
+  meta,
+  currentLotPlayerId,
+}: {
+  entry: BoardEntry;
+  rank: number;
+  meta: { name?: string; positions?: string } | undefined;
+  currentLotPlayerId: string | undefined;
+}) {
+  const onBlock = currentLotPlayerId === entry.playerId;
+  return (
+    <div className={`whisper-board-row${onBlock ? " on-block" : ""}`}>
+      <span className="num whisper-rank">{rank}</span>
+      <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>
+      <span className="pos">{meta?.positions ?? entry.matchedShape ?? "POS"}</span>
+      {onBlock && <span className="chip whisper-on-block">ON THE BLOCK</span>}
+      <span className="spacer" />
+      <span className="num whisper-worth">{money(entry.worth)}</span>
+    </div>
+  );
+}
+
+function lightRank(light: Light): number {
+  if (light.status === "red") return 0;
+  if (light.status === "amber") return 1;
+  if (light.status === "green") return 2;
+  return 3;
+}
+
+function verdictLine(worth: WorthToYou, objectPronoun: "him" | "her"): string {
+  if (worth.verdict === "push") return `Go get ${objectPronoun}.`;
+  if (worth.verdict === "pass") return `Let ${objectPronoun} go.`;
+  return `Chase ${objectPronoun} to ${worth.capValue === null ? "your cap" : money(worth.capValue)} -- not a dollar past.`;
+}
+
+function whyLine(worth: WorthToYou): string {
+  const premium = worth.chemistry.premium;
+  if (premium > 0) return `Chemistry moves your number up by ${money(premium)}.`;
+  if (premium < 0) return `Chemistry pulls your number down by ${money(Math.abs(premium))}.`;
+  return "The roster price is doing the talking here.";
+}
+
+function roomRelation(
+  capValue: number | null,
+  market: RosterIntelligencePayload["market"],
+): string | null {
+  if (capValue === null || !market) return null;
+  if (capValue < market.band.low) return "The room wants more than you should give.";
+  if (capValue > market.band.high) return "You'd be paying past the room -- make sure you mean it.";
+  return "That sits inside what the room expects.";
+}
+
+function money(value: number): string {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function WhisperStyles() {
+  return (
+    <style>{`
+      .auc-root .whisper-panel { margin-bottom: 16px; }
+      .auc-root .whisper-strip {
+        width: 100%;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 13px;
+        border-radius: var(--auc-r-ctl);
+        border: 1px solid var(--auc-hairline);
+        border-left: 4px solid var(--whisper-team, var(--ballpark-brass));
+        background: var(--auc-inset);
+        color: var(--auc-text);
+        box-shadow: var(--auc-shadow-card);
+        cursor: pointer;
+        text-align: left;
+        animation: whisperPulse 0.34s ease-out 1;
+      }
+      .auc-root .whisper-strip:active { transform: scale(0.98); }
+      .auc-root .whisper-affordance {
+        color: var(--auc-muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        white-space: nowrap;
+      }
+      .auc-root .whisper-dormant .whisper-strip {
+        opacity: 0.55;
+        cursor: not-allowed;
+        border-left-color: transparent;
+        animation: none;
+      }
+      .auc-root .whisper-body {
+        padding: 16px;
+        max-height: min(56vh, 480px);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-top: 10px;
+      }
+      .auc-root .whisper-headline {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+      .auc-root .whisper-verdict {
+        position: relative;
+        font-size: 17px;
+        line-height: 1.25;
+        font-weight: 800;
+      }
+      .auc-root .whisper-verdict.push { color: #34d399; }
+      .auc-root .whisper-verdict.cap { color: var(--ballpark-brass); }
+      .auc-root .whisper-verdict.pass { color: color-mix(in srgb, var(--ballpark-sage) 85%, transparent); }
+      .auc-root .whisper-verdict.flash::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -4px;
+        height: 2px;
+        background: currentColor;
+        animation: whisperVerdictFlash 0.3s ease-out 1;
+      }
+      .auc-root .whisper-number-row {
+        display: flex;
+        align-items: end;
+        gap: 12px;
+      }
+      .auc-root .whisper-number {
+        margin-top: 2px;
+        font-size: 20px;
+        font-weight: 800;
+      }
+      .auc-root .whisper-number.gold { color: var(--ballpark-scoreboard-yellow); }
+      .auc-root .whisper-why {
+        margin: 0;
+        color: var(--auc-text);
+        font-size: 13.5px;
+      }
+      .auc-root .whisper-room-line {
+        margin: 0;
+        color: var(--auc-muted);
+        font-size: 12.5px;
+      }
+      .auc-root .whisper-nomination,
+      .auc-root .whisper-empty {
+        margin: 0;
+        color: var(--auc-text);
+        font-size: 13.5px;
+      }
+      .auc-root .whisper-section {
+        border-top: 1px solid var(--auc-hairline);
+        padding-top: 14px;
+      }
+      .auc-root .whisper-lights-row {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .auc-root .whisper-light {
+        appearance: none;
+        display: grid;
+        justify-items: center;
+        gap: 6px;
+        min-width: 0;
+        padding: 0 2px 8px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--auc-muted);
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+      }
+      .auc-root .whisper-light.selected { border-bottom-color: var(--ballpark-brass); }
+      .auc-root .whisper-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 3px solid currentColor;
+      }
+      .auc-root .whisper-light[data-status="green"] .whisper-dot { background: #34d399; border-color: #34d399; }
+      .auc-root .whisper-light[data-status="amber"] .whisper-dot { background: #fbbf24; border-color: #fbbf24; }
+      .auc-root .whisper-light[data-status="red"] .whisper-dot { background: #DC3545; border-color: #DC3545; }
+      .auc-root .whisper-light[data-status="unknown"] .whisper-dot { background: transparent; border-color: rgba(232, 232, 216, 0.45); }
+      .auc-root .whisper-light-sentence {
+        min-height: 40px;
+        margin: 10px 0 0;
+        color: var(--auc-text);
+        font-size: 13px;
+      }
+      .auc-root .whisper-board-head { align-items: center; margin-bottom: 9px; }
+      .auc-root .whisper-board-toggle {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--ballpark-brass);
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+      }
+      .auc-root .whisper-board-list,
+      .auc-root .whisper-board-well {
+        display: flex;
+        flex-direction: column;
+      }
+      .auc-root .whisper-board-well {
+        max-height: 190px;
+        overflow-y: auto;
+        margin-top: 8px;
+        background: rgba(0, 0, 0, 0.22);
+        border-top: 1px solid rgba(0, 0, 0, 0.35);
+        border-bottom: 1px solid rgba(232, 232, 216, 0.08);
+      }
+      .auc-root .whisper-board-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 36px;
+        border-bottom: 1px solid var(--auc-hairline);
+        padding: 7px 4px 7px 8px;
+      }
+      .auc-root .whisper-board-row:last-child { border-bottom: 0; }
+      .auc-root .whisper-board-row.on-block {
+        border-left: 3px solid var(--ballpark-brass);
+        padding-left: 5px;
+      }
+      .auc-root .whisper-rank { width: 18px; color: var(--auc-muted); font-size: 12px; }
+      .auc-root .whisper-board-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13.5px;
+        font-weight: 700;
+      }
+      .auc-root .whisper-worth {
+        color: var(--auc-text);
+        font-size: 12.5px;
+        font-weight: 800;
+      }
+      .auc-root .whisper-on-block {
+        color: var(--ballpark-brass);
+        font-size: 10px;
+        padding: 3px 7px;
+      }
+      @keyframes whisperPulse {
+        0% { border-color: var(--ballpark-brass); }
+        100% { border-color: var(--auc-hairline); border-left-color: var(--whisper-team, var(--ballpark-brass)); }
+      }
+      @keyframes whisperVerdictFlash {
+        from { opacity: 1; transform: scaleX(1); }
+        to { opacity: 0; transform: scaleX(0.2); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .auc-root .whisper-strip,
+        .auc-root .whisper-verdict.flash::after { animation: none !important; }
+      }
+    `}</style>
+  );
+}

@@ -27399,3 +27399,62 @@ strip identifies the seat by ROLE + CLUB ("ASST GM · {CLUB NAME}"), which works
 - `git diff --stat` — only: WhisperPanel.tsx (new) + its test, AuctionStage.tsx, LeagueBuilderAuctionDraft.tsx.
   GameTracker.tsx NOT present; the scout lot-card logic NOT rewritten.
 <!-- ===== END CONTRACT: CODEX-WHISPER ===== -->
+
+<!-- ===== CONTRACT: CODEX-MODEA ===== -->
+## CODEX-MODEA — the "Design first" (Mode A) pool flow (Draft Room zone 4)
+
+**Builder:** Codex. **Auditor:** Opus (audits against the Fable spec's checklist).
+**Fable design-reviews the screen.** **Branch-only, never push.**
+**Design source of truth — READ IN FULL, BUILD TO IT EXACTLY:**
+`spec-docs/FABLE_MODEA_POOL_LAYOUT_2026-07-02.md` (four-state flow A1-A4, review composition,
+extract/lock gating, copy, auditor checklist).
+
+### Scope
+Replace the Mode-A "POOL-FROM-DEMAND COMING" placeholder in zone 4 of
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (~:1039-1048) with the real 4-state flow.
+Reuse the existing Mode-B shuttle + lock path WHOLESALE (Fable's keystone decision). Add a tiny
+engine helper + one additive persisted field. Do NOT touch the auction room or GameTracker.
+
+### The flow (Fable A1-A4)
+- A1 WAITING: EXTRACT disabled; name who hasn't locked a design ("{Club} — {GM}").
+- A2 READY: all human designs locked → gold EXTRACT POOL button.
+- A3 REVIEW (post-extract, pre-lock): sufficiency chip + LOCK/RE-EXTRACT; THE CLUB CHECK
+  (live per-club verdict rows, REUSE `rosterDesignStatusTone` + the designer's §4 copy — one
+  copy source); THE GAPS (engine shortfall messages VERBATIM on warn-amber feed-cards); THE ASKS
+  (compact table SPOT/SHAPE/ASKING/WANTED/IN-POOL); then the full Mode-B shuttle.
+- A4 LOCKED: same body, UNLOCK, panes disabled, market-outlook panel; the club check stays live
+  (that IS the drift check — no special drift UI).
+
+### Wiring
+- EXTRACT calls `extractPoolFromDemand(universe, designs, selectedArchetypes, tier, options)` from
+  `src/engines/poolFromDemand.ts`. Build `universe: DemandUniversePlayer[]` (SimPlayer + profile)
+  and `designs: TeamDesignInput[] {teamId, slots}` (from each human club's locked `rosterDesign.slots`)
+  and `selectedArchetypes` (the clubs' MLB archetypes) by REUSING the existing Player→SimPlayer and
+  Player→ClassifiableProfile mappers (find them — the designer's `buildRosterDesignPool` builds the
+  profile; the pool/sim builders build SimPlayer). Verify each mapper at point of use; do NOT reinvent.
+- EXTRACT writes pool MEMBERSHIP (add the extracted players, remove the rest) so Mode A converges
+  onto Mode B's shuttle + the existing `handleLock`/lock path — NO new lock plumbing.
+- **Engine-fidelity helper:** EXPORT a small `countCellMatches` from `poolFromDemand.ts` and have the
+  UI count "IN-POOL" per ask THROUGH it, so the UI's per-cell counts match the engine's SHAPE-ONLY
+  reservation semantics exactly (tags/position are labels, not filters — do NOT invent stricter
+  matching in the UI, the designer's budget-mismatch class of bug).
+- Persist one additive field `poolExtractedAt?: string` on `LeagueTemplate`
+  (`src/utils/leagueBuilderStorage.ts`) — NO new IndexedDB. Used for the stale/re-extract gate.
+- Host wiring corrections (Fable): the "Import from branded teams" auto-import gated to POOL-FIRST
+  only (RE-EXTRACT takes its slot in Mode A); mode-aware `startReady`; the human-only design
+  denominator (already landed in the designer build — confirm, don't duplicate).
+
+### Gating (Fable)
+- EXTRACT enabled only when every human club's design is locked.
+- LOCK requires floor-met + all designs locked + NOT stale (any design edited after extraction
+  disables LOCK until RE-EXTRACT — "the pool is built from the designs" is Mode A's one promise).
+- Shortfalls NEVER block the lock (the C1B floors guarantee completion); red club verdicts confirm
+  via inline ✓/✗, never a hard block (a thin player list must not deadlock the league).
+
+### Verify before returning (report ACTUAL output + Fable checklist item by item)
+- `NODE_ENV= npm run build` exit 0 (tail).
+- `npx vitest run src/engines/__tests__/poolFromDemand.test.ts` green + add a unit test for the new
+  `countCellMatches` (its count equals the engine's actual reserved match set for a given cell). Counts.
+- `git diff --stat` — only: LeagueBuilderDraftSetup.tsx, poolFromDemand.ts (+ its test),
+  leagueBuilderStorage.ts (+poolExtractedAt). GameTracker + the auction room NOT present.
+<!-- ===== END CONTRACT: CODEX-MODEA ===== -->
