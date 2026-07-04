@@ -44,6 +44,7 @@ import {
   type VerdictTone,
 } from "./designVerdict";
 import type { DraftPoolMode, Player, Team } from "../../../../utils/leagueBuilderStorage";
+import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 
 export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
@@ -317,6 +318,7 @@ export function RosterDesigner({
   }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.slots]);
 
   const designPool = useMemo(() => buildRosterDesignPool(players), [players]);
+  const fullPlayerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const simPool = useMemo(() => demandUniverseFromPlayers(players), [players]);
   const targetArchetype = useMemo(() => {
     const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
@@ -628,6 +630,7 @@ export function RosterDesigner({
           readOnly={readOnly}
           identityKey={team.mlbArchetypeKey}
           designPool={designPool}
+          fullPlayerById={fullPlayerById}
           classifiedPool={classifiedPool}
           targetPick={feasibleTarget?.picks.find((pick) => pick.slotId === selectedSlot.slotId) ?? null}
           pinDisplay={pinDisplayBySlot.get(selectedSlot.slotId) ?? null}
@@ -760,6 +763,7 @@ function SlotEditor({
   readOnly,
   identityKey,
   designPool,
+  fullPlayerById,
   classifiedPool,
   targetPick,
   pinDisplay,
@@ -775,6 +779,7 @@ function SlotEditor({
   readOnly: boolean;
   identityKey: string | undefined;
   designPool: readonly DesignPoolPlayer[];
+  fullPlayerById: ReadonlyMap<string, Player>;
   classifiedPool: readonly ClassifiedDesignPlayer[];
   targetPick: Best22TargetPick | null;
   pinDisplay: PinDisplay | null;
@@ -953,6 +958,7 @@ function SlotEditor({
             entries={shortlist}
             preference={preference}
             classificationById={classificationById}
+            fullPlayerById={fullPlayerById}
             targetPick={targetPick}
             readOnly={readOnly}
             pinnedPlayerId={pinnedPlayerId}
@@ -969,6 +975,7 @@ function ShortlistRail({
   entries,
   preference,
   classificationById,
+  fullPlayerById,
   targetPick,
   readOnly,
   pinnedPlayerId,
@@ -978,6 +985,7 @@ function ShortlistRail({
   entries: readonly RankedPoolEntry[];
   preference: SlotPreference;
   classificationById: ReadonlyMap<string, ShapeClassification>;
+  fullPlayerById: ReadonlyMap<string, Player>;
   targetPick: Best22TargetPick | null;
   readOnly: boolean;
   pinnedPlayerId: string | null;
@@ -997,12 +1005,22 @@ function ShortlistRail({
             const runnerUp = satisfaction?.shapeMatch === "runnerUp";
             const isTarget = targetPick?.playerId === entry.playerId;
             const pinnedHere = pinnedPlayerId === entry.playerId;
+            const fullPlayer = fullPlayerById.get(entry.playerId);
+            const name = (
+              <span className="min-w-0 truncate">
+                {runnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈ </span> : null}
+                {entry.playerName ?? entry.playerId} · {entry.shape} · {formatVerdictMoney(entry.salary)}
+              </span>
+            );
             return (
               <div key={entry.playerId} className="flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75">
-                <span className="min-w-0 truncate">
-                  {runnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈ </span> : null}
-                  {entry.playerName ?? entry.playerId} · {entry.shape} · {formatVerdictMoney(entry.salary)}
-                </span>
+                {fullPlayer ? (
+                  <PlayerProfilePopover player={fullPlayer} revealFull>
+                    {name}
+                  </PlayerProfilePopover>
+                ) : (
+                  name
+                )}
                 <span className="shrink-0 flex items-center gap-1">
                   {isTarget ? (
                     <span className="border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">

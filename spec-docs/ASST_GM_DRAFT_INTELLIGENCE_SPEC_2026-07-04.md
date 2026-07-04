@@ -78,11 +78,14 @@ aggregates the roster's per-type profile + tiers.
 
 ## 4. THE IN-DRAFT WHISPER (fixes + the killer feature)
 ### 4.1 "YOUR NUMBER" — value-anchored (FIX the bug)
-TODAY (BUG): WhisperPanel.tsx:222 renders `worth.capValue` (the affordability ceiling) as YOUR NUMBER → it
-recommends bidding your whole budget. FIX: YOUR NUMBER = the **value-anchored recommendation** = the market
-predicted clearing (`estimateMarket` median / your `ownValue` from projectBidVsPass), NOT capValue. Keep capValue
-as the SEPARATE "most you can bid" guard line (already shown). Verdict stays push/cap/pass but keyed off surplus
-(ownValue − predictedMedian), not off capValue≥median.
+TODAY (BUG): WhisperPanel.tsx:222 renders `worth.capValue` (the affordability ceiling) as YOUR NUMBER.
+B1-quick (committed 1a9eadee) made it `iv + chemistry.premium` — better, but STILL archetype-BLIND (no fit term),
+so early (empty rosters, chem≈0) EVERY seat collapses to the same number (JK 2026-07-04 defect). REAL FIX (B1b):
+YOUR NUMBER = the **SEAT-SPECIFIC value** = the C2B `ownValue = IV × archetypeFit_ij × needMultiplier_j(pos) ×
+personalityBias_j` (auctionMarketModel.ts; already computed, feeds projectBidVsPass/estimateMarket). This is
+archetype-DIFFERENTIATED by construction → each GM's number diverges by their archetype. Keep capValue as the
+SEPARATE "most you can bid" guard. Verdict keyed off **surplus = ownValue − predictedMedian** and off the LIVE bid
+(§4.6), not off capValue.
 ### 4.2 Bid-vs-pass projection — WIRE THE BUILT ENGINE (the killer feature)
 BUILT but ORPHANED: `projectBidVsPass` (auctionMarketModel.ts:660-770) returns `{bid, pass}` BoardProjection with
 budget-after, remaining hard requirements, and top-N surplus-ranked targets per branch — deterministic. NO
@@ -98,8 +101,18 @@ the per-position view.
 ### 4.4 Player profile (the PUBLIC full profile, MLB only)
 SCOUTING_INTELLIGENCE_SPEC §5: PUBLIC = the player up for bid + full profile (ratings/traits/chemistry/personality/
 age/handedness) for MLB; FARM keeps hidden (scout bands only). TODAY: the Lot card shows name/positions/personality/
-age but NO ratings. BUILD: a click-to-inspect profile reusing PlayerInstanceCard `AttributeCell` (:591-604); gate
-full ratings to `tier==='mlb'` (farm keeps scoutedGrade/scoutRange + respects `ratingRevealState:'hidden'`).
+age but NO ratings and NO player-archetype. BUILD (JK 2026-07-04 mockup ruling):
+- **Click ANY player NAME → a profile POPOVER** — from the on-the-block player AND from every board entry (not just
+  the Lot card). Popover shows the COMPLETE player record (JK 2026-07-04): player ARCHETYPE (the taxonomy
+  classification — Command Ace / Slugger / Glove-only / Workhorse / Closer / …), chemistry TYPE, and the **FULL
+  ratings grid — EVERY attribute for EVERY player**: POW · CON · SPD · FLD · ARM **and** VEL · JNK · ACC (a PITCHER
+  also shows his POW/CON/SPD/FLD/ARM, not only VEL/JNK/ACC), high values emphasized; PLUS handedness (bats/throws),
+  ARM SLOT, age, position(s), and traits. Nothing on the player record is omitted. Reuse PlayerInstanceCard
+  `AttributeCell` (:591-604).
+- **Each board line shows the player ARCHETYPE** inline (under the name).
+- GATE: full ratings ONLY when `tier==='mlb'`. FARM popover shows scoutedGrade / scoutRange + confidence, NEVER true
+  ratings (respects `ratingRevealState:'hidden'`). Player-archetype label can show on both sides (it's a classification,
+  not a hidden rating) unless it would leak the fogged grade — verify at build.
 ### 4.5 Live cumulative chemistry readout (JK requirement 2026-07-04)
 The whisper must show, as the roster fills, the **cumulative count in each of the 5 chemistry categories** with its
 current potency tier and distance to the next — e.g. "Scholarly 4 → L2 (3 to L3) · Competitive 2 → L1 (1 to L2) ·
@@ -139,3 +152,35 @@ Each slice: Codex builds → Opus audits (builder≠auditor) → gate → JK bro
   the delta (what claiming him does to his type's count/tier). [build: folds into the whisper work, B1b/B2.]
 - Farm profile NEVER shows true ratings.
 - Full test suite at CURRENT_STATE baseline; no ivCurves/oracle/GameTracker touched.
+
+## 7. PROTOTYPE-REVIEW CORRECTIONS (JK 2026-07-04, after the interactive mockup)
+These SUPERSEDE the interim B1-quick behavior and refine the build:
+1. **SEAT-SPECIFIC number (fixes "every team says the same thing").** YOUR NUMBER = the C2B seat `ownValue`
+   (IV × archetypeFit × need × bias), NOT `iv + chemistry.premium`. Must diverge by team archetype. (Amends §4.1.)
+2. **§4.6 LIVE-BID AWARENESS (new).** The whisper must track the CURRENT high bid and re-read against YOUR NUMBER
+   in real time: below your number → "still under your number — $X to go"; at/above → "past your number — let
+   {him} go" (or "over the room" via the existing room-relation). The verdict + prose update on every bid, not
+   just on nomination. The number itself stays your value; the VERDICT reacts to the live price.
+3. **CHEMISTRY = MARGINAL POTENCY VALUE, never an early penalty (amends §3.5/§4.1).** A player's chemistry effect
+   on his value to you = how much he advances one of your 5 types toward/across L2 (3) or L3 (7): a BOOST when he
+   would tip a tier (marginal synergy), ~NEUTRAL early (empty roster — do NOT pull value down for "no chemistry
+   yet"), and a downward pull ONLY LATE when options dwindle and you still need the tier. Kill the flat early
+   "weak chemistry" penalty. (Formula: chemistryDelta = potencyValue(after claim) − potencyValue(before);
+   positive = boost.)
+4. **DRAFT-PROGRESS AWARENESS (amends §4 five-lights).** Expectations scale to picks-made. An empty/near-empty
+   roster in the first ~half of the draft is NORMAL, NOT a red SHAPE flag. SHAPE goes amber/red only when
+   remaining picks approach the count of unfilled required slots (you're running out of room to fill holes).
+   Early draft: the light reads "on pace / plenty of board left," not alarm.
+5. **BOARD = GLOBAL BIG-BOARD + PER-POSITION, both sortable (amends §3.1, §4.3).** Provide (a) a GLOBAL ranking of
+   EVERY remaining player in the pool (the big board), AND (b) per-position lists **5 deep**, for ALL positions
+   (8 field + SP/SP-RP/RP/CP + bench). "Best remaining by surplus" is shown PER POSITION (surplus is only
+   meaningful within a position) AND as the global big-board. Both GM-sortable (strong-nudge) if not risky.
+6. **Mockup verdict (JK): "looks and feels solid"** — build to it, with corrections 1-5. All positions clickable
+   + 5-deep; both boards present.
+7. **SHARED setup + in-draft (JK 2026-07-04).** The profile POPOVER (§4.4) and the per-position DRAG-REORDER (§3.2)
+   are built ONCE as SHARED components and used in BOTH surfaces: the SETUP RosterDesigner is the PRIMARY ranking
+   surface (the GM ranks specifically + inspects players *going into* the draft — same popover, same drag list),
+   and those rankings CARRY into the live draft where the whisper reuses them for the in-draft nudge/auto-advance.
+   Setup and in-draft show the SAME board. NO-REGRESSION MANDATE: adding these must not break the existing
+   RosterDesigner (feasibility chip, per-slot archetype/tag/tilt preferences, pins, best-22 fit) or the whisper —
+   full suite stays at the CURRENT_STATE baseline; builder≠auditor + gate every slice.

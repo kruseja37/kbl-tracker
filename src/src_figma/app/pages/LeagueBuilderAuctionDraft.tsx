@@ -990,6 +990,7 @@ export function LeagueBuilderAuctionDraft() {
       : null;
 
     const boardMeta: Record<string, { name?: string; positions?: string }> = {};
+    const boardPlayers: Record<string, Player> = {};
     const boardCandidates = boardIds
       .map((playerId) => {
         const auctionPlayer = session.players[playerId];
@@ -1000,6 +1001,7 @@ export function LeagueBuilderAuctionDraft() {
           name: player ? playerDisplayName(player) : playerId,
           positions: boardPositionLabel(player),
         };
+        if (player) boardPlayers[playerId] = player;
         return {
           playerId,
           iv: auctionPlayer.iv,
@@ -1074,6 +1076,7 @@ export function LeagueBuilderAuctionDraft() {
         currentLotPlayerId: lotPlayerId,
         objectPronoun: playerPronouns(lotPlayer).object,
         boardMeta,
+        boardPlayers,
       },
     );
   }, [
@@ -1307,6 +1310,7 @@ export function LeagueBuilderAuctionDraft() {
       teamSecondary: nowTeam?.colors.secondary ?? (stageFocusTeam?.colors.secondary ?? "#E8E8D8"),
     },
     lot: {
+      player: stageLotPlayer,
       name: stageLotPlayer ? playerDisplayName(stageLotPlayer) : session.state === "AUCTION_COMPLETE" ? "MLB auction complete" : "Next player surfacing",
       positions: lotPositions(stageLotPlayer),
       personality: readableTrait(stageLotPlayer?.personality, "Personality —"),

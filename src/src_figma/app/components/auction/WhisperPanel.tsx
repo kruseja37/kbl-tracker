@@ -6,6 +6,8 @@ import type {
   RosterIntelligencePayload,
   WorthToYou,
 } from "../../../../engines/rosterIntelligencePayload";
+import type { Player } from "../../../../utils/leagueBuilderStorage";
+import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 
 interface WhisperPanelProps {
   payload: RosterIntelligencePayload | null;
@@ -17,6 +19,7 @@ interface WhisperPayloadMeta {
   currentLotPlayerId?: string;
   objectPronoun?: "him" | "her";
   boardMeta?: Record<string, { name?: string; positions?: string }>;
+  boardPlayers?: Record<string, Player>;
 }
 
 const LIGHT_ORDER = ["shape", "identity", "chemistry", "balance", "budget"] as const;
@@ -158,6 +161,7 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
                       entry={entry}
                       rank={index + 1}
                       meta={meta.boardMeta?.[entry.playerId]}
+                      player={meta.boardPlayers?.[entry.playerId]}
                       currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
                     />
                   ))}
@@ -170,6 +174,7 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
                         entry={entry}
                         rank={index + 4}
                         meta={meta.boardMeta?.[entry.playerId]}
+                        player={meta.boardPlayers?.[entry.playerId]}
                         currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
                       />
                     ))}
@@ -233,18 +238,27 @@ function BoardRow({
   entry,
   rank,
   meta,
+  player,
   currentLotPlayerId,
 }: {
   entry: BoardEntry;
   rank: number;
   meta: { name?: string; positions?: string } | undefined;
+  player: Player | undefined;
   currentLotPlayerId: string | undefined;
 }) {
   const onBlock = currentLotPlayerId === entry.playerId;
+  const name = <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>;
   return (
     <div className={`whisper-board-row${onBlock ? " on-block" : ""}`}>
       <span className="num whisper-rank">{rank}</span>
-      <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>
+      {player ? (
+        <PlayerProfilePopover player={player} revealFull>
+          {name}
+        </PlayerProfilePopover>
+      ) : (
+        name
+      )}
       {entry.needTag && <span className="chip whisper-need-chip">{entry.needTag}</span>}
       {entry.fitTag && <span className="chip whisper-fit-chip">{entry.fitTag}</span>}
       <span className="pos">{meta?.positions ?? entry.matchedShape ?? "POS"}</span>

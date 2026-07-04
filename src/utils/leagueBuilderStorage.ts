@@ -207,6 +207,26 @@ export interface LeagueAssignment {
   rosterStatus: RosterStatus;
 }
 
+export interface PlayerProspectProfile {
+  methodVersion?: string;
+  source?: string;
+  draftYear?: number;
+  draftRound?: number;
+  draftPick?: number;
+  teamId?: string;
+  trueGrade?: unknown;
+  scoutedGrade?: unknown;
+  potentialGrade?: unknown;
+  scoutId?: string;
+  scoutName?: string;
+  scoutAccuracy?: number;
+  scoutConfidence?: unknown;
+  scoutGradeError?: number;
+  scoutSpecialtiesVisible?: string[];
+  scoutWeaknessesVisible?: string[];
+  archetypeFamily?: string;
+}
+
 export interface LeagueBuilderScoutProfile {
   id: string;
   leagueId: string;
@@ -347,6 +367,7 @@ export interface Player {
   optionDatesBySeason?: Record<string, string[]>;
   ratingRevealState?: 'hidden' | 'revealed';
   ratingRevealedAt?: string;
+  prospectProfile?: PlayerProspectProfile;
   createdDate: string;
   lastModified: string;
   isCustom: boolean;

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { RosterIntelligencePayload } from "../../../../engines/rosterIntelligencePayload";
+import type { Player } from "../../../../utils/leagueBuilderStorage";
 import { WhisperPanel } from "./WhisperPanel";
 import { PressButton } from "../ballpark";
+import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 
 /**
  * AuctionStage — the "Premium Retro" auction-draft stage (MLB + farm), the
@@ -29,6 +31,7 @@ export interface ScoutReadVM {
 }
 
 export interface LotVM {
+  player?: Player | null;
   name: string;
   positions: string;
   personality: string;
@@ -531,10 +534,17 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
 
 function Lot({ lot }: { lot: LotVM }) {
   const [revealed, setRevealed] = useState(false);
+  const name = <span className="name">{lot.name.toUpperCase()}</span>;
   return (
     <div className="lotinner">
       <div className="eyebrow">{lot.scout ? "On the block · prospect" : "On the block"}</div>
-      <div className="name">{lot.name.toUpperCase()}</div>
+      {lot.player ? (
+        <PlayerProfilePopover player={lot.player} revealFull={!lot.scout}>
+          {name}
+        </PlayerProfilePopover>
+      ) : (
+        name
+      )}
       <div className="axes">
         <span className="pos">{lot.positions}</span>
         <span className="chip">{lot.personality}</span>

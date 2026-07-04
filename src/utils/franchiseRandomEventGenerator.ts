@@ -137,6 +137,18 @@ interface EventScope {
   seasonNumber: number;
 }
 
+interface FranchiseRandomEventProspectProfileEvidence {
+  trueGrade?: unknown;
+  scoutedGrade?: unknown;
+  potentialGrade?: unknown;
+  scoutConfidence?: unknown;
+  scoutName?: unknown;
+  archetypeFamily?: unknown;
+  hiddenScoutTruth?: unknown;
+  trueRatings?: unknown;
+  hiddenRatingFields?: unknown;
+}
+
 export interface FranchiseRandomEventPlayerEvidence {
   id: string;
   franchiseId?: string;
@@ -149,13 +161,7 @@ export interface FranchiseRandomEventPlayerEvidence {
   leagueAssignments?: Array<{ rosterStatus?: string }>;
   editHistory?: unknown[];
   hiddenPersonalityModifiers?: unknown;
-  prospectProfile?: {
-    trueGrade?: unknown;
-    hiddenScoutTruth?: unknown;
-    trueRatings?: unknown;
-    hiddenRatingFields?: unknown;
-    [key: string]: unknown;
-  };
+  prospectProfile?: FranchiseRandomEventProspectProfileEvidence;
 }
 
 export interface FranchiseRandomEventCompletedGameEvidence {

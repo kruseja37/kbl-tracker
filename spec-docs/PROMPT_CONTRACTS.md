@@ -29767,3 +29767,102 @@ FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized se
 LeagueBuilderDraftSetup batch, historicalArchetypes big-batch, franchiseOffseasonGuards component batch — verify each SOLO);
 `git status` — WhisperPanel.tsx + rosterIntelligencePayload.ts + tests. NO ivCurves/iv_oracle/GameTracker. DO NOT COMMIT.
 <!-- ===== END CONTRACT: CODEX-WHISPER-NUMBER-AND-BOARD ===== -->
+
+<!-- ===== CONTRACT: CODEX-B5-PROFILE-POPOVER ===== -->
+# CONTRACT: CODEX-B5-PROFILE-POPOVER (slice B5 of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04)
+
+MISSION: Build ONE SHARED player-profile popover used in BOTH the live auction draft AND the setup
+RosterDesigner. Clicking any player NAME opens a popover showing that player's COMPLETE record. MLB players
+show the FULL ratings grid; FARM/prospect players stay fogged (scout grade/range/confidence only, never true
+ratings). This is slice B5 of `spec-docs/ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md` — READ its §4.4 and §7
+item 7 FIRST. Design authority: the whisper mockup JK approved (chalk-and-ash ballpark aesthetic).
+
+BRANCH: `experiment/manager-wpa-window` (current). DO NOT create a new branch. DO NOT commit.
+
+GROUND TRUTH (verified — do not re-guess these):
+- Player record: interface `Player` in `src/utils/leagueBuilderStorage.ts` (~L280-356). Fields you need exist:
+  firstName,lastName,nickname?,age,bats('L'|'R'|'S'),throws('L'|'R'),armSlot?('High'|'Mid'|'Low'|'Sub'|null),
+  primaryPosition,secondaryPosition?,power,contact,speed,fielding,arm,velocity,junk,accuracy,arsenal(PitchType[]),
+  overallGrade,trait1?,trait2?,personality,chemistry('Competitive'|'Spirited'|'Crafty'|'Scholarly'|'Disciplined'),
+  ratingRevealState?('hidden'|'revealed'), prospectProfile?{scoutedGrade?,potentialGrade?,scoutConfidence?,scoutName?,...}.
+- Archetype classifier: `classifyPlayerArchetype(profile: ClassifiableProfile, opts?)` in
+  `src/engines/playerArchetypeClassifier.ts` (~L175). Returns `ShapeClassification` — use its friendly `.shape`
+  string (no enum mapping). ClassifiableProfile needs: isPitcher, primaryPosition, secondaryPosition?, bats?,
+  throws?, age?, power?..accuracy?, traits?(string[]), arsenal?(string[]), personality?.
+- Ratings-cell styling to COPY (AttributeCell is local-only, not exported):
+  `src/src_figma/app/pages/PlayerInstanceCard.tsx` ~L591-604 — `border-[3px] border-[#D3BF84] bg-[#FFF8DB] px-4 py-4`,
+  label `text-[8px] text-[#8A6A1A]`, value `text-[10px] text-black`.
+- Farm-hidden gate pattern to MIRROR: `resolveRevealState` + `hiddenSafe` in `src/utils/franchisePlayerProfile.ts`
+  (~L159-165, 304-305): revealed if ratingRevealState==='revealed'; hidden if ratingRevealState==='hidden';
+  else FARM→hidden. When hidden, numeric ratings are suppressed (fullDetails:null) and only scout bands + identity show.
+- Popover base to REUSE: Radix wrapper `@/app/components/ui/popover` exporting Popover/PopoverTrigger/PopoverContent
+  (portal + escape + click-outside built in). `@` = `src/src_figma/`.
+- Wire-in sites (name JSX): AuctionStage.tsx ~L537 (on-block lot name `<div className="name">`); WhisperPanel.tsx
+  ~L247 (board row `<span className="whisper-board-name">`); RosterDesigner.tsx ~L1004 (pool candidate `entry.playerName`).
+
+DELIVERABLES:
+
+PART 1 — PURE MODEL (no React, unit-tested). Create `src/utils/draftProfileModel.ts`:
+- `export interface DraftProfileModel` capturing: name, age, primaryPosition, secondaryPosition?, bats, throws,
+  armSlot, chemistry, personality, traits(string[]), archetype(string|null), AND EXACTLY ONE OF:
+  fullRatings:{power,contact,speed,fielding,arm,velocity,junk,accuracy,arsenal} | null,
+  scoutBands:{scoutedGrade,potentialGrade,scoutConfidence,scoutName}|null.
+- `export function buildDraftProfileModel(player: Player, opts: { revealFull: boolean }): DraftProfileModel`.
+- GATE (mirror resolveRevealState): if player.ratingRevealState==='revealed' → REVEAL. else if
+  player.ratingRevealState==='hidden' OR opts.revealFull===false → HIDDEN. else → REVEAL.
+- REVEALED: fullRatings = all 8 numerics + arsenal; scoutBands = null. archetype = classifyPlayerArchetype(mapped).shape.
+  EVERY revealed player shows BOTH batting (POW/CON/SPD/FLD/ARM) AND pitching (VEL/JNK/ACC) — a pitcher shows his
+  batting tools too, a hitter shows his pitching tools too. Do NOT omit either group. (JK requirement.)
+- HIDDEN: fullRatings = null. scoutBands from prospectProfile (missing → label 'Unscouted'/'—'). archetype = null
+  UNLESS a non-leaking scout-sourced shape exists. NEVER include any numeric true rating in a hidden model.
+- isPitcher for the classifier = primaryPosition ∈ {SP,RP,CP,'SP/RP',P}.
+
+PART 2 — VIEW. Create `src/src_figma/app/components/shared/PlayerProfilePopover.tsx`:
+- `export function PlayerProfilePopover({ player, revealFull, children }: { player: Player; revealFull: boolean;
+  children: React.ReactNode })`. Wrap Radix Popover: `children` inside `<PopoverTrigger asChild>` (the clickable
+  name); `<PopoverContent>` renders buildDraftProfileModel(player,{revealFull}).
+- Layout: header NAME + sub-line "pos · age · B/T · arm slot"; archetype + chemistry chips; then when REVEALED a
+  ratings grid using the copied AttributeCell styling (emphasize values ≥80); traits chips. When HIDDEN: scout
+  grade / potential / confidence / scout name + a "Farm — scouting only" note and NO ratings grid.
+- Chalk-and-ash ballpark aesthetic. Trigger must be keyboard-focusable. No layout shift on the host rows.
+
+PART 3 — WIRE 3 SURFACES (resolve the full Player at each; REPORT which resolver you used):
+  A) AuctionStage.tsx ~L537: wrap the on-block lot name in <PlayerProfilePopover>. Resolve the full Player for the
+     lot from the pool/playerById lookup already in scope (LotVM has an id). revealFull=true (MLB auction).
+  B) WhisperPanel.tsx ~L247: wrap the board-row name. Resolve Player from entry.playerId via the same meta/pool map
+     that already yields `meta`. revealFull=true (MLB).
+  C) RosterDesigner.tsx ~L1004: wrap the pool candidate name. Resolve Player from entry.playerId via the
+     leagueBuilder players already loaded in the component. revealFull = true for the MLB pool; if a farm/prospect
+     context is distinguishable, pass revealFull=false there. When unsure, pass true — the model's ratingRevealState
+     guard still protects any hidden record.
+- If a site genuinely cannot resolve the full Player, still open the popover with available identity fields and
+  report it — but the pools exist, so resolution should succeed. Do NOT fabricate ratings.
+
+CONSTRAINTS / NO-REGRESSION:
+- Additive only. DO NOT modify ivCurves.ts, iv_oracle.json, any salary/WAR engine, GameTracker.tsx, or
+  useGameState.ts logic. At the 3 wire-in sites, ONLY wrap the existing name text in the trigger — do NOT change
+  RosterDesigner's feasibility chip / per-slot preferences / pins / best-22 fit, and do NOT change the whisper's
+  number/board/verdict logic.
+- No `any`, no @ts-ignore. Strong types throughout.
+
+TESTS (Tier-2 proof). Create `src/utils/__tests__/draftProfileModel.test.ts`:
+  1. REVEALED MLB hitter → fullRatings present (all 8 + arsenal), archetype non-empty, scoutBands null.
+  2. REVEALED MLB pitcher → fullRatings STILL includes power/contact/speed/fielding/arm AND velocity/junk/accuracy.
+  3. HIDDEN farm (ratingRevealState:'hidden') → fullRatings null, scoutBands present (or 'Unscouted'), NO numeric
+     true rating leaks anywhere in the model.
+  4. revealFull:false forces hidden when ratingRevealState is undefined.
+  5. ratingRevealState:'revealed' overrides revealFull:false (reveals).
+- If jsdom + @testing-library/react is already configured, add a light PlayerProfilePopover render test (MLB shows a
+  rating value; farm does not). If that harness is NOT configured, the pure-model tests suffice — say so explicitly.
+
+GATE (run all; paste ACTUAL output):
+- `npm run build` → exit 0.
+- `NODE_ENV= npx vitest run src/utils/__tests__/draftProfileModel.test.ts` → green.
+- `NODE_ENV= npx vitest run` (FULL) → must stay at the CURRENT_STATE baseline; the only allowed reds are the
+  characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture; and known big-batch flakes
+  LeagueBuilderDraftSetup / historicalArchetypes / franchiseOffseasonGuards.component — verify SOLO if they appear).
+  Report pass/fail counts. Any NEW red → STOP and report, do not paper over.
+
+OUTPUT: files created/changed; the resolver used at each of the 3 wire-ins; the model-test output; the build result;
+the full-suite counts; `git status`. DO NOT COMMIT — leave changes for Opus audit.
+<!-- ===== END CONTRACT: CODEX-B5-PROFILE-POPOVER ===== -->
