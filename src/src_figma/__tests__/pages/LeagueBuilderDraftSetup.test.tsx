@@ -894,12 +894,8 @@ describe("LeagueBuilderDraftSetup", () => {
   test("renders shared-pool floor failures as pool-level budget overflow rows", async () => {
     const cheapRoster = makeLegalRosterPlayerSet("cheap", 10_000);
     const expensiveRoster = [
-      ...makeLegalRosterPlayerSet("expensive", 50_000),
-      makePlayer(400, {
-        id: "expensive-extra-c",
-        primaryPosition: "C",
-        salary: 50_000,
-      }),
+      ...makeLegalRosterPlayerSet("expensive-a", 70_000),
+      ...makeLegalRosterPlayerSet("expensive-b", 70_000),
     ];
     const poolPlayers = [...cheapRoster, ...expensiveRoster];
     mockLeagueData({
@@ -945,13 +941,13 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(floorRow).toHaveTextContent("ALL CLUBS · ONE POOL");
     expect(floorRow).toHaveTextContent("SHARED POOL");
     expect(floorRow).toHaveTextContent("seats 1 of 3 clubs");
-    expect(floorRow).toHaveTextContent("the cheapest legal 22 left costs $1,060,000");
-    expect(floorRow).toHaveTextContent("against the $1,000,000 cap ($60,000 over)");
+    expect(floorRow).toHaveTextContent("the balanced legal 22 for that club costs $1,180,000");
+    expect(floorRow).toHaveTextContent("against the $1,000,000 cap ($180,000 over)");
     expect(floorRow).toHaveTextContent("the affordable players are used up");
     expect(floorRow).not.toHaveTextContent("Priciest asks");
     expect(floorRow).not.toHaveTextContent("CPU Blues");
     expect(floorRow).not.toHaveTextContent("club 2");
-    expect(screen.getAllByText("BUILDS · $740,000 to spare")).toHaveLength(2);
+    expect(screen.getAllByText("BUILDS · $720,000 to spare")).toHaveLength(2);
   });
 
   test("renders CLUB CHECK target segments without changing the floor dot gate", async () => {

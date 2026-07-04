@@ -111,6 +111,8 @@ export interface DesignFeasibilityResult {
 export interface SeatAllClubsResult {
   holds: boolean;
   seated: number;
+  assemblies: string[][];
+  costs: number[];
   failing?: { pass: number; blockers: string[]; overrun?: number };
 }
 
@@ -547,33 +549,271 @@ export function seatAllClubs(
   designPool: readonly DesignPoolPlayer[],
   clubs: number,
   budget: number,
-): SeatAllClubsResult & { assemblies: string[][] } {
+): SeatAllClubsResult {
   const clubCount = Math.max(0, Math.floor(clubs));
-  const remaining = new Map(designPool.map((player) => [player.id, player]));
-  const assemblies: string[][] = [];
   const slots = buildDefaultDesignSlots();
-  for (let pass = 1; pass <= clubCount; pass += 1) {
-    const result = evaluateRosterDesign(slots, [...remaining.values()], budget);
-    if (!result.feasible) {
+  if (clubCount === 0) return { holds: true, seated: 0, assemblies: [], costs: [] };
+
+  const classified = classifyPool(designPool);
+  const byId = new Map(classified.map((player, index) => [player.id, index]));
+
+  interface GlobalSlot {
+    slot: DesignSlot;
+    clubIndex: number;
+    localSlotIndex: number;
+    snakeRank: number;
+  }
+
+  const clubSlots: GlobalSlot[] = [];
+  for (let localSlotIndex = 0; localSlotIndex < slots.length; localSlotIndex += 1) {
+    const forward = localSlotIndex % 2 === 0;
+    const clubOrder = Array.from({ length: clubCount }, (_, index) => index);
+    if (!forward) clubOrder.reverse();
+    for (let orderIndex = 0; orderIndex < clubOrder.length; orderIndex += 1) {
+      const clubIndex = clubOrder[orderIndex];
+      clubSlots.push({
+        slot: slots[localSlotIndex],
+        clubIndex,
+        localSlotIndex,
+        snakeRank: localSlotIndex * clubCount + orderIndex,
+      });
+    }
+  }
+
+  const candidateIdx: number[][] = clubSlots.map(({ slot }) =>
+    classified
+      .map((player, index) => ({ player, index }))
+      .filter(({ player }) => eligibleForSlot(slot, player))
+      .sort((a, b) => candidateOrder(a.player, b.player, undefined))
+      .map(({ index }) => index),
+  );
+
+  const slotOfPlayer = new Map<number, number>();
+  const playerOfGlobalSlot: (number | null)[] = clubSlots.map(() => null);
+  const byConstraint = clubSlots.map((_, index) => index).sort((a, b) =>
+    candidateIdx[a].length - candidateIdx[b].length
+    || clubSlots[a].snakeRank - clubSlots[b].snakeRank,
+  );
+  const tryAugment = (slotIndex: number, visited: Set<number>): boolean => {
+    for (const playerIndex of candidateIdx[slotIndex]) {
+      if (visited.has(playerIndex)) continue;
+      visited.add(playerIndex);
+      const holder = slotOfPlayer.get(playerIndex);
+      if (holder === undefined || tryAugment(holder, visited)) {
+        slotOfPlayer.set(playerIndex, slotIndex);
+        playerOfGlobalSlot[slotIndex] = playerIndex;
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const slotIndex of byConstraint) {
+    tryAugment(slotIndex, new Set());
+  }
+
+  const firstUnmatched = playerOfGlobalSlot.findIndex((playerIndex) => playerIndex === null);
+  if (firstUnmatched !== -1) {
+    const slot = clubSlots[firstUnmatched].slot;
+    const label = slot.position ?? slot.slotId;
+    const message = `No eligible player left in the pool for ${label}.`;
+    return {
+      holds: false,
+      seated: 0,
+      assemblies: [],
+      costs: [],
+      failing: {
+        pass: clubSlots[firstUnmatched].clubIndex + 1,
+        blockers: [`${slot.slotId}: ${message}`],
+      },
+    };
+  }
+
+  const clubAssignments: number[][] = Array.from(
+    { length: clubCount },
+    () => Array.from({ length: slots.length }, () => -1),
+  );
+  for (let globalSlotIndex = 0; globalSlotIndex < clubSlots.length; globalSlotIndex += 1) {
+    const playerIndex = playerOfGlobalSlot[globalSlotIndex];
+    if (playerIndex === null) continue;
+    const ref = clubSlots[globalSlotIndex];
+    clubAssignments[ref.clubIndex][ref.localSlotIndex] = playerIndex;
+  }
+
+  const usedIndices = (): Set<number> => new Set(clubAssignments.flat());
+  const assemblyIds = (assignment: readonly number[]): string[] =>
+    assignment.map((index) => classified[index].id).sort((a, b) => a.localeCompare(b));
+  const assemblyCost = (assignment: readonly number[]): number =>
+    assignment.reduce((sum, index) => sum + classified[index].salary, 0);
+  const assemblyRoster = (assignment: readonly number[]): RosterSlotPlayer[] =>
+    assignment.map((index) => classified[index].slotPlayer);
+  const legalFailure = (): number =>
+    clubAssignments.findIndex((assignment) => !isLegalRoster(assemblyRoster(assignment)));
+
+  const illegalClub = legalFailure();
+  if (illegalClub !== -1) {
+    const roster = assemblyRoster(clubAssignments[illegalClub]);
+    return {
+      holds: false,
+      seated: clubAssignments.filter((assignment) => isLegalRoster(assemblyRoster(assignment))).length,
+      assemblies: clubAssignments.map(assemblyIds),
+      costs: clubAssignments.map(assemblyCost),
+      failing: {
+        pass: illegalClub + 1,
+        blockers: [
+          'legality: The design fills and fits the budget, but the assembled 22 is not a legal roster: '
+            + `${explainIllegality(roster)}. Swap one design ask toward the stranded requirement.`,
+        ],
+      },
+    };
+  }
+
+  const replaceClubFromResult = (clubIndex: number, result: DesignFeasibilityResult): boolean => {
+    const next = result.slots
+      .map((slot) => (slot.playerId ? byId.get(slot.playerId) : undefined));
+    if (next.some((index) => index === undefined)) return false;
+    clubAssignments[clubIndex] = next as number[];
+    return true;
+  };
+
+  const tryCheaperUnusedReassignment = (clubIndex: number): boolean => {
+    const current = clubAssignments[clubIndex];
+    const currentCost = assemblyCost(current);
+    const currentSet = new Set(current);
+    const used = usedIndices();
+    const available = classified
+      .filter((_, index) => currentSet.has(index) || !used.has(index))
+      .map((player) => player as DesignPoolPlayer);
+    const result = evaluateRosterDesign(slots, available, currentCost - 0.000001);
+    return result.feasible && result.totalCost < currentCost && replaceClubFromResult(clubIndex, result);
+  };
+
+  const slotClass = (slot: DesignSlot): string => `${slot.kind}:${slot.position ?? ''}`;
+
+  const tryUnderBudgetSameClassSwap = (maxClubIndex: number): boolean => {
+    const maxAssignment = clubAssignments[maxClubIndex];
+    const maxCost = assemblyCost(maxAssignment);
+    const candidates: Array<{
+      donorClubIndex: number;
+      maxSlotIndex: number;
+      donorSlotIndex: number;
+      reduction: number;
+      donorCost: number;
+      maxPlayerId: string;
+      donorPlayerId: string;
+    }> = [];
+
+    for (let donorClubIndex = 0; donorClubIndex < clubAssignments.length; donorClubIndex += 1) {
+      if (donorClubIndex === maxClubIndex) continue;
+      const donorAssignment = clubAssignments[donorClubIndex];
+      const donorCost = assemblyCost(donorAssignment);
+      if (donorCost > budget) continue;
+
+      for (let maxSlotIndex = 0; maxSlotIndex < slots.length; maxSlotIndex += 1) {
+        const maxPlayerIndex = maxAssignment[maxSlotIndex];
+        const maxPlayer = classified[maxPlayerIndex];
+        for (let donorSlotIndex = 0; donorSlotIndex < slots.length; donorSlotIndex += 1) {
+          if (slotClass(slots[maxSlotIndex]) !== slotClass(slots[donorSlotIndex])) continue;
+          const donorPlayerIndex = donorAssignment[donorSlotIndex];
+          const donorPlayer = classified[donorPlayerIndex];
+          if (donorPlayer.salary >= maxPlayer.salary) continue;
+          const nextDonorCost = donorCost - donorPlayer.salary + maxPlayer.salary;
+          if (nextDonorCost > budget) continue;
+          if (!eligibleForSlot(slots[maxSlotIndex], donorPlayer)) continue;
+          if (!eligibleForSlot(slots[donorSlotIndex], maxPlayer)) continue;
+
+          const nextMaxAssignment = [...maxAssignment];
+          const nextDonorAssignment = [...donorAssignment];
+          nextMaxAssignment[maxSlotIndex] = donorPlayerIndex;
+          nextDonorAssignment[donorSlotIndex] = maxPlayerIndex;
+          if (!isLegalRoster(assemblyRoster(nextMaxAssignment))) continue;
+          if (!isLegalRoster(assemblyRoster(nextDonorAssignment))) continue;
+          candidates.push({
+            donorClubIndex,
+            maxSlotIndex,
+            donorSlotIndex,
+            reduction: maxPlayer.salary - donorPlayer.salary,
+            donorCost: nextDonorCost,
+            maxPlayerId: maxPlayer.id,
+            donorPlayerId: donorPlayer.id,
+          });
+        }
+      }
+    }
+
+    candidates.sort((a, b) =>
+      b.reduction - a.reduction
+      || a.donorCost - b.donorCost
+      || a.donorClubIndex - b.donorClubIndex
+      || a.maxSlotIndex - b.maxSlotIndex
+      || a.donorSlotIndex - b.donorSlotIndex
+      || a.maxPlayerId.localeCompare(b.maxPlayerId)
+      || a.donorPlayerId.localeCompare(b.donorPlayerId),
+    );
+    const best = candidates[0];
+    if (!best) return false;
+    const donorAssignment = clubAssignments[best.donorClubIndex];
+    const maxPlayerIndex = maxAssignment[best.maxSlotIndex];
+    const donorPlayerIndex = donorAssignment[best.donorSlotIndex];
+    maxAssignment[best.maxSlotIndex] = donorPlayerIndex;
+    donorAssignment[best.donorSlotIndex] = maxPlayerIndex;
+    return assemblyCost(maxAssignment) < maxCost;
+  };
+
+  const maxIterations = Math.max(1, clubCount * slots.length * Math.max(1, classified.length));
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    const costs = clubAssignments.map(assemblyCost);
+    const overBudget = costs
+      .map((cost, index) => ({ cost, index }))
+      .filter(({ cost }) => cost > budget)
+      .sort((a, b) => b.cost - a.cost || a.index - b.index);
+    if (overBudget.length === 0) {
       return {
-        holds: false,
-        seated: pass - 1,
-        assemblies,
-        failing: {
-          pass,
-          blockers: result.blockers.map((blocker) => `${blocker.slotId}: ${blocker.message}`),
-          ...(result.totalCost > budget ? { overrun: result.totalCost - budget } : {}),
-        },
+        holds: true,
+        seated: clubCount,
+        assemblies: clubAssignments.map(assemblyIds),
+        costs,
       };
     }
-    const assembly = result.slots
-      .map((slot) => slot.playerId)
-      .filter((id): id is string => Boolean(id))
-      .sort((a, b) => a.localeCompare(b));
-    assemblies.push(assembly);
-    for (const id of assembly) remaining.delete(id);
+
+    const maxClubIndex = overBudget[0].index;
+    if (tryCheaperUnusedReassignment(maxClubIndex)) continue;
+    if (tryUnderBudgetSameClassSwap(maxClubIndex)) continue;
+
+    const finalCosts = clubAssignments.map(assemblyCost);
+    const failingCost = finalCosts[maxClubIndex];
+    return {
+      holds: false,
+      seated: finalCosts.filter((cost) => cost <= budget).length,
+      assemblies: clubAssignments.map(assemblyIds),
+      costs: finalCosts,
+      failing: {
+        pass: maxClubIndex + 1,
+        blockers: [
+          `budget: The design fills, but costs ${formatMoney(failingCost)} against a budget of `
+            + `${formatMoney(budget)} (${formatMoney(failingCost - budget)} over).`,
+        ],
+        overrun: failingCost - budget,
+      },
+    };
   }
-  return { holds: true, seated: clubCount, assemblies };
+
+  const costs = clubAssignments.map(assemblyCost);
+  const maxCost = Math.max(...costs);
+  const maxClubIndex = costs.findIndex((cost) => cost === maxCost);
+  return {
+    holds: false,
+    seated: costs.filter((cost) => cost <= budget).length,
+    assemblies: clubAssignments.map(assemblyIds),
+    costs,
+    failing: {
+      pass: maxClubIndex + 1,
+      blockers: [
+        `budget: The design fills, but costs ${formatMoney(maxCost)} against a budget of `
+          + `${formatMoney(budget)} (${formatMoney(maxCost - budget)} over).`,
+      ],
+      overrun: maxCost - budget,
+    },
+  };
 }
 
 /**

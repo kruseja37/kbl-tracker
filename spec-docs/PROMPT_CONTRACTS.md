@@ -29439,3 +29439,41 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture batch, historicalArchetypes big-batch — solo-verify). Run any red SOLO.
 - `git status` — rosterDesignFeasibility.ts + seatAllClubs.test.ts (+ any FLOOR leeway-readout tweak in LeagueBuilderDraftSetup.tsx). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-BALANCED-SEATING ===== -->
+
+<!-- ===== CONTRACT: CODEX-CHEAP-DEPTH ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/, and do NOT touch spec-docs/C4_AUDIT_2026-07-02.md — it is Opus's live audit doc).
+Stage only explicit paths you create/edit. Report ACTUAL output. No GameTracker edits.
+
+STEP 3 of Fable's pool-affordability fix. BUILD EXACTLY to spec-docs/FABLE_POOL_AFFORDABILITY_DESIGN_2026-07-04.md §"STEP 3 —
+CHEAP-DEPTH FLOORS" — read it VERBATIM. Do ONLY Step 3. File: src/engines/draftPoolExtractor.ts (structuralFloor, ~:133-226).
+
+PROBLEM: every structural pick-list sorts byIvDescIdAsc (:124-126; applied :145,:161,:176-179,:211,:218) — the floors pull each
+position's MOST EXPENSIVE bodies and nothing guarantees affordable depth, so the pool starves of cheap bodies per position.
+
+DELIVERABLE (per §Step 3):
+1. Add `byIvAscIdAsc` (salary===iv, cheapest first) beside byIvDescIdAsc.
+2. Add tuning constants to EXTRACTOR_TUNING (draftPoolExtractor.ts:72): `cheapDepthPerClubField: 1`, `cheapDepthPerClubArm: 2`
+   (named dials for later C5 tuning).
+3. In structuralFloor, AFTER each existing top-IV pull, ALSO pull the cheapest legal bodies from the SAME filtered list into picks:
+   - per field position: teams × cheapDepthPerClubField cheapest primaries (C included);
+   - C-coverage: teams × cheapDepthPerClubField cheapest additional coverage bodies;
+   - startable arms: teams × cheapDepthPerClubArm cheapest; relievable arms: teams × cheapDepthPerClubArm cheapest;
+   - pitcher/hitter body top-ups: unchanged. Dedup via the existing picks map. No extra quality gate (these ARE the affordability rail).
+4. Trim protection is AUTOMATIC: cheap picks join floorIds → protectedIds (poolFromDemand.ts:476-481) → trimPoolToTarget cannot evict
+   them. Do NOT change trim logic. Sizing stays a COUNT target (do NOT add a cost-target sizer).
+
+TESTS (§Step 3 acceptance — add to the extractor's test file, e.g. src/engines/__tests__/draftPoolExtractor.test.ts or poolFromDemand.test.ts):
+- For a synthetic source with WIDE salary spread: the extracted pool contains ≥ teams cheapest-quartile primaries at EVERY field
+  position AND ≥ 2×teams cheapest-quartile startable + relievable arms, and NONE of them appear in trimPoolToTarget.evicted at any legal multiplier.
+- Pool-size delta stays within the existing ceiling clamp (cheap picks count toward, not on top of, the target where trim applies to unprotected filler).
+
+GUARDRAILS: no GameTracker; no trim-logic change; no cost-target sizer; reuse canonical helpers.
+ORTHOGONALITY: L-SIM not required (grep-confirm draftPoolExtractor not in the L-SIM harness path; state it).
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/poolFromDemand.test.ts src/engines/__tests__/draftPoolExtractor.test.ts src/engines/__tests__/seatAllClubs.test.ts` — green (draftPoolExtractor test may not exist yet; create it or add to poolFromDemand.test).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture batch, archetypeBalanceSimulator provenance, historicalArchetypes big-batch — solo-verify). Run any red SOLO.
+- `git status` — draftPoolExtractor.ts (+ its test). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-CHEAP-DEPTH ===== -->

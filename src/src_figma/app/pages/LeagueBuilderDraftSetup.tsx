@@ -387,6 +387,9 @@ function buildLeagueSeatabilityRow(
 ): RecheckRow {
   const verdict = seatAllClubs(buildRosterDesignPool(poolPlayers), leagueTeams.length, cap);
   if (!verdict.holds) {
+    const failingCost = verdict.failing?.pass
+      ? verdict.costs[verdict.failing.pass - 1]
+      : undefined;
     const remaining = new Map(poolPlayers.map((player) => [player.id, player]));
     for (const assembly of verdict.assemblies) {
       for (const id of assembly) remaining.delete(id);
@@ -398,10 +401,10 @@ function buildLeagueSeatabilityRow(
     const positions = rosterPositionMap(remainingPlayers);
     const need = teamRosterNeed(candidateIds, positions);
     const lawBlockers = need ? describeRosterLawGaps(candidateIds.length, need) : [];
-    const detail = lawBlockers.length > 0
-      ? `${lawBlockers.join(" ")} Add players or raise the cap.`
-      : verdict.failing?.overrun !== undefined
-        ? `the cheapest legal 22 left costs ${formatMoney(result.totalCost)} against the ${formatMoney(cap)} cap (${formatMoney(verdict.failing.overrun)} over) — the affordable players are used up. Raise the cap or add players.`
+    const detail = verdict.failing?.overrun !== undefined
+      ? `the balanced legal 22 for that club costs ${formatMoney(failingCost ?? result.totalCost)} against the ${formatMoney(cap)} cap (${formatMoney(verdict.failing.overrun)} over) — the affordable players are used up. Raise the cap or add players.`
+      : lawBlockers.length > 0
+        ? `${lawBlockers.join(" ")} Add players or raise the cap.`
         : verdict.failing?.blockers.join(" ") ?? "no further legal body is available";
     return {
       id: "league-seatability",
@@ -416,7 +419,9 @@ function buildLeagueSeatabilityRow(
     label: SHARED_POOL_RECHECK_LABEL,
     tag: SHARED_POOL_RECHECK_TAG,
     ok: true,
-    message: `Seats all ${leagueTeams.length} clubs.`,
+    message: verdict.costs.length > 0
+      ? `Seats all ${leagueTeams.length} clubs · tightest club has ${formatMoney(Math.min(...verdict.costs.map((cost) => cap - cost)))} to spare.`
+      : `Seats all ${leagueTeams.length} clubs.`,
   };
 }
 
