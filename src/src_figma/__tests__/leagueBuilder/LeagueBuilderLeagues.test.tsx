@@ -16,6 +16,7 @@ import {
 } from '../../app/utils/draftRouting';
 import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
 import { TIER_CAPS } from '../../../data/tierParams';
+import { SALARY_CAP_FLOOR, salaryCapHardError } from '../../app/utils/salaryCapInput';
 
 // ============================================
 // MOCKS
@@ -214,8 +215,8 @@ describe('LeagueBuilderLeagues Component', () => {
       await openCreateLeagueModal();
 
       const capInput = screen.getByLabelText('Salary cap');
-      fireEvent.change(capInput, { target: { value: '10000' } });
-      expect(screen.getByText(/Salary cap must be at least/)).toBeInTheDocument();
+      fireEvent.change(capInput, { target: { value: String(SALARY_CAP_FLOOR - 1) } });
+      expect(screen.getByText(salaryCapHardError(SALARY_CAP_FLOOR - 1)!)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /^create league$/i })).toBeDisabled();
 
       fireEvent.change(capInput, { target: { value: '3000000' } });

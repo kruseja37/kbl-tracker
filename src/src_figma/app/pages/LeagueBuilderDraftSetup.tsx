@@ -58,6 +58,7 @@ import {
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
 import { historicalToSimArchetype, rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
+import { TIER_CAPS } from "../../../data/tierParams";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
@@ -108,6 +109,13 @@ import {
 } from "../../../engines/rosterDesignFeasibility";
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
+import {
+  formatSalaryCapInput,
+  formatSalaryCapMoney,
+  parseSalaryCapInput,
+  salaryCapAdvisory as getSalaryCapAdvisory,
+  salaryCapHardError as getSalaryCapHardError,
+} from "../utils/salaryCapInput";
 
 export { demandPlayerFromLeaguePlayer, demandUniverseFromPlayers } from "../engines/leaguePlayerAdapter";
 
@@ -174,6 +182,7 @@ type ClubEditorMode = "identity" | "design" | null;
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
 type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing">;
 type HandEditLedger = { handAdds: string[]; handRemoves: string[] };
+type PoolExtractedBasis = NonNullable<LeagueTemplate["poolExtractedBasis"]>;
 type RecheckRow = {
   id: string;
   label: string;
@@ -283,6 +292,67 @@ function handEditReportSentence(adds: number, removes: number): string {
   if (adds > 0) parts.push(`${adds} hand-${pluralWord(adds, "add")}`);
   if (removes > 0) parts.push(`${removes} hand-${pluralWord(removes, "remove")}`);
   return parts.length ? ` Kept your ${parts.join(" and ")}.` : "";
+}
+
+function designPinReportSentence(count: number): string | null {
+  return count > 0 ? `${count} design ${pluralWord(count, "pin")} held in the pool.` : null;
+}
+
+function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: number): ModeAReport {
+  const designPinMessage = designPinReportSentence(designPinCount);
+  const sizing = result.sizing && designPinMessage
+    ? { ...result.sizing, messages: [...result.sizing.messages, designPinMessage] }
+    : result.sizing;
+  return {
+    cells: result.cells,
+    shortfalls: result.shortfalls,
+    designVerdicts: result.designVerdicts,
+    sizing,
+  };
+}
+
+function buildPoolExtractedBasis(
+  league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier">,
+  leagueTeams: readonly Team[],
+  cap: number,
+): PoolExtractedBasis {
+  const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
+  const identityByTeamId: Record<string, string | null> = {};
+  for (const teamId of league.teamIds) {
+    identityByTeamId[teamId] = teamsById.get(teamId)?.mlbArchetypeKey ?? null;
+  }
+  return {
+    cap,
+    poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+    identityByTeamId,
+  };
+}
+
+function poolBasisStaleLines(
+  extractedBasis: PoolExtractedBasis | undefined,
+  liveBasis: PoolExtractedBasis | null,
+  leagueTeams: readonly Team[],
+): string[] {
+  if (!extractedBasis || !liveBasis) return [];
+  const lines: string[] = [];
+  if (extractedBasis.cap !== liveBasis.cap) {
+    lines.push(`THE CAP MOVED (${formatMoney(extractedBasis.cap)} → ${formatMoney(liveBasis.cap)}) SINCE THE POOL WAS DRAWN — RE-EXTRACT TO SIZE THE POOL TO THE NEW MONEY.`);
+  }
+  if (Math.abs(extractedBasis.poolSizeMultiplier - liveBasis.poolSizeMultiplier) > 1e-9) {
+    lines.push("THE POOL-SIZE DIAL MOVED — RE-EXTRACT TO REDRAW.");
+  }
+  const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
+  const identityKeys = sortedIds([
+    ...Object.keys(extractedBasis.identityByTeamId),
+    ...Object.keys(liveBasis.identityByTeamId),
+  ]);
+  for (const teamId of identityKeys) {
+    const previous = extractedBasis.identityByTeamId[teamId] ?? null;
+    const current = liveBasis.identityByTeamId[teamId] ?? null;
+    if (previous === current) continue;
+    lines.push(`${teamsById.get(teamId)?.name ?? "A CLUB"} CHANGED ITS IDENTITY — RE-EXTRACT TO RESTOCK FOR IT.`);
+  }
+  return lines;
 }
 
 function rosterPositionMap(players: readonly Player[]): RosterPositionMap {
@@ -505,6 +575,7 @@ export function LeagueBuilderDraftSetup() {
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [clubEditorMode, setClubEditorMode] = useState<ClubEditorMode>("identity");
   const [shills, setShills] = useState(() => scaledShillDefault(0));
+  const [salaryCapInput, setSalaryCapInput] = useState("");
 
   // Resolve the active league once leagues load (honoring ?leagueId=).
   useEffect(() => {
@@ -796,6 +867,27 @@ export function LeagueBuilderDraftSetup() {
     () => resolveLeagueSalaryCap(league),
     [league],
   );
+  const tierReferenceCap = TIER_CAPS[league?.tier ?? "juiced"].tierCap;
+  const parsedSalaryCapInput = parseSalaryCapInput(salaryCapInput);
+  const salaryCapHardError = getSalaryCapHardError(parsedSalaryCapInput);
+  const salaryCapAdvisory = getSalaryCapAdvisory(parsedSalaryCapInput, tierReferenceCap);
+  const salaryCapAtTierPar = tierBudget === tierReferenceCap;
+
+  useEffect(() => {
+    setSalaryCapInput(formatSalaryCapInput(tierBudget));
+  }, [activeLeagueId, tierBudget]);
+
+  const livePoolExtractedBasis = useMemo(
+    () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget) : null),
+    [league, leagueTeams, tierBudget],
+  );
+  const basisStaleLines = useMemo(
+    () => (poolMode === "design-first" && league?.poolExtractedAt
+      ? poolBasisStaleLines(league.poolExtractedBasis, livePoolExtractedBasis, leagueTeams)
+      : []),
+    [league?.poolExtractedAt, league?.poolExtractedBasis, leagueTeams, livePoolExtractedBasis, poolMode],
+  );
+  const basisStale = basisStaleLines.length > 0;
   const designsLocked = useMemo(
     () => humanTeams.filter((team) => Boolean(team.rosterDesign?.lockedAt)).length,
     [humanTeams],
@@ -807,6 +899,16 @@ export function LeagueBuilderDraftSetup() {
       })
     : [];
   const designsStale = poolMode === "design-first" && modeAStaleTeams.length > 0;
+  const poolTrailing = designsStale || basisStale;
+  const universePlayerIds = useMemo(() => new Set(players.map((player) => player.id)), [players]);
+  const lockedDesignPinPlayerIds = useMemo(
+    () => sortedIds(humanTeams.flatMap((team) => {
+      if (!team.rosterDesign?.lockedAt) return [];
+      return Object.values(team.rosterDesign.pins ?? {})
+        .filter((playerId): playerId is string => typeof playerId === "string" && playerId.length > 0 && universePlayerIds.has(playerId));
+    })),
+    [humanTeams, universePlayerIds],
+  );
   const rosterDesignToneByTeamId = useMemo(() => {
     const tones = new Map<string, ReturnType<typeof rosterDesignStatusTone>>();
     for (const team of humanTeams) {
@@ -908,7 +1010,7 @@ export function LeagueBuilderDraftSetup() {
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
   const startReady =
     Boolean(league) &&
-    (hasSavedDraft || (poolReady && identitiesReady && (poolMode === "pool-first" || (allHumanDesignsLocked && !designsStale)))) &&
+    (hasSavedDraft || (poolReady && identitiesReady && (poolMode === "pool-first" || (allHumanDesignsLocked && !poolTrailing)))) &&
     savedDraftChecked &&
     !savedDraftLookupError;
   const startBlocker = !savedDraftChecked
@@ -917,8 +1019,8 @@ export function LeagueBuilderDraftSetup() {
       ? "could not confirm saved draft status"
       : poolMode === "design-first" && !allHumanDesignsLocked
         ? "lock every club's design first"
-        : designsStale
-          ? "re-extract the pool — some designs changed after it was drawn"
+        : poolTrailing
+          ? "finish the re-plan — lock the edits, then re-extract"
           : !poolReady
             ? "lock a sufficient player pool first"
             : !identitiesReady
@@ -932,7 +1034,7 @@ export function LeagueBuilderDraftSetup() {
   };
 
   const saveLeagueDraftSetup = useCallback(
-    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
       if (!league) return;
       await saveLeagueTemplate({ ...league, ...patch });
       await refresh();
@@ -946,6 +1048,28 @@ export function LeagueBuilderDraftSetup() {
       assertPoolCanMutate();
       if (locked) throw new Error("Pool is locked. Unlock it before changing pool size.");
       await saveLeagueDraftSetup({ poolSizeMultiplier });
+    });
+
+  const handleSalaryCapInputChange = (value: string) => {
+    const parsed = parseSalaryCapInput(value);
+    setSalaryCapInput(parsed === null ? value : formatSalaryCapInput(parsed));
+  };
+
+  const handleSalaryCapApply = () =>
+    runAction(async () => {
+      if (!league) return;
+      assertPoolCanMutate();
+      if (locked) throw new Error("Pool is locked. Unlock it before changing salary cap.");
+      if (salaryCapHardError || parsedSalaryCapInput === null) throw new Error(salaryCapHardError ?? "ENTER A VALID SALARY CAP.");
+      await saveLeagueTemplate({ ...league, salaryCap: parsedSalaryCapInput });
+    });
+
+  const handleSalaryCapReset = () =>
+    runAction(async () => {
+      if (!league) return;
+      assertPoolCanMutate();
+      if (locked) throw new Error("Pool is locked. Unlock it before changing salary cap.");
+      await saveLeagueTemplate({ ...league, salaryCap: undefined });
     });
 
   const persistSeatNameForOwnedTeams = useCallback(
@@ -1035,6 +1159,7 @@ export function LeagueBuilderDraftSetup() {
     const selectedArchetypes = leagueTeams
       .map((team) => HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey))
       .filter((archetype): archetype is (typeof HISTORICAL_ARCHETYPES)[number] => Boolean(archetype));
+    const designPinIdSet = new Set(lockedDesignPinPlayerIds);
     return extractPoolFromDemand(
       demandUniverseFromPlayers(players),
       lockedDesigns,
@@ -1045,11 +1170,11 @@ export function LeagueBuilderDraftSetup() {
         shills,
         budgetPerTeam: tierBudget,
         poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
-        pinnedIds: ledger.handAdds,
-        excludedIds: ledger.handRemoves,
+        pinnedIds: sortedIds([...ledger.handAdds, ...lockedDesignPinPlayerIds]),
+        excludedIds: ledger.handRemoves.filter((id) => !designPinIdSet.has(id)),
       },
     );
-  }, [humanTeams, league, leagueTeams, players, shills, tierBudget]);
+  }, [humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, shills, tierBudget]);
 
   useEffect(() => {
     setReExtractConfirm(false);
@@ -1060,16 +1185,11 @@ export function LeagueBuilderDraftSetup() {
     }
     try {
       const result = buildModeAResult(modeAHandLedger);
-      setModeAReport({
-        cells: result.cells,
-        shortfalls: result.shortfalls,
-        designVerdicts: result.designVerdicts,
-        sizing: result.sizing,
-      });
+      setModeAReport(modeAReportFromResult(result, lockedDesignPinPlayerIds.length));
     } catch {
       setModeAReport(null);
     }
-  }, [buildModeAResult, league?.poolExtractedAt, modeAHandLedger, poolMode]);
+  }, [buildModeAResult, league?.poolExtractedAt, lockedDesignPinPlayerIds.length, modeAHandLedger, poolMode]);
 
   useEffect(() => {
     if (!reExtractConfirm && !lockConfirm) return undefined;
@@ -1097,6 +1217,7 @@ export function LeagueBuilderDraftSetup() {
       await saveLeagueDraftSetup({
         draftPoolMode: nextMode,
         poolExtractedAt: nextMode === "pool-first" ? undefined : league.poolExtractedAt,
+        poolExtractedBasis: nextMode === "pool-first" ? undefined : league.poolExtractedBasis,
         modeAExtractedIds: nextMode === "pool-first" ? undefined : league.modeAExtractedIds,
         modeAHandAdds: nextMode === "pool-first" ? undefined : league.modeAHandAdds,
         modeAHandRemoves: nextMode === "pool-first" ? undefined : league.modeAHandRemoves,
@@ -1217,16 +1338,12 @@ export function LeagueBuilderDraftSetup() {
       await saveLeagueTemplate({
         ...league,
         poolExtractedAt: extractedAt,
+        poolExtractedBasis: livePoolExtractedBasis ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget),
         modeAExtractedIds: sortedIds(result.players.map((player) => player.id)),
         modeAHandAdds: folded.handAdds,
         modeAHandRemoves: folded.handRemoves,
       });
-      setModeAReport({
-        cells: result.cells,
-        shortfalls: result.shortfalls,
-        designVerdicts: result.designVerdicts,
-        sizing: result.sizing,
-      });
+      setModeAReport(modeAReportFromResult(result, lockedDesignPinPlayerIds.length));
       setReExtractConfirm(false);
     });
 
@@ -1544,6 +1661,56 @@ export function LeagueBuilderDraftSetup() {
     </div>
   ) : null;
 
+  const moneyReadOnlyLine = locked ? "UNLOCK THE POOL TO MOVE THE MONEY" : poolEditingBlockMessage;
+  const moneyControl = league ? (
+    <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">
+      <div className="text-[10px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
+        THE MONEY
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center min-w-[140px] bg-[#243024] border-2 border-[var(--ballpark-panel-border)] px-2 py-1.5 text-sm font-bold text-[var(--ballpark-chalk)]">
+          <span className="text-[var(--ballpark-brass)] mr-1">$</span>
+          <input
+            aria-label="The money salary cap"
+            type="text"
+            inputMode="numeric"
+            readOnly={poolEditingBlocked}
+            value={salaryCapInput}
+            onChange={(event) => handleSalaryCapInputChange(event.target.value)}
+            className="min-w-0 w-24 bg-transparent text-[var(--ballpark-chalk)] outline-none read-only:text-[var(--ballpark-chalk)]/55"
+          />
+        </label>
+        <PressButton
+          size="sm"
+          variant="affirm"
+          onClick={handleSalaryCapApply}
+          disabled={busy || poolEditingBlocked || Boolean(salaryCapHardError) || parsedSalaryCapInput === null}
+        >
+          APPLY
+        </PressButton>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-bold font-[var(--ballpark-font-chrome)] text-[var(--ballpark-chalk)]/75">
+        <span>{(league.tier ?? "juiced").toUpperCase()} TIER PAR {formatSalaryCapMoney(tierReferenceCap)}</span>
+        {!salaryCapAtTierPar ? (
+          <PressButton
+            size="sm"
+            onClick={handleSalaryCapReset}
+            disabled={busy || poolEditingBlocked}
+          >
+            RESET TO TIER
+          </PressButton>
+        ) : null}
+      </div>
+      {poolEditingBlocked ? (
+        <div className="mt-2 text-[11px] text-[var(--ballpark-chalk)]/55">{moneyReadOnlyLine}</div>
+      ) : salaryCapHardError ? (
+        <div className="mt-2 text-[11px] font-bold text-[var(--ballpark-status-red-bright)]">{salaryCapHardError}</div>
+      ) : salaryCapAdvisory ? (
+        <div className="mt-2 text-[11px] font-bold text-[var(--ballpark-status-warn)]">{salaryCapAdvisory}</div>
+      ) : null}
+    </div>
+  ) : null;
+
   const recheckPanel = recheckVisible ? (
     <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-4">
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -1796,6 +1963,16 @@ export function LeagueBuilderDraftSetup() {
                 const isSelected = team.id === selectedTeamId;
                 const designLocked = Boolean(team.rosterDesign?.lockedAt);
                 const designEdited = Boolean(team.rosterDesign);
+                const lockedAt = team.rosterDesign?.lockedAt;
+                const designLabel = designLocked && league.poolExtractedAt && lockedAt && lockedAt > league.poolExtractedAt
+                  ? "◉ locked · awaiting re-extract"
+                  : designLocked && league.poolExtractedAt && lockedAt && lockedAt <= league.poolExtractedAt
+                    ? "design locked · view / unlock"
+                    : !designLocked && designEdited && league.poolExtractedAt
+                      ? "✎ re-planning · edit"
+                      : designLocked
+                        ? "design locked · view"
+                        : "✓ design set · edit";
                 const designTone = rosterDesignToneByTeamId.get(team.id);
                 const designDotClass =
                   designTone === "red"
@@ -1861,7 +2038,7 @@ export function LeagueBuilderDraftSetup() {
                         >
                           {designEdited ? (
                             <>
-                              {designLocked ? "design locked · view" : "✓ design set · edit"}
+                              {designLabel}
                               {!designLocked ? <span className={`w-1.5 h-1.5 rounded-full ${designDotClass}`} aria-hidden="true" /> : null}
                               {designLocked ? (
                                 <span className="border border-[var(--ballpark-brass)] px-1 py-0.5 text-[8px] tracking-wider text-[var(--ballpark-brass)]">
@@ -1900,6 +2077,7 @@ export function LeagueBuilderDraftSetup() {
                     budget={tierBudget}
                     tier={league.tier ?? "juiced"}
                     showHelp={showHelp}
+                    poolDrawn={Boolean(league.poolExtractedAt)}
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage}
                     onSave={(rosterDesign) => handleSaveRosterDesign(selectedTeam, rosterDesign)}
@@ -1944,9 +2122,38 @@ export function LeagueBuilderDraftSetup() {
                   </div>
                 ) : (
                   <>
-                    {modeAStale ? (
-                      <div className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[#FFE8B0]">
-                        Designs changed since this pool was drawn — {modeAStaleTeams.map((team) => team.name).join(", ")}. Extract again before locking.
+                    {poolTrailing ? (
+                      <div className="border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-chalk)]">
+                        <div className="text-[11px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
+                          RE-PLAN IN PROGRESS · EDIT → LOCK → RE-EXTRACT
+                        </div>
+                        {modeAStaleTeams.length > 0 ? (
+                          <div className="flex flex-wrap gap-x-5 gap-y-1 mb-2 text-[#FFE8B0]">
+                            {modeAStaleTeams.map((team) => {
+                              const lockedAt = team.rosterDesign?.lockedAt;
+                              const owner = ownerName(teamOwnerId(team, seats));
+                              return (
+                                <span key={team.id}>
+                                  {lockedAt
+                                    ? `◉ ${team.name} (${owner}) — locked, waiting on re-extract`
+                                    : `✎ ${team.name} (${owner}) — editing`}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                        {basisStaleLines.length > 0 ? (
+                          <div className="grid gap-1 mb-2 text-[var(--ballpark-status-warn)] font-bold">
+                            {basisStaleLines.map((line) => (
+                              <div key={line}>{line}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="text-[11px] font-bold text-[var(--ballpark-chalk)]/75">
+                          {allHumanDesignsLocked
+                            ? "EVERY CLUB IS LOCKED — RE-EXTRACT TO APPLY THE NEW PLAN."
+                            : "The current pool still reflects the old designs. Re-extract when every club locks."}
+                        </div>
                       </div>
                     ) : null}
 
@@ -1956,6 +2163,7 @@ export function LeagueBuilderDraftSetup() {
                         {designFirstStrayNotice}
                       </div>
                       {poolSizeDial}
+                      {moneyControl}
                       {solvencyBanner ? (
                         <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
                           {solvencyBanner}
@@ -2124,6 +2332,7 @@ export function LeagueBuilderDraftSetup() {
                 {poolShuttle}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
                   {sufficiencyChip}
+                  {moneyControl}
                   {solvencyBanner ? (
                     <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
                       {solvencyBanner}

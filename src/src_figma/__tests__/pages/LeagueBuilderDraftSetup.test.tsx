@@ -9,6 +9,7 @@ import { buildRosterDesignPool } from "../../app/components/leagueBuilder/Roster
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
+import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
@@ -21,6 +22,7 @@ import {
 } from "../../hooks/useLeagueBuilderData";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { getAuctionSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
+import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
 const mockNavigate = vi.fn();
 
@@ -72,6 +74,16 @@ vi.mock("../../../engines/draftabilityRanker", async () => {
   };
 });
 
+vi.mock("../../../engines/poolFromDemand", async () => {
+  const actual = await vi.importActual<typeof import("../../../engines/poolFromDemand")>(
+    "../../../engines/poolFromDemand",
+  );
+  return {
+    ...actual,
+    extractPoolFromDemand: vi.fn(actual.extractPoolFromDemand),
+  };
+});
+
 vi.mock("../../../utils/leagueBuilderStorage", async () => {
   const actual = await vi.importActual<typeof import("../../../utils/leagueBuilderStorage")>(
     "../../../utils/leagueBuilderStorage",
@@ -81,6 +93,20 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
     getAuctionSession: vi.fn(async () => null),
     saveLeagueTemplate: vi.fn(async (league) => league),
     saveTeam: vi.fn(async (team) => team),
+  };
+});
+
+vi.mock("../../../utils/leagueBuilderPoolBuilder", async () => {
+  const actual = await vi.importActual<typeof import("../../../utils/leagueBuilderPoolBuilder")>(
+    "../../../utils/leagueBuilderPoolBuilder",
+  );
+  return {
+    ...actual,
+    addPlayersToLeaguePool: vi.fn(async () => undefined),
+    removePlayersFromLeaguePool: vi.fn(async () => undefined),
+    importRosteredPlayersToLeaguePool: vi.fn(async () => 0),
+    lockLeaguePool: vi.fn(async () => undefined),
+    unlockLeaguePool: vi.fn(async () => undefined),
   };
 });
 
@@ -205,6 +231,7 @@ function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesig
 function makeBest22Target(overrides: Partial<Best22Target> = {}): Best22Target {
   return {
     picks: [],
+    pins: { honored: [], dropped: [] },
     totalSalary: 28_000,
     totalTax: 2_000,
     allIn: 30_000,
@@ -355,10 +382,11 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
-      expect(screen.getByText(/re-extract the pool — some designs changed after it was drawn/i)).toBeInTheDocument();
+      expect(screen.getByText(/finish the re-plan — lock the edits, then re-extract/i)).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
-    expect(screen.getByText(/Designs changed since this pool was drawn/i)).toBeInTheDocument();
+    expect(screen.getByText("RE-PLAN IN PROGRESS · EDIT → LOCK → RE-EXTRACT")).toBeInTheDocument();
+    expect(screen.getByText(/◉ Keys \(Player 2\) — locked, waiting on re-extract/i)).toBeInTheDocument();
   });
 
   test("enables design-first draft start when all locked designs predate the extracted pool", async () => {
@@ -379,6 +407,48 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
     });
     expect(screen.queryByText(/re-extract the pool/i)).not.toBeInTheDocument();
+  });
+
+  test("W3 shows the re-plan rail while editing and flips the action line once every club locks", async () => {
+    const league = makeLeague({
+      draftPoolMode: "design-first",
+      poolExtractedAt: "2026-01-02T00:00:00.000Z",
+    });
+    const teams = [
+      makeTeam("team-a", { rosterDesign: { slots: [] } }),
+      makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+    ];
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({ league, teams, pool: makePool({ locked: false }) });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("RE-PLAN IN PROGRESS · EDIT → LOCK → RE-EXTRACT")).toBeInTheDocument();
+    expect(screen.getByText(/✎ Caps \(You\) — editing/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^RE-EXTRACT$/i })).toBeDisabled();
+    expect(screen.getByText("The current pool still reflects the old designs. Re-extract when every club locks.")).toBeInTheDocument();
+
+    mockLeagueData({
+      league,
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-03T00:00:00.000Z") }),
+        teams[1],
+      ],
+      pool: makePool({ locked: false }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/◉ Caps \(You\) — locked, waiting on re-extract/i)).toBeInTheDocument();
+    expect(screen.getByText("EVERY CLUB IS LOCKED — RE-EXTRACT TO APPLY THE NEW PLAN.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^RE-EXTRACT$/i })).toBeEnabled();
+  });
+
+  test("W5 pool-first mode does not render the re-plan rail", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    await screen.findByText("4 · THE POOL");
+
+    expect(screen.queryByText("RE-PLAN IN PROGRESS · EDIT → LOCK → RE-EXTRACT")).not.toBeInTheDocument();
   });
 
   test("persists a changed GM seat name through the existing league and team records", async () => {
@@ -484,6 +554,157 @@ describe("LeagueBuilderDraftSetup", () => {
         id: "league-page",
         poolSizeMultiplier: 1.5,
       }));
+    });
+  });
+
+  test("M1 applies THE MONEY and the recheck header follows the persisted cap", async () => {
+    const unlockedPool = makePool({ locked: false });
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({ pool: unlockedPool });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("THE MONEY")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("The money salary cap"), { target: { value: "900000" } });
+    fireEvent.click(screen.getByRole("button", { name: /^APPLY$/i }));
+
+    await waitFor(() => {
+      expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+        id: "league-page",
+        salaryCap: 900_000,
+      }));
+    });
+
+    mockLeagueData({ league: makeLeague({ salaryCap: 900_000 }), pool: unlockedPool });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/CAN EVERY CLUB BUILD A LEGAL 22 UNDER \$900,000/i)).toBeInTheDocument();
+  });
+
+  test("M2 THE MONEY uses the shared below-floor hard error and disables APPLY", async () => {
+    mockLeagueData({ pool: makePool({ locked: false }) });
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.change(await screen.findByLabelText("The money salary cap"), { target: { value: String(SALARY_CAP_FLOOR - 1) } });
+
+    expect(screen.getByText(salaryCapHardError(SALARY_CAP_FLOOR - 1)!)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^APPLY$/i })).toBeDisabled();
+  });
+
+  test("M3 resets THE MONEY to tier par", async () => {
+    mockLeagueData({
+      league: makeLeague({ salaryCap: 900_000 }),
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /RESET TO TIER/i }));
+
+    await waitFor(() => {
+      expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+        id: "league-page",
+        salaryCap: undefined,
+      }));
+    });
+  });
+
+  test("M4-M6 extraction basis marks cap, dial, and identity drift without retro-nagging legacy pools", async () => {
+    const extractedBasis = {
+      cap: 1_000_000,
+      poolSizeMultiplier: 1.35,
+      identityByTeamId: { "team-a": "murderers-row", "team-b": "whiteyball" },
+    };
+    const staleLeague = makeLeague({
+      draftPoolMode: "design-first",
+      poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      poolExtractedBasis: extractedBasis,
+      salaryCap: 900_000,
+      poolSizeMultiplier: 1.5,
+    });
+    const teams = [
+      makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      makeTeam("team-b", {
+        mlbArchetypeKey: "murderers-row",
+        rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+      }),
+    ];
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({ league: staleLeague, teams, pool: makePool() });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/THE CAP MOVED \(\$1,000,000 → \$900,000\) SINCE THE POOL WAS DRAWN/i)).toBeInTheDocument();
+    expect(screen.getByText("THE POOL-SIZE DIAL MOVED — RE-EXTRACT TO REDRAW.")).toBeInTheDocument();
+    expect(screen.getByText("Keys CHANGED ITS IDENTITY — RE-EXTRACT TO RESTOCK FOR IT.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      ],
+      pool: makePool(),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/THE CAP MOVED/i)).not.toBeInTheDocument();
+    });
+  });
+
+  test("M7 locked pool renders THE MONEY read-only with the unlock hint", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("UNLOCK THE POOL TO MOVE THE MONEY")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^APPLY$/i })).toBeDisabled();
+  });
+
+  test("P8 locked design pins ride extraction and beat hand-removes", async () => {
+    const pinnedPlayer = makePlayer(999, { id: "pinned-player", primaryPosition: "SS" });
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        modeAExtractedIds: ["player-0"],
+        modeAHandRemoves: ["pinned-player"],
+      }),
+      teams: [
+        makeTeam("team-a", {
+          rosterDesign: {
+            slots: [],
+            lockedAt: "2026-01-03T00:00:00.000Z",
+            pins: { SS: "pinned-player" },
+          },
+        }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-03T00:00:00.000Z") }),
+      ],
+      players: [...makePlayers(80), pinnedPlayer],
+      pool: makePool({
+        locked: false,
+        players: [{ id: "player-0", iv: 100_000, salary: 10_000 }],
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^RE-EXTRACT$/i }));
+
+    await waitFor(() => {
+      const extractMock = vi.mocked(extractPoolFromDemand);
+      const matchingIndex = extractMock.mock.calls.findIndex((call) => {
+        const options = call[4] as { pinnedIds?: string[]; excludedIds?: string[] };
+        return options.pinnedIds?.includes("pinned-player");
+      });
+      expect(matchingIndex).toBeGreaterThanOrEqual(0);
+      const options = extractMock.mock.calls[matchingIndex][4] as { pinnedIds?: string[]; excludedIds?: string[] };
+      expect(options.excludedIds).not.toContain("pinned-player");
+      const result = extractMock.mock.results[matchingIndex]?.value as ReturnType<typeof extractPoolFromDemand>;
+      expect(result.players.map((player) => player.id)).toContain("pinned-player");
     });
   });
 

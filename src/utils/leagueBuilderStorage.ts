@@ -117,6 +117,11 @@ export interface LeagueTemplate {
   draftPoolMode?: DraftPoolMode;
   draftSeats?: DraftSetupSeat[];
   poolExtractedAt?: string;
+  poolExtractedBasis?: {
+    cap: number;
+    poolSizeMultiplier: number;
+    identityByTeamId: Record<string, string | null>;
+  };
   modeAExtractedIds?: string[];
   modeAHandAdds?: string[];
   modeAHandRemoves?: string[];

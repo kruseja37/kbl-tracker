@@ -28845,3 +28845,202 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (name any; run suspects solo).
 - `git diff --stat` — leaguePlayerAdapter.ts, RosterDesigner.tsx (+ tests). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-ITER-DESIGNER-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-PAGE ===== -->
+# CODEX-ITER-PAGE — re-plan rail + THE MONEY cap + poolExtractedBasis + pins→extraction (iterate-loop slice 3)
+
+BUILD TO: spec-docs/FABLE_ITERATE_DRAFT_DESIGN_2026-07-03.md §1.4 (rail) + §3 (cap + basis) + §2.6 (pins ride extraction) —
+read VERBATIM for copy + placement. Page = src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx (+ a new shared module +
+a repoint of LeagueBuilderLeagues.tsx). The designer slice (6e72e632) is committed: RosterDesigner accepts an optional
+`poolDrawn` prop; team.rosterDesign carries optional `pins`. buildBest22Target/extractPoolFromDemand pin plumbing exists.
+
+FEASIBILITY-SOFT LAW (binding): NO gate arithmetic moves except adding basisStale to the existing designsStale/START join.
+canModeALock, handleExtractPool's lock-requirement, EXTRACT/RE-EXTRACT gates, the FLOOR verdict, nonGreenClubCount, the
+CLUB CHECK dot — all keep their EXACT predicates. This slice is copy + one banner→rail + one cap control + one basis field
++ the pins union. Reuse canonical wires (resolveLeagueSalaryCap, extractPoolFromDemand, seedRosterDesignSlots). GameTracker untouched.
+
+DELIVERABLE 1 — §1.4 RE-PLAN RAIL (replace the amber stale banner ~:1947-1951):
+  - A brass border-left guide strip in the SAME slot, rendered when the pool is TRAILING (today's designsStale predicate,
+    :809, unchanged — new name/voice). Per-club fragments: RE-PLANNING (`!lockedAt && poolExtractedAt`) → `✎ {club} ({gm}) —
+    editing`; LOCKED-AHEAD (`lockedAt > poolExtractedAt`) → `◉ {club} ({gm}) — locked, waiting on re-extract`.
+  - The action line: `The current pool still reflects the old designs. Re-extract when every club locks.` → flips to
+    `EVERY CLUB IS LOCKED — RE-EXTRACT TO APPLY THE NEW PLAN.` EXACTLY when allHumanDesignsLocked becomes true (copy must
+    never point at a disabled control).
+  - startBlocker copy (~:921) softens to `finish the re-plan — lock the edits, then re-extract` (predicate UNCHANGED).
+  - Club-card sub-labels (~:1862-1874) state-aware: LOCKED-CURRENT → `design locked · view / unlock`; RE-PLANNING →
+    `✎ re-planning · edit`; LOCKED-AHEAD → `◉ locked · awaiting re-extract`.
+  - Pass `poolDrawn={Boolean(league.poolExtractedAt)}` to <RosterDesigner>.
+
+DELIVERABLE 2 — §3 THE MONEY control + shared validation:
+  - Extract the Leagues page's cap parse/format/floor trio (parseSalaryCapInput, formatSalaryCapInput, floor =
+    Math.ceil(22 * LEAGUE_MINIMUM_SALARY), LeagueBuilderLeagues.tsx:156-166) into a NEW shared module
+    src/src_figma/app/utils/salaryCapInput.ts; BOTH LeagueBuilderLeagues AND the new control import it (one owner). No new rules.
+  - A compact `THE MONEY` control in zone 4's control rail beside POOL SIZE (the dial ~:1509-1545 is its layout twin): label
+    (10px brass), a `$`-prefixed numeric input + APPLY (persists saveLeagueTemplate({...league, salaryCap: parsed})), line 3
+    tier reference + `RESET TO TIER` (writes salaryCap: undefined → resolveLeagueSalaryCap falls back to the tier cap). When
+    cap === tier par, line 3 shows only the par (no reset). Below-floor = hard error (APPLY disabled, red line from the shared
+    module); advisory band = amber line. Renders in BOTH pool modes.
+  - Gating: editable ONLY while the pool is UNLOCKED and no saved draft (poolEditingBlocked, same as the dial). Locked pool →
+    read-only control with dim `UNLOCK THE POOL TO MOVE THE MONEY` (never a disabled control without a named way out).
+
+DELIVERABLE 3 — §3.3 poolExtractedBasis (the honesty field, additive/migration-safe):
+  - New optional league field `poolExtractedBasis?: { cap: number; poolSizeMultiplier: number; identityByTeamId: Record<string, string | null> }`,
+    written by handleExtractPool alongside poolExtractedAt. `basisStale` = any component diverges from the live value
+    (structural compare, no hashing). This closes THREE holes: cap change, pool-size dial change post-draw, and MLB-identity
+    change post-draw (all silent today — modeAStaleTeams keys on lockedAt only).
+  - Design-first: basisStale joins the TRAILING predicate → the rail gains a line per stale component (cap → `THE CAP MOVED
+    ({$old} → {$new}) SINCE THE POOL WAS DRAWN — RE-EXTRACT…`; dial → `THE POOL-SIZE DIAL MOVED — RE-EXTRACT TO REDRAW.`;
+    identity → `{club} CHANGED ITS IDENTITY — RE-EXTRACT TO RESTOCK FOR IT.`), and basisStale joins designsStale in the START
+    gate (same severity). Pool-first: no basis gate — the cap flows into the existing recheck key (already includes tierBudget)
+    + the existing "pool changed — re-check" chip (advisory).
+  - Migration: a league with poolExtractedAt but NO poolExtractedBasis (drawn before this build) is basis-CURRENT (no
+    retro-nag; the next extract writes it).
+
+DELIVERABLE 4 — §2.6 pins ride the extraction:
+  - handleExtractPool (~:1197-1231) unions every LOCKED design's VALID pins into extractPoolFromDemand's pinnedIds (today
+    just folded.handAdds): `pinnedIds: [...folded.handAdds, ...lockedDesignPinPlayerIds]`. Pin-vs-hand-remove resolves
+    PIN-WINS (the explicit per-slot commitment outranks the pool-level exclusion). The extraction report gains one clause:
+    `{n} design pin(s) held in the pool.` Demand-cell math untouched (pins guarantee membership, not demand).
+
+TESTS (§1.6 W3-W5, §3.5 M1-M7, §2.7 P8):
+  - W3-W5: unlock one club → rail shows editing + RE-EXTRACT disabled; lock it → rail shows waiting + the action line flips
+    to every-club-locked EXACTLY when allHumanDesignsLocked; pool-first renders none of the rail/lock surfaces. W4 gate
+    regression pins (canModeALock/startReady/handleExtractPool lock-req/modeAStaleTeams byte-identical predicates).
+  - M1-M7: APPLY persists + designer chip/CLUB CHECK/recheck/draftability reflect it (they key on tierBudget); below-floor
+    hard error identical strings from the shared module; RESET TO TIER; design-first extract→change cap→rail line + START
+    blocks→RE-EXTRACT clears; identity-swap + dial-change trip basisStale; legacy no-basis → no staleness; locked pool → read-only.
+  - P8: a locked design with a pin → extractPoolFromDemand receives the id in pinnedIds and the drawn pool contains the
+    player; pin-vs-hand-remove resolves pin-wins.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx
+   src/engines/__tests__/poolFromDemand.test.ts` — green (LeagueBuilderLeagues proves the shared salaryCapInput repoint didn't regress).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set. NOTE: LeagueBuilderDraftSetup + RosterDesigner
+  + franchiseManualSmokeFixture are heavy IndexedDB-teardown batch flakes — run any red SOLO and report solo results.
+- `git diff --stat` — LeagueBuilderDraftSetup.tsx, new salaryCapInput.ts, LeagueBuilderLeagues.tsx (+ tests), leagueBuilderStorage.ts
+  (poolExtractedBasis type). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ITER-PAGE ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-RERUN ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never
+stage or touch pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md,
+spec-docs/generated/, reference-docs/, scripts/, instructions/). Stage only the explicit paths you create/edit.
+Report ACTUAL command output — no "should pass". Do NOT modify any GameTracker path.
+
+SLICE 4 of 5 — "C-ITER-RERUN — run it back" per spec-docs/FABLE_ITERATE_DRAFT_DESIGN_2026-07-03.md §4.
+Design is RULED — build exactly to it, do not redesign. Reuse existing helpers; NO new mappers (canonical-mapper law).
+
+DELIVERABLE 1 — new export `resetCompletedDraftArc(leagueId: string): Promise<void>` in
+`src/utils/leagueBuilderAuctionPipeline.ts`. Ordered, idempotent, re-runnable after a mid-way crash. Per §4.3:
+  1. READ FIRST (before any delete): MLB session (`getAuctionSession(leagueId, MLB_AUCTION_SEASON)`), farm session
+     (`getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1))`), startup draft session
+     (`getStartupDraftSession`), and the registered pool (`getRegisteredPool` — leagueConstruction.ts, the
+     price-of-record snapshot). Tolerate any of these being absent (partial arc — see R3).
+  2. FARM un-commit: delete farm-minted Player records = players whose leagueAssignments carry
+     {leagueId, rosterStatus:'FARM'} AND whose ids appear in the farm session's committed results (BOTH conditions;
+     never delete on rosterStatus alone). Clear `TeamRoster.farmRoster` for every league team.
+  3. MLB un-commit: for every player with an assignment {leagueId, teamId !== ''}: rewrite the assignment to
+     {leagueId, teamId:'', rosterStatus:'FREE_AGENT'} (pool membership survives — isPlayerInLeaguePool keys on
+     leagueId only); restore `salary` from the RegisteredPool entry (players[].salary — the frozen ask; commit
+     overwrote it with the settled price); clear `settledSalary`. Clear `TeamRoster.mlbRoster` for every league team.
+  4. DELETE sessions: farm auction session, MLB auction session (`deleteAuctionSession`), startup draft session
+     (`deleteStartupDraftSession`), and the league's scout profiles (`deleteScoutProfilesForLeague`) — scout-hire
+     is part of the draft arc and re-runs with it.
+  5. KEEP UNTOUCHED: registered pool (prices frozen — the whole point of re-drafting the same market), designs +
+     pins + lockedAt, identities, seats, league fields (poolExtractedAt/basis stay — the pool wasn't redrawn).
+  Grep the exact signatures of every storage fn named above from source at point of use before calling (do not
+  trust names — confirm arity/return). If a needed reader/deleter genuinely does not exist, STOP and report; do
+  not invent a store.
+
+DELIVERABLE 2 — franchise guard (defense-in-depth). `resetCompletedDraftArc` throws a NAMED error if any franchise
+references this league (franchiseInitializer consumes the completed mlbSession — re-running under a live franchise
+orphans it). Wire the existence check off the franchise storage's league linkage; if no direct lookup exists, a
+minimal read-only scan at call time is acceptable.
+
+DELIVERABLE 3 — the affordance in `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` (header region ~:1658-1662,
+the static "Drafted ✓ · Run it back" badge). The badge becomes live: badge + `RUN IT BACK` (PressButton
+variant="destruct", header rightSlot beside the badge). Click → the page's established inline confirm pattern
+(SURE? ✓ ✗, ~:1966-1978) with this exact consequence line:
+  "Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay.
+   You'll draft again from scout hire."
+  Confirm ✓ → runAction(resetCompletedDraftArc(activeLeagueId)) (runAction refreshes on success → completion probe
+  ~:592-597 flips hasCompletedDraft false → badge gone → §1-§3 loop available; START routes to scout hire fresh).
+  GUARD (UI): if a franchise references the league, render RUN IT BACK disabled with exactly:
+  "A FRANCHISE IS ALREADY RUNNING ON THIS DRAFT — RE-RUNNING WOULD PULL ITS FLOOR OUT."
+  COMPLETED-DRAFTS-ONLY: an in-progress saved draft keeps today's resume-first gate untouched — do NOT show RUN IT
+  BACK for an in-progress session. No other gate/predicate on the page may change (FEASIBILITY-SOFT law from slice 3
+  stands — canModeALock/startReady/handleExtractPool untouched).
+
+TESTS (§4.4 R1-R6, extend `src/**/draftPipeline.integration.test.ts` which already drives commit end-to-end):
+  - R1: complete MLB+farm on a fixture league → resetCompletedDraftArc → all three sessions gone; scout profiles gone;
+    every pooled player back to {teamId:'', 'FREE_AGENT'} with the registered-pool ask restored and settledSalary
+    cleared; team mlbRoster/farmRoster empty; farm-minted players deleted; registered pool + designs + pins
+    byte-identical before/after.
+  - R2 (idempotent): running twice = same end state, no throw.
+  - R3 (partial arc): MLB complete, farm never run → reset succeeds (absent farm session tolerated).
+  - R4 (guard): franchise linked → resetCompletedDraftArc throws the named error.
+  - R5 (UI): completed draft → badge + RUN IT BACK render; confirm → after refresh badge gone, START reads
+    "START THE DRAFT", room no longer resumes a completed session.
+  - R6 (membership): isPlayerInLeaguePool still true for every pre-draft pool member after reset (pool did not shrink).
+
+ORTHOGONALITY: grep the import graph — confirm the auction/draft pipeline is NOT imported by the L-SIM harness
+(test-utils/lsim) and state it in the audit evidence; L-SIM is NOT required on this slice.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run <the draftPipeline integration test> src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist,
+  franchiseManualSmokeFixture batch timeout, archetypeBalanceSimulator provenance, LeagueBuilderDraftSetup/RosterDesigner
+  IndexedDB-teardown batch flakes). Run any red SOLO and report solo results.
+- `git status` — leagueBuilderAuctionPipeline.ts, LeagueBuilderDraftSetup.tsx, the integration test. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ITER-RERUN ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-COPY ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (same exclusion list as above). Stage only explicit paths. Report ACTUAL output. No GameTracker edits.
+
+SLICE 5 of 5 — "C-ITER-COPY — deep duplicate" per FABLE_ITERATE_DRAFT_DESIGN_2026-07-03.md §5. Design is RULED.
+
+THE BUG (§5.1, verified): `duplicateLeague` (`src/src_figma/hooks/useLeagueBuilderData.ts` ~:317-334) is a shallow
+record copy `{...original, id: undefined, name: name+' Copy'}`. Its teamIds point at the SAME team records → the copy
+shares rosterDesign (slots+lockedAt), mlbArchetypeKey, seats; any edit mutates both (this is the "same wall in the
+copy league" + live data corruption). And poolExtractedAt/modeAExtractedIds/ledgers copy while pool MEMBERSHIP does
+not (it lives on Player.leagueAssignments keyed by the new league id) → the copy claims "pool drawn" over an empty pool.
+
+DELIVERABLE — `duplicateLeague` becomes a deep copy, per §5.2:
+  1. DEEP-COPY EVERY TEAM: for each teamId, create a NEW team record copying flavor + plan (name, colors, stadium,
+     identity keys incl mlbArchetypeKey/farmArchetypeKey, capIdentities, gmSeatId/gmSeatName, rosterDesign.slots AND
+     rosterDesign.pins) with: lockedAt CLEARED (a copy starts editable — the §1 wall never inherits); rosters/lineups
+     cleared (lineupWithDH, rotation, optimal snapshots — draft output, not plan); leagueIds pointing at the new
+     league only; a fresh empty TeamRoster iff a freshly created team normally gets one (parity with `createTeam` —
+     verify what createTeam produces and match it exactly).
+  2. REMAP IDS everywhere referenced on the league: teamIds, and every conferences[]/divisions[] team membership
+     (old id → new id). Grep the exact conference/division shape from the LeagueTemplate type and remap faithfully.
+  3. RESET EXTRACTION STATE on the copy: poolExtractedAt, modeAExtractedIds, modeAHandAdds, modeAHandRemoves,
+     poolExtractedBasis → all undefined.
+  4. KEEP THE KNOBS: tier, salaryCap, draftPoolMode, draftFormat, poolSizeMultiplier, draftSeats, balanceMode,
+     checkpointCadence, and flavor fields.
+  5. DO NOT COPY (all keyed by leagueId — they stay behind naturally; state it so nobody "fixes" it later): pool
+     membership, registered pool, auction/farm/startup sessions, scout profiles.
+  Use existing team-creation/id-minting helpers already in the hook/storage (same ones createTeam uses) — NO new
+  mapper, NO hand-built team record that bypasses the canonical creation path.
+
+TESTS (§5.3 C1-C5):
+  - C1: duplicate → editing a design in the copy leaves the original team record byte-identical (distinct team ids;
+    shared-record bug dead).
+  - C2: copy has no poolExtractedAt/modeAExtractedIds/basis; design-first copy shows modeAState==='waiting' with
+    designs present but unlocked; pins survived the copy.
+  - C3: teamIds and division/conference memberships reference only new ids; counts match the original.
+  - C4: sessions/scouts/registered-pool queries against the copy's id return null/empty; the original league's untouched.
+  - C5: pool-first copy auto-imports membership on first open (existing effect, new league id).
+
+ORTHOGONALITY: grep the import graph — confirm useLeagueBuilderData / duplicateLeague is NOT in the L-SIM import
+graph and state it; L-SIM not required.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run <the useLeagueBuilderData / LeagueBuilderData test>` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set. Run any red SOLO and report.
+- `git status` — useLeagueBuilderData.ts + its test. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ITER-COPY ===== -->

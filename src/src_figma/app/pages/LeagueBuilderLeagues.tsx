@@ -25,7 +25,6 @@ import { useLeagueBuilderData, type LeagueTemplate } from "../../hooks/useLeague
 import {
   BALANCE_MODE_DEFAULT,
   CHECKPOINT_CADENCE_DEFAULT,
-  LEAGUE_MINIMUM_SALARY,
   type CheckpointCadence,
 } from "../../../data/rosterEngineConstants";
 import type { BalanceMode } from "../../../engines/leagueConstruction";
@@ -35,6 +34,13 @@ import {
   isSavedAuctionMutationGuardMessage,
   useSavedAuctionMutationGuard,
 } from "../utils/savedAuctionMutationGuard";
+import {
+  formatSalaryCapInput,
+  formatSalaryCapMoney,
+  parseSalaryCapInput,
+  salaryCapAdvisory as getSalaryCapAdvisory,
+  salaryCapHardError as getSalaryCapHardError,
+} from "../utils/salaryCapInput";
 
 // ============================================
 // TYPES
@@ -99,21 +105,6 @@ function formatCheckpointCadence(value: CheckpointCadence | undefined): string {
   return CHECKPOINT_CADENCE_OPTIONS.find((option) => option.value === (value ?? CHECKPOINT_CADENCE_DEFAULT))?.label ?? "Standard";
 }
 
-function formatMoney(value: number): string {
-  return `$${Math.round(value).toLocaleString()}`;
-}
-
-function formatSalaryCapInput(value: number): string {
-  return Math.round(value).toLocaleString();
-}
-
-function parseSalaryCapInput(value: string): number | null {
-  const normalized = value.replace(/,/g, "").trim();
-  if (!/^\d+$/.test(normalized)) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -155,21 +146,8 @@ export function LeagueBuilderLeagues() {
   const editingLeagueMutationBlocked = isLeagueMutationBlocked(editingLeague?.id);
   const tierReference = TIER_CAPS[formData.tier].tierCap;
   const parsedSalaryCap = parseSalaryCapInput(formData.salaryCap);
-  const salaryCapFloor = Math.ceil(22 * LEAGUE_MINIMUM_SALARY);
-  const salaryCapHardError = parsedSalaryCap === null
-    ? "Enter a whole-dollar salary cap."
-    : parsedSalaryCap <= 0
-      ? "Salary cap must be greater than zero."
-      : parsedSalaryCap < salaryCapFloor
-        ? `Salary cap must be at least ${formatMoney(salaryCapFloor)}.`
-        : null;
-  const salaryCapAdvisory = salaryCapHardError || parsedSalaryCap === null
-    ? null
-    : parsedSalaryCap < tierReference * 0.5
-      ? "Very tight for this tier."
-      : parsedSalaryCap > tierReference * 2
-        ? "Rarely binding for this tier."
-        : null;
+  const salaryCapHardError = getSalaryCapHardError(parsedSalaryCap);
+  const salaryCapAdvisory = getSalaryCapAdvisory(parsedSalaryCap, tierReference);
 
   // Set default rules preset when data loads
   useEffect(() => {
@@ -603,7 +581,7 @@ export function LeagueBuilderLeagues() {
                   className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] placeholder-[#E8E8D8]/40 focus:border-[#E8E8D8] outline-none"
                 />
                 <div className="mt-2 text-xs font-bold text-[#E8E8D8]/70">
-                  TIER REFERENCE: {formatMoney(tierReference)}
+                  TIER REFERENCE: {formatSalaryCapMoney(tierReference)}
                 </div>
                 {salaryCapHardError ? (
                   <div className="mt-2 text-xs font-bold text-red-200">{salaryCapHardError}</div>
