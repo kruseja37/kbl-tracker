@@ -10,7 +10,12 @@ import {
   type FieldPosition,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
-import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode, type ChemistryCode } from '../data/chemistryCanonical';
+import {
+  CHEMISTRY_CODES,
+  CHEMISTRY_CODE_TO_WORD,
+  normalizeToChemistryCode,
+  type ChemistryCode,
+} from '../data/chemistryCanonical';
 import { TRAIT_PRICING } from '../data/traitPricing';
 import {
   computeOwnValue,
@@ -43,6 +48,7 @@ import {
 } from './archetypeBalanceSimulator';
 import type { TierKey } from '../data/tierParams';
 import type {
+  ChemistryCrossing,
   ChemistryTipBreakdown,
   FamilyChemistryProfile,
 } from './chemistryTierValue';
@@ -77,10 +83,35 @@ export interface WorthToYou {
   archetypeFitMultiplier: number;
   needMultiplier: number;
   chemistry: ChemistryTipBreakdown;
+  chemistryContribution: number;
+  chemistryReadout: ChemistryReadout;
   verdict: 'push' | 'cap' | 'pass';
   recommendedNumber: number;
   capValue: number | null;
   handedness?: null;
+}
+
+export interface ChemistryReadoutFamily {
+  family: ChemistryCode;
+  word: string;
+  count: number;
+  tier: 'L1' | 'L2' | 'L3';
+  distanceToNextTier: number | null;
+  nextTierLabel: 'L2' | 'L3' | null;
+  isCandidateFamily: boolean;
+}
+
+export interface ChemistryReadoutCandidate {
+  family: ChemistryCode;
+  word: string;
+  countAfter: number;
+  crossing: ChemistryCrossing | null;
+  distanceToNextTierAfter: number | null;
+}
+
+export interface ChemistryReadout {
+  families: ReadonlyArray<ChemistryReadoutFamily>;
+  candidate: ChemistryReadoutCandidate;
 }
 
 export interface BoardEntry {
@@ -206,6 +237,10 @@ export function marketReadFromEstimate(view: MarketLotView, table: ArchetypeLift
 
 export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   const chemistry = chemistryAdviceForCandidate(input.candidate, input.rosterPlayers);
+  const chemistryReadout = buildChemistryReadout(
+    chemistryProfileForPlayers(input.rosterPlayers),
+    chemistry,
+  );
   const factors = computeOwnValueFactors({
     archetypeWeights: input.archetypeWeights,
     ownBandPriorities: input.ownBandPriorities,
@@ -227,7 +262,8 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     input.remainingPool,
     input.openSlotsAfterWin,
   );
-  const worth = ownValue + chemistry.premium;
+  const chemistryContribution = Math.max(0, chemistry.premium);
+  const worth = ownValue + chemistryContribution;
   const recommendedNumber = Math.max(0, Math.min(worth, capValue ?? worth));
   const verdict = worthVerdict(worth, capValue, input.market ?? null);
   return {
@@ -236,9 +272,40 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     archetypeFitMultiplier: factors.archetypeFitMultiplier,
     needMultiplier: factors.needMultiplier,
     chemistry,
+    chemistryContribution,
+    chemistryReadout,
     verdict,
     recommendedNumber,
     capValue,
+  };
+}
+
+export function buildChemistryReadout(
+  profile: readonly FamilyChemistryProfile[],
+  chemistry: ChemistryTipBreakdown,
+): ChemistryReadout {
+  const byFamily = new Map(profile.map((row) => [row.family, row]));
+  return {
+    families: CHEMISTRY_CODES.map((family) => {
+      const row = byFamily.get(family);
+      const tier = row?.tier ?? 'L1';
+      return {
+        family,
+        word: familyWord(family),
+        count: row?.count ?? 0,
+        tier,
+        distanceToNextTier: row ? row.distanceToNextTier : 3,
+        nextTierLabel: nextTierLabel(tier),
+        isCandidateFamily: family === chemistry.family,
+      };
+    }),
+    candidate: {
+      family: chemistry.family,
+      word: familyWord(chemistry.family),
+      countAfter: chemistry.countsAfter[chemistry.family] ?? 0,
+      crossing: chemistry.crossing,
+      distanceToNextTierAfter: chemistry.distanceToNextTier,
+    },
   };
 }
 
@@ -549,6 +616,12 @@ function baseballList(items: readonly FieldPosition[]): string {
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function nextTierLabel(tier: 'L1' | 'L2' | 'L3'): ChemistryReadoutFamily['nextTierLabel'] {
+  if (tier === 'L1') return 'L2';
+  if (tier === 'L2') return 'L3';
+  return null;
 }
 
 function familyWord(family: ChemistryCode): string {

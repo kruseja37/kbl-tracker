@@ -84,6 +84,63 @@ function payload(
         distanceToNextTier: 1,
         liftedTraitCount: 0,
       },
+      chemistryContribution: 3_000,
+      chemistryReadout: {
+        families: [
+          {
+            family: "SPI",
+            word: "Spirited",
+            count: 0,
+            tier: "L1",
+            distanceToNextTier: 3,
+            nextTierLabel: "L2",
+            isCandidateFamily: false,
+          },
+          {
+            family: "DIS",
+            word: "Disciplined",
+            count: 1,
+            tier: "L1",
+            distanceToNextTier: 2,
+            nextTierLabel: "L2",
+            isCandidateFamily: false,
+          },
+          {
+            family: "CMP",
+            word: "Competitive",
+            count: 2,
+            tier: "L1",
+            distanceToNextTier: 1,
+            nextTierLabel: "L2",
+            isCandidateFamily: true,
+          },
+          {
+            family: "SCH",
+            word: "Scholarly",
+            count: 4,
+            tier: "L2",
+            distanceToNextTier: 3,
+            nextTierLabel: "L3",
+            isCandidateFamily: false,
+          },
+          {
+            family: "CRA",
+            word: "Crafty",
+            count: 7,
+            tier: "L3",
+            distanceToNextTier: null,
+            nextTierLabel: null,
+            isCandidateFamily: false,
+          },
+        ],
+        candidate: {
+          family: "CMP",
+          word: "Competitive",
+          countAfter: 3,
+          crossing: "L1->L2",
+          distanceToNextTierAfter: 4,
+        },
+      },
     },
     board: [
       { playerId: "lot-star", worth: 75_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Seat A Star" },
@@ -237,6 +294,24 @@ describe("WhisperPanel", () => {
     rerender(<WhisperPanel payload={Object.assign(payload(), { bidVsPass: null })} />);
 
     expect(screen.queryByTestId("whisper-bid-vs-pass")).not.toBeInTheDocument();
+  });
+
+  test("chemistry readout renders five rows, marks the candidate family, and shows upward tips", () => {
+    render(<WhisperPanel payload={payload()} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    const readout = within(screen.getByTestId("whisper-chemistry-readout"));
+    expect(readout.getByText("Spirited")).toBeInTheDocument();
+    expect(readout.getByText("Disciplined")).toBeInTheDocument();
+    expect(readout.getByText("Competitive")).toBeInTheDocument();
+    expect(readout.getByText("Scholarly")).toBeInTheDocument();
+    expect(readout.getByText("Crafty")).toBeInTheDocument();
+    expect(readout.getByText("1 to L2")).toBeInTheDocument();
+    expect(readout.getByText("at max")).toBeInTheDocument();
+    expect(readout.getByText("+1 → tips L2")).toBeInTheDocument();
+
+    const candidateRow = readout.getByText("Competitive").closest(".whisper-chemistry-row");
+    expect(candidateRow).toHaveAttribute("data-candidate-family", "true");
   });
 
   test("YOUR NUMBER renders recommendedNumber instead of the affordability ceiling", () => {

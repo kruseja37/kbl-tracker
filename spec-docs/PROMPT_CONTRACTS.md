@@ -30016,3 +30016,78 @@ any NEW red → STOP + report.
 OUTPUT: files changed; the marketOptions construction + projection call diff; the whisper render; test output; build
 result; full-suite counts; `git status`. DO NOT COMMIT.
 <!-- ===== END CONTRACT: CODEX-B1B2-BID-VS-PASS ===== -->
+
+<!-- ===== CONTRACT: CODEX-CHEM-READOUT ===== -->
+# CONTRACT: CODEX-CHEM-READOUT (chemistry slice of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04, §4.5 + §7.3)
+
+MISSION: Two things. (A) BOOST-ONLY chemistry number (JK decision 2026-07-04, §7.3): chemistry may only RAISE
+"YOUR NUMBER" when a pick tips a potency level; it must NEVER dip the number early. (B) Build the LIVE 5-CATEGORY
+CHEMISTRY READOUT in the whisper (§4.5): as the roster fills, show each of the 5 chemistry types' current count +
+potency tier + distance-to-next, and the on-block candidate's DELTA. READ §4.5 and §7.3 (incl. the "JK DECISION
+2026-07-04 — BOOST-ONLY (v1)" note) FIRST.
+
+BRANCH: `experiment/manager-wpa-window`. DO NOT create a branch. DO NOT commit.
+
+GROUND TRUTH (verified):
+- `chemistryProfileForPlayers(players: readonly Player[]): FamilyChemistryProfile[]` (src/utils/chemistryIntelligence.ts:73)
+  — returns ALL 5 families. `FamilyChemistryProfile` (src/engines/chemistryTierValue.ts:79): { family: ChemistryCode;
+  count: number; tier: 'L1'|'L2'|'L3'; distanceToNextTier: number|null; slack: number|null; traitCount: number }.
+- `chemistryAdviceForCandidate(candidate, rosterPlayers): ChemistryTipBreakdown` (chemistryIntelligence.ts:48) — ALREADY
+  called in assembleWorthToYou. `ChemistryTipBreakdown` (chemistryTierValue.ts:48): { premium; teamLift; ownContext;
+  family: ChemistryCode; crossing: ChemistryCrossing|null; countsBefore; countsAfter; distanceToNextTier; liftedTraitCount }.
+  `ChemistryCrossing` = 'L1->L2'|'L2->L3'|'L2->L1'|'L3->L2' (chemistryTierValue.ts:46). countsAfter/countsBefore are
+  `RosterChemistryCounts = Partial<Record<ChemistryCode, number>>` (derivedTraitPotency.ts:16).
+- `CHEMISTRY_CODE_TO_WORD` (src/data/chemistryCanonical.ts) maps code → word (Competitive/Crafty/Disciplined/Scholarly/Spirited).
+- `assembleWorthToYou` (src/engines/rosterIntelligencePayload.ts:207) — has `input.candidate` + `input.rosterPlayers` in
+  scope; already computes `const chemistry = chemistryAdviceForCandidate(...)` and (from B1b-1) `const worth = ownValue +
+  chemistry.premium`. `WorthToYou` (rosterIntelligencePayload.ts:73).
+- Whisper: `LIGHT_ORDER` includes 'chemistry' (WhisperPanel.tsx). `whyLine` (WhisperPanel.tsx ~L410) currently branches
+  on `worth.chemistry.premium` incl. a "pulls your number down" case.
+
+DELIVERABLES:
+
+PART A — BOOST-ONLY number (§7.3, JK decision):
+- In `assembleWorthToYou`: `const chemistryContribution = Math.max(0, chemistry.premium);` and `const worth = ownValue +
+  chemistryContribution;` (was `ownValue + chemistry.premium`). Add `chemistryContribution: number` to `WorthToYou`.
+- Update `whyLine` (WhisperPanel.tsx) to key off the FLOORED contribution, never "pulls down": if chemistryContribution > 0
+  → "Chemistry moves your number up by $X." (optionally name the tier it tips); else fall through to the existing
+  fit/need explanation. Remove/retire the `premium < 0` "pulls your number down" branch — the number no longer dips.
+- DO NOT modify the chemistry ENGINE (chemistryTierValue.ts / chemistryIntelligence.ts). Only how the NUMBER consumes
+  premium. The raw `chemistry` breakdown stays on WorthToYou (the readout shows the true tiers).
+
+PART B — LIVE 5-category readout (§4.5):
+- In `assembleWorthToYou`, compute `const chemistryReadout = buildChemistryReadout(chemistryProfileForPlayers(
+  input.rosterPlayers), chemistry)` and attach it to `WorthToYou` as `chemistryReadout`. Define types + builder in
+  rosterIntelligencePayload.ts (pure).
+- `ChemistryReadout` shape: { families: ReadonlyArray<{ family: ChemistryCode; word: string; count: number; tier:
+  'L1'|'L2'|'L3'; distanceToNextTier: number|null; nextTierLabel: string|null (L1→'L2', L2→'L3', L3→null);
+  isCandidateFamily: boolean }> (all 5, stable order), candidate: { family: ChemistryCode; word: string; countAfter:
+  number; crossing: ChemistryCrossing|null; distanceToNextTierAfter: number|null } }.
+- Render a dedicated "CHEMISTRY" readout section in the whisper's EXPANDED panel (near the chemistry light / above the
+  board), one row per family: "<Word> <count> · <tier> (<distanceToNextTier> to <nextTierLabel>)" — or "at max" at L3.
+  Highlight the candidate's family row; when `candidate.crossing` is an upward tip (L1->L2 / L2->L3), show a delta chip
+  like "+1 → tips <newTier>". Chalk-and-ash, consistent with the bid-vs-pass section. Always visible in the expanded
+  panel (JK: "see the cumulative values for each of the five categories as the team is constructed").
+
+CONSTRAINTS / NO-REGRESSION:
+- Additive + the one number-floor change ONLY. DO NOT touch ivCurves/iv_oracle/salary/WAR/GameTracker, the chemistry
+  ENGINE math, the bid-vs-pass section, the board, the live-bid line, YOUR NUMBER's ownValue, or the profile popover.
+- No `any`, no @ts-ignore.
+
+TESTS:
+- rosterIntelligencePayload.test.ts: (1) empty roster + candidate WITH traits (raw chemistry.premium < 0, isolated L1) →
+  recommendedNumber does NOT dip below the ownValue-only number (chemistryContribution == 0). (2) candidate that TIPS a
+  tier (raw premium > 0) → worth = ownValue + premium (boost preserved). (3) chemistryReadout.families has all 5 with
+  count/tier/distanceToNextTier/nextTierLabel. (4) candidate delta reflects countsAfter + crossing.
+- WhisperPanel.test.tsx: given a payload with chemistryReadout, the 5 family rows render (expanded); the candidate's
+  family row is marked; an upward crossing shows the tip chip.
+
+GATE (paste ACTUAL output): `npm run build` exit 0; `NODE_ENV= npx vitest run
+src/engines/__tests__/rosterIntelligencePayload.test.ts src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx
+src/engines/__tests__/chemistryTierValue.test.ts` green; FULL `NODE_ENV= npx vitest run` at CURRENT_STATE baseline (only
+the 2 characterized fails + the known LeagueBuilderDraftSetup/historicalArchetypes/franchiseOffseasonGuards big-batch
+flakes — verify each SOLO if they appear). Report counts; any NEW red → STOP + report.
+
+OUTPUT: files changed; the number-floor diff; the readout builder + render; test output; build; full-suite counts;
+`git status`. DO NOT COMMIT.
+<!-- ===== END CONTRACT: CODEX-CHEM-READOUT ===== -->

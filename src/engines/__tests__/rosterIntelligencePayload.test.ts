@@ -347,6 +347,122 @@ describe('roster intelligence payload assembly', () => {
     expect(cappedPick.recommendedNumber).toBeLessThanOrEqual(cappedPick.capValue ?? 0);
   });
 
+  test('assembleWorthToYou floors isolated chemistry penalties out of the recommended number', () => {
+    const isolatedTraitPick = assembleWorthToYou({
+      candidate: player({
+        id: 'isolated-scholar',
+        chemistry: 'Scholarly',
+        trait1: 'Big Hack',
+      }),
+      iv: 50_000,
+      rosterPlayers: [],
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 0,
+      ...neutralSeat(),
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    });
+
+    expect(isolatedTraitPick.chemistry.premium).toBeLessThan(0);
+    expect(isolatedTraitPick.chemistryContribution).toBe(0);
+    expect(isolatedTraitPick.recommendedNumber).toBe(isolatedTraitPick.ownValue);
+  });
+
+  test('assembleWorthToYou preserves upward chemistry boosts when a candidate tips a tier', () => {
+    const rosterPlayers = [
+      player({ id: 'scholar-1', chemistry: 'Scholarly', trait1: 'Big Hack' }),
+      player({ id: 'scholar-2', chemistry: 'Scholarly', trait1: 'Bunter' }),
+    ];
+    const tippedPick = assembleWorthToYou({
+      candidate: player({ id: 'scholar-tip', chemistry: 'Scholarly' }),
+      iv: 50_000,
+      rosterPlayers,
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 0,
+      ...neutralSeat(),
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    });
+
+    expect(tippedPick.chemistry.crossing).toBe('L1->L2');
+    expect(tippedPick.chemistry.premium).toBeGreaterThan(0);
+    expect(tippedPick.chemistryContribution).toBe(tippedPick.chemistry.premium);
+    expect(tippedPick.recommendedNumber).toBe(tippedPick.ownValue + tippedPick.chemistry.premium);
+  });
+
+  test('assembleWorthToYou attaches all five chemistry readout families with tier distances', () => {
+    const read = assembleWorthToYou({
+      candidate: player({ id: 'competitive-add', chemistry: 'Competitive' }),
+      iv: 50_000,
+      rosterPlayers: [
+        player({ id: 'cmp-1', chemistry: 'Competitive' }),
+        player({ id: 'sch-1', chemistry: 'Scholarly' }),
+        player({ id: 'sch-2', chemistry: 'Scholarly' }),
+        player({ id: 'sch-3', chemistry: 'Scholarly' }),
+        player({ id: 'sch-4', chemistry: 'Scholarly' }),
+        player({ id: 'sch-5', chemistry: 'Scholarly' }),
+        player({ id: 'sch-6', chemistry: 'Scholarly' }),
+        player({ id: 'sch-7', chemistry: 'Scholarly' }),
+      ],
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 0,
+      ...neutralSeat(),
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    });
+
+    expect(read.chemistryReadout.families).toHaveLength(5);
+    expect(read.chemistryReadout.families.map((family) => family.word)).toEqual([
+      'Spirited',
+      'Disciplined',
+      'Competitive',
+      'Scholarly',
+      'Crafty',
+    ]);
+    expect(read.chemistryReadout.families.find((family) => family.family === 'CMP')).toMatchObject({
+      count: 1,
+      tier: 'L1',
+      distanceToNextTier: 2,
+      nextTierLabel: 'L2',
+      isCandidateFamily: true,
+    });
+    expect(read.chemistryReadout.families.find((family) => family.family === 'SCH')).toMatchObject({
+      count: 7,
+      tier: 'L3',
+      distanceToNextTier: null,
+      nextTierLabel: null,
+      isCandidateFamily: false,
+    });
+  });
+
+  test('assembleWorthToYou candidate chemistry delta reflects countsAfter and crossing', () => {
+    const read = assembleWorthToYou({
+      candidate: player({ id: 'disciplined-tip', chemistry: 'Disciplined' }),
+      iv: 50_000,
+      rosterPlayers: [
+        player({ id: 'disciplined-1', chemistry: 'Disciplined', trait1: 'Composed' }),
+        player({ id: 'disciplined-2', chemistry: 'Disciplined', trait1: 'Base Rounder' }),
+      ],
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 0,
+      ...neutralSeat(),
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    });
+
+    expect(read.chemistryReadout.candidate).toMatchObject({
+      family: 'DIS',
+      word: 'Disciplined',
+      countAfter: 3,
+      crossing: 'L1->L2',
+      distanceToNextTierAfter: 4,
+    });
+  });
+
   test('assembleWorthToYou gives different numbers to different archetype seats for the same player', () => {
     const candidate = player({ id: 'same-player', chemistry: 'Competitive' });
     const base = {

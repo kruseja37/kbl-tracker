@@ -172,6 +172,13 @@ These SUPERSEDE the interim B1-quick behavior and refine the build:
    yet"), and a downward pull ONLY LATE when options dwindle and you still need the tier. Kill the flat early
    "weak chemistry" penalty. (Formula: chemistryDelta = potencyValue(after claim) − potencyValue(before);
    positive = boost.)
+   **JK DECISION 2026-07-04 — BOOST-ONLY (v1).** Chemistry's contribution to YOUR NUMBER = `max(0, chemistry.premium)`:
+   it only RAISES the number when the pick tips a level, and is NEUTRAL otherwise — it NEVER dips the number early.
+   (Root cause of the old dip: the engine's `chemistry.premium` can go negative because a candidate's own traits are
+   re-priced from the frozen L2 IV-standard DOWN to L1 when he's isolated — architecturally defensible anti-double-count,
+   but exactly the "silly early" dip JK killed.) The full "downward pull ONLY LATE when options dwindle and you still
+   need the tier" is DEFERRED to a follow-on (needs a scarcity+need gate). The live 5-category readout (§4.5) still shows
+   each type's TRUE tier/count so the information is visible without punishing the number.
 4. **DRAFT-PROGRESS AWARENESS (amends §4 five-lights).** Expectations scale to picks-made. An empty/near-empty
    roster in the first ~half of the draft is NORMAL, NOT a red SHAPE flag. SHAPE goes amber/red only when
    remaining picks approach the count of unfilled required slots (you're running out of room to fill holes).

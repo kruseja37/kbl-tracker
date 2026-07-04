@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import type {
   BoardEntry,
+  ChemistryReadout,
   Light,
   RosterIntelligencePayload,
   WorthToYou,
@@ -172,6 +173,8 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
             </section>
           )}
 
+          {worth?.chemistryReadout && <ChemistryReadoutSection readout={worth.chemistryReadout} />}
+
           <section className="whisper-section whisper-board" data-testid="whisper-board">
             <div className="row whisper-board-head">
               <div className="eyebrow">YOUR BOARD</div>
@@ -218,6 +221,37 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
           </section>
         </div>
       )}
+    </section>
+  );
+}
+
+function ChemistryReadoutSection({ readout }: { readout: ChemistryReadout }) {
+  return (
+    <section className="whisper-section whisper-chemistry-readout" data-testid="whisper-chemistry-readout">
+      <div className="eyebrow">CHEMISTRY</div>
+      <div className="whisper-chemistry-list">
+        {readout.families.map((family) => (
+          <div
+            key={family.family}
+            className={`whisper-chemistry-row${family.isCandidateFamily ? " candidate" : ""}`}
+            data-candidate-family={family.isCandidateFamily ? "true" : "false"}
+          >
+            <span className="whisper-chem-word">{family.word}</span>
+            <span className="num whisper-chem-count">{family.count}</span>
+            <span className="whisper-chem-tier">{family.tier}</span>
+            <span className="whisper-chem-next">
+              {family.nextTierLabel && family.distanceToNextTier !== null
+                ? `${family.distanceToNextTier} to ${family.nextTierLabel}`
+                : "at max"}
+            </span>
+            {family.isCandidateFamily && (
+              <span className="chip whisper-chem-delta">
+                {candidateDeltaLabel(readout.candidate)}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -379,13 +413,18 @@ function verdictLine(worth: WorthToYou, objectPronoun: "him" | "her"): string {
 }
 
 function whyLine(worth: WorthToYou): string {
-  const premium = worth.chemistry.premium;
-  if (premium > 0) return `Chemistry moves your number up by ${money(premium)}.`;
-  if (premium < 0) return `Chemistry pulls your number down by ${money(Math.abs(premium))}.`;
+  const contribution = worth.chemistryContribution;
+  if (contribution > 0) return `Chemistry moves your number up by ${money(contribution)}.`;
   if (Math.abs(worth.ownValue - worth.iv) >= 1) {
     return `Fit and need move the raw IV to ${money(worth.ownValue)} before chemistry.`;
   }
   return "Your fit and need sit right on the raw IV.";
+}
+
+function candidateDeltaLabel(candidate: ChemistryReadout["candidate"]): string {
+  if (candidate.crossing === "L1->L2") return "+1 → tips L2";
+  if (candidate.crossing === "L2->L3") return "+1 → tips L3";
+  return `+1 → ${candidate.countAfter}`;
 }
 
 function liveBidLine(
@@ -649,6 +688,58 @@ function WhisperStyles() {
         color: var(--auc-text);
         font-size: 13px;
       }
+      .auc-root .whisper-chemistry-readout {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .auc-root .whisper-chemistry-list {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid rgba(232, 232, 216, 0.1);
+        background: rgba(0, 0, 0, 0.14);
+      }
+      .auc-root .whisper-chemistry-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 28px 38px minmax(88px, auto) auto;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 7px 8px;
+        border-bottom: 1px solid rgba(232, 232, 216, 0.08);
+        color: var(--auc-muted);
+        font-size: 12.5px;
+      }
+      .auc-root .whisper-chemistry-row:last-child { border-bottom: 0; }
+      .auc-root .whisper-chemistry-row.candidate {
+        color: var(--auc-text);
+        background: rgba(202, 164, 94, 0.1);
+        box-shadow: inset 3px 0 0 var(--ballpark-brass);
+      }
+      .auc-root .whisper-chem-word {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 800;
+      }
+      .auc-root .whisper-chem-count,
+      .auc-root .whisper-chem-tier {
+        color: var(--auc-text);
+        font-weight: 900;
+      }
+      .auc-root .whisper-chem-next {
+        color: var(--auc-muted);
+        font-size: 12px;
+      }
+      .auc-root .whisper-chem-delta {
+        justify-self: end;
+        color: var(--ballpark-brass);
+        border-color: rgba(202, 164, 94, 0.58);
+        background: rgba(202, 164, 94, 0.12);
+        font-size: 10px;
+        padding: 3px 7px;
+      }
       .auc-root .whisper-board-head { align-items: center; margin-bottom: 9px; }
       .auc-root .whisper-board-toggle {
         appearance: none;
@@ -736,6 +827,14 @@ function WhisperStyles() {
       }
       @media (max-width: 620px) {
         .auc-root .whisper-branch-grid { grid-template-columns: 1fr; }
+        .auc-root .whisper-chemistry-row {
+          grid-template-columns: minmax(0, 1fr) auto auto;
+        }
+        .auc-root .whisper-chem-next,
+        .auc-root .whisper-chem-delta {
+          grid-column: 1 / -1;
+          justify-self: start;
+        }
       }
     `}</style>
   );
