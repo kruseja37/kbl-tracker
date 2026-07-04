@@ -28931,6 +28931,25 @@ Report ACTUAL command output — no "should pass". Do NOT modify any GameTracker
 SLICE 4 of 5 — "C-ITER-RERUN — run it back" per spec-docs/FABLE_ITERATE_DRAFT_DESIGN_2026-07-03.md §4.
 Design is RULED — build exactly to it, do not redesign. Reuse existing helpers; NO new mappers (canonical-mapper law).
 
+UNBLOCK (Opus authorized 2026-07-03 — you correctly stopped on the missing farm-session deleter; both gaps are now resolved,
+proceed to full build):
+  A. AUTHORIZED STORAGE ADDITION — add `export async function deleteAuctionSessionById(id: string): Promise<void>` to
+     src/utils/leagueBuilderStorage.ts, mirroring `getAuctionSessionById` (by-id) with the delete + `syncEngine.remove(
+     'kbl-league-builder', 'auctionSessions', id)` body copied from the existing `deleteAuctionSession`. Then REFACTOR
+     `deleteAuctionSession(leagueId, seasonNumber)` to delegate: `return deleteAuctionSessionById(createAuctionSessionId(
+     leagueId, seasonNumber))` — exact parity with how `getAuctionSession` delegates to `getAuctionSessionById` (no behavior
+     change for existing callers). In resetCompletedDraftArc delete the farm session via
+     `deleteAuctionSessionById(createFarmAuctionSessionId(leagueId, 1))`. This adds NO store and does NOT bump
+     TRACKER_DB_VERSION — it is a function only (no version-pin test impact).
+  B. FRANCHISE-GUARD SEAM — there is NO direct franchise→leagueId field (FranchiseSummary carries only leagueName). Detect a
+     linked franchise by a bounded read-only scan: `listFranchises()` (src/utils/franchiseManager.ts) → for each summary,
+     `getAllFranchiseTeams(summary.id)` (src/utils/franchisePlayerStorage.ts) → LINKED iff any team's `leagueIds` includes
+     the target leagueId. Expose one helper `leagueHasLinkedFranchise(leagueId: string): Promise<boolean>` used by BOTH the
+     engine guard (resetCompletedDraftArc throws the named error when true) and the page (RUN IT BACK disabled + message).
+     Place the helper where it imports cleanly (franchiseManager.ts is the natural home — it already owns listFranchises;
+     verify no import cycle into leagueBuilderAuctionPipeline, and if one arises put the helper in the pipeline and have it
+     import the two franchise readers). Confirm the chosen home has no cycle and state it in the audit evidence.
+
 DELIVERABLE 1 — new export `resetCompletedDraftArc(leagueId: string): Promise<void>` in
 `src/utils/leagueBuilderAuctionPipeline.ts`. Ordered, idempotent, re-runnable after a mid-way crash. Per §4.3:
   1. READ FIRST (before any delete): MLB session (`getAuctionSession(leagueId, MLB_AUCTION_SEASON)`), farm session
@@ -28993,7 +29012,8 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist,
   franchiseManualSmokeFixture batch timeout, archetypeBalanceSimulator provenance, LeagueBuilderDraftSetup/RosterDesigner
   IndexedDB-teardown batch flakes). Run any red SOLO and report solo results.
-- `git status` — leagueBuilderAuctionPipeline.ts, LeagueBuilderDraftSetup.tsx, the integration test. GameTracker NOT present.
+- `git status` — leagueBuilderAuctionPipeline.ts, LeagueBuilderDraftSetup.tsx, leagueBuilderStorage.ts (deleteAuctionSessionById),
+  franchiseManager.ts (or pipeline) for leagueHasLinkedFranchise, the integration test. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-ITER-RERUN ===== -->
 
 <!-- ===== CONTRACT: CODEX-ITER-COPY ===== -->

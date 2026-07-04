@@ -22,6 +22,11 @@ import {
 } from "../../hooks/useLeagueBuilderData";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { getAuctionSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
+import {
+  RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
+  resetCompletedDraftArc,
+} from "../../../utils/leagueBuilderAuctionPipeline";
+import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
 const mockNavigate = vi.fn();
@@ -93,6 +98,26 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
     getAuctionSession: vi.fn(async () => null),
     saveLeagueTemplate: vi.fn(async (league) => league),
     saveTeam: vi.fn(async (team) => team),
+  };
+});
+
+vi.mock("../../../utils/leagueBuilderAuctionPipeline", async () => {
+  const actual = await vi.importActual<typeof import("../../../utils/leagueBuilderAuctionPipeline")>(
+    "../../../utils/leagueBuilderAuctionPipeline",
+  );
+  return {
+    ...actual,
+    resetCompletedDraftArc: vi.fn(async () => undefined),
+  };
+});
+
+vi.mock("../../../utils/franchiseManager", async () => {
+  const actual = await vi.importActual<typeof import("../../../utils/franchiseManager")>(
+    "../../../utils/franchiseManager",
+  );
+  return {
+    ...actual,
+    leagueHasLinkedFranchise: vi.fn(async () => false),
   };
 });
 
@@ -293,6 +318,8 @@ describe("LeagueBuilderDraftSetup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(leagueHasLinkedFranchise).mockResolvedValue(false);
+    vi.mocked(resetCompletedDraftArc).mockResolvedValue(undefined);
     vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());
     vi.mocked(rankAllArchetypesForPool).mockReturnValue([]);
     window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page");
@@ -501,6 +528,62 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0");
     });
+  });
+
+  test("R5 completed draft renders RUN IT BACK and resets to a fresh scout-hire start", async () => {
+    vi.mocked(getAuctionSession).mockResolvedValue({
+      leagueId: "league-page",
+      seasonNumber: 1,
+      seed: "completed-draft",
+      session: { state: "AUCTION_COMPLETE" },
+      createdDate: "2026-01-01T00:00:00.000Z",
+      lastModified: "2026-01-01T00:00:00.000Z",
+    } as Awaited<ReturnType<typeof getAuctionSession>>);
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("Drafted ✓")).toBeInTheDocument();
+    const runItBack = await screen.findByRole("button", { name: "RUN IT BACK" });
+    expect(runItBack).toBeEnabled();
+
+    fireEvent.click(runItBack);
+    expect(screen.getByText("SURE?")).toBeInTheDocument();
+    expect(screen.getByText(
+      "Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay. You'll draft again from scout hire.",
+    )).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm run it back" }));
+
+    await waitFor(() => {
+      expect(resetCompletedDraftArc).toHaveBeenCalledWith("league-page");
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Drafted ✓")).not.toBeInTheDocument();
+    });
+
+    const start = screen.getByRole("button", { name: /START THE DRAFT/i });
+    expect(start).toBeEnabled();
+    fireEvent.click(start);
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0");
+  });
+
+  test("R4 disables RUN IT BACK when a franchise already references the league", async () => {
+    vi.mocked(getAuctionSession).mockResolvedValue({
+      leagueId: "league-page",
+      seasonNumber: 1,
+      seed: "completed-draft",
+      session: { state: "AUCTION_COMPLETE" },
+      createdDate: "2026-01-01T00:00:00.000Z",
+      lastModified: "2026-01-01T00:00:00.000Z",
+    } as Awaited<ReturnType<typeof getAuctionSession>>);
+    vi.mocked(leagueHasLinkedFranchise).mockResolvedValue(true);
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("Drafted ✓")).toBeInTheDocument();
+    expect(await screen.findByText(RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "RUN IT BACK" })).toBeDisabled();
+    expect(resetCompletedDraftArc).not.toHaveBeenCalled();
   });
 
   test("keeps the pool frozen when saved auction status cannot be verified", async () => {

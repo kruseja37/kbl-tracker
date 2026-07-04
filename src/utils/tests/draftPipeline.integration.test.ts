@@ -27,13 +27,15 @@ import { DEFAULT_AUCTION_SETUP_CONFIG } from '../../data/auctionEngineConstants'
 import { LEAGUE_MINIMUM_SALARY } from '../../data/rosterEngineConstants';
 import { LUXURY_CAP_TABLES } from '../../data/tierParams';
 import { selectTeamArchetype } from '../../engines/archetypeIdentity';
-import { shiftLuxuryCaps } from '../../engines/leagueConstruction';
+import { shiftLuxuryCaps, type RegisteredPool } from '../../engines/leagueConstruction';
 import {
   buildAuctionPlayers,
   buildAuctionTeams,
   commitCompletedFarmAuctionSessionToLeagueRosters,
   commitCompletedMlbAuctionSessionToLeagueRosters,
   MLB_AUCTION_SEASON,
+  ResetCompletedDraftLinkedFranchiseError,
+  resetCompletedDraftArc,
 } from '../leagueBuilderAuctionPipeline';
 import { registerLeaguePoolForLeague } from '../leagueBuilderPoolRegistration';
 import {
@@ -52,6 +54,7 @@ import {
   createEmptyTeamRoster,
   createAuctionSessionId,
   createFarmAuctionSessionId,
+  createStartupDraftSessionId,
   deleteAuctionSession,
   getAllPlayers,
   getAuctionSession,
@@ -59,13 +62,16 @@ import {
   getPlayer,
   getRegisteredPool,
   getScoutProfilesForLeague,
+  getStartupDraftSession,
   getTeam,
   getTeamRoster,
   saveAuctionSession,
   saveAuctionSessionById,
   saveLeagueTemplate,
   savePlayer,
+  saveRegisteredPool,
   saveScoutProfile,
+  saveStartupDraftSession,
   saveTeam,
   saveTeamRoster,
   seedFromMLBDatabase,
@@ -83,8 +89,10 @@ import {
 import { getReporterForTeam } from '../reporterStorage';
 import { resetTrackerDbForTests } from '../trackerDb';
 import {
+  createFranchise,
   deleteFranchise,
   getFranchiseConfig,
+  leagueHasLinkedFranchise,
   listFranchises,
 } from '../franchiseManager';
 import {
@@ -92,6 +100,7 @@ import {
   deleteFranchiseDatabase,
   getAllFranchisePlayers,
   getAllFranchiseTeams,
+  saveFranchiseTeam,
 } from '../franchisePlayerStorage';
 import { getFranchiseFarmRecordsForSeason } from '../franchiseFarmStorage';
 import { getFranchiseSeasonId } from '../franchisePersistenceContract';
@@ -705,6 +714,294 @@ function makeCompleteEmptyAuctionSession(teamIds: readonly string[], seed: strin
   }) as CpuShillAuctionSession;
 }
 
+function makeCompletedAuctionSessionWithSales(input: {
+  teamIds: readonly string[];
+  seed: string;
+  players: readonly { playerId: string; iv: number; ivPercentile: number }[];
+  sales: readonly { playerId: string; teamId: string; salary: number }[];
+  rosterSlotsPerTeam: number;
+}): CpuShillAuctionSession {
+  const base = initAuctionSession({
+    teams: input.teamIds.map((teamId) => ({
+      teamId,
+      budgetRemaining: 1_000_000,
+      rosterSlotsRemaining: input.rosterSlotsPerTeam,
+      minSalary: LEAGUE_MINIMUM_SALARY,
+    })),
+    players: input.players,
+    config: {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      nominationOrderSeed: input.seed,
+      cpuShillCount: 0,
+      bidIncrement: 1_000,
+      turnTimerSeconds: null,
+      excludeFromLeague: true,
+      nominationWeightExponent: 2,
+    },
+  }) as CpuShillAuctionSession;
+  const salesByTeam = new Map(input.teamIds.map((teamId) => [teamId, input.sales.filter((sale) => sale.teamId === teamId)]));
+
+  return {
+    ...base,
+    state: 'AUCTION_COMPLETE',
+    availablePlayerIds: [],
+    currentLot: null,
+    pendingClaim: null,
+    teams: base.teams.map((team) => {
+      const sales = salesByTeam.get(team.teamId) ?? [];
+      const spent = sales.reduce((sum, sale) => sum + sale.salary, 0);
+      return {
+        ...team,
+        budgetRemaining: Math.max(0, team.budgetRemaining - spent),
+        rosterSlotsRemaining: Math.max(0, team.rosterSlotsRemaining - sales.length),
+        roster: sales.map((sale) => ({ playerId: sale.playerId, salary: sale.salary })),
+      };
+    }),
+    results: input.sales.map((sale) => ({
+      playerId: sale.playerId,
+      disposition: 'SOLD' as const,
+      nominatorTeamId: sale.teamId,
+      winnerTeamId: sale.teamId,
+      salary: sale.salary,
+    })),
+    saleCount: input.sales.length,
+  } satisfies CpuShillAuctionSession;
+}
+
+interface ResetDraftArcFixture {
+  leagueId: string;
+  teamIds: string[];
+  poolPlayerIds: string[];
+  farmSoldPlayerIds: string[];
+  askSalaryByPlayerId: Map<string, number>;
+  registeredPoolBefore: RegisteredPool;
+  rosterDesignsBefore: Array<Team['rosterDesign']>;
+}
+
+async function seedResetCompletedDraftArc(input: {
+  leagueId: string;
+  includeFarm?: boolean;
+}): Promise<ResetDraftArcFixture> {
+  const includeFarm = input.includeFarm ?? true;
+  const teamIds = [`${input.leagueId}-team-a`, `${input.leagueId}-team-b`];
+  const playerSpecs = [
+    { id: `${input.leagueId}-pool-a`, salary: 10_000, position: 'CF' as const },
+    { id: `${input.leagueId}-pool-b`, salary: 11_000, position: 'SS' as const },
+    { id: `${input.leagueId}-pool-unsold`, salary: 12_000, position: '1B' as const },
+  ];
+
+  await saveLeagueTemplate({
+    id: input.leagueId,
+    name: `${input.leagueId} Reset League`,
+    teamIds,
+    conferences: [],
+    divisions: [],
+    defaultRulesPreset: 'standard',
+    draftFormat: 'auction',
+    tier: 'standard',
+    balanceMode: 'taxed',
+    poolExtractedAt: '2026-07-03T00:00:00.000Z',
+  });
+
+  for (const [index, teamId] of teamIds.entries()) {
+    await saveTeam({
+      ...makeCommitRegressionTeam(teamId, input.leagueId, index === 0 ? 'human' : 'ai'),
+      rosterDesign: {
+        slots: [{ slotId: 'CF', kind: 'pos', position: 'CF' }],
+        lockedAt: '2026-07-03T00:00:00.000Z',
+        pins: { CF: playerSpecs[0].id },
+      },
+    });
+    await saveTeamRoster(createEmptyTeamRoster(teamId));
+    await saveScoutProfile({
+      id: `${teamId}-reset-scout`,
+      leagueId: input.leagueId,
+      teamId,
+      name: `${teamId} Reset Scout`,
+      specialties: ['outfield'],
+      weaknesses: ['CP'],
+      accuracyByPosition: { CF: 80 },
+      seed: `${input.leagueId}:${teamId}:reset-scout`,
+      hiredPick: { round: 1, pickNumber: index + 1, teamId },
+    });
+  }
+
+  for (const spec of playerSpecs) {
+    await savePlayer({
+      ...makeCommitRegressionPlayerAt(spec.id, spec.position),
+      salary: spec.salary,
+      leagueAssignments: [{ leagueId: input.leagueId, teamId: '', rosterStatus: 'FREE_AGENT' }],
+    });
+  }
+
+  const registeredPool: RegisteredPool = {
+    leagueId: input.leagueId,
+    tier: 'standard',
+    balanceMode: 'taxed',
+    players: playerSpecs.map((spec, index) => ({
+      id: spec.id,
+      iv: 100_000 - (index * 10_000),
+      salary: spec.salary,
+    })),
+    tierCap: 1_000_000,
+    luxuryCaps: LUXURY_CAP_TABLES.standard,
+    pickValueChart: [],
+    totalSlots: playerSpecs.length,
+    poolSurplusWarning: false,
+    locked: true,
+    lockedAt: Date.now(),
+  };
+  await saveRegisteredPool(registeredPool);
+  await saveStartupDraftSession({
+    id: createStartupDraftSessionId(input.leagueId, 1),
+    leagueId: input.leagueId,
+    seasonNumber: 1,
+    seed: `${input.leagueId}-startup`,
+    workflowVersion: 'reset-test-startup',
+    engineMethodVersion: 'reset-test-engine',
+    scoutOrder: [],
+    scoutPool: [],
+    hiredScoutIdsByTeamId: {},
+    prospectPickOrder: [],
+    prospectPool: [],
+    completedPicks: [],
+    currentPickIndex: 0,
+  });
+
+  const mlbSales = [
+    { playerId: playerSpecs[0].id, teamId: teamIds[0], salary: playerSpecs[0].salary + 5_000 },
+    { playerId: playerSpecs[1].id, teamId: teamIds[1], salary: playerSpecs[1].salary + 5_000 },
+  ];
+  const completedMlbSession = makeCompletedAuctionSessionWithSales({
+    teamIds,
+    seed: `${input.leagueId}-mlb-complete`,
+    players: registeredPool.players.map((player, index) => ({
+      playerId: player.id,
+      iv: player.iv,
+      ivPercentile: 100 - (index * 10),
+    })),
+    sales: mlbSales,
+    rosterSlotsPerTeam: 22,
+  });
+  await saveAuctionSession({
+    id: createAuctionSessionId(input.leagueId, MLB_AUCTION_SEASON),
+    leagueId: input.leagueId,
+    seasonNumber: MLB_AUCTION_SEASON,
+    seed: completedMlbSession.config.nominationOrderSeed,
+    session: completedMlbSession,
+  });
+  await commitCompletedMlbAuctionSessionToLeagueRosters({
+    leagueId: input.leagueId,
+    session: completedMlbSession,
+  });
+
+  let farmSoldPlayerIds: string[] = [];
+  if (includeFarm) {
+    const farmInit = buildFarmAuctionSession({
+      leagueId: input.leagueId,
+      seasonNumber: 1,
+      teams: teamIds.map((teamId) => ({ teamId, teamName: teamId })),
+      seed: `${input.leagueId}-farm-complete`,
+      poolMultiplier: 1,
+      config: {
+        ...DEFAULT_AUCTION_SETUP_CONFIG,
+        nominationOrderSeed: `${input.leagueId}-farm-complete`,
+        cpuShillCount: 0,
+        bidIncrement: 500,
+        turnTimerSeconds: null,
+        excludeFromLeague: true,
+        nominationWeightExponent: 3,
+        flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      },
+    });
+    const farmSales = teamIds.map((teamId, index) => ({
+      playerId: farmInit.pool.prospects[index].id,
+      teamId,
+      salary: LEAGUE_MINIMUM_SALARY + (index * 500),
+    }));
+    farmSoldPlayerIds = farmSales.map((sale) => sale.playerId);
+    const completedFarmSession = makeCompletedAuctionSessionWithSales({
+      teamIds,
+      seed: `${input.leagueId}-farm-complete`,
+      players: farmInit.pool.auctionPlayers,
+      sales: farmSales,
+      rosterSlotsPerTeam: 10,
+    });
+    await saveAuctionSessionById({
+      id: createFarmAuctionSessionId(input.leagueId, 1),
+      leagueId: input.leagueId,
+      seasonNumber: 1,
+      seed: completedFarmSession.config.nominationOrderSeed,
+      session: completedFarmSession,
+      pool: farmInit.pool,
+    });
+    await commitCompletedFarmAuctionSessionToLeagueRosters({
+      leagueId: input.leagueId,
+      session: completedFarmSession,
+      pool: farmInit.pool,
+    });
+  }
+
+  const teamsBefore = await Promise.all(teamIds.map((teamId) => getTeam(teamId)));
+  const storedPool = await getRegisteredPool(input.leagueId);
+  if (!storedPool) throw new Error('Reset fixture failed to save registered pool.');
+
+  return {
+    leagueId: input.leagueId,
+    teamIds,
+    poolPlayerIds: playerSpecs.map((spec) => spec.id),
+    farmSoldPlayerIds,
+    askSalaryByPlayerId: new Map(playerSpecs.map((spec) => [spec.id, spec.salary])),
+    registeredPoolBefore: storedPool,
+    rosterDesignsBefore: teamsBefore.map((team) => team?.rosterDesign),
+  };
+}
+
+async function captureResetDraftArcEndState(fixture: ResetDraftArcFixture) {
+  const [mlbSession, farmSession, startupDraftSession, scouts, registeredPool] = await Promise.all([
+    getAuctionSession(fixture.leagueId, MLB_AUCTION_SEASON),
+    getAuctionSessionById(createFarmAuctionSessionId(fixture.leagueId, 1)),
+    getStartupDraftSession(fixture.leagueId, 1),
+    getScoutProfilesForLeague(fixture.leagueId),
+    getRegisteredPool(fixture.leagueId),
+  ]);
+  const rosters = await Promise.all(fixture.teamIds.map(async (teamId) => {
+    const roster = await getTeamRoster(teamId);
+    return {
+      teamId,
+      mlbRoster: roster?.mlbRoster ?? [],
+      farmRoster: roster?.farmRoster ?? [],
+    };
+  }));
+  const poolPlayers = await Promise.all(fixture.poolPlayerIds.map(async (playerId) => {
+    const player = await getPlayer(playerId);
+    return {
+      playerId,
+      salary: player?.salary,
+      settledSalary: player?.settledSalary ?? null,
+      assignment: player?.leagueAssignments?.find((candidate) => candidate.leagueId === fixture.leagueId) ?? null,
+      inPool: player ? isPlayerInLeaguePool(player, fixture.leagueId) : false,
+    };
+  }));
+  const farmPlayers = await Promise.all(fixture.farmSoldPlayerIds.map(async (playerId) => ({
+    playerId,
+    exists: Boolean(await getPlayer(playerId)),
+  })));
+  const teams = await Promise.all(fixture.teamIds.map((teamId) => getTeam(teamId)));
+
+  return {
+    mlbSession,
+    farmSession,
+    startupDraftSession,
+    scouts,
+    registeredPool,
+    rosters,
+    poolPlayers,
+    farmPlayers,
+    rosterDesigns: teams.map((team) => team?.rosterDesign),
+  };
+}
+
 async function cleanup(): Promise<void> {
   for (const franchiseId of CREATED_FRANCHISE_IDS.splice(0)) {
     await deleteSeasonMetadata(getFranchiseSeasonId(franchiseId, 1)).catch(() => undefined);
@@ -1033,6 +1330,104 @@ describe('draft pipeline integration', () => {
     expect(first.franchisePlayerCount).toBe(TEAM_IDS.length * 32);
     expect(first.franchiseTeamCount).toBe(TEAM_IDS.length);
     expect(first.franchiseFarmRecordCount).toBe(TEAM_IDS.length * 10);
+  }, 30_000);
+
+  test('R1/R6 resetCompletedDraftArc un-commits MLB and farm draft state while keeping pool and designs', async () => {
+    const fixture = await seedResetCompletedDraftArc({ leagueId: `${LEAGUE_ID}-reset-full` });
+
+    await expect(getAuctionSession(fixture.leagueId, MLB_AUCTION_SEASON)).resolves.toMatchObject({
+      session: { state: 'AUCTION_COMPLETE' },
+    });
+    await expect(getAuctionSessionById(createFarmAuctionSessionId(fixture.leagueId, 1))).resolves.toMatchObject({
+      session: { state: 'AUCTION_COMPLETE' },
+    });
+    await expect(getStartupDraftSession(fixture.leagueId, 1)).resolves.not.toBeNull();
+    await expect(getScoutProfilesForLeague(fixture.leagueId)).resolves.toHaveLength(fixture.teamIds.length);
+
+    await resetCompletedDraftArc(fixture.leagueId);
+
+    await expect(getAuctionSession(fixture.leagueId, MLB_AUCTION_SEASON)).resolves.toBeNull();
+    await expect(getAuctionSessionById(createFarmAuctionSessionId(fixture.leagueId, 1))).resolves.toBeNull();
+    await expect(getStartupDraftSession(fixture.leagueId, 1)).resolves.toBeNull();
+    await expect(getScoutProfilesForLeague(fixture.leagueId)).resolves.toEqual([]);
+
+    for (const playerId of fixture.poolPlayerIds) {
+      const player = await getPlayer(playerId);
+      expect(player).toEqual(expect.objectContaining({
+        id: playerId,
+        salary: fixture.askSalaryByPlayerId.get(playerId),
+        leagueAssignments: expect.arrayContaining([
+          expect.objectContaining({
+            leagueId: fixture.leagueId,
+            teamId: '',
+            rosterStatus: 'FREE_AGENT',
+          }),
+        ]),
+      }));
+      expect(player).not.toHaveProperty('settledSalary');
+      expect(player && isPlayerInLeaguePool(player, fixture.leagueId)).toBe(true);
+    }
+
+    for (const teamId of fixture.teamIds) {
+      const roster = await getTeamRoster(teamId);
+      expect(roster?.mlbRoster).toEqual([]);
+      expect(roster?.farmRoster).toEqual([]);
+    }
+    for (const playerId of fixture.farmSoldPlayerIds) {
+      await expect(getPlayer(playerId)).resolves.toBeNull();
+    }
+
+    await expect(getRegisteredPool(fixture.leagueId)).resolves.toEqual(fixture.registeredPoolBefore);
+    const teamsAfter = await Promise.all(fixture.teamIds.map((teamId) => getTeam(teamId)));
+    expect(teamsAfter.map((team) => team?.rosterDesign)).toEqual(fixture.rosterDesignsBefore);
+  }, 30_000);
+
+  test('R2 resetCompletedDraftArc is idempotent after the draft arc is cleared', async () => {
+    const fixture = await seedResetCompletedDraftArc({ leagueId: `${LEAGUE_ID}-reset-idempotent` });
+
+    await resetCompletedDraftArc(fixture.leagueId);
+    const afterFirstReset = await captureResetDraftArcEndState(fixture);
+
+    await expect(resetCompletedDraftArc(fixture.leagueId)).resolves.toBeUndefined();
+    await expect(captureResetDraftArcEndState(fixture)).resolves.toEqual(afterFirstReset);
+  }, 30_000);
+
+  test('R3 resetCompletedDraftArc tolerates an absent farm auction session', async () => {
+    const fixture = await seedResetCompletedDraftArc({
+      leagueId: `${LEAGUE_ID}-reset-no-farm`,
+      includeFarm: false,
+    });
+
+    await expect(getAuctionSession(fixture.leagueId, MLB_AUCTION_SEASON)).resolves.toMatchObject({
+      session: { state: 'AUCTION_COMPLETE' },
+    });
+    await expect(getAuctionSessionById(createFarmAuctionSessionId(fixture.leagueId, 1))).resolves.toBeNull();
+
+    await resetCompletedDraftArc(fixture.leagueId);
+
+    await expect(getAuctionSession(fixture.leagueId, MLB_AUCTION_SEASON)).resolves.toBeNull();
+    await expect(getAuctionSessionById(createFarmAuctionSessionId(fixture.leagueId, 1))).resolves.toBeNull();
+    for (const playerId of fixture.poolPlayerIds) {
+      const player = await getPlayer(playerId);
+      expect(player?.leagueAssignments).toEqual(expect.arrayContaining([
+        expect.objectContaining({ leagueId: fixture.leagueId, teamId: '', rosterStatus: 'FREE_AGENT' }),
+      ]));
+      expect(player).not.toHaveProperty('settledSalary');
+    }
+  }, 30_000);
+
+  test('R4 resetCompletedDraftArc refuses a league linked to an existing franchise', async () => {
+    const leagueId = `${LEAGUE_ID}-reset-linked`;
+    const franchiseId = await createFranchise('Reset Linked Franchise');
+    CREATED_FRANCHISE_IDS.push(franchiseId);
+    await saveFranchiseTeam(franchiseId, makeCommitRegressionTeam(`${leagueId}-franchise-team`, leagueId, 'human'));
+
+    await expect(leagueHasLinkedFranchise(leagueId)).resolves.toBe(true);
+    await expect(resetCompletedDraftArc(leagueId)).rejects.toThrow(ResetCompletedDraftLinkedFranchiseError);
+    await expect(resetCompletedDraftArc(leagueId)).rejects.toMatchObject({
+      name: 'ResetCompletedDraftLinkedFranchiseError',
+      leagueId,
+    });
   }, 30_000);
 
   test('blocks franchise launch before metadata when a saved MLB auction is not finished', async () => {

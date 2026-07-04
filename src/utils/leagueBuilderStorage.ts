@@ -1844,8 +1844,11 @@ export async function saveAuctionSessionById(
 }
 
 export async function deleteAuctionSession(leagueId: string, seasonNumber = 1): Promise<void> {
+  return deleteAuctionSessionById(createAuctionSessionId(leagueId, seasonNumber));
+}
+
+export async function deleteAuctionSessionById(id: string): Promise<void> {
   const db = await initLeagueBuilderDatabase();
-  const id = createAuctionSessionId(leagueId, seasonNumber);
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readwrite');

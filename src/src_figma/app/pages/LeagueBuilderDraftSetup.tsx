@@ -59,7 +59,11 @@ import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
 import { historicalToSimArchetype, rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { TIER_CAPS } from "../../../data/tierParams";
-import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
+import {
+  MLB_AUCTION_SEASON,
+  RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
+  resetCompletedDraftArc,
+} from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
   removePlayersFromLeaguePool,
@@ -84,6 +88,7 @@ import {
   type Player,
   type Position,
 } from "../../../utils/leagueBuilderStorage";
+import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { TRAIT_PRICING } from "../../../data/traitPricing";
@@ -612,6 +617,9 @@ export function LeagueBuilderDraftSetup() {
   const [modeAReport, setModeAReport] = useState<ModeAReport | null>(null);
   const [reExtractConfirm, setReExtractConfirm] = useState(false);
   const [lockConfirm, setLockConfirm] = useState(false);
+  const [runItBackConfirm, setRunItBackConfirm] = useState(false);
+  const [runItBackLinkedFranchise, setRunItBackLinkedFranchise] = useState(false);
+  const [runItBackLinkedChecked, setRunItBackLinkedChecked] = useState(false);
   const [liveClubVerdicts, setLiveClubVerdicts] = useState<Map<string, DesignFeasibilityResult>>(new Map());
   const [targetByTeamId, setTargetByTeamId] = useState<Map<string, Best22Target | null>>(new Map());
   const [draftability, setDraftability] = useState<
@@ -622,6 +630,7 @@ export function LeagueBuilderDraftSetup() {
   const autoRecheckTriggerRef = useRef<string | null>(null);
   const reExtractConfirmRef = useRef<HTMLDivElement>(null);
   const lockConfirmRef = useRef<HTMLDivElement>(null);
+  const runItBackConfirmRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setShills(clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)));
@@ -673,6 +682,29 @@ export function LeagueBuilderDraftSetup() {
         setHasCompletedDraft(false);
         setSavedDraftLookupError(SAVED_DRAFT_LOOKUP_ERROR_MESSAGE);
         setSavedDraftChecked(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLeagueId]);
+
+  useEffect(() => {
+    if (!activeLeagueId) {
+      setRunItBackLinkedFranchise(false);
+      setRunItBackLinkedChecked(true);
+      return;
+    }
+    let cancelled = false;
+    setRunItBackLinkedChecked(false);
+    void leagueHasLinkedFranchise(activeLeagueId).then((linked) => {
+      if (cancelled) return;
+      setRunItBackLinkedFranchise(linked);
+      setRunItBackLinkedChecked(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setRunItBackLinkedFranchise(true);
+        setRunItBackLinkedChecked(true);
       }
     });
     return () => {
@@ -1179,6 +1211,7 @@ export function LeagueBuilderDraftSetup() {
   useEffect(() => {
     setReExtractConfirm(false);
     setLockConfirm(false);
+    setRunItBackConfirm(false);
     if (poolMode !== "design-first" || !league?.poolExtractedAt) {
       setModeAReport(null);
       return;
@@ -1192,16 +1225,18 @@ export function LeagueBuilderDraftSetup() {
   }, [buildModeAResult, league?.poolExtractedAt, lockedDesignPinPlayerIds.length, modeAHandLedger, poolMode]);
 
   useEffect(() => {
-    if (!reExtractConfirm && !lockConfirm) return undefined;
+    if (!reExtractConfirm && !lockConfirm && !runItBackConfirm) return undefined;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (reExtractConfirmRef.current?.contains(target) || lockConfirmRef.current?.contains(target)) return;
+      if (runItBackConfirmRef.current?.contains(target)) return;
       setReExtractConfirm(false);
       setLockConfirm(false);
+      setRunItBackConfirm(false);
     };
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [lockConfirm, reExtractConfirm]);
+  }, [lockConfirm, reExtractConfirm, runItBackConfirm]);
 
   const assertPoolCanMutate = () => {
     if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
@@ -1360,6 +1395,17 @@ export function LeagueBuilderDraftSetup() {
       await unlockLeaguePool(activeLeagueId);
     });
 
+  const handleRunItBack = () =>
+    runAction(async () => {
+      if (!activeLeagueId) return;
+      await resetCompletedDraftArc(activeLeagueId);
+      setRunItBackConfirm(false);
+      setHasSavedDraft(false);
+      setHasCompletedDraft(false);
+      setSavedDraftLookupError(null);
+      setSavedDraftChecked(true);
+    });
+
   const handleStartDraft = () => {
     if (!league || !startReady) return;
     navigate(
@@ -1434,6 +1480,9 @@ export function LeagueBuilderDraftSetup() {
     };
   });
   const nonGreenClubCount = clubCheckRows.filter((row) => row.tone !== "green").length;
+  const runItBackBlockedMessage = runItBackLinkedFranchise
+    ? RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE
+    : null;
   const recheckVisible = identitiesReady && inPoolPlayers.length > 0;
   const currentRecheckKey = useMemo(() => JSON.stringify({
     pool: sortedIds(inPoolPlayers.map((player) => player.id)),
@@ -1823,9 +1872,55 @@ export function LeagueBuilderDraftSetup() {
       rightSlot={
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {hasCompletedDraft ? (
-            <span className="bg-[var(--ballpark-brass)] text-[#1A1A1A] border-2 border-[var(--ballpark-chalk)] px-3 py-1 text-xs font-bold">
-              Drafted ✓ · Run it back
-            </span>
+            <>
+              <span className="bg-[var(--ballpark-brass)] text-[#1A1A1A] border-2 border-[var(--ballpark-chalk)] px-3 py-1 text-xs font-bold">
+                Drafted ✓
+              </span>
+              <div ref={runItBackConfirmRef} className="flex flex-wrap items-center gap-2">
+                {runItBackConfirm ? (
+                  <>
+                    <span className="text-xs font-bold text-[var(--ballpark-chalk)]/75">SURE?</span>
+                    <PressButton
+                      size="sm"
+                      variant="affirm"
+                      aria-label="Confirm run it back"
+                      onClick={handleRunItBack}
+                      disabled={busy}
+                    >
+                      <Check className="w-3 h-3" />
+                    </PressButton>
+                    <PressButton
+                      size="sm"
+                      variant="destruct"
+                      aria-label="Cancel run it back"
+                      onClick={() => setRunItBackConfirm(false)}
+                      disabled={busy}
+                    >
+                      <X className="w-3 h-3" />
+                    </PressButton>
+                    <span className="max-w-[520px] text-[11px] text-[var(--ballpark-chalk)]/65">
+                      Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay. You'll draft again from scout hire.
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <PressButton
+                      size="sm"
+                      variant="destruct"
+                      onClick={() => setRunItBackConfirm(true)}
+                      disabled={busy || !runItBackLinkedChecked || Boolean(runItBackBlockedMessage)}
+                    >
+                      RUN IT BACK
+                    </PressButton>
+                    {runItBackBlockedMessage ? (
+                      <span className="max-w-[440px] text-[11px] font-bold text-[var(--ballpark-status-warn)]">
+                        {runItBackBlockedMessage}
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </>
           ) : null}
           <PressButton
             size="sm"

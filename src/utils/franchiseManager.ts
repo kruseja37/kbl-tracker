@@ -21,6 +21,7 @@ import {
   exportFranchiseSaveSlot,
   validateFranchiseSaveSlotImportPayload,
 } from './franchiseSaveSlotManifest';
+import { getAllFranchiseTeams } from './franchisePlayerStorage';
 
 // ============================================
 // TYPES
@@ -253,6 +254,19 @@ export async function listFranchises(): Promise<FranchiseSummary[]> {
     leagueName: meta.leagueName,
     controlledTeamName: meta.controlledTeamName,
   }));
+}
+
+export async function leagueHasLinkedFranchise(leagueId: string): Promise<boolean> {
+  const summaries = await listFranchises();
+
+  for (const summary of summaries) {
+    const teams = await getAllFranchiseTeams(summary.id);
+    if (teams.some((team) => team.leagueIds?.includes(leagueId))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ============================================
