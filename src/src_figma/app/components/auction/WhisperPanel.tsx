@@ -21,6 +21,35 @@ interface WhisperPayloadMeta {
   objectPronoun?: "him" | "her";
   boardMeta?: Record<string, { name?: string; positions?: string }>;
   boardPlayers?: Record<string, Player>;
+  bidVsPass?: WhisperBidVsPass | null;
+}
+
+interface WhisperBidVsPassTarget {
+  playerId: string;
+  name: string;
+  player: Player | null;
+  surplus: number;
+  ownValue: number;
+  predictedMedian: number;
+  affordable: boolean;
+}
+
+interface WhisperBidVsPassNeed {
+  minimumAdditions: number;
+  deficits: readonly string[];
+}
+
+interface WhisperBidVsPassBranch {
+  branch: "bid" | "pass";
+  budgetAfter: number;
+  needAfter: WhisperBidVsPassNeed | null;
+  targets: readonly WhisperBidVsPassTarget[];
+}
+
+interface WhisperBidVsPass {
+  bidAmount: number;
+  bid: WhisperBidVsPassBranch;
+  pass: WhisperBidVsPassBranch;
 }
 
 const LIGHT_ORDER = ["shape", "identity", "chemistry", "balance", "budget"] as const;
@@ -112,6 +141,8 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
             flash={flashVerdict}
           />
 
+          {meta.bidVsPass && <BidVsPassSection bidVsPass={meta.bidVsPass} />}
+
           {scorecard && (
             <section className="whisper-section" data-testid="whisper-lights">
               <div className="whisper-lights-row">
@@ -188,6 +219,65 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
         </div>
       )}
     </section>
+  );
+}
+
+function BidVsPassSection({ bidVsPass }: { bidVsPass: WhisperBidVsPass }) {
+  return (
+    <section className="whisper-section whisper-bid-pass" data-testid="whisper-bid-vs-pass">
+      <div className="eyebrow">BID vs PASS</div>
+      <div className="whisper-branch-grid">
+        <BidVsPassBranchCard branch={bidVsPass.bid} title={`BID ${money(bidVsPass.bidAmount)}`} />
+        <BidVsPassBranchCard branch={bidVsPass.pass} title="PASS" />
+      </div>
+    </section>
+  );
+}
+
+function BidVsPassBranchCard({
+  branch,
+  title,
+}: {
+  branch: WhisperBidVsPassBranch;
+  title: string;
+}) {
+  return (
+    <div className="whisper-branch-card">
+      <div className="row whisper-branch-head">
+        <span className="whisper-branch-title">{title}</span>
+        <span className="spacer" />
+        <span className="num whisper-branch-budget">{money(branch.budgetAfter)}</span>
+      </div>
+      <p className="whisper-branch-need">{needSummary(branch.needAfter)}</p>
+      <div className="whisper-target-list">
+        {branch.targets.slice(0, 5).length === 0 ? (
+          <p className="whisper-target-empty">No clean surplus targets left.</p>
+        ) : (
+          branch.targets.slice(0, 5).map((target) => (
+            <BidVsPassTargetRow key={`${branch.branch}-${target.playerId}`} target={target} />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BidVsPassTargetRow({ target }: { target: WhisperBidVsPassTarget }) {
+  const name = <span className="whisper-target-name">{target.name}</span>;
+  return (
+    <div className="whisper-target-row">
+      {target.player ? (
+        <PlayerProfilePopover player={target.player} revealFull>
+          {name}
+        </PlayerProfilePopover>
+      ) : (
+        name
+      )}
+      <span className={`num whisper-surplus ${target.surplus >= 0 ? "positive" : "negative"}`}>
+        {signedMoney(target.surplus)}
+      </span>
+      {!target.affordable && <span className="chip whisper-cant-afford">can't afford</span>}
+    </div>
   );
 }
 
@@ -320,6 +410,22 @@ function roomRelation(
   return "That sits inside what the room expects.";
 }
 
+function needSummary(need: WhisperBidVsPassNeed | null): string {
+  if (!need) return "Needs read unavailable.";
+  if (need.minimumAdditions === 0 && need.deficits.length === 0) return "Roster law clean.";
+  const additions = `${need.minimumAdditions} ${need.minimumAdditions === 1 ? "addition" : "additions"}`;
+  const deficits = need.deficits
+    .slice(0, 2)
+    .map((deficit) => deficit.replace(/\.$/, ""));
+  return deficits.length > 0 ? `Needs ${additions}: ${deficits.join("; ")}` : `Needs ${additions}.`;
+}
+
+function signedMoney(value: number): string {
+  const rounded = Math.round(value);
+  const prefix = rounded >= 0 ? "+" : "-";
+  return `${prefix}${money(Math.abs(rounded))}`;
+}
+
 function money(value: number): string {
   return `$${Math.round(value).toLocaleString()}`;
 }
@@ -423,6 +529,87 @@ function WhisperStyles() {
       .auc-root .whisper-section {
         border-top: 1px solid var(--auc-hairline);
         padding-top: 14px;
+      }
+      .auc-root .whisper-bid-pass {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .auc-root .whisper-branch-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .auc-root .whisper-branch-card {
+        min-width: 0;
+        border: 1px solid rgba(232, 232, 216, 0.12);
+        background: rgba(0, 0, 0, 0.18);
+        padding: 9px;
+      }
+      .auc-root .whisper-branch-head {
+        align-items: center;
+        gap: 8px;
+      }
+      .auc-root .whisper-branch-title {
+        color: var(--auc-text);
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+      }
+      .auc-root .whisper-branch-budget {
+        color: var(--ballpark-brass);
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .auc-root .whisper-branch-need {
+        min-height: 32px;
+        margin: 7px 0 8px;
+        color: var(--auc-muted);
+        font-size: 11.5px;
+        line-height: 1.3;
+      }
+      .auc-root .whisper-target-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .auc-root .whisper-target-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 6px;
+        min-height: 25px;
+        border-top: 1px solid rgba(232, 232, 216, 0.08);
+        padding-top: 5px;
+      }
+      .auc-root .whisper-target-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--auc-text);
+        font-size: 12.5px;
+        font-weight: 700;
+      }
+      .auc-root .whisper-surplus {
+        font-size: 12px;
+        font-weight: 900;
+      }
+      .auc-root .whisper-surplus.positive { color: #34d399; }
+      .auc-root .whisper-surplus.negative { color: #f87171; }
+      .auc-root .whisper-cant-afford {
+        grid-column: 1 / -1;
+        justify-self: start;
+        color: #fca5a5;
+        border-color: rgba(248, 113, 113, 0.45);
+        background: rgba(248, 113, 113, 0.1);
+        font-size: 9.5px;
+        padding: 3px 6px;
+      }
+      .auc-root .whisper-target-empty {
+        margin: 0;
+        color: var(--auc-muted);
+        font-size: 12px;
       }
       .auc-root .whisper-lights-row {
         display: grid;
@@ -546,6 +733,9 @@ function WhisperStyles() {
       @media (prefers-reduced-motion: reduce) {
         .auc-root .whisper-strip,
         .auc-root .whisper-verdict.flash::after { animation: none !important; }
+      }
+      @media (max-width: 620px) {
+        .auc-root .whisper-branch-grid { grid-template-columns: 1fr; }
       }
     `}</style>
   );

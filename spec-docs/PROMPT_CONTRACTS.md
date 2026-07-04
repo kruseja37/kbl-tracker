@@ -29945,3 +29945,74 @@ GATE (paste ACTUAL output): `npm run build` exit 0; `NODE_ENV= npx vitest run sr
 OUTPUT: files changed; the computeOwnValue extraction + projectBidVsPass refactor diff; the seat-input threading diff;
 test output; build result; full-suite counts; `git status`. DO NOT COMMIT.
 <!-- ===== END CONTRACT: CODEX-B1B1-SEAT-VALUE ===== -->
+
+<!-- ===== CONTRACT: CODEX-B1B2-BID-VS-PASS ===== -->
+# CONTRACT: CODEX-B1B2-BID-VS-PASS (slice B1b-2 of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04)
+
+MISSION: WIRE the already-built but ORPHANED bid-vs-pass engine into the Assistant-GM whisper — the "killer
+feature": "BID (at the price you'd pay to get him now) → here's the board/roster you can still complete; PASS →
+here's what's left." Slice B1b-2 of `spec-docs/ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md` — READ §4.2 FIRST.
+`projectBidVsPass` is BUILT and CORRECT — its strand filter is ALREADY require-a-closer-aware (via
+rosterNeedBreakdown.closerDeficit). WIRE it; do NOT rebuild or modify its logic.
+
+BRANCH: `experiment/manager-wpa-window`. DO NOT create a branch. DO NOT commit.
+
+GROUND TRUTH (verified):
+- `projectBidVsPass(input: BidVsPassInput): { bid: BoardProjection; pass: BoardProjection } | null`
+  (src/engines/auctionMarketModel.ts:691). Input `BidVsPassInput`: { session: CpuShillAuctionSession, options:
+  SessionMarketOptions, teamId: string, bidAmount: number, ownBandPriorities: BandPriorities, topN?: number }.
+  Returns null if no current lot / team not found.
+- `BoardProjection` { branch: 'bid'|'pass'; budgetAfter: number; needAfter: RosterNeedBreakdown | null; targets:
+  readonly ProjectedTarget[] }. `ProjectedTarget` { playerId: string; ownValue: number; predictedMedian: number;
+  surplus: number; affordable: boolean } (surplus = ownValue − predictedMedian, already DESC-sorted).
+- `SessionMarketOptions` (auctionMarketModel.ts:460): { shillTeamIds: ReadonlySet<string>; advisedTeamId?:
+  string|null; bandPrioritiesByTeamId?: ReadonlyMap<string,BandPriorities>; personalityByTeamId?; humanTeamIds?:
+  ReadonlySet<string> }.
+- ALL options ingredients ALREADY exist at the page level (src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx):
+  `shillTeamIdSet` (~552), `marketBandPrioritiesByTeamId` (~554), `marketHumanTeamIds` (~558). `ownBandPriorities`
+  is already computed in the payload block (~924). Lot: `session.currentLot.highBid` / `.openingAsk`
+  (auctionStateMachine.ts:78-79). `playerById` (~550) resolves target names/Players.
+- Whisper payload channel: `WhisperPayloadMeta` (WhisperPanel.tsx:17). REUSE the B5 popover:
+  `PlayerProfilePopover` (src/src_figma/app/components/shared/PlayerProfilePopover.tsx) on target names.
+
+DELIVERABLES:
+
+PART 1 — Page-level projection + display adapter (LeagueBuilderAuctionDraft.tsx):
+- Build `const marketOptions: SessionMarketOptions = { shillTeamIds: shillTeamIdSet, advisedTeamId: team.id,
+  bandPrioritiesByTeamId: marketBandPrioritiesByTeamId, humanTeamIds: marketHumanTeamIds }` — reuse the existing maps.
+- `bidAmount = session.currentLot.highBid ?? session.currentLot.openingAsk` (the current price to win).
+- Call `projectBidVsPass({ session, options: marketOptions, teamId: team.id, bidAmount, ownBandPriorities, topN: 5 })`
+  ONLY when ownBandPriorities is non-null (same guard as worthToYou).
+- Transform each branch's targets into a DISPLAY structure resolving name + Player: `targets: [{ playerId, name
+  (playerDisplayName), player (playerById.get(playerId) ?? null — for the popover), surplus, ownValue,
+  predictedMedian, affordable }]`. Keep `branch`, `budgetAfter`, and a compact `needAfter` summary (minimumAdditions
+  + the readable deficits from RosterNeedBreakdown — reuse any existing need→tag helper).
+- Add `bidVsPass?: DisplayBidVsPass | null` to the payload meta; thread it.
+
+PART 2 — Whisper render (WhisperPanel.tsx):
+- Render a "BID vs PASS" section (below the headline, near/above the board). Two branches: header `BID $<bidAmount>`
+  and `PASS`. Each shows: budget after, a one-line needs summary, and up to 5 surplus targets — each row: name
+  (wrapped in `<PlayerProfilePopover player={...} revealFull>` when a Player resolved, else plain text), surplus
+  (`+$X` / `-$X`, colored positive/negative), and a "can't afford" marker when `!affordable`.
+- Hide the whole section when bidVsPass is null/absent. Chalk-and-ash aesthetic, consistent with the panel. A
+  collapsible toggle is nice but optional.
+
+CONSTRAINTS / NO-REGRESSION:
+- DO NOT modify projectBidVsPass or any engine logic (it's correct + closer-aware). Additive UI + page adapter +
+  payload field ONLY. DO NOT change YOUR NUMBER, the board, the verdict, or the live-bid line. DO NOT touch
+  ivCurves/iv_oracle/salary/WAR/GameTracker.
+- No `any`, no @ts-ignore.
+
+TESTS:
+- WhisperPanel.test.tsx: given a mock payload with `bidVsPass` (both branches, some targets), assert BOTH branches
+  render with their targets + surplus; given `bidVsPass` null/absent, the section is ABSENT.
+- auctionMarketModel.test.ts (projectBidVsPass) stays green (untouched).
+
+GATE (paste ACTUAL output): `npm run build` exit 0; `NODE_ENV= npx vitest run
+src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx src/engines/__tests__/auctionMarketModel.test.ts`
+green; FULL `NODE_ENV= npx vitest run` at CURRENT_STATE baseline (only the 2 characterized fails). Report counts;
+any NEW red → STOP + report.
+
+OUTPUT: files changed; the marketOptions construction + projection call diff; the whisper render; test output; build
+result; full-suite counts; `git status`. DO NOT COMMIT.
+<!-- ===== END CONTRACT: CODEX-B1B2-BID-VS-PASS ===== -->

@@ -169,6 +169,76 @@ describe("WhisperPanel", () => {
     expect(board.getByText("SS")).toBeInTheDocument();
   });
 
+  test("BID vs PASS renders both branch projections with targets and surplus", () => {
+    render(<WhisperPanel payload={Object.assign(payload(), {
+      bidVsPass: {
+        bidAmount: 55_000,
+        bid: {
+          branch: "bid" as const,
+          budgetAfter: 145_000,
+          needAfter: {
+            minimumAdditions: 2,
+            deficits: ["Still needs a starting C.", "Needs a true closer (CP)."],
+          },
+          targets: [
+            {
+              playerId: "bid-target",
+              name: "Bid Target",
+              player: null,
+              surplus: 12_000,
+              ownValue: 82_000,
+              predictedMedian: 70_000,
+              affordable: true,
+            },
+          ],
+        },
+        pass: {
+          branch: "pass" as const,
+          budgetAfter: 200_000,
+          needAfter: {
+            minimumAdditions: 3,
+            deficits: ["Needs 1 more reliever."],
+          },
+          targets: [
+            {
+              playerId: "pass-target",
+              name: "Pass Target",
+              player: null,
+              surplus: -5_000,
+              ownValue: 45_000,
+              predictedMedian: 50_000,
+              affordable: false,
+            },
+          ],
+        },
+      },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    const bidVsPass = within(screen.getByTestId("whisper-bid-vs-pass"));
+    expect(bidVsPass.getByText("BID vs PASS")).toBeInTheDocument();
+    expect(bidVsPass.getByText("BID $55,000")).toBeInTheDocument();
+    expect(bidVsPass.getByText("PASS")).toBeInTheDocument();
+    expect(bidVsPass.getByText("$145,000")).toBeInTheDocument();
+    expect(bidVsPass.getByText("$200,000")).toBeInTheDocument();
+    expect(bidVsPass.getByText("Bid Target")).toBeInTheDocument();
+    expect(bidVsPass.getByText("Pass Target")).toBeInTheDocument();
+    expect(bidVsPass.getByText("+$12,000")).toBeInTheDocument();
+    expect(bidVsPass.getByText("-$5,000")).toBeInTheDocument();
+    expect(bidVsPass.getByText("can't afford")).toBeInTheDocument();
+  });
+
+  test("BID vs PASS is absent when the projection is absent or null", () => {
+    const { rerender } = render(<WhisperPanel payload={payload()} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.queryByTestId("whisper-bid-vs-pass")).not.toBeInTheDocument();
+
+    rerender(<WhisperPanel payload={Object.assign(payload(), { bidVsPass: null })} />);
+
+    expect(screen.queryByTestId("whisper-bid-vs-pass")).not.toBeInTheDocument();
+  });
+
   test("YOUR NUMBER renders recommendedNumber instead of the affordability ceiling", () => {
     render(<WhisperPanel payload={payload("push", {
       worthToYou: {

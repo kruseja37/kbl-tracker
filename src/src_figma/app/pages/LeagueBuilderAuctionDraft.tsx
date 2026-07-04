@@ -46,7 +46,10 @@ import {
   buildArchetypeLiftTable,
   buildLotViewFromSession,
   estimateMarket,
+  projectBidVsPass,
+  type BoardProjection,
   type EstimatedMarket,
+  type SessionMarketOptions,
 } from "../../../engines/auctionMarketModel";
 import { settleFromShills } from "../../../engines/auctionSettleFromShills";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
@@ -57,7 +60,7 @@ import {
 } from "../../../engines/auctionBoardFrame";
 import { buildAuctionExitReport, describeRosterLawGaps } from "../../../engines/auctionExitGate";
 import { deriveShillTeamIds } from "../../../engines/cpuTeamRoles";
-import { rosterNeedBreakdown, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
+import { rosterNeedBreakdown, toRosterSlotPlayer, type RosterNeedBreakdown, type RosterPositionMap } from "../../../engines/rosterNeed";
 import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
   farmDraftRouteForLeague,
@@ -90,6 +93,34 @@ import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../
 import type { LeagueTemplate, Player, Team, UseLeagueBuilderDataReturn } from "../../hooks/useLeagueBuilderData";
 
 type DraftPool = Awaited<ReturnType<UseLeagueBuilderDataReturn["getRegisteredPool"]>>;
+
+interface DisplayBidVsPassTarget {
+  playerId: string;
+  name: string;
+  player: Player | null;
+  surplus: number;
+  ownValue: number;
+  predictedMedian: number;
+  affordable: boolean;
+}
+
+interface DisplayBidVsPassNeed {
+  minimumAdditions: number;
+  deficits: readonly string[];
+}
+
+interface DisplayBidVsPassBranch {
+  branch: BoardProjection["branch"];
+  budgetAfter: number;
+  needAfter: DisplayBidVsPassNeed | null;
+  targets: readonly DisplayBidVsPassTarget[];
+}
+
+interface DisplayBidVsPass {
+  bidAmount: number;
+  bid: DisplayBidVsPassBranch;
+  pass: DisplayBidVsPassBranch;
+}
 
 const CPU_BID_OPTIONS = { needAwareCompletion: true } as const;
 
@@ -211,6 +242,55 @@ function buildLawNeedLine(frame: AuctionBoardFrame): ReactNode {
   const lawGaps = describeRosterLawGaps(rosterCount, need);
   if (lawGaps[0]) return <>{lawGaps[0]}</>;
   return <>Legal {LEGAL_ROSTER.size} — roster complete.</>;
+}
+
+function displayBidVsPassNeed(
+  need: RosterNeedBreakdown | null,
+  rosterCount: number,
+): DisplayBidVsPassNeed | null {
+  if (!need) return null;
+  return {
+    minimumAdditions: need.minimumAdditions,
+    deficits: describeRosterLawGaps(rosterCount, need),
+  };
+}
+
+function displayBidVsPassBranch(
+  branch: BoardProjection,
+  baseRosterCount: number,
+  playerById: Map<string, Player>,
+): DisplayBidVsPassBranch {
+  const rosterCount = baseRosterCount + (branch.branch === "bid" ? 1 : 0);
+  return {
+    branch: branch.branch,
+    budgetAfter: branch.budgetAfter,
+    needAfter: displayBidVsPassNeed(branch.needAfter, rosterCount),
+    targets: branch.targets.map((target) => {
+      const player = playerById.get(target.playerId) ?? null;
+      return {
+        playerId: target.playerId,
+        name: player ? playerDisplayName(player) : target.playerId,
+        player,
+        surplus: target.surplus,
+        ownValue: target.ownValue,
+        predictedMedian: target.predictedMedian,
+        affordable: target.affordable,
+      };
+    }),
+  };
+}
+
+function displayBidVsPassProjection(
+  projection: { bid: BoardProjection; pass: BoardProjection },
+  bidAmount: number,
+  baseRosterCount: number,
+  playerById: Map<string, Player>,
+): DisplayBidVsPass {
+  return {
+    bidAmount,
+    bid: displayBidVsPassBranch(projection.bid, baseRosterCount, playerById),
+    pass: displayBidVsPassBranch(projection.pass, baseRosterCount, playerById),
+  };
 }
 
 function auctionExitRepairGuidance(
@@ -941,12 +1021,13 @@ export function LeagueBuilderAuctionDraft() {
       });
     }
 
-    const marketView = buildLotViewFromSession(session, {
+    const marketOptions: SessionMarketOptions = {
       shillTeamIds: shillTeamIdSet,
-      advisedTeamId: seatTeamId,
+      advisedTeamId: team.id,
       bandPrioritiesByTeamId: marketBandPrioritiesByTeamId,
       humanTeamIds: marketHumanTeamIds,
-    });
+    };
+    const marketView = buildLotViewFromSession(session, marketOptions);
     const market = marketView ? marketReadFromEstimate(marketView, marketLiftTable) : undefined;
 
     const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean && ownBandPriorities
@@ -965,6 +1046,22 @@ export function LeagueBuilderAuctionDraft() {
           market,
         })
       : undefined;
+    const bidAmount = session.currentLot.highBid ?? session.currentLot.openingAsk;
+    const bidVsPass = ownBandPriorities
+      ? (() => {
+          const projection = projectBidVsPass({
+            session,
+            options: marketOptions,
+            teamId: team.id,
+            bidAmount,
+            ownBandPriorities,
+            topN: 5,
+          });
+          return projection
+            ? displayBidVsPassProjection(projection, bidAmount, teamState.roster.length, playerById)
+            : null;
+        })()
+      : null;
 
     const boardIds = Array.from(new Set([lotPlayerId, ...session.availablePlayerIds]));
     const comparisonPool = boardIds
@@ -1086,6 +1183,7 @@ export function LeagueBuilderAuctionDraft() {
         objectPronoun: playerPronouns(lotPlayer).object,
         boardMeta,
         boardPlayers,
+        bidVsPass,
       },
     );
   }, [
