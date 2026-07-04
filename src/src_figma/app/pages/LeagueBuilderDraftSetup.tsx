@@ -109,6 +109,7 @@ import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassif
 import {
   buildDefaultDesignSlots,
   evaluateRosterDesign,
+  seatAllClubs,
   type DesignPoolPlayer,
   type DesignFeasibilityResult,
 } from "../../../engines/rosterDesignFeasibility";
@@ -323,6 +324,7 @@ function buildPoolExtractedBasis(
   league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier">,
   leagueTeams: readonly Team[],
   cap: number,
+  shills: number,
 ): PoolExtractedBasis {
   const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
   const identityByTeamId: Record<string, string | null> = {};
@@ -332,6 +334,7 @@ function buildPoolExtractedBasis(
   return {
     cap,
     poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+    shills: clampDraftShillCount(shills),
     identityByTeamId,
   };
 }
@@ -348,6 +351,9 @@ function poolBasisStaleLines(
   }
   if (Math.abs(extractedBasis.poolSizeMultiplier - liveBasis.poolSizeMultiplier) > 1e-9) {
     lines.push("THE POOL-SIZE DIAL MOVED — RE-EXTRACT TO REDRAW.");
+  }
+  if (extractedBasis.shills !== undefined && extractedBasis.shills !== liveBasis.shills) {
+    lines.push("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.");
   }
   const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
   const identityKeys = sortedIds([
@@ -379,32 +385,31 @@ function buildLeagueSeatabilityRow(
   leagueTeams: readonly Team[],
   cap: number,
 ): RecheckRow {
-  const remaining = new Map(poolPlayers.map((player) => [player.id, player]));
-  const defaultSlots = buildDefaultDesignSlots();
-  for (let pass = 1; pass <= leagueTeams.length; pass += 1) {
+  const verdict = seatAllClubs(buildRosterDesignPool(poolPlayers), leagueTeams.length, cap);
+  if (!verdict.holds) {
+    const remaining = new Map(poolPlayers.map((player) => [player.id, player]));
+    for (const assembly of verdict.assemblies) {
+      for (const id of assembly) remaining.delete(id);
+    }
     const remainingPlayers = [...remaining.values()];
+    const defaultSlots = buildDefaultDesignSlots();
     const result = evaluateRosterDesign(defaultSlots, buildRosterDesignPool(remainingPlayers), cap);
-    if (!result.feasible) {
-      const candidateIds = sortedIds(result.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id)));
-      const positions = rosterPositionMap(remainingPlayers);
-      const need = teamRosterNeed(candidateIds, positions);
-      const lawBlockers = need ? describeRosterLawGaps(candidateIds.length, need) : [];
-      const detail = lawBlockers.length > 0
-        ? `${lawBlockers.join(" ")} Add players or raise the cap.`
-        : result.totalCost > cap
-          ? `the cheapest legal 22 left costs ${formatMoney(result.totalCost)} against the ${formatMoney(cap)} cap (${formatMoney(result.totalCost - cap)} over) — the affordable players are used up. Raise the cap or add players.`
-          : result.blockers.map((blocker) => blocker.message).join(" ");
-      return {
-        id: "league-seatability",
-        label: SHARED_POOL_RECHECK_LABEL,
-        tag: SHARED_POOL_RECHECK_TAG,
-        ok: false,
-        message: `The shared pool seats ${pass - 1} of ${leagueTeams.length} clubs, then can't seat the next: ${detail}`,
-      };
-    }
-    for (const id of result.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id))) {
-      remaining.delete(id);
-    }
+    const candidateIds = sortedIds(result.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id)));
+    const positions = rosterPositionMap(remainingPlayers);
+    const need = teamRosterNeed(candidateIds, positions);
+    const lawBlockers = need ? describeRosterLawGaps(candidateIds.length, need) : [];
+    const detail = lawBlockers.length > 0
+      ? `${lawBlockers.join(" ")} Add players or raise the cap.`
+      : verdict.failing?.overrun !== undefined
+        ? `the cheapest legal 22 left costs ${formatMoney(result.totalCost)} against the ${formatMoney(cap)} cap (${formatMoney(verdict.failing.overrun)} over) — the affordable players are used up. Raise the cap or add players.`
+        : verdict.failing?.blockers.join(" ") ?? "no further legal body is available";
+    return {
+      id: "league-seatability",
+      label: SHARED_POOL_RECHECK_LABEL,
+      tag: SHARED_POOL_RECHECK_TAG,
+      ok: false,
+      message: `The shared pool seats ${verdict.seated} of ${leagueTeams.length} clubs, then can't seat the next: ${detail}`,
+    };
   }
   return {
     id: "league-seatability",
@@ -914,8 +919,8 @@ export function LeagueBuilderDraftSetup() {
   }, [activeLeagueId, tierBudget]);
 
   const livePoolExtractedBasis = useMemo(
-    () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget) : null),
-    [league, leagueTeams, tierBudget],
+    () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills) : null),
+    [league, leagueTeams, shills, tierBudget],
   );
   const basisStaleLines = useMemo(
     () => (poolMode === "design-first" && league?.poolExtractedAt
@@ -1202,6 +1207,7 @@ export function LeagueBuilderDraftSetup() {
       selectedArchetypes,
       league.tier ?? "juiced",
       {
+        // Must match leagueTeams.length: the FLOOR drains one pass for every displayed club.
         teams: league.teamIds.length,
         shills,
         budgetPerTeam: tierBudget,
@@ -1377,7 +1383,7 @@ export function LeagueBuilderDraftSetup() {
       await saveLeagueTemplate({
         ...league,
         poolExtractedAt: extractedAt,
-        poolExtractedBasis: livePoolExtractedBasis ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget),
+        poolExtractedBasis: livePoolExtractedBasis ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills),
         modeAExtractedIds: sortedIds(result.players.map((player) => player.id)),
         modeAHandAdds: folded.handAdds,
         modeAHandRemoves: folded.handRemoves,
@@ -1810,7 +1816,7 @@ export function LeagueBuilderDraftSetup() {
     </div>
   ) : null;
 
-  const sizingSummaryLine = modeAReport?.sizing ? (
+  const sizingSummaryLine = modeAReport?.sizing && !poolTrailing ? (
     <div className="border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-chalk)]">
       Sized to {modeAReport.sizing.finalSize} ({(modeAReport.sizing.finalSize / Math.max(1, modeAReport.sizing.demandBase)).toFixed(2)}×):
       {" "}trimmed {modeAReport.sizing.trimmedCount} worst-fit extras, added {modeAReport.sizing.injectedIds.length} for affordability.

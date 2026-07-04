@@ -108,6 +108,12 @@ export interface DesignFeasibilityResult {
   blockers: DesignBlocker[];
 }
 
+export interface SeatAllClubsResult {
+  holds: boolean;
+  seated: number;
+  failing?: { pass: number; blockers: string[]; overrun?: number };
+}
+
 export interface ClassifiedDesignPoolPlayer extends DesignPoolPlayer {
   classification: ShapeClassification;
 }
@@ -535,6 +541,39 @@ export function evaluateRosterDesign(
     slots: resolutions,
     blockers,
   };
+}
+
+export function seatAllClubs(
+  designPool: readonly DesignPoolPlayer[],
+  clubs: number,
+  budget: number,
+): SeatAllClubsResult & { assemblies: string[][] } {
+  const clubCount = Math.max(0, Math.floor(clubs));
+  const remaining = new Map(designPool.map((player) => [player.id, player]));
+  const assemblies: string[][] = [];
+  const slots = buildDefaultDesignSlots();
+  for (let pass = 1; pass <= clubCount; pass += 1) {
+    const result = evaluateRosterDesign(slots, [...remaining.values()], budget);
+    if (!result.feasible) {
+      return {
+        holds: false,
+        seated: pass - 1,
+        assemblies,
+        failing: {
+          pass,
+          blockers: result.blockers.map((blocker) => `${blocker.slotId}: ${blocker.message}`),
+          ...(result.totalCost > budget ? { overrun: result.totalCost - budget } : {}),
+        },
+      };
+    }
+    const assembly = result.slots
+      .map((slot) => slot.playerId)
+      .filter((id): id is string => Boolean(id))
+      .sort((a, b) => a.localeCompare(b));
+    assemblies.push(assembly);
+    for (const id of assembly) remaining.delete(id);
+  }
+  return { holds: true, seated: clubCount, assemblies };
 }
 
 /**

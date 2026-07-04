@@ -120,6 +120,7 @@ export interface LeagueTemplate {
   poolExtractedBasis?: {
     cap: number;
     poolSizeMultiplier: number;
+    shills?: number;
     identityByTeamId: Record<string, string | null>;
   };
   modeAExtractedIds?: string[];

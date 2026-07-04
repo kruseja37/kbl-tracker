@@ -27,6 +27,7 @@ import {
 import {
   buildDefaultDesignSlots,
   evaluateRosterDesign,
+  seatAllClubs,
   type DesignFeasibilityResult,
   type DesignPoolPlayer,
   type DesignSlot,
@@ -122,6 +123,13 @@ export interface PoolG1Result {
   assemblies: string[][];
   failing?: { pass: number; blockers: string[]; overrun?: number };
   repairRounds: number;
+}
+
+export class PoolTeamsForSizingMissingError extends Error {
+  constructor() {
+    super('extractPoolFromDemand requires options.teams when sizing the shared draft pool.');
+    this.name = 'PoolTeamsForSizingMissingError';
+  }
 }
 
 function assertPoolMultiplier(multiplier: number): number {
@@ -305,32 +313,13 @@ function runG1Check(
   teams: number,
   budget: number,
 ): PoolG1Result {
-  const remaining = new Map(players.map((player) => [player.id, player]));
-  const assemblies: string[][] = [];
-  const slots = buildDefaultDesignSlots();
-  for (let pass = 1; pass <= teams; pass += 1) {
-    const pool = [...remaining.values()].map(toDesignPoolPlayer);
-    const result = evaluateRosterDesign(slots, pool, budget);
-    if (!result.feasible) {
-      return {
-        holds: false,
-        assemblies,
-        failing: {
-          pass,
-          blockers: result.blockers.map((blocker) => `${blocker.slotId}: ${blocker.message}`),
-          ...(result.totalCost > budget ? { overrun: result.totalCost - budget } : {}),
-        },
-        repairRounds: 0,
-      };
-    }
-    const assembly = result.slots
-      .map((slot) => slot.playerId)
-      .filter((id): id is string => Boolean(id))
-      .sort((a, b) => a.localeCompare(b));
-    assemblies.push(assembly);
-    for (const id of assembly) remaining.delete(id);
-  }
-  return { holds: true, assemblies, repairRounds: 0 };
+  const result = seatAllClubs(players.map(toDesignPoolPlayer), teams, budget);
+  return {
+    holds: result.holds,
+    assemblies: result.assemblies,
+    ...(result.failing ? { failing: result.failing } : {}),
+    repairRounds: 0,
+  };
 }
 
 function demandCellMatches(
@@ -383,7 +372,10 @@ export function extractPoolFromDemand(
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
   const posture = options.posture ?? 'optimal';
-  const teamsForSizing = Math.max(0, Math.floor(options.teams ?? designs.length));
+  if (options.teams === undefined) {
+    throw new PoolTeamsForSizingMissingError();
+  }
+  const teamsForSizing = Math.max(0, Math.floor(options.teams));
   const sizingEnabled = options.sizeTarget !== undefined || options.poolSizeMultiplier !== undefined;
   const handReconcileEnabled = Boolean(options.pinnedIds?.length || options.excludedIds?.length);
   const requestedPinnedIds = new Set(options.pinnedIds ?? []);

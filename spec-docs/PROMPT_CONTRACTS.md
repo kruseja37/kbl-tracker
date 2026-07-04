@@ -29239,3 +29239,114 @@ GATE (report ACTUAL output):
   GameTrackerLaunchState/RosterDesigner). Run any red SOLO and report solo results.
 - `git status` — LeagueBuilderDraftSetup.tsx + its test only. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-FLOOR-DIAGNOSTIC-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-POOL-SEATABILITY-SYNC ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/). Stage only explicit paths. Report ACTUAL output. No GameTracker edits.
+
+PROBLEM (root-caused by an adversarial workflow, run wf_a9772ea7-6e7): design-first pool extraction can show a "buildable"
+impression next to a shared-pool FLOOR that says "can't seat all clubs." Cause is TWO-SOURCES + staleness, NOT a sizing math
+error: (i) the sizer's seatability guarantee `runG1Check` (src/engines/poolFromDemand.ts:303-334) and the UI FLOOR
+`buildLeagueSeatabilityRow` (src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx ~:374-416) are TWO separate copies of the
+same greedy-sequential drain (both loop evaluateRosterDesign(buildDefaultDesignSlots(), pool, budget)) that can drift; and
+(ii) the on-screen extraction receipt `modeAReport` re-derives LIVE over the full universe via buildModeAResult →
+extractPoolFromDemand (LeagueBuilderDraftSetup.tsx ~:1199-1229), which RE-HEALS (re-injects affordability bodies) on every
+input change and reports "added N for affordability" even when the PERSISTED pool (inPoolPlayers) the FLOOR checks is stale.
+A repro proved: on the SAME player set the two checks AGREE; they diverge only when fed different sets (a live-healed
+hypothetical vs the stale persisted pool). The per-club CLUB CHECK verdicts already use the persisted pool at the live cap
+(liveClubVerdicts, :959/:969-981) and are truthful — do NOT change them.
+
+DELIVERABLE A — ONE shared seatability primitive (kills the two-copies drift risk permanently). Extract the greedy-sequential
+drain into a single exported function in src/engines/rosterDesignFeasibility.ts (next to evaluateRosterDesign):
+  `seatAllClubs(designPool: DesignPoolPlayer[], clubs: number, budget: number): { holds: boolean; seated: number; failing?: { pass: number; blockers: string[]; overrun?: number } }`
+  — it loops `clubs` passes, each pass evaluateRosterDesign(buildDefaultDesignSlots(), remaining, budget), removes the matched
+  22 from `remaining`, returns holds/seated/failing (mirror the exact logic already in runG1Check + buildLeagueSeatabilityRow).
+  Then: `runG1Check` becomes a thin wrapper — it maps its DemandUniversePlayer pool via the EXISTING toDesignPoolPlayer and
+  calls seatAllClubs(pool, teamsForSizing, budget) (preserve its PoolG1Result shape/return). `buildLeagueSeatabilityRow`
+  becomes a thin wrapper — pool = buildRosterDesignPool(inPoolPlayers), clubs = leagueTeams.length, budget = cap — mapping the
+  failing→row copy already added by CODEX-FLOOR-DIAGNOSTIC-FIX ("ALL CLUBS · ONE POOL", "seats N of M clubs…", the affordable-
+  players-used-up budget branch). BYTE-SAME behavior on identical inputs; the point is they can never algorithmically drift again.
+
+DELIVERABLE B — no stale healed receipt is shown as current (the corrective fix):
+  - COMPLETE the staleness signal: extend `poolExtractedBasis` (currently { cap, poolSizeMultiplier, identityByTeamId },
+    leagueBuilderStorage.ts) to ALSO stamp `shills: number`. Update buildPoolExtractedBasis + poolBasisStaleLines (a shill
+    change → a stale line "THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW."). Migration-safe: absent field → treat as current
+    (do not retro-nag). Designs remain covered by designsStale; cap/dial/identity by basisStale. poolTrailing = designsStale ||
+    basisStale then covers cap + dial + identity + shills.
+  - GATE the healed receipt: when poolTrailing is true (pool stale vs live inputs), the `modeAReport` SIZING receipt line
+    ("Sized to … added N for affordability …", rendered ~:1806/sizingSummaryLine) must NOT be shown (it is a live-healed
+    hypothetical, not the persisted pool). The RE-PLAN RAIL already renders on poolTrailing and tells the GM to re-extract —
+    that is the single source of guidance when stale. Do NOT show a healed "added N for affordability" line beside a failing
+    FLOOR. (Leave the CLUB CHECK per-club verdicts and the recheck FLOOR as-is — they read the persisted pool and are truthful;
+    only the healed SIZING receipt must be suppressed when stale.) On a FRESH extract (not stale), the receipt shows normally
+    and — per Deliverable A — the sizer guarantee and the FLOOR provably agree.
+
+DELIVERABLE C — harden the team-count seam (prevents a latent under-count): in extractPoolFromDemand, `teamsForSizing =
+Math.max(0, Math.floor(options.teams ?? designs.length))` (poolFromDemand.ts:386). Make the fallback SAFE: if options.teams is
+undefined, throw a named error (or fall back to the full club count, never designs.length) so the sizer can never silently size
+for fewer clubs than the FLOOR drains. The caller already passes teams: league.teamIds.length (LeagueBuilderDraftSetup.tsx:1205)
+— keep it; add a one-line assert/comment that teamsForSizing must equal the FLOOR's leagueTeams.length.
+
+DELIVERABLE D — regression tests (promote the scratch repro at scratch/poolFromDemandDivergence.test.ts into
+src/engines/__tests__/ as a real test; delete the scratch copy):
+  - EQUIVALENCE INVARIANT: for representative pools/clubs/budgets, seatAllClubs(pool, clubs, budget).holds === the FLOOR verdict
+    on the same pool/clubs/budget (they must never disagree on an identical set).
+  - SAME-SET AGREEMENT (the definitive check): run the real extractPoolFromDemand on a fixture; then run seatAllClubs on the
+    EXACT extracted result.players at the same cap+clubs → assert it HOLDS whenever the sizer's g1 holds. (If this test cannot be
+    made to pass, STOP and report — it means a FRESH extract genuinely persists a set its own guarantee fails, a deeper bug.)
+  - STALE GUARD: extract at cap C; then lower the live cap to C' without re-extracting → assert poolTrailing is true and the
+    healed sizing receipt is suppressed (the RE-PLAN RAIL shows instead).
+
+GUARDRAILS: no GameTracker edits; do NOT change the CLUB CHECK per-club verdicts (truthful) or any unrelated gate (FEASIBILITY-
+SOFT). Additive/migration-safe basis field (no DB version bump, no new store). Reuse canonical mappers (no new mapper).
+ORTHOGONALITY: poolFromDemand is engine-level — grep the L-SIM import graph; if test-utils/lsim imports poolFromDemand run the
+smoke leg, else document orthogonality.
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/poolFromDemand.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts
+   src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx <the new seatability equivalence test>` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist,
+  franchiseManualSmokeFixture batch, archetypeBalanceSimulator provenance, figma IndexedDB-teardown batch flakes). Run any red SOLO.
+- `git status` — poolFromDemand.ts, rosterDesignFeasibility.ts, LeagueBuilderDraftSetup.tsx, leagueBuilderStorage.ts (basis
+  shills field), the new engine test. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-POOL-SEATABILITY-SYNC ===== -->
+
+<!-- ===== CONTRACT: CODEX-ROTATION-ORDER ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/). Stage only explicit paths. Report ACTUAL output. No GameTracker edits.
+
+SMALL PRESENTATIONAL FIX (JK-approved quick win). Today the BEST-22 target's rotation/bullpen slots (SP1-4, RP1-4) are filled
+in fill-order with NO quality ordering, so the ace can read as SP3 and a mid arm as SP1. Make each arm group read BEST-FIRST by
+value. This ONLY reorders which already-selected arm sits in which same-kind slot — it does NOT change which players are
+selected, the totals, allIn, feasibility, legality, the hitter/position slots, the bench, or any ask.
+
+SCOPE: src/engines/best22Target.ts (+ its test). Nothing else.
+
+DELIVERABLE — in buildBest22Target, AFTER `picks` is built (best22Target.ts ~:170-203) and BEFORE the return, reorder the
+arm-slot picks by player value (SimPlayer.iv) descending, WITHIN each same-kind group, preserving pinned picks in place:
+  - Build ivByPlayerId from simPool (player.id → player.iv). SimPlayer.iv is the canonical kblIV value metric.
+  - For each kind in ('sp','rp'): collect the slot INDICES whose slot.kind === kind (SP1-4 / RP1-4), in slot order. If ≤1, skip.
+    Partition those indices into PINNED (picks[i].pinned === true) and FREE (the rest). Leave pinned picks exactly where they are.
+    Take the FREE indices' picks, sort them by ivByPlayerId.get(playerId) DESC, tiebreak salary DESC then playerId ASC
+    (empty-player picks, playerId==='' → treat as -Infinity so they sort LAST). Reassign the sorted free picks onto the FREE
+    indices in order: result[freeIndex] = { ...sortedFreePick, slotId: originalSlotIdAtThatIndex } — i.e. each destination slot
+    keeps its own slotId (SP1..SP4 stay in position) but now holds the value-ranked arm; carry the pick's full payload
+    (playerId, playerName, salary, honorsAsk, pinned). SP/RP slots have no shape ask so honorsAsk is uniformly true — no ask breakage.
+  - Leave 'pos', 'backupC', 'flex', 'swing' picks untouched (order preserved). Return the reordered picks in place of `picks`.
+  Keep it a small pure helper (e.g. reorderArmSlotsByValue(picks, slots, ivByPlayerId)); deterministic (explicit tiebreaks).
+
+TEST — extend src/engines/__tests__/best22Target.test.ts: a fixture where the SP slots get filled out of value order →
+assert the returned picks for SP1..SP4 are IV-descending (ace at SP1); same for RP1..RP4; a PINNED arm stays at its exact slot
+while the non-pinned arms sort around it; the hitter/position + bench (FLEX/SWING/backupC) picks are UNCHANGED; and totalSalary
+/ allIn / feasible / asksHonored are byte-identical to before the reorder (selection unchanged, only arm order changed).
+
+GUARDRAILS: selection + totals + legality UNCHANGED (this is display order only); no GameTracker; engine + its test only.
+ORTHOGONALITY: best22Target is not in the L-SIM import graph — grep-confirm and state it; L-SIM not required.
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/best22Target.test.ts src/src_figma/__tests__/components/RosterDesigner.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set. Run any red SOLO and report.
+- `git status` — best22Target.ts + its test only. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ROTATION-ORDER ===== -->

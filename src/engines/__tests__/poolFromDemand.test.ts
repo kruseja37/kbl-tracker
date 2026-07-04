@@ -3,6 +3,7 @@ import {
   countCellMatches,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
+  PoolTeamsForSizingMissingError,
   POOL_SIZE_MULTIPLIER_STOPS,
   resolvePoolSizingTarget,
   selectFitAwareRepairCandidate,
@@ -443,6 +444,12 @@ describe('extractPoolFromDemand', () => {
     });
     expect(result.sizing).toBeUndefined();
     expect(result.g1).toBeUndefined();
+  });
+
+  it('requires callers to pass the full league team count explicitly', () => {
+    expect(() =>
+      extractPoolFromDemand(universe(), [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard'),
+    ).toThrow(PoolTeamsForSizingMissingError);
   });
 
   it('keeps the amendment surface byte-neutral when no pins or excludes are passed', () => {

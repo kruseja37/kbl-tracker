@@ -747,6 +747,63 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
+  test("M6b shill-count basis stales the pool and hides the healed sizing receipt", async () => {
+    window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page&shills=1");
+    const players = [
+      ...makeLegalRosterPlayerSet("one", 10_000),
+      ...makeLegalRosterPlayerSet("two", 10_000),
+    ];
+    const teams = [
+      makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+    ];
+    const staleLeague = makeLeague({
+      draftPoolMode: "design-first",
+      poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      poolExtractedBasis: {
+        cap: 1_000_000,
+        poolSizeMultiplier: 1.35,
+        shills: 0,
+        identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+      },
+      salaryCap: 1_000_000,
+      poolSizeMultiplier: 1.35,
+    });
+    const pool = makePool({
+      locked: false,
+      players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+    });
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({ league: staleLeague, teams, players, pool });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+    });
+    expect(screen.queryByText(/Sized to .*added .* for affordability/i)).not.toBeInTheDocument();
+
+    mockLeagueData({
+      league: {
+        ...staleLeague,
+        poolExtractedBasis: {
+          ...staleLeague.poolExtractedBasis!,
+          shills: 1,
+        },
+      },
+      teams,
+      players,
+      pool,
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.")).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText(/Sized to .*added .* for affordability/i)).toBeInTheDocument();
+  });
+
   test("M7 locked pool renders THE MONEY read-only with the unlock hint", async () => {
     render(<LeagueBuilderDraftSetup />);
 
