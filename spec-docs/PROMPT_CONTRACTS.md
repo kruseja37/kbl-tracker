@@ -29177,3 +29177,65 @@ GATE (report ACTUAL output):
   franchiseManualSmokeFixture batch). Run any red SOLO and report.
 - `git status` — useLeagueBuilderData.ts + its test only. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-ITER-COPY-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-FLOOR-DIAGNOSTIC-FIX ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/). Stage only explicit paths. Report ACTUAL command output. No GameTracker edits.
+
+FIX three defects JK found on the design-first draft-setup "recheck" panel (root-caused; all fixes live in ONE file:
+src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx). Do NOT touch src/engines/rosterDesignFeasibility.ts — its per-team
+budget blocker ("Priciest asks vs their market…") is CORRECT for a single overpriced club; the bug is only that the SHARED-POOL
+FLOOR row reuses that per-team message where it is meaningless. Do NOT change any gate/predicate (FEASIBILITY-SOFT law stands).
+
+CONTEXT: `buildLeagueSeatabilityRow` (~:374-412) is the sequential shared-pool FLOOR check — it drains a shrinking `remaining`
+pool, one pass per team in `leagueTeams`, and on the first pass that can't fill a legal-22-under-cap it returns a failure row.
+`evaluateRosterDesign(...)` returns `{ feasible, totalCost, budget, headroom, legal, slots, blockers }` (rosterDesignFeasibility.ts:529-537)
+— so totalCost + budget/cap are available on failure. `buildRecheckReport` (~:414-445) pushes the per-club rows (each human
+team evaluated INDEPENDENTLY against the FULL pool — no contention) then this ONE FLOOR row. The recheck panel renders the flat
+row list at ~:1786-1798 (each row: ✓/✗ + label + brass tag + message). Panel title at :1767 is pinned by a test — DO NOT change it.
+
+DELIVERABLE 1 — fix the misleading FLOOR failure message (#1) in `buildLeagueSeatabilityRow`:
+  On failure (`!result.feasible`), keep computing `lawBlockers` (the teamRosterNeed → describeRosterLawGaps path) exactly as now.
+  Then build the detail by CASE:
+    - lawBlockers non-empty (pool ran short of bodies/a position): detail = `${lawBlockers.join(" ")} Add players or raise the cap.`
+    - else if over budget (`result.totalCost > cap`): detail = `the cheapest legal 22 left costs ${formatMoney(result.totalCost)} `
+      + `against the ${formatMoney(cap)} cap (${formatMoney(result.totalCost - cap)} over) — the affordable players are used up. `
+      + `Raise the cap or add players.`   ← NOTE: NO "Priciest asks vs their market" tail (that per-team message is wrong here).
+    - else (fallback, e.g. legality): detail = `result.blockers.map((b) => b.message).join(" ")`.
+  DROP the `result.blockers.map(...)` reuse as the DEFAULT (it's only the else-fallback now). The `candidateIds`/`positions`/`need`
+  computation stays as the source of lawBlockers.
+
+DELIVERABLE 2 — the FLOOR row stops masquerading as a per-club row (#2 + #3):
+  - Its `label` becomes a POOL-LEVEL constant `ALL CLUBS · ONE POOL` (NOT `club.name` / `leagueTeams[pass-1].name` — stop naming
+    an arbitrary indexed club; this also removes the latent CPU-mislabel, since `leagueTeams` includes CPU teams while the per-club
+    rows are human-only). Its `tag` becomes `SHARED POOL` (distinct from the per-club owner tags).
+  - Its failure `message` is COUNT-framed, not club-named:
+    `The shared pool seats ${pass - 1} of ${leagueTeams.length} clubs, then can't seat the next: ${detail}`
+  - The SUCCESS row (currently label "LEAGUE", tag "ALL CLUBS", message "BUILDS") becomes: label `ALL CLUBS · ONE POOL`,
+    tag `SHARED POOL`, message `Seats all ${leagueTeams.length} clubs.`
+  - Keep `leagueTeams` as the contention set (all clubs incl. CPU DO draft from the shared pool — correct); we simply no longer
+    name a specific club.
+
+DELIVERABLE 3 — a one-line caption clarifying the two questions (#2), in the recheck panel (~:1763-1784), directly under the title
+row (:1767) as a muted line (reuse an existing muted class, e.g. `text-[11px] text-[var(--ballpark-chalk)]/60`):
+  `Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.`
+
+TESTS — extend src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx (a design-first fixture where the pool can seat some
+but not all clubs, forcing the FLOOR budget-overflow path):
+  - the FLOOR failure row renders with the `SHARED POOL` tag and the `ALL CLUBS · ONE POOL` label (NOT a club name);
+  - its message contains "seats N of M clubs" and the cost/cap/over figures and "affordable players are used up", and does NOT
+    contain "Priciest asks";
+  - the panel caption line is present;
+  - a NO-REGRESSION assertion that the per-club rows still render "BUILDS · $X to spare" and the panel title is unchanged.
+  Do NOT weaken existing assertions (panel title at test :664/:822 must still pass).
+
+ORTHOGONALITY: L-SIM not required (page-only; grep-confirm no test-utils/lsim import path). 
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist,
+  franchiseManualSmokeFixture batch, archetypeBalanceSimulator provenance, figma IndexedDB-teardown batch flakes incl.
+  GameTrackerLaunchState/RosterDesigner). Run any red SOLO and report solo results.
+- `git status` — LeagueBuilderDraftSetup.tsx + its test only. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-FLOOR-DIAGNOSTIC-FIX ===== -->

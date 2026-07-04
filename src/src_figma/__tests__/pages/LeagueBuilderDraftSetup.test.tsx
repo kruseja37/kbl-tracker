@@ -249,6 +249,13 @@ function makeLegalRosterPlayers(salary: number): Player[] {
   return [...hitters, backupC, ...starters, ...relievers, ...flex, swing];
 }
 
+function makeLegalRosterPlayerSet(prefix: string, salary: number): Player[] {
+  return makeLegalRosterPlayers(salary).map((player) => ({
+    ...player,
+    id: `${prefix}-${player.id}`,
+  }));
+}
+
 function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesign"]> {
   return { slots: [], lockedAt };
 }
@@ -825,6 +832,69 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(screen.getByText((content) => content.includes(expectedLawLine))).toBeInTheDocument();
     });
+  });
+
+  test("renders shared-pool floor failures as pool-level budget overflow rows", async () => {
+    const cheapRoster = makeLegalRosterPlayerSet("cheap", 10_000);
+    const expensiveRoster = [
+      ...makeLegalRosterPlayerSet("expensive", 50_000),
+      makePlayer(400, {
+        id: "expensive-extra-c",
+        primaryPosition: "C",
+        salary: 50_000,
+      }),
+    ];
+    const poolPlayers = [...cheapRoster, ...expensiveRoster];
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c"],
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", {
+          name: "Caps",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+        }),
+        makeTeam("team-b", {
+          name: "Keys",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+        }),
+        makeTeam("team-c", {
+          name: "CPU Blues",
+          controlledBy: "ai",
+        }),
+      ],
+      players: poolPlayers,
+      pool: makePool({
+        locked: false,
+        players: poolPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("CAN EVERY CLUB BUILD A LEGAL 22 UNDER $1,000,000?")).toBeInTheDocument();
+    expect(screen.getByText(
+      "Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.",
+    )).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /RE-CHECK/i }));
+
+    const floorMessage = await screen.findByText((content) =>
+      content.includes("The shared pool seats 1 of 3 clubs, then can't seat the next:"),
+    );
+    const floorRow = floorMessage.closest("div");
+    expect(floorRow).toHaveTextContent("ALL CLUBS · ONE POOL");
+    expect(floorRow).toHaveTextContent("SHARED POOL");
+    expect(floorRow).toHaveTextContent("seats 1 of 3 clubs");
+    expect(floorRow).toHaveTextContent("the cheapest legal 22 left costs $1,060,000");
+    expect(floorRow).toHaveTextContent("against the $1,000,000 cap ($60,000 over)");
+    expect(floorRow).toHaveTextContent("the affordable players are used up");
+    expect(floorRow).not.toHaveTextContent("Priciest asks");
+    expect(floorRow).not.toHaveTextContent("CPU Blues");
+    expect(floorRow).not.toHaveTextContent("club 2");
+    expect(screen.getAllByText("BUILDS · $740,000 to spare")).toHaveLength(2);
   });
 
   test("renders CLUB CHECK target segments without changing the floor dot gate", async () => {

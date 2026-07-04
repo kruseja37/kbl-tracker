@@ -200,6 +200,9 @@ type RecheckReport = {
   allOk: boolean;
 };
 
+const SHARED_POOL_RECHECK_LABEL = "ALL CLUBS · ONE POOL";
+const SHARED_POOL_RECHECK_TAG = "SHARED POOL";
+
 const ASK_SPOT_ORDER = new Map(
   ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "RP", "BACKUP C", "BENCH", "SWING"]
     .map((spot, index) => [spot, index]),
@@ -386,16 +389,17 @@ function buildLeagueSeatabilityRow(
       const positions = rosterPositionMap(remainingPlayers);
       const need = teamRosterNeed(candidateIds, positions);
       const lawBlockers = need ? describeRosterLawGaps(candidateIds.length, need) : [];
-      const blockers = lawBlockers.length > 0
-        ? lawBlockers
-        : result.blockers.map((blocker) => blocker.message);
-      const club = leagueTeams[pass - 1];
+      const detail = lawBlockers.length > 0
+        ? `${lawBlockers.join(" ")} Add players or raise the cap.`
+        : result.totalCost > cap
+          ? `the cheapest legal 22 left costs ${formatMoney(result.totalCost)} against the ${formatMoney(cap)} cap (${formatMoney(result.totalCost - cap)} over) — the affordable players are used up. Raise the cap or add players.`
+          : result.blockers.map((blocker) => blocker.message).join(" ");
       return {
         id: "league-seatability",
-        label: club ? club.name : "LEAGUE",
-        tag: "LEAGUE",
+        label: SHARED_POOL_RECHECK_LABEL,
+        tag: SHARED_POOL_RECHECK_TAG,
         ok: false,
-        message: `after ${pass - 1} clubs build, the pool can't seat club ${pass}: ${blockers.join(" ")}`,
+        message: `The shared pool seats ${pass - 1} of ${leagueTeams.length} clubs, then can't seat the next: ${detail}`,
       };
     }
     for (const id of result.slots.map((slot) => slot.playerId).filter((id): id is string => Boolean(id))) {
@@ -404,10 +408,10 @@ function buildLeagueSeatabilityRow(
   }
   return {
     id: "league-seatability",
-    label: "LEAGUE",
-    tag: "ALL CLUBS",
+    label: SHARED_POOL_RECHECK_LABEL,
+    tag: SHARED_POOL_RECHECK_TAG,
     ok: true,
-    message: "BUILDS",
+    message: `Seats all ${leagueTeams.length} clubs.`,
   };
 }
 
@@ -1781,6 +1785,9 @@ export function LeagueBuilderDraftSetup() {
             pool changed — re-check
           </span>
         ) : null}
+      </div>
+      <div className="mb-3 text-[11px] text-[var(--ballpark-chalk)]/60">
+        Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.
       </div>
       <div className="grid gap-2">
         {recheckReport ? recheckReport.rows.map((row) => (
