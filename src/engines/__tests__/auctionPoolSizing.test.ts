@@ -39,8 +39,10 @@ describe('poolDemandModel', () => {
     const model = poolDemandModel(8, 0);
     const catcher = model.classFloors.find((c) => c.key === 'primary-C')!;
     const shortstop = model.classFloors.find((c) => c.key === 'primary-SS')!;
+    const closer = model.classFloors.find((c) => c.key === 'closer-arms')!;
     expect(catcher.demand).toBe(Math.ceil(8 * 2 * SIZING_TUNING.feasibilityHeadroom));
     expect(shortstop.demand).toBe(Math.ceil(8 * 1 * SIZING_TUNING.feasibilityHeadroom));
+    expect(closer.demand).toBe(Math.ceil(8 * 1 * SIZING_TUNING.feasibilityHeadroom));
     const bigger = poolDemandModel(10, 0);
     expect(bigger.feasibilityFloor).toBeGreaterThan(model.feasibilityFloor);
   });

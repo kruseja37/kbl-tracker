@@ -21,7 +21,7 @@
  */
 
 import { HISTORICAL_ARCHETYPES } from '../data/historicalArchetypes';
-import type { RosterSlotPlayer } from '../data/rosterConstruction';
+import { isCloser, type RosterSlotPlayer } from '../data/rosterConstruction';
 import {
   BANDS,
   type Band,
@@ -414,6 +414,14 @@ export function leagueScarcityMultiplier(teamsStillNeeding: number, playersLeftA
   return Math.min(MARKET_TUNING.scarcityMax, Math.max(MARKET_TUNING.scarcityMin, normalized));
 }
 
+function sameScarcityClass(left: RosterSlotPlayer, right: RosterSlotPlayer): boolean {
+  if (isCloser(left)) return isCloser(right);
+  if (left.isPitcher || right.isPitcher) {
+    return left.isPitcher === right.isPitcher && left.role !== undefined && left.role === right.role;
+  }
+  return left.position === right.position;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Session adapter — the live app's full-information surface.
 // ---------------------------------------------------------------------------------------------
@@ -466,7 +474,7 @@ export function buildLotViewFromSession(
     let playersLeftAtPos = 1; // the candidate himself
     for (const id of session.availablePlayerIds) {
       const shape = playerShape(session, id);
-      if (shape !== null && !shape.isPitcher === !candidateShape.isPitcher && shape.position === candidateShape.position) {
+      if (shape !== null && sameScarcityClass(shape, candidateShape)) {
         playersLeftAtPos += 1;
       }
     }

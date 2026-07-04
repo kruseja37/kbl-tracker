@@ -8,7 +8,7 @@ import {
   auctionMaxBid,
   reservePriceCurve,
 } from '../data/rosterEngineConstants';
-import { canCover, type RosterSlotPlayer } from '../data/rosterConstruction';
+import { canCover, isCloser, type RosterSlotPlayer } from '../data/rosterConstruction';
 import {
   cheapestLegalCompletion,
   completionBidCeiling,
@@ -832,11 +832,12 @@ function candidateServesTightClass(
   pool: readonly CompletionCandidate[],
   needs: readonly RosterNeedBreakdown[],
 ): boolean {
-  const jointDemand = { startable: 0, relievable: 0, coverage: 0, pitcherBodies: 0, hitterBodies: 0 };
+  const jointDemand = { startable: 0, relievable: 0, closers: 0, coverage: 0, pitcherBodies: 0, hitterBodies: 0 };
   const primaryDemand = new Map<string, number>();
   for (const need of needs) {
     jointDemand.startable += need.rotationDeficit;
     jointDemand.relievable += need.bullpenDeficit;
+    jointDemand.closers += need.closerDeficit;
     jointDemand.coverage += need.catcherCoverNeed;
     // The role-agnostic BODY floors are joint classes too — the tail-game need is usually "any
     // 8th pitcher", which carries no rotation/bullpen deficit at all.
@@ -855,6 +856,8 @@ function candidateServesTightClass(
       poolSupply((s) => s.isPitcher && (s.role === 'SP' || s.role === 'SP/RP')) < jointDemand.startable) return true;
     if (relievable && jointDemand.relievable > 0 &&
       poolSupply((s) => s.isPitcher && (s.role === 'RP' || s.role === 'CP' || s.role === 'SP/RP')) < jointDemand.relievable) return true;
+    if (isCloser(candidateShape) && jointDemand.closers > 0 &&
+      poolSupply(isCloser) < jointDemand.closers) return true;
     if (jointDemand.pitcherBodies > 0 &&
       poolSupply((s) => s.isPitcher) < jointDemand.pitcherBodies) return true;
   } else {

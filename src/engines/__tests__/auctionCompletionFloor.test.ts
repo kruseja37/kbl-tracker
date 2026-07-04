@@ -83,15 +83,15 @@ describe('cheapestLegalCompletion', () => {
     ];
     const pool = candidates([
       ['sp-dear', 9_000, { isPitcher: true, position: 'P', role: 'SP' }],
-      ['rp-cheap', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['cp-cheap', 5_000, { isPitcher: true, position: 'P', role: 'CP' }],
       ['swing-a', 6_000, { isPitcher: true, position: 'P', role: 'SP/RP' }],
       ['swing-b', 6_500, { isPitcher: true, position: 'P', role: 'SP/RP' }],
     ]);
     const quote = cheapestLegalCompletion(roster, pool, 2);
     expect(quote.feasible).toBe(true);
-    // Naive per-class greedy pays SP 9000 + RP 5000 = 14000; the swing covers rotation for 6000.
+    // Naive per-class greedy pays SP 9000 + CP 5000 = 14000; the swing covers rotation for 6000.
     expect(quote.cost).toBe(11_000);
-    expect([...quote.pickIds].sort()).toEqual(['rp-cheap', 'swing-a']);
+    expect([...quote.pickIds].sort()).toEqual(['cp-cheap', 'swing-a']);
   });
 
   test('catcher depth forces the dearer C-coverer over a cheaper non-coverer', () => {
@@ -126,12 +126,13 @@ describe('cheapestLegalCompletion', () => {
   test('deterministic id tie-break at equal price', () => {
     const roster = TEMPLATE.slice(0, 20);
     const pool = candidates([
+      ['cp-a', 5_000, { isPitcher: true, position: 'P', role: 'CP' }],
       ['rp-b', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
       ['rp-a', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
       ['rp-c', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
     ]);
     const quote = cheapestLegalCompletion(roster, pool, 2);
-    expect(quote.pickIds).toEqual(['rp-a', 'rp-b']);
+    expect(quote.pickIds).toEqual(['cp-a', 'rp-a']);
   });
 });
 
@@ -491,10 +492,10 @@ describe('C2B-FIX F1 — coverage-carrying arms inside the required picks', () =
     expect(quote.cost).toBe(9_000);
   });
 
-  test('the 14-hitter / bullpen-deficit variant: the Two-Way(C) RP carries the depth', () => {
-    // 21 = 14 hitters (1 C-coverer) + 7 arms (4 SP + 3 RP → bullpen deficit 1). The hitter side
-    // sits at its 14 ceiling, so no covering BAT can ever fit — the required reliever must
-    // carry the coverage itself.
+  test('the 14-hitter / closer-deficit variant: the Two-Way(C) CP carries the depth', () => {
+    // 21 = 14 hitters (1 C-coverer) + 7 arms (4 SP + 3 RP → closer+relief deficit 1).
+    // The hitter side sits at its 14 ceiling, so no covering BAT can ever fit — the required
+    // closer must carry the coverage itself.
     const roster = [
       ...hittersOneCoverer13,
       { isPitcher: false, position: 'RF', secondaryPosition: 'OF' } as RosterSlotPlayer,
@@ -502,12 +503,12 @@ describe('C2B-FIX F1 — coverage-carrying arms inside the required picks', () =
       arm('RP'), arm('RP'), arm('RP'),
     ];
     const pool = candidates([
-      ['rp-plain', 3_500, arm('RP')],
-      ['rp-twoway-c', 7_500, arm('RP', true)],
+      ['cp-plain', 3_500, arm('CP')],
+      ['cp-twoway-c', 7_500, arm('CP', true)],
     ]);
     const quote = cheapestLegalCompletion(roster, pool, 1);
     expect(quote.feasible).toBe(true);
-    expect(quote.pickIds).toEqual(['rp-twoway-c']);
+    expect(quote.pickIds).toEqual(['cp-twoway-c']);
     expect(quote.cost).toBe(7_500);
   });
 

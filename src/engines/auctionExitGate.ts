@@ -50,7 +50,7 @@ function classNeedsAfterSwingAllocation(need: RosterNeedBreakdown): { rotationNe
   const swingCredits = Math.max(0, need.rotationDeficit + need.bullpenDeficit - need.pitcherNeed);
   const rotationNeed = Math.max(0, need.rotationDeficit - swingCredits);
   const remainingSwingCredits = Math.max(0, swingCredits - need.rotationDeficit);
-  const bullpenNeed = Math.max(0, need.bullpenDeficit - remainingSwingCredits);
+  const bullpenNeed = Math.max(0, need.bullpenDeficit - remainingSwingCredits - need.closerDeficit);
   return { rotationNeed, bullpenNeed };
 }
 
@@ -74,6 +74,7 @@ export function describeRosterLawGaps(
 
   const { rotationNeed, bullpenNeed } = classNeedsAfterSwingAllocation(need);
   if (rotationNeed > 0) blockers.push(`Needs ${plural(rotationNeed, 'more starter')}.`);
+  if (need.closerDeficit > 0) blockers.push('Needs a true closer (CP).');
   if (bullpenNeed > 0) blockers.push(`Needs ${plural(bullpenNeed, 'more reliever')}.`);
   if (need.hitterFloorNeed > 0) blockers.push(`Needs ${plural(need.hitterFloorNeed, 'more position player')}.`);
   if (need.pitcherFloorNeed > 0) blockers.push(`Needs ${plural(need.pitcherFloorNeed, 'more pitcher')}.`);

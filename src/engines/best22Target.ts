@@ -61,7 +61,7 @@ function playerName(player: SimPlayer): string | undefined {
 }
 
 type ValidatedBuildPin = { slotId: string; slotIndex: number; playerId: string };
-type ArmSlotKind = 'sp' | 'rp';
+type ArmSlotKind = 'sp' | 'rp' | 'cp';
 
 function armPickValue(pick: Best22TargetPick, ivByPlayerId: ReadonlyMap<string, number>): number {
   return pick.playerId === '' ? Number.NEGATIVE_INFINITY : ivByPlayerId.get(pick.playerId) ?? Number.NEGATIVE_INFINITY;
@@ -88,7 +88,7 @@ function reorderArmSlotsByValue(
 ): Best22TargetPick[] {
   const reordered = [...picks];
 
-  for (const kind of ['sp', 'rp'] satisfies ArmSlotKind[]) {
+  for (const kind of ['sp', 'rp', 'cp'] satisfies ArmSlotKind[]) {
     const slotIndices = slots
       .map((slot, index) => (slot.kind === kind ? index : -1))
       .filter((index) => index >= 0);

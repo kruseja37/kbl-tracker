@@ -3,6 +3,7 @@ import {
   canCover,
   canRelieve,
   canStart,
+  isCloser,
   type FieldPosition,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
@@ -64,15 +65,23 @@ const ROTATION_SEATS: AuctionBoardSeatDefinition[] = Array.from(
   }),
 );
 
-const BULLPEN_SEATS: AuctionBoardSeatDefinition[] = Array.from(
-  { length: LEGAL_ROSTER.minRelievers },
-  (_, index) => ({
-    slotId: `RP${index + 1}`,
-    label: `RP${index + 1}`,
+const BULLPEN_SEATS: AuctionBoardSeatDefinition[] = [
+  ...Array.from(
+    { length: LEGAL_ROSTER.minRelievers - LEGAL_ROSTER.minClosers },
+    (_, index) => ({
+      slotId: `RP${index + 1}`,
+      label: `RP${index + 1}`,
+      group: 'BULLPEN' as const,
+      seatClass: 'bullpen' as const,
+    }),
+  ),
+  {
+    slotId: 'CP',
+    label: 'CP',
     group: 'BULLPEN',
     seatClass: 'bullpen',
-  }),
-);
+  },
+];
 
 const BENCH_SEATS: AuctionBoardSeatDefinition[] = [
   {
@@ -198,7 +207,12 @@ export function buildAuctionBoardFrame(
     if (player) seatedBySlot.set(definition.slotId, player);
   }
 
-  for (const definition of BULLPEN_SEATS) {
+  for (const definition of BULLPEN_SEATS.filter((seat) => seat.slotId === 'CP')) {
+    const player = fillSeat(roster, positions, seated, isCloser);
+    if (player) seatedBySlot.set(definition.slotId, player);
+  }
+
+  for (const definition of BULLPEN_SEATS.filter((seat) => seat.slotId !== 'CP')) {
     const player =
       fillSeat(roster, positions, seated, (shape) => shape.isPitcher && (shape.role === 'RP' || shape.role === 'CP')) ??
       fillSeat(roster, positions, seated, (shape) => shape.isPitcher && shape.role === 'SP/RP' && canRelieve(shape));

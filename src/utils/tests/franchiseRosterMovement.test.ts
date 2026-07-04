@@ -107,7 +107,7 @@ const LEGAL_MLB_POSITIONS: readonly Player['primaryPosition'][] = [
   'RP',
   'RP',
   'RP',
-  'RP',
+  'CP',
 ];
 
 describe('franchise roster movement boundary', () => {

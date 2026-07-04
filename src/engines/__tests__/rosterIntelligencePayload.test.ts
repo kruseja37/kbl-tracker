@@ -35,6 +35,7 @@ const need = (overrides: Partial<RosterNeedBreakdown> = {}): RosterNeedBreakdown
   pitcherNeed: 0,
   rotationDeficit: 0,
   bullpenDeficit: 0,
+  closerDeficit: 0,
   hitterFloorNeed: 0,
   pitcherFloorNeed: 0,
   minimumAdditions: 0,
@@ -376,6 +377,12 @@ describe('roster intelligence payload assembly', () => {
         shape: pitcher('SP'),
         rosterNeed: need({ rotationDeficit: 1 }),
         expected: 'ROTATION',
+      },
+      {
+        name: 'CLOSER',
+        shape: pitcher('CP'),
+        rosterNeed: need({ closerDeficit: 1 }),
+        expected: 'CLOSER',
       },
       {
         name: 'BULLPEN',

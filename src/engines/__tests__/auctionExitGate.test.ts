@@ -118,7 +118,7 @@ function legal14And8TwoWayCBullpen(): RosterSlotPlayer[] {
     pitcher('RP'),
     pitcher('RP'),
     pitcher('RP'),
-    pitcher('RP', 'C'),
+    pitcher('CP', 'C'),
   ];
 }
 

@@ -27,6 +27,7 @@ import {
   canCover,
   canRelieve,
   canStart,
+  isCloser,
   isLegalRoster,
   LEGAL_ROSTER,
   type RosterSlotPlayer,
@@ -57,7 +58,7 @@ export interface SlotPreference {
   personalityTilt?: PersonalityTilt;
 }
 
-export type DesignSlotKind = 'pos' | 'backupC' | 'sp' | 'rp' | 'flex' | 'swing';
+export type DesignSlotKind = 'pos' | 'backupC' | 'sp' | 'rp' | 'cp' | 'flex' | 'swing';
 
 export interface DesignSlot {
   slotId: string;
@@ -72,7 +73,8 @@ export function buildDefaultDesignSlots(): DesignSlot[] {
     ...HITTER_POSITIONS.map((position) => ({ slotId: position, kind: 'pos' as const, position })),
     { slotId: 'backupC', kind: 'backupC' },
     ...Array.from({ length: 4 }, (_, index) => ({ slotId: `SP${index + 1}`, kind: 'sp' as const })),
-    ...Array.from({ length: 4 }, (_, index) => ({ slotId: `RP${index + 1}`, kind: 'rp' as const })),
+    ...Array.from({ length: 3 }, (_, index) => ({ slotId: `RP${index + 1}`, kind: 'rp' as const })),
+    { slotId: 'CP', kind: 'cp' },
     ...Array.from({ length: 4 }, (_, index) => ({ slotId: `FLEX${index + 1}`, kind: 'flex' as const })),
     { slotId: 'SWING', kind: 'swing' },
   ];
@@ -243,6 +245,8 @@ function eligibleForSlot(
       return isPitcher && (role === 'SP' || role === 'SP/RP');
     case 'rp':
       return isPitcher && (role === 'RP' || role === 'CP' || role === 'SP/RP');
+    case 'cp':
+      return isPitcher && role === 'CP';
     case 'flex':
       return !isPitcher;
     case 'swing':
@@ -314,6 +318,9 @@ function explainIllegality(players: RosterSlotPlayer[]): string {
   }
   if (pitchers.filter(canRelieve).length < LEGAL_ROSTER.minRelievers) {
     return `fewer than ${LEGAL_ROSTER.minRelievers} relievable arms (RP, CP, or SP/RP) made the 22`;
+  }
+  if (pitchers.filter(isCloser).length < LEGAL_ROSTER.minClosers) {
+    return `no true closer made the 22 — one bullpen seat must be a CP`;
   }
   return 'a roster-construction rule failed that this reporter does not recognize';
 }
@@ -894,6 +901,6 @@ export function rankPoolForPreference(
 ): RankedPoolEntry[] {
   const slot: DesignSlot = HITTER_POSITIONS.includes(position)
     ? { slotId: position, kind: 'pos', position }
-    : { slotId: position, kind: position === 'RP' || position === 'CP' ? 'rp' : 'sp' };
+    : { slotId: position, kind: position === 'CP' ? 'cp' : position === 'RP' ? 'rp' : 'sp' };
   return rankPoolForSlot(slot, preference, pool);
 }

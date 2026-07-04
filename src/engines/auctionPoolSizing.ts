@@ -23,6 +23,7 @@
 import {
   LEGAL_ROSTER,
   canCover,
+  isCloser,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
 import {
@@ -114,6 +115,7 @@ export function poolDemandModel(
     })),
     { key: 'startable-arms', label: 'startable arms (SP / SP-RP)', demand: floor(t * structure.startableArms) },
     { key: 'relievable-arms', label: 'relievable arms (RP / CP / SP-RP)', demand: floor(t * structure.relievableArms) },
+    { key: 'closer-arms', label: 'true closers (CP)', demand: floor(t * structure.closerArms) },
     { key: 'pitcher-bodies', label: 'total pitchers', demand: floor(t * structure.minPitchers) },
     { key: 'hitter-bodies', label: 'total position players', demand: floor(t * structure.minPositionPlayers) },
   ];
@@ -243,6 +245,12 @@ function structuralReads(
       label: 'relievable arms',
       supply: pitchers.filter((p) => p.role === 'RP' || p.role === 'CP' || p.role === 'SP/RP').length,
       demand: teams * LEGAL_ROSTER.minRelievers,
+    },
+    {
+      key: 'closer-arms',
+      label: 'true closers',
+      supply: pitchers.filter(isCloser).length,
+      demand: teams * LEGAL_ROSTER.minClosers,
     },
     {
       key: 'pitcher-bodies',

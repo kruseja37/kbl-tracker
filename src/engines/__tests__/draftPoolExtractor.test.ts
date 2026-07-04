@@ -16,7 +16,7 @@ import {
   trimPoolToTarget,
 } from '../poolFromDemand';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
-import { canRelieve, canStart, LEGAL_ROSTER } from '../../data/rosterConstruction';
+import { canRelieve, canStart, isCloser, LEGAL_ROSTER } from '../../data/rosterConstruction';
 
 /**
  * FABLE-C1B: the reverse one-click — archetypes → a balanced, draftable pool from a larger source.
@@ -153,15 +153,15 @@ function mkWideSalaryHitter(id: string, position: string, i: number, cheapCount:
   };
 }
 
-function mkWideSalarySwingArm(id: string, i: number, cheapCount: number): SimPlayer {
+function mkWideSalaryArm(id: string, role: 'SP/RP' | 'CP', i: number, cheapCount: number): SimPlayer {
   const cheap = i < cheapCount;
   const iv = cheap ? 1_500 + i : 140_000 + i * 1_000;
   const tool = cheap ? 25 + (i % 5) : 74 + (i % 10);
   return {
     id,
     isPitcher: true,
-    role: 'SP/RP',
-    position: 'SP/RP',
+    role,
+    position: role,
     bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
     pit: { VEL: tool, JNK: tool, ACC: tool },
     iv,
@@ -181,7 +181,12 @@ function wideSalarySource(teams: number): SimPlayer[] {
   const armCount = teams * 8;
   const cheapArmQuartile = Math.ceil(armCount / 4);
   for (let i = 0; i < armCount; i += 1) {
-    source.push(mkWideSalarySwingArm(`wide-swing-${i.toString().padStart(2, '0')}`, i, cheapArmQuartile));
+    source.push(mkWideSalaryArm(`wide-swing-${i.toString().padStart(2, '0')}`, 'SP/RP', i, cheapArmQuartile));
+  }
+  const closerCount = teams * 2;
+  const cheapCloserQuartile = Math.ceil(closerCount / 4);
+  for (let i = 0; i < closerCount; i += 1) {
+    source.push(mkWideSalaryArm(`wide-cp-${i.toString().padStart(2, '0')}`, 'CP', i, cheapCloserQuartile));
   }
   return source;
 }
@@ -269,6 +274,14 @@ describe('extractDraftPool — Step 3 cheap-depth floors', () => {
     expect(pooledRelievable.length).toBeGreaterThanOrEqual(TEAMS * EXTRACTOR_TUNING.cheapDepthPerClubArm);
     pooledRelievable.forEach((id) => requiredCheapIds.add(id));
 
+    const cheapestClosers = [...source.filter(isCloser)]
+      .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id))
+      .slice(0, Math.ceil(TEAMS * MLB_POOL_STRUCTURE.closerArms * EXTRACTOR_TUNING.oversupply))
+      .map((player) => player.id);
+    const pooledClosers = cheapestClosers.filter((id) => poolIds.has(id));
+    expect(pooledClosers.length).toBe(cheapestClosers.length);
+    pooledClosers.forEach((id) => requiredCheapIds.add(id));
+
     for (const id of requiredCheapIds) {
       expect(protectedIds.has(id), id).toBe(true);
     }
@@ -340,6 +353,7 @@ describe('audit-fix regressions — C1B-1/2/3/4', () => {
       catcherCoverage: 1,
       startableArms: 2,
       relievableArms: 2,
+      closerArms: 1,
       minPitchers: 4,
       minPositionPlayers: 6,
     };

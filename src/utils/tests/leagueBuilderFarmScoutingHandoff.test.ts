@@ -62,7 +62,7 @@ const LEGAL_MLB_POSITIONS: readonly Position[] = [
   'RP',
   'RP',
   'RP',
-  'RP',
+  'CP',
 ];
 
 function makeRoster(teamId: string, farmRoster: string[]): TeamRoster {

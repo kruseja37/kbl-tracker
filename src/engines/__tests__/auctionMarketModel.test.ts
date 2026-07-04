@@ -217,15 +217,16 @@ describe('needMultiplier building blocks', () => {
     expect(leagueScarcityMultiplier(1, 2)).toBe(1); // 0.5 suitors per player = neutral
   });
 
-  test('C2B-FIX F2: a pure SP does not fill a bullpen-only deficit; the right classes do', () => {
+  test('C2B-FIX F2: a pure SP does not fill a generic bullpen deficit; relief classes do', () => {
     const arm = (role: string): RosterSlotPlayer => ({ isPitcher: true, position: 'P', role });
-    // 4 SP + 3 RP: the only remaining arm requirement is ONE reliever (bullpen class).
+    // 4 SP + 2 RP + 1 CP: the only remaining arm requirement is ONE reliever (bullpen class).
     const need = rosterNeedBreakdown([
-      arm('SP'), arm('SP'), arm('SP'), arm('SP'), arm('RP'), arm('RP'), arm('RP'),
+      arm('SP'), arm('SP'), arm('SP'), arm('SP'), arm('RP'), arm('RP'), arm('CP'),
     ]);
     expect(need.pitcherNeed).toBe(1);
     expect(need.rotationDeficit).toBe(0);
     expect(need.bullpenDeficit).toBe(1);
+    expect(need.closerDeficit).toBe(0);
     expect(need.pitcherFloorNeed).toBe(0);
     // Off-class SP: merely eligible (1.0). On-class RP/CP and the flexible swing: hard-need.
     expect(ownNeedMultiplier(need, arm('SP'), 22)).toBe(1);
@@ -234,14 +235,31 @@ describe('needMultiplier building blocks', () => {
     expect(ownNeedMultiplier(need, arm('SP/RP'), 22)).toBeGreaterThan(1);
   });
 
+  test('a closer-only deficit values CP but not substitutable RP or SP/RP arms', () => {
+    const arm = (role: string): RosterSlotPlayer => ({ isPitcher: true, position: 'P', role });
+    const need = rosterNeedBreakdown([
+      arm('SP'), arm('SP'), arm('SP'), arm('SP'), arm('RP'), arm('RP'), arm('RP'), arm('RP'),
+    ]);
+
+    expect(need.pitcherNeed).toBe(1);
+    expect(need.rotationDeficit).toBe(0);
+    expect(need.bullpenDeficit).toBe(0);
+    expect(need.closerDeficit).toBe(1);
+    expect(ownNeedMultiplier(need, arm('SP'), 22)).toBe(1);
+    expect(ownNeedMultiplier(need, arm('RP'), 22)).toBe(1);
+    expect(ownNeedMultiplier(need, arm('SP/RP'), 22)).toBe(1);
+    expect(ownNeedMultiplier(need, arm('CP'), 22)).toBeGreaterThan(1);
+  });
+
   test('C2B-FIX F2: a swing-shared deficit keeps BOTH pure classes as hard-need (delta-exact)', () => {
     const arm = (role: string): RosterSlotPlayer => ({ isPitcher: true, position: 'P', role });
-    // 3 SP + 3 RP + 1 SP/RP: one more arm of EITHER pure class frees the swing for the other
-    // side, so adding either strictly reduces the remaining arm minimum.
+    // 3 SP + 2 RP + 1 CP + 1 SP/RP: one more arm of EITHER pure class frees the swing for the
+    // other side, so adding either strictly reduces the remaining arm minimum.
     const need = rosterNeedBreakdown([
-      arm('SP'), arm('SP'), arm('SP'), arm('RP'), arm('RP'), arm('RP'), arm('SP/RP'),
+      arm('SP'), arm('SP'), arm('SP'), arm('RP'), arm('RP'), arm('CP'), arm('SP/RP'),
     ]);
     expect(need.pitcherNeed).toBe(1);
+    expect(need.closerDeficit).toBe(0);
     expect(ownNeedMultiplier(need, arm('SP'), 22)).toBeGreaterThan(1);
     expect(ownNeedMultiplier(need, arm('RP'), 22)).toBeGreaterThan(1);
   });
@@ -401,8 +419,8 @@ describe('projectBidVsPass', () => {
   });
 
   test('C2B-FIX F3: a target the GM cannot legally sign never surfaces on that branch', () => {
-    // 21-man enriched roster: 14 hitters (2 C-coverers) + 7 arms (4 SP + 3 RP). One slot left,
-    // and it must be a reliever — a 15th BAT would breach the 14-hitter ceiling on every branch,
+    // 21-man enriched roster: 14 hitters (2 C-coverers) + 7 arms (4 SP + 3 RP, no CP). One slot
+    // left, and it must be a closer — a 15th BAT would breach the 14-hitter ceiling on every branch,
     // and on the BID branch (roster full) nothing at all is signable.
     const hitter = (position: string, secondaryPosition: string | null = null): RosterSlotPlayer =>
       ({ isPitcher: false, position, secondaryPosition });
@@ -418,8 +436,9 @@ describe('projectBidVsPass', () => {
       ({ playerId, iv: 20_000, ivPercentile: 50, pos });
     const players = Object.fromEntries([
       ...rosterShapes.map((shape, i) => [`r-${i}`, mk(`r-${i}`, shape)] as const),
-      ['lot-rp', mk('lot-rp', arm('RP'))] as const,
+      ['lot-cp', mk('lot-cp', arm('CP'))] as const,
       ['target-bat', mk('target-bat', hitter('2B', 'IF'))] as const,
+      ['target-cp', mk('target-cp', arm('CP'))] as const,
       ['target-rp', mk('target-rp', arm('RP'))] as const,
     ]);
     const session: AuctionSession = {
@@ -456,9 +475,9 @@ describe('projectBidVsPass', () => {
       nominationRound: 0,
       players,
       playerOrder: Object.keys(players),
-      availablePlayerIds: ['target-bat', 'target-rp'],
+      availablePlayerIds: ['target-bat', 'target-cp', 'target-rp'],
       currentLot: {
-        playerId: 'lot-rp',
+        playerId: 'lot-cp',
         nominatorTeamId: 'me',
         openingAsk: 10_000,
         highBid: null,
@@ -481,8 +500,8 @@ describe('projectBidVsPass', () => {
       },
     });
     expect(projection).not.toBeNull();
-    // PASS branch (one slot open): the reliever is legal; the 15th bat would strand — filtered.
-    expect(projection!.pass.targets.map((t) => t.playerId)).toEqual(['target-rp']);
+    // PASS branch (one slot open): only a CP is legal; the 15th bat and generic RP would strand.
+    expect(projection!.pass.targets.map((t) => t.playerId)).toEqual(['target-cp']);
     // BID branch (roster full after the win): nothing is signable at all.
     expect(projection!.bid.targets).toEqual([]);
   });

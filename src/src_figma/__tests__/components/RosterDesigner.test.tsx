@@ -237,19 +237,23 @@ describe("RosterDesigner defaults and ask scoping", () => {
     cleanup();
   });
 
-  test("C1-C2: RP1 defaults to avoid-fragile, RP2-4 stay any, and saved RP1 any survives", () => {
+  test("C1-C2: CP defaults to avoid-fragile, RP1-3 stay any, and saved CP any survives", () => {
     const fresh = seedRosterDesignSlots();
-    expect(fresh.find((slot) => slot.slotId === "RP1")?.preference?.personalityTilt).toBe("avoid-fragile");
-    for (const slotId of ["RP2", "RP3", "RP4"]) {
+    expect(fresh.find((slot) => slot.slotId === "CP")?.preference?.personalityTilt).toBe("avoid-fragile");
+    for (const slotId of ["RP1", "RP2", "RP3"]) {
       expect(fresh.find((slot) => slot.slotId === slotId)?.preference?.personalityTilt).toBe("any");
     }
 
-    const saved: DesignSlot[] = [{ slotId: "RP1", kind: "rp", preference: { personalityTilt: "any" } }];
-    expect(seedRosterDesignSlots(saved).find((slot) => slot.slotId === "RP1")?.preference?.personalityTilt)
+    const saved: DesignSlot[] = [{ slotId: "CP", kind: "cp", preference: { personalityTilt: "any" } }];
+    expect(seedRosterDesignSlots(saved).find((slot) => slot.slotId === "CP")?.preference?.personalityTilt)
       .toBe("any");
+
+    const legacy: DesignSlot[] = [{ slotId: "RP4", kind: "rp", preference: { shape: "Two-Pitch-Reliever" } }];
+    expect(seedRosterDesignSlots(legacy).find((slot) => slot.slotId === "CP")?.preference?.shape)
+      .toBe("Two-Pitch-Reliever");
   });
 
-  test("C3: RP1 renders as the closer label without changing the slot id", () => {
+  test("C3: CP renders as the closer label", () => {
     render(
       <RosterDesigner
         team={makeTeam("team-a", "Alpha")}
@@ -263,7 +267,7 @@ describe("RosterDesigner defaults and ask scoping", () => {
       />,
     );
 
-    expect(screen.getByText("RP1 · CLOSER")).toBeInTheDocument();
+    expect(screen.getByText("CP · CLOSER")).toBeInTheDocument();
   });
 
   test("D1: TWO-WAY toggle only renders where a two-way player is eligible", () => {
@@ -288,25 +292,25 @@ describe("RosterDesigner defaults and ask scoping", () => {
       expect(screen.queryByRole("button", { name: /TWO-WAY/ })).toBeNull();
     }
 
-    for (const label of ["BACKUP C", "SP1", "SP2", "SP3", "SP4", "RP1 · CLOSER", "RP2", "RP3", "RP4", "SWING"]) {
+    for (const label of ["BACKUP C", "SP1", "SP2", "SP3", "SP4", "RP1", "RP2", "RP3", "CP · CLOSER", "SWING"]) {
       clickSlot(label);
       expect(screen.getByRole("button", { name: /TWO-WAY/ })).toBeInTheDocument();
     }
   }, 10_000);
 
-  test("D2-D3: saved impossible two-way tags are stripped from field and flex slots but preserved on RP1", () => {
+  test("D2-D3: saved impossible two-way tags are stripped from field and flex slots but preserved on CP", () => {
     const saved = seedRosterDesignSlots([
       { slotId: "LF", kind: "pos", position: "LF", preference: { tags: { twoWay: true } } },
       { slotId: "FLEX1", kind: "flex", preference: { tags: { twoWay: true } } },
-      { slotId: "RP1", kind: "rp", preference: { tags: { twoWay: true } } },
+      { slotId: "CP", kind: "cp", preference: { tags: { twoWay: true } } },
     ]);
     const lf = saved.find((slot) => slot.slotId === "LF");
     const flex = saved.find((slot) => slot.slotId === "FLEX1");
-    const rp1 = saved.find((slot) => slot.slotId === "RP1");
+    const cp = saved.find((slot) => slot.slotId === "CP");
 
     expect(lf?.preference?.tags?.twoWay).toBeUndefined();
     expect(flex?.preference?.tags?.twoWay).toBeUndefined();
-    expect(rp1?.preference?.tags?.twoWay).toBe(true);
+    expect(cp?.preference?.tags?.twoWay).toBe(true);
 
     const pool = buildRosterDesignPool([makePlayer("lf", { primaryPosition: "LF" })]);
     const classified = pool.map((player) => ({ ...player, classification: classifyPlayerArchetype(player.profile) }));

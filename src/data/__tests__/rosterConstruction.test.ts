@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   LEGAL_ROSTER,
   canCover,
+  canRelieve,
   depthReport,
+  isCloser,
   isLegalRoster,
   twoWayVariantFromTraits,
   type RosterSlotPlayer,
@@ -148,6 +150,38 @@ describe('depthReport — the SOFT veteran depth tier', () => {
   it('LEGAL_ROSTER surface stays pinned', () => {
     expect(LEGAL_ROSTER.size).toBe(22);
     expect(LEGAL_ROSTER.minCatchers).toBe(2);
+    expect(LEGAL_ROSTER.minRelievers).toBe(4);
+    expect(LEGAL_ROSTER.minClosers).toBe(1);
     expect(LEGAL_ROSTER.fieldPositions).toHaveLength(8);
+  });
+
+  it('requires one true closer without adding a fifth reliever', () => {
+    const noCloser = [
+      ...starters(),
+      hitter('C'),
+      hitter('1B'),
+      hitter('LF'),
+      hitter('2B'),
+      hitter('SS'),
+      hitter('RF'),
+      pitcher('SP'),
+      pitcher('SP'),
+      pitcher('SP'),
+      pitcher('SP'),
+      pitcher('RP'),
+      pitcher('RP'),
+      pitcher('RP'),
+      pitcher('RP'),
+    ];
+    const withCloser = [...noCloser.slice(0, -1), pitcher('CP')];
+
+    expect(noCloser).toHaveLength(22);
+    expect(withCloser).toHaveLength(22);
+    expect(noCloser.filter(canRelieve)).toHaveLength(4);
+    expect(noCloser.filter(isCloser)).toHaveLength(0);
+    expect(isLegalRoster(noCloser)).toBe(false);
+    expect(withCloser.filter(canRelieve)).toHaveLength(4);
+    expect(withCloser.filter(isCloser)).toHaveLength(1);
+    expect(isLegalRoster(withCloser)).toBe(true);
   });
 });

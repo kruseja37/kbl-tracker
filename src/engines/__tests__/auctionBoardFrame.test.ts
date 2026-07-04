@@ -69,7 +69,7 @@ function legal13And9TwoWayCStaff(): SourceSpec[] {
   return [
     ...starters(),
     ...bench(5),
-    ...arms(['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'RP'], { twoWayCIndex: 4 }),
+    ...arms(['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'CP'], { twoWayCIndex: 4 }),
   ];
 }
 
@@ -79,7 +79,7 @@ function legal13And9SeatedSecondaryC(): SourceSpec[] {
       source(`starter-${position}`, position, position === 'SS' ? { secondaryPosition: 'C' } : {})
     )),
     ...bench(5),
-    ...arms(['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'RP']),
+    ...arms(['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'CP']),
   ];
 }
 
@@ -87,7 +87,7 @@ function legalFivePureSp(): SourceSpec[] {
   return [
     ...starters(),
     ...bench(5, { secondaryC: true }),
-    ...arms(['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP']),
+    ...arms(['SP', 'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'CP']),
   ];
 }
 
@@ -103,7 +103,7 @@ function legalFiveRelieversViaSwing(): SourceSpec[] {
   return [
     ...starters(),
     ...bench(5, { secondaryC: true }),
-    ...arms(['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'RP']),
+    ...arms(['SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'RP', 'CP']),
   ];
 }
 
@@ -366,10 +366,10 @@ describe('buildAuctionBoardFrame', () => {
     expect(second).toEqual(first);
   });
 
-  it('has no DH or CP seat and derives exactly the legal roster seat count', () => {
+  it('has no DH seat, has one CP seat, and derives exactly the legal roster seat count', () => {
     const slotIds = AUCTION_BOARD_SEATS.map((seat) => seat.slotId);
     expect(slotIds).toHaveLength(LEGAL_ROSTER.size);
     expect(slotIds).not.toContain('DH');
-    expect(slotIds).not.toContain('CP');
+    expect(slotIds.filter((slotId) => slotId === 'CP')).toHaveLength(1);
   });
 });

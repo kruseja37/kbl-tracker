@@ -238,15 +238,16 @@ function makeLegalRosterPlayers(salary: number): Player[] {
   const starters = Array.from({ length: 4 }, (_, index) =>
     makePlayer(30 + index, { id: `legal-sp-${index}`, primaryPosition: "SP", salary }),
   );
-  const relievers = Array.from({ length: 4 }, (_, index) =>
+  const relievers = Array.from({ length: 3 }, (_, index) =>
     makePlayer(40 + index, { id: `legal-rp-${index}`, primaryPosition: "RP", salary }),
   );
+  const closer = makePlayer(44, { id: "legal-cp", primaryPosition: "CP", salary });
   const flexPositions: Player["primaryPosition"][] = ["1B", "2B", "3B", "SS"];
   const flex = flexPositions.map((position, index) =>
     makePlayer(50 + index, { id: `legal-flex-${index}`, primaryPosition: position, salary }),
   );
   const swing = makePlayer(60, { id: "legal-swing", primaryPosition: "SP/RP", salary });
-  return [...hitters, backupC, ...starters, ...relievers, ...flex, swing];
+  return [...hitters, backupC, ...starters, ...relievers, closer, ...flex, swing];
 }
 
 function makeLegalRosterPlayerSet(prefix: string, salary: number): Player[] {
@@ -947,7 +948,7 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(floorRow).not.toHaveTextContent("Priciest asks");
     expect(floorRow).not.toHaveTextContent("CPU Blues");
     expect(floorRow).not.toHaveTextContent("club 2");
-    expect(screen.getAllByText("BUILDS · $720,000 to spare")).toHaveLength(2);
+    expect(screen.getAllByText("BUILDS · $660,000 to spare")).toHaveLength(2);
   });
 
   test("renders CLUB CHECK target segments without changing the floor dot gate", async () => {

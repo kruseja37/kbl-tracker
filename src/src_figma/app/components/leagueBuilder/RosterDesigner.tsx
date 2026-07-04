@@ -73,7 +73,7 @@ type RosterDesignerProps = {
 };
 
 const LINEUP_SLOT_IDS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"];
-const STAFF_SLOT_IDS = ["SP1", "SP2", "SP3", "SP4", "RP1", "RP2", "RP3", "RP4"];
+const STAFF_SLOT_IDS = ["SP1", "SP2", "SP3", "SP4", "RP1", "RP2", "RP3", "CP"];
 const BENCH_SLOT_IDS = ["backupC", "FLEX1", "FLEX2", "FLEX3", "FLEX4", "SWING"];
 const FIELD_POSITIONS = new Set<string>(LINEUP_SLOT_IDS);
 const HITTER_SHAPES = ALL_SHAPES.filter((shape) => shape.role === "hitter" || shape.role === "both");
@@ -100,7 +100,7 @@ function savePayload(slots: DesignSlot[], lockedAt: string | undefined, pins: Ro
 function defaultPreferenceForSlot(slotId: string): SlotPreference {
   return {
     allowRunnerUp: true,
-    personalityTilt: slotId === "C" || slotId === "SS" || slotId === "SP1" || slotId === "RP1" ? "avoid-fragile" : "any",
+    personalityTilt: slotId === "C" || slotId === "SS" || slotId === "SP1" || slotId === "CP" ? "avoid-fragile" : "any",
   };
 }
 
@@ -113,7 +113,7 @@ function mergePreference(defaultPreference: SlotPreference, savedPreference: Slo
 }
 
 function slotKindAllowsTwoWay(slot: DesignSlot): boolean {
-  return slot.kind === "backupC" || slot.kind === "sp" || slot.kind === "rp" || slot.kind === "swing";
+  return slot.kind === "backupC" || slot.kind === "sp" || slot.kind === "rp" || slot.kind === "cp" || slot.kind === "swing";
 }
 
 function sanitizePreferenceForSlot(slot: DesignSlot, preference: SlotPreference): SlotPreference {
@@ -129,7 +129,7 @@ function sanitizePreferenceForSlot(slot: DesignSlot, preference: SlotPreference)
 export function seedRosterDesignSlots(savedSlots?: readonly DesignSlot[]): DesignSlot[] {
   const savedById = new Map((savedSlots ?? []).map((slot) => [slot.slotId, slot]));
   return buildDefaultDesignSlots().map((slot) => {
-    const saved = savedById.get(slot.slotId);
+    const saved = savedById.get(slot.slotId) ?? (slot.kind === "cp" ? savedById.get("RP4") : undefined);
     return {
       ...slot,
       preference: sanitizePreferenceForSlot(slot, mergePreference(defaultPreferenceForSlot(slot.slotId), saved?.preference)),
@@ -146,7 +146,7 @@ export function rosterDesignStatusTone(slots: readonly DesignSlot[], players: re
 function slotLabel(slot: DesignSlot): string {
   if (slot.slotId === "backupC") return "BACKUP C";
   if (slot.slotId.startsWith("FLEX")) return `BENCH ${slot.slotId.replace("FLEX", "")}`;
-  if (slot.slotId === "RP1") return "RP1 · CLOSER";
+  if (slot.kind === "cp") return "CP · CLOSER";
   return slot.slotId;
 }
 
@@ -161,7 +161,7 @@ function slotKindIsHitter(slot: DesignSlot): boolean {
 }
 
 function slotKindIsPitcher(slot: DesignSlot): boolean {
-  return slot.kind === "sp" || slot.kind === "rp" || slot.kind === "swing";
+  return slot.kind === "sp" || slot.kind === "rp" || slot.kind === "cp" || slot.kind === "swing";
 }
 
 // Candidate counting goes through the ENGINE's countEligibleForAsk — this file used to
@@ -178,6 +178,7 @@ function menuGroupsForSlot(slot: DesignSlot): Array<{ label?: string; shapes: Ar
   if (slot.kind === "backupC") return [{ shapes: menuForPosition("C") }];
   if (slot.kind === "sp") return [{ shapes: menuForPosition("SP") }];
   if (slot.kind === "rp") return [{ shapes: menuForPosition("RP") }];
+  if (slot.kind === "cp") return [{ shapes: menuForPosition("CP") }];
   if (slot.kind === "flex") {
     return [
       { label: "BENCH STOCK", shapes: HITTER_SHAPES.filter((shape) => DEPTH_SHAPE_FAMILIES.has(shape.family)) },
@@ -191,6 +192,7 @@ function menuGroupsForSlot(slot: DesignSlot): Array<{ label?: string; shapes: Ar
 }
 
 function alignmentPositionForSlot(slot: DesignSlot): TaxonomyPosition {
+  if (slot.kind === "cp") return "CP";
   if (slot.kind === "rp" || (slot.kind === "swing" && slot.preference?.shape && menuForPosition("RP").some((shape) => shape.family === slot.preference?.shape))) return "RP";
   if (slot.kind === "sp") return "SP";
   if (slot.kind === "backupC") return "C";

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import {
   rosterNeedBreakdown,
+  playerFillsHardRequirement,
   teamRosterNeed,
   toRosterSlotPlayer,
   wouldStrandRoster,
@@ -59,6 +60,31 @@ describe('rosterNeedBreakdown', () => {
     // 4 swings alone: 4 can cover one full side but the other still needs 4.
     const swings = [pitcher('SP/RP'), pitcher('SP/RP'), pitcher('SP/RP'), pitcher('SP/RP')];
     expect(rosterNeedBreakdown(swings).pitcherNeed).toBe(4);
+  });
+
+  it('requires a CP for the closer slot while letting that CP also satisfy relief', () => {
+    const noCloser = [
+      pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'),
+      pitcher('RP'), pitcher('RP'), pitcher('RP'), pitcher('RP'),
+    ];
+    const missingReliefAndCloser = [
+      pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'),
+      pitcher('RP'), pitcher('RP'), pitcher('RP'),
+    ];
+
+    const closerOnlyNeed = rosterNeedBreakdown(noCloser);
+    expect(closerOnlyNeed.pitcherNeed).toBe(1);
+    expect(closerOnlyNeed.bullpenDeficit).toBe(0);
+    expect(closerOnlyNeed.closerDeficit).toBe(1);
+    expect(playerFillsHardRequirement(pitcher('RP'), closerOnlyNeed)).toBe(false);
+    expect(playerFillsHardRequirement(pitcher('CP'), closerOnlyNeed)).toBe(true);
+
+    const overlappingNeed = rosterNeedBreakdown(missingReliefAndCloser);
+    expect(overlappingNeed.pitcherNeed).toBe(1);
+    expect(overlappingNeed.bullpenDeficit).toBe(1);
+    expect(overlappingNeed.closerDeficit).toBe(1);
+    expect(playerFillsHardRequirement(pitcher('RP'), overlappingNeed)).toBe(false);
+    expect(playerFillsHardRequirement(pitcher('CP'), overlappingNeed)).toBe(true);
   });
 
   it('F2: unknown-role arms (P / TWO-WAY primaries) credit NEITHER staff minimum — matching legality', () => {

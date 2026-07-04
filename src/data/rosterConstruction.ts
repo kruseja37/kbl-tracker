@@ -13,7 +13,9 @@
  *   • CATCHER DEPTH 2: at least two DISTINCT players who can play C — via primary C, secondary C, or
  *     a pitcher with the Two Way (C) trait — at least one of whom is a primary-C position player.
  *     (So one dedicated catcher + a Two Way (C) pitcher is LEGAL — risky, but viable by ruling.)
- *   • ≥4 startable arms (SP or SP/RP) and ≥4 relievable arms (RP, CP, or SP/RP)
+ *   • ≥4 startable arms (SP or SP/RP), ≥4 relievable arms (RP, CP, or SP/RP), and
+ *     at least one true closer (CP). The closer is one of the four relievers, not a
+ *     fifth required bullpen arm.
  *
  * SOFT tier (advisor warnings, NEVER a legality block): the veteran depth rule — ≥2 players able to
  * cover EVERY field position, counting secondary positions (exact or the group secondaries IF / OF /
@@ -32,6 +34,7 @@ export const LEGAL_ROSTER = {
   minCatchers: 2,
   startingPitchers: 4,
   minRelievers: 4,
+  minClosers: 1,
   maxRelievers: 5,
   minBench: 4,
   maxBench: 5,
@@ -87,6 +90,11 @@ export function canRelieve(p: RosterSlotPlayer): boolean {
   return p.isPitcher && (p.role === 'RP' || p.role === 'CP' || p.role === 'SP/RP');
 }
 
+/** A true closer. RP and SP/RP never satisfy the dedicated closer requirement. */
+export function isCloser(p: RosterSlotPlayer): boolean {
+  return p.isPitcher && p.role === 'CP';
+}
+
 /** Does a secondary-position value (exact or group) cover a field position? Groups never cover C. */
 function secondaryCovers(secondary: string, pos: FieldPosition): boolean {
   if (secondary === pos) return true;
@@ -118,9 +126,10 @@ export function canCover(p: RosterSlotPlayer, pos: FieldPosition): boolean {
 /**
  * True iff `players` form a LEGAL roster per `LEGAL_ROSTER` and the ratified Ruling A semantics:
  * exactly 22, within the 13–14 position / 8–9 pitcher flex, a PRIMARY at each of the eight field
- * spots, catcher depth 2 (distinct C-coverers incl. secondary-C and Two Way (C), ≥1 primary-C), and
- * at least four startable + four relievable arms. Used as the gate that makes downstream value/price
- * results translate to a real auction draft rather than to impossible teams.
+ * spots, catcher depth 2 (distinct C-coverers incl. secondary-C and Two Way (C), ≥1 primary-C),
+ * at least four startable + four relievable arms, and at least one true closer (CP). Used as the
+ * gate that makes downstream value/price results translate to a real auction draft rather than to
+ * impossible teams.
  */
 export function isLegalRoster(players: RosterSlotPlayer[]): boolean {
   if (players.length !== LEGAL_ROSTER.size) return false;
@@ -140,7 +149,8 @@ export function isLegalRoster(players: RosterSlotPlayer[]): boolean {
 
   return (
     pitchers.filter(canStart).length >= LEGAL_ROSTER.startingPitchers &&
-    pitchers.filter(canRelieve).length >= LEGAL_ROSTER.minRelievers
+    pitchers.filter(canRelieve).length >= LEGAL_ROSTER.minRelievers &&
+    pitchers.filter(isCloser).length >= LEGAL_ROSTER.minClosers
   );
 }
 

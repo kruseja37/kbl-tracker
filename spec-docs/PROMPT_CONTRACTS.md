@@ -29561,3 +29561,63 @@ GATE (report ACTUAL output for each):
 NOTE FOR AUDITOR (not Codex's job): Opus runs the independent 4-team affordability re-measure (design §7.4) + the adversarial diff audit
 before commit.
 <!-- ===== END CONTRACT: CODEX-POSITIONAL-SCARCITY ===== -->
+
+<!-- ===== CONTRACT: CODEX-REQUIRE-A-CLOSER ===== -->
+CODEX-REQUIRE-A-CLOSER — make a closer (role 'CP') a required, non-substitutable roster piece across every construction layer.
+Branch experiment/manager-wpa-window. Builder=Codex; AUDITOR=Opus (does NOT commit — leave the diff uncommitted for Opus's
+adversarial audit + archetype re-band + affordability re-measure). Report ACTUAL output. NO GameTracker edits.
+
+IMPLEMENTATION MAP: spec-docs/CP_VALUATION_ANALYSIS_2026-07-04.md §C/§D lists every layer that currently collapses CP into a generic
+`canRelieve`/RP bullpen bucket, with file:line. Opus adversarially verified that map (spec-docs/CP_VALUATION_AUDIT_2026-07-04.md): the
+squeeze is CONFIRMED across all layers. Use the map as your file guide.
+
+BINDING DESIGN RULING (JK 2026-07-04 "require them and carve out the last reliever spot for a CP" + THE TWENTY-TWO is fixed at 22 slots):
+1. Roster size UNCHANGED (22). The bullpen stays 4 relievers; the LAST bullpen slot becomes a CP-ONLY closer slot → 3 general reliever
+   slots (accept RP/CP/SP-RP as today) + 1 CLOSER slot (role === 'CP' ONLY, not satisfiable by RP or SP/RP).
+2. Legality: add `LEGAL_ROSTER.minClosers = 1` and an `isCloser(p) => p.role === 'CP'` helper in rosterConstruction.ts; `isLegalRoster`
+   must ALSO require `pitchers.filter(isCloser).length >= LEGAL_ROSTER.minClosers` (in ADDITION to the existing minRelievers>=4 — the closer
+   is one of the 4 relievers, NOT a 5th arm; roster stays 22). canRelieve stays as-is (CP still counts toward the 4 relievers).
+3. Pool must GUARANTEE closer supply (so the requirement is always satisfiable):
+   - draftPoolExtractor.ts: add a CP-specific structural floor (a `closerArms` field on PoolStructure, >=1 per club) that pulls the
+     cheapest legal CP bodies into the protected floor — mirror the existing cheap-depth floor pattern; protect from trim.
+   - poolFromDemand.ts: add a CP reservation/repair CLASS distinct from generic 'rp' (eligibleForRepairGroup gets a 'cp' case gated on
+     role==='CP'); a pool that cannot seat because it lacks a CP triggers a CP injection in repair (mirror the existing missing-body repair).
+4. Dedicated CP-only seat in EVERY consumer that the audit flagged (no RP substitution for the closer seat):
+   - rosterDesignFeasibility.ts: default slots become 3× kind:'rp' + 1× kind:'cp'; add a 'cp' eligibility case (isPitcher && role==='CP');
+     the 3 'rp' seats keep today's inline role check. Update buildDefaultDesignSlots + the eligibility switch + any legality explanation.
+   - best22Target.ts: add a 'cp' ArmSlotKind (or a closer sub-slot) so the BEST-22 reserves one closer; do not fold CP into 'rp'.
+   - archetypeBalanceSimulator.ts: SLOT_PLAN becomes 4 SP + 3 RP + 1 CP + 1 swing (still 9 arms if that's the current count — keep the arm
+     count identical, just reclassify the last RP as CP); the bullpen cap grouping stays, but the CP slot must be CP-filled.
+   - auctionBoardFrame.ts: the last bullpen seat (RP4) becomes a CP seat; its fillSeat predicate requires role==='CP' (not RP||CP).
+   - rosterNeed.ts: split the bullpen hard-requirement into a closerDeficit (unmet when no CP yet) + the existing relief deficit; a CP
+     satisfies BOTH the closer need and a relief slot, an RP satisfies only relief. playerFillsHardRequirement becomes closer-aware.
+   - auctionMarketModel.ts: inherits rosterNeed's closer-aware hard requirement (verify the needMultiplier now distinguishes an unmet
+     closer need — a team missing its closer should value a CP appropriately).
+   - src/src_figma/app/components/leagueBuilder/RosterDesigner.tsx: the visible closer slot must present a CP menu / accept only CP, not
+     the generic RP menu (audit cited ~:149/:176/:180). Keep GameTracker untouched; this is the league-builder designer only.
+5. PRICE UNCHANGED — JK ruled CP stays 0.65. ZERO edits to src/data/ivCurves.ts and spec-docs/reference/iv_oracle.json (hard tripwire:
+   both byte-identical in git diff). This is a roster-CONSTRUCTION change, not a valuation change — no oracle re-bless.
+
+TEST CHURN (expected + must be honest): the new legality rule breaks fixtures that build a "legal roster" or pool WITHOUT a CP. Update
+those fixtures MINIMALLY (add a CP where a legal roster is now required; reclassify one RP→CP in slot fixtures). NEVER weaken or delete an
+assertion to make it pass. For any test whose EXPECTATION legitimately changes (e.g. slot count by kind, bullpen composition), update the
+expected value and leave the assertion intact. REPORT the count of fixtures touched and one-line why for each non-trivial one.
+
+ORTHOGONALITY: L-SIM not required (grep-confirm these modules are outside the L-SIM import graph — the auction/pool/roster-construction
+modules are, per [[lsim-orthogonal-to-auction-modules]]; state it). Do NOT run L-SIM.
+
+WORK ORDER (dependency-first; STOP + report if a design fork is genuinely ambiguous or a test cannot be updated without weakening it —
+do NOT paper over): (a) rosterConstruction constants+legality; (b) rosterDesignFeasibility slots+eligibility; (c) draftPoolExtractor CP
+floor; (d) poolFromDemand CP reservation/repair; (e) best22Target + archetypeBalanceSimulator + auctionBoardFrame; (f) rosterNeed +
+auctionMarketModel; (g) RosterDesigner UI; (h) fixture updates + gate.
+
+GATE (report ACTUAL output for each):
+- `NODE_ENV= npm run build` — exit 0.
+- `NODE_ENV= npx vitest run src/data/__tests__/rosterConstruction.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts src/engines/__tests__/draftPoolExtractor.test.ts src/engines/__tests__/poolFromDemand.test.ts src/engines/__tests__/best22Target.test.ts src/engines/__tests__/archetypeBalanceSimulator.test.ts src/engines/__tests__/auctionBoardFrame.test.ts src/engines/__tests__/rosterNeed.test.ts src/engines/__tests__/auctionMarketModel.test.ts` — green (skip any path that doesn't exist; list which ran).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture
+  batch, LeagueBuilderDraftSetup batch flake, historicalArchetypes big-batch — verify each SOLO). Run any red SOLO before reporting it.
+- `git diff --stat src/data/ivCurves.ts spec-docs/reference/iv_oracle.json` — MUST be empty (price untouched tripwire).
+- `git status` — list changed files. GameTracker NOT present. ivCurves.ts / iv_oracle.json NOT present. DO NOT COMMIT — leave for Opus.
+NOTE FOR AUDITOR (not Codex's job): Opus runs archetype re-band (archetypeBalanceSimulator 24/24) + the 4-team affordability re-measure
+with a required CP per club + the adversarial diff audit before commit.
+<!-- ===== END CONTRACT: CODEX-REQUIRE-A-CLOSER ===== -->

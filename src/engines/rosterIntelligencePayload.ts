@@ -5,6 +5,7 @@ import {
   canRelieve,
   canStart,
   depthReport,
+  isCloser,
   isLegalRoster,
   type FieldPosition,
   type RosterSlotPlayer,
@@ -234,7 +235,8 @@ function boardNeedTag(shape: RosterSlotPlayer | undefined, need: RosterNeedBreak
   if (missingPrimary) return `FILLS ${missingPrimary}`;
   if (need.catcherCoverNeed > 0 && canCover(shape, 'C')) return 'CATCHER COVER';
   if (shape.isPitcher && need.rotationDeficit > 0 && canStart(shape)) return 'ROTATION';
-  if (shape.isPitcher && need.bullpenDeficit > 0 && canRelieve(shape)) return 'BULLPEN';
+  if (shape.isPitcher && need.closerDeficit > 0 && isCloser(shape)) return 'CLOSER';
+  if (shape.isPitcher && Math.max(0, need.bullpenDeficit - need.closerDeficit) > 0 && canRelieve(shape)) return 'BULLPEN';
   if (!shape.isPitcher && need.hitterFloorNeed > 0) return 'BENCH BAT';
   if (shape.isPitcher && need.pitcherFloorNeed > 0) return 'STAFF DEPTH';
   return null;
@@ -332,6 +334,7 @@ function nearestShapeGap(need: ReturnType<typeof rosterNeedBreakdown>): string {
   if (need.missingPrimaries.length > 0) return `${baseballList(need.missingPrimaries)} primary coverage`;
   if (need.catcherCoverNeed > 0) return 'backup catcher coverage';
   if (need.rotationDeficit > 0) return 'rotation depth';
+  if (need.closerDeficit > 0) return 'closer depth';
   if (need.bullpenDeficit > 0) return 'bullpen depth';
   if (need.hitterFloorNeed > 0) return 'bench depth';
   if (need.pitcherFloorNeed > 0) return 'pitching depth';

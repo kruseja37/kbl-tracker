@@ -91,7 +91,7 @@ function syntheticPool(catchers: number): SimPlayer[] {
     for (let i = 0; i < 8; i += 1) pool.push(mkHitter(`${pos.toLowerCase()}-${i}`, pos, n++));
   }
   for (let i = 0; i < 12; i += 1) pool.push(mkPitcher(`sp${i}`, i % 4 === 3 ? 'SP/RP' : 'SP', n++));
-  for (let i = 0; i < 12; i += 1) pool.push(mkPitcher(`rp${i}`, i % 5 === 4 ? 'CP' : 'RP', n++));
+  for (let i = 0; i < 12; i += 1) pool.push(mkPitcher(`rp${i}`, i >= 8 ? 'CP' : 'RP', n++));
   return pool;
 }
 
@@ -113,7 +113,7 @@ function deepPool(): SimPlayer[] {
     for (let i = 0; i < 12; i += 1) pool.push(mkHitter(`${pos.toLowerCase()}-${i}`, pos, n++));
   }
   for (let i = 0; i < 20; i += 1) pool.push(mkPitcher(`sp${i}`, i % 4 === 3 ? 'SP/RP' : 'SP', n++));
-  for (let i = 0; i < 18; i += 1) pool.push(mkPitcher(`rp${i}`, i % 5 === 4 ? 'CP' : 'RP', n++));
+  for (let i = 0; i < 18; i += 1) pool.push(mkPitcher(`rp${i}`, i % 4 === 3 ? 'CP' : 'RP', n++));
   return pool;
 }
 
@@ -194,7 +194,7 @@ describe('audit-fix regressions — F3 (Ruling-A backup-C), F4 (SP/RP matching),
     expect(build.players.filter((p) => p.isPitcher)).toHaveLength(9);
   }, 30_000);
 
-  it('F4: 4 pure SP + 4 SP/RP and ZERO pure relievers → a legal staff is still found', () => {
+  it('F4: 4 pure SP + 3 SP/RP + 1 CP and ZERO generic RP → a legal staff is still found', () => {
     const pool: SimPlayer[] = [];
     let n = 0;
     for (let i = 0; i < 8; i += 1) pool.push(mkHitter(`c${i}`, 'C', n++));
@@ -202,10 +202,11 @@ describe('audit-fix regressions — F3 (Ruling-A backup-C), F4 (SP/RP matching),
       for (let i = 0; i < 8; i += 1) pool.push(mkHitter(`${pos.toLowerCase()}-${i}`, pos, n++));
     }
     for (let i = 0; i < 4; i += 1) pool.push(mkPitcher(`sp${i}`, 'SP', n++));
-    for (let i = 0; i < 4; i += 1) pool.push(mkPitcher(`sw${i}`, 'SP/RP', n++));
+    for (let i = 0; i < 3; i += 1) pool.push(mkPitcher(`sw${i}`, 'SP/RP', n++));
+    pool.push(mkPitcher('cp0', 'CP', n++));
     const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { posture: 'optimal' });
     expect(build.rosterSize).toBe(22);
-    expect(build.legalRoster).toBe(true); // pure SPs start, swings relieve — the F4 counterexample
+    expect(build.legalRoster).toBe(true); // pure SPs start, swings relieve, CP closes — the F4 counterexample
   }, 30_000);
 
   it('F5: a bullpen-boosted archetype gets its relief corps sniped; a hitter archetype does not', () => {

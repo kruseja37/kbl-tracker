@@ -198,6 +198,25 @@ describe('extractPoolFromDemand', () => {
     expect(verdict.blockers.some((blocker) => blocker.kind === 'no-match')).toBe(true);
   });
 
+  it('does not satisfy a CP design cell with matching RP bodies', () => {
+    const source = universe();
+    const matchingRp = source.find((player) => player.role === 'RP')!;
+    const cpShape = classifyPlayerArchetype(matchingRp.profile).shape;
+    const noClosers = source.filter((player) => player.role !== 'CP');
+    const designs = [designAsking('team-a', 'CP', cpShape)];
+    const result = extractPoolFromDemand(noClosers, designs, archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+    });
+
+    const cell = result.cells.find((candidate) => candidate.key.startsWith(`cp|${cpShape}`));
+    expect(cell?.asks).toBe(1);
+    expect(cell?.reserved).toBe(0);
+    expect(result.shortfalls[0].message).toContain('the uploaded universe holds 0');
+    expect(result.designVerdicts[0].result.feasible).toBe(false);
+  });
+
+
   it('is deterministic: identical inputs produce the identical pool', () => {
     const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
     const first = extractPoolFromDemand(universe(), designs, archetypes, 'standard', { teams: 4 });
@@ -464,7 +483,7 @@ describe('extractPoolFromDemand', () => {
       arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
       arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
       arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
-      arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('CP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
     ];
     const protectedIds = new Set([protectedPremium.id]);
     const common = {

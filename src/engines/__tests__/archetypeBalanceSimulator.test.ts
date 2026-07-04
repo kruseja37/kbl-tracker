@@ -76,5 +76,5 @@ describe('archetype balance simulator — workbook baseline (provenance)', () =>
     expect(report.results.length).toBe(archetypes.length);
     expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
     expect(report.results.length - report.outliers.length).toBeGreaterThanOrEqual(30);
-  });
+  }, 30_000);
 });

@@ -25,7 +25,15 @@ import {
   type ConstructionPlayer,
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
-import { canCover, canRelieve, canStart, isLegalRoster, type TwoWayVariant } from '../data/rosterConstruction';
+import {
+  LEGAL_ROSTER,
+  canCover,
+  canRelieve,
+  canStart,
+  isCloser,
+  isLegalRoster,
+  type TwoWayVariant,
+} from '../data/rosterConstruction';
 
 /** A pool player for the simulator: construction ratings + canonical value/salary. */
 export interface SimPlayer extends ConstructionPlayer {
@@ -107,7 +115,8 @@ type SlotKind =
   | { kind: 'flex' }
   | { kind: 'benchOrRp' } // the swing slot: a 5th bench bat OR a 5th reliever (whichever builds more value)
   | { kind: 'sp' }
-  | { kind: 'rp' };
+  | { kind: 'rp' }
+  | { kind: 'cp' };
 
 /**
  * 22 slots for the VALUE-MAX baseline (`buildBestRoster`) — kept byte-stable for the frozen parity
@@ -120,7 +129,8 @@ type SlotKind =
  * + 4 bench position players (any non-pitcher)
  * + 1 SWING slot — a 5th bench bat OR a 5th reliever, so bench flexes 4-5 and relievers flex 4-5
  * + 4 starting pitchers (SP or SP/RP)
- * + 4 relievers (RP/CP, or an SP/RP swing)
+ * + 3 general relievers (RP/CP, or an SP/RP swing)
+ * + 1 dedicated closer (CP only)
  * = 13-14 position players + 8-9 pitchers; verified by `isLegalRoster`.
  */
 const SLOT_PLAN: SlotKind[] = [
@@ -129,13 +139,15 @@ const SLOT_PLAN: SlotKind[] = [
   ...Array.from({ length: 4 }, () => ({ kind: 'flex' } as SlotKind)),
   { kind: 'benchOrRp' } as SlotKind, // swing: 5th bench bat or 5th reliever
   ...Array.from({ length: 4 }, () => ({ kind: 'sp' } as SlotKind)),
-  ...Array.from({ length: 4 }, () => ({ kind: 'rp' } as SlotKind)),
+  { kind: 'cp' } as SlotKind,
+  ...Array.from({ length: 3 }, () => ({ kind: 'rp' } as SlotKind)),
 ];
 
 function eligible(pool: SimPlayer[], slot: SlotKind, used: Set<string>): SimPlayer[] {
   const free = pool.filter((p) => !used.has(p.id));
   if (slot.kind === 'sp') return free.filter(canStart);
   if (slot.kind === 'rp') return free.filter(canRelieve);
+  if (slot.kind === 'cp') return free.filter(isCloser);
   if (slot.kind === 'flex') return free.filter((p) => !p.isPitcher);
   // the swing slot: a bench position player OR a reliever (the climb keeps whichever adds more value).
   if (slot.kind === 'benchOrRp') return free.filter((p) => !p.isPitcher || canRelieve(p));
@@ -494,12 +506,13 @@ const IDENTITY_MAX_PASSES = 40;
  */
 type IdentitySlotKind = SlotKind | { kind: 'backupC' };
 
-/** pos ×8 → backupC → sp ×4 → rp ×4 → flex ×4 → swing LAST (pitcher-count context is known). */
+/** pos ×8 → backupC → sp ×4 → rp ×3 → cp ×1 → flex ×4 → swing LAST (pitcher-count context is known). */
 const IDENTITY_SLOT_PLAN: IdentitySlotKind[] = [
   ...HITTER_POSITIONS.map((position) => ({ kind: 'pos', position } as IdentitySlotKind)),
   { kind: 'backupC' } as IdentitySlotKind,
   ...Array.from({ length: 4 }, () => ({ kind: 'sp' } as IdentitySlotKind)),
-  ...Array.from({ length: 4 }, () => ({ kind: 'rp' } as IdentitySlotKind)),
+  ...Array.from({ length: 3 }, () => ({ kind: 'rp' } as IdentitySlotKind)),
+  { kind: 'cp' } as IdentitySlotKind,
   ...Array.from({ length: 4 }, () => ({ kind: 'flex' } as IdentitySlotKind)),
   { kind: 'benchOrRp' } as IdentitySlotKind,
 ];
@@ -511,7 +524,8 @@ const VALUE_TO_IDENTITY_SLOT: number[] = [
   17, 18, 19, 20, // flex ×4
   21, // swing
   9, 10, 11, 12, // sp ×4
-  13, 14, 15, 16, // rp ×4
+  16, // cp
+  13, 14, 15, // rp ×3
 ];
 
 /**
@@ -544,9 +558,12 @@ function identityEligible(
     return pure.length > 0 ? pure : free.filter(canStart);
   }
   if (slot.kind === 'rp' && greedyCtx !== undefined) {
-    const pure = free.filter((p) => p.isPitcher && (p.role === 'RP' || p.role === 'CP'));
-    return pure.length > 0 ? pure : free.filter(canRelieve);
+    const pure = free.filter((p) => p.isPitcher && p.role === 'RP');
+    if (pure.length > 0) return pure;
+    const nonCloser = free.filter((p) => canRelieve(p) && !isCloser(p));
+    return nonCloser.length > 0 ? nonCloser : free.filter(canRelieve);
   }
+  if (slot.kind === 'cp') return free.filter(isCloser);
   return eligible(pool, slot as SlotKind, used);
 }
 
@@ -571,7 +588,7 @@ function normalizeIdentityPins(
   return pinnedBySlot.size > 0 ? pinnedBySlot : undefined;
 }
 
-const LEGAL_MAX_PITCHERS = 9;
+const LEGAL_MAX_PITCHERS = LEGAL_ROSTER.maxPitchers;
 
 /** Sequential greedy over IDENTITY_SLOT_PLAN with the running pitcher-count context. */
 function identityGreedyStart(

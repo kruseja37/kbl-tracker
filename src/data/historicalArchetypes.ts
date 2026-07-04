@@ -61,7 +61,7 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'bash-brothers', name: 'Bash Brothers', exemplars: ['1989 Athletics', '1996 Mariners'], era: 'late 1980s–90s',
     lore: 'Forearm-bashing bombs and cannon arms; the pitching leaks.', identity: '+power +arm → −command (rotation & bullpen)',
-    boosts: ['POW', 'ARM'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: { POW: 1.5, ARM: 1, ROT_ACC: -1, PEN_ACC: -1 },
+    boosts: ['POW', 'ARM'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: { POW: 1.5, ARM: 1, ROT_ACC: -1, PEN_ACC: -0.5 },
   },
   {
     id: 'whiteyball', name: 'Whiteyball', exemplars: ['1985 Cardinals', '1982 Cardinals'], era: 'turf era / 1980s',

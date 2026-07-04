@@ -48,7 +48,7 @@ function hitter(
 }
 
 function arm(
-  role: 'SP' | 'RP',
+  role: 'SP' | 'RP' | 'CP' | 'SP/RP',
   options: { id?: string; salary?: number; tools?: { velocity: number; junk: number; accuracy: number } } = {},
 ): DesignPoolPlayer {
   const id = options.id ?? `p-${role}-${nextId += 1}`;
@@ -76,7 +76,8 @@ function standardPool(): DesignPoolPlayer[] {
     hitter('C', { id: 'backup-c' }),
     ...Array.from({ length: 5 }, (_, index) => hitter('LF', { id: `bench-${index}` })),
     ...Array.from({ length: 4 }, () => arm('SP')),
-    ...Array.from({ length: 4 }, () => arm('RP')),
+    ...Array.from({ length: 3 }, () => arm('RP')),
+    arm('CP'),
   ];
 }
 
@@ -184,7 +185,7 @@ describe('evaluateRosterDesign', () => {
         hitter(pos, { salary: 8_200 }),
       ]),
       ...Array.from({ length: 4 }, () => arm('SP', { salary: 9_000 })),
-      ...Array.from({ length: 5 }, () => arm('RP', { salary: 7_000 })),
+      ...Array.from({ length: 4 }, (_, index) => arm(index === 3 ? 'CP' : 'RP', { salary: 7_000 })),
     ];
     const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 1_000_000);
     expect(result.blockers).toEqual([]);
@@ -216,7 +217,8 @@ describe('evaluateRosterDesign', () => {
       ...Array.from({ length: 5 }, (_, i) => hitter('LF', { id: `bench-${i}` })), // FLEX×4 + the swing bat
       twoWayArm, // the ONLY body that can back up C
       ...Array.from({ length: 4 }, () => arm('SP')),
-      ...Array.from({ length: 4 }, () => arm('RP')),
+      ...Array.from({ length: 3 }, () => arm('RP')),
+      arm('CP'),
       arm('RP', { id: 'tempting-cheap-arm', salary: 5_000 }), // cheaper than any bat at SWING
     ];
     const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 500_000);
@@ -238,7 +240,7 @@ describe('evaluateRosterDesign', () => {
       ...Array.from({ length: 4 }, (_, i) => hitter('LF', { id: `bench-${i}` })), // FLEX only — no 13th bat
       twoWayArm,
       ...Array.from({ length: 4 }, () => arm('SP')),
-      ...Array.from({ length: 5 }, () => arm('RP')),
+      ...Array.from({ length: 5 }, (_, index) => arm(index === 4 ? 'CP' : 'RP')),
     ];
     const result = evaluateRosterDesign(buildDefaultDesignSlots(), pool, 500_000);
     expect(result.feasible).toBe(false);
@@ -321,12 +323,17 @@ describe('rankPoolForPreference', () => {
   it('P4 seam: exported slot eligibility delegates to the feasibility slot rules', () => {
     const shortstop = hitter('SS', { id: 'shortstop' });
     const starter = arm('SP', { id: 'starter' });
+    const reliever = arm('RP', { id: 'reliever' });
+    const closer = arm('CP', { id: 'closer' });
     const secondaryC = hitter('1B', { id: 'secondary-c', secondary: 'C' });
 
     expect(isDesignPlayerEligibleForSlot({ slotId: 'SS', kind: 'pos', position: 'SS' }, shortstop)).toBe(true);
     expect(isDesignPlayerEligibleForSlot({ slotId: 'SS', kind: 'pos', position: 'SS' }, secondaryC)).toBe(false);
     expect(isDesignPlayerEligibleForSlot({ slotId: 'backupC', kind: 'backupC' }, secondaryC)).toBe(true);
     expect(isDesignPlayerEligibleForSlot({ slotId: 'SP1', kind: 'sp' }, starter)).toBe(true);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'RP1', kind: 'rp' }, closer)).toBe(true);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'CP', kind: 'cp' }, closer)).toBe(true);
+    expect(isDesignPlayerEligibleForSlot({ slotId: 'CP', kind: 'cp' }, reliever)).toBe(false);
     expect(isDesignPlayerEligibleForSlot({ slotId: 'FLEX1', kind: 'flex' }, starter)).toBe(false);
   });
 
@@ -334,13 +341,13 @@ describe('rankPoolForPreference', () => {
     const pool = [
       ...standardPool(),
       arm('SP', { id: 'swing-sp-rp' }),
-      arm('RP', { id: 'cp-like' }),
+      arm('CP', { id: 'cp-like' }),
     ];
     const positions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'] as const;
     for (const position of positions) {
       const slot = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].includes(position)
         ? { slotId: position, kind: 'pos' as const, position }
-        : { slotId: position, kind: position === 'RP' || position === 'CP' ? 'rp' as const : 'sp' as const };
+        : { slotId: position, kind: position === 'CP' ? 'cp' as const : position === 'RP' ? 'rp' as const : 'sp' as const };
       expect(rankPoolForPreference(position as TaxonomyPosition, { shape: 'Balanced' }, pool))
         .toEqual(rankPoolForSlot(slot, { shape: 'Balanced' }, pool));
     }

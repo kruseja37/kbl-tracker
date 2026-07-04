@@ -111,8 +111,9 @@ function makeStrandingFixture(): Player[] {
   for (let index = 0; index < 4; index += 1) {
     players.push(makePlayer({ id: `cheap-sp-${index}`, primaryPosition: 'SP', salary: 1_000 }));
     players.push(makePlayer({ id: `expensive-sp-${index}`, primaryPosition: 'SP', salary: 40_000 }));
-    players.push(makePlayer({ id: `cheap-rp-${index}`, primaryPosition: 'RP', salary: 1_000 }));
-    players.push(makePlayer({ id: `expensive-rp-${index}`, primaryPosition: 'RP', salary: 40_000 }));
+    const reliefPosition = index === 3 ? 'CP' : 'RP';
+    players.push(makePlayer({ id: `cheap-${reliefPosition.toLowerCase()}-${index}`, primaryPosition: reliefPosition, salary: 1_000 }));
+    players.push(makePlayer({ id: `expensive-${reliefPosition.toLowerCase()}-${index}`, primaryPosition: reliefPosition, salary: 40_000 }));
   }
   return players;
 }
@@ -131,9 +132,10 @@ function makeLegalRosterFixture(prefix: string, salary: number): Player[] {
     ...Array.from({ length: 4 }, (_, index) =>
       makePlayer({ id: `${prefix}-sp-${index}`, primaryPosition: 'SP', salary }),
     ),
-    ...Array.from({ length: 4 }, (_, index) =>
+    ...Array.from({ length: 3 }, (_, index) =>
       makePlayer({ id: `${prefix}-rp-${index}`, primaryPosition: 'RP', salary }),
     ),
+    makePlayer({ id: `${prefix}-cp`, primaryPosition: 'CP', salary }),
   ];
 }
 

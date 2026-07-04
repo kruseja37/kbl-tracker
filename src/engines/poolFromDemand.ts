@@ -39,7 +39,7 @@ import { historicalToSimArchetype } from './draftabilityRanker';
 import { poolDemandModel } from './auctionPoolSizing';
 import type { HistoricalArchetype } from '../data/historicalArchetypes';
 import type { TierKey } from '../data/tierParams';
-import { canCover, canRelieve, canStart } from '../data/rosterConstruction';
+import { canCover, canRelieve, canStart, isCloser } from '../data/rosterConstruction';
 
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
@@ -264,6 +264,8 @@ function eligibleForRepairGroup(slot: DesignSlot, player: DemandUniversePlayer):
       return canStart(player);
     case 'rp':
       return canRelieve(player);
+    case 'cp':
+      return isCloser(player);
     case 'flex':
       return !player.isPitcher;
     case 'swing':
@@ -541,6 +543,7 @@ export function extractPoolFromDemand(
     const preference = cell.slot.preference!;
     const allowRunnerUp = preference.allowRunnerUp ?? true;
     const matching = classified
+      .filter(({ player }) => cell.slot.kind === 'cp' ? isCloser(player) : true)
       .filter(({ classification }) => demandCellMatches(classification, { ...preference, allowRunnerUp }))
       .map(({ player }) => player)
       .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));

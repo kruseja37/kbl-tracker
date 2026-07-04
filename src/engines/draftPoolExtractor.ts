@@ -38,7 +38,7 @@ import {
   type DraftabilityBand,
 } from './draftabilityRanker';
 import { computePoolTierCap } from './leagueConstruction';
-import { canCover, canRelieve, canStart, LEGAL_ROSTER } from '../data/rosterConstruction';
+import { canCover, canRelieve, canStart, isCloser, LEGAL_ROSTER } from '../data/rosterConstruction';
 import type { HistoricalArchetype } from '../data/historicalArchetypes';
 import type { TierKey } from '../data/tierParams';
 
@@ -51,6 +51,8 @@ export interface PoolStructure {
   catcherCoverage: number;
   startableArms: number;
   relievableArms: number;
+  /** True closer bodies needed per team; CP only, not satisfiable by RP or SP/RP. */
+  closerArms: number;
   /** TOTAL pitcher bodies per team (capability floors alone undercount — audit C1B-1: SP/RP swings satisfy both arm floors with one body). */
   minPitchers: number;
   /** TOTAL position-player bodies per team. */
@@ -64,6 +66,7 @@ export const MLB_POOL_STRUCTURE: PoolStructure = {
   catcherCoverage: LEGAL_ROSTER.minCatchers,
   startableArms: LEGAL_ROSTER.startingPitchers,
   relievableArms: LEGAL_ROSTER.minRelievers,
+  closerArms: LEGAL_ROSTER.minClosers,
   minPitchers: LEGAL_ROSTER.minPitchers,
   minPositionPlayers: LEGAL_ROSTER.minPositionPlayers,
 };
@@ -133,6 +136,10 @@ function byIvAscIdAsc(a: SimPlayer, b: SimPlayer): number {
   return a.iv - b.iv || a.id.localeCompare(b.id);
 }
 
+function bySalaryAscIdAsc(a: SimPlayer, b: SimPlayer): number {
+  return a.salary - b.salary || a.id.localeCompare(b.id);
+}
+
 /**
  * Structural floor pick-lists from the source (deterministic): per-position primaries, extra
  * C-coverage, startable + relievable arms — each scaled to league demand × oversupply. Shortfalls
@@ -191,17 +198,25 @@ function structuralFloor(
 
   const startableCandidates = source.filter(canStart);
   const relievableCandidates = source.filter(canRelieve);
+  const closerCandidates = source.filter(isCloser);
   const startable = [...startableCandidates].sort(byIvDescIdAsc);
   const relievable = [...relievableCandidates].sort(byIvDescIdAsc);
   startable.slice(0, need(teams * structure.startableArms)).forEach((p) => picks.set(p.id, p));
   [...startableCandidates].sort(byIvAscIdAsc).slice(0, cheapArmWanted).forEach((p) => picks.set(p.id, p));
   relievable.slice(0, need(teams * structure.relievableArms)).forEach((p) => picks.set(p.id, p));
   [...relievableCandidates].sort(byIvAscIdAsc).slice(0, cheapArmWanted).forEach((p) => picks.set(p.id, p));
+  [...closerCandidates]
+    .sort(bySalaryAscIdAsc)
+    .slice(0, need(teams * structure.closerArms))
+    .forEach((p) => picks.set(p.id, p));
   if (startable.length < teams * structure.startableArms) {
     notes.push(`source itself is short on startable arms: ${startable.length} for ${teams * structure.startableArms} needed`);
   }
   if (relievable.length < teams * structure.relievableArms) {
     notes.push(`source itself is short on relief arms: ${relievable.length} for ${teams * structure.relievableArms} needed`);
+  }
+  if (closerCandidates.length < teams * structure.closerArms) {
+    notes.push(`source itself is short on closers: ${closerCandidates.length} CP for ${teams * structure.closerArms} needed`);
   }
 
   // TOTAL-BODY floors (audit C1B-1): capability floors dedup into the same picks — one SP/RP body

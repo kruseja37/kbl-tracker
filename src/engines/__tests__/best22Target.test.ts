@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIdentityRoster, type SimArchetype, type SimPlayer } from '../archetypeBalanceSimulator';
 import { BEST22_TUNING, buildBest22Target } from '../best22Target';
-import { canCover, canRelieve, canStart, type FieldPosition } from '../../data/rosterConstruction';
+import { canCover, canRelieve, canStart, isCloser, type FieldPosition } from '../../data/rosterConstruction';
 import { archetypeCapShift, HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import {
   buildDefaultDesignSlots,
@@ -66,7 +66,8 @@ function legalPool(extra: SimPlayer[] = [], names: Record<string, string> = {}):
     simPlayer('backup-c', { position: '1B', isPitcher: false, secondaryPosition: 'C' }, 60, names['backup-c']),
     ...Array.from({ length: 5 }, (_, index) => simPlayer(`bench-${index}`, { position: 'LF', isPitcher: false }, 60, names[`bench-${index}`])),
     ...Array.from({ length: 4 }, (_, index) => simPlayer(`sp-${index}`, { position: 'SP', isPitcher: true, role: 'SP' }, 60, names[`sp-${index}`])),
-    ...Array.from({ length: 4 }, (_, index) => simPlayer(`rp-${index}`, { position: 'RP', isPitcher: true, role: 'RP' }, 60, names[`rp-${index}`])),
+    ...Array.from({ length: 3 }, (_, index) => simPlayer(`rp-${index}`, { position: 'RP', isPitcher: true, role: 'RP' }, 60, names[`rp-${index}`])),
+    simPlayer('cp-0', { position: 'CP', isPitcher: true, role: 'CP' }, 60, names['cp-0']),
     ...extra,
   ];
 }
@@ -140,6 +141,9 @@ function expectPickFitsSlot(
       break;
     case 'rp':
       expect(canRelieve(player), `${slot.slotId} should hold a relievable pitcher, got ${player.id}`).toBe(true);
+      break;
+    case 'cp':
+      expect(isCloser(player), `${slot.slotId} should hold a true closer, got ${player.id}`).toBe(true);
       break;
     case 'flex':
       expect(player.isPitcher, `${slot.slotId} should hold a position player, got ${player.id}`).toBe(false);
@@ -344,7 +348,7 @@ describe('buildBest22Target', () => {
       { kind: 'rp', position: null },
       { kind: 'rp', position: null },
       { kind: 'rp', position: null },
-      { kind: 'rp', position: null },
+      { kind: 'cp', position: null },
       { kind: 'flex', position: null },
       { kind: 'flex', position: null },
       { kind: 'flex', position: null },
@@ -523,7 +527,7 @@ describe('buildBest22Target', () => {
       'rp-0': { iv: 40_000, salary: 10_000, velocity: 10 },
       'rp-1': { iv: 10_000, salary: 10_000, velocity: 100 },
       'rp-2': { iv: 30_000, salary: 20_000, velocity: 30 },
-      'rp-3': { iv: 30_000, salary: 10_000, velocity: 70 },
+      'cp-0': { iv: 30_000, salary: 10_000, velocity: 70 },
     };
     const pool = legalPool().map((player) => {
       const spec = armSpecs[player.id];
@@ -558,15 +562,17 @@ describe('buildBest22Target', () => {
     );
 
     expect(playerIdsForKind(rawPicks, slots, 'sp')).toEqual(['sp-1', 'sp-3', 'sp-2', 'sp-0']);
-    expect(playerIdsForKind(rawPicks, slots, 'rp')).toEqual(['rp-1', 'rp-3', 'rp-2', 'rp-0']);
+    expect(playerIdsForKind(rawPicks, slots, 'rp')).toEqual(['rp-1', 'rp-2', 'rp-0']);
+    expect(playerIdsForKind(rawPicks, slots, 'cp')).toEqual(['cp-0']);
     expect(playerIdsForKind(target.picks, slots, 'sp')).toEqual(['sp-0', 'sp-3', 'sp-2', 'sp-1']);
-    expect(playerIdsForKind(target.picks, slots, 'rp')).toEqual(['rp-0', 'rp-2', 'rp-3', 'rp-1']);
+    expect(playerIdsForKind(target.picks, slots, 'rp')).toEqual(['rp-0', 'rp-2', 'rp-1']);
+    expect(playerIdsForKind(target.picks, slots, 'cp')).toEqual(['cp-0']);
     expect(target.picks[10]).toMatchObject({ slotId: 'SP2', playerId: 'sp-3', pinned: true });
     expect(target.pins).toEqual({ honored: [{ slotId: 'SP2', playerId: 'sp-3' }], dropped: [] });
 
     const nonArmTarget = target.picks
       .map((pick, index) => ({ kind: slots[index].kind, ...pick }))
-      .filter((pick) => pick.kind !== 'sp' && pick.kind !== 'rp')
+      .filter((pick) => pick.kind !== 'sp' && pick.kind !== 'rp' && pick.kind !== 'cp')
       .map((pick) => ({
         slotId: pick.slotId,
         playerId: pick.playerId,
@@ -574,7 +580,9 @@ describe('buildBest22Target', () => {
         honorsAsk: pick.honorsAsk,
         pinned: pick.pinned,
       }));
-    const nonArmRaw = rawPicks.filter((_, index) => slots[index].kind !== 'sp' && slots[index].kind !== 'rp');
+    const nonArmRaw = rawPicks.filter((_, index) =>
+      slots[index].kind !== 'sp' && slots[index].kind !== 'rp' && slots[index].kind !== 'cp',
+    );
     expect(nonArmTarget).toEqual(nonArmRaw);
 
     const targetPlayerIds = target.picks.map((pick) => pick.playerId).filter(Boolean).sort();

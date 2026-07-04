@@ -24,6 +24,7 @@
 import {
   LEGAL_ROSTER,
   canCover,
+  isCloser,
   type FieldPosition,
   type RosterSlotPlayer,
   twoWayVariantFromTraits,
@@ -86,6 +87,8 @@ export interface RosterNeedBreakdown {
   rotationDeficit: number;
   /** Bullpen-side class deficit BEFORE swing allocation: `max(0, 4 − pure-RP/CP count)` (C2B-FIX F2). */
   bullpenDeficit: number;
+  /** Dedicated closer deficit: `max(0, 1 − CP count)`. CP satisfies this and a relief slot. */
+  closerDeficit: number;
   /** Additional position players needed to reach the 13 floor beyond the primary fills. */
   hitterFloorNeed: number;
   /** Additional pitchers needed to reach the 8 floor beyond the rotation/bullpen fills. */
@@ -100,14 +103,19 @@ export interface RosterNeedBreakdown {
 function classifyArms(pitchers: readonly RosterSlotPlayer[]): {
   pureSp: number;
   pureRelief: number;
+  closers: number;
   swing: number;
 } {
   let pureSp = 0;
   let pureRelief = 0;
+  let closers = 0;
   let swing = 0;
   for (const p of pitchers) {
     if (p.role === 'SP') pureSp += 1;
-    else if (p.role === 'RP' || p.role === 'CP') pureRelief += 1;
+    else if (p.role === 'RP' || p.role === 'CP') {
+      pureRelief += 1;
+      if (isCloser(p)) closers += 1;
+    }
     else if (p.role === 'SP/RP') swing += 1;
     // Unknown-role pitchers are INVALID data (JK ruling 2026-07-01: pitcher primaries are exactly
     // SP/SP-RP/RP/CP; two-way is a TRAIT on a normal pitcher primary — a well-formed Two Way (C)
@@ -115,18 +123,21 @@ function classifyArms(pitchers: readonly RosterSlotPlayer[]): {
     // Defensively, a bare 'P'/'TWO-WAY' primary counts toward pitcher HEADCOUNT only, matching
     // `isLegalRoster` exactly (audit F2). Upstream purge of the invalid states is a Wave-1 ticket.
   }
-  return { pureSp, pureRelief, swing };
+  return { pureSp, pureRelief, closers, swing };
 }
 
 function pitcherAdditionsNeeded(pitchers: RosterSlotPlayer[]): number {
-  const { pureSp, pureRelief, swing } = classifyArms(pitchers);
+  const { pureSp, pureRelief, closers, swing } = classifyArms(pitchers);
+  const closerDeficit = Math.max(0, LEGAL_ROSTER.minClosers - closers);
   let best = Number.POSITIVE_INFINITY;
   for (let x = 0; x <= swing; x += 1) {
     const rotDeficit = Math.max(0, LEGAL_ROSTER.startingPitchers - pureSp - x);
     const penDeficit = Math.max(0, LEGAL_ROSTER.minRelievers - pureRelief - (swing - x));
-    best = Math.min(best, rotDeficit + penDeficit);
+    best = Math.min(best, rotDeficit + closerDeficit + Math.max(0, penDeficit - closerDeficit));
   }
-  return Number.isFinite(best) ? best : LEGAL_ROSTER.startingPitchers + LEGAL_ROSTER.minRelievers;
+  return Number.isFinite(best)
+    ? best
+    : LEGAL_ROSTER.startingPitchers + LEGAL_ROSTER.minRelievers + LEGAL_ROSTER.minClosers;
 }
 
 /**
@@ -157,6 +168,7 @@ export function rosterNeedBreakdown(roster: RosterSlotPlayer[]): RosterNeedBreak
   const armClasses = classifyArms(pitchers);
   const rotationDeficit = Math.max(0, LEGAL_ROSTER.startingPitchers - armClasses.pureSp);
   const bullpenDeficit = Math.max(0, LEGAL_ROSTER.minRelievers - armClasses.pureRelief);
+  const closerDeficit = Math.max(0, LEGAL_ROSTER.minClosers - armClasses.closers);
 
   const hittersAfterPrimaries = hitters.length + primaryFills;
   const pitchersAfterFills = pitchers.length + pitcherNeed;
@@ -193,6 +205,7 @@ export function rosterNeedBreakdown(roster: RosterSlotPlayer[]): RosterNeedBreak
     pitcherNeed,
     rotationDeficit,
     bullpenDeficit,
+    closerDeficit,
     hitterFloorNeed,
     pitcherFloorNeed,
     minimumAdditions,
@@ -260,10 +273,13 @@ export function playerFillsHardRequirement(
     if (need.missingPrimaries.some((pos) => shape.position === pos)) return true;
     if (need.hitterFloorNeed > 0) return true;
   } else {
+    const generalReliefDeficit = Math.max(0, need.bullpenDeficit - need.closerDeficit);
+    if (shape.role === 'CP' && need.closerDeficit > 0) return true;
     if (need.pitcherNeed > 0) {
-      if (shape.role === 'SP/RP') return true;
+      if (shape.role === 'SP/RP' && (need.rotationDeficit > 0 || generalReliefDeficit > 0)) return true;
       if (shape.role === 'SP' && need.rotationDeficit > 0) return true;
-      if ((shape.role === 'RP' || shape.role === 'CP') && need.bullpenDeficit > 0) return true;
+      if (shape.role === 'RP' && generalReliefDeficit > 0) return true;
+      if (shape.role === 'CP' && need.bullpenDeficit > 0) return true;
     }
     if (need.pitcherFloorNeed > 0) return true;
   }
