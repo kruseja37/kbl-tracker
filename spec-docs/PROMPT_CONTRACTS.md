@@ -29866,3 +29866,82 @@ GATE (run all; paste ACTUAL output):
 OUTPUT: files created/changed; the resolver used at each of the 3 wire-ins; the model-test output; the build result;
 the full-suite counts; `git status`. DO NOT COMMIT — leave changes for Opus audit.
 <!-- ===== END CONTRACT: CODEX-B5-PROFILE-POPOVER ===== -->
+
+<!-- ===== CONTRACT: CODEX-B1B1-SEAT-VALUE ===== -->
+# CONTRACT: CODEX-B1B1-SEAT-VALUE (slice B1b-1 of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04)
+
+MISSION: Make the Assistant-GM whisper "YOUR NUMBER" (a) SEAT-SPECIFIC — it must DIFFER by the acting team's
+archetype (today every seat shows the same figure) — and (b) LIVE-BID-AWARE — the verdict/prose must react to the
+current high bid instead of freezing on the number. Do this by REUSING the already-built C2B market math, NOT by
+hand-rolling. Slice B1b-1 of `spec-docs/ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md` — READ §4.1 (+ its
+"CORRECTION" note), §7.1, §7.2, §4.6 FIRST.
+
+BRANCH: `experiment/manager-wpa-window`. DO NOT create a branch. DO NOT commit.
+
+GROUND TRUTH (verified via deep map — do not re-derive, but VERIFY exact signatures before you call them):
+- The advised GM's OWN honest value in the engine = `iv × fit × need` with NO personalityBias. It is computed
+  INLINE inside `projectBidVsPass` at `src/engines/auctionMarketModel.ts:~715` as `const ownValue = player.iv * fit
+  * need;` where `fit = bandFitMultiplier(bandWeights, ownLift, MEAN_PERSONALITY_SPREAD)` and `need =
+  ownNeedMultiplier(needAfter, shape, slotsAfter)`. (personalityBias at `estimateMarketWithInternals:~307` models
+  RIVAL cpu bidders — it is NOT part of the user GM's own number.)
+- Canonical fit fn: `bandFitMultiplier` (src/engines/cpuShillBidding.ts); cached wrapper `clubArchetypeFit(
+  archetypeWeights, priorities)` (auctionMarketModel.ts:~551). Canonical need fn: `ownNeedMultiplier(...)`. REUSE
+  these — do NOT reimplement the fit/need math.
+- Current number: `assembleWorthToYou` (src/engines/rosterIntelligencePayload.ts:~197-209): `worth = input.iv +
+  chemistry.premium` → archetype-BLIND. Called at src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx:~948-959.
+- Seat context ALREADY in scope at that call site: `team` (has mlbArchetypeKey), `teamState` (budget/slots),
+  `session`, the PRE-COMPUTED map `marketBandPrioritiesByTeamId` (LeagueBuilderAuctionDraft.tsx:~554-557 → the
+  seat's BandPriorities = `marketBandPrioritiesByTeamId[team.id]`), `lotAuction` (has `.iv`, `.archetypeWeights`,
+  `.pos`), `rosterShapes`, `openSlotsAfterWin`. Everything needed is already computed — REUSE the map, do NOT
+  recompute band priorities.
+- Live high bid: `session.currentLot?.highBid ?? null` (src/engines/auctionStateMachine.ts:~79, `Lot.highBid`).
+  NOT currently passed to the whisper.
+- Types: `WorthToYou` + `WorthToYouInput` (rosterIntelligencePayload.ts:~71); `BandPriorities`,
+  `RosterNeedBreakdown`, `RosterSlotPlayer` (auctionMarketModel.ts / rosterNeed.ts) — read the real declarations.
+
+DELIVERABLES:
+
+PART 1 — Extract the canonical ownValue (DRY; this PROVES reuse):
+- In `auctionMarketModel.ts` add `export function computeOwnValue(...)` that returns EXACTLY what projectBidVsPass
+  currently computes at :715 (`iv × fit × need`), using the SAME `bandFitMultiplier` + `ownNeedMultiplier` calls
+  and the SAME MEAN_PERSONALITY_SPREAD. Pick the param list that matches what :715 has in scope (iv, archetype
+  weights, own band priorities/lift, need breakdown, shape, open slots).
+- REFACTOR projectBidVsPass:~715 to CALL `computeOwnValue(...)` instead of the inline expression. The existing
+  `src/engines/__tests__/auctionMarketModel.test.ts` MUST stay green — that is the proof the extraction is byte-identical
+  in behavior. If any projectBidVsPass test moves, STOP — the extraction is wrong.
+
+PART 2 — Seat-specific YOUR NUMBER:
+- Extend `WorthToYouInput` + `assembleWorthToYou` to accept the seat inputs (ownBandPriorities, the lot's
+  archetypeWeights, shape, openSlots, needBreakdown). Compute `ownValue = computeOwnValue(...)`. Change the sum to
+  `worth = ownValue + chemistry.premium` (was `iv + chemistry.premium`). Keep `recommendedNumber =
+  max(0, min(worth, capValue ?? worth))`. Add `ownValue`, `archetypeFitMultiplier`, `needMultiplier` to `WorthToYou`
+  (transparency). Do NOT touch the chemistry.premium math.
+- Thread the seat inputs at LeagueBuilderAuctionDraft.tsx:~948 from the IN-SCOPE data listed above (ownBandPriorities
+  = marketBandPrioritiesByTeamId[team.id]; archetypeWeights = lotAuction.archetypeWeights; shape from lotShape /
+  lotAuction.pos; openSlots = openSlotsAfterWin; needBreakdown from rosterShapes via the canonical need fn). Reuse
+  the pre-computed map — do NOT recompute priorities.
+
+PART 3 — Live-bid awareness (§7.2 / §4.6):
+- Add `currentHighBid: number | null` to the whisper payload meta and thread `session.currentLot?.highBid`.
+- In `WhisperPanel.tsx`, add a live-bid line near YOUR NUMBER: if currentHighBid == null → nothing; if currentHighBid
+  < recommendedNumber → "Still under your number — $X to go" (X = recommendedNumber − currentHighBid); if ≥ →
+  "Past your number — let {objectPronoun} go". The NUMBER itself stays your value (ownValue-based); ONLY the
+  live line/verdict reacts to the price. Reuse the existing objectPronoun from the payload meta.
+
+CONSTRAINTS / NO-REGRESSION:
+- DO NOT change ivCurves/iv_oracle/salary/WAR/GameTracker. DO NOT change chemistry.premium math (later slice) —
+  only swap `iv`→`ownValue` in the worth sum. projectBidVsPass BEHAVIOR must be unchanged (PART 1 is DRY-only).
+- No `any`, no @ts-ignore.
+
+TESTS:
+- `rosterIntelligencePayload.test.ts`: (1) two DIFFERENT archetypes → DIFFERENT recommendedNumber for the SAME
+  player (assert they diverge); (2) a strong-fit seat's number > a poor-fit seat's for the same player; (3) a
+  neutral seat (fit×need≈1) → ownValue ≈ iv (sanity); (4) live-bid line: currentHighBid below → "still under",
+  at/above → "let {him} go".
+- `auctionMarketModel.test.ts` stays green (proves computeOwnValue == the inline it replaced).
+
+GATE (paste ACTUAL output): `npm run build` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/rosterIntelligencePayload.test.ts src/engines/__tests__/auctionMarketModel.test.ts src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx` green; FULL `NODE_ENV= npx vitest run` at CURRENT_STATE baseline (only the 2 characterized fails: wpaRuntimeBoundary, franchiseManualSmokeFixture; big-batch flakes verify SOLO). Report counts; any NEW red → STOP + report.
+
+OUTPUT: files changed; the computeOwnValue extraction + projectBidVsPass refactor diff; the seat-input threading diff;
+test output; build result; full-suite counts; `git status`. DO NOT COMMIT.
+<!-- ===== END CONTRACT: CODEX-B1B1-SEAT-VALUE ===== -->

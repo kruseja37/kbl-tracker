@@ -81,11 +81,14 @@ aggregates the roster's per-type profile + tiers.
 TODAY (BUG): WhisperPanel.tsx:222 renders `worth.capValue` (the affordability ceiling) as YOUR NUMBER.
 B1-quick (committed 1a9eadee) made it `iv + chemistry.premium` — better, but STILL archetype-BLIND (no fit term),
 so early (empty rosters, chem≈0) EVERY seat collapses to the same number (JK 2026-07-04 defect). REAL FIX (B1b):
-YOUR NUMBER = the **SEAT-SPECIFIC value** = the C2B `ownValue = IV × archetypeFit_ij × needMultiplier_j(pos) ×
-personalityBias_j` (auctionMarketModel.ts; already computed, feeds projectBidVsPass/estimateMarket). This is
-archetype-DIFFERENTIATED by construction → each GM's number diverges by their archetype. Keep capValue as the
-SEPARATE "most you can bid" guard. Verdict keyed off **surplus = ownValue − predictedMedian** and off the LIVE bid
-(§4.6), not off capValue.
+YOUR NUMBER = the **SEAT-SPECIFIC value** = the C2B `ownValue = IV × archetypeFit_ij × needMultiplier_j(pos)`
+(auctionMarketModel.ts:715, inside projectBidVsPass; `fit = bandFitMultiplier`, `need = ownNeedMultiplier`).
+**CORRECTION (deep-map 2026-07-04): the advised GM's OWN honest value has NO personalityBias** — personalityBias
+(`estimateMarketWithInternals:307`) models how RIVAL cpu bidders deviate, not the user GM's own number. So YOUR
+NUMBER = IV × fit × need only. This is archetype-DIFFERENTIATED by construction → each GM's number diverges by their
+archetype. Keep capValue as the SEPARATE "most you can bid" guard. Verdict keyed off **surplus = ownValue −
+predictedMedian** and off the LIVE bid (§4.6), not off capValue. BUILD: extract `computeOwnValue` and refactor
+projectBidVsPass:715 to CALL it (DRY — the existing projectBidVsPass tests then prove the extraction is identical).
 ### 4.2 Bid-vs-pass projection — WIRE THE BUILT ENGINE (the killer feature)
 BUILT but ORPHANED: `projectBidVsPass` (auctionMarketModel.ts:660-770) returns `{bid, pass}` BoardProjection with
 budget-after, remaining hard requirements, and top-N surplus-ranked targets per branch — deterministic. NO
@@ -156,7 +159,9 @@ Each slice: Codex builds → Opus audits (builder≠auditor) → gate → JK bro
 ## 7. PROTOTYPE-REVIEW CORRECTIONS (JK 2026-07-04, after the interactive mockup)
 These SUPERSEDE the interim B1-quick behavior and refine the build:
 1. **SEAT-SPECIFIC number (fixes "every team says the same thing").** YOUR NUMBER = the C2B seat `ownValue`
-   (IV × archetypeFit × need × bias), NOT `iv + chemistry.premium`. Must diverge by team archetype. (Amends §4.1.)
+   (IV × archetypeFit × need — NO bias; see §4.1 correction), NOT `iv + chemistry.premium`. worth = ownValue +
+   chemistry.premium (chemistry.premium is already marginal — teamLift=0 unless a tier crossing). Must diverge by
+   team archetype. (Amends §4.1.)
 2. **§4.6 LIVE-BID AWARENESS (new).** The whisper must track the CURRENT high bid and re-read against YOUR NUMBER
    in real time: below your number → "still under your number — $X to go"; at/above → "past your number — let
    {him} go" (or "over the room" via the existing room-relation). The verdict + prose update on every bid, not

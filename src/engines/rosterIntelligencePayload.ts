@@ -13,11 +13,14 @@ import {
 import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode, type ChemistryCode } from '../data/chemistryCanonical';
 import { TRAIT_PRICING } from '../data/traitPricing';
 import {
+  computeOwnValue,
+  computeOwnValueFactors,
   estimateMarket,
   type ArchetypeLiftTable,
   type EstimatedMarket,
   type MarketLotView,
 } from './auctionMarketModel';
+import type { Band, BandPriorities } from './leagueConstruction';
 import {
   completionBidCeiling,
   type CompletionCandidate,
@@ -70,6 +73,9 @@ export interface MarketRead {
 
 export interface WorthToYou {
   iv: number;
+  ownValue: number;
+  archetypeFitMultiplier: number;
+  needMultiplier: number;
   chemistry: ChemistryTipBreakdown;
   verdict: 'push' | 'cap' | 'pass';
   recommendedNumber: number;
@@ -124,6 +130,10 @@ export interface WorthToYouInput {
   rosterWithCandidate: readonly RosterSlotPlayer[];
   remainingPool: readonly CompletionCandidate[];
   openSlotsAfterWin: number;
+  ownBandPriorities: BandPriorities;
+  archetypeWeights: Partial<Record<Band, number>> | undefined;
+  needBreakdown: RosterNeedBreakdown | null;
+  candidateShape: RosterSlotPlayer | null;
   market?: MarketRead | null;
 }
 
@@ -196,16 +206,40 @@ export function marketReadFromEstimate(view: MarketLotView, table: ArchetypeLift
 
 export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   const chemistry = chemistryAdviceForCandidate(input.candidate, input.rosterPlayers);
+  const factors = computeOwnValueFactors({
+    archetypeWeights: input.archetypeWeights,
+    ownBandPriorities: input.ownBandPriorities,
+    needBreakdown: input.needBreakdown,
+    shape: input.candidateShape,
+    openSlots: input.openSlotsAfterWin,
+  });
+  const ownValue = computeOwnValue({
+    iv: input.iv,
+    archetypeWeights: input.archetypeWeights,
+    ownBandPriorities: input.ownBandPriorities,
+    needBreakdown: input.needBreakdown,
+    shape: input.candidateShape,
+    openSlots: input.openSlotsAfterWin,
+  });
   const capValue = completionBidCeiling(
     input.budgetRemaining,
     input.rosterWithCandidate,
     input.remainingPool,
     input.openSlotsAfterWin,
   );
-  const worth = input.iv + chemistry.premium;
+  const worth = ownValue + chemistry.premium;
   const recommendedNumber = Math.max(0, Math.min(worth, capValue ?? worth));
   const verdict = worthVerdict(worth, capValue, input.market ?? null);
-  return { iv: input.iv, chemistry, verdict, recommendedNumber, capValue };
+  return {
+    iv: input.iv,
+    ownValue,
+    archetypeFitMultiplier: factors.archetypeFitMultiplier,
+    needMultiplier: factors.needMultiplier,
+    chemistry,
+    verdict,
+    recommendedNumber,
+    capValue,
+  };
 }
 
 export function assembleBoard(input: BoardInput): BoardEntry[] {

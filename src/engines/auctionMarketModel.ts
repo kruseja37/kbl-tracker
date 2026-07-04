@@ -406,6 +406,37 @@ export function ownNeedMultiplier(
   return 1 + MARKET_TUNING.needWeight * urgency;
 }
 
+export interface OwnValueInput {
+  iv: number;
+  archetypeWeights: Partial<Record<Band, number>> | undefined;
+  ownBandPriorities: BandPriorities;
+  needBreakdown: RosterNeedBreakdown | null;
+  shape: RosterSlotPlayer | null;
+  openSlots: number;
+}
+
+export interface OwnValueFactors {
+  archetypeFitMultiplier: number;
+  needMultiplier: number;
+}
+
+export function computeOwnValueFactors(input: Omit<OwnValueInput, 'iv'>): OwnValueFactors {
+  const bandWeights = normalizeBandWeights(input.archetypeWeights);
+  const fit = bandWeights !== null
+    ? bandFitMultiplier(bandWeights, cachedBandLift(input.ownBandPriorities), MEAN_PERSONALITY_SPREAD)
+    : 1;
+  const need = ownNeedMultiplier(input.needBreakdown, input.shape, Math.max(1, input.openSlots));
+  return {
+    archetypeFitMultiplier: fit,
+    needMultiplier: need,
+  };
+}
+
+export function computeOwnValue(input: OwnValueInput): number {
+  const factors = computeOwnValueFactors(input);
+  return input.iv * factors.archetypeFitMultiplier * factors.needMultiplier;
+}
+
 /** leagueScarcity(pos) = teams-still-needing / players-left, normalized and clamped (spec §5:136). */
 export function leagueScarcityMultiplier(teamsStillNeeding: number, playersLeftAtPos: number): number {
   if (playersLeftAtPos <= 0) return MARKET_TUNING.scarcityMax;
@@ -686,7 +717,6 @@ export function projectBidVsPass(input: BidVsPassInput): { bid: BoardProjection;
       needAfter = teamRosterNeed(branchRosterIds, branchPositions);
     }
 
-    const ownLift = cachedBandLift(input.ownBandPriorities);
     const targets: ProjectedTarget[] = [];
     for (const playerId of session.availablePlayerIds) {
       const player = session.players[playerId] as CpuShillAuctionPlayer | undefined;
@@ -708,11 +738,14 @@ export function projectBidVsPass(input: BidVsPassInput): { bid: BoardProjection;
         if (strandsRoster) continue;
       }
 
-      const fit = bandWeights !== null
-        ? bandFitMultiplier(bandWeights, ownLift, MEAN_PERSONALITY_SPREAD)
-        : 1;
-      const need = ownNeedMultiplier(needAfter, shape, Math.max(1, slotsAfter));
-      const ownValue = player.iv * fit * need;
+      const ownValue = computeOwnValue({
+        iv: player.iv,
+        archetypeWeights: player.archetypeWeights,
+        ownBandPriorities: input.ownBandPriorities,
+        needBreakdown: needAfter,
+        shape,
+        openSlots: slotsAfter,
+      });
 
       const rivalViews: MarketBidderView[] = session.teams
         .filter((t) => t.rosterSlotsRemaining > 0)

@@ -7,6 +7,7 @@ import type { CompletionCandidate } from '../auctionCompletionFloor';
 import type { Player } from '../../utils/leagueBuilderStorage';
 import type { SimPlayer } from '../archetypeBalanceSimulator';
 import type { RosterNeedBreakdown } from '../rosterNeed';
+import type { Band, BandPriorities } from '../leagueConstruction';
 import {
   PAYLOAD_TUNING,
   assembleBoard,
@@ -79,6 +80,65 @@ const AMBER_ROSTER: readonly RosterSlotPlayer[] = [
   pitcher('RP'),
   pitcher('CP'),
 ];
+
+const NEUTRAL_BAND_PRIORITIES: BandPriorities = {
+  Power: 1,
+  Contact: 1,
+  Speed: 1,
+  Defense: 1,
+  Rotation: 1,
+  Bullpen: 1,
+};
+
+const POWER_BAND_PRIORITIES: BandPriorities = {
+  Power: 10,
+  Contact: 0,
+  Speed: 0,
+  Defense: 0,
+  Rotation: 0,
+  Bullpen: 0,
+};
+
+const DEFENSE_BAND_PRIORITIES: BandPriorities = {
+  Power: 0,
+  Contact: 0,
+  Speed: 0,
+  Defense: 10,
+  Rotation: 0,
+  Bullpen: 0,
+};
+
+const NEUTRAL_ARCHETYPE_WEIGHTS: Record<Band, number> = {
+  Power: 0.5,
+  Contact: 0.5,
+  Speed: 0.5,
+  Defense: 0.5,
+  Rotation: 0.5,
+  Bullpen: 0.5,
+};
+
+const POWER_ARCHETYPE_WEIGHTS: Record<Band, number> = {
+  Power: 1,
+  Contact: 0,
+  Speed: 0,
+  Defense: 0,
+  Rotation: 0,
+  Bullpen: 0,
+};
+
+function neutralSeat(overrides: {
+  ownBandPriorities?: BandPriorities;
+  archetypeWeights?: Partial<Record<Band, number>>;
+  needBreakdown?: RosterNeedBreakdown | null;
+  candidateShape?: RosterSlotPlayer | null;
+} = {}) {
+  return {
+    ownBandPriorities: overrides.ownBandPriorities ?? NEUTRAL_BAND_PRIORITIES,
+    archetypeWeights: overrides.archetypeWeights ?? NEUTRAL_ARCHETYPE_WEIGHTS,
+    needBreakdown: overrides.needBreakdown ?? null,
+    candidateShape: overrides.candidateShape ?? hitter('CF'),
+  };
+}
 
 function player(overrides: Partial<Player> & Pick<Player, 'id'>): Player {
   return {
@@ -209,6 +269,7 @@ describe('roster intelligence payload assembly', () => {
         rosterWithCandidate: GREEN_ROSTER,
         remainingPool: [],
         openSlotsAfterWin: 0,
+        ...neutralSeat({ candidateShape: pitcher('SP') }),
         market: market(),
       }).verdict,
     ).toBe('push');
@@ -222,6 +283,7 @@ describe('roster intelligence payload assembly', () => {
         rosterWithCandidate: GREEN_ROSTER,
         remainingPool: [],
         openSlotsAfterWin: 0,
+        ...neutralSeat({ candidateShape: pitcher('SP') }),
         market: market(),
       }).verdict,
     ).toBe('cap');
@@ -235,6 +297,7 @@ describe('roster intelligence payload assembly', () => {
         rosterWithCandidate: GREEN_ROSTER,
         remainingPool: [],
         openSlotsAfterWin: 0,
+        ...neutralSeat(),
         market: market(),
       }).verdict,
     ).toBe('pass');
@@ -258,9 +321,10 @@ describe('roster intelligence payload assembly', () => {
       rosterWithCandidate: GREEN_ROSTER,
       remainingPool: [],
       openSlotsAfterWin: 0,
+      ...neutralSeat({ candidateShape: pitcher('SP') }),
       market: market({ band: { low: 70_000, median: 90_000, high: 110_000 } }),
     });
-    const valueWorth = valuePick.iv + valuePick.chemistry.premium;
+    const valueWorth = valuePick.ownValue + valuePick.chemistry.premium;
 
     expect(valuePick.capValue).toBe(809_714);
     expect(valuePick.recommendedNumber).toBe(valueWorth);
@@ -274,12 +338,98 @@ describe('roster intelligence payload assembly', () => {
       rosterWithCandidate: GREEN_ROSTER,
       remainingPool: [],
       openSlotsAfterWin: 0,
+      ...neutralSeat({ candidateShape: pitcher('SP') }),
       market: market({ band: { low: 95_000, median: 110_000, high: 130_000 } }),
     });
 
     expect(cappedPick.capValue).toBe(90_000);
     expect(cappedPick.recommendedNumber).toBe(90_000);
     expect(cappedPick.recommendedNumber).toBeLessThanOrEqual(cappedPick.capValue ?? 0);
+  });
+
+  test('assembleWorthToYou gives different numbers to different archetype seats for the same player', () => {
+    const candidate = player({ id: 'same-player', chemistry: 'Competitive' });
+    const base = {
+      candidate,
+      iv: 50_000,
+      rosterPlayers: [] as Player[],
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [] as CompletionCandidate[],
+      openSlotsAfterWin: 21,
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    };
+
+    const powerSeat = assembleWorthToYou({
+      ...base,
+      ...neutralSeat({
+        ownBandPriorities: POWER_BAND_PRIORITIES,
+        archetypeWeights: POWER_ARCHETYPE_WEIGHTS,
+        candidateShape: hitter('1B'),
+      }),
+    });
+    const defenseSeat = assembleWorthToYou({
+      ...base,
+      ...neutralSeat({
+        ownBandPriorities: DEFENSE_BAND_PRIORITIES,
+        archetypeWeights: POWER_ARCHETYPE_WEIGHTS,
+        candidateShape: hitter('1B'),
+      }),
+    });
+
+    expect(powerSeat.recommendedNumber).not.toBe(defenseSeat.recommendedNumber);
+  });
+
+  test('assembleWorthToYou values a strong-fit seat above a poor-fit seat for the same player', () => {
+    const candidate = player({ id: 'power-fit-player', chemistry: 'Competitive' });
+    const base = {
+      candidate,
+      iv: 50_000,
+      rosterPlayers: [] as Player[],
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [] as CompletionCandidate[],
+      openSlotsAfterWin: 21,
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    };
+
+    const strongFit = assembleWorthToYou({
+      ...base,
+      ...neutralSeat({
+        ownBandPriorities: POWER_BAND_PRIORITIES,
+        archetypeWeights: POWER_ARCHETYPE_WEIGHTS,
+        candidateShape: hitter('1B'),
+      }),
+    });
+    const poorFit = assembleWorthToYou({
+      ...base,
+      ...neutralSeat({
+        ownBandPriorities: DEFENSE_BAND_PRIORITIES,
+        archetypeWeights: POWER_ARCHETYPE_WEIGHTS,
+        candidateShape: hitter('1B'),
+      }),
+    });
+
+    expect(strongFit.archetypeFitMultiplier).toBeGreaterThan(poorFit.archetypeFitMultiplier);
+    expect(strongFit.recommendedNumber).toBeGreaterThan(poorFit.recommendedNumber);
+  });
+
+  test('assembleWorthToYou keeps a neutral fit and need seat at raw IV before chemistry', () => {
+    const neutral = assembleWorthToYou({
+      candidate: player({ id: 'neutral-player', chemistry: 'Competitive' }),
+      iv: 50_000,
+      rosterPlayers: [],
+      budgetRemaining: 500_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 21,
+      ...neutralSeat(),
+      market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+    });
+
+    expect(neutral.archetypeFitMultiplier).toBeCloseTo(1, 6);
+    expect(neutral.needMultiplier).toBe(1);
+    expect(neutral.ownValue).toBeCloseTo(neutral.iv, 6);
   });
 
   test('assembleWorthToYou never pushes without a market read', () => {
@@ -294,6 +444,7 @@ describe('roster intelligence payload assembly', () => {
         rosterWithCandidate: GREEN_ROSTER,
         remainingPool: [],
         openSlotsAfterWin: 0,
+        ...neutralSeat(),
       }).verdict,
     ).toBe('pass');
 
@@ -306,6 +457,7 @@ describe('roster intelligence payload assembly', () => {
         rosterWithCandidate: GREEN_ROSTER,
         remainingPool: [],
         openSlotsAfterWin: 0,
+        ...neutralSeat(),
       }).verdict,
     ).toBe('cap');
 
@@ -318,6 +470,7 @@ describe('roster intelligence payload assembly', () => {
         rosterWithCandidate: AMBER_ROSTER.slice(0, 20),
         remainingPool: [],
         openSlotsAfterWin: 2,
+        ...neutralSeat(),
       }).verdict,
     ).toBe('pass');
   });

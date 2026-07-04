@@ -35,6 +35,7 @@ import {
   cpuBidOnLot,
   cpuDecideLoneSurvivor,
   type CpuBidOnLotDecision,
+  type CpuShillAuctionPlayer,
   type CpuLoneSurvivorDecision,
 } from "../../../engines/cpuShillBidding";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
@@ -908,6 +909,7 @@ export function LeagueBuilderAuctionDraft() {
 
     const lotPlayerId = session.currentLot.playerId;
     const lotAuction = session.players[lotPlayerId];
+    const lotArchetypeWeights = (lotAuction as CpuShillAuctionPlayer | undefined)?.archetypeWeights;
     const lotPlayer = playerById.get(lotPlayerId) ?? null;
     const lotShape = lotAuction?.pos;
 
@@ -921,6 +923,8 @@ export function LeagueBuilderAuctionDraft() {
     const rosterPlayersClean = rosterPlayers.length === teamState.roster.length && rosterShapeClean;
     const rosterWithCandidate = lotShape ? [...rosterShapes, lotShape] : rosterShapes;
     const openSlotsAfterWin = Math.max(0, teamState.rosterSlotsRemaining - 1);
+    const needBreakdown = rosterShapeClean ? rosterNeedBreakdown(rosterShapes) : null;
+    const ownBandPriorities = marketBandPrioritiesByTeamId.get(team.id) ?? null;
 
     const remainingPool: CompletionCandidate[] = [];
     let remainingPoolClean = true;
@@ -945,7 +949,7 @@ export function LeagueBuilderAuctionDraft() {
     });
     const market = marketView ? marketReadFromEstimate(marketView, marketLiftTable) : undefined;
 
-    const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean
+    const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean && ownBandPriorities
       ? assembleWorthToYou({
           candidate: lotPlayer,
           iv: lotAuction.iv,
@@ -954,6 +958,10 @@ export function LeagueBuilderAuctionDraft() {
           rosterWithCandidate,
           remainingPool,
           openSlotsAfterWin,
+          ownBandPriorities,
+          archetypeWeights: lotArchetypeWeights,
+          needBreakdown,
+          candidateShape: lotShape,
           market,
         })
       : undefined;
@@ -1019,7 +1027,7 @@ export function LeagueBuilderAuctionDraft() {
       // Gate need on rosterShapeClean like the sibling reads (worthToYou/scorecard/budget): a
       // position-blind roster member truncates rosterShapes, which would fabricate false FILLS/deficit
       // tags. Undefined → boardNeedTag returns null (byte-identical to the no-need board).
-      need: rosterShapeClean ? rosterNeedBreakdown(rosterShapes) : undefined,
+      need: needBreakdown ?? undefined,
     });
 
     const positionMap: Record<string, NonNullable<AuctionPlayer["pos"]>> = {};
@@ -1074,6 +1082,7 @@ export function LeagueBuilderAuctionDraft() {
         seatClubName: teamDisplayName(team),
         seatPrimary: team.colors.primary,
         currentLotPlayerId: lotPlayerId,
+        currentHighBid: session.currentLot.highBid,
         objectPronoun: playerPronouns(lotPlayer).object,
         boardMeta,
         boardPlayers,

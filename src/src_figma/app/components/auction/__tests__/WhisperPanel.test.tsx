@@ -67,6 +67,9 @@ function payload(
     },
     worthToYou: {
       iv: 72_000,
+      ownValue: 72_000,
+      archetypeFitMultiplier: 1,
+      needMultiplier: 1,
       verdict,
       recommendedNumber: verdict === "pass" ? 0 : 75_000,
       capValue: verdict === "pass" ? 45_000 : 75_000,
@@ -179,6 +182,23 @@ describe("WhisperPanel", () => {
     expect(screen.getByText("$96,000")).toBeInTheDocument();
     expect(screen.getByText("Go get him -- worth about $96,000 to you.")).toBeInTheDocument();
     expect(screen.queryByText("$809,714")).not.toBeInTheDocument();
+  });
+
+  test("live high bid line reacts below and at the recommended number", () => {
+    const { rerender } = render(<WhisperPanel payload={Object.assign(payload("push"), {
+      currentHighBid: 70_000,
+      objectPronoun: "him" as const,
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.getByText("Still under your number -- $5,000 to go")).toBeInTheDocument();
+
+    rerender(<WhisperPanel payload={Object.assign(payload("push"), {
+      currentHighBid: 75_000,
+      objectPronoun: "him" as const,
+    })} />);
+
+    expect(screen.getByText("Past your number -- let him go")).toBeInTheDocument();
   });
 
   test("FULL BOARD toggle renders the expanded board rows when more than three names remain", () => {

@@ -17,6 +17,7 @@ interface WhisperPayloadMeta {
   seatClubName?: string;
   seatPrimary?: string;
   currentLotPlayerId?: string;
+  currentHighBid?: number | null;
   objectPronoun?: "him" | "her";
   boardMeta?: Record<string, { name?: string; positions?: string }>;
   boardPlayers?: Record<string, Player>;
@@ -106,6 +107,7 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
             worth={worth}
             board={board}
             market={payload.market}
+            currentHighBid={meta.currentHighBid ?? null}
             objectPronoun={meta.objectPronoun ?? "him"}
             flash={flashVerdict}
           />
@@ -193,12 +195,14 @@ function WhisperHeadline({
   worth,
   board,
   market,
+  currentHighBid,
   objectPronoun,
   flash,
 }: {
   worth: WorthToYou | undefined;
   board: readonly BoardEntry[];
   market: RosterIntelligencePayload["market"];
+  currentHighBid: number | null;
   objectPronoun: "him" | "her";
   flash: boolean;
 }) {
@@ -215,6 +219,7 @@ function WhisperHeadline({
 
   const relation = roomRelation(worth.capValue, market);
   const verdictText = verdictLine(worth, objectPronoun);
+  const liveBidText = liveBidLine(worth, currentHighBid, objectPronoun);
   return (
     <section className="whisper-headline" data-testid="whisper-headline">
       <div className={`whisper-verdict ${worth.verdict} ${flash ? "flash" : ""}`}>
@@ -228,6 +233,7 @@ function WhisperHeadline({
           </div>
         </div>
       </div>
+      {liveBidText && <p className="whisper-live-bid">{liveBidText}</p>}
       <p className="whisper-why">{whyLine(worth)}</p>
       {relation && <p className="whisper-room-line">{relation}</p>}
     </section>
@@ -286,7 +292,22 @@ function whyLine(worth: WorthToYou): string {
   const premium = worth.chemistry.premium;
   if (premium > 0) return `Chemistry moves your number up by ${money(premium)}.`;
   if (premium < 0) return `Chemistry pulls your number down by ${money(Math.abs(premium))}.`;
-  return "The roster price is doing the talking here.";
+  if (Math.abs(worth.ownValue - worth.iv) >= 1) {
+    return `Fit and need move the raw IV to ${money(worth.ownValue)} before chemistry.`;
+  }
+  return "Your fit and need sit right on the raw IV.";
+}
+
+function liveBidLine(
+  worth: WorthToYou,
+  currentHighBid: number | null,
+  objectPronoun: "him" | "her",
+): string | null {
+  if (currentHighBid === null) return null;
+  if (currentHighBid < worth.recommendedNumber) {
+    return `Still under your number -- ${money(worth.recommendedNumber - currentHighBid)} to go`;
+  }
+  return `Past your number -- let ${objectPronoun} go`;
 }
 
 function roomRelation(
