@@ -61,6 +61,56 @@ function playerName(player: SimPlayer): string | undefined {
 }
 
 type ValidatedBuildPin = { slotId: string; slotIndex: number; playerId: string };
+type ArmSlotKind = 'sp' | 'rp';
+
+function armPickValue(pick: Best22TargetPick, ivByPlayerId: ReadonlyMap<string, number>): number {
+  return pick.playerId === '' ? Number.NEGATIVE_INFINITY : ivByPlayerId.get(pick.playerId) ?? Number.NEGATIVE_INFINITY;
+}
+
+function compareArmPicksByValue(
+  a: Best22TargetPick,
+  b: Best22TargetPick,
+  ivByPlayerId: ReadonlyMap<string, number>,
+): number {
+  const valueDelta = armPickValue(b, ivByPlayerId) - armPickValue(a, ivByPlayerId);
+  if (valueDelta !== 0) return valueDelta;
+  if (a.playerId === '' && b.playerId !== '') return 1;
+  if (b.playerId === '' && a.playerId !== '') return -1;
+  const salaryDelta = b.salary - a.salary;
+  if (salaryDelta !== 0) return salaryDelta;
+  return a.playerId.localeCompare(b.playerId);
+}
+
+function reorderArmSlotsByValue(
+  picks: readonly Best22TargetPick[],
+  slots: readonly DesignSlot[],
+  ivByPlayerId: ReadonlyMap<string, number>,
+): Best22TargetPick[] {
+  const reordered = [...picks];
+
+  for (const kind of ['sp', 'rp'] satisfies ArmSlotKind[]) {
+    const slotIndices = slots
+      .map((slot, index) => (slot.kind === kind ? index : -1))
+      .filter((index) => index >= 0);
+    if (slotIndices.length <= 1) continue;
+
+    const freeIndices = slotIndices.filter((index) => !picks[index]?.pinned);
+    if (freeIndices.length <= 1) continue;
+
+    const sortedFreePicks = freeIndices
+      .map((index) => picks[index])
+      .sort((a, b) => compareArmPicksByValue(a, b, ivByPlayerId));
+
+    freeIndices.forEach((slotIndex, freeIndex) => {
+      reordered[slotIndex] = {
+        ...sortedFreePicks[freeIndex],
+        slotId: picks[slotIndex].slotId,
+      };
+    });
+  }
+
+  return reordered;
+}
 
 function validatePins(
   slots: readonly DesignSlot[],
@@ -201,9 +251,11 @@ export function buildBest22Target(
       pinned: pinnedPlayerBySlotIndex.get(index) === player.id,
     };
   });
+  const ivByPlayerId = new Map(simPool.map((player) => [player.id, player.iv]));
+  const reorderedPicks = reorderArmSlotsByValue(picks, slots, ivByPlayerId);
 
   return {
-    picks,
+    picks: reorderedPicks,
     pins: pinReport,
     totalSalary: build.totalSalary,
     totalTax: build.totalTax,

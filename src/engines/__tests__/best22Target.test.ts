@@ -108,6 +108,14 @@ function classifiedById(pool: readonly SimPlayer[], overrides: Record<string, Sh
   return new Map(pool.map((player) => [player.id, overrides[player.id] ?? classification()]));
 }
 
+function playerIdsForKind(
+  picks: readonly { playerId: string }[],
+  slots: readonly DesignSlot[],
+  kind: DesignSlot['kind'],
+): string[] {
+  return slots.flatMap((slot, index) => (slot.kind === kind ? [picks[index].playerId] : []));
+}
+
 function expectPickFitsSlot(
   pick: { playerId: string },
   slot: DesignSlot,
@@ -496,6 +504,87 @@ describe('buildBest22Target', () => {
     expect(mismatch.asksHonored).toEqual({ honored: 0, asked: 1 });
     expect(match.picks[4]).toMatchObject({ slotId: 'SS', playerId: 'ss', pinned: true, honorsAsk: true });
     expect(match.asksHonored).toEqual({ honored: 1, asked: 1 });
+  });
+
+  it('A5: arm slots display best-first by IV without changing selection, totals, pins, or non-arm slots', () => {
+    const slots = buildDefaultDesignSlots();
+    const armFitArchetype: SimArchetype = {
+      name: 'Arm Fit',
+      rawShift: {
+        'rotation/VEL': 1,
+        'bullpen/VEL': 1,
+      },
+    };
+    const armSpecs: Record<string, { iv: number; salary: number; velocity: number }> = {
+      'sp-0': { iv: 40_000, salary: 10_000, velocity: 10 },
+      'sp-1': { iv: 10_000, salary: 10_000, velocity: 100 },
+      'sp-2': { iv: 30_000, salary: 10_000, velocity: 30 },
+      'sp-3': { iv: 20_000, salary: 10_000, velocity: 70 },
+      'rp-0': { iv: 40_000, salary: 10_000, velocity: 10 },
+      'rp-1': { iv: 10_000, salary: 10_000, velocity: 100 },
+      'rp-2': { iv: 30_000, salary: 20_000, velocity: 30 },
+      'rp-3': { iv: 30_000, salary: 10_000, velocity: 70 },
+    };
+    const pool = legalPool().map((player) => {
+      const spec = armSpecs[player.id];
+      return spec
+        ? ({ ...player, iv: spec.iv, salary: spec.salary, pit: { VEL: spec.velocity, JNK: 0, ACC: 0 } } as SimPlayer)
+        : player;
+    });
+    const pinMap = new Map([['SP2', 'sp-3']]);
+    const rawBuild = buildIdentityRoster(pool, armFitArchetype, TIER, SOLVENT_BUDGET, {
+      posture: 'optimal',
+      pinned: [{ slotIndex: 10, playerId: 'sp-3' }],
+    });
+    const rawBySlotIndex = new Map(rawBuild.slotPicks.map((slotPick) => [slotPick.slotIndex, slotPick.player]));
+    const rawPicks = slots.map((slot, index) => {
+      const player = rawBySlotIndex.get(index);
+      return {
+        slotId: slot.slotId ?? String(index),
+        playerId: player?.id ?? '',
+        salary: player?.salary ?? 0,
+        honorsAsk: Boolean(player),
+        pinned: index === 10 && player?.id === 'sp-3',
+      };
+    });
+    const target = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      armFitArchetype,
+      TIER,
+      SOLVENT_BUDGET,
+      pinMap,
+    );
+
+    expect(playerIdsForKind(rawPicks, slots, 'sp')).toEqual(['sp-1', 'sp-3', 'sp-2', 'sp-0']);
+    expect(playerIdsForKind(rawPicks, slots, 'rp')).toEqual(['rp-1', 'rp-3', 'rp-2', 'rp-0']);
+    expect(playerIdsForKind(target.picks, slots, 'sp')).toEqual(['sp-0', 'sp-3', 'sp-2', 'sp-1']);
+    expect(playerIdsForKind(target.picks, slots, 'rp')).toEqual(['rp-0', 'rp-2', 'rp-3', 'rp-1']);
+    expect(target.picks[10]).toMatchObject({ slotId: 'SP2', playerId: 'sp-3', pinned: true });
+    expect(target.pins).toEqual({ honored: [{ slotId: 'SP2', playerId: 'sp-3' }], dropped: [] });
+
+    const nonArmTarget = target.picks
+      .map((pick, index) => ({ kind: slots[index].kind, ...pick }))
+      .filter((pick) => pick.kind !== 'sp' && pick.kind !== 'rp')
+      .map((pick) => ({
+        slotId: pick.slotId,
+        playerId: pick.playerId,
+        salary: pick.salary,
+        honorsAsk: pick.honorsAsk,
+        pinned: pick.pinned,
+      }));
+    const nonArmRaw = rawPicks.filter((_, index) => slots[index].kind !== 'sp' && slots[index].kind !== 'rp');
+    expect(nonArmTarget).toEqual(nonArmRaw);
+
+    const targetPlayerIds = target.picks.map((pick) => pick.playerId).filter(Boolean).sort();
+    const rawPlayerIds = rawBuild.players.map((player) => player.id).sort();
+    expect(targetPlayerIds).toEqual(rawPlayerIds);
+    expect(new Set(targetPlayerIds).size).toBe(rawBuild.players.length);
+    expect(target.totalSalary).toBe(rawBuild.totalSalary);
+    expect(target.allIn).toBe(rawBuild.totalSalary + rawBuild.totalTax);
+    expect(target.feasible).toBe(rawBuild.legalRoster && rawBuild.solvent && rawBuild.floorMet);
+    expect(target.asksHonored).toEqual({ honored: 0, asked: 0 });
   });
 
   it('B1: value-seeded builds report each player under their true identity slot', () => {
