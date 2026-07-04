@@ -5,6 +5,7 @@ import {
   extractPoolFromDemand,
   PoolTeamsForSizingMissingError,
   POOL_SIZE_MULTIPLIER_STOPS,
+  repairG1PoolForSizing,
   resolvePoolSizingTarget,
   selectFitAwareRepairCandidate,
   trimPoolToTarget,
@@ -422,6 +423,78 @@ describe('extractPoolFromDemand', () => {
     });
     expect(result.sizing?.finalSize).toBeGreaterThanOrEqual(result.sizing?.effectiveTarget ?? 0);
     expect(result.sizing?.clamped).toBe(true);
+  });
+
+  it('repairs pure G1 budget overruns with net-zero swap-downs', () => {
+    n = 0;
+    const starterC = hitter('C', EVEN, 1_000);
+    starterC.id = 'starter-c';
+    const starter1B = hitter('1B', EVEN, 1_000);
+    starter1B.id = 'starter-1b';
+    const backupC = hitter('1B', EVEN, 1_000, {
+      secondaryPosition: 'C',
+      profile: { isPitcher: false, primaryPosition: '1B', secondaryPosition: 'C', bats: 'R', throws: 'R', age: 27, ...EVEN },
+    } as Partial<DemandUniversePlayer>);
+    backupC.id = 'backup-c';
+    const protectedPremium = hitter('LF', EVEN, 50_000);
+    protectedPremium.id = 'protected-premium-lf';
+    const evictableExpensive = hitter('RF', EVEN, 20_000);
+    evictableExpensive.id = 'evictable-expensive-rf';
+    const cheapSwap = hitter('RF', LOW, 1_000);
+    cheapSwap.id = 'inject-cheap-rf';
+    const initialPool = [
+      starterC,
+      starter1B,
+      backupC,
+      hitter('2B', EVEN, 1_000),
+      hitter('3B', EVEN, 1_000),
+      hitter('SS', EVEN, 1_000),
+      hitter('LF', EVEN, 1_000),
+      hitter('CF', EVEN, 1_000),
+      evictableExpensive,
+      protectedPremium,
+      hitter('1B', EVEN, 1_000),
+      hitter('2B', EVEN, 1_000),
+      hitter('3B', EVEN, 1_000),
+      arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+      arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    ];
+    const protectedIds = new Set([protectedPremium.id]);
+    const common = {
+      universe: [...initialPool, cheapSwap],
+      players: initialPool,
+      protectedIds,
+      teams: 1,
+      budget: 75_000,
+      poolMinSalary: 1_000,
+      fitOf: () => 0,
+    };
+    const initial = repairG1PoolForSizing({ ...common, maxRounds: 0 });
+    const repaired = repairG1PoolForSizing({ ...common, maxRounds: 3 });
+
+    expect(initial.g1.holds).toBe(false);
+    expect(initial.g1.failing?.overrun).toBeGreaterThan(0);
+    expect(initial.g1.failing?.blockers).toEqual([
+      expect.stringContaining('budget: The design fills'),
+    ]);
+    expect(repaired.g1.holds).toBe(true);
+    expect(repaired.g1.repairRounds).toBeLessThanOrEqual(3);
+    expect(repaired.players).toHaveLength(initialPool.length);
+    expect(repaired.players.map((player) => player.id)).toContain(protectedPremium.id);
+    expect(repaired.players.map((player) => player.id)).toContain(cheapSwap.id);
+    expect(repaired.players.map((player) => player.id)).not.toContain(evictableExpensive.id);
+    expect(repaired.injectedIds).toEqual([cheapSwap.id]);
+    expect(repaired.evictedIds).toEqual([evictableExpensive.id]);
+    expect(repaired.messages.join(' ')).toContain(`id ${cheapSwap.id}`);
+    expect(repaired.messages.join(' ')).toContain(`id ${evictableExpensive.id}`);
+    expect(repaired.evictedIds).not.toContain(protectedPremium.id);
   });
 
   it('keeps price shortfall wording separate from body-count wording and preserves the price-spread pin', () => {

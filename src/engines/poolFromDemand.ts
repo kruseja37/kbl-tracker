@@ -125,6 +125,14 @@ export interface PoolG1Result {
   repairRounds: number;
 }
 
+export interface PoolG1RepairResult {
+  players: DemandUniversePlayer[];
+  g1: PoolG1Result;
+  injectedIds: string[];
+  evictedIds: string[];
+  messages: string[];
+}
+
 export class PoolTeamsForSizingMissingError extends Error {
   constructor() {
     super('extractPoolFromDemand requires options.teams when sizing the shared draft pool.');
@@ -280,6 +288,30 @@ function repairSlotsForFailure(failing: PoolG1Result['failing'] | undefined): Ar
   return chosen;
 }
 
+function repairClassSlots(slot: DesignSlot | null, player: DemandUniversePlayer): DesignSlot[] {
+  if (slot) return [slot];
+  const matching = buildDefaultDesignSlots().filter((candidateSlot) => eligibleForRepairGroup(candidateSlot, player));
+  return matching.length > 0 ? matching : buildDefaultDesignSlots();
+}
+
+function eligibleForRepairClass(slot: DesignSlot | null, player: DemandUniversePlayer): boolean {
+  return (slot ? [slot] : buildDefaultDesignSlots()).some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player));
+}
+
+function selectSwapDownEvictionCandidate(
+  currentPlayers: readonly DemandUniversePlayer[],
+  protectedIds: ReadonlySet<string>,
+  slot: DesignSlot | null,
+  incoming: DemandUniversePlayer,
+): DemandUniversePlayer | null {
+  const classSlots = repairClassSlots(slot, incoming);
+  return currentPlayers
+    .filter((player) => !protectedIds.has(player.id))
+    .filter((player) => player.salary > incoming.salary)
+    .filter((player) => classSlots.some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player)))
+    .sort((a, b) => b.salary - a.salary || a.id.localeCompare(b.id))[0] ?? null;
+}
+
 function excludedWouldQualifyMessage(
   universe: readonly DemandUniversePlayer[],
   current: ReadonlyMap<string, DemandUniversePlayer>,
@@ -319,6 +351,105 @@ function runG1Check(
     assemblies: result.assemblies,
     ...(result.failing ? { failing: result.failing } : {}),
     repairRounds: 0,
+  };
+}
+
+export function repairG1PoolForSizing(options: {
+  universe: readonly DemandUniversePlayer[];
+  players: readonly DemandUniversePlayer[];
+  protectedIds: ReadonlySet<string>;
+  requestedExcludedIds?: ReadonlySet<string>;
+  teams: number;
+  budget: number;
+  maxRounds: number;
+  poolMinSalary: number;
+  fitOf: (player: DemandUniversePlayer) => number;
+  handReconcileEnabled?: boolean;
+}): PoolG1RepairResult {
+  const requestedExcludedIds = options.requestedExcludedIds ?? new Set<string>();
+  let current = new Map(options.players.map((player) => [player.id, player]));
+  let g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), options.teams, options.budget);
+  const messages: string[] = [];
+  const injectedIds: string[] = [];
+  const evictedIds: string[] = [];
+  let excludedRepairNoteAdded = false;
+  let rounds = 0;
+  while (!g1.holds && rounds < options.maxRounds) {
+    rounds += 1;
+    const repairSlots = repairSlotsForFailure(g1.failing);
+    const isOverrunRepair = g1.failing?.overrun !== undefined;
+    let addedThisRound = 0;
+    const currentPlayers = [...current.values()];
+    const currentMinFit = currentPlayers.length > 0
+      ? Math.min(...currentPlayers.map(options.fitOf))
+      : Number.NEGATIVE_INFINITY;
+    const slotBound = options.budget - 21 * options.poolMinSalary;
+    for (const slot of repairSlots) {
+      const label = slot ? (slot.position ?? slot.slotId) : 'roster';
+      const eligible = options.universe
+        .filter((player) => !current.has(player.id))
+        .filter((player) => !requestedExcludedIds.has(player.id))
+        .filter((player) => eligibleForRepairClass(slot, player))
+        .filter((player) => player.salary <= slotBound)
+        .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));
+      if (eligible.length === 0) continue;
+      const repairPick = selectFitAwareRepairCandidate(eligible, currentMinFit, options.fitOf);
+      const chosen = repairPick.player;
+      if (!chosen) continue;
+      if (isOverrunRepair) {
+        const evicted = selectSwapDownEvictionCandidate([...current.values()], options.protectedIds, slot, chosen);
+        if (!evicted) continue;
+        current.set(chosen.id, chosen);
+        current.delete(evicted.id);
+        injectedIds.push(chosen.id);
+        evictedIds.push(evicted.id);
+        if (repairPick.lastResort) {
+          messages.push(
+            `no affordable ${label} body also fits your league's identities — swapped in the cheapest legal option `
+              + `(${playerName(chosen)}; id ${chosen.id}) and evicted ${playerName(evicted)} (id ${evicted.id}).`,
+          );
+        } else {
+          messages.push(
+            `swap-down repair for ${label}: injected ${playerName(chosen)} (id ${chosen.id}) and evicted `
+              + `${playerName(evicted)} (id ${evicted.id}).`,
+          );
+        }
+      } else {
+        if (repairPick.lastResort) {
+          messages.push(
+            `no affordable ${label} body also fits your league's identities — added the cheapest legal option (${playerName(chosen)}).`,
+          );
+        }
+        current.set(chosen.id, chosen);
+        injectedIds.push(chosen.id);
+      }
+      addedThisRound += 1;
+    }
+    if (addedThisRound === 0) {
+      const suffix = options.handReconcileEnabled && !excludedRepairNoteAdded
+        ? excludedWouldQualifyMessage(options.universe, current, requestedExcludedIds, repairSlots, slotBound, currentMinFit, options.fitOf)
+        : null;
+      if (suffix) excludedRepairNoteAdded = true;
+      messages.push(
+        `pool still cannot field every club after repair: ${g1.failing?.blockers.join(' ') ?? 'no further legal body is available'}${suffix ? ` ${suffix}` : ''}`,
+      );
+      g1 = { ...g1, repairRounds: rounds };
+      break;
+    }
+    g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), options.teams, options.budget);
+    g1 = { ...g1, repairRounds: rounds };
+  }
+  if (!g1.holds && rounds >= options.maxRounds) {
+    messages.push(
+      `pool still cannot field every club after ${rounds} repair rounds: ${g1.failing?.blockers.join(' ') ?? 'repair exhausted'}`,
+    );
+  }
+  return {
+    players: [...current.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    g1,
+    injectedIds,
+    evictedIds,
+    messages,
   };
 }
 
@@ -492,64 +623,27 @@ export function extractPoolFromDemand(
       );
     }
 
-    const injectedIds: string[] = [];
-    let excludedRepairNoteAdded = false;
+    let injectedIds: string[] = [];
+    let repairEvictedIds: string[] = [];
     const budget = options.budgetPerTeam ?? Number.POSITIVE_INFINITY;
     if (Number.isFinite(budget) && teamsForSizing > 0) {
-      let current = new Map(players.map((player) => [player.id, player]));
-      g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), teamsForSizing, budget);
-      const maxRounds = options.maxRepairRounds ?? 6;
-      let rounds = 0;
-      while (!g1.holds && rounds < maxRounds) {
-        rounds += 1;
-        const repairSlots = repairSlotsForFailure(g1.failing);
-        let addedThisRound = 0;
-        const currentPlayers = [...current.values()];
-        const currentMinFit = currentPlayers.length > 0
-          ? Math.min(...currentPlayers.map(fitOf))
-          : Number.NEGATIVE_INFINITY;
-        const slotBound = budget - 21 * poolMinSalary;
-        for (const slot of repairSlots) {
-          const label = slot ? (slot.position ?? slot.slotId) : 'roster';
-          const eligible = universe
-            .filter((player) => !current.has(player.id))
-            .filter((player) => !requestedExcludedIds.has(player.id))
-            .filter((player) => (slot ? eligibleForRepairGroup(slot, player) : buildDefaultDesignSlots().some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player))))
-            .filter((player) => player.salary <= slotBound)
-            .sort((a, b) => a.salary - b.salary || a.id.localeCompare(b.id));
-          if (eligible.length === 0) continue;
-          const repairPick = selectFitAwareRepairCandidate(eligible, currentMinFit, fitOf);
-          const chosen = repairPick.player;
-          if (!chosen) continue;
-          if (repairPick.lastResort) {
-            messages.push(
-              `no affordable ${label} body also fits your league's identities — added the cheapest legal option (${playerName(chosen)}).`,
-            );
-          }
-          current.set(chosen.id, chosen);
-          injectedIds.push(chosen.id);
-          addedThisRound += 1;
-        }
-        if (addedThisRound === 0) {
-          const suffix = handReconcileEnabled && !excludedRepairNoteAdded
-            ? excludedWouldQualifyMessage(universe, current, requestedExcludedIds, repairSlots, budget - 21 * poolMinSalary, currentMinFit, fitOf)
-            : null;
-          if (suffix) excludedRepairNoteAdded = true;
-          messages.push(
-            `pool still cannot field every club after repair: ${g1.failing?.blockers.join(' ') ?? 'no further legal body is available'}${suffix ? ` ${suffix}` : ''}`,
-          );
-          g1 = { ...g1, repairRounds: rounds };
-          break;
-        }
-        g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), teamsForSizing, budget);
-        g1 = { ...g1, repairRounds: rounds };
-      }
-      if (!g1.holds && rounds >= maxRounds) {
-        messages.push(
-          `pool still cannot field every club after ${rounds} repair rounds: ${g1.failing?.blockers.join(' ') ?? 'repair exhausted'}`,
-        );
-      }
-      players = [...current.values()].sort((a, b) => a.id.localeCompare(b.id));
+      const repair = repairG1PoolForSizing({
+        universe,
+        players,
+        protectedIds,
+        requestedExcludedIds,
+        teams: teamsForSizing,
+        budget,
+        maxRounds: options.maxRepairRounds ?? 6,
+        poolMinSalary,
+        fitOf,
+        handReconcileEnabled,
+      });
+      players = repair.players;
+      g1 = repair.g1;
+      injectedIds = repair.injectedIds;
+      repairEvictedIds = repair.evictedIds;
+      messages.push(...repair.messages);
     }
 
     const finalSize = players.length;
@@ -560,7 +654,7 @@ export function extractPoolFromDemand(
       ...target,
       finalSize,
       trimmedCount: trimmed.evicted.length,
-      evictedIds: trimmed.evicted.map((player) => player.id),
+      evictedIds: [...trimmed.evicted.map((player) => player.id), ...repairEvictedIds],
       injectedIds,
       clamped: target.clamped || finalSize > target.requestedTarget,
       messages,
