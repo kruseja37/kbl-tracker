@@ -30,6 +30,7 @@ import {
   deleteRulesPreset,
   getTeamRoster,
   saveTeamRoster,
+  createEmptyTeamRoster,
   clearTeamRoster,
   deleteTeamRoster,
   getRegisteredPool as getRegisteredPoolFromStorage,
@@ -319,10 +320,142 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       const original = await getLeagueTemplate(id);
       if (!original) throw new Error('League not found');
 
-      const duplicate = await saveLeagueTemplate({
+      const originalTeams = await Promise.all(original.teamIds.map(async (teamId) => {
+        const team = await getTeam(teamId);
+        if (!team) throw new Error(`Team not found: ${teamId}`);
+        return team;
+      }));
+      const originalTeamIds = new Set(original.teamIds);
+      for (const division of original.divisions) {
+        for (const teamId of division.teamIds) {
+          if (!originalTeamIds.has(teamId)) {
+            throw new Error(`Division ${division.id} references unknown team: ${teamId}`);
+          }
+        }
+      }
+
+      const duplicateSeed = await saveLeagueTemplate({
         ...original,
         id: undefined,
         name: `${original.name} Copy`,
+        teamIds: [],
+        conferences: original.conferences.map((conference) => ({
+          ...conference,
+          divisionIds: [...conference.divisionIds],
+        })),
+        divisions: original.divisions.map((division) => ({
+          ...division,
+          teamIds: [],
+        })),
+        poolExtractedAt: undefined,
+        poolExtractedBasis: undefined,
+        modeAExtractedIds: undefined,
+        modeAHandAdds: undefined,
+        modeAHandRemoves: undefined,
+      });
+      const teamIdMap = new Map<string, string>();
+      const copiedTeamsByOriginalId = new Map<string, Team>();
+      const copyUsesPoolFirst = (original.draftPoolMode ?? 'pool-first') === 'pool-first';
+
+      for (const originalTeam of originalTeams) {
+        const {
+          id: _teamId,
+          createdDate: _teamCreatedDate,
+          lastModified: _teamLastModified,
+          lineupWithDH: _lineupWithDH,
+          lineupWithoutDH: _lineupWithoutDH,
+          startingRotation: _startingRotation,
+          optimalLineupVsRHPWithDH: _optimalLineupVsRHPWithDH,
+          optimalLineupVsLHPWithDH: _optimalLineupVsLHPWithDH,
+          optimalLineupVsRHPWithoutDH: _optimalLineupVsRHPWithoutDH,
+          optimalLineupVsLHPWithoutDH: _optimalLineupVsLHPWithoutDH,
+          rivalries: _rivalries,
+          ...teamCopyInput
+        } = originalTeam;
+        const copiedTeam = await saveTeam({
+          ...teamCopyInput,
+          id: undefined,
+          leagueIds: [duplicateSeed.id],
+          rosterDesign: originalTeam.rosterDesign
+            ? {
+                slots: structuredClone(originalTeam.rosterDesign.slots),
+                pins: originalTeam.rosterDesign.pins
+                  ? { ...originalTeam.rosterDesign.pins }
+                  : undefined,
+              }
+            : undefined,
+          lineupWithDH: [],
+          lineupWithoutDH: [],
+          startingRotation: [],
+          ...(!originalTeam.rivalries?.length && originalTeam.rivalries
+            ? { rivalries: originalTeam.rivalries }
+            : {}),
+          optimalLineupVsRHPWithDH: undefined,
+          optimalLineupVsLHPWithDH: undefined,
+          optimalLineupVsRHPWithoutDH: undefined,
+          optimalLineupVsLHPWithoutDH: undefined,
+        });
+        teamIdMap.set(originalTeam.id, copiedTeam.id);
+        copiedTeamsByOriginalId.set(originalTeam.id, copiedTeam);
+
+        if (copyUsesPoolFirst) {
+          const originalRoster = await getTeamRoster(originalTeam.id);
+          if (originalRoster) {
+            const emptyRoster = createEmptyTeamRoster(copiedTeam.id);
+            await saveTeamRoster({
+              ...emptyRoster,
+              mlbRoster: [...originalRoster.mlbRoster],
+              farmRoster: [...originalRoster.farmRoster],
+            });
+          }
+        }
+      }
+
+      for (const originalTeam of originalTeams) {
+        if (!originalTeam.rivalries?.length) continue;
+
+        const copiedTeam = copiedTeamsByOriginalId.get(originalTeam.id);
+        if (!copiedTeam) throw new Error(`Team copy failed: ${originalTeam.id}`);
+
+        const remappedRivalries = originalTeam.rivalries.flatMap((rivalry) => {
+          const copiedOpponentTeamId = teamIdMap.get(rivalry.opponentTeamId);
+          return copiedOpponentTeamId
+            ? [{ ...rivalry, opponentTeamId: copiedOpponentTeamId }]
+            : [];
+        });
+
+        await saveTeam({
+          ...copiedTeam,
+          rivalries: remappedRivalries.length ? remappedRivalries : undefined,
+        });
+      }
+
+      // Pool assignments, registered pools, scout profiles, and draft/auction
+      // sessions are leagueId keyed. A duplicate starts with none of those rows.
+      const duplicate = await saveLeagueTemplate({
+        ...duplicateSeed,
+        teamIds: original.teamIds.map((teamId) => {
+          const copiedTeamId = teamIdMap.get(teamId);
+          if (!copiedTeamId) throw new Error(`Team copy failed: ${teamId}`);
+          return copiedTeamId;
+        }),
+        conferences: original.conferences.map((conference) => ({
+          ...conference,
+          divisionIds: [...conference.divisionIds],
+        })),
+        divisions: original.divisions.map((division) => ({
+          ...division,
+          teamIds: division.teamIds.map((teamId) => {
+            const copiedTeamId = teamIdMap.get(teamId);
+            if (!copiedTeamId) throw new Error(`Team copy failed: ${teamId}`);
+            return copiedTeamId;
+          }),
+        })),
+        poolExtractedAt: undefined,
+        poolExtractedBasis: undefined,
+        modeAExtractedIds: undefined,
+        modeAHandAdds: undefined,
+        modeAHandRemoves: undefined,
       });
       await refresh();
       return duplicate;

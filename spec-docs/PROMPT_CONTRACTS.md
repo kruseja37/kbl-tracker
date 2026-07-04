@@ -29064,3 +29064,116 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set. Run any red SOLO and report.
 - `git status` — useLeagueBuilderData.ts + its test. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-ITER-COPY ===== -->
+
+<!-- ===== CONTRACT: CODEX-SLIM-RUNNER ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/). Stage only explicit paths. Report ACTUAL command output.
+
+LAST v1 SLIM-RULES ITEM — the extra-innings "runner on second" delay + franchise launch wiring. BUILD EXACTLY TO the
+BINDING design spec-docs/FABLE_SLIM_RULES_RUNNER_ON_SECOND_2026-07-03.md (read it VERBATIM — copy, placement, mapping
+table, tests are all pinned there; no design decisions are open). Season length + innings already work; only the
+runner-on-second 1|2 delay choice + the launch mapping are new.
+
+HARD GUARDRAILS (audit FAILs on violation):
+- GameTracker.tsx + useGameState.ts are FROZEN — consume-only. The nav-state fields (extraInningRunner?, extraInningRunnerDelay?),
+  the placement math, and the hook plumbing ALL already exist (spec §0 table). ZERO edits to either file.
+- LeagueBuilderRules / the RULES hub card: UNTOUCHED (JK ruling). ExhibitionGame.tsx: UNTOUCHED (incl. its delay=2 default).
+- Additive/migration-safe: no DB version bump, no new store, no registry/manifest edit. No new mapper MODULE (co-located resolver only).
+
+DELIVERABLE 1 — TYPE (the only type change): in src/types/franchise.ts add to FranchiseConfig.season (~:158-167, directly under
+`extraInningsRule` at :161): `extraInningsRunnerDelay?: 1 | 2` (optional, additive). StoredFranchiseConfig EXTENDS FranchiseConfig
+(:204) → it inherits automatically; do NOT add a duplicate field there. Do NOT rename or narrow `extraInningsRule` (stays `string`;
+fixtures hold lowercase 'standard').
+
+DELIVERABLE 2 — CONTROL in src/src_figma/app/pages/FranchiseSetup.tsx, INSIDE the existing EXTRA INNINGS RULE box (:688), BETWEEN
+the radio row (:689-714) and the ℹ️ hint (:715-717). New sub-choice row rendered ONLY when
+`config.season.extraInningsRule === "Runner on 2nd"` (conditional render, no reserved space):
+  - divider: `border-t-2 border-[#E8E8D8]/20`, `mt-3 pt-3`.
+  - micro-label (matching :609 style `text-[10px] text-[#E8E8D8]/70` + 1px shadow): `GHOST RUNNER ARRIVES`.
+  - a `flex gap-4` row of TWO radio-dot buttons PIXEL-IDENTICAL in construction to the parent options (:691-712): labels
+    `1st extra inning` → writes extraInningsRunnerDelay:1, `2nd extra inning` → writes :2. Selected renders from
+    `config.season.extraInningsRunnerDelay ?? 1`.
+  - clicking `Runner on 2nd` in the parent row ALSO seeds `extraInningsRunnerDelay: (previous ?? 1)` in the same setConfig call.
+    Switching away to Standard/Sudden Death RETAINS the field (remembered on toggle-back; inert by the §3 gate).
+  - the existing ℹ️ hint line (:715-717) becomes CONTEXT-SENSITIVE (same element/classes, exactly one line):
+    Standard → BYTE-IDENTICAL to today `ℹ️ Standard: No runner placed, play until there's a winner`;
+    Runner on 2nd → `ℹ️ Ghost runner takes second starting the {N} inning` where {N}=ordinal of
+    (config.season.inningsPerGame + (extraInningsRunnerDelay ?? 1)) — inline ordinal, domain {7th,8th,10th,11th}, live-updates
+    with INNINGS PER GAME; Sudden Death → `ℹ️ Sudden Death: not tracked in v1 — plays as Standard`.
+  No new box/section/tooltip/(?)-button; reuse the existing chalk/brass language exactly.
+
+DELIVERABLE 3 — MAPPING (the point): add ONE exported pure resolver in src/src_figma/app/pages/FranchiseHome.tsx beside
+`resolveFranchiseGameUseDH` (:261-263). Name `resolveFranchiseExtraInnings`; input `UseFranchiseDataReturn["franchiseConfig"]`
+(StoredFranchiseConfig | null); output `{ extraInningRunner: boolean; extraInningRunnerDelay: 1 | 2 }`. Exhaustive logic:
+  exactly "Runner on 2nd" → { true, config.season.extraInningsRunnerDelay ?? 1 };
+  "Standard" → { false, 1 }; "Sudden Death" → { false, 1 } (FUTURE SEAM — one comment marking v2 sudden-death lands here; do NOT
+  wire it); anything else (legacy lowercase 'standard' / missing / null) → { false, 1 }.
+  APPLY: at the franchise-game launch nav-state (:3681-3721), spread the resolver's TWO fields into the first-arg object of
+  withPregameManagerNavigationState, adjacent to totalInnings (:3714). Always pass BOTH (deterministic). Do NOT pass useGhostRunner
+  (GameTracker mirrors extraInningRunner into the ghost ref via its documented fallback at :1645-1647).
+
+TESTS (spec §4 A-E — add ALL):
+  A. Resolver units — extend src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx (precedent :846-847): Runner+delay2→{true,2};
+     Runner+delay absent→{true,1} (MIGRATION test); Standard→{false,*}; Sudden Death→{false,*}; legacy lowercase 'standard' + null→{false,*}.
+  B. Launch nav-state integration (same file): for each of the 3 rule values assert the navigate state carries the correct
+     extraInningRunner/extraInningRunnerDelay pair alongside totalInnings.
+  C. Config round-trip incl. delay — extend src/src_figma/__tests__/franchiseMode/franchiseSetupLaunch.integration.test.ts: a
+     franchise with extraInningsRule:"Runner on 2nd"+delay:2 → getFranchiseConfig returns both (survives the :752 spread); a config
+     WITHOUT the delay round-trips with the field ABSENT (default only at launch, not at rest).
+  D. FranchiseSetup show/hide — NEW file src/src_figma/__tests__/franchiseMode/FranchiseSetupExtraInnings.test.tsx: sub-choice absent
+     under Standard (default); Runner on 2nd reveals it with "1st extra inning" selected; picking "2nd extra inning" writes delay 2 +
+     ℹ️ shows the concrete inning (9-inning → "11th"); Sudden Death hides it + shows its ℹ️; Standard ℹ️ byte-identical to :716.
+  E. FROZEN-FILE PROOF — `git diff --stat` shows ZERO changes to GameTracker.tsx, useGameState.ts, LeagueBuilderRules, ExhibitionGame.tsx.
+
+ORTHOGONALITY: L-SIM not required (grep the import graph, state it). 
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx
+   src/src_figma/__tests__/franchiseMode/franchiseSetupLaunch.integration.test.ts
+   src/src_figma/__tests__/franchiseMode/FranchiseSetupExtraInnings.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist,
+  franchiseManualSmokeFixture batch, archetypeBalanceSimulator provenance, historicalArchetypes big-batch flake, figma
+  IndexedDB-teardown batch flakes). Run any red SOLO and report solo results.
+- `git status` — types/franchise.ts, FranchiseSetup.tsx, FranchiseHome.tsx, the 3 test files. GameTracker/useGameState/
+  LeagueBuilderRules/ExhibitionGame NOT present.
+<!-- ===== END CONTRACT: CODEX-SLIM-RUNNER ===== -->
+
+<!-- ===== CONTRACT: CODEX-ITER-COPY-FIX ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/). Stage only explicit paths. Report ACTUAL command output. No GameTracker edits.
+
+FIX for the just-built duplicateLeague deep-copy (slice 5, uncommitted, in src/src_figma/hooks/useLeagueBuilderData.ts).
+An adversarial audit CONFIRMED one in-scope defect: copied teams keep `rivalries[].opponentTeamId` pointing at the ORIGINAL
+league's team ids. The remap rewrites teamIds + divisions[].teamIds + conferences, but NOT the per-team `rivalries` field —
+so a copied league's rivalries reference foreign team ids (phantom in the LeagueBuilderTeams editor; inert in the reporter,
+which matches opponentTeamId against the copy's own team ids and falls back to intensity 0). This hits even a pre-draft copy.
+
+TYPE: `Team.rivalries?: TeamRivalry[]`, `TeamRivalry = { opponentTeamId: string; intensity: number; origin?: string }`
+(src/utils/leagueBuilderStorage.ts:197-201). opponentTeamId is an intra-league team id (set by the rivalry editor from
+same-league teams — LeagueBuilderTeams.tsx).
+
+DELIVERABLE — remap rivalries through the SAME teamIdMap the league-level remap uses. CRITICAL ORDERING: teamIdMap is built
+incrementally inside the team-creation loop, so a team's rivalry may reference a team not yet copied at that point. Therefore
+do the rivalry remap in a SECOND PASS, AFTER the creation loop (teamIdMap complete): for each copied team that has rivalries,
+rewrite each rivalry's opponentTeamId via teamIdMap.get(old); DROP any rivalry whose opponentTeamId is not in the map (a stale/
+foreign id that can't be honored in the copy); persist the updated team (saveTeam/updateTeam) only for teams that actually have
+rivalries (skip the extra write otherwise). Do NOT change any other copy behavior. Keep the fix minimal and localized to
+duplicateLeague. (Scope note: the SEPARATE post-draft pool-first roster-leak edge is TICKETED and out of scope for this fix —
+do NOT change the mlbRoster/farmRoster copy behavior.)
+
+TEST — extend src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx (the slice-5 test file): add a case where two teams
+have a mutual rivalry (team-a.rivalries=[{opponentTeamId:'team-b',intensity:N}], team-b→team-a) → after duplicateLeague, each
+copied team's rivalries[].opponentTeamId equals the COPY's corresponding new team id (via the copiedLeague.teamIds mapping),
+references NONE of the original ids, and intensity/origin survive; the ORIGINAL teams' rivalries are unchanged. Include a
+drop case: a rivalry whose opponentTeamId is not among the copied teams is dropped from the copy.
+
+ORTHOGONALITY: L-SIM not required (hook-only; grep-confirm no test-utils/lsim import of useLeagueBuilderData/duplicateLeague).
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist,
+  franchiseManualSmokeFixture batch). Run any red SOLO and report.
+- `git status` — useLeagueBuilderData.ts + its test only. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ITER-COPY-FIX ===== -->
