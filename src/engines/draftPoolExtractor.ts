@@ -78,6 +78,10 @@ export const EXTRACTOR_TUNING = {
   maxRepairRounds: 6,
   /** Players fed to the worst-off archetype per repair round. */
   repairBatch: 6,
+  /** Cheap primary-position bodies per club, per field position, protected by the floor. */
+  cheapDepthPerClubField: 1,
+  /** Cheap legal pitcher bodies per club, separately for startable and relievable lists. */
+  cheapDepthPerClubArm: 2,
 } as const;
 
 export interface ExtractPoolOptions {
@@ -125,6 +129,10 @@ function byIvDescIdAsc(a: SimPlayer, b: SimPlayer): number {
   return b.iv - a.iv || a.id.localeCompare(b.id);
 }
 
+function byIvAscIdAsc(a: SimPlayer, b: SimPlayer): number {
+  return a.iv - b.iv || a.id.localeCompare(b.id);
+}
+
 /**
  * Structural floor pick-lists from the source (deterministic): per-position primaries, extra
  * C-coverage, startable + relievable arms — each scaled to league demand × oversupply. Shortfalls
@@ -139,11 +147,15 @@ function structuralFloor(
 ): SimPlayer[] {
   const picks = new Map<string, SimPlayer>();
   const need = (n: number) => Math.ceil(n * oversupply);
+  const cheapFieldWanted = teams * EXTRACTOR_TUNING.cheapDepthPerClubField;
+  const cheapArmWanted = teams * EXTRACTOR_TUNING.cheapDepthPerClubArm;
 
   for (const pos of LEGAL_ROSTER.fieldPositions) {
     const wanted = need(teams * structure.primariesPerPosition * (pos === 'C' ? structure.catcherCoverage : 1));
-    const primaries = source.filter((p) => !p.isPitcher && p.position === pos).sort(byIvDescIdAsc);
+    const primaryCandidates = source.filter((p) => !p.isPitcher && p.position === pos);
+    const primaries = [...primaryCandidates].sort(byIvDescIdAsc);
     primaries.slice(0, wanted).forEach((p) => picks.set(p.id, p));
+    [...primaryCandidates].sort(byIvAscIdAsc).slice(0, cheapFieldWanted).forEach((p) => picks.set(p.id, p));
     if (pos === 'C') {
       // Ruling A: each team's catcher depth-2 must include a PRIMARY-C STARTER — coverage alone
       // (secondary-C / Two Way (C)) cannot field the position. Name the PRIMARY shortfall
@@ -155,13 +167,17 @@ function structuralFloor(
       }
       // Coverage beyond primaries also counts (secondary-C hitters, Two Way (C) arms).
       const stillWanted = need(teams * structure.catcherCoverage) - Math.min(primaries.length, wanted);
+      const coverageCandidates = source.filter((p) => canCover(p, 'C') && !picks.has(p.id));
       if (stillWanted > 0) {
-        source
-          .filter((p) => canCover(p, 'C') && !picks.has(p.id))
+        [...coverageCandidates]
           .sort(byIvDescIdAsc)
           .slice(0, stillWanted)
           .forEach((p) => picks.set(p.id, p));
       }
+      [...coverageCandidates]
+        .sort(byIvAscIdAsc)
+        .slice(0, cheapFieldWanted)
+        .forEach((p) => picks.set(p.id, p));
       const coverageInSource = source.filter((p) => canCover(p, 'C')).length;
       if (coverageInSource < teams * structure.catcherCoverage) {
         notes.push(
@@ -173,10 +189,14 @@ function structuralFloor(
     }
   }
 
-  const startable = source.filter(canStart).sort(byIvDescIdAsc);
-  const relievable = source.filter(canRelieve).sort(byIvDescIdAsc);
+  const startableCandidates = source.filter(canStart);
+  const relievableCandidates = source.filter(canRelieve);
+  const startable = [...startableCandidates].sort(byIvDescIdAsc);
+  const relievable = [...relievableCandidates].sort(byIvDescIdAsc);
   startable.slice(0, need(teams * structure.startableArms)).forEach((p) => picks.set(p.id, p));
+  [...startableCandidates].sort(byIvAscIdAsc).slice(0, cheapArmWanted).forEach((p) => picks.set(p.id, p));
   relievable.slice(0, need(teams * structure.relievableArms)).forEach((p) => picks.set(p.id, p));
+  [...relievableCandidates].sort(byIvAscIdAsc).slice(0, cheapArmWanted).forEach((p) => picks.set(p.id, p));
   if (startable.length < teams * structure.startableArms) {
     notes.push(`source itself is short on startable arms: ${startable.length} for ${teams * structure.startableArms} needed`);
   }

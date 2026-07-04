@@ -29477,3 +29477,36 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture batch, archetypeBalanceSimulator provenance, historicalArchetypes big-batch — solo-verify). Run any red SOLO.
 - `git status` — draftPoolExtractor.ts (+ its test). GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-CHEAP-DEPTH ===== -->
+
+<!-- ===== CONTRACT: CODEX-REPAIR-SWAPDOWN ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch pre-existing
+dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/, reference-docs/, scripts/,
+instructions/, spec-docs/C4_AUDIT_2026-07-02.md [Opus's live audit doc]). Stage only explicit paths. Report ACTUAL output. No GameTracker edits.
+
+STEP 4 (safety net, LAST step) of Fable's pool-affordability fix. BUILD EXACTLY to spec-docs/FABLE_POOL_AFFORDABILITY_DESIGN_2026-07-04.md
+§"STEP 4 — REPAIR SWAP-DOWN" — read it VERBATIM. Do ONLY Step 4. File: src/engines/poolFromDemand.ts (repair loop ~:503-546).
+
+PROBLEM: the repair loop only ever `current.set(...)` (ADDS bodies). On a pure BUDGET OVERRUN (g1.failing.overrun set, repairSlotsForFailure
+→ [null]), adding the cheapest legal body cannot REMOVE the expensive bodies causing the overrun → it can't dig out. (Note: g1 is now the
+BALANCED seatAllClubs from Step 2, so an overrun here is GENUINE, not the old stranding artifact.)
+
+DELIVERABLE (per §Step 4): when `g1.failing.overrun` is set, each repair round becomes a net-zero-size SWAP-DOWN: inject the cheapest
+eligible universe body for the failing class (existing pick via selectFitAwareRepairCandidate) AND evict the MOST EXPENSIVE UNPROTECTED
+pool body of the same eligibility class. Constraints: respect protectedIds (never evict a protected/floor/pin body); never shrink below
+hardFloor; ≤ repairSlots.length evictions per round; record evicted ids in the sizing messages. If no unprotected expensive body exists,
+fall through to the EXISTING stuck message (~:538-540). NON-overrun failures (missing-body) keep TODAY's adds-only behavior unchanged.
+
+TESTS (§Step 4 acceptance — add to poolFromDemand.test.ts):
+- Fixture: a pool that fails G1 on OVERRUN only, with a universe containing cheaper same-class bodies → repair converges to holds:true
+  within maxRepairRounds, pool SIZE unchanged (net-zero swaps), and NO protected id evicted.
+- Existing repair tests for MISSING-BODY failures unchanged (adds-only path intact).
+
+GUARDRAILS: overrun path only becomes swap-down; missing-body path unchanged; respect protectedIds + hardFloor; no GameTracker.
+ORTHOGONALITY: L-SIM not required (grep-confirm poolFromDemand not in the L-SIM harness path; state it).
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/poolFromDemand.test.ts src/engines/__tests__/draftPoolExtractor.test.ts src/engines/__tests__/seatAllClubs.test.ts` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture
+  batch, LeagueBuilderDraftSetup batch flake, archetypeBalanceSimulator/historicalArchetypes big-batch — solo-verify). Run any red SOLO.
+- `git status` — poolFromDemand.ts + its test. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-REPAIR-SWAPDOWN ===== -->

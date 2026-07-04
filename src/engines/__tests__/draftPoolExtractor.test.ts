@@ -10,7 +10,13 @@ import {
   EXTRACTOR_TUNING,
   MLB_POOL_STRUCTURE,
 } from '../draftPoolExtractor';
+import {
+  POOL_SIZE_MULTIPLIER_STOPS,
+  resolvePoolSizingTarget,
+  trimPoolToTarget,
+} from '../poolFromDemand';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
+import { canRelieve, canStart, LEGAL_ROSTER } from '../../data/rosterConstruction';
 
 /**
  * FABLE-C1B: the reverse one-click — archetypes → a balanced, draftable pool from a larger source.
@@ -133,6 +139,60 @@ function mkPitcher(id: string, role: 'SP' | 'RP' | 'CP' | 'SP/RP', i: number): S
   return { id, isPitcher: true, role, bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 }, pit, iv, salary: iv, position: role };
 }
 
+function mkWideSalaryHitter(id: string, position: string, i: number, cheapCount: number): SimPlayer {
+  const cheap = i < cheapCount;
+  const iv = cheap ? 1_000 + i : 120_000 + i * 1_000;
+  const tool = cheap ? 24 + (i % 5) : 72 + (i % 12);
+  return {
+    id,
+    isPitcher: false,
+    position,
+    bat: { POW: tool, CON: tool, SPD: tool, FLD: tool, ARM: tool },
+    iv,
+    salary: iv,
+  };
+}
+
+function mkWideSalarySwingArm(id: string, i: number, cheapCount: number): SimPlayer {
+  const cheap = i < cheapCount;
+  const iv = cheap ? 1_500 + i : 140_000 + i * 1_000;
+  const tool = cheap ? 25 + (i % 5) : 74 + (i % 10);
+  return {
+    id,
+    isPitcher: true,
+    role: 'SP/RP',
+    position: 'SP/RP',
+    bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+    pit: { VEL: tool, JNK: tool, ACC: tool },
+    iv,
+    salary: iv,
+  };
+}
+
+function wideSalarySource(teams: number): SimPlayer[] {
+  const source: SimPlayer[] = [];
+  for (const pos of LEGAL_ROSTER.fieldPositions) {
+    const count = pos === 'C' ? 14 : 16;
+    const cheapQuartile = Math.ceil(count / 4);
+    for (let i = 0; i < count; i += 1) {
+      source.push(mkWideSalaryHitter(`wide-${pos}-${i.toString().padStart(2, '0')}`, pos, i, cheapQuartile));
+    }
+  }
+  const armCount = teams * 8;
+  const cheapArmQuartile = Math.ceil(armCount / 4);
+  for (let i = 0; i < armCount; i += 1) {
+    source.push(mkWideSalarySwingArm(`wide-swing-${i.toString().padStart(2, '0')}`, i, cheapArmQuartile));
+  }
+  return source;
+}
+
+function cheapestQuartileIds(players: readonly SimPlayer[]): string[] {
+  return [...players]
+    .sort((a, b) => a.iv - b.iv || a.id.localeCompare(b.id))
+    .slice(0, Math.ceil(players.length / 4))
+    .map((player) => player.id);
+}
+
 /** A big synthetic source: `catchers` primary-Cs, 40 deep at the other positions, a wide arms rack. */
 function syntheticSource(catchers: number): SimPlayer[] {
   const src: SimPlayer[] = [];
@@ -171,6 +231,65 @@ describe('extractDraftPool — synthetic sources (machinery)', () => {
     expect(result.notes.join(' ')).toContain('short on catching');
     const pooledCs = result.players.filter((p) => !p.isPitcher && p.position === 'C').length;
     expect(pooledCs).toBe(6); // all six the source had
+  }, 120_000);
+});
+
+describe('extractDraftPool — Step 3 cheap-depth floors', () => {
+  const TEAMS = 4;
+  const ONE = pick('whiteyball');
+
+  it('protects cheapest-quartile legal depth at every position and through legal trim multipliers', () => {
+    const source = wideSalarySource(TEAMS);
+    const salarySpread = Math.max(...source.map((p) => p.salary)) / Math.min(...source.map((p) => p.salary));
+    expect(salarySpread).toBeGreaterThan(100);
+
+    const result = extractDraftPool(source, ONE, 'standard', {
+      teams: TEAMS,
+      minEmbodimentZ: -10,
+      maxRepairRounds: 0,
+    });
+    const poolIds = new Set(result.players.map((player) => player.id));
+    const protectedIds = new Set([...result.claimedIds, ...result.floorIds]);
+    const requiredCheapIds = new Set<string>();
+
+    for (const pos of LEGAL_ROSTER.fieldPositions) {
+      const cheapQuartile = cheapestQuartileIds(source.filter((player) => !player.isPitcher && player.position === pos));
+      const pooled = cheapQuartile.filter((id) => poolIds.has(id));
+      expect(pooled.length, pos).toBeGreaterThanOrEqual(TEAMS * EXTRACTOR_TUNING.cheapDepthPerClubField);
+      pooled.forEach((id) => requiredCheapIds.add(id));
+    }
+
+    const cheapestStartable = cheapestQuartileIds(source.filter(canStart));
+    const pooledStartable = cheapestStartable.filter((id) => poolIds.has(id));
+    expect(pooledStartable.length).toBeGreaterThanOrEqual(TEAMS * EXTRACTOR_TUNING.cheapDepthPerClubArm);
+    pooledStartable.forEach((id) => requiredCheapIds.add(id));
+
+    const cheapestRelievable = cheapestQuartileIds(source.filter(canRelieve));
+    const pooledRelievable = cheapestRelievable.filter((id) => poolIds.has(id));
+    expect(pooledRelievable.length).toBeGreaterThanOrEqual(TEAMS * EXTRACTOR_TUNING.cheapDepthPerClubArm);
+    pooledRelievable.forEach((id) => requiredCheapIds.add(id));
+
+    for (const id of requiredCheapIds) {
+      expect(protectedIds.has(id), id).toBe(true);
+    }
+    expect(result.size).toBeLessThanOrEqual(resolvePoolSizingTarget({ teams: TEAMS, poolSizeMultiplier: 1.5 }).ceilingTarget);
+
+    const trimInput = [
+      ...result.players,
+      ...Array.from({ length: 80 }, (_, i) => ({ id: `unprotected-filler-${i}`, salary: 900_000 + i })),
+    ];
+    for (const multiplier of POOL_SIZE_MULTIPLIER_STOPS) {
+      const target = resolvePoolSizingTarget({ teams: TEAMS, poolSizeMultiplier: multiplier });
+      const trimmed = trimPoolToTarget(trimInput, protectedIds, () => 0, target.effectiveTarget);
+      const evictedIds = new Set(trimmed.evicted.map((player) => player.id));
+      for (const id of requiredCheapIds) {
+        expect(evictedIds.has(id), `${id} evicted at ${multiplier}x`).toBe(false);
+      }
+      expect(trimmed.kept.length).toBeLessThanOrEqual(target.ceilingTarget);
+      if (protectedIds.size <= target.effectiveTarget) {
+        expect(trimmed.kept).toHaveLength(target.effectiveTarget);
+      }
+    }
   }, 120_000);
 });
 
