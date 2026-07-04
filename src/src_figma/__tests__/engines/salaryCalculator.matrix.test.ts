@@ -112,12 +112,16 @@ describe('Salary Calculator — Boundary-Value Matrix', () => {
   });
 
   // ─── Case 6: Same player, different positions ────
-  it('SAL-06: same synthetic ratings are not repriced by position knobs', () => {
+  it('SAL-06: same synthetic ratings are repriced by D17 curves, not position knobs', () => {
     const ssPlayer = makeBatter({ primaryPosition: 'SS' as any });
     const firstBPlayer = makeBatter({ primaryPosition: '1B' as any });
     const ssSalary = calculateSalary(ssPlayer);
     const firstBSalary = calculateSalary(firstBPlayer);
-    expect(ssSalary).toBe(firstBSalary);
+    expect(getPositionMultiplier('SS' as any)).toBe(1.0);
+    expect(getPositionMultiplier('1B' as any)).toBe(1.0);
+    expect(ssSalary).toBe(24_922);
+    expect(firstBSalary).toBe(19_937);
+    expect(ssSalary / firstBSalary).toBeCloseTo(1.10 / 0.88, 3);
   });
 
   // ─── Case 7: Weighted rating formula (batter) ────

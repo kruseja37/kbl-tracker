@@ -1307,9 +1307,9 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
   });
 
   test('when both sides of an opposite pair are gains, only the higher gainScore survives', () => {
-    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
-    expect(computeTraitWeight('Choker')).toBeCloseTo(0.4322222222222223, 10);
-    // §8B: Clutch 0.8 × 0.471111 = 0.376889; Choker 0.9 × 0.432222 = 0.389000.
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4822222222222223, 10);
+    expect(computeTraitWeight('Choker')).toBeCloseTo(0.44333333333333336, 10);
+    // §8B: Clutch 0.8 × 0.482222 = 0.385778; Choker 0.9 × 0.443333 = 0.399000.
     const result = computeTraitAcquisition(
       input({
         candidates: [
@@ -1488,11 +1488,11 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
   });
 
   test('at the two-trait cap, a stronger gain displaces the weakest held trait', () => {
-    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4822222222222223, 10);
     expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);
-    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.32666666666666666, 10);
-    // §8B: keep(Clutch)=0.6×0.471111×1.25=0.353333;
-    // keep(Utility)=0.4×0.13×1.25=0.065000; gain(Stealer)=0.8×0.326667=0.261333.
+    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.3488888888888889, 10);
+    // §8B: keep(Clutch)=0.6×0.482222×1.25=0.361667;
+    // keep(Utility)=0.4×0.13×1.25=0.065000; gain(Stealer)=0.8×0.348889=0.279111.
     const result = computeTraitAcquisition(
       input({
         heldTraits: [
@@ -1511,11 +1511,11 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
   });
 
   test('at the two-trait cap, equal strength is not enough for displacement', () => {
-    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
-    expect(computeTraitWeight('Rally Starter')).toBeCloseTo(0.5322222222222223, 10);
-    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.32666666666666666, 10);
-    // §8B: weakest keep(Clutch)=0.8×0.471111×1.25=0.471111;
-    // gain(Stealer)=0.8×0.326667=0.261333, so β incumbency blocks equal-P churn.
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4822222222222223, 10);
+    expect(computeTraitWeight('Rally Starter')).toBeCloseTo(0.5433333333333333, 10);
+    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.3488888888888889, 10);
+    // §8B: weakest keep(Clutch)=0.8×0.482222×1.25=0.482222;
+    // gain(Stealer)=0.8×0.348889=0.279111, so β incumbency blocks equal-P churn.
     const result = computeTraitAcquisition(
       input({
         heldTraits: [
@@ -1535,10 +1535,10 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
 
   test('gainScore ranking admits the top two by value and caps open slots', () => {
     expect(computeTraitWeight('Cannon Arm')).toBeCloseTo(0.81, 10);
-    expect(computeTraitWeight('Tough Out')).toBeCloseTo(0.5433333333333333, 10);
+    expect(computeTraitWeight('Tough Out')).toBeCloseTo(0.5544444444444445, 10);
     expect(computeTraitWeight('Sprinter')).toBeCloseTo(0.24888888888888888, 10);
     // Appendix A example 1: Cannon Arm 0.84×0.81=0.680400;
-    // Tough Out 0.75×0.543333=0.407500; Sprinter 0.90×0.248889=0.224000.
+    // Tough Out 0.75×0.554444=0.415833; Sprinter 0.90×0.248889=0.224000.
     const result = computeTraitAcquisition(input({
       candidates: [
         { traitName: 'Sprinter', score: score('Sprinter', 0.9) },
@@ -1559,11 +1559,11 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
 
   test('recomputes weakest incumbent after each displacement so gains cannot target the same slot', () => {
     expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);
-    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4822222222222223, 10);
     expect(computeTraitWeight('Cannon Arm')).toBeCloseTo(0.81, 10);
     expect(computeTraitWeight('Big Hack')).toBeCloseTo(0.798888888888889, 10);
     // §8B collision fix: keep(Utility)=0.4×0.13×1.25=0.065000;
-    // keep(Clutch)=0.4×0.471111×1.25=0.235556. Cannon Arm (0.680400)
+    // keep(Clutch)=0.4×0.482222×1.25=0.241111. Cannon Arm (0.680400)
     // displaces Utility, then Big Hack (0.663078) recomputes and displaces Clutch.
     const result = computeTraitAcquisition(input({
       heldTraits: [
@@ -1698,10 +1698,10 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
 
   test('a high-gainScore rare trait displaces a near-zero-weight common incumbent', () => {
     expect(computeTraitWeight('Metal Head')).toBeCloseTo(0, 10);
-    expect(computeTraitWeight('Composed')).toBeCloseTo(0.3077777777777778, 10);
+    expect(computeTraitWeight('Composed')).toBeCloseTo(0.26333333333333336, 10);
     expect(computeTraitWeight('K Collector')).toBeCloseTo(0.8322222222222223, 10);
     // Appendix A example 3: keep(Metal Head)=0.5×0×1.25=0;
-    // keep(Composed)=0.6×0.307778×1.25=0.230833; gain(K Collector)=0.86×0.832222=0.715711.
+    // keep(Composed)=0.6×0.263333×1.25=0.197500; gain(K Collector)=0.86×0.832222=0.715711.
     const result = computeTraitAcquisition(
       input({
         playerRole: 'pitcher',
@@ -1784,12 +1784,12 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
 
   // R-E-b (E3) + §8B: displacement uses recomputed keepScore, not supplied strength or bare P.
   test('displacement follows recomputed keepScore, not supplied strength or bare recomputed P', () => {
-    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4711111111111111, 10);
+    expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4822222222222223, 10);
     expect(computeTraitWeight('Utility')).toBeCloseTo(0.13, 10);
-    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.32666666666666666, 10);
+    expect(computeTraitWeight('Stealer')).toBeCloseTo(0.3488888888888889, 10);
     // §8B: bare recomputed P says Clutch (0.4) is weaker than Utility (0.7), but
-    // keep(Clutch)=0.4×0.471111×1.25=0.235556 and keep(Utility)=0.7×0.13×1.25=0.113750.
-    // gain(Stealer)=0.8×0.326667=0.261333, so Utility is displaced by keepScore.
+    // keep(Clutch)=0.4×0.482222×1.25=0.241111 and keep(Utility)=0.7×0.13×1.25=0.113750.
+    // gain(Stealer)=0.8×0.348889=0.279111, so Utility is displaced by keepScore.
     const result = computeTraitAcquisition(
       input({
         heldTraits: [

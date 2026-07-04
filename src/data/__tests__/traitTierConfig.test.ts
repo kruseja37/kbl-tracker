@@ -11,10 +11,10 @@ import {
 } from '../traitTierConfig';
 
 describe('traitTierConfig T-1 derived trait value/scarcity foundation', () => {
-  test('reproduces the IV-marginal dollar anchors from the frozen single-position baseline', () => {
+  test('reproduces the D17-reblessed IV-marginal dollar anchors', () => {
     expect(computeTraitDollarValue('Metal Head')).toBe(14);
     expect(computeTraitDollarValue('Meltdown')).toBe(-308);
-    expect(computeTraitDollarValue('RBI Zero')).toBe(-2364);
+    expect(computeTraitDollarValue('RBI Zero')).toBe(-2648);
   });
 
   test('keeps the frozen TEAM MAX USES distribution from workbook col T', () => {

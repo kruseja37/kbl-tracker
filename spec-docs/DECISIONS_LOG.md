@@ -3618,3 +3618,18 @@ Acceptance ruling: at identical pitching ratings, ordering must hold as SP > SP/
 arms VEL/JNK/ACC 80/70/70 and 90/85/85 must keep SP near the existing $51k/$81k anchors, with SP/RP in
 [0.76,0.84], CP in [0.60,0.70], and RP in [0.50,0.60] vs SP. The frozen IV oracle is deliberately
 re-blessed because salary is `kblIV` and feeds auction budgets, cap math, and downstream oracle pins.
+
+## 2026-07-04 — JK RULING: D17 primary-fielder positional scarcity lives in IV curves
+
+Per `FABLE_POSITIONAL_SCARCITY_DESIGN_2026-07-04.md`, JK signed off all four open questions:
+the ladder magnitudes stand as designed, 3B lands at 0.97, secondary-position scarcity credit is
+deferred to v1.1, and future Two Way (C) players price their bat/fielding on the catcher-scaled
+block because they deliver real catcher service.
+
+The D17 ladder is: C 1.12, SS 1.10, CF 1.06, 2B 1.03, 3B 0.97, RF 0.94, LF 0.90, 1B 0.88.
+It is payroll-neutral by construction: the unweighted mean is 1.00, and the change redistributes
+value within fielders rather than raising the level of the pool. Scarcity is implemented by scaling
+only the `midSal` and `sal100` anchors of all five hitter rows in the 8 primary fielder blocks;
+shape parameters stay one shared family. `POSITION_MULTIPLIERS` remains the retired all-1.0 knob so
+pool pricing and franchise salary both read the same `kblIV` base. Utility/neutral blocks and all
+pitcher blocks stay unchanged.

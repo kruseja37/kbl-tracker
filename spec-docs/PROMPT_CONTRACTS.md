@@ -29510,3 +29510,54 @@ GATE (report ACTUAL output):
   batch, LeagueBuilderDraftSetup batch flake, archetypeBalanceSimulator/historicalArchetypes big-batch — solo-verify). Run any red SOLO.
 - `git status` — poolFromDemand.ts + its test. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-REPAIR-SWAPDOWN ===== -->
+
+<!-- ===== CONTRACT: CODEX-POSITIONAL-SCARCITY ===== -->
+CODEX-POSITIONAL-SCARCITY — build Fable's fielder positional-scarcity ladder. Branch experiment/manager-wpa-window. Builder=Codex;
+AUDITOR=Opus (does NOT commit — leave the diff uncommitted for Opus's independent audit + affordability re-measure). Report ACTUAL output.
+
+SOURCE OF TRUTH — read spec-docs/FABLE_POSITIONAL_SCARCITY_DESIGN_2026-07-04.md IN FULL and build EXACTLY to it. JK signed off all 4 open
+questions (2026-07-04): ladder as specced, 3B at 0.97, secondary-position credit DEFERRED to v1.1 (do NOT build it), two-way-catcher rule
+confirmed. This is D17 (second application of the D16 arm-reprice re-bless protocol).
+
+WHAT TO BUILD (data-only + oracle + docs + re-band; ZERO engine-code logic changes):
+1. src/data/ivCurves.ts — scale ONLY the 8 FIELDER blocks by their ladder factor, applied to the anchor dollars (midSal AND sal100) of ALL
+   FIVE attribute rows (POW/CON/SPD/FLD/ARM). Shape params (min/curve1/mid/curve2) stay BYTE-IDENTICAL across all 8 (one shape family, 8
+   scalings — the D16 pattern). Factors: C ×1.12 · SS ×1.10 · CF ×1.06 · 2B ×1.03 · 3B ×0.97 · RF ×0.94 · LF ×0.90 · '1B' ×0.88. Builder MAY
+   round each scaled anchor to nearest $25 (the RATIO is the spec — see design §2.3 worked C-block table). DO NOT TOUCH: the 4 pitcher blocks
+   (SP, 'SP/RP', RP, CP), and the utility/neutral blocks (IF, OF, IF/OF, 1B/OF, '-', EXTRA) — all byte-identical. Extend the ivCurves header
+   comment: hitter blocks now carry the D17 KBL scarcity ladder (deliberate divergence from the source workbook, like D16 arm rows) — the
+   extraction script must NOT be re-run over them blindly.
+2. POSITION_MULTIPLIERS (salaryCalculator.ts:246) STAYS ALL-1.0 — do NOT touch it (design §1: the §3.8 knob remains retired; scarcity lives
+   in the curves so both the pool path and the franchise-salary path read it off the shared kblIV base).
+3. Regenerate spec-docs/reference/iv_oracle.json (the SAME regeneration path used for D16) and HAND-CHECK pins against design §5 tripwires:
+   - 8 PITCHER anchors in G1 byte-identical; every one of the 440 stock PITCHERS byte-identical rawIV AND kblIV (hard tripwire — the arm
+     surface must not move). Jon Gray Injury-Prone delta stays EXACTLY -836. G4 named pins UNCHANGED: Fenomeno $124,165 / Pastimm $122,198
+     / Drake $56,490 / Bradwick $58,417.
+   - 13 HITTER anchors re-pin to old×f (spot-check per §2.3 ratios). G7 hitter kblIV===rawIV invariant stays green with ZERO test-file edits.
+   - If ANY pitcher value or named SP pin moves, STOP — the build touched something out of scope; report and do not proceed.
+4. spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md — add the D17 entry beside §3.9's D16 note (the 8-position ladder table, the
+   "one shape family × 8 scalars" rule, POSITION_MULTIPLIERS stays retired-at-1.0).
+5. spec-docs/DECISIONS_LOG.md — D17 entry: this ruling, date 2026-07-04, the payroll-neutrality constraint, secondary-position deferral to
+   v1.1, JK sign-off on all 4 magnitudes.
+6. ARCHETYPE RE-BAND (design §6): run archetypeBalanceSimulator (+ its test) over all 24 archetypes AFTER the curve change. REPORT the band
+   status for all 24. For any archetype OUT of band, apply the minimal budget-split/shape-target retune to bring it back — NEVER re-touch the
+   ladder factors to patch parity. LIST every archetype you retuned with before/after values so the auditor can see whether any archetype's
+   identity shifted (flag identity-softening ones explicitly, like the Royals bullpen case in the arm reprice). Target 24/24 in band.
+
+GUARDRAILS: NO DH treatment (the resolveBlockKey DH→1B mapping is inert dead-letter — leave it). NO secondary-position credit (v1.1). NO
+GameTracker edits. NO engine-logic changes (data + oracle + docs + archetype tuning only). rawIV changes ONLY via this deliberate re-bless.
+
+ORTHOGONALITY: L-SIM NOT required — grep-confirm the pool/IV modules are outside the L-SIM import graph and state it (documented in memory
+[[lsim-orthogonal-to-auction-modules]]). Do NOT run L-SIM.
+
+GATE (report ACTUAL output for each):
+- `NODE_ENV= npm run build` — exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/ivEngine.test.ts src/engines/__tests__/archetypeBalanceSimulator.test.ts src/engines/__tests__/draftPoolExtractor.test.ts src/engines/__tests__/poolFromDemand.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts` — green (per design §5.5 expected-churn set).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture
+  batch, LeagueBuilderDraftSetup batch flake, historicalArchetypes big-batch — verify each SOLO). Run any red SOLO before reporting it.
+- `git status` — list changed files: ivCurves.ts, iv_oracle.json, IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md, DECISIONS_LOG.md, and (only if
+  re-band needed) historicalArchetypes.ts + its test. GameTracker NOT present. salaryCalculator.ts NOT present. DO NOT COMMIT — leave staged
+  or unstaged for Opus's audit.
+NOTE FOR AUDITOR (not Codex's job): Opus runs the independent 4-team affordability re-measure (design §7.4) + the adversarial diff audit
+before commit.
+<!-- ===== END CONTRACT: CODEX-POSITIONAL-SCARCITY ===== -->

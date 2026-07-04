@@ -1,6 +1,6 @@
 # IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md
 *(renamed 2026-06-09 from ROSTER_ANALYZER_ARCHETYPE_ENGINE_SPEC.md — scope grew beyond the original feature pair to the full player-valuation core and all three roster-intelligence surfaces)*
-**Version:** 1.1.9 | **Date:** 2026-07-04 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
+**Version:** 1.1.10 | **Date:** 2026-07-04 | **Status:** CANONICAL — approved by JK in spec session 2026-06-09
 **Owner:** JK | **Drafted by:** Claude (Fable 5) from XBL Roster Tool workbook analysis + Billy Yank SMB4 Guide (3rd Ed.) + 10-question design session
 **v1.1 (2026-06-09):** added §5.3 tax semantics clarification, §5.4 balanceMode toggle, T3 EV-flatness acceptance criterion, registry entry — per JK archetype-purpose review.
 **v1.1.1 (2026-06-09):** §7.3 snake-draft solvency guardrail (hard block) + per-team green/yellow/red/blocked pick signals; `solvencyRedMargin` registry constant — closed gap JK identified (auction solvency rule was not extended to snake draft).
@@ -12,6 +12,7 @@
 **v1.1.7 (2026-06-10):** DB1 complete (player DB regenerated from SOT; armSlot field added). Two-way & pitcher-batting USAGE MODEL (D15, JK-designed): kblIV layer prices pitcher batting at hitter curves × per-role usage weight vectors (derived from SMB4's FOUR-man rotation); Two Way trait = everyday usage 1.00 + trait reprices as the usage unlock + tier-laddered defense (twoWayArmByTier); pitcherAssumedArm=99 simulation-only; chemistry potency: IV stays L2-reference forever, draft board gains potency overlay + marginal synergy (T8), realized potency flows through Effective Ratings/True Value, salary never reprices for it. A12 CLOSED (anomaly was the missing usage model). New ticket V117 implements; acceptance test: Fenomeno > Pastimm > Drake.
 **v1.1.8 (2026-06-10):** V117 first run correctly BLOCKED on the acceptance oracle — diagnosis: A12 had a second half. SP/RP PITCHING curves carry the same crude roster-scarcity premium (~3.2× SP sal100) the batting curves did. Fix (D16): kblIV prices SP/RP arms as innings-expectancy interpolation between SP and RP curves × a flexibility option premium. Acceptance test REWRITTEN from strict ordering to crash-plus-parity HYPOTHESIS — and CORRECTED post-DB1 (JK catch): "bat-first Drake" was corrupted-era folklore (pre-DB1 column scramble gave him POW 92/VEL 4; true SOT line is VEL 92/JNK 24/ACC 45, bat 6/12). Crash anchor is now Lad Bradwick (SP, CON 97/POW 3, no Two Way trait — the genuine bat-first pitcher in clean data); Drake is redefined as the trait-less-elite-arm probe vs Pastimm's trait-stacked arm. Design principle enshrined: "No no-brainers between comparable talents" — comparability must be PROVEN by usage math against SMB4's real-time reality, not inferred from grades; grade-vs-IV divergence is the strategic surface that makes draft night original and feeds every downstream system (True Value, morale, fan dynamics, narrative).
 **v1.1.9 (2026-07-04):** STEP 1 ARM REPRICING complete per `FABLE_POOL_AFFORDABILITY_DESIGN_2026-07-04.md`: pitcher role pricing now follows **SP (1.00) > SP/RP (0.80) > CP (0.65) > RP (0.55)** on the SP pitching-attribute shape. SP stays byte-unchanged; SP/RP, CP, and RP pitching rows adopt SP's shape and scaled anchors. SP/RP batting/FLD rows copy SP; flexibility-as-value is deferred to the v1.1 economy batch and is no longer hidden in kblIV curve math.
+**v1.1.10 (2026-07-04):** D17 fielding-position scarcity complete per `FABLE_POSITIONAL_SCARCITY_DESIGN_2026-07-04.md`: the 8 primary fielder blocks now share one hitter shape family and scale only `midSal`/`sal100` by **C 1.12, SS 1.10, CF 1.06, 2B 1.03, 3B 0.97, RF 0.94, LF 0.90, 1B 0.88**. Utility/neutral blocks and all pitcher blocks stay unchanged; `POSITION_MULTIPLIERS` remains the retired all-1.0 knob. Secondary-position scarcity credit is deferred to v1.1, and future Two Way (C) players price their bat/fielding on the scaled C block because they deliver real catcher service.
 
 ---
 
@@ -124,14 +125,14 @@ function attributeCost(r: number, c: AttributeCurve): number {
 ```
 This is an exact decode of the workbook formula (verified against cached values, e.g. PitchCalcs costs match Roster cells).
 
-### 3.3 Verified curve sample (C and 1B share params in source; full table extraction is Build Task T1)
+### 3.3 Verified curve sample (live C after D17; full table extraction was Build Task T1)
 | Pos | Attr | min | curve1 | mid | midSal | curve2 | sal100 |
 |---|---|---|---|---|---|---|---|
-| C | POW | 0 | 1 | 50 | 8000 | 1.5 | 56000 |
-| C | CON | 0 | 1 | 55 | 7000 | 2 | 31500 |
-| C | SPD | 0 | 1 | 55 | 5500 | 3 | 34000 |
-| C | FLD | 0 | 1 | 60 | 1400 | 2 | 5600 |
-| C | ARM | 0 | 1 | 60 | 2550 | 2 | 10200 |
+| C | POW | 0 | 1 | 50 | 8960 | 1.5 | 62720 |
+| C | CON | 0 | 1 | 55 | 7840 | 2 | 35280 |
+| C | SPD | 0 | 1 | 55 | 6160 | 3 | 38080 |
+| C | FLD | 0 | 1 | 60 | 1568 | 2 | 6272 |
+| C | ARM | 0 | 1 | 60 | 2856 | 2 | 11424 |
 
 Position→row mapping in workbook (Lists!AN2:AO19): C→5, 1B→11, 2B→17, SS→23, 3B→29, LF→35, CF→41, RF→47, IF→53, OF→59, IF/OF→65, "-"→71, SP→77, SP/RP→85, RP→93, CP→101, 1B/OF→109, EXTRA→117. Hitters carry 5 attribute rows (POW/CON/SPD/FLD/ARM); pitchers 7 (POW/CON/SPD/FLD/VEL/JNK/ACC). The formula's row-offset gates (`<77` → ARM applies, `>72` → VEL/JNK/ACC apply) implement hitter-vs-pitcher attribute sets.
 
@@ -143,6 +144,19 @@ Position→row mapping in workbook (Lists!AN2:AO19): C→5, 1B→11, 2B→17, SS
 | SP/RP | 0.80 | 8,400 / 50,400 | 6,000 / 14,400 | 4,000 / 16,000 | 6,160 / 27,720 |
 | CP | 0.65 | 6,825 / 40,950 | 4,875 / 11,700 | 3,250 / 13,000 | 5,005 / 22,525 |
 | RP | 0.55 | 5,775 / 34,650 | 4,125 / 9,900 | 2,750 / 11,000 | 4,235 / 19,060 |
+
+**Fielder positional-scarcity curve repricing (2026-07-04 D17):** the 8 primary fielder blocks are one hitter shape family with eight scalar anchor ladders. Only `midSal` and `sal100` move; `{min, curve1, mid, curve2}` stays identical across C/1B/2B/SS/3B/LF/CF/RF for all five hitter attributes. Utility/neutral blocks (`IF`, `OF`, `IF/OF`, `1B/OF`, `-`, `EXTRA`) stay unchanged so pitcher batting and utility pricing remain at the center.
+
+| Position | Factor | Status |
+|---|---:|---|
+| C | 1.12 | premium catcher service |
+| SS | 1.10 | premium infield service |
+| CF | 1.06 | premium outfield range |
+| 2B | 1.03 | above-average middle-infield service |
+| 3B | 0.97 | confirmed slightly below average |
+| RF | 0.94 | corner outfield |
+| LF | 0.90 | low-scarcity corner outfield |
+| 1B | 0.88 | bat-parking position |
 
 ### 3.4 Sub-Minimum Reverse Curve (pitchers)
 For pitcher attributes below `min`, the workbook prices a MIRRORED curve using columns I–N of the position block (a second `{min,curve1,mid,midSal,curve2,sal100}` set applied to the reflected rating `100 − 100·(r − subMin.min)/(primary.min − subMin.min)` — denominator CORRECTED v1.1.6/A1 from formula text, audit-confirmed; T4 must use primary.min). **Design meaning (per JK):** very low velocity disrupts hitter timing and has genuine positive value. Implement exactly as the workbook's `AE`-column formula. This is a P1 fidelity requirement, not an optional nicety.
@@ -265,6 +279,8 @@ Pure function. No React imports. Lives in `src/engines/ivEngine.ts`. Per-player 
 
 Updated pipeline: `salary = computeIV(p) × ageFactor × perfMod × fameMod × personalityMod(FA only)`, then relativity/True Value exactly per existing spec.
 
+**D17 confirmation:** fielder scarcity lives in `src/data/ivCurves.ts`, not in `POSITION_MULTIPLIERS`. The exported multiplier table remains all 1.0 so the pool path and franchise salary path both read the same shared `kblIV` base.
+
 ### 3.9 kblIV Usage Layer (v1.1.7 / D15) — two-way players & pitcher batting
 **Architecture: two layers.** `rawIV` = canonical oracle semantics, golden-anchor-tested (21 anchors + repriced Jon Gray −$836) — changed only by explicit re-bless. `kblIV` = rawIV with the KBL usage model applied to pitcher batting — the number ALL downstream systems consume. Same divergence pattern as chemistry potency.
 
@@ -287,6 +303,12 @@ Usage for trait holders = 1.00 ALL attributes (everyday player: pitching+batting
 **Chemistry potency vs construction (resolves the draft-time unknowability):** IV is potency-NEUTRAL at the L2 reference, permanently (workbook-faithful: XBL restricted its league to L2 — why the anchors balance). Realized potency NEVER reprices salary: building synergy is construction skill and keeps its surplus, which True Value captures as over/underperformance; fan expectations stay declared-budget-anchored. The DRAFT BOARD carries a live potency overlay (§7.3): current per-team chemistry counts → realized-tier preview per candidate + marginal synergy insight ("this Spirited pick takes you 2→3, upgrading N existing traits a tier"). Mid-season chem shifts (trades/call-ups) realize automatically via effectiveRatings potencyTier(p, team).
 
 **SP/RP arm pricing (v1.1.9 / D16 — supersedes the v1.1.8 interpolation):** arm value now lives in the role curve block itself. All pitching roles use SP's VEL/JNK/ACC shape params with scaled anchors: SP 1.00, SP/RP 0.80, CP 0.65, RP 0.55. The former `spRpStartShare × SP + RP × spRpFlexPremium` path is retired because it hid deferred flexibility-as-value inside canonical IV. The legality/flexibility benefit is claimed by roster/pool construction, not double-counted in salary. Multiplier traits stack on the role's repriced pitching cells.
+
+**Primary-fielder scarcity (v1.1.10 / D17):** fielder positional value now uses the same curve-data mechanism as D16 arm roles: one shape family × eight scalars. The ladder is payroll-neutral by construction (unweighted mean 1.00) and deliberately diverges from the source workbook's position-blind hitter rows. Secondary-position scarcity is NOT built in v1; the small existing secondary-position aux component remains as-is and broader flexibility-as-value is deferred to the v1.1 economy batch. Two Way (C) holders price at the scaled C block; no stock player currently carries Two Way (C), so stock pitcher pins remain immutable.
+
+| Fielder position | C | SS | CF | 2B | 3B | RF | LF | 1B |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Curve scalar | 1.12 | 1.10 | 1.06 | 1.03 | 0.97 | 0.94 | 0.90 | 0.88 |
 
 **ACCEPTANCE TEST (v1.1.8, corrected post-DB1 — crash + parity HYPOTHESIS + arm probe, JK gameplay oracle):**
 1. REQUIRED (crash): **Lad Bradwick** (SP, CON 97/POW 3, no Two Way trait — the pool's true bat-first pitcher) deflates: kblIV ≤ 50% of his rawIV. A monster bat on a pitcher who bats ~20% of everyday PAs must stop pricing like an everyday bat. [Drake was the corrupted-era stand-in for this role; his true line is VEL 92 — see (3).]
@@ -628,6 +650,7 @@ All engines: pure functions, no React imports, unit-testable outside the app (en
 | twoWayArmByTier | L1 60 / L2 80 / L3 99 | D15 — CALIBRATE (L3 JK-observed) |
 | pitcherAssumedArm | 99 (simulation-only, unpriced) | D15, JK-observed |
 | armRoleCurveMultipliers | SP 1.00 / SP-RP 0.80 / CP 0.65 / RP 0.55 | D16 Step 1 arm repricing |
+| fielderScarcityCurveMultipliers | C 1.12 / SS 1.10 / CF 1.06 / 2B 1.03 / 3B 0.97 / RF 0.94 / LF 0.90 / 1B 0.88 | D17 primary-position scarcity repricing |
 | parityBand | RETIRED 2026-06-10 (see §3.9 acceptance) | — |
 | spdFloors (prFloor/rangeFloor per role: SP/SP-RP/RP/CP) | .02/.10, .02/.08, .02/.06, .01/.05 | D15 SPD usage — CALIBRATE (ratified from V117 build) |
 | armSlot pricing | WIRED into pool kblIV (ratified 2026-06-10): Sub = flat $4,000 + VEL×1.075/JNK×1.2 on the player's kbl pitch cells; High/Mid/Low = $0 | workbook §3.6; 5 Sub players in stock pool |

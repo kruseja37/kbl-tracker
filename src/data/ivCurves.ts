@@ -2,7 +2,12 @@
  * ivCurves.ts — IV Engine salary-curve parameter table (DATA ONLY, generated).
  *
  * Source workbook: spec-docs/reference/Team_Builder_Archetype_Logic_Template.xlsx (sheet: 'Salary Cap', cols A:N)
- * Extracted: 2026-06-10 by scripts/extract-iv-data.py — DO NOT EDIT BY HAND; rerun the script.
+ * Extracted: 2026-06-10 by scripts/extract-iv-data.py.
+ * KBL re-blesses:
+ *   - D16 (2026-07-04): pitcher role blocks carry SP-shaped arm repricing.
+ *   - D17 (2026-07-04): 8 primary fielder blocks carry the KBL positional-scarcity
+ *     ladder below. These are deliberate divergences from the source workbook; do NOT
+ *     blindly re-run extraction over the repriced blocks.
  * Spec: spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md §3.2 (AttributeCurve), §3.3 (position rows), §3.4 (sub-min reverse curve)
  *
  * POSITION_ROW_MAP (workbook Lists!AN2:AO19 — first attribute row of each block;
@@ -48,74 +53,74 @@ export interface PositionCurveBlock {
 export const IV_CURVES: Record<PositionKey, PositionCurveBlock> = {
   C: {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8960, curve2: 1.5, sal100: 62720 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7840, curve2: 2, sal100: 35280 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 6160, curve2: 3, sal100: 38080 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1568, curve2: 2, sal100: 6272 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2856, curve2: 2, sal100: 11424 } },
     },
   },
   '1B': {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 7040, curve2: 1.5, sal100: 49280 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 6160, curve2: 2, sal100: 27720 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 4840, curve2: 3, sal100: 29920 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1232, curve2: 2, sal100: 4928 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2244, curve2: 2, sal100: 8976 } },
     },
   },
   '2B': {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8240, curve2: 1.5, sal100: 57680 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7210, curve2: 2, sal100: 32445 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5665, curve2: 3, sal100: 35020 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1442, curve2: 2, sal100: 5768 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2626.5, curve2: 2, sal100: 10506 } },
     },
   },
   SS: {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8800, curve2: 1.5, sal100: 61600 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7700, curve2: 2, sal100: 34650 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 6050, curve2: 3, sal100: 37400 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1540, curve2: 2, sal100: 6160 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2805, curve2: 2, sal100: 11220 } },
     },
   },
   '3B': {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 7760, curve2: 1.5, sal100: 54320 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 6790, curve2: 2, sal100: 30555 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5335, curve2: 3, sal100: 32980 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1358, curve2: 2, sal100: 5432 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2473.5, curve2: 2, sal100: 9894 } },
     },
   },
   LF: {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 7200, curve2: 1.5, sal100: 50400 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 6300, curve2: 2, sal100: 28350 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 4950, curve2: 3, sal100: 30600 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1260, curve2: 2, sal100: 5040 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2295, curve2: 2, sal100: 9180 } },
     },
   },
   CF: {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8480, curve2: 1.5, sal100: 59360 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7420, curve2: 2, sal100: 33390 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5830, curve2: 3, sal100: 36040 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1484, curve2: 2, sal100: 5936 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2703, curve2: 2, sal100: 10812 } },
     },
   },
   RF: {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 8000, curve2: 1.5, sal100: 56000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 7000, curve2: 2, sal100: 31500 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5500, curve2: 3, sal100: 34000 } },
-      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1400, curve2: 2, sal100: 5600 } },
-      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2550, curve2: 2, sal100: 10200 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 50, midSal: 7520, curve2: 1.5, sal100: 52640 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 55, midSal: 6580, curve2: 2, sal100: 29610 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 55, midSal: 5170, curve2: 3, sal100: 31960 } },
+      FLD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 1316, curve2: 2, sal100: 5264 } },
+      ARM: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2397, curve2: 2, sal100: 9588 } },
     },
   },
   IF: {
