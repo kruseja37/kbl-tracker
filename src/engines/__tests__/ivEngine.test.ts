@@ -125,15 +125,15 @@ describe('ivEngine T4 golden oracle parity', () => {
     }
   });
 
-  test('G2 Jon Gray Injury Prone isolated rawIV delta remains -$2,136', () => {
+  test('G2 Jon Gray Injury Prone isolated rawIV delta remains pinned after arm repricing', () => {
     const gray = oracle.anchors.find((anchor) => anchor.name === 'Jon Gray');
     expect(gray).toBeTruthy();
-    expect(oracle.meta.anchorGate.jonGrayInjuryProneDelta).toBe(-2136);
+    expect(oracle.meta.anchorGate.jonGrayInjuryProneDelta).toBe(-836);
 
     const base = profileInput(gray!.input);
     const withoutTrait = computeIV({ ...base, traits: [], arsenal: [] }).rawIV;
     const injuryOnly = computeIV({ ...base, traits: ['Injury Prone'], arsenal: [] }).rawIV;
-    expect(injuryOnly - withoutTrait).toBe(-2136);
+    expect(injuryOnly - withoutTrait).toBe(-836);
   });
 
   test('G3 all 440 stock players match frozen rawIV/kblIV totals and components', () => {
@@ -148,9 +148,9 @@ describe('ivEngine T4 golden oracle parity', () => {
   });
 
   test('G4 final named oracle constants are hard-coded', () => {
-    expect(computeIV(profileInput(byId('crc-fenomeno').input)).kblIV).toBe(143641);
-    expect(computeIV(profileInput(byId('bee-pastimm').input)).kblIV).toBe(199126);
-    expect(computeIV(profileInput(byId('wpg-drake').input)).kblIV).toBe(101003);
+    expect(computeIV(profileInput(byId('crc-fenomeno').input)).kblIV).toBe(124165);
+    expect(computeIV(profileInput(byId('bee-pastimm').input)).kblIV).toBe(122198);
+    expect(computeIV(profileInput(byId('wpg-drake').input)).kblIV).toBe(56490);
     expect(computeIV(profileInput(byId('blf-bradwick').input)).kblIV).toBe(58417);
   });
 

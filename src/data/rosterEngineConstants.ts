@@ -26,12 +26,6 @@ export const USAGE_INPUTS: Record<PitcherRoleKey, UsageInput> = {
   CP: { startShare: 0, paRatio: 0.625, phFloor: 0.05, prFloor: 0.01, rangeFloor: 0.05 },
 };
 
-/** §12/D16 SP/RP arm interpolation alpha. Distinct from SP/RP batting startShare. */
-export const SP_RP_INNINGS_ALPHA = 0.30;
-
-/** §12/D16 SP/RP flexible arm premium. */
-export const SP_RP_FLEX_PREMIUM = 1.12;
-
 /** §12/D15, CALIBRATE: Two Way trait defensive ARM ladder by potency tier. */
 export const TWO_WAY_ARM_BY_TIER: Record<PotencyTier, number> = { L1: 60, L2: 80, L3: 99 };
 

@@ -191,7 +191,7 @@ describe('T5 salary seam: kblIV salary base', () => {
   test.each([
     ['hitter', 'bee-balmer', 33_250],
     ['starter', 'bee-bender', 98_550],
-    ['reliever', 'bee-balfour', 22_892],
+    ['reliever', 'bee-balfour', 12_509],
   ])('R1 neutral %s salary equals frozen oracle kblIV', (_label, playerId, expectedKblIV) => {
     const player = toSalaryPlayer(findOraclePlayer(playerId));
     const breakdown = calculateSalaryWithBreakdown(player);

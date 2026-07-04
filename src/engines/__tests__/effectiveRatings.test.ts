@@ -13,8 +13,6 @@ import {
   POSITION_CHANCE_FREQUENCY,
   POTENCY_SCALE,
   ROLE_MISUSE_MOJO_PENALTY,
-  SP_RP_FLEX_PREMIUM,
-  SP_RP_INNINGS_ALPHA,
   TWO_WAY_ARM_BY_TIER,
   TWO_WAY_TRAIT_POSITION,
   TWO_WAY_USAGE,
@@ -238,8 +236,6 @@ describe('effectiveRatings T6 pure engine', () => {
       RP: { startShare: 0, paRatio: 0.625, phFloor: 0.08, prFloor: 0.02, rangeFloor: 0.06 },
       CP: { startShare: 0, paRatio: 0.625, phFloor: 0.05, prFloor: 0.01, rangeFloor: 0.05 },
     });
-    expect(SP_RP_INNINGS_ALPHA).toBe(0.30);
-    expect(SP_RP_FLEX_PREMIUM).toBe(1.12);
     expect(TWO_WAY_ARM_BY_TIER).toEqual({ L1: 60, L2: 80, L3: 99 });
     expect(TWO_WAY_USAGE).toBe(1);
     expect(POTENCY_SCALE).toEqual({

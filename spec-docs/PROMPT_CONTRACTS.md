@@ -29350,3 +29350,92 @@ GATE (report ACTUAL output):
 - FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set. Run any red SOLO and report.
 - `git status` — best22Target.ts + its test only. GameTracker NOT present.
 <!-- ===== END CONTRACT: CODEX-ROTATION-ORDER ===== -->
+
+<!-- ===== CONTRACT: CODEX-ARM-REPRICE ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/). Stage only explicit paths. Report ACTUAL output. No GameTracker edits.
+
+STEP 1 (KEYSTONE) of Fable's pool-affordability fix. BUILD EXACTLY to spec-docs/FABLE_POOL_AFFORDABILITY_DESIGN_2026-07-04.md
+§"STEP 1 — ARM REPRICING" — read it VERBATIM; the ruling, the concrete per-attribute target values (midSal/sal100 for the
+SP/RP, CP, RP blocks), and the re-bless ritual are all pinned there. Do ONLY Step 1; do NOT build Steps 2-4.
+
+DELIVERABLE (src/data/ivCurves.ts:157-212): reprice the arm role curves to the ratio SP (1.00) > SP/RP (0.90) > CP (0.65) >
+RP (0.55) on the SP pitching-attribute curves. SP block UNCHANGED (baseline — minimizes oracle churn). SP/RP, CP, RP adopt SP's
+SHAPE params (min/curve1/mid/curve2) on every pitching attr and scale SP's midSal/sal100 by the role multiplier (one shape
+family, four scalings, so the ordering holds at EVERY rating). SP/RP batting/FLD rows copy SP verbatim (kills the 200k/160k/200k
+batting sal100s). CP/RP batting/FLD already equal SP — leave. The RATIO is the spec; rounding to nearest $25 is fine. Use the
+exact tables in §STEP 1.
+
+ACCEPTANCE (§Step 1 — REPORT the actual computeIV numbers): at VEL/JNK/ACC = 80/70/70 and 90/85/85 (identical non-pitching):
+ordering SP > SP/RP > CP > RP at BOTH; ratios vs SP — SP/RP ∈ [0.76,0.84] (centered 0.80), CP ∈ [0.60,0.70], RP ∈ [0.50,0.60]; SP UNCHANGED
+from today (~$51,329 / ~$81,047).
+
+MANDATORY RE-BLESS (this is oracle-blessed canonical IV math — salary===kblIV, feeds auction budgets/cap/oracle pins):
+1. Re-pin the frozen IV oracle test (src/engines/__tests__/ivEngine.test.ts): update pinned expectations DELIBERATELY — each new
+   pin HAND-CHECKED against the ratio table (SP pins must be unchanged; SP/RP/CP/RP pins move by their multiplier). NEVER blind-
+   regenerate. In the report, LIST the old→new pinned values you changed so the auditor can verify each against the ratio.
+2. Re-run the value-parity harness archetypeBalanceSimulator (+ its test). If an archetype leaves its balance band, adjust THAT
+   archetype's budget split / shape targets — NEVER re-inflate the role curves to patch parity (repricing moves parity toward truth).
+3. Full vitest (expect churn in salarySeam.t5, optimizerConstantsSnapshot, draftabilityRanker, draftPoolExtractor, poolFeasibility,
+   leagueConstruction — update those pinned snapshots to the new prices; verify historicalArchetypes.test SOLO — known big-batch flake).
+4. Update spec-docs/IV_ENGINE_AND_ROSTER_INTELLIGENCE_SPEC.md (role-curve table + the ordering ruling) + a DECISIONS_LOG.md entry
+   (the ruling + date 2026-07-04).
+
+GUARDRAILS: SP block byte-unchanged; do NOT re-inflate curves to patch parity; no GameTracker; the value ratio is authoritative.
+ORTHOGONALITY: L-SIM not required (grep-confirm ivCurves not in the L-SIM harness path; state it).
+GATE (report ACTUAL output + the re-pinned oracle values + the acceptance-arm computeIV):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/ivEngine.test.ts src/engines/__tests__/archetypeBalanceSimulator.test.ts` — green (deliberately re-pinned).
+- FULL suite `NODE_ENV= npx vitest run` — reconcile every red: either a deliberately re-pinned price snapshot (list it) or a
+  pre-characterized flake (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture batch, historicalArchetypes big-batch — solo-verify).
+  NO red may be an un-reconciled real regression.
+- `git status` — ivCurves.ts, ivEngine.test.ts, any repriced snapshot tests, IV_ENGINE spec, DECISIONS_LOG. GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-ARM-REPRICE ===== -->
+
+<!-- ===== CONTRACT: CODEX-BALANCED-SEATING ===== -->
+ROLE: Builder. Branch experiment/manager-wpa-window ONLY — never push, never `git commit -a`, never stage or touch
+pre-existing dirty files (.claude/launch.json, CLAUDE.md, HANDOFF_*, spec-docs/SESSION_LOG.md, spec-docs/generated/,
+reference-docs/, scripts/, instructions/, src/data/rosterEngineConstants.ts unless YOUR change, src/engines/__tests__/effectiveRatings.test.ts unless YOUR change).
+Stage only explicit paths you create/edit. Report ACTUAL output. No GameTracker edits.
+
+STEP 2 of Fable's pool-affordability fix. BUILD EXACTLY to spec-docs/FABLE_POOL_AFFORDABILITY_DESIGN_2026-07-04.md §"STEP 2 —
+BALANCED SEATING" — read it VERBATIM. Do ONLY Step 2.
+
+PROBLEM: seatAllClubs (src/engines/rosterDesignFeasibility.ts, the shared primitive both runG1Check AND the UI FLOOR call — commit
+19fac707) is a GREEDY sequential first-fit: club 1 solves cheapest-first + deletes its 22, next club solves from leftovers. Identical
+symmetric clubs, but club 1 hoovers the cheap bodies and the last club is priced against expensive leftovers → a FALSE "can't seat"
+that only clears at an inflated cap (JK's "$1.5M cap, then >$1M/club leeway" artifact).
+
+DELIVERABLE — replace the INTERNALS of seatAllClubs (KEEP its signature + existing result shape {holds, seated, assemblies, failing?};
+ADD per-club costs to the result) with a global-matching + budget-balancing check, per §Step 2:
+1. GLOBAL MATCHING: build T copies of buildDefaultDesignSlots() (T×22 slots), run the SAME Kuhn max-cardinality matcher
+   evaluateRosterDesign already uses — ONCE over all T×22 slots vs the whole pool. Candidate order = the existing candidateOrder with
+   NO tilt (G1 has none). Slot order = most-constrained-first globally, tie-break SNAKE by club index so scarce cheap bodies stripe
+   across clubs instead of pooling in club 1. Incomplete matching → holds:false with the true blockers (existing blocker language).
+2. PER-CLUB BUDGET BALANCING: after a complete matching, while some club exceeds `budget`: (a) swap a body in the max-cost club with a
+   CHEAPER eligible UNUSED pool body (augment via the matcher); else (b) same-slot-class swap with an under-budget club where the exchange
+   strictly reduces the max club's cost AND keeps the donor legal + within budget. Each iteration strictly decreases the max club cost →
+   terminates. All clubs ≤ budget → holds:true.
+3. LEGALITY: per-club isLegalRoster stays the invariant gate; failures explain via explainIllegality (never canned).
+4. Return per-club assemblies AND per-club costs so the UI leeway readout reports the BALANCED spread, not the greedy artifact.
+DETERMINISM: no randomness — existing tie-breaks (salary, then id) + fixed snake order. Both callers (runG1Check + buildLeagueSeatabilityRow)
+consume the SAME upgraded primitive — verify both still compile + behave (the UI FLOOR row copy from CODEX-FLOOR-DIAGNOSTIC-FIX stays;
+if per-club costs are now available, the FLOOR/leeway may use them but do NOT change the FEASIBILITY-SOFT gates).
+
+TESTS (§Step 2 acceptance — add to src/engines/__tests__/seatAllClubs.test.ts):
+- STRANDING fixture (the regression test for THIS bug): 2 clubs; pool where each slot-class has 2 cheap + 2 expensive bodies such that
+  club-sequential seating strands club 2 over budget but a cross-club distribution seats both. Balanced MUST hold at a budget where the OLD
+  greedy provably returned holds:false (encode the old greedy failure in the test comment, not in code).
+- SYMMETRY: verdict + per-club max cost invariant under pool input order.
+- PARTITION: pool = T disjoint legal 22s each costing exactly B → holds at B, fails at B−1.
+- EQUIVALENCE PRESERVED: the existing seatAllClubs.test equivalence + same-set-agreement tests still pass (G1 and the UI FLOOR stay in lockstep).
+
+GUARDRAILS: keep it the shared primitive (do NOT fork a second seating fn); no GameTracker; no FEASIBILITY-SOFT gate changes.
+ORTHOGONALITY: L-SIM not required (grep-confirm rosterDesignFeasibility not in the L-SIM harness path; state it).
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/seatAllClubs.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts src/engines/__tests__/poolFromDemand.test.ts src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx` — green.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmokeFixture batch, historicalArchetypes big-batch — solo-verify). Run any red SOLO.
+- `git status` — rosterDesignFeasibility.ts + seatAllClubs.test.ts (+ any FLOOR leeway-readout tweak in LeagueBuilderDraftSetup.tsx). GameTracker NOT present.
+<!-- ===== END CONTRACT: CODEX-BALANCED-SEATING ===== -->

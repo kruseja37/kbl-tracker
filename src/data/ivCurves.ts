@@ -170,16 +170,16 @@ export const IV_CURVES: Record<PositionKey, PositionCurveBlock> = {
   },
   'SP/RP': {
     attributes: {
-      POW: { primary: { min: 0, curve1: 1, mid: 30, midSal: 1000, curve2: 2, sal100: 200000 } },
-      CON: { primary: { min: 0, curve1: 1, mid: 30, midSal: 800, curve2: 2, sal100: 160000 } },
-      SPD: { primary: { min: 0, curve1: 1, mid: 30, midSal: 1000, curve2: 2, sal100: 200000 } },
+      POW: { primary: { min: 0, curve1: 1, mid: 30, midSal: 500, curve2: 2, sal100: 100000 } },
+      CON: { primary: { min: 0, curve1: 1, mid: 30, midSal: 400, curve2: 2, sal100: 80000 } },
+      SPD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 550, curve2: 2, sal100: 100000 } },
       FLD: { primary: { min: 0, curve1: 1, mid: 50, midSal: 500, curve2: 2, sal100: 3500 } },
       VEL: {
-        primary: { min: 50, curve1: 1.2, mid: 60, midSal: 16000, curve2: 1.2, sal100: 200000 },
-        subMin: { min: 0, curve1: 1.2, mid: 30, midSal: 20000, curve2: 1.3, sal100: 50000 },
+        primary: { min: 50, curve1: 1.2, mid: 65, midSal: 8400, curve2: 2, sal100: 50400 },
+        subMin: { min: 0, curve1: 1.2, mid: 30, midSal: 6000, curve2: 1.3, sal100: 14400 },
       },
-      JNK: { primary: { min: 0, curve1: 1, mid: 60, midSal: 7500, curve2: 1.5, sal100: 150000 } },
-      ACC: { primary: { min: 0, curve1: 1, mid: 55, midSal: 12000, curve2: 1.5, sal100: 150000 } },
+      JNK: { primary: { min: 0, curve1: 1, mid: 60, midSal: 4000, curve2: 2, sal100: 16000 } },
+      ACC: { primary: { min: 0, curve1: 1, mid: 50, midSal: 6160, curve2: 2, sal100: 27720 } },
     },
   },
   RP: {
@@ -189,11 +189,11 @@ export const IV_CURVES: Record<PositionKey, PositionCurveBlock> = {
       SPD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 550, curve2: 2, sal100: 100000 } },
       FLD: { primary: { min: 0, curve1: 1, mid: 50, midSal: 500, curve2: 2, sal100: 3500 } },
       VEL: {
-        primary: { min: 50, curve1: 1.2, mid: 65, midSal: 15000, curve2: 2, sal100: 93750 },
-        subMin: { min: 0, curve1: 1.2, mid: 30, midSal: 9000, curve2: 1.3, sal100: 20000 },
+        primary: { min: 50, curve1: 1.2, mid: 65, midSal: 5775, curve2: 2, sal100: 34650 },
+        subMin: { min: 0, curve1: 1.2, mid: 30, midSal: 4125, curve2: 1.3, sal100: 9900 },
       },
-      JNK: { primary: { min: 0, curve1: 1, mid: 60, midSal: 6500, curve2: 2, sal100: 26000 } },
-      ACC: { primary: { min: 0, curve1: 1, mid: 50, midSal: 10200, curve2: 2, sal100: 45900 } },
+      JNK: { primary: { min: 0, curve1: 1, mid: 60, midSal: 2750, curve2: 2, sal100: 11000 } },
+      ACC: { primary: { min: 0, curve1: 1, mid: 50, midSal: 4235, curve2: 2, sal100: 19060 } },
     },
   },
   CP: {
@@ -203,11 +203,11 @@ export const IV_CURVES: Record<PositionKey, PositionCurveBlock> = {
       SPD: { primary: { min: 0, curve1: 1, mid: 60, midSal: 550, curve2: 2, sal100: 100000 } },
       FLD: { primary: { min: 0, curve1: 1, mid: 50, midSal: 500, curve2: 2, sal100: 3500 } },
       VEL: {
-        primary: { min: 50, curve1: 1.2, mid: 65, midSal: 10000, curve2: 2, sal100: 50000 },
-        subMin: { min: 0, curve1: 1.2, mid: 30, midSal: 7000, curve2: 1.3, sal100: 17000 },
+        primary: { min: 50, curve1: 1.2, mid: 65, midSal: 6825, curve2: 2, sal100: 40950 },
+        subMin: { min: 0, curve1: 1.2, mid: 30, midSal: 4875, curve2: 1.3, sal100: 11700 },
       },
-      JNK: { primary: { min: 0, curve1: 1, mid: 60, midSal: 4500, curve2: 2, sal100: 15000 } },
-      ACC: { primary: { min: 0, curve1: 1, mid: 50, midSal: 7000, curve2: 2, sal100: 27000 } },
+      JNK: { primary: { min: 0, curve1: 1, mid: 60, midSal: 3250, curve2: 2, sal100: 13000 } },
+      ACC: { primary: { min: 0, curve1: 1, mid: 50, midSal: 5005, curve2: 2, sal100: 22525 } },
     },
   },
   '1B/OF': {

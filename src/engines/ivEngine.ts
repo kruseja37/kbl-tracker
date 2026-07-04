@@ -6,8 +6,6 @@ import {
   PITCHER_NEUTRAL_HITTER_BLOCK,
   PITCHER_ROLES,
   POTENCY_SCALE,
-  SP_RP_FLEX_PREMIUM,
-  SP_RP_INNINGS_ALPHA,
   TWO_WAY_ARM_BY_TIER,
   TWO_WAY_TRAIT_POSITION,
   TWO_WAY_USAGE,
@@ -394,12 +392,7 @@ function pitcherAttrCellKbl(
   attr: IVAttr,
   rating: number,
 ): number {
-  if (role !== 'SP/RP') {
-    return attrCellFor(blockAttributes(curves, role), attr, rating, role);
-  }
-  const sp = attrCellFor(blockAttributes(curves, 'SP'), attr, rating, 'SP');
-  const rp = attrCellFor(blockAttributes(curves, 'RP'), attr, rating, 'RP');
-  return roundup((SP_RP_INNINGS_ALPHA * sp + (1 - SP_RP_INNINGS_ALPHA) * rp) * SP_RP_FLEX_PREMIUM);
+  return attrCellFor(blockAttributes(curves, role), attr, rating, role);
 }
 
 function pitcherAttrMarginalKbl(
@@ -409,12 +402,7 @@ function pitcherAttrMarginalKbl(
   rating: number,
   delta: number,
 ): number {
-  if (role !== 'SP/RP') {
-    return marginalFor(blockAttributes(curves, role), attr, rating, delta, role);
-  }
-  const sp = marginalFor(blockAttributes(curves, 'SP'), attr, rating, delta, 'SP');
-  const rp = marginalFor(blockAttributes(curves, 'RP'), attr, rating, delta, 'RP');
-  return (SP_RP_INNINGS_ALPHA * sp + (1 - SP_RP_INNINGS_ALPHA) * rp) * SP_RP_FLEX_PREMIUM;
+  return marginalFor(blockAttributes(curves, role), attr, rating, delta, role);
 }
 
 interface KblCells {
@@ -451,7 +439,7 @@ function pitcherKblCells(input: IVPlayerInput, curves: Record<PositionKey, Posit
     CON: attrCellFor(hitterBlock, 'CON', bat.CON ?? 0, hitterCurveBlock),
     SPD: attrCellFor(hitterBlock, 'SPD', bat.SPD ?? 0, hitterCurveBlock),
   };
-  const fieldingInterpolated = role === 'SP/RP' && !isTwoWay;
+  const fieldingInterpolated = false;
   const fieldingBlock = isTwoWay ? hitterBlock : pitchBlock;
   batCells.FLD = fieldingInterpolated
     ? pitcherAttrCellKbl(curves, role, 'FLD', bat.FLD ?? 0)

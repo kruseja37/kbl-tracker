@@ -3605,3 +3605,16 @@ JK ruled the three §9 open items:
    then the buildability check runs and the re-check panel surfaces any club that the edits made unbuildable.
    This is a Phase 2B (§5.2) concern — Phase 2A (the trim/floor engine, which takes protectedIds as a param)
    is unaffected and proceeds as designed.
+
+## 2026-07-04 — JK RULING: Step 1 arm repricing removes hidden flexibility from canonical IV
+
+Per `FABLE_POOL_AFFORDABILITY_DESIGN_2026-07-04.md` Step 1, pitcher arm role prices now use one SP-shaped
+pitching curve family with role scalings: SP 1.00, SP/RP 0.80, CP 0.65, RP 0.55. SP/RP was refined down
+from the earlier 0.90 draft because 0.90 embedded deferred flexibility-as-value on top of expected
+production. Canonical IV prices expected production only; SP/RP flexibility and legality-floor value belong
+in the roster/pool construction layer and the v1.1 economy batch, not in `computeIV` salary curves.
+
+Acceptance ruling: at identical pitching ratings, ordering must hold as SP > SP/RP > CP > RP. Reference
+arms VEL/JNK/ACC 80/70/70 and 90/85/85 must keep SP near the existing $51k/$81k anchors, with SP/RP in
+[0.76,0.84], CP in [0.60,0.70], and RP in [0.50,0.60] vs SP. The frozen IV oracle is deliberately
+re-blessed because salary is `kblIV` and feeds auction budgets, cap math, and downstream oracle pins.

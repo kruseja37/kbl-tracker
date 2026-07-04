@@ -101,7 +101,7 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'hdh-royals', name: 'HDH Royals', exemplars: ['2014 Royals', '2015 Royals'], era: '2010s',
     lore: 'Shorten the game: a lockdown pen and fast gloves.', identity: '+bullpen command +speed → −power −rotation command',
-    boosts: ['PEN_ACC', 'SPD'], nerfs: ['POW', 'ROT_ACC'], spec: { PEN_ACC: 1.5, SPD: 1, POW: -1.5, ROT_ACC: -1 },
+    boosts: ['PEN_ACC', 'SPD'], nerfs: ['POW', 'ROT_ACC'], spec: { PEN_ACC: 0.3, SPD: 1, POW: -0.5, ROT_ACC: -0.25 },
   },
   {
     id: 'the-opener', name: 'The Opener', exemplars: ['2018 Rays'], era: '2018',
