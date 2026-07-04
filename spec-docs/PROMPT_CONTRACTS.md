@@ -29621,3 +29621,52 @@ GATE (report ACTUAL output for each):
 NOTE FOR AUDITOR (not Codex's job): Opus runs archetype re-band (archetypeBalanceSimulator 24/24) + the 4-team affordability re-measure
 with a required CP per club + the adversarial diff audit before commit.
 <!-- ===== END CONTRACT: CODEX-REQUIRE-A-CLOSER ===== -->
+
+<!-- ===== CONTRACT: CODEX-NEUTRALIZE-IDENTITY-CAP ===== -->
+CODEX-NEUTRALIZE-IDENTITY-CAP — neutralize the vestigial "at most 2 identity modifications" cap. Branch experiment/manager-wpa-window.
+Builder=Codex; AUDITOR=Opus (does NOT commit — leave the diff uncommitted for Opus's audit + browser-verify). Report ACTUAL output.
+
+JK RULING (2026-07-04, binding): In this product, a team's identity is set ONLY by selecting ARCHETYPES — an MLB archetype from a list
+AND a farm archetype from a list. There is NO user-facing "2 up / 2 down" hand-pick identity path. Therefore the "at most 2
+modifications" cap has NO anti-gaming purpose and must be NEUTRALIZED. MLB and farm archetype identities are SEPARATE selections and
+must stay separate.
+
+BUG IT CAUSES (verified root cause, file:line): On the MLB Auction Draft setup screen, selecting the "Rangy Defenders" archetype
+(boosts ['SPD','ARM','FLD'] = 3 boosts; the ONLY 3-boost archetype of 24) throws the red banner "Identity increase selection can
+include at most 2 modifications". Chain: archetypeToCapIdentity (src/engines/archetypeIdentity.ts:31-47) sets increase=uniqueModNames(
+arch.boosts) = 3 entries + a rawShift. auctionLuxuryTax.ts:27-29 calls shiftLuxuryCaps(baseCaps, { increase: capIdentity.increase,
+decrease: capIdentity.decrease }) — DROPPING rawShift → identityCapShift (leagueConstruction.ts:213) has no rawShift to early-return on
+→ falls through to applyIdentitySelection (leagueConstruction.ts:219) → validate() throws at :197 because increase.length (3) > 2.
+
+WHAT TO CHANGE:
+1. src/engines/leagueConstruction.ts — in `applyIdentitySelection` `validate()` (≈:194-205): REMOVE the length cap (the
+   `if (filtered.length > 2) throw new Error(...at most 2 modifications...)`). KEEP the vocabulary check (`if (!(name in
+   CAP_MODIFICATION_FRACTIONS)) throw ...Unknown identity modification`). The function still returns `filtered` (the non-'--' names).
+   So a 3+-entry increase/decrease now returns cleanly and identityCapShift/shiftLuxuryCaps compute the shift over all entries.
+2. src/engines/__tests__/leagueConstruction.test.ts — the test asserting the ≤2 throw (≈:185
+   `expect(() => applyIdentitySelection({ increase: ['POW','CON','SPD'], decrease: [] })).toThrow(/at most 2/)`): CHANGE it to assert
+   the 3-item increase now RETURNS `['POW','CON','SPD']` (no throw). KEEP the unknown-modification throw test (:186). Update any other
+   test that pins the ≤2 cap. Grep the repo for other assumptions that a 3-entry increase throws/breaks and fix consistently. Do NOT
+   weaken unrelated assertions.
+3. SEPARATION CHECK (report, only change if broken): confirm MLB identity (team.capIdentity) and farm identity (team.farmCapIdentity)
+   are built by separate selectTeamArchetype args and consumed separately (the MLB team uses capIdentity; farm uses farmCapIdentity) —
+   the neutralization must fix BOTH the MLB and farm archetype paths (a 3-boost farm archetype must also no longer throw). State the
+   file:line evidence that they are separate; if you find them conflated, flag it (do not silently merge).
+4. spec-docs/DECISIONS_LOG.md — add a dated entry SUPERSEDING D-11: the ≤2 identity-modification cap is NEUTRALIZED per JK 2026-07-04.
+   Rationale: identity is set exclusively via archetype selection (MLB + farm, each from a list); there is no hand-pick 2-up/2-down UI,
+   so the cap guards nothing and blocks legitimate 3-boost archetypes (e.g. Rangy Defenders). The luxury tax + tier cap remain the
+   balancers. (Reference the old D-11 line so the supersession is traceable.)
+
+GUARDRAILS: Do NOT change the luxury-tax shift BASIS (whether it uses rawShift vs increase/decrease labels) — that is a separate
+pre-existing behavior and OUT OF SCOPE; only remove the length cap. Do NOT edit archetype specs, src/data/ivCurves.ts,
+spec-docs/reference/iv_oracle.json, or GameTracker. Do NOT touch the LeagueBuilderTeams hand-pick UI slot layout.
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/leagueConstruction.test.ts` — green (skip nonexistent paths; list what ran). Also run
+  any auctionLuxuryTax / archetypeIdentity / poolFeasibility tests if they exist.
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmoke
+  Fixture batch, LeagueBuilderDraftSetup batch flake, historicalArchetypes big-batch — verify each SOLO). Run any red SOLO.
+- `git status` — list changed files (leagueConstruction.ts + its test + DECISIONS_LOG.md, and any other test touched). ivCurves.ts /
+  iv_oracle.json / GameTracker NOT present. DO NOT COMMIT — leave for Opus.
+<!-- ===== END CONTRACT: CODEX-NEUTRALIZE-IDENTITY-CAP ===== -->

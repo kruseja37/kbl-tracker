@@ -177,12 +177,15 @@ describe('leagueConstruction T8a pure engine', () => {
     }
   });
 
-  test('applyIdentitySelection validates vocabulary, count, and neutral drops', () => {
+  test('applyIdentitySelection validates vocabulary and neutral drops without a count cap', () => {
     expect(applyIdentitySelection({ increase: ['POW', '--'], decrease: ['--', 'CON'] })).toEqual({
       increase: ['POW'],
       decrease: ['CON'],
     });
-    expect(() => applyIdentitySelection({ increase: ['POW', 'CON', 'SPD'], decrease: [] })).toThrow(/at most 2/);
+    expect(applyIdentitySelection({ increase: ['POW', 'CON', 'SPD'], decrease: ['ARM', 'FLD', 'ACC'] })).toEqual({
+      increase: ['POW', 'CON', 'SPD'],
+      decrease: ['ARM', 'FLD', 'ACC'],
+    });
     expect(() => applyIdentitySelection({ increase: ['Not A Mod'], decrease: [] })).toThrow(/Unknown identity modification/);
   });
 

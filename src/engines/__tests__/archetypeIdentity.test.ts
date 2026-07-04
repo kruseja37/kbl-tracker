@@ -156,9 +156,13 @@ describe('archetype identity bridge', () => {
     expect(saveTeam).toHaveBeenCalledTimes(1);
 
     vi.mocked(saveTeam).mockClear();
-    const withFarm = await selectTeamArchetype(minimalTeam({ id: 'team-2' }), 'murderers-row', 'the-opener');
-    expect(withFarm.farmArchetypeKey).toBe('the-opener');
+    const withFarm = await selectTeamArchetype(minimalTeam({ id: 'team-2' }), 'murderers-row', 'rangy-defenders');
+    expect(withFarm.farmArchetypeKey).toBe('rangy-defenders');
     expect(withFarm.farmCapIdentity?.rawShift).toBeDefined();
+    expect(withFarm.farmCapIdentity!.increase).toEqual(['SPD', 'ARM', 'FLD']);
+    expect(withFarm.farmCapIdentity!.rawShift!.SPD).toBeGreaterThan(0);
+    expect(withFarm.farmCapIdentity!.rawShift!.ARM).toBeGreaterThan(0);
+    expect(withFarm.farmCapIdentity!.rawShift!.FLD).toBeGreaterThan(0);
     expect(saveTeam).toHaveBeenCalledTimes(1);
   });
 

@@ -191,11 +191,8 @@ export function composeIdentity(priorities: BandPriorities): IdentityComposition
 }
 
 export function applyIdentitySelection(sel: { increase: string[]; decrease: string[] }): IdentityComposition {
-  const validate = (kind: 'increase' | 'decrease', names: string[]): string[] => {
+  const validate = (names: string[]): string[] => {
     const filtered = names.filter((name) => name !== '--');
-    if (filtered.length > 2) {
-      throw new Error(`Identity ${kind} selection can include at most 2 modifications`);
-    }
     for (const name of names) {
       if (!(name in CAP_MODIFICATION_FRACTIONS)) {
         throw new Error(`Unknown identity modification: ${name}`);
@@ -205,8 +202,8 @@ export function applyIdentitySelection(sel: { increase: string[]; decrease: stri
   };
 
   return {
-    increase: validate('increase', sel.increase),
-    decrease: validate('decrease', sel.decrease),
+    increase: validate(sel.increase),
+    decrease: validate(sel.decrease),
   };
 }
 

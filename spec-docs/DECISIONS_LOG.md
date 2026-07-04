@@ -3633,3 +3633,16 @@ only the `midSal` and `sal100` anchors of all five hitter rows in the 8 primary 
 shape parameters stay one shared family. `POSITION_MULTIPLIERS` remains the retired all-1.0 knob so
 pool pricing and franchise salary both read the same `kblIV` base. Utility/neutral blocks and all
 pitcher blocks stay unchanged.
+
+## 2026-07-04 — JK RULING: identity modification count cap neutralized (supersedes D-11)
+
+This supersedes the old D-11 / 2026-06-14 T8 identity-composition envelope that limited identity
+selection to two increases and two decreases (`DECISIONS_LOG.md` line 1075 at the time of ruling).
+
+In this product, team identity is set only by choosing archetypes: one MLB archetype from the MLB
+list and one farm archetype from the farm list. There is no user-facing "2 up / 2 down" hand-pick
+identity path. The cap therefore guards nothing and blocks legitimate archetypes, specifically the
+3-boost Rangy Defenders archetype. MLB and farm archetype identities remain separate selections.
+
+The identity-modification count cap is neutralized. The vocabulary check remains, and the luxury tax
+plus tier cap remain the balancing mechanisms.
