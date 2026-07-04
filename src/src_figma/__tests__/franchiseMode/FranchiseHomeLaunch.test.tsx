@@ -212,7 +212,7 @@ vi.mock('@/app/components/ScheduleContent', () => ({
   ScheduleContent: () => <div data-testid="schedule-content" />,
 }));
 
-import { FranchiseHome, resolveFranchiseGameUseDH } from '../../app/pages/FranchiseHome';
+import { FranchiseHome, resolveFranchiseExtraInnings, resolveFranchiseGameUseDH } from '../../app/pages/FranchiseHome';
 
 const snapshot = (
   snapshotId: string,
@@ -284,7 +284,14 @@ const starterHands: Record<string, 'R' | 'L'> = {
   'higher-seed': 'L',
 };
 
-function makeFranchiseConfig(useDH?: boolean) {
+function makeFranchiseConfig(
+  useDH?: boolean,
+  seasonOverrides: {
+    extraInningsRule?: string;
+    extraInningsRunnerDelay?: 1 | 2;
+    inningsPerGame?: number;
+  } = {},
+) {
   return {
     franchiseId: 'franchise-1',
     createdAt: 1,
@@ -297,6 +304,7 @@ function makeFranchiseConfig(useDH?: boolean) {
       extraInningsRule: 'standard',
       scheduleType: 'balanced',
       ...(useDH === undefined ? {} : { useDH }),
+      ...seasonOverrides,
       allStarGame: false,
       tradeDeadline: false,
       mercyRule: false,
@@ -323,11 +331,18 @@ function makeFranchiseConfig(useDH?: boolean) {
   };
 }
 
-function makeFranchiseData(useDH?: boolean) {
+function makeFranchiseData(
+  useDH?: boolean,
+  seasonOverrides: {
+    extraInningsRule?: string;
+    extraInningsRunnerDelay?: 1 | 2;
+    inningsPerGame?: number;
+  } = {},
+) {
   return {
     isLoading: false,
     error: null,
-    franchiseConfig: makeFranchiseConfig(useDH),
+    franchiseConfig: makeFranchiseConfig(useDH, seasonOverrides),
     leagueName: 'KRUSE BASEBALL',
     seasonNumber: 1,
     seasonName: 'Season 1',
@@ -846,6 +861,90 @@ describe('FranchiseHome launch optimal lineup snapshots', () => {
   test('resolveFranchiseGameUseDH reads the persisted no-DH franchise seal', () => {
     expect(resolveFranchiseGameUseDH(makeFranchiseConfig(false) as never)).toBe(false);
   });
+
+  test('resolveFranchiseExtraInnings maps Runner on 2nd with an explicit delay', () => {
+    expect(
+      resolveFranchiseExtraInnings(
+        makeFranchiseConfig(false, {
+          extraInningsRule: 'Runner on 2nd',
+          extraInningsRunnerDelay: 2,
+        }) as never,
+      ),
+    ).toEqual({ extraInningRunner: true, extraInningRunnerDelay: 2 });
+  });
+
+  test('resolveFranchiseExtraInnings defaults missing Runner on 2nd delay for migrated franchises', () => {
+    expect(
+      resolveFranchiseExtraInnings(
+        makeFranchiseConfig(false, {
+          extraInningsRule: 'Runner on 2nd',
+        }) as never,
+      ),
+    ).toEqual({ extraInningRunner: true, extraInningRunnerDelay: 1 });
+  });
+
+  test.sequential.each([
+    { extraInningsRule: 'Standard', expected: { extraInningRunner: false, extraInningRunnerDelay: 1 } },
+    { extraInningsRule: 'Sudden Death', expected: { extraInningRunner: false, extraInningRunnerDelay: 1 } },
+    { extraInningsRule: 'standard', expected: { extraInningRunner: false, extraInningRunnerDelay: 1 } },
+  ])('resolveFranchiseExtraInnings maps $extraInningsRule to no ghost runner', ({ extraInningsRule, expected }) => {
+    expect(
+      resolveFranchiseExtraInnings(
+        makeFranchiseConfig(false, {
+          extraInningsRule,
+          extraInningsRunnerDelay: 2,
+        }) as never,
+      ),
+    ).toEqual(expected);
+  });
+
+  test('resolveFranchiseExtraInnings maps null config to no ghost runner', () => {
+    expect(resolveFranchiseExtraInnings(null)).toEqual({
+      extraInningRunner: false,
+      extraInningRunnerDelay: 1,
+    });
+  });
+
+  test.sequential.each([
+    {
+      extraInningsRule: 'Standard',
+      expectedRunner: false,
+      expectedDelay: 1,
+    },
+    {
+      extraInningsRule: 'Runner on 2nd',
+      extraInningsRunnerDelay: 2 as const,
+      expectedRunner: true,
+      expectedDelay: 2,
+    },
+    {
+      extraInningsRule: 'Sudden Death',
+      extraInningsRunnerDelay: 2 as const,
+      expectedRunner: false,
+      expectedDelay: 1,
+    },
+  ])(
+    'regular-season launch passes extra innings nav-state for $extraInningsRule',
+    async ({ extraInningsRule, extraInningsRunnerDelay, expectedRunner, expectedDelay }) => {
+      mocks.mockUseFranchiseData.mockReturnValue(
+        makeFranchiseData(false, {
+          extraInningsRule,
+          ...(extraInningsRunnerDelay === undefined ? {} : { extraInningsRunnerDelay }),
+        }),
+      );
+
+      await startRegularSeasonGame();
+
+      await waitFor(() => {
+        const state = mocks.mockNavigate.mock.calls.at(-1)?.[1]?.state;
+        expect(state).toMatchObject({
+          totalInnings: 9,
+          extraInningRunner: expectedRunner,
+          extraInningRunnerDelay: expectedDelay,
+        });
+      });
+    },
+  );
 
   test('playoff bracket creation is disabled until seeding review is confirmed', async () => {
     const playoffData = makeNoPlayoffData();

@@ -582,6 +582,29 @@ function Step2SeasonSettings({
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
 }) {
+  const selectedExtraInningsRunnerDelay = config.season.extraInningsRunnerDelay ?? 1;
+  const ghostRunnerStartInning = config.season.inningsPerGame + selectedExtraInningsRunnerDelay;
+  const formatOrdinal = (value: number) => {
+    const remainder = value % 100;
+    if (remainder >= 11 && remainder <= 13) return `${value}th`;
+    switch (value % 10) {
+      case 1:
+        return `${value}st`;
+      case 2:
+        return `${value}nd`;
+      case 3:
+        return `${value}rd`;
+      default:
+        return `${value}th`;
+    }
+  };
+  const extraInningsHint =
+    config.season.extraInningsRule === "Runner on 2nd"
+      ? `ℹ️ Ghost runner takes second starting the ${formatOrdinal(ghostRunnerStartInning)} inning`
+      : config.season.extraInningsRule === "Sudden Death"
+        ? "ℹ️ Sudden Death: not tracked in v1 — plays as Standard"
+        : "ℹ️ Standard: No runner placed, play until there's a winner";
+
   const presets = [
     { id: "standard", name: "Standard", games: 32, innings: 7 },
     { id: "quick", name: "Quick Play", games: 16, innings: 6 },
@@ -693,7 +716,13 @@ function Step2SeasonSettings({
                 onClick={() =>
                   setConfig({
                     ...config,
-                    season: { ...config.season, extraInningsRule: rule },
+                    season: {
+                      ...config.season,
+                      extraInningsRule: rule,
+                      ...(rule === "Runner on 2nd"
+                        ? { extraInningsRunnerDelay: config.season.extraInningsRunnerDelay ?? 1 }
+                        : {}),
+                    },
                   })
                 }
                 className="flex items-center gap-2 text-xs text-[#E8E8D8]"
@@ -712,8 +741,42 @@ function Step2SeasonSettings({
               </button>
             ))}
           </div>
+          {config.season.extraInningsRule === "Runner on 2nd" && (
+            <div className="border-t-2 border-[#E8E8D8]/20 mt-3 pt-3">
+              <p className="text-[10px] text-[#E8E8D8]/70 mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>GHOST RUNNER ARRIVES</p>
+              <div className="flex gap-4">
+                {[
+                  { label: "1st extra inning", value: 1 as const },
+                  { label: "2nd extra inning", value: 2 as const },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() =>
+                      setConfig({
+                        ...config,
+                        season: { ...config.season, extraInningsRunnerDelay: option.value },
+                      })
+                    }
+                    className="flex items-center gap-2 text-xs text-[#E8E8D8]"
+                    style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 ${
+                        selectedExtraInningsRunnerDelay === option.value ? "border-[#C4A853] bg-[#C4A853]" : "border-[#E8E8D8]"
+                      }`}
+                    >
+                      {selectedExtraInningsRunnerDelay === option.value && (
+                        <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />
+                      )}
+                    </div>
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="text-[10px] text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-            ℹ️ Standard: No runner placed, play until there's a winner
+            {extraInningsHint}
           </p>
         </div>
       </div>

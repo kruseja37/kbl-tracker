@@ -159,6 +159,7 @@ export interface FranchiseConfig {
     gamesPerTeam: number;
     inningsPerGame: number;
     extraInningsRule: string;
+    extraInningsRunnerDelay?: 1 | 2;
     scheduleType: string;
     useDH?: boolean;
     allStarGame: boolean;

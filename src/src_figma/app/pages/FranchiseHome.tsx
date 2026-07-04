@@ -262,6 +262,25 @@ export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataRetur
   return franchiseConfig?.season?.useDH ?? false;
 }
 
+export function resolveFranchiseExtraInnings(
+  franchiseConfig: UseFranchiseDataReturn["franchiseConfig"],
+): { extraInningRunner: boolean; extraInningRunnerDelay: 1 | 2 } {
+  switch (franchiseConfig?.season?.extraInningsRule) {
+    case "Runner on 2nd":
+      return {
+        extraInningRunner: true,
+        extraInningRunnerDelay: franchiseConfig.season.extraInningsRunnerDelay ?? 1,
+      };
+    case "Standard":
+      return { extraInningRunner: false, extraInningRunnerDelay: 1 };
+    case "Sudden Death":
+      // Future v2 sudden-death wiring belongs in this resolver branch.
+      return { extraInningRunner: false, extraInningRunnerDelay: 1 };
+    default:
+      return { extraInningRunner: false, extraInningRunnerDelay: 1 };
+  }
+}
+
 function saveCurrentSeasonNumber(season: number): void {
   const value = String(season);
   localStorage.setItem('kbl-current-season', value);
@@ -3652,6 +3671,7 @@ function GameDayContent({
       away: selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, homeStarter),
       home: selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, awayStarter),
     };
+    const extraInningsLaunchState = resolveFranchiseExtraInnings(franchiseData.franchiseConfig);
     await Promise.all([
       ensureFranchiseReporterForTeam({
         teamId: preGameData.awayTeamId,
@@ -3712,6 +3732,7 @@ function GameDayContent({
         seasonNumber: currentSeason,
         gameNumber: preGameData.gameNumber,
         totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
+        ...extraInningsLaunchState,
       }, {
         awayManagerId: awayManager.managerId,
         awayManagerName: awayManager.managerName,

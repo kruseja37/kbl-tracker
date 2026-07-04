@@ -261,6 +261,19 @@ async function resetTestData(): Promise<void> {
   await clearAllLeagueBuilderData();
 }
 
+async function seedValidLeagueTemplate(): Promise<void> {
+  await seedLeagueTeam(AWAY_TEAM_ID, 'Away Club');
+  await seedLeagueTeam(HOME_TEAM_ID, 'Home Club');
+  await saveLeagueTemplate({
+    id: LEAGUE_ID,
+    name: 'Integration League',
+    teamIds: [AWAY_TEAM_ID, HOME_TEAM_ID],
+    conferences: [],
+    divisions: [],
+    defaultRulesPreset: 'default',
+  });
+}
+
 describe('franchise setup-to-launch persistence integration', () => {
   beforeEach(async () => {
     __resetLeagueBuilderDatabaseForTests();
@@ -403,6 +416,33 @@ describe('franchise setup-to-launch persistence integration', () => {
     expect(homeRoster.pitchers.length).toBeGreaterThan(0);
     expect(awayRoster.players[0].playerId).toContain(AWAY_TEAM_ID);
     expect(homeRoster.pitchers[0].playerId).toContain(HOME_TEAM_ID);
+  });
+
+  test('initializeFranchise round-trips the extra innings runner delay only when provided', async () => {
+    await seedValidLeagueTemplate();
+
+    const runnerConfig = makeFranchiseConfig();
+    runnerConfig.season.extraInningsRule = 'Runner on 2nd';
+    runnerConfig.season.extraInningsRunnerDelay = 2;
+    const runnerFranchiseId = await initializeFranchise(runnerConfig);
+    createdFranchiseIds.push(runnerFranchiseId);
+
+    await expect(getFranchiseConfig(runnerFranchiseId)).resolves.toMatchObject({
+      season: {
+        extraInningsRule: 'Runner on 2nd',
+        extraInningsRunnerDelay: 2,
+      },
+    });
+
+    const migratedConfig = makeFranchiseConfig();
+    migratedConfig.season.extraInningsRule = 'Runner on 2nd';
+    delete migratedConfig.season.extraInningsRunnerDelay;
+    const migratedFranchiseId = await initializeFranchise(migratedConfig);
+    createdFranchiseIds.push(migratedFranchiseId);
+
+    const migratedStoredConfig = await getFranchiseConfig(migratedFranchiseId);
+    expect(migratedStoredConfig?.season.extraInningsRule).toBe('Runner on 2nd');
+    expect(migratedStoredConfig?.season).not.toHaveProperty('extraInningsRunnerDelay');
   });
 
   test('initializeFranchise blocks invalid MLB/farm handoff without writing schedule rows', async () => {
