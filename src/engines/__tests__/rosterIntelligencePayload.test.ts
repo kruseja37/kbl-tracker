@@ -240,6 +240,48 @@ describe('roster intelligence payload assembly', () => {
     ).toBe('pass');
   });
 
+  test('assembleWorthToYou recommends value-anchored worth without exceeding the affordability cap', () => {
+    const verlander = player({
+      id: 'verlander-case',
+      primaryPosition: 'P',
+      velocity: 92,
+      junk: 88,
+      accuracy: 84,
+      chemistry: 'Scholarly',
+    });
+
+    const valuePick = assembleWorthToYou({
+      candidate: verlander,
+      iv: 96_000,
+      rosterPlayers: [],
+      budgetRemaining: 809_714,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 0,
+      market: market({ band: { low: 70_000, median: 90_000, high: 110_000 } }),
+    });
+    const valueWorth = valuePick.iv + valuePick.chemistry.premium;
+
+    expect(valuePick.capValue).toBe(809_714);
+    expect(valuePick.recommendedNumber).toBe(valueWorth);
+    expect(valuePick.recommendedNumber).toBeLessThan(valuePick.capValue);
+
+    const cappedPick = assembleWorthToYou({
+      candidate: verlander,
+      iv: 120_000,
+      rosterPlayers: [],
+      budgetRemaining: 90_000,
+      rosterWithCandidate: GREEN_ROSTER,
+      remainingPool: [],
+      openSlotsAfterWin: 0,
+      market: market({ band: { low: 95_000, median: 110_000, high: 130_000 } }),
+    });
+
+    expect(cappedPick.capValue).toBe(90_000);
+    expect(cappedPick.recommendedNumber).toBe(90_000);
+    expect(cappedPick.recommendedNumber).toBeLessThanOrEqual(cappedPick.capValue ?? 0);
+  });
+
   test('assembleWorthToYou never pushes without a market read', () => {
     const candidate = player({ id: 'candidate', chemistry: 'Scholarly' });
 

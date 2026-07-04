@@ -219,7 +219,7 @@ function WhisperHeadline({
         <div>
           <div className="eyebrow">YOUR NUMBER</div>
           <div className={`whisper-number num ${worth.verdict === "cap" ? "gold" : ""}`}>
-            {worth.capValue === null ? "PASS" : money(worth.capValue)}
+            {worth.recommendedNumber === 0 ? "PASS" : money(worth.recommendedNumber)}
           </div>
         </div>
       </div>
@@ -263,9 +263,9 @@ function lightRank(light: Light): number {
 }
 
 function verdictLine(worth: WorthToYou, objectPronoun: "him" | "her"): string {
-  if (worth.verdict === "push") return `Go get ${objectPronoun}.`;
+  if (worth.verdict === "push") return `Go get ${objectPronoun} -- worth about ${money(worth.recommendedNumber)} to you.`;
   if (worth.verdict === "pass") return `Let ${objectPronoun} go.`;
-  return `Chase ${objectPronoun} to ${worth.capValue === null ? "your cap" : money(worth.capValue)} -- not a dollar past.`;
+  return `Worth more than you can safely spend -- cap at ${money(worth.recommendedNumber)}.`;
 }
 
 function whyLine(worth: WorthToYou): string {
@@ -328,7 +328,7 @@ function WhisperStyles() {
       .auc-root .whisper-body {
         padding: 16px;
         max-height: min(56vh, 480px);
-        overflow: hidden;
+        overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 14px;

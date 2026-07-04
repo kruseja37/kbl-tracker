@@ -68,6 +68,7 @@ function payload(
     worthToYou: {
       iv: 72_000,
       verdict,
+      recommendedNumber: verdict === "pass" ? 0 : 75_000,
       capValue: verdict === "pass" ? 45_000 : 75_000,
       chemistry: {
         premium: 3_000,
@@ -163,6 +164,40 @@ describe("WhisperPanel", () => {
     expect(board.getByText("FILLS SS")).toBeInTheDocument();
     expect(board.getByText("IDENTITY")).toBeInTheDocument();
     expect(board.getByText("SS")).toBeInTheDocument();
+  });
+
+  test("YOUR NUMBER renders recommendedNumber instead of the affordability ceiling", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: {
+        ...payload().worthToYou!,
+        recommendedNumber: 96_000,
+        capValue: 809_714,
+      },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.getByText("$96,000")).toBeInTheDocument();
+    expect(screen.getByText("Go get him -- worth about $96,000 to you.")).toBeInTheDocument();
+    expect(screen.queryByText("$809,714")).not.toBeInTheDocument();
+  });
+
+  test("FULL BOARD toggle renders the expanded board rows when more than three names remain", () => {
+    const { container } = render(<WhisperPanel payload={payload("push", {
+      board: [
+        { playerId: "top-1", worth: 90_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Top One" },
+        { playerId: "top-2", worth: 80_000, matchedShape: "CF", needTag: null, fitTag: null, note: "Top Two" },
+        { playerId: "top-3", worth: 70_000, matchedShape: "SP", needTag: null, fitTag: null, note: "Top Three" },
+        { playerId: "expanded-4", worth: 60_000, matchedShape: "RP", needTag: null, fitTag: null, note: "Expanded Four" },
+      ],
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.queryByText("Expanded Four")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "FULL BOARD" }));
+
+    expect(container.querySelector(".whisper-board-well")).toBeInTheDocument();
+    expect(screen.getByText("Expanded Four")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "FOLD IT UP" })).toBeInTheDocument();
   });
 
   test("missing roster records make roster-dependent lights hollow", () => {

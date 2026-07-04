@@ -72,6 +72,7 @@ export interface WorthToYou {
   iv: number;
   chemistry: ChemistryTipBreakdown;
   verdict: 'push' | 'cap' | 'pass';
+  recommendedNumber: number;
   capValue: number | null;
   handedness?: null;
 }
@@ -201,8 +202,10 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     input.remainingPool,
     input.openSlotsAfterWin,
   );
-  const verdict = worthVerdict(input.iv + chemistry.premium, capValue, input.market ?? null);
-  return { iv: input.iv, chemistry, verdict, capValue };
+  const worth = input.iv + chemistry.premium;
+  const recommendedNumber = Math.max(0, Math.min(worth, capValue ?? worth));
+  const verdict = worthVerdict(worth, capValue, input.market ?? null);
+  return { iv: input.iv, chemistry, verdict, recommendedNumber, capValue };
 }
 
 export function assembleBoard(input: BoardInput): BoardEntry[] {

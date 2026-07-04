@@ -29724,3 +29724,46 @@ GATE (report ACTUAL output):
 - `git status` — changed: auctionCompletionFloor.ts + its test (+ any auctionStateMachine/useAuctionDraft test). NO ivCurves/iv_oracle/
   GameTracker. DO NOT COMMIT — leave for Opus.
 <!-- ===== END CONTRACT: CODEX-CLOSER-COMPLETION-FIX ===== -->
+
+<!-- ===== CONTRACT: CODEX-WHISPER-NUMBER-AND-BOARD ===== -->
+CODEX-WHISPER-NUMBER-AND-BOARD — B1-quick of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md: fix the two visible whisper bugs
+(value-anchored YOUR NUMBER + FULL BOARD toggle clip). Branch experiment/manager-wpa-window. Builder=Codex; AUDITOR=Opus (does
+NOT commit — leave the diff for Opus's audit + browser-verify). Report ACTUAL output. NO new UI surfaces (that is B1b, deferred).
+
+CONTEXT: read spec-docs/ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md §4.1 + §4.3. Two contained bugs JK saw on the live auction:
+1) "YOUR NUMBER" recommends the affordability CEILING (insane: "Chase him to $809,714" for a ~$96k SP). 2) the "FULL BOARD"
+toggle flips its label but reveals nothing (CSS clip).
+
+FIX 1 — value-anchored YOUR NUMBER (§4.1):
+- In src/engines/rosterIntelligencePayload.ts, assembleWorthToYou (≈:196-205) currently returns { iv, chemistry, verdict, capValue }.
+  ADD a `recommendedNumber: number` = the seat's VALUE-anchored worth clamped by affordability = `Math.max(0, Math.min(input.iv +
+  chemistry.premium, capValue ?? (input.iv + chemistry.premium)))`. (worth-to-you = the player's IV plus your chemistry premium;
+  never recommend above what you can afford.) Keep capValue on the object unchanged (it stays the separate "most you can bid" guard).
+- In src/src_figma/app/components/auction/WhisperPanel.tsx:220-223, render YOUR NUMBER = money(worth.recommendedNumber) instead of
+  money(worth.capValue). If recommendedNumber is 0 → "PASS". capValue continues to appear ONLY as the budget-panel "MOST YOU CAN BID"
+  line (do not remove it there).
+- Update verdictLine (≈:265-269) so its dollar reference is recommendedNumber, NOT capValue: push → "Go get {him} — worth about
+  {recommendedNumber} to you." · cap (recommendedNumber was clamped by capValue, i.e. worth > affordability) → "Worth more than you
+  can safely spend — cap at {recommendedNumber}." · pass → "Let {him} go." Keep the room-relation line (roomRelation) unchanged
+  (it already compares to the public market band). Do NOT change worthVerdict's push/cap/pass logic in this slice.
+
+FIX 2 — FULL BOARD toggle clip (§4.3):
+- In WhisperPanel.tsx the expanded `.whisper-board-well` (≈:446-453, max-height:190px overflow-y:auto) is clipped by its parent
+  `.whisper-body` (≈:328-336: max-height:min(56vh,480px); overflow:hidden). Change `.whisper-body` `overflow: hidden` →
+  `overflow-y: auto` so the expanded board is reachable by scroll. Verify no open/close animation depends on the hidden overflow
+  (there is no max-height transition on .whisper-body). Do not change the well's own internal scroll.
+
+TESTS: update/add in the whisper test suite (src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx + any
+rosterIntelligencePayload test): (a) recommendedNumber = min(iv+chemPremium, capValue) and never exceeds capValue; a value pick's
+recommendedNumber is the worth, NOT the capValue (assert they differ when capValue >> worth — the Verlander case); (b) WhisperPanel
+renders recommendedNumber as YOUR NUMBER; (c) the FULL BOARD toggle path renders the expanded rows (board.length>3 → well present
+when expanded). Do NOT weaken existing assertions.
+
+GUARDRAILS: NO new components / no bid-vs-pass UI (deferred to B1b). Do NOT touch worthVerdict logic, ivCurves, iv_oracle,
+rosterConstruction, GameTracker. Data/UI + the payload field only.
+
+GATE (report ACTUAL output): `NODE_ENV= npm run build` exit 0; `NODE_ENV= npx vitest run src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx src/engines/__tests__/rosterIntelligencePayload.test.ts` green (skip nonexistent, list what ran);
+FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary, franchiseManualSmokeFixture,
+LeagueBuilderDraftSetup batch, historicalArchetypes big-batch, franchiseOffseasonGuards component batch — verify each SOLO);
+`git status` — WhisperPanel.tsx + rosterIntelligencePayload.ts + tests. NO ivCurves/iv_oracle/GameTracker. DO NOT COMMIT.
+<!-- ===== END CONTRACT: CODEX-WHISPER-NUMBER-AND-BOARD ===== -->
