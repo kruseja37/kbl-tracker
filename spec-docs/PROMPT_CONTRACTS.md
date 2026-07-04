@@ -29670,3 +29670,57 @@ GATE (report ACTUAL output):
 - `git status` — list changed files (leagueConstruction.ts + its test + DECISIONS_LOG.md, and any other test touched). ivCurves.ts /
   iv_oracle.json / GameTracker NOT present. DO NOT COMMIT — leave for Opus.
 <!-- ===== END CONTRACT: CODEX-NEUTRALIZE-IDENTITY-CAP ===== -->
+
+<!-- ===== CONTRACT: CODEX-CLOSER-COMPLETION-FIX ===== -->
+CODEX-CLOSER-COMPLETION-FIX — BLOCKER fix: the auction cheapest-legal-completion never reserves a closer, so with the
+require-a-closer rule every bid strands. Branch experiment/manager-wpa-window. Builder=Codex; AUDITOR=Opus (does NOT commit —
+leave the diff for Opus's audit + browser-verify). Report ACTUAL output.
+
+BLOCKER + REGRESSION from commit f71059ec (require-a-closer). Symptom: on the MLB auction, lot 1, a team with 0 rostered / 22 open
+slots / ample budget cannot bid or claim — "That bid would leave you unable to fill a legal roster." EVERY team strands on EVERY
+bid, so the draft can't start (and it cascades: all-bids-strand makes the auction fall back to the scalar reserve / "claim at
+reserve", which is why shill bids appear ignored).
+
+ROOT CAUSE (Opus-verified, airtight): src/engines/auctionCompletionFloor.ts `cheapestArmPicks` counts RP and CP together as one
+`pureRelief` class (≈:114) and buys the cheapest relievers from a combined `poolPen` (RP or CP, ≈:121). Because RPs are cheaper than
+CPs (arm ladder RP 0.55×SP < CP 0.65×SP), the cheapest pen picks are all RPs — no CP. `attemptCompletion` then verifies
+`isLegalRoster(finalRoster)` (≈:335), which the require-a-closer change made CP-requiring (LEGAL_ROSTER.minClosers=1) → the roster has
+no CP → INFEASIBLE. `cheapestLegalCompletion` → infeasible → `bidWouldStrand` (src/engines/auctionStateMachine.ts ≈:420/471/545)
+returns true → 'bid-strands-roster'. The f71059ec change MASKED this by editing auctionCompletionFloor.test.ts fixtures (made the sole
+cheap reliever a CP / relied on 'cp' sorting before 'rp' at equal price) so tests passed without the assembly ever reserving a CP.
+
+WHAT TO FIX (src/engines/auctionCompletionFloor.ts, `cheapestArmPicks`):
+- When the roster's own pitchers contain fewer than `LEGAL_ROSTER.minClosers` closers (use `isCloser` from rosterConstruction), the
+  chosen bullpen (pen) picks MUST include at least `minClosers − rosterClosers` closers (CP). Reuse the EXISTING coverer-substitution
+  machinery in this function (covSum/covSlice/covererIndex) with an `isCloser` predicate over the pen class: the cheapest penNeeded-
+  subset of poolPen that contains the required CP(s) — the plain penNeeded-prefix when it already contains enough CPs by price, else
+  substitute the cheapest CP(s) for the most-expensive selected non-CP reliever(s). Keep it the CHEAPEST such subset so the completion
+  cost (which feeds completionBidCeiling) stays accurate/conservative.
+- Interaction with the existing C-coverer substitution (preferCoverer): when BOTH a closer AND an arm-based C-coverer must sit in the
+  pen (rare — the coverer is normally the primary-C hitter), satisfy BOTH; if a strict cost optimum for the dual constraint is hard,
+  a CONSERVATIVE (feasible, cost ≥ true optimum) combination is acceptable — feasibility first. Document any conservatism in a comment.
+- EDGE (do NOT mis-handle): if penNeeded==0 because the roster already holds ≥minRelievers non-CP relievers with no open pitcher slot,
+  the roster is genuinely un-completable (can't add a 5th reliever, can't swap in a completion) → correctly INFEASIBLE. Do NOT force a
+  CP that would exceed maxRelievers/maxPitchers. Only reserve a CP when there is bullpen room to place it.
+- This is the ONLY completion-assembly with the gap (grep-confirmed: no other engine assembles-then-verifies isLegalRoster besides
+  this and the rosterDesignFeasibility slot path, which already reserves a CP slot). Do NOT change rosterConstruction/ivCurves/oracle.
+
+REGRESSION TESTS (mandatory — in src/engines/__tests__/auctionCompletionFloor.test.ts):
+1. REALISTIC PRICING (this FAILS before the fix): roster lacking a CP; pool has cheaper RPs and PRICIER CPs (e.g. RP $5,000, CP
+   $8,000) plus enough SP/hitters → `cheapestLegalCompletion` FEASIBLE, `pickIds` include ≥1 CP, and `cost` reflects the CP
+   substitution (NOT the all-RP cost). Assert the CP is present.
+2. NO CP IN POOL → correctly INFEASIBLE (a legal roster is impossible without a closer).
+3. ROSTER ALREADY HAS A CP → no forced substitution; picks the plain cheapest relievers.
+4. Repair the two f71059ec-masked tests to use realistic pricing (CP strictly pricier than RP) rather than relying on 'cp' sorting
+   first or the CP being the only reliever — the CP-reservation must be what forces the CP in, not the id/price coincidence.
+5. Add/verify an auctionStateMachine (or useAuctionDraft) test: a team with an EMPTY roster placing the FIRST bid, with a pool that
+   holds ≥ minClosers CPs, does NOT strand (bidWouldStrand === false / recordBid not rejected 'bid-strands-roster').
+
+GATE (report ACTUAL output):
+- `NODE_ENV= npm run build` exit 0.
+- `NODE_ENV= npx vitest run src/engines/__tests__/auctionCompletionFloor.test.ts src/engines/__tests__/auctionStateMachine.test.ts src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts src/engines/__tests__/rosterDesignFeasibility.test.ts src/engines/__tests__/poolFromDemand.test.ts` — green (skip nonexistent; list what ran).
+- FULL suite `NODE_ENV= npx vitest run` — no NEW red beyond the characterized set (wpaRuntimeBoundary allowlist, franchiseManualSmoke
+  Fixture batch, LeagueBuilderDraftSetup batch flake, historicalArchetypes big-batch — verify each SOLO). Run any red SOLO.
+- `git status` — changed: auctionCompletionFloor.ts + its test (+ any auctionStateMachine/useAuctionDraft test). NO ivCurves/iv_oracle/
+  GameTracker. DO NOT COMMIT — leave for Opus.
+<!-- ===== END CONTRACT: CODEX-CLOSER-COMPLETION-FIX ===== -->

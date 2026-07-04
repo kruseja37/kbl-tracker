@@ -24,6 +24,7 @@
 import {
   LEGAL_ROSTER,
   canCover,
+  isCloser,
   isLegalRoster,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
@@ -108,13 +109,18 @@ function cheapestArmPicks(
 ): CompletionCandidate[] | null {
   let pureSp = 0;
   let pureRelief = 0;
+  let rosterClosers = 0;
   let rosterSwing = 0;
   for (const p of rosterPitchers) {
     if (p.role === 'SP') pureSp += 1;
-    else if (p.role === 'RP' || p.role === 'CP') pureRelief += 1;
+    else if (p.role === 'RP' || p.role === 'CP') {
+      pureRelief += 1;
+      if (isCloser(p)) rosterClosers += 1;
+    }
     else if (p.role === 'SP/RP') rosterSwing += 1;
     // Unknown-role arms count toward neither staff minimum (rosterNeed.ts policy, audit F2).
   }
+  const closerDeficit = Math.max(0, LEGAL_ROSTER.minClosers - rosterClosers);
 
   const poolSp = pool.filter((c) => !state.used.has(c.id) && c.shape.isPitcher && c.shape.role === 'SP');
   const poolPen = pool.filter(
@@ -130,101 +136,194 @@ function cheapestArmPicks(
   const penSums = prefix(poolPen);
   const swingSums = prefix(poolSwing);
 
-  // Coverage-substitution machinery (C2B-FIX F1). For a price-sorted class list, the cheapest
-  // k-subset containing ≥1 C-coverer is: the plain k-prefix when a coverer already sits inside
-  // it; otherwise the (k−1)-prefix plus the class's CHEAPEST coverer (every coverer then sits at
-  // index ≥ k, so any qualifying subset must pay at least that substitution). At arm time the
-  // depth shortfall is at most one body (a primary-C always covers), so one coverer suffices.
+  // Requirement-substitution machinery (C2B-FIX F1 + closer floor). For a price-sorted class list,
+  // the cheapest k-subset containing ≥N required-role players is: the plain k-prefix when it
+  // already contains enough; otherwise replace the most expensive selected non-required players
+  // with the cheapest required players outside the prefix. C-coverer still needs only one body
+  // here; CP uses the same machinery so the bullpen quote stays the cheapest legal subset.
   const covererIndex = (list: readonly CompletionCandidate[]): number =>
     list.findIndex((c) => canCover(c.shape, 'C'));
   const spCovIdx = covererIndex(poolSp);
   const penCovIdx = covererIndex(poolPen);
   const swingCovIdx = covererIndex(poolSwing);
-  const covSum = (
+  type ClassPick = { cost: number; picks: CompletionCandidate[] };
+  const plainPick = (
+    list: readonly CompletionCandidate[],
+    sums: readonly number[],
+    k: number,
+  ): ClassPick | null =>
+    k <= list.length ? { cost: sums[k], picks: list.slice(0, k) } : null;
+  const constrainedPick = (
+    list: readonly CompletionCandidate[],
+    sums: readonly number[],
+    k: number,
+    required: number,
+    predicate: (c: CompletionCandidate) => boolean,
+  ): ClassPick | null => {
+    if (k > list.length || required > k) return null;
+    if (required <= 0) return plainPick(list, sums, k);
+
+    const prefix = list.slice(0, k);
+    const prefixRequired = prefix.filter(predicate);
+    if (prefixRequired.length >= required) return { cost: sums[k], picks: prefix };
+
+    const missing = required - prefixRequired.length;
+    const additions = list.slice(k).filter(predicate).slice(0, missing);
+    if (additions.length !== missing) return null;
+
+    const removable = prefix.filter((c) => !predicate(c)).slice(-missing);
+    if (removable.length !== missing) return null;
+    const removed = new Set(removable.map((c) => c.id));
+    const picks = [...prefix.filter((c) => !removed.has(c.id)), ...additions];
+    const cost =
+      sums[k] -
+      removable.reduce((sum, c) => sum + c.price, 0) +
+      additions.reduce((sum, c) => sum + c.price, 0);
+    return { cost, picks };
+  };
+  const covPick = (
     list: readonly CompletionCandidate[],
     sums: readonly number[],
     covIdx: number,
     k: number,
-  ): number => {
-    if (k <= 0 || covIdx < 0 || k > list.length) return Number.POSITIVE_INFINITY;
-    return covIdx < k ? sums[k] : sums[k - 1] + list[covIdx].price;
+  ): ClassPick | null => {
+    if (covIdx < 0) return null;
+    return constrainedPick(list, sums, k, 1, (c) => canCover(c.shape, 'C'));
   };
-  const covSlice = (
-    list: readonly CompletionCandidate[],
-    covIdx: number,
-    k: number,
-  ): CompletionCandidate[] =>
-    covIdx < k ? list.slice(0, k) : [...list.slice(0, k - 1), list[covIdx]];
+  const dualPenPick = (k: number): ClassPick | null => {
+    if (k > poolPen.length || closerDeficit > k || penCovIdx < 0) return null;
+    type Cell = ClassPick | null;
+    const targetClosers = closerDeficit;
+    const makeLayer = (): Cell[][] =>
+      Array.from({ length: targetClosers + 1 }, () => [null, null]);
+    const dp: Cell[][][] = Array.from({ length: k + 1 }, makeLayer);
+    dp[0][0][0] = { cost: 0, picks: [] };
+
+    for (const candidate of poolPen) {
+      for (let picked = k - 1; picked >= 0; picked -= 1) {
+        for (let closers = 0; closers <= targetClosers; closers += 1) {
+          for (let cover = 0; cover <= 1; cover += 1) {
+            const current = dp[picked][closers][cover];
+            if (current === null) continue;
+            const nextPicked = picked + 1;
+            const nextClosers = Math.min(
+              targetClosers,
+              closers + (isCloser(candidate.shape) ? 1 : 0),
+            );
+            const nextCover = cover || canCover(candidate.shape, 'C') ? 1 : 0;
+            const next: ClassPick = {
+              cost: current.cost + candidate.price,
+              picks: [...current.picks, candidate],
+            };
+            const prior = dp[nextPicked][nextClosers][nextCover];
+            if (prior === null || next.cost < prior.cost) {
+              dp[nextPicked][nextClosers][nextCover] = next;
+            }
+          }
+        }
+      }
+    }
+    return dp[k][targetClosers][1];
+  };
+  const penPick = (k: number, requireCoverer: boolean): ClassPick | null => {
+    if (closerDeficit <= 0) {
+      return requireCoverer
+        ? covPick(poolPen, penSums, penCovIdx, k)
+        : plainPick(poolPen, penSums, k);
+    }
+    if (!requireCoverer) {
+      return constrainedPick(poolPen, penSums, k, closerDeficit, (c) => isCloser(c.shape));
+    }
+    // Rare dual constraint: the pen class must hold both a CP and the arm-based C-coverer.
+    // The DP keeps feasibility exact; when prices tie it preserves the already sorted order.
+    return dualPenPick(k);
+  };
 
   // Pass 1: the fewest arms any roster-swing split needs (the rosterNeedBreakdown count).
   let minCount = Number.POSITIVE_INFINITY;
   for (let x = 0; x <= rosterSwing; x += 1) {
     const rotDef = Math.max(0, LEGAL_ROSTER.startingPitchers - pureSp - x);
     const penDef = Math.max(0, LEGAL_ROSTER.minRelievers - pureRelief - (rosterSwing - x));
-    minCount = Math.min(minCount, rotDef + penDef);
+    minCount = Math.min(minCount, rotDef + Math.max(penDef, closerDeficit));
   }
   if (minCount === 0) return [];
 
   // Pass 2: cheapest priced way to buy that count, over every split of pool swings — tracking the
   // plain optimum AND (when preferCoverer) the cheapest same-count combination carrying a coverer.
+  // The bullpen pick is always CP-aware when the roster lacks a closer.
   type CovClass = 'sp' | 'pen' | 'swing';
-  let best: { cost: number; sp: number; pen: number; swing: number } | null = null;
-  let bestCov: { cost: number; sp: number; pen: number; swing: number; covClass: CovClass } | null =
-    null;
+  let best: ClassPick | null = null;
+  let bestCov: ClassPick | null = null;
   for (let x = 0; x <= rosterSwing; x += 1) {
     const rotDef = Math.max(0, LEGAL_ROSTER.startingPitchers - pureSp - x);
     const penDef = Math.max(0, LEGAL_ROSTER.minRelievers - pureRelief - (rosterSwing - x));
-    if (rotDef + penDef !== minCount) continue;
+    if (rotDef + Math.max(penDef, closerDeficit) !== minCount) continue;
     for (let sRot = 0; sRot <= Math.min(rotDef, poolSwing.length); sRot += 1) {
       const spNeeded = rotDef - sRot;
       if (spNeeded > poolSp.length) continue;
       for (let sPen = 0; sPen <= Math.min(penDef, poolSwing.length - sRot); sPen += 1) {
-        const penNeeded = penDef - sPen;
-        if (penNeeded > poolPen.length) continue;
+        const genericPenNeeded = penDef - sPen;
+        const penNeeded = Math.max(genericPenNeeded, closerDeficit);
         const swingNeeded = sRot + sPen;
-        const cost = spSums[spNeeded] + penSums[penNeeded] + swingSums[swingNeeded];
-        if (best === null || cost < best.cost) {
-          best = { cost, sp: spNeeded, pen: penNeeded, swing: swingNeeded };
+        if (spNeeded + penNeeded + swingNeeded !== minCount) continue;
+        const sp = plainPick(poolSp, spSums, spNeeded);
+        const pen = penPick(penNeeded, false);
+        const swing = plainPick(poolSwing, swingSums, swingNeeded);
+        if (sp === null || pen === null || swing === null) continue;
+        const plain: ClassPick = {
+          cost: sp.cost + pen.cost + swing.cost,
+          picks: [...sp.picks, ...pen.picks, ...swing.picks],
+        };
+        if (best === null || plain.cost < best.cost) {
+          best = plain;
         }
         if (preferCoverer) {
           // One class carries the coverer; the other two stay on their plain prefixes. Fixed
           // class order + strict `<` keeps the choice deterministic at price ties.
-          const covOptions: readonly { covClass: CovClass; cost: number }[] = [
+          const covOptions: readonly { covClass: CovClass; pick: ClassPick | null }[] = [
             {
               covClass: 'sp',
-              cost: covSum(poolSp, spSums, spCovIdx, spNeeded) + penSums[penNeeded] + swingSums[swingNeeded],
+              pick: (() => {
+                const covSp = covPick(poolSp, spSums, spCovIdx, spNeeded);
+                return covSp === null ? null : {
+                  cost: covSp.cost + pen.cost + swing.cost,
+                  picks: [...covSp.picks, ...pen.picks, ...swing.picks],
+                };
+              })(),
             },
             {
               covClass: 'pen',
-              cost: spSums[spNeeded] + covSum(poolPen, penSums, penCovIdx, penNeeded) + swingSums[swingNeeded],
+              pick: (() => {
+                const covPen = penPick(penNeeded, true);
+                return covPen === null ? null : {
+                  cost: sp.cost + covPen.cost + swing.cost,
+                  picks: [...sp.picks, ...covPen.picks, ...swing.picks],
+                };
+              })(),
             },
             {
               covClass: 'swing',
-              cost: spSums[spNeeded] + penSums[penNeeded] + covSum(poolSwing, swingSums, swingCovIdx, swingNeeded),
+              pick: (() => {
+                const covSwing = covPick(poolSwing, swingSums, swingCovIdx, swingNeeded);
+                return covSwing === null ? null : {
+                  cost: sp.cost + pen.cost + covSwing.cost,
+                  picks: [...sp.picks, ...pen.picks, ...covSwing.picks],
+                };
+              })(),
             },
           ];
           for (const option of covOptions) {
-            if (Number.isFinite(option.cost) && (bestCov === null || option.cost < bestCov.cost)) {
-              bestCov = { cost: option.cost, sp: spNeeded, pen: penNeeded, swing: swingNeeded, covClass: option.covClass };
+            if (option.pick !== null && (bestCov === null || option.pick.cost < bestCov.cost)) {
+              bestCov = option.pick;
             }
           }
         }
       }
     }
   }
-  if (preferCoverer && bestCov !== null) {
-    return [
-      ...(bestCov.covClass === 'sp' ? covSlice(poolSp, spCovIdx, bestCov.sp) : poolSp.slice(0, bestCov.sp)),
-      ...(bestCov.covClass === 'pen' ? covSlice(poolPen, penCovIdx, bestCov.pen) : poolPen.slice(0, bestCov.pen)),
-      ...(bestCov.covClass === 'swing' ? covSlice(poolSwing, swingCovIdx, bestCov.swing) : poolSwing.slice(0, bestCov.swing)),
-    ];
-  }
+  if (preferCoverer && bestCov !== null) return bestCov.picks;
   if (best === null) return null;
-  return [
-    ...poolSp.slice(0, best.sp),
-    ...poolPen.slice(0, best.pen),
-    ...poolSwing.slice(0, best.swing),
-  ];
+  return best.picks;
 }
 
 /**

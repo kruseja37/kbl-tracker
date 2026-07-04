@@ -60,14 +60,77 @@ describe('cheapestLegalCompletion', () => {
     const roster = TEMPLATE.slice(0, 20); // 14 hitters + SP,SP,SP,SP/RP,RP,RP
     const pool = candidates([
       ['rp-cheap', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
-      ['cp-mid', 7_000, { isPitcher: true, position: 'P', role: 'CP' }],
-      ['rp-dear', 9_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['rp-second', 6_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['cp-pricier', 8_000, { isPitcher: true, position: 'P', role: 'CP' }],
     ]);
     const quote = cheapestLegalCompletion(roster, pool, 2);
     expect(quote.feasible).toBe(true);
-    // Hitters sit at the 14 ceiling, so both picks must be arms; cheapest two win.
-    expect(quote.pickIds).toEqual(['rp-cheap', 'cp-mid']);
-    expect(quote.cost).toBe(12_000);
+    // Hitters sit at the 14 ceiling, so both picks must be arms; the CP is dearer than the
+    // second RP, but the require-a-closer law reserves it.
+    expect([...quote.pickIds].sort()).toEqual(['cp-pricier', 'rp-cheap']);
+    expect(quote.cost).toBe(13_000);
+  });
+
+  test('closer reservation substitutes a pricier CP for the all-RP cheapest bullpen prefix', () => {
+    const roster: RosterSlotPlayer[] = [
+      ...TEMPLATE.slice(0, 14),
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+    ];
+    const pool = candidates([
+      ['rp-5000', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['rp-6000', 6_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['cp-8000', 8_000, { isPitcher: true, position: 'P', role: 'CP' }],
+      ['cp-9000', 9_000, { isPitcher: true, position: 'P', role: 'CP' }],
+    ]);
+    const quote = cheapestLegalCompletion(roster, pool, 2);
+    expect(quote.feasible).toBe(true);
+    expect(quote.pickIds).toEqual(['rp-5000', 'cp-8000']);
+    expect(quote.cost).toBe(13_000);
+    expect(quote.cost).not.toBe(11_000);
+  });
+
+  test('infeasible when a closer-less roster has no CP left in the pool', () => {
+    const roster: RosterSlotPlayer[] = [
+      ...TEMPLATE.slice(0, 14),
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+    ];
+    const pool = candidates([
+      ['rp-5000', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['rp-6000', 6_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['rp-7000', 7_000, { isPitcher: true, position: 'P', role: 'RP' }],
+    ]);
+    expect(cheapestLegalCompletion(roster, pool, 2).feasible).toBe(false);
+  });
+
+  test('a roster that already has a CP keeps the plain cheapest relievers', () => {
+    const roster: RosterSlotPlayer[] = [
+      ...TEMPLATE.slice(0, 14),
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+      { isPitcher: true, position: 'P', role: 'CP' },
+    ];
+    const pool = candidates([
+      ['rp-5000', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['rp-6000', 6_000, { isPitcher: true, position: 'P', role: 'RP' }],
+      ['cp-8000', 8_000, { isPitcher: true, position: 'P', role: 'CP' }],
+    ]);
+    const quote = cheapestLegalCompletion(roster, pool, 2);
+    expect(quote.feasible).toBe(true);
+    expect(quote.pickIds).toEqual(['rp-5000', 'rp-6000']);
+    expect(quote.cost).toBe(11_000);
   });
 
   test('joint rotation/bullpen enumeration beats naive per-class greedy', () => {
@@ -123,16 +186,25 @@ describe('cheapestLegalCompletion', () => {
     expect(cheapestLegalCompletion(roster, pool, 1).feasible).toBe(false);
   });
 
-  test('deterministic id tie-break at equal price', () => {
-    const roster = TEMPLATE.slice(0, 20);
+  test('deterministic id tie-break at equal price when closer is already rostered', () => {
+    const roster: RosterSlotPlayer[] = [
+      ...TEMPLATE.slice(0, 14),
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'SP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+      { isPitcher: true, position: 'P', role: 'RP' },
+      { isPitcher: true, position: 'P', role: 'CP' },
+    ];
     const pool = candidates([
-      ['cp-a', 5_000, { isPitcher: true, position: 'P', role: 'CP' }],
       ['rp-b', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
       ['rp-a', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
       ['rp-c', 5_000, { isPitcher: true, position: 'P', role: 'RP' }],
     ]);
-    const quote = cheapestLegalCompletion(roster, pool, 2);
-    expect(quote.pickIds).toEqual(['cp-a', 'rp-a']);
+    const quote = cheapestLegalCompletion(roster, pool, 1);
+    expect(quote.feasible).toBe(true);
+    expect(quote.pickIds).toEqual(['rp-a']);
   });
 });
 
