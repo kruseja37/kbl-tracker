@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, GripVertical, X } from "lucide-react";
 import { PressButton } from "../ballpark";
 import {
   buildDefaultDesignSlots,
@@ -49,11 +49,12 @@ import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
 type RosterDesignPins = Record<string, string>;
+type RosterDesignRankOverrides = Record<string, string[]>;
 type RosterDesignSave = {
   slots: DesignSlot[];
   lockedAt?: string;
   pins?: RosterDesignPins;
-  rankOverrides?: Record<string, string[]>;
+  rankOverrides?: RosterDesignRankOverrides;
 };
 type PinDisplay = {
   playerId: string;
@@ -94,13 +95,71 @@ function cleanPins(pins: RosterDesignPins | undefined): RosterDesignPins {
   return Object.fromEntries(Object.entries(pins).filter(([, playerId]) => typeof playerId === "string" && playerId.length > 0));
 }
 
-function savePayload(slots: DesignSlot[], lockedAt: string | undefined, pins: RosterDesignPins): RosterDesignSave {
+function cleanRankOverrides(rankOverrides: RosterDesignRankOverrides | undefined): RosterDesignRankOverrides {
+  if (!rankOverrides) return {};
+  return Object.fromEntries(
+    Object.entries(rankOverrides)
+      .map(([position, playerIds]) => [
+        position,
+        [...new Set(playerIds.filter((playerId) => typeof playerId === "string" && playerId.length > 0))],
+      ])
+      .filter(([position, playerIds]) => typeof position === "string" && position.length > 0 && playerIds.length > 0),
+  );
+}
+
+function savePayload(
+  slots: DesignSlot[],
+  lockedAt: string | undefined,
+  pins: RosterDesignPins,
+  rankOverrides: RosterDesignRankOverrides,
+): RosterDesignSave {
   const cleanedPins = cleanPins(pins);
+  const cleanedRankOverrides = cleanRankOverrides(rankOverrides);
   return {
     slots,
     lockedAt,
     ...(Object.keys(cleanedPins).length > 0 ? { pins: cleanedPins } : {}),
+    ...(Object.keys(cleanedRankOverrides).length > 0 ? { rankOverrides: cleanedRankOverrides } : {}),
   };
+}
+
+function rankPositionForSlot(slot: DesignSlot): TaxonomyPosition | undefined {
+  if (slot.position) return slot.position;
+  if (slot.kind === "backupC") return "C";
+  if (slot.kind === "sp") return "SP";
+  if (slot.kind === "rp") return "RP";
+  if (slot.kind === "cp") return "CP";
+  return undefined;
+}
+
+function slotsWithRankPositions(slots: readonly DesignSlot[]): DesignSlot[] {
+  return slots.map((slot) => {
+    const position = rankPositionForSlot(slot);
+    return position && slot.position !== position ? { ...slot, position } : slot;
+  });
+}
+
+function applyRankOverrideOrder(
+  entries: readonly RankedPoolEntry[],
+  orderedPlayerIds: readonly string[] | undefined,
+): RankedPoolEntry[] {
+  if (!orderedPlayerIds?.length) return [...entries];
+  const entryById = new Map(entries.map((entry) => [entry.playerId, entry]));
+  const ranked = orderedPlayerIds
+    .map((playerId) => entryById.get(playerId))
+    .filter((entry): entry is RankedPoolEntry => Boolean(entry));
+  const rankedIds = new Set(ranked.map((entry) => entry.playerId));
+  return [...ranked, ...entries.filter((entry) => !rankedIds.has(entry.playerId))];
+}
+
+function movePlayerId(entries: readonly RankedPoolEntry[], fromIndex: number, toIndex: number): string[] {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= entries.length || toIndex >= entries.length) {
+    return entries.map((entry) => entry.playerId);
+  }
+  const nextEntries = [...entries];
+  const [moved] = nextEntries.splice(fromIndex, 1);
+  nextEntries.splice(toIndex, 0, moved);
+  return nextEntries.map((entry) => entry.playerId);
 }
 
 function defaultPreferenceForSlot(slotId: string): SlotPreference {
@@ -263,11 +322,13 @@ export function RosterDesigner({
     slots: DesignSlot[];
     lockedAt: string | undefined;
     pins: RosterDesignPins;
+    rankOverrides: RosterDesignRankOverrides;
   } | null>(null);
   const resetConfirmRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<DesignSlot[]>(() => seedRosterDesignSlots(team.rosterDesign?.slots));
   const [lockedAt, setLockedAt] = useState<string | undefined>(team.rosterDesign?.lockedAt);
   const [pins, setPins] = useState<RosterDesignPins>(() => cleanPins(team.rosterDesign?.pins));
+  const [rankOverrides, setRankOverrides] = useState<RosterDesignRankOverrides>(() => cleanRankOverrides(team.rosterDesign?.rankOverrides));
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [result, setResult] = useState<DesignFeasibilityResult | null>(null);
   const [target, setTarget] = useState<Best22Target | null>(null);
@@ -275,7 +336,7 @@ export function RosterDesigner({
   const [resetConfirm, setResetConfirm] = useState(false);
 
   renderedTeamIdRef.current = team.id;
-  latestPendingSaveRef.current = { teamId: team.id, save: onSave, slots, lockedAt, pins };
+  latestPendingSaveRef.current = { teamId: team.id, save: onSave, slots, lockedAt, pins, rankOverrides };
 
   const persistDirtySave = useCallback((
     teamId: string,
@@ -283,12 +344,13 @@ export function RosterDesigner({
     nextSlots: DesignSlot[],
     nextLockedAt: string | undefined,
     nextPins: RosterDesignPins,
+    nextRankOverrides: RosterDesignRankOverrides,
   ) => {
     if (!dirtyRef.current || dirtyTeamIdRef.current !== teamId) return;
     if (saveInFlightRef.current?.teamId === teamId) return;
     const version = dirtyVersionRef.current;
     saveInFlightRef.current = { teamId, version };
-    void save(savePayload(nextSlots, nextLockedAt, nextPins)).then(() => {
+    void save(savePayload(nextSlots, nextLockedAt, nextPins, nextRankOverrides)).then(() => {
       if (dirtyTeamIdRef.current === teamId && dirtyVersionRef.current === version) {
         dirtyRef.current = false;
         dirtyTeamIdRef.current = null;
@@ -305,7 +367,7 @@ export function RosterDesigner({
   useEffect(() => {
     return () => {
       const pending = latestPendingSaveRef.current;
-      if (pending) persistDirtySave(pending.teamId, pending.save, pending.slots, pending.lockedAt, pending.pins);
+      if (pending) persistDirtySave(pending.teamId, pending.save, pending.slots, pending.lockedAt, pending.pins, pending.rankOverrides);
     };
   }, [persistDirtySave]);
 
@@ -315,12 +377,13 @@ export function RosterDesigner({
     setSlots(seedRosterDesignSlots(team.rosterDesign?.slots));
     setLockedAt(team.rosterDesign?.lockedAt);
     setPins(cleanPins(team.rosterDesign?.pins));
+    setRankOverrides(cleanRankOverrides(team.rosterDesign?.rankOverrides));
     setSelectedSlotId(null);
     setResult(null);
     setTarget(null);
     setTargetState("quiet");
     setResetConfirm(false);
-  }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.slots]);
+  }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.rankOverrides, team.rosterDesign?.slots]);
 
   const designPool = useMemo(() => buildRosterDesignPool(players), [players]);
   const fullPlayerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
@@ -339,13 +402,19 @@ export function RosterDesigner({
   );
   const pinMemoKey = useMemo(() => JSON.stringify(Object.entries(pins).sort(([left], [right]) => left.localeCompare(right))), [pins]);
   const pinMap = useMemo(() => new Map(Object.entries(pins)), [pinMemoKey]);
+  const rankOverrideMemoKey = useMemo(
+    () => JSON.stringify(Object.entries(rankOverrides).sort(([left], [right]) => left.localeCompare(right))),
+    [rankOverrides],
+  );
+  const rankOverrideMap = useMemo(() => new Map(Object.entries(rankOverrides)), [rankOverrideMemoKey]);
+  const rankedSlots = useMemo(() => slotsWithRankPositions(slots), [slots]);
 
   useEffect(() => {
     const effectTeamId = team.id;
     const timer = window.setTimeout(() => {
       const nextResult = designPool.length > 0 ? evaluateRosterDesign(slots, designPool, budget) : null;
       const nextTarget = designPool.length > 0 && targetArchetype
-        ? buildBest22Target(slots, simPool, targetClassifiedById, targetArchetype, tier, budget, pinMap)
+        ? buildBest22Target(rankedSlots, simPool, targetClassifiedById, targetArchetype, tier, budget, pinMap, rankOverrideMap)
         : null;
       setResult(nextResult);
       setTarget(nextTarget);
@@ -354,15 +423,15 @@ export function RosterDesigner({
         hasIdentity: Boolean(targetArchetype),
         target: nextTarget,
       }));
-      persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins);
+      persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins, rankOverrides);
     }, 300);
     return () => {
       window.clearTimeout(timer);
       if (renderedTeamIdRef.current !== effectTeamId) {
-        persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins);
+        persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins, rankOverrides);
       }
     };
-  }, [budget, designPool, lockedAt, onSave, pinMap, pins, persistDirtySave, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
+  }, [budget, designPool, lockedAt, onSave, pinMap, pins, persistDirtySave, rankOverrideMap, rankOverrides, rankedSlots, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
 
   useEffect(() => {
     if (!resetConfirm) return undefined;
@@ -465,6 +534,7 @@ export function RosterDesigner({
     markDirty();
     setSlots(seedRosterDesignSlots());
     setPins({});
+    setRankOverrides({});
     setLockedAt(undefined);
     setSelectedSlotId(null);
     setResetConfirm(false);
@@ -498,6 +568,17 @@ export function RosterDesigner({
     delete nextPins[slotId];
     markDirty();
     setPins(nextPins);
+  };
+
+  const reorderRankOverride = (slot: DesignSlot, orderedPlayerIds: readonly string[]) => {
+    if (readOnly) return;
+    const position = rankPositionForSlot(slot);
+    if (!position) return;
+    markDirty();
+    setRankOverrides((current) => ({
+      ...current,
+      [position]: [...orderedPlayerIds],
+    }));
   };
 
   return (
@@ -642,9 +723,11 @@ export function RosterDesigner({
           pinnedPlayerId={pins[selectedSlot.slotId] ?? null}
           lockedByDesign={lockedByDesign}
           disabledReason={disabledReason}
+          rankOverride={rankOverrideMap.get(rankPositionForSlot(selectedSlot) ?? "")}
           onPreferenceChange={(update) => updatePreference(selectedSlot.slotId, update)}
           onPin={(playerId) => pinPlayerToSlot(selectedSlot.slotId, playerId)}
           onUnpin={() => unpinSlot(selectedSlot.slotId)}
+          onReorder={(orderedPlayerIds) => reorderRankOverride(selectedSlot, orderedPlayerIds)}
           onUnlock={unlockDesign}
         />
       ) : null}
@@ -773,11 +856,13 @@ function SlotEditor({
   targetPick,
   pinDisplay,
   pinnedPlayerId,
+  rankOverride,
   lockedByDesign = false,
   disabledReason,
   onPreferenceChange,
   onPin,
   onUnpin,
+  onReorder,
   onUnlock,
 }: {
   slot: DesignSlot;
@@ -789,11 +874,13 @@ function SlotEditor({
   targetPick: Best22TargetPick | null;
   pinDisplay: PinDisplay | null;
   pinnedPlayerId: string | null;
+  rankOverride: readonly string[] | undefined;
   lockedByDesign?: boolean;
   disabledReason?: string | null;
   onPreferenceChange: (update: (preference: SlotPreference) => SlotPreference) => void;
   onPin: (playerId: string) => void;
   onUnpin: () => void;
+  onReorder: (orderedPlayerIds: readonly string[]) => void;
   onUnlock?: () => void;
 }) {
   const groups = menuGroupsForSlot(slot);
@@ -805,8 +892,8 @@ function SlotEditor({
     [classifiedPool],
   );
   const shortlist = useMemo(
-    () => rankPoolForSlot(slot, preference, designPool).slice(0, 5),
-    [designPool, preference, slot],
+    () => applyRankOverrideOrder(rankPoolForSlot(slot, preference, designPool), rankOverride).slice(0, 5),
+    [designPool, preference, rankOverride, slot],
   );
 
   const setShape = (shape: string | undefined) => {
@@ -969,6 +1056,7 @@ function SlotEditor({
             pinnedPlayerId={pinnedPlayerId}
             onPin={onPin}
             onUnpin={onUnpin}
+            onReorder={onReorder}
           />
         </div>
       </div>
@@ -986,6 +1074,7 @@ function ShortlistRail({
   pinnedPlayerId,
   onPin,
   onUnpin,
+  onReorder,
 }: {
   entries: readonly RankedPoolEntry[];
   preference: SlotPreference;
@@ -996,7 +1085,14 @@ function ShortlistRail({
   pinnedPlayerId: string | null;
   onPin: (playerId: string) => void;
   onUnpin: () => void;
+  onReorder: (orderedPlayerIds: readonly string[]) => void;
 }) {
+  const [draggedPlayerId, setDraggedPlayerId] = useState<string | null>(null);
+  const commitMove = (fromIndex: number, toIndex: number) => {
+    if (readOnly || fromIndex === toIndex) return;
+    onReorder(movePlayerId(entries, fromIndex, toIndex));
+  };
+
   return (
     <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
       <div className="mb-2 text-[10px] font-bold tracking-[0.14em] text-[var(--ballpark-brass)]">THE ASK&apos;S SHORTLIST</div>
@@ -1004,13 +1100,14 @@ function ShortlistRail({
         <div className="text-[11px] leading-snug text-[var(--ballpark-chalk)]/45">NOBODY IN THE POOL FITS THIS ASK YET</div>
       ) : (
         <div className="space-y-1.5">
-          {entries.map((entry) => {
+          {entries.map((entry, index) => {
             const classification = classificationById.get(entry.playerId);
             const satisfaction = classification ? askSatisfaction(preference, classification) : null;
             const runnerUp = satisfaction?.shapeMatch === "runnerUp";
             const isTarget = targetPick?.playerId === entry.playerId;
             const pinnedHere = pinnedPlayerId === entry.playerId;
             const fullPlayer = fullPlayerById.get(entry.playerId);
+            const dragIndex = draggedPlayerId ? entries.findIndex((candidate) => candidate.playerId === draggedPlayerId) : -1;
             const name = (
               <span className="min-w-0 truncate">
                 {runnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈ </span> : null}
@@ -1018,14 +1115,48 @@ function ShortlistRail({
               </span>
             );
             return (
-              <div key={entry.playerId} className="flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75">
-                {fullPlayer ? (
-                  <PlayerProfilePopover player={fullPlayer} revealFull>
-                    {name}
-                  </PlayerProfilePopover>
-                ) : (
-                  name
+              <div
+                key={entry.playerId}
+                onDragOver={(event) => {
+                  if (readOnly || !draggedPlayerId || draggedPlayerId === entry.playerId) return;
+                  event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (dragIndex >= 0) commitMove(dragIndex, index);
+                  setDraggedPlayerId(null);
+                }}
+                className={classNames(
+                  "flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75",
+                  draggedPlayerId === entry.playerId && "opacity-50",
                 )}
+              >
+                <span className="min-w-0 flex items-center gap-1.5">
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      draggable
+                      aria-label={`Drag ${entry.playerName ?? entry.playerId}`}
+                      title="Drag to rank"
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", entry.playerId);
+                        setDraggedPlayerId(entry.playerId);
+                      }}
+                      onDragEnd={() => setDraggedPlayerId(null)}
+                      className="shrink-0 border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
+                    >
+                      <GripVertical className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                  {fullPlayer ? (
+                    <PlayerProfilePopover player={fullPlayer} revealFull>
+                      {name}
+                    </PlayerProfilePopover>
+                  ) : (
+                    name
+                  )}
+                </span>
                 <span className="shrink-0 flex items-center gap-1">
                   {isTarget ? (
                     <span className="border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
@@ -1033,21 +1164,41 @@ function ShortlistRail({
                     </span>
                   ) : null}
                   {!readOnly ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (pinnedHere) onUnpin();
-                        else onPin(entry.playerId);
-                      }}
-                      className={classNames(
-                        "border px-1.5 py-0.5 text-[9px] font-bold tracking-wider active:scale-95",
-                        pinnedHere
-                          ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-brass)] text-[#1A1A1A]"
-                          : "border-[var(--ballpark-panel-border)] text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)]",
-                      )}
-                    >
-                      {pinnedHere ? "PINNED ✓" : "PIN"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => commitMove(index, index - 1)}
+                        disabled={index === 0}
+                        aria-label={`Move ${entry.playerName ?? entry.playerId} up`}
+                        className="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+                      >
+                        <ArrowUp className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => commitMove(index, index + 1)}
+                        disabled={index === entries.length - 1}
+                        aria-label={`Move ${entry.playerName ?? entry.playerId} down`}
+                        className="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+                      >
+                        <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (pinnedHere) onUnpin();
+                          else onPin(entry.playerId);
+                        }}
+                        className={classNames(
+                          "border px-1.5 py-0.5 text-[9px] font-bold tracking-wider active:scale-95",
+                          pinnedHere
+                            ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-brass)] text-[#1A1A1A]"
+                            : "border-[var(--ballpark-panel-border)] text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)]",
+                        )}
+                      >
+                        {pinnedHere ? "PINNED ✓" : "PIN"}
+                      </button>
+                    </>
                   ) : null}
                 </span>
               </div>

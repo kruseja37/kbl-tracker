@@ -74,6 +74,12 @@ function clickSlot(label: string) {
   fireEvent.click(button);
 }
 
+function shortlistLines(): string[] {
+  const rail = screen.getByText("THE ASK'S SHORTLIST").parentElement;
+  if (!rail) throw new Error("No shortlist rail found");
+  return Array.from(rail.querySelectorAll("span.min-w-0.truncate")).map((element) => element.textContent ?? "");
+}
+
 describe("RosterDesigner debounce saves", () => {
   const players = [makePlayer("player-1")];
 
@@ -612,5 +618,109 @@ describe("RosterDesigner extracted edit affordances and pins", () => {
     expect(screen.getByText("📌 Test wrong-slot — CAN'T PIN HERE")).toBeInTheDocument();
     expect(screen.queryByText(/OUT OF THE POOL/)).toBeNull();
     expect(screen.queryByText(/LEFT THE POOL/)).toBeNull();
+  });
+});
+
+describe("RosterDesigner rank override reorder", () => {
+  const ssCheap = makePlayer("ss-cheap", { primaryPosition: "SS", salary: 9_000 });
+  const ssMid = makePlayer("ss-mid", { primaryPosition: "SS", salary: 10_000 });
+  const ssExpensive = makePlayer("ss-expensive", { primaryPosition: "SS", salary: 11_000 });
+  const players = [ssExpensive, ssMid, ssCheap];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  test("R1: arrow reorder writes the displayed per-position order to rankOverrides", async () => {
+    const onSave = vi.fn(async () => undefined);
+    render(
+      <RosterDesigner
+        team={makeTeam("team-rank", "Rank")}
+        mode="pool-first"
+        players={players}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(shortlistLines()[0]).toContain("Test ss-cheap");
+
+    fireEvent.click(screen.getByRole("button", { name: "Move Test ss-mid up" }));
+    expect(shortlistLines().slice(0, 3).map((line) => line.split(" · ")[0])).toEqual([
+      "Test ss-mid",
+      "Test ss-cheap",
+      "Test ss-expensive",
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => undefined);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][0].rankOverrides?.SS).toEqual(["ss-mid", "ss-cheap", "ss-expensive"]);
+  });
+
+  test("R2: preset rankOverrides render the shortlist in the GM order first", () => {
+    render(
+      <RosterDesigner
+        team={makeTeam("team-preset", "Preset", {
+          rosterDesign: {
+            slots: seedRosterDesignSlots(),
+            rankOverrides: { SS: ["ss-expensive", "ss-mid"] },
+          },
+        })}
+        mode="pool-first"
+        players={players}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(shortlistLines().slice(0, 3).map((line) => line.split(" · ")[0])).toEqual([
+      "Test ss-expensive",
+      "Test ss-mid",
+      "Test ss-cheap",
+    ]);
+  });
+
+  test("R3: slots without rankOverrides keep the default rankPoolForSlot order", () => {
+    render(
+      <RosterDesigner
+        team={makeTeam("team-default", "Default", {
+          rosterDesign: {
+            slots: seedRosterDesignSlots(),
+            rankOverrides: { RP: ["unused-reliever"] },
+          },
+        })}
+        mode="pool-first"
+        players={players}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(shortlistLines().slice(0, 3).map((line) => line.split(" · ")[0])).toEqual([
+      "Test ss-cheap",
+      "Test ss-mid",
+      "Test ss-expensive",
+    ]);
   });
 });

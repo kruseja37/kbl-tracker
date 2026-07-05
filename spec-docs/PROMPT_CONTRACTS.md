@@ -30157,3 +30157,78 @@ src/engines/__tests__/rosterDesignFeasibility.test.ts` green; FULL `NODE_ENV= np
 OUTPUT: files changed; the gmPreferenceWeight constant + the slotPreferenceBonus hook diff; the store/save type diff;
 test output; build; full-suite counts; `git status`. DO NOT COMMIT.
 <!-- ===== END CONTRACT: CODEX-B2A-RANK-OVERRIDES-ENGINE ===== -->
+
+<!-- ===== CONTRACT: CODEX-B2B-RANK-DRAG-UI ===== -->
+# CONTRACT: CODEX-B2B-RANK-DRAG-UI (slice B2b of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04, §3.2/§2B)
+
+MISSION: The UI half of the GM per-position "drag-to-rank" board. In the setup RosterDesigner shortlist, let the GM
+REORDER players within a slot (a STRONG NUDGE) via BOTH a DRAG HANDLE and UP/DOWN arrows (JK decision 2026-07-04);
+persist the order to `rankOverrides` (already in the store, B2a); and WIRE it into the best-22 fit so the GM's order
+visibly moves the fitted board. The engine already honors rankOverrides (B2a, committed fa16c370). READ §3.2 + §7-item-7.
+
+BRANCH: `experiment/manager-wpa-window`. DO NOT create a branch. DO NOT commit.
+
+GROUND TRUTH (verified):
+- Store field EXISTS (B2a): `Team.rosterDesign.rankOverrides?: Record<string, string[]>` (position → ordered playerId[])
+  and `RosterDesignSave.rankOverrides?` (RosterDesigner.tsx:52). The optimizer honors it: `buildBest22Target(..., pins?,
+  rankOverrides?: ReadonlyMap<string, readonly string[]>)` (best22Target.ts) applies a rank-decaying gmPreferenceWeight
+  by `slot.position`.
+- Shortlist UI: `ShortlistRail` (src/src_figma/app/components/leagueBuilder/RosterDesigner.tsx:~974-1055) renders
+  `entries: RankedPoolEntry[]` (rosterDesignFeasibility.ts:845). Each row already has the player NAME wrapped in
+  `<PlayerProfilePopover>` (B5) + a PIN button via `onPin(playerId)`/`onUnpin()` (~L1031-1046). The default order comes
+  from `rankPoolForSlot(slot, preference, pool)`.
+- Persistence: RosterDesigner edits accumulate + save via `onSave(design: RosterDesignSave)` →
+  `handleSaveRosterDesign(team, rosterDesign)` (LeagueBuilderDraftSetup.tsx:~1339) → `saveTeam({...team, rosterDesign})`
+  → silent `refresh()`. READ the EXACT existing pins edit→debounced-save flow in RosterDesigner and MIRROR it for
+  rankOverrides (same debounce, same onSave shape). LANDMINE: `useLeagueBuilderData.refresh()` MUST stay silent (no
+  isLoading toggle) or the page remounts and scroll jumps (fixed f6b02b55) — do NOT introduce a loud refresh.
+- The best-22 call: `buildBest22Target(...)` is invoked in RosterDesigner (the `feasibleTarget` useMemo). It does NOT
+  pass rankOverrides yet — you add that argument.
+- NO drag library in the repo. Use native HTML5 drag (`draggable` + onDragStart/onDragOver/onDrop) on a DEDICATED GRIP
+  HANDLE only (NOT the whole row — the name must still click through to the popover).
+
+DELIVERABLES:
+
+PART 1 — Reorder UI (ShortlistRail):
+- Each shortlist entry gets: (a) a DRAG GRIP handle (⠿/≡ icon) that is `draggable` (native HTML5 DnD reorders within the
+  slot's list); (b) UP and DOWN arrow buttons (move the entry one position; disabled at the ends). The NAME stays
+  wrapped in `<PlayerProfilePopover>` and still opens on click — the grip/arrows are SEPARATE targets, no click conflict.
+  Keep the existing PIN button. Respect `readOnly` (hide/disable reorder controls when readOnly, like pins).
+- All three (drag, up, down) call ONE reorder handler that produces the new ordered playerId[] for the slot's position.
+
+PART 2 — Order model + persistence:
+- Store the GM order as `rankOverrides[slot.position] = orderedPlayerIds`. Keying is by POSITION (spec §3.2); same-position
+  slots share the ranking (acceptable — the GM's e.g. 'RP' order applies to all RP slots).
+- DISPLAY order: when `rankOverrides[slot.position]` exists, order the shortlist by it (ranked ids first in GM order, then
+  any not-yet-ranked entries in the default rankPoolForSlot order); else default order.
+- The reorder writes the FULL current display order (ranked + the shown unranked, in their displayed order) to
+  rankOverrides[position], then persists via the SAME debounced onSave flow the pins use. Do NOT add a loud refresh.
+  Removing all overrides for a position (e.g., a future reset) should delete the key (optional; not required this slice).
+
+PART 3 — Wire into the fit:
+- Build a `ReadonlyMap<string, readonly string[]>` from `team.rosterDesign.rankOverrides` and pass it as the new
+  `rankOverrides` argument to the `buildBest22Target(...)` call in the `feasibleTarget` useMemo, so a GM reorder visibly
+  moves the fitted board (BEST-22 target/picks) toward the GM's order. Add rankOverrides to that useMemo's deps.
+
+CONSTRAINTS / NO-REGRESSION:
+- DO NOT break: the feasibility chip, per-slot archetype/tag/tilt preferences, pins, best-22 target rendering, the name
+  profile popover, or the silent-refresh scroll behavior. DO NOT touch ivCurves/iv_oracle/salary/WAR/GameTracker or the
+  optimizer math (B2a). Additive UI + persistence + one wired argument only.
+- No `any`, no @ts-ignore. Native DnD must degrade gracefully (arrows always work even if drag is unavailable).
+
+TESTS (src/src_figma/__tests__/components/RosterDesigner.test.tsx — mirror the existing pins save test):
+  1. Clicking UP/DOWN on a shortlist entry reorders it AND flushes a save whose rosterDesign.rankOverrides[position]
+     reflects the new order (assert the persisted order). (Drive via the arrow buttons — deterministic; drag is exercised
+     by the same handler.)
+  2. When rankOverrides[position] is preset, the shortlist renders in the GM's order (assert row order).
+  3. NO-REGRESSION: pins still save; the feasibility chip / best-22 still render; a slot with no rankOverrides shows the
+     default order (unchanged).
+
+GATE (paste ACTUAL output): `npm run build` exit 0; `NODE_ENV= npx vitest run
+src/src_figma/__tests__/components/RosterDesigner.test.tsx src/engines/__tests__/best22Target.test.ts` green; FULL
+`NODE_ENV= npx vitest run` at CURRENT_STATE baseline (only the 2 characterized fails + known big-batch flakes —
+verify SOLO if they appear, esp. LeagueBuilderDraftSetup). Report counts; any NEW red → STOP + report.
+
+OUTPUT: files changed; the reorder handler + persistence diff; the buildBest22Target wiring diff; test output; build;
+full-suite counts; `git status`. DO NOT COMMIT.
+<!-- ===== END CONTRACT: CODEX-B2B-RANK-DRAG-UI ===== -->
