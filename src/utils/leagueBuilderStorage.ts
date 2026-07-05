@@ -180,7 +180,12 @@ export interface Team {
   farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
   gmSeatId?: string;
   gmSeatName?: string;
-  rosterDesign?: { slots: DesignSlot[]; lockedAt?: string; pins?: Record<string, string> };
+  rosterDesign?: {
+    slots: DesignSlot[];
+    lockedAt?: string;
+    pins?: Record<string, string>;
+    rankOverrides?: Record<string, string[]>;
+  };
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;
   teamHistory?: RebrandRelocationMarker[];

@@ -30091,3 +30091,69 @@ flakes — verify each SOLO if they appear). Report counts; any NEW red → STOP
 OUTPUT: files changed; the number-floor diff; the readout builder + render; test output; build; full-suite counts;
 `git status`. DO NOT COMMIT.
 <!-- ===== END CONTRACT: CODEX-CHEM-READOUT ===== -->
+
+<!-- ===== CONTRACT: CODEX-B2A-RANK-OVERRIDES-ENGINE ===== -->
+# CONTRACT: CODEX-B2A-RANK-OVERRIDES-ENGINE (slice B2a of ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04, §3.2/§3.3)
+
+MISSION: The DATA + OPTIMIZER half of the GM per-position "drag-to-rank" board. Add the persisted `rankOverrides`
+field and make the roster fit-optimizer HONOR the GM's per-position order as a STRONG NUDGE (a large
+`gmPreferenceWeight` bonus — rank 1 gets the biggest, decaying) that usually wins BUT a clearly-superior fit can
+still override (NOT a hard constraint — ruling 1). NO UI in this slice (the drag UI is B2b). READ §3.2, §3.3, and
+ruling 1 FIRST.
+
+BRANCH: `experiment/manager-wpa-window`. DO NOT create a branch. DO NOT commit.
+
+GROUND TRUTH (verified):
+- Store: `Team.rosterDesign?: { slots: DesignSlot[]; lockedAt?: string; pins?: Record<string,string> }`
+  (src/utils/leagueBuilderStorage.ts:183). Persisted in the GLOBAL_TEAMS IndexedDB store; DB_VERSION=8 is NOT pinned
+  on rosterDesign subfields → adding an OPTIONAL field is additive + safe, NO version bump, NO migration.
+- Save type: `RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string; pins?: RosterDesignPins }`
+  (RosterDesigner.tsx:73). `DesignSlot` (src/engines/rosterDesignFeasibility.ts:63-68) has `slotId, kind, position?, preference?`.
+- Optimizer: `buildBest22Target(slots, simPool, classifiedById, archetype, tier, budget, pins?)`
+  (src/engines/best22Target.ts:158-268) builds `slotPreferenceBonus(playerId, slotIndex): number` (best22Target.ts:~171-195,
+  currently honors shape/tags/tilt, returns `Math.min(BEST22_TUNING.bonusCap, bonus) * u`) and passes it to
+  `buildIdentityRoster(..., { posture, slotPreferenceBonus, pinned })` (archetypeBalanceSimulator.ts:772). `BEST22_TUNING`
+  holds shapePrimaryMatch/shapeRunnerUpMatch/perTagMatch/tiltClean/bonusCap — READ the real values before sizing.
+- `gm_preference_weight` is NOT yet in the codebase — it's a NEW tuning constant (spec calls it "large").
+
+DELIVERABLES:
+
+PART 1 — Store + save type (additive):
+- Add `rankOverrides?: Record<string, string[]>` (position → ordered playerId[], best-first) to `Team.rosterDesign`
+  (leagueBuilderStorage.ts:183) AND to `RosterDesignSave` (RosterDesigner.tsx:73). OPTIONAL. No DB bump, no migration.
+  Do NOT wire any UI (B2b). This slice only makes the field exist + typecheck end-to-end.
+
+PART 2 — Optimizer honors the GM order (the strong nudge):
+- Add `BEST22_TUNING.gmPreferenceWeight` (a NEW constant, sized "large" — a STRONG nudge; pick a value on the order
+  of shapePrimaryMatch..~1.5×shapePrimaryMatch for the rank-1 player, decaying by rank; document the choice as tunable).
+- Thread an optional `rankOverrides?: ReadonlyMap<string, readonly string[]>` (position → ordered playerIds) into
+  `buildBest22Target` (new last optional param). Inside `slotPreferenceBonus(playerId, slotIndex)`: for `slot =
+  slots[slotIndex]`, if `slot.position` is set and `rankOverrides` has that position, find the player's index in that
+  list; if found, ADD a rank-decaying gmPreference bonus (rank 0 = full gmPreferenceWeight, decaying, e.g.
+  `gmPreferenceWeight * (1/(1+rank))` or linear). Players NOT in the list get 0. Add this term so it STACKS as a
+  distinct nudge (add it AFTER/OUTSIDE the existing shape/tag `Math.min(bonusCap, …)` cap, or raise the cap to
+  accommodate it — do NOT let the existing cap swallow the GM nudge). Still `* u` (fit-std units) like the siblings.
+- Behavior must be: STRONG nudge (GM's order usually wins among comparable fits) but NOT absolute (a clearly-superior
+  raw fit still overrides). No rankOverrides passed → byte-identical to today (regression guard).
+
+CONSTRAINTS / NO-REGRESSION:
+- Additive only. DO NOT change the existing shape/tag/tilt bonus math, pins, feasibility, or any UI. DO NOT touch
+  ivCurves/iv_oracle/salary/WAR/GameTracker. DO NOT wire rankOverrides into the RosterDesigner call yet (B2b).
+- No `any`, no @ts-ignore.
+
+TESTS (src/engines/__tests__/best22Target.test.ts — or the nearest existing best22/feasibility test):
+  1. NUDGE WORKS: two comparable-fit candidates for a slot's position; rankOverrides puts the SECOND-choice above the
+     first → the best-22 fit now prefers the GM's #1 (assert the picked playerId flips to the GM-preferred one).
+  2. OVERRIDE HOLDS (not a hard constraint): a clearly-superior-fit candidate NOT ranked #1 by the GM still gets
+     picked over a GM-#1 with much worse fit (assert the superior fit wins). This proves the "strong nudge, not hard
+     constraint" ruling.
+  3. REGRESSION: buildBest22Target with NO rankOverrides returns the SAME result as before the change (byte-identical
+     pick set for a fixture) — assert unchanged.
+
+GATE (paste ACTUAL output): `npm run build` exit 0; `NODE_ENV= npx vitest run src/engines/__tests__/best22Target.test.ts
+src/engines/__tests__/rosterDesignFeasibility.test.ts` green; FULL `NODE_ENV= npx vitest run` at CURRENT_STATE baseline
+(only the 2 characterized fails + known big-batch flakes — verify SOLO). Report counts; any NEW red → STOP + report.
+
+OUTPUT: files changed; the gmPreferenceWeight constant + the slotPreferenceBonus hook diff; the store/save type diff;
+test output; build; full-suite counts; `git status`. DO NOT COMMIT.
+<!-- ===== END CONTRACT: CODEX-B2A-RANK-OVERRIDES-ENGINE ===== -->

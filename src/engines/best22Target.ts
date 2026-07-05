@@ -18,6 +18,8 @@ export const BEST22_TUNING = {
   perTagMatch: 0.4,
   tiltClean: 0.4,
   bonusCap: 3.0,
+  // Tunable strong nudge: rank #1 is 1.25x a primary shape match, but raw fit can still beat it.
+  gmPreferenceWeight: 2.5,
 } as const;
 
 export interface Best22TargetPick {
@@ -163,35 +165,51 @@ export function buildBest22Target(
   tier: TierKey,
   budget: number,
   pins?: ReadonlyMap<string, string>,
+  rankOverrides?: ReadonlyMap<string, readonly string[]>,
 ): Best22Target {
   const fitScore = archetypeFitScorer(archetype, tier, 'optimal');
   const u = meanStd(simPool.map(fitScore)).std || 1;
   const { report: pinValidationReport, buildPins } = validatePins(slots, simPool, pins);
 
   const slotPreferenceBonus = (playerId: string, slotIndex: number): number => {
-    const preference = slots[slotIndex]?.preference;
-    if (!preference) return 0;
-    const classification = classifiedById.get(playerId);
-    if (!classification) return 0;
-    const satisfaction = askSatisfaction(preference, classification);
-
+    const slot = slots[slotIndex];
+    const preference = slot?.preference;
     let bonus = 0;
-    if (satisfaction.shapeMatch === 'primary') {
-      bonus += BEST22_TUNING.shapePrimaryMatch;
-    } else if (satisfaction.shapeMatch === 'runnerUp') {
-      bonus += BEST22_TUNING.shapeRunnerUpMatch;
-    }
-    bonus += satisfaction.tagsMatched * BEST22_TUNING.perTagMatch;
 
-    if (preference.personalityTilt && preference.personalityTilt !== 'any') {
-      if (satisfaction.tiltPenalty === 0) {
-        bonus += BEST22_TUNING.tiltClean;
-      } else if (satisfaction.tiltPenalty === 1) {
-        bonus += BEST22_TUNING.tiltClean / 2;
+    if (preference) {
+      const classification = classifiedById.get(playerId);
+      if (classification) {
+        const satisfaction = askSatisfaction(preference, classification);
+
+        let preferenceBonus = 0;
+        if (satisfaction.shapeMatch === 'primary') {
+          preferenceBonus += BEST22_TUNING.shapePrimaryMatch;
+        } else if (satisfaction.shapeMatch === 'runnerUp') {
+          preferenceBonus += BEST22_TUNING.shapeRunnerUpMatch;
+        }
+        preferenceBonus += satisfaction.tagsMatched * BEST22_TUNING.perTagMatch;
+
+        if (preference.personalityTilt && preference.personalityTilt !== 'any') {
+          if (satisfaction.tiltPenalty === 0) {
+            preferenceBonus += BEST22_TUNING.tiltClean;
+          } else if (satisfaction.tiltPenalty === 1) {
+            preferenceBonus += BEST22_TUNING.tiltClean / 2;
+          }
+        }
+
+        bonus += Math.min(BEST22_TUNING.bonusCap, preferenceBonus);
       }
     }
 
-    return Math.min(BEST22_TUNING.bonusCap, bonus) * u;
+    if (slot?.position && rankOverrides?.size) {
+      const rankedPlayerIds = rankOverrides.get(slot.position);
+      const rank = rankedPlayerIds?.indexOf(playerId) ?? -1;
+      if (rank >= 0) {
+        bonus += BEST22_TUNING.gmPreferenceWeight / (1 + rank);
+      }
+    }
+
+    return bonus * u;
   };
 
   const build = buildIdentityRoster([...simPool], archetype, tier, budget, {

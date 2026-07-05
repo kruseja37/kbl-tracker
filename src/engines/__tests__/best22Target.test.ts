@@ -305,6 +305,89 @@ describe('buildBest22Target', () => {
     expect(target.picks.find((pick) => pick.playerId === 'sp-0')?.playerName).toBe('Avery Ace');
   });
 
+  it('R1: rankOverrides strongly nudges a comparable candidate into the GM-ranked position slot', () => {
+    const gmPreferred = simPlayer('gm-preferred-ss', { position: 'SS', isPitcher: false });
+    const pool = legalPool([gmPreferred]);
+    const slots = buildDefaultDesignSlots();
+    const baseline = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const nudged = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      undefined,
+      new Map([['SS', ['gm-preferred-ss', 'ss']]]),
+    );
+
+    expect(BEST22_TUNING.gmPreferenceWeight).toBe(2.5);
+    expect(baseline.picks[4]).toMatchObject({ slotId: 'SS', playerId: 'ss' });
+    expect(nudged.picks[4]).toMatchObject({ slotId: 'SS', playerId: 'gm-preferred-ss' });
+    expect(nudged.feasible).toBe(true);
+  });
+
+  it('R2: rankOverrides are not a hard constraint when raw fit is clearly superior', () => {
+    const fitArchetype: SimArchetype = {
+      name: 'Power Fit',
+      rawShift: { 'hitters/POW': 1 },
+    };
+    const superior = {
+      ...simPlayer('superior-fit-ss', { position: 'SS', isPitcher: false }, 60),
+      bat: { POW: 99, CON: 60, SPD: 60, FLD: 60, ARM: 60 },
+    } as SimPlayer;
+    const pool = legalPool([superior]).map((player) =>
+      player.id === 'ss'
+        ? ({ ...player, bat: { POW: 1, CON: 60, SPD: 60, FLD: 60, ARM: 60 } } as SimPlayer)
+        : player,
+    );
+    const slots = buildDefaultDesignSlots();
+    const target = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      fitArchetype,
+      TIER,
+      SOLVENT_BUDGET,
+      undefined,
+      new Map([['SS', ['ss', 'superior-fit-ss']]]),
+    );
+
+    expect(target.picks[4]).toMatchObject({ slotId: 'SS', playerId: 'superior-fit-ss' });
+    expect(target.feasible).toBe(true);
+  });
+
+  it('R3: absent rankOverrides leave the existing best-22 target byte-identical', () => {
+    const askedSS = simPlayer('asked-ss', { position: 'SS', isPitcher: false });
+    const pool = legalPool([askedSS]);
+    const slots = buildDefaultDesignSlots().map((slot) =>
+      slot.slotId === 'SS' ? { ...slot, preference: { shape: 'Defensive-Wizard', allowRunnerUp: false } } : slot,
+    );
+    const classes = classifiedById(pool, { 'asked-ss': classification('Defensive-Wizard') });
+    const noRankOverrides = buildBest22Target(
+      slots,
+      pool,
+      classes,
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['FLEX1', 'bench-4']]),
+    );
+    const emptyRankOverrides = buildBest22Target(
+      slots,
+      pool,
+      classes,
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      new Map([['FLEX1', 'bench-4']]),
+      new Map(),
+    );
+
+    expect(noRankOverrides).toEqual(emptyRankOverrides);
+    expect(noRankOverrides.picks.map((pick) => pick.playerId)).toEqual(emptyRankOverrides.picks.map((pick) => pick.playerId));
+  });
+
   it('A3: an ask that would break solvency stays advisory and the floor verdict is unchanged', () => {
     const expensiveFlex = { ...simPlayer('expensive-flex', { position: 'LF', isPitcher: false }), salary: 100_000_000 };
     const pool = legalPool([expensiveFlex]);

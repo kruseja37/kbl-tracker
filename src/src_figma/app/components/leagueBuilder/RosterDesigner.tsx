@@ -49,7 +49,12 @@ import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
 type RosterDesignPins = Record<string, string>;
-type RosterDesignSave = { slots: DesignSlot[]; lockedAt?: string; pins?: RosterDesignPins };
+type RosterDesignSave = {
+  slots: DesignSlot[];
+  lockedAt?: string;
+  pins?: RosterDesignPins;
+  rankOverrides?: Record<string, string[]>;
+};
 type PinDisplay = {
   playerId: string;
   playerName: string;
