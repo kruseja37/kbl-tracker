@@ -101,6 +101,9 @@ export interface ClassifiedDemandPlayer {
 
 export const POOL_SIZE_MULTIPLIER_STOPS = [1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const;
 export const DEFAULT_POOL_SIZE_MULTIPLIER = 1.25;
+export const POOL_QUALITY_CENTER_STOPS = [64, 66, 68, 70, 72, 74, 76] as const;
+export type PoolQualityCenter = typeof POOL_QUALITY_CENTER_STOPS[number];
+export const DEFAULT_POOL_QUALITY_CENTER: PoolQualityCenter = 68;
 
 export type PoolBalancePresetKey = 'grounded' | 'balanced' | 'juiced';
 export type PoolSourceMode = 'team-roster-priority' | 'full-pool';
@@ -182,8 +185,61 @@ export const POOL_BALANCE_PRESETS: Record<PoolBalancePresetKey, NumericPoolShape
   },
 } as const;
 
-export function poolBalancePresetTuning(preset: PoolBalancePresetKey = 'balanced'): NumericPoolShapeTuning {
-  return POOL_BALANCE_PRESETS[preset] ?? POOL_BALANCE_PRESETS.balanced;
+function clampNumericWindowBoundary(value: number): number {
+  return Math.min(101, Math.max(0, value));
+}
+
+export function resolvePoolQualityCenter(poolQualityCenter?: number): PoolQualityCenter {
+  if (poolQualityCenter === undefined || !Number.isFinite(poolQualityCenter)) {
+    return DEFAULT_POOL_QUALITY_CENTER;
+  }
+  const clamped = Math.min(
+    POOL_QUALITY_CENTER_STOPS[POOL_QUALITY_CENTER_STOPS.length - 1],
+    Math.max(POOL_QUALITY_CENTER_STOPS[0], poolQualityCenter),
+  );
+  return POOL_QUALITY_CENTER_STOPS.reduce((best, candidate) => {
+    const candidateDistance = Math.abs(candidate - clamped);
+    const bestDistance = Math.abs(best - clamped);
+    if (candidateDistance < bestDistance) return candidate;
+    if (candidateDistance === bestDistance && candidate < best) return candidate;
+    return best;
+  }, DEFAULT_POOL_QUALITY_CENTER);
+}
+
+export function derivePoolQualityTuning(
+  tuning: NumericPoolShapeTuning,
+  poolQualityCenter?: number,
+): NumericPoolShapeTuning {
+  const resolvedCenter = resolvePoolQualityCenter(poolQualityCenter);
+  const qualityShift = resolvedCenter - DEFAULT_POOL_QUALITY_CENTER;
+  if (qualityShift === 0) return tuning;
+  return {
+    ...tuning,
+    lowTailMax: clampNumericWindowBoundary(tuning.lowTailMax + qualityShift),
+    middleMin: clampNumericWindowBoundary(tuning.middleMin + qualityShift),
+    middleMax: clampNumericWindowBoundary(tuning.middleMax + qualityShift),
+    highTailMin: clampNumericWindowBoundary(tuning.highTailMin + qualityShift),
+    superstarTailMin: clampNumericWindowBoundary(tuning.superstarTailMin + qualityShift),
+    windows: tuning.windows.map((window, index) => ({
+      ...window,
+      minInclusive: index === 0
+        ? 0
+        : clampNumericWindowBoundary(window.minInclusive + qualityShift),
+      maxExclusive: index === tuning.windows.length - 1
+        ? 101
+        : clampNumericWindowBoundary(window.maxExclusive + qualityShift),
+    })),
+  };
+}
+
+export function poolBalancePresetTuning(
+  preset: PoolBalancePresetKey = 'balanced',
+  poolQualityCenter?: number,
+): NumericPoolShapeTuning {
+  const tuning = POOL_BALANCE_PRESETS[preset] ?? POOL_BALANCE_PRESETS.balanced;
+  return poolQualityCenter === undefined
+    ? tuning
+    : derivePoolQualityTuning(tuning, poolQualityCenter);
 }
 
 export interface NumericPoolShapeWindow {
@@ -207,11 +263,18 @@ export interface NumericPoolQuotaShortfall {
 
 export interface NumericPoolShapeDiagnostics {
   preset: PoolBalancePresetKey;
+  poolQualityCenter: PoolQualityCenter;
+  defaultQualityCenter: PoolQualityCenter;
+  qualityShift: number;
+  shiftedBandWindows: NumericPoolShapeWindow[];
   poolSize: number;
   requiredRosterDemand: number;
   poolSlackFactor: number;
   targetSize: number;
   medianNumericGrade: number | null;
+  targetMedianQuality: PoolQualityCenter;
+  achievedMedianQuality: number | null;
+  achievedMedianDelta: number | null;
   p90NumericGrade: number | null;
   highTailShare: number;
   superstarTailShare: number;
@@ -229,6 +292,10 @@ export interface NumericPoolShapeDiagnostics {
   engineGeneratedByBand: Record<string, number>;
   finalPoolByBand: Record<string, number>;
   hardKeepShapeOverflowByBand: Record<string, number>;
+  qualityBandTargetCounts: Record<string, number>;
+  qualityBandFinalCounts: Record<string, number>;
+  qualityBandShortfalls: Record<string, number>;
+  qualityCenterShortfallReason: string | null;
   excludedReaddedForLegalityCount: number;
   poolSourceMode: PoolSourceMode;
   selectedTeamRosterCandidateCount: number;
@@ -412,8 +479,11 @@ function numericWindowId(
   )?.id ?? null;
 }
 
-function numericWindowIdOf(player: DemandUniversePlayer): string {
-  return numericWindowId(numericGradeOf(player)) ?? 'unknown';
+function numericWindowIdOf(
+  player: DemandUniversePlayer,
+  windows: readonly NumericPoolShapeWindow[] = poolBalancePresetTuning().windows,
+): string {
+  return numericWindowId(numericGradeOf(player), windows) ?? 'unknown';
 }
 
 function numericBandOf(player: DemandUniversePlayer, tuning: NumericPoolShapeTuning): string {
@@ -430,8 +500,11 @@ function roleBucketOf(player: DemandUniversePlayer): string {
   return `pos:${player.position}`;
 }
 
-function roleWindowKey(player: DemandUniversePlayer): string {
-  return `${roleBucketOf(player)}|${numericWindowIdOf(player)}`;
+function roleWindowKey(
+  player: DemandUniversePlayer,
+  windows: readonly NumericPoolShapeWindow[] = poolBalancePresetTuning().windows,
+): string {
+  return `${roleBucketOf(player)}|${numericWindowIdOf(player, windows)}`;
 }
 
 function percentile(values: readonly number[], p: number): number | null {
@@ -512,6 +585,49 @@ function countPlayersByBand(
   const counts: Record<string, number> = {};
   for (const player of players) incrementCount(counts, numericBandOf(player, tuning));
   return counts;
+}
+
+function countPlayersByWindow(
+  players: readonly DemandUniversePlayer[],
+  windows: readonly NumericPoolShapeWindow[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const player of players) incrementCount(counts, numericWindowIdOf(player, windows));
+  return counts;
+}
+
+function qualityBandShortfallsByWindow(
+  shortfalls: readonly NumericPoolQuotaShortfall[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const shortfall of shortfalls) {
+    const missing = Math.max(0, shortfall.targetCount - shortfall.selectedCount);
+    if (missing > 0) counts[shortfall.windowId] = (counts[shortfall.windowId] ?? 0) + missing;
+  }
+  return counts;
+}
+
+function qualityCenterShortfallReason(options: {
+  poolQualityCenter: PoolQualityCenter;
+  medianNumericGrade: number | null;
+  quotaShortfalls: readonly NumericPoolQuotaShortfall[];
+  hardKeepShapeOverflowByBand: Record<string, number>;
+  curveViolations?: readonly NumericPoolCurveViolation[];
+}): string | null {
+  if (options.medianNumericGrade === null) return 'empty pool has no achieved median quality';
+  if (Object.keys(options.hardKeepShapeOverflowByBand).length > 0) {
+    return 'hard keeps or protected players exceed one or more shifted quality bands';
+  }
+  if (options.quotaShortfalls.length > 0) {
+    return 'source pool constraints left one or more shifted role/quality buckets short';
+  }
+  if ((options.curveViolations ?? []).length > 0) {
+    return 'G1 legality repair required curve tradeoffs after the shifted quality pass';
+  }
+  const delta = options.medianNumericGrade - options.poolQualityCenter;
+  return Math.abs(delta) > 2
+    ? 'achieved median quality is more than two points from the requested center'
+    : null;
 }
 
 function stableHashToUnit(value: string): number {
@@ -602,6 +718,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
   requiredRosterDemand: number;
   targetSize: number;
   preset?: PoolBalancePresetKey;
+  poolQualityCenter?: number;
   tuning?: NumericPoolShapeTuning;
   hardKeepPlayers?: readonly DemandUniversePlayer[];
   engineGeneratedPlayers?: readonly DemandUniversePlayer[];
@@ -623,7 +740,9 @@ export function buildNumericPoolShapeDiagnostics(options: {
   g1SwapCount?: number;
 }): NumericPoolShapeDiagnostics {
   const preset = options.preset ?? 'balanced';
-  const tuning = options.tuning ?? poolBalancePresetTuning(preset);
+  const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
+  const qualityShift = poolQualityCenter - DEFAULT_POOL_QUALITY_CENTER;
+  const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
   const numericGrades = options.players.map(numericGradeOf);
   const denominator = numericGrades.length || 1;
   const highTailShare = numericGrades.filter((grade) => grade >= tuning.highTailMin).length / denominator;
@@ -659,13 +778,23 @@ export function buildNumericPoolShapeDiagnostics(options: {
     const bucket = roleBucketOf(player);
     positionRoleCoverage[bucket] = (positionRoleCoverage[bucket] ?? 0) + 1;
   }
+  const quotaShortfalls = [...(options.quotaShortfalls ?? [])];
+  const medianNumericGrade = percentile(numericGrades, 0.5);
+  const curveViolations = [...(options.curveViolations ?? [])];
   const diagnostics = {
     preset,
+    poolQualityCenter,
+    defaultQualityCenter: DEFAULT_POOL_QUALITY_CENTER,
+    qualityShift,
+    shiftedBandWindows: tuning.windows.map((window) => ({ ...window })),
     poolSize: options.players.length,
     requiredRosterDemand: options.requiredRosterDemand,
     poolSlackFactor: options.requiredRosterDemand > 0 ? options.players.length / options.requiredRosterDemand : 0,
     targetSize: options.targetSize,
-    medianNumericGrade: percentile(numericGrades, 0.5),
+    medianNumericGrade,
+    targetMedianQuality: poolQualityCenter,
+    achievedMedianQuality: medianNumericGrade,
+    achievedMedianDelta: medianNumericGrade === null ? null : medianNumericGrade - poolQualityCenter,
     p90NumericGrade: percentile(numericGrades, 0.9),
     highTailShare,
     superstarTailShare,
@@ -673,7 +802,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
     lowTailShare,
     barbellIndex: highTailShare + lowTailShare - middleMassShare,
     positionRoleCoverage,
-    quotaShortfalls: [...(options.quotaShortfalls ?? [])],
+    quotaShortfalls,
     legalCompletionFeasible: options.legalCompletionFeasible ?? null,
     messages: [...(options.messages ?? [])],
     hardKeepCount: hardKeepPlayers.length,
@@ -683,6 +812,16 @@ export function buildNumericPoolShapeDiagnostics(options: {
     engineGeneratedByBand,
     finalPoolByBand,
     hardKeepShapeOverflowByBand,
+    qualityBandTargetCounts: targetCountsByWindow(options.targetSize, tuning.windows),
+    qualityBandFinalCounts: countPlayersByWindow(options.players, tuning.windows),
+    qualityBandShortfalls: qualityBandShortfallsByWindow(quotaShortfalls),
+    qualityCenterShortfallReason: qualityCenterShortfallReason({
+      poolQualityCenter,
+      medianNumericGrade,
+      quotaShortfalls,
+      hardKeepShapeOverflowByBand,
+      curveViolations,
+    }),
     excludedReaddedForLegalityCount: options.excludedReaddedForLegalityCount ?? 0,
     poolSourceMode: options.poolSourceMode ?? 'full-pool',
     selectedTeamRosterCandidateCount: selectedTeamRosterIds.size,
@@ -700,7 +839,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
     ...(options.g1RemovalsByRoleWindow ? { g1RemovalsByRoleWindow: options.g1RemovalsByRoleWindow } : {}),
     ...(options.g1LowTailAdditionsByRole ? { g1LowTailAdditionsByRole: options.g1LowTailAdditionsByRole } : {}),
     ...(options.g1Swaps ? { g1Swaps: [...options.g1Swaps] } : {}),
-    ...(options.curveViolations ? { curveViolations: [...options.curveViolations] } : {}),
+    ...(options.curveViolations ? { curveViolations } : {}),
     ...(options.g1AdditionCount !== undefined ? { g1AdditionCount: options.g1AdditionCount } : {}),
     ...(options.g1SwapCount !== undefined ? { g1SwapCount: options.g1SwapCount } : {}),
   };
@@ -712,6 +851,7 @@ function curveSnapshot(
   targetSize: number,
   preset: PoolBalancePresetKey = 'balanced',
   tuning: NumericPoolShapeTuning = poolBalancePresetTuning(preset),
+  poolQualityCenter: number = DEFAULT_POOL_QUALITY_CENTER,
 ): NumericPoolCurveSnapshot {
   const diagnostics = buildNumericPoolShapeDiagnostics({
     players,
@@ -719,6 +859,7 @@ function curveSnapshot(
     targetSize,
     preset,
     tuning,
+    poolQualityCenter,
   });
   return {
     poolSize: diagnostics.poolSize,
@@ -746,13 +887,15 @@ export function shapePoolByNumericGrade(options: {
   requiredRosterDemand: number;
   fitOf: (player: DemandUniversePlayer) => number;
   preset?: PoolBalancePresetKey;
+  poolQualityCenter?: number;
   tuning?: NumericPoolShapeTuning;
   generationNonce?: number;
   poolSourceMode?: PoolSourceMode;
   priorityIds?: ReadonlySet<string>;
 }): { players: DemandUniversePlayer[]; diagnostics: NumericPoolShapeDiagnostics } {
   const preset = options.preset ?? 'balanced';
-  const tuning = options.tuning ?? poolBalancePresetTuning(preset);
+  const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
+  const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
   const excludedIds = options.excludedIds ?? new Set<string>();
   const poolSourceMode = options.poolSourceMode ?? 'full-pool';
   const selectedTeamRosterIds = options.priorityIds ?? new Set<string>();
@@ -932,6 +1075,7 @@ export function shapePoolByNumericGrade(options: {
       targetSize: effectiveTarget,
       preset,
       tuning,
+      poolQualityCenter,
       quotaShortfalls,
       messages,
       hardKeepPlayers: protectedPlayers,
@@ -1076,8 +1220,12 @@ function isHighTailWindow(windowId: string): boolean {
   return windowId === 'high-tail' || windowId === 'ultra-high-tail';
 }
 
-function countWindow(players: readonly DemandUniversePlayer[], windowId: string): number {
-  return players.filter((player) => numericWindowIdOf(player) === windowId).length;
+function countWindow(
+  players: readonly DemandUniversePlayer[],
+  windowId: string,
+  windows: readonly NumericPoolShapeWindow[] = poolBalancePresetTuning().windows,
+): number {
+  return players.filter((player) => numericWindowIdOf(player, windows) === windowId).length;
 }
 
 function maxLowTailCount(size: number, tuning: NumericPoolShapeTuning = poolBalancePresetTuning()): number {
@@ -1100,11 +1248,12 @@ function repairCandidatePriority(options: {
   tuning?: NumericPoolShapeTuning;
 }): number {
   const tuning = options.tuning ?? poolBalancePresetTuning();
-  const windowId = numericWindowIdOf(options.player);
+  const windows = tuning.windows;
+  const windowId = numericWindowIdOf(options.player, windows);
   const expectedBuckets = expectedRoleBucketsForSlot(options.slot);
   const sameRole = expectedBuckets.length === 0 || expectedBuckets.includes(roleBucketOf(options.player));
   const highTailSafe = !isHighTailWindow(windowId)
-    || countWindow(options.currentPlayers, 'high-tail') + 1 <= maxHighTailCount(options.currentPlayers.length + 1, tuning);
+    || countWindow(options.currentPlayers, 'high-tail', windows) + 1 <= maxHighTailCount(options.currentPlayers.length + 1, tuning);
   if (sameRole && isMiddleCoreWindow(windowId)) return 0;
   if (sameRole && isAdjacentMiddleWindow(windowId)) return 1;
   if (sameRole && isHighTailWindow(windowId) && highTailSafe) return 2;
@@ -1141,15 +1290,17 @@ function selectCurveSwapEvictionCandidate(options: {
   incoming: DemandUniversePlayer;
   slot: DesignSlot | null;
   fitOf: (player: DemandUniversePlayer) => number;
+  tuning?: NumericPoolShapeTuning;
 }): DemandUniversePlayer | null {
   const incomingBucket = roleBucketOf(options.incoming);
-  const incomingWindow = numericWindowIdOf(options.incoming);
+  const windows = (options.tuning ?? poolBalancePresetTuning()).windows;
+  const incomingWindow = numericWindowIdOf(options.incoming, windows);
   return options.currentPlayers
     .filter((player) => !options.protectedIds.has(player.id))
-    .filter((player) => isLowTailWindow(numericWindowIdOf(player)))
+    .filter((player) => isLowTailWindow(numericWindowIdOf(player, windows)))
     .sort((a, b) => {
-      const aWindow = numericWindowIdOf(a);
-      const bWindow = numericWindowIdOf(b);
+      const aWindow = numericWindowIdOf(a, windows);
+      const bWindow = numericWindowIdOf(b, windows);
       const aSameBucket = roleBucketOf(a) === incomingBucket;
       const bSameBucket = roleBucketOf(b) === incomingBucket;
       const aLow = isLowTailWindow(aWindow);
@@ -1243,10 +1394,12 @@ export function repairG1PoolForSizing(options: {
   repairGrowthAllowed?: boolean;
   failOnCurveViolation?: boolean;
   preset?: PoolBalancePresetKey;
+  poolQualityCenter?: number;
   tuning?: NumericPoolShapeTuning;
 }): PoolG1RepairResult {
   const preset = options.preset ?? 'balanced';
-  const tuning = options.tuning ?? poolBalancePresetTuning(preset);
+  const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
+  const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
   const requestedExcludedIds = options.requestedExcludedIds ?? new Set<string>();
   const requiredRosterDemand = Math.max(0, options.requiredRosterDemand ?? options.teams * 22);
   const targetSize = Math.max(0, Math.floor(options.targetSize ?? options.players.length));
@@ -1297,7 +1450,7 @@ export function repairG1PoolForSizing(options: {
       const chosen = repairCandidates[0] ?? null;
       if (!chosen) continue;
       const lastResort = fitQualified.length === 0;
-      const chosenWindow = numericWindowIdOf(chosen);
+      const chosenWindow = numericWindowIdOf(chosen, tuning.windows);
       const chosenRole = roleBucketOf(chosen);
       if (isOverrunRepair) {
         const evicted = selectSwapDownEvictionCandidate([...current.values()], options.protectedIds, slot, chosen);
@@ -1306,8 +1459,8 @@ export function repairG1PoolForSizing(options: {
         current.delete(evicted.id);
         injectedIds.push(chosen.id);
         evictedIds.push(evicted.id);
-        incrementCount(additionsByRoleWindow, roleWindowKey(chosen));
-        incrementCount(removalsByRoleWindow, roleWindowKey(evicted));
+        incrementCount(additionsByRoleWindow, roleWindowKey(chosen, tuning.windows));
+        incrementCount(removalsByRoleWindow, roleWindowKey(evicted, tuning.windows));
         if (isLowTailWindow(chosenWindow)) incrementCount(lowTailAdditionsByRole, chosenRole);
         swaps.push({
           addedId: chosen.id,
@@ -1315,7 +1468,7 @@ export function repairG1PoolForSizing(options: {
           roleBucket: chosenRole,
           windowId: chosenWindow,
           removedRoleBucket: roleBucketOf(evicted),
-          removedWindowId: numericWindowIdOf(evicted),
+          removedWindowId: numericWindowIdOf(evicted, tuning.windows),
         });
         if (lastResort) {
           messages.push(
@@ -1332,7 +1485,7 @@ export function repairG1PoolForSizing(options: {
         const sizeWouldExceedTarget = current.size + 1 > targetSize;
         const sizeWouldExceedMaxRepair = current.size + 1 > maxRepairSize;
         const lowTailWouldExceedCap = isLowTailWindow(chosenWindow)
-          && countWindow([...current.values()], 'low-tail') + 1 > maxLowTailCount(current.size + 1, tuning);
+          && countWindow([...current.values()], 'low-tail', tuning.windows) + 1 > maxLowTailCount(current.size + 1, tuning);
         const shouldTrySwap = sizeWouldExceedTarget || lowTailWouldExceedCap || !repairGrowthAllowed;
         let evicted: DemandUniversePlayer | null = null;
         if (shouldTrySwap) {
@@ -1342,6 +1495,7 @@ export function repairG1PoolForSizing(options: {
             incoming: chosen,
             slot,
             fitOf: options.fitOf,
+            tuning,
           });
         }
         if (!evicted && (sizeWouldExceedMaxRepair || !repairGrowthAllowed)) {
@@ -1364,19 +1518,19 @@ export function repairG1PoolForSizing(options: {
         }
         current.set(chosen.id, chosen);
         injectedIds.push(chosen.id);
-        incrementCount(additionsByRoleWindow, roleWindowKey(chosen));
+        incrementCount(additionsByRoleWindow, roleWindowKey(chosen, tuning.windows));
         if (isLowTailWindow(chosenWindow)) incrementCount(lowTailAdditionsByRole, chosenRole);
         if (evicted) {
           current.delete(evicted.id);
           evictedIds.push(evicted.id);
-          incrementCount(removalsByRoleWindow, roleWindowKey(evicted));
+          incrementCount(removalsByRoleWindow, roleWindowKey(evicted, tuning.windows));
           swaps.push({
             addedId: chosen.id,
             removedId: evicted.id,
             roleBucket: chosenRole,
             windowId: chosenWindow,
             removedRoleBucket: roleBucketOf(evicted),
-            removedWindowId: numericWindowIdOf(evicted),
+            removedWindowId: numericWindowIdOf(evicted, tuning.windows),
           });
           messages.push(
             `curve-preserving G1 repair for ${label}: swapped in ${playerName(chosen)} (id ${chosen.id}) `
@@ -1406,7 +1560,7 @@ export function repairG1PoolForSizing(options: {
     );
   }
   const finalPlayers = [...current.values()].sort((a, b) => a.id.localeCompare(b.id));
-  const finalSnapshot = curveSnapshot(finalPlayers, requiredRosterDemand, targetSize, preset, tuning);
+  const finalSnapshot = curveSnapshot(finalPlayers, requiredRosterDemand, targetSize, preset, tuning, poolQualityCenter);
   if (!g1.holds && curveViolations.length > 0) {
     curveViolations.push({
       code: 'LEGALITY_REQUIRES_CURVE_VIOLATION',
@@ -1496,6 +1650,7 @@ export function extractPoolFromDemand(
     budgetPerTeam?: number;
     contestMultiplier?: number;
     poolBalancePreset?: PoolBalancePresetKey;
+    poolQualityCenter?: number;
     poolSizeMultiplier?: number;
     sizeTarget?: number;
     maxRepairRounds?: number;
@@ -1513,12 +1668,16 @@ export function extractPoolFromDemand(
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
   const posture = options.posture ?? 'optimal';
   const poolBalancePreset = options.poolBalancePreset ?? 'balanced';
-  const poolShapeTuning = poolBalancePresetTuning(poolBalancePreset);
+  const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
+  const poolShapeTuning = poolBalancePresetTuning(poolBalancePreset, options.poolQualityCenter);
   if (options.teams === undefined) {
     throw new PoolTeamsForSizingMissingError();
   }
   const teamsForSizing = Math.max(0, Math.floor(options.teams));
-  const sizingEnabled = options.sizeTarget !== undefined || options.poolSizeMultiplier !== undefined || options.poolBalancePreset !== undefined;
+  const sizingEnabled = options.sizeTarget !== undefined
+    || options.poolSizeMultiplier !== undefined
+    || options.poolBalancePreset !== undefined
+    || options.poolQualityCenter !== undefined;
   const handReconcileEnabled = Boolean(options.pinnedIds?.length || options.excludedIds?.length);
   const requestedPinnedIds = new Set(options.pinnedIds ?? []);
   const requestedExcludedIds = new Set(options.excludedIds ?? []);
@@ -1640,13 +1799,14 @@ export function extractPoolFromDemand(
       fitOf,
       preset: poolBalancePreset,
       tuning: poolShapeTuning,
+      poolQualityCenter,
       generationNonce: options.generationNonce,
       poolSourceMode: options.poolSourceMode ?? 'full-pool',
       priorityIds: requestedPriorityIds,
     });
     players = shaped.players;
     numericShape = shaped.diagnostics;
-    const preRepairShape = curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning);
+    const preRepairShape = curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning, poolQualityCenter);
     const keptAfterShape = new Set(players.map((player) => player.id));
     const shapeEvictedIds = beforeShape
       .filter((player) => !protectedIds.has(player.id) && !keptAfterShape.has(player.id))
@@ -1689,6 +1849,7 @@ export function extractPoolFromDemand(
         repairGrowthAllowed: options.repairGrowthAllowed,
         failOnCurveViolation: options.failOnCurveViolation,
         preset: poolBalancePreset,
+        poolQualityCenter,
         tuning: poolShapeTuning,
       });
       players = repair.players;
@@ -1707,6 +1868,7 @@ export function extractPoolFromDemand(
         targetSize: target.effectiveTarget,
         preset: poolBalancePreset,
         tuning: poolShapeTuning,
+        poolQualityCenter,
         legalCompletionFeasible: g1?.holds ?? null,
         quotaShortfalls: numericShape.quotaShortfalls,
         messages: numericShape.messages,
@@ -1716,7 +1878,7 @@ export function extractPoolFromDemand(
         poolSourceMode: options.poolSourceMode ?? 'full-pool',
         fullPoolEligibleCandidateCount: universe.filter((player) => !requestedExcludedIds.has(player.id)).length,
         preRepair: preRepairShape,
-        postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning),
+        postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning, poolQualityCenter),
         g1AdditionsByRoleWindow: repair.additionsByRoleWindow,
         g1RemovalsByRoleWindow: repair.removalsByRoleWindow,
         g1LowTailAdditionsByRole: repair.lowTailAdditionsByRole,
@@ -1732,6 +1894,7 @@ export function extractPoolFromDemand(
         targetSize: target.effectiveTarget,
         preset: poolBalancePreset,
         tuning: poolShapeTuning,
+        poolQualityCenter,
         legalCompletionFeasible: g1?.holds ?? null,
         quotaShortfalls: numericShape.quotaShortfalls,
         messages: numericShape.messages,

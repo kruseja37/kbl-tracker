@@ -3,13 +3,17 @@ import {
   buildNumericPoolShapeDiagnostics,
   countCellMatches,
   DEFAULT_POOL_SIZE_MULTIPLIER,
+  DEFAULT_POOL_QUALITY_CENTER,
+  derivePoolQualityTuning,
   extractPoolFromDemand,
   numericGradeForPoolShape,
   poolBalancePresetTuning,
   PoolTeamsForSizingMissingError,
   POOL_BALANCE_PRESETS,
+  POOL_QUALITY_CENTER_STOPS,
   POOL_SIZE_MULTIPLIER_STOPS,
   repairG1PoolForSizing,
+  resolvePoolQualityCenter,
   resolvePoolSizingTarget,
   selectFitAwareRepairCandidate,
   shapePoolByNumericGrade,
@@ -187,6 +191,19 @@ function exactCurveSource(): DemandUniversePlayer[] {
     ...shapedHitters('middle-high', 25, MIDDLE_HIGH),
     ...shapedHitters('high', 15, HIGH_TAIL),
   ];
+}
+
+function qualitySpectrumSource(): DemandUniversePlayer[] {
+  n = 0;
+  const levels = [35, 45, 55, 60, 65, 70, 75, 80, 85, 90];
+  return levels.flatMap((level) =>
+    shapedHitters(
+      `quality-${level}`,
+      30,
+      { power: level, contact: level, speed: level, fielding: level, arm: level },
+      10_000 + level,
+    ),
+  );
 }
 
 function legalOneTeamPool(): DemandUniversePlayer[] {
@@ -396,6 +413,117 @@ describe('extractPoolFromDemand', () => {
     });
     expect(diagnostics.lowTailShare).toBe(1);
     expect(diagnostics.highTailShare).toBe(0);
+  });
+
+  it('derives shifted quality-center windows from the existing preset bands', () => {
+    const highCenter = derivePoolQualityTuning(POOL_BALANCE_PRESETS.balanced, 72);
+    expect(highCenter.lowTailMax).toBe(62);
+    expect(highCenter.middleMin).toBe(62);
+    expect(highCenter.middleMax).toBe(80);
+    expect(highCenter.highTailMin).toBe(80);
+    expect(highCenter.superstarTailMin).toBe(88);
+    expect(highCenter.windows.map((window) => [window.id, window.minInclusive, window.maxExclusive])).toEqual([
+      ['low-tail', 0, 62],
+      ['middle-low', 62, 68],
+      ['middle-core', 68, 74],
+      ['middle-high', 74, 80],
+      ['high-tail', 80, 88],
+      ['ultra-high-tail', 88, 101],
+    ]);
+
+    const lowCenter = derivePoolQualityTuning(POOL_BALANCE_PRESETS.balanced, 64);
+    expect(lowCenter.windows.map((window) => [window.id, window.minInclusive, window.maxExclusive])).toEqual([
+      ['low-tail', 0, 54],
+      ['middle-low', 54, 60],
+      ['middle-core', 60, 66],
+      ['middle-high', 66, 72],
+      ['high-tail', 72, 80],
+      ['ultra-high-tail', 80, 101],
+    ]);
+    expect(resolvePoolQualityCenter(69)).toBe(68);
+    expect(resolvePoolQualityCenter(99)).toBe(76);
+    expect(POOL_QUALITY_CENTER_STOPS).toEqual([64, 66, 68, 70, 72, 74, 76]);
+  });
+
+  it('omitted quality center and explicit 68 preserve the default numeric-grade output', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('extra-middle', 40, MIDDLE_CORE),
+      ...shapedHitters('extra-high', 20, HIGH_TAIL),
+      ...shapedHitters('extra-ultra', 10, HIGH_BAT),
+    ];
+    const omitted = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+    });
+    const explicitDefault = shapePoolByNumericGrade({
+      universe: [...source].reverse(),
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      poolQualityCenter: DEFAULT_POOL_QUALITY_CENTER,
+    });
+
+    expect(explicitDefault.players.map((player) => player.id)).toEqual(omitted.players.map((player) => player.id));
+    expect(explicitDefault.diagnostics.poolQualityCenter).toBe(68);
+    expect(explicitDefault.diagnostics.qualityShift).toBe(0);
+    expect(explicitDefault.diagnostics.shiftedBandWindows).toEqual(POOL_BALANCE_PRESETS.balanced.windows);
+    expect(explicitDefault.diagnostics.achievedMedianQuality).toBe(omitted.diagnostics.medianNumericGrade);
+  });
+
+  it('moves the achieved quality distribution when candidate depth exists', () => {
+    const source = qualitySpectrumSource();
+    const lowCenter = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      poolQualityCenter: 64,
+    });
+    const highCenter = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      poolQualityCenter: 76,
+    });
+
+    expect(highCenter.diagnostics.achievedMedianQuality ?? 0).toBeGreaterThan(lowCenter.diagnostics.achievedMedianQuality ?? 0);
+    expect(highCenter.diagnostics.targetMedianQuality).toBe(76);
+    expect(lowCenter.diagnostics.targetMedianQuality).toBe(64);
+    expect(highCenter.diagnostics.qualityShift).toBe(8);
+    expect(lowCenter.diagnostics.qualityShift).toBe(-4);
+  });
+
+  it('preserves preset shares and caps under a shifted quality center', () => {
+    const source = qualitySpectrumSource();
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'grounded',
+      poolQualityCenter: 72,
+    });
+
+    expect(shaped.diagnostics.highTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.grounded.highTailCap);
+    expect(shaped.diagnostics.superstarTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.grounded.superstarTailCap);
+    expect(shaped.diagnostics.middleMassShare).toBeGreaterThanOrEqual(POOL_BALANCE_PRESETS.grounded.targetMiddleMass);
+    expect(shaped.diagnostics.lowTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.grounded.lowTailRepairCap);
+    expect(shaped.diagnostics.qualityBandTargetCounts['middle-core']).toBeGreaterThan(0);
+    expect(shaped.diagnostics.qualityBandFinalCounts['middle-core']).toBeGreaterThan(0);
   });
 
   it('selects a deterministic numeric-grade supply curve with capped high tail and middle mass', () => {
@@ -612,6 +740,30 @@ describe('extractPoolFromDemand', () => {
     expect(fullPool.diagnostics.engineGeneratedFromSelectedTeamRosterCount).toBe(0);
   });
 
+  it('keeps selected-team priority as priority, not a hard keep, under shifted quality centers', () => {
+    const fullPoolFirst = hitter('SS', HIGH_TAIL, 10_000);
+    fullPoolFirst.id = 'a-full-pool-first-shifted';
+    const rosterPriority = hitter('SS', HIGH_TAIL, 10_000);
+    rosterPriority.id = 'z-roster-priority-shifted';
+
+    const rosterPrioritized = shapePoolByNumericGrade({
+      universe: [fullPoolFirst, rosterPriority],
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 1,
+      requiredRosterDemand: 1,
+      fitOf: () => 0,
+      poolSourceMode: 'team-roster-priority',
+      priorityIds: new Set([rosterPriority.id]),
+      poolQualityCenter: 72,
+    });
+
+    expect(rosterPrioritized.players.map((player) => player.id)).toEqual([rosterPriority.id]);
+    expect(rosterPrioritized.diagnostics.poolQualityCenter).toBe(72);
+    expect(rosterPrioritized.diagnostics.hardKeepCount).toBe(0);
+    expect(rosterPrioritized.diagnostics.engineGeneratedFromSelectedTeamRosterCount).toBe(1);
+  });
+
   it('preserves protected/reserved source players even when they exceed the numeric target', () => {
     const first = hitter('SS', HIGH_TAIL, 10_000);
     first.id = 'protected-a';
@@ -716,6 +868,28 @@ describe('extractPoolFromDemand', () => {
     expect(shaped.diagnostics.messages.join(' ')).toContain('high-tail cap still exceeds');
   });
 
+  it('preserves hard keeps that conflict with a shifted quality center and diagnoses the conflict', () => {
+    const protectedLow = shapedHitters('protected-low-shifted', 4, LOW_TAIL);
+    const source = [
+      ...protectedLow,
+      ...qualitySpectrumSource(),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: protectedLow,
+      protectedIds: new Set(protectedLow.map((player) => player.id)),
+      targetSize: 10,
+      requiredRosterDemand: 8,
+      fitOf: () => 0,
+      poolQualityCenter: 72,
+    });
+
+    expect(protectedLow.every((player) => shaped.players.some((kept) => kept.id === player.id))).toBe(true);
+    expect(shaped.diagnostics.hardKeepByBand.low).toBeGreaterThan(0);
+    expect(shaped.diagnostics.hardKeepShapeOverflowByBand.low).toBeGreaterThan(0);
+    expect(shaped.diagnostics.qualityCenterShortfallReason).toContain('hard keeps');
+  });
+
   it('uses generationNonce for deterministic reroll inside numeric windows', () => {
     const source = [
       ...shapedHitters('reroll-middle-a', 60, MIDDLE_CORE),
@@ -772,6 +946,55 @@ describe('extractPoolFromDemand', () => {
     });
 
     expect(rerolled.players.map((player) => player.id)).not.toContain(removed.id);
+  });
+
+  it('keeps manual exclusions out across quality-center shifts when alternatives exist', () => {
+    const source = qualitySpectrumSource();
+    const baseline = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 60,
+      requiredRosterDemand: 48,
+      fitOf: () => 0,
+      poolQualityCenter: 72,
+    });
+    const removed = baseline.players.find((player) => player.id.startsWith('quality-70')) ?? baseline.players[0];
+    const shifted = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      excludedIds: new Set([removed.id]),
+      targetSize: 60,
+      requiredRosterDemand: 48,
+      fitOf: () => 0,
+      poolQualityCenter: 72,
+      generationNonce: 2,
+    });
+
+    expect(shifted.players.map((player) => player.id)).not.toContain(removed.id);
+    expect(shifted.diagnostics.poolQualityCenter).toBe(72);
+  });
+
+  it('reports quality-center shortfalls when source supply cannot satisfy shifted high quality', () => {
+    const source = [
+      ...shapedHitters('short-low', 20, LOW_TAIL),
+      ...shapedHitters('short-middle', 20, MIDDLE_LOW),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 30,
+      requiredRosterDemand: 24,
+      fitOf: () => 0,
+      poolQualityCenter: 76,
+    });
+
+    expect(shaped.players.length).toBeGreaterThan(0);
+    expect(shaped.diagnostics.quotaShortfalls.length).toBeGreaterThan(0);
+    expect(Object.keys(shaped.diagnostics.qualityBandShortfalls).length).toBeGreaterThan(0);
+    expect(shaped.diagnostics.qualityCenterShortfallReason).toContain('source pool constraints');
   });
 
   it('caps requested targets at the hard ceiling and rejects off-stop multipliers', () => {
@@ -840,6 +1063,23 @@ describe('extractPoolFromDemand', () => {
       expect(players.reduce((sum, player) => sum + player.salary, 0)).toBeLessThanOrEqual(5_000_000);
     }
     expect(result.numericShape?.legalCompletionFeasible).toBe(true);
+  });
+
+  it('threads poolQualityCenter through extraction without changing cap or source-mode semantics', () => {
+    const result = extractPoolFromDemand(universe(), [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolQualityCenter: 72,
+      poolSourceMode: 'full-pool',
+    });
+
+    expect(result.sizing).toBeDefined();
+    expect(result.numericShape?.poolQualityCenter).toBe(72);
+    expect(result.numericShape?.qualityShift).toBe(4);
+    expect(result.numericShape?.shiftedBandWindows.find((window) => window.id === 'high-tail')).toEqual(
+      expect.objectContaining({ minInclusive: 80, maxExclusive: 88 }),
+    );
+    expect(result.numericShape?.poolSourceMode).toBe('full-pool');
   });
 
   it('selects a pricier fitting repair body before a cheaper zero-fit fallback', () => {
