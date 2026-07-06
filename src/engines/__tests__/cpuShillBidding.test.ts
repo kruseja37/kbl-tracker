@@ -327,7 +327,8 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       expect(decision.reason).toBe('over-valuation');
       expect(decision.valuation).not.toBeNull();
       expect(decision.valuation!).toBeLessThanOrEqual(700);
-      expect(decision.maxBid).toBe(20_000);
+      expect(decision.maxBid).toBeLessThan(decision.valuation! + 1);
+      expect(decision.liquidity?.priceRead).toBe('pass');
     }
   });
 

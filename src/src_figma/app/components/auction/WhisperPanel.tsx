@@ -357,6 +357,29 @@ function WhisperHeadline({
           </div>
         </div>
       </div>
+      <div className="whisper-liquidity" data-testid="whisper-liquidity">
+        <div className="whisper-liquidity-metric">
+          <span className="eyebrow">MAX BID</span>
+          <span className="num whisper-liquidity-number">{worth.suggestedMaxBid === 0 ? "PASS" : money(worth.suggestedMaxBid)}</span>
+        </div>
+        <span className={`chip whisper-price-read ${worth.priceRead}`}>
+          {worth.priceRead.toUpperCase()}
+        </span>
+        <span className={`chip whisper-liquidity-state ${worth.liquidityState}`}>
+          {liquidityStateLabel(worth.liquidityState)}
+        </span>
+        <span className="spacer" />
+        <span className="whisper-liquidity-small">Reserve {money(worth.minimumFutureFillReserve)}</span>
+        <span className="whisper-liquidity-small">Room {money(worth.discretionaryBudget)}</span>
+      </div>
+      <div className="whisper-reason-row">
+        {liquidityReasonLabels(worth).map((label) => (
+          <span key={label} className="chip whisper-reason-chip">{label}</span>
+        ))}
+        {prioritySignalLabels(worth).map((label) => (
+          <span key={label} className="chip whisper-priority-chip">{label}</span>
+        ))}
+      </div>
       {liveBidText && <p className="whisper-live-bid">{liveBidText}</p>}
       <p className="whisper-why">{whyLine(worth)}</p>
       {relation && <p className="whisper-room-line">{relation}</p>}
@@ -419,6 +442,59 @@ function whyLine(worth: WorthToYou): string {
     return `Fit and need move the raw IV to ${money(worth.ownValue)} before chemistry.`;
   }
   return "Your fit and need sit right on the raw IV.";
+}
+
+function liquidityStateLabel(state: WorthToYou["liquidityState"]): string {
+  if (state === "emergency-fill") return "EMERGENCY FILL";
+  return state.toUpperCase();
+}
+
+function liquidityReasonLabels(worth: WorthToYou): string[] {
+  const labels = worth.reasonCodes.map((code) => {
+    switch (code) {
+      case "above-remaining-budget":
+        return "over budget";
+      case "above-legal-ceiling":
+        return "legal cap";
+      case "below-minimum-bid":
+        return "bid floor";
+      case "emergency-fill":
+        return "must fill";
+      case "future-fill-protected":
+        return "protect fill";
+      case "late-budget-surplus":
+        return "late cash";
+      case "liquidity-constrained":
+        return "cash tight";
+      case "near-complete":
+        return "near done";
+      case "priority-fit":
+        return "priority need";
+      case "scarce-replacement":
+        return "scarce repl.";
+      case "similar-replacements":
+        return "similar repl.";
+      case "within-liquidity-ceiling":
+        return "under ceiling";
+    }
+  });
+  return labels.slice(0, 4);
+}
+
+function prioritySignalLabels(worth: WorthToYou): string[] {
+  const labels: string[] = [];
+  if (Math.abs(worth.needMultiplier - 1) >= 0.02) {
+    labels.push(`NEED ${signedPercent(worth.needMultiplier - 1)}`);
+  }
+  if (Math.abs(worth.archetypeFitMultiplier - 1) >= 0.02) {
+    labels.push(`FIT ${signedPercent(worth.archetypeFitMultiplier - 1)}`);
+  }
+  return labels;
+}
+
+function signedPercent(value: number): string {
+  const rounded = Math.round(value * 100);
+  return `${rounded >= 0 ? "+" : ""}${rounded}%`;
 }
 
 function candidateDeltaLabel(candidate: ChemistryReadout["candidate"]): string {
@@ -549,6 +625,79 @@ function WhisperStyles() {
         font-weight: 800;
       }
       .auc-root .whisper-number.gold { color: var(--ballpark-scoreboard-yellow); }
+      .auc-root .whisper-liquidity {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        padding: 8px 0;
+        border-top: 1px solid rgba(232, 232, 216, 0.1);
+        border-bottom: 1px solid rgba(232, 232, 216, 0.1);
+      }
+      .auc-root .whisper-liquidity-metric {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+      }
+      .auc-root .whisper-liquidity-number {
+        color: var(--auc-text);
+        font-size: 14px;
+        font-weight: 900;
+      }
+      .auc-root .whisper-price-read,
+      .auc-root .whisper-liquidity-state {
+        font-size: 10px;
+        line-height: 1;
+        padding: 4px 7px;
+      }
+      .auc-root .whisper-price-read.value { color: #34d399; border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.08); }
+      .auc-root .whisper-price-read.fair { color: #bfdbfe; border-color: rgba(147, 197, 253, 0.45); background: rgba(147, 197, 253, 0.08); }
+      .auc-root .whisper-price-read.stretch { color: #fbbf24; border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.08); }
+      .auc-root .whisper-price-read.pass { color: #fca5a5; border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.09); }
+      .auc-root .whisper-liquidity-state {
+        color: var(--auc-muted);
+        border-color: rgba(232, 232, 216, 0.18);
+        background: rgba(232, 232, 216, 0.04);
+      }
+      .auc-root .whisper-liquidity-state.constrained,
+      .auc-root .whisper-liquidity-state.emergency-fill {
+        color: #fca5a5;
+        border-color: rgba(248, 113, 113, 0.42);
+        background: rgba(248, 113, 113, 0.08);
+      }
+      .auc-root .whisper-liquidity-state.aggressive {
+        color: #34d399;
+        border-color: rgba(52, 211, 153, 0.42);
+        background: rgba(52, 211, 153, 0.07);
+      }
+      .auc-root .whisper-liquidity-small {
+        color: var(--auc-muted);
+        font-size: 11.5px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+      .auc-root .whisper-reason-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .auc-root .whisper-reason-chip,
+      .auc-root .whisper-priority-chip {
+        font-size: 9.5px;
+        line-height: 1;
+        padding: 3px 6px;
+      }
+      .auc-root .whisper-reason-chip {
+        color: var(--auc-muted);
+        border-color: rgba(232, 232, 216, 0.18);
+        background: rgba(232, 232, 216, 0.04);
+      }
+      .auc-root .whisper-priority-chip {
+        color: var(--ballpark-brass);
+        border-color: rgba(202, 164, 94, 0.58);
+        background: rgba(202, 164, 94, 0.1);
+      }
       .auc-root .whisper-why {
         margin: 0;
         color: var(--auc-text);
