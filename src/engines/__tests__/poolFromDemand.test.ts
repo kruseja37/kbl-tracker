@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildNumericPoolShapeDiagnostics,
   countCellMatches,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
+  numericGradeForPoolShape,
   PoolTeamsForSizingMissingError,
   POOL_SIZE_MULTIPLIER_STOPS,
   repairG1PoolForSizing,
   resolvePoolSizingTarget,
   selectFitAwareRepairCandidate,
+  shapePoolByNumericGrade,
   trimPoolToTarget,
   type ClassifiedDemandPlayer,
   type DemandUniversePlayer,
@@ -81,6 +84,11 @@ const BAT = { power: 82, contact: 55, speed: 47, fielding: 51, arm: 60 }; // Slu
 const EVEN = { power: 60, contact: 60, speed: 60, fielding: 60, arm: 60 };
 const LOW = { power: 5, contact: 5, speed: 5, fielding: 5, arm: 5 };
 const HIGH_BAT = { power: 95, contact: 95, speed: 70, fielding: 50, arm: 50 };
+const LOW_TAIL = { power: 35, contact: 35, speed: 35, fielding: 35, arm: 35 };
+const MIDDLE_LOW = { power: 55, contact: 55, speed: 55, fielding: 55, arm: 55 };
+const MIDDLE_CORE = { power: 60, contact: 60, speed: 60, fielding: 60, arm: 60 };
+const MIDDLE_HIGH = { power: 65, contact: 65, speed: 65, fielding: 65, arm: 65 };
+const HIGH_TAIL = { power: 70, contact: 70, speed: 70, fielding: 70, arm: 70 };
 
 function universe(): DemandUniversePlayer[] {
   n = 0;
@@ -156,6 +164,59 @@ function leaguePlayer(primaryPosition: Player['primaryPosition']): Player {
     lastModified: '2026-07-02T00:00:00.000Z',
     isCustom: true,
   };
+}
+
+function shapedHitters(prefix: string, count: number, tools: typeof EVEN, salaryBase = 10_000): DemandUniversePlayer[] {
+  const players: DemandUniversePlayer[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const player = hitter('SS', tools, salaryBase + index);
+    player.id = `${prefix}-${index.toString().padStart(2, '0')}`;
+    players.push(player);
+  }
+  return players;
+}
+
+function exactCurveSource(): DemandUniversePlayer[] {
+  n = 0;
+  return [
+    ...shapedHitters('low', 10, LOW_TAIL),
+    ...shapedHitters('middle-low', 22, MIDDLE_LOW),
+    ...shapedHitters('middle-core', 28, MIDDLE_CORE),
+    ...shapedHitters('middle-high', 25, MIDDLE_HIGH),
+    ...shapedHitters('high', 15, HIGH_TAIL),
+  ];
+}
+
+function legalOneTeamPool(): DemandUniversePlayer[] {
+  n = 0;
+  return [
+    hitter('C', MIDDLE_CORE, 1_000, { id: 'legal-c' } as Partial<DemandUniversePlayer>),
+    hitter('1B', MIDDLE_CORE, 1_000, { id: 'legal-1b' } as Partial<DemandUniversePlayer>),
+    hitter('2B', MIDDLE_CORE, 1_000, { id: 'legal-2b' } as Partial<DemandUniversePlayer>),
+    hitter('3B', MIDDLE_CORE, 1_000, { id: 'legal-3b' } as Partial<DemandUniversePlayer>),
+    hitter('SS', MIDDLE_CORE, 1_000, { id: 'legal-ss' } as Partial<DemandUniversePlayer>),
+    hitter('LF', MIDDLE_CORE, 1_000, { id: 'legal-lf' } as Partial<DemandUniversePlayer>),
+    hitter('CF', MIDDLE_CORE, 1_000, { id: 'legal-cf' } as Partial<DemandUniversePlayer>),
+    hitter('RF', MIDDLE_CORE, 1_000, { id: 'legal-rf' } as Partial<DemandUniversePlayer>),
+    hitter('1B', MIDDLE_CORE, 1_000, {
+      id: 'legal-backup-c',
+      secondaryPosition: 'C',
+      profile: { isPitcher: false, primaryPosition: '1B', secondaryPosition: 'C', bats: 'R', throws: 'R', age: 27, ...MIDDLE_CORE },
+    } as Partial<DemandUniversePlayer>),
+    hitter('1B', MIDDLE_CORE, 1_000, { id: 'legal-bench-1b' } as Partial<DemandUniversePlayer>),
+    hitter('2B', MIDDLE_CORE, 1_000, { id: 'legal-bench-2b' } as Partial<DemandUniversePlayer>),
+    hitter('3B', MIDDLE_CORE, 1_000, { id: 'legal-bench-3b' } as Partial<DemandUniversePlayer>),
+    hitter('LF', MIDDLE_CORE, 1_000, { id: 'legal-bench-lf' } as Partial<DemandUniversePlayer>),
+    arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+    arm('CP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000),
+  ];
 }
 
 describe('extractPoolFromDemand', () => {
@@ -314,12 +375,126 @@ describe('extractPoolFromDemand', () => {
   it('maps dial targets from roster demand plus expected shill wins', () => {
     const eightTeams = resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
     expect(eightTeams.demandBase).toBe(176);
-    expect(eightTeams.requestedTarget).toBe(238);
+    expect(eightTeams.requestedTarget).toBe(220);
     expect(resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: 1.5 }).requestedTarget).toBe(264);
 
     const withShills = resolvePoolSizingTarget({ teams: 8, shills: 3, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
     expect(withShills.demandBase).toBe(206);
-    expect(withShills.requestedTarget).toBe(279);
+    expect(withShills.requestedTarget).toBe(258);
+  });
+
+  it('uses the canonical numeric analyzer grade instead of display letter labels', () => {
+    const lowWithFakeLetter = hitter('SS', LOW_TAIL, 10_000, { overallGrade: 'S+' } as Partial<DemandUniversePlayer>);
+    expect(numericGradeForPoolShape(lowWithFakeLetter)).toBeLessThan(58);
+
+    const diagnostics = buildNumericPoolShapeDiagnostics({
+      players: [lowWithFakeLetter],
+      requiredRosterDemand: 1,
+      targetSize: 1,
+    });
+    expect(diagnostics.lowTailShare).toBe(1);
+    expect(diagnostics.highTailShare).toBe(0);
+  });
+
+  it('selects a deterministic numeric-grade supply curve with capped high tail and middle mass', () => {
+    const source = exactCurveSource();
+    const first = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+    });
+    const second = shapePoolByNumericGrade({
+      universe: [...source].reverse(),
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+    });
+
+    expect(first.players.map((player) => player.id)).toEqual(second.players.map((player) => player.id));
+    expect(first.diagnostics.highTailShare).toBeLessThanOrEqual(0.15);
+    expect(first.diagnostics.middleMassShare).toBeGreaterThanOrEqual(0.70);
+    expect(first.diagnostics.lowTailShare).toBeLessThanOrEqual(0.10);
+    expect(first.diagnostics.poolSlackFactor).toBeCloseTo(1.25);
+  });
+
+  it('limits the ultra-high numeric tail as its own source-level curve window', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('ultra-high', 25, HIGH_BAT),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+    });
+
+    const ultraHighCount = shaped.players.filter((player) => numericGradeForPoolShape(player) >= 84).length;
+    expect(ultraHighCount).toBeLessThanOrEqual(2);
+    expect(shaped.diagnostics.highTailShare).toBeLessThanOrEqual(0.15);
+    expect(shaped.diagnostics.middleMassShare).toBeGreaterThanOrEqual(0.70);
+  });
+
+  it('reports numeric quota shortfalls instead of silently filling missing middle windows', () => {
+    const source = [
+      ...shapedHitters('too-low', 12, LOW_TAIL),
+      ...shapedHitters('too-high', 12, HIGH_TAIL),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 20,
+      requiredRosterDemand: 16,
+      fitOf: () => 0,
+    });
+
+    expect(shaped.diagnostics.quotaShortfalls.length).toBeGreaterThan(0);
+    expect(shaped.diagnostics.quotaShortfalls.some((shortfall) => shortfall.windowId.startsWith('middle'))).toBe(true);
+    expect(shaped.diagnostics.messages.join(' ')).toContain('quota fallback');
+  });
+
+  it('preserves fit-first ordering inside a numeric window with deterministic id ties', () => {
+    const lowFit = hitter('SS', MIDDLE_CORE, 10_000);
+    lowFit.id = 'a-low-fit';
+    const highFit = hitter('SS', MIDDLE_CORE, 10_000);
+    highFit.id = 'b-high-fit';
+
+    const shaped = shapePoolByNumericGrade({
+      universe: [lowFit, highFit],
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 1,
+      requiredRosterDemand: 1,
+      fitOf: (player) => (player.id === highFit.id ? 10 : 0),
+    });
+
+    expect(shaped.players.map((player) => player.id)).toEqual([highFit.id]);
+  });
+
+  it('preserves protected/reserved source players even when they exceed the numeric target', () => {
+    const first = hitter('SS', HIGH_TAIL, 10_000);
+    first.id = 'protected-a';
+    const second = hitter('SS', HIGH_TAIL, 11_000);
+    second.id = 'protected-b';
+    const shaped = shapePoolByNumericGrade({
+      universe: [first, second],
+      currentPlayers: [first, second],
+      protectedIds: new Set([first.id, second.id]),
+      targetSize: 1,
+      requiredRosterDemand: 1,
+      fitOf: () => 0,
+    });
+
+    expect(shaped.players.map((player) => player.id)).toEqual([first.id, second.id]);
+    expect(shaped.diagnostics.messages.join(' ')).toContain('protected classes already exceed');
   });
 
   it('caps requested targets at the hard ceiling and rejects off-stop multipliers', () => {
@@ -387,6 +562,7 @@ describe('extractPoolFromDemand', () => {
       expect(isLegalRoster(players)).toBe(true);
       expect(players.reduce((sum, player) => sum + player.salary, 0)).toBeLessThanOrEqual(5_000_000);
     }
+    expect(result.numericShape?.legalCompletionFeasible).toBe(true);
   });
 
   it('selects a pricier fitting repair body before a cheaper zero-fit fallback', () => {
@@ -428,6 +604,7 @@ describe('extractPoolFromDemand', () => {
     });
     expect(result.players.length).toBeGreaterThan(0);
     expect(result.g1?.holds).toBe(false);
+    expect(result.numericShape?.legalCompletionFeasible).toBe(false);
     expect(result.g1?.repairRounds).toBeGreaterThanOrEqual(1);
     expect(result.sizing?.messages.join(' ')).toMatch(/pool still cannot field every club|repair/);
   });
@@ -514,6 +691,137 @@ describe('extractPoolFromDemand', () => {
     expect(repaired.messages.join(' ')).toContain(`id ${cheapSwap.id}`);
     expect(repaired.messages.join(' ')).toContain(`id ${evictableExpensive.id}`);
     expect(repaired.evictedIds).not.toContain(protectedPremium.id);
+  });
+
+  it('G1 repair prefers a same-role middle/core candidate over cheap low-tail filler', () => {
+    const initialPool = legalOneTeamPool().filter((player) => player.id !== 'legal-rf');
+    const cheapLowRf = hitter('RF', LOW_TAIL, 1);
+    cheapLowRf.id = 'cheap-low-rf';
+    const middleRf = hitter('RF', MIDDLE_CORE, 2_000);
+    middleRf.id = 'middle-core-rf';
+
+    const repaired = repairG1PoolForSizing({
+      universe: [...initialPool, cheapLowRf, middleRf],
+      players: initialPool,
+      protectedIds: new Set<string>(),
+      teams: 1,
+      budget: 100_000,
+      maxRounds: 2,
+      poolMinSalary: 1,
+      fitOf: () => 0,
+      requiredRosterDemand: 22,
+      targetSize: 22,
+    });
+
+    expect(repaired.g1.holds).toBe(true);
+    expect(repaired.injectedIds).toContain(middleRf.id);
+    expect(repaired.injectedIds).not.toContain(cheapLowRf.id);
+    expect(repaired.lowTailAdditionsByRole).not.toHaveProperty('pos:RF');
+  });
+
+  it('swaps out low-tail overfill before appending beyond the target size', () => {
+    const lowExtra = hitter('1B', LOW_TAIL, 1_000);
+    lowExtra.id = 'low-extra-1b';
+    const initialPool = [
+      ...legalOneTeamPool().filter((player) => player.id !== 'legal-rf'),
+      lowExtra,
+    ];
+    const middleRf = hitter('RF', MIDDLE_CORE, 2_000);
+    middleRf.id = 'middle-swap-rf';
+
+    const repaired = repairG1PoolForSizing({
+      universe: [...initialPool, middleRf],
+      players: initialPool,
+      protectedIds: new Set<string>(),
+      teams: 1,
+      budget: 100_000,
+      maxRounds: 2,
+      poolMinSalary: 1_000,
+      fitOf: () => 0,
+      requiredRosterDemand: 22,
+      targetSize: 22,
+    });
+
+    expect(repaired.g1.holds).toBe(true);
+    expect(repaired.players).toHaveLength(22);
+    expect(repaired.injectedIds).toEqual([middleRf.id]);
+    expect(repaired.evictedIds).toEqual([lowExtra.id]);
+    expect(repaired.swaps).toEqual([
+      expect.objectContaining({
+        addedId: middleRf.id,
+        removedId: lowExtra.id,
+        removedWindowId: 'low-tail',
+      }),
+    ]);
+  });
+
+  it('never removes protected players during curve-preserving G1 swap repair', () => {
+    const protectedLowExtra = hitter('1B', LOW_TAIL, 1_000);
+    protectedLowExtra.id = 'protected-low-extra-1b';
+    const initialPool = [
+      ...legalOneTeamPool().filter((player) => player.id !== 'legal-rf'),
+      protectedLowExtra,
+    ];
+    const middleRf = hitter('RF', MIDDLE_CORE, 2_000);
+    middleRf.id = 'middle-protected-rf';
+
+    const repaired = repairG1PoolForSizing({
+      universe: [...initialPool, middleRf],
+      players: initialPool,
+      protectedIds: new Set([protectedLowExtra.id]),
+      teams: 1,
+      budget: 100_000,
+      maxRounds: 2,
+      poolMinSalary: 1_000,
+      fitOf: () => 0,
+      requiredRosterDemand: 22,
+      targetSize: 22,
+    });
+
+    expect(repaired.g1.holds).toBe(true);
+    expect(repaired.players.map((player) => player.id)).toContain(protectedLowExtra.id);
+    expect(repaired.evictedIds).not.toContain(protectedLowExtra.id);
+    expect(repaired.players).toHaveLength(23);
+  });
+
+  it('reports a curve violation instead of silently growing when repair growth is disabled', () => {
+    const initialPool = legalOneTeamPool().filter((player) => player.id !== 'legal-rf');
+    const middleRf = hitter('RF', MIDDLE_CORE, 2_000);
+    middleRf.id = 'middle-blocked-rf';
+
+    const repaired = repairG1PoolForSizing({
+      universe: [...initialPool, middleRf],
+      players: initialPool,
+      protectedIds: new Set<string>(),
+      teams: 1,
+      budget: 100_000,
+      maxRounds: 1,
+      poolMinSalary: 1_000,
+      fitOf: () => 0,
+      requiredRosterDemand: 22,
+      targetSize: 21,
+      repairGrowthAllowed: false,
+    });
+
+    expect(repaired.g1.holds).toBe(false);
+    expect(repaired.injectedIds).toEqual([]);
+    expect(repaired.curveViolations.some((violation) => violation.code === 'REPAIR_GROWTH_LIMIT')).toBe(true);
+    expect(repaired.curveViolations.some((violation) => violation.code === 'LEGALITY_REQUIRES_CURVE_VIOLATION')).toBe(true);
+  });
+
+  it('exposes pre-repair and post-repair production curve diagnostics', () => {
+    const result = extractPoolFromDemand(universe(), [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+
+    expect(result.numericShape?.preRepair).toBeDefined();
+    expect(result.numericShape?.postRepair).toBeDefined();
+    expect(result.numericShape?.g1AdditionCount).toBeGreaterThanOrEqual(0);
+    expect(result.numericShape?.g1SwapCount).toBeGreaterThanOrEqual(0);
+    expect(result.numericShape?.g1AdditionsByRoleWindow).toBeDefined();
+    expect(result.numericShape?.curveViolations).toBeDefined();
   });
 
   it('keeps price shortfall wording separate from body-count wording and preserves the price-spread pin', () => {
