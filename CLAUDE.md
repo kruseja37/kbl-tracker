@@ -215,8 +215,20 @@ Defaults:
 - JK owns product rulings, manual/browser acceptance, and scope decisions.
 - Claude Opus 4.8 is Captain/spec lead/primary auditor unless it wrote the change.
 - Codex is the default builder and local verifier for precise repo edits.
+- **Fable 5 is the math/design builder and the UI/UX design authority** (JK mandate 2026-07-02):
+  it designs the hard math (roster/market/sizing intelligence) and owns the design line from
+  league setup → draft → handoff → Fenway hub. **Design flows Fable → workers, never the
+  reverse**: Opus/Codex do not design math or UX and hand it to Fable; Fable designs, workers
+  execute, Opus orchestrates and adversarially audits. Fable builds only genuinely NOVEL math
+  (where building is the discovery process) — everything else it specs and reviews.
 - The builder/auditor triangle is mandatory: the agent that wrote a meaningful change does not audit its own diff.
 - Contracts and audit prompts must exist in `spec-docs/PROMPT_CONTRACTS.md` before handoff.
+- **Continuation point for the v1 arc:** `spec-docs/V1_HANDOFF_2026-07-02_POST_C3_PLAN.md`
+  (sequencing + the 2026-07-02 rulings). UI rules binding every league-builder→hub screen change:
+  GameTracker UI is SET (design reference only — never modify it); tutorial/informational content
+  hides behind the help button; every on-screen element must earn its place; kill leftover UI
+  that doesn't serve the franchise experience. Priorities: franchise/draft/living season #1,
+  Almanac #2, everything else back-burner.
 
 ---
 

@@ -7,6 +7,13 @@
       "runtimeArgs": ["node_modules/.bin/vite", "--host", "--port", "5199"],
       "port": 5199,
       "autoPort": false
+    },
+    {
+      "name": "draftlane",
+      "runtimeExecutable": "/Users/johnkruse/.nvm/versions/node/v20.20.0/bin/node",
+      "runtimeArgs": ["/Users/johnkruse/Projects/kbl-draftlane/node_modules/.bin/vite", "--host", "--port", "5199", "/Users/johnkruse/Projects/kbl-draftlane"],
+      "port": 5199,
+      "autoPort": false
     }
   ]
 }

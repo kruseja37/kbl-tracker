@@ -6653,3 +6653,10 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - The lock remains league-specific: unrelated leagues can still be edited after the saved-auction lookup resolves, and new league creation remains available.
 - Added regressions for locked league edit/save blocking, locked league delete blocking, unrelated league editing, and synchronized the Leagues test harness so its saved-auction guard lookup settles without React `act(...)` warnings.
 - Verification after addendum 7: `LeagueBuilderLeagues.test.tsx` passed 30/30; serialized focused draft/auction + League Builder suite passed 131/131 after a parallel IndexedDB teardown leak reproduced only in the parallel batch and the accused auction file passed solo; `git diff --check` passed; `npm run -s build` passed with only the existing Vite chunk-size warning. The Team Builder and Player Builder component tests still emit the pre-existing React `act(...)` warnings noted in the outside audit.
+
+## 2026-07-05 — Draft-economy reset (Fable session)
+- JK identified the real design-first failure: barbell pool (stars+scrubs, no middle) → teams broke by roster spot 11, free auto-fill scrubs, juiced rosters.
+- Three slices built+audited this day (grade-curve selector; read-only curve diagnostic; Pool Advisor consolidation) — JK had Codex REVERT ALL as slop. Tree clean at 7b5214ca; poolQualityCurve.ts deleted.
+- Durable lesson recorded: barbell is engineered by the pool builder's own pulls (top-IV floors + cheap-depth + priceSpread endpoints); post-assembly curve trims are structurally dead (protected extremes).
+- Plan of record written: spec-docs/DRAFT_ECONOMY_RESET_2026-07-05.md — measure first (throwaway histogram harness), Lever A reserve prices (k×IV dial), Lever B curve-quota pulls at source, Fork B = snake-draft pivot (JK product call). Pickup checklist in §7.
+- No code changes shipped this session post-revert. Next action: pickup checklist §7, put the Fork + reserve dial to JK.
