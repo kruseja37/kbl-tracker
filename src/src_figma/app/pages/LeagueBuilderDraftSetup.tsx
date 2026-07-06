@@ -104,9 +104,11 @@ import {
   countCellMatches,
   buildNumericPoolShapeDiagnostics,
   DEFAULT_POOL_SIZE_MULTIPLIER,
+  DEFAULT_POOL_QUALITY_CENTER,
   extractPoolFromDemand,
   poolBalancePresetTuning,
   POOL_BALANCE_PRESETS,
+  POOL_QUALITY_CENTER_STOPS,
   POOL_SIZE_MULTIPLIER_STOPS,
   resolvePoolSizingTarget,
   type ClassifiedDemandPlayer,
@@ -114,6 +116,7 @@ import {
   type DemandShortfall,
   type PoolBalancePresetKey,
   type PoolFromDemandResult,
+  type PoolQualityCenter,
   type PoolSourceMode,
   type TeamDesignInput,
 } from "../../../engines/poolFromDemand";
@@ -194,6 +197,15 @@ const POOL_SOURCE_MODE_LABELS: Record<PoolSourceMode, string> = {
   "full-pool": "Full player pool",
 };
 const POOL_SOURCE_MODE_ORDER: PoolSourceMode[] = ["team-roster-priority", "full-pool"];
+const POOL_QUALITY_LABELS: Record<PoolQualityCenter, string> = {
+  64: "lower-powered",
+  66: "lower",
+  68: "baseline",
+  70: "stronger",
+  72: "stronger",
+  74: "highest",
+  76: "highest",
+};
 const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
 const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
 const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", "Sub"];
@@ -254,6 +266,7 @@ type RecheckReport = {
 const SHARED_POOL_RECHECK_LABEL = "ALL CLUBS · ONE POOL";
 const POOL_PROVENANCE_SESSION_PREFIX = "kbl:draft-pool-provenance:";
 const POOL_SOURCE_MODE_SESSION_PREFIX = "kbl:draft-pool-source-mode:";
+const POOL_QUALITY_CENTER_SESSION_PREFIX = "kbl:draft-pool-quality-center:";
 const SHARED_POOL_RECHECK_TAG = "SHARED POOL";
 
 const ASK_SPOT_ORDER = new Map(
@@ -399,6 +412,28 @@ function loadPoolSourceModeFromSession(leagueId: string | null, poolMode: DraftP
 function savePoolSourceModeToSession(leagueId: string | null, poolMode: DraftPoolMode, sourceMode: PoolSourceMode): void {
   if (!leagueId || typeof window === "undefined") return;
   window.sessionStorage.setItem(poolSourceModeSessionKey(leagueId, poolMode), sourceMode);
+}
+
+function poolQualityCenterSessionKey(leagueId: string, poolMode: DraftPoolMode): string {
+  return `${POOL_QUALITY_CENTER_SESSION_PREFIX}${leagueId}:${poolMode}`;
+}
+
+function normalizePoolQualityCenter(value: unknown): PoolQualityCenter {
+  return POOL_QUALITY_CENTER_STOPS.includes(value as PoolQualityCenter)
+    ? value as PoolQualityCenter
+    : DEFAULT_POOL_QUALITY_CENTER;
+}
+
+function loadPoolQualityCenterFromSession(leagueId: string | null, poolMode: DraftPoolMode): PoolQualityCenter {
+  if (!leagueId || typeof window === "undefined") return DEFAULT_POOL_QUALITY_CENTER;
+  const raw = window.sessionStorage.getItem(poolQualityCenterSessionKey(leagueId, poolMode));
+  const parsed = raw === null ? DEFAULT_POOL_QUALITY_CENTER : Number(raw);
+  return normalizePoolQualityCenter(parsed);
+}
+
+function savePoolQualityCenterToSession(leagueId: string | null, poolMode: DraftPoolMode, qualityCenter: PoolQualityCenter): void {
+  if (!leagueId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(poolQualityCenterSessionKey(leagueId, poolMode), String(qualityCenter));
 }
 
 function playerBelongsToSelectedTeamRoster(
@@ -797,7 +832,13 @@ export function LeagueBuilderDraftSetup() {
   const [modeAReport, setModeAReport] = useState<ModeAReport | null>(null);
   const [poolFirstShapeReport, setPoolFirstShapeReport] = useState<ModeAReport | null>(null);
   const [poolBalancePreset, setPoolBalancePreset] = useState<PoolBalancePresetKey>("balanced");
-  const poolBalanceTuning = useMemo(() => poolBalancePresetTuning(poolBalancePreset), [poolBalancePreset]);
+  const [poolQualityCenter, setPoolQualityCenter] = useState<PoolQualityCenter>(() =>
+    loadPoolQualityCenterFromSession(activeLeagueId, poolMode)
+  );
+  const poolBalanceTuning = useMemo(
+    () => poolBalancePresetTuning(poolBalancePreset, poolQualityCenter),
+    [poolBalancePreset, poolQualityCenter],
+  );
   const [poolSourceMode, setPoolSourceMode] = useState<PoolSourceMode>(() =>
     loadPoolSourceModeFromSession(activeLeagueId, poolMode)
   );
@@ -1185,6 +1226,7 @@ export function LeagueBuilderDraftSetup() {
       targetSize: shapedTarget.effectiveTarget,
       preset: poolBalancePreset,
       tuning: poolBalanceTuning,
+      poolQualityCenter,
       hardKeepPlayers: demandPlayers.filter((player) =>
         poolProvenance.seedProtectedIds.has(player.id) ||
         poolProvenance.userAddedIds.has(player.id) ||
@@ -1196,7 +1238,7 @@ export function LeagueBuilderDraftSetup() {
       fullPoolEligibleCandidateCount: players.length,
       legalCompletionFeasible: legal,
     });
-  }, [inPoolPlayers, league, players.length, poolBalancePreset, poolBalanceTuning, poolMode, poolProvenance, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
+  }, [inPoolPlayers, league, players.length, poolBalancePreset, poolBalanceTuning, poolMode, poolProvenance, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
   const poolFirstManualShapeWarnings = useMemo(() => {
     if (!poolFirstManualShapeDiagnostics) return [];
     const warnings: string[] = [];
@@ -1428,6 +1470,12 @@ export function LeagueBuilderDraftSetup() {
       await saveLeagueDraftSetup({ poolSizeMultiplier });
     }, { refreshData: false, refreshPool: false });
 
+  const handlePoolQualityCenterChange = (nextQualityCenter: PoolQualityCenter) => {
+    if (nextQualityCenter === poolQualityCenter) return;
+    setPoolQualityCenter(nextQualityCenter);
+    setPoolFirstShapeReport(null);
+  };
+
   const handleSalaryCapInputChange = (value: string) => {
     const parsed = parseSalaryCapInput(value);
     setSalaryCapInput(parsed === null ? value : formatSalaryCapInput(parsed));
@@ -1552,11 +1600,12 @@ export function LeagueBuilderDraftSetup() {
         shills,
         budgetPerTeam: tierBudget,
         poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+        poolQualityCenter,
         pinnedIds: sortedIds([...ledger.handAdds, ...lockedDesignPinPlayerIds]),
         excludedIds: ledger.handRemoves.filter((id) => !designPinIdSet.has(id)),
       },
     );
-  }, [humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, shills, tierBudget]);
+  }, [humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, poolQualityCenter, shills, tierBudget]);
 
   const buildPoolFirstShapeResult = useCallback((provenance: PoolProvenanceState): PoolFromDemandResult => {
     if (!league) throw new Error("League not found.");
@@ -1577,6 +1626,7 @@ export function LeagueBuilderDraftSetup() {
         shills: 0,
         budgetPerTeam: tierBudget,
         poolBalancePreset,
+        poolQualityCenter,
         poolSizeMultiplier: poolBalanceTuning.poolSlackFactor,
         pinnedIds: hardKeepIds,
         excludedIds: sortedIds([...provenance.manualExcludedIds].filter((id) => !hardKeepSet.has(id))),
@@ -1585,7 +1635,7 @@ export function LeagueBuilderDraftSetup() {
         priorityIds: sortedIds([...selectedTeamRosterIds]),
       },
     );
-  }, [league, leagueTeams, players, poolBalancePreset, poolBalanceTuning.poolSlackFactor, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
+  }, [league, leagueTeams, players, poolBalancePreset, poolBalanceTuning.poolSlackFactor, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
 
   useEffect(() => {
     setReExtractConfirm(false);
@@ -1617,6 +1667,7 @@ export function LeagueBuilderDraftSetup() {
   useEffect(() => {
     setPoolProvenance(loadPoolProvenanceFromSession(activeLeagueId, poolMode));
     setPoolSourceMode(loadPoolSourceModeFromSession(activeLeagueId, poolMode));
+    setPoolQualityCenter(loadPoolQualityCenterFromSession(activeLeagueId, poolMode));
     setPoolFirstShapeReport(null);
   }, [activeLeagueId, poolMode]);
 
@@ -1629,6 +1680,11 @@ export function LeagueBuilderDraftSetup() {
     if (poolMode !== "pool-first") return;
     savePoolSourceModeToSession(activeLeagueId, poolMode, poolSourceMode);
   }, [activeLeagueId, poolMode, poolSourceMode]);
+
+  useEffect(() => {
+    if (poolMode !== "pool-first") return;
+    savePoolQualityCenterToSession(activeLeagueId, poolMode, poolQualityCenter);
+  }, [activeLeagueId, poolMode, poolQualityCenter]);
 
   useEffect(() => {
     if (!reExtractConfirm && !lockConfirm && !runItBackConfirm) return undefined;
@@ -1850,6 +1906,11 @@ export function LeagueBuilderDraftSetup() {
       actualPoolSize: result.size,
       slackFactor: numeric?.poolSlackFactor ?? report.sizing?.requestedMultiplier ?? null,
       medianNumericGrade: numeric?.medianNumericGrade ?? null,
+      poolQualityCenter: numeric?.poolQualityCenter ?? poolQualityCenter,
+      achievedMedianQuality: numeric?.achievedMedianQuality ?? null,
+      achievedMedianDelta: numeric?.achievedMedianDelta ?? null,
+      qualityCenterShortfallReason: numeric?.qualityCenterShortfallReason ?? null,
+      qualityBandShortfalls: numeric?.qualityBandShortfalls ?? {},
       p90NumericGrade: numeric?.p90NumericGrade ?? null,
       highTailShare: numeric?.highTailShare ?? null,
       superstarTailShare: numeric?.superstarTailShare ?? null,
@@ -2391,6 +2452,9 @@ export function LeagueBuilderDraftSetup() {
       {" "}· target {poolFirstShapeReport.numericShape.targetSize}
       {" "}· actual {poolFirstShapeReport.numericShape.poolSize}
       {" "}· slack {poolFirstShapeReport.numericShape.poolSlackFactor.toFixed(2)}×
+      {" "}· quality {poolFirstShapeReport.numericShape.poolQualityCenter}
+      {" "}· achieved {poolFirstShapeReport.numericShape.achievedMedianQuality?.toFixed(1) ?? "n/a"}
+      {" "}· delta {poolFirstShapeReport.numericShape.achievedMedianDelta?.toFixed(1) ?? "n/a"}
       {" "}· median {poolFirstShapeReport.numericShape.medianNumericGrade?.toFixed(1) ?? "n/a"}
       {" "}· p90 {poolFirstShapeReport.numericShape.p90NumericGrade?.toFixed(1) ?? "n/a"}
       {" "}· high {(poolFirstShapeReport.numericShape.highTailShare * 100).toFixed(1)}%
@@ -2413,6 +2477,7 @@ export function LeagueBuilderDraftSetup() {
       {" "}· G1 +{poolFirstShapeReport.numericShape.g1AdditionCount ?? 0}
       {" "}· swaps {poolFirstShapeReport.numericShape.g1SwapCount ?? 0}
       {poolFirstShapeReport.numericShape.overTargetReason ? <> · over target: {poolFirstShapeReport.numericShape.overTargetReason}</> : null}
+      {poolFirstShapeReport.numericShape.qualityCenterShortfallReason ? <> · quality note: {poolFirstShapeReport.numericShape.qualityCenterShortfallReason}</> : null}
     </div>
   ) : null;
 
@@ -2427,6 +2492,9 @@ export function LeagueBuilderDraftSetup() {
       Manual pool: {POOL_BALANCE_PRESET_LABELS[poolBalancePreset]} · actual {poolFirstManualShapeDiagnostics.poolSize}
       {" "}· target {poolFirstManualShapeDiagnostics.targetSize}
       {" "}· source {POOL_SOURCE_MODE_LABELS[poolFirstManualShapeDiagnostics.poolSourceMode]}
+      {" "}· quality {poolFirstManualShapeDiagnostics.poolQualityCenter}
+      {" "}· achieved {poolFirstManualShapeDiagnostics.achievedMedianQuality?.toFixed(1) ?? "n/a"}
+      {" "}· delta {poolFirstManualShapeDiagnostics.achievedMedianDelta?.toFixed(1) ?? "n/a"}
       {" "}· median {poolFirstManualShapeDiagnostics.medianNumericGrade?.toFixed(1) ?? "n/a"}
       {" "}· p90 {poolFirstManualShapeDiagnostics.p90NumericGrade?.toFixed(1) ?? "n/a"}
       {" "}· high {(poolFirstManualShapeDiagnostics.highTailShare * 100).toFixed(1)}%
@@ -3100,6 +3168,38 @@ export function LeagueBuilderDraftSetup() {
                           </button>
                         );
                       })}
+                    </div>
+                  </div>
+                  <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">
+                    <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-1">
+                      POOL QUALITY
+                    </div>
+                    <div className="text-[10px] font-bold text-[var(--ballpark-chalk)]/65 mb-2">
+                      Shift the numeric talent curve up or down while preserving the selected pool shape.
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {POOL_QUALITY_CENTER_STOPS.map((qualityCenter) => {
+                        const active = poolQualityCenter === qualityCenter;
+                        return (
+                          <button
+                            key={qualityCenter}
+                            type="button"
+                            onClick={() => handlePoolQualityCenterChange(qualityCenter)}
+                            disabled={poolEditingBlocked || busy}
+                            className={`px-2 py-1 text-[10px] font-bold border-2 ${
+                              active
+                                ? "bg-[var(--ballpark-brass)] text-[#1A1A1A] border-[var(--ballpark-brass)]"
+                                : "bg-[#2F3F32] text-[var(--ballpark-chalk)] border-[var(--ballpark-panel-border)]"
+                            }`}
+                          >
+                            {qualityCenter}
+                            {qualityCenter === DEFAULT_POOL_QUALITY_CENTER ? " baseline" : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-1 text-[10px] font-bold text-[var(--ballpark-chalk)]/55">
+                      {POOL_QUALITY_LABELS[poolQualityCenter]}
                     </div>
                   </div>
                   <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">

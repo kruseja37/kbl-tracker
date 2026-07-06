@@ -658,6 +658,26 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
+  test("renders Pool Quality stops with the 68 baseline default", async () => {
+    mockLeagueData({
+      league: makeLeague({ draftPoolMode: "pool-first" }),
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("POOL QUALITY")).toBeInTheDocument();
+    expect(screen.getByText("Shift the numeric talent curve up or down while preserving the selected pool shape.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "64" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "66" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "68 baseline" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "70" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "72" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "74" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "76" })).toBeInTheDocument();
+    expect(screen.getByText("baseline")).toBeInTheDocument();
+  });
+
   test("M1 applies THE MONEY and the recheck header follows the persisted cap", async () => {
     const unlockedPool = makePool({ locked: false });
     const { rerender } = render(<LeagueBuilderDraftSetup />);
@@ -913,6 +933,91 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText(/Sized to 106 \(1\.20×\)/i)).toBeInTheDocument();
   });
 
+  test("pool-first regeneration carries the selected pool quality center without saving salary cap", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+        salaryCap: 1_000_000,
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "72" }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+    });
+    const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+      poolQualityCenter?: number;
+      poolBalancePreset?: string;
+      poolSizeMultiplier?: number;
+    };
+    expect(options.poolQualityCenter).toBe(72);
+    expect(options.poolBalancePreset).toBe("balanced");
+    expect(options.poolSizeMultiplier).toBe(1.25);
+    expect(saveLeagueTemplate).not.toHaveBeenCalled();
+    expect(await screen.findByText((content) =>
+      content.includes("Production shape: Balanced") &&
+      content.includes("quality 72") &&
+      content.includes("achieved"),
+    )).toBeInTheDocument();
+  });
+
+  test("pool quality center restores from session and feeds regeneration", async () => {
+    window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "74");
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { poolQualityCenter?: number };
+      expect(options.poolQualityCenter).toBe(74);
+    });
+    expect(screen.getByText("highest")).toBeInTheDocument();
+  });
+
   test("repeated pool-first regenerate is idempotent for engine-generated players", async () => {
     const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
       makeLegalRosterPlayerSet(prefix, 10_000),
@@ -1013,6 +1118,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "72" }));
     fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalled();
@@ -1026,8 +1132,10 @@ describe("LeagueBuilderDraftSetup", () => {
         priorityIds?: string[];
         poolSourceMode?: string;
         generationNonce?: number;
+        poolQualityCenter?: number;
       };
       expect(options.generationNonce).toBe(1);
+      expect(options.poolQualityCenter).toBe(72);
       expect(options.poolSourceMode).toBe("team-roster-priority");
       expect(options.priorityIds).toHaveLength(88);
       expect(options.pinnedIds).toHaveLength(0);
@@ -1069,9 +1177,11 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "72" }));
     fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
     await waitFor(() => {
-      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { pinnedIds?: string[] };
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { pinnedIds?: string[]; poolQualityCenter?: number };
+      expect(options.poolQualityCenter).toBe(72);
       expect(options.pinnedIds).toContain(pinnedPlayer.id);
     });
 
@@ -1083,8 +1193,10 @@ describe("LeagueBuilderDraftSetup", () => {
         pinnedIds?: string[];
         excludedIds?: string[];
         generationNonce?: number;
+        poolQualityCenter?: number;
       };
       expect(options.generationNonce).toBe(1);
+      expect(options.poolQualityCenter).toBe(72);
       expect(options.pinnedIds).toContain(pinnedPlayer.id);
       expect(options.excludedIds).not.toContain(pinnedPlayer.id);
     });
@@ -1134,15 +1246,68 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "72" }));
     fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
 
     await waitFor(() => {
       const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
         pinnedIds?: string[];
         excludedIds?: string[];
+        poolQualityCenter?: number;
       };
+      expect(options.poolQualityCenter).toBe(72);
       expect(options.pinnedIds).toContain(pinnedPlayer.id);
       expect(options.excludedIds).not.toContain(pinnedPlayer.id);
+    });
+  });
+
+  test("quality-center changes preserve user-added hard keeps and manual exclusions", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const userAdded = currentPlayers[0];
+    const manualExcluded = currentPlayers[1];
+    const candidatePlayers = ["five", "six", "seven"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+      engineGeneratedIds: currentPlayers.map((player) => player.id).filter((id) => id !== userAdded.id),
+      userAddedIds: [userAdded.id],
+      manualExcludedIds: [manualExcluded.id],
+      seedProtectedIds: [],
+      generationNonce: 0,
+    }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "72" }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+        pinnedIds?: string[];
+        excludedIds?: string[];
+        poolQualityCenter?: number;
+      };
+      expect(options.poolQualityCenter).toBe(72);
+      expect(options.pinnedIds).toContain(userAdded.id);
+      expect(options.excludedIds).toContain(manualExcluded.id);
     });
   });
 
@@ -1172,6 +1337,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
+    fireEvent.click(await screen.findByRole("button", { name: "72" }));
     fireEvent.click(await screen.findByRole("button", { name: /Full player pool/i }));
     fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
 
@@ -1182,7 +1348,9 @@ describe("LeagueBuilderDraftSetup", () => {
       pinnedIds?: string[];
       priorityIds?: string[];
       poolSourceMode?: string;
+      poolQualityCenter?: number;
     };
+    expect(options.poolQualityCenter).toBe(72);
     expect(options.poolSourceMode).toBe("full-pool");
     expect(options.priorityIds).toHaveLength(88);
     expect(options.pinnedIds).toHaveLength(0);
