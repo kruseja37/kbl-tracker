@@ -369,7 +369,7 @@ function WhisperHeadline({
           {liquidityStateLabel(worth.liquidityState)}
         </span>
         <span className="spacer" />
-        <span className="whisper-liquidity-small">Reserve {money(worth.minimumFutureFillReserve)}</span>
+        <span className="whisper-liquidity-small">Fill Reserve {money(worth.minimumFutureFillReserve)}</span>
         <span className="whisper-liquidity-small">Room {money(worth.discretionaryBudget)}</span>
       </div>
       <div className="whisper-reason-row">

@@ -358,7 +358,7 @@ describe("WhisperPanel", () => {
     expect(liquidity.getByText("$88,000")).toBeInTheDocument();
     expect(liquidity.getByText("STRETCH")).toBeInTheDocument();
     expect(liquidity.getByText("CONSTRAINED")).toBeInTheDocument();
-    expect(liquidity.getByText("Reserve $58,000")).toBeInTheDocument();
+    expect(liquidity.getByText("Fill Reserve $58,000")).toBeInTheDocument();
     expect(liquidity.getByText("Room $42,000")).toBeInTheDocument();
     expect(screen.getByText("protect fill")).toBeInTheDocument();
     expect(screen.getByText("cash tight")).toBeInTheDocument();
