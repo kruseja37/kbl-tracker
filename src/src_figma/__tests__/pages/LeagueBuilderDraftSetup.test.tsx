@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LeagueBuilderDraftSetup,
+  comparePlayersByIvDesc,
   draftSetupSolvencyBannerText,
 } from "../../app/pages/LeagueBuilderDraftSetup";
 import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
@@ -26,6 +27,7 @@ import {
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
   resetCompletedDraftArc,
 } from "../../../utils/leagueBuilderAuctionPipeline";
+import { addPlayersToLeaguePool, computePlayerIv, removePlayersFromLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
@@ -330,6 +332,7 @@ describe("LeagueBuilderDraftSetup", () => {
     vi.mocked(resetCompletedDraftArc).mockResolvedValue(undefined);
     vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());
     vi.mocked(rankAllArchetypesForPool).mockReturnValue([]);
+    window.sessionStorage.clear();
     window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page");
     mockLeagueData();
   });
@@ -489,6 +492,9 @@ describe("LeagueBuilderDraftSetup", () => {
   test("persists a changed GM seat name through the existing league and team records", async () => {
     render(<LeagueBuilderDraftSetup />);
 
+    await waitFor(() => {
+      expect(screen.queryByText(/Checking for a saved auction before allowing pool edits/i)).not.toBeInTheDocument();
+    });
     const youInput = (await screen.findAllByDisplayValue("You")).find(
       (element): element is HTMLInputElement => element.tagName === "INPUT",
     );
@@ -638,7 +644,11 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText("POOL SIZE")).toBeInTheDocument();
     expect(screen.getByText(/PLAYERS · 2 CLUBS × 22/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "1.5×" }));
+    const onePointFiveButton = screen.getByRole("button", { name: "1.5×" });
+    await waitFor(() => {
+      expect(onePointFiveButton).not.toBeDisabled();
+    });
+    fireEvent.click(onePointFiveButton);
 
     await waitFor(() => {
       expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
@@ -803,6 +813,614 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.queryByText("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.")).not.toBeInTheDocument();
     });
     expect(await screen.findByText(/Sized to .*added .* for affordability/i)).toBeInTheDocument();
+  });
+
+  test("pool-first regeneration uses numeric-shaped slack target instead of exact roster demand", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    const players = [...currentPlayers, ...candidatePlayers];
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+        poolSizeMultiplier: 1.25,
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players,
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+      expect(addPlayersToLeaguePool).toHaveBeenCalled();
+    });
+    const extractMock = vi.mocked(extractPoolFromDemand);
+    const matchingCall = extractMock.mock.calls.find((call) => {
+      const options = call[4] as { teams?: number; poolBalancePreset?: string; poolSizeMultiplier?: number; pinnedIds?: string[]; poolSourceMode?: string };
+      return options.teams === 4 && options.poolBalancePreset === "balanced" && options.poolSizeMultiplier === 1.25;
+    });
+    expect(matchingCall).toBeTruthy();
+    const matchingOptions = matchingCall?.[4] as { pinnedIds?: string[]; priorityIds?: string[]; poolSourceMode?: string };
+    expect(matchingOptions.poolSourceMode).toBe("team-roster-priority");
+    expect(matchingOptions.priorityIds).toHaveLength(88);
+    expect(matchingOptions.pinnedIds).toHaveLength(0);
+    const addedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
+    const removedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
+    expect(addedIds.length - removedIds.length).toBe(22);
+    expect(await screen.findByText(/Sized to 110 \(1\.25×\)/i)).toBeInTheDocument();
+    expect(screen.getByText((content) =>
+      content.includes("Production shape: Balanced") &&
+      content.includes("demand 88") &&
+      content.includes("target 110") &&
+      content.includes("actual 110") &&
+      content.includes("source Team roster priority"),
+    )).toBeInTheDocument();
+  });
+
+  test("pool-first regeneration carries the selected balance preset into numeric shaping", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+    });
+    const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+      poolBalancePreset?: string;
+      poolSizeMultiplier?: number;
+    };
+    expect(options.poolBalancePreset).toBe("grounded");
+    expect(options.poolSizeMultiplier).toBe(1.2);
+    expect(await screen.findByText(/Sized to 106 \(1\.20×\)/i)).toBeInTheDocument();
+  });
+
+  test("repeated pool-first regenerate is idempotent for engine-generated players", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    const players = [...currentPlayers, ...candidatePlayers];
+    const league = makeLeague({
+      teamIds: ["team-a", "team-b", "team-c", "team-d"],
+      draftPoolMode: "pool-first",
+      poolSizeMultiplier: 1.25,
+    });
+    const teams = ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId));
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({
+      league,
+      teams,
+      players,
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(addPlayersToLeaguePool).toHaveBeenCalled();
+    });
+    const firstAddedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
+    const firstRemovedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
+    expect(firstAddedIds.length - firstRemovedIds.length).toBe(22);
+
+    vi.mocked(addPlayersToLeaguePool).mockClear();
+    vi.mocked(removePlayersFromLeaguePool).mockClear();
+    const firstFinalIds = [
+      ...currentPlayers.map((player) => player.id).filter((id) => !firstRemovedIds.includes(id)),
+      ...firstAddedIds,
+    ];
+    const assignedPlayers = players.map((player) => {
+      if (firstRemovedIds.includes(player.id)) return { ...player, leagueAssignments: [] };
+      if (firstAddedIds.includes(player.id)) {
+        return { ...player, leagueAssignments: [{ leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const }] };
+      }
+      return player;
+    });
+    mockLeagueData({
+      league,
+      teams,
+      players: assignedPlayers,
+      pool: makePool({
+        locked: false,
+        players: firstFinalIds.map((id) => ({ id, iv: 10_000, salary: 10_000 })),
+        totalSlots: 110,
+      }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalledTimes(2);
+    });
+    expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
+    expect(removePlayersFromLeaguePool).not.toHaveBeenCalled();
+  });
+
+  test("reroll advances the deterministic generation nonce without converting roster priority into hard keeps", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six", "seven"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
+
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+        pinnedIds?: string[];
+        priorityIds?: string[];
+        poolSourceMode?: string;
+        generationNonce?: number;
+      };
+      expect(options.generationNonce).toBe(1);
+      expect(options.poolSourceMode).toBe("team-roster-priority");
+      expect(options.priorityIds).toHaveLength(88);
+      expect(options.pinnedIds).toHaveLength(0);
+    });
+  });
+
+  test("reroll preserves roster-design pinned players as hard keeps", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const pinnedPlayer = currentPlayers.find((player) => player.primaryPosition === "C")!;
+    const candidatePlayers = ["five", "six", "seven"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: [
+        makeTeam("team-a", {
+          rosterDesign: {
+            slots: [],
+            pins: { C: pinnedPlayer.id },
+          },
+        }),
+        ...["team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      ],
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { pinnedIds?: string[] };
+      expect(options.pinnedIds).toContain(pinnedPlayer.id);
+    });
+
+    vi.mocked(removePlayersFromLeaguePool).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
+
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+        pinnedIds?: string[];
+        excludedIds?: string[];
+        generationNonce?: number;
+      };
+      expect(options.generationNonce).toBe(1);
+      expect(options.pinnedIds).toContain(pinnedPlayer.id);
+      expect(options.excludedIds).not.toContain(pinnedPlayer.id);
+    });
+    const removedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls.flatMap((call) => call[0] ?? []);
+    expect(removedIds).not.toContain(pinnedPlayer.id);
+  });
+
+  test("manual exclusion does not beat a roster-design pin during regeneration", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const pinnedPlayer = currentPlayers.find((player) => player.primaryPosition === "C")!;
+    const candidatePlayers = ["five", "six", "seven"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+      engineGeneratedIds: currentPlayers.map((player) => player.id),
+      userAddedIds: [],
+      manualExcludedIds: [pinnedPlayer.id],
+      seedProtectedIds: [],
+      generationNonce: 0,
+    }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: [
+        makeTeam("team-a", {
+          rosterDesign: {
+            slots: [],
+            pins: { C: pinnedPlayer.id },
+          },
+        }),
+        ...["team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      ],
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+        pinnedIds?: string[];
+        excludedIds?: string[];
+      };
+      expect(options.pinnedIds).toContain(pinnedPlayer.id);
+      expect(options.excludedIds).not.toContain(pinnedPlayer.id);
+    });
+  });
+
+  test("source mode switching rebuilds disposable engine players without preserving roster priority as hard keep", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six", "seven"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Full player pool/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+    });
+    const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+      pinnedIds?: string[];
+      priorityIds?: string[];
+      poolSourceMode?: string;
+    };
+    expect(options.poolSourceMode).toBe("full-pool");
+    expect(options.priorityIds).toHaveLength(88);
+    expect(options.pinnedIds).toHaveLength(0);
+  });
+
+  test("session provenance keeps remounted generated players disposable", async () => {
+    const seedPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const generatedPlayers = makeLegalRosterPlayerSet("generated", 10_000).map((player) => ({
+      ...player,
+      leagueAssignments: [{ leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const }],
+    }));
+    const extraGeneratedPlayers = makeLegalRosterPlayerSet("generated-extra", 10_000).map((player) => ({
+      ...player,
+      leagueAssignments: [{ leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const }],
+    }));
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+      engineGeneratedIds: [...generatedPlayers, ...extraGeneratedPlayers].map((player) => player.id),
+      userAddedIds: [],
+      manualExcludedIds: [],
+      seedProtectedIds: seedPlayers.map((player) => player.id),
+      generationNonce: 0,
+    }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...seedPlayers, ...generatedPlayers, ...extraGeneratedPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: [...seedPlayers, ...generatedPlayers, ...extraGeneratedPlayers].map((player) => ({
+          id: player.id,
+          iv: player.salary,
+          salary: player.salary,
+        })),
+        totalSlots: seedPlayers.length + generatedPlayers.length + extraGeneratedPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(removePlayersFromLeaguePool).toHaveBeenCalled();
+    });
+    const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { pinnedIds?: string[] };
+    expect(options.pinnedIds).toHaveLength(88);
+    const removedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
+    expect(removedIds.some((id) => generatedPlayers.some((player) => player.id === id) || extraGeneratedPlayers.some((player) => player.id === id))).toBe(true);
+  });
+
+  test("switching from balanced to grounded can shrink engine-generated slack", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    const players = [...currentPlayers, ...candidatePlayers];
+    const league = makeLeague({
+      teamIds: ["team-a", "team-b", "team-c", "team-d"],
+      draftPoolMode: "pool-first",
+      poolSizeMultiplier: 1.25,
+    });
+    const teams = ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId));
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({
+      league,
+      teams,
+      players,
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await waitFor(() => {
+      expect(addPlayersToLeaguePool).toHaveBeenCalled();
+    });
+    const balancedAddedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
+    const balancedRemovedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
+    expect(balancedAddedIds.length - balancedRemovedIds.length).toBe(22);
+
+    vi.mocked(addPlayersToLeaguePool).mockClear();
+    vi.mocked(removePlayersFromLeaguePool).mockClear();
+    const balancedFinalIds = [
+      ...currentPlayers.map((player) => player.id).filter((id) => !balancedRemovedIds.includes(id)),
+      ...balancedAddedIds,
+    ];
+    const assignedPlayers = players.map((player) => {
+      if (balancedRemovedIds.includes(player.id)) return { ...player, leagueAssignments: [] };
+      if (balancedAddedIds.includes(player.id)) {
+        return { ...player, leagueAssignments: [{ leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const }] };
+      }
+      return player;
+    });
+    mockLeagueData({
+      league,
+      teams,
+      players: assignedPlayers,
+      pool: makePool({
+        locked: false,
+        players: balancedFinalIds.map((id) => ({ id, iv: 10_000, salary: 10_000 })),
+        totalSlots: 110,
+      }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Grounded$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+    await waitFor(() => {
+      expect(removePlayersFromLeaguePool).toHaveBeenCalled();
+    });
+    const removedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
+    expect(removedIds.length).toBeGreaterThan(0);
+    expect(removedIds.every((id) => balancedFinalIds.includes(id))).toBe(true);
+  });
+
+  test("manual pool diagnostics report illegal completion and block locking only for legality", async () => {
+    const shortPool = makeLegalRosterPlayers(10_000).slice(0, 8);
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a"],
+        draftPoolMode: "pool-first",
+      }),
+      teams: [makeTeam("team-a")],
+      players: shortPool,
+      pool: makePool({
+        locked: false,
+        players: shortPool.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: shortPool.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText((content) =>
+      content.includes("Manual pool: Balanced") && content.includes("legal no"),
+    )).toBeInTheDocument();
+    expect(screen.getByText(/Pool cannot legally seat every club at 22 under the cap/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /LOCK POOL/i })).toBeDisabled();
+  });
+
+  test("available player rows expose IV instead of letter grade for swap decisions", async () => {
+    const available = makePlayer(77, {
+      id: "available-iv",
+      firstName: "Ivy",
+      lastName: "Value",
+      salary: 42_000,
+      overallGrade: "A+",
+      leagueAssignments: [],
+    });
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "pool-first",
+      }),
+      players: [available],
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("Ivy Value")).toBeInTheDocument();
+    expect(screen.getByText(`$${Math.round(computePlayerIv(available)).toLocaleString()}`)).toBeInTheDocument();
+  });
+
+  test("available players default-sort by numeric IV high to low instead of first name", async () => {
+    const highValue = makePlayer(201, {
+      id: "available-high-iv",
+      firstName: "Zed",
+      lastName: "High",
+      salary: 95_000,
+      power: 99,
+      contact: 99,
+      speed: 99,
+      fielding: 99,
+      arm: 99,
+      leagueAssignments: [],
+    });
+    const lowValue = makePlayer(202, {
+      id: "available-low-iv",
+      firstName: "Aaron",
+      lastName: "Low",
+      salary: 1_000,
+      power: 10,
+      contact: 10,
+      speed: 10,
+      fielding: 10,
+      arm: 10,
+      leagueAssignments: [],
+    });
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "pool-first",
+      }),
+      players: [lowValue, highValue],
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const highNode = await screen.findByText("Zed High");
+    const lowNode = await screen.findByText("Aaron Low");
+    expect(highNode.compareDocumentPosition(lowNode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test("IV comparator sorts invalid values last and uses deterministic name/id ties", () => {
+    const alpha = makePlayer(301, { id: "alpha-id", firstName: "Alpha", lastName: "Tie", leagueAssignments: [] });
+    const zed = makePlayer(302, { id: "zed-id", firstName: "Zed", lastName: "Tie", leagueAssignments: [] });
+    const high = makePlayer(303, { id: "high-id", firstName: "High", lastName: "Value", leagueAssignments: [] });
+    const invalid = makePlayer(304, { id: "invalid-id", firstName: "Invalid", lastName: "Value", leagueAssignments: [] });
+    const sorted = [invalid, zed, high, alpha].sort(comparePlayersByIvDesc(new Map([
+      [alpha.id, 50_000],
+      [zed.id, 50_000],
+      [high.id, 90_000],
+      [invalid.id, Number.NaN],
+    ])));
+
+    expect(sorted.map((player) => player.id)).toEqual([high.id, alpha.id, zed.id, invalid.id]);
   });
 
   test("M7 locked pool renders THE MONEY read-only with the unlock hint", async () => {

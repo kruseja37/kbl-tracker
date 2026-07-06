@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
   Search,
@@ -18,6 +18,7 @@ import {
   Gavel,
   Plus,
   Minus,
+  RefreshCw,
 } from "lucide-react";
 import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
 import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
@@ -57,7 +58,13 @@ import {
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
-import { historicalToSimArchetype, rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
+import {
+  historicalToSimArchetype,
+  rankAllArchetypesForPool,
+  rankArchetypeDraftability,
+  type ArchetypeDraftability,
+  type DraftabilityBand,
+} from "../../../engines/draftabilityRanker";
 import { TIER_CAPS } from "../../../data/tierParams";
 import {
   MLB_AUCTION_SEASON,
@@ -95,14 +102,19 @@ import { TRAIT_PRICING } from "../../../data/traitPricing";
 import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
   countCellMatches,
+  buildNumericPoolShapeDiagnostics,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
+  poolBalancePresetTuning,
+  POOL_BALANCE_PRESETS,
   POOL_SIZE_MULTIPLIER_STOPS,
   resolvePoolSizingTarget,
   type ClassifiedDemandPlayer,
   type DemandCellReport,
   type DemandShortfall,
+  type PoolBalancePresetKey,
   type PoolFromDemandResult,
+  type PoolSourceMode,
   type TeamDesignInput,
 } from "../../../engines/poolFromDemand";
 import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassifier";
@@ -126,10 +138,30 @@ import {
 export { demandPlayerFromLeaguePlayer, demandUniverseFromPlayers } from "../engines/leaguePlayerAdapter";
 
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
+const INITIAL_VISIBLE_POOL_ROWS = 100;
+const VISIBLE_POOL_ROW_STEP = 100;
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
   return `$${Math.round(value).toLocaleString()}`;
+}
+
+const DRAFTABILITY_BAND_ORDER: Record<DraftabilityBand, number> = { GREEN: 0, YELLOW: 1, LOCKED: 2 };
+
+function compareDraftabilityRows(a: ArchetypeDraftability, b: ArchetypeDraftability): number {
+  return DRAFTABILITY_BAND_ORDER[a.band] - DRAFTABILITY_BAND_ORDER[b.band]
+    || b.resilience - a.resilience
+    || b.embodimentZ - a.embodimentZ
+    || b.taxHeadroom - a.taxHeadroom
+    || a.archetypeId.localeCompare(b.archetypeId);
+}
+
+function draftabilityRecordFromRows(rows: readonly ArchetypeDraftability[]) {
+  const next: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> = {};
+  for (const row of rows) {
+    next[row.archetypeId] = { band: row.band, reason: row.reasons[0] };
+  }
+  return next;
 }
 
 export function draftSetupSolvencyBannerText(
@@ -151,6 +183,17 @@ function playerName(player: Player): string {
 // lineup slot only"; TWO-WAY is a trait, not a position). Pitchers carry the combined SP/RP role.
 const DRAFTABLE_POSITION_OPTIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "SP", "SP/RP", "RP", "CP"] as const;
 const POSITION_OPTIONS = ["All", ...DRAFTABLE_POSITION_OPTIONS] as const;
+const POOL_BALANCE_PRESET_LABELS: Record<PoolBalancePresetKey, string> = {
+  grounded: "Grounded",
+  balanced: "Balanced",
+  juiced: "Juiced",
+};
+const POOL_BALANCE_PRESET_ORDER: PoolBalancePresetKey[] = ["grounded", "balanced", "juiced"];
+const POOL_SOURCE_MODE_LABELS: Record<PoolSourceMode, string> = {
+  "team-roster-priority": "Team roster priority",
+  "full-pool": "Full player pool",
+};
+const POOL_SOURCE_MODE_ORDER: PoolSourceMode[] = ["team-roster-priority", "full-pool"];
 const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
 const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
 const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", "Sub"];
@@ -186,9 +229,16 @@ type LeaguePoolRecord = {
 
 type ClubEditorMode = "identity" | "design" | null;
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
-type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing">;
+type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing" | "g1" | "numericShape">;
 type HandEditLedger = { handAdds: string[]; handRemoves: string[] };
 type PoolExtractedBasis = NonNullable<LeagueTemplate["poolExtractedBasis"]>;
+type PoolProvenanceState = {
+  engineGeneratedIds: Set<string>;
+  userAddedIds: Set<string>;
+  manualExcludedIds: Set<string>;
+  seedProtectedIds: Set<string>;
+  generationNonce: number;
+};
 type RecheckRow = {
   id: string;
   label: string;
@@ -202,6 +252,8 @@ type RecheckReport = {
 };
 
 const SHARED_POOL_RECHECK_LABEL = "ALL CLUBS · ONE POOL";
+const POOL_PROVENANCE_SESSION_PREFIX = "kbl:draft-pool-provenance:";
+const POOL_SOURCE_MODE_SESSION_PREFIX = "kbl:draft-pool-source-mode:";
 const SHARED_POOL_RECHECK_TAG = "SHARED POOL";
 
 const ASK_SPOT_ORDER = new Map(
@@ -285,6 +337,115 @@ function sortedIds(ids: readonly string[]): string[] {
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
 
+function emptyPoolProvenance(): PoolProvenanceState {
+  return {
+    engineGeneratedIds: new Set<string>(),
+    userAddedIds: new Set<string>(),
+    manualExcludedIds: new Set<string>(),
+    seedProtectedIds: new Set<string>(),
+    generationNonce: 0,
+  };
+}
+
+function poolProvenanceSessionKey(leagueId: string, poolMode: DraftPoolMode): string {
+  return `${POOL_PROVENANCE_SESSION_PREFIX}${leagueId}:${poolMode}`;
+}
+
+function loadPoolProvenanceFromSession(leagueId: string | null, poolMode: DraftPoolMode): PoolProvenanceState {
+  if (!leagueId || typeof window === "undefined") return emptyPoolProvenance();
+  try {
+    const raw = window.sessionStorage.getItem(poolProvenanceSessionKey(leagueId, poolMode));
+    if (!raw) return emptyPoolProvenance();
+    const parsed = JSON.parse(raw) as Partial<Record<keyof PoolProvenanceState, unknown>>;
+    return {
+      engineGeneratedIds: new Set(Array.isArray(parsed.engineGeneratedIds) ? parsed.engineGeneratedIds.filter((id): id is string => typeof id === "string") : []),
+      userAddedIds: new Set(Array.isArray(parsed.userAddedIds) ? parsed.userAddedIds.filter((id): id is string => typeof id === "string") : []),
+      manualExcludedIds: new Set(Array.isArray(parsed.manualExcludedIds) ? parsed.manualExcludedIds.filter((id): id is string => typeof id === "string") : []),
+      seedProtectedIds: new Set(Array.isArray(parsed.seedProtectedIds) ? parsed.seedProtectedIds.filter((id): id is string => typeof id === "string") : []),
+      generationNonce: typeof parsed.generationNonce === "number" && Number.isFinite(parsed.generationNonce)
+        ? Math.max(0, Math.floor(parsed.generationNonce))
+        : 0,
+    };
+  } catch {
+    return emptyPoolProvenance();
+  }
+}
+
+function savePoolProvenanceToSession(
+  leagueId: string | null,
+  poolMode: DraftPoolMode,
+  provenance: PoolProvenanceState,
+): void {
+  if (!leagueId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(poolProvenanceSessionKey(leagueId, poolMode), JSON.stringify({
+    engineGeneratedIds: sortedIds([...provenance.engineGeneratedIds]),
+    userAddedIds: sortedIds([...provenance.userAddedIds]),
+    manualExcludedIds: sortedIds([...provenance.manualExcludedIds]),
+    seedProtectedIds: sortedIds([...provenance.seedProtectedIds]),
+    generationNonce: provenance.generationNonce,
+  }));
+}
+
+function poolSourceModeSessionKey(leagueId: string, poolMode: DraftPoolMode): string {
+  return `${POOL_SOURCE_MODE_SESSION_PREFIX}${leagueId}:${poolMode}`;
+}
+
+function loadPoolSourceModeFromSession(leagueId: string | null, poolMode: DraftPoolMode): PoolSourceMode {
+  if (!leagueId || typeof window === "undefined") return "team-roster-priority";
+  const raw = window.sessionStorage.getItem(poolSourceModeSessionKey(leagueId, poolMode));
+  return raw === "full-pool" || raw === "team-roster-priority" ? raw : "team-roster-priority";
+}
+
+function savePoolSourceModeToSession(leagueId: string | null, poolMode: DraftPoolMode, sourceMode: PoolSourceMode): void {
+  if (!leagueId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(poolSourceModeSessionKey(leagueId, poolMode), sourceMode);
+}
+
+function playerBelongsToSelectedTeamRoster(
+  player: Player,
+  leagueId: string | null,
+  teamIds: readonly string[],
+): boolean {
+  if (!leagueId || teamIds.length === 0) return false;
+  const teamIdSet = new Set(teamIds);
+  return player.leagueAssignments?.some((assignment) =>
+    assignment.leagueId === leagueId && Boolean(assignment.teamId) && teamIdSet.has(assignment.teamId)
+  ) ?? false;
+}
+
+function stablePlayerNameOrIdCompare(a: Player, b: Player): number {
+  return playerName(a).localeCompare(playerName(b)) || a.id.localeCompare(b.id);
+}
+
+export function comparePlayersByIvDesc(ivById: ReadonlyMap<string, number>): (a: Player, b: Player) => number {
+  return (a, b) => {
+    const av = ivById.get(a.id);
+    const bv = ivById.get(b.id);
+    const aValid = Number.isFinite(av);
+    const bValid = Number.isFinite(bv);
+    if (aValid && bValid && av !== bv) return (bv as number) - (av as number);
+    if (aValid && !bValid) return -1;
+    if (!aValid && bValid) return 1;
+    return stablePlayerNameOrIdCompare(a, b);
+  };
+}
+
+function setUnion(...sets: ReadonlySet<string>[]): Set<string> {
+  const result = new Set<string>();
+  for (const set of sets) {
+    for (const id of set) result.add(id);
+  }
+  return result;
+}
+
+function setDifference(left: ReadonlySet<string>, right: ReadonlySet<string>): Set<string> {
+  const result = new Set<string>();
+  for (const id of left) {
+    if (!right.has(id)) result.add(id);
+  }
+  return result;
+}
+
 function pluralWord(count: number, singular: string, plural = `${singular}s`): string {
   return count === 1 ? singular : plural;
 }
@@ -317,6 +478,8 @@ function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: num
     shortfalls: result.shortfalls,
     designVerdicts: result.designVerdicts,
     sizing,
+    g1: result.g1,
+    numericShape: result.numericShape,
   };
 }
 
@@ -582,6 +745,9 @@ export function LeagueBuilderDraftSetup() {
     isLoading,
     error,
     updatePlayer,
+    replaceLeagueLocal = () => undefined,
+    replaceTeamsLocal = () => undefined,
+    replacePlayersLocal = () => undefined,
     refresh,
   } = leagueBuilderData;
   const poolLoaderKey = ["get", "Registered", "Pool"].join("") as keyof typeof leagueBuilderData;
@@ -629,6 +795,13 @@ export function LeagueBuilderDraftSetup() {
   const [savedDraftChecked, setSavedDraftChecked] = useState(false);
   const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
   const [modeAReport, setModeAReport] = useState<ModeAReport | null>(null);
+  const [poolFirstShapeReport, setPoolFirstShapeReport] = useState<ModeAReport | null>(null);
+  const [poolBalancePreset, setPoolBalancePreset] = useState<PoolBalancePresetKey>("balanced");
+  const poolBalanceTuning = useMemo(() => poolBalancePresetTuning(poolBalancePreset), [poolBalancePreset]);
+  const [poolSourceMode, setPoolSourceMode] = useState<PoolSourceMode>(() =>
+    loadPoolSourceModeFromSession(activeLeagueId, poolMode)
+  );
+  const [poolProvenance, setPoolProvenance] = useState<PoolProvenanceState>(() => emptyPoolProvenance());
   const [reExtractConfirm, setReExtractConfirm] = useState(false);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [runItBackConfirm, setRunItBackConfirm] = useState(false);
@@ -799,12 +972,17 @@ export function LeagueBuilderDraftSetup() {
     if (focusedPlayerId && !focusedPlayer) setFocusedPlayerId(null);
   }, [focusedPlayerId, focusedPlayer]);
 
-  // Live value per pooled player; matches the locked value calculation.
+  // Live value per player; matches the locked value calculation used when the pool is frozen.
   const ivById = useMemo(() => {
     const map = new Map<string, number>();
-    for (const p of inPoolPlayers) map.set(p.id, computePlayerIv(p));
+    for (const p of players) map.set(p.id, computePlayerIv(p));
     return map;
-  }, [inPoolPlayers]);
+  }, [players]);
+  const selectedTeamRosterIds = useMemo(() => new Set(
+    players
+      .filter((player) => playerBelongsToSelectedTeamRoster(player, activeLeagueId, league?.teamIds ?? []))
+      .map((player) => player.id),
+  ), [activeLeagueId, league?.teamIds, players]);
 
   // Note: the AVAILABLE rows show each player's STORED overallGrade (cheap, and canonical for
   // seeded data — an edit persists the freshly-derived grade). Deriving the canonical grade for
@@ -824,8 +1002,50 @@ export function LeagueBuilderDraftSetup() {
     return availablePlayers
       .filter((p) => (availPosition === "All" ? true : p.primaryPosition === availPosition))
       .filter((p) => (q ? playerName(p).toLowerCase().includes(q) : true))
-      .sort((a, b) => playerName(a).localeCompare(playerName(b)));
-  }, [availablePlayers, availSearch, availPosition]);
+      .sort(comparePlayersByIvDesc(ivById));
+  }, [availablePlayers, availSearch, availPosition, ivById]);
+
+  const [inVisibleLimit, setInVisibleLimit] = useState(INITIAL_VISIBLE_POOL_ROWS);
+  const [availVisibleLimit, setAvailVisibleLimit] = useState(INITIAL_VISIBLE_POOL_ROWS);
+
+  useEffect(() => {
+    setInVisibleLimit(INITIAL_VISIBLE_POOL_ROWS);
+  }, [activeLeagueId, inPosition, inSearch, poolMode]);
+
+  useEffect(() => {
+    setAvailVisibleLimit(INITIAL_VISIBLE_POOL_ROWS);
+  }, [activeLeagueId, availPosition, availSearch, poolMode]);
+
+  const visibleInFiltered = useMemo(
+    () => inFiltered.slice(0, inVisibleLimit),
+    [inFiltered, inVisibleLimit],
+  );
+  const visibleAvailFiltered = useMemo(
+    () => availFiltered.slice(0, availVisibleLimit),
+    [availFiltered, availVisibleLimit],
+  );
+
+  const toggleInPlayer = useCallback((playerId: string) => {
+    setInSelected((current) => {
+      const next = new Set(current);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }, []);
+
+  const toggleAvailablePlayer = useCallback((playerId: string) => {
+    setAvailSelected((current) => {
+      const next = new Set(current);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  }, []);
+
+  const focusPlayer = useCallback((playerId: string) => {
+    setFocusedPlayerId(playerId);
+  }, []);
 
   const recommendedShills = league ? recommendedShillCount(leagueTeams.filter((team) => team.controlledBy !== "ai").length, league.teamIds.length).count : 0;
   const poolSizeTargetOverride = useMemo(() => {
@@ -909,6 +1129,22 @@ export function LeagueBuilderDraftSetup() {
     () => sortedIds(inPoolPlayers.map((player) => player.id)).join("|"),
     [inPoolPlayers],
   );
+  const universePlayerIds = useMemo(() => new Set(players.map((player) => player.id)), [players]);
+  const lockedDesignPinPlayerIds = useMemo(
+    () => sortedIds(humanTeams.flatMap((team) => {
+      if (!team.rosterDesign?.lockedAt) return [];
+      return Object.values(team.rosterDesign.pins ?? {})
+        .filter((playerId): playerId is string => typeof playerId === "string" && playerId.length > 0 && universePlayerIds.has(playerId));
+    })),
+    [humanTeams, universePlayerIds],
+  );
+  const rosterDesignPinPlayerIds = useMemo(
+    () => sortedIds(humanTeams.flatMap((team) =>
+      Object.values(team.rosterDesign?.pins ?? {})
+        .filter((playerId): playerId is string => typeof playerId === "string" && playerId.length > 0 && universePlayerIds.has(playerId)),
+    )),
+    [humanTeams, universePlayerIds],
+  );
   const tierBudget = useMemo(
     () => resolveLeagueSalaryCap(league),
     [league],
@@ -922,6 +1158,65 @@ export function LeagueBuilderDraftSetup() {
   useEffect(() => {
     setSalaryCapInput(formatSalaryCapInput(tierBudget));
   }, [activeLeagueId, tierBudget]);
+
+  const poolFirstManualShapeDiagnostics = useMemo(() => {
+    if (!league || poolMode !== "pool-first") return null;
+    const shapedTarget = resolvePoolSizingTarget({
+      teams: league.teamIds.length,
+      shills: 0,
+      poolSizeMultiplier: poolBalanceTuning.poolSlackFactor,
+    });
+    const demandPlayers = demandUniverseFromPlayers(inPoolPlayers);
+    const legal = tierBudget > 0 && league.teamIds.length > 0
+      ? seatAllClubs(
+          demandPlayers.map((player) => ({
+            id: player.id,
+            salary: player.salary,
+            profile: player.profile,
+            slotPlayer: player,
+          })),
+          league.teamIds.length,
+          tierBudget,
+        ).holds
+      : null;
+    return buildNumericPoolShapeDiagnostics({
+      players: demandPlayers,
+      requiredRosterDemand: shapedTarget.demandBase,
+      targetSize: shapedTarget.effectiveTarget,
+      preset: poolBalancePreset,
+      tuning: poolBalanceTuning,
+      hardKeepPlayers: demandPlayers.filter((player) =>
+        poolProvenance.seedProtectedIds.has(player.id) ||
+        poolProvenance.userAddedIds.has(player.id) ||
+        rosterDesignPinPlayerIds.includes(player.id)
+      ),
+      engineGeneratedPlayers: demandPlayers.filter((player) => poolProvenance.engineGeneratedIds.has(player.id)),
+      selectedTeamRosterIds,
+      poolSourceMode,
+      fullPoolEligibleCandidateCount: players.length,
+      legalCompletionFeasible: legal,
+    });
+  }, [inPoolPlayers, league, players.length, poolBalancePreset, poolBalanceTuning, poolMode, poolProvenance, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
+  const poolFirstManualShapeWarnings = useMemo(() => {
+    if (!poolFirstManualShapeDiagnostics) return [];
+    const warnings: string[] = [];
+    if (poolFirstManualShapeDiagnostics.legalCompletionFeasible === false) {
+      warnings.push("Pool cannot legally seat every club at 22 under the cap.");
+    }
+    if (poolFirstManualShapeDiagnostics.superstarTailShare > poolBalanceTuning.superstarTailCap + 1e-9) {
+      warnings.push(`superstar tail ${(poolFirstManualShapeDiagnostics.superstarTailShare * 100).toFixed(1)}% exceeds ${(poolBalanceTuning.superstarTailCap * 100).toFixed(0)}% ${POOL_BALANCE_PRESET_LABELS[poolBalancePreset]} cap`);
+    }
+    if (poolFirstManualShapeDiagnostics.highTailShare > poolBalanceTuning.highTailCap + 1e-9) {
+      warnings.push(`high tail ${(poolFirstManualShapeDiagnostics.highTailShare * 100).toFixed(1)}% exceeds ${(poolBalanceTuning.highTailCap * 100).toFixed(0)}% ${POOL_BALANCE_PRESET_LABELS[poolBalancePreset]} cap`);
+    }
+    if (poolFirstManualShapeDiagnostics.middleMassShare + 1e-9 < poolBalanceTuning.targetMiddleMass) {
+      warnings.push(`middle mass ${(poolFirstManualShapeDiagnostics.middleMassShare * 100).toFixed(1)}% is below ${(poolBalanceTuning.targetMiddleMass * 100).toFixed(0)}% ${POOL_BALANCE_PRESET_LABELS[poolBalancePreset]} target`);
+    }
+    if (poolFirstManualShapeDiagnostics.lowTailShare > poolBalanceTuning.lowTailRepairCap + 1e-9) {
+      warnings.push(`low tail ${(poolFirstManualShapeDiagnostics.lowTailShare * 100).toFixed(1)}% exceeds ${(poolBalanceTuning.lowTailRepairCap * 100).toFixed(0)}% ${POOL_BALANCE_PRESET_LABELS[poolBalancePreset]} cap`);
+    }
+    return warnings;
+  }, [poolBalancePreset, poolBalanceTuning, poolFirstManualShapeDiagnostics]);
 
   const livePoolExtractedBasis = useMemo(
     () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills) : null),
@@ -946,15 +1241,6 @@ export function LeagueBuilderDraftSetup() {
     : [];
   const designsStale = poolMode === "design-first" && modeAStaleTeams.length > 0;
   const poolTrailing = designsStale || basisStale;
-  const universePlayerIds = useMemo(() => new Set(players.map((player) => player.id)), [players]);
-  const lockedDesignPinPlayerIds = useMemo(
-    () => sortedIds(humanTeams.flatMap((team) => {
-      if (!team.rosterDesign?.lockedAt) return [];
-      return Object.values(team.rosterDesign.pins ?? {})
-        .filter((playerId): playerId is string => typeof playerId === "string" && playerId.length > 0 && universePlayerIds.has(playerId));
-    })),
-    [humanTeams, universePlayerIds],
-  );
   const rosterDesignToneByTeamId = useMemo(() => {
     const tones = new Map<string, ReturnType<typeof rosterDesignStatusTone>>();
     for (const team of humanTeams) {
@@ -1032,6 +1318,56 @@ export function LeagueBuilderDraftSetup() {
       return undefined;
     }
     let cancelled = false;
+    type IdleWindow = Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const idleWindow = window as IdleWindow;
+    if (idleWindow.requestIdleCallback) {
+      let timer: number | null = null;
+      let idleHandle: number | null = null;
+      const rows: ArchetypeDraftability[] = [];
+      const simPool = demandUniverseFromPlayers(rosterDesignerPlayers);
+      let archetypeIndex = 0;
+
+      const finish = () => {
+        rows.sort(compareDraftabilityRows);
+        rows.forEach((row, index) => {
+          row.rank = index + 1;
+        });
+        if (!cancelled) setDraftability(draftabilityRecordFromRows(rows));
+      };
+
+      const runNext = () => {
+        if (cancelled) return;
+        const archetype = HISTORICAL_ARCHETYPES[archetypeIndex];
+        if (!archetype) {
+          finish();
+          return;
+        }
+        const [row] = rankArchetypeDraftability(
+          simPool,
+          [archetype],
+          league?.tier ?? "juiced",
+          { budgetOverride: tierBudget },
+        );
+        rows.push(row);
+        archetypeIndex += 1;
+        timer = window.setTimeout(() => {
+          idleHandle = idleWindow.requestIdleCallback?.(runNext, { timeout: 1000 }) ?? null;
+        }, 0);
+      };
+
+      timer = window.setTimeout(() => {
+        idleHandle = idleWindow.requestIdleCallback?.(runNext, { timeout: 1000 }) ?? null;
+      }, 400);
+
+      return () => {
+        cancelled = true;
+        if (timer !== null) window.clearTimeout(timer);
+        if (idleHandle !== null) idleWindow.cancelIdleCallback?.(idleHandle);
+      };
+    }
     const timer = window.setTimeout(() => {
       void (async () => {
         const rows = rankAllArchetypesForPool(
@@ -1039,11 +1375,7 @@ export function LeagueBuilderDraftSetup() {
           league?.tier ?? "juiced",
           { budgetOverride: tierBudget },
         );
-        const next: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> = {};
-        for (const row of rows) {
-          next[row.archetypeId] = { band: row.band, reason: row.reasons[0] };
-        }
-        if (!cancelled) setDraftability(next);
+        if (!cancelled) setDraftability(draftabilityRecordFromRows(rows));
       })();
     }, 400);
     return () => {
@@ -1082,10 +1414,10 @@ export function LeagueBuilderDraftSetup() {
   const saveLeagueDraftSetup = useCallback(
     async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
       if (!league) return;
-      await saveLeagueTemplate({ ...league, ...patch });
-      await refresh();
+      const saved = await saveLeagueTemplate({ ...league, ...patch });
+      replaceLeagueLocal(saved);
     },
-    [league, refresh],
+    [league, replaceLeagueLocal],
   );
 
   const handlePoolSizeMultiplierChange = (poolSizeMultiplier: number) =>
@@ -1094,7 +1426,7 @@ export function LeagueBuilderDraftSetup() {
       assertPoolCanMutate();
       if (locked) throw new Error("Pool is locked. Unlock it before changing pool size.");
       await saveLeagueDraftSetup({ poolSizeMultiplier });
-    });
+    }, { refreshData: false, refreshPool: false });
 
   const handleSalaryCapInputChange = (value: string) => {
     const parsed = parseSalaryCapInput(value);
@@ -1107,7 +1439,8 @@ export function LeagueBuilderDraftSetup() {
       assertPoolCanMutate();
       if (locked) throw new Error("Pool is locked. Unlock it before changing salary cap.");
       if (salaryCapHardError || parsedSalaryCapInput === null) throw new Error(salaryCapHardError ?? "ENTER A VALID SALARY CAP.");
-      await saveLeagueTemplate({ ...league, salaryCap: parsedSalaryCapInput });
+      const saved = await saveLeagueTemplate({ ...league, salaryCap: parsedSalaryCapInput });
+      replaceLeagueLocal(saved);
     });
 
   const handleSalaryCapReset = () =>
@@ -1115,7 +1448,8 @@ export function LeagueBuilderDraftSetup() {
       if (!league) return;
       assertPoolCanMutate();
       if (locked) throw new Error("Pool is locked. Unlock it before changing salary cap.");
-      await saveLeagueTemplate({ ...league, salaryCap: undefined });
+      const saved = await saveLeagueTemplate({ ...league, salaryCap: undefined });
+      replaceLeagueLocal(saved);
     });
 
   const persistSeatNameForOwnedTeams = useCallback(
@@ -1125,16 +1459,17 @@ export function LeagueBuilderDraftSetup() {
         const ownerId = team.gmSeatId || seats[0]?.id || DEFAULT_DRAFT_SEATS[0].id;
         return ownerId === seat.id;
       });
-      await Promise.all(affectedTeams.map((team) =>
+      const savedTeams = await Promise.all(affectedTeams.map((team) =>
         saveTeam({
           ...team,
           gmSeatId: seat.id,
           gmSeatName: seat.name,
         }),
       ));
+      replaceTeamsLocal(savedTeams);
       await saveLeagueDraftSetup({ draftSeats: nextSeats });
     },
-    [leagueTeams, saveLeagueDraftSetup, seats],
+    [leagueTeams, replaceTeamsLocal, saveLeagueDraftSetup, seats],
   );
 
   // FABLE-C3 (audit POOL-01): composition intelligence rides the REGISTERED (locked) snapshot.
@@ -1178,13 +1513,13 @@ export function LeagueBuilderDraftSetup() {
   }, [isLoading, activeLeagueId, league, poolEditingBlocked, poolMode, refresh]);
 
   const runAction = useCallback(
-    async (fn: () => Promise<void>) => {
+    async (fn: () => Promise<void>, options: { refreshData?: boolean; refreshPool?: boolean } = {}) => {
       setBusy(true);
       setActionError(null);
       try {
         await fn();
-        await refresh();
-        if (activeLeagueId) await refreshPool(activeLeagueId);
+        if (options.refreshData ?? true) await refresh();
+        if (activeLeagueId && (options.refreshPool ?? true)) await refreshPool(activeLeagueId);
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -1223,6 +1558,35 @@ export function LeagueBuilderDraftSetup() {
     );
   }, [humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, shills, tierBudget]);
 
+  const buildPoolFirstShapeResult = useCallback((provenance: PoolProvenanceState): PoolFromDemandResult => {
+    if (!league) throw new Error("League not found.");
+    const selectedArchetypes = leagueTeams
+      .map((team) => HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey))
+      .filter((archetype): archetype is (typeof HISTORICAL_ARCHETYPES)[number] => Boolean(archetype));
+    const hardKeepSet = setUnion(provenance.seedProtectedIds, provenance.userAddedIds, new Set(rosterDesignPinPlayerIds));
+    const hardKeepIds = sortedIds([...hardKeepSet]);
+    return extractPoolFromDemand(
+      demandUniverseFromPlayers(players),
+      [],
+      selectedArchetypes,
+      league.tier ?? "juiced",
+      {
+        teams: league.teamIds.length,
+        // Production pool-first shaping targets displayed league roster demand;
+        // draft shills affect scout-hire routing, not this source pool size.
+        shills: 0,
+        budgetPerTeam: tierBudget,
+        poolBalancePreset,
+        poolSizeMultiplier: poolBalanceTuning.poolSlackFactor,
+        pinnedIds: hardKeepIds,
+        excludedIds: sortedIds([...provenance.manualExcludedIds].filter((id) => !hardKeepSet.has(id))),
+        generationNonce: provenance.generationNonce,
+        poolSourceMode,
+        priorityIds: sortedIds([...selectedTeamRosterIds]),
+      },
+    );
+  }, [league, leagueTeams, players, poolBalancePreset, poolBalanceTuning.poolSlackFactor, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
+
   useEffect(() => {
     setReExtractConfirm(false);
     setLockConfirm(false);
@@ -1231,13 +1595,40 @@ export function LeagueBuilderDraftSetup() {
       setModeAReport(null);
       return;
     }
-    try {
-      const result = buildModeAResult(modeAHandLedger);
-      setModeAReport(modeAReportFromResult(result, lockedDesignPinPlayerIds.length));
-    } catch {
-      setModeAReport(null);
-    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      try {
+        const result = buildModeAResult(modeAHandLedger);
+        if (!cancelled) setModeAReport(modeAReportFromResult(result, lockedDesignPinPlayerIds.length));
+      } catch {
+        if (!cancelled) setModeAReport(null);
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [buildModeAResult, league?.poolExtractedAt, lockedDesignPinPlayerIds.length, modeAHandLedger, poolMode]);
+
+  useEffect(() => {
+    if (poolMode !== "pool-first") setPoolFirstShapeReport(null);
+  }, [poolMode]);
+
+  useEffect(() => {
+    setPoolProvenance(loadPoolProvenanceFromSession(activeLeagueId, poolMode));
+    setPoolSourceMode(loadPoolSourceModeFromSession(activeLeagueId, poolMode));
+    setPoolFirstShapeReport(null);
+  }, [activeLeagueId, poolMode]);
+
+  useEffect(() => {
+    if (poolMode !== "pool-first") return;
+    savePoolProvenanceToSession(activeLeagueId, poolMode, poolProvenance);
+  }, [activeLeagueId, poolMode, poolProvenance]);
+
+  useEffect(() => {
+    if (poolMode !== "pool-first") return;
+    savePoolSourceModeToSession(activeLeagueId, poolMode, poolSourceMode);
+  }, [activeLeagueId, poolMode, poolSourceMode]);
 
   useEffect(() => {
     if (!reExtractConfirm && !lockConfirm && !runItBackConfirm) return undefined;
@@ -1273,7 +1664,7 @@ export function LeagueBuilderDraftSetup() {
         modeAHandRemoves: nextMode === "pool-first" ? undefined : league.modeAHandRemoves,
       });
       if (nextMode === "pool-first") setModeAReport(null);
-    });
+    }, { refreshData: false, refreshPool: false });
 
   const handleSeatNameChange = (seatId: string, name: string) =>
     runAction(async () => {
@@ -1296,7 +1687,7 @@ export function LeagueBuilderDraftSetup() {
       const fallbackSeat = seats.find((seat) => seat.id !== seatId) ?? DEFAULT_DRAFT_SEATS[0];
       const nextSeats = seats.filter((seat) => seat.id !== seatId);
       const affectedTeams = leagueTeams.filter((team) => teamOwnerId(team, seats) === seatId);
-      await Promise.all(affectedTeams.map((team) =>
+      const savedTeams = await Promise.all(affectedTeams.map((team) =>
         saveTeam({
           ...team,
           controlledBy: "human",
@@ -1304,6 +1695,7 @@ export function LeagueBuilderDraftSetup() {
           gmSeatName: fallbackSeat.name,
         }),
       ));
+      replaceTeamsLocal(savedTeams);
       await saveLeagueDraftSetup({ draftSeats: nextSeats });
     });
 
@@ -1313,12 +1705,13 @@ export function LeagueBuilderDraftSetup() {
       const team = leagueTeams.find((candidate) => candidate.id === teamId);
       if (!team) return;
       const seat = seats.find((candidate) => candidate.id === ownerId);
-      await saveTeam({
+      const saved = await saveTeam({
         ...team,
         controlledBy: ownerId === "cpu" ? "ai" : "human",
         gmSeatId: ownerId === "cpu" ? undefined : seat?.id ?? ownerId,
         gmSeatName: ownerId === "cpu" ? undefined : seat?.name ?? "GM",
       });
+      replaceTeamsLocal([saved]);
     });
 
   const handlePick = (slot: ArchetypeSlot, key: string) =>
@@ -1327,42 +1720,196 @@ export function LeagueBuilderDraftSetup() {
       const nextMlbKey = slot === "mlb" ? key : selectedTeam.mlbArchetypeKey;
       const nextFarmKey = slot === "farm" ? key : selectedTeam.farmArchetypeKey;
       if (!nextMlbKey) {
-        await saveTeam({ ...selectedTeam, farmArchetypeKey: nextFarmKey });
+        const saved = await saveTeam({ ...selectedTeam, farmArchetypeKey: nextFarmKey });
+        replaceTeamsLocal([saved]);
         return;
       }
-      await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey);
+      const saved = await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey);
+      replaceTeamsLocal([saved]);
     });
 
   const handleSaveRosterDesign = useCallback(
     async (team: Team, rosterDesign: NonNullable<Team["rosterDesign"]>) => {
       try {
-        await saveTeam({ ...team, rosterDesign });
-        await refresh();
+        const saved = await saveTeam({ ...team, rosterDesign });
+        replaceTeamsLocal([saved]);
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
       }
     },
-    [refresh],
+    [replaceTeamsLocal],
   );
 
   const handleAdd = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await addPlayersToLeaguePool([...availSelected], activeLeagueId);
+      const addedIds = [...availSelected];
+      const changedPlayers = await addPlayersToLeaguePool(addedIds, activeLeagueId);
+      replacePlayersLocal(changedPlayers);
       setAvailSelected(new Set());
-    });
+      setPoolProvenance((previous) => {
+        const userAddedIds = new Set(previous.userAddedIds);
+        const manualExcludedIds = new Set(previous.manualExcludedIds);
+        const engineGeneratedIds = new Set(previous.engineGeneratedIds);
+        for (const id of addedIds) {
+          userAddedIds.add(id);
+          manualExcludedIds.delete(id);
+          engineGeneratedIds.delete(id);
+        }
+        return { ...previous, userAddedIds, manualExcludedIds, engineGeneratedIds };
+      });
+      setPoolFirstShapeReport(null);
+    }, { refreshData: false });
 
   const handleRemove = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await removePlayersFromLeaguePool([...inSelected], activeLeagueId);
+      const pinnedHardKeepIds = new Set(rosterDesignPinPlayerIds);
+      const removedIds = [...inSelected].filter((id) => !pinnedHardKeepIds.has(id));
+      const changedPlayers = removedIds.length > 0
+        ? await removePlayersFromLeaguePool(removedIds, activeLeagueId)
+        : [];
+      replacePlayersLocal(changedPlayers);
       setInSelected(new Set());
-    });
+      setPoolProvenance((previous) => {
+        const userAddedIds = new Set(previous.userAddedIds);
+        const manualExcludedIds = new Set(previous.manualExcludedIds);
+        const engineGeneratedIds = new Set(previous.engineGeneratedIds);
+        const seedProtectedIds = new Set(previous.seedProtectedIds);
+        for (const id of removedIds) {
+          if (userAddedIds.has(id)) {
+            userAddedIds.delete(id);
+          } else {
+            manualExcludedIds.add(id);
+          }
+          engineGeneratedIds.delete(id);
+          seedProtectedIds.delete(id);
+        }
+        return { ...previous, engineGeneratedIds, userAddedIds, manualExcludedIds, seedProtectedIds };
+      });
+      setPoolFirstShapeReport(null);
+    }, { refreshData: false });
 
   const handleImport = () =>
     runAction(async () => {
       assertPoolCanMutate();
       await importRosteredPlayersToLeaguePool(activeLeagueId);
+      setPoolFirstShapeReport(null);
+    });
+
+  const regenerateProductionPool = async (baseProvenance: PoolProvenanceState) => {
+    if (!league) return;
+    assertPoolCanMutate();
+    const currentIds = new Set(players.filter((player) => isPlayerInLeaguePool(player, activeLeagueId)).map((player) => player.id));
+    const pinnedHardKeepIds = new Set(rosterDesignPinPlayerIds);
+    const seedProtectedIds = new Set(baseProvenance.seedProtectedIds);
+    const needsEngineBootstrap = baseProvenance.engineGeneratedIds.size === 0;
+    const bootstrappedEngineGeneratedIds = needsEngineBootstrap
+      ? setDifference(
+        setDifference(
+          setDifference(
+            setDifference(currentIds, baseProvenance.userAddedIds),
+            pinnedHardKeepIds,
+          ),
+          baseProvenance.manualExcludedIds,
+        ),
+        seedProtectedIds,
+      )
+      : new Set(baseProvenance.engineGeneratedIds);
+    const normalizedProvenance: PoolProvenanceState = {
+      engineGeneratedIds: bootstrappedEngineGeneratedIds,
+      userAddedIds: new Set(baseProvenance.userAddedIds),
+      manualExcludedIds: new Set(baseProvenance.manualExcludedIds),
+      seedProtectedIds,
+      generationNonce: Math.max(0, Math.floor(baseProvenance.generationNonce)),
+    };
+    const result = buildPoolFirstShapeResult(normalizedProvenance);
+    const resultIds = new Set(result.players.map((player) => player.id));
+    const hardKeepIds = setUnion(normalizedProvenance.seedProtectedIds, normalizedProvenance.userAddedIds, pinnedHardKeepIds);
+    const engineGeneratedIds = setDifference(resultIds, hardKeepIds);
+    const nextIds = setUnion(hardKeepIds, engineGeneratedIds);
+    const toAdd = [...nextIds].filter((id) => !currentIds.has(id));
+    const toRemove = [...normalizedProvenance.engineGeneratedIds].filter((id) => currentIds.has(id) && !nextIds.has(id));
+    if (toAdd.length > 0) await addPlayersToLeaguePool(toAdd, activeLeagueId);
+    if (toRemove.length > 0) await removePlayersFromLeaguePool(toRemove, activeLeagueId);
+    const nextProvenance = {
+      engineGeneratedIds,
+      userAddedIds: normalizedProvenance.userAddedIds,
+      manualExcludedIds: normalizedProvenance.manualExcludedIds,
+      seedProtectedIds: normalizedProvenance.seedProtectedIds,
+      generationNonce: normalizedProvenance.generationNonce,
+    };
+    setPoolProvenance(nextProvenance);
+    const report = modeAReportFromResult(result, 0);
+    setPoolFirstShapeReport(report);
+    const numeric = report.numericShape;
+    console.info("Draft setup production numeric pool shape", {
+      preset: numeric?.preset ?? poolBalancePreset,
+      demand: numeric?.requiredRosterDemand ?? report.sizing?.demandBase ?? league.teamIds.length * 22,
+      targetPoolSize: numeric?.targetSize ?? report.sizing?.finalSize ?? result.size,
+      actualPoolSize: result.size,
+      slackFactor: numeric?.poolSlackFactor ?? report.sizing?.requestedMultiplier ?? null,
+      medianNumericGrade: numeric?.medianNumericGrade ?? null,
+      p90NumericGrade: numeric?.p90NumericGrade ?? null,
+      highTailShare: numeric?.highTailShare ?? null,
+      superstarTailShare: numeric?.superstarTailShare ?? null,
+      middleMassShare: numeric?.middleMassShare ?? null,
+      lowTailShare: numeric?.lowTailShare ?? null,
+      barbellIndex: numeric?.barbellIndex ?? null,
+      legalCompletionFeasible: numeric?.legalCompletionFeasible ?? report.g1?.holds ?? null,
+      quotaShortfalls: numeric?.quotaShortfalls.length ?? 0,
+      curveViolations: numeric?.curveViolations?.length ?? 0,
+      poolSourceMode: numeric?.poolSourceMode ?? poolSourceMode,
+      selectedTeamRosterCandidateCount: numeric?.selectedTeamRosterCandidateCount ?? selectedTeamRosterIds.size,
+      selectedTeamRosterFinalCount: numeric?.selectedTeamRosterFinalCount ?? 0,
+      fullPoolEligibleCandidateCount: numeric?.fullPoolEligibleCandidateCount ?? players.length,
+      engineGeneratedFromSelectedTeamRosterCount: numeric?.engineGeneratedFromSelectedTeamRosterCount ?? 0,
+      engineGeneratedFromFullPoolCount: numeric?.engineGeneratedFromFullPoolCount ?? 0,
+      hardKeepFromSelectedTeamRosterCount: numeric?.hardKeepFromSelectedTeamRosterCount ?? 0,
+      engineGeneratedCount: engineGeneratedIds.size,
+      userAddedCount: normalizedProvenance.userAddedIds.size,
+      manualExcludedCount: normalizedProvenance.manualExcludedIds.size,
+      protectedCount: normalizedProvenance.seedProtectedIds.size,
+      pinnedHardKeepCount: pinnedHardKeepIds.size,
+      excludedButPinnedCount: [...normalizedProvenance.manualExcludedIds].filter((id) => pinnedHardKeepIds.has(id)).length,
+      missingPinnedFromPoolCount: [...pinnedHardKeepIds].filter((id) => !resultIds.has(id)).length,
+      hardKeepCount: numeric?.hardKeepCount ?? hardKeepIds.size,
+      hardKeepOverflowCount: numeric?.hardKeepOverflowCount ?? 0,
+      hardKeepByBand: numeric?.hardKeepByBand ?? {},
+      engineGeneratedByBand: numeric?.engineGeneratedByBand ?? {},
+      finalPoolByBand: numeric?.finalPoolByBand ?? {},
+      hardKeepShapeOverflowByBand: numeric?.hardKeepShapeOverflowByBand ?? {},
+      excludedReaddedForLegalityCount: numeric?.excludedReaddedForLegalityCount ?? 0,
+      generationNonce: normalizedProvenance.generationNonce,
+      removedEngineGeneratedCount: toRemove.length,
+      g1Additions: numeric?.g1AdditionCount ?? 0,
+      g1Swaps: numeric?.g1SwapCount ?? 0,
+    });
+  };
+
+  const handleRegenerateProductionPool = () =>
+    runAction(async () => {
+      await regenerateProductionPool(poolProvenance);
+    });
+
+  const handleRerollProductionPool = () =>
+    runAction(async () => {
+      await regenerateProductionPool({
+        ...poolProvenance,
+        generationNonce: poolProvenance.generationNonce + 1,
+      });
+    });
+
+  const handleResetManualPoolEdits = () =>
+    runAction(async () => {
+      const resetProvenance: PoolProvenanceState = {
+        engineGeneratedIds: new Set(poolProvenance.engineGeneratedIds),
+        userAddedIds: new Set<string>(),
+        manualExcludedIds: new Set<string>(),
+        seedProtectedIds: new Set(poolProvenance.seedProtectedIds),
+        generationNonce: poolProvenance.generationNonce,
+      };
+      await regenerateProductionPool(resetProvenance);
     });
 
   const handleExtractPool = () =>
@@ -1385,7 +1932,7 @@ export function LeagueBuilderDraftSetup() {
       if (toAdd.length > 0) await addPlayersToLeaguePool(toAdd, activeLeagueId);
       if (toRemove.length > 0) await removePlayersFromLeaguePool(toRemove, activeLeagueId);
       const extractedAt = new Date().toISOString();
-      await saveLeagueTemplate({
+      const saved = await saveLeagueTemplate({
         ...league,
         poolExtractedAt: extractedAt,
         poolExtractedBasis: livePoolExtractedBasis ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills),
@@ -1393,6 +1940,7 @@ export function LeagueBuilderDraftSetup() {
         modeAHandAdds: folded.handAdds,
         modeAHandRemoves: folded.handRemoves,
       });
+      replaceLeagueLocal(saved);
       setModeAReport(modeAReportFromResult(result, lockedDesignPinPlayerIds.length));
       setReExtractConfirm(false);
     });
@@ -1456,13 +2004,6 @@ export function LeagueBuilderDraftSetup() {
     },
     [activeLeagueId, poolEditingBlockMessage, poolEditingBlocked, refresh, refreshPool, updatePlayer],
   );
-
-  const toggle = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
-    const next = new Set(set);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setter(next);
-  };
 
   const selectAll = (filtered: Player[], setter: (s: Set<string>) => void) =>
     setter(new Set(filtered.map((p) => p.id)));
@@ -1554,6 +2095,8 @@ export function LeagueBuilderDraftSetup() {
     sufficiency.meetsFloor &&
     allHumanDesignsLocked &&
     !modeAStale;
+  const poolFirstLegalCompletionBlocked =
+    poolMode === "pool-first" && poolFirstManualShapeDiagnostics?.legalCompletionFeasible === false;
   const runModeALock = () => {
     if (!canModeALock) return;
     if (nonGreenClubCount > 0 && !lockConfirm) {
@@ -1592,7 +2135,7 @@ export function LeagueBuilderDraftSetup() {
             </PressButton>
           }
         >
-          {inFiltered.map((player) => (
+          {visibleInFiltered.map((player) => (
             <Row
               key={player.id}
               player={player}
@@ -1601,10 +2144,17 @@ export function LeagueBuilderDraftSetup() {
               checked={inSelected.has(player.id)}
               focused={focusedPlayerId === player.id}
               disabled={poolEditingBlocked}
-              onToggle={() => toggle(inSelected, setInSelected, player.id)}
-              onFocus={() => setFocusedPlayerId(player.id)}
+              onToggle={toggleInPlayer}
+              onFocus={focusPlayer}
             />
           ))}
+          {inFiltered.length > visibleInFiltered.length && (
+            <ListLimitNotice
+              shown={visibleInFiltered.length}
+              total={inFiltered.length}
+              onShowMore={() => setInVisibleLimit((limit) => limit + VISIBLE_POOL_ROW_STEP)}
+            />
+          )}
           {inFiltered.length === 0 && <Empty label="The pool is empty." />}
         </Pane>
 
@@ -1632,23 +2182,25 @@ export function LeagueBuilderDraftSetup() {
             </PressButton>
           }
         >
-          {availFiltered.slice(0, 500).map((player) => (
+          {visibleAvailFiltered.map((player) => (
             <Row
               key={player.id}
               player={player}
-              rightLabel={player.overallGrade}
-              rightTitle="Grade"
+              rightLabel={formatMoney(ivById.get(player.id))}
+              rightTitle={`Value · Grade ${player.overallGrade}`}
               checked={availSelected.has(player.id)}
               focused={focusedPlayerId === player.id}
               disabled={poolEditingBlocked}
-              onToggle={() => toggle(availSelected, setAvailSelected, player.id)}
-              onFocus={() => setFocusedPlayerId(player.id)}
+              onToggle={toggleAvailablePlayer}
+              onFocus={focusPlayer}
             />
           ))}
-          {availFiltered.length > 500 && (
-            <div className="text-xs text-[var(--ballpark-chalk)]/55 px-2 py-2">
-              Showing first 500 of {availFiltered.length}. Narrow the filters to see more.
-            </div>
+          {availFiltered.length > visibleAvailFiltered.length && (
+            <ListLimitNotice
+              shown={visibleAvailFiltered.length}
+              total={availFiltered.length}
+              onShowMore={() => setAvailVisibleLimit((limit) => limit + VISIBLE_POOL_ROW_STEP)}
+            />
           )}
           {availFiltered.length === 0 && <Empty label="No available players match." />}
         </Pane>
@@ -1821,14 +2373,84 @@ export function LeagueBuilderDraftSetup() {
     </div>
   ) : null;
 
-  const sizingSummaryLine = modeAReport?.sizing && !poolTrailing ? (
+  const activePoolShapeReport = poolMode === "pool-first" ? poolFirstShapeReport : modeAReport;
+  const sizingSummaryLine = activePoolShapeReport?.sizing && !poolTrailing ? (
     <div className="border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-chalk)]">
-      Sized to {modeAReport.sizing.finalSize} ({(modeAReport.sizing.finalSize / Math.max(1, modeAReport.sizing.demandBase)).toFixed(2)}×):
-      {" "}trimmed {modeAReport.sizing.trimmedCount} worst-fit extras, added {modeAReport.sizing.injectedIds.length} for affordability.
+      Sized to {activePoolShapeReport.sizing.finalSize} ({(activePoolShapeReport.sizing.finalSize / Math.max(1, activePoolShapeReport.sizing.demandBase)).toFixed(2)}×):
+      {" "}trimmed {activePoolShapeReport.sizing.trimmedCount} worst-fit extras, added {activePoolShapeReport.sizing.injectedIds.length} for affordability.
       {handEditReportSentence(
-        modeAReport.sizing.pinnedHandPicks?.length ?? 0,
-        modeAReport.sizing.excludedHandRemoves?.length ?? 0,
+        activePoolShapeReport.sizing.pinnedHandPicks?.length ?? 0,
+        activePoolShapeReport.sizing.excludedHandRemoves?.length ?? 0,
       )}
+    </div>
+  ) : null;
+
+  const numericShapeDiagnostics = poolFirstShapeReport?.numericShape ? (
+    <div className="border-l-4 border-[var(--ballpark-action-green)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-chalk)]">
+      Production shape: {POOL_BALANCE_PRESET_LABELS[poolFirstShapeReport.numericShape.preset]} · demand {poolFirstShapeReport.numericShape.requiredRosterDemand}
+      {" "}· target {poolFirstShapeReport.numericShape.targetSize}
+      {" "}· actual {poolFirstShapeReport.numericShape.poolSize}
+      {" "}· slack {poolFirstShapeReport.numericShape.poolSlackFactor.toFixed(2)}×
+      {" "}· median {poolFirstShapeReport.numericShape.medianNumericGrade?.toFixed(1) ?? "n/a"}
+      {" "}· p90 {poolFirstShapeReport.numericShape.p90NumericGrade?.toFixed(1) ?? "n/a"}
+      {" "}· high {(poolFirstShapeReport.numericShape.highTailShare * 100).toFixed(1)}%
+      {" "}· superstar {(poolFirstShapeReport.numericShape.superstarTailShare * 100).toFixed(1)}%
+      {" "}· middle {(poolFirstShapeReport.numericShape.middleMassShare * 100).toFixed(1)}%
+      {" "}· low {(poolFirstShapeReport.numericShape.lowTailShare * 100).toFixed(1)}%
+      {" "}· barbell {poolFirstShapeReport.numericShape.barbellIndex.toFixed(2)}
+      {" "}· legal {poolFirstShapeReport.numericShape.legalCompletionFeasible === false ? "no" : "yes"}
+      {" "}· shortfalls {poolFirstShapeReport.numericShape.quotaShortfalls.length}
+      {" "}· curve {poolFirstShapeReport.numericShape.curveViolations?.length ?? 0}
+      {" "}· source {POOL_SOURCE_MODE_LABELS[poolFirstShapeReport.numericShape.poolSourceMode]}
+      {" "}· roster final {poolFirstShapeReport.numericShape.selectedTeamRosterFinalCount}/{poolFirstShapeReport.numericShape.selectedTeamRosterCandidateCount}
+      {" "}· engine roster {poolFirstShapeReport.numericShape.engineGeneratedFromSelectedTeamRosterCount}
+      {" "}· engine full {poolFirstShapeReport.numericShape.engineGeneratedFromFullPoolCount}
+      {" "}· engine {poolFirstShapeReport.numericShape.engineGeneratedByBand ? Object.values(poolFirstShapeReport.numericShape.engineGeneratedByBand).reduce((sum, count) => sum + count, 0) : poolProvenance.engineGeneratedIds.size}
+      {" "}· hard {poolFirstShapeReport.numericShape.hardKeepCount}
+      {" "}· pinned {rosterDesignPinPlayerIds.length}
+      {" "}· hard overflow {poolFirstShapeReport.numericShape.hardKeepOverflowCount}
+      {" "}· nonce {poolProvenance.generationNonce}
+      {" "}· G1 +{poolFirstShapeReport.numericShape.g1AdditionCount ?? 0}
+      {" "}· swaps {poolFirstShapeReport.numericShape.g1SwapCount ?? 0}
+      {poolFirstShapeReport.numericShape.overTargetReason ? <> · over target: {poolFirstShapeReport.numericShape.overTargetReason}</> : null}
+    </div>
+  ) : null;
+
+  const manualShapeDiagnostics = poolMode === "pool-first" && poolFirstManualShapeDiagnostics ? (
+    <div
+      className={`border-l-4 bg-[var(--ballpark-well)] px-4 py-3 text-sm ${
+        poolFirstManualShapeWarnings.length
+          ? "border-[var(--ballpark-status-warn)] text-[#FFE8B0]"
+          : "border-[var(--ballpark-action-green)] text-[var(--ballpark-chalk)]"
+      }`}
+    >
+      Manual pool: {POOL_BALANCE_PRESET_LABELS[poolBalancePreset]} · actual {poolFirstManualShapeDiagnostics.poolSize}
+      {" "}· target {poolFirstManualShapeDiagnostics.targetSize}
+      {" "}· source {POOL_SOURCE_MODE_LABELS[poolFirstManualShapeDiagnostics.poolSourceMode]}
+      {" "}· median {poolFirstManualShapeDiagnostics.medianNumericGrade?.toFixed(1) ?? "n/a"}
+      {" "}· p90 {poolFirstManualShapeDiagnostics.p90NumericGrade?.toFixed(1) ?? "n/a"}
+      {" "}· high {(poolFirstManualShapeDiagnostics.highTailShare * 100).toFixed(1)}%
+      {" "}· superstar {(poolFirstManualShapeDiagnostics.superstarTailShare * 100).toFixed(1)}%
+      {" "}· middle {(poolFirstManualShapeDiagnostics.middleMassShare * 100).toFixed(1)}%
+      {" "}· low {(poolFirstManualShapeDiagnostics.lowTailShare * 100).toFixed(1)}%
+      {" "}· legal {poolFirstManualShapeDiagnostics.legalCompletionFeasible === false ? "no" : "yes"}
+      {" "}· engine {poolProvenance.engineGeneratedIds.size}
+      {" "}· user {poolProvenance.userAddedIds.size}
+      {" "}· excluded {poolProvenance.manualExcludedIds.size}
+      {" "}· protected {poolProvenance.seedProtectedIds.size}
+      {" "}· pinned {rosterDesignPinPlayerIds.length}
+      {" "}· roster final {poolFirstManualShapeDiagnostics.selectedTeamRosterFinalCount}/{poolFirstManualShapeDiagnostics.selectedTeamRosterCandidateCount}
+      {" "}· hard {poolFirstManualShapeDiagnostics.hardKeepCount}
+      {" "}· hard overflow {poolFirstManualShapeDiagnostics.hardKeepOverflowCount}
+      {" "}· nonce {poolProvenance.generationNonce}
+      {poolFirstManualShapeDiagnostics.poolSize > poolFirstManualShapeDiagnostics.targetSize ? (
+        <> · over target: {poolFirstManualShapeDiagnostics.overTargetReason ?? "manual additions or legal repair"}</>
+      ) : null}
+      {poolFirstManualShapeWarnings.length ? (
+        <div className="mt-2 font-bold">
+          {poolFirstManualShapeWarnings.join(" · ")}
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -2186,6 +2808,7 @@ export function LeagueBuilderDraftSetup() {
                     team={selectedTeam}
                     mode={poolMode}
                     players={rosterDesignerPlayers}
+                    allPlayers={players}
                     lockedPool={locked}
                     budget={tierBudget}
                     tier={league.tier ?? "juiced"}
@@ -2451,6 +3074,62 @@ export function LeagueBuilderDraftSetup() {
                       {solvencyBanner}
                     </div>
                   ) : null}
+                  <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">
+                    <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
+                      POOL BALANCE
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {POOL_BALANCE_PRESET_ORDER.map((preset) => {
+                        const active = poolBalancePreset === preset;
+                        return (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              setPoolBalancePreset(preset);
+                              setPoolFirstShapeReport(null);
+                            }}
+                            disabled={poolEditingBlocked || busy}
+                            className={`px-2 py-1 text-[10px] font-bold border-2 ${
+                              active
+                                ? "bg-[var(--ballpark-brass)] text-[#1A1A1A] border-[var(--ballpark-brass)]"
+                                : "bg-[#2F3F32] text-[var(--ballpark-chalk)] border-[var(--ballpark-panel-border)]"
+                            }`}
+                          >
+                            {POOL_BALANCE_PRESET_LABELS[preset]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">
+                    <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
+                      POOL SOURCE
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {POOL_SOURCE_MODE_ORDER.map((sourceMode) => {
+                        const active = poolSourceMode === sourceMode;
+                        return (
+                          <button
+                            key={sourceMode}
+                            type="button"
+                            onClick={() => {
+                              setPoolSourceMode(sourceMode);
+                              setPoolFirstShapeReport(null);
+                            }}
+                            disabled={poolEditingBlocked || busy}
+                            className={`px-2 py-1 text-[10px] font-bold border-2 ${
+                              active
+                                ? "bg-[var(--ballpark-brass)] text-[#1A1A1A] border-[var(--ballpark-brass)]"
+                                : "bg-[#2F3F32] text-[var(--ballpark-chalk)] border-[var(--ballpark-panel-border)]"
+                            }`}
+                          >
+                            {POOL_SOURCE_MODE_LABELS[sourceMode]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <PressButton
                     onClick={handleImport}
                     disabled={poolEditingBlocked || busy}
@@ -2458,10 +3137,32 @@ export function LeagueBuilderDraftSetup() {
                   >
                     <Download className="w-4 h-4" /> Import from branded teams
                   </PressButton>
+                  <PressButton
+                    onClick={handleRegenerateProductionPool}
+                    disabled={poolEditingBlocked || busy}
+                    size="sm"
+                    variant="affirm"
+                  >
+                    <Download className="w-4 h-4" /> Regenerate production-shaped pool
+                  </PressButton>
+                  <PressButton
+                    onClick={handleRerollProductionPool}
+                    disabled={poolEditingBlocked || busy}
+                    size="sm"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Reroll generated players
+                  </PressButton>
+                  <PressButton
+                    onClick={handleResetManualPoolEdits}
+                    disabled={poolEditingBlocked || busy}
+                    size="sm"
+                  >
+                    Reset manual edits
+                  </PressButton>
                   {!locked ? (
                     <PressButton
                       onClick={handleLock}
-                      disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0}
+                      disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0 || poolFirstLegalCompletionBlocked}
                       variant="gold"
                       shadow={4}
                     >
@@ -2478,6 +3179,9 @@ export function LeagueBuilderDraftSetup() {
                   )}
                 </div>
                 {recheckPanel}
+                {sizingSummaryLine}
+                {numericShapeDiagnostics}
+                {manualShapeDiagnostics}
                 {marketOutlookPanel}
               </>
             )}
@@ -3006,7 +3710,7 @@ function Pane({
   );
 }
 
-function Row({
+const Row = memo(function Row({
   player,
   rightLabel,
   rightTitle,
@@ -3022,20 +3726,20 @@ function Row({
   checked: boolean;
   focused: boolean;
   disabled: boolean;
-  onToggle: () => void;
-  onFocus: () => void;
+  onToggle: (playerId: string) => void;
+  onFocus: (playerId: string) => void;
 }) {
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    onFocus();
+    onFocus(player.id);
   };
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={onFocus}
+      onClick={() => onFocus(player.id)}
       onKeyDown={handleKeyDown}
       className={`w-full flex items-center gap-2 px-2 py-1.5 text-left border-b border-[#4A6844] text-sm transition cursor-pointer ${
         focused ? "bg-[#C4A853]/20 outline outline-2 outline-[#C4A853] -outline-offset-2" : checked ? "bg-[#5A8352]" : "hover:bg-[#4A6844]"
@@ -3045,7 +3749,7 @@ function Row({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          onToggle();
+          onToggle(player.id);
         }}
         disabled={disabled}
         aria-pressed={checked}
@@ -3061,6 +3765,29 @@ function Row({
       <span className="w-24 text-right text-xs font-bold text-[#E8E8D8]" title={rightTitle}>
         {rightLabel}
       </span>
+    </div>
+  );
+});
+
+function ListLimitNotice({
+  shown,
+  total,
+  onShowMore,
+}: {
+  shown: number;
+  total: number;
+  onShowMore: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-2 py-2 text-xs text-[var(--ballpark-chalk)]/55">
+      <span>Showing {shown} of {total}. Refine search or show more.</span>
+      <button
+        type="button"
+        onClick={onShowMore}
+        className="font-bold text-[#E8E8D8]/85 hover:text-[#E8E8D8] underline"
+      >
+        Show more
+      </button>
     </div>
   );
 }

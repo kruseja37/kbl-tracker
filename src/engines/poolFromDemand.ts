@@ -102,16 +102,38 @@ export interface ClassifiedDemandPlayer {
 export const POOL_SIZE_MULTIPLIER_STOPS = [1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const;
 export const DEFAULT_POOL_SIZE_MULTIPLIER = 1.25;
 
+export type PoolBalancePresetKey = 'grounded' | 'balanced' | 'juiced';
+export type PoolSourceMode = 'team-roster-priority' | 'full-pool';
+
+export interface NumericPoolShapeTuning {
+  lowTailMax: number;
+  middleMin: number;
+  middleMax: number;
+  highTailMin: number;
+  superstarTailMin: number;
+  highTailCap: number;
+  superstarTailCap: number;
+  targetMiddleMass: number;
+  targetLowTailShare: number;
+  lowTailRepairCap: number;
+  maxRepairSlackFactor: number;
+  poolSlackFactor: number;
+  windows: readonly NumericPoolShapeWindow[];
+}
+
 export const NUMERIC_POOL_SHAPE_TUNING = {
   lowTailMax: 58,
   middleMin: 58,
   middleMax: 76,
   highTailMin: 76,
+  superstarTailMin: 84,
   highTailCap: 0.15,
+  superstarTailCap: 0.04,
   targetMiddleMass: 0.70,
   targetLowTailShare: 0.10,
   lowTailRepairCap: 0.18,
   maxRepairSlackFactor: 1.30,
+  poolSlackFactor: DEFAULT_POOL_SIZE_MULTIPLIER,
   windows: [
     { id: 'low-tail', label: 'low tail', minInclusive: 0, maxExclusive: 58, targetShare: 0.10 },
     { id: 'middle-low', label: 'middle low', minInclusive: 58, maxExclusive: 64, targetShare: 0.22 },
@@ -120,7 +142,49 @@ export const NUMERIC_POOL_SHAPE_TUNING = {
     { id: 'high-tail', label: 'high tail', minInclusive: 76, maxExclusive: 84, targetShare: 0.13 },
     { id: 'ultra-high-tail', label: 'ultra high tail', minInclusive: 84, maxExclusive: 101, targetShare: 0.02 },
   ],
+} as const satisfies NumericPoolShapeTuning;
+
+export const POOL_BALANCE_PRESETS: Record<PoolBalancePresetKey, NumericPoolShapeTuning> = {
+  grounded: {
+    ...NUMERIC_POOL_SHAPE_TUNING,
+    poolSlackFactor: 1.2,
+    highTailCap: 0.10,
+    superstarTailCap: 0.02,
+    targetMiddleMass: 0.78,
+    targetLowTailShare: 0.09,
+    lowTailRepairCap: 0.13,
+    windows: [
+      { id: 'low-tail', label: 'low tail', minInclusive: 0, maxExclusive: 58, targetShare: 0.09 },
+      { id: 'middle-low', label: 'middle low', minInclusive: 58, maxExclusive: 64, targetShare: 0.27 },
+      { id: 'middle-core', label: 'middle core', minInclusive: 64, maxExclusive: 70, targetShare: 0.31 },
+      { id: 'middle-high', label: 'middle high', minInclusive: 70, maxExclusive: 76, targetShare: 0.23 },
+      { id: 'high-tail', label: 'high tail', minInclusive: 76, maxExclusive: 84, targetShare: 0.09 },
+      { id: 'ultra-high-tail', label: 'ultra high tail', minInclusive: 84, maxExclusive: 101, targetShare: 0.01 },
+    ],
+  },
+  balanced: NUMERIC_POOL_SHAPE_TUNING,
+  juiced: {
+    ...NUMERIC_POOL_SHAPE_TUNING,
+    poolSlackFactor: 1.35,
+    highTailCap: 0.20,
+    superstarTailCap: 0.05,
+    targetMiddleMass: 0.69,
+    targetLowTailShare: 0.09,
+    lowTailRepairCap: 0.12,
+    windows: [
+      { id: 'low-tail', label: 'low tail', minInclusive: 0, maxExclusive: 58, targetShare: 0.09 },
+      { id: 'middle-low', label: 'middle low', minInclusive: 58, maxExclusive: 64, targetShare: 0.18 },
+      { id: 'middle-core', label: 'middle core', minInclusive: 64, maxExclusive: 70, targetShare: 0.26 },
+      { id: 'middle-high', label: 'middle high', minInclusive: 70, maxExclusive: 76, targetShare: 0.27 },
+      { id: 'high-tail', label: 'high tail', minInclusive: 76, maxExclusive: 84, targetShare: 0.17 },
+      { id: 'ultra-high-tail', label: 'ultra high tail', minInclusive: 84, maxExclusive: 101, targetShare: 0.03 },
+    ],
+  },
 } as const;
+
+export function poolBalancePresetTuning(preset: PoolBalancePresetKey = 'balanced'): NumericPoolShapeTuning {
+  return POOL_BALANCE_PRESETS[preset] ?? POOL_BALANCE_PRESETS.balanced;
+}
 
 export interface NumericPoolShapeWindow {
   readonly id: string;
@@ -142,12 +206,15 @@ export interface NumericPoolQuotaShortfall {
 }
 
 export interface NumericPoolShapeDiagnostics {
+  preset: PoolBalancePresetKey;
   poolSize: number;
   requiredRosterDemand: number;
   poolSlackFactor: number;
   targetSize: number;
   medianNumericGrade: number | null;
+  p90NumericGrade: number | null;
   highTailShare: number;
+  superstarTailShare: number;
   middleMassShare: number;
   lowTailShare: number;
   barbellIndex: number;
@@ -155,6 +222,21 @@ export interface NumericPoolShapeDiagnostics {
   quotaShortfalls: NumericPoolQuotaShortfall[];
   legalCompletionFeasible: boolean | null;
   messages: string[];
+  hardKeepCount: number;
+  hardKeepOverflowCount: number;
+  overTargetReason: string | null;
+  hardKeepByBand: Record<string, number>;
+  engineGeneratedByBand: Record<string, number>;
+  finalPoolByBand: Record<string, number>;
+  hardKeepShapeOverflowByBand: Record<string, number>;
+  excludedReaddedForLegalityCount: number;
+  poolSourceMode: PoolSourceMode;
+  selectedTeamRosterCandidateCount: number;
+  selectedTeamRosterFinalCount: number;
+  fullPoolEligibleCandidateCount: number;
+  engineGeneratedFromSelectedTeamRosterCount: number;
+  engineGeneratedFromFullPoolCount: number;
+  hardKeepFromSelectedTeamRosterCount: number;
   preRepair?: NumericPoolCurveSnapshot;
   postRepair?: NumericPoolCurveSnapshot;
   g1AdditionsByRoleWindow?: Record<string, number>;
@@ -323,7 +405,7 @@ function numericGradeOf(player: DemandUniversePlayer): number {
 
 function numericWindowId(
   numericGrade: number,
-  windows: readonly NumericPoolShapeWindow[] = NUMERIC_POOL_SHAPE_TUNING.windows,
+  windows: readonly NumericPoolShapeWindow[] = poolBalancePresetTuning().windows,
 ): string | null {
   return windows.find((window) =>
     numericGrade >= window.minInclusive && numericGrade < window.maxExclusive
@@ -332,6 +414,15 @@ function numericWindowId(
 
 function numericWindowIdOf(player: DemandUniversePlayer): string {
   return numericWindowId(numericGradeOf(player)) ?? 'unknown';
+}
+
+function numericBandOf(player: DemandUniversePlayer, tuning: NumericPoolShapeTuning): string {
+  const grade = numericGradeOf(player);
+  if (grade < tuning.lowTailMax) return 'low';
+  if (grade >= tuning.superstarTailMin) return 'superstar';
+  if (grade >= tuning.highTailMin) return 'high';
+  if (grade >= tuning.middleMin && grade < tuning.middleMax) return 'middle';
+  return 'other';
 }
 
 function roleBucketOf(player: DemandUniversePlayer): string {
@@ -391,9 +482,97 @@ function targetCountsByRoleBucket(
 
 function targetCountsByWindow(
   targetSize: number,
-  windows: readonly NumericPoolShapeWindow[] = NUMERIC_POOL_SHAPE_TUNING.windows,
+  windows: readonly NumericPoolShapeWindow[] = poolBalancePresetTuning().windows,
 ): Record<string, number> {
   return largestRemainderCounts(windows.map((window) => ({ id: window.id, share: window.targetShare })), targetSize);
+}
+
+function targetCountsByBand(targetSize: number, tuning: NumericPoolShapeTuning): Record<string, number> {
+  const entries = [
+    { id: 'low', share: tuning.windows
+      .filter((window) => window.maxExclusive <= tuning.lowTailMax)
+      .reduce((sum, window) => sum + window.targetShare, 0) },
+    { id: 'middle', share: tuning.windows
+      .filter((window) => window.minInclusive >= tuning.middleMin && window.maxExclusive <= tuning.middleMax)
+      .reduce((sum, window) => sum + window.targetShare, 0) },
+    { id: 'high', share: tuning.windows
+      .filter((window) => window.minInclusive >= tuning.highTailMin && window.minInclusive < tuning.superstarTailMin)
+      .reduce((sum, window) => sum + window.targetShare, 0) },
+    { id: 'superstar', share: tuning.windows
+      .filter((window) => window.minInclusive >= tuning.superstarTailMin)
+      .reduce((sum, window) => sum + window.targetShare, 0) },
+  ];
+  return largestRemainderCounts(entries, targetSize);
+}
+
+function countPlayersByBand(
+  players: readonly DemandUniversePlayer[],
+  tuning: NumericPoolShapeTuning,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const player of players) incrementCount(counts, numericBandOf(player, tuning));
+  return counts;
+}
+
+function stableHashToUnit(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
+
+function seededCandidateWindowSize(windowId: string, needed: number, available: number): number {
+  if (needed <= 0) return 0;
+  if (available <= needed) return available;
+  const extra = isMiddleWindow(windowId)
+    ? Math.max(3, Math.ceil(needed * 0.50))
+    : isHighTailWindow(windowId)
+      ? Math.max(1, Math.ceil(needed * 0.20))
+      : Math.max(2, Math.ceil(needed * 0.25));
+  return Math.min(available, needed + extra);
+}
+
+function seededSelectionJitterWeight(windowId: string): number {
+  if (isMiddleWindow(windowId)) return 1.10;
+  if (isHighTailWindow(windowId)) return 0.25;
+  if (isLowTailWindow(windowId)) return 0.35;
+  return 0.55;
+}
+
+function selectWindowCandidates(options: {
+  candidates: readonly DemandUniversePlayer[];
+  needed: number;
+  windowId: string;
+  generationNonce?: number;
+}): DemandUniversePlayer[] {
+  if (options.needed <= 0) return [];
+  const ordered = [...options.candidates];
+  const nonce = Math.max(0, Math.floor(options.generationNonce ?? 0));
+  if (nonce === 0 || ordered.length <= options.needed) {
+    return ordered.slice(0, options.needed);
+  }
+  const windowSize = seededCandidateWindowSize(options.windowId, options.needed, ordered.length);
+  const maxOffset = Math.max(0, Math.min(ordered.length - windowSize, windowSize - options.needed));
+  const offset = maxOffset > 0 ? nonce % (maxOffset + 1) : 0;
+  const candidateWindow = [
+    ...ordered.slice(offset, offset + windowSize),
+    ...ordered.slice(0, Math.max(0, offset + windowSize - ordered.length)),
+  ];
+  const jitterWeight = seededSelectionJitterWeight(options.windowId);
+  return candidateWindow
+    .map((player, index) => ({
+      player,
+      rank: index / Math.max(1, candidateWindow.length - 1),
+      jitter: stableHashToUnit(`${nonce}|${options.windowId}|${player.id}`),
+    }))
+    .sort((a, b) =>
+      (a.rank + a.jitter * jitterWeight) - (b.rank + b.jitter * jitterWeight)
+      || a.player.id.localeCompare(b.player.id)
+    )
+    .slice(0, options.needed)
+    .map((entry) => entry.player);
 }
 
 function byFitDescIdAsc(
@@ -406,10 +585,30 @@ function byFitDescIdAsc(
   };
 }
 
+function bySourceThenFitDescIdAsc(
+  fitOf: (player: DemandUniversePlayer) => number,
+  priorityIds: ReadonlySet<string>,
+): (a: DemandUniversePlayer, b: DemandUniversePlayer) => number {
+  return (a, b) => {
+    const aPriority = priorityIds.has(a.id);
+    const bPriority = priorityIds.has(b.id);
+    if (aPriority !== bPriority) return aPriority ? -1 : 1;
+    return byFitDescIdAsc(fitOf)(a, b);
+  };
+}
+
 export function buildNumericPoolShapeDiagnostics(options: {
   players: readonly DemandUniversePlayer[];
   requiredRosterDemand: number;
   targetSize: number;
+  preset?: PoolBalancePresetKey;
+  tuning?: NumericPoolShapeTuning;
+  hardKeepPlayers?: readonly DemandUniversePlayer[];
+  engineGeneratedPlayers?: readonly DemandUniversePlayer[];
+  selectedTeamRosterIds?: ReadonlySet<string>;
+  poolSourceMode?: PoolSourceMode;
+  fullPoolEligibleCandidateCount?: number;
+  excludedReaddedForLegalityCount?: number;
   legalCompletionFeasible?: boolean | null;
   quotaShortfalls?: readonly NumericPoolQuotaShortfall[];
   messages?: readonly string[];
@@ -423,25 +622,53 @@ export function buildNumericPoolShapeDiagnostics(options: {
   g1AdditionCount?: number;
   g1SwapCount?: number;
 }): NumericPoolShapeDiagnostics {
+  const preset = options.preset ?? 'balanced';
+  const tuning = options.tuning ?? poolBalancePresetTuning(preset);
   const numericGrades = options.players.map(numericGradeOf);
   const denominator = numericGrades.length || 1;
-  const highTailShare = numericGrades.filter((grade) => grade >= NUMERIC_POOL_SHAPE_TUNING.highTailMin).length / denominator;
+  const highTailShare = numericGrades.filter((grade) => grade >= tuning.highTailMin).length / denominator;
+  const superstarTailShare = numericGrades.filter((grade) => grade >= tuning.superstarTailMin).length / denominator;
   const middleMassShare = numericGrades.filter((grade) =>
-    grade >= NUMERIC_POOL_SHAPE_TUNING.middleMin && grade < NUMERIC_POOL_SHAPE_TUNING.middleMax
+    grade >= tuning.middleMin && grade < tuning.middleMax
   ).length / denominator;
-  const lowTailShare = numericGrades.filter((grade) => grade < NUMERIC_POOL_SHAPE_TUNING.lowTailMax).length / denominator;
+  const lowTailShare = numericGrades.filter((grade) => grade < tuning.lowTailMax).length / denominator;
+  const hardKeepPlayers = [...(options.hardKeepPlayers ?? [])];
+  const engineGeneratedPlayers = options.engineGeneratedPlayers
+    ? [...options.engineGeneratedPlayers]
+    : options.players.filter((player) => !hardKeepPlayers.some((kept) => kept.id === player.id));
+  const selectedTeamRosterIds = options.selectedTeamRosterIds ?? new Set<string>();
+  const hardKeepByBand = countPlayersByBand(hardKeepPlayers, tuning);
+  const engineGeneratedByBand = countPlayersByBand(engineGeneratedPlayers, tuning);
+  const finalPoolByBand = countPlayersByBand(options.players, tuning);
+  const targetBandCounts = targetCountsByBand(options.targetSize, tuning);
+  const hardKeepShapeOverflowByBand: Record<string, number> = {};
+  for (const [band, count] of Object.entries(hardKeepByBand)) {
+    const overflow = count - (targetBandCounts[band] ?? 0);
+    if (overflow > 0) hardKeepShapeOverflowByBand[band] = overflow;
+  }
+  const hardKeepOverflowCount = Math.max(0, hardKeepPlayers.length - options.targetSize);
+  const overTargetReason = options.players.length > options.targetSize
+    ? hardKeepOverflowCount > 0
+      ? 'hardKeep overflow'
+      : hardKeepPlayers.length > 0
+        ? 'protected/manual keeps plus legal repair or curve violation'
+        : 'legal repair or curve violation'
+    : null;
   const positionRoleCoverage: Record<string, number> = {};
   for (const player of options.players) {
     const bucket = roleBucketOf(player);
     positionRoleCoverage[bucket] = (positionRoleCoverage[bucket] ?? 0) + 1;
   }
   const diagnostics = {
+    preset,
     poolSize: options.players.length,
     requiredRosterDemand: options.requiredRosterDemand,
     poolSlackFactor: options.requiredRosterDemand > 0 ? options.players.length / options.requiredRosterDemand : 0,
     targetSize: options.targetSize,
     medianNumericGrade: percentile(numericGrades, 0.5),
+    p90NumericGrade: percentile(numericGrades, 0.9),
     highTailShare,
+    superstarTailShare,
     middleMassShare,
     lowTailShare,
     barbellIndex: highTailShare + lowTailShare - middleMassShare,
@@ -449,6 +676,21 @@ export function buildNumericPoolShapeDiagnostics(options: {
     quotaShortfalls: [...(options.quotaShortfalls ?? [])],
     legalCompletionFeasible: options.legalCompletionFeasible ?? null,
     messages: [...(options.messages ?? [])],
+    hardKeepCount: hardKeepPlayers.length,
+    hardKeepOverflowCount,
+    overTargetReason,
+    hardKeepByBand,
+    engineGeneratedByBand,
+    finalPoolByBand,
+    hardKeepShapeOverflowByBand,
+    excludedReaddedForLegalityCount: options.excludedReaddedForLegalityCount ?? 0,
+    poolSourceMode: options.poolSourceMode ?? 'full-pool',
+    selectedTeamRosterCandidateCount: selectedTeamRosterIds.size,
+    selectedTeamRosterFinalCount: options.players.filter((player) => selectedTeamRosterIds.has(player.id)).length,
+    fullPoolEligibleCandidateCount: options.fullPoolEligibleCandidateCount ?? options.players.length,
+    engineGeneratedFromSelectedTeamRosterCount: engineGeneratedPlayers.filter((player) => selectedTeamRosterIds.has(player.id)).length,
+    engineGeneratedFromFullPoolCount: engineGeneratedPlayers.filter((player) => !selectedTeamRosterIds.has(player.id)).length,
+    hardKeepFromSelectedTeamRosterCount: hardKeepPlayers.filter((player) => selectedTeamRosterIds.has(player.id)).length,
   };
   return {
     ...diagnostics,
@@ -468,11 +710,15 @@ function curveSnapshot(
   players: readonly DemandUniversePlayer[],
   requiredRosterDemand: number,
   targetSize: number,
+  preset: PoolBalancePresetKey = 'balanced',
+  tuning: NumericPoolShapeTuning = poolBalancePresetTuning(preset),
 ): NumericPoolCurveSnapshot {
   const diagnostics = buildNumericPoolShapeDiagnostics({
     players,
     requiredRosterDemand,
     targetSize,
+    preset,
+    tuning,
   });
   return {
     poolSize: diagnostics.poolSize,
@@ -499,14 +745,27 @@ export function shapePoolByNumericGrade(options: {
   targetSize: number;
   requiredRosterDemand: number;
   fitOf: (player: DemandUniversePlayer) => number;
+  preset?: PoolBalancePresetKey;
+  tuning?: NumericPoolShapeTuning;
+  generationNonce?: number;
+  poolSourceMode?: PoolSourceMode;
+  priorityIds?: ReadonlySet<string>;
 }): { players: DemandUniversePlayer[]; diagnostics: NumericPoolShapeDiagnostics } {
+  const preset = options.preset ?? 'balanced';
+  const tuning = options.tuning ?? poolBalancePresetTuning(preset);
   const excludedIds = options.excludedIds ?? new Set<string>();
+  const poolSourceMode = options.poolSourceMode ?? 'full-pool';
+  const selectedTeamRosterIds = options.priorityIds ?? new Set<string>();
+  const priorityIds = poolSourceMode === 'team-roster-priority'
+    ? selectedTeamRosterIds
+    : new Set<string>();
+  const fitComparator = bySourceThenFitDescIdAsc(options.fitOf, priorityIds);
   const protectedPlayers = [...options.currentPlayers]
     .filter((player) => options.protectedIds.has(player.id) && !excludedIds.has(player.id))
     .sort((a, b) => a.id.localeCompare(b.id));
   const selected = new Map(protectedPlayers.map((player) => [player.id, player]));
   const effectiveTarget = Math.max(0, Math.floor(options.targetSize));
-  const windows = NUMERIC_POOL_SHAPE_TUNING.windows;
+  const windows = tuning.windows;
   const roleTargets = targetCountsByRoleBucket(options.universe.filter((player) => !excludedIds.has(player.id)), effectiveTarget);
   const quotaShortfalls: NumericPoolQuotaShortfall[] = [];
   const messages: string[] = [];
@@ -524,8 +783,13 @@ export function shapePoolByNumericGrade(options: {
       const candidates = bucketSource
         .filter((player) => !selected.has(player.id))
         .filter((player) => numericWindowId(numericGradeOf(player), windows) === window.id)
-        .sort(byFitDescIdAsc(options.fitOf));
-      const picks = candidates.slice(0, needed);
+        .sort(fitComparator);
+      const picks = selectWindowCandidates({
+        candidates,
+        needed,
+        windowId: window.id,
+        generationNonce: options.generationNonce,
+      });
       for (const pick of picks) selected.set(pick.id, pick);
       if (picks.length < needed) {
         quotaShortfalls.push({
@@ -546,25 +810,33 @@ export function shapePoolByNumericGrade(options: {
     const remaining = options.universe
       .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
       .sort((a, b) => {
-        const aMiddle = numericGradeOf(a) >= NUMERIC_POOL_SHAPE_TUNING.middleMin && numericGradeOf(a) < NUMERIC_POOL_SHAPE_TUNING.middleMax;
-        const bMiddle = numericGradeOf(b) >= NUMERIC_POOL_SHAPE_TUNING.middleMin && numericGradeOf(b) < NUMERIC_POOL_SHAPE_TUNING.middleMax;
+        const aMiddle = numericGradeOf(a) >= tuning.middleMin && numericGradeOf(a) < tuning.middleMax;
+        const bMiddle = numericGradeOf(b) >= tuning.middleMin && numericGradeOf(b) < tuning.middleMax;
         if (aMiddle !== bMiddle) return aMiddle ? -1 : 1;
-        return byFitDescIdAsc(options.fitOf)(a, b);
+        return fitComparator(a, b);
       });
     const needed = effectiveTarget - selected.size;
-    for (const pick of remaining.slice(0, needed)) selected.set(pick.id, pick);
+    const picks = options.generationNonce && options.generationNonce > 0
+      ? selectWindowCandidates({
+          candidates: remaining,
+          needed,
+          windowId: 'fallback',
+          generationNonce: options.generationNonce,
+        })
+      : remaining.slice(0, needed);
+    for (const pick of picks) selected.set(pick.id, pick);
     messages.push(
       `numeric grade quota fallback added ${Math.min(needed, remaining.length)} deterministic source candidates after explicit quota shortfalls.`,
     );
   }
 
-  const highTailCapCount = Math.floor(effectiveTarget * NUMERIC_POOL_SHAPE_TUNING.highTailCap);
-  let highTailCount = [...selected.values()].filter((player) => numericGradeOf(player) >= NUMERIC_POOL_SHAPE_TUNING.highTailMin).length;
+  const highTailCapCount = Math.floor(effectiveTarget * tuning.highTailCap);
+  let highTailCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
   if (highTailCount > highTailCapCount) {
     let swaps = 0;
     const highTailEvictable = () => [...selected.values()]
       .filter((player) => !options.protectedIds.has(player.id))
-      .filter((player) => numericGradeOf(player) >= NUMERIC_POOL_SHAPE_TUNING.highTailMin)
+      .filter((player) => numericGradeOf(player) >= tuning.highTailMin)
       .sort((a, b) => {
         const fitDelta = options.fitOf(a) - options.fitOf(b);
         if (Math.abs(fitDelta) > 1e-9) return fitDelta;
@@ -575,13 +847,13 @@ export function shapePoolByNumericGrade(options: {
       const sameBucket = roleBucketOf(highTailPlayer);
       const replacementCandidates = options.universe
         .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
-        .filter((player) => numericGradeOf(player) < NUMERIC_POOL_SHAPE_TUNING.highTailMin)
+        .filter((player) => numericGradeOf(player) < tuning.highTailMin)
         .sort((a, b) => {
           const aSameBucket = roleBucketOf(a) === sameBucket;
           const bSameBucket = roleBucketOf(b) === sameBucket;
           if (aSameBucket !== bSameBucket) return aSameBucket ? -1 : 1;
-          const aMiddle = numericGradeOf(a) >= NUMERIC_POOL_SHAPE_TUNING.middleMin;
-          const bMiddle = numericGradeOf(b) >= NUMERIC_POOL_SHAPE_TUNING.middleMin;
+          const aMiddle = numericGradeOf(a) >= tuning.middleMin;
+          const bMiddle = numericGradeOf(b) >= tuning.middleMin;
           if (aMiddle !== bMiddle) return aMiddle ? -1 : 1;
           return byFitDescIdAsc(options.fitOf)(a, b);
         });
@@ -602,6 +874,49 @@ export function shapePoolByNumericGrade(options: {
     }
   }
 
+  const superstarCapCount = Math.floor(effectiveTarget * tuning.superstarTailCap);
+  let superstarCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
+  if (superstarCount > superstarCapCount) {
+    let swaps = 0;
+    const superstarEvictable = () => [...selected.values()]
+      .filter((player) => !options.protectedIds.has(player.id))
+      .filter((player) => numericGradeOf(player) >= tuning.superstarTailMin)
+      .sort((a, b) => {
+        const fitDelta = options.fitOf(a) - options.fitOf(b);
+        if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+        return a.id.localeCompare(b.id);
+      });
+    for (const superstar of superstarEvictable()) {
+      if (superstarCount <= superstarCapCount) break;
+      const sameBucket = roleBucketOf(superstar);
+      const replacement = options.universe
+        .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+        .filter((player) => numericGradeOf(player) < tuning.superstarTailMin)
+        .sort((a, b) => {
+          const aSameBucket = roleBucketOf(a) === sameBucket;
+          const bSameBucket = roleBucketOf(b) === sameBucket;
+          if (aSameBucket !== bSameBucket) return aSameBucket ? -1 : 1;
+          const aMiddle = numericGradeOf(a) >= tuning.middleMin && numericGradeOf(a) < tuning.middleMax;
+          const bMiddle = numericGradeOf(b) >= tuning.middleMin && numericGradeOf(b) < tuning.middleMax;
+          if (aMiddle !== bMiddle) return aMiddle ? -1 : 1;
+          return byFitDescIdAsc(options.fitOf)(a, b);
+        })[0];
+      if (!replacement) continue;
+      selected.delete(superstar.id);
+      selected.set(replacement.id, replacement);
+      superstarCount -= 1;
+      swaps += 1;
+    }
+    if (swaps > 0) {
+      messages.push(`numeric grade superstar cap swapped ${swaps} excess superstar-tail player${swaps === 1 ? '' : 's'} into lower supply before G1 legality recheck.`);
+    }
+    if (superstarCount > superstarCapCount) {
+      messages.push(
+        `numeric grade superstar cap still exceeds target by ${superstarCount - superstarCapCount}; protected players or missing same-role supply prevented further swaps.`,
+      );
+    }
+  }
+
   if (protectedPlayers.length > effectiveTarget) {
     messages.push(
       `protected classes already exceed the numeric target by ${protectedPlayers.length - effectiveTarget}; protected asks, claims, floors, and pins were preserved.`,
@@ -615,8 +930,15 @@ export function shapePoolByNumericGrade(options: {
       players,
       requiredRosterDemand: options.requiredRosterDemand,
       targetSize: effectiveTarget,
+      preset,
+      tuning,
       quotaShortfalls,
       messages,
+      hardKeepPlayers: protectedPlayers,
+      engineGeneratedPlayers: players.filter((player) => !options.protectedIds.has(player.id)),
+      selectedTeamRosterIds,
+      poolSourceMode,
+      fullPoolEligibleCandidateCount: options.universe.filter((player) => !excludedIds.has(player.id)).length,
     }),
   };
 }
@@ -758,12 +1080,12 @@ function countWindow(players: readonly DemandUniversePlayer[], windowId: string)
   return players.filter((player) => numericWindowIdOf(player) === windowId).length;
 }
 
-function maxLowTailCount(size: number): number {
-  return Math.ceil(size * NUMERIC_POOL_SHAPE_TUNING.lowTailRepairCap);
+function maxLowTailCount(size: number, tuning: NumericPoolShapeTuning = poolBalancePresetTuning()): number {
+  return Math.ceil(size * tuning.lowTailRepairCap);
 }
 
-function maxHighTailCount(size: number): number {
-  return Math.floor(size * NUMERIC_POOL_SHAPE_TUNING.highTailCap);
+function maxHighTailCount(size: number, tuning: NumericPoolShapeTuning = poolBalancePresetTuning()): number {
+  return Math.floor(size * tuning.highTailCap);
 }
 
 function incrementCount(target: Record<string, number>, key: string): void {
@@ -775,12 +1097,14 @@ function repairCandidatePriority(options: {
   slot: DesignSlot | null;
   currentPlayers: readonly DemandUniversePlayer[];
   fitOf: (player: DemandUniversePlayer) => number;
+  tuning?: NumericPoolShapeTuning;
 }): number {
+  const tuning = options.tuning ?? poolBalancePresetTuning();
   const windowId = numericWindowIdOf(options.player);
   const expectedBuckets = expectedRoleBucketsForSlot(options.slot);
   const sameRole = expectedBuckets.length === 0 || expectedBuckets.includes(roleBucketOf(options.player));
   const highTailSafe = !isHighTailWindow(windowId)
-    || countWindow(options.currentPlayers, 'high-tail') + 1 <= maxHighTailCount(options.currentPlayers.length + 1);
+    || countWindow(options.currentPlayers, 'high-tail') + 1 <= maxHighTailCount(options.currentPlayers.length + 1, tuning);
   if (sameRole && isMiddleCoreWindow(windowId)) return 0;
   if (sameRole && isAdjacentMiddleWindow(windowId)) return 1;
   if (sameRole && isHighTailWindow(windowId) && highTailSafe) return 2;
@@ -798,10 +1122,11 @@ function sortRepairCandidates(
   slot: DesignSlot | null,
   currentPlayers: readonly DemandUniversePlayer[],
   fitOf: (player: DemandUniversePlayer) => number,
+  tuning: NumericPoolShapeTuning = poolBalancePresetTuning(),
 ): DemandUniversePlayer[] {
   return [...candidates].sort((a, b) => {
-    const priorityDelta = repairCandidatePriority({ player: a, slot, currentPlayers, fitOf })
-      - repairCandidatePriority({ player: b, slot, currentPlayers, fitOf });
+    const priorityDelta = repairCandidatePriority({ player: a, slot, currentPlayers, fitOf, tuning })
+      - repairCandidatePriority({ player: b, slot, currentPlayers, fitOf, tuning });
     if (priorityDelta !== 0) return priorityDelta;
     const fitDelta = fitOf(b) - fitOf(a);
     if (Math.abs(fitDelta) > 1e-9) return fitDelta;
@@ -917,11 +1242,15 @@ export function repairG1PoolForSizing(options: {
   maxRepairSlackFactor?: number;
   repairGrowthAllowed?: boolean;
   failOnCurveViolation?: boolean;
+  preset?: PoolBalancePresetKey;
+  tuning?: NumericPoolShapeTuning;
 }): PoolG1RepairResult {
+  const preset = options.preset ?? 'balanced';
+  const tuning = options.tuning ?? poolBalancePresetTuning(preset);
   const requestedExcludedIds = options.requestedExcludedIds ?? new Set<string>();
   const requiredRosterDemand = Math.max(0, options.requiredRosterDemand ?? options.teams * 22);
   const targetSize = Math.max(0, Math.floor(options.targetSize ?? options.players.length));
-  const maxRepairSlackFactor = options.maxRepairSlackFactor ?? NUMERIC_POOL_SHAPE_TUNING.maxRepairSlackFactor;
+  const maxRepairSlackFactor = options.maxRepairSlackFactor ?? tuning.maxRepairSlackFactor;
   const repairGrowthAllowed = options.repairGrowthAllowed ?? true;
   const maxRepairSize = requiredRosterDemand > 0
     ? Math.max(targetSize, Math.floor(requiredRosterDemand * maxRepairSlackFactor))
@@ -963,6 +1292,7 @@ export function repairG1PoolForSizing(options: {
         slot,
         currentPlayers,
         options.fitOf,
+        tuning,
       );
       const chosen = repairCandidates[0] ?? null;
       if (!chosen) continue;
@@ -1002,7 +1332,7 @@ export function repairG1PoolForSizing(options: {
         const sizeWouldExceedTarget = current.size + 1 > targetSize;
         const sizeWouldExceedMaxRepair = current.size + 1 > maxRepairSize;
         const lowTailWouldExceedCap = isLowTailWindow(chosenWindow)
-          && countWindow([...current.values()], 'low-tail') + 1 > maxLowTailCount(current.size + 1);
+          && countWindow([...current.values()], 'low-tail') + 1 > maxLowTailCount(current.size + 1, tuning);
         const shouldTrySwap = sizeWouldExceedTarget || lowTailWouldExceedCap || !repairGrowthAllowed;
         let evicted: DemandUniversePlayer | null = null;
         if (shouldTrySwap) {
@@ -1024,7 +1354,7 @@ export function repairG1PoolForSizing(options: {
         if (!evicted && lowTailWouldExceedCap) {
           curveViolations.push({
             code: 'LOW_TAIL_CAP_EXCEEDED',
-            message: `G1 repair needs ${label}, but ${playerName(chosen)} would push low-tail share above ${(NUMERIC_POOL_SHAPE_TUNING.lowTailRepairCap * 100).toFixed(0)}%.`,
+            message: `G1 repair needs ${label}, but ${playerName(chosen)} would push low-tail share above ${(tuning.lowTailRepairCap * 100).toFixed(0)}%.`,
           });
         }
         if (lastResort) {
@@ -1076,23 +1406,23 @@ export function repairG1PoolForSizing(options: {
     );
   }
   const finalPlayers = [...current.values()].sort((a, b) => a.id.localeCompare(b.id));
-  const finalSnapshot = curveSnapshot(finalPlayers, requiredRosterDemand, targetSize);
+  const finalSnapshot = curveSnapshot(finalPlayers, requiredRosterDemand, targetSize, preset, tuning);
   if (!g1.holds && curveViolations.length > 0) {
     curveViolations.push({
       code: 'LEGALITY_REQUIRES_CURVE_VIOLATION',
       message: 'G1 could not legalize within the configured curve and repair-growth guardrails.',
     });
   }
-  if (finalSnapshot.middleMassShare + 1e-9 < NUMERIC_POOL_SHAPE_TUNING.targetMiddleMass) {
+  if (finalSnapshot.middleMassShare + 1e-9 < tuning.targetMiddleMass) {
     curveViolations.push({
       code: 'MIDDLE_MASS_TARGET_MISSED',
-      message: `post-repair middle mass ${(finalSnapshot.middleMassShare * 100).toFixed(1)}% is below ${(NUMERIC_POOL_SHAPE_TUNING.targetMiddleMass * 100).toFixed(0)}%.`,
+      message: `post-repair middle mass ${(finalSnapshot.middleMassShare * 100).toFixed(1)}% is below ${(tuning.targetMiddleMass * 100).toFixed(0)}%.`,
     });
   }
-  if (finalSnapshot.lowTailShare > NUMERIC_POOL_SHAPE_TUNING.lowTailRepairCap + 1e-9) {
+  if (finalSnapshot.lowTailShare > tuning.lowTailRepairCap + 1e-9) {
     curveViolations.push({
       code: 'LOW_TAIL_CAP_EXCEEDED',
-      message: `post-repair low tail ${(finalSnapshot.lowTailShare * 100).toFixed(1)}% exceeds ${(NUMERIC_POOL_SHAPE_TUNING.lowTailRepairCap * 100).toFixed(0)}%.`,
+      message: `post-repair low tail ${(finalSnapshot.lowTailShare * 100).toFixed(1)}% exceeds ${(tuning.lowTailRepairCap * 100).toFixed(0)}%.`,
     });
   }
   if (finalSnapshot.poolSlackFactor > maxRepairSlackFactor + 1e-9) {
@@ -1165,6 +1495,7 @@ export function extractPoolFromDemand(
     shills?: number;
     budgetPerTeam?: number;
     contestMultiplier?: number;
+    poolBalancePreset?: PoolBalancePresetKey;
     poolSizeMultiplier?: number;
     sizeTarget?: number;
     maxRepairRounds?: number;
@@ -1174,18 +1505,24 @@ export function extractPoolFromDemand(
     maxRepairSlackFactor?: number;
     repairGrowthAllowed?: boolean;
     failOnCurveViolation?: boolean;
+    generationNonce?: number;
+    poolSourceMode?: PoolSourceMode;
+    priorityIds?: string[];
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
   const posture = options.posture ?? 'optimal';
+  const poolBalancePreset = options.poolBalancePreset ?? 'balanced';
+  const poolShapeTuning = poolBalancePresetTuning(poolBalancePreset);
   if (options.teams === undefined) {
     throw new PoolTeamsForSizingMissingError();
   }
   const teamsForSizing = Math.max(0, Math.floor(options.teams));
-  const sizingEnabled = options.sizeTarget !== undefined || options.poolSizeMultiplier !== undefined;
+  const sizingEnabled = options.sizeTarget !== undefined || options.poolSizeMultiplier !== undefined || options.poolBalancePreset !== undefined;
   const handReconcileEnabled = Boolean(options.pinnedIds?.length || options.excludedIds?.length);
   const requestedPinnedIds = new Set(options.pinnedIds ?? []);
   const requestedExcludedIds = new Set(options.excludedIds ?? []);
+  const requestedPriorityIds = new Set(options.priorityIds ?? []);
   const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
 
   // 1. Type the universe once (whole-profile classification).
@@ -1283,7 +1620,7 @@ export function extractPoolFromDemand(
     const target = resolvePoolSizingTarget({
       teams: teamsForSizing,
       shills: options.shills ?? 0,
-      poolSizeMultiplier: options.poolSizeMultiplier,
+      poolSizeMultiplier: options.poolSizeMultiplier ?? poolShapeTuning.poolSlackFactor,
       sizeTarget: options.sizeTarget,
     });
     const protectedIds = new Set<string>([
@@ -1301,10 +1638,15 @@ export function extractPoolFromDemand(
       targetSize: target.effectiveTarget,
       requiredRosterDemand: target.demandBase,
       fitOf,
+      preset: poolBalancePreset,
+      tuning: poolShapeTuning,
+      generationNonce: options.generationNonce,
+      poolSourceMode: options.poolSourceMode ?? 'full-pool',
+      priorityIds: requestedPriorityIds,
     });
     players = shaped.players;
     numericShape = shaped.diagnostics;
-    const preRepairShape = curveSnapshot(players, target.demandBase, target.effectiveTarget);
+    const preRepairShape = curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning);
     const keptAfterShape = new Set(players.map((player) => player.id));
     const shapeEvictedIds = beforeShape
       .filter((player) => !protectedIds.has(player.id) && !keptAfterShape.has(player.id))
@@ -1346,6 +1688,8 @@ export function extractPoolFromDemand(
         maxRepairSlackFactor: options.maxRepairSlackFactor,
         repairGrowthAllowed: options.repairGrowthAllowed,
         failOnCurveViolation: options.failOnCurveViolation,
+        preset: poolBalancePreset,
+        tuning: poolShapeTuning,
       });
       players = repair.players;
       g1 = repair.g1;
@@ -1361,11 +1705,18 @@ export function extractPoolFromDemand(
         players,
         requiredRosterDemand: target.demandBase,
         targetSize: target.effectiveTarget,
+        preset: poolBalancePreset,
+        tuning: poolShapeTuning,
         legalCompletionFeasible: g1?.holds ?? null,
         quotaShortfalls: numericShape.quotaShortfalls,
         messages: numericShape.messages,
+        hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
+        engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
+        selectedTeamRosterIds: requestedPriorityIds,
+        poolSourceMode: options.poolSourceMode ?? 'full-pool',
+        fullPoolEligibleCandidateCount: universe.filter((player) => !requestedExcludedIds.has(player.id)).length,
         preRepair: preRepairShape,
-        postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget),
+        postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning),
         g1AdditionsByRoleWindow: repair.additionsByRoleWindow,
         g1RemovalsByRoleWindow: repair.removalsByRoleWindow,
         g1LowTailAdditionsByRole: repair.lowTailAdditionsByRole,
@@ -1379,9 +1730,16 @@ export function extractPoolFromDemand(
         players,
         requiredRosterDemand: target.demandBase,
         targetSize: target.effectiveTarget,
+        preset: poolBalancePreset,
+        tuning: poolShapeTuning,
         legalCompletionFeasible: g1?.holds ?? null,
         quotaShortfalls: numericShape.quotaShortfalls,
         messages: numericShape.messages,
+        hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
+        engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
+        selectedTeamRosterIds: requestedPriorityIds,
+        poolSourceMode: options.poolSourceMode ?? 'full-pool',
+        fullPoolEligibleCandidateCount: universe.filter((player) => !requestedExcludedIds.has(player.id)).length,
         preRepair: preRepairShape,
         postRepair: preRepairShape,
         g1AdditionsByRoleWindow: {},

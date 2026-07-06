@@ -5,7 +5,9 @@ import {
   DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
   numericGradeForPoolShape,
+  poolBalancePresetTuning,
   PoolTeamsForSizingMissingError,
+  POOL_BALANCE_PRESETS,
   POOL_SIZE_MULTIPLIER_STOPS,
   repairG1PoolForSizing,
   resolvePoolSizingTarget,
@@ -422,6 +424,99 @@ describe('extractPoolFromDemand', () => {
     expect(first.diagnostics.poolSlackFactor).toBeCloseTo(1.25);
   });
 
+  it('balanced preset matches the default numeric-grade supply curve', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('extra-middle', 40, MIDDLE_CORE),
+      ...shapedHitters('extra-high', 20, HIGH_TAIL),
+      ...shapedHitters('extra-ultra', 10, HIGH_BAT),
+    ];
+    const defaultShape = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+    });
+    const balancedShape = shapePoolByNumericGrade({
+      universe: [...source].reverse(),
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+      tuning: poolBalancePresetTuning('balanced'),
+    });
+
+    expect(POOL_BALANCE_PRESETS.balanced.poolSlackFactor).toBe(DEFAULT_POOL_SIZE_MULTIPLIER);
+    expect(balancedShape.players.map((player) => player.id)).toEqual(defaultShape.players.map((player) => player.id));
+    expect(balancedShape.diagnostics.highTailShare).toBe(defaultShape.diagnostics.highTailShare);
+    expect(balancedShape.diagnostics.middleMassShare).toBe(defaultShape.diagnostics.middleMassShare);
+  });
+
+  it('grounded preset reduces high and superstar tails versus balanced', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('extra-middle', 40, MIDDLE_CORE),
+      ...shapedHitters('extra-high', 30, HIGH_TAIL),
+      ...shapedHitters('extra-ultra', 20, HIGH_BAT),
+    ];
+    const balanced = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+    const grounded = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'grounded',
+    });
+
+    expect(grounded.diagnostics.highTailShare).toBeLessThan(balanced.diagnostics.highTailShare);
+    expect(grounded.diagnostics.superstarTailShare).toBeLessThanOrEqual(balanced.diagnostics.superstarTailShare);
+    expect(grounded.diagnostics.superstarTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.grounded.superstarTailCap);
+  });
+
+  it('juiced preset increases high tail without violating the superstar cap', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('extra-middle', 40, MIDDLE_CORE),
+      ...shapedHitters('extra-high', 30, HIGH_TAIL),
+      ...shapedHitters('extra-ultra', 20, HIGH_BAT),
+    ];
+    const balanced = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+    const juiced = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'juiced',
+    });
+
+    expect(juiced.diagnostics.highTailShare).toBeGreaterThan(balanced.diagnostics.highTailShare);
+    expect(juiced.diagnostics.superstarTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.juiced.superstarTailCap);
+  });
+
   it('limits the ultra-high numeric tail as its own source-level curve window', () => {
     const source = [
       ...exactCurveSource(),
@@ -479,6 +574,44 @@ describe('extractPoolFromDemand', () => {
     expect(shaped.players.map((player) => player.id)).toEqual([highFit.id]);
   });
 
+  it('uses selected-team roster membership as source priority, not a hard keep', () => {
+    const fullPoolFirst = hitter('SS', MIDDLE_CORE, 10_000);
+    fullPoolFirst.id = 'a-full-pool-first';
+    const rosterPriority = hitter('SS', MIDDLE_CORE, 10_000);
+    rosterPriority.id = 'z-roster-priority';
+
+    const rosterPrioritized = shapePoolByNumericGrade({
+      universe: [fullPoolFirst, rosterPriority],
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 1,
+      requiredRosterDemand: 1,
+      fitOf: () => 0,
+      poolSourceMode: 'team-roster-priority',
+      priorityIds: new Set([rosterPriority.id]),
+    });
+    const fullPool = shapePoolByNumericGrade({
+      universe: [fullPoolFirst, rosterPriority],
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 1,
+      requiredRosterDemand: 1,
+      fitOf: () => 0,
+      poolSourceMode: 'full-pool',
+      priorityIds: new Set([rosterPriority.id]),
+    });
+
+    expect(rosterPrioritized.players.map((player) => player.id)).toEqual([rosterPriority.id]);
+    expect(rosterPrioritized.diagnostics.poolSourceMode).toBe('team-roster-priority');
+    expect(rosterPrioritized.diagnostics.hardKeepCount).toBe(0);
+    expect(rosterPrioritized.diagnostics.selectedTeamRosterCandidateCount).toBe(1);
+    expect(rosterPrioritized.diagnostics.engineGeneratedFromSelectedTeamRosterCount).toBe(1);
+    expect(fullPool.players.map((player) => player.id)).toEqual([fullPoolFirst.id]);
+    expect(fullPool.diagnostics.poolSourceMode).toBe('full-pool');
+    expect(fullPool.diagnostics.selectedTeamRosterCandidateCount).toBe(1);
+    expect(fullPool.diagnostics.engineGeneratedFromSelectedTeamRosterCount).toBe(0);
+  });
+
   it('preserves protected/reserved source players even when they exceed the numeric target', () => {
     const first = hitter('SS', HIGH_TAIL, 10_000);
     first.id = 'protected-a';
@@ -495,6 +628,150 @@ describe('extractPoolFromDemand', () => {
 
     expect(shaped.players.map((player) => player.id)).toEqual([first.id, second.id]);
     expect(shaped.diagnostics.messages.join(' ')).toContain('protected classes already exceed');
+  });
+
+  it('counts protected high-tail players against generated high-tail need', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('extra-middle', 40, MIDDLE_CORE),
+      ...shapedHitters('extra-high', 30, HIGH_TAIL),
+    ];
+    const protectedHigh = source.find((player) => player.id.startsWith('high-'))!;
+    const baseline = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+    const withProtected = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [protectedHigh],
+      protectedIds: new Set([protectedHigh.id]),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+
+    expect(withProtected.players.map((player) => player.id)).toContain(protectedHigh.id);
+    expect(withProtected.diagnostics.hardKeepByBand.high).toBe(1);
+    expect(withProtected.diagnostics.engineGeneratedByBand.high).toBeLessThan(baseline.diagnostics.finalPoolByBand.high);
+    expect(withProtected.diagnostics.finalPoolByBand.high).toBe(baseline.diagnostics.finalPoolByBand.high);
+  });
+
+  it('counts protected low-tail players against generated low-tail need', () => {
+    const source = [
+      ...exactCurveSource(),
+      ...shapedHitters('extra-low', 20, LOW_TAIL),
+      ...shapedHitters('extra-middle', 40, MIDDLE_CORE),
+    ];
+    const protectedLow = source.find((player) => player.id.startsWith('low-'))!;
+    const baseline = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+    const withProtected = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [protectedLow],
+      protectedIds: new Set([protectedLow.id]),
+      targetSize: 100,
+      requiredRosterDemand: 80,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+
+    expect(withProtected.players.map((player) => player.id)).toContain(protectedLow.id);
+    expect(withProtected.diagnostics.hardKeepByBand.low).toBe(1);
+    expect(withProtected.diagnostics.engineGeneratedByBand.low).toBeLessThan(baseline.diagnostics.finalPoolByBand.low);
+    expect(withProtected.diagnostics.finalPoolByBand.low).toBe(baseline.diagnostics.finalPoolByBand.low);
+  });
+
+  it('preserves excess protected high-tail players and reports shape overflow', () => {
+    const protectedHigh = shapedHitters('protected-high-overflow', 8, HIGH_TAIL);
+    const source = [
+      ...protectedHigh,
+      ...shapedHitters('middle-overflow', 40, MIDDLE_CORE),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: protectedHigh,
+      protectedIds: new Set(protectedHigh.map((player) => player.id)),
+      targetSize: 10,
+      requiredRosterDemand: 8,
+      fitOf: () => 0,
+      preset: 'grounded',
+    });
+
+    expect(protectedHigh.every((player) => shaped.players.some((kept) => kept.id === player.id))).toBe(true);
+    expect(shaped.diagnostics.hardKeepShapeOverflowByBand.high).toBeGreaterThan(0);
+    expect(shaped.diagnostics.hardKeepOverflowCount).toBe(0);
+    expect(shaped.diagnostics.messages.join(' ')).toContain('high-tail cap still exceeds');
+  });
+
+  it('uses generationNonce for deterministic reroll inside numeric windows', () => {
+    const source = [
+      ...shapedHitters('reroll-middle-a', 60, MIDDLE_CORE),
+      ...shapedHitters('reroll-middle-b', 60, MIDDLE_HIGH),
+      ...shapedHitters('reroll-low', 20, LOW_TAIL),
+      ...shapedHitters('reroll-high', 20, HIGH_TAIL),
+    ];
+    const common = {
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 50,
+      requiredRosterDemand: 40,
+      fitOf: () => 0,
+      preset: 'balanced' as const,
+    };
+    const first = shapePoolByNumericGrade({ ...common, generationNonce: 1 });
+    const same = shapePoolByNumericGrade({ ...common, generationNonce: 1 });
+    const rerolled = shapePoolByNumericGrade({ ...common, generationNonce: 2 });
+
+    expect(first.players.map((player) => player.id)).toEqual(same.players.map((player) => player.id));
+    expect(rerolled.players.map((player) => player.id)).not.toEqual(first.players.map((player) => player.id));
+    expect(rerolled.diagnostics.highTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.balanced.highTailCap);
+    expect(rerolled.diagnostics.middleMassShare).toBeGreaterThanOrEqual(POOL_BALANCE_PRESETS.balanced.targetMiddleMass);
+  });
+
+  it('keeps manual exclusions out during deterministic reroll when alternatives exist', () => {
+    const source = [
+      ...shapedHitters('exclude-middle-a', 60, MIDDLE_CORE),
+      ...shapedHitters('exclude-middle-b', 60, MIDDLE_HIGH),
+      ...shapedHitters('exclude-low', 20, LOW_TAIL),
+      ...shapedHitters('exclude-high', 20, HIGH_TAIL),
+    ];
+    const baseline = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 50,
+      requiredRosterDemand: 40,
+      fitOf: () => 0,
+      preset: 'balanced',
+    });
+    const removed = baseline.players.find((player) => player.id.startsWith('exclude-middle'))!;
+    const rerolled = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      excludedIds: new Set([removed.id]),
+      targetSize: 50,
+      requiredRosterDemand: 40,
+      fitOf: () => 0,
+      preset: 'balanced',
+      generationNonce: 1,
+    });
+
+    expect(rerolled.players.map((player) => player.id)).not.toContain(removed.id);
   });
 
   it('caps requested targets at the hard ceiling and rejects off-stop multipliers', () => {

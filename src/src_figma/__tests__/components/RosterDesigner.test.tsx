@@ -143,6 +143,36 @@ describe("RosterDesigner debounce saves", () => {
     await act(async () => undefined);
   });
 
+  test("resolves orphaned pin names from the full player universe", () => {
+    const pinned = makePlayer("known-pin", {
+      firstName: "Known",
+      lastName: "Pin",
+    });
+    const team = makeTeam("team-a", "Alpha", {
+      rosterDesign: {
+        slots: seedRosterDesignSlots(),
+        pins: { SS: pinned.id },
+      },
+    });
+
+    render(
+      <RosterDesigner
+        team={team}
+        mode="pool-first"
+        players={[]}
+        allPlayers={[pinned]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={vi.fn(async () => undefined)}
+      />,
+    );
+
+    expect(screen.getByText(/Known Pin/)).toBeInTheDocument();
+    expect(screen.queryByText(/known-pin/)).not.toBeInTheDocument();
+  });
+
   test("flushes a pending edit on unmount before the debounce fires", async () => {
     const onSave = vi.fn(async () => undefined);
     const { unmount } = render(
