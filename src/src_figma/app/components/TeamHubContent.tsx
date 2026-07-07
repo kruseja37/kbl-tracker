@@ -61,17 +61,9 @@ import {
   type FranchiseValueInputReport,
 } from "../../../utils/franchiseValueInputs";
 import {
-  buildFranchiseTrueValuePreviewReport,
-  type FranchiseTrueValuePreviewReport,
-} from "../../../utils/franchiseTrueValuePreview";
-import {
   getFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from "../../../utils/franchiseTrueValueStorage";
-import {
-  buildFranchiseExpectedWinsPreviewReport,
-  type FranchiseExpectedWinsPreviewReport,
-} from "../../../utils/franchiseExpectedWinsPreview";
 import {
   buildFranchiseDesignationEligibility,
   type FranchiseDesignationEligibilityReport,
@@ -143,7 +135,6 @@ import {
 } from "../../../utils/franchiseMoraleState";
 import {
   buildFranchiseFanMoraleSpecViewModel,
-  type FranchiseFanMoraleSpecViewModel,
 } from "../../../utils/franchiseFanMoraleSpecAdapter";
 import {
   buildFranchisePlayerMoraleSpecViewModel,
@@ -1346,16 +1337,6 @@ export function TeamHubContent() {
     };
   }, [franchiseId, seasonId, seasonNumber]);
 
-  const trueValuePreviewReport = useMemo(() => {
-    if (!valueInputReport) return null;
-    return buildFranchiseTrueValuePreviewReport(valueInputReport);
-  }, [valueInputReport]);
-
-  const expectedWinsPreviewReport = useMemo(() => {
-    if (!trueValuePreviewReport) return null;
-    return buildFranchiseExpectedWinsPreviewReport(trueValuePreviewReport);
-  }, [trueValuePreviewReport]);
-
   const analyticsTrustReport = useMemo(() => {
     if (!valueInputReport) return null;
     return buildFranchiseAnalyticsTrustReport({
@@ -2485,22 +2466,6 @@ export function TeamHubContent() {
             error={transactionHistoryError}
           />
 
-          <FranchiseMode2FoundationStatusPanel
-            selectedTeamId={selectedTeamId}
-            selectedTeamName={selectedTeam}
-            valueInputReport={valueInputReport}
-            trueValuePreviewReport={trueValuePreviewReport}
-            expectedWinsPreviewReport={expectedWinsPreviewReport}
-            analyticsTrustReport={analyticsTrustReport}
-            salaryLifecycleReport={salaryLifecycleReport}
-            designationEligibilityReport={designationEligibilityReport}
-            projectedDesignationRows={projectedDesignationRows}
-            moraleRelationshipTrustReport={moraleRelationshipTrustReport}
-            narrativeEventEligibilityReport={narrativeEventEligibilityReport}
-            isLoading={valueTruthLoading || continuityLoading}
-            error={valueTruthError ?? continuityError}
-          />
-
           <FranchiseRandomEventLogPanel
             report={randomEventLogReport}
             records={randomEventRecords}
@@ -2900,22 +2865,6 @@ interface FranchiseValueTruthPanelProps {
   salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
   designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
   projectedDesignationRows: FranchisePlayerDesignationRecord[];
-  isLoading: boolean;
-  error: string | null;
-}
-
-interface FranchiseMode2FoundationStatusPanelProps {
-  selectedTeamId: string;
-  selectedTeamName: string;
-  valueInputReport: FranchiseValueInputReport | null;
-  trueValuePreviewReport: FranchiseTrueValuePreviewReport | null;
-  expectedWinsPreviewReport: FranchiseExpectedWinsPreviewReport | null;
-  analyticsTrustReport: FranchiseAnalyticsTrustReport | null;
-  salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
-  designationEligibilityReport: FranchiseDesignationEligibilityReport | null;
-  projectedDesignationRows: FranchisePlayerDesignationRecord[];
-  moraleRelationshipTrustReport: FranchiseMoraleRelationshipTrustReport | null;
-  narrativeEventEligibilityReport: FranchiseNarrativeEventEligibilityReport | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -4092,165 +4041,6 @@ function FoundationStatusCard({
   );
 }
 
-function FranchiseValueExpectedWinsPreviewPanel({
-  selectedTeamId,
-  selectedTeamName,
-  valueInputReport,
-  trueValuePreviewReport,
-  expectedWinsPreviewReport,
-  salaryLifecycleReport,
-  isLoading,
-}: {
-  selectedTeamId: string;
-  selectedTeamName: string;
-  valueInputReport: FranchiseValueInputReport | null;
-  trueValuePreviewReport: FranchiseTrueValuePreviewReport | null;
-  expectedWinsPreviewReport: FranchiseExpectedWinsPreviewReport | null;
-  salaryLifecycleReport: FranchiseSalaryLifecycleReport | null;
-  isLoading: boolean;
-}) {
-  const teamSummary = trueValuePreviewReport?.teamSummaries.find((summary) => summary.teamId === selectedTeamId) ?? null;
-  const expectedWinsRow = expectedWinsPreviewReport?.teamRows.find((row) => row.teamId === selectedTeamId) ?? null;
-  const teamPayrollRecord = salaryLifecycleReport?.teamRecords.find((record) => record.teamId === selectedTeamId) ?? null;
-  const selectedSalaryRecords = (salaryLifecycleReport?.playerRecords ?? []).filter((record) => record.teamId === selectedTeamId);
-  const stableSalaryBaselineCount = selectedSalaryRecords.filter((record) => record.initialSalaryBaseline.status === 'stable-baseline').length;
-  const contractYearsProofCount = selectedSalaryRecords.filter((record) =>
-    Number.isFinite(record.contractYears) && Number(record.contractYears) > 0,
-  ).length;
-  const missingContractYearsCount = selectedSalaryRecords.length - contractYearsProofCount;
-  const rosterSalarySum = selectedSalaryRecords.reduce((sum, record) =>
-    typeof record.salary === 'number' && Number.isFinite(record.salary) ? sum + record.salary : sum,
-  0);
-  const payrollBaseline = teamPayrollRecord?.payrollBaseline ?? null;
-  const payrollMatchesRoster = payrollBaseline !== null && rosterSalarySum > 0
-    ? Math.abs(payrollBaseline - rosterSalarySum) < 0.001
-    : false;
-  const blockers = expectedWinsRow?.blockers ?? [];
-  const salaryBlockers = [
-    ...(stableSalaryBaselineCount < selectedSalaryRecords.length
-      ? [`${selectedSalaryRecords.length - stableSalaryBaselineCount} selected-team player salary baseline(s) missing.`]
-      : []),
-    ...(missingContractYearsCount > 0
-      ? [`Contract years missing for ${missingContractYearsCount} salary row${missingContractYearsCount === 1 ? '' : 's'}.`]
-      : []),
-    ...(teamPayrollRecord?.payrollBaselineState.status === 'blocked' || payrollBaseline === null
-      ? ['Team payroll proof is missing for this selected team.']
-      : []),
-  ];
-  const finalTrueValueCalculated = Boolean(
-    valueInputReport?.trueValuePolicy.finalTrueValueCalculated ?? trueValuePreviewReport?.policies.finalTrueValueCalculated,
-  );
-  const trustedValueArtifactFrozen = Boolean(valueInputReport?.trustedValueArtifactFrozen);
-  const isAvailable = Boolean(teamSummary && expectedWinsRow && finalTrueValueCalculated);
-  const panelStatus = trustedValueArtifactFrozen
-    ? 'trusted'
-    : (isAvailable ? 'projected' : 'blocked');
-  const trueValueLabel = trustedValueArtifactFrozen ? 'TRUE VALUE FINAL' : 'TRUE VALUE PROJECTED';
-  const valueDelta = teamSummary?.valueDeltaEstimateTotal ?? expectedWinsRow?.previewGapFromLeagueAverage ?? null;
-
-  return (
-    <section
-      role="region"
-      aria-label="Team True Value and Expected Wins"
-      className="mt-3 border-[4px] border-[var(--franchise-border)] bg-[var(--franchise-panel)] p-3"
-    >
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="text-[10px] font-bold text-[var(--franchise-gold)]">TRUE VALUE + EXPECTED WINS</div>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            <span className="border border-[var(--franchise-gold-amber)]/50 bg-[var(--franchise-gold-deep)] px-2 py-0.5 text-[8px] font-bold text-[var(--franchise-gold-soft)]">
-              {trueValueLabel}
-            </span>
-            <span className="border border-[var(--franchise-gold-amber)]/50 bg-[var(--franchise-gold-deep)] px-2 py-0.5 text-[8px] font-bold text-[var(--franchise-gold-soft)]">
-              EXPECTED WINS ESTIMATE
-            </span>
-            <span className="border border-[var(--franchise-text)]/25 bg-[var(--franchise-border)] px-2 py-0.5 text-[8px] font-bold text-[var(--franchise-text)]/75">
-              CURRENT SALARY CONTEXT
-            </span>
-            <span className="border border-[var(--franchise-text)]/25 bg-[var(--franchise-panel-darker)] px-2 py-0.5 text-[8px] font-bold text-[var(--franchise-text)]/75">
-              CONTEXT ONLY
-            </span>
-            <span className="border border-[var(--franchise-loss)]/35 bg-[var(--franchise-loss-panel)] px-2 py-0.5 text-[8px] font-bold text-[var(--franchise-loss-text)]">
-              NO SALARY MOVEMENT
-            </span>
-          </div>
-        </div>
-        <FoundationStatusBadge status={panelStatus} />
-      </div>
-
-      <div className="mb-2 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Team payroll proof</div>
-          <div className="mt-1">{formatRosterSalary(payrollBaseline)}</div>
-          <div className="text-[8px] text-[var(--franchise-text)]/55">{teamPayrollRecord ? formatTruthStatus(teamPayrollRecord.payrollBaselineState.status) : 'BLOCKED'}</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Roster salary sum</div>
-          <div className="mt-1">{rosterSalarySum > 0 ? formatRosterSalary(rosterSalarySum) : '—'}</div>
-          <div className="text-[8px] text-[var(--franchise-text)]/55">{payrollMatchesRoster ? 'MATCHES PAYROLL BASELINE' : 'CROSS-CHECK'}</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Current salary rows</div>
-          <div className="mt-1">{stableSalaryBaselineCount}/{selectedSalaryRecords.length}</div>
-          <div className="text-[8px] text-[var(--franchise-text)]/55">Selected-team salary rows</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Contract years proof</div>
-          <div className="mt-1">{contractYearsProofCount}/{selectedSalaryRecords.length}</div>
-          <div className="text-[8px] text-[var(--franchise-text)]/55">Separate from salary baseline stability</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Salary movement</div>
-          <div className="mt-1">Blocked</div>
-          <div className="text-[8px] text-[var(--franchise-text)]/55">No final True Value or offseason mutation</div>
-        </div>
-      </div>
-
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Team</div>
-          <div className="mt-1">{selectedTeamName || selectedTeamId || 'No team selected'}</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Team salary total</div>
-          <div className="mt-1">{formatPreviewNumber(teamSummary?.salaryTotal)}</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Value total</div>
-          <div className="mt-1">{formatPreviewNumber(teamSummary?.previewValueEstimateTotal)}</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Value delta</div>
-          <div className="mt-1">{formatPreviewNumber(valueDelta)}</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Expected wins estimate</div>
-          <div className="mt-1">{formatPreviewNumber(expectedWinsRow?.expectedWinsEstimate)}</div>
-        </div>
-      </div>
-
-      <div className="mt-2 border-2 border-[var(--franchise-border)] bg-[var(--franchise-panel-darker)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]/70">
-        <div>League average value baseline: {formatPreviewNumber(expectedWinsPreviewReport?.leagueAveragePreviewValueBaseline)}</div>
-        <div>Blocked: expected-wins persistence, final True Value handoff authority, salary movement, morale/relationship mutation, offseason, Mode 3.</div>
-        {salaryBlockers.length > 0 && (
-          <div className="mt-2 text-[var(--franchise-gold-soft)]">
-            Salary blocker: {salaryBlockers.join(' ')}
-          </div>
-        )}
-        {!isAvailable && (
-          <div className="mt-2 text-[var(--franchise-loss-text)]">
-            {isLoading
-              ? 'Loading preview contracts.'
-              : blockers.length > 0
-                ? `Blocked: ${blockers.join(' ')}`
-                : 'Blocked: insufficient current MLB position peer/team data for this selected team.'}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function FranchiseStadiumFoundationPanel({
   stadiums,
   selectedStadium,
@@ -4902,157 +4692,6 @@ function FranchiseSprayChartGraphic({
   );
 }
 
-function FranchiseMode2FoundationStatusPanel({
-  selectedTeamId,
-  selectedTeamName,
-  valueInputReport,
-  trueValuePreviewReport,
-  expectedWinsPreviewReport,
-  analyticsTrustReport,
-  salaryLifecycleReport,
-  designationEligibilityReport,
-  projectedDesignationRows,
-  moraleRelationshipTrustReport,
-  narrativeEventEligibilityReport,
-  isLoading,
-  error,
-}: FranchiseMode2FoundationStatusPanelProps) {
-  const valueRows = valueInputReport?.rows.length ?? 0;
-  const stableSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
-    record.currentSalaryCalculation?.status === 'active' || record.initialSalaryBaseline.status === 'stable-baseline',
-  ).length ?? 0;
-  const salaryRows = salaryLifecycleReport?.playerRecords.length ?? 0;
-  const blockedSalaryRows = salaryLifecycleReport?.playerRecords.filter((record) =>
-    record.initialSalaryBaseline.status !== 'stable-baseline',
-  ).length ?? 0;
-  const activeDesignationCount = projectedDesignationRows.filter((record) =>
-    record.status === 'active' && (!selectedTeamId || record.teamId === selectedTeamId),
-  ).length;
-  const projectedDesignationCount = projectedDesignationRows.filter((record) =>
-    record.status === 'projected' && (!selectedTeamId || record.teamId === selectedTeamId),
-  ).length;
-  const blockedDesignationCount = designationEligibilityReport?.records.filter((record) =>
-    record.status === 'blocked',
-  ).length ?? 0;
-  const hiddenFarmRows = narrativeEventEligibilityReport?.hiddenFarmProspectData.hiddenSafeRows ?? 0;
-
-  const statsStatus = analyticsTrustReport?.coreStats.status ?? 'blocked';
-  const frozenTrueValueArtifact = Boolean(valueInputReport?.trustedValueArtifactFrozen);
-  const finalTrueValueCalculated = Boolean(valueInputReport?.trueValuePolicy.finalTrueValueCalculated);
-  const valueStatus = frozenTrueValueArtifact
-    ? 'trusted'
-    : (finalTrueValueCalculated ? 'projected' : (valueRows > 0 ? 'preview-only' : 'blocked'));
-  const salaryStatus = stableSalaryRows > 0 && blockedSalaryRows === 0
-    ? 'trusted'
-    : (stableSalaryRows > 0 ? 'partial' : 'blocked');
-  const designationStatus = activeDesignationCount > 0
-    ? 'active'
-    : projectedDesignationCount > 0
-    ? 'preview-only'
-    : (blockedDesignationCount > 0 ? 'blocked' : 'preview-only');
-  const designationBody = activeDesignationCount > 0
-    ? `${activeDesignationCount} live canonical row(s), ${projectedDesignationCount} projected canonical row(s), ${blockedDesignationCount} blocked eligibility row(s). Season-end locking, morale, salary, and Mode 3 effects stay blocked.`
-    : `${projectedDesignationCount} projected canonical row(s), ${blockedDesignationCount} blocked eligibility row(s). Season-end locking, morale, salary, and Mode 3 effects stay blocked.`;
-  const valueInputsBody = frozenTrueValueArtifact
-    ? `${valueRows} canonical player row(s). Frozen True Value artifact is final/trusted and feeds Albatross/Fan Favorite plus awards.`
-    : finalTrueValueCalculated
-      ? `${valueRows} canonical player row(s). True Value is projected until the season-end artifact freeze.`
-      : `${valueRows} canonical player row(s). True Value and value delta remain unavailable until trusted value inputs exist.`;
-  const moraleStatus = moraleRelationshipTrustReport?.scope.status ?? 'blocked';
-  const narrativeStatus = narrativeEventEligibilityReport?.downstreamConsumers.readOnlySummaries.status ?? 'blocked';
-
-  return (
-    <section
-      role="region"
-      aria-label="Mode 2 Foundation Status"
-      className="mb-4 border-[4px] border-[var(--franchise-border)] bg-[var(--franchise-panel-darker)] p-3"
-    >
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-[9px] font-bold text-[var(--franchise-gold)]">MODE 2 FOUNDATION STATUS</div>
-          <div className="mt-1 text-[10px] leading-snug text-[var(--franchise-text)]/60">
-            Read-only gate summary. These labels explain what can be reported as context and what remains blocked or deferred.
-          </div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-panel)] px-2 py-1 text-[10px] text-[var(--franchise-text)]">
-          {isLoading ? 'LOADING' : 'READ ONLY'}
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-3 border-2 border-[var(--franchise-loss)]/50 bg-[var(--franchise-loss-panel)] p-2 text-[10px] text-[var(--franchise-loss-text)]">
-          {error}
-        </div>
-      )}
-
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-        <FoundationStatusCard
-          title="STATS / ARCHIVE / SCOPE"
-          status={statsStatus}
-          body={`${analyticsTrustReport?.coreStats.scopedArchiveRows ?? 0} scoped archive-backed game(s), ${analyticsTrustReport?.coreStats.seasonStatsRows ?? 0} stat row(s). Scope identity stays required.`}
-        />
-        <FoundationStatusCard
-          title="VALUE INPUTS"
-          status={valueStatus}
-          body={valueInputsBody}
-        />
-        <FoundationStatusCard
-          title="SALARY LIFECYCLE"
-          status={salaryStatus}
-          body={`${stableSalaryRows}/${salaryRows} current salary row(s). Team payroll proof is real; luxury tax, salary matching, and offseason automation stay blocked.`}
-        />
-        <FoundationStatusCard
-          title="DESIGNATION ELIGIBILITY"
-          status={designationStatus}
-          body={designationBody}
-        />
-        <FoundationStatusCard
-          title="MORALE / RELATIONSHIPS"
-          status={moraleStatus}
-          body="Visible personality and chemistry may be read-only context. Morale and relationship state changes stay blocked."
-        />
-        <FoundationStatusCard
-          title="NARRATIVE / RANDOM EVENTS"
-          status={narrativeStatus}
-          body="Stable facts may be read-only summary context. Narrative generation, random events, and story persistence stay blocked."
-        />
-      </div>
-
-      <FranchiseValueExpectedWinsPreviewPanel
-        selectedTeamId={selectedTeamId}
-        selectedTeamName={selectedTeamName}
-        valueInputReport={valueInputReport}
-        trueValuePreviewReport={trueValuePreviewReport}
-        expectedWinsPreviewReport={expectedWinsPreviewReport}
-        salaryLifecycleReport={salaryLifecycleReport}
-        isLoading={isLoading}
-      />
-
-      <div className="mt-3 grid gap-2 lg:grid-cols-2">
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-loss-panel)] p-2 text-[10px] leading-snug text-[var(--franchise-loss-text)]">
-          <div className="mb-1 font-bold text-[var(--franchise-gold-soft)]">Blocked / inactive systems</div>
-          <div>True Value finalization: {frozenTrueValueArtifact ? 'TRUSTED / FROZEN' : finalTrueValueCalculated ? 'PROJECTED / NOT FROZEN' : 'BLOCKED / DEFERRED'}.</div>
-          <div>Salary movement: {formatTruthStatus(narrativeEventEligibilityReport?.salaryMovement.status ?? 'blocked')}.</div>
-          <div>Morale state changes: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.moraleMutation.status ?? 'blocked')}.</div>
-          <div>Relationship state changes: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.relationshipMutation.status ?? 'blocked')}.</div>
-          <div>Narrative/random event generation: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.randomEventGeneration.status ?? 'blocked')}.</div>
-          <div>Story persistence: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.storyPersistence.status ?? 'blocked')}.</div>
-          <div>Awards persistence: LIVE (finalized at season end; effects dormant).</div>
-          <div>Mode 3/offseason execution: {formatTruthStatus(narrativeEventEligibilityReport?.downstreamConsumers.mode3OffseasonExecution.status ?? 'deferred')}.</div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]/70">
-          <div className="mb-1 font-bold text-[var(--franchise-gold)]">Hidden-safe boundary</div>
-          <div>Unrevealed FARM/prospect hidden inputs: {hiddenFarmRows > 0 ? 'BLOCKED' : 'NOT APPLICABLE'}.</div>
-          <div>True ratings, true grade, hidden scout truth, and hidden personality modifiers are not surfaced as event inputs.</div>
-          <div className="mt-2 text-[var(--franchise-text)]/55">
-            This panel creates no records and enables no mutation actions.
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function FranchiseFanMoralePanel({
   snapshots,
   selectedTeamId,
@@ -5153,94 +4792,10 @@ function FranchiseFanMoralePanel({
         onApply={onApplyManualMorale}
       />
 
-      <FranchiseFanMoraleSpecAlignmentPanel view={specView} />
-
       <div className="mt-3 border-2 border-[var(--franchise-border)] bg-[var(--franchise-panel-darker)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]/65">
-        Player morale snapshots stored this season: {playerSnapshots.length}. Relationship mutation, salary movement, profile automation, award/designation effects, and Mode 3/offseason effects remain blocked.
+        Player morale snapshots stored this season: {playerSnapshots.length}.
       </div>
     </div>
-  );
-}
-
-function FranchiseFanMoraleSpecAlignmentPanel({ view }: { view: FranchiseFanMoraleSpecViewModel }) {
-  const implementedAreas = [
-    view.implementationStatus.canonicalStorage,
-    view.implementationStatus.confirmedEventEffects,
-    view.implementationStatus.teamHubDisplay,
-    view.implementationStatus.eventBackedHistory,
-  ];
-  const pendingAreas = [
-    view.implementationStatus.randomEventConfirmation,
-    view.implementationStatus.scoreOnlyFanMorale,
-    view.implementationStatus.expectedWinsBaseline,
-    view.implementationStatus.performanceGapFormula,
-    view.implementationStatus.rosterCompositionFormula,
-    view.implementationStatus.randomEventWeighting,
-    view.implementationStatus.trueValueInputs,
-    view.implementationStatus.designations,
-    view.implementationStatus.beatReporterSentiment,
-    view.implementationStatus.freeAgencyConsequences,
-    view.implementationStatus.franchiseHealthConsequences,
-    view.implementationStatus.dailySnapshots,
-    view.implementationStatus.automaticGameTrackerMutation,
-    view.implementationStatus.playerMoraleCoupling,
-  ];
-
-  return (
-    <section
-      className="mt-3 border-[4px] border-[var(--franchise-border)] bg-[var(--franchise-panel-darker)] p-3"
-      aria-label="Fan morale spec alignment status"
-    >
-      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="text-[10px] font-bold text-[var(--franchise-gold)]">FAN MORALE SPEC ALIGNMENT</div>
-          <div className="mt-1 text-[10px] leading-snug text-[var(--franchise-text)]/65">
-            Read-only alignment with the fan morale spec. Current storage/display support is not the full formula engine.
-          </div>
-        </div>
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-panel)] px-2 py-1 text-[10px] text-[var(--franchise-text)]">
-          READ ONLY
-        </div>
-      </div>
-
-      <div className="grid gap-2 md:grid-cols-3">
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]">
-          <div className="font-bold text-[var(--franchise-gold)]">Current</div>
-          <div className="mt-1">Value: {view.currentValue}</div>
-          <div>Previous: {view.previousValue ?? '—'}</div>
-          <div>State: {view.state}</div>
-          <div>Trend: {view.trend}</div>
-          <div>Risk: {view.riskLevel}</div>
-        </div>
-
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]/75">
-          <div className="font-bold text-[var(--franchise-gold)]">Implemented</div>
-          <div className="mt-1 space-y-1">
-            {implementedAreas.map((area) => (
-              <div key={area.label}>{area.label}: {formatTruthStatus(area.status)}</div>
-            ))}
-          </div>
-        </div>
-
-        <div className="border-2 border-[var(--franchise-border)] bg-[var(--franchise-loss-panel)] p-2 text-[10px] leading-snug text-[var(--franchise-loss-text)]">
-          <div className="font-bold text-[var(--franchise-gold-soft)]">Deferred / Blocked</div>
-          <div className="mt-1 space-y-1">
-            {pendingAreas.map((area) => (
-              <div key={area.label}>{area.label}: {formatTruthStatus(area.status)}</div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-2 border-2 border-[var(--franchise-border)] bg-[var(--franchise-border)] p-2 text-[10px] leading-snug text-[var(--franchise-text)]/65">
-        {view.lastEvent
-          ? `Last event/reason: ${view.lastEvent.reason}`
-          : 'Last event/reason: no confirmed event-backed fan morale change yet.'}
-        <div className="mt-1">
-          Expected wins, performance gap, roster composition formula, random-event weighting, daily snapshots, designations, beat reporter sentiment, salary/True Value inputs, free-agency consequences, franchise health consequences, relationships, narrative/random events, and Mode 3/offseason effects remain partial, blocked, or deferred.
-        </div>
-      </div>
-    </section>
   );
 }
 
