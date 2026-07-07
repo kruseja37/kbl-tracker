@@ -2101,15 +2101,16 @@ export function LeagueBuilderDraftSetup() {
   const handleLock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await lockLeaguePool(activeLeagueId);
+      const lockedPool = await lockLeaguePool(activeLeagueId);
+      setPoolRecord(lockedPool);
       setLockConfirm(false);
-    });
+    }, { refreshPool: false });
 
   const handleUnlock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await unlockLeaguePool(activeLeagueId);
-    });
+      setPoolRecord(await unlockLeaguePool(activeLeagueId));
+    }, { refreshPool: false });
 
   const handleRunItBack = () =>
     runAction(async () => {

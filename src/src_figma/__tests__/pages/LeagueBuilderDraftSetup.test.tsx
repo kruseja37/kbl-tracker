@@ -27,7 +27,12 @@ import {
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
   resetCompletedDraftArc,
 } from "../../../utils/leagueBuilderAuctionPipeline";
-import { addPlayersToLeaguePool, computePlayerIv, removePlayersFromLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
+import {
+  addPlayersToLeaguePool,
+  computePlayerIv,
+  lockLeaguePool,
+  removePlayersFromLeaguePool,
+} from "../../../utils/leagueBuilderPoolBuilder";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
@@ -425,6 +430,34 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0");
+  });
+
+  test("CUT2-1 flips THE FLOOR status in-session after locking the pool", async () => {
+    const players = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const unlockedPool = makePool({
+      locked: false,
+      players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+    });
+    const lockedPool = { ...unlockedPool, locked: true };
+    const leagueData = mockLeagueData({ players, pool: unlockedPool });
+    vi.mocked(lockLeaguePool).mockResolvedValue(lockedPool);
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/pool open/i)).toBeInTheDocument();
+    expect(screen.getByText(/lock a sufficient player pool first/i)).toBeInTheDocument();
+
+    const lockButton = screen.getByRole("button", { name: /^LOCK POOL$/i });
+    expect(lockButton).toBeEnabled();
+    fireEvent.click(lockButton);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/pool locked/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/lock a sufficient player pool first/i)).not.toBeInTheDocument();
+    expect(leagueData.refresh).toHaveBeenCalled();
   });
 
   test("blocks draft start when a club has an MLB identity but no farm identity", async () => {
