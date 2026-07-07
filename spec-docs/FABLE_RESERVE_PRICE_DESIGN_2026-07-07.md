@@ -7,7 +7,7 @@
 - **k** = the reserve dial. v1 stops: `0 (off) · 0.50 · 0.65 (default) · 0.80`. Session-scoped Draft Setup control in the same pattern as Pool Quality (session/URL carrier — NO schema migration). k=0 must reproduce today's behavior bit-for-bit (the escape hatch).
 - **Opening bid** of every lot = its reserve. No bid below reserve is legal. CPU/shill opening logic floors at reserve (scout bands already price most lots above it).
 - **Unsold lots** (no bid at reserve): pass out UNSOLD, remain in the pool, renominatable later. No price decay in v1 (defer to tuning).
-- **End-of-draft auto-fill/backfill charges the reserve** of each auto-filled player. Free bodies cease to exist.
+- **End-of-draft auto-fill/backfill charges the reserve** of each auto-filled player. Free bodies cease to exist. **Amendment (2026-07-07, Lever A REJECT remediation):** in pool-exhaustion cleanup only, reserve yields to legal completion. If a reserve-priced cleanup fill would strand an otherwise completable roster, charge `max(minSalary, min(reserve, team-affordable))`; `team-affordable` is the team's remaining budget divided across its open slots. This exception does not apply to live bidding, lone-survivor claims, or forced fills before exhaustion.
 - **The honesty payoff:** `cheapestLegalCompletion` / `estimateMinimumFutureFillReserve` (liquidityAwareBidding) compute future-fill costs with reserve-floored prices. Fill Reserve, Room, MAX BID, and the affordability guardrail all become real. This is the mechanism that stops the spot-11 collapse — teams physically cannot bid past the money they'll need.
 
 ## 2. Surfaces (and only these)

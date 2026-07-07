@@ -29,6 +29,8 @@ export interface AuctionSimPlayer {
   capHit?: number;
   /** Sim-only explicit base value; defaults to IV to match the verified auction value primitive. */
   baseValue?: number;
+  /** Sim-only completion cleanup override; live bidding still prices from IV/reserve. */
+  completionPriceOverride?: number;
   /** Optional production-shaped archetype weights; used only with team band priorities. */
   archetypeWeights?: Partial<Record<Band, number>>;
   /**
@@ -123,6 +125,7 @@ export type AuctionSimInvariantName =
   | 'fullRosterBid'
   | 'impossibleCompletionSilentlyRepaired'
   | 'autoFillCreatesNegativeCash'
+  | 'soldBelowReserve'
   | 'clearingPriceExceedsWinnerWtp'
   | 'clearingPriceExceedsWinnerMaxLegalBid';
 
@@ -328,6 +331,7 @@ export interface AuctionSimEconomyDiagnostics {
   autoFillCount: number;
   freeAutoFillCount: number;
   paidAutoFillCount: number;
+  belowReserveSaleCount: number;
   middleClassBidRate: number | null;
   coreBidRate: number | null;
   invariantFailures: AuctionSimInvariantFailure[];

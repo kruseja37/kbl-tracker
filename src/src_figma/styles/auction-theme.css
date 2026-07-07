@@ -106,6 +106,9 @@
   .auc-root .market-read { flex-direction: column; }
   .auc-root .market-signal { flex: 1 1 auto; }
 }
+.auc-root .reserve-ask { margin-top: 14px; display: inline-flex; align-items: center; gap: 10px; border: 1px solid rgba(242, 192, 65, 0.34); border-radius: 999px; background: rgba(196, 168, 83, 0.12); padding: 7px 12px; }
+.auc-root .reserve-ask span { font-size: 10px; letter-spacing: 0.16em; color: var(--auc-gold-bright); font-weight: 850; }
+.auc-root .reserve-ask b { color: var(--auc-text); font-size: 13px; }
 .auc-root .highbid { margin-top: 20px; padding: 16px 18px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
 .auc-root .highbid .amt { font-family: var(--auc-font-char); font-size: 30px; color: var(--auc-text); transition: color 0.2s; }
 .auc-root .highbid.bump .amt { color: var(--auc-gold-bright); }

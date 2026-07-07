@@ -95,6 +95,7 @@ function session(input: {
   asks?: Record<string, number>;
   state?: AuctionSession['state'];
   flatReserveFloor?: number;
+  reserveFractionK?: number;
 }): AuctionSession {
   return {
     state: input.state ?? 'AUCTION_COMPLETE',
@@ -102,6 +103,7 @@ function session(input: {
       ...DEFAULT_AUCTION_SETUP_CONFIG,
       nominationOrderSeed: 'settle-test',
       flatReserveFloor: input.flatReserveFloor,
+      reserveFractionK: input.reserveFractionK,
     },
     teams: input.teams,
     nominationOrder: input.order ?? input.teams.map((t) => t.teamId),
@@ -217,6 +219,41 @@ describe('settleFromShills', () => {
     });
 
     expect(out.outcomes[0].pickIds).toEqual(['legal-3b']);
+  });
+
+  it('S3R: reserve-enabled settle charges the picked player reserve price', () => {
+    const baseIds = ids('base', 21);
+    const baseShapes = LEGAL.filter((_, index) => index !== 3);
+    const positions = positionsFrom([
+      ...baseIds.map((id, index) => [id, baseShapes[index]] as [string, RosterSlotPlayer]),
+      ['legal-3b', H('3B')],
+    ]);
+    const s = session({
+      teams: [team('team-a', baseIds), team('shill', ['legal-3b'])],
+      positions,
+      results: [result('legal-3b', 'SOLD', 'shill')],
+      asks: { 'legal-3b': 20_000 },
+      reserveFractionK: 0.65,
+    });
+
+    const out = settleFromShills({ session: s, positions, shillTeamIds: ['shill'] });
+
+    expect(out.ok).toBe(true);
+    expect(out.outcomes[0]).toMatchObject({
+      teamId: 'team-a',
+      status: 'settled',
+      pickIds: ['legal-3b'],
+      cost: 13_000,
+    });
+    const buyer = out.session.teams.find((t) => t.teamId === 'team-a')!;
+    expect(buyer.budgetRemaining).toBe(500_000 - 13_000);
+    expect(buyer.roster.at(-1)).toEqual({ playerId: 'legal-3b', salary: 13_000 });
+    expect(out.session.results[0]).toMatchObject({
+      playerId: 'legal-3b',
+      winnerTeamId: 'team-a',
+      salary: 13_000,
+      settled: true,
+    });
   });
 
   it('S4: mixes passed and shill-held bodies and increments saleCount only for passed lots', () => {

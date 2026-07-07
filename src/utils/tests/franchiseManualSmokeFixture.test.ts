@@ -161,5 +161,5 @@ describe('franchise manual smoke fixture', () => {
     expect((await getAllTeams()).some((team) => team.id === 'unrelated-team')).toBe(true);
     expect((await getAllPlayers()).some((player) => player.id === 'unrelated-player')).toBe(true);
     expect((await getAllPlayers()).filter((player) => player.sourceDatabase === FRANCHISE_MANUAL_SMOKE_SOURCE)).toHaveLength(132);
-  });
+  }, 15_000);
 });

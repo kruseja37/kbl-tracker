@@ -64,11 +64,15 @@ function makeSession(overrides: {
   players?: readonly CpuShillAuctionPlayer[];
   nominationOrder?: readonly string[];
   shill?: CpuShillProfile;
+  reserveFractionK?: number;
 } = {}): CpuShillAuctionSession {
   const shill = overrides.shill ?? POWER_SHILL;
   return {
     ...initAuctionSession({
-      config: BASE_CONFIG,
+      config: {
+        ...BASE_CONFIG,
+        reserveFractionK: overrides.reserveFractionK,
+      },
       teams: overrides.teams ?? [
         { teamId: 'human', budgetRemaining: 20_000, rosterSlotsRemaining: 2, minSalary: 0 },
         { teamId: 'cpu', budgetRemaining: 20_000, rosterSlotsRemaining: 2, minSalary: 0 },
@@ -182,6 +186,38 @@ describe('cpuShillBidding AUC-2.2 pure policy', () => {
       expect(decision.bid).toBe(decision.minimumBid);
       expect(decision.bid).toBeLessThan(decision.valuation);
       expect(decision.bid).toBeLessThanOrEqual(decision.maxBid);
+    }
+  });
+
+  test('cpuBidOnLot floors opening bids at the configured reserve price', () => {
+    const reservePlayer: CpuShillAuctionPlayer = {
+      playerId: 'reserve-star',
+      iv: 10_001,
+      ivPercentile: 5,
+      archetypeWeights: { Power: 1 },
+    };
+    let session: CpuShillAuctionSession = makeSession({
+      reserveFractionK: 0.65,
+      players: [reservePlayer],
+      teams: [
+        { teamId: 'human', budgetRemaining: 100_000, rosterSlotsRemaining: 1, minSalary: 0 },
+        { teamId: 'cpu', budgetRemaining: 100_000, rosterSlotsRemaining: 1, minSalary: 0 },
+      ],
+      nominationOrder: ['human', 'cpu'],
+    });
+    session = openEngineLot(session);
+
+    const biddingSeed = Array.from({ length: 300 }, (_, index) => `reserve-bid-${index}`).find(
+      (seed) => cpuBidOnLot(session, 'cpu', seed).kind === 'bid',
+    );
+    expect(biddingSeed).toBeDefined();
+    const decision = cpuBidOnLot(session, 'cpu', biddingSeed!);
+
+    expect(session.currentLot?.openingAsk).toBe(6_501);
+    expect(decision.kind).toBe('bid');
+    if (decision.kind === 'bid') {
+      expect(decision.minimumBid).toBe(6_501);
+      expect(decision.bid).toBe(6_501);
     }
   });
 

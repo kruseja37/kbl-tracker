@@ -176,13 +176,25 @@ function fillTeamFromPool(
     numericGrade: entry.numericGrade ?? undefined,
     pos: entry.pos,
   }));
-  const quote = cheapestAuctionSimCompletion(rosterPlayers, fillPool, config);
+  const affordableSlotPrice = openSlots > 0 ? team.budgetRemaining / openSlots : 0;
+  const pricedFillPool = fillPool.map((player): AuctionSimPlayer => {
+    if (config.autoFillPriceMode !== 'reserve') return player;
+    const reserve = playerCompletionPrice(player, config);
+    return {
+      ...player,
+      completionPriceOverride: Math.max(
+        config.minimumCompletionPrice,
+        Math.min(reserve, affordableSlotPrice),
+      ),
+    };
+  });
+  const quote = cheapestAuctionSimCompletion(rosterPlayers, pricedFillPool, config);
   if (!quote.feasible) {
     return { fillPool, log: [], invariantFailures: [] };
   }
 
   const pickIds = quote.pickIds;
-  const byId = new Map(fillPool.map((player) => [player.playerId, player]));
+  const byId = new Map(pricedFillPool.map((player) => [player.playerId, player]));
   const log: AuctionSimAutoFillLogEntry[] = [];
   const invariantFailures: AuctionSimInvariantFailure[] = [];
 
@@ -301,6 +313,9 @@ export function simulateAuction(
         };
         if (rosterSizeBefore >= config.rosterSize) {
           invariantFailures.push(invariantFailure('fullRosterBid', config, common));
+        }
+        if (clear.price < clear.reserve) {
+          invariantFailures.push(invariantFailure('soldBelowReserve', config, common));
         }
         if (clear.price > cashBefore) {
           invariantFailures.push(invariantFailure('acceptedPriceExceedsCash', config, common));

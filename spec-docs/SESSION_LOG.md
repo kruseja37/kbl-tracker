@@ -6665,6 +6665,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Browser/Playwright gates and screenshots were blocked by the environment: Vite preview on `127.0.0.1:4173`, Vite preview on `localhost:5177`, and a bare Node HTTP server all failed `listen EPERM`.
 - Next: implement Lens GameTracker launch parity before route flip; scope farm `AuctionStage` integration as a C4-B-sized ticket; rerun requested browser screenshots in a localhost-capable environment.
 
+## 2026-07-07 (Codex, attended) — Lever A steps 4-6 completed in sandbox
+
+- Continued the Lever A reserve-price build in `/private/tmp/kbl-lever-a` from committed steps 1-3. `git pull origin main` and local commits were blocked by Git metadata EPERM in this sandbox, so origin/main's CUT2 Draft Setup floor changes were manually applied and the intended commit boundaries were written to `LEVER_A_COMMIT_PLAN.txt` for the captain.
+- Step 4: added the Draft Setup reserve-price dial (`reserveK`, default `0.65`) as a session-scoped Pool-Quality-pattern control, preserved the route param through Scout Hire and Auction Draft, passed it to `initAuction`, and rendered a `RESERVE` amount on the auction lot card.
+- Step 5: added explicit `auctionSim` below-reserve-sale invariant/diagnostic support, surfaced the count in matrix output, removed the reserve-as-valuation-boost behavior, and added regressions for reserve floors and zero below-reserve sales.
+- Step 6: added an opt-in Lever A measurement harness and reran k=0 baseline plus k=0.65 reserve legs. Grounded k=0.65: spot11 median 53.3%, below-reserve 0, stuck 0, spread median 3.6%. Balanced k=0.65: spot11 median 53.9%, below-reserve 0, stuck 0, spread median 4.8%. k=0 baseline reproduced in the deterministic harness. Caveat: the harness is a scalar deterministic fixture isolating reserve economics, not a field-exact external production-pool scrape.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused Draft Setup/Auction UI suite pass (91/91); focused auctionSim suite pass (25 pass / 1 skipped); full `NODE_ENV= npm test -- --run` pass (590 files passed / 5 skipped; 9,103 tests passed / 9 skipped); opt-in measurement pass via `RUN_LEVER_A_MEASUREMENT=1 NODE_ENV= npx vitest run scripts/leverAReserveMeasurement.test.ts --reporter=verbose`.
+- Next: captain materializes the three planned commits from `LEVER_A_COMMIT_PLAN.txt`; rerun the external full production scrape measurement if that exact artifact is required beyond the in-repo scalar harness.
+
+## 2026-07-07 (Codex, attended) — Lever A REJECT remediation
+
+- Fixed F1 by bounding positive-k reserve renomination at 2 passes per player, making second pass permanent so pool exhaustion and existing cleanup/backfill are reachable again. k=0 legacy pass-out remains shape-stable: no pass-count field and no reserve renomination path.
+- Fixed the unaffordable load-bearing miss by treating a zero completion bid ceiling for a positionally required class as load-bearing; forced fill still requires a legal affordable bid ceiling before sale.
+- Added the belt-and-braces no-progress signal by ignoring superseded/repeated PASSED rows in the UI progress key and passed-lot readers; stale PASSED rows now carry `supersededByResultIndex`, and consumers count only active PASSED rows.
+- Made exhaustion cleanup reserve-aware but legally completable: in pool-exhaustion cleanup only, charge `max(minSalary, min(reserve, team-affordable))`; documented the rule in `FABLE_RESERVE_PRICE_DESIGN_2026-07-07.md`.
+- Reworked the Lever A acceptance harness to be position-aware and to drive the real production auction state machine for the F1 repro shapes. The harness now reports `determinismRerunMatched` and production termination checks.
+- F2 falsification check: temporarily disabled the bound (`MAX_RESERVE_RENOMINATION_PASSES = 999_999`) and confirmed the opt-in harness fails both k=0.65 production checks (`Exceeded 40/60 production steps`, pass counts 5/6). Restored the bound to 2 and reran the harness green.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused auction state-machine/UI suites pass (93/93); opt-in `RUN_LEVER_A_MEASUREMENT=1 NODE_ENV= npx vitest run scripts/leverAReserveMeasurement.test.ts --reporter=verbose` pass. Full `NODE_ENV= npm test -- --run` was attempted twice; auction-related tests passed, but known unrelated UI order flakes remained in `LeagueBuilderDraftSetup` / `AwardsWatchlist` under full-suite pressure and passed or narrowed when isolated.
+- Next: auditor should focus on the new F1/F2/F3 surfaces and the documented full-suite caveat, not broaden into the unrelated DraftSetup/AwardsWatchlist order flakes unless separately assigned.
 ## 2026-07-07 (Codex, attended) — CUT1-1 Lens parity completion
 
 - Completed the **CUT1-1 Lens parity** product line on `cutover/lens-parity` (branch-only, no push): `/franchise/:franchiseId` now routes to the real-data `FranchiseLens` hub, while `FranchiseHome` stays in the tree as an unrouted fallback.

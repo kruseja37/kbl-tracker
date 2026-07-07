@@ -6,6 +6,7 @@ import {
   advanceLot,
   getCurrentBidderTeamId,
   initAuctionSession,
+  isActivePassedResult,
   passBid,
   passLoneSurvivorOut,
   recordBid,
@@ -377,8 +378,8 @@ export function buildSettleFromShillsInput(input: {
       else leftoverIds.add(assignment.playerId);
     }
   }
-  for (const result of input.session.results) {
-    if (result.disposition === "PASSED") leftoverIds.add(result.playerId);
+  for (const [index, result] of input.session.results.entries()) {
+    if (isActivePassedResult(input.session, result, index)) leftoverIds.add(result.playerId);
   }
   for (const playerId of leftoverIds) unionIds.add(playerId);
 
@@ -409,13 +410,22 @@ export function buildSettleFromShillsInput(input: {
 
 function stateProgressKey(session: CpuShillAuctionSession): string {
   const lot = session.currentLot;
+  const permanentlyPassedIds = session.results
+    .filter((result, index) => isActivePassedResult(session, result, index))
+    .map((result) => result.playerId)
+    .sort();
+  const soldIds = session.results
+    .filter((result) => result.disposition === "SOLD")
+    .map((result) => result.playerId)
+    .sort();
   return JSON.stringify({
     state: session.state,
     nominationIndex: session.nominationIndex,
     nominationRound: session.nominationRound,
     available: session.availablePlayerIds.length,
-    results: session.results.length,
     saleCount: session.saleCount,
+    soldIds,
+    permanentlyPassedIds,
     pendingClaim: session.pendingClaim,
     lot: lot
       ? {

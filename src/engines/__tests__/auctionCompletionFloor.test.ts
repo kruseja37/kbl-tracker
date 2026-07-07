@@ -7,6 +7,7 @@ import {
   advanceLot,
   claimLoneSurvivor,
   getTeamAuctionMaxBid,
+  MAX_RESERVE_RENOMINATION_PASSES,
   passBid,
   passLoneSurvivorOut,
   recordBid,
@@ -216,8 +217,8 @@ describe('cheapestLegalCompletion', () => {
 
 const ASK = 10_000;
 
-function player(id: string, shape: RosterSlotPlayer): AuctionPlayer {
-  return { playerId: id, iv: 20_000, ivPercentile: 50, pos: shape };
+function player(id: string, shape: RosterSlotPlayer, iv = 20_000): AuctionPlayer {
+  return { playerId: id, iv, ivPercentile: 50, pos: shape };
 }
 
 /** Assemble a mid-draft session literally (the crash-restore shape) — no 20-lot warm-up needed. */
@@ -272,6 +273,34 @@ function team(
 function ok<T extends { ok: boolean; session: AuctionSession }>(result: T): AuctionSession {
   expect(result.ok).toBe(true);
   return result.session;
+}
+
+function driveAllPassToCompletion(
+  start: AuctionSession,
+  maxSteps = 50,
+): { session: AuctionSession; steps: number } {
+  let session = start;
+  for (let step = 0; step < maxSteps; step += 1) {
+    if (session.state === 'AUCTION_COMPLETE') return { session, steps: step };
+    if (session.state === 'NOMINATION') {
+      session = ok(surfaceNextPlayer(session));
+    } else if (session.state === 'OPEN_BIDDING') {
+      if (session.currentLot?.stillIn.length === 1) {
+        session = ok(resolveLot(session));
+      } else {
+        const bidder = session.currentLot?.bidTurnTeamId;
+        if (!bidder) session = ok(resolveLot(session));
+        else session = ok(passBid(session, bidder));
+      }
+    } else if (session.state === 'RESOLVE') {
+      session = session.pendingClaim ? ok(passLoneSurvivorOut(session)) : ok(resolveLot(session));
+    } else if (session.state === 'SOLD' || session.state === 'PASSED') {
+      session = ok(advanceLot(session));
+    } else {
+      throw new Error(`Unexpected auction state ${(session as AuctionSession).state}`);
+    }
+  }
+  throw new Error(`Auction did not terminate within ${maxSteps} steps`);
 }
 
 describe('the broken-floor repro pair', () => {
@@ -445,6 +474,47 @@ describe('the broken-floor repro pair', () => {
     expect(backfilled[0].salary).toBeCloseTo(LEAGUE_MINIMUM_SALARY, 6);
   });
 
+  test('F1/F2 reserve pricing: exhaustion cleanup completes the team at reserve price when k is enabled', () => {
+    const reserveSalary = 13_000;
+    const rostered = TEMPLATE.slice(0, 21).map((shape, i) => player(`f2r-${i}`, shape));
+    const passed = player('f2r-cp', { isPitcher: true, position: 'P', role: 'CP' });
+    let session = midDraftSession({
+      teams: [team('team-a', 50_000, rostered.map((p) => p.playerId), 1, 0)],
+      rostered: [...rostered, passed],
+      available: [],
+    });
+    session = {
+      ...session,
+      state: 'PASSED',
+      config: { ...session.config, reserveFractionK: 0.65 },
+      results: [
+        {
+          playerId: passed.playerId,
+          disposition: 'PASSED',
+          nominatorTeamId: 'team-a',
+          winnerTeamId: null,
+          salary: null,
+        },
+      ],
+    };
+
+    session = ok(advanceLot(session));
+
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    const teamA = session.teams[0];
+    expect(teamA.rosterSlotsRemaining).toBe(0);
+    expect(teamA.budgetRemaining).toBe(50_000 - reserveSalary);
+    expect(teamA.roster.at(-1)).toEqual({ playerId: passed.playerId, salary: reserveSalary });
+    expect(session.results[0]).toMatchObject({
+      disposition: 'SOLD',
+      winnerTeamId: 'team-a',
+      salary: reserveSalary,
+      bidderSet: ['team-a'],
+      underbidder: null,
+      numBidders: 1,
+    });
+  });
+
   test('F2 (C3-fix-2 F7): loadBearingTeam Criterion 1 refuses an unaffordable completion-critical rescue on the SURPLUS branch', () => {
     // remainingPool (1 wrong-class hitter) >= totalOpenSlots (1) → resolveNoBidLot takes the
     // surplus branch and consults loadBearingTeam. The lot player is team-a's ONLY legal
@@ -514,6 +584,107 @@ describe('the broken-floor repro pair', () => {
     // Position-less → the backfill no-ops: the team stays short and the PASSED result stands.
     expect(session.teams[0].rosterSlotsRemaining).toBe(2);
     expect(session.results.filter((r) => r.disposition === 'PASSED')).toHaveLength(1);
+  });
+
+  test('F1 reserve renomination blocker: k=0.65 torched team with non-tight catcher supply terminates and completes legally', () => {
+    const reserveIv = 100_000; // k=0.65 => 65k opening ask, unaffordable to the torched team.
+    const budget = 2_000;
+    const rostered = TEMPLATE
+      .filter((_, index) => index !== 8) // 21 players, only one C-coverer; one backup-C slot open.
+      .map((shape, index) => player(`f1-loop-rostered-${index}`, shape));
+    const pool = [
+      player('f1-loop-c-a', { isPitcher: false, position: 'C', secondaryPosition: null }, reserveIv),
+      player('f1-loop-c-b', { isPitcher: false, position: 'C', secondaryPosition: null }, reserveIv),
+    ];
+    let session = midDraftSession({
+      teams: [team('team-a', budget, rostered.map((p) => p.playerId), 1, 0)],
+      rostered,
+      available: pool,
+    });
+    session = { ...session, config: { ...session.config, reserveFractionK: 0.65 } };
+
+    const result = driveAllPassToCompletion(session, 30);
+
+    expect(result.session.state).toBe('AUCTION_COMPLETE');
+    expect(result.steps).toBeLessThan(30);
+    expect(result.session.teams[0].rosterSlotsRemaining).toBe(0);
+    expect(result.session.teams[0].budgetRemaining).toBeGreaterThanOrEqual(0);
+    expect(result.session.teams[0].roster.at(-1)?.salary).toBe(budget);
+    expect(result.session.teams[0].budgetRemaining).toBe(0);
+    expect(result.session.passCountByPlayerId).toBeDefined();
+    for (const passCount of Object.values(result.session.passCountByPlayerId ?? {})) {
+      expect(passCount).toBeLessThanOrEqual(MAX_RESERVE_RENOMINATION_PASSES);
+    }
+  });
+
+  test('F1 k=0 torched-team leg keeps the legacy permanent-pass cleanup shape', () => {
+    const reserveIv = 100_000;
+    const budget = 2_000;
+    const rostered = TEMPLATE
+      .filter((_, index) => index !== 8)
+      .map((shape, index) => player(`f1-k0-rostered-${index}`, shape));
+    const pool = [
+      player('f1-k0-c-a', { isPitcher: false, position: 'C', secondaryPosition: null }, reserveIv),
+      player('f1-k0-c-b', { isPitcher: false, position: 'C', secondaryPosition: null }, reserveIv),
+    ];
+    const result = driveAllPassToCompletion(midDraftSession({
+      teams: [team('team-a', budget, rostered.map((p) => p.playerId), 1, 0)],
+      rostered,
+      available: pool,
+    }), 10);
+
+    expect(result.session.state).toBe('AUCTION_COMPLETE');
+    expect(result.steps).toBeLessThan(10);
+    expect(result.session.passCountByPlayerId).toBeUndefined();
+    expect(result.session.availablePlayerIds).toEqual([]);
+    expect(result.session.saleCount).toBe(1);
+    expect(result.session.results).toHaveLength(2);
+    expect(result.session.results.map((row) => row.disposition).sort()).toEqual(['PASSED', 'SOLD']);
+    expect(result.session.teams[0].roster.at(-1)?.salary).toBeCloseTo(LEAGUE_MINIMUM_SALARY, 6);
+  });
+
+  test('F1 all-pass surplus at k=0.65 terminates instead of cycling on re-added lots', () => {
+    const players = [
+      player('surplus-c-a', { isPitcher: false, position: 'C', secondaryPosition: null }, 100_000),
+      player('surplus-c-b', { isPitcher: false, position: 'C', secondaryPosition: null }, 100_000),
+      player('surplus-c-c', { isPitcher: false, position: 'C', secondaryPosition: null }, 100_000),
+    ];
+    let session = midDraftSession({
+      teams: [team('team-a', 2_000, [], 1, 0)],
+      rostered: [],
+      available: players,
+    });
+    session = {
+      ...session,
+      config: { ...session.config, reserveFractionK: 0.65 },
+    };
+
+    const result = driveAllPassToCompletion(session, 50);
+
+    expect(result.session.state).toBe('AUCTION_COMPLETE');
+    expect(result.steps).toBeLessThan(50);
+    expect(result.session.availablePlayerIds).toEqual([]);
+    for (const passCount of Object.values(result.session.passCountByPlayerId ?? {})) {
+      expect(passCount).toBeLessThanOrEqual(MAX_RESERVE_RENOMINATION_PASSES);
+    }
+  });
+
+  test('F1 all-pass surplus at k=0 keeps the legacy one-pass-per-player drain shape', () => {
+    const players = [
+      player('surplus-k0-c-a', { isPitcher: false, position: 'C', secondaryPosition: null }, 100_000),
+      player('surplus-k0-c-b', { isPitcher: false, position: 'C', secondaryPosition: null }, 100_000),
+      player('surplus-k0-c-c', { isPitcher: false, position: 'C', secondaryPosition: null }, 100_000),
+    ];
+    const result = driveAllPassToCompletion(midDraftSession({
+      teams: [team('team-a', 2_000, [], 1, 0)],
+      rostered: [],
+      available: players,
+    }), 15);
+
+    expect(result.session.state).toBe('AUCTION_COMPLETE');
+    expect(result.session.passCountByPlayerId).toBeUndefined();
+    expect(result.session.availablePlayerIds).toEqual([]);
+    expect(result.session.results.filter((row) => row.disposition === 'PASSED')).toHaveLength(3);
   });
 
   test('fallback tier: position-less sessions keep the scalar reserve but the phantom tax is stripped', () => {

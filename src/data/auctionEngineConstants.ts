@@ -19,6 +19,11 @@ export interface AuctionSetupConfig {
   nominationOrderSeed: string;
   nominationWeightExponent?: number;
   flatReserveFloor?: number;
+  /**
+   * Lever A reserve dial. Absent/0 preserves the historical opening-ask path;
+   * positive v1 stops use reserveP(k * IV) instead.
+   */
+  reserveFractionK?: number;
   cpuShillCount: number;
   excludeFromLeague?: boolean;
   /**

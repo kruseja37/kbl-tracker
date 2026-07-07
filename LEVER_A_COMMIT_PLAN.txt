@@ -1,0 +1,3 @@
+merge(origin/main): apply CUT2 draft-setup floor fixes before Lever A step 4 (manual patch due sandbox Git metadata EPERM)
+feat(economy): add session-scoped Draft Setup reserve dial and lot-card reserve display [Lever A c4]
+feat(sim): surface reserve-price invariant metrics and measurement legs [Lever A c5]

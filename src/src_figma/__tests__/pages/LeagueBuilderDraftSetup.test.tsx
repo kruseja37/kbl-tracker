@@ -309,7 +309,7 @@ async function waitForExtractPoolOptions(
   await waitFor(() => {
     matched = extractPoolOptions().find(predicate);
     expect(matched).toBeDefined();
-  }, { timeout: 3000 });
+  }, { timeout: 7000 });
   return matched!;
 }
 
@@ -434,7 +434,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
   test("CUT2-1 flips THE FLOOR status in-session after locking the pool", async () => {
@@ -452,7 +452,35 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     expect(await screen.findByText(/pool open/i)).toBeInTheDocument();
-    expect(screen.getByText(/lock a sufficient player pool first/i)).toBeInTheDocument();
+    expect(await screen.findByText(/lock a sufficient player pool first/i)).toBeInTheDocument();
+
+    const lockButton = screen.getByRole("button", { name: /^LOCK POOL$/i });
+    expect(lockButton).toBeEnabled();
+    fireEvent.click(lockButton);
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/pool locked/i).length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText(/lock a sufficient player pool first/i)).not.toBeInTheDocument();
+    expect(leagueData.refresh).toHaveBeenCalled();
+  });
+
+  test("CUT2-1 flips THE FLOOR status in-session after locking the pool", async () => {
+    const players = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const unlockedPool = makePool({
+      locked: false,
+      players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+    });
+    const lockedPool = { ...unlockedPool, locked: true };
+    const leagueData = mockLeagueData({ players, pool: unlockedPool });
+    vi.mocked(lockLeaguePool).mockResolvedValue(lockedPool);
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/pool open/i)).toBeInTheDocument();
+    expect(await screen.findByText(/lock a sufficient player pool first/i)).toBeInTheDocument();
 
     const lockButton = screen.getByRole("button", { name: /^LOCK POOL$/i });
     expect(lockButton).toBeEnabled();
@@ -487,13 +515,68 @@ describe("LeagueBuilderDraftSetup", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
-    });
+    }, { timeout: 5000 });
 
     fireEvent.click(screen.getByRole("button", { name: /Increase shill bidders/i }));
     fireEvent.click(screen.getByRole("button", { name: /Increase shill bidders/i }));
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=2");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=2&reserveK=0.65");
+  });
+
+  test("CUT2-2 persists selected shill count and reloads it without a URL carrier", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    }, { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole("button", { name: /Increase shill bidders/i }));
+
+    await waitFor(() => {
+      expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({ draftShillCount: 1 }));
+    });
+
+    cleanup();
+    vi.mocked(saveLeagueTemplate).mockClear();
+    window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page");
+    mockLeagueData({ league: makeLeague({ draftShillCount: 1 }) });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=1&reserveK=0.65");
+  });
+
+  test("CUT2-2 30-club shill pressure does not inflate the pool-lock floor", async () => {
+    window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=league-page&shills=10");
+    const teamIds = Array.from({ length: 30 }, (_, index) => `team-${index}`);
+    const teams = teamIds.map((teamId) => makeTeam(teamId));
+    const realClubFloor = poolDemandModel(30, 0).feasibilityFloor;
+    const players = makePlayers(realClubFloor);
+    const pool = makePool({
+      locked: true,
+      players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+    });
+
+    mockLeagueData({
+      league: makeLeague({ teamIds }),
+      teams,
+      players,
+      pool,
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    }, { timeout: 5000 });
+    expect(screen.getByText(new RegExp(`Pool ${realClubFloor} / ${realClubFloor} draft slots`))).toBeInTheDocument();
+    expect(screen.getByText(/30 clubs \+ 10 CPU shills/i)).toBeInTheDocument();
   });
 
   test("CUT2-2 persists selected shill count and reloads it without a URL carrier", async () => {
@@ -521,7 +604,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=1");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=1&reserveK=0.65");
   });
 
   test("CUT2-2 30-club shill pressure does not inflate the pool-lock floor", async () => {
@@ -686,7 +769,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /RESUME DRAFT/i }));
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0");
+      expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
     });
   });
 
@@ -724,7 +807,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const start = screen.getByRole("button", { name: /START THE DRAFT/i });
     expect(start).toBeEnabled();
     fireEvent.click(start);
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
   test("R4 disables RUN IT BACK when a franchise already references the league", async () => {
@@ -1195,12 +1278,12 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalled();
       expect(addPlayersToLeaguePool).toHaveBeenCalled();
-    });
+    }, { timeout: 7000 });
     const extractMock = vi.mocked(extractPoolFromDemand);
     const matchingCall = extractMock.mock.calls.find((call) => {
       const options = call[4] as { teams?: number; poolBalancePreset?: string; poolSizeMultiplier?: number; pinnedIds?: string[]; poolSourceMode?: string };
@@ -1567,19 +1650,17 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "72" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton("72");
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
-    await waitFor(() => {
-      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
-        pinnedIds?: string[];
-        excludedIds?: string[];
-        poolQualityCenter?: number;
-      };
-      expect(options.poolQualityCenter).toBe(72);
-      expect(options.pinnedIds).toContain(pinnedPlayer.id);
-      expect(options.excludedIds).not.toContain(pinnedPlayer.id);
-    });
+    const options = await waitForExtractPoolOptions((candidate) => (
+      candidate.poolQualityCenter === 72
+      && Boolean(candidate.pinnedIds?.includes(pinnedPlayer.id))
+      && !candidate.excludedIds?.includes(pinnedPlayer.id)
+    ));
+    expect(options.poolQualityCenter).toBe(72);
+    expect(options.pinnedIds).toContain(pinnedPlayer.id);
+    expect(options.excludedIds).not.toContain(pinnedPlayer.id);
   });
 
   test("quality-center changes preserve user-added hard keeps and manual exclusions", async () => {

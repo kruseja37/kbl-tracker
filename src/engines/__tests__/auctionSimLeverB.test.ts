@@ -80,7 +80,11 @@ describe('Lever B numeric pool shaping', () => {
         spotBudgetCheckpoint: 11,
       },
     };
-    expect(runScenarioMatrix(input)).toEqual(runScenarioMatrix(input));
+    const result = runScenarioMatrix(input);
+    expect(result).toEqual(runScenarioMatrix(input));
+    expect(result.rows.length).toBeGreaterThan(0);
+    expect(result.rows.every((row) => row.belowReserveSaleCount.median === 0)).toBe(true);
+    expect(result.rows.every((row) => row.reachesNoBelowReserveSaleTarget)).toBe(true);
   });
 
   test('Lever B modules stay isolated from UI and production pool builders', () => {
