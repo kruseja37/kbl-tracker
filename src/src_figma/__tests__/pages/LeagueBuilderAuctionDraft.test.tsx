@@ -623,20 +623,29 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
   });
 
-  test("blocks direct auction start when selected shills make the locked pool underfilled", async () => {
-    // 44 players vs the demand-model floor for 2 teams + 1 shill (52 + 10 = 62) → needs 18.
-    const smallPoolPlayers = makePlayers(44);
-    mockLeagueData({ players: smallPoolPlayers, pool: makePool(smallPoolPlayers) });
-    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=1");
+  test("starts direct auction when the locked pool satisfies the real-club floor regardless of selected shills", async () => {
+    // CUT2-3: 52 clears the real-club feasibility floor for 2 teams. The old shill-inflated
+    // floor (52 + 10 = 62) would have blocked this direct start.
+    const realClubFloorPlayers = makePlayers(52);
+    const seed = seedForOpeningLot(realClubFloorPlayers);
+    mockLeagueData({ players: realClubFloorPlayers, pool: makePool(realClubFloorPlayers) });
+    window.history.pushState({}, "", `/league-builder/auction-draft?leagueId=league-page&shills=1&devSeed=${seed}`);
 
     render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
-      // FABLE-C3-FIX-2 F6: the demand-model gate — floor = classFeasibility(2 teams)=52 + 1 shill×10 wins = 62; pool 44 → needs 18.
-      expect(screen.getByText(/needs 18 more player\(s\) for 3 drafting teams/i)).toBeInTheDocument();
+      expect(screen.getAllByText("MARKET SHILLS").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     });
+
+    expect(screen.queryByText(/needs \d+ more player\(s\)/i)).not.toBeInTheDocument();
+    const begin = await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i });
+    expect(begin).toBeEnabled();
+
+    fireEvent.click(begin);
+
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /BEGIN AUCTION DRAFT|STARTING/i })).toBeDisabled();
+      expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
     });
   });
 

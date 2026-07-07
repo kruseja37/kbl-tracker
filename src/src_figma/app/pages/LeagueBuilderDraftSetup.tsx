@@ -923,8 +923,9 @@ export function LeagueBuilderDraftSetup() {
   const runItBackConfirmRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setShills(clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)));
-  }, [leagueTeams.length, requestedShillCount]);
+    const persistedShills = typeof league?.draftShillCount === "number" ? league.draftShillCount : null;
+    setShills(clampDraftShillCount(requestedShillCount ?? persistedShills ?? scaledShillDefault(leagueTeams.length)));
+  }, [league?.draftShillCount, leagueTeams.length, requestedShillCount]);
 
   useEffect(() => {
     if (leagueTeams.length === 0) {
@@ -1155,21 +1156,21 @@ export function LeagueBuilderDraftSetup() {
     if (!league) return undefined;
     return resolvePoolSizingTarget({
       teams: league.teamIds.length,
-      shills,
+      shills: 0,
       poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     }).effectiveTarget;
-  }, [league, shills]);
+  }, [league]);
   const poolSizeTarget = useMemo(() => {
     if (!league) return null;
     return resolvePoolSizingTarget({
       teams: league.teamIds.length,
-      shills,
+      shills: 0,
       poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     });
-  }, [league, shills]);
+  }, [league]);
   const sufficiency = useMemo(
-    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills, poolSizeTargetOverride),
-    [league?.teamIds.length, shills, inPoolPlayers.length, poolSizeTargetOverride],
+    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, 0, poolSizeTargetOverride),
+    [league?.teamIds.length, inPoolPlayers.length, poolSizeTargetOverride],
   );
   const [rosteredButUnassigned, setRosteredButUnassigned] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -1538,6 +1539,19 @@ export function LeagueBuilderDraftSetup() {
     setActionError(setupMutationBlockMessage);
     return false;
   };
+
+  const handleShillCountChange = useCallback((nextCount: number) => {
+    const nextShills = clampDraftShillCount(nextCount);
+    setShills(nextShills);
+    if (!league || setupMutationBlockMessage) return;
+    void saveLeagueTemplate({ ...league, draftShillCount: nextShills })
+      .then((saved) => {
+        replaceLeagueLocal(saved);
+      })
+      .catch((err) => {
+        setActionError(err instanceof Error ? err.message : String(err));
+      });
+  }, [league, replaceLeagueLocal, setupMutationBlockMessage]);
 
   const saveLeagueDraftSetup = useCallback(
     async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
@@ -2101,15 +2115,16 @@ export function LeagueBuilderDraftSetup() {
   const handleLock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await lockLeaguePool(activeLeagueId);
+      const lockedPool = await lockLeaguePool(activeLeagueId);
+      setPoolRecord(lockedPool);
       setLockConfirm(false);
-    });
+    }, { refreshPool: false });
 
   const handleUnlock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await unlockLeaguePool(activeLeagueId);
-    });
+      setPoolRecord(await unlockLeaguePool(activeLeagueId));
+    }, { refreshPool: false });
 
   const handleRunItBack = () =>
     runAction(async () => {
@@ -2425,7 +2440,7 @@ export function LeagueBuilderDraftSetup() {
         }
       >
         {poolSizeTarget.effectiveTarget} PLAYERS · {league?.teamIds.length ?? 0} CLUBS × {LEGAL_ROSTER.size}
-        {shills > 0 ? ` + ${shills} SHILLS` : ""}
+        {shills > 0 ? ` · ${shills} CPU SHILLS ROUTED TO DRAFT` : ""}
       </div>
     </div>
   ) : null;
@@ -3448,7 +3463,7 @@ export function LeagueBuilderDraftSetup() {
                   type="button"
                   aria-label="Decrease shill bidders"
                   disabled={Boolean(setupMutationBlockMessage) || busy}
-                  onClick={() => setShills((count) => Math.max(0, count - 1))}
+                  onClick={() => handleShillCountChange(shills - 1)}
                   className="p-2 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)] disabled:opacity-40 active:scale-95"
                 >
                   <Minus className="w-4 h-4" />
@@ -3458,7 +3473,7 @@ export function LeagueBuilderDraftSetup() {
                   type="button"
                   aria-label="Increase shill bidders"
                   disabled={Boolean(setupMutationBlockMessage) || busy}
-                  onClick={() => setShills((count) => Math.min(MAX_DRAFT_SHILL_COUNT, count + 1))}
+                  onClick={() => handleShillCountChange(shills + 1)}
                   className="p-2 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)] disabled:opacity-40 active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
@@ -3468,7 +3483,7 @@ export function LeagueBuilderDraftSetup() {
                 </div>
               </div>
               <div className="text-sm text-[var(--ballpark-chalk)]/75">
-                {leagueTeams.length} clubs · {humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU · {poolReady ? "pool locked" : "pool open"} · {identitiesReady ? "identities set" : "identity needed"}
+                {leagueTeams.length} clubs{shills > 0 ? ` + ${shills} CPU shills` : ""} · {humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU · {poolReady ? "pool locked" : "pool open"} · {identitiesReady ? "identities set" : "identity needed"}
               </div>
               <div className="flex flex-col items-start lg:items-end gap-2">
                 <PressButton
