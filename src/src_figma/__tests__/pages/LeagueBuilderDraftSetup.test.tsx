@@ -259,6 +259,24 @@ function makeLegalRosterPlayerSet(prefix: string, salary: number): Player[] {
   }));
 }
 
+function makeQualityRosterPlayerSet(prefix: string, rating: number): Player[] {
+  return makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+    ...player,
+    power: rating,
+    contact: rating,
+    speed: rating,
+    fielding: rating,
+    arm: rating,
+    velocity: rating,
+    junk: rating,
+    accuracy: rating,
+  }));
+}
+
+function capFitDiagnosticText(): string {
+  return screen.getByLabelText("Cap fit diagnostic").textContent ?? "";
+}
+
 function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesign"]> {
   return { slots: [], lockedAt };
 }
@@ -676,6 +694,156 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.getByRole("button", { name: "74" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "76" })).toBeInTheDocument();
     expect(screen.getByText("baseline")).toBeInTheDocument();
+  });
+
+  test("renders the advisory Cap Fit diagnostic without reserve-price or apply-recommendation copy", async () => {
+    mockLeagueData({
+      league: makeLeague({ draftPoolMode: "pool-first", salaryCap: 1_000_000 }),
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
+    expect(capFitDiagnosticText()).toContain("Cap Fit:");
+    expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
+    expect(capFitDiagnosticText()).toContain("Recommended Neutral Cap:");
+    expect(capFitDiagnosticText()).toContain("Pool quality and salary cap are separate. Changing Pool Quality does not change the cap.");
+    expect(screen.queryByText(/reserve price/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /apply recommended cap/i })).not.toBeInTheDocument();
+  });
+
+  test("changing Pool Quality does not mutate salary cap while the diagnostic stays visible", async () => {
+    mockLeagueData({
+      league: makeLeague({ draftPoolMode: "pool-first", salaryCap: 900_000 }),
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "76" }));
+    });
+
+    expect(capFitDiagnosticText()).toContain("Current Cap: $900,000");
+    expect(saveLeagueTemplate).not.toHaveBeenCalled();
+  });
+
+  test("diagnostic recommendation updates from current generated pool values after Pool Quality generation changes composition", async () => {
+    const lowPoolPlayers = [
+      ...makeQualityRosterPlayerSet("low-one", 30),
+      ...makeQualityRosterPlayerSet("low-two", 30),
+    ];
+    const highPoolPlayers = lowPoolPlayers.map((player) => ({
+      ...player,
+      power: 90,
+      contact: 90,
+      speed: 90,
+      fielding: 90,
+      arm: 90,
+      velocity: 90,
+      junk: 90,
+      accuracy: 90,
+    }));
+    const league = makeLeague({
+      draftPoolMode: "pool-first",
+      salaryCap: 1_000_000,
+    });
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    mockLeagueData({
+      league,
+      players: lowPoolPlayers,
+      pool: makePool({
+        locked: false,
+        players: lowPoolPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: lowPoolPlayers.length,
+      }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
+    const lowDiagnostic = capFitDiagnosticText();
+
+    fireEvent.click(screen.getByRole("button", { name: "76" }));
+
+    mockLeagueData({
+      league,
+      players: highPoolPlayers,
+      pool: makePool({
+        locked: false,
+        players: highPoolPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: highPoolPlayers.length,
+      }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
+    expect(capFitDiagnosticText()).not.toBe(lowDiagnostic);
+  });
+
+  test("Cap Fit diagnostic survives preset, source, Regenerate, and Reroll without salary cap mutation", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000),
+    );
+    const candidatePlayers = ["five", "six", "seven"].flatMap((prefix) =>
+      makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
+        ...player,
+        leagueAssignments: [],
+      })),
+    );
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c", "team-d"],
+        draftPoolMode: "pool-first",
+        salaryCap: 1_000_000,
+      }),
+      teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+      players: [...currentPlayers, ...candidatePlayers],
+      pool: makePool({
+        locked: false,
+        players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: currentPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Grounded$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Full player pool$/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    });
+
+    await waitFor(() => {
+      expect(extractPoolFromDemand).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).not.toBeDisabled();
+    });
+    expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
+    });
+
+    await waitFor(() => {
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
+        generationNonce?: number;
+        poolBalancePreset?: string;
+        poolSourceMode?: string;
+      };
+      expect(options.generationNonce).toBe(1);
+      expect(options.poolBalancePreset).toBe("grounded");
+      expect(options.poolSourceMode).toBe("full-pool");
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Reroll generated players/i })).not.toBeDisabled();
+    });
+    expect(capFitDiagnosticText()).toContain("Recommended Neutral Cap:");
+    expect(saveLeagueTemplate).not.toHaveBeenCalled();
   });
 
   test("M1 applies THE MONEY and the recheck header follows the persisted cap", async () => {

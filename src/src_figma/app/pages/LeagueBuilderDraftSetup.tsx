@@ -66,6 +66,8 @@ import {
   type DraftabilityBand,
 } from "../../../engines/draftabilityRanker";
 import { TIER_CAPS } from "../../../data/tierParams";
+import { LEGAL_ROSTER } from "../../../data/rosterConstruction";
+import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import {
   MLB_AUCTION_SEASON,
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
@@ -120,6 +122,10 @@ import {
   type PoolSourceMode,
   type TeamDesignInput,
 } from "../../../engines/poolFromDemand";
+import {
+  computePoolAffordabilityDiagnostic,
+  type PoolAffordabilityState,
+} from "../../../engines/poolAffordabilityDiagnostic";
 import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassifier";
 import {
   buildDefaultDesignSlots,
@@ -205,6 +211,13 @@ const POOL_QUALITY_LABELS: Record<PoolQualityCenter, string> = {
   72: "stronger",
   74: "highest",
   76: "highest",
+};
+const CAP_FIT_LABELS: Record<PoolAffordabilityState, string> = {
+  too_tight: "Too Tight",
+  bargain_heavy: "Bargain Heavy",
+  neutral: "Neutral",
+  inflationary: "Inflationary",
+  very_loose: "Very Loose",
 };
 const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
 const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
@@ -1195,6 +1208,22 @@ export function LeagueBuilderDraftSetup() {
   const salaryCapHardError = getSalaryCapHardError(parsedSalaryCapInput);
   const salaryCapAdvisory = getSalaryCapAdvisory(parsedSalaryCapInput, tierReferenceCap);
   const salaryCapAtTierPar = tierBudget === tierReferenceCap;
+  const poolAffordabilityDiagnostic = useMemo(() => {
+    if (!league) return null;
+    return computePoolAffordabilityDiagnostic({
+      poolPlayers: inPoolPlayers.map((player) => ({
+        id: player.id,
+        economicValue: ivById.get(player.id) ?? player.salary,
+      })),
+      teamCount: league.teamIds.length,
+      rosterSlotsPerTeam: LEGAL_ROSTER.size,
+      currentCapPerTeam: tierBudget,
+      minimumFillCost: LEAGUE_MINIMUM_SALARY,
+      poolQualityCenter,
+      presetLabel: POOL_BALANCE_PRESET_LABELS[poolBalancePreset],
+      sourceLabel: POOL_SOURCE_MODE_LABELS[poolSourceMode],
+    });
+  }, [inPoolPlayers, ivById, league, poolBalancePreset, poolQualityCenter, poolSourceMode, tierBudget]);
 
   useEffect(() => {
     setSalaryCapInput(formatSalaryCapInput(tierBudget));
@@ -2384,6 +2413,26 @@ export function LeagueBuilderDraftSetup() {
         <div className="mt-2 text-[11px] font-bold text-[var(--ballpark-status-red-bright)]">{salaryCapHardError}</div>
       ) : salaryCapAdvisory ? (
         <div className="mt-2 text-[11px] font-bold text-[var(--ballpark-status-warn)]">{salaryCapAdvisory}</div>
+      ) : null}
+      {poolAffordabilityDiagnostic ? (
+        <div
+          aria-label="Cap fit diagnostic"
+          className="mt-3 border-2 border-[var(--ballpark-panel-border)] bg-[#172017] px-2 py-2 text-[11px] font-bold font-[var(--ballpark-font-chrome)] text-[var(--ballpark-chalk)]/80"
+        >
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              Cap Fit: <span className="text-[var(--ballpark-brass)]">{CAP_FIT_LABELS[poolAffordabilityDiagnostic.affordabilityState]}</span>
+            </span>
+            <span>Current Cap: {formatSalaryCapMoney(poolAffordabilityDiagnostic.currentCapPerTeam)}</span>
+            <span>Recommended Neutral Cap: {formatSalaryCapMoney(poolAffordabilityDiagnostic.recommendedNeutralCapPerTeam)}</span>
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
+            Draft window {poolAffordabilityDiagnostic.expectedDraftedCount} of {poolAffordabilityDiagnostic.poolSize} players · legal fill {formatSalaryCapMoney(poolAffordabilityDiagnostic.legalMinimumFillPerTeam)}
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
+            {poolAffordabilityDiagnostic.summary} Pool quality and salary cap are separate. Changing Pool Quality does not change the cap.
+          </div>
+        </div>
       ) : null}
     </div>
   ) : null;
