@@ -97,19 +97,25 @@ describe('computePoolAffordabilityDiagnostic', () => {
       poolPlayers: [player('a', 100_000), player('b', 80_000)],
       teamCount: 1,
       rosterSlotsPerTeam: 2,
-      currentCapPerTeam: 210_000,
+      currentCapPerTeam: 234_000,
       minimumFillCost: 1_000,
     });
     const veryLoose = computePoolAffordabilityDiagnostic({
       poolPlayers: [player('a', 100_000), player('b', 80_000)],
       teamCount: 1,
       rosterSlotsPerTeam: 2,
-      currentCapPerTeam: 230_000,
+      currentCapPerTeam: 245_000,
       minimumFillCost: 1_000,
     });
 
+    expect(inflationary.recommendedNeutralCapPerTeam).toBe(180_000);
+    expect(inflationary.capRatio).toBe(1.3);
     expect(inflationary.affordabilityState).toBe('inflationary');
+    expect(inflationary.reasonCodes).toContain('cap-above-neutral');
+    expect(veryLoose.recommendedNeutralCapPerTeam).toBe(180_000);
+    expect(veryLoose.capRatio).toBeCloseTo(1.361, 3);
     expect(veryLoose.affordabilityState).toBe('very_loose');
+    expect(veryLoose.reasonCodes).toContain('cap-far-above-neutral');
   });
 
   test('respects the legal minimum fill floor', () => {
