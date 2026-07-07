@@ -177,20 +177,23 @@ async function assertPoolUnlocked(leagueId: string): Promise<void> {
  * shape the auction commit later rewrites to MLB/the winning team). Idempotent: a player
  * already in the pool is skipped. Rejected while the pool is locked.
  */
-export async function addPlayersToLeaguePool(playerIds: string[], leagueId: string): Promise<void> {
+export async function addPlayersToLeaguePool(playerIds: string[], leagueId: string): Promise<Player[]> {
   await assertPoolUnlocked(leagueId);
+  const changedPlayers: Player[] = [];
   for (const id of playerIds) {
     const player = await getPlayer(id);
     if (!player) continue;
     if (isPlayerInLeaguePool(player, leagueId)) continue;
-    await savePlayer({
+    const saved = await savePlayer({
       ...player,
       leagueAssignments: [
         ...(player.leagueAssignments ?? []),
         { leagueId, teamId: '', rosterStatus: 'FREE_AGENT' },
       ],
     });
+    changedPlayers.push(saved);
   }
+  return changedPlayers;
 }
 
 /**
@@ -202,26 +205,28 @@ export async function addPlayersToLeaguePool(playerIds: string[], leagueId: stri
  * rosters are team-scoped; a team shared across leagues has the player removed everywhere,
  * consistent with clearTeamRoster.)
  */
-export async function removePlayersFromLeaguePool(playerIds: string[], leagueId: string): Promise<void> {
+export async function removePlayersFromLeaguePool(playerIds: string[], leagueId: string): Promise<Player[]> {
   await assertPoolUnlocked(leagueId);
   const removeSet = new Set(playerIds);
+  const changedPlayers: Player[] = [];
 
   // 1) Drop the league assignment for each removed player.
   for (const id of removeSet) {
     const player = await getPlayer(id);
     if (!player) continue;
     if (!isPlayerInLeaguePool(player, leagueId)) continue;
-    await savePlayer({
+    const saved = await savePlayer({
       ...player,
       leagueAssignments: (player.leagueAssignments ?? []).filter(
         (assignment) => assignment.leagueId !== leagueId,
       ),
     });
+    changedPlayers.push(saved);
   }
 
   // 2) Pull them off the league's team rosters so the registration roster-union can't re-add them.
   const league = await getLeagueTemplate(leagueId);
-  if (!league) return;
+  if (!league) return changedPlayers;
   for (const teamId of league.teamIds) {
     const roster = await getTeamRoster(teamId);
     if (!roster) continue;
@@ -234,6 +239,7 @@ export async function removePlayersFromLeaguePool(playerIds: string[], leagueId:
       await saveTeamRoster({ ...roster, mlbRoster, farmRoster });
     }
   }
+  return changedPlayers;
 }
 
 /**
