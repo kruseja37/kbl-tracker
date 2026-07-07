@@ -77,3 +77,36 @@ JK's July 3–4 browser sessions establish what no doc records: the app is an **
 
 ## PART 7 — THE OPERATING PRINCIPLE THIS ALL SERVES (JK, 2026-07-07)
 "We need to deeply understand the truth, then cut out/hide/defer everything that stands in the way of v1." Concretely: **truth map before trust; one canonical surface per screen; old code unreachable, not coexisting; tune the ~100 knobs only on a fully-canonical app.** Every phase gate above is an instance of this rule.
+
+---
+
+## PART 8 — EXECUTION RUNBOOK (bulletproof mode, ratified structure)
+
+**Command structure (JK ruling pending, Fable recommendation):** ONE captain (Fable) driving everything from this repo. All building via local Codex CLI (contracts written by captain), all diffs adversarially audited by Opus subagents (builder ≠ auditor, no exceptions), recon/crawls via read-only subagent workflows. Captain's own context spends ONLY on: contracts, gates, SOT updates, JK communication. **The external draft agent is STOOD DOWN until Phase 1 completes** — not for skill (its economy work is excellent and is being ported) but for structure: it can only see GitHub, and until the trunk is published and unified, any GitHub-based worker is building in a parallel universe by construction. Re-engage it (optional, JK's call) AFTER Phase 1, scoped strictly to the Phase-2 economy thread, from published main, under the reset-plan constraints — its deep context on pool tuning is genuinely valuable there.
+
+**Non-negotiable rules (all phases):**
+1. Every phase exit = a gate JK can operate (count, walk, or number — never a claim).
+2. Every landing updates V1_BUILD_STATUS in place, same commit. A stale SOT is a stop-ship defect (it's what caused this mess).
+3. Builder ≠ auditor. Captain gates independently (build + suite + browser where UI).
+4. Zero-new-reds vs the now-measured trunk baseline (8,983 pass / 1 fail, 2026-07-07).
+5. "Ready" is a word only JK's browser walk can produce.
+6. Branch-per-slice off trunk; push only after D1 establishes the published main.
+
+**The sequence with owners and gates:**
+
+| # | Work | Owner | Exit gate (JK-operable) |
+|---|---|---|---|
+| 0a | Read remaining governing docs (DECISIONS_LOG tail, UX_NORTH_STAR) — close the captain's stated reading gap | Fable | Cited in the SOT update |
+| 0b | V1_BUILD_STATUS updated in place (assembly=DONE, July 2–4 landings, lineage ruling, evidence classes per stage) | Fable | SOT matches git; committed |
+| 0c | **D1:** push trunk → GitHub `main` (archive today's main as `archive/draft-economy-2026-07-07`) | Fable + JK approval | `git clone` anywhere == the app JK runs |
+| 1 | Port the 7 cherry-picks + 2 test unions (economy work incl. sim harness) per the port map; skip-list enforced | Codex builds · Opus audits · Fable gates | Build 0 · suite ≥ baseline, zero new reds · browser smoke: pool controls + liquidity Whisper live on trunk |
+| 1.5a | **UI TRUTH MAP:** mechanical route extraction (rows MUST equal router count) + Playwright walk + click-crawl; screenshot per row; old/new verdict per row | Fable + crawl subagents | Row-count invariant holds; JK spot-audits any screen he remembers — it must be present |
+| 1.5b | JK cut-over ruling session (keep/flip/hide/delete per row) — absorbs D3 | JK | Every row ruled |
+| 1.5c | Execute cut-over in small audited batches (fenway hub route-flip first; delete dead simulate; hide out-of-v1 surfaces) | Codex · Opus · Fable | **Full-app walk = ZERO old surfaces, JK witnesses** |
+| 2a | Economy measurement: sim-harness histogram + budget curves on the unified trunk, pasted into the reset doc | Fable (contracts) or re-engaged draft agent | Numbers exist in the committed doc |
+| 2b | **D2 Fork A/B** → levers per contract (reserve prices / curve quotas), one per contract, sim-remeasured | per D4 ruling | Reset-doc acceptance numbers hit + JK draft feel + stock imports lock legal first-try |
+| 3 | Asst-GM headline: S2 per-league foundation → C4 setup UI + 24-picker → auction gaps (wrong-fit penalty, mock toggle, FS-3 verify) → scout bands (interrogation-first per Decision A) | Codex/Fable design · Opus | Per-slice gates + browser checks; SOT per landing |
+| 4 | Season seams: setup-spine, freeze-bridge L-SIM hardening, soul-flag production activation mechanism, All-Star voting surface | Codex · Opus | L-SIM season green incl. freeze-bridge; browser walk of setup→freeze→season |
+| 5 | Freeze → saved-game migration check → flip 11 flags → §16 tuning (~100 knobs) → `/franchise` route flip → **JK browser sign-off** | All · JK | The sole acceptance gate — JK plays it |
+
+**Honest calendar:** 0 → 1.5 is achievable today (the map and cut-over are the day's real prize). Phase 2 starts today if the day holds. Phases 3–5 are the following sessions' work — the SOT + this runbook carry the plan across sessions and across agents, which is the point: continuity lives in the repo, not in anyone's context window.
