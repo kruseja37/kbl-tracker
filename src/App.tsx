@@ -104,6 +104,11 @@ const LeagueBuilderAuctionDraft = lazy(() =>
     default: module.LeagueBuilderAuctionDraft,
   })),
 );
+const LeagueBuilderFarmAuctionDraft = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderFarmAuctionDraft").then((module) => ({
+    default: module.LeagueBuilderFarmAuctionDraft,
+  })),
+);
 const ScoutHire = lazy(() =>
   import("./src_figma/app/pages/ScoutHire").then((module) => ({
     default: module.ScoutHire,
@@ -282,6 +287,10 @@ function App() {
         <Route
           path="/league-builder/auction-draft"
           element={<LeagueBuilderAuctionDraft />}
+        />
+        <Route
+          path="/league-builder/farm-auction-draft"
+          element={<LeagueBuilderFarmAuctionDraft />}
         />
         <Route
           path="/league-builder/staff-hire"
