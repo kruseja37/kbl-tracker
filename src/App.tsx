@@ -104,6 +104,16 @@ const LeagueBuilderAuctionDraft = lazy(() =>
     default: module.LeagueBuilderAuctionDraft,
   })),
 );
+const ScoutHire = lazy(() =>
+  import("./src_figma/app/pages/ScoutHire").then((module) => ({
+    default: module.ScoutHire,
+  })),
+);
+const EndOfDraftStaffing = lazy(() =>
+  import("./src_figma/app/pages/EndOfDraftStaffing").then((module) => ({
+    default: module.EndOfDraftStaffing,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -268,9 +278,14 @@ function App() {
           path="/league-builder/draft-setup"
           element={<LeagueBuilderDraftSetup />}
         />
+        <Route path="/league-builder/scout-hire" element={<ScoutHire />} />
         <Route
           path="/league-builder/auction-draft"
           element={<LeagueBuilderAuctionDraft />}
+        />
+        <Route
+          path="/league-builder/staff-hire"
+          element={<EndOfDraftStaffing />}
         />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
