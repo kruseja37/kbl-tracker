@@ -21,6 +21,7 @@ import {
   setActiveFranchise,
 } from './franchiseManager';
 import { getLeagueTemplate, getTeam } from './leagueBuilderStorage';
+import { deepCopyLeagueToFranchise } from './franchisePlayerStorage';
 import { generateSchedule, type ScheduleTeam } from './scheduleGenerator';
 import { addGame, initScheduleDatabase } from './scheduleStorage';
 
@@ -83,10 +84,15 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
   };
   await saveFranchiseConfig(storedConfig);
 
-  // 7. Generate the season schedule
+  // 7. Seed franchise player/team DB from the selected League Builder league
+  if (config.league) {
+    await deepCopyLeagueToFranchise(franchiseId, config.league);
+  }
+
+  // 8. Generate the season schedule
   const scheduleGames = generateSchedule(teams, config.season.gamesPerTeam);
 
-  // 8. Write schedule to IndexedDB (tagged with franchiseId)
+  // 9. Write schedule to IndexedDB (tagged with franchiseId)
   await initScheduleDatabase();
   for (const game of scheduleGames) {
     await addGame({
@@ -99,7 +105,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     });
   }
 
-  // 9. Set as active franchise
+  // 10. Set as active franchise
   await setActiveFranchise(franchiseId);
 
   return franchiseId;
