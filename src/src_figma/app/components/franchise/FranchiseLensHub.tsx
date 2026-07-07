@@ -474,6 +474,8 @@ export interface FranchiseLensActions {
   onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
   onSetFitness: (playerId: string, state: FitnessState) => Promise<RosterActionResult>;
   onScoreGame?: (scheduleGameId?: string) => void;
+  onScoreOnlyGame?: (scheduleGameId?: string) => void;
+  onSkipGame?: (scheduleGameId?: string) => void;
 }
 /** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
 interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
@@ -720,7 +722,24 @@ function SeasonHome({ hub, actions, onAction }: { hub: HubVM; actions?: Franchis
               >
                 SCORE
               </button>
-              <div className="fen-simrow"><button type="button" className="fen-simbtn">Sim this game</button><button type="button" className="fen-simbtn">Sim the week</button></div>
+              <div className="fen-simrow">
+                <button
+                  type="button"
+                  className="fen-simbtn"
+                  onClick={() => actions?.onScoreOnlyGame?.(home.nextGame?.scheduleGameId)}
+                  disabled={!actions?.onScoreOnlyGame}
+                >
+                  SCORE ONLY
+                </button>
+                <button
+                  type="button"
+                  className="fen-simbtn"
+                  onClick={() => actions?.onSkipGame?.(home.nextGame?.scheduleGameId)}
+                  disabled={!actions?.onSkipGame}
+                >
+                  SKIP
+                </button>
+              </div>
               {home.nextGame.pulse ? <div className="fen-gpulse">{home.nextGame.pulse}</div> : null}
             </div>
           </div>
@@ -1783,17 +1802,35 @@ function ScheduleRow({ g, actions }: { g: ScheduleGameVM; actions?: FranchiseLen
       <div className="sm fen-chalk">{g.home ? "vs" : "@"} {g.opponent}</div>
       {g.result ? (
         <div className={`sr ${g.result.win ? "w" : "l"}`}>{g.result.win ? "W" : "L"} {g.result.teamScore}–{g.result.oppScore}</div>
-      ) : g.isNext ? (
-        <button
-          type="button"
-          className="fen-sched-play"
-          onClick={() => actions?.onScoreGame?.(g.scheduleGameId)}
-          disabled={!actions?.onScoreGame}
-        >
-          SCORE
-        </button>
       ) : (
-        <div className="sr soft">{g.note ?? (g.home ? "home" : "away")}</div>
+        <div className="fen-sched-actions">
+          {g.isNext ? (
+            <button
+              type="button"
+              className="fen-sched-play"
+              onClick={() => actions?.onScoreGame?.(g.scheduleGameId)}
+              disabled={!actions?.onScoreGame}
+            >
+              SCORE
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="fen-sched-lite"
+            onClick={() => actions?.onScoreOnlyGame?.(g.scheduleGameId)}
+            disabled={!actions?.onScoreOnlyGame}
+          >
+            Score Only
+          </button>
+          <button
+            type="button"
+            className="fen-sched-lite danger"
+            onClick={() => actions?.onSkipGame?.(g.scheduleGameId)}
+            disabled={!actions?.onSkipGame}
+          >
+            Skip
+          </button>
+        </div>
       )}
     </div>
   );
