@@ -69,6 +69,7 @@ type RosterDesignerProps = {
   team: Team;
   mode: DraftPoolMode;
   players: readonly Player[];
+  allPlayers?: readonly Player[];
   lockedPool: boolean;
   budget: number;
   tier: TierKey;
@@ -301,6 +302,7 @@ export function RosterDesigner({
   team,
   mode,
   players,
+  allPlayers,
   lockedPool,
   budget,
   tier,
@@ -385,9 +387,11 @@ export function RosterDesigner({
     setResetConfirm(false);
   }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.rankOverrides, team.rosterDesign?.slots]);
 
-  const designPool = useMemo(() => buildRosterDesignPool(players), [players]);
-  const fullPlayerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
-  const simPool = useMemo(() => demandUniverseFromPlayers(players), [players]);
+  const sourcePlayers = mode === "design-first" && !lockedPool ? (allPlayers ?? players) : players;
+  const designPool = useMemo(() => buildRosterDesignPool(sourcePlayers), [sourcePlayers]);
+  const labelPlayers = allPlayers ?? players;
+  const fullPlayerById = useMemo(() => new Map(labelPlayers.map((player) => [player.id, player])), [labelPlayers]);
+  const simPool = useMemo(() => demandUniverseFromPlayers(sourcePlayers), [sourcePlayers]);
   const targetArchetype = useMemo(() => {
     const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
     return historical ? historicalToSimArchetype(historical) : null;
@@ -454,6 +458,7 @@ export function RosterDesigner({
       const playerId = pinMap.get(slot.slotId);
       if (!playerId) continue;
       const poolPlayer = designPlayerById.get(playerId);
+      const fullPlayer = fullPlayerById.get(playerId);
       const targetPick = targetPickBySlotId.get(slot.slotId);
       const dropped = droppedBySlotId.get(slot.slotId);
       const classification = classificationById.get(playerId);
@@ -469,8 +474,8 @@ export function RosterDesigner({
         playerId,
         playerName: targetPick?.playerId === playerId
           ? targetPick.playerName ?? playerId
-          : poolPlayer?.name ?? playerId,
-        salary: targetPick?.playerId === playerId ? targetPick.salary : poolPlayer?.salary,
+          : poolPlayer?.name ?? (fullPlayer ? `${fullPlayer.firstName} ${fullPlayer.lastName}` : playerId),
+        salary: targetPick?.playerId === playerId ? targetPick.salary : poolPlayer?.salary ?? fullPlayer?.salary,
         honorsAsk,
         orphaned: !poolPlayer,
         dropped: Boolean(poolPlayer && dropped),
@@ -478,7 +483,7 @@ export function RosterDesigner({
     }
 
     return displays;
-  }, [classifiedPool, designPool, pinMap, slots, target]);
+  }, [classifiedPool, designPool, fullPlayerById, pinMap, slots, target]);
 
   const selectedSlot = slots.find((slot) => slot.slotId === selectedSlotId) ?? null;
   const tone = designVerdictTone(result, designPool.length);
