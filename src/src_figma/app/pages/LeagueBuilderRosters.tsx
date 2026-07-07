@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { ArrowLeft, Folder, Users, ChevronRight, Save, RotateCcw } from "lucide-react";
+import { Folder, Users, ChevronRight, Save, RotateCcw } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import {
   useLeagueBuilderData,
@@ -24,11 +24,14 @@ import {
   type OptimalLineupCandidate,
   type OptimalLineupSnapshotField,
 } from "../../../utils/optimalLineup";
+import { analyzeBuilderTeamRoster } from "../../../utils/rosterAnalyzerBuilderAdapter";
 import type {
   OpposingPitcherHand,
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
+import type { RosterAnalyzerReport } from "../../../engines/rosterAnalyzerEngine";
 import { OptimalLineupComparisonPanel } from "../components/OptimalLineupComparisonPanel";
+import { BallparkShell } from "../components/ballpark";
 
 type TabType = "roster" | "lineup" | "rotation" | "depth";
 
@@ -118,6 +121,7 @@ export function LeagueBuilderRosters() {
     isLoading,
     error,
     getRoster,
+    updatePlayer,
     updateRoster,
   } = useLeagueBuilderData();
 
@@ -133,6 +137,29 @@ export function LeagueBuilderRosters() {
       current ? applyRosterUpdateWithStaleOptimalSnapshots(current, update) : current,
     );
     setHasChanges(true);
+  };
+
+  const updatePlayerRosterAssignment = async (
+    playerId: string,
+    rosterStatus: "MLB" | "FARM" | null,
+  ) => {
+    if (!selectedTeamId || !activeLeagueId) return;
+    const player = players.find((candidate) => candidate.id === playerId);
+    if (!player) return;
+    const nextAssignments = (player.leagueAssignments ?? []).filter(
+      (assignment) => assignment.leagueId !== activeLeagueId,
+    );
+    if (rosterStatus) {
+      nextAssignments.push({
+        leagueId: activeLeagueId,
+        teamId: selectedTeamId,
+        rosterStatus,
+      });
+    }
+    await updatePlayer({
+      ...player,
+      leagueAssignments: nextAssignments,
+    });
   };
 
   // Auto-select first league on load
@@ -301,6 +328,16 @@ export function LeagueBuilderRosters() {
     () => selectedTeamId ? players.filter((player) => isPlayerOnTeam(player, selectedTeamId)) : [],
     [players, selectedTeamId, activeLeagueId]
   );
+  const analyzerReport = useMemo(() => {
+    if (!selectedTeam || !currentRoster) return null;
+    return analyzeBuilderTeamRoster({
+      leagueId: activeLeagueId,
+      team: selectedTeam,
+      players,
+      roster: currentRoster,
+      generatedAt: 'builder-roster-page',
+    });
+  }, [activeLeagueId, currentRoster, players, selectedTeam]);
 
   if (isLoading) {
     return (
@@ -319,43 +356,30 @@ export function LeagueBuilderRosters() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/league-builder")}
-              className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+    <BallparkShell
+      onBack={() => navigate("/league-builder")}
+      icon={Folder}
+      iconColor="#0066FF"
+      title="ROSTERS"
+      maxWidthClassName="max-w-7xl"
+      rightSlot={
+        <>
+          {/* League Selector */}
+          {leagues.length > 1 && (
+            <select
+              value={activeLeagueId}
+              onChange={(e) => setActiveLeagueId(e.target.value)}
+              className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
             >
-              <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-            </button>
-            <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-              <Folder className="w-6 h-6" style={{ color: "#0066FF" }} />
-              <h1
-                className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
-                style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
-              >
-                ROSTERS
-              </h1>
-            </div>
-            {/* League Selector */}
-            {leagues.length > 1 && (
-              <select
-                value={activeLeagueId}
-                onChange={(e) => setActiveLeagueId(e.target.value)}
-                className="bg-[#4A6844] border-4 border-[#E8E8D8] text-[#E8E8D8] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
-              >
-                {leagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.name.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
+              {leagues.map((league) => (
+                <option key={league.id} value={league.id}>
+                  {league.name.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          )}
           {selectedTeamId && hasChanges && (
-            <div className="flex items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={handleRevert}
                 className="flex items-center gap-2 px-4 py-2 bg-[#556B55] hover:bg-[#667B66] border-4 border-[#E8E8D8]/50 transition"
@@ -373,9 +397,10 @@ export function LeagueBuilderRosters() {
               </button>
             </div>
           )}
-        </div>
-
-        <div className="grid grid-cols-12 gap-6">
+        </>
+      }
+    >
+      <div className="grid grid-cols-12 gap-6">
           {/* Team List - Left Column */}
           <div className="col-span-3">
             <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
@@ -459,6 +484,8 @@ export function LeagueBuilderRosters() {
                   </div>
                 </div>
 
+                <BuilderRosterAnalyzerPanel report={analyzerReport} />
+
                 {/* Tabs */}
                 <div className="flex border-b-4 border-[#4A6844]">
                   {(["roster", "lineup", "rotation", "depth"] as TabType[]).map(
@@ -484,6 +511,7 @@ export function LeagueBuilderRosters() {
                       roster={currentRoster}
                       players={teamPlayers}
                       onUpdate={applyCurrentRosterUpdate}
+                      onSetRosterStatus={updatePlayerRosterAssignment}
                     />
                   )}
                   {activeTab === "lineup" && (
@@ -522,6 +550,62 @@ export function LeagueBuilderRosters() {
             )}
           </div>
         </div>
+    </BallparkShell>
+  );
+}
+
+interface BuilderRosterAnalyzerPanelProps {
+  report: RosterAnalyzerReport | null;
+}
+
+function BuilderRosterAnalyzerPanel({ report }: BuilderRosterAnalyzerPanelProps) {
+  if (!report) return null;
+
+  const visibleFindings = report.findings
+    .filter((finding) => finding.severity !== 'info' || finding.kind !== 'data_integrity')
+    .slice(0, 3);
+  const limitations = report.profile.limitations.slice(0, 3);
+
+  return (
+    <div className="border-b-4 border-[#4A6844] bg-[#3F563F] px-6 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-bold tracking-wider text-[#E8E8D8]/60">
+            READ-ONLY ROSTER ANALYZER
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+            <span className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 px-3 py-1">
+              MLB {report.profile.activeCount}
+            </span>
+            <span className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 px-3 py-1">
+              FARM {report.profile.farmCount}
+            </span>
+            <span className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 px-3 py-1">
+              TRUST {report.trust.overall.toUpperCase()}
+            </span>
+          </div>
+        </div>
+        <div className="max-w-xl flex-1 text-sm">
+          {visibleFindings.length > 0 ? (
+            <div className="space-y-1">
+              {visibleFindings.map((finding) => (
+                <div key={finding.id} className="text-[#E8E8D8]">
+                  <span className="font-bold text-[#FFD166]">{finding.severity.toUpperCase()}</span>
+                  <span className="text-[#E8E8D8]/80"> · {finding.title}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="font-bold text-[#A7F3D0]">
+              No critical readiness issues found.
+            </div>
+          )}
+          {limitations.length > 0 && (
+            <div className="mt-2 text-xs text-[#E8E8D8]/60">
+              {limitations.join(' ')}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -535,34 +619,38 @@ interface RosterTabProps {
   roster: TeamRoster;
   players: Player[];
   onUpdate: (update: Partial<TeamRoster>) => void;
+  onSetRosterStatus: (playerId: string, rosterStatus: "MLB" | "FARM" | null) => Promise<void>;
 }
 
-function RosterTab({ roster, players, onUpdate }: RosterTabProps) {
+function RosterTab({ roster, players, onUpdate, onSetRosterStatus }: RosterTabProps) {
   const mlbPlayers = players.filter((p) => roster.mlbRoster.includes(p.id));
   const farmPlayers = players.filter((p) => roster.farmRoster.includes(p.id));
   const unassigned = players.filter(
     (p) => !roster.mlbRoster.includes(p.id) && !roster.farmRoster.includes(p.id)
   );
 
-  const moveToMLB = (playerId: string) => {
+  const moveToMLB = async (playerId: string) => {
     onUpdate({
       mlbRoster: [...roster.mlbRoster, playerId],
       farmRoster: roster.farmRoster.filter((id) => id !== playerId),
     });
+    await onSetRosterStatus(playerId, "MLB");
   };
 
-  const moveToFarm = (playerId: string) => {
+  const moveToFarm = async (playerId: string) => {
     onUpdate({
       farmRoster: [...roster.farmRoster, playerId],
       mlbRoster: roster.mlbRoster.filter((id) => id !== playerId),
     });
+    await onSetRosterStatus(playerId, "FARM");
   };
 
-  const removeFromRoster = (playerId: string) => {
+  const removeFromRoster = async (playerId: string) => {
     onUpdate({
       mlbRoster: roster.mlbRoster.filter((id) => id !== playerId),
       farmRoster: roster.farmRoster.filter((id) => id !== playerId),
     });
+    await onSetRosterStatus(playerId, null);
   };
 
   return (

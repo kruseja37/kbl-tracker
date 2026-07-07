@@ -144,21 +144,21 @@ const MAX_RATING_ADJUSTMENT = 10;
 
 /**
  * Salary floor/ceiling by grade for System B.
- * Per GAP-B12-025 spec. Values in millions ($M).
+ * Per GAP-B12-025 spec, re-denominated to T5 canonical dollars.
  */
-const GRADE_SALARY_BOUNDS: Record<Grade, { floor: number; ceiling: number }> = {
-  'S':  { floor: 15, ceiling: 45 },
-  'A+': { floor: 12, ceiling: 40 },
-  'A':  { floor: 10, ceiling: 35 },
-  'A-': { floor: 8,  ceiling: 30 },
-  'B+': { floor: 6,  ceiling: 25 },
-  'B':  { floor: 5,  ceiling: 20 },
-  'B-': { floor: 4,  ceiling: 18 },
-  'C+': { floor: 3,  ceiling: 15 },
-  'C':  { floor: 2,  ceiling: 12 },
-  'C-': { floor: 2,  ceiling: 12 },
-  'D+': { floor: 1,  ceiling: 8 },
-  'D':  { floor: 1,  ceiling: 8 },
+export const GRADE_SALARY_BOUNDS: Record<Grade, { floor: number; ceiling: number }> = {
+  'S':  { floor: 49994.58, ceiling: 149983.74 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'A+': { floor: 39995.66, ceiling: 133318.88 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'A':  { floor: 33329.72, ceiling: 116654.02 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'A-': { floor: 26663.78, ceiling: 99989.16 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'B+': { floor: 19997.83, ceiling: 83324.30 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'B':  { floor: 16664.86, ceiling: 66659.44 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'B-': { floor: 13331.89, ceiling: 59993.50 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'C+': { floor: 9998.92, ceiling: 49994.58 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'C':  { floor: 6665.94, ceiling: 39995.66 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'C-': { floor: 6665.94, ceiling: 39995.66 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'D+': { floor: 3332.97, ceiling: 26663.78 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  'D':  { floor: 3332.97, ceiling: 26663.78 }, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 };
 
 /** System B gap closure rate (50%) */

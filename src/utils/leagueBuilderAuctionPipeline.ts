@@ -1,0 +1,442 @@
+import { LEAGUE_MINIMUM_SALARY } from '../data/rosterEngineConstants';
+import type {
+  AuctionPlayer,
+  AuctionSession,
+  AuctionTeamInput,
+} from '../engines/auctionStateMachine';
+import type { RegisteredPool } from '../engines/leagueConstruction';
+import { toRosterSlotPlayer } from '../engines/rosterNeed';
+import type { FarmAuctionPool } from './farmAuctionPool';
+import {
+  createEmptyTeamRoster,
+  createFarmAuctionSessionId,
+  deleteAuctionSession,
+  deleteAuctionSessionById,
+  deletePlayer,
+  deleteScoutProfilesForLeague,
+  deleteStartupDraftSession,
+  getAllPlayers,
+  getAuctionSession,
+  getAuctionSessionById,
+  getLeagueTemplate,
+  getPlayer,
+  getRegisteredPool,
+  getStartupDraftSession,
+  getTeamRoster,
+  savePlayer,
+  saveTeamRoster,
+  type Chemistry,
+  type Grade,
+  type PitchType,
+  type Player,
+  type Position,
+  type Team,
+  type TeamRoster,
+} from './leagueBuilderStorage';
+import { leagueHasLinkedFranchise } from './franchiseManager';
+
+export const MLB_AUCTION_ROSTER_SLOTS = 22;
+export const MLB_AUCTION_SEASON = 1;
+export const RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE =
+  'A FRANCHISE IS ALREADY RUNNING ON THIS DRAFT — RE-RUNNING WOULD PULL ITS FLOOR OUT.';
+
+export class ResetCompletedDraftLinkedFranchiseError extends Error {
+  readonly leagueId: string;
+
+  constructor(leagueId: string) {
+    super(RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE);
+    this.name = 'ResetCompletedDraftLinkedFranchiseError';
+    this.leagueId = leagueId;
+    Object.defineProperty(this, 'leagueId', {
+      value: leagueId,
+      enumerable: true,
+    });
+  }
+}
+
+export interface AuctionRosterCommitReport {
+  leagueId: string;
+  rosterStatus: 'MLB' | 'FARM';
+  committedPlayerIds: string[];
+  teamRosterCounts: Record<string, number>;
+}
+
+export function computeIvPercentiles(poolPlayers: readonly RegisteredPool["players"][number][]): Map<string, number> {
+  const sorted = [...poolPlayers].sort((left, right) => left.iv - right.iv || left.id.localeCompare(right.id));
+  const denominator = Math.max(1, sorted.length - 1);
+  const firstIndexByIv = new Map<number, number>();
+
+  sorted.forEach((player, index) => {
+    if (!firstIndexByIv.has(player.iv)) firstIndexByIv.set(player.iv, index);
+  });
+
+  return new Map(
+    poolPlayers.map((player) => [
+      player.id,
+      sorted.length <= 1 ? 100 : ((firstIndexByIv.get(player.iv) ?? 0) / denominator) * 100,
+    ]),
+  );
+}
+
+export function buildAuctionPlayers(pool: RegisteredPool): AuctionPlayer[] {
+  const percentiles = computeIvPercentiles(pool.players);
+  return pool.players.map((player) => {
+    if (!Number.isFinite(player.iv)) {
+      throw new Error(`RegisteredPool player ${player.id} has no finite IV.`);
+    }
+    return {
+      playerId: player.id,
+      iv: player.iv,
+      ivPercentile: percentiles.get(player.id) ?? 0,
+    };
+  });
+}
+
+/**
+ * `buildAuctionPlayers` + position/legality enrichment for the own_need guard (FABLE-C1, spec §5).
+ * The RegisteredPool is priced-only ({id, iv, salary}), so positions come from the stored Player
+ * records. Enrichment is per-player permissive: a missing record leaves that player position-blind
+ * (the machine's guard stands down for any roster containing him — never a false rejection).
+ * MLB auction only — the farm auction's 10-man roster has different legality and stays unenriched.
+ */
+export async function buildAuctionPlayersWithPositions(
+  pool: RegisteredPool,
+  fetchPlayer: (playerId: string) => Promise<Player | null> = getPlayer,
+): Promise<AuctionPlayer[]> {
+  const base = buildAuctionPlayers(pool);
+  return Promise.all(
+    base.map(async (auctionPlayer) => {
+      const stored = await fetchPlayer(auctionPlayer.playerId);
+      if (!stored) return auctionPlayer;
+      return {
+        ...auctionPlayer,
+        pos: toRosterSlotPlayer({
+          primaryPosition: stored.primaryPosition,
+          secondaryPosition: stored.secondaryPosition ?? null,
+          traits: [stored.trait1, stored.trait2],
+        }),
+      };
+    }),
+  );
+}
+
+export async function buildAuctionTeams(input: {
+  leagueTeams: readonly Team[];
+  pool: RegisteredPool;
+  getRoster: (teamId: string) => Promise<TeamRoster | null>;
+}): Promise<AuctionTeamInput[]> {
+  const poolById = new Map(input.pool.players.map((player) => [player.id, player]));
+
+  return Promise.all(
+    input.leagueTeams.map(async (team) => {
+      const roster = await input.getRoster(team.id);
+      const mlbRosterIds = roster?.mlbRoster ?? [];
+      const committedRoster = mlbRosterIds
+        .map((playerId) => {
+          const poolPlayer = poolById.get(playerId);
+          return poolPlayer ? { playerId, salary: poolPlayer.salary } : null;
+        })
+        .filter((assignment): assignment is { playerId: string; salary: number } => assignment !== null);
+      const committedSalaries = committedRoster.reduce((sum, assignment) => sum + assignment.salary, 0);
+
+      return {
+        teamId: team.id,
+        budgetRemaining: Math.max(0, input.pool.tierCap - committedSalaries),
+        rosterSlotsRemaining: Math.max(0, MLB_AUCTION_ROSTER_SLOTS - mlbRosterIds.length),
+        minSalary: LEAGUE_MINIMUM_SALARY,
+        projectedTax: 0,
+        roster: committedRoster,
+      };
+    }),
+  );
+}
+
+function cloneRoster(roster: TeamRoster): TeamRoster {
+  return {
+    ...roster,
+    mlbRoster: [...roster.mlbRoster],
+    farmRoster: [...roster.farmRoster],
+    lineupWithDH: [...roster.lineupWithDH],
+    lineupWithoutDH: [...roster.lineupWithoutDH],
+    startingRotation: [...roster.startingRotation],
+    longRelievers: [...roster.longRelievers],
+    setupPitchers: [...roster.setupPitchers],
+    depthChart: {
+      C: [...roster.depthChart.C],
+      '1B': [...roster.depthChart['1B']],
+      '2B': [...roster.depthChart['2B']],
+      SS: [...roster.depthChart.SS],
+      '3B': [...roster.depthChart['3B']],
+      LF: [...roster.depthChart.LF],
+      CF: [...roster.depthChart.CF],
+      RF: [...roster.depthChart.RF],
+      DH: [...roster.depthChart.DH],
+      SP: [...roster.depthChart.SP],
+      RP: [...roster.depthChart.RP],
+      CP: [...roster.depthChart.CP],
+    },
+    pinchHitOrder: [...roster.pinchHitOrder],
+    pinchRunOrder: [...roster.pinchRunOrder],
+    defensiveSubOrder: [...roster.defensiveSubOrder],
+  };
+}
+
+function completedSessionOrThrow(session: AuctionSession): void {
+  if (session.state !== 'AUCTION_COMPLETE') {
+    throw new Error(`Cannot commit auction roster before AUCTION_COMPLETE; current state is ${session.state}.`);
+  }
+}
+
+async function readCompletedDraftArc(leagueId: string) {
+  const [mlbSession, farmSession, startupDraftSession, registeredPool] = await Promise.all([
+    getAuctionSession(leagueId, MLB_AUCTION_SEASON),
+    getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
+    getStartupDraftSession(leagueId, 1),
+    getRegisteredPool(leagueId),
+  ]);
+
+  return { mlbSession, farmSession, startupDraftSession, registeredPool };
+}
+
+function committedSoldPlayerIds(session: AuctionSession | null | undefined): Set<string> {
+  if (!session || session.state !== 'AUCTION_COMPLETE') return new Set();
+  return new Set(
+    session.results
+      .filter((result) => result.disposition === 'SOLD')
+      .map((result) => result.playerId),
+  );
+}
+
+function assignmentForLeague(player: Player, leagueId: string): NonNullable<Player['leagueAssignments']>[number] | undefined {
+  return player.leagueAssignments?.find((assignment) => assignment.leagueId === leagueId);
+}
+
+async function leagueTeamIds(leagueId: string): Promise<string[]> {
+  const league = await getLeagueTemplate(leagueId);
+  return league?.teamIds ?? [];
+}
+
+async function clearLeagueTeamRosterField(
+  teamIds: readonly string[],
+  field: 'mlbRoster' | 'farmRoster',
+): Promise<void> {
+  await Promise.all(teamIds.map(async (teamId) => {
+    const roster = await getTeamRoster(teamId);
+    if (roster && roster[field].length === 0) return;
+    const nextRoster = roster ? cloneRoster(roster) : createEmptyTeamRoster(teamId);
+    nextRoster[field] = [];
+    await saveTeamRoster(nextRoster);
+  }));
+}
+
+async function deleteCommittedFarmPlayers(leagueId: string, farmCommittedIds: Set<string>): Promise<void> {
+  if (farmCommittedIds.size === 0) return;
+  const players = await getAllPlayers();
+  await Promise.all(players.map(async (player) => {
+    if (!farmCommittedIds.has(player.id)) return;
+    const assignment = assignmentForLeague(player, leagueId);
+    if (assignment?.rosterStatus !== 'FARM') return;
+    await deletePlayer(player.id);
+  }));
+}
+
+async function resetAssignedLeaguePlayersToPool(
+  leagueId: string,
+  askSalaryByPlayerId: ReadonlyMap<string, number>,
+): Promise<void> {
+  const players = await getAllPlayers();
+
+  for (const player of players) {
+    const assignment = assignmentForLeague(player, leagueId);
+    if (!assignment?.teamId) continue;
+
+    const nextAssignments = (player.leagueAssignments ?? []).map((candidate) =>
+      candidate.leagueId === leagueId
+        ? { ...candidate, teamId: '', rosterStatus: 'FREE_AGENT' as const }
+        : candidate,
+    );
+    const { settledSalary: _settledSalary, ...playerWithoutSettledSalary } = player;
+    const askSalary = askSalaryByPlayerId.get(player.id);
+
+    await savePlayer({
+      ...playerWithoutSettledSalary,
+      ...(askSalary === undefined ? {} : { salary: askSalary }),
+      leagueAssignments: nextAssignments,
+    });
+  }
+}
+
+function upsertAssignment(
+  player: Player,
+  leagueId: string,
+  teamId: string,
+  rosterStatus: 'MLB' | 'FARM',
+): Player['leagueAssignments'] {
+  return [
+    ...(player.leagueAssignments ?? []).filter((assignment) => assignment.leagueId !== leagueId),
+    { leagueId, teamId, rosterStatus },
+  ];
+}
+
+async function commitTeamRoster(input: {
+  leagueId: string;
+  teamId: string;
+  rosterStatus: 'MLB' | 'FARM';
+  playerIds: readonly string[];
+}): Promise<void> {
+  const roster = await getTeamRoster(input.teamId);
+  if (!roster) throw new Error(`Team "${input.teamId}" is missing a League Builder roster.`);
+
+  const nextRoster = cloneRoster(roster);
+  if (input.rosterStatus === 'MLB') {
+    nextRoster.mlbRoster = [...input.playerIds];
+  } else {
+    nextRoster.farmRoster = [...input.playerIds];
+  }
+  await saveTeamRoster(nextRoster);
+}
+
+async function saveMlbAssignment(input: {
+  leagueId: string;
+  teamId: string;
+  playerId: string;
+  salary: number;
+}): Promise<void> {
+  const player = await getPlayer(input.playerId);
+  if (!player) throw new Error(`Auction winner player "${input.playerId}" was not found.`);
+
+  await savePlayer({
+    ...player,
+    salary: input.salary,
+    settledSalary: input.salary,
+    leagueAssignments: upsertAssignment(player, input.leagueId, input.teamId, 'MLB'),
+  });
+}
+
+function farmProspectToPlayer(
+  prospect: FarmAuctionPool['prospects'][number],
+  leagueId: string,
+  teamId: string,
+  salary: number,
+): Omit<Player, 'createdDate' | 'lastModified'> {
+  return {
+    ...prospect,
+    primaryPosition: prospect.primaryPosition as Position,
+    secondaryPosition: prospect.secondaryPosition as Position | undefined,
+    arsenal: prospect.arsenal as PitchType[],
+    overallGrade: prospect.overallGrade as Grade,
+    personality: prospect.personality as Player['personality'],
+    chemistry: prospect.chemistry as Chemistry,
+    salary,
+    settledSalary: salary,
+    draftedAsFarmProspect: true,
+    leagueAssignments: [{ leagueId, teamId, rosterStatus: 'FARM' }],
+  };
+}
+
+export async function commitCompletedMlbAuctionSessionToLeagueRosters(input: {
+  leagueId: string;
+  session: AuctionSession;
+  excludeTeamIds?: readonly string[];
+}): Promise<AuctionRosterCommitReport> {
+  completedSessionOrThrow(input.session);
+
+  const teamRosterCounts: Record<string, number> = {};
+  const committedPlayerIds: string[] = [];
+  const excludedTeamIds = new Set(input.excludeTeamIds ?? []);
+
+  for (const team of input.session.teams) {
+    if (excludedTeamIds.has(team.teamId)) {
+      teamRosterCounts[team.teamId] = team.roster.length;
+      continue;
+    }
+    const playerIds = team.roster.map((assignment) => assignment.playerId);
+    await commitTeamRoster({
+      leagueId: input.leagueId,
+      teamId: team.teamId,
+      rosterStatus: 'MLB',
+      playerIds,
+    });
+    teamRosterCounts[team.teamId] = playerIds.length;
+
+    for (const assignment of team.roster) {
+      await saveMlbAssignment({
+        leagueId: input.leagueId,
+        teamId: team.teamId,
+        playerId: assignment.playerId,
+        salary: assignment.salary,
+      });
+      committedPlayerIds.push(assignment.playerId);
+    }
+  }
+
+  return {
+    leagueId: input.leagueId,
+    rosterStatus: 'MLB',
+    committedPlayerIds,
+    teamRosterCounts,
+  };
+}
+
+export async function commitCompletedFarmAuctionSessionToLeagueRosters(input: {
+  leagueId: string;
+  session: AuctionSession;
+  pool: FarmAuctionPool;
+}): Promise<AuctionRosterCommitReport> {
+  completedSessionOrThrow(input.session);
+
+  const prospectsById = new Map(input.pool.prospects.map((prospect) => [prospect.id, prospect]));
+  const teamRosterCounts: Record<string, number> = {};
+  const committedPlayerIds: string[] = [];
+
+  for (const team of input.session.teams) {
+    const playerIds = team.roster.map((assignment) => assignment.playerId);
+    await commitTeamRoster({
+      leagueId: input.leagueId,
+      teamId: team.teamId,
+      rosterStatus: 'FARM',
+      playerIds,
+    });
+    teamRosterCounts[team.teamId] = playerIds.length;
+
+    for (const assignment of team.roster) {
+      const prospect = prospectsById.get(assignment.playerId);
+      if (!prospect) throw new Error(`Farm auction prospect "${assignment.playerId}" was not found in the saved pool.`);
+      await savePlayer(farmProspectToPlayer(prospect, input.leagueId, team.teamId, assignment.salary));
+      committedPlayerIds.push(assignment.playerId);
+    }
+  }
+
+  return {
+    leagueId: input.leagueId,
+    rosterStatus: 'FARM',
+    committedPlayerIds,
+    teamRosterCounts,
+  };
+}
+
+export async function resetCompletedDraftArc(leagueId: string): Promise<void> {
+  if (await leagueHasLinkedFranchise(leagueId)) {
+    throw new ResetCompletedDraftLinkedFranchiseError(leagueId);
+  }
+
+  const draftArc = await readCompletedDraftArc(leagueId);
+  void draftArc.mlbSession;
+  void draftArc.startupDraftSession;
+
+  const teamIds = await leagueTeamIds(leagueId);
+  const askSalaryByPlayerId = new Map(
+    (draftArc.registeredPool?.players ?? []).map((player) => [player.id, player.salary]),
+  );
+
+  await deleteCommittedFarmPlayers(leagueId, committedSoldPlayerIds(draftArc.farmSession?.session));
+  await clearLeagueTeamRosterField(teamIds, 'farmRoster');
+
+  await resetAssignedLeaguePlayersToPool(leagueId, askSalaryByPlayerId);
+  await clearLeagueTeamRosterField(teamIds, 'mlbRoster');
+
+  await deleteAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
+  await deleteAuctionSession(leagueId, MLB_AUCTION_SEASON);
+  await deleteStartupDraftSession(leagueId, 1);
+  await deleteScoutProfilesForLeague(leagueId);
+}

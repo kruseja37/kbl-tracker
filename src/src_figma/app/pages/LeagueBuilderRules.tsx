@@ -1,10 +1,11 @@
 import { useNavigate } from "react-router";
-import { ArrowLeft, Settings, Plus, Trash2, X, Copy, Check, Lock, Edit2 } from "lucide-react";
+import { Settings, Plus, Trash2, X, Copy, Check, Lock, Edit2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
   useLeagueBuilderData,
   type RulesPreset,
 } from "../../hooks/useLeagueBuilderData";
+import { BallparkShell } from "../components/ballpark";
 
 type TabType = "game" | "season" | "playoffs";
 
@@ -69,34 +70,22 @@ export function LeagueBuilderRules() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/league-builder")}
-              className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-            >
-              <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-            </button>
-            <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-              <Settings className="w-6 h-6" style={{ color: "#DD0000" }} />
-              <h1 className="text-2xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
-                RULES PRESETS
-              </h1>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-[#5A8352] hover:bg-[#6A9362] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="font-bold">NEW PRESET</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-12 gap-6">
+    <BallparkShell
+      onBack={() => navigate("/league-builder")}
+      icon={Settings}
+      iconColor="#DD0000"
+      title="RULES PRESETS"
+      rightSlot={
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="ml-auto flex items-center gap-2 px-6 py-3 bg-[#5A8352] hover:bg-[#6A9362] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+        >
+          <Plus className="w-5 h-5" />
+          <span className="font-bold">NEW PRESET</span>
+        </button>
+      }
+    >
+      <div className="grid grid-cols-12 gap-6">
           {/* Preset List - Left Column */}
           <div className="col-span-4">
             <div className="bg-[#556B55] border-[6px] border-[#4A6844] p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
@@ -230,8 +219,6 @@ export function LeagueBuilderRules() {
             )}
           </div>
         </div>
-      </div>
-
       {/* Create/Edit Modal */}
       {(showCreateModal || editingPreset) && (
         <RulesPresetModal
@@ -252,7 +239,7 @@ export function LeagueBuilderRules() {
           }}
         />
       )}
-    </div>
+    </BallparkShell>
   );
 }
 

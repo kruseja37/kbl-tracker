@@ -12,9 +12,26 @@
  */
 
 import { generateHometown } from '../data/usCities';
+import { TIER_CAPS } from '../data/tierParams';
+import {
+  BALANCE_MODE_DEFAULT,
+  CHECKPOINT_CADENCE_DEFAULT,
+  normalizeCheckpointCadence,
+  type CheckpointCadence,
+} from '../data/rosterEngineConstants';
+import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../data/chemistryCanonical';
+import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
+import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
+import type { DesignSlot } from '../engines/rosterDesignFeasibility';
+import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
+import type { ParkFactors } from '../types/war';
+import type { ParkDimensions } from '../data/parkLookup';
 import type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
+import type { RebrandRelocationMarker } from '../engines/franchiseRebrandCascade';
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
+import type { FarmAuctionPool } from './farmAuctionPool';
+import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import {
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
@@ -26,7 +43,7 @@ export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 4;
+const DB_VERSION = 8;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
@@ -35,6 +52,11 @@ const STORES = {
   LEAGUE_PLAYER_OVERRIDES: 'leaguePlayerOverrides',
   RULES_PRESETS: 'rulesPresets',
   TEAM_ROSTERS: 'teamRosters',
+  SCOUT_PROFILES: 'scoutProfiles',
+  STARTUP_DRAFT_SESSIONS: 'startupDraftSessions',
+  REGISTERED_POOLS: 'registeredPools',
+  MLB_DRAFT_SESSIONS: 'mlbDraftSessions',
+  AUCTION_SESSIONS: 'auctionSessions',
 } as const;
 
 // ============================================
@@ -74,6 +96,13 @@ export interface Division {
   teamIds: string[];
 }
 
+export type DraftPoolMode = 'pool-first' | 'design-first';
+
+export interface DraftSetupSeat {
+  id: string;
+  name: string;
+}
+
 export interface LeagueTemplate {
   id: string;
   name: string;
@@ -84,8 +113,34 @@ export interface LeagueTemplate {
   conferences: Conference[];
   divisions: Division[];
   defaultRulesPreset: string;
+  draftFormat?: 'auction' | 'snake';
+  draftPoolMode?: DraftPoolMode;
+  draftSeats?: DraftSetupSeat[];
+  poolExtractedAt?: string;
+  poolExtractedBasis?: {
+    cap: number;
+    poolSizeMultiplier: number;
+    shills?: number;
+    identityByTeamId: Record<string, string | null>;
+  };
+  modeAExtractedIds?: string[];
+  modeAHandAdds?: string[];
+  modeAHandRemoves?: string[];
+  tier?: TierKey;
+  salaryCap?: number;
+  poolSizeMultiplier?: number;
+  balanceMode?: BalanceMode;
+  checkpointCadence?: CheckpointCadence;
   logoUrl?: string;
   color?: string;
+}
+
+export function resolveLeagueSalaryCap(league: Pick<LeagueTemplate, 'salaryCap' | 'tier'> | null | undefined): number {
+  return league?.salaryCap ?? TIER_CAPS[league?.tier ?? 'juiced'].tierCap;
+}
+
+export function getLeagueDraftFormat(template: Pick<LeagueTemplate, 'draftFormat'> | null | undefined): 'auction' | 'snake' {
+  return template?.draftFormat ?? 'auction';
 }
 
 // Team
@@ -102,6 +157,10 @@ export interface Team {
   };
   logoUrl?: string;
   stadium: string;
+  stadiumId?: string;
+  stadiumDimensions?: ParkDimensions;
+  parkFactors?: ParkFactors;
+  controlledBy?: 'human' | 'ai';
   stadiumCapacity?: number;
   leagueIds: string[];
   foundedYear?: number;
@@ -115,6 +174,21 @@ export interface Team {
   ballparkNickname?: string;
   heritageFacts?: string[];
   rivalries?: TeamRivalry[];
+  capIdentity?: TeamCapIdentity;
+  farmCapIdentity?: TeamCapIdentity;
+  mlbArchetypeKey?: string;   // HistoricalArchetype.id; provenance for the MLB capIdentity
+  farmArchetypeKey?: string;  // HistoricalArchetype.id; provenance for the farm capIdentity
+  gmSeatId?: string;
+  gmSeatName?: string;
+  rosterDesign?: {
+    slots: DesignSlot[];
+    lockedAt?: string;
+    pins?: Record<string, string>;
+    rankOverrides?: Record<string, string[]>;
+  };
+  captainPlayerId?: string | null;
+  fanHopefulPlayerId?: string | null;
+  teamHistory?: RebrandRelocationMarker[];
   lineupWithDH?: LineupSlot[];
   lineupWithoutDH?: LineupSlot[];
   startingRotation?: string[];
@@ -138,6 +212,95 @@ export interface LeagueAssignment {
   rosterStatus: RosterStatus;
 }
 
+export interface PlayerProspectProfile {
+  methodVersion?: string;
+  source?: string;
+  draftYear?: number;
+  draftRound?: number;
+  draftPick?: number;
+  teamId?: string;
+  trueGrade?: unknown;
+  scoutedGrade?: unknown;
+  potentialGrade?: unknown;
+  scoutId?: string;
+  scoutName?: string;
+  scoutAccuracy?: number;
+  scoutConfidence?: unknown;
+  scoutGradeError?: number;
+  scoutSpecialtiesVisible?: string[];
+  scoutWeaknessesVisible?: string[];
+  archetypeFamily?: string;
+}
+
+export interface LeagueBuilderScoutProfile {
+  id: string;
+  leagueId: string;
+  teamId?: string;
+  name: string;
+  specialties: string[];
+  weaknesses: string[];
+  accuracyByPosition: Record<string, number>;
+  seed: string;
+  hiredPick?: {
+    round: number;
+    pickNumber: number;
+    teamId: string;
+  };
+  createdDate: string;
+  lastModified: string;
+}
+
+export interface LeagueBuilderStartupDraftSession {
+  id: string;
+  leagueId: string;
+  seasonNumber: number;
+  seed: string;
+  workflowVersion: string;
+  engineMethodVersion: string;
+  scoutOrder: string[];
+  scoutPool: LeagueBuilderScoutProfile[];
+  hiredScoutIdsByTeamId: Record<string, string[]>;
+  prospectPickOrder: Array<{
+    round: number;
+    pickNumber: number;
+    teamId: string;
+    teamName?: string;
+  }>;
+  prospectPool: unknown[];
+  completedPicks: unknown[];
+  currentPickIndex: number;
+  createdDate: string;
+  lastModified: string;
+}
+
+export interface LeagueBuilderMlbDraftSession {
+  id: string;
+  leagueId: string;
+  seasonNumber: number;
+  seed: string;
+  workflowVersion: string;
+  engineMethodVersion: string;
+  tier: TierKey;
+  balanceMode: BalanceMode;
+  rounds: number;
+  pickOrder: Array<{ round: number; pick: number; teamId: string }>;
+  completedPicks: Array<{ round: number; pick: number; teamId: string; playerId: string }>;
+  currentPickIndex: number;
+  createdDate: string;
+  lastModified: string;
+}
+
+export interface LeagueBuilderAuctionSession {
+  id: string;
+  leagueId: string;
+  seasonNumber: number;
+  seed: string;
+  session: CpuShillAuctionSession;
+  pool?: FarmAuctionPool;
+  createdDate: string;
+  lastModified: string;
+}
+
 // Player
 export interface Player {
   id: string;
@@ -154,6 +317,7 @@ export interface Player {
   age: number;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
+  armSlot?: 'High' | 'Mid' | 'Low' | 'Sub' | null;
   primaryPosition: Position;
   secondaryPosition?: Position;
   // Batting ratings
@@ -172,12 +336,43 @@ export interface Player {
   trait2?: string;
   personality: Personality;
   chemistry: Chemistry;
+  hiddenPersonalityModifiers?: HiddenPersonalityModifiers;
   morale: number;
   mojo: MojoState;
   fame: number;
   salary: number;
+  // §10 freeze: the auction winning bid (RB-7c); additive, no consumer in v1
+  settledSalary?: number;
+  salaryCalculationVersion?: string;
+  salarySeasonId?: string;
+  salaryStatsScopeId?: string;
+  salarySeasonNumber?: number;
+  rookieScaleActiveBySeason?: Record<string, boolean>;
+  draftedAsFarmProspect?: boolean;
+  rookieStatus?: { activatedSeasonId: string };
+  salaryUpdatedAt?: string;
+  salaryFactors?: {
+    source: 'multifactor-current-season' | 'hidden-farm-public-context';
+    baseSalary?: number;
+    positionMultiplier?: number;
+    traitModifier?: number;
+    ageFactor?: number;
+    performanceModifier?: number;
+    fameModifier?: number;
+    personalityModifier?: number;
+    actualWar?: number | null;
+    expectedWar?: number | null;
+    gamesPerSeason?: number | null;
+    inningsPerGame?: number | null;
+    rookieScaleActive?: boolean;
+  };
   contractYears?: number;
   leagueAssignments?: LeagueAssignment[];
+  optionsUsedBySeason?: Record<string, number>;
+  optionDatesBySeason?: Record<string, string[]>;
+  ratingRevealState?: 'hidden' | 'revealed';
+  ratingRevealedAt?: string;
+  prospectProfile?: PlayerProspectProfile;
   createdDate: string;
   lastModified: string;
   isCustom: boolean;
@@ -208,6 +403,7 @@ export type PlayerAttributes = Pick<
   | 'age'
   | 'bats'
   | 'throws'
+  | 'armSlot'
   | 'nickname'
   | 'hometown'
 >;
@@ -323,6 +519,7 @@ type LegacyPlayerRecord = Player & {
   rosterStatus?: LegacyRosterStatus;
 };
 
+type LegacyLeagueTemplateRecord = LeagueTemplate;
 type LegacyLeaguePlayerOverrideRecord = LeaguePlayerOverrideRecord;
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -450,6 +647,18 @@ function normalizePlayerRecord(player: LegacyPlayerRecord): Player {
   delete normalized.rosterStatus;
 
   return normalized;
+}
+
+function normalizeLeagueTemplateRecord(template: LegacyLeagueTemplateRecord): LeagueTemplate {
+  return {
+    ...template,
+    tier: template.tier ?? 'juiced',
+    balanceMode: template.balanceMode ?? BALANCE_MODE_DEFAULT,
+    checkpointCadence: normalizeCheckpointCadence(
+      (template as LegacyLeagueTemplateRecord & { checkpointCadence?: unknown }).checkpointCadence ??
+        CHECKPOINT_CADENCE_DEFAULT,
+    ),
+  };
 }
 
 function migratePlayerBaseFameTier(store: IDBObjectStore): void {
@@ -613,6 +822,31 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
         db.createObjectStore(STORES.TEAM_ROSTERS, { keyPath: 'teamId' });
       }
 
+      if (!db.objectStoreNames.contains(STORES.SCOUT_PROFILES)) {
+        const store = db.createObjectStore(STORES.SCOUT_PROFILES, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+        store.createIndex('teamId', 'teamId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.STARTUP_DRAFT_SESSIONS)) {
+        const store = db.createObjectStore(STORES.STARTUP_DRAFT_SESSIONS, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.REGISTERED_POOLS)) {
+        db.createObjectStore(STORES.REGISTERED_POOLS, { keyPath: 'leagueId' });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.MLB_DRAFT_SESSIONS)) {
+        const store = db.createObjectStore(STORES.MLB_DRAFT_SESSIONS, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains(STORES.AUCTION_SESSIONS)) {
+        const store = db.createObjectStore(STORES.AUCTION_SESSIONS, { keyPath: 'id' });
+        store.createIndex('leagueId', 'leagueId', { unique: false });
+      }
+
       // League Player Overrides store
       if (oldVersion < 2 && !db.objectStoreNames.contains(STORES.LEAGUE_PLAYER_OVERRIDES)) {
         const store = db.createObjectStore(STORES.LEAGUE_PLAYER_OVERRIDES, { keyPath: 'id' });
@@ -647,7 +881,7 @@ export async function getAllLeagueTemplates(): Promise<LeagueTemplate[]> {
     const store = tx.objectStore(STORES.LEAGUE_TEMPLATES);
     const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result || []);
+    request.onsuccess = () => resolve((request.result || []).map((template) => normalizeLeagueTemplateRecord(template)));
     request.onerror = () => reject(request.error);
   });
 }
@@ -660,7 +894,7 @@ export async function getLeagueTemplate(id: string): Promise<LeagueTemplate | nu
     const store = tx.objectStore(STORES.LEAGUE_TEMPLATES);
     const request = store.get(id);
 
-    request.onsuccess = () => resolve(request.result || null);
+    request.onsuccess = () => resolve(request.result ? normalizeLeagueTemplateRecord(request.result) : null);
     request.onerror = () => reject(request.error);
   });
 }
@@ -700,6 +934,52 @@ export async function deleteLeagueTemplate(id: string): Promise<void> {
 
     request.onsuccess = () => {
       if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'leagueTemplates', id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveRegisteredPool(pool: RegisteredPool): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readwrite');
+    const store = tx.objectStore(STORES.REGISTERED_POOLS);
+    const request = store.put(pool);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'registeredPools', pool.leagueId, pool);
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function getRegisteredPool(leagueId: string): Promise<RegisteredPool | null> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readonly');
+    const store = tx.objectStore(STORES.REGISTERED_POOLS);
+    const request = store.get(leagueId);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteRegisteredPool(leagueId: string): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readwrite');
+    const store = tx.objectStore(STORES.REGISTERED_POOLS);
+    const request = store.delete(leagueId);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'registeredPools', leagueId);
       resolve();
     };
     request.onerror = () => reject(request.error);
@@ -1230,6 +1510,83 @@ export async function saveTeamRoster(roster: TeamRoster): Promise<TeamRoster> {
   });
 }
 
+export function createEmptyTeamRoster(teamId: string): TeamRoster {
+  return {
+    teamId,
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    depthChart: createEmptyDepthChart(),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+    lastModified: nowISO(),
+  };
+}
+
+async function clearTeamAssignmentsFromPlayers(teamId: string, leagueId?: string): Promise<void> {
+  const players = await getAllPlayers();
+
+  for (const player of players) {
+    let changed = false;
+    const nextAssignments = (player.leagueAssignments ?? []).map((assignment) => {
+      if (assignment.teamId !== teamId) return assignment;
+      if (leagueId && assignment.leagueId !== leagueId) return assignment;
+      if (!assignment.teamId && assignment.rosterStatus === 'FREE_AGENT') return assignment;
+
+      changed = true;
+      return {
+        ...assignment,
+        teamId: '',
+        rosterStatus: 'FREE_AGENT' as const,
+      };
+    });
+
+    if (!changed) continue;
+    await savePlayer({
+      ...player,
+      leagueAssignments: nextAssignments,
+    });
+  }
+}
+
+export async function clearTeamRoster(teamId: string, leagueId?: string): Promise<TeamRoster> {
+  const existing = await getTeamRoster(teamId);
+  const base = existing ?? createEmptyTeamRoster(teamId);
+  const cleared: TeamRoster = {
+    ...base,
+    mlbRoster: [],
+    farmRoster: [],
+    lineupWithDH: [],
+    lineupWithoutDH: [],
+    optimalLineupVsRHPWithDH: undefined,
+    optimalLineupVsLHPWithDH: undefined,
+    optimalLineupVsRHPWithoutDH: undefined,
+    optimalLineupVsLHPWithoutDH: undefined,
+    startingRotation: [],
+    longRelievers: [],
+    closingPitcher: '',
+    setupPitchers: [],
+    depthChart: createEmptyDepthChart(),
+    pinchHitOrder: [],
+    pinchRunOrder: [],
+    defensiveSubOrder: [],
+  };
+
+  const saved = await saveTeamRoster(cleared);
+  await clearTeamAssignmentsFromPlayers(teamId, leagueId);
+  return saved;
+}
+
 export async function deleteTeamRoster(teamId: string): Promise<void> {
   const db = await initLeagueBuilderDatabase();
 
@@ -1240,6 +1597,293 @@ export async function deleteTeamRoster(teamId: string): Promise<void> {
 
     request.onsuccess = () => {
       if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'teamRosters', teamId);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// ============================================
+// SCOUT / STARTUP DRAFT OPERATIONS
+// ============================================
+
+export function createStartupDraftSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-farm-draft::${seasonNumber}`;
+}
+
+export function createMlbDraftSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-mlb-draft::${seasonNumber}`;
+}
+
+export function createAuctionSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-auction-draft::${seasonNumber}`;
+}
+
+export function createFarmAuctionSessionId(leagueId: string, seasonNumber = 1): string {
+  return `${leagueId}::startup-farm-auction-draft::${seasonNumber}`;
+}
+
+export async function getAllScoutProfiles(): Promise<LeagueBuilderScoutProfile[]> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCOUT_PROFILES, 'readonly');
+    const store = tx.objectStore(STORES.SCOUT_PROFILES);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getScoutProfilesForLeague(leagueId: string): Promise<LeagueBuilderScoutProfile[]> {
+  const scouts = await getAllScoutProfiles();
+  return scouts.filter((scout) => scout.leagueId === leagueId);
+}
+
+export async function saveScoutProfile(
+  scout: Omit<LeagueBuilderScoutProfile, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderScoutProfile> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = (await getAllScoutProfiles()).find((candidate) => candidate.id === scout.id);
+  const fullScout: LeagueBuilderScoutProfile = {
+    ...scout,
+    createdDate: scout.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.SCOUT_PROFILES, 'readwrite');
+    const store = tx.objectStore(STORES.SCOUT_PROFILES);
+    const request = store.put(fullScout);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'scoutProfiles', fullScout.id, fullScout);
+      resolve(fullScout);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteScoutProfilesForLeague(leagueId: string): Promise<void> {
+  const scouts = await getScoutProfilesForLeague(leagueId);
+  const db = await initLeagueBuilderDatabase();
+
+  await Promise.all(scouts.map((scout) => new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORES.SCOUT_PROFILES, 'readwrite');
+    const store = tx.objectStore(STORES.SCOUT_PROFILES);
+    const request = store.delete(scout.id);
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'scoutProfiles', scout.id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  })));
+}
+
+export async function getStartupDraftSession(
+  leagueId: string,
+  seasonNumber = 1,
+): Promise<LeagueBuilderStartupDraftSession | null> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createStartupDraftSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STARTUP_DRAFT_SESSIONS, 'readonly');
+    const store = tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS);
+    const request = store.get(id);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveStartupDraftSession(
+  session: Omit<LeagueBuilderStartupDraftSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderStartupDraftSession> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = await getStartupDraftSession(session.leagueId, session.seasonNumber);
+  const fullSession: LeagueBuilderStartupDraftSession = {
+    ...session,
+    createdDate: session.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STARTUP_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS);
+    const request = store.put(fullSession);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'startupDraftSessions', fullSession.id, fullSession);
+      resolve(fullSession);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteStartupDraftSession(leagueId: string, seasonNumber = 1): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createStartupDraftSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.STARTUP_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS);
+    const request = store.delete(id);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'startupDraftSessions', id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getMlbDraftSession(
+  leagueId: string,
+  seasonNumber = 1,
+): Promise<LeagueBuilderMlbDraftSession | null> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createMlbDraftSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readonly');
+    const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const request = store.get(id);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveMlbDraftSession(
+  session: Omit<LeagueBuilderMlbDraftSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderMlbDraftSession> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = await getMlbDraftSession(session.leagueId, session.seasonNumber);
+  const fullSession: LeagueBuilderMlbDraftSession = {
+    ...session,
+    createdDate: session.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const request = store.put(fullSession);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', fullSession.id, fullSession);
+      resolve(fullSession);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteMlbDraftSession(leagueId: string, seasonNumber = 1): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createMlbDraftSessionId(leagueId, seasonNumber);
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const request = store.delete(id);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'mlbDraftSessions', id);
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getAuctionSession(
+  leagueId: string,
+  seasonNumber = 1,
+): Promise<LeagueBuilderAuctionSession | null> {
+  return getAuctionSessionById(createAuctionSessionId(leagueId, seasonNumber));
+}
+
+export async function getAuctionSessionById(id: string): Promise<LeagueBuilderAuctionSession | null> {
+  const db = await initLeagueBuilderDatabase();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readonly');
+    const store = tx.objectStore(STORES.AUCTION_SESSIONS);
+    const request = store.get(id);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function saveAuctionSession(
+  session: Omit<LeagueBuilderAuctionSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderAuctionSession> {
+  return saveAuctionSessionById(session);
+}
+
+export async function saveAuctionSessionById(
+  session: Omit<LeagueBuilderAuctionSession, 'createdDate' | 'lastModified'> & {
+    createdDate?: string;
+    lastModified?: string;
+  },
+): Promise<LeagueBuilderAuctionSession> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existing = await getAuctionSessionById(session.id);
+  const fullSession: LeagueBuilderAuctionSession = {
+    ...session,
+    seed: session.session.config.nominationOrderSeed,
+    createdDate: session.createdDate ?? existing?.createdDate ?? now,
+    lastModified: now,
+  };
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.AUCTION_SESSIONS);
+    const request = store.put(fullSession);
+
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'auctionSessions', fullSession.id, fullSession);
+      resolve(fullSession);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function deleteAuctionSession(leagueId: string, seasonNumber = 1): Promise<void> {
+  return deleteAuctionSessionById(createAuctionSessionId(leagueId, seasonNumber));
+}
+
+export async function deleteAuctionSessionById(id: string): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.AUCTION_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.AUCTION_SESSIONS);
+    const request = store.delete(id);
+
+    request.onsuccess = () => {
+      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-league-builder', 'auctionSessions', id);
       resolve();
     };
     request.onerror = () => reject(request.error);
@@ -1356,6 +2000,11 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
       { store: STORES.LEAGUE_PLAYER_OVERRIDES, keyField: 'id' },
       { store: STORES.RULES_PRESETS, keyField: 'id' },
       { store: STORES.TEAM_ROSTERS, keyField: 'teamId' },
+      { store: STORES.SCOUT_PROFILES, keyField: 'id' },
+      { store: STORES.STARTUP_DRAFT_SESSIONS, keyField: 'id' },
+      { store: STORES.REGISTERED_POOLS, keyField: 'leagueId' },
+      { store: STORES.MLB_DRAFT_SESSIONS, keyField: 'id' },
+      { store: STORES.AUCTION_SESSIONS, keyField: 'id' },
     ];
 
     for (const { store: storeName, keyField } of storeConfigs) {
@@ -1378,6 +2027,11 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
         STORES.LEAGUE_PLAYER_OVERRIDES,
         STORES.RULES_PRESETS,
         STORES.TEAM_ROSTERS,
+        STORES.SCOUT_PROFILES,
+        STORES.STARTUP_DRAFT_SESSIONS,
+        STORES.REGISTERED_POOLS,
+        STORES.MLB_DRAFT_SESSIONS,
+        STORES.AUCTION_SESSIONS,
       ],
       'readwrite'
     );
@@ -1388,6 +2042,11 @@ export async function clearAllLeagueBuilderData(): Promise<void> {
     tx.objectStore(STORES.LEAGUE_PLAYER_OVERRIDES).clear();
     tx.objectStore(STORES.RULES_PRESETS).clear();
     tx.objectStore(STORES.TEAM_ROSTERS).clear();
+    tx.objectStore(STORES.SCOUT_PROFILES).clear();
+    tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS).clear();
+    tx.objectStore(STORES.REGISTERED_POOLS).clear();
+    tx.objectStore(STORES.MLB_DRAFT_SESSIONS).clear();
+    tx.objectStore(STORES.AUCTION_SESSIONS).clear();
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -1405,24 +2064,6 @@ import { ALL_MLB_PLAYERS } from '../data/players/mlb';
 import { calculateSalary, type PlayerForSalary, type PlayerPosition as SalaryPosition } from '../engines/salaryCalculator';
 
 /**
- * Chemistry code to full chemistry name mapping
- */
-const CHEMISTRY_MAP: Record<string, Chemistry> = {
-  'SPI': 'Spirited',
-  'DIS': 'Disciplined',
-  'CMP': 'Competitive',
-  'SCH': 'Scholarly',
-  'CRA': 'Crafty',
-  'SPIRITED': 'Spirited',
-  'DISCIPLINED': 'Disciplined',
-  'COMPETITIVE': 'Competitive',
-  'SCHOLARLY': 'Scholarly',
-  'CRAFTY': 'Crafty',
-  'FIERY': 'Competitive',  // Map FIERY to Competitive
-  'GRITTY': 'Competitive', // Map GRITTY to Competitive
-};
-
-/**
  * Compute salary from SMB4 player ratings using the salary engine
  */
 function computeInitialSalary(player: PlayerData, primaryPosition: Position): number {
@@ -1436,6 +2077,8 @@ function computeInitialSalary(player: PlayerData, primaryPosition: Position): nu
     name: player.name,
     isPitcher: player.isPitcher,
     primaryPosition: posMap[primaryPosition] || 'UTIL',
+    secondaryPosition: player.secondaryPosition,
+    pitcherRole: player.isPitcher ? (player.pitcherRole ?? 'SP') : undefined,
     ratings: player.isPitcher
       ? { velocity: player.pitcherRatings?.velocity ?? 50, junk: player.pitcherRatings?.junk ?? 50, accuracy: player.pitcherRatings?.accuracy ?? 50 }
       : { power: player.batterRatings?.power ?? 50, contact: player.batterRatings?.contact ?? 50, speed: player.batterRatings?.speed ?? 50, fielding: player.batterRatings?.fielding ?? 50, arm: player.batterRatings?.arm ?? 50 },
@@ -1443,9 +2086,12 @@ function computeInitialSalary(player: PlayerData, primaryPosition: Position): nu
       ? { power: player.batterRatings.power, contact: player.batterRatings.contact, speed: player.batterRatings.speed, fielding: player.batterRatings.fielding, arm: player.batterRatings.arm }
       : undefined,
     age: player.age,
+    bats: player.bats,
     personality: 'Competitive',
     fame: 0,
     traits: [player.traits.trait1, player.traits.trait2].filter((t): t is string => !!t),
+    arsenal: player.arsenal,
+    armSlot: player.armSlot,
   };
   return calculateSalary(salaryPlayer);
 }
@@ -1459,8 +2105,8 @@ function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'crea
   const firstName = nameParts[0] || 'Unknown';
   const lastName = nameParts.slice(1).join(' ') || player.id;
 
-  // Map chemistry code to full name
-  const chemistry = CHEMISTRY_MAP[player.chemistry] || CHEMISTRY_MAP[player.chemistry.toUpperCase()] || 'Competitive';
+  // Map player chemistry code to the League Builder title-case name.
+  const chemistry: Chemistry = CHEMISTRY_CODE_TO_WORD[normalizeToChemistryCode(player.chemistry)];
 
   // Determine position for League Builder format
   let primaryPosition: Position = player.primaryPosition as Position;
@@ -1493,6 +2139,7 @@ function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'crea
     age: player.age,
     bats: player.bats,
     throws: player.throws,
+    armSlot: player.armSlot ?? null,
     primaryPosition,
     secondaryPosition: player.secondaryPosition as Position | undefined,
     // Batting ratings (default to 50 if not present)
@@ -1674,6 +2321,14 @@ function buildDepthChart(players: Player[]): DepthChart {
       continue;
     }
 
+    // SP/RP swingmen are eligible for BOTH pitching roles — never DH (no SP/RP depth bucket exists,
+    // so the generic branch below would otherwise dump them at DH). JK ruling 2026-06-25.
+    if (player.primaryPosition === 'SP/RP') {
+      depthChart.SP.push(player.id);
+      depthChart.RP.push(player.id);
+      continue;
+    }
+
     if (player.primaryPosition in depthChart) {
       depthChart[player.primaryPosition as keyof DepthChart].push(player.id);
     } else {
@@ -1706,12 +2361,19 @@ function buildSeedRoster(teamId: string, teamPlayers: Player[], sourceData?: Rec
   // Use source PlayerData role to distinguish rotation SP from bullpen SP
   const getSourceRole = (id: string) => sourceData?.[id]?.role;
 
-  const startingRotation = pitchers
+  // SMB4 uses a 4-man rotation. Pure SP fill the rotation first; SP/RP swingmen backfill and
+  // overflow to long relief. This mirrors the "SP/RPs need the option to start" ruling (2026-06-25).
+  const ROTATION_SIZE = 4;
+  const pureStarters = pitchers
     .filter((player) => player.primaryPosition === 'SP' && getSourceRole(player.id) !== 'BULLPEN')
     .map((player) => player.id);
-  const longRelievers = pitchers
+  const swingmen = pitchers
     .filter((player) => player.primaryPosition === 'SP/RP')
     .map((player) => player.id);
+  const rotationCandidates = [...pureStarters, ...swingmen];
+  const startingRotation = rotationCandidates.slice(0, ROTATION_SIZE);
+  const startingSet = new Set(startingRotation);
+  const longRelievers = rotationCandidates.filter((id) => !startingSet.has(id));
   const closingPitcher = pitchers.find((player) => player.primaryPosition === 'CP')?.id || '';
   const assignedIds = new Set([...startingRotation, ...longRelievers, closingPitcher].filter(Boolean));
   const setupPitchers = pitchers
