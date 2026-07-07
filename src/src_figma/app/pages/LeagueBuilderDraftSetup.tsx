@@ -52,6 +52,7 @@ import {
   leagueIdFromSearch,
   MAX_DRAFT_SHILL_COUNT,
   clampDraftShillCount,
+  reservePriceKFromSearch,
   resolveInitialLeagueId,
   scoutHireRouteForLeague,
   shillCountFromSearch,
@@ -136,6 +137,12 @@ import {
   type DesignFeasibilityResult,
 } from "../../../engines/rosterDesignFeasibility";
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
+import {
+  DEFAULT_RESERVE_PRICE_K,
+  RESERVE_PRICE_K_STOPS,
+  normalizeReservePriceK,
+  type ReservePriceK,
+} from "../../../engines/auctionReservePrice";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import {
   formatSalaryCapInput,
@@ -212,6 +219,12 @@ const POOL_QUALITY_LABELS: Record<PoolQualityCenter, string> = {
   72: "stronger",
   74: "highest",
   76: "highest",
+};
+const RESERVE_PRICE_K_LABELS: Record<ReservePriceK, string> = {
+  0: "off",
+  0.5: "50%",
+  0.65: "65%",
+  0.8: "80%",
 };
 const CAP_FIT_LABELS: Record<PoolAffordabilityState, string> = {
   too_tight: "Too Tight",
@@ -293,6 +306,7 @@ const SHARED_POOL_RECHECK_LABEL = "ALL CLUBS · ONE POOL";
 const POOL_PROVENANCE_SESSION_PREFIX = "kbl:draft-pool-provenance:";
 const POOL_SOURCE_MODE_SESSION_PREFIX = "kbl:draft-pool-source-mode:";
 const POOL_QUALITY_CENTER_SESSION_PREFIX = "kbl:draft-pool-quality-center:";
+const RESERVE_PRICE_K_SESSION_PREFIX = "kbl:draft-reserve-price-k:";
 const SHARED_POOL_RECHECK_TAG = "SHARED POOL";
 
 const ASK_SPOT_ORDER = new Map(
@@ -496,6 +510,69 @@ function loadPoolQualityCenterFromSession(leagueId: string | null, poolMode: Dra
 function savePoolQualityCenterToSession(leagueId: string | null, poolMode: DraftPoolMode, qualityCenter: PoolQualityCenter): void {
   if (!leagueId || typeof window === "undefined") return;
   window.sessionStorage.setItem(poolQualityCenterSessionKey(leagueId, poolMode), String(qualityCenter));
+}
+
+function reservePriceKSessionKey(leagueId: string, poolMode: DraftPoolMode): string {
+  return `${RESERVE_PRICE_K_SESSION_PREFIX}${leagueId}:${poolMode}`;
+}
+
+function loadReservePriceKFromSession(
+  leagueId: string | null,
+  poolMode: DraftPoolMode,
+  requested: ReservePriceK | null,
+): ReservePriceK {
+  if (requested !== null) return requested;
+  if (!leagueId || typeof window === "undefined") return DEFAULT_RESERVE_PRICE_K;
+  const raw = window.sessionStorage.getItem(reservePriceKSessionKey(leagueId, poolMode));
+  const parsed = raw === null ? DEFAULT_RESERVE_PRICE_K : Number(raw);
+  return normalizeReservePriceK(parsed, DEFAULT_RESERVE_PRICE_K);
+}
+
+function saveReservePriceKToSession(leagueId: string | null, poolMode: DraftPoolMode, reservePriceK: ReservePriceK): void {
+  if (!leagueId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(reservePriceKSessionKey(leagueId, poolMode), String(reservePriceK));
+}
+
+function ReservePriceDial({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: ReservePriceK;
+  disabled: boolean;
+  onChange: (next: ReservePriceK) => void;
+}) {
+  return (
+    <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">
+      <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-1">
+        RESERVE DIAL
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {RESERVE_PRICE_K_STOPS.map((reserveK) => {
+          const active = value === reserveK;
+          return (
+            <button
+              key={reserveK}
+              type="button"
+              onClick={() => onChange(reserveK)}
+              disabled={disabled}
+              className={`px-2 py-1 text-[10px] font-bold border-2 ${
+                active
+                  ? "bg-[var(--ballpark-brass)] text-[#1A1A1A] border-[var(--ballpark-brass)]"
+                  : "bg-[#2F3F32] text-[var(--ballpark-chalk)] border-[var(--ballpark-panel-border)]"
+              }`}
+            >
+              {RESERVE_PRICE_K_LABELS[reserveK]}
+              {reserveK === DEFAULT_RESERVE_PRICE_K ? " default" : ""}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-1 text-[10px] font-bold text-[var(--ballpark-chalk)]/55">
+        {value === 0 ? "off" : `${Math.round(value * 100)}% IV`}
+      </div>
+    </div>
+  );
 }
 
 function playerBelongsToSelectedTeamRoster(
@@ -852,6 +929,7 @@ export function LeagueBuilderDraftSetup() {
 
   const requestedLeagueId = leagueIdFromSearch(location.search);
   const requestedShillCount = shillCountFromSearch(location.search);
+  const requestedReservePriceK = reservePriceKFromSearch(location.search);
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
   const [showHelp, setShowHelp] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -897,6 +975,9 @@ export function LeagueBuilderDraftSetup() {
   const [poolQualityCenter, setPoolQualityCenter] = useState<PoolQualityCenter>(() =>
     loadPoolQualityCenterFromSession(activeLeagueId, poolMode)
   );
+  const [reservePriceK, setReservePriceK] = useState<ReservePriceK>(() =>
+    loadReservePriceKFromSession(activeLeagueId, poolMode, requestedReservePriceK)
+  );
   const poolBalanceTuning = useMemo(
     () => poolBalancePresetTuning(poolBalancePreset, poolQualityCenter),
     [poolBalancePreset, poolQualityCenter],
@@ -923,8 +1004,9 @@ export function LeagueBuilderDraftSetup() {
   const runItBackConfirmRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setShills(clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)));
-  }, [leagueTeams.length, requestedShillCount]);
+    const persistedShills = typeof league?.draftShillCount === "number" ? league.draftShillCount : null;
+    setShills(clampDraftShillCount(requestedShillCount ?? persistedShills ?? scaledShillDefault(leagueTeams.length)));
+  }, [league?.draftShillCount, leagueTeams.length, requestedShillCount]);
 
   useEffect(() => {
     if (leagueTeams.length === 0) {
@@ -1155,21 +1237,21 @@ export function LeagueBuilderDraftSetup() {
     if (!league) return undefined;
     return resolvePoolSizingTarget({
       teams: league.teamIds.length,
-      shills,
+      shills: 0,
       poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     }).effectiveTarget;
-  }, [league, shills]);
+  }, [league]);
   const poolSizeTarget = useMemo(() => {
     if (!league) return null;
     return resolvePoolSizingTarget({
       teams: league.teamIds.length,
-      shills,
+      shills: 0,
       poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     });
-  }, [league, shills]);
+  }, [league]);
   const sufficiency = useMemo(
-    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, shills, poolSizeTargetOverride),
-    [league?.teamIds.length, shills, inPoolPlayers.length, poolSizeTargetOverride],
+    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, 0, poolSizeTargetOverride),
+    [league?.teamIds.length, inPoolPlayers.length, poolSizeTargetOverride],
   );
   const [rosteredButUnassigned, setRosteredButUnassigned] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -1539,6 +1621,19 @@ export function LeagueBuilderDraftSetup() {
     return false;
   };
 
+  const handleShillCountChange = useCallback((nextCount: number) => {
+    const nextShills = clampDraftShillCount(nextCount);
+    setShills(nextShills);
+    if (!league || setupMutationBlockMessage) return;
+    void saveLeagueTemplate({ ...league, draftShillCount: nextShills })
+      .then((saved) => {
+        replaceLeagueLocal(saved);
+      })
+      .catch((err) => {
+        setActionError(err instanceof Error ? err.message : String(err));
+      });
+  }, [league, replaceLeagueLocal, setupMutationBlockMessage]);
+
   const saveLeagueDraftSetup = useCallback(
     async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
       if (!league) return;
@@ -1755,8 +1850,9 @@ export function LeagueBuilderDraftSetup() {
     setPoolProvenance(loadPoolProvenanceFromSession(activeLeagueId, poolMode));
     setPoolSourceMode(loadPoolSourceModeFromSession(activeLeagueId, poolMode));
     setPoolQualityCenter(loadPoolQualityCenterFromSession(activeLeagueId, poolMode));
+    setReservePriceK(loadReservePriceKFromSession(activeLeagueId, poolMode, requestedReservePriceK));
     setPoolFirstShapeReport(null);
-  }, [activeLeagueId, poolMode]);
+  }, [activeLeagueId, poolMode, requestedReservePriceK]);
 
   useEffect(() => {
     if (poolMode !== "pool-first") return;
@@ -1772,6 +1868,11 @@ export function LeagueBuilderDraftSetup() {
     if (poolMode !== "pool-first") return;
     savePoolQualityCenterToSession(activeLeagueId, poolMode, poolQualityCenter);
   }, [activeLeagueId, poolMode, poolQualityCenter]);
+
+  useEffect(() => {
+    if (poolMode !== "pool-first") return;
+    saveReservePriceKToSession(activeLeagueId, poolMode, reservePriceK);
+  }, [activeLeagueId, poolMode, reservePriceK]);
 
   useEffect(() => {
     if (!reExtractConfirm && !lockConfirm && !runItBackConfirm) return undefined;
@@ -2101,15 +2202,16 @@ export function LeagueBuilderDraftSetup() {
   const handleLock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await lockLeaguePool(activeLeagueId);
+      const lockedPool = await lockLeaguePool(activeLeagueId);
+      setPoolRecord(lockedPool);
       setLockConfirm(false);
-    });
+    }, { refreshPool: false });
 
   const handleUnlock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      await unlockLeaguePool(activeLeagueId);
-    });
+      setPoolRecord(await unlockLeaguePool(activeLeagueId));
+    }, { refreshPool: false });
 
   const handleRunItBack = () =>
     runAction(async () => {
@@ -2126,8 +2228,8 @@ export function LeagueBuilderDraftSetup() {
     if (!league || !startReady) return;
     navigate(
       hasSavedDraft
-        ? draftRouteForLeague(league, { shillCount: shills })
-        : scoutHireRouteForLeague(league, { shillCount: shills }),
+        ? draftRouteForLeague(league, { shillCount: shills, reservePriceK })
+        : scoutHireRouteForLeague(league, { shillCount: shills, reservePriceK }),
     );
   };
 
@@ -2425,7 +2527,7 @@ export function LeagueBuilderDraftSetup() {
         }
       >
         {poolSizeTarget.effectiveTarget} PLAYERS · {league?.teamIds.length ?? 0} CLUBS × {LEGAL_ROSTER.size}
-        {shills > 0 ? ` + ${shills} SHILLS` : ""}
+        {shills > 0 ? ` · ${shills} CPU SHILLS ROUTED TO DRAFT` : ""}
       </div>
     </div>
   ) : null;
@@ -3442,13 +3544,13 @@ export function LeagueBuilderDraftSetup() {
                 Set shill pressure, check the room, then start. A live draft resumes from here.
               </HelpNote>
             ) : null}
-            <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr_auto] gap-4 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(220px,280px)_1fr_auto] gap-4 items-center">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   aria-label="Decrease shill bidders"
                   disabled={Boolean(setupMutationBlockMessage) || busy}
-                  onClick={() => setShills((count) => Math.max(0, count - 1))}
+                  onClick={() => handleShillCountChange(shills - 1)}
                   className="p-2 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)] disabled:opacity-40 active:scale-95"
                 >
                   <Minus className="w-4 h-4" />
@@ -3458,7 +3560,7 @@ export function LeagueBuilderDraftSetup() {
                   type="button"
                   aria-label="Increase shill bidders"
                   disabled={Boolean(setupMutationBlockMessage) || busy}
-                  onClick={() => setShills((count) => Math.min(MAX_DRAFT_SHILL_COUNT, count + 1))}
+                  onClick={() => handleShillCountChange(shills + 1)}
                   className="p-2 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-brass)] disabled:opacity-40 active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
@@ -3467,8 +3569,13 @@ export function LeagueBuilderDraftSetup() {
                   shills · rec {recommendedShills}
                 </div>
               </div>
+              <ReservePriceDial
+                value={reservePriceK}
+                disabled={Boolean(setupMutationBlockMessage) || busy}
+                onChange={setReservePriceK}
+              />
               <div className="text-sm text-[var(--ballpark-chalk)]/75">
-                {leagueTeams.length} clubs · {humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU · {poolReady ? "pool locked" : "pool open"} · {identitiesReady ? "identities set" : "identity needed"}
+                {leagueTeams.length} clubs{shills > 0 ? ` + ${shills} CPU shills` : ""} · {humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU · reserve {RESERVE_PRICE_K_LABELS[reservePriceK]} · {poolReady ? "pool locked" : "pool open"} · {identitiesReady ? "identities set" : "identity needed"}
               </div>
               <div className="flex flex-col items-start lg:items-end gap-2">
                 <PressButton

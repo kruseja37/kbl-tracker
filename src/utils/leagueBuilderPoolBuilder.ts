@@ -364,17 +364,15 @@ export function evaluatePoolSufficiency(poolSize: number, teamCount: number): Po
 // ---------------------------------------------------------------------------------------------
 
 export interface PoolDemandSufficiency extends PoolSufficiency {
-  /** Players the pure-pressure shills are expected to WIN (end-checkpoint: never 22× seats). */
+  /** Players the pure-pressure shills are expected to WIN; advisory only, never lock-floor demand. */
   expectedShillWins: number;
   /** The full sizing model's recommendation (identity-roomy), above the hard floor. */
   targetSize: number;
 }
 
 /**
- * The shill-aware sufficiency gate: the hard floor is REAL seats (teams × 22) + the shills'
- * expected wins — a pool any smaller can strand a real roster once shills start winning. The
- * previous participant-count×22 model over-demanded (a shill never holds 22 seats under the
- * FABLE-C3 end-checkpoint).
+ * The sufficiency gate is real drafting clubs only. Pure-pressure shills affect auction pressure
+ * and routing, but JK ruled on 2026-07-07 that they do not count toward pool-lock sufficiency.
  */
 export function evaluatePoolDemandSufficiency(
   poolSize: number,
@@ -383,13 +381,11 @@ export function evaluatePoolDemandSufficiency(
   targetOverride?: number,
 ): PoolDemandSufficiency {
   const model = poolDemandModel(teamCount, shillCount);
-  // FABLE-C3-FIX F4: the green-light floor is the model's CLASS-FEASIBILITY floor (e.g. 202
-  // bodies for 8 teams — below it the pool provably cannot field every archetype) plus the
-  // capped shill wins — NOT bare seats + wins (the sweep showed that size sheds 20/20 drafts).
-  // `targetSize` (identity-roomy) is the surfaced recommendation above the floor.
+  // CUT2-2: keep the class-feasibility floor for real clubs, but exclude shill wins from the
+  // lock gate so the generator's real-club target can satisfy the floor by itself.
   const hardFloor = Math.max(
-    model.baseSlots + model.expectedShillWins,
-    model.feasibilityFloor + model.expectedShillWins,
+    model.baseSlots,
+    model.feasibilityFloor,
   );
   const targetSize = targetOverride ?? model.targetSize;
   return {

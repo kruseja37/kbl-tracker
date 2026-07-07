@@ -7,6 +7,7 @@ import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderDat
 import {
   draftRouteForLeague,
   leagueIdFromSearch,
+  reservePriceKFromSearch,
   resolveInitialLeagueId,
   shillCountFromSearch,
 } from "../utils/draftRouting";
@@ -34,6 +35,7 @@ export function ScoutHire() {
   const navigate = useNavigate();
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
+  const requestedReservePriceK = useMemo(() => reservePriceKFromSearch(window.location.search), []);
   const { leagues, teams, isLoading, error } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [selectedByTeamId, setSelectedByTeamId] = useState<Record<string, string | undefined>>({});
@@ -111,7 +113,10 @@ export function ScoutHire() {
         selectedScoutIdsByTeamId: selectedByTeamId,
         pool: scoutPool,
       });
-      navigate(draftRouteForLeague(activeLeague, { shillCount: requestedShillCount }));
+      navigate(draftRouteForLeague(activeLeague, {
+        shillCount: requestedShillCount,
+        reservePriceK: requestedReservePriceK,
+      }));
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : "Could not save scout hires.");
     } finally {
@@ -153,7 +158,12 @@ export function ScoutHire() {
           <button
             aria-label="Back to draft setup"
             type="button"
-            onClick={() => navigate(`/league-builder/draft-setup?leagueId=${encodeURIComponent(activeLeague.id)}${requestedShillCount !== null ? `&shills=${requestedShillCount}` : ""}`)}
+            onClick={() => {
+              const params = new URLSearchParams({ leagueId: activeLeague.id });
+              if (requestedShillCount !== null) params.set("shills", String(requestedShillCount));
+              if (requestedReservePriceK !== null) params.set("reserveK", String(requestedReservePriceK));
+              navigate(`/league-builder/draft-setup?${params.toString()}`);
+            }}
             className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           >
             <ArrowLeft className="w-5 h-5" />

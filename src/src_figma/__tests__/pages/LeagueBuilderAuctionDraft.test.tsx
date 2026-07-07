@@ -530,7 +530,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     const players = makePlayers();
     mockLeagueData({ players, pool: makePool(players) });
     const seed = seedForOpeningLot(players);
-    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}&reserveK=0`);
 
     render(<LeagueBuilderAuctionDraft />);
 
@@ -623,20 +623,29 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
   });
 
-  test("blocks direct auction start when selected shills make the locked pool underfilled", async () => {
-    // 44 players vs the demand-model floor for 2 teams + 1 shill (52 + 10 = 62) → needs 18.
-    const smallPoolPlayers = makePlayers(44);
-    mockLeagueData({ players: smallPoolPlayers, pool: makePool(smallPoolPlayers) });
-    window.history.pushState({}, "", "/league-builder/auction-draft?leagueId=league-page&shills=1");
+  test("starts direct auction when the locked pool satisfies the real-club floor regardless of selected shills", async () => {
+    // CUT2-3: 52 clears the real-club feasibility floor for 2 teams. The old shill-inflated
+    // floor (52 + 10 = 62) would have blocked this direct start.
+    const realClubFloorPlayers = makePlayers(52);
+    const seed = seedForOpeningLot(realClubFloorPlayers);
+    mockLeagueData({ players: realClubFloorPlayers, pool: makePool(realClubFloorPlayers) });
+    window.history.pushState({}, "", `/league-builder/auction-draft?leagueId=league-page&shills=1&devSeed=${seed}`);
 
     render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
-      // FABLE-C3-FIX-2 F6: the demand-model gate — floor = classFeasibility(2 teams)=52 + 1 shill×10 wins = 62; pool 44 → needs 18.
-      expect(screen.getByText(/needs 18 more player\(s\) for 3 drafting teams/i)).toBeInTheDocument();
+      expect(screen.getAllByText("MARKET SHILLS").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     });
+
+    expect(screen.queryByText(/needs \d+ more player\(s\)/i)).not.toBeInTheDocument();
+    const begin = await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i });
+    expect(begin).toBeEnabled();
+
+    fireEvent.click(begin);
+
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /BEGIN AUCTION DRAFT|STARTING/i })).toBeDisabled();
+      expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
     });
   });
 
@@ -665,24 +674,23 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByText("team-a")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Custom bid amount")).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /BID \$70k/i })).toBeInTheDocument();
-    });
+    expect(screen.getByText("RESERVE")).toBeInTheDocument();
+    const firstBidButton = await screen.findByRole("button", { name: /BID \$\d+k/i });
 
-    fireEvent.click(screen.getByRole("button", { name: /BID \$70k/i }));
+    fireEvent.click(firstBidButton);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /BID \$75k/i })).toBeInTheDocument();
+      expect(screen.getByText(/Page (Caps|Keys) — raise or pass/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Let him go" })).toBeEnabled();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Let him go" }));
 
     await waitFor(() => {
-      expect(screen.getByText("SOLD")).toBeInTheDocument();
+      expect(screen.getAllByText(/(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/).length).toBeGreaterThan(0);
     });
     expect(screen.getAllByText(/^Lot 1 of /)).not.toHaveLength(0);
     expect(screen.queryByText(/^Lot 2 of /)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/).length).toBeGreaterThan(0);
   });
 
   test("shows a read-only CPU decision preview before advancing automated turns", async () => {
@@ -701,7 +709,9 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
 
     expect(screen.getByText(/turn preview/i)).toBeInTheDocument();
-    expect(screen.getByText(/Page Caps will bid \$70,000/)).toBeInTheDocument();
+    const cpuBidText = screen.getByText(/Page Caps will bid \$[\d,]+/);
+    const cpuBidAmount = cpuBidText.textContent?.match(/\$[\d,]+/)?.[0] ?? "";
+    expect(cpuBidAmount).not.toBe("");
     const cpuReason = screen.getByText("CPU team likes the player and bids.");
     expect(cpuReason).toBeInTheDocument();
     expect(cpuReason.textContent).not.toContain("$");
@@ -717,7 +727,7 @@ describe("LeagueBuilderAuctionDraft", () => {
       expect(screen.queryByText(/turn preview/i)).not.toBeInTheDocument();
     });
     expect(screen.getByText("Page Caps")).toBeInTheDocument();
-    expect(screen.getAllByText("$70,000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(cpuBidAmount).length).toBeGreaterThan(0);
   });
 
   test("shows a pure shill winner on the visible AuctionStage roster board after SOLD", async () => {

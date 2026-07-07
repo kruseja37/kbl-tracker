@@ -116,6 +116,7 @@ export interface LeagueTemplate {
   draftFormat?: 'auction' | 'snake';
   draftPoolMode?: DraftPoolMode;
   draftSeats?: DraftSetupSeat[];
+  draftShillCount?: number;
   poolExtractedAt?: string;
   poolExtractedBasis?: {
     cap: number;

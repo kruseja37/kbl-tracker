@@ -123,6 +123,7 @@ export type AuctionSimInvariantName =
   | 'fullRosterBid'
   | 'impossibleCompletionSilentlyRepaired'
   | 'autoFillCreatesNegativeCash'
+  | 'soldBelowReserve'
   | 'clearingPriceExceedsWinnerWtp'
   | 'clearingPriceExceedsWinnerMaxLegalBid';
 
@@ -328,6 +329,7 @@ export interface AuctionSimEconomyDiagnostics {
   autoFillCount: number;
   freeAutoFillCount: number;
   paidAutoFillCount: number;
+  belowReserveSaleCount: number;
   middleClassBidRate: number | null;
   coreBidRate: number | null;
   invariantFailures: AuctionSimInvariantFailure[];

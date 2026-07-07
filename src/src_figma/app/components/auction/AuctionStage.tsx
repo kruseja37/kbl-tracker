@@ -48,6 +48,7 @@ export interface LotVM {
   };
   /** Farm: the fogged scout read (covered by default, long-press to reveal). */
   scout?: ScoutReadVM;
+  reserveAsk?: number | null;
   highBid?: { amount: number; by: string; isYou: boolean } | null;
 }
 
@@ -611,6 +612,13 @@ function Lot({ lot }: { lot: LotVM }) {
             </div>
           </div>
         </>
+      )}
+
+      {lot.reserveAsk !== null && lot.reserveAsk !== undefined && (
+        <div className="reserve-ask">
+          <span>RESERVE</span>
+          <b className="num">{money(lot.reserveAsk)}</b>
+        </div>
       )}
 
       <div className="highbid">

@@ -281,6 +281,36 @@ describe('auctionSim clearing', () => {
     expect(result.winnerTeamId).toBeNull();
     expect(result.bids[0].eligible).toBe(false);
   });
+
+  test('reserve runs report zero below-reserve sales and flag no invariant when prices clear at reserve or higher', () => {
+    const result = simulateAuction(
+      [
+        player('target-a', 100_000, undefined, 'A'),
+        player('target-b', 80_000, undefined, 'B+'),
+      ],
+      [team('t1', 1_000_000), team('t2', 1_000_000)],
+      {
+        ...BASE_CONFIG,
+        rosterSize: 1,
+        reserveFractionK: 0.65,
+        autoFillPriceMode: 'reserve',
+        biddingPolicy: 'naive',
+      },
+    );
+
+    const sold = result.pickLog.filter((entry) => entry.disposition === 'sold');
+    expect(sold.length).toBeGreaterThan(0);
+    for (const entry of sold) {
+      expect(entry.price).not.toBeNull();
+      expect(entry.price!).toBeGreaterThanOrEqual(entry.reserve);
+    }
+    expect(result.economyDiagnostics.belowReserveSaleCount).toBe(0);
+    expect(
+      result.economyDiagnostics.invariantFailures.filter(
+        (failure) => failure.invariantName === 'soldBelowReserve',
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe('auctionSim auto-fill', () => {

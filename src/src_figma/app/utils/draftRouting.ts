@@ -1,4 +1,9 @@
 import type { LeagueTemplate } from "../../../utils/leagueBuilderStorage";
+import {
+  DEFAULT_RESERVE_PRICE_K,
+  normalizeReservePriceK,
+  type ReservePriceK,
+} from "../../../engines/auctionReservePrice";
 
 export function mlbDraftRouteForFormat(
   _format: LeagueTemplate["draftFormat"],
@@ -16,6 +21,7 @@ export function farmDraftRouteForFormat(
 
 type DraftRouteOptions = {
   shillCount?: number | null;
+  reservePriceK?: ReservePriceK | number | null;
 };
 
 export const MAX_DRAFT_SHILL_COUNT = 12;
@@ -29,6 +35,9 @@ function withLeagueId(route: string, leagueId: string, options: DraftRouteOption
   const params = new URLSearchParams({ leagueId });
   if (options.shillCount !== null && options.shillCount !== undefined && Number.isFinite(options.shillCount)) {
     params.set("shills", String(clampDraftShillCount(options.shillCount)));
+  }
+  if (options.reservePriceK !== null && options.reservePriceK !== undefined && Number.isFinite(options.reservePriceK)) {
+    params.set("reserveK", String(normalizeReservePriceK(options.reservePriceK, DEFAULT_RESERVE_PRICE_K)));
   }
   return `${route}?${params.toString()}`;
 }
@@ -60,6 +69,15 @@ export function shillCountFromSearch(search: string): number | null {
   if (!/^\d+$/.test(trimmed)) return null;
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? clampDraftShillCount(parsed) : null;
+}
+
+export function reservePriceKFromSearch(search: string): ReservePriceK | null {
+  const raw = new URLSearchParams(search).get("reserveK");
+  if (raw === null) return null;
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed)) return null;
+  const normalized = normalizeReservePriceK(parsed, DEFAULT_RESERVE_PRICE_K);
+  return Math.abs(normalized - parsed) < 0.000001 ? normalized : null;
 }
 
 export function resolveInitialLeagueId(

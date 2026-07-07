@@ -1150,3 +1150,7 @@ Outgoing header was the 2026-06-24 MERGE FREEZE banner (both code lanes held sti
 ## Outgoing Live Header Snapshot — before 2026-07-07 CUT1 Codex session
 
 Previous `CURRENT_STATE.md` live header was the 2026-07-02 C2B/C3 trunk-advanced banner, with next action listed as QUICK-WIN-CATALOG-24 / in-season legal-roster enforcement before C4. This CUT1 session advanced the Phase 1.5c route cutover/gating branch instead, so the live header was refreshed to the cutover status.
+
+## Outgoing Live Header Snapshot — before 2026-07-07 Lever A Codex session end
+
+Previous `CURRENT_STATE.md` live header was the 2026-07-07 CUT1 route-cutover banner. This Lever A session refreshed the live header to record steps 4-6 complete in `/private/tmp/kbl-lever-a`, the Git metadata EPERM commit/pull limitation, the `LEVER_A_COMMIT_PLAN.txt` handoff, the green final gates, and the reserve measurement numbers.

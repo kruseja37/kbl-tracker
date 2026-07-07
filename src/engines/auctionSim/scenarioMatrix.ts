@@ -68,6 +68,7 @@ export interface ScenarioMatrixRow {
   autoFillCount: ScenarioMatrixStat;
   freeAutoFillCount: ScenarioMatrixStat;
   paidAutoFillCount: ScenarioMatrixStat;
+  belowReserveSaleCount: ScenarioMatrixStat;
   eliteConcentration: ScenarioMatrixStat;
   coreBidRate: ScenarioMatrixStat;
   finalBudget: ScenarioMatrixStat;
@@ -75,6 +76,7 @@ export interface ScenarioMatrixRow {
   reachesSpot11BudgetTarget: boolean;
   reachesStrengthSpreadTarget: boolean;
   reachesNoFreeAutoFillTarget: boolean;
+  reachesNoBelowReserveSaleTarget: boolean;
   reachesHighTailTarget: boolean;
 }
 
@@ -196,6 +198,7 @@ export function runScenarioMatrix(input: ScenarioMatrixInput): ScenarioMatrixRes
     const autoFillCount: number[] = [];
     const freeAutoFillCount: number[] = [];
     const paidAutoFillCount: number[] = [];
+    const belowReserveSaleCount: number[] = [];
     const eliteConcentration: number[] = [];
     const coreBidRate: number[] = [];
     const finalBudget: number[] = [];
@@ -214,6 +217,7 @@ export function runScenarioMatrix(input: ScenarioMatrixInput): ScenarioMatrixRes
         autoFillCount.push(sim.economyDiagnostics.autoFillCount);
         freeAutoFillCount.push(sim.economyDiagnostics.freeAutoFillCount);
         paidAutoFillCount.push(sim.economyDiagnostics.paidAutoFillCount);
+        belowReserveSaleCount.push(sim.economyDiagnostics.belowReserveSaleCount);
         eliteConcentration.push(sim.rosterStrengthMetrics.eliteConcentration);
         coreBidRate.push(sim.economyDiagnostics.coreBidRate ?? 0);
         finalBudget.push(mean(Object.values(sim.economyDiagnostics.finalBudgetByTeam)));
@@ -245,6 +249,7 @@ export function runScenarioMatrix(input: ScenarioMatrixInput): ScenarioMatrixRes
       autoFillCount: stat(autoFillCount),
       freeAutoFillCount: stat(freeAutoFillCount),
       paidAutoFillCount: stat(paidAutoFillCount),
+      belowReserveSaleCount: stat(belowReserveSaleCount),
       eliteConcentration: stat(eliteConcentration),
       coreBidRate: stat(coreBidRate),
       finalBudget: stat(finalBudget),
@@ -258,6 +263,7 @@ export function runScenarioMatrix(input: ScenarioMatrixInput): ScenarioMatrixRes
         statMedian(rowBase.budgetRemainingAtRosterSpot11Ratio) <= 0.45,
       reachesStrengthSpreadTarget: statMedian(rowBase.rosterStrengthSpread) <= 0.05,
       reachesNoFreeAutoFillTarget: statMedian(rowBase.freeAutoFillCount) === 0,
+      reachesNoBelowReserveSaleTarget: statMedian(rowBase.belowReserveSaleCount) === 0,
       reachesHighTailTarget: rowBase.highTailShare <= NUMERIC_GRADE_TARGET.highTailCap,
     });
   }
@@ -278,8 +284,8 @@ function fmtNum(value: number | null, digits = 2): string {
 
 export function formatScenarioMatrixMarkdown(result: ScenarioMatrixResult): string {
   const lines = [
-    '| Scenario | k | Pool | Median Grade | High Tail | Middle Mass | Barbell | Spot11 Med | Strength Spread Med | Free Fill Med | Score |',
-    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| Scenario | k | Pool | Median Grade | High Tail | Middle Mass | Barbell | Spot11 Med | Strength Spread Med | Free Fill Med | Below Reserve Med | Score |',
+    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
   ];
   for (const row of result.rows) {
     lines.push(
@@ -288,6 +294,8 @@ export function formatScenarioMatrixMarkdown(result: ScenarioMatrixResult): stri
       } | ${fmtPct(row.highTailShare)} | ${fmtPct(row.middleMassShare)} | ${fmtNum(row.barbellIndex)} | ${
         fmtPct(row.budgetRemainingAtRosterSpot11Ratio.median)
       } | ${fmtPct(row.rosterStrengthSpread.median)} | ${fmtNum(row.freeAutoFillCount.median, 0)} | ${
+        fmtNum(row.belowReserveSaleCount.median, 0)
+      } | ${
         row.objectiveScore.toFixed(3)
       } |`,
     );
@@ -301,7 +309,9 @@ export function formatScenarioMatrixMarkdown(result: ScenarioMatrixResult): stri
         fmtPct(row.budgetRemainingAtRosterSpot11Ratio.median)
       }; spread ${fmtPct(row.rosterStrengthSpread.median)}; median grade ${
         row.medianNumericGrade === null ? 'n/a' : `${row.medianNumericGrade.toFixed(1)} (${row.medianLetterGrade})`
-      }; free fill ${fmtNum(row.freeAutoFillCount.median, 0)}`,
+      }; free fill ${fmtNum(row.freeAutoFillCount.median, 0)}; below reserve ${
+        fmtNum(row.belowReserveSaleCount.median, 0)
+      }`,
     );
   }
   return lines.join('\n');

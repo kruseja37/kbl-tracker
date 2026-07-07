@@ -150,6 +150,9 @@ export function buildEconomyDiagnostics(
 
   if (medSpot11 !== null && medSpot11 < 0.30) observations.push('budget collapse before roster spot 11');
   if (autoFillLog.some((entry) => entry.price === 0)) observations.push('free auto-fill value exists');
+  if (invariantFailures.some((failure) => failure.invariantName === 'soldBelowReserve')) {
+    observations.push('below-reserve sale invariant tripped');
+  }
   if (poolMetrics.barbellIndex > 0.25) observations.push('pool shape is barbell-heavy');
   if (rosterStrengthMetrics.rosterStrengthSpread > 0.05) observations.push('rational roster strength spread exceeds ±5%');
   if (observations.length === 0) observations.push('no configured red-flag threshold tripped');
@@ -189,6 +192,7 @@ export function buildEconomyDiagnostics(
     autoFillCount: autoFillLog.length,
     freeAutoFillCount: autoFillLog.filter((entry) => entry.price === 0).length,
     paidAutoFillCount: autoFillLog.filter((entry) => entry.price > 0).length,
+    belowReserveSaleCount: invariantFailures.filter((failure) => failure.invariantName === 'soldBelowReserve').length,
     middleClassBidRate,
     coreBidRate: middleClassBidRate,
     invariantFailures: [...invariantFailures],

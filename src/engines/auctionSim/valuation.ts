@@ -56,6 +56,6 @@ export function rawWillingnessToPay(
   const openSlotPressure = Math.max(0.75, 1 + (config.rosterSize - team.roster.length) / config.rosterSize * 0.12);
   return Math.max(
     reserve,
-    player.iv * need * openSlotPressure + reserve * 0.25 + player.iv * scarcity * 0.18 + player.iv * noise * 0.06,
+    player.iv * need * openSlotPressure + player.iv * scarcity * 0.18 + player.iv * noise * 0.06,
   );
 }

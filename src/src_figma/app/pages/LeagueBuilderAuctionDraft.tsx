@@ -65,10 +65,12 @@ import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
   farmDraftRouteForLeague,
   leagueIdFromSearch,
+  reservePriceKFromSearch,
   resolveInitialLeagueId,
   clampDraftShillCount,
   shillCountFromSearch,
 } from "../utils/draftRouting";
+import { DEFAULT_RESERVE_PRICE_K } from "../../../engines/auctionReservePrice";
 import { evaluatePoolDemandSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
 import {
   getTeamAuctionMaxBid,
@@ -557,6 +559,10 @@ export function LeagueBuilderAuctionDraft() {
   const { leagueData, loadAuction, session } = auction;
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
+  const requestedReservePriceK = useMemo(
+    () => reservePriceKFromSearch(window.location.search) ?? DEFAULT_RESERVE_PRICE_K,
+    [],
+  );
   const requestedDevSeed = useMemo(() => devSeedFromSearch(window.location.search), []);
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [cpuAdvancePending, setCpuAdvancePending] = useState(false);
@@ -1252,6 +1258,7 @@ export function LeagueBuilderAuctionDraft() {
     void auction.initAuction(activeLeagueId, {
       nominationOrderSeed: requestedDevSeed ?? DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
       cpuShillCount: setupShillCount,
+      reserveFractionK: requestedReservePriceK,
       turnTimerSeconds: null,
       excludeFromLeague: true,
     });
@@ -1432,6 +1439,7 @@ export function LeagueBuilderAuctionDraft() {
       publicMarket: publicMarket?.playerId === stageLotAuctionPlayer?.playerId
         ? lotPublicMarket(publicMarket)
         : undefined,
+      reserveAsk: lot?.openingAsk ?? stagePendingClaim?.price ?? null,
       highBid: lot?.highBid !== null && lot?.highBid !== undefined
         ? {
             amount: lot.highBid,

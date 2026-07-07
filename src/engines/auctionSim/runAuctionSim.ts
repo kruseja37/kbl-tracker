@@ -302,6 +302,9 @@ export function simulateAuction(
         if (rosterSizeBefore >= config.rosterSize) {
           invariantFailures.push(invariantFailure('fullRosterBid', config, common));
         }
+        if (clear.price < clear.reserve) {
+          invariantFailures.push(invariantFailure('soldBelowReserve', config, common));
+        }
         if (clear.price > cashBefore) {
           invariantFailures.push(invariantFailure('acceptedPriceExceedsCash', config, common));
         }

@@ -46,6 +46,7 @@ function vm(): AuctionStageVM {
       positions: "SS",
       personality: "Competitive",
       chemistry: "Crafty",
+      reserveAsk: 65_000,
       highBid: null,
     },
     move: {
@@ -81,6 +82,13 @@ describe("AuctionStage roster board", () => {
     expect(screen.getByTestId("auction-board-slot-backupC")).toBeInTheDocument();
     expect(screen.queryAllByTestId(/auction-board-gap-/)).toHaveLength(0);
     expect(screen.queryByTestId("auction-board-overflow")).not.toBeInTheDocument();
+  });
+
+  test("shows the current lot reserve ask", () => {
+    render(<AuctionStage vm={vm()} />);
+
+    expect(screen.getByText("RESERVE")).toBeInTheDocument();
+    expect(screen.getByText("$65,000")).toBeInTheDocument();
   });
 
   test("shows only the public CPU move amount, not private read or cap fields", () => {
