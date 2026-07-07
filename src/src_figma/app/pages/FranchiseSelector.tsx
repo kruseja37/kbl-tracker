@@ -150,9 +150,8 @@ export function FranchiseSelector() {
         )}
 
         <div className="mb-4 rounded border border-[#333] bg-[#111] p-3 text-xs leading-5 text-[#aaa]">
-          Export and delete are available for franchise save slots. Import/upload
-          is not implemented yet, so exported backups cannot be restored from this
-          screen in v1.
+          Export a save slot before big moves, or clear an old clubhouse when the
+          shelf gets crowded.
         </div>
 
         {/* Franchise Cards */}
