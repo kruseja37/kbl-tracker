@@ -14,6 +14,7 @@ import {
   getCurrentBidderTeamId,
   getTeamAuctionMaxBid,
   initAuctionSession,
+  isActivePassedResult,
   passBid,
   passLoneSurvivorOut,
   recordBid,
@@ -378,7 +379,9 @@ export function runAuctionTuningCase(
     // Supply invariant, cleanup-aware (FABLE-C3): PASSED lots are no longer destroyed supply —
     // the machine's exhaustion backfill re-offers them at minimum salary — so a run is only
     // provably wedged when live + passed supply together cannot cover the open real seats.
-    const passedRecoverable = session.results.filter((r) => r.disposition === 'PASSED').length;
+    const passedRecoverable = session.results.filter((result, index) =>
+      isActivePassedResult(session, result, index),
+    ).length;
     if (
       session.state === 'NOMINATION' &&
       session.availablePlayerIds.length + passedRecoverable < realOpenSlotCount(session)
@@ -490,7 +493,9 @@ export function runAuctionTuningCase(
     result.winnerTeamId !== null &&
     shillTeamIdSet.has(result.winnerTeamId),
   ).length;
-  const passedLots = session.results.filter((result) => result.disposition === 'PASSED').length;
+  const passedLots = session.results.filter((result, index) =>
+    isActivePassedResult(session, result, index),
+  ).length;
   const carryoverPct = input.carryoverPct ?? 0.5;
   const farmCarryover = input.kind === 'MLB'
     ? realTeams.reduce((sum, team) => sum + Math.max(0, team.budgetRemaining) * carryoverPct, 0)

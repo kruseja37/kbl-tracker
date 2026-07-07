@@ -20,6 +20,13 @@ export function playerCompletionPrice(
   config: Pick<AuctionSimConfig, 'autoFillPriceMode' | 'reserveFractionK' | 'bidIncrement' | 'minimumCompletionPrice'>,
 ): number {
   if (config.autoFillPriceMode === 'zero') return 0;
+  if (
+    typeof player.completionPriceOverride === 'number' &&
+    Number.isFinite(player.completionPriceOverride) &&
+    player.completionPriceOverride >= 0
+  ) {
+    return player.completionPriceOverride;
+  }
   return Math.max(
     config.minimumCompletionPrice,
     reservePrice(player, config.reserveFractionK, config.bidIncrement),

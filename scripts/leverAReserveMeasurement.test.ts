@@ -17,12 +17,14 @@ describe('Lever A reserve-price measurement', () => {
       .filter((row) => row.legId === 'k0-baseline')
       .map((row) => [row.preset, row]));
 
-    expect(report.baselineReproduced).toBe(true);
+    expect(report.determinismRerunMatched).toBe(true);
     expect(reserveRows.length).toBe(2);
+    expect(report.productionTerminationChecks).toHaveLength(2);
 
     console.info('LEVER_A_RESERVE_MEASUREMENT');
     console.info(JSON.stringify({
-      baselineReproduced: report.baselineReproduced,
+      determinismRerunMatched: report.determinismRerunMatched,
+      productionTerminationChecks: report.productionTerminationChecks,
       rows: report.rows.map((row) => ({
         preset: row.preset,
         leg: row.legId,
@@ -47,9 +49,12 @@ describe('Lever A reserve-price measurement', () => {
       expect(row.stuckTeamCount, `${row.preset} stuck teams`).toBe(0);
       expect(row.invariantFailureCount, `${row.preset} invariant failures`).toBe(0);
       expect(baseline, `${row.preset} baseline row`).toBeDefined();
-      expect(row.rosterStrengthSpreadMean, `${row.preset} spread improved`).toBeLessThan(
-        baseline?.rosterStrengthSpreadMean ?? Number.POSITIVE_INFINITY,
-      );
+      expect(row.rosterStrengthSpreadMean, `${row.preset} spread target`).toBeLessThanOrEqual(0.05);
+    }
+
+    for (const check of report.productionTerminationChecks) {
+      expect(check.terminated, `${check.id} terminated: ${check.error ?? 'no error'}`).toBe(true);
+      expect(check.maxPassCount, `${check.id} pass bound`).toBeLessThanOrEqual(2);
     }
   }, 120_000);
 });

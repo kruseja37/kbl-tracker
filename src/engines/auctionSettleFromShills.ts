@@ -5,6 +5,7 @@ import {
 } from './auctionCompletionFloor';
 import {
   auctionReservePriceEnabled,
+  isActivePassedResult,
   lotOpeningAsk,
   type AuctionResult,
   type AuctionRosterAssignment,
@@ -98,8 +99,8 @@ function buildLeftoverPool(session: AuctionSession, shillIds: ReadonlySet<string
     }
   }
 
-  for (const result of session.results) {
-    if (result.disposition === 'PASSED') ids.add(result.playerId);
+  for (const [index, result] of session.results.entries()) {
+    if (isActivePassedResult(session, result, index)) ids.add(result.playerId);
   }
 
   return { ids, sourceByPlayerId };
@@ -198,9 +199,19 @@ function applySettledPicks(input: {
   });
 
   let saleCount = input.saleCount;
+  const soldIds = new Set(
+    input.results
+      .filter((result) => result.disposition === 'SOLD')
+      .map((result) => result.playerId),
+  );
   const results = input.results.map((result) => {
     if (!pickSet.has(result.playerId)) return result;
-    if (result.disposition === 'PASSED') saleCount += 1;
+    const activePassed =
+      result.disposition === 'PASSED' &&
+      result.supersededByResultIndex === undefined &&
+      !soldIds.has(result.playerId);
+    if (result.disposition === 'PASSED' && !activePassed) return result;
+    if (activePassed) saleCount += 1;
     return {
       ...result,
       disposition: 'SOLD' as const,

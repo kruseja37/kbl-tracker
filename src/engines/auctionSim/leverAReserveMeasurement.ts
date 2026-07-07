@@ -1,4 +1,17 @@
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
+import { LEAGUE_MINIMUM_SALARY } from '../../data/rosterEngineConstants';
+import {
+  advanceLot,
+  MAX_RESERVE_RENOMINATION_PASSES,
+  passBid,
+  passLoneSurvivorOut,
+  resolveLot,
+  surfaceNextPlayer,
+  type AuctionPlayer,
+  type AuctionSession,
+  type AuctionTeamState,
+  type AuctionTransitionResult,
+} from '../auctionStateMachine';
 import { simulateAuction } from './runAuctionSim';
 import type {
   AutoFillPriceMode,
@@ -48,7 +61,20 @@ export interface LeverAMeasurementRow {
 
 export interface LeverAMeasurementReport {
   rows: LeverAMeasurementRow[];
-  baselineReproduced: boolean;
+  determinismRerunMatched: boolean;
+  productionTerminationChecks: LeverAProductionTerminationCheck[];
+}
+
+export interface LeverAProductionTerminationCheck {
+  id: 'torched-team-k065' | 'all-pass-surplus-k065';
+  reserveFractionK: number;
+  terminated: boolean;
+  steps: number;
+  finalState: AuctionSession['state'];
+  openSlots: number;
+  activePassRows: number;
+  maxPassCount: number;
+  error: string | null;
 }
 
 const TEAM_COUNT = 4;
@@ -74,8 +100,8 @@ const PRESET_PROFILES: Record<LeverAMeasurementPreset, {
   middleShare: number;
   highShare: number;
 }> = {
-  grounded: { poolSize: 106, lowShare: 0.104, middleShare: 0.802, highShare: 0.094 },
-  balanced: { poolSize: 110, lowShare: 0.118, middleShare: 0.745, highShare: 0.136 },
+  grounded: { poolSize: 176, lowShare: 0.104, middleShare: 0.802, highShare: 0.094 },
+  balanced: { poolSize: 176, lowShare: 0.118, middleShare: 0.745, highShare: 0.136 },
 };
 
 const LEGAL_SLOT_SEQUENCE: readonly string[] = [
@@ -105,6 +131,31 @@ const LEGAL_SLOT_SEQUENCE: readonly string[] = [
   'RP',
   'CP',
   'CP',
+];
+
+const PRODUCTION_LEGAL_ROSTER: readonly RosterSlotPlayer[] = [
+  { isPitcher: false, position: 'C', secondaryPosition: null },
+  { isPitcher: false, position: '1B', secondaryPosition: '1B/OF' },
+  { isPitcher: false, position: '2B', secondaryPosition: 'IF' },
+  { isPitcher: false, position: '3B', secondaryPosition: 'IF' },
+  { isPitcher: false, position: 'SS', secondaryPosition: 'IF' },
+  { isPitcher: false, position: 'LF', secondaryPosition: 'OF' },
+  { isPitcher: false, position: 'CF', secondaryPosition: 'OF' },
+  { isPitcher: false, position: 'RF', secondaryPosition: 'OF' },
+  { isPitcher: false, position: 'C', secondaryPosition: '1B' },
+  { isPitcher: false, position: '1B', secondaryPosition: '1B/OF' },
+  { isPitcher: false, position: '2B', secondaryPosition: 'IF/OF' },
+  { isPitcher: false, position: 'LF', secondaryPosition: 'OF' },
+  { isPitcher: false, position: 'CF', secondaryPosition: 'OF' },
+  { isPitcher: false, position: 'SS', secondaryPosition: 'IF' },
+  { isPitcher: true, position: 'P', role: 'SP' },
+  { isPitcher: true, position: 'P', role: 'SP' },
+  { isPitcher: true, position: 'P', role: 'SP' },
+  { isPitcher: true, position: 'P', role: 'SP/RP' },
+  { isPitcher: true, position: 'P', role: 'RP' },
+  { isPitcher: true, position: 'P', role: 'RP' },
+  { isPitcher: true, position: 'P', role: 'RP' },
+  { isPitcher: true, position: 'P', role: 'CP' },
 ];
 
 function hitter(position: string): RosterSlotPlayer {
@@ -148,7 +199,7 @@ export function buildLeverAMeasurementPool(preset: LeverAMeasurementPreset): Auc
       playerId: `${preset}-${String(index + 1).padStart(3, '0')}`,
       iv: ivForGrade(numericGrade, index),
       numericGrade,
-      pos: undefined,
+      pos: posForIndex(index),
       fitScore: ((index * 37) % 100) / 100,
     };
   }).sort((left, right) => right.iv - left.iv || left.playerId.localeCompare(right.playerId));
@@ -274,10 +325,147 @@ function runRows(): LeverAMeasurementRow[] {
   return rows;
 }
 
+function productionPlayer(id: string, shape: RosterSlotPlayer, iv = 100_000): AuctionPlayer {
+  return { playerId: id, iv, ivPercentile: 50, pos: shape };
+}
+
+function productionTeam(
+  teamId: string,
+  budgetRemaining: number,
+  roster: readonly AuctionPlayer[],
+  rosterSlotsRemaining: number,
+): AuctionTeamState {
+  return {
+    teamId,
+    budgetRemaining,
+    rosterSlotsRemaining,
+    minSalary: LEAGUE_MINIMUM_SALARY,
+    projectedTax: 0,
+    roster: roster.map((player) => ({ playerId: player.playerId, salary: 5_000 })),
+  };
+}
+
+function productionSession(input: {
+  id: LeverAProductionTerminationCheck['id'];
+  reserveFractionK: number;
+  teams: readonly AuctionTeamState[];
+  rostered: readonly AuctionPlayer[];
+  available: readonly AuctionPlayer[];
+}): AuctionSession {
+  const allPlayers = [...input.rostered, ...input.available];
+  return {
+    state: 'NOMINATION',
+    config: {
+      format: 'auction',
+      bidIncrement: BID_INCREMENT,
+      turnTimerSeconds: null,
+      nominationOrderSeed: `lever-a:${input.id}`,
+      reserveFractionK: input.reserveFractionK,
+      cpuShillCount: 0,
+      excludeFromLeague: true,
+    },
+    teams: input.teams,
+    nominationOrder: input.teams.map((team) => team.teamId),
+    nominationIndex: 0,
+    nominationRound: 0,
+    players: Object.fromEntries(allPlayers.map((player) => [player.playerId, player])),
+    playerOrder: allPlayers.map((player) => player.playerId),
+    availablePlayerIds: input.available.map((player) => player.playerId),
+    currentLot: null,
+    pendingClaim: null,
+    results: [],
+    saleCount: 0,
+  };
+}
+
+function transitionOrThrow(result: AuctionTransitionResult): AuctionSession {
+  if (!result.ok) throw new Error(result.reason);
+  return result.session;
+}
+
+function driveProductionAllPass(
+  start: AuctionSession,
+  maxSteps: number,
+): { session: AuctionSession; steps: number; error: string | null } {
+  let session = start;
+  try {
+    for (let step = 0; step < maxSteps; step += 1) {
+      if (session.state === 'AUCTION_COMPLETE') return { session, steps: step, error: null };
+      if (session.state === 'NOMINATION') {
+        session = transitionOrThrow(surfaceNextPlayer(session));
+      } else if (session.state === 'OPEN_BIDDING') {
+        if (session.currentLot?.stillIn.length === 1) {
+          session = transitionOrThrow(resolveLot(session));
+        } else {
+          const bidder = session.currentLot?.bidTurnTeamId;
+          session = bidder ? transitionOrThrow(passBid(session, bidder)) : transitionOrThrow(resolveLot(session));
+        }
+      } else if (session.state === 'RESOLVE') {
+        session = session.pendingClaim
+          ? transitionOrThrow(passLoneSurvivorOut(session))
+          : transitionOrThrow(resolveLot(session));
+      } else if (session.state === 'SOLD' || session.state === 'PASSED') {
+        session = transitionOrThrow(advanceLot(session));
+      } else {
+        throw new Error(`Unexpected auction state ${session.state}`);
+      }
+    }
+    return { session, steps: maxSteps, error: `Exceeded ${maxSteps} production steps` };
+  } catch (error) {
+    return { session, steps: maxSteps, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function summarizeProductionCheck(
+  id: LeverAProductionTerminationCheck['id'],
+  reserveFractionK: number,
+  driven: { session: AuctionSession; steps: number; error: string | null },
+): LeverAProductionTerminationCheck {
+  return {
+    id,
+    reserveFractionK,
+    terminated: driven.error === null && driven.session.state === 'AUCTION_COMPLETE',
+    steps: driven.steps,
+    finalState: driven.session.state,
+    openSlots: driven.session.teams.reduce((sum, team) => sum + Math.max(0, team.rosterSlotsRemaining), 0),
+    activePassRows: driven.session.results.filter((row) => row.disposition === 'PASSED' && row.supersededByResultIndex === undefined).length,
+    maxPassCount: Math.max(0, ...Object.values(driven.session.passCountByPlayerId ?? {})),
+    error: driven.error,
+  };
+}
+
+function runProductionTerminationChecks(): LeverAProductionTerminationCheck[] {
+  const torchedRoster = PRODUCTION_LEGAL_ROSTER
+    .filter((_, index) => index !== 8)
+    .map((shape, index) => productionPlayer(`prod-torched-rostered-${index}`, shape, 20_000));
+  const catcher = (id: string) => productionPlayer(id, { isPitcher: false, position: 'C', secondaryPosition: null });
+  const torched = productionSession({
+    id: 'torched-team-k065',
+    reserveFractionK: 0.65,
+    teams: [productionTeam('team-a', 2_000, torchedRoster, 1)],
+    rostered: torchedRoster,
+    available: [catcher('prod-torched-c-a'), catcher('prod-torched-c-b')],
+  });
+
+  const surplus = productionSession({
+    id: 'all-pass-surplus-k065',
+    reserveFractionK: 0.65,
+    teams: [productionTeam('team-a', 2_000, [], 1)],
+    rostered: [],
+    available: [catcher('prod-surplus-c-a'), catcher('prod-surplus-c-b'), catcher('prod-surplus-c-c')],
+  });
+
+  return [
+    summarizeProductionCheck('torched-team-k065', 0.65, driveProductionAllPass(torched, 40)),
+    summarizeProductionCheck('all-pass-surplus-k065', 0.65, driveProductionAllPass(surplus, 60)),
+  ];
+}
+
 export function runLeverAReserveMeasurement(): LeverAMeasurementReport {
   const rows = runRows();
   return {
     rows,
-    baselineReproduced: JSON.stringify(rows) === JSON.stringify(runRows()),
+    determinismRerunMatched: JSON.stringify(rows) === JSON.stringify(runRows()),
+    productionTerminationChecks: runProductionTerminationChecks(),
   };
 }

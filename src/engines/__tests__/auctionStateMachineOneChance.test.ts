@@ -4,6 +4,8 @@ import { LEAGUE_MINIMUM_SALARY, reservePriceCurve } from '../../data/rosterEngin
 import {
   advanceLot,
   initAuctionSession,
+  isActivePassedResult,
+  MAX_RESERVE_RENOMINATION_PASSES,
   passBid,
   passLoneSurvivorOut,
   recordBid,
@@ -282,6 +284,71 @@ describe('auctionStateMachine one-chance engine path', () => {
     session = ok(advanceLot(session));
     expect(session.state).toBe('NOMINATION');
     expect(session.availablePlayerIds).toContain(passedPlayerId);
+  });
+
+  test('reserve-enabled renomination is bounded per player', () => {
+    let session = makeSession({
+      reserveFractionK: 0.65,
+      teams: [{ teamId: 'A', budgetRemaining: 1_000, rosterSlotsRemaining: 10, minSalary: 0 }],
+      players: [{ playerId: 'bounded-pass', iv: 1_000, ivPercentile: 50 }],
+      nominationOrder: ['A'],
+    });
+
+    for (let pass = 1; pass <= MAX_RESERVE_RENOMINATION_PASSES; pass += 1) {
+      session = ok(surfaceNextPlayer(session));
+      expect(session.currentLot?.playerId).toBe('bounded-pass');
+      session = passAllNoBidActors(session);
+      expect(session.passCountByPlayerId?.['bounded-pass']).toBe(pass);
+      const passRows = session.results.filter((result) => result.playerId === 'bounded-pass');
+      expect(passRows).toHaveLength(pass);
+      if (pass < MAX_RESERVE_RENOMINATION_PASSES) {
+        expect(session.availablePlayerIds).toContain('bounded-pass');
+        session = ok(advanceLot(session));
+      }
+    }
+
+    expect(session.availablePlayerIds).not.toContain('bounded-pass');
+    expect(session.results.filter((result) => result.disposition === 'PASSED')).toHaveLength(MAX_RESERVE_RENOMINATION_PASSES);
+    expect(session.results[0].supersededByResultIndex).toBe(1);
+
+    session = ok(advanceLot(session));
+    expect(session.state).toBe('AUCTION_COMPLETE');
+  });
+
+  test('a renominated-then-sold player supersedes the stale PASSED result', () => {
+    let session = ok(surfaceNextPlayer(makeSession({
+      reserveFractionK: 0.65,
+      teams: [{ teamId: 'A', budgetRemaining: 100_000, rosterSlotsRemaining: 1, minSalary: 0 }],
+      players: [{ playerId: 'later-sold', iv: 10_000, ivPercentile: 80 }],
+      nominationOrder: ['A'],
+    })));
+    session = {
+      ...session,
+      results: [{
+        playerId: 'later-sold',
+        disposition: 'PASSED',
+        nominatorTeamId: 'A',
+        winnerTeamId: null,
+        salary: null,
+      }],
+    };
+
+    session = ok(recordBid(session, 'A', session.currentLot!.openingAsk));
+    session = ok(resolveLot(session));
+
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    expect(session.results).toHaveLength(2);
+    expect(session.results[0]).toMatchObject({
+      playerId: 'later-sold',
+      disposition: 'PASSED',
+      supersededByResultIndex: 1,
+    });
+    expect(session.results[1]).toMatchObject({
+      playerId: 'later-sold',
+      disposition: 'SOLD',
+      winnerTeamId: 'A',
+    });
+    expect(isActivePassedResult(session, session.results[0], 0)).toBe(false);
   });
 
   test('resume-safe selection depends on the seed and persisted result count', () => {
