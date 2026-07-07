@@ -6653,3 +6653,14 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - The lock remains league-specific: unrelated leagues can still be edited after the saved-auction lookup resolves, and new league creation remains available.
 - Added regressions for locked league edit/save blocking, locked league delete blocking, unrelated league editing, and synchronized the Leagues test harness so its saved-auction guard lookup settles without React `act(...)` warnings.
 - Verification after addendum 7: `LeagueBuilderLeagues.test.tsx` passed 30/30; serialized focused draft/auction + League Builder suite passed 131/131 after a parallel IndexedDB teardown leak reproduced only in the parallel batch and the accused auction file passed solo; `git diff --check` passed; `npm run -s build` passed with only the existing Vite chunk-size warning. The Team Builder and Player Builder component tests still emit the pre-existing React `act(...)` warnings noted in the outside audit.
+---
+
+## 2026-07-07 (Codex, attended) — CUT1 flips + dev-gating batch
+
+- Completed **CUT1-2**: gated the remaining preview route groups in `src/App.tsx` behind `import.meta.env.DEV || import.meta.env.MODE === "test"`; committed `9693be96 feat(cutover): dev-gate previews [CUT1-2]`.
+- Completed **CUT1-4**: removed `/__preview/draft-archetypes`, kept the fixture unrouted, fixed fixture copy to 24 archetypes, and confirmed the harvested MLB-vs-farm explainer lives in the Draft Setup `?` help layer; committed `f77eee9a feat(cutover): remove archetype preview [CUT1-4]`.
+- **CUT1-1 STOPPED** at the required parity gate: the live Lens adapter reads schedule, standings, next-game, roster/readiness, and lineup context, but the Lens hub's PLAY BALL/SIM controls are inert and there is no SCORE action, `buildFranchiseGameTrackerRoster` launch, or pregame launch/review path. `/franchise/:franchiseId` was not flipped.
+- **CUT1-3 STOPPED**: `useFarmAuctionDraft` already preserves farm session persistence and `commitCompletedFarmAuctionSessionToLeagueRosters`, but a route-swap adapter to `AuctionStage` exceeded the contract's ~150-line glue threshold. No farm route change was committed.
+- Gates: `npx tsc -b --clean` pass; `npx tsc -b --pretty false` pass; `npm run build` pass. Full `NODE_ENV= npx vitest run` produced 9,078 pass / 7 fail / 8 skipped: known WPA allowlist, untouched DraftSetup batch/default-timeout failures, and `franchiseManualSmokeFixture` default-timeout red that passed with `--testTimeout 20000`.
+- Browser/Playwright gates and screenshots were blocked by the environment: Vite preview on `127.0.0.1:4173`, Vite preview on `localhost:5177`, and a bare Node HTTP server all failed `listen EPERM`.
+- Next: implement Lens GameTracker launch parity before route flip; scope farm `AuctionStage` integration as a C4-B-sized ticket; rerun requested browser screenshots in a localhost-capable environment.
