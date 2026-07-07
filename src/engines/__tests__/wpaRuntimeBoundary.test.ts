@@ -179,6 +179,12 @@ describe("WPA runtime boundary", () => {
       "src/src_figma/app/pages/MatchupDramaBarPreview.tsx",
       "src/src_figma/app/utils/gameTrackerRunnerCorrection.ts",
       "src/utils/eventLog.ts",
+      // Read-only trust report: consumes archive-backed WPA availability from
+      // franchise value inputs and explicitly keeps WPA out of final value authority.
+      "src/utils/franchiseAnalyticsTrust.ts",
+      // Stadium record materializer: reads committed completed-game WPA archives
+      // for cumulative WPA and largest-swing records; it does not calculate WPA.
+      "src/utils/franchiseStadiumRecordsStorage.ts",
       "src/utils/gameStorage.ts",
       "src/utils/kblWpaAttribution.ts",
       "src/utils/managerWpaDerivation.ts",
