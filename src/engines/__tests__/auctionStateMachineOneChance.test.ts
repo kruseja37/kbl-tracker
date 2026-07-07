@@ -35,6 +35,7 @@ const PLAYERS = [
 function makeSession(overrides: {
   seed?: string;
   flatReserveFloor?: number;
+  reserveFractionK?: number;
   nominationWeightExponent?: number;
   teams?: readonly AuctionTeamInput[];
   players?: readonly AuctionPlayer[];
@@ -46,6 +47,7 @@ function makeSession(overrides: {
       nominationOrderSeed: overrides.seed ?? BASE_CONFIG.nominationOrderSeed,
       nominationWeightExponent: overrides.nominationWeightExponent,
       flatReserveFloor: overrides.flatReserveFloor,
+      reserveFractionK: overrides.reserveFractionK,
     },
     teams: overrides.teams ?? [
       { teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 3, minSalary: 0 },
@@ -178,6 +180,51 @@ describe('auctionStateMachine one-chance engine path', () => {
     expect(reject(surfaceNextPlayer({ ...session, state: 'AUCTION_COMPLETE' })).reason).toBe('auction-complete');
   });
 
+  test('reserveFractionK opens the lot at reserveP and rejects bids below reserve', () => {
+    let session = makeSession({
+      reserveFractionK: 0.65,
+      teams: [
+        { teamId: 'A', budgetRemaining: 100_000, rosterSlotsRemaining: 1 },
+        { teamId: 'B', budgetRemaining: 100_000, rosterSlotsRemaining: 1 },
+      ],
+      players: [{ playerId: 'reserve-target', iv: 10_001, ivPercentile: 1 }],
+      nominationOrder: ['A', 'B'],
+    });
+    session = ok(surfaceNextPlayer(session));
+
+    expect(session.currentLot?.openingAsk).toBe(6_501);
+    const belowReserve = reject(recordBid(session, 'A', 6_500));
+    expect(belowReserve.reason).toBe('bid-below-minimum');
+    expect(ok(recordBid(session, 'A', 6_501)).currentLot?.highBid).toBe(6_501);
+  });
+
+  test('reserveFractionK floors tiny-IV lots at the minimum salary', () => {
+    const session = ok(surfaceNextPlayer(makeSession({
+      reserveFractionK: 0.5,
+      players: [{ playerId: 'minimum-floor', iv: 400, ivPercentile: 1 }],
+      nominationOrder: ['A', 'B', 'C'],
+    })));
+
+    expect(session.currentLot?.openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
+  });
+
+  test('k=0 keeps the historical opening-ask curve byte-identical', () => {
+    const current = ok(surfaceNextPlayer(makeSession({
+      reserveFractionK: 0,
+      players: [{ playerId: 'legacy-curve', iv: 1_000, ivPercentile: 98 }],
+      nominationOrder: ['A'],
+    })));
+    const legacy = ok(surfaceNextPlayer(makeSession({
+      players: [{ playerId: 'legacy-curve', iv: 1_000, ivPercentile: 98 }],
+      nominationOrder: ['A'],
+    })));
+
+    expect(current.currentLot?.openingAsk).toBe(legacy.currentLot?.openingAsk);
+    expect(current.currentLot?.openingAsk).toBe(
+      reservePriceCurve(current.players['legacy-curve'].ivPercentile) * current.players['legacy-curve'].iv,
+    );
+  });
+
   test('a no-bid player is permanently out and never re-surfaces', () => {
     let session = makeSession({
       teams: [{ teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 1, minSalary: 0 }],
@@ -204,6 +251,37 @@ describe('auctionStateMachine one-chance engine path', () => {
     session = ok(surfaceNextPlayer(session));
 
     expect(session.currentLot?.playerId).not.toBe(passedPlayerId);
+  });
+
+  test('reserve-enabled no-bid lots remain in the pool for later renomination', () => {
+    let session = makeSession({
+      reserveFractionK: 0.65,
+      teams: [{ teamId: 'A', budgetRemaining: 10_000, rosterSlotsRemaining: 1, minSalary: 0 }],
+      players: [
+        { playerId: 'unsold-1', iv: 1_000, ivPercentile: 10 },
+        { playerId: 'unsold-2', iv: 2_000, ivPercentile: 90 },
+      ],
+      nominationOrder: ['A'],
+    });
+
+    session = ok(surfaceNextPlayer(session));
+    const passedPlayerId = session.currentLot?.playerId;
+    if (passedPlayerId === undefined) throw new Error('Expected first surfaced player');
+
+    session = permanentNoBidPass(session);
+
+    expect(session.state).toBe('PASSED');
+    expect(session.results.at(-1)).toMatchObject({
+      playerId: passedPlayerId,
+      disposition: 'PASSED',
+      winnerTeamId: null,
+      salary: null,
+    });
+    expect(session.availablePlayerIds).toContain(passedPlayerId);
+
+    session = ok(advanceLot(session));
+    expect(session.state).toBe('NOMINATION');
+    expect(session.availablePlayerIds).toContain(passedPlayerId);
   });
 
   test('resume-safe selection depends on the seed and persisted result count', () => {

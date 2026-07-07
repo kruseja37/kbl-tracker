@@ -8,6 +8,7 @@ import {
   auctionMaxBid,
   reservePriceCurve,
 } from '../data/rosterEngineConstants';
+import { RESERVE_PRICE_OFF_K, normalizeReservePriceK, reserveP } from './auctionReservePrice';
 import { canCover, isCloser, type RosterSlotPlayer } from '../data/rosterConstruction';
 import {
   cheapestLegalCompletion,
@@ -265,9 +266,23 @@ export function selectNextNominee(session: AuctionSession): string | null {
 
 /** The opening ask a lot for `player` would carry — single-math with `surfaceNextPlayer`. */
 export function lotOpeningAsk(player: AuctionPlayer, config: AuctionSetupConfig): number {
-  return config.flatReserveFloor != null
+  const legacyOpeningAsk = config.flatReserveFloor != null
     ? config.flatReserveFloor
     : reservePriceCurve(player.ivPercentile) * player.iv;
+  return reserveP({
+    iv: player.iv,
+    k: reservePriceK(config),
+    minimumSalary: LEAGUE_MINIMUM_SALARY,
+    passthroughPrice: legacyOpeningAsk,
+  });
+}
+
+function reservePriceK(config: AuctionSetupConfig): number {
+  return normalizeReservePriceK(config.reserveFractionK, RESERVE_PRICE_OFF_K);
+}
+
+function reservePriceEnabled(config: AuctionSetupConfig): boolean {
+  return reservePriceK(config) !== RESERVE_PRICE_OFF_K;
 }
 
 /**
@@ -736,12 +751,16 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
 
 function finalizePassedLotPermanent(session: AuctionSession): AuctionSession {
   const lot = requireLot(session);
+  const availablePlayerIds = reservePriceEnabled(session.config) && !session.availablePlayerIds.includes(lot.playerId)
+    ? [...session.availablePlayerIds, lot.playerId]
+    : session.availablePlayerIds;
 
   return {
     ...session,
     state: 'PASSED',
     currentLot: lot,
     pendingClaim: null,
+    availablePlayerIds,
     results: [
       ...session.results,
       {
