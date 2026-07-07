@@ -277,6 +277,38 @@ function capFitDiagnosticText(): string {
   return screen.getByLabelText("Cap fit diagnostic").textContent ?? "";
 }
 
+type ExtractPoolOptions = {
+  excludedIds?: string[];
+  generationNonce?: number;
+  pinnedIds?: string[];
+  poolBalancePreset?: string;
+  poolQualityCenter?: number;
+  poolSourceMode?: string;
+  priorityIds?: string[];
+};
+
+function extractPoolOptions(): ExtractPoolOptions[] {
+  return vi.mocked(extractPoolFromDemand).mock.calls.map((call) => call[4] as ExtractPoolOptions);
+}
+
+async function waitForExtractPoolOptions(
+  predicate: (options: ExtractPoolOptions) => boolean,
+): Promise<ExtractPoolOptions> {
+  let matched: ExtractPoolOptions | undefined;
+  await waitFor(() => {
+    matched = extractPoolOptions().find(predicate);
+    expect(matched).toBeDefined();
+  });
+  return matched!;
+}
+
+async function clickDraftSetupButton(name: string | RegExp): Promise<void> {
+  const button = await screen.findByRole("button", { name });
+  await act(async () => {
+    fireEvent.click(button);
+  });
+}
+
 function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesign"]> {
   return { slots: [], lockedAt };
 }
@@ -761,12 +793,14 @@ describe("LeagueBuilderDraftSetup", () => {
         totalSlots: lowPoolPlayers.length,
       }),
     });
-    rerender(<LeagueBuilderDraftSetup />);
+    await act(async () => {
+      rerender(<LeagueBuilderDraftSetup />);
+    });
 
     expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
     const lowDiagnostic = capFitDiagnosticText();
 
-    fireEvent.click(screen.getByRole("button", { name: "76" }));
+    await clickDraftSetupButton("76");
 
     mockLeagueData({
       league,
@@ -777,7 +811,9 @@ describe("LeagueBuilderDraftSetup", () => {
         totalSlots: highPoolPlayers.length,
       }),
     });
-    rerender(<LeagueBuilderDraftSetup />);
+    await act(async () => {
+      rerender(<LeagueBuilderDraftSetup />);
+    });
 
     expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
     expect(capFitDiagnosticText()).not.toBe(lowDiagnostic);
@@ -811,18 +847,18 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Grounded$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^Full player pool$/i }));
+    await clickDraftSetupButton(/^Grounded$/i);
+    await clickDraftSetupButton(/^Full player pool$/i);
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).not.toBeDisabled();
     });
     vi.mocked(extractPoolFromDemand).mockClear();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
-    });
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
-    await waitFor(() => {
-      expect(extractPoolFromDemand).toHaveBeenCalled();
+    await waitForExtractPoolOptions((options) => {
+      return options.generationNonce === 0
+        && options.poolBalancePreset === "grounded"
+        && options.poolSourceMode === "full-pool";
     });
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).not.toBeDisabled();
@@ -830,19 +866,12 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
     vi.mocked(extractPoolFromDemand).mockClear();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
-    });
+    await clickDraftSetupButton(/Reroll generated players/i);
 
-    await waitFor(() => {
-      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
-        generationNonce?: number;
-        poolBalancePreset?: string;
-        poolSourceMode?: string;
-      };
-      expect(options.generationNonce).toBe(1);
-      expect(options.poolBalancePreset).toBe("grounded");
-      expect(options.poolSourceMode).toBe("full-pool");
+    await waitForExtractPoolOptions((options) => {
+      return options.generationNonce === 1
+        && options.poolBalancePreset === "grounded"
+        && options.poolSourceMode === "full-pool";
     });
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Reroll generated players/i })).not.toBeDisabled();
@@ -1291,28 +1320,26 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "72" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
-    await waitFor(() => {
-      expect(extractPoolFromDemand).toHaveBeenCalled();
+    await clickDraftSetupButton("72");
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
+    await waitForExtractPoolOptions((options) => {
+      return options.generationNonce === 0
+        && options.poolQualityCenter === 72
+        && options.poolSourceMode === "team-roster-priority";
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
+    vi.mocked(extractPoolFromDemand).mockClear();
+    await clickDraftSetupButton(/Reroll generated players/i);
 
-    await waitFor(() => {
-      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
-        pinnedIds?: string[];
-        priorityIds?: string[];
-        poolSourceMode?: string;
-        generationNonce?: number;
-        poolQualityCenter?: number;
-      };
-      expect(options.generationNonce).toBe(1);
-      expect(options.poolQualityCenter).toBe(72);
-      expect(options.poolSourceMode).toBe("team-roster-priority");
-      expect(options.priorityIds).toHaveLength(88);
-      expect(options.pinnedIds).toHaveLength(0);
+    const rerollOptions = await waitForExtractPoolOptions((options) => {
+      return options.generationNonce === 1
+        && options.poolQualityCenter === 72
+        && options.poolSourceMode === "team-roster-priority"
+        && options.priorityIds?.length === 88
+        && options.pinnedIds?.length === 0;
     });
+    expect(rerollOptions.priorityIds).toHaveLength(88);
+    expect(rerollOptions.pinnedIds).toHaveLength(0);
   });
 
   test("reroll preserves roster-design pinned players as hard keeps", async () => {
@@ -1350,29 +1377,26 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "72" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
-    await waitFor(() => {
-      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { pinnedIds?: string[]; poolQualityCenter?: number };
-      expect(options.poolQualityCenter).toBe(72);
-      expect(options.pinnedIds).toContain(pinnedPlayer.id);
+    await clickDraftSetupButton("72");
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
+    await waitForExtractPoolOptions((options) => {
+      return options.generationNonce === 0
+        && options.poolQualityCenter === 72
+        && Boolean(options.pinnedIds?.includes(pinnedPlayer.id));
     });
 
     vi.mocked(removePlayersFromLeaguePool).mockClear();
-    fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
+    vi.mocked(extractPoolFromDemand).mockClear();
+    await clickDraftSetupButton(/Reroll generated players/i);
 
-    await waitFor(() => {
-      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
-        pinnedIds?: string[];
-        excludedIds?: string[];
-        generationNonce?: number;
-        poolQualityCenter?: number;
-      };
-      expect(options.generationNonce).toBe(1);
-      expect(options.poolQualityCenter).toBe(72);
-      expect(options.pinnedIds).toContain(pinnedPlayer.id);
-      expect(options.excludedIds).not.toContain(pinnedPlayer.id);
+    const rerollOptions = await waitForExtractPoolOptions((options) => {
+      return options.generationNonce === 1
+        && options.poolQualityCenter === 72
+        && Boolean(options.pinnedIds?.includes(pinnedPlayer.id))
+        && !options.excludedIds?.includes(pinnedPlayer.id);
     });
+    expect(rerollOptions.pinnedIds).toContain(pinnedPlayer.id);
+    expect(rerollOptions.excludedIds).not.toContain(pinnedPlayer.id);
     const removedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls.flatMap((call) => call[0] ?? []);
     expect(removedIds).not.toContain(pinnedPlayer.id);
   });
@@ -1510,22 +1534,20 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "72" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Full player pool/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
-
+    await clickDraftSetupButton("72");
+    await clickDraftSetupButton(/Full player pool/i);
     await waitFor(() => {
-      expect(extractPoolFromDemand).toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).not.toBeDisabled();
     });
-    const options = vi.mocked(extractPoolFromDemand).mock.calls
-      .map((call) => call[4] as {
-        pinnedIds?: string[];
-        priorityIds?: string[];
-        poolSourceMode?: string;
-        poolQualityCenter?: number;
-      })
-      .find((callOptions) => callOptions.poolSourceMode === "full-pool" && callOptions.poolQualityCenter === 72);
-    expect(options).toBeDefined();
+    vi.mocked(extractPoolFromDemand).mockClear();
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
+
+    const options = await waitForExtractPoolOptions((callOptions) => {
+      return callOptions.poolSourceMode === "full-pool"
+        && callOptions.poolQualityCenter === 72
+        && callOptions.priorityIds?.length === 88
+        && callOptions.pinnedIds?.length === 0;
+    });
     expect(options.poolQualityCenter).toBe(72);
     expect(options.poolSourceMode).toBe("full-pool");
     expect(options.priorityIds).toHaveLength(88);
