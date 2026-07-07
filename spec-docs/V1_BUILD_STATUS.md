@@ -2,8 +2,20 @@
 
 > **THIS is the one status doc for v1. Scope: A-to-Z, LEAGUE SETUP → END OF REGULAR SEASON.**
 > Playoffs/offseason DEFERRED (Decision E). In-season GM tools (dead-cap display, call-ups, trades advisor) = a SEPARATE thread, excluded here.
-> **As-of: 2026-07-01**, git-grounded (trunk HEAD `fd1f5961`). Update this doc IN PLACE as work lands — do not spawn a new status doc.
+> **As-of: 2026-07-07**, git-grounded (trunk HEAD `7b5214ca` + docs commits). Update this doc IN PLACE as work lands — do not spawn a new status doc.
 > Every other v1 "status/roadmap/plan" doc is SUPERSEDED (see §5). When in doubt, this doc + the code win.
+
+---
+
+## §0. 2026-07-07 UPDATE (Fable, evidence-classed — read this before the body)
+
+**Evidence legend:** [git]=command run 2026-07-07 · [read]=doc/log read in full · [browser]=seen rendering · [UNVERIFIED]=assume broken.
+
+1. **ASSEMBLY EXECUTED (corrects §2 below):** `claude/v1-draft-ui` AND `claude/lineups-fenway-hub` are both MERGED into trunk [git: merge-base --is-ancestor both ✓]; trunk advanced 74 commits 2026-07-02→04 [git]: C2B second-price market + C3 pool sizing/FS-3 launch fix [read: CURRENT_STATE 07-02 header], asst-GM B-series (B1/B2/B5, bid-vs-pass board wired), require-a-closer, the pool-affordability arc (repricing/seating/cheap-depth/swap-down), D17 positional scarcity, AUTH-4 finale, hard-cap Phase 1 + legality-by-construction fix a20ff1a6 [read: DECISIONS_LOG 07-02..07-04].
+2. **Trunk baseline MEASURED [git, executed]:** build exit 0; full suite **8,983 pass / 1 fail / 8 skip (589 files)**. The 1 failure's identity to be named in the next gate run.
+3. **LINEAGE RULING (JK 2026-07-07):** this trunk = THE PRODUCT. GitHub PRs #8–#18 (all opened+merged 2026-07-07 [git: gh pr list]) built a parallel line on a May-21 base: PR #9 was a content snapshot OF this trunk [git: core files byte-identical]; PRs #10–#17 added genuinely-new draft-economy work (pool balance/quality/source presets, cap-fit diagnostic, liquidity-aware bidding, a 19-file headless auction-sim harness) which is being PORTED here (port map in `PATHWAY_TO_V1_2026-07-07.md`; files verified ABSENT on trunk [git]). The GitHub line will be archived after the port; trunk becomes published main (Pathway Phase 0c).
+4. **UI TRUTH DEMOTION (JK ground-truth, browser 07-03/04):** the RUNNING app is an old/new amalgamation. Every "[UI] DONE" in §3 hereby means "exists in tree", NOT "is what renders". Proven instance [git]: `/franchise/:id` still routes the OLD FranchiseHome (App.tsx:334) while the lens/fenway hub sits at `/__preview/franchise-lens` only (App.tsx:419) — merged, never routed. NO UI status is trusted until the Phase-1.5 **UI TRUTH MAP** (route-by-route browser walk, row-count == router-count, screenshot per row) exists and JK rules the cut-over. `UX_NORTH_STAR.md` §3's binding disposition table (KEEP/RESKIN/FOLD/KILL incl. R-IA6 lens-is-the-hub, R-IA7 dev-gate previews) is the design layer the map inherits.
+5. **Plan of record for execution:** `spec-docs/PATHWAY_TO_V1_2026-07-07.md` (incl. PART 8 runbook: owners, gates, agent stand-down). Draft-economy thread governed by `DRAFT_ECONOMY_RESET_2026-07-05.md` (now committed; was stranded untracked). Score/Skip + score-only verified present [git: ScheduleContent.tsx:94-111]; trunk simulate code is hardcoded OFF [git: FranchiseHome.tsx:181] — dead code for the cut-over DELETE list.
 
 ---
 
