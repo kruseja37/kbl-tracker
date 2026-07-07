@@ -124,6 +124,7 @@ import {
 } from "../../../engines/poolFromDemand";
 import {
   computePoolAffordabilityDiagnostic,
+  type PoolAffordabilityReasonCode,
   type PoolAffordabilityState,
 } from "../../../engines/poolAffordabilityDiagnostic";
 import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassifier";
@@ -218,6 +219,18 @@ const CAP_FIT_LABELS: Record<PoolAffordabilityState, string> = {
   neutral: "Neutral",
   inflationary: "Inflationary",
   very_loose: "Very Loose",
+};
+const CAP_FIT_REASON_LABELS: Record<PoolAffordabilityReasonCode, string> = {
+  "expected-draft-window": "expected drafted window",
+  "legal-fill-floor": "legal fill floor",
+  "star-affordability-guard": "star guard",
+  "pool-shortfall": "pool shortfall",
+  "invalid-values-discounted": "estimated values",
+  "cap-well-below-neutral": "well below suggestion",
+  "cap-below-neutral": "below suggestion",
+  "cap-near-neutral": "near suggestion",
+  "cap-above-neutral": "above suggestion",
+  "cap-far-above-neutral": "far above suggestion",
 };
 const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
 const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
@@ -2474,13 +2487,32 @@ export function LeagueBuilderDraftSetup() {
               Cap Fit: <span className="text-[var(--ballpark-brass)]">{CAP_FIT_LABELS[poolAffordabilityDiagnostic.affordabilityState]}</span>
             </span>
             <span>Current Cap: {formatSalaryCapMoney(poolAffordabilityDiagnostic.currentCapPerTeam)}</span>
-            <span>Recommended Neutral Cap: {formatSalaryCapMoney(poolAffordabilityDiagnostic.recommendedNeutralCapPerTeam)}</span>
+            <span>Suggested Neutral Cap: {formatSalaryCapMoney(poolAffordabilityDiagnostic.recommendedNeutralCapPerTeam)}</span>
           </div>
           <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
             Draft window {poolAffordabilityDiagnostic.expectedDraftedCount} of {poolAffordabilityDiagnostic.poolSize} players · legal fill {formatSalaryCapMoney(poolAffordabilityDiagnostic.legalMinimumFillPerTeam)}
           </div>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {poolAffordabilityDiagnostic.reasonCodes.map((reasonCode) => (
+              <span
+                key={reasonCode}
+                className="border border-[var(--ballpark-panel-border)] bg-black/20 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-[var(--ballpark-chalk)]/65"
+              >
+                {CAP_FIT_REASON_LABELS[reasonCode]}
+              </span>
+            ))}
+            <span className="border border-[var(--ballpark-panel-border)] bg-black/20 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-[var(--ballpark-chalk)]/65">
+              advisory only
+            </span>
+          </div>
           <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
-            {poolAffordabilityDiagnostic.summary} Pool quality and salary cap are separate. Changing Pool Quality does not change the cap.
+            Based on the expected drafted window, not every player in the pool.
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
+            Uses actual generated pool values, so source constraints or hard keeps can move the suggestion differently than the selected quality target.
+          </div>
+          <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
+            {poolAffordabilityDiagnostic.summary} Pool quality and salary cap are separate. Changing Pool Quality does not change the cap. Advisory guidance only.
           </div>
         </div>
       ) : null}

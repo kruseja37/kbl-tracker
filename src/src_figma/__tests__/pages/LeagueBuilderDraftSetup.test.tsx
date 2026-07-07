@@ -708,9 +708,14 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
     expect(capFitDiagnosticText()).toContain("Cap Fit:");
     expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
-    expect(capFitDiagnosticText()).toContain("Recommended Neutral Cap:");
+    expect(capFitDiagnosticText()).toContain("Suggested Neutral Cap:");
+    expect(capFitDiagnosticText()).toContain("expected drafted window");
+    expect(capFitDiagnosticText()).toContain("advisory only");
+    expect(capFitDiagnosticText()).toContain("Based on the expected drafted window, not every player in the pool.");
+    expect(capFitDiagnosticText()).toContain("Uses actual generated pool values");
     expect(capFitDiagnosticText()).toContain("Pool quality and salary cap are separate. Changing Pool Quality does not change the cap.");
     expect(screen.queryByText(/reserve price/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/luxury tax/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /apply recommended cap/i })).not.toBeInTheDocument();
   });
 
@@ -848,7 +853,8 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Reroll generated players/i })).not.toBeDisabled();
     });
-    expect(capFitDiagnosticText()).toContain("Recommended Neutral Cap:");
+    expect(capFitDiagnosticText()).toContain("Suggested Neutral Cap:");
+    expect(capFitDiagnosticText()).toContain("advisory only");
     expect(saveLeagueTemplate).not.toHaveBeenCalled();
   }, 10_000);
 
