@@ -445,6 +445,47 @@ describe('the broken-floor repro pair', () => {
     expect(backfilled[0].salary).toBeCloseTo(LEAGUE_MINIMUM_SALARY, 6);
   });
 
+  test('F1/F2 reserve pricing: exhaustion cleanup completes the team at reserve price when k is enabled', () => {
+    const reserveSalary = 13_000;
+    const rostered = TEMPLATE.slice(0, 21).map((shape, i) => player(`f2r-${i}`, shape));
+    const passed = player('f2r-cp', { isPitcher: true, position: 'P', role: 'CP' });
+    let session = midDraftSession({
+      teams: [team('team-a', 50_000, rostered.map((p) => p.playerId), 1, 0)],
+      rostered: [...rostered, passed],
+      available: [],
+    });
+    session = {
+      ...session,
+      state: 'PASSED',
+      config: { ...session.config, reserveFractionK: 0.65 },
+      results: [
+        {
+          playerId: passed.playerId,
+          disposition: 'PASSED',
+          nominatorTeamId: 'team-a',
+          winnerTeamId: null,
+          salary: null,
+        },
+      ],
+    };
+
+    session = ok(advanceLot(session));
+
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    const teamA = session.teams[0];
+    expect(teamA.rosterSlotsRemaining).toBe(0);
+    expect(teamA.budgetRemaining).toBe(50_000 - reserveSalary);
+    expect(teamA.roster.at(-1)).toEqual({ playerId: passed.playerId, salary: reserveSalary });
+    expect(session.results[0]).toMatchObject({
+      disposition: 'SOLD',
+      winnerTeamId: 'team-a',
+      salary: reserveSalary,
+      bidderSet: ['team-a'],
+      underbidder: null,
+      numBidders: 1,
+    });
+  });
+
   test('F2 (C3-fix-2 F7): loadBearingTeam Criterion 1 refuses an unaffordable completion-critical rescue on the SURPLUS branch', () => {
     // remainingPool (1 wrong-class hitter) >= totalOpenSlots (1) → resolveNoBidLot takes the
     // surplus branch and consults loadBearingTeam. The lot player is team-a's ONLY legal

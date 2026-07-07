@@ -4,6 +4,7 @@ import {
   type CompletionCandidate,
 } from './auctionCompletionFloor';
 import {
+  auctionReservePriceEnabled,
   lotOpeningAsk,
   type AuctionResult,
   type AuctionRosterAssignment,
@@ -50,6 +51,10 @@ type SourceAssignment = {
   teamId: string;
   assignment: AuctionRosterAssignment;
 };
+
+interface SettleCompletionCandidate extends CompletionCandidate {
+  chargePrice: number;
+}
 
 function resolveRosterShapes(
   roster: readonly AuctionRosterAssignment[],
@@ -106,7 +111,10 @@ function rankCandidates(input: {
   teamId: string;
   leftoverIds: ReadonlySet<string>;
   fitScores?: SettleFitTable;
-}): CompletionCandidate[] {
+}): SettleCompletionCandidate[] {
+  const reserveEnabled = auctionReservePriceEnabled(input.session.config);
+  const teamMinSalary =
+    input.session.teams.find((team) => team.teamId === input.teamId)?.minSalary ?? 0;
   const sorted = [...input.leftoverIds]
     .map((id) => {
       const player = input.session.players[id];
@@ -129,7 +137,8 @@ function rankCandidates(input: {
   return sorted.map((entry, rank) => ({
     id: entry.id,
     shape: entry.shape,
-    price: rank,
+    price: reserveEnabled ? entry.ask : rank,
+    chargePrice: reserveEnabled ? entry.ask : teamMinSalary,
   }));
 }
 
@@ -139,10 +148,14 @@ function applySettledPicks(input: {
   saleCount: number;
   buyer: AuctionTeamState;
   pickIds: readonly string[];
+  priceByPlayerId: ReadonlyMap<string, number>;
   sourceByPlayerId: ReadonlyMap<string, SourceAssignment>;
 }): { teams: AuctionTeamState[]; results: AuctionResult[]; saleCount: number } {
   const pickSet = new Set(input.pickIds);
-  const buyerCost = input.pickIds.length * input.buyer.minSalary;
+  const buyerCost = input.pickIds.reduce(
+    (sum, playerId) => sum + (input.priceByPlayerId.get(playerId) ?? input.buyer.minSalary),
+    0,
+  );
   const sourceByTeam = new Map<string, Set<string>>();
   for (const playerId of input.pickIds) {
     const source = input.sourceByPlayerId.get(playerId);
@@ -160,7 +173,10 @@ function applySettledPicks(input: {
         rosterSlotsRemaining: Math.max(0, team.rosterSlotsRemaining - input.pickIds.length),
         roster: [
           ...team.roster,
-          ...input.pickIds.map((playerId) => ({ playerId, salary: team.minSalary })),
+          ...input.pickIds.map((playerId) => ({
+            playerId,
+            salary: input.priceByPlayerId.get(playerId) ?? team.minSalary,
+          })),
         ],
       };
     }
@@ -189,7 +205,7 @@ function applySettledPicks(input: {
       ...result,
       disposition: 'SOLD' as const,
       winnerTeamId: input.buyer.teamId,
-      salary: input.buyer.minSalary,
+      salary: input.priceByPlayerId.get(result.playerId) ?? input.buyer.minSalary,
       settled: true as const,
     };
   });
@@ -264,7 +280,11 @@ export function settleFromShills(input: SettleFromShillsInput): SettleFromShills
       continue;
     }
 
-    const cost = openSlots * team.minSalary;
+    const priceByPlayerId = new Map(candidates.map((candidate) => [candidate.id, candidate.chargePrice]));
+    const cost = quote.pickIds.reduce(
+      (sum, playerId) => sum + (priceByPlayerId.get(playerId) ?? team.minSalary),
+      0,
+    );
     if (cost > team.budgetRemaining) {
       outcomes.push({
         teamId: team.teamId,
@@ -282,6 +302,7 @@ export function settleFromShills(input: SettleFromShillsInput): SettleFromShills
       saleCount,
       buyer: team,
       pickIds: quote.pickIds,
+      priceByPlayerId,
       sourceByPlayerId,
     });
     teams = applied.teams;

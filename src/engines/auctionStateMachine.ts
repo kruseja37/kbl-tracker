@@ -271,18 +271,18 @@ export function lotOpeningAsk(player: AuctionPlayer, config: AuctionSetupConfig)
     : reservePriceCurve(player.ivPercentile) * player.iv;
   return reserveP({
     iv: player.iv,
-    k: reservePriceK(config),
+    k: auctionReservePriceK(config),
     minimumSalary: LEAGUE_MINIMUM_SALARY,
     passthroughPrice: legacyOpeningAsk,
   });
 }
 
-function reservePriceK(config: AuctionSetupConfig): number {
+export function auctionReservePriceK(config: AuctionSetupConfig): number {
   return normalizeReservePriceK(config.reserveFractionK, RESERVE_PRICE_OFF_K);
 }
 
-function reservePriceEnabled(config: AuctionSetupConfig): boolean {
-  return reservePriceK(config) !== RESERVE_PRICE_OFF_K;
+export function auctionReservePriceEnabled(config: AuctionSetupConfig): boolean {
+  return auctionReservePriceK(config) !== RESERVE_PRICE_OFF_K;
 }
 
 /**
@@ -620,14 +620,13 @@ export function seededNominationOrder(teamIds: readonly string[], seed: string):
 
 /**
  * The exhaustion-state completion guarantee (FABLE-C3): when the pool runs dry with completing
- * teams still unfilled, buy their cheapest VERIFIED-legal completions out of the PASSED lots at
- * LEAGUE-MINIMUM salary (they cleared the market at zero demand — the floor price; forced-fill
- * semantics; FABLE-C3-FIX F5 fixed this header, which stale-claimed opening-ask pricing).
- * Affordable by construction: `sessionBidCeiling` reserves ≥ minSalary per open slot on every
- * acquisition (the F1 reserve floor). Deterministic (nomination order; the completion floor's
- * own cheapest-first math). Teams whose completion is positionally impossible from the passed
- * set stay short — nothing more can be done; the shortfall then surfaces downstream instead of
- * silently. No-ops entirely when any position info is missing (legacy sessions).
+ * teams still unfilled, buy their cheapest VERIFIED-legal completions out of the PASSED lots.
+ * k=0 preserves the legacy league-minimum cleanup price; positive-k reserve sessions charge
+ * each backfilled player's reserve-floored opening ask. Deterministic (nomination order; the
+ * completion floor's own cheapest-first math). Teams whose completion is positionally impossible
+ * from the passed set stay short — nothing more can be done; the shortfall then surfaces
+ * downstream instead of silently. No-ops entirely when any position info is missing (legacy
+ * sessions).
  */
 function backfillFromPassedLots(session: AuctionSession): AuctionSession {
   const passedIds = session.results
@@ -665,24 +664,24 @@ function backfillFromPassedLots(session: AuctionSession): AuctionSession {
     }
     if (!resolvable) continue;
 
-    // Cleanup fills price at the team's MINIMUM salary, not the opening ask: these players
-    // already cleared the market at ZERO demand (every team passed), so the floor price is the
-    // honest clearing price — and the completion ceiling guarantees every team retains at least
-    // minimum-salary money per open slot, which makes this backfill affordable by construction
-    // whenever a positional completion exists (the ask-priced variant provably was not: a team
-    // can end with less budget than the cheapest ask after rivals deplete the cheap supply).
-    const cleanupPool = passedPool.map((entry) => ({ ...entry, price: team.minSalary }));
+    const cleanupPool = auctionReservePriceEnabled(session.config)
+      ? passedPool
+      : passedPool.map((entry) => ({ ...entry, price: team.minSalary }));
     const quote = cheapestLegalCompletion(rosterShapes, cleanupPool, team.rosterSlotsRemaining);
     if (!quote.feasible || quote.cost > team.budgetRemaining) continue;
 
     const pickSet = new Set(quote.pickIds);
+    const fillPriceByPlayerId = new Map(cleanupPool.map((entry) => [entry.id, entry.price]));
     teams[index] = {
       ...team,
       budgetRemaining: team.budgetRemaining - quote.cost,
       rosterSlotsRemaining: 0,
       roster: [
         ...team.roster,
-        ...quote.pickIds.map((playerId) => ({ playerId, salary: team.minSalary })),
+        ...quote.pickIds.map((playerId) => ({
+          playerId,
+          salary: fillPriceByPlayerId.get(playerId) ?? team.minSalary,
+        })),
       ],
     };
     results = results.map((result) =>
@@ -691,7 +690,7 @@ function backfillFromPassedLots(session: AuctionSession): AuctionSession {
             ...result,
             disposition: 'SOLD' as const,
             winnerTeamId: teamId,
-            salary: team.minSalary,
+            salary: fillPriceByPlayerId.get(result.playerId) ?? team.minSalary,
             bidderSet: [teamId],
             underbidder: null,
             numBidders: 1,
@@ -751,7 +750,7 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
 
 function finalizePassedLotPermanent(session: AuctionSession): AuctionSession {
   const lot = requireLot(session);
-  const availablePlayerIds = reservePriceEnabled(session.config) && !session.availablePlayerIds.includes(lot.playerId)
+  const availablePlayerIds = auctionReservePriceEnabled(session.config) && !session.availablePlayerIds.includes(lot.playerId)
     ? [...session.availablePlayerIds, lot.playerId]
     : session.availablePlayerIds;
 
