@@ -78,7 +78,7 @@ function stateForRatio(capRatio: number): PoolAffordabilityState {
   if (capRatio < 0.85) return 'too_tight';
   if (capRatio < 0.95) return 'bargain_heavy';
   if (capRatio <= 1.10) return 'neutral';
-  if (capRatio <= 1.25) return 'inflationary';
+  if (capRatio <= 1.35) return 'inflationary';
   return 'very_loose';
 }
 

@@ -217,7 +217,7 @@ const CAP_FIT_LABELS: Record<PoolAffordabilityState, string> = {
   too_tight: "Too Tight",
   bargain_heavy: "Bargain Heavy",
   neutral: "Neutral",
-  inflationary: "Inflationary",
+  inflationary: "Cap Rich",
   very_loose: "Very Loose",
 };
 const CAP_FIT_REASON_LABELS: Record<PoolAffordabilityReasonCode, string> = {
