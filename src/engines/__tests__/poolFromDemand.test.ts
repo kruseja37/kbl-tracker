@@ -1386,7 +1386,16 @@ describe('extractPoolFromDemand', () => {
       budgetPerTeam: 5_000_000,
       poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
     });
-    const excluded = baseline.players[0].id;
+    const excluded = baseline.players.find((candidate) => {
+      const trial = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+        teams: 4,
+        budgetPerTeam: 5_000_000,
+        poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+        excludedIds: [candidate.id],
+      });
+      return !trial.players.some((player) => player.id === candidate.id);
+    })?.id;
+    expect(excluded).toBeDefined();
     const pinned = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
     expect(pinned).toBeDefined();
 
@@ -1395,7 +1404,7 @@ describe('extractPoolFromDemand', () => {
       budgetPerTeam: 5_000_000,
       poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
       pinnedIds: [pinned!.id],
-      excludedIds: [excluded],
+      excludedIds: [excluded!],
     });
 
     expect(result.players.map((player) => player.id)).toContain(pinned!.id);
@@ -1403,6 +1412,79 @@ describe('extractPoolFromDemand', () => {
     expect(result.sizing?.pinnedHandPicks).toEqual([pinned!.id]);
     expect(result.sizing?.excludedHandRemoves).toEqual([excluded]);
     expect(result.sizing?.evictedIds).not.toContain(pinned!.id);
+  });
+
+  it('keeps explicit pins when a manual exclusion conflicts with them', () => {
+    const source = universe();
+    const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    const pinned = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
+    expect(pinned).toBeDefined();
+
+    const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      pinnedIds: [pinned!.id],
+      excludedIds: [pinned!.id],
+    });
+
+    expect(result.players.map((player) => player.id)).toContain(pinned!.id);
+    expect(result.sizing?.pinnedHandPicks).toEqual([pinned!.id]);
+    expect(result.sizing?.excludedHandRemoves).toEqual([]);
+    expect(result.sizing?.evictedIds).not.toContain(pinned!.id);
+  });
+
+  it('force-includes design-priority target players as curve-counted hard keeps', () => {
+    const source = universe();
+    const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    const target = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
+    expect(target).toBeDefined();
+
+    const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      designPriorityIds: [target!.id],
+    });
+
+    expect(result.players.map((player) => player.id)).toContain(target!.id);
+    expect(result.numericShape?.identityCriticalCandidateCount).toBe(1);
+    expect(result.numericShape?.identityCriticalIncludedCount).toBe(1);
+    expect(result.numericShape?.identityCriticalMissingCount).toBe(0);
+    expect(result.numericShape?.designHardKeepCount).toBe(1);
+  });
+
+  it('reports manual exclusions that block design-priority target players', () => {
+    const source = universe();
+    const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+    });
+    const target = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
+    expect(target).toBeDefined();
+
+    const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
+      teams: 4,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      designPriorityIds: [target!.id],
+      excludedIds: [target!.id],
+    });
+
+    expect(result.players.map((player) => player.id)).not.toContain(target!.id);
+    expect(result.numericShape?.identityCriticalCandidateCount).toBe(1);
+    expect(result.numericShape?.identityCriticalIncludedCount).toBe(0);
+    expect(result.numericShape?.identityCriticalMissingCount).toBe(1);
+    expect(result.numericShape?.missingIdentityCriticalReasons).toEqual({ [target!.id]: 'manual exclusion' });
   });
 
   it('is deterministic with sizing enabled for shuffled input order', () => {

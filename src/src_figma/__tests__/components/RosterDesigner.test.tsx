@@ -507,6 +507,62 @@ describe("RosterDesigner extracted edit affordances and pins", () => {
     expect(screen.queryByText(/PINNED TO THIS SLOT/i)).toBeNull();
   });
 
+  test("P8: editable design-first shortlist can pin candidates from the full player universe", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const currentPoolReliever = makePlayer("pool-rp", {
+      firstName: "Pool",
+      lastName: "Reliever",
+      primaryPosition: "RP",
+      velocity: 60,
+      junk: 60,
+      accuracy: 60,
+      salary: 15_000,
+    });
+    const universeCloser = makePlayer("universe-cp", {
+      firstName: "Kay",
+      lastName: "Frequin",
+      primaryPosition: "CP",
+      velocity: 92,
+      junk: 94,
+      accuracy: 91,
+      salary: 12_000,
+    });
+
+    render(
+      <RosterDesigner
+        team={makeTeam("team-universe", "Universe")}
+        mode="design-first"
+        players={[currentPoolReliever]}
+        allPlayers={[currentPoolReliever, universeCloser]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    clickSlot("CP · CLOSER");
+    expect(shortlistLines().some((line) => line.includes("Kay Frequin"))).toBe(true);
+
+    const row = screen
+      .getAllByText(/Kay Frequin ·/)
+      .map((element) => element.closest("div"))
+      .find((candidate): candidate is HTMLDivElement => Boolean(candidate && within(candidate).queryByRole("button", { name: "PIN" })));
+    if (!row) throw new Error("No universe candidate pin row found");
+    fireEvent.click(within(row).getByRole("button", { name: "PIN" }));
+
+    expect(screen.getByText("PINNED TO THIS SLOT: Kay Frequin · $12,000")).toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => undefined);
+
+    const saved = onSave.mock.calls[0]?.[0];
+    expect(saved.pins).toEqual({ CP: "universe-cp" });
+  });
+
   test("P9: readOnly hides pin chips, orphan pins report, and moving a pin keeps one slot claim", async () => {
     render(
       <RosterDesigner

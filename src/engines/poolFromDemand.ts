@@ -287,6 +287,11 @@ export interface NumericPoolShapeDiagnostics {
   messages: string[];
   hardKeepCount: number;
   hardKeepOverflowCount: number;
+  designHardKeepCount: number;
+  identityCriticalCandidateCount: number;
+  identityCriticalIncludedCount: number;
+  identityCriticalMissingCount: number;
+  missingIdentityCriticalReasons: Record<string, string>;
   overTargetReason: string | null;
   hardKeepByBand: Record<string, number>;
   engineGeneratedByBand: Record<string, number>;
@@ -722,6 +727,9 @@ export function buildNumericPoolShapeDiagnostics(options: {
   tuning?: NumericPoolShapeTuning;
   hardKeepPlayers?: readonly DemandUniversePlayer[];
   engineGeneratedPlayers?: readonly DemandUniversePlayer[];
+  designHardKeepIds?: ReadonlySet<string>;
+  identityCriticalIds?: ReadonlySet<string>;
+  missingIdentityCriticalReasons?: Record<string, string>;
   selectedTeamRosterIds?: ReadonlySet<string>;
   poolSourceMode?: PoolSourceMode;
   fullPoolEligibleCandidateCount?: number;
@@ -752,6 +760,15 @@ export function buildNumericPoolShapeDiagnostics(options: {
   ).length / denominator;
   const lowTailShare = numericGrades.filter((grade) => grade < tuning.lowTailMax).length / denominator;
   const hardKeepPlayers = [...(options.hardKeepPlayers ?? [])];
+  const finalIds = new Set(options.players.map((player) => player.id));
+  const designHardKeepIds = options.designHardKeepIds ?? new Set<string>();
+  const identityCriticalIds = options.identityCriticalIds ?? new Set<string>();
+  const missingIdentityCriticalReasons = Object.fromEntries(
+    [...identityCriticalIds]
+      .filter((id) => !finalIds.has(id))
+      .sort((a, b) => a.localeCompare(b))
+      .map((id) => [id, options.missingIdentityCriticalReasons?.[id] ?? 'not selected by the current source pool']),
+  );
   const engineGeneratedPlayers = options.engineGeneratedPlayers
     ? [...options.engineGeneratedPlayers]
     : options.players.filter((player) => !hardKeepPlayers.some((kept) => kept.id === player.id));
@@ -807,6 +824,11 @@ export function buildNumericPoolShapeDiagnostics(options: {
     messages: [...(options.messages ?? [])],
     hardKeepCount: hardKeepPlayers.length,
     hardKeepOverflowCount,
+    designHardKeepCount: [...designHardKeepIds].filter((id) => finalIds.has(id)).length,
+    identityCriticalCandidateCount: identityCriticalIds.size,
+    identityCriticalIncludedCount: [...identityCriticalIds].filter((id) => finalIds.has(id)).length,
+    identityCriticalMissingCount: Object.keys(missingIdentityCriticalReasons).length,
+    missingIdentityCriticalReasons,
     overTargetReason,
     hardKeepByBand,
     engineGeneratedByBand,
@@ -1663,6 +1685,7 @@ export function extractPoolFromDemand(
     generationNonce?: number;
     poolSourceMode?: PoolSourceMode;
     priorityIds?: string[];
+    designPriorityIds?: string[];
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
@@ -1682,7 +1705,11 @@ export function extractPoolFromDemand(
   const requestedPinnedIds = new Set(options.pinnedIds ?? []);
   const requestedExcludedIds = new Set(options.excludedIds ?? []);
   const requestedPriorityIds = new Set(options.priorityIds ?? []);
+  const requestedDesignPriorityIds = new Set(options.designPriorityIds ?? []);
+  const designReconcileEnabled = requestedDesignPriorityIds.size > 0;
+  const reconcileEnabled = handReconcileEnabled || designReconcileEnabled;
   const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
+  const universeIds = new Set(universe.map((player) => player.id));
 
   // 1. Type the universe once (whole-profile classification).
   const classified: ClassifiedDemandPlayer[] = universe.map((player) => ({
@@ -1761,11 +1788,18 @@ export function extractPoolFromDemand(
       if (!byId.has(player.id)) byId.set(player.id, player);
     }
   }
-  if (handReconcileEnabled) {
-    for (const id of requestedExcludedIds) byId.delete(id);
+  if (reconcileEnabled) {
+    const explicitProtectedIds = new Set<string>([
+      ...reservedIds,
+      ...(handReconcileEnabled ? requestedPinnedIds : []),
+    ]);
+    const effectiveExcludedIds = new Set(
+      [...requestedExcludedIds].filter((id) => !explicitProtectedIds.has(id)),
+    );
+    for (const id of effectiveExcludedIds) byId.delete(id);
     const classifiedById = new Map(classified.map(({ player }) => [player.id, player]));
-    for (const id of [...requestedPinnedIds].sort((a, b) => a.localeCompare(b))) {
-      if (requestedExcludedIds.has(id)) continue;
+    for (const id of [...new Set([...requestedDesignPriorityIds, ...requestedPinnedIds])].sort((a, b) => a.localeCompare(b))) {
+      if (requestedExcludedIds.has(id) && !requestedPinnedIds.has(id)) continue;
       const player = classifiedById.get(id);
       if (player) byId.set(id, player);
     }
@@ -1785,10 +1819,38 @@ export function extractPoolFromDemand(
     const protectedIds = new Set<string>([
       ...reservedIds,
       ...(handReconcileEnabled ? requestedPinnedIds : []),
+      ...requestedDesignPriorityIds,
     ]);
+    const explicitProtectedIds = new Set<string>([
+      ...reservedIds,
+      ...(handReconcileEnabled ? requestedPinnedIds : []),
+    ]);
+    const effectiveExcludedIds = new Set(
+      [...requestedExcludedIds].filter((id) => !explicitProtectedIds.has(id)),
+    );
+    const designHardKeepIds = new Set<string>([
+      ...(handReconcileEnabled ? requestedPinnedIds : []),
+      ...requestedDesignPriorityIds,
+    ]);
+    const identityCriticalMissingReasons = () => {
+      const selectedIds = new Set(players.map((player) => player.id));
+      return Object.fromEntries(
+        [...requestedDesignPriorityIds]
+          .filter((id) => !selectedIds.has(id))
+          .sort((a, b) => a.localeCompare(b))
+          .map((id) => [
+            id,
+            requestedExcludedIds.has(id)
+              ? 'manual exclusion'
+              : !universeIds.has(id)
+                ? 'not in eligible player universe'
+                : 'not selected by the current source pool',
+          ]),
+      );
+    };
     const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
     const beforeShape = players;
-    const excludedForShape = handReconcileEnabled ? requestedExcludedIds : new Set<string>();
+    const excludedForShape = handReconcileEnabled ? effectiveExcludedIds : new Set<string>();
     const shaped = shapePoolByNumericGrade({
       universe,
       currentPlayers: players,
@@ -1836,7 +1898,7 @@ export function extractPoolFromDemand(
         universe,
         players,
         protectedIds,
-        requestedExcludedIds,
+        requestedExcludedIds: excludedForShape,
         teams: teamsForSizing,
         budget,
         maxRounds: options.maxRepairRounds ?? 6,
@@ -1874,9 +1936,12 @@ export function extractPoolFromDemand(
         messages: numericShape.messages,
         hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
         engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
+        designHardKeepIds,
+        identityCriticalIds: requestedDesignPriorityIds,
+        missingIdentityCriticalReasons: identityCriticalMissingReasons(),
         selectedTeamRosterIds: requestedPriorityIds,
         poolSourceMode: options.poolSourceMode ?? 'full-pool',
-        fullPoolEligibleCandidateCount: universe.filter((player) => !requestedExcludedIds.has(player.id)).length,
+        fullPoolEligibleCandidateCount: universe.filter((player) => !effectiveExcludedIds.has(player.id)).length,
         preRepair: preRepairShape,
         postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning, poolQualityCenter),
         g1AdditionsByRoleWindow: repair.additionsByRoleWindow,
@@ -1900,9 +1965,12 @@ export function extractPoolFromDemand(
         messages: numericShape.messages,
         hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
         engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
+        designHardKeepIds,
+        identityCriticalIds: requestedDesignPriorityIds,
+        missingIdentityCriticalReasons: identityCriticalMissingReasons(),
         selectedTeamRosterIds: requestedPriorityIds,
         poolSourceMode: options.poolSourceMode ?? 'full-pool',
-        fullPoolEligibleCandidateCount: universe.filter((player) => !requestedExcludedIds.has(player.id)).length,
+        fullPoolEligibleCandidateCount: universe.filter((player) => !effectiveExcludedIds.has(player.id)).length,
         preRepair: preRepairShape,
         postRepair: preRepairShape,
         g1AdditionsByRoleWindow: {},

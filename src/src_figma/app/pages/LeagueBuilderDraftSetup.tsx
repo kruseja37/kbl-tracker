@@ -363,6 +363,42 @@ function sortedIds(ids: readonly string[]): string[] {
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
 }
 
+function designFirstIdentityCriticalPlayerIds(
+  teams: readonly Team[],
+  players: readonly Player[],
+  tier: LeagueTemplate["tier"],
+  budget: number,
+): string[] {
+  const lockedDesignTeams = teams.filter((team) => Boolean(team.rosterDesign?.lockedAt));
+  if (lockedDesignTeams.length === 0 || players.length === 0) return [];
+
+  const simPool = demandUniverseFromPlayers(players);
+  const classifiedById = new Map(simPool.map((player) => [player.id, classifyPlayerArchetype(player.profile)]));
+  const ids: string[] = [];
+
+  for (const team of lockedDesignTeams) {
+    const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
+    const archetype = historical ? historicalToSimArchetype(historical) : null;
+    if (!archetype) continue;
+    const design = team.rosterDesign;
+    const target = buildBest22Target(
+      seedRosterDesignSlots(design?.slots),
+      simPool,
+      classifiedById,
+      archetype,
+      tier ?? "juiced",
+      budget,
+      new Map(Object.entries(design?.pins ?? {})),
+      new Map(Object.entries(design?.rankOverrides ?? {})),
+    );
+    for (const pick of target.picks) {
+      if (pick.playerId) ids.push(pick.playerId);
+    }
+  }
+
+  return sortedIds(ids);
+}
+
 function emptyPoolProvenance(): PoolProvenanceState {
   return {
     engineGeneratedIds: new Set<string>(),
@@ -1203,6 +1239,10 @@ export function LeagueBuilderDraftSetup() {
     () => resolveLeagueSalaryCap(league),
     [league],
   );
+  const designFirstIdentityCriticalIds = useMemo(
+    () => designFirstIdentityCriticalPlayerIds(humanTeams, players, league?.tier, tierBudget),
+    [humanTeams, league?.tier, players, tierBudget],
+  );
   const tierReferenceCap = TIER_CAPS[league?.tier ?? "juiced"].tierCap;
   const parsedSalaryCapInput = parseSalaryCapInput(salaryCapInput);
   const salaryCapHardError = getSalaryCapHardError(parsedSalaryCapInput);
@@ -1328,6 +1368,8 @@ export function LeagueBuilderDraftSetup() {
     id: team.id,
     mlbArchetypeKey: team.mlbArchetypeKey ?? null,
     slots: team.rosterDesign?.slots ?? null,
+    pins: team.rosterDesign?.pins ?? null,
+    rankOverrides: team.rosterDesign?.rankOverrides ?? null,
   }))), [humanTeams]);
   const solvencyBanner = useMemo(() => {
     if (!locked) return null;
@@ -1371,6 +1413,8 @@ export function LeagueBuilderDraftSetup() {
                 archetype,
                 league?.tier ?? "juiced",
                 tierBudget,
+                new Map(Object.entries(team.rosterDesign.pins ?? {})),
+                new Map(Object.entries(team.rosterDesign.rankOverrides ?? {})),
               ),
             );
           }
@@ -1632,9 +1676,10 @@ export function LeagueBuilderDraftSetup() {
         poolQualityCenter,
         pinnedIds: sortedIds([...ledger.handAdds, ...lockedDesignPinPlayerIds]),
         excludedIds: ledger.handRemoves.filter((id) => !designPinIdSet.has(id)),
+        designPriorityIds: designFirstIdentityCriticalIds,
       },
     );
-  }, [humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, poolQualityCenter, shills, tierBudget]);
+  }, [designFirstIdentityCriticalIds, humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, poolQualityCenter, shills, tierBudget]);
 
   const buildPoolFirstShapeResult = useCallback((provenance: PoolProvenanceState): PoolFromDemandResult => {
     if (!league) throw new Error("League not found.");
@@ -1965,6 +2010,11 @@ export function LeagueBuilderDraftSetup() {
       missingPinnedFromPoolCount: [...pinnedHardKeepIds].filter((id) => !resultIds.has(id)).length,
       hardKeepCount: numeric?.hardKeepCount ?? hardKeepIds.size,
       hardKeepOverflowCount: numeric?.hardKeepOverflowCount ?? 0,
+      designHardKeepCount: numeric?.designHardKeepCount ?? 0,
+      identityCriticalCandidateCount: numeric?.identityCriticalCandidateCount ?? 0,
+      identityCriticalIncludedCount: numeric?.identityCriticalIncludedCount ?? 0,
+      identityCriticalMissingCount: numeric?.identityCriticalMissingCount ?? 0,
+      missingIdentityCriticalReasons: numeric?.missingIdentityCriticalReasons ?? {},
       hardKeepByBand: numeric?.hardKeepByBand ?? {},
       engineGeneratedByBand: numeric?.engineGeneratedByBand ?? {},
       finalPoolByBand: numeric?.finalPoolByBand ?? {},
@@ -2484,6 +2534,16 @@ export function LeagueBuilderDraftSetup() {
   ) : null;
 
   const activePoolShapeReport = poolMode === "pool-first" ? poolFirstShapeReport : modeAReport;
+  const playerByIdForDiagnostics = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
+  const identityCriticalDiagnostic = activePoolShapeReport?.numericShape
+    && activePoolShapeReport.numericShape.identityCriticalCandidateCount > 0
+    ? activePoolShapeReport.numericShape
+    : null;
+  const identityCriticalMissingLines = identityCriticalDiagnostic
+    ? Object.entries(identityCriticalDiagnostic.missingIdentityCriticalReasons)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, reason]) => `${playerByIdForDiagnostics.get(id) ? playerName(playerByIdForDiagnostics.get(id)!) : id}: ${reason}`)
+    : [];
   const sizingSummaryLine = activePoolShapeReport?.sizing && !poolTrailing ? (
     <div className="border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-chalk)]">
       Sized to {activePoolShapeReport.sizing.finalSize} ({(activePoolShapeReport.sizing.finalSize / Math.max(1, activePoolShapeReport.sizing.demandBase)).toFixed(2)}×):
@@ -2492,6 +2552,14 @@ export function LeagueBuilderDraftSetup() {
         activePoolShapeReport.sizing.pinnedHandPicks?.length ?? 0,
         activePoolShapeReport.sizing.excludedHandRemoves?.length ?? 0,
       )}
+      {identityCriticalDiagnostic ? (
+        <> Design targets {identityCriticalDiagnostic.identityCriticalIncludedCount}/{identityCriticalDiagnostic.identityCriticalCandidateCount} included.</>
+      ) : null}
+      {identityCriticalMissingLines.length > 0 ? (
+        <div className="mt-1 text-[#FFE8B0]">
+          Missing design targets: {identityCriticalMissingLines.join(" · ")}
+        </div>
+      ) : null}
     </div>
   ) : null;
 

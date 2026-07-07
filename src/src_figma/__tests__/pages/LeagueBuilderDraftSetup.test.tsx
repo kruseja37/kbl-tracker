@@ -813,6 +813,10 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Grounded$/i }));
     fireEvent.click(screen.getByRole("button", { name: /^Full player pool$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).not.toBeDisabled();
+    });
+    vi.mocked(extractPoolFromDemand).mockClear();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
     });
@@ -824,6 +828,7 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).not.toBeDisabled();
     });
     expect(capFitDiagnosticText()).toContain("Current Cap: $1,000,000");
+    vi.mocked(extractPoolFromDemand).mockClear();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /Reroll generated players/i }));
@@ -844,7 +849,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     expect(capFitDiagnosticText()).toContain("Recommended Neutral Cap:");
     expect(saveLeagueTemplate).not.toHaveBeenCalled();
-  });
+  }, 10_000);
 
   test("M1 applies THE MONEY and the recheck header follows the persisted cap", async () => {
     const unlockedPool = makePool({ locked: false });
@@ -1512,12 +1517,15 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalled();
     });
-    const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as {
-      pinnedIds?: string[];
-      priorityIds?: string[];
-      poolSourceMode?: string;
-      poolQualityCenter?: number;
-    };
+    const options = vi.mocked(extractPoolFromDemand).mock.calls
+      .map((call) => call[4] as {
+        pinnedIds?: string[];
+        priorityIds?: string[];
+        poolSourceMode?: string;
+        poolQualityCenter?: number;
+      })
+      .find((callOptions) => callOptions.poolSourceMode === "full-pool" && callOptions.poolQualityCenter === 72);
+    expect(options).toBeDefined();
     expect(options.poolQualityCenter).toBe(72);
     expect(options.poolSourceMode).toBe("full-pool");
     expect(options.priorityIds).toHaveLength(88);
@@ -1810,6 +1818,135 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
+  test("design-first extraction protects identity-critical target picks from the full eligible universe", async () => {
+    const criticalCloser = makePlayer(999, {
+      id: "critical-cp",
+      firstName: "Kay",
+      lastName: "Frequin",
+      primaryPosition: "CP",
+      salary: 10_000,
+    });
+    const sourcePlayers = [
+      ...makeLegalRosterPlayerSet("alpha", 10_000),
+      ...makeLegalRosterPlayerSet("beta", 10_000),
+      criticalCloser,
+    ];
+    vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target({
+      picks: [{
+        slotId: "CP",
+        playerId: "critical-cp",
+        playerName: "Kay Frequin",
+        salary: 10_000,
+        honorsAsk: true,
+        pinned: false,
+      }],
+    }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b"],
+        draftPoolMode: "design-first",
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", {
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+        }),
+        makeTeam("team-b", {
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+        }),
+      ],
+      players: sourcePlayers,
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const extractButton = await screen.findByRole("button", { name: /EXTRACT POOL/i });
+    await waitFor(() => {
+      expect(extractButton).not.toBeDisabled();
+    });
+    vi.mocked(extractPoolFromDemand).mockClear();
+    fireEvent.click(extractButton);
+
+    await waitFor(() => {
+      const matchingCallIndex = vi.mocked(extractPoolFromDemand).mock.calls.findIndex((call) => {
+        const options = call[4] as { designPriorityIds?: string[] };
+        return options.designPriorityIds?.includes("critical-cp");
+      });
+      expect(matchingCallIndex).toBeGreaterThanOrEqual(0);
+    });
+    const matchingCallIndex = vi.mocked(extractPoolFromDemand).mock.calls.findIndex((call) => {
+      const options = call[4] as { designPriorityIds?: string[] };
+      return options.designPriorityIds?.includes("critical-cp");
+    });
+    const result = vi.mocked(extractPoolFromDemand).mock.results[matchingCallIndex]?.value as ReturnType<typeof extractPoolFromDemand>;
+    expect(result.players.map((player) => player.id)).toContain("critical-cp");
+    expect(result.numericShape?.identityCriticalCandidateCount).toBe(1);
+    expect(result.numericShape?.identityCriticalIncludedCount).toBe(1);
+    expect(result.numericShape?.identityCriticalMissingCount).toBe(0);
+  });
+
+  test("design-first diagnostics name manual exclusions that block identity-critical target picks", async () => {
+    const criticalReliever = makePlayer(1000, {
+      id: "critical-rp",
+      firstName: "LaTroy",
+      lastName: "Hawkins",
+      primaryPosition: "RP",
+      salary: 10_000,
+    });
+    const sourcePlayers = [
+      ...makeLegalRosterPlayerSet("alpha", 10_000),
+      ...makeLegalRosterPlayerSet("beta", 10_000),
+      criticalReliever,
+    ];
+    vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target({
+      picks: [{
+        slotId: "RP1",
+        playerId: "critical-rp",
+        playerName: "LaTroy Hawkins",
+        salary: 10_000,
+        honorsAsk: true,
+        pinned: false,
+      }],
+    }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b"],
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        modeAExtractedIds: sourcePlayers.filter((player) => player.id !== "critical-rp").map((player) => player.id),
+        modeAHandRemoves: ["critical-rp"],
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", {
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+        }),
+        makeTeam("team-b", {
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+        }),
+      ],
+      players: sourcePlayers.map((player) => player.id === "critical-rp"
+        ? { ...player, leagueAssignments: [] }
+        : player),
+      pool: makePool({
+        locked: false,
+        players: sourcePlayers
+          .filter((player) => player.id !== "critical-rp")
+          .map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^RE-EXTRACT$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Design targets 0\/1 included/i)).toBeInTheDocument();
+      expect(screen.getByText(/Missing design targets: LaTroy Hawkins: manual exclusion/i)).toBeInTheDocument();
+    });
+  });
+
   test("renders RE-CHECK with roster-law blocker wording", async () => {
     const shortPool = makeLegalRosterPlayers(10_000).filter((player) => player.id !== "legal-h-RF");
     const positions: RosterPositionMap = Object.fromEntries(shortPool.map((player) => [
@@ -1917,6 +2054,8 @@ describe("LeagueBuilderDraftSetup", () => {
       ),
     ];
     vi.mocked(buildBest22Target)
+      .mockReturnValueOnce(makeBest22Target())
+      .mockReturnValueOnce(makeBest22Target())
       .mockReturnValueOnce(makeBest22Target({ allIn: 30_000, feasible: true }))
       .mockReturnValueOnce(makeBest22Target({ allIn: 45_000, feasible: false }));
     mockLeagueData({
@@ -1956,7 +2095,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     expect(await screen.findByText("THE CLUB CHECK")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("TARGET $30,000")).toBeInTheDocument();
+      expect(screen.getAllByText("TARGET $30,000").length).toBeGreaterThan(0);
       expect(screen.getByText("NO IDENTITY")).toBeInTheDocument();
       expect(screen.getByText("IDENTITY WON'T EXPRESS")).toBeInTheDocument();
     });

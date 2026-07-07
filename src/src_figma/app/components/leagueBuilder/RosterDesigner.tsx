@@ -387,10 +387,11 @@ export function RosterDesigner({
     setResetConfirm(false);
   }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.rankOverrides, team.rosterDesign?.slots]);
 
-  const designPool = useMemo(() => buildRosterDesignPool(players), [players]);
+  const sourcePlayers = mode === "design-first" && !lockedPool ? (allPlayers ?? players) : players;
+  const designPool = useMemo(() => buildRosterDesignPool(sourcePlayers), [sourcePlayers]);
   const labelPlayers = allPlayers ?? players;
   const fullPlayerById = useMemo(() => new Map(labelPlayers.map((player) => [player.id, player])), [labelPlayers]);
-  const simPool = useMemo(() => demandUniverseFromPlayers(players), [players]);
+  const simPool = useMemo(() => demandUniverseFromPlayers(sourcePlayers), [sourcePlayers]);
   const targetArchetype = useMemo(() => {
     const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
     return historical ? historicalToSimArchetype(historical) : null;
