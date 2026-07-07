@@ -1,0 +1,253 @@
+/* ============================================================================
+ * auction-theme.css — KBL Auction Draft "Premium Retro" design layer
+ * ----------------------------------------------------------------------------
+ * The refined-hybrid auction redesign (JK ruling 2026-06-25). Extends the live
+ * `--franchise-*` token system with auction-scoped `--auc-*` vars + a set of
+ * component classes, ALL scoped under `.auc-root` so nothing leaks into the
+ * SNES rest-of-app. Tailwind v3 (CSS vars, not @theme). Imported by main.tsx.
+ *
+ * Three type voices: pixel font for character, system sans for data, tabular
+ * mono for money. Soft premium depth (no hard 8px offset except one wink on the
+ * primary bid button). Mirrors spec-docs/prototypes/auction-draft/index.html.
+ * ========================================================================== */
+
+:root {
+  --auc-field-top: #2f4128;
+  --auc-field-bot: #1a2417;
+  --auc-panel: #33442C;
+  --auc-panel-raised: #3C5236;
+  --auc-inset: #212C1C;
+  --auc-hairline: rgba(232, 232, 216, 0.10);
+  --auc-hairline-strong: rgba(232, 232, 216, 0.20);
+  --auc-text: #E8E8D8;
+  --auc-muted: rgba(232, 232, 216, 0.62);
+  --auc-faint: rgba(232, 232, 216, 0.40);
+  --auc-gold: #C4A853;
+  --auc-gold-bright: #FFD27A;
+  --auc-win: #9DFFB0;
+  --auc-win-fill: #3E9D5A;
+  --auc-loss: #FF8C8C;
+  --auc-loss-fill: #A3483D;
+  --auc-info: #7FB0E8;
+  --auc-font-char: 'Press Start 2P', monospace;
+  --auc-font-num: 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --auc-font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --auc-r-card: 16px;
+  --auc-r-lot: 20px;
+  --auc-r-ctl: 10px;
+  --auc-shadow-card: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 2px 6px rgba(0, 0, 0, 0.35), 0 14px 34px rgba(0, 0, 0, 0.30);
+  --auc-shadow-hard: 3px 3px 0 rgba(0, 0, 0, 0.70);
+}
+
+.auc-root {
+  font-family: var(--auc-font-body);
+  color: var(--auc-text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, var(--auc-field-top) 0%, rgba(47, 65, 40, 0) 60%),
+    linear-gradient(180deg, #243020 0%, var(--auc-field-bot) 100%);
+}
+.auc-root .wrap { max-width: 1240px; margin: 0 auto; padding: 26px 24px 60px; }
+
+/* type helpers */
+.auc-root .num { font-family: var(--auc-font-num); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.auc-root .char { font-family: var(--auc-font-char); }
+.auc-root .eyebrow { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--auc-muted); font-weight: 600; }
+.auc-root .muted { color: var(--auc-muted); }
+.auc-root .faint { color: var(--auc-faint); }
+.auc-root .gold { color: var(--auc-gold-bright); }
+.auc-root .win { color: var(--auc-win); }
+.auc-root .loss { color: var(--auc-loss); }
+.auc-root .info { color: var(--auc-info); }
+.auc-root .spacer { flex: 1; }
+.auc-root .row { display: flex; align-items: center; gap: 12px; }
+
+/* chips / cards */
+.auc-root .card { background: var(--auc-panel); border: 1px solid var(--auc-hairline); border-radius: var(--auc-r-card); padding: 20px; box-shadow: var(--auc-shadow-card); }
+.auc-root .card.raised { background: linear-gradient(180deg, #43593b, #374c31); }
+.auc-root .chip { display: inline-flex; align-items: center; gap: 7px; background: var(--auc-inset); border: 1px solid var(--auc-hairline); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; color: var(--auc-text); }
+.auc-root .pos { font-family: var(--auc-font-num); font-weight: 700; font-size: 12px; color: #cfe6c4; background: rgba(126, 176, 232, 0.14); border: 1px solid rgba(126, 176, 232, 0.3); border-radius: 7px; padding: 2px 8px; }
+
+/* status bar */
+.auc-root .statusbar { display: flex; align-items: center; gap: 16px; padding: 12px 18px; border-radius: 14px; background: linear-gradient(180deg, rgba(33, 44, 28, 0.7), rgba(33, 44, 28, 0.4)); border: 1px solid var(--auc-hairline); margin-bottom: 18px; font-size: 13px; flex-wrap: wrap; }
+.auc-root .statusbar .pill { display: inline-flex; align-items: center; gap: 8px; color: var(--auc-muted); }
+.auc-root .statusbar .now { margin-left: auto; display: inline-flex; align-items: center; gap: 9px; color: var(--auc-text); font-weight: 650; }
+.auc-root .help-toggle { appearance: none; cursor: pointer; border: 1px solid var(--auc-hairline-strong); border-radius: 999px; background: var(--auc-inset); color: var(--auc-muted); padding: 5px 12px; font-size: 12px; font-weight: 750; }
+.auc-root .help-toggle.active { color: #1A1A1A; background: var(--auc-gold-bright); border-color: var(--auc-gold-bright); }
+.auc-root .team-now { padding: 6px 12px; border-radius: 999px; background: linear-gradient(90deg, color-mix(in srgb, var(--team-primary) 82%, #111 18%), color-mix(in srgb, var(--team-secondary) 48%, #111 52%)); border: 1px solid color-mix(in srgb, var(--team-secondary) 70%, #fff 30%); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset; }
+.auc-root .team-now span:last-child { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72); }
+.auc-root .live { width: 9px; height: 9px; border-radius: 999px; background: var(--auc-win); animation: aucPulse 1.8s infinite; }
+@keyframes aucPulse { 0% { box-shadow: 0 0 0 0 rgba(157, 255, 176, 0.55); } 70% { box-shadow: 0 0 0 8px rgba(157, 255, 176, 0); } 100% { box-shadow: 0 0 0 0 rgba(157, 255, 176, 0); } }
+
+/* stage grid */
+.auc-root .stage { display: grid; grid-template-columns: 1.55fr 1fr; gap: 18px; }
+@media (max-width: 980px) { .auc-root .stage { grid-template-columns: 1fr; } }
+
+/* the lot */
+.auc-root .lot { position: relative; background: linear-gradient(180deg, #445b3c, #36492f); border: 1px solid var(--auc-hairline-strong); border-radius: var(--auc-r-lot); padding: 24px; box-shadow: var(--auc-shadow-card); overflow: hidden; }
+.auc-root .lot::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px 180px at 30% -20%, rgba(196, 168, 83, 0.18), transparent 70%); pointer-events: none; }
+.auc-root .lot .lotinner { animation: aucRise 0.5s cubic-bezier(.2, .8, .2, 1); position: relative; }
+@keyframes aucRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.auc-root .lot .name { font-family: var(--auc-font-char); font-size: 26px; color: #fff; text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45); line-height: 1.25; margin: 4px 0 12px; }
+.auc-root .axes { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.auc-root .market-read { margin-top: 8px; align-items: stretch; border-color: rgba(0, 0, 0, 0.3); border-left-color: var(--ballpark-brass); }
+.auc-root .market-read-main { min-width: 0; flex: 1; }
+.auc-root .market-band { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 7px; }
+.auc-root .market-band span,
+.auc-root .market-band b { display: block; border-radius: 9px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); padding: 8px 9px; text-align: center; font-size: 13px; }
+.auc-root .market-band b { color: var(--ballpark-scoreboard-yellow); border-color: rgba(242, 192, 65, 0.34); font-size: 15px; }
+.auc-root .market-signal { flex: 0 0 178px; border-radius: 10px; border: 1px solid var(--auc-hairline); background: rgba(0, 0, 0, 0.18); padding: 9px 10px; }
+.auc-root .market-signal span { display: inline-flex; align-items: center; border-radius: 999px; background: rgba(136, 170, 136, 0.16); color: var(--ballpark-sage); padding: 3px 8px; font-size: 10.5px; font-weight: 850; letter-spacing: 0.08em; }
+.auc-root .market-signal.contested span { background: rgba(242, 192, 65, 0.18); color: var(--ballpark-scoreboard-yellow); }
+.auc-root .market-signal p { margin: 7px 0 0; color: var(--auc-muted); font-size: 12px; line-height: 1.35; }
+@media (max-width: 700px) {
+  .auc-root .market-read { flex-direction: column; }
+  .auc-root .market-signal { flex: 1 1 auto; }
+}
+.auc-root .highbid { margin-top: 20px; padding: 16px 18px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
+.auc-root .highbid .amt { font-family: var(--auc-font-char); font-size: 30px; color: var(--auc-text); transition: color 0.2s; }
+.auc-root .highbid.bump .amt { color: var(--auc-gold-bright); }
+.auc-root .highbid .by { color: var(--auc-info); font-weight: 650; }
+
+/* your move */
+.auc-root .move { margin-top: 18px; border: 1px solid var(--auc-gold); border-radius: var(--auc-r-card); background: linear-gradient(180deg, rgba(196, 168, 83, 0.10), rgba(0, 0, 0, 0.12)); padding: 18px; }
+.auc-root .walletline { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 6px; }
+.auc-root .walletline .lab { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--auc-muted); }
+.auc-root .walletline .v { font-family: var(--auc-font-num); font-size: 18px; font-weight: 700; }
+.auc-root .ceiling { font-size: 12.5px; color: var(--auc-muted); margin: 4px 0 14px; }
+.auc-root .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.auc-root .preset { appearance: none; cursor: pointer; font-family: var(--auc-font-num); font-weight: 700; font-size: 13px; background: var(--auc-inset); color: var(--auc-text); border: 1px solid var(--auc-hairline-strong); border-radius: 9px; padding: 9px 13px; }
+.auc-root .preset.dim { opacity: 0.4; cursor: not-allowed; }
+.auc-root .preset.sel { border-color: var(--auc-gold); color: var(--auc-gold-bright); background: rgba(196, 168, 83, 0.12); }
+.auc-root .actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; }
+.auc-root .bid { font-family: var(--auc-font-char); font-size: 16px; padding: 18px; border-radius: 12px; cursor: pointer; border: none; background: linear-gradient(180deg, #e6cd6e, #c4a853); color: #231c08; box-shadow: var(--auc-shadow-hard); transition: transform 0.08s; }
+.auc-root .bid:active { transform: scale(0.97); }
+.auc-root .bid:disabled { opacity: 0.45; cursor: not-allowed; filter: grayscale(0.4); }
+.auc-root .letgo { font-family: var(--auc-font-body); font-weight: 650; font-size: 14px; border-radius: 12px; cursor: pointer; background: transparent; color: var(--auc-muted); border: 1px solid var(--auc-hairline-strong); }
+.auc-root .letgo:hover { color: var(--auc-loss); border-color: var(--auc-loss-fill); }
+.auc-root .letgo:disabled { opacity: 0.45; cursor: not-allowed; color: var(--auc-faint); border-color: var(--auc-hairline); }
+.auc-root .cpu-panel { padding: 16px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
+.auc-root .cpu-action { margin-top: 6px; color: var(--auc-gold-bright); font-weight: 800; font-size: 17px; }
+.auc-root .cpu-reason { margin-top: 4px; color: var(--auc-muted); font-size: 13px; }
+.auc-root .cpu-numbers { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--auc-muted); }
+.auc-root .cpu-numbers span { border: 1px solid var(--auc-hairline); border-radius: 999px; padding: 4px 9px; background: rgba(0, 0, 0, 0.18); }
+.auc-root .cpu-numbers b { color: var(--auc-text); }
+.auc-root .advance-cpu { margin-top: 14px; width: 100%; cursor: pointer; border: 1px solid var(--auc-gold); border-radius: 10px; background: rgba(196, 168, 83, 0.14); color: var(--auc-gold-bright); font-weight: 800; padding: 11px 14px; }
+.auc-root .advance-cpu:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* tax posture */
+.auc-root .tax { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 12px; color: var(--auc-muted); }
+.auc-root .meter { flex: 1; height: 7px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); overflow: hidden; }
+.auc-root .meter i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--auc-win-fill), var(--auc-gold), var(--auc-loss-fill)); }
+
+/* complete handoff check */
+.auc-root .handoff-check { background: var(--ballpark-panel); border: 4px solid var(--ballpark-panel-border); box-shadow: var(--auc-shadow-hard); border-radius: var(--auc-r-card); padding: 18px; outline: none; }
+.auc-root .handoff-strip { font-family: var(--ballpark-font-chrome); color: var(--ballpark-chalk); font-size: 13px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase; padding-bottom: 12px; border-bottom: 1px solid var(--ballpark-panel-border); }
+.auc-root .handoff-rows { display: grid; gap: 10px; margin-top: 14px; }
+.auc-root .handoff-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.9fr); gap: 16px; align-items: start; background: var(--ballpark-well); border: 1px solid var(--ballpark-panel-border); border-radius: 8px; padding: 13px; }
+.auc-root .handoff-club { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.auc-root .handoff-chip { width: 20px; height: 20px; flex: 0 0 auto; border-radius: 999px; background: linear-gradient(135deg, var(--team-primary), var(--team-secondary)); border: 1px solid var(--ballpark-chalk); box-shadow: 0 0 0 1px var(--ballpark-ground) inset; }
+.auc-root .handoff-name { font-family: var(--ballpark-font-human); color: var(--ballpark-chalk); font-size: 15px; font-weight: 850; overflow-wrap: anywhere; }
+.auc-root .handoff-count { margin-top: 2px; color: color-mix(in srgb, var(--ballpark-chalk) 70%, transparent); font-size: 12px; font-family: var(--ballpark-font-chrome); }
+.auc-root .handoff-verdict { text-align: right; }
+.auc-root .handoff-legal { color: var(--ballpark-status-green); font-family: var(--ballpark-font-chrome); font-size: 13px; font-weight: 900; letter-spacing: 0.08em; }
+.auc-root .handoff-blocked { color: var(--ballpark-status-red-bright); font-family: var(--ballpark-font-chrome); font-size: 13px; font-weight: 900; letter-spacing: 0.08em; }
+.auc-root .handoff-blockers { margin-top: 5px; color: color-mix(in srgb, var(--ballpark-chalk) 76%, transparent); font-family: var(--ballpark-font-chrome); font-size: 12px; line-height: 1.45; }
+.auc-root .handoff-footer { margin-top: 14px; border-top: 1px solid var(--ballpark-panel-border); padding-top: 14px; display: grid; gap: 12px; }
+.auc-root .handoff-summary { color: var(--ballpark-chalk); font-size: 13.5px; line-height: 1.45; }
+.auc-root .handoff-footer.blocked .handoff-summary { color: var(--ballpark-status-warn); }
+.auc-root .handoff-result-line,
+.auc-root .handoff-partial { color: color-mix(in srgb, var(--ballpark-chalk) 70%, transparent); font-family: var(--ballpark-font-chrome); font-size: 12.5px; line-height: 1.45; }
+.auc-root .handoff-settle { display: grid; gap: 10px; padding: 12px; background: var(--ballpark-well); border: 1px solid var(--ballpark-panel-border); border-radius: 8px; }
+.auc-root .handoff-override { display: grid; gap: 10px; }
+.auc-root .handoff-review { cursor: pointer; justify-self: start; border: 1px solid var(--ballpark-status-warn); background: var(--ballpark-well); color: var(--ballpark-status-warn); border-radius: 8px; padding: 10px 13px; font-weight: 900; font-family: var(--ballpark-font-chrome); }
+.auc-root .handoff-anyway,
+.auc-root .handoff-stay { cursor: pointer; justify-self: start; border: 1px solid var(--ballpark-panel-border); background: transparent; color: color-mix(in srgb, var(--ballpark-chalk) 70%, transparent); border-radius: 8px; padding: 9px 12px; font-weight: 850; font-family: var(--ballpark-font-chrome); }
+.auc-root .handoff-confirm { color: color-mix(in srgb, var(--ballpark-chalk) 78%, transparent); font-size: 12.5px; line-height: 1.45; }
+.auc-root .handoff-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.auc-root .handoff-settle-confirm { cursor: pointer; border: 1px solid var(--ballpark-status-green); background: var(--ballpark-well); color: var(--ballpark-status-green); border-radius: 8px; padding: 9px 12px; font-weight: 900; font-family: var(--ballpark-font-chrome); }
+.auc-root .handoff-settle-confirm:disabled,
+.auc-root .handoff-stay:disabled { opacity: 0.45; cursor: not-allowed; }
+.auc-root .handoff-yes { cursor: pointer; border: 1px solid var(--ballpark-status-red-bright); background: var(--ballpark-well); color: var(--ballpark-status-red-bright); border-radius: 8px; padding: 9px 12px; font-weight: 900; font-family: var(--ballpark-font-chrome); }
+@media (max-width: 640px) {
+  .auc-root .handoff-row { grid-template-columns: 1fr; }
+  .auc-root .handoff-verdict { text-align: left; }
+  .auc-root .handoff-footer .ballpark-press-button,
+  .auc-root .handoff-review,
+  .auc-root .handoff-anyway,
+  .auc-root .handoff-settle-confirm,
+  .auc-root .handoff-yes,
+  .auc-root .handoff-stay { width: 100%; justify-content: center; }
+}
+
+/* roster board */
+.auc-root .board-groups { display: grid; gap: 14px; margin-top: 14px; }
+.auc-root .board-group-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ballpark-chalk); font-weight: 800; }
+.auc-root .board-group-title span { color: color-mix(in srgb, var(--ballpark-chalk) 58%, transparent); letter-spacing: 0; }
+.auc-root .board .slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 7px; }
+.auc-root .slot { background: var(--auc-inset); border: 1px solid var(--auc-hairline); border-radius: 10px; padding: 9px 6px; text-align: center; }
+.auc-root .slot .p { font-family: var(--auc-font-num); font-weight: 700; font-size: 12px; color: var(--auc-muted); }
+.auc-root .slot .who { font-size: 10.5px; color: var(--auc-text); margin-top: 3px; min-height: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.auc-root .slot-chip { display: inline-flex; align-items: center; justify-content: center; margin-top: 4px; min-width: 30px; border-radius: 999px; border: 1px solid var(--auc-hairline); background: rgba(0, 0, 0, 0.2); color: var(--ballpark-chalk); font-family: var(--auc-font-num); font-size: 10px; font-weight: 800; padding: 1px 6px; }
+.auc-root .slot.filled { background: rgba(62, 157, 90, 0.12); border-color: rgba(62, 157, 90, 0.35); }
+.auc-root .slot.filled .p { color: var(--auc-win); }
+.auc-root .slot.gap { border-style: dashed; border-color: color-mix(in srgb, var(--ballpark-status-warn) 72%, var(--ballpark-chalk)); background: color-mix(in srgb, var(--ballpark-status-warn) 12%, transparent); animation: aucGapGlow 2.4s infinite; }
+.auc-root .slot.gap .p { color: var(--ballpark-status-warn); }
+.auc-root .gap-label,
+.auc-root .depth-note { margin-top: 3px; font-size: 9.5px; line-height: 1.25; color: color-mix(in srgb, var(--ballpark-chalk) 64%, transparent); }
+.auc-root .gap-label { color: var(--ballpark-status-warn); font-weight: 800; }
+@keyframes aucGapGlow { 0%, 100% { border-color: color-mix(in srgb, var(--ballpark-status-warn) 42%, transparent); } 50% { border-color: color-mix(in srgb, var(--ballpark-status-warn) 86%, var(--ballpark-chalk)); } }
+.auc-root .overflow-rail { margin-top: 14px; border-radius: 12px; border: 1px dashed color-mix(in srgb, var(--ballpark-status-warn) 60%, var(--ballpark-chalk)); background: color-mix(in srgb, var(--ballpark-ground) 10%, transparent); padding: 12px; }
+.auc-root .overflow-title { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ballpark-status-warn); font-weight: 850; }
+.auc-root .overflow-note { margin-top: 3px; font-size: 12px; color: var(--auc-muted); }
+.auc-root .overflow-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+.auc-root .needline { margin-top: 12px; font-size: 12.5px; color: var(--ballpark-ground); }
+
+/* lot log */
+.auc-root .log { margin-top: 16px; }
+.auc-root .logitem { display: flex; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--auc-hairline); font-size: 13px; }
+.auc-root .logitem:last-child { border-bottom: none; }
+.auc-root .tag { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; }
+.auc-root .tag.you, .auc-root .tag.won { background: rgba(62, 157, 90, 0.18); color: var(--auc-win); }
+.auc-root .tag.rival { background: rgba(126, 176, 232, 0.16); color: var(--auc-info); }
+.auc-root .tag.gone { background: rgba(163, 72, 61, 0.22); color: var(--auc-loss); }
+
+/* help layer */
+.auc-root .help-panel { margin-top: 18px; display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-radius: 14px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--auc-hairline); }
+.auc-root .help-panel .help-mark { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; background: rgba(196, 168, 83, 0.16); color: var(--ballpark-scoreboard-yellow); font-weight: 900; }
+.auc-root .help-panel .txt { font-size: 13.5px; color: var(--auc-text); }
+.auc-root .help-panel .txt b { color: var(--auc-gold-bright); font-weight: 700; }
+
+/* scout fog (farm) */
+.auc-root .scout { position: relative; margin-top: 16px; border: 1px dashed rgba(196, 168, 83, 0.5); border-radius: 14px; overflow: hidden; }
+.auc-root .scout .cover { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 22px; cursor: grab; background: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.28) 0 12px, rgba(0, 0, 0, 0.18) 12px 24px); user-select: none; width: 100%; border: none; color: var(--auc-text); font-family: var(--auc-font-body); font-size: 14px; }
+.auc-root .scout .body { display: none; padding: 18px; }
+.auc-root .scout.revealed .cover { display: none; }
+.auc-root .scout.revealed .body { display: block; animation: aucFade 0.25s; }
+@keyframes aucFade { from { opacity: 0; } to { opacity: 1; } }
+.auc-root .range { margin: 10px 0 6px; }
+.auc-root .rangebar { height: 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.3); position: relative; border: 1px solid var(--auc-hairline); }
+.auc-root .rangebar i { position: absolute; top: -1px; bottom: -1px; border-radius: 999px; background: linear-gradient(90deg, rgba(196, 168, 83, 0.35), rgba(196, 168, 83, 0.8), rgba(196, 168, 83, 0.35)); }
+.auc-root .rangebar .mid { position: absolute; top: -5px; width: 2px; height: 22px; background: var(--auc-gold-bright); }
+.auc-root .gauge { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.auc-root .gtrack { flex: 1; height: 8px; border-radius: 999px; position: relative; background: linear-gradient(90deg, #7a4a3a, #c4a853 55%, #3e9d5a); }
+.auc-root .gtrack .pin { position: absolute; top: -6px; width: 4px; height: 20px; border-radius: 2px; background: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4); }
+.auc-root .gval { font-family: var(--auc-font-char); font-size: 18px; color: var(--auc-gold-bright); }
+.auc-root .conf { font-size: 11.5px; color: var(--auc-muted); margin-top: 10px; }
+
+/* stamps */
+.auc-root .gonewrap { position: relative; }
+.auc-root .stamp { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; border-radius: var(--auc-r-lot); }
+.auc-root .stamp.gone { background: rgba(20, 26, 16, 0.78); }
+.auc-root .stamp.sold { background: rgba(20, 26, 16, 0.55); }
+.auc-root .stamp .s { font-family: var(--auc-font-char); text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5); }
+.auc-root .stamp.gone .s { font-size: 30px; color: var(--auc-loss); transform: rotate(-7deg); }
+.auc-root .stamp.sold .s { font-size: 34px; color: var(--auc-win); transform: rotate(-6deg); animation: aucStamp 0.5s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes aucStamp { 0% { opacity: 0; transform: rotate(-6deg) scale(1.7); } 100% { opacity: 1; transform: rotate(-6deg) scale(1); } }
+.auc-root .stamp .note { font-size: 13.5px; color: var(--auc-muted); margin-top: 14px; text-align: center; max-width: 280px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .auc-root *, .auc-root *::before, .auc-root *::after { animation: none !important; transition: none !important; }
+}

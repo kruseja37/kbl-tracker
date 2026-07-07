@@ -191,6 +191,7 @@ export interface GameHeader {
   finalScore: { away: number; home: number } | null;  // null if game in progress
   finalInning: number;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
   isComplete: boolean;
@@ -250,6 +251,7 @@ export interface AtBatEvent {
   battingTeamDelta?: number;     // Batting-team WPA delta from the official model
   fieldingTeamDelta?: number;    // Fielding-team WPA delta from the official model
   totalInnings?: number;         // Regulation length used for win-probability recalculation
+  useGhostRunner?: boolean;      // Whether extra innings should use Savant ghost-runner mapping
   extraInningRunner?: boolean;   // Whether automatic runner rules were enabled for this game
   extraInningRunnerDelay?: 1 | 2; // Extra inning number where automatic runner starts
 
@@ -268,12 +270,16 @@ export interface AtBatEvent {
 
   // 1.9 (GAP-GT-2-A): Identity fields
   seasonId?: string;
+  seasonNumber?: number;
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
   franchiseId?: string;
   scheduleGameId?: string;
   leagueId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
 
   // 1.10 (GAP-GT-2-G): Park context
   parkContext?: {
@@ -429,6 +435,7 @@ export interface AtBatEvent {
     rescuedThrow?: boolean;
     hrDistance?: number;
     pitchType?: string;
+    pitchLocation?: 'low' | 'high' | 'inside' | 'outside' | 'outOfZone';
     pitchesInAtBat?: number;
     modifiers?: string[];
     managerBuntIntent?: ManagerBuntIntent;
@@ -469,6 +476,13 @@ export type PromptedManagerDecisionAction =
   | 'let_batter_hit'
   | 'decline_defensive_sub';
 
+export interface PromptedManagerScoutEvaluation {
+  recommend: boolean;
+  decisionType: 'pitcher_change' | 'pinch_hit' | 'defensive_replacement';
+  bestMoveKblWpaGain: number;
+  thresholdKblWpa: number;
+}
+
 export interface PromptedManagerDecisionEvent {
   decisionType: PromptedManagerDecisionType;
   action: PromptedManagerDecisionAction;
@@ -485,6 +499,7 @@ export interface PromptedManagerDecisionEvent {
   leverageIndex?: number;
   recommendationId?: string;
   provenanceKey?: string;
+  scoutEvaluation?: PromptedManagerScoutEvaluation;
   resolution?: {
     status: 'pending';
     expectedEndpoint: ManagerDecisionResolutionEndpoint;
@@ -502,10 +517,16 @@ export interface BetweenPlayEvent {
   eventId: string;
   gameId: string;
   seasonId?: string;
+  seasonNumber?: number;
   statsScopeId?: string;
   competitionType?: CompetitionType;
   competitionId?: string;
   franchiseId?: string;
+  scheduleGameId?: string;
+  leagueId?: string;
+  playoffId?: string;
+  playoffSeriesId?: string;
+  playoffGameNumber?: number;
   timestamp: number;
   eventIndex: number;              // Interleaved with AtBatEvent indices
   undoneAt?: number | null;
@@ -528,6 +549,7 @@ export interface BetweenPlayEvent {
     outs: number;
     totalInnings?: number;
     score: { away: number; home: number };
+    useGhostRunner?: boolean;
     extraInningRunner?: boolean;
     extraInningRunnerDelay?: 1 | 2;
     runnersOn?: {
@@ -1025,6 +1047,7 @@ function applyAtBatEventUpdates(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'useGhostRunner'
     | 'extraInningRunner'
     | 'extraInningRunnerDelay'
     | 'outsRecorded'
@@ -1059,6 +1082,7 @@ function applyAtBatEventUpdates(
   if (updates.battingTeamDelta !== undefined) next.battingTeamDelta = updates.battingTeamDelta;
   if (updates.fieldingTeamDelta !== undefined) next.fieldingTeamDelta = updates.fieldingTeamDelta;
   if (updates.totalInnings !== undefined) next.totalInnings = updates.totalInnings;
+  if (updates.useGhostRunner !== undefined) next.useGhostRunner = updates.useGhostRunner;
   if (updates.extraInningRunner !== undefined) next.extraInningRunner = updates.extraInningRunner;
   if (updates.extraInningRunnerDelay !== undefined) next.extraInningRunnerDelay = updates.extraInningRunnerDelay;
   if (updates.outsRecorded !== undefined) next.outsRecorded = updates.outsRecorded;
@@ -1078,7 +1102,7 @@ function applyAtBatEventUpdates(
 type WpaPolicyFallback = Partial<
   Pick<
     AtBatEvent,
-    'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+    'totalInnings' | 'useGhostRunner' | 'extraInningRunner' | 'extraInningRunnerDelay'
   >
 >;
 
@@ -1112,6 +1136,7 @@ function shouldRefreshStoredWpa(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'useGhostRunner'
     | 'extraInningRunner'
     | 'extraInningRunnerDelay'
     | 'outsRecorded'
@@ -1138,6 +1163,7 @@ function shouldRefreshStoredWpa(
     updates.battingTeamDelta !== undefined ||
     updates.fieldingTeamDelta !== undefined ||
     updates.totalInnings !== undefined ||
+    updates.useGhostRunner !== undefined ||
     updates.extraInningRunner !== undefined ||
     updates.extraInningRunnerDelay !== undefined ||
     updates.outsRecorded !== undefined ||
@@ -1150,13 +1176,16 @@ function shouldHydrateWpaPolicy(
   updates: Partial<
     Pick<
       AtBatEvent,
-      'totalInnings' | 'extraInningRunner' | 'extraInningRunnerDelay'
+      'totalInnings' | 'useGhostRunner' | 'extraInningRunner' | 'extraInningRunnerDelay'
     >
   >,
 ): boolean {
   return (
     updates.totalInnings === undefined &&
     existing.totalInnings === undefined
+  ) || (
+    updates.useGhostRunner === undefined &&
+    existing.useGhostRunner === undefined
   ) || (
     updates.extraInningRunner === undefined &&
     existing.extraInningRunner === undefined
@@ -1173,6 +1202,7 @@ function wpaPolicyFallbackFromHeader(
 
   return {
     totalInnings: header.totalInnings,
+    useGhostRunner: header.useGhostRunner,
     extraInningRunner: header.extraInningRunner,
     extraInningRunnerDelay: header.extraInningRunnerDelay,
   };
@@ -1183,6 +1213,7 @@ function refreshStoredWpa(
   fallbackPolicy?: WpaPolicyFallback,
 ): AtBatEvent {
   const totalInnings = event.totalInnings ?? fallbackPolicy?.totalInnings;
+  const useGhostRunner = event.useGhostRunner ?? fallbackPolicy?.useGhostRunner;
   const extraInningRunner =
     event.extraInningRunner ?? fallbackPolicy?.extraInningRunner;
   const extraInningRunnerDelay =
@@ -1196,6 +1227,7 @@ function refreshStoredWpa(
       homeScore: event.homeScore,
       awayScore: event.awayScore,
       totalInnings,
+      useGhostRunner,
       extraInningRunner,
       extraInningRunnerDelay,
     },
@@ -1217,6 +1249,7 @@ function refreshStoredWpa(
   });
   const resolvedPolicyFields: WpaPolicyFallback = {};
   if (totalInnings !== undefined) resolvedPolicyFields.totalInnings = totalInnings;
+  if (useGhostRunner !== undefined) resolvedPolicyFields.useGhostRunner = useGhostRunner;
   if (extraInningRunner !== undefined) {
     resolvedPolicyFields.extraInningRunner = extraInningRunner;
   }
@@ -1268,6 +1301,7 @@ export async function updateAtBatEvent(
     | 'battingTeamDelta'
     | 'fieldingTeamDelta'
     | 'totalInnings'
+    | 'useGhostRunner'
     | 'extraInningRunner'
     | 'extraInningRunnerDelay'
     | 'outsRecorded'
@@ -1358,6 +1392,7 @@ export async function updateAtBatEventWithFieldingSync(
       | 'battingTeamDelta'
       | 'fieldingTeamDelta'
       | 'totalInnings'
+      | 'useGhostRunner'
       | 'extraInningRunner'
       | 'extraInningRunnerDelay'
       | 'isWalkOff'
@@ -1772,6 +1807,30 @@ export async function getBetweenPlayEvents(
   });
 }
 
+export async function getSeasonInjuryCountsByPlayer(seasonId: string): Promise<Map<string, number>> {
+  const games = await getSeasonGames(seasonId);
+  const injuryCounts = new Map<string, number>();
+
+  for (const game of games) {
+    const events = await getBetweenPlayEvents(game.gameId);
+    for (const event of events) {
+      if (event.type !== 'injury' || event.playerStateChange?.stateType !== 'injury') {
+        continue;
+      }
+
+      const injuredPlayerId = event.playerStateChange.playerId;
+      injuryCounts.set(injuredPlayerId, (injuryCounts.get(injuredPlayerId) ?? 0) + 1);
+    }
+  }
+
+  return injuryCounts;
+}
+
+export async function getSeasonInjuryCount(seasonId: string, playerId: string): Promise<number> {
+  const counts = await getSeasonInjuryCountsByPlayer(seasonId);
+  return counts.get(playerId) ?? 0;
+}
+
 export async function undoMostRecentGameAction(gameId: string): Promise<UndoneGameAction | null> {
   const [atBatEvents, betweenPlayEvents] = await Promise.all([
     getGameEvents(gameId),
@@ -2119,14 +2178,20 @@ export async function generateBoxScore(gameId: string): Promise<BoxScore | null>
     const isAB = !['BB', 'IBB', 'HBP', 'SF', 'SAC'].includes(event.result);
     if (isAB) batter.ab++;
 
-    // Count hit
-    const isHit = ['1B', '2B', '3B', 'HR'].includes(event.result);
+    // Count hit — ITPHR (inside-the-park HR, UX-049) and GRD (ground-rule double,
+    // GAP-GT-6-D) are hits. Mirrors canonical HIT_RESULTS (gameReplayAudit.ts) and
+    // isHit() in useGameState.ts. Both already count as AB above (not in the non-AB list).
+    const isHit = ['1B', '2B', '3B', 'HR', 'ITPHR', 'GRD'].includes(event.result);
     if (isHit) batter.hits++;
 
     // Other stats
     batter.rbi += event.rbiCount;
     if (event.result === 'BB' || event.result === 'IBB') batter.walks++;
-    if (event.result === 'K' || event.result === 'Kc') batter.strikeouts++;
+    // Strikeouts: K/Kc plus the 'Ꝁ' glyph (UX-048 called-K button; live play collapses
+    // it to 'Kc' at GameTracker.tsx, so a raw 'Ꝁ' is latent today but handled defensively
+    // to match the rest of the codebase) and the dropped-third-strike family (D3K/WP_K/PB_K,
+    // which are batter strikeouts even though he reaches). Mirrors canonical STRIKEOUT_RESULTS.
+    if (['K', 'Kc', 'Ꝁ', 'D3K', 'WP_K', 'PB_K'].includes(event.result)) batter.strikeouts++;
 
     // Line score tracking
     if (event.inning > currentInning) {

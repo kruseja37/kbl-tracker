@@ -1390,6 +1390,7 @@ export function useFameDetection({
       Sliding: 'WEB_GEM',
       'Over Shoulder': 'WEB_GEM',
       'Robbed HR': 'ROBBERY',
+      'Failed Robbery': null,
       'Beat Runner': null,
       'Beat Throw': null,
       'Missed Dive': null,

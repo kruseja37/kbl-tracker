@@ -30,7 +30,13 @@ import {
   deleteRulesPreset,
   getTeamRoster,
   saveTeamRoster,
+  createEmptyTeamRoster,
+  clearTeamRoster,
   deleteTeamRoster,
+  getRegisteredPool as getRegisteredPoolFromStorage,
+  getMlbDraftSession as getMlbDraftSessionFromStorage,
+  saveMlbDraftSession as saveMlbDraftSessionToStorage,
+  deleteMlbDraftSession as deleteMlbDraftSessionFromStorage,
   seedFromSMB4Database,
   isSMB4DatabaseSeeded,
   seedFromMLBDatabase,
@@ -41,7 +47,11 @@ import {
   type Player,
   type RulesPreset,
   type TeamRoster,
+  type LeagueBuilderMlbDraftSession,
 } from '../../utils/leagueBuilderStorage';
+import type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
+import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegistration';
+import type { PlayerForSalary } from '../../engines/salaryCalculator';
 
 // Re-export types for convenience
 export type {
@@ -62,7 +72,11 @@ export type {
   RosterStatus,
   LineupSlot,
   DepthChart,
+  DraftPoolMode,
+  DraftSetupSeat,
+  LeagueBuilderMlbDraftSession,
 } from '../../utils/leagueBuilderStorage';
+export type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
 
 // ============================================
 // HOOK INTERFACE
@@ -83,6 +97,16 @@ export interface UseLeagueBuilderDataReturn {
   updateLeague: (data: LeagueTemplate) => Promise<LeagueTemplate>;
   removeLeague: (id: string) => Promise<void>;
   duplicateLeague: (id: string) => Promise<LeagueTemplate>;
+  registerLeaguePool: (leagueId: string) => Promise<RegisteredPool>;
+  getRegisteredPool: (leagueId: string) => Promise<RegisteredPool | null>;
+  getMlbDraftSession: (leagueId: string, seasonNumber?: number) => Promise<LeagueBuilderMlbDraftSession | null>;
+  saveMlbDraftSession: (
+    session: Omit<LeagueBuilderMlbDraftSession, 'createdDate' | 'lastModified'> & {
+      createdDate?: string;
+      lastModified?: string;
+    },
+  ) => Promise<LeagueBuilderMlbDraftSession>;
+  deleteMlbDraftSession: (leagueId: string, seasonNumber?: number) => Promise<void>;
 
   // Team operations
   getTeamById: (id: string) => Promise<Team | null>;
@@ -106,6 +130,7 @@ export interface UseLeagueBuilderDataReturn {
   // Roster operations
   getRoster: (teamId: string) => Promise<TeamRoster | null>;
   updateRoster: (roster: TeamRoster) => Promise<TeamRoster>;
+  clearRoster: (teamId: string, leagueId?: string) => Promise<TeamRoster>;
   removeRoster: (teamId: string) => Promise<void>;
 
   // SMB4 Database Seeding
@@ -124,6 +149,40 @@ export interface UseLeagueBuilderDataReturn {
 // HOOK IMPLEMENTATION
 // ============================================
 
+function toPitcherRole(position: Player['primaryPosition']): PlayerForSalary['pitcherRole'] {
+  return position === 'SP' || position === 'RP' || position === 'CP' || position === 'SP/RP'
+    ? position
+    : 'SP';
+}
+
+export function toConstructionPlayer(player: Player): ConstructionPlayer {
+  const isPitcher = player.primaryPosition === 'SP'
+    || player.primaryPosition === 'RP'
+    || player.primaryPosition === 'CP'
+    || player.primaryPosition === 'SP/RP'
+    || player.primaryPosition === 'P';
+
+  return {
+    id: player.id,
+    isPitcher,
+    role: isPitcher ? toPitcherRole(player.primaryPosition) : undefined,
+    bat: {
+      POW: player.power,
+      CON: player.contact,
+      SPD: player.speed,
+      FLD: player.fielding,
+      ARM: player.arm,
+    },
+    pit: isPitcher
+      ? {
+          VEL: player.velocity,
+          JNK: player.junk,
+          ACC: player.accuracy,
+        }
+      : undefined,
+  };
+}
+
 export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
   const [leagues, setLeagues] = useState<LeagueTemplate[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -133,9 +192,11 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
   const [error, setError] = useState<string | null>(null);
 
   // Load initial data
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setIsLoading(true);
+      if (!options?.silent) {
+        setIsLoading(true);
+      }
       setError(null);
 
       await initLeagueBuilderDatabase();
@@ -156,7 +217,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       console.error('[useLeagueBuilderData] Failed to load data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
-      setIsLoading(false);
+      if (!options?.silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -167,7 +230,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
   // Refresh function
   const refresh = useCallback(async () => {
-    await loadData();
+    await loadData({ silent: true });
   }, [loadData]);
 
   // ============================================
@@ -257,10 +320,142 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       const original = await getLeagueTemplate(id);
       if (!original) throw new Error('League not found');
 
-      const duplicate = await saveLeagueTemplate({
+      const originalTeams = await Promise.all(original.teamIds.map(async (teamId) => {
+        const team = await getTeam(teamId);
+        if (!team) throw new Error(`Team not found: ${teamId}`);
+        return team;
+      }));
+      const originalTeamIds = new Set(original.teamIds);
+      for (const division of original.divisions) {
+        for (const teamId of division.teamIds) {
+          if (!originalTeamIds.has(teamId)) {
+            throw new Error(`Division ${division.id} references unknown team: ${teamId}`);
+          }
+        }
+      }
+
+      const duplicateSeed = await saveLeagueTemplate({
         ...original,
         id: undefined,
         name: `${original.name} Copy`,
+        teamIds: [],
+        conferences: original.conferences.map((conference) => ({
+          ...conference,
+          divisionIds: [...conference.divisionIds],
+        })),
+        divisions: original.divisions.map((division) => ({
+          ...division,
+          teamIds: [],
+        })),
+        poolExtractedAt: undefined,
+        poolExtractedBasis: undefined,
+        modeAExtractedIds: undefined,
+        modeAHandAdds: undefined,
+        modeAHandRemoves: undefined,
+      });
+      const teamIdMap = new Map<string, string>();
+      const copiedTeamsByOriginalId = new Map<string, Team>();
+      const copyUsesPoolFirst = (original.draftPoolMode ?? 'pool-first') === 'pool-first';
+
+      for (const originalTeam of originalTeams) {
+        const {
+          id: _teamId,
+          createdDate: _teamCreatedDate,
+          lastModified: _teamLastModified,
+          lineupWithDH: _lineupWithDH,
+          lineupWithoutDH: _lineupWithoutDH,
+          startingRotation: _startingRotation,
+          optimalLineupVsRHPWithDH: _optimalLineupVsRHPWithDH,
+          optimalLineupVsLHPWithDH: _optimalLineupVsLHPWithDH,
+          optimalLineupVsRHPWithoutDH: _optimalLineupVsRHPWithoutDH,
+          optimalLineupVsLHPWithoutDH: _optimalLineupVsLHPWithoutDH,
+          rivalries: _rivalries,
+          ...teamCopyInput
+        } = originalTeam;
+        const copiedTeam = await saveTeam({
+          ...teamCopyInput,
+          id: undefined,
+          leagueIds: [duplicateSeed.id],
+          rosterDesign: originalTeam.rosterDesign
+            ? {
+                slots: structuredClone(originalTeam.rosterDesign.slots),
+                pins: originalTeam.rosterDesign.pins
+                  ? { ...originalTeam.rosterDesign.pins }
+                  : undefined,
+              }
+            : undefined,
+          lineupWithDH: [],
+          lineupWithoutDH: [],
+          startingRotation: [],
+          ...(!originalTeam.rivalries?.length && originalTeam.rivalries
+            ? { rivalries: originalTeam.rivalries }
+            : {}),
+          optimalLineupVsRHPWithDH: undefined,
+          optimalLineupVsLHPWithDH: undefined,
+          optimalLineupVsRHPWithoutDH: undefined,
+          optimalLineupVsLHPWithoutDH: undefined,
+        });
+        teamIdMap.set(originalTeam.id, copiedTeam.id);
+        copiedTeamsByOriginalId.set(originalTeam.id, copiedTeam);
+
+        if (copyUsesPoolFirst) {
+          const originalRoster = await getTeamRoster(originalTeam.id);
+          if (originalRoster) {
+            const emptyRoster = createEmptyTeamRoster(copiedTeam.id);
+            await saveTeamRoster({
+              ...emptyRoster,
+              mlbRoster: [...originalRoster.mlbRoster],
+              farmRoster: [...originalRoster.farmRoster],
+            });
+          }
+        }
+      }
+
+      for (const originalTeam of originalTeams) {
+        if (!originalTeam.rivalries?.length) continue;
+
+        const copiedTeam = copiedTeamsByOriginalId.get(originalTeam.id);
+        if (!copiedTeam) throw new Error(`Team copy failed: ${originalTeam.id}`);
+
+        const remappedRivalries = originalTeam.rivalries.flatMap((rivalry) => {
+          const copiedOpponentTeamId = teamIdMap.get(rivalry.opponentTeamId);
+          return copiedOpponentTeamId
+            ? [{ ...rivalry, opponentTeamId: copiedOpponentTeamId }]
+            : [];
+        });
+
+        await saveTeam({
+          ...copiedTeam,
+          rivalries: remappedRivalries.length ? remappedRivalries : undefined,
+        });
+      }
+
+      // Pool assignments, registered pools, scout profiles, and draft/auction
+      // sessions are leagueId keyed. A duplicate starts with none of those rows.
+      const duplicate = await saveLeagueTemplate({
+        ...duplicateSeed,
+        teamIds: original.teamIds.map((teamId) => {
+          const copiedTeamId = teamIdMap.get(teamId);
+          if (!copiedTeamId) throw new Error(`Team copy failed: ${teamId}`);
+          return copiedTeamId;
+        }),
+        conferences: original.conferences.map((conference) => ({
+          ...conference,
+          divisionIds: [...conference.divisionIds],
+        })),
+        divisions: original.divisions.map((division) => ({
+          ...division,
+          teamIds: division.teamIds.map((teamId) => {
+            const copiedTeamId = teamIdMap.get(teamId);
+            if (!copiedTeamId) throw new Error(`Team copy failed: ${teamId}`);
+            return copiedTeamId;
+          }),
+        })),
+        poolExtractedAt: undefined,
+        poolExtractedBasis: undefined,
+        modeAExtractedIds: undefined,
+        modeAHandAdds: undefined,
+        modeAHandRemoves: undefined,
       });
       await refresh();
       return duplicate;
@@ -270,6 +465,37 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       throw err;
     }
   }, [refresh]);
+
+  const getRegisteredPool = useCallback(async (leagueId: string) => {
+    return getRegisteredPoolFromStorage(leagueId);
+  }, []);
+
+  const registerLeaguePool = useCallback(async (leagueId: string) => {
+    try {
+      return await registerLeaguePoolForLeague(leagueId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to register league pool';
+      setError(message);
+      throw err;
+    }
+  }, []);
+
+  const getMlbDraftSession = useCallback(async (leagueId: string, seasonNumber = 1) => {
+    return getMlbDraftSessionFromStorage(leagueId, seasonNumber);
+  }, []);
+
+  const saveMlbDraftSession = useCallback(async (
+    session: Omit<LeagueBuilderMlbDraftSession, 'createdDate' | 'lastModified'> & {
+      createdDate?: string;
+      lastModified?: string;
+    },
+  ) => {
+    return saveMlbDraftSessionToStorage(session);
+  }, []);
+
+  const deleteMlbDraftSession = useCallback(async (leagueId: string, seasonNumber = 1) => {
+    return deleteMlbDraftSessionFromStorage(leagueId, seasonNumber);
+  }, []);
 
   // ============================================
   // TEAM OPERATIONS
@@ -423,6 +649,18 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     }
   }, []);
 
+  const clearRoster = useCallback(async (teamId: string, leagueId?: string) => {
+    try {
+      const cleared = await clearTeamRoster(teamId, leagueId);
+      await refresh();
+      return cleared;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to clear roster';
+      setError(message);
+      throw err;
+    }
+  }, [refresh]);
+
   const removeRoster = useCallback(async (teamId: string) => {
     try {
       await deleteTeamRoster(teamId);
@@ -494,6 +732,11 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     updateLeague,
     removeLeague,
     duplicateLeague,
+    registerLeaguePool,
+    getRegisteredPool,
+    getMlbDraftSession,
+    saveMlbDraftSession,
+    deleteMlbDraftSession,
 
     // Team operations
     getTeamById,
@@ -517,6 +760,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     // Roster operations
     getRoster,
     updateRoster,
+    clearRoster,
     removeRoster,
 
     // SMB4 Database Seeding

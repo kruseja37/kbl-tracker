@@ -2,9 +2,9 @@
  * Salary Calculator - Player Value and Salary System
  *
  * Calculates player salaries based on:
- * - Base rating value (weighted ratings per spec 3:3:2:1:1 and 1:1:1)
- * - Position multiplier (premium for C, SS, etc.)
- * - Trait modifier (Clutch +10%, Choker -10%, etc.)
+ * - kblIV base from IV spec §3.8/§3.9
+ * - Position multiplier knobs defaulted to 1.0
+ * - L2-reference trait value already embedded in kblIV (D15)
  * - Age/experience factor
  * - Performance modifier (WAR vs expectations)
  * - Fame modifier (narrative value)
@@ -17,11 +17,8 @@
  * - Salary-based trade matching instead of grade-based
  * - True Value = position-relative percentile comparison
  *
- * DH-Aware Salary Rules:
- * - Two-way players ALWAYS get full batting bonus (they play every day)
- * - Regular pitchers get reduced batting bonus based on:
- *   1. League DH percentage (0% = pitchers bat, 100% = universal DH)
- *   2. Rotation factor (even without DH, pitchers only bat when they start)
+ * Deprecated legacy rating/bonus helpers remain below for bridge and matrix tests,
+ * but the live T5 pipeline does not call them.
  *
  * @see SALARY_SYSTEM_SPEC.md
  */
@@ -31,6 +28,17 @@ import {
   calculatePitcherBattingMultiplier,
   PITCHER_ROTATION_FACTOR,
 } from '../utils/leagueConfig';
+import {
+  MLB_BASELINE_INNINGS,
+  getSeasonScalingFactor,
+} from '../utils/franchiseAdaptiveStandards';
+import {
+  computeIV,
+  type IVLayerBreakdown,
+  type IVPlayerInput,
+} from './ivEngine';
+import { getPercentile, getValueAtPercentile } from './percentile';
+import { LEAGUE_MINIMUM_SALARY } from '../data/rosterEngineConstants';
 
 // Re-export DHContext for consumers
 export type { DHContext } from '../utils/leagueConfig';
@@ -82,12 +90,21 @@ export interface PlayerForSalary {
   isPitcher: boolean;
   isTwoWay?: boolean;
   primaryPosition?: PlayerPosition;
+  secondaryPosition?: PlayerPosition | string | null;
+  pitcherRole?: 'SP' | 'RP' | 'CP' | 'SP/RP';
   ratings: PlayerRatings;
   battingRatings?: BatterRatings;  // For pitchers who can hit
   age: number;
+  bats?: 'L' | 'R' | 'S' | string;
   personality?: Personality;
   fame: number;
   traits?: string[];
+  arsenal?: string[];
+  armSlot?: 'High' | 'Mid' | 'Low' | 'Sub' | null;
+}
+
+export interface SalaryCalculationOptions {
+  rookieScaleActive?: boolean;
 }
 
 export interface SeasonStatsForSalary {
@@ -110,6 +127,8 @@ export interface ExpectedPerformance {
 }
 
 export interface SalaryBreakdown {
+  ivBase?: number;
+  ivBreakdown?: IVLayerBreakdown;
   baseSalary: number;
   positionMultiplier: number;
   traitModifier: number;
@@ -157,6 +176,7 @@ export interface TrueValueResult {
   // Legacy ROI fields for backward compatibility
   salary: number;
   war: number;
+  roiWARPer100k: number;
   roiWARPerMillion: number;
   roiTier: ROITier;
   valueRating: number;
@@ -178,13 +198,19 @@ export interface DraftBudget {
   total: number;
 }
 
+export type TrueValuePoolKey = PlayerPosition | 'RESERVE';
+
+export interface TrueValueLeaguePlayer {
+  id: string;
+  detectedPosition: PlayerPosition;
+  trueValuePool?: TrueValuePoolKey;
+  excludeFromPeerPools?: boolean;
+  salary: number;
+  seasonWAR: number;
+}
+
 export interface LeagueContext {
-  allPlayers: Array<{
-    id: string;
-    detectedPosition: PlayerPosition;
-    salary: number;
-    seasonWAR: number;
-  }>;
+  allPlayers: TrueValueLeaguePlayer[];
 }
 
 // ============================================
@@ -214,54 +240,45 @@ export const PITCHER_WEIGHTS = {
 };
 
 /**
- * Position multipliers - premium defensive positions command higher salaries
- * Per spec Section "Position Multipliers"
+ * Position multipliers remain exported tuning knobs, but T5/D15 moves positional
+ * value into computeIV(...).kblIV. Defaults are 1.0 per IV spec §3.8.
  */
 export const POSITION_MULTIPLIERS: Record<PlayerPosition, number> = {
-  // Premium positions
-  'C': 1.15,      // Most valuable - defensive + game management
-  'SS': 1.12,    // Premium up-the-middle defense
-
-  // Above average
-  'CF': 1.08,    // Covers most ground
-  '2B': 1.05,    // Up-the-middle, double play pivot
-
-  // Average
-  '3B': 1.02,    // Hot corner reflexes
-  'SP': 1.00,    // Baseline for starters
-  'CP': 1.00,    // Closers
-
-  // Below average (offense-first positions)
-  'RF': 0.98,
-  'LF': 0.95,
-  '1B': 0.92,    // Least defensive value
-  'DH': 0.88,    // No defensive value
-
-  // Relievers (less innings = less value)
-  'RP': 0.85,
-  'SP/RP': 0.92,
-
-  // Utility (versatility has value)
-  'UTIL': 1.05,
-  'BENCH': 0.80,
-
-  // Two-way handled separately
+  'C': 1.00,
+  'SS': 1.00,
+  'CF': 1.00,
+  '2B': 1.00,
+  '3B': 1.00,
+  'SP': 1.00,
+  'CP': 1.00,
+  'RF': 1.00,
+  'LF': 1.00,
+  '1B': 1.00,
+  'DH': 1.00,
+  'RP': 1.00,
+  'SP/RP': 1.00,
+  'UTIL': 1.00,
+  'BENCH': 1.00,
   'TWO-WAY': 1.00,
 };
 
 /**
  * Trait tiers and their salary impacts
  * Per spec Section "Trait Salary Modifiers"
+ * @deprecated T5/D15 - retained for legacy bridge and compatibility tests only.
  */
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const ELITE_POSITIVE_TRAITS = [
   'Clutch', 'Two Way', 'Utility', 'Durable', 'Composed',
 ];
 
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const GOOD_POSITIVE_TRAITS = [
   'Cannon Arm', 'Stealer', 'Magic Hands', 'Dive Wizard', 'K Collector',
   'Rally Stopper', 'RBI Hero', 'Gets Ahead', 'Tough Out', 'First Pitch Slayer', 'Sprinter',
 ];
 
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const MINOR_POSITIVE_TRAITS = [
   'Pinch Perfect', 'Base Rounder', 'Stimulated', 'Specialist', 'Reverse Splits',
   'Pick Officer', 'Sign Stealer', 'Mind Gamer', 'Distractor', 'Bad Ball Hitter',
@@ -272,20 +289,24 @@ export const MINOR_POSITIVE_TRAITS = [
   'Elite SL', 'Elite CB', 'Elite CH', 'Elite SB',
 ];
 
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const SEVERE_NEGATIVE_TRAITS = [
   'Choker', 'Meltdown', 'Injury Prone', 'Volatile',
 ];
 
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const MODERATE_NEGATIVE_TRAITS = [
   'Whiffer', 'Butter Fingers', 'Noodle Arm', 'Wild Thrower', 'BB Prone',
   'Wild Thing', 'Falls Behind', 'K Neglecter', 'Slow Poke',
 ];
 
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const MINOR_NEGATIVE_TRAITS = [
   'First Pitch Prayer', 'Bad Jumps', 'Easy Jumps', 'Easy Target',
   'Base Jogger', 'Surrounded', 'RBI Zero', 'Crossed Up',
 ];
 
+/** @deprecated T5/D15 - retired from the live salary pipeline. */
 export const TRAIT_SALARY_IMPACT = {
   ELITE_POSITIVE: 1.10,     // +10%
   GOOD_POSITIVE: 1.05,      // +5%
@@ -298,6 +319,7 @@ export const TRAIT_SALARY_IMPACT = {
 /**
  * Pitcher batting bonus thresholds
  * Per spec: Pitchers with good batting ratings command a premium
+ * @deprecated T5/D15 - retired from the live salary pipeline.
  */
 export const PITCHER_BATTING_BONUS = {
   ELITE: { threshold: 70, bonus: 1.50 },    // +50%
@@ -308,18 +330,19 @@ export const PITCHER_BATTING_BONUS = {
 /**
  * Two-way player premium
  * Per spec: Combined salaries × 1.25
+ * @deprecated T5/D15 - retired from the live salary pipeline.
  */
 export const TWO_WAY_PREMIUM = 1.25;
 
 /**
- * Maximum salary in millions
+ * Maximum salary in canonical kblIV dollars.
  */
-export const MAX_SALARY = 50;
+export const MAX_SALARY = 166648.6; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 
 /**
- * Minimum salary in millions
+ * Minimum salary in canonical kblIV dollars.
  */
-export const MIN_SALARY = 0.5;
+export const MIN_SALARY = LEAGUE_MINIMUM_SALARY; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 
 /**
  * Personality modifiers (for free agency)
@@ -335,26 +358,31 @@ export const PERSONALITY_MODIFIERS: Record<Personality, number> = {
 };
 
 /**
- * Base draft allocation in millions
+ * Base draft allocation in canonical kblIV dollars.
  */
-export const BASE_DRAFT_ALLOCATION = 5.0;
+export const BASE_DRAFT_ALLOCATION = 16664.86; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 
 /**
- * Standings bonus per position in millions
+ * Standings bonus per position in canonical kblIV dollars.
  */
-export const STANDINGS_BONUS_PER_POSITION = 0.5;
+export const STANDINGS_BONUS_PER_POSITION = 1666.49; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 
 /**
- * ROI thresholds (WAR per $1M)
+ * ROI thresholds (WAR per $100k) after T5 dollar-denomination bridge.
  */
 export const ROI_THRESHOLDS: Record<ROITier, number> = {
-  ELITE_VALUE: 1.0,
-  GREAT_VALUE: 0.5,
-  GOOD_VALUE: 0.25,
-  FAIR_VALUE: 0.15,
-  POOR_VALUE: 0.05,
+  ELITE_VALUE: 30.003, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  GREAT_VALUE: 15.002, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  GOOD_VALUE: 7.501, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  FAIR_VALUE: 4.5, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  POOR_VALUE: 1.5, // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
   BUST: 0,
 };
+
+export const ROOKIE_SCALE_FACTOR = 0.50;
+
+const LEGACY_MAX_SALARY_MILLIONS = 50;
+const BUST_SCORE_SALARY_DIVISOR = 66659.44; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
 
 // ============================================
 // RATING CALCULATION FUNCTIONS
@@ -426,12 +454,14 @@ export function calculateWeightedRating(ratings: PlayerRatings, isPitcher: boole
  * Formula: (weightedRating / 100)^2.5 * 50
  */
 function ratingsToBaseSalary(weightedRating: number): number {
-  const baseSalary = Math.pow(weightedRating / 100, 2.5) * MAX_SALARY;
+  const baseSalary = Math.pow(weightedRating / 100, 2.5) * LEGACY_MAX_SALARY_MILLIONS;
   return Math.round(baseSalary * 10) / 10;
 }
 
 /**
  * Calculate base salary for a position player
+ * @deprecated T5/D15: live salary uses computeIV(...).kblIV. Kept for bridge
+ * scripts and legacy matrix coverage only.
  */
 export function calculatePositionPlayerBaseSalary(ratings: BatterRatings): number {
   const weightedRating = getUnifiedBattingRating(ratings);
@@ -440,6 +470,8 @@ export function calculatePositionPlayerBaseSalary(ratings: BatterRatings): numbe
 
 /**
  * Calculate base salary for a pitcher
+ * @deprecated T5/D15: live salary uses computeIV(...).kblIV. Kept for bridge
+ * scripts and legacy matrix coverage only.
  */
 export function calculatePitcherBaseSalary(ratings: PitcherRatings): number {
   const weightedRating = getPitcherRating(ratings);
@@ -466,6 +498,8 @@ function getFullPitcherBattingBonus(battingRatings: BatterRatings): number {
 
 /**
  * Calculate pitcher batting bonus with DH context
+ * @deprecated T5/D15: pitcher batting value is priced by kblIV usage weights.
+ * Kept for legacy tests and historical display compatibility only.
  *
  * Key adjustments:
  * 1. Two-way players ALWAYS get full bonus (they play every day)
@@ -516,6 +550,7 @@ export function calculatePitcherBattingBonus(
 
 /**
  * Calculate base salary for a two-way player
+ * @deprecated T5/D15: Two Way is priced by kblIV usage-unlock machinery.
  */
 export function calculateTwoWayBaseSalary(
   batterRatings: BatterRatings,
@@ -530,6 +565,7 @@ export function calculateTwoWayBaseSalary(
 
 /**
  * Calculate base salary from ratings (router function)
+ * @deprecated T5/D15: live salary base is computeIV(...).kblIV.
  *
  * @param player - Player data with ratings
  * @param dhContext - Optional DH context for pitcher batting bonus adjustment
@@ -575,6 +611,8 @@ export function getPositionMultiplier(position?: PlayerPosition): number {
 /**
  * Calculate trait modifier
  * Traits are multiplicative
+ * @deprecated T5/D15: trait pricing is already embedded in kblIV at the L2
+ * reference; live salary path uses traitModifier=1.0.
  */
 export function calculateTraitModifier(traits?: string[]): number {
   if (!traits || traits.length === 0) return 1.0;
@@ -645,13 +683,78 @@ export function applyPersonalityModifier(
   return salary * (PERSONALITY_MODIFIERS[personality] || 1.0);
 }
 
+function roundSalaryDollars(value: number): number {
+  return Math.round(value);
+}
+
+function isPitcherPosition(position: PlayerPosition | undefined): position is 'SP' | 'RP' | 'CP' | 'SP/RP' {
+  return position === 'SP' || position === 'RP' || position === 'CP' || position === 'SP/RP';
+}
+
+function resolvePitcherRole(player: PlayerForSalary): 'SP' | 'RP' | 'CP' | 'SP/RP' {
+  if (player.pitcherRole) return player.pitcherRole;
+  if (isPitcherPosition(player.primaryPosition)) return player.primaryPosition;
+  return 'SP';
+}
+
+function resolveHitterPosition(position: PlayerPosition | undefined): string {
+  if (!position || position === 'UTIL' || position === 'BENCH') return 'IF/OF';
+  if (position === 'TWO-WAY') return 'OF';
+  return position;
+}
+
+function normalizeSalaryTraitsForIV(player: PlayerForSalary): string[] {
+  const traits = [...(player.traits ?? [])];
+  if (player.isTwoWay && !traits.some((trait) => trait.startsWith('Two Way'))) {
+    traits.push('Two Way (OF)');
+  }
+  return traits;
+}
+
+export function buildSalaryIvInput(player: PlayerForSalary): IVPlayerInput {
+  const batterRatings = player.isPitcher
+    ? player.battingRatings ?? { power: 0, contact: 0, speed: 0, fielding: 0, arm: 0 }
+    : player.ratings as BatterRatings;
+
+  return {
+    id: player.id,
+    name: player.name,
+    isPitcher: player.isPitcher,
+    bats: player.bats,
+    primaryPosition: player.isPitcher ? undefined : resolveHitterPosition(player.primaryPosition),
+    secondaryPosition: player.secondaryPosition,
+    pitcherRole: player.isPitcher ? resolvePitcherRole(player) : undefined,
+    batterRatings,
+    pitcherRatings: player.isPitcher && isPitcherRatings(player.ratings)
+      ? {
+          velocity: player.ratings.velocity,
+          junk: player.ratings.junk,
+          accuracy: player.ratings.accuracy,
+        }
+      : undefined,
+    traits: normalizeSalaryTraitsForIV(player),
+    arsenal: player.arsenal ?? [],
+    armSlot: player.armSlot ?? null,
+  };
+}
+
+export function calculateIvBaseSalary(player: PlayerForSalary): { ivBase: number; ivBreakdown: IVLayerBreakdown } {
+  const result = computeIV(buildSalaryIvInput(player));
+  return {
+    ivBase: result.kblIV,
+    ivBreakdown: result.kbl,
+  };
+}
+
 // ============================================
 // COMPLETE SALARY CALCULATION
 // ============================================
 
 /**
  * Calculate complete salary with breakdown
- * Per spec: Base × Position × Traits × Age × Performance × Fame × Personality
+ * Per IV spec §3.8 / D15: kblIV × position knob × age or rookie scale ×
+ * performance × fame × personality. Trait percentage repricing is retired from
+ * the live salary path because kblIV already carries L2-reference trait value.
  *
  * @param player - Player data
  * @param seasonStats - Optional season statistics
@@ -664,21 +767,29 @@ export function calculateSalaryWithBreakdown(
   seasonStats?: SeasonStatsForSalary,
   expectations?: ExpectedPerformance,
   isNewTeam: boolean = false,
-  dhContext?: DHContext
+  dhContext?: DHContext,
+  options: SalaryCalculationOptions = {},
 ): SalaryBreakdown {
-  // 1. Base salary from ratings (DH-aware for pitchers)
-  const baseSalary = calculateBaseRatingSalary(player, dhContext);
+  void dhContext;
 
-  // 2. Position multiplier
+  // 1. T5/D15 base salary from kblIV. Legacy baseSalary remains populated for
+  // back-compat, but it is the same canonical ivBase value.
+  const { ivBase, ivBreakdown } = calculateIvBaseSalary(player);
+  const baseSalary = ivBase;
+
+  // 2. Position multiplier knob. Defaults are 1.0 because positional value is
+  // already embedded in the IV curves (§3.8).
   const positionMultiplier = getPositionMultiplier(player.primaryPosition);
   const afterPosition = baseSalary * positionMultiplier;
 
-  // 3. Trait modifier
-  const traitModifier = calculateTraitModifier(player.traits);
+  // 3. Trait modifier retired from salary path by D15; kblIV already includes
+  // L2-reference trait value.
+  const traitModifier = 1.0;
   const afterTraits = afterPosition * traitModifier;
 
-  // 4. Age factor
-  const ageFactor = calculateAgeFactor(player.age);
+  // 4. Age factor, with rookie-scale override replacing age rather than
+  // stacking with it (§8.4 / D6 / FINDING-127).
+  const ageFactor = options.rookieScaleActive ? ROOKIE_SCALE_FACTOR : calculateAgeFactor(player.age);
   const afterAge = afterTraits * ageFactor;
 
   // 5. Performance modifier (if season data available)
@@ -702,13 +813,15 @@ export function calculateSalaryWithBreakdown(
     : 1.0;
   const afterPersonality = afterFame * personalityModifier;
 
-  // Final salary clamped to [MIN_SALARY, MAX_SALARY]
+  // Final salary clamped to bridged dollar bounds.
   const finalSalary = Math.min(
     MAX_SALARY,
-    Math.max(MIN_SALARY, Math.round(afterPersonality * 10) / 10)
+    Math.max(MIN_SALARY, roundSalaryDollars(afterPersonality))
   );
 
   return {
+    ivBase,
+    ivBreakdown,
     baseSalary,
     positionMultiplier,
     traitModifier,
@@ -743,9 +856,10 @@ export function calculateSalary(
   seasonStats?: SeasonStatsForSalary,
   expectations?: ExpectedPerformance,
   isNewTeam: boolean = false,
-  dhContext?: DHContext
+  dhContext?: DHContext,
+  options: SalaryCalculationOptions = {},
 ): number {
-  return calculateSalaryWithBreakdown(player, seasonStats, expectations, isNewTeam, dhContext).finalSalary;
+  return calculateSalaryWithBreakdown(player, seasonStats, expectations, isNewTeam, dhContext, options).finalSalary;
 }
 
 // ============================================
@@ -760,7 +874,10 @@ export function calculateExpectedWAR(
   gamesPerSeason: number = 48
 ): ExpectedPerformance {
   const weightedRating = calculateWeightedRating(player.ratings, player.isPitcher);
-  const scaleFactor = gamesPerSeason / 162;
+  const scaleFactor = getSeasonScalingFactor({
+    gamesPerSeason,
+    inningsPerGame: MLB_BASELINE_INNINGS,
+  });
 
   let baseExpectedWAR: number;
   if (weightedRating >= 95) baseExpectedWAR = 6.0;
@@ -795,33 +912,34 @@ export function calculateExpectedWAR(
 // TRUE VALUE CALCULATION (Position-Relative)
 // ============================================
 
-/**
- * Get percentile of a value within an array
- */
-function getPercentile(value: number, sortedArray: number[]): number {
-  if (sortedArray.length === 0) return 0.5;
+export const TRUE_VALUE_CALCULATION_VERSION = 'true-value-effective-position-v2';
+export const TRUE_VALUE_MIN_PEER_POOL_SIZE = 6;
 
-  let count = 0;
-  for (const v of sortedArray) {
-    if (v <= value) count++;
-    else break;
-  }
+export const TRUE_VALUE_PLAYER_POSITIONS: readonly PlayerPosition[] = [
+  'SP',
+  'SP/RP',
+  'RP',
+  'CP',
+  'C',
+  '1B',
+  '2B',
+  'SS',
+  '3B',
+  'LF',
+  'CF',
+  'RF',
+];
 
-  return count / sortedArray.length;
-}
+const TRUE_VALUE_PLAYER_POSITION_SET = new Set<string>(TRUE_VALUE_PLAYER_POSITIONS);
 
-/**
- * Get value at a percentile within an array
- */
-function getValueAtPercentile(percentile: number, sortedArray: number[]): number {
-  if (sortedArray.length === 0) return 0;
-
-  const index = Math.min(
-    Math.floor(percentile * sortedArray.length),
-    sortedArray.length - 1
-  );
-
-  return sortedArray[index];
+export function normalizeTrueValuePosition(position: unknown): PlayerPosition | null {
+  // TV1-FIX R-6: True Value accepts only canonical primary positions.
+  // Non-canonical labels are data defects for callers to surface, not inputs
+  // to normalize into an inferred peer pool.
+  if (typeof position !== 'string') return null;
+  const normalized = position.trim().toUpperCase();
+  if (TRUE_VALUE_PLAYER_POSITION_SET.has(normalized)) return normalized as PlayerPosition;
+  return null;
 }
 
 /**
@@ -838,33 +956,37 @@ const POSITION_MERGE_GROUPS: Partial<Record<PlayerPosition, PlayerPosition[]>> =
   'LF': ['LF', 'RF', 'CF'],
   'RF': ['RF', 'LF', 'CF'],
   'CF': ['CF', 'LF', 'RF'],
-  'UTIL': ['UTIL', 'BENCH'],
-  'BENCH': ['BENCH', 'UTIL'],
 };
 
 /**
  * Get peer pool for a position
  */
 function getPositionPeerPool(
-  position: PlayerPosition,
+  position: TrueValuePoolKey,
   allPlayers: LeagueContext['allPlayers']
 ): LeagueContext['allPlayers'] {
-  const MIN_POOL_SIZE = 6;
+  const poolEligiblePlayers = allPlayers.filter(p => !p.excludeFromPeerPools);
+  const poolKey = (player: LeagueContext['allPlayers'][number]) =>
+    player.trueValuePool ?? player.detectedPosition;
 
   // Direct position matches
-  let pool = allPlayers.filter(p => p.detectedPosition === position);
+  let pool = poolEligiblePlayers.filter(p => poolKey(p) === position);
 
-  // Merge with similar positions if pool too small
-  if (pool.length < MIN_POOL_SIZE) {
+  // SALARY_SYSTEM_SPEC_UPDATED.md True Value Calculation + R-3:
+  // merge sparse position pools first, then fall back to whole league only
+  // when the merged pool is still below the canonical peer floor.
+  // EP1 R-8/R-9: effective-position and Reserve callers provide trueValuePool;
+  // Reserve is a distinct sparse pool with only the whole-league safety net.
+  if (position !== 'RESERVE' && pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
     const mergeGroup = POSITION_MERGE_GROUPS[position];
     if (mergeGroup) {
-      pool = allPlayers.filter(p => mergeGroup.includes(p.detectedPosition));
+      pool = poolEligiblePlayers.filter(p => mergeGroup.includes(poolKey(p) as PlayerPosition));
     }
   }
 
   // If still too small, return all players
-  if (pool.length < MIN_POOL_SIZE) {
-    return allPlayers;
+  if (pool.length < TRUE_VALUE_MIN_PEER_POOL_SIZE) {
+    return poolEligiblePlayers;
   }
 
   return pool;
@@ -872,13 +994,14 @@ function getPositionPeerPool(
 
 /**
  * Calculate True Value (position-relative percentile approach)
- * Per spec Section "True Value Calculation"
+ * Per SALARY_SYSTEM_SPEC_UPDATED.md "True Value Calculation" and TV1 R-2:
+ * this is the canonical step-percentile implementation for True Value.
  */
 export function calculateTrueValue(
-  player: { salary: number; seasonWAR: number; detectedPosition: PlayerPosition },
+  player: { id?: string; salary: number; seasonWAR: number; detectedPosition: PlayerPosition; trueValuePool?: TrueValuePoolKey },
   leagueContext: LeagueContext
 ): TrueValueResult {
-  const position = player.detectedPosition;
+  const position = player.trueValuePool ?? player.detectedPosition;
   const actualWAR = player.seasonWAR;
 
   // Get peer pool for this position
@@ -895,15 +1018,17 @@ export function calculateTrueValue(
   const trueValue = getValueAtPercentile(warPercentile, salariesAtPosition);
   const valueDelta = trueValue - player.salary;
 
-  // Calculate simple ROI for backward compatibility
-  const roiWARPerMillion = player.salary > 0 ? actualWAR / player.salary : 0;
+  // Calculate simple ROI for backward compatibility. T5 canonical salaries are
+  // dollars, so tiering uses WAR per $100k; roiWARPerMillion is retained as an
+  // alias for legacy consumers.
+  const roiWARPer100k = player.salary > 0 ? actualWAR / (player.salary / 100_000) : 0;
 
   let roiTier: ROITier;
-  if (roiWARPerMillion >= ROI_THRESHOLDS.ELITE_VALUE) roiTier = 'ELITE_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.GREAT_VALUE) roiTier = 'GREAT_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.GOOD_VALUE) roiTier = 'GOOD_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.FAIR_VALUE) roiTier = 'FAIR_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.POOR_VALUE) roiTier = 'POOR_VALUE';
+  if (roiWARPer100k >= ROI_THRESHOLDS.ELITE_VALUE) roiTier = 'ELITE_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.GREAT_VALUE) roiTier = 'GREAT_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.GOOD_VALUE) roiTier = 'GOOD_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.FAIR_VALUE) roiTier = 'FAIR_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.POOR_VALUE) roiTier = 'POOR_VALUE';
   else roiTier = 'BUST';
 
   let valueRating: number;
@@ -925,7 +1050,8 @@ export function calculateTrueValue(
     // Legacy fields
     salary: player.salary,
     war: actualWAR,
-    roiWARPerMillion: Math.round(roiWARPerMillion * 1000) / 1000,
+    roiWARPer100k: Math.round(roiWARPer100k * 1000) / 1000,
+    roiWARPerMillion: Math.round(roiWARPer100k * 1000) / 1000,
     roiTier,
     valueRating,
   };
@@ -935,18 +1061,19 @@ export function calculateTrueValue(
  * Simple ROI calculation (for backward compatibility)
  */
 export function calculateSimpleROI(salary: number, war: number): {
+  roiWARPer100k: number;
   roiWARPerMillion: number;
   roiTier: ROITier;
   valueRating: number;
 } {
-  const roiWARPerMillion = salary > 0 ? war / salary : 0;
+  const roiWARPer100k = salary > 0 ? war / (salary / 100_000) : 0;
 
   let roiTier: ROITier;
-  if (roiWARPerMillion >= ROI_THRESHOLDS.ELITE_VALUE) roiTier = 'ELITE_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.GREAT_VALUE) roiTier = 'GREAT_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.GOOD_VALUE) roiTier = 'GOOD_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.FAIR_VALUE) roiTier = 'FAIR_VALUE';
-  else if (roiWARPerMillion >= ROI_THRESHOLDS.POOR_VALUE) roiTier = 'POOR_VALUE';
+  if (roiWARPer100k >= ROI_THRESHOLDS.ELITE_VALUE) roiTier = 'ELITE_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.GREAT_VALUE) roiTier = 'GREAT_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.GOOD_VALUE) roiTier = 'GOOD_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.FAIR_VALUE) roiTier = 'FAIR_VALUE';
+  else if (roiWARPer100k >= ROI_THRESHOLDS.POOR_VALUE) roiTier = 'POOR_VALUE';
   else roiTier = 'BUST';
 
   let valueRating: number;
@@ -959,7 +1086,8 @@ export function calculateSimpleROI(salary: number, war: number): {
   }
 
   return {
-    roiWARPerMillion: Math.round(roiWARPerMillion * 1000) / 1000,
+    roiWARPer100k: Math.round(roiWARPer100k * 1000) / 1000,
+    roiWARPerMillion: Math.round(roiWARPer100k * 1000) / 1000,
     roiTier,
     valueRating,
   };
@@ -1030,7 +1158,7 @@ export function validateMultiPlayerSwap(
   if (totalIncomingSalary < salaryRange.min || totalIncomingSalary > salaryRange.max) {
     return {
       valid: false,
-      reason: `Total salary $${totalIncomingSalary.toFixed(1)}M outside range $${salaryRange.min.toFixed(1)}M - $${salaryRange.max.toFixed(1)}M`,
+      reason: `Total salary ${formatSalary(totalIncomingSalary)} outside range ${formatSalary(salaryRange.min)} - ${formatSalary(salaryRange.max)}`,
       totalIncomingSalary,
     };
   }
@@ -1110,7 +1238,7 @@ export function updatePlayerSalary(
   return {
     previousSalary,
     newSalary,
-    change: Math.round((newSalary - previousSalary) * 10) / 10,
+    change: roundSalaryDollars(newSalary - previousSalary),
     trigger,
   };
 }
@@ -1198,7 +1326,7 @@ export function calculateBustScore(
   const underperformance = expectedWAR - actualWAR;
   if (underperformance <= 0) return 0;
 
-  const salaryFactor = salary / 20;
+  const salaryFactor = salary / BUST_SCORE_SALARY_DIVISOR;
   return underperformance * salaryFactor;
 }
 
@@ -1221,49 +1349,54 @@ export function calculateComebackScore(
 // ============================================
 
 export function formatSalary(salary: number): string {
-  if (salary >= 1) {
-    return `$${salary.toFixed(1)}M`;
+  const abs = Math.abs(salary);
+  const sign = salary < 0 ? '-' : '';
+  if (abs >= 1_000_000) {
+    return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   }
-  return `$${(salary * 1000).toFixed(0)}K`;
+  if (abs >= 1_000) {
+    return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  }
+  return `${sign}$${abs.toFixed(abs < 10 ? 2 : 0)}`;
 }
 
 export function formatSalaryChange(change: number): string {
   const sign = change >= 0 ? '+' : '';
-  return `${sign}$${change.toFixed(1)}M`;
+  return `${sign}${formatSalary(change)}`;
 }
 
 export function getSalaryTier(salary: number): string {
-  if (salary >= 40) return 'Superstar Contract';
-  if (salary >= 30) return 'All-Star Contract';
-  if (salary >= 20) return 'Premium Contract';
-  if (salary >= 10) return 'Solid Contract';
-  if (salary >= 5) return 'Moderate Contract';
-  if (salary >= 2) return 'Budget Contract';
+  if (salary >= 133318.88) return 'Superstar Contract'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 99989.16) return 'All-Star Contract'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 66659.44) return 'Premium Contract'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 33329.72) return 'Solid Contract'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 16664.86) return 'Moderate Contract'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 6665.94) return 'Budget Contract'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
   return 'Minimum Contract';
 }
 
 export function getSalaryColor(salary: number): string {
-  if (salary >= 40) return '#a855f7';
-  if (salary >= 30) return '#f59e0b';
-  if (salary >= 20) return '#22c55e';
-  if (salary >= 10) return '#3b82f6';
-  if (salary >= 5) return '#6b7280';
+  if (salary >= 133318.88) return '#a855f7'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 99989.16) return '#f59e0b'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 66659.44) return '#22c55e'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 33329.72) return '#3b82f6'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
+  if (salary >= 16664.86) return '#6b7280'; // CALIBRATE (T5 bridge — see PROMPT_CONTRACTS T5)
   return '#9ca3af';
 }
 
 export function getRatingSalaryScale(): Array<{ rating: string; salary: string }> {
   return [
-    { rating: '95+', salary: '$45-50M' },
-    { rating: '90-94', salary: '$35-44M' },
-    { rating: '85-89', salary: '$25-34M' },
-    { rating: '80-84', salary: '$18-24M' },
-    { rating: '75-79', salary: '$12-17M' },
-    { rating: '70-74', salary: '$8-11M' },
-    { rating: '65-69', salary: '$5-7M' },
-    { rating: '60-64', salary: '$3-4M' },
-    { rating: '55-59', salary: '$2-3M' },
-    { rating: '50-54', salary: '$1-2M' },
-    { rating: '<50', salary: '$0.5-1M' },
+    { rating: '95+', salary: '$150K-167K' },
+    { rating: '90-94', salary: '$117K-147K' },
+    { rating: '85-89', salary: '$83K-113K' },
+    { rating: '80-84', salary: '$60K-80K' },
+    { rating: '75-79', salary: '$40K-57K' },
+    { rating: '70-74', salary: '$27K-37K' },
+    { rating: '65-69', salary: '$17K-23K' },
+    { rating: '60-64', salary: '$10K-13K' },
+    { rating: '55-59', salary: '$6.7K-10K' },
+    { rating: '50-54', salary: '$3.3K-6.7K' },
+    { rating: '<50', salary: '$1.7K-3.3K' },
   ];
 }
 

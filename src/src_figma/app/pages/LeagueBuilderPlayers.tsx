@@ -9,7 +9,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router";
 import {
-  ArrowLeft,
   User,
   Search,
   Plus,
@@ -23,6 +22,7 @@ import {
   RotateCcw,
   Shuffle,
 } from "lucide-react";
+import { BallparkShell } from "../components/ballpark";
 import {
   useLeagueBuilderData,
   type Player,
@@ -45,13 +45,19 @@ import { mergePlayerOverrides } from "../../../utils/playerOverrides";
 import { generateHometown } from "../../../data/usCities";
 import { FamePip } from "../components/FamePip";
 import { FAME_TIER_LABEL, type FameTier } from "../../../types/reporter";
+import {
+  isSavedAuctionMutationGuardMessage,
+  useSavedAuctionMutationGuard,
+} from "../utils/savedAuctionMutationGuard";
 
 // ============================================
 // CONSTANTS
 // ============================================
 
-const PRIMARY_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
-const SECONDARY_POSITIONS: Position[] = ['C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY'];
+// Canonical draftable positions: 8 fielders + the 4 pitcher roles (SP/RP is one combined role).
+// DH is a lineup slot only and TWO-WAY is a trait, not a position (DECISIONS_LOG) — both removed.
+const PRIMARY_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'];
+const SECONDARY_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP'];
 const GRADES: Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'];
 const PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
@@ -210,6 +216,7 @@ export function LeagueBuilderPlayers() {
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [formData, setFormData] = useState<PlayerFormData>(DEFAULT_FORM_DATA);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState<string>("ALL");
@@ -222,6 +229,8 @@ export function LeagueBuilderPlayers() {
   const [isLoadingOverrides, setIsLoadingOverrides] = useState(false);
 
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+  const allLeagueIds = useMemo(() => leagues.map((league) => league.id), [leagues]);
+  const savedAuctionGuard = useSavedAuctionMutationGuard(allLeagueIds);
 
   // Auto-select first league on load
   useEffect(() => {
@@ -254,6 +263,38 @@ export function LeagueBuilderPlayers() {
   }, [editingPlayer, leagues]);
 
   const isLeagueTab = editorTab !== 'base';
+  const getTeamMutationLeagueIds = (teamId: string) => {
+    if (!teamId) return [];
+    const team = teams.find((candidate) => candidate.id === teamId);
+    const ids = new Set(team?.leagueIds ?? []);
+    leagues.forEach((league) => {
+      if (league.teamIds.includes(teamId)) ids.add(league.id);
+    });
+    return [...ids];
+  };
+  const getPlayerMutationLeagueIds = (player: Player | null | undefined) => [
+    ...new Set((player?.leagueAssignments ?? []).map((assignment) => assignment.leagueId).filter(Boolean)),
+  ];
+  const editingPlayerMutationLeagueIds = useMemo(() => {
+    if (!editingPlayer) {
+      return activeLeagueId ? [activeLeagueId] : [];
+    }
+
+    const ids = new Set(getPlayerMutationLeagueIds(editingPlayer));
+    if (isLeagueTab) ids.add(editorTab);
+    if (activeLeagueId) ids.add(activeLeagueId);
+    getTeamMutationLeagueIds(formData.teamId).forEach((leagueId) => ids.add(leagueId));
+    return [...ids].filter(Boolean);
+  }, [activeLeagueId, editingPlayer, editorTab, formData.teamId, isLeagueTab, leagues, teams]);
+  const isMutationBlockedForLeagueIds = (leagueIds: string[]) =>
+    leagueIds.length > 0 &&
+    (!savedAuctionGuard.checked ||
+      Boolean(savedAuctionGuard.lookupError) ||
+      leagueIds.some((leagueId) => savedAuctionGuard.lockedLeagueIds.includes(leagueId)));
+  const savedAuctionMutationMessage = savedAuctionGuard.message;
+  const editingPlayerMutationBlocked =
+    isMutationBlockedForLeagueIds(editingPlayerMutationLeagueIds) ||
+    Boolean(editingPlayer && savedAuctionGuard.lockedPlayerIds.includes(editingPlayer.id));
 
   // Filter players
   const filteredPlayers = useMemo(() => {
@@ -419,6 +460,7 @@ export function LeagueBuilderPlayers() {
 
   const openCreateModal = () => {
     setEditingPlayer(null);
+    setSaveError(null);
     setFormData(DEFAULT_FORM_DATA);
     setEditorTab('base');
     setCurrentOverrides({});
@@ -428,6 +470,7 @@ export function LeagueBuilderPlayers() {
 
   const openEditModal = (player: Player) => {
     setEditingPlayer(player);
+    setSaveError(null);
     setEditorTab('base');
     setCurrentOverrides({});
     setFameTierOverride(undefined);
@@ -442,11 +485,24 @@ export function LeagueBuilderPlayers() {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingPlayer(null);
+    setSaveError(null);
     setFormData(DEFAULT_FORM_DATA);
     setEditorTab('base');
     setCurrentOverrides({});
     setFameTierOverride(undefined);
   };
+
+  useEffect(() => {
+    if (!isModalOpen || !editingPlayerMutationBlocked || !savedAuctionMutationMessage) return;
+    setSaveError(savedAuctionMutationMessage);
+  }, [editingPlayerMutationBlocked, isModalOpen, savedAuctionMutationMessage]);
+
+  useEffect(() => {
+    setSaveError((current) => {
+      if (!isSavedAuctionMutationGuardMessage(current)) return current;
+      return savedAuctionGuard.blocked ? savedAuctionMutationMessage : null;
+    });
+  }, [savedAuctionGuard.blocked, savedAuctionMutationMessage]);
 
   /** Track which form fields changed on a league tab to build override delta */
   const handleFormChange = useCallback((field: string, value: string | PitchType[] | Position | '') => {
@@ -504,8 +560,13 @@ export function LeagueBuilderPlayers() {
 
   const handleSave = async () => {
     if (!formData.firstName.trim() || !formData.lastName.trim()) return;
+    if (editingPlayerMutationBlocked) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      return;
+    }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       if (isLeagueTab && editingPlayer) {
         // LEAGUE TAB: Save overrides + update league assignment
@@ -619,17 +680,27 @@ export function LeagueBuilderPlayers() {
       }
     } catch (err) {
       console.error("Failed to save player:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to save player.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
+    const player = players.find((candidate) => candidate.id === id);
+    const blockedByLeague = isMutationBlockedForLeagueIds(getPlayerMutationLeagueIds(player));
+    const blockedBySavedPool = Boolean(player && savedAuctionGuard.lockedPlayerIds.includes(player.id));
+    if (blockedByLeague || blockedBySavedPool) {
+      setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
+      setDeleteConfirmId(null);
+      return;
+    }
     try {
       await removePlayer(id);
       setDeleteConfirmId(null);
     } catch (err) {
       console.error("Failed to delete player:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to delete player.");
     }
   };
 
@@ -757,25 +828,13 @@ export function LeagueBuilderPlayers() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button
-            onClick={() => navigate("/league-builder")}
-            className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-          >
-            <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-          </button>
-          <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-            <User className="w-6 h-6" style={{ color: "#3366FF" }} />
-            <h1
-              className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
-              style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
-            >
-              PLAYERS
-            </h1>
-          </div>
+    <BallparkShell
+      onBack={() => navigate("/league-builder")}
+      icon={User}
+      iconColor="#3366FF"
+      title="PLAYERS"
+      rightSlot={
+        <>
           {/* League Selector */}
           {leagues.length > 1 && (
             <select
@@ -791,13 +850,14 @@ export function LeagueBuilderPlayers() {
             </select>
           )}
           <div className="ml-auto text-sm text-[#E8E8D8]/70">{players.length} players</div>
-        </div>
-
-        {/* Error Display */}
-        {error && (
+        </>
+      }
+    >
+      {/* Error Display */}
+        {(error || saveError) && (
           <div className="bg-red-900/50 border-4 border-red-500 p-4 mb-6 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400" />
-            <span className="text-red-200">{error}</span>
+            <span className="text-red-200">{saveError ?? error}</span>
           </div>
         )}
 
@@ -938,8 +998,6 @@ export function LeagueBuilderPlayers() {
             </table>
           )}
         </div>
-      </div>
-
       {/* Create/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -958,6 +1016,11 @@ export function LeagueBuilderPlayers() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+            {saveError && (
+              <div className="mx-6 mt-4 bg-red-900/50 border-4 border-red-500 p-3 text-sm text-red-100">
+                {saveError}
+              </div>
+            )}
 
             {/* Context Tabs — only for editing existing players with league assignments */}
             {editingPlayer && playerLeagueIds.length > 0 && (
@@ -1591,7 +1654,11 @@ export function LeagueBuilderPlayers() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={(!isLeagueTab && (!formData.firstName.trim() || !formData.lastName.trim())) || isSaving}
+                disabled={
+                  (!isLeagueTab && (!formData.firstName.trim() || !formData.lastName.trim())) ||
+                  editingPlayerMutationBlocked ||
+                  isSaving
+                }
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (
@@ -1610,6 +1677,6 @@ export function LeagueBuilderPlayers() {
           </div>
         </div>
       )}
-    </div>
+    </BallparkShell>
   );
 }

@@ -12,6 +12,16 @@
  */
 
 import { syncEngine } from './syncEngine';
+import {
+  FRANCHISE_DATABASE_PREFIX,
+  getFranchiseDatabaseName,
+} from './franchisePersistenceContract';
+import {
+  deleteFranchiseSaveSlot,
+  exportFranchiseSaveSlot,
+  validateFranchiseSaveSlotImportPayload,
+} from './franchiseSaveSlotManifest';
+import { getAllFranchiseTeams } from './franchisePlayerStorage';
 
 // ============================================
 // TYPES
@@ -33,6 +43,7 @@ export interface FranchiseMetadata {
   leagueId?: string;
   controlledTeamId?: string;
   controlledTeamName?: string;
+  gmName?: string;
   currentSeason?: number;
 }
 
@@ -46,13 +57,6 @@ export interface FranchiseSummary {
   storageUsedBytes: number;
   leagueName?: string;
   controlledTeamName?: string;
-}
-
-export interface FranchiseStats {
-  totalGames: number;
-  totalAtBats: number;
-  totalFameEvents: number;
-  seasons: SeasonSummary[];
 }
 
 export interface SeasonSummary {
@@ -73,7 +77,7 @@ export interface AppSettings {
 
 const META_DB_NAME = 'kbl-app-meta';
 const META_DB_VERSION = 3;
-const DB_PREFIX = 'kbl-franchise-';
+const DB_PREFIX = FRANCHISE_DATABASE_PREFIX;
 const CURRENT_SCHEMA_VERSION = 1;
 const APP_VERSION = '1.0.0';
 
@@ -89,7 +93,7 @@ const META_STORES = {
 // ============================================
 
 export function getFranchiseDBName(franchiseId: FranchiseId): string {
-  return `${DB_PREFIX}${franchiseId}`;
+  return getFranchiseDatabaseName(franchiseId);
 }
 
 function generateFranchiseId(): FranchiseId {
@@ -194,73 +198,7 @@ export async function loadFranchise(franchiseId: FranchiseId): Promise<Franchise
  * Delete a franchise and its IndexedDB.
  */
 export async function deleteFranchise(franchiseId: FranchiseId): Promise<void> {
-  const db = await initMetaDatabase();
-
-  // Push cascade tombstones for franchise player/team data before DB deletion
-  if (!syncEngine.isSuppressed()) {
-    try {
-      const { getAllFranchisePlayers, getAllFranchiseTeams } = await import('./franchisePlayerStorage');
-      const dbName = `kbl-franchise-${franchiseId}`;
-      const [players, teams] = await Promise.all([
-        getAllFranchisePlayers(franchiseId),
-        getAllFranchiseTeams(franchiseId),
-      ]);
-      for (const p of players) syncEngine.remove(dbName, 'players', p.id);
-      for (const t of teams) syncEngine.remove(dbName, 'teams', t.id);
-    } catch {
-      // Franchise DB may not exist yet — ignore
-    }
-  }
-
-  // Remove from meta DB (franchise metadata)
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(META_STORES.franchiseList, 'readwrite');
-    const store = tx.objectStore(META_STORES.franchiseList);
-    const request = store.delete(franchiseId);
-
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-app-meta', 'franchiseList', franchiseId);
-      resolve();
-    };
-  });
-
-  // Remove franchise config from meta DB
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(META_STORES.franchiseConfigs, 'readwrite');
-      const store = tx.objectStore(META_STORES.franchiseConfigs);
-      const request = store.delete(franchiseId);
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        if (!syncEngine.isSuppressed()) syncEngine.remove('kbl-app-meta', 'franchiseConfigs', franchiseId);
-        resolve();
-      };
-    });
-  } catch {
-    // Config store may not exist in v1 databases — ignore
-  }
-
-  // Clear franchise-scoped schedule data
-  try {
-    const { clearFranchiseSchedule } = await import('./scheduleStorage');
-    await clearFranchiseSchedule(franchiseId);
-  } catch {
-    // Schedule storage may not be initialized — ignore
-  }
-
-  // Delete the franchise's IndexedDB
-  const dbName = getFranchiseDBName(franchiseId);
-  return new Promise<void>((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(dbName);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
-    request.onblocked = () => {
-      console.warn(`[franchiseManager] deleteDatabase blocked for ${dbName}`);
-      resolve(); // Continue — DB will be deleted when connections close
-    };
-  });
+  await deleteFranchiseSaveSlot(franchiseId);
 }
 
 /**
@@ -316,6 +254,19 @@ export async function listFranchises(): Promise<FranchiseSummary[]> {
     leagueName: meta.leagueName,
     controlledTeamName: meta.controlledTeamName,
   }));
+}
+
+export async function leagueHasLinkedFranchise(leagueId: string): Promise<boolean> {
+  const summaries = await listFranchises();
+
+  for (const summary of summaries) {
+    const teams = await getAllFranchiseTeams(summary.id);
+    if (teams.some((team) => team.leagueIds?.includes(leagueId))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ============================================
@@ -419,7 +370,7 @@ export async function getFranchiseConfig(franchiseId: FranchiseId): Promise<Stor
  */
 export async function updateFranchiseMetadata(
   franchiseId: FranchiseId,
-  updates: Partial<Pick<FranchiseMetadata, 'leagueName' | 'leagueId' | 'controlledTeamId' | 'controlledTeamName' | 'currentSeason'>>
+  updates: Partial<Pick<FranchiseMetadata, 'leagueName' | 'leagueId' | 'controlledTeamId' | 'controlledTeamName' | 'gmName' | 'currentSeason'>>
 ): Promise<void> {
   const metadata = await loadFranchise(franchiseId);
   if (!metadata) throw new Error(`Franchise ${franchiseId} not found`);
@@ -446,41 +397,16 @@ export async function updateFranchiseMetadata(
 
 /**
  * Export a franchise as a JSON Blob containing all its data.
- * Reads all object stores from the franchise's IndexedDB.
+ * Uses the manifest-driven scoped-global save-slot payload.
  */
 export async function exportFranchise(franchiseId: FranchiseId): Promise<Blob> {
   const metadata = await loadFranchise(franchiseId);
   if (!metadata) throw new Error(`Franchise ${franchiseId} not found`);
 
-  const dbName = getFranchiseDBName(franchiseId);
-
-  // Open the franchise DB
-  const franchiseDb = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(dbName);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
-
-  // Read all stores
-  const exportData: Record<string, unknown[]> = {};
-  const storeNames = Array.from(franchiseDb.objectStoreNames);
-
-  for (const storeName of storeNames) {
-    const records: unknown[] = await new Promise((resolve, reject) => {
-      const tx = franchiseDb.transaction(storeName, 'readonly');
-      const store = tx.objectStore(storeName);
-      const request = store.getAll();
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result || []);
-    });
-    exportData[storeName] = records;
-  }
-
-  franchiseDb.close();
+  const exportData = await exportFranchiseSaveSlot(franchiseId);
 
   const blob = new Blob(
-    [JSON.stringify({ metadata, stores: exportData, exportedAt: Date.now() })],
+    [JSON.stringify(exportData, null, 2)],
     { type: 'application/json' }
   );
 
@@ -493,53 +419,15 @@ export async function exportFranchise(franchiseId: FranchiseId): Promise<Blob> {
  */
 export async function importFranchise(data: Blob): Promise<FranchiseId> {
   const text = await data.text();
-  const parsed = JSON.parse(text) as {
-    metadata: FranchiseMetadata;
-    stores: Record<string, unknown[]>;
-    exportedAt: number;
-  };
-
-  // Create new franchise with imported name
-  const newId = await createFranchise(`${parsed.metadata.name} (imported)`);
-  const dbName = getFranchiseDBName(newId);
-
-  // Open/create the franchise DB with the needed stores
-  const storeNames = Object.keys(parsed.stores);
-  if (storeNames.length > 0) {
-    const franchiseDb = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        for (const storeName of storeNames) {
-          if (!db.objectStoreNames.contains(storeName)) {
-            db.createObjectStore(storeName, { autoIncrement: true });
-          }
-        }
-      };
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(request.result);
-    });
-
-    // Write data to each store
-    for (const [storeName, records] of Object.entries(parsed.stores)) {
-      if (records.length === 0) continue;
-      await new Promise<void>((resolve, reject) => {
-        const tx = franchiseDb.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        for (const record of records) {
-          store.put(record);
-        }
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    }
-
-    franchiseDb.close();
+  const parsed = JSON.parse(text) as unknown;
+  const validation = validateFranchiseSaveSlotImportPayload(parsed);
+  if (validation.status !== 'valid') {
+    throw new Error(`Invalid franchise save-slot import payload: ${validation.messages.join(' ')}`);
   }
 
-  return newId;
+  throw new Error(
+    'Manifest-driven franchise import writes are not implemented in Wave A. The payload shape is valid, but importing is intentionally validate-only.',
+  );
 }
 
 // ============================================

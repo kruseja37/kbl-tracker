@@ -95,3 +95,69 @@ export async function findCanonicalByPlayerId(playerId: string): Promise<Canonic
     player.instances.some((instance) => instance.playerIdInInstance === playerId)
   ) ?? null;
 }
+
+export async function removeCanonicalPlayerInstancesForFranchise(
+  franchiseId: string,
+): Promise<{ updated: number; deleted: number }> {
+  const db = await getTrackerDb();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.openCursor();
+    let updated = 0;
+    let deleted = 0;
+    const syncUpdates: CanonicalPlayer[] = [];
+    const syncDeletes: string[] = [];
+
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        return;
+      }
+
+      const player = cursor.value as CanonicalPlayer;
+      const nextInstances = player.instances.filter(
+        (instance) =>
+          !(instance.mode === 'franchise' && instance.instanceId === franchiseId),
+      );
+
+      if (nextInstances.length === player.instances.length) {
+        cursor.continue();
+        return;
+      }
+
+      if (nextInstances.length === 0) {
+        deleted += 1;
+        syncDeletes.push(player.canonicalId);
+        cursor.delete();
+        cursor.continue();
+        return;
+      }
+
+      const nextPlayer: CanonicalPlayer = {
+        ...player,
+        instances: nextInstances,
+      };
+      updated += 1;
+      syncUpdates.push(nextPlayer);
+      cursor.update(nextPlayer);
+      cursor.continue();
+    };
+
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const player of syncUpdates) {
+          syncEngine.upsert('kbl-tracker', STORE_NAME, player.canonicalId, player);
+        }
+        for (const canonicalId of syncDeletes) {
+          syncEngine.remove('kbl-tracker', STORE_NAME, canonicalId);
+        }
+      }
+      resolve({ updated, deleted });
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}

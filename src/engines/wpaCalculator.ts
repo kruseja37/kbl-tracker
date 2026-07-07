@@ -38,6 +38,7 @@ export interface WPAStateBefore {
   homeScore: number;
   awayScore: number;
   totalInnings?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -53,6 +54,7 @@ export interface WPAStateAfter {
 }
 
 export interface WPAExtraInningRunnerOptions {
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
@@ -106,6 +108,7 @@ export function calculateWPA(
       homeScore: before.homeScore,
       awayScore: before.awayScore,
       scheduledInnings: totalInnings,
+      useGhostRunner: before.useGhostRunner,
       extraInningRunner: before.extraInningRunner,
       extraInningRunnerDelay: before.extraInningRunnerDelay,
     },

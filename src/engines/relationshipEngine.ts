@@ -1,3 +1,5 @@
+import type { RelationshipEdgeType } from '../utils/franchiseRelationshipEdgesStorage';
+
 /**
  * RelationshipEngine - Player relationship management
  * Per Ralph Framework S-F001, S-F002, S-F003
@@ -8,20 +10,61 @@
  * - Trade warnings generated
  */
 
-// Relationship types
+// Legacy 9-literal relationship types. Deprecated as canonical L13 edge
+// vocabulary, but retained as source sub-discriminators for LI detectors,
+// UI hooks, and MORALE_EFFECTS base deltas until L13-3 is the sole writer.
 export const RelationshipType = {
+  /** @deprecated L13-Q1: canonical edge type is ROMANCE; retain as legacy subtype. */
   DATING: 'DATING',
+  /** @deprecated L13-Q1: canonical edge type is ROMANCE; retain as legacy subtype. */
   MARRIED: 'MARRIED',
+  /** @deprecated L13-Q1: canonical edge type is ROMANCE; retain as legacy subtype. */
   DIVORCED: 'DIVORCED',
+  /** @deprecated L13-Q1: canonical edge type is FRIENDSHIP; retain as legacy subtype. */
   BEST_FRIENDS: 'BEST_FRIENDS',
+  /** @deprecated L13-Q1: canonical edge type is MENTORSHIP; retain as legacy subtype. */
   MENTOR_PROTEGE: 'MENTOR_PROTEGE',
+  /** @deprecated L13-Q1: canonical edge type is RIVALRY; retain as legacy subtype. */
   RIVALS: 'RIVALS',
+  /** @deprecated L13-Q1: canonical edge type is FEUD; retain as legacy subtype. */
   BULLY_VICTIM: 'BULLY_VICTIM',
+  /** @deprecated L13-Q1: canonical edge type is RIVALRY; retain as legacy subtype. */
   JEALOUS: 'JEALOUS',
+  /** @deprecated L13-Q1: canonical edge type is ROMANCE; retain as legacy subtype. */
   CRUSH: 'CRUSH',
 } as const;
 
 export type RelationshipType = (typeof RelationshipType)[keyof typeof RelationshipType];
+
+export const RELATIONSHIP_9_TO_6_MAP = {
+  [RelationshipType.DATING]: 'ROMANCE',
+  [RelationshipType.MARRIED]: 'ROMANCE',
+  [RelationshipType.DIVORCED]: 'ROMANCE',
+  [RelationshipType.CRUSH]: 'ROMANCE',
+  [RelationshipType.BULLY_VICTIM]: 'FEUD',
+  [RelationshipType.RIVALS]: 'RIVALRY',
+  [RelationshipType.JEALOUS]: 'RIVALRY',
+  [RelationshipType.BEST_FRIENDS]: 'FRIENDSHIP',
+  [RelationshipType.MENTOR_PROTEGE]: 'MENTORSHIP',
+} as const satisfies Record<RelationshipType, RelationshipEdgeType>;
+
+export const RELATIONSHIP_6_TO_9_COVERAGE = {
+  RIVALRY: [RelationshipType.RIVALS, RelationshipType.JEALOUS],
+  FEUD: [RelationshipType.BULLY_VICTIM],
+  MENTORSHIP: [RelationshipType.MENTOR_PROTEGE],
+  FRIENDSHIP: [RelationshipType.BEST_FRIENDS],
+  ROMANCE: [
+    RelationshipType.DATING,
+    RelationshipType.MARRIED,
+    RelationshipType.DIVORCED,
+    RelationshipType.CRUSH,
+  ],
+  HISTORY: [],
+} as const satisfies Record<RelationshipEdgeType, readonly RelationshipType[]>;
+
+export function map9To6(literal: RelationshipType): RelationshipEdgeType {
+  return RELATIONSHIP_9_TO_6_MAP[literal];
+}
 
 // Relationship data structure
 export interface Relationship {
@@ -35,7 +78,7 @@ export interface Relationship {
 }
 
 // Morale effects by relationship type
-const MORALE_EFFECTS: Record<RelationshipType, { player1: number; player2: number }> = {
+export const MORALE_EFFECTS: Record<RelationshipType, { player1: number; player2: number }> = {
   [RelationshipType.DATING]: { player1: 8, player2: 8 },
   [RelationshipType.MARRIED]: { player1: 12, player2: 12 },
   [RelationshipType.DIVORCED]: { player1: -8, player2: -8 },

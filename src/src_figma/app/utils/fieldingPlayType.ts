@@ -245,7 +245,7 @@ export function mapFieldingPlayTypeToSpecialPlayType(
     case 'robbed_hr':
       return 'Robbed HR';
     case 'failed_robbery':
-      return null;
+      return 'Failed Robbery';
     case 'beat_runner':
       return 'Beat Runner';
     case 'beat_throw':

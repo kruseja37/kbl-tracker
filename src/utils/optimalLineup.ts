@@ -8,9 +8,12 @@ import type {
   OptimalLineupSnapshot,
   OptimalLineupSourceConfidence,
 } from "../types/managerWpa";
+import { CALIBRATE } from "../data/rosterEngineConstants";
+import { optimizeLineup } from "../engines/rosterAnalyzer";
+import type { Team } from "./leagueBuilderStorage";
 
 export const OPTIMAL_LINEUP_ALGORITHM_VERSION =
-  "kbl-optimal-lineup-v2-greedy-traits-1";
+  "kbl-optimal-lineup-v3-iv-effective-ratings-1";
 
 const FIELD_POSITIONS = ["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"] as const;
 const PREMIUM_POSITIONS = new Set(["C", "SS", "CF", "2B"]);
@@ -33,8 +36,28 @@ export interface OptimalLineupCandidate {
   trait1?: string;
   trait2?: string;
   traits?: string[] | Record<string, string | undefined>;
+  velocity?: number;
+  junk?: number;
+  accuracy?: number;
+  pitcherRole?: "SP" | "RP" | "CP" | "SP/RP" | string;
+  arsenal?: string[];
+  armSlot?: "High" | "Mid" | "Low" | "Sub" | null;
   unavailable?: boolean;
 }
+
+type OptimalLineupPlayerStates = Record<
+  string,
+  {
+    mojo: "Rattled" | "Tense" | "Normal" | "Locked In" | "On Fire" | "Jacked";
+    fitness: "JUICED" | "FIT" | "WELL" | "STRAINED" | "WEAK" | "HURT";
+    workload?: {
+      role?: "SP" | "SP/RP" | "RP" | "CP";
+      pitchesThrown?: number;
+      gamesSinceLastAppearance?: number;
+      catcherConsecutiveGames?: number;
+    };
+  }
+>;
 
 export interface LineupSlotInput {
   playerId: string;
@@ -54,6 +77,7 @@ export interface BuildOptimalLineupSnapshotInput {
   generatedAt?: number;
   generatedFrom: OptimalLineupGeneratedFrom;
   sourceConfidence: OptimalLineupSourceConfidence;
+  playerStates?: OptimalLineupPlayerStates;
 }
 
 export interface BuildLineupSnapshotFromSlotsInput
@@ -229,69 +253,31 @@ export function confirmEngineOptimalLineupSnapshot(
 export function buildOptimalLineupSnapshot(
   input: BuildOptimalLineupSnapshotInput,
 ): OptimalLineupSnapshot {
-  const availableCandidates = input.candidates
-    .filter((candidate) => !candidate.unavailable)
-    .filter((candidate) => !isPitcherCandidate(candidate));
   const positions = input.dhEnabled ? [...FIELD_POSITIONS, "DH"] : [...FIELD_POSITIONS];
-  const assignedPlayerIds = new Set<string>();
-  const selected: Array<{
-    candidate: OptimalLineupCandidate;
-    defensivePosition: string;
-    positionalFitScore: number;
-  }> = [];
-
-  for (const position of positions.filter((position) => position !== "DH")) {
-    const candidate = availableCandidates
-      .filter((row) => !assignedPlayerIds.has(row.playerId))
-      .map((row) => ({
-        candidate: row,
-        positionalFitScore: positionalFitScore(row, position),
-        totalScore:
-          positionalFitScore(row, position) * 55 +
-          projectedValueScore(row, input.opposingPitcherHand, position) * 0.45 +
-          defensivePriorityBonus(row, position),
-      }))
-      .sort((left, right) => right.totalScore - left.totalScore)[0];
-
-    if (!candidate) continue;
-    assignedPlayerIds.add(candidate.candidate.playerId);
-    selected.push({
-      candidate: candidate.candidate,
-      defensivePosition: position,
-      positionalFitScore: candidate.positionalFitScore,
-    });
-  }
-
-  if (input.dhEnabled) {
-    const dhCandidate = availableCandidates
-      .filter((row) => !assignedPlayerIds.has(row.playerId))
-      .map((row) => ({
-        candidate: row,
-        positionalFitScore: positionalFitScore(row, "DH"),
-        totalScore: projectedValueScore(row, input.opposingPitcherHand, "DH"),
-      }))
-      .sort((left, right) => right.totalScore - left.totalScore)[0];
-
-    if (dhCandidate) {
-      assignedPlayerIds.add(dhCandidate.candidate.playerId);
-      selected.push({
-        candidate: dhCandidate.candidate,
-        defensivePosition: "DH",
-        positionalFitScore: dhCandidate.positionalFitScore,
-      });
-    }
-  }
-
-  const ordered = orderLineupSlots(selected, input.opposingPitcherHand);
-  const slots = ordered.map((entry, index) =>
-    buildSlot({
-      candidate: entry.candidate,
-      defensivePosition: entry.defensivePosition,
-      battingOrderSlot: index + 1,
-      opposingPitcherHand: input.opposingPitcherHand,
-      positionalFitScore: entry.positionalFitScore,
-    }),
+  const candidateById = new Map(input.candidates.map((candidate) => [candidate.playerId, candidate]));
+  const recommendation = optimizeLineup(
+    analysisTeamForCandidates(input.candidates, input.teamId, input.dhEnabled),
+    input.opposingPitcherHand,
+    input.playerStates ?? {},
   );
+  const slots = recommendation.recommendedBattingOrder.map((entry) => {
+    const candidate =
+      candidateById.get(entry.playerId) ??
+      ({
+        playerId: entry.playerId,
+        playerName: entry.playerName,
+        currentPosition: entry.defensivePosition,
+      } satisfies OptimalLineupCandidate);
+    return buildSlot({
+      candidate,
+      defensivePosition: entry.defensivePosition,
+      battingOrderSlot: entry.slot,
+      opposingPitcherHand: input.opposingPitcherHand,
+      positionalFitScore: positionalFitScore(candidate, entry.defensivePosition),
+      projectedValueScore: entry.projectedValueScore,
+      projectedSlotKblWpa: projectedSlotKblWpaFromIv(entry.slotScore),
+    });
+  });
 
   return buildSnapshot({
     ...input,
@@ -305,6 +291,26 @@ export function buildLineupSnapshotFromSlots(
   input: BuildLineupSnapshotFromSlotsInput,
 ): OptimalLineupSnapshot {
   const candidateById = new Map(input.candidates.map((candidate) => [candidate.playerId, candidate]));
+  const recommendation = optimizeLineup(
+    analysisTeamForCandidates(input.candidates, input.teamId, input.dhEnabled, input.slots),
+    input.opposingPitcherHand,
+    input.playerStates ?? {},
+  );
+  const scoreBySlot = new Map(
+    recommendation.recommendedBattingOrder.map((slot) => [
+      slotIdentity({
+        playerId: slot.playerId,
+        battingOrderSlot: slot.slot,
+        defensivePosition: slot.defensivePosition,
+        playerName: slot.playerName,
+        projectedSlotKblWpa: 0,
+        projectedValueScore: 0,
+        positionalFitScore: 0,
+        confidence: "low",
+      }),
+      slot,
+    ]),
+  );
   const slots = input.slots
     .filter((slot) => !PITCHER_POSITIONS.has(normalizePosition(slot.defensivePosition)))
     .map((slot) => {
@@ -316,6 +322,9 @@ export function buildLineupSnapshotFromSlots(
           currentPosition: slot.defensivePosition,
         } satisfies OptimalLineupCandidate);
 
+      const scoreKey = `${slot.playerId}:${slot.battingOrderSlot}:${normalizePosition(slot.defensivePosition)}`;
+      const score = scoreBySlot.get(scoreKey);
+
       return buildSlot({
         candidate: {
           ...candidate,
@@ -326,6 +335,10 @@ export function buildLineupSnapshotFromSlots(
         battingOrderSlot: slot.battingOrderSlot,
         opposingPitcherHand: input.opposingPitcherHand,
         positionalFitScore: positionalFitScore(candidate, slot.defensivePosition),
+        projectedValueScore: score?.projectedValueScore,
+        projectedSlotKblWpa: score?.slotScore === undefined
+          ? undefined
+          : projectedSlotKblWpaFromIv(score.slotScore),
       });
     })
     .sort((left, right) => left.battingOrderSlot - right.battingOrderSlot);
@@ -470,8 +483,10 @@ function buildSlot(input: {
   battingOrderSlot: number;
   opposingPitcherHand: OpposingPitcherHand;
   positionalFitScore: number;
+  projectedValueScore?: number;
+  projectedSlotKblWpa?: number;
 }): OptimalLineupSlot {
-  const projectedValue = projectedValueScore(
+  const projectedValue = input.projectedValueScore ?? projectedValueScore(
     input.candidate,
     input.opposingPitcherHand,
     input.defensivePosition,
@@ -482,13 +497,36 @@ function buildSlot(input: {
     playerName: input.candidate.playerName,
     battingOrderSlot: input.battingOrderSlot,
     defensivePosition: normalizePosition(input.defensivePosition),
-    projectedSlotKblWpa: projectedSlotKblWpa(projectedValue, input.battingOrderSlot),
+    projectedSlotKblWpa: input.projectedSlotKblWpa ?? projectedSlotKblWpa(projectedValue, input.battingOrderSlot),
     projectedValueScore: roundScore(projectedValue),
     positionalFitScore: roundScore(input.positionalFitScore),
     confidence: input.candidate.power === undefined || input.candidate.contact === undefined
       ? "low"
       : "medium",
   };
+}
+
+function analysisTeamForCandidates(
+  candidates: OptimalLineupCandidate[],
+  teamId: string,
+  dhEnabled: boolean | undefined,
+  lineupSlotsOverride?: LineupSlotInput[],
+): Team {
+  return {
+    id: teamId,
+    name: teamId,
+    abbreviation: teamId.slice(0, 3).toUpperCase(),
+    location: "",
+    nickname: "",
+    colors: { primary: "#000000", secondary: "#ffffff" },
+    stadium: "",
+    leagueIds: [],
+    createdDate: "",
+    lastModified: "",
+    dhEnabled,
+    rosterPlayers: candidates,
+    lineupSlotsOverride,
+  } as unknown as Team;
 }
 
 function orderLineupSlots(
@@ -582,6 +620,10 @@ function defensivePriorityBonus(
 function projectedSlotKblWpa(projectedValue: number, battingOrderSlot: number): number {
   const orderWeight = Math.max(0.88, 1.06 - (Math.max(1, battingOrderSlot) - 1) * 0.018);
   return roundWpa(((projectedValue - 55) / 500) * orderWeight);
+}
+
+function projectedSlotKblWpaFromIv(slotScore: number): number {
+  return roundWpa(slotScore / CALIBRATE.lineupSnapshotWpaDivisor);
 }
 
 function deviationRankScore(

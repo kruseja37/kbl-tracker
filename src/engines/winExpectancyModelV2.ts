@@ -25,6 +25,7 @@ export interface WpaGameState {
   awayScore: number;
   scheduledInnings: number;
   runEnvironment?: number;
+  useGhostRunner?: boolean;
   extraInningRunner?: boolean;
   extraInningRunnerDelay?: 1 | 2;
 }
