@@ -440,6 +440,10 @@
 .fen-trophy.you .th { color: var(--fen-yellow); }
 
 /* ===== Schedule tab ===== */
+.fen-sched-manager { color: var(--franchise-text, var(--fen-chalk)); }
+.fen-sched-manager .space-y-4 { margin: 0; }
+.fen-sched-manager button, .fen-sched-manager label { font-family: var(--fen-chalk-font); letter-spacing: 0; }
+.fen-sched-manager input, .fen-sched-manager select { font-family: var(--fen-chalk-font); }
 .fen-sched-deadline { font-family: var(--fen-chalk-font); font-size: 13px; color: var(--fen-yellow); background: rgba(242, 192, 65, 0.1); border: 1px solid rgba(242, 192, 65, 0.3); border-radius: 5px; padding: 8px 14px; margin-bottom: 18px; }
 .fen-sched-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
 @media (max-width: 720px) { .fen-sched-grid { grid-template-columns: 1fr; } }

@@ -7,10 +7,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
+import { AddGameModal, type GameFormData } from "../components/AddGameModal";
 import { FranchisePregameLaunchOverlay } from "../components/FranchisePregameLaunchOverlay";
 import { FranchiseLensHub } from "../components/franchise/FranchiseLensHub";
 import { useFranchiseLensData } from "../../hooks/useFranchiseLensData";
-import { useScheduleData } from "../../hooks/useScheduleData";
+import { useScheduleData, type ScheduledGame } from "../../hooks/useScheduleData";
 import { repairFranchisePersistence } from "../../../utils/franchiseInitializer";
 import {
   buildFranchiseGameTrackerNavigation,
@@ -38,6 +39,10 @@ export function FranchiseLens() {
   const [scoreOnlySaving, setScoreOnlySaving] = useState(false);
   const [pendingSkipGameId, setPendingSkipGameId] = useState<string | null>(null);
   const [skipSaving, setSkipSaving] = useState(false);
+  const [selectedScheduleTeam, setSelectedScheduleTeam] = useState<string>("");
+  const [scheduleDropdownOpen, setScheduleDropdownOpen] = useState(false);
+  const [addGameModalOpen, setAddGameModalOpen] = useState(false);
+  const [editingScheduleGame, setEditingScheduleGame] = useState<(GameFormData & { id: string }) | null>(null);
 
   const scheduleData = useScheduleData(seasonNumber, { franchiseId });
   const {
@@ -65,6 +70,101 @@ export function FranchiseLens() {
     const timer = setTimeout(() => setToastMessage(null), 4000);
     return () => clearTimeout(timer);
   }, [toastMessage]);
+
+  useEffect(() => {
+    if (active?.id) {
+      setSelectedScheduleTeam(active.id);
+      setScheduleDropdownOpen(false);
+    }
+  }, [active?.id]);
+
+  const availableTeams = teams.map((team) => team.id);
+
+  const getNextGameNumber = (): number => {
+    if (scheduleData.games.length === 0) return 1;
+    return Math.max(...scheduleData.games.map((game) => game.gameNumber)) + 1;
+  };
+
+  const getNextDayNumber = (): number => {
+    if (scheduleData.games.length === 0) return 1;
+    return Math.max(...scheduleData.games.map((game) => game.dayNumber)) + 1;
+  };
+
+  const getNextDate = (): string => {
+    const today = () => new Date().toLocaleDateString("en-US", { month: "long", day: "numeric" });
+    const latestDatedGame = scheduleData.games
+      .filter((game) => game.date)
+      .sort((a, b) => b.gameNumber - a.gameNumber)[0];
+    if (!latestDatedGame?.date) return today();
+
+    try {
+      const parsedDate = new Date(`${latestDatedGame.date}, ${new Date().getFullYear()}`);
+      if (!Number.isNaN(parsedDate.getTime())) {
+        parsedDate.setDate(parsedDate.getDate() + 1);
+        return parsedDate.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+      }
+    } catch {
+      // Fall through to today's date when a user-entered free-form date cannot be parsed.
+    }
+    return today();
+  };
+
+  const getFilteredSchedule = (teamId: string): ScheduledGame[] => {
+    const sortedGames = [...scheduleData.games].sort((a, b) => a.gameNumber - b.gameNumber);
+    if (teamId === "FULL LEAGUE") return sortedGames;
+    return sortedGames.filter((game) => game.awayTeamId === teamId || game.homeTeamId === teamId);
+  };
+
+  const handleAddGame = async (gameData: GameFormData) => {
+    try {
+      await scheduleData.addGame({
+        seasonId,
+        statsScopeId: seasonId,
+        gameNumber: gameData.gameNumber,
+        dayNumber: gameData.dayNumber,
+        date: gameData.date,
+        time: gameData.time,
+        awayTeamId: gameData.awayTeamId,
+        homeTeamId: gameData.homeTeamId,
+      });
+      reload();
+    } catch (caught) {
+      setToastMessage(caught instanceof Error ? caught.message : "Failed to add game.");
+    }
+  };
+
+  const handleAddSeries = async (gameData: GameFormData, count: number) => {
+    try {
+      await scheduleData.addSeries({
+        seasonId,
+        statsScopeId: seasonId,
+        date: gameData.date,
+        time: gameData.time,
+        awayTeamId: gameData.awayTeamId,
+        homeTeamId: gameData.homeTeamId,
+      }, count);
+      reload();
+    } catch (caught) {
+      setToastMessage(caught instanceof Error ? caught.message : "Failed to add series.");
+    }
+  };
+
+  const handleUpdateGame = async (gameId: string, gameData: GameFormData) => {
+    try {
+      await scheduleData.updateGame(gameId, {
+        gameNumber: gameData.gameNumber,
+        dayNumber: gameData.dayNumber,
+        date: gameData.date,
+        time: gameData.time,
+        awayTeamId: gameData.awayTeamId,
+        homeTeamId: gameData.homeTeamId,
+      });
+      setEditingScheduleGame(null);
+      reload();
+    } catch (caught) {
+      setToastMessage(caught instanceof Error ? caught.message : "Failed to update game.");
+    }
+  };
 
   const getScheduledGame = (scheduleGameId?: string) => {
     if (scheduleGameId) {
@@ -273,6 +373,56 @@ export function FranchiseLens() {
           onScoreOnlyGame: openScoreOnlyModal,
           onSkipGame: openSkipConfirm,
         }}
+        scheduleManager={{
+          games: getFilteredSchedule(selectedScheduleTeam || active.id),
+          selectedTeam: selectedScheduleTeam || active.id,
+          onTeamChange: setSelectedScheduleTeam,
+          availableTeams,
+          onAddGame: () => setAddGameModalOpen(true),
+          dropdownOpen: scheduleDropdownOpen,
+          setDropdownOpen: setScheduleDropdownOpen,
+          stadiumMap,
+          seasonNumber,
+          teamNameMap,
+          onDeleteGame: async (gameId) => {
+            await scheduleData.deleteGame(gameId);
+            reload();
+          },
+          onEditGame: (game) => {
+            setEditingScheduleGame({
+              id: game.id,
+              gameNumber: game.gameNumber,
+              dayNumber: game.dayNumber,
+              date: game.date,
+              time: game.time,
+              awayTeamId: game.awayTeamId,
+              homeTeamId: game.homeTeamId,
+            });
+            setAddGameModalOpen(true);
+          },
+          onScoreGame: (game) => void handleScoreGame(game.id),
+          onEnterFinalScore: (game) => openScoreOnlyModal(game.id),
+          onSkipGame: (game) => openSkipConfirm(game.id),
+          onImportCsvRows: async (rows) => {
+            await scheduleData.importFranchiseRows(rows, {
+              seasonId,
+              statsScopeId: seasonId,
+            });
+            reload();
+          },
+        }}
+      />
+      <AddGameModal
+        isOpen={addGameModalOpen}
+        onClose={() => { setAddGameModalOpen(false); setEditingScheduleGame(null); }}
+        onAddGame={handleAddGame}
+        onAddSeries={handleAddSeries}
+        onUpdateGame={handleUpdateGame}
+        editingGame={editingScheduleGame}
+        nextGameNumber={getNextGameNumber()}
+        nextDayNumber={getNextDayNumber()}
+        nextDate={getNextDate()}
+        teams={availableTeams}
       />
       {isPreparingGameLaunch && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 bg-[#1A2433] px-5 py-3 text-[11px] text-[#F4F1E4] shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">

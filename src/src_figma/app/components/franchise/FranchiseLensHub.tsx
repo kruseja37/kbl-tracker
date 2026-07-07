@@ -1,6 +1,8 @@
 import { Fragment, useState } from "react";
+import { ScheduleContent } from "../ScheduleContent";
 import { FranchiseLineupsBoard } from "./FranchiseLineupsBoard";
 import { FITNESS_STATES, type FitnessState } from "../../../../engines/fitnessEngine";
+import type { FranchiseScheduleImportRow, ScheduledGame } from "../../../../utils/scheduleStorage";
 
 /**
  * FranchiseLensHub — the aged-"Green Monster" team-lens franchise hub (redesign,
@@ -477,6 +479,24 @@ export interface FranchiseLensActions {
   onScoreOnlyGame?: (scheduleGameId?: string) => void;
   onSkipGame?: (scheduleGameId?: string) => void;
 }
+export interface FranchiseLensScheduleManager {
+  games: ScheduledGame[];
+  selectedTeam: string;
+  onTeamChange: (teamId: string) => void;
+  availableTeams: string[];
+  onAddGame: () => void;
+  dropdownOpen: boolean;
+  setDropdownOpen: (open: boolean) => void;
+  stadiumMap: Record<string, string>;
+  seasonNumber?: number;
+  teamNameMap?: Record<string, string>;
+  onDeleteGame?: (gameId: string) => void;
+  onEditGame?: (game: ScheduledGame) => void;
+  onScoreGame?: (game: ScheduledGame) => void;
+  onEnterFinalScore?: (game: ScheduledGame) => void;
+  onSkipGame?: (game: ScheduledGame) => void;
+  onImportCsvRows?: (rows: FranchiseScheduleImportRow[]) => Promise<void> | void;
+}
 /** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
 interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
 
@@ -488,6 +508,8 @@ export interface FranchiseLensHubProps {
   onBack?: () => void;
   /** When present, roster rows/farm expose call-up & send-down affordances wired to the live engines. */
   actions?: FranchiseLensActions;
+  /** When present, the Schedule tab uses the live franchise schedule manager instead of the compact read-only digest. */
+  scheduleManager?: FranchiseLensScheduleManager;
 }
 
 const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times", "Playoffs", "Moves"] as const;
@@ -515,7 +537,7 @@ function Money({ value, className }: { value: number; className?: string }) {
   );
 }
 
-export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: FranchiseLensHubProps) {
+export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions, scheduleManager }: FranchiseLensHubProps) {
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
   const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
@@ -594,7 +616,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
             ) : tab === "Stadium" ? (
               <StadiumTab hub={hub} active={active} />
             ) : tab === "Schedule" ? (
-              <ScheduleTab hub={hub} active={active} actions={actions} />
+              <ScheduleTab hub={hub} active={active} actions={actions} scheduleManager={scheduleManager} />
             ) : tab === "Almanac" ? (
               <AlmanacTab hub={hub} active={active} />
             ) : (
@@ -1836,7 +1858,25 @@ function ScheduleRow({ g, actions }: { g: ScheduleGameVM; actions?: FranchiseLen
   );
 }
 
-function ScheduleTab({ hub, active, actions }: { hub: HubVM; active: ActiveTeamVM; actions?: FranchiseLensActions }) {
+function ScheduleTab({
+  hub,
+  active,
+  actions,
+  scheduleManager,
+}: {
+  hub: HubVM;
+  active: ActiveTeamVM;
+  actions?: FranchiseLensActions;
+  scheduleManager?: FranchiseLensScheduleManager;
+}) {
+  if (scheduleManager) {
+    return (
+      <div className="fen-sched-manager">
+        <ScheduleContent {...scheduleManager} />
+      </div>
+    );
+  }
+
   const sc = hub.schedule;
   if (!sc) return <div className="fen-empty">No schedule loaded for {active.name} yet.</div>;
   return (
