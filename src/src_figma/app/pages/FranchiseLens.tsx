@@ -1,12 +1,8 @@
 /**
- * FranchiseLensLivePreview — the REAL-DATA franchise-lens hub, behind the parallel route
- * /__preview/franchise-lens/:franchiseId (non-destructive; the live /franchise/:franchiseId
- * route and the mock /__preview/franchise-lens route are untouched).
+ * FranchiseLens — the real-data franchise hub at /franchise/:franchiseId.
  *
  * This is the thin page wrapper: read the franchiseId from the URL, run the real-data adapter
- * hook, and render the unchanged pure-view FranchiseLensHub. Seed a demo franchise via
- * /__preview/franchise-lens-seed (dev only) to get a reproducible :franchiseId, or point this
- * at any real save's franchiseId. See FRANCHISE_LENS_REALDATA_ADAPTER_PLAN.md.
+ * hook, and render the unchanged pure-view FranchiseLensHub.
  */
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -26,7 +22,7 @@ import {
   type FranchisePregameData,
 } from "../utils/franchiseGameLaunch";
 
-export function FranchiseLensLivePreview() {
+export function FranchiseLens() {
   const navigate = useNavigate();
   const { franchiseId } = useParams<{ franchiseId: string }>();
   const [searchParams] = useSearchParams();
@@ -376,4 +372,4 @@ export function FranchiseLensLivePreview() {
   );
 }
 
-export default FranchiseLensLivePreview;
+export default FranchiseLens;

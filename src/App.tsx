@@ -35,9 +35,9 @@ const EliminationSelector = lazy(() =>
     default: module.EliminationSelector,
   })),
 );
-const FranchiseHome = lazy(() =>
-  import("./src_figma/app/pages/FranchiseHome").then((module) => ({
-    default: module.FranchiseHome,
+const FranchiseLens = lazy(() =>
+  import("./src_figma/app/pages/FranchiseLens").then((module) => ({
+    default: module.FranchiseLens,
   })),
 );
 const GameTracker = lazy(() =>
@@ -212,11 +212,6 @@ const FranchiseLensPreview = lazy(() =>
     default: module.FranchiseLensPreview,
   })),
 );
-const FranchiseLensLivePreview = lazy(() =>
-  import("./src_figma/app/pages/FranchiseLensLivePreview").then((module) => ({
-    default: module.FranchiseLensLivePreview,
-  })),
-);
 const PlayerInstanceCardPreview = lazy(() =>
   import("./src_figma/app/pages/PlayerInstanceCardPreview").then((module) => ({
     default: module.PlayerInstanceCardPreview,
@@ -287,8 +282,9 @@ const FranchiseLensSeedPlayed = enableFranchiseManualSmokeSetupRoute
  * KBL Tracker - Main App
  *
  * All routes use Figma-designed components which provide an exhaustive UI.
- * The FranchiseHome page includes all in-season, playoff, and offseason flows
- * as tabs and modals, so no separate routes are needed for:
+ * The franchise route lands on the FranchiseLens hub. Legacy FranchiseHome remains
+ * in src_figma/app/pages as an unrouted fallback for regression coverage.
+ * No separate routes are needed for:
  * - Season dashboard, Schedule, Roster, Leaders
  * - Awards ceremony flows
  * - Offseason flows (Free Agency, Draft, Trades, Retirements, etc.)
@@ -330,7 +326,7 @@ function App() {
           path="/franchise/:franchiseId/season-summary"
           element={<SeasonSummary />}
         />
-        <Route path="/franchise/:franchiseId" element={<FranchiseHome />} />
+        <Route path="/franchise/:franchiseId" element={<FranchiseLens />} />
 
         {/* Game Flow - Figma Design */}
         <Route path="/game-tracker/:gameId" element={<GameTracker />} />
@@ -420,7 +416,7 @@ function App() {
             <Route path="/__preview/franchise-lens" element={<FranchiseLensPreview />} />
             <Route
               path="/__preview/franchise-lens/:franchiseId"
-              element={<FranchiseLensLivePreview />}
+              element={<FranchiseLens />}
             />
             <Route
               path="/__preview/player-instance-card"
