@@ -4,9 +4,9 @@ import { archetypeByKey } from "../data/teamArchetypeCatalog";
 
 /**
  * DraftSetupArchetypePreview — a non-destructive, routable preview of the Draft
- * Setup archetype picker (the two-pick MLB/farm model over the 15 historical
- * identities), at /__preview/draft-archetypes. Mock teams; lets us review the
- * design before folding it into LeagueBuilderDraftSetup + wiring the engine.
+ * Setup archetype picker (the two-pick MLB/farm model over the 24 historical
+ * identities). Mock teams; kept as an unrouted fixture now that the explainer
+ * copy lives in LeagueBuilderDraftSetup's help layer.
  */
 
 interface MockTeam { id: string; name: string; abbr: string; }
@@ -39,7 +39,7 @@ export function DraftSetupArchetypePreview() {
         <h1 className="text-2xl font-bold mb-1" style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.8)" }}>Team Identity</h1>
         <p className="text-sm text-[#E8E8D8]/65 mb-5 max-w-[70ch]">
           Each team picks an <b className="text-[#E8E8D8]">MLB identity</b> (sets what's cheap to build) and a{" "}
-          <b className="text-[#E8E8D8]">farm identity</b> (steers your scout) from 15 historical team archetypes — all
+          <b className="text-[#E8E8D8]">farm identity</b> (steers your scout) from 24 historical team archetypes — all
           balanced, so no identity builds a stronger team; the difference is the <i>shape</i> of the team you can build.
         </p>
 

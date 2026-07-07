@@ -110,11 +110,6 @@ const LeagueBuilderDraftSetup = lazy(() =>
     default: module.LeagueBuilderDraftSetup,
   })),
 );
-const DraftSetupArchetypePreview = lazy(() =>
-  import("./src_figma/app/pages/DraftSetupArchetypePreview").then((module) => ({
-    default: module.DraftSetupArchetypePreview,
-  })),
-);
 const SeasonRulesPreview = lazy(() =>
   import("./src_figma/app/pages/SeasonRulesPreview").then((module) => ({
     default: module.SeasonRulesPreview,
@@ -252,6 +247,7 @@ const BetweenInningSummaryPreview = lazy(() =>
     default: module.BetweenInningSummaryPreview,
   })),
 );
+const enablePreviewRoutes = import.meta.env.DEV || import.meta.env.MODE === "test";
 const enableFranchiseVisualSmokePreviewRoute =
   import.meta.env.DEV || import.meta.env.MODE === "test";
 const enableFranchiseManualSmokeSetupRoute =
@@ -313,16 +309,19 @@ function App() {
       <Routes>
         {/* Main Menu - Figma Design */}
         <Route path="/" element={<AppHome />} />
-        <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
-        <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
-        <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
-        <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
-        <Route path="/__preview/lineups" element={<LineupsTabPreview />} />
-        <Route path="/__preview/ingame-advisor" element={<InGameAdvisorPreview />} />
-        <Route path="/__preview/construction-rail" element={<ConstructionRailPreview />} />
-        <Route path="/__preview/staffing" element={<EndOfDraftStaffingPreview />} />
-        <Route path="/__preview/scout-hire" element={<ScoutHirePreview />} />
-        <Route path="/__preview/my-teams" element={<MyTeamsSwitcherPreview />} />
+        {enablePreviewRoutes ? (
+          <>
+            <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
+            <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
+            <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
+            <Route path="/__preview/lineups" element={<LineupsTabPreview />} />
+            <Route path="/__preview/ingame-advisor" element={<InGameAdvisorPreview />} />
+            <Route path="/__preview/construction-rail" element={<ConstructionRailPreview />} />
+            <Route path="/__preview/staffing" element={<EndOfDraftStaffingPreview />} />
+            <Route path="/__preview/scout-hire" element={<ScoutHirePreview />} />
+            <Route path="/__preview/my-teams" element={<MyTeamsSwitcherPreview />} />
+          </>
+        ) : null}
 
         {/* Franchise Flow - Figma Design */}
         <Route path="/franchise/select" element={<FranchiseSelector />} />
@@ -413,38 +412,42 @@ function App() {
         />
         <Route path="/almanac/teams/:leagueId/:teamId" element={<TeamPage />} />
 
-        {/* Isolated component proof route */}
-        <Route path="/__preview/fame-pip" element={<FamePipPreview />} />
-        <Route path="/__preview/auction-stage" element={<AuctionStagePreview />} />
-        <Route path="/__preview/franchise-lens" element={<FranchiseLensPreview />} />
-        <Route
-          path="/__preview/franchise-lens/:franchiseId"
-          element={<FranchiseLensLivePreview />}
-        />
-        <Route
-          path="/__preview/player-instance-card"
-          element={<PlayerInstanceCardPreview />}
-        />
-        <Route
-          path="/__preview/fame-leaderboard"
-          element={<FameLeaderboardPreview />}
-        />
-        <Route
-          path="/__preview/matchup-drama-bar"
-          element={<MatchupDramaBarPreview />}
-        />
-        <Route
-          path="/__preview/commentary-feed"
-          element={<CommentaryFeedPreview />}
-        />
-        <Route
-          path="/__preview/commentary-feed-persistence"
-          element={<CommentaryFeedPersistencePreview />}
-        />
-        <Route
-          path="/__preview/between-inning-summary"
-          element={<BetweenInningSummaryPreview />}
-        />
+        {/* Isolated component proof routes */}
+        {enablePreviewRoutes ? (
+          <>
+            <Route path="/__preview/fame-pip" element={<FamePipPreview />} />
+            <Route path="/__preview/auction-stage" element={<AuctionStagePreview />} />
+            <Route path="/__preview/franchise-lens" element={<FranchiseLensPreview />} />
+            <Route
+              path="/__preview/franchise-lens/:franchiseId"
+              element={<FranchiseLensLivePreview />}
+            />
+            <Route
+              path="/__preview/player-instance-card"
+              element={<PlayerInstanceCardPreview />}
+            />
+            <Route
+              path="/__preview/fame-leaderboard"
+              element={<FameLeaderboardPreview />}
+            />
+            <Route
+              path="/__preview/matchup-drama-bar"
+              element={<MatchupDramaBarPreview />}
+            />
+            <Route
+              path="/__preview/commentary-feed"
+              element={<CommentaryFeedPreview />}
+            />
+            <Route
+              path="/__preview/commentary-feed-persistence"
+              element={<CommentaryFeedPersistencePreview />}
+            />
+            <Route
+              path="/__preview/between-inning-summary"
+              element={<BetweenInningSummaryPreview />}
+            />
+          </>
+        ) : null}
         {enableFranchiseVisualSmokePreviewRoute ? (
           <Route
             path="/__preview/franchise-v1-visual-smoke"
