@@ -4,6 +4,7 @@ import {
   SOLVENCY_SEVERE_TAX_FRAC,
   TRADE_TOLERANCE_BAND,
 } from '../data/rosterEngineConstants';
+import { LEGAL_ROSTER } from '../data/rosterConstruction';
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
@@ -286,7 +287,7 @@ export function derivePickValueChart(ivsDesc: number[]): PickValue[] {
     .map((value, index) => ({ pick: index + 1, value }));
 }
 
-const MLB_ROSTER_SLOTS_PER_TEAM = 22;
+const MLB_ROSTER_SLOTS_PER_TEAM = LEGAL_ROSTER.size;
 
 /**
  * Option B — pool-relative MLB team budget (JK ruling 2026-06-25). Instead of a static per-tier

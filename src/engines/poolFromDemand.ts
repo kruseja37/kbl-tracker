@@ -39,7 +39,7 @@ import { poolDemandModel } from './auctionPoolSizing';
 import { scoreSmb4Player } from './smb4GradeEmulator';
 import type { HistoricalArchetype } from '../data/historicalArchetypes';
 import type { TierKey } from '../data/tierParams';
-import { canCover, canRelieve, canStart, isCloser } from '../data/rosterConstruction';
+import { canCover, canRelieve, canStart, isCloser, LEGAL_ROSTER } from '../data/rosterConstruction';
 
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
@@ -1423,7 +1423,7 @@ export function repairG1PoolForSizing(options: {
   const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
   const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
   const requestedExcludedIds = options.requestedExcludedIds ?? new Set<string>();
-  const requiredRosterDemand = Math.max(0, options.requiredRosterDemand ?? options.teams * 22);
+  const requiredRosterDemand = Math.max(0, options.requiredRosterDemand ?? options.teams * LEGAL_ROSTER.size);
   const targetSize = Math.max(0, Math.floor(options.targetSize ?? options.players.length));
   const maxRepairSlackFactor = options.maxRepairSlackFactor ?? tuning.maxRepairSlackFactor;
   const repairGrowthAllowed = options.repairGrowthAllowed ?? true;
