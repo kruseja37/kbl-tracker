@@ -110,11 +110,6 @@ const LeagueBuilderDraftSetup = lazy(() =>
     default: module.LeagueBuilderDraftSetup,
   })),
 );
-const DraftSetupArchetypePreview = lazy(() =>
-  import("./src_figma/app/pages/DraftSetupArchetypePreview").then((module) => ({
-    default: module.DraftSetupArchetypePreview,
-  })),
-);
 const SeasonRulesPreview = lazy(() =>
   import("./src_figma/app/pages/SeasonRulesPreview").then((module) => ({
     default: module.SeasonRulesPreview,
@@ -316,7 +311,6 @@ function App() {
         <Route path="/" element={<AppHome />} />
         {enablePreviewRoutes ? (
           <>
-            <Route path="/__preview/draft-archetypes" element={<DraftSetupArchetypePreview />} />
             <Route path="/__preview/season-rules" element={<SeasonRulesPreview />} />
             <Route path="/__preview/draft-guide" element={<DraftGuidePreview />} />
             <Route path="/__preview/scout-panel" element={<ScoutPanelPreview />} />
