@@ -107,7 +107,7 @@ export interface BalanceReport {
   outliers: { name: string; deviation: number }[];
 }
 
-const ROSTER_SIZE = 22;
+const ROSTER_SIZE = LEGAL_ROSTER.size;
 const HITTER_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
 
 type SlotKind =
@@ -682,7 +682,7 @@ function constrainedIdentityClimb(
     const iv = players.reduce((s, p) => s + p.iv, 0);
     const over = Math.max(0, rosterCost(players, caps) - budget);
     const short = Math.max(0, floorIv - iv);
-    const illegal = players.length === 22 && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
+    const illegal = players.length === LEGAL_ROSTER.size && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
     const fit = players.reduce(
       (s, p, idx) => s + fitScore(p) + (slotBonus?.(p.id, picks[idx].slotIndex) ?? 0),
       0,

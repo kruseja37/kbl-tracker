@@ -12,10 +12,11 @@ export function scarcityPressure(
   player: AuctionSimPlayer,
   teams: readonly AuctionSimTeamState[],
   remainingPlayers: readonly AuctionSimPlayer[],
+  rosterSize: number,
 ): number {
   const key = positionClass(player);
   const supply = remainingPlayers.filter((candidate) => positionClass(candidate) === key).length + 1;
-  const demand = teams.reduce((sum, team) => sum + Math.max(0, 22 - team.roster.length), 0);
+  const demand = teams.reduce((sum, team) => sum + Math.max(0, rosterSize - team.roster.length), 0);
   const classDemand = key === 'any' ? demand : Math.max(1, Math.ceil(demand / 10));
   return Math.max(0, Math.log((classDemand + 1) / (supply + 1)));
 }
@@ -45,7 +46,7 @@ export function rawWillingnessToPay(
   config: AuctionSimConfig,
 ): number {
   const need = rosterNeedMultiplier(team, player);
-  const scarcity = scarcityPressure(player, teams, remainingPlayers);
+  const scarcity = scarcityPressure(player, teams, remainingPlayers, config.rosterSize);
   const noise = seededUnit(config.seed, `${team.teamId}:${player.playerId}`) - 0.5;
 
   if (config.biddingPolicy === 'naive') {

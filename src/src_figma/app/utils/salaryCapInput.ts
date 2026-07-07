@@ -1,6 +1,7 @@
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
+import { LEGAL_ROSTER } from "../../../data/rosterConstruction";
 
-export const SALARY_CAP_FLOOR = Math.ceil(22 * LEAGUE_MINIMUM_SALARY);
+export const SALARY_CAP_FLOOR = Math.ceil(LEGAL_ROSTER.size * LEAGUE_MINIMUM_SALARY);
 
 export function formatSalaryCapMoney(value: number): string {
   return `$${Math.round(value).toLocaleString()}`;
