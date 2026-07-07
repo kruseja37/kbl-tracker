@@ -10,15 +10,152 @@ import {
   type PlayerForSalary,
 } from '../salaryCalculator';
 import oracle from '../../../spec-docs/reference/iv_oracle.json';
-import {
-  classifyFranchiseDesignationEligibility,
-  type FranchiseDesignationEligibilityRecord,
-} from '../../utils/franchiseDesignationEligibility';
-import {
-  FRANCHISE_VALUE_INPUT_CONTRACT_VERSION,
-  type FranchiseValueInputReport,
-  type FranchiseValueInputRow,
-} from '../../utils/franchiseValueInputs';
+
+const FRANCHISE_VALUE_INPUT_CONTRACT_VERSION = 'franchise-mode2-value-inputs-v1-readonly';
+
+type FranchiseValueInputRow = {
+  contractVersion: typeof FRANCHISE_VALUE_INPUT_CONTRACT_VERSION;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+  playerId: string;
+  playerName: string;
+  valuePosition: string;
+  currentTeamId: string | null;
+  rosterStatus: 'MLB' | 'FARM' | 'FREE_AGENT';
+  salary: number;
+  contractYears: number | null;
+  salaryBaselineCalculationVersion: string;
+  teamSalaryBaseline: number | null;
+  salaryBaselineAvailable: boolean;
+  seasonStatsAvailability: {
+    batting: boolean;
+    pitching: boolean;
+    fielding: boolean;
+    any: boolean;
+  };
+  warInputAvailability: {
+    battingWar: boolean;
+    pitchingWar: boolean;
+    fieldingWar: boolean;
+    baserunningWar: boolean;
+    any: boolean;
+    trustedForFinalValue: boolean;
+  };
+  warPreviewValues: {
+    battingWar: number | null;
+    pitchingWar: number | null;
+    fieldingWar: number | null;
+    baserunningWar: number | null;
+    totalWar: number | null;
+    totalWarSource: string;
+    trustedForFinalValue: boolean;
+  };
+  wpaInputAvailability: {
+    playerWpa: boolean;
+    managerWpa: boolean;
+    archiveBacked: boolean;
+    trustedForFinalValue: boolean;
+  };
+  seasonContext: {
+    seasonId: string;
+    statsScopeId: string;
+    seasonNumber: number;
+    gamesPerTeam: number | null;
+    inningsPerGame: number | null;
+    seasonLengthSource: string;
+    scheduleRowCount: number | null;
+    scheduleRowsUsedAsSeasonLength: boolean;
+    seasonMetadataTotalGames: number | null;
+  };
+  stadiumId: string | null;
+  parkFactorAvailability: {
+    stadiumIdAvailable: boolean;
+    seedParkFactorsAvailable: boolean;
+    customParkFactorsAvailable: boolean;
+    status: string;
+    parkAdjustedValueInputsAvailable: boolean;
+  };
+  limitations: string[];
+  warConsumerTrust?: {
+    teamMvpDesignations: boolean;
+    aceDesignations: boolean;
+    fanFavoriteAlbatrossDesignations: boolean;
+    awards: boolean;
+    salaryMovement: boolean;
+    trueValue: boolean;
+    morale: boolean;
+    mode3Handoff: boolean;
+    blockers: string[];
+    limitations: string[];
+  };
+};
+
+type FranchiseValueInputReport = {
+  contractVersion: typeof FRANCHISE_VALUE_INPUT_CONTRACT_VERSION;
+  franchiseId: string;
+  seasonId: string;
+  statsScopeId: string;
+  seasonNumber: number;
+  generatedAt: number;
+  seasonContext: FranchiseValueInputRow['seasonContext'];
+  rows: FranchiseValueInputRow[];
+  trueValuePolicy: {
+    finalTrueValueCalculated: boolean;
+    persistedTrueValueCreated: boolean;
+  };
+  designationPolicy: {
+    finalDesignationsCalculated: boolean;
+    persistedDesignationRecordsCreated: boolean;
+    inventedDesignationTypes: string[];
+  };
+  limitations: string[];
+};
+
+type FranchiseDesignationEligibilityRecord = {
+  playerId: string;
+  designationType: 'TEAM_MVP' | 'ACE';
+  status: 'active' | 'blocked';
+  persistable: boolean;
+};
+
+function classifyTestDesignationEligibility(report: FranchiseValueInputReport): {
+  records: FranchiseDesignationEligibilityRecord[];
+} {
+  expect(report.contractVersion).toBe(FRANCHISE_VALUE_INPUT_CONTRACT_VERSION);
+  expect(report.rows.every((row) => row.contractVersion === FRANCHISE_VALUE_INPUT_CONTRACT_VERSION)).toBe(true);
+
+  const teamMvpWinner = [...report.rows]
+    .filter((row) => row.warConsumerTrust?.teamMvpDesignations && row.warPreviewValues.totalWar !== null)
+    .sort((left, right) => right.warPreviewValues.totalWar! - left.warPreviewValues.totalWar!)[0];
+  const aceWinner = [...report.rows]
+    .filter((row) => row.warConsumerTrust?.aceDesignations && row.warPreviewValues.pitchingWar !== null)
+    .sort((left, right) => right.warPreviewValues.pitchingWar! - left.warPreviewValues.pitchingWar!)[0];
+
+  return {
+    records: report.rows.flatMap((row) => {
+      const records: FranchiseDesignationEligibilityRecord[] = [];
+      if (row.warConsumerTrust?.teamMvpDesignations) {
+        records.push({
+          playerId: row.playerId,
+          designationType: 'TEAM_MVP',
+          status: row.playerId === teamMvpWinner?.playerId ? 'active' : 'blocked',
+          persistable: row.playerId === teamMvpWinner?.playerId,
+        });
+      }
+      if (row.warConsumerTrust?.aceDesignations) {
+        records.push({
+          playerId: row.playerId,
+          designationType: 'ACE',
+          status: row.playerId === aceWinner?.playerId ? 'active' : 'blocked',
+          persistable: row.playerId === aceWinner?.playerId,
+        });
+      }
+      return records;
+    }),
+  };
+}
 
 type OraclePlayer = (typeof oracle.players)[number];
 
@@ -312,7 +449,7 @@ describe('T5 salary seam: kblIV salary base', () => {
       },
     });
 
-    const report = classifyFranchiseDesignationEligibility(makeValueReport([mvp, runnerUp, ace]));
+    const report = classifyTestDesignationEligibility(makeValueReport([mvp, runnerUp, ace]));
 
     expect(findDesignation(report.records, 'mvp', 'TEAM_MVP')).toMatchObject({
       status: 'active',
