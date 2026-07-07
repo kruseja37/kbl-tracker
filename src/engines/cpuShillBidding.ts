@@ -15,11 +15,17 @@ import {
 import {
   servesOwnTightClass,
   sessionBidCeiling,
+  lotOpeningAsk,
   wouldStarveJointDemand,
   type AuctionPlayer,
   type AuctionSession,
 } from './auctionStateMachine';
 import { playerFillsHardRequirement, teamRosterNeed } from './rosterNeed';
+import {
+  evaluateLiquidityAwareBid,
+  type LiquidityAwareBidRead,
+  type LiquidityCompletionCandidate,
+} from './liquidityAwareBidding';
 
 export type CpuShillPersonality = 'sniper' | 'spender' | 'zealot';
 
@@ -86,6 +92,7 @@ export type CpuBidOnLotDecision =
       maxBid: number;
       valuation: number;
       personality: CpuShillPersonality;
+      liquidity?: LiquidityAwareBidRead;
     }
   | {
       kind: 'pass';
@@ -96,6 +103,7 @@ export type CpuBidOnLotDecision =
       maxBid: number | null;
       valuation: number | null;
       personality: CpuShillPersonality | null;
+      liquidity?: LiquidityAwareBidRead;
     };
 
 export type CpuLoneSurvivorDecision =
@@ -106,6 +114,7 @@ export type CpuLoneSurvivorDecision =
       price: number;
       valuation: number;
       maxBid: number;
+      liquidity?: LiquidityAwareBidRead;
     }
   | {
       kind: 'pass';
@@ -121,6 +130,7 @@ export type CpuLoneSurvivorDecision =
         | 'unknown-player';
       valuation: number | null;
       maxBid: number | null;
+      liquidity?: LiquidityAwareBidRead;
     };
 type CpuLoneSurvivorPassReason = Extract<CpuLoneSurvivorDecision, { kind: 'pass' }>['reason'];
 
@@ -364,22 +374,39 @@ export function cpuBidOnLot(
   const minimumBid = minimumLegalBid(lot, session.config.bidIncrement);
   const maxBid = sessionBidCeiling(session, shillTeamId) ?? 0;
   const valuation = evaluateCpuValuation(player, shill, seed);
+  const rosterShapes = rosterShapesForTeam(session, team);
 
   if (minimumBid > maxBid) {
     return passDecision(shillTeamId, playerId, 'over-budget', minimumBid, maxBid, valuation, shill.personality);
   }
   const mustBuy = needOverrideApplies(session, team, playerId, minimumBid, maxBid, options);
+  const liquidity = evaluateLiquidityAwareBid({
+    playerId,
+    iv: player.iv,
+    nextBid: minimumBid,
+    currentBid: lot.highBid,
+    bidIncrement: session.config.bidIncrement,
+    legalMaxBid: maxBid,
+    budgetRemaining: team.budgetRemaining,
+    rosterSlotsRemaining: team.rosterSlotsRemaining,
+    minSalary: team.minSalary,
+    rosterShapes,
+    candidateShape: player.pos ?? null,
+    remainingPool: liquidityRemainingPool(session),
+    baseValuation: valuation,
+    needMultiplier: mustBuy ? 1.25 : 1,
+  });
   // The flex-absorption politeness (FABLE-C3 sweep finding round 3): a CPU never SNIPES into a
   // jointly-tight class it doesn't need — legal for humans, but blind CPU sniping at the tail
   // starves rivals' floors and wedges the draft. Opt-in with the same need-aware flag.
   if (!mustBuy && options?.needAwareCompletion && wouldStarveJointDemand(session, shillTeamId, playerId)) {
-    return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, maxBid, valuation, shill.personality);
+    return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, liquidity.maxBid, valuation, shill.personality, liquidity);
   }
-  if (!mustBuy && minimumBid >= valuation) {
-    return passDecision(shillTeamId, playerId, 'over-valuation', minimumBid, maxBid, valuation, shill.personality);
+  if (!mustBuy && !liquidity.nextBidAllowed) {
+    return passDecision(shillTeamId, playerId, 'over-valuation', minimumBid, liquidity.maxBid, valuation, shill.personality, liquidity);
   }
-  if (!mustBuy && !evaluateCpuInterest({ playerId, currentAsk: minimumBid, valuation, maxBid }, shill, seed)) {
-    return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, maxBid, valuation, shill.personality);
+  if (!mustBuy && !evaluateCpuInterest({ playerId, currentAsk: minimumBid, valuation: liquidity.liquidityAdjustedValue, maxBid: liquidity.maxBid }, shill, seed)) {
+    return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, liquidity.maxBid, valuation, shill.personality, liquidity);
   }
 
   return {
@@ -388,9 +415,10 @@ export function cpuBidOnLot(
     playerId,
     bid: minimumBid,
     minimumBid,
-    maxBid,
+    maxBid: liquidity.maxBid,
     valuation,
     personality: shill.personality,
+    liquidity,
   };
 }
 
@@ -429,13 +457,28 @@ export function cpuDecideLoneSurvivor(
   const price = claim.price;
   const maxBid = sessionBidCeiling(session, teamId) ?? 0;
   const valuation = evaluateCpuValuation(player, shill, seed);
+  const mustBuy = needOverrideApplies(session, team, claim.playerId, price, maxBid, options);
+  const liquidity = evaluateLiquidityAwareBid({
+    playerId: claim.playerId,
+    iv: player.iv,
+    nextBid: price,
+    bidIncrement: session.config.bidIncrement,
+    legalMaxBid: maxBid,
+    budgetRemaining: team.budgetRemaining,
+    rosterSlotsRemaining: team.rosterSlotsRemaining,
+    minSalary: team.minSalary,
+    rosterShapes: rosterShapesForTeam(session, team),
+    candidateShape: player.pos ?? null,
+    remainingPool: liquidityRemainingPool(session),
+    baseValuation: valuation,
+    needMultiplier: mustBuy ? 1.25 : 1,
+  });
 
   if (price > maxBid) {
-    return loneSurvivorPassDecision(teamId, claim.playerId, 'over-budget', valuation, maxBid);
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'over-budget', valuation, maxBid, liquidity);
   }
-  const mustBuy = needOverrideApplies(session, team, claim.playerId, price, maxBid, options);
-  if (!mustBuy && valuation <= price) {
-    return loneSurvivorPassDecision(teamId, claim.playerId, 'over-valuation', valuation, maxBid);
+  if (!mustBuy && !liquidity.nextBidAllowed) {
+    return loneSurvivorPassDecision(teamId, claim.playerId, 'over-valuation', valuation, liquidity.maxBid, liquidity);
   }
 
   return {
@@ -444,7 +487,8 @@ export function cpuDecideLoneSurvivor(
     playerId: claim.playerId,
     price,
     valuation,
-    maxBid,
+    maxBid: liquidity.maxBid,
+    liquidity,
   };
 }
 
@@ -562,6 +606,35 @@ function findTeam(session: AuctionSession, teamId: string) {
   return session.teams.find((team) => team.teamId === teamId) ?? null;
 }
 
+function rosterShapesForTeam(
+  session: AuctionSession,
+  team: { roster: readonly { playerId: string }[] },
+) {
+  const shapes = team.roster
+    .map((assignment) => session.players[assignment.playerId]?.pos)
+    .filter((shape): shape is NonNullable<AuctionPlayer['pos']> => Boolean(shape));
+  return shapes.length === team.roster.length ? shapes : [];
+}
+
+function liquidityRemainingPool(session: AuctionSession): LiquidityCompletionCandidate[] {
+  const pool: LiquidityCompletionCandidate[] = [];
+  for (const id of session.availablePlayerIds) {
+    const player = session.players[id];
+    if (!player?.pos) return [];
+    pool.push({
+      id,
+      price: minimumOpeningAsk(player, session),
+      value: player.iv,
+      shape: player.pos,
+    });
+  }
+  return pool;
+}
+
+function minimumOpeningAsk(player: AuctionPlayer, session: AuctionSession): number {
+  return lotOpeningAsk(player, session.config);
+}
+
 function passDecision(
   teamId: string,
   playerId: string | null,
@@ -570,8 +643,9 @@ function passDecision(
   maxBid: number | null,
   valuation: number | null,
   personality: CpuShillPersonality | null,
+  liquidity?: LiquidityAwareBidRead,
 ): CpuBidOnLotDecision {
-  return { kind: 'pass', teamId, playerId, reason, minimumBid, maxBid, valuation, personality };
+  return { kind: 'pass', teamId, playerId, reason, minimumBid, maxBid, valuation, personality, liquidity };
 }
 
 function loneSurvivorPassDecision(
@@ -580,8 +654,9 @@ function loneSurvivorPassDecision(
   reason: CpuLoneSurvivorPassReason,
   valuation: number | null,
   maxBid: number | null,
+  liquidity?: LiquidityAwareBidRead,
 ): CpuLoneSurvivorDecision {
-  return { kind: 'pass', teamId, playerId, reason, valuation, maxBid };
+  return { kind: 'pass', teamId, playerId, reason, valuation, maxBid, liquidity };
 }
 
 function seededUnit(seed: string): number {
