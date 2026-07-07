@@ -49,30 +49,34 @@ import { syncEngine } from "../../../utils/syncEngine";
 import { listGameStoriesForFranchiseSeason } from "../../../utils/gameStoriesStorage";
 import { autoGenerateReporterForTeam } from "../../../utils/reporterAssignment";
 import { getReporterForTeam } from "../../../utils/reporterStorage";
-import type { Player as TeamRosterPlayer, Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
-import { LineupPreview } from "@/app/components/LineupPreview";
-import { PregameBenchmarkChecklist } from "@/app/components/PregameBenchmarkChecklist";
-import { MilestoneWatchPanel } from "@/app/components/MilestoneWatchPanel";
-import { getApproachingMilestones, type MilestoneWatch } from "../../../utils/milestoneDetector";
-import { getAllCareerBatting, getAllCareerPitching } from "../../../utils/careerStorage";
-import { getSeasonBattingStats, getSeasonPitchingStats } from "../../../utils/seasonStorage";
+import type { Pitcher as TeamRosterPitcher } from "@/app/components/TeamRoster";
 import {
-  applyFranchiseStarterSelectionToRosterSnapshot,
   buildFranchiseGameTrackerRoster,
   buildFranchisePregameReadiness,
-  collectFranchiseRosterPlayerIds,
 } from "../utils/franchiseGameTrackerRoster";
 import { withPregameManagerNavigationState } from "../utils/pregameNavigationState";
 import {
   optimalLineupField,
   selectOptimalLineupForOpposingPitcher,
 } from "../../../utils/optimalLineup";
+import { FranchisePregameLaunchOverlay } from "@/app/components/FranchisePregameLaunchOverlay";
 import {
   buildCurrentLineupOptimalBenchmark,
-  buildPregameBenchmarkIssues,
-  buildPregameBenchmarkRows,
   upsertPregameBenchmark,
 } from "../utils/pregameLineupBenchmarks";
+import {
+  buildFranchiseGameTrackerNavigation,
+  FranchiseGameLaunchBlockedError,
+  getFranchisePregameReadiness,
+  getFranchiseStarterHand,
+  getRecordLabelFromStandings,
+  loadFranchisePregameMilestoneWatchesForData,
+  markFranchisePostGameColumnsPending,
+  prepareFranchisePregameData,
+  resolveFranchiseExtraInnings,
+  resolveFranchiseGameUseDH,
+  type FranchisePregameData,
+} from "../utils/franchiseGameLaunch";
 import {
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
   resolveManagerForTeam,
@@ -83,10 +87,11 @@ import {
 } from "../utils/franchiseRouteSeason";
 import type {
   GameLockLineupSnapshots,
-  OpposingPitcherHand,
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
 import type { FranchisePlayoffSeedingReview } from "../../../utils/franchisePlayoffSeedingReview";
+
+export { resolveFranchiseExtraInnings, resolveFranchiseGameUseDH } from "../utils/franchiseGameLaunch";
 
 // Context for passing franchise data to child components
 const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
@@ -221,64 +226,9 @@ function FranchiseV1OffseasonGate() {
 
 // ScheduledGame type is imported from useScheduleData hook
 
-// Pre-game lineup review data
-interface PreGameData {
-  awayPlayers: TeamRosterPlayer[];
-  awayPitchers: TeamRosterPitcher[];
-  homePlayers: TeamRosterPlayer[];
-  homePitchers: TeamRosterPitcher[];
-  awayTeamId: string;
-  homeTeamId: string;
-  awayTeamName: string;
-  homeTeamName: string;
-  gameNumber: number;
-  scheduleGameId?: string;
-  useDH: boolean;
-  selectedAwayStarterIdx: number;
-  selectedHomeStarterIdx: number;
-  awayOptimalLineups?: {
-    vsRHP?: OptimalLineupSnapshot;
-    vsLHP?: OptimalLineupSnapshot;
-  };
-  homeOptimalLineups?: {
-    vsRHP?: OptimalLineupSnapshot;
-    vsLHP?: OptimalLineupSnapshot;
-  };
-  milestoneWatches?: MilestoneWatch[];
-}
-
-function getFranchiseStarterHand(
-  pitcher: TeamRosterPitcher | undefined,
-): OpposingPitcherHand {
-  return (pitcher?.throwingHand || "R") === "L" ? "L" : "R";
-}
-
 function getSelectedStarterIndex(pitchers: TeamRosterPitcher[]): number {
   const starterIndex = pitchers.findIndex((pitcher) => pitcher.isStarter);
   return starterIndex >= 0 ? starterIndex : 0;
-}
-
-export function resolveFranchiseGameUseDH(franchiseConfig: UseFranchiseDataReturn["franchiseConfig"]): boolean {
-  return franchiseConfig?.season?.useDH ?? false;
-}
-
-export function resolveFranchiseExtraInnings(
-  franchiseConfig: UseFranchiseDataReturn["franchiseConfig"],
-): { extraInningRunner: boolean; extraInningRunnerDelay: 1 | 2 } {
-  switch (franchiseConfig?.season?.extraInningsRule) {
-    case "Runner on 2nd":
-      return {
-        extraInningRunner: true,
-        extraInningRunnerDelay: franchiseConfig.season.extraInningsRunnerDelay ?? 1,
-      };
-    case "Standard":
-      return { extraInningRunner: false, extraInningRunnerDelay: 1 };
-    case "Sudden Death":
-      // Future v2 sudden-death wiring belongs in this resolver branch.
-      return { extraInningRunner: false, extraInningRunnerDelay: 1 };
-    default:
-      return { extraInningRunner: false, extraInningRunnerDelay: 1 };
-  }
 }
 
 function saveCurrentSeasonNumber(season: number): void {
@@ -3266,7 +3216,7 @@ function GameDayContent({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // T3-01: Pre-game lineup review state
-  const [preGameData, setPreGameData] = useState<PreGameData | null>(null);
+  const [preGameData, setPreGameData] = useState<FranchisePregameData | null>(null);
 
   // Batch operation state
   const [batchType, setBatchType] = useState<BatchOperationType | null>(null);
@@ -3292,24 +3242,7 @@ function GameDayContent({
   // Lookup team record from standings (handles nested LeagueStandings shape)
   // MAJ-15: Needed by handlePlayGame and JSX display
   const getTeamRecord = (teamId: string): string => {
-    const standings = franchiseData.standings;
-    if (!standings || typeof standings !== 'object') return '0-0';
-    try {
-      for (const conference of Object.values(standings)) {
-        if (!conference || typeof conference !== 'object') continue;
-        for (const division of Object.values(conference as Record<string, unknown>)) {
-          if (!Array.isArray(division)) continue;
-          const entry = division.find(
-            (s: { team?: string; wins?: number; losses?: number }) =>
-              s.team && s.team.toLowerCase() === teamId.toLowerCase()
-          );
-          if (entry) return `${entry.wins}-${entry.losses}`;
-        }
-      }
-    } catch {
-      // Standings shape doesn't match expected — return default
-    }
-    return '0-0';
+    return getRecordLabelFromStandings(franchiseData.standings, teamId);
   };
 
   // Derive season complete: all games resolved (no SCHEDULED games remain)
@@ -3394,120 +3327,37 @@ function GameDayContent({
   // Team IDs for the matchup — pull from schedule if available
   const awayTeamId = scheduleData.nextGame?.awayTeamId ?? '';
   const homeTeamId = scheduleData.nextGame?.homeTeamId ?? '';
-  const countCompletedGamesForTeam = (teamId: string): number =>
-    (scheduleData.completedGames ?? []).filter(
-      (game) => game.awayTeamId === teamId || game.homeTeamId === teamId,
-    ).length;
-
   // T3-01: Show pre-game lineup review before launching game
   const handlePlayGame = async () => {
     if (isPreparingGameLaunch) return;
     const nextGame = scheduleData.nextGame;
-    const away = nextGame?.awayTeamId || awayTeamId;
-    const home = nextGame?.homeTeamId || homeTeamId;
-    const awayName = franchiseData.teamNameMap?.[away] || away;
-    const homeName = franchiseData.teamNameMap?.[home] || home;
-    const gameNum = nextGame?.gameNumber ?? 1;
 
     setConfirmAction(null);
     setIsPreparingGameLaunch(true);
     try {
-      await onRepairFranchisePersistence();
-      const awayGamesPlayed = countCompletedGamesForTeam(away);
-      const homeGamesPlayed = countCompletedGamesForTeam(home);
-
-      // Load real rosters from IndexedDB for both teams
-      const [awayRoster, homeRoster] = await Promise.all([
-        buildFranchiseGameTrackerRoster(away, {
-          franchiseId,
-          leagueId: franchiseLeagueId,
-          useDH: franchiseUseDH,
-          teamGamesPlayed: awayGamesPlayed,
-        }),
-        buildFranchiseGameTrackerRoster(home, {
-          franchiseId,
-          leagueId: franchiseLeagueId,
-          useDH: franchiseUseDH,
-          teamGamesPlayed: homeGamesPlayed,
-        }),
-      ]);
-
-      const missingRosterTeams: string[] = [];
-      if (awayRoster.players.length === 0 || awayRoster.pitchers.length === 0) {
-        missingRosterTeams.push(awayName.toUpperCase());
-      }
-      if (homeRoster.players.length === 0 || homeRoster.pitchers.length === 0) {
-        missingRosterTeams.push(homeName.toUpperCase());
-      }
-      if (missingRosterTeams.length > 0) {
-        setToastMessage(
-          `Franchise roster data is incomplete for ${missingRosterTeams.join(' and ')}. Game launch blocked.`,
-        );
-        return;
-      }
-
-      // Find default starter indices (first SP)
-      const awayStarterIdx = awayRoster.pitchers.findIndex(p => p.isStarter);
-      const homeStarterIdx = homeRoster.pitchers.findIndex(p => p.isStarter);
-
-      setPreGameData({
-        awayPlayers: awayRoster.players,
-        awayPitchers: awayRoster.pitchers,
-        homePlayers: homeRoster.players,
-        homePitchers: homeRoster.pitchers,
-        awayTeamId: away,
-        homeTeamId: home,
-        awayTeamName: awayName.toUpperCase(),
-        homeTeamName: homeName.toUpperCase(),
-        gameNumber: gameNum,
-        scheduleGameId: nextGame?.id,
+      const prepared = await prepareFranchisePregameData({
+        franchiseId,
+        leagueId: franchiseLeagueId,
         useDH: franchiseUseDH,
-        selectedAwayStarterIdx: awayStarterIdx >= 0 ? awayStarterIdx : 0,
-        selectedHomeStarterIdx: homeStarterIdx >= 0 ? homeStarterIdx : 0,
-        awayOptimalLineups: awayRoster.optimalLineups,
-        homeOptimalLineups: homeRoster.optimalLineups,
+        nextGame,
+        completedGames: scheduleData.completedGames ?? [],
+        teamNameMap: franchiseData.teamNameMap,
+        repairFranchisePersistence: onRepairFranchisePersistence,
       });
+      setPreGameData(prepared);
 
       // T3-06: Async milestone watch computation (non-blocking)
       (async () => {
         try {
-          const [careerBatters, careerPitchers] = await Promise.all([
-            getAllCareerBatting(),
-            getAllCareerPitching(),
-          ]);
-          const seasonId = activeSeasonId || '';
-          const [seasonBatters, seasonPitchers] = seasonId
-            ? await Promise.all([
-                getSeasonBattingStats(seasonId),
-                getSeasonPitchingStats(seasonId),
-              ])
-            : [[], []];
-
-          // Build lookup maps
-          const careerBatMap = new Map(careerBatters.map(b => [b.playerId, b]));
-          const careerPitMap = new Map(careerPitchers.map(p => [p.playerId, p]));
-          const seasonBatMap = new Map(seasonBatters.map(b => [b.playerId, b]));
-          const seasonPitMap = new Map(seasonPitchers.map(p => [p.playerId, p]));
-          const achieved = new Set<string>(); // TODO: load from careerStorage milestones
-
-          const playerIds = collectFranchiseRosterPlayerIds([awayRoster, homeRoster]);
-
-          const watches: MilestoneWatch[] = [];
-          for (const pid of playerIds) {
-            const pw = getApproachingMilestones(
-              careerBatMap.get(pid) || null,
-              careerPitMap.get(pid) || null,
-              seasonBatMap.get(pid) || null,
-              seasonPitMap.get(pid) || null,
-              achieved,
-            );
-            watches.push(...pw);
-          }
-
-          // Sort by closest to milestone
-          watches.sort((a, b) => a.neededForMilestone - b.neededForMilestone);
-
-          setPreGameData(prev => prev ? { ...prev, milestoneWatches: watches } : prev);
+          const watches = await loadFranchisePregameMilestoneWatchesForData({
+            data: prepared,
+            seasonId: activeSeasonId || '',
+          });
+          setPreGameData(prev =>
+            prev && prev.scheduleGameId === prepared.scheduleGameId
+              ? { ...prev, milestoneWatches: watches }
+              : prev,
+          );
         } catch (err) {
           console.warn('[FranchiseHome] Milestone watch computation failed:', err);
         }
@@ -3515,7 +3365,9 @@ function GameDayContent({
     } catch (err) {
       console.error('[FranchiseHome] Failed to prepare GameTracker launch:', err);
       setToastMessage(
-        err instanceof Error && err.message
+        err instanceof FranchiseGameLaunchBlockedError
+          ? err.message
+          : err instanceof Error && err.message
           ? `GameTracker launch blocked: ${err.message}`
           : 'GameTracker launch blocked. Try reloading the franchise.',
       );
@@ -3542,29 +3394,9 @@ function GameDayContent({
     }
   };
 
-  const getPregameReadiness = (data: PreGameData) =>
-    buildFranchisePregameReadiness({
-      teams: [
-        {
-          teamName: data.awayTeamName,
-          players: data.awayPlayers,
-          pitchers: data.awayPitchers,
-          selectedStarterIdx: data.selectedAwayStarterIdx,
-          useDH: data.useDH,
-        },
-        {
-          teamName: data.homeTeamName,
-          players: data.homePlayers,
-          pitchers: data.homePitchers,
-          selectedStarterIdx: data.selectedHomeStarterIdx,
-          useDH: data.useDH,
-        },
-      ],
-    });
-
   const handleRegisterPregameBenchmarks = async () => {
     if (!preGameData) return;
-    const readiness = getPregameReadiness(preGameData);
+    const readiness = getFranchisePregameReadiness(preGameData);
     if (!readiness.isReady) {
       setToastMessage(`Lineup readiness required: ${readiness.issues.join(" | ")}`);
       return;
@@ -3609,138 +3441,29 @@ function GameDayContent({
   // T3-01: Launch game with selected starters from pre-game screen
   const handleLaunchGame = async () => {
     if (!preGameData) return;
-    const readiness = getPregameReadiness(preGameData);
-    if (!readiness.isReady) {
-      setToastMessage(`Lineup readiness required: ${readiness.issues.join(" | ")}`);
-      return;
-    }
-    const { awayPlayers, awayPitchers, homePlayers, homePitchers } = preGameData;
-
-    const [awayTeamData, homeTeamData] = await Promise.all([
-      getVisibleFranchiseTeam(franchiseId, preGameData.awayTeamId),
-      getVisibleFranchiseTeam(franchiseId, preGameData.homeTeamId),
-    ]);
-    const managerInstanceId =
-      franchiseId || franchiseLeagueId || LEAGUE_BUILDER_MANAGER_INSTANCE_ID;
-    const [awayManager, homeManager] = await Promise.all([
-      resolveManagerForTeam({
-        team: {
-          id: preGameData.awayTeamId,
-          name: preGameData.awayTeamName,
-          managerId: awayTeamData?.managerId,
-          managerName: awayTeamData?.managerName,
-        },
-        mode: "franchise",
-        instanceId: managerInstanceId,
-        fallbackMode: "franchise",
-        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
-        persistAssignment: true,
-      }),
-      resolveManagerForTeam({
-        team: {
-          id: preGameData.homeTeamId,
-          name: preGameData.homeTeamName,
-          managerId: homeTeamData?.managerId,
-          managerName: homeTeamData?.managerName,
-        },
-        mode: "franchise",
-        instanceId: managerInstanceId,
-        fallbackMode: "franchise",
-        fallbackInstanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
-        persistAssignment: true,
-      }),
-    ]);
-
-    const finalAwayRoster = applyFranchiseStarterSelectionToRosterSnapshot({
-      players: awayPlayers,
-      pitchers: awayPitchers,
-      selectedStarterIdx: preGameData.selectedAwayStarterIdx,
-      useDH: preGameData.useDH,
-    });
-    const finalHomeRoster = applyFranchiseStarterSelectionToRosterSnapshot({
-      players: homePlayers,
-      pitchers: homePitchers,
-      selectedStarterIdx: preGameData.selectedHomeStarterIdx,
-      useDH: preGameData.useDH,
-    });
-    const finalAwayPitchers = finalAwayRoster.pitchers;
-    const finalHomePitchers = finalHomeRoster.pitchers;
-    const awayStarter = finalAwayPitchers.find((pitcher) => pitcher.isStarter);
-    const homeStarter = finalHomePitchers.find((pitcher) => pitcher.isStarter);
-    const optimalLineupSnapshots: GameLockLineupSnapshots = {
-      away: selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, homeStarter),
-      home: selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, awayStarter),
-    };
-    const extraInningsLaunchState = resolveFranchiseExtraInnings(franchiseData.franchiseConfig);
-    await Promise.all([
-      ensureFranchiseReporterForTeam({
-        teamId: preGameData.awayTeamId,
-        teamName: preGameData.awayTeamName,
-        leagueId: franchiseLeagueId,
-        franchiseId,
-        colors: {
-          primary: awayTeamData?.colors.primary,
-          secondary: awayTeamData?.colors.secondary,
-        },
-      }),
-      ensureFranchiseReporterForTeam({
-        teamId: preGameData.homeTeamId,
-        teamName: preGameData.homeTeamName,
-        leagueId: franchiseLeagueId,
-        franchiseId,
-        colors: {
-          primary: homeTeamData?.colors.primary,
-          secondary: homeTeamData?.colors.secondary,
-        },
-      }),
-    ]);
-    sessionStorage.setItem(
-      "kbl-pending-post-game-columns-enabled",
-      JSON.stringify(true),
-    );
-    navigate(`/game-tracker/franchise-g${preGameData.gameNumber}`, {
-      state: withPregameManagerNavigationState({
-        gameMode: 'franchise' as const,
-        awayTeamId: preGameData.awayTeamId,
-        homeTeamId: preGameData.homeTeamId,
-        awayTeamName: preGameData.awayTeamName,
-        homeTeamName: preGameData.homeTeamName,
-        awayTeamAbbreviation: awayTeamData?.abbreviation,
-        homeTeamAbbreviation: homeTeamData?.abbreviation,
-        awayPlayers: finalAwayRoster.players.length > 0 ? finalAwayRoster.players : undefined,
-        awayPitchers: finalAwayPitchers.length > 0 ? finalAwayPitchers : undefined,
-        homePlayers: finalHomeRoster.players.length > 0 ? finalHomeRoster.players : undefined,
-        homePitchers: finalHomePitchers.length > 0 ? finalHomePitchers : undefined,
-        awayTeamColor: awayTeamData?.colors.primary || getTeamColors(preGameData.awayTeamId).primary,
-        awayTeamBorderColor: awayTeamData?.colors.secondary || getTeamColors(preGameData.awayTeamId).secondary,
-        homeTeamColor: homeTeamData?.colors.primary || getTeamColors(preGameData.homeTeamId).primary,
-        homeTeamBorderColor: homeTeamData?.colors.secondary || getTeamColors(preGameData.homeTeamId).secondary,
-        awayRecord: getTeamRecord(preGameData.awayTeamId),
-        homeRecord: getTeamRecord(preGameData.homeTeamId),
-        stadiumName: franchiseData.stadiumMap?.[preGameData.homeTeamId] ?? preGameData.homeTeamName,
+    try {
+      const navigation = await buildFranchiseGameTrackerNavigation({
+        data: preGameData,
         franchiseId,
         leagueId: franchiseLeagueId,
         seasonId: activeSeasonId,
-        statsScopeId: activeSeasonId,
-        competitionType: 'franchise' as const,
-        competitionId: franchiseId,
-        useDH: preGameData.useDH,
-        optimalLineupSnapshots,
-        liveBeatReporterEnabled: false,
-        postGameColumnsEnabled: true,
-        scheduleGameId: preGameData.scheduleGameId,
         seasonNumber: currentSeason,
-        gameNumber: preGameData.gameNumber,
-        totalInnings: franchiseData.franchiseConfig?.season?.inningsPerGame ?? 9,
-        ...extraInningsLaunchState,
-      }, {
-        awayManagerId: awayManager.managerId,
-        awayManagerName: awayManager.managerName,
-        homeManagerId: homeManager.managerId,
-        homeManagerName: homeManager.managerName,
-      }),
-    });
-    setPreGameData(null);
+        franchiseConfig: franchiseData.franchiseConfig,
+        stadiumMap: franchiseData.stadiumMap,
+        getTeamRecord,
+      });
+      markFranchisePostGameColumnsPending();
+      navigate(navigation.pathname, { state: navigation.state });
+      setPreGameData(null);
+    } catch (err) {
+      setToastMessage(
+        err instanceof FranchiseGameLaunchBlockedError
+          ? err.message
+          : err instanceof Error && err.message
+          ? `GameTracker launch blocked: ${err.message}`
+          : 'GameTracker launch blocked. Try reloading the franchise.',
+      );
+    }
   };
 
   const handleSimulate = async () => {
@@ -3998,36 +3721,6 @@ function GameDayContent({
   const resolvedCount = completedCount + skippedCount;
   const totalScheduled = allGames.length;
   const gamesPerTeam = franchiseData.franchiseConfig?.season?.gamesPerTeam ?? totalScheduled;
-  const pregameAwayStarter = preGameData?.awayPitchers[preGameData.selectedAwayStarterIdx];
-  const pregameHomeStarter = preGameData?.homePitchers[preGameData.selectedHomeStarterIdx];
-  const pregameAwayBenchmark = preGameData
-    ? selectOptimalLineupForOpposingPitcher(preGameData.awayOptimalLineups, pregameHomeStarter)
-    : undefined;
-  const pregameHomeBenchmark = preGameData
-    ? selectOptimalLineupForOpposingPitcher(preGameData.homeOptimalLineups, pregameAwayStarter)
-    : undefined;
-  const pregameBenchmarkRequirements = preGameData
-    ? [
-        {
-          teamName: preGameData.awayTeamName,
-          opposingPitcherHand: getFranchiseStarterHand(pregameHomeStarter),
-          dhEnabled: preGameData.useDH,
-          snapshot: pregameAwayBenchmark,
-        },
-        {
-          teamName: preGameData.homeTeamName,
-          opposingPitcherHand: getFranchiseStarterHand(pregameAwayStarter),
-          dhEnabled: preGameData.useDH,
-          snapshot: pregameHomeBenchmark,
-        },
-      ]
-    : [];
-  const pregameBenchmarkRows = buildPregameBenchmarkRows(pregameBenchmarkRequirements);
-  const pregameBenchmarkIssues = buildPregameBenchmarkIssues(pregameBenchmarkRequirements);
-  const pregameReadiness = preGameData ? getPregameReadiness(preGameData) : undefined;
-  const pregameReadinessIssues = pregameReadiness?.issues ?? [];
-  const canRegisterPregameBenchmarks = pregameReadiness?.isReady ?? false;
-  const canLaunchPregame = pregameReadiness?.isReady ?? false;
 
   return (
     <div className="space-y-4">
@@ -4289,120 +3982,13 @@ function GameDayContent({
 
       {/* T3-01: Pre-game lineup review overlay */}
       {preGameData && (
-        <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 overflow-y-auto p-4">
-          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-6 max-w-3xl w-full my-4">
-            {/* Header */}
-            <div className="text-center mb-4">
-              <div className="text-lg text-[var(--franchise-text)] font-bold mb-1" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.5)' }}>
-                PRE-GAME LINEUP
-              </div>
-              <div className="text-xs text-[var(--franchise-text)]/70">
-                Game {preGameData.gameNumber} &bull; {preGameData.awayTeamName} @ {preGameData.homeTeamName}
-              </div>
-              {pregameReadinessIssues.length > 0 && (
-                <div
-                  className="mt-4 border-2 border-[var(--franchise-gold)] bg-[var(--franchise-shadow-darkest)] p-3 text-left text-[10px] text-[var(--franchise-text)]"
-                  data-testid="franchise-pregame-readiness"
-                >
-                  <div className="mb-2 font-bold tracking-[0.16em] text-[var(--franchise-gold)]">
-                    LINEUP READINESS REQUIRED
-                  </div>
-                  <div className="text-[var(--franchise-text)]/75">
-                    {pregameReadinessIssues.join(" • ")}
-                  </div>
-                </div>
-              )}
-              <PregameBenchmarkChecklist
-                rows={pregameBenchmarkRows}
-                onAction={canRegisterPregameBenchmarks ? handleRegisterPregameBenchmarks : undefined}
-              />
-            </div>
-
-            {/* Starter Selection */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              {/* Away Starter */}
-              <div>
-                <div className="text-[9px] text-[var(--franchise-text)]/60 mb-1 uppercase tracking-wider">Away starter override</div>
-                <select
-                  aria-label="Away starter override"
-                  value={preGameData.selectedAwayStarterIdx}
-                  onChange={(e) => setPreGameData({ ...preGameData, selectedAwayStarterIdx: Number(e.target.value) })}
-                  className="w-full bg-[var(--franchise-panel-deep)] border-[3px] border-[var(--franchise-shadow-soft)] text-[var(--franchise-text)] text-xs px-2 py-2"
-                >
-                  {preGameData.awayPitchers.map((p, i) => (
-                    <option key={i} value={i}>{p.name} ({p.throwingHand})</option>
-                  ))}
-                </select>
-              </div>
-              {/* Home Starter */}
-              <div>
-                <div className="text-[9px] text-[var(--franchise-text)]/60 mb-1 uppercase tracking-wider">Home starter override</div>
-                <select
-                  aria-label="Home starter override"
-                  value={preGameData.selectedHomeStarterIdx}
-                  onChange={(e) => setPreGameData({ ...preGameData, selectedHomeStarterIdx: Number(e.target.value) })}
-                  className="w-full bg-[var(--franchise-panel-deep)] border-[3px] border-[var(--franchise-shadow-soft)] text-[var(--franchise-text)] text-xs px-2 py-2"
-                >
-                  {preGameData.homePitchers.map((p, i) => (
-                    <option key={i} value={i}>{p.name} ({p.throwingHand})</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="mb-4 text-center text-[10px] text-[var(--franchise-text)]/60">
-              Lineup order and rotation source from Team Hub. Starter override is game-only.
-            </div>
-
-            {/* Lineups Side by Side */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <LineupPreview
-                teamName={preGameData.awayTeamName}
-                lineup={preGameData.awayPlayers.filter(p => p.battingOrder != null)}
-                bench={preGameData.awayPlayers.filter(p => p.battingOrder == null)}
-                startingPitcher={preGameData.awayPitchers[preGameData.selectedAwayStarterIdx]}
-                teamColor="#E8E8D8"
-                isAway={true}
-              />
-              <LineupPreview
-                teamName={preGameData.homeTeamName}
-                lineup={preGameData.homePlayers.filter(p => p.battingOrder != null)}
-                bench={preGameData.homePlayers.filter(p => p.battingOrder == null)}
-                startingPitcher={preGameData.homePitchers[preGameData.selectedHomeStarterIdx]}
-                teamColor="#E8E8D8"
-                isAway={false}
-              />
-            </div>
-
-            {/* T3-06: Milestone Watch */}
-            <div className="mb-4">
-              <MilestoneWatchPanel
-                watches={preGameData.milestoneWatches || []}
-                isLoading={!preGameData.milestoneWatches}
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => setPreGameData(null)}
-                className="flex-1 bg-[var(--franchise-border)] border-[5px] border-[var(--franchise-panel)] py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-              >
-                BACK
-              </button>
-              <button
-                onClick={handleLaunchGame}
-                disabled={!canLaunchPregame}
-                className={`flex-[2] border-[5px] py-3 text-sm font-bold transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] ${
-                  !canLaunchPregame
-                    ? "border-[var(--franchise-border)] bg-[var(--franchise-panel-dark)] text-[var(--franchise-text)]/50 cursor-not-allowed"
-                    : "border-[var(--franchise-gold-bronze)] bg-[var(--franchise-gold)] text-[var(--franchise-field-ink)] hover:bg-[var(--franchise-gold-light)] active:scale-95"
-                }`}
-              >
-                START GAME
-              </button>
-            </div>
-          </div>
-        </div>
+        <FranchisePregameLaunchOverlay
+          data={preGameData}
+          onChange={setPreGameData}
+          onBack={() => setPreGameData(null)}
+          onLaunch={handleLaunchGame}
+          onRegisterBenchmarks={handleRegisterPregameBenchmarks}
+        />
       )}
     </div>
   );

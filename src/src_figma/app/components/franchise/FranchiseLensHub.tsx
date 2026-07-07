@@ -1,6 +1,8 @@
 import { Fragment, useState } from "react";
+import { ScheduleContent } from "../ScheduleContent";
 import { FranchiseLineupsBoard } from "./FranchiseLineupsBoard";
 import { FITNESS_STATES, type FitnessState } from "../../../../engines/fitnessEngine";
+import type { FranchiseScheduleImportRow, ScheduledGame } from "../../../../utils/scheduleStorage";
 
 /**
  * FranchiseLensHub — the aged-"Green Monster" team-lens franchise hub (redesign,
@@ -53,6 +55,10 @@ export interface ImpactCardVM {
 }
 
 export interface NextGameVM {
+  scheduleGameId?: string;
+  awayTeamId?: string;
+  homeTeamId?: string;
+  gameNumber?: number;
   awayName: string; awayAbbr: string; awayRecord: string;
   homeName: string; homeAbbr: string; homeRecord: string;
   meta?: string;
@@ -304,6 +310,10 @@ export interface MomentsVM {
 
 /* ===== Schedule (team-scoped — the club's fixtures + results) ===== */
 export interface ScheduleGameVM {
+  scheduleGameId?: string;
+  awayTeamId?: string;
+  homeTeamId?: string;
+  gameNumber?: number;
   date: string;            // "Wk 9 · Wed"
   opponent: string;        // abbr
   home: boolean;           // home (vs) vs away (@)
@@ -465,6 +475,27 @@ export interface FranchiseLensActions {
   onSendDown: (playerId: string, teamId: string) => Promise<RosterActionResult>;
   onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
   onSetFitness: (playerId: string, state: FitnessState) => Promise<RosterActionResult>;
+  onScoreGame?: (scheduleGameId?: string) => void;
+  onScoreOnlyGame?: (scheduleGameId?: string) => void;
+  onSkipGame?: (scheduleGameId?: string) => void;
+}
+export interface FranchiseLensScheduleManager {
+  games: ScheduledGame[];
+  selectedTeam: string;
+  onTeamChange: (teamId: string) => void;
+  availableTeams: string[];
+  onAddGame: () => void;
+  dropdownOpen: boolean;
+  setDropdownOpen: (open: boolean) => void;
+  stadiumMap: Record<string, string>;
+  seasonNumber?: number;
+  teamNameMap?: Record<string, string>;
+  onDeleteGame?: (gameId: string) => void;
+  onEditGame?: (game: ScheduledGame) => void;
+  onScoreGame?: (game: ScheduledGame) => void;
+  onEnterFinalScore?: (game: ScheduledGame) => void;
+  onSkipGame?: (game: ScheduledGame) => void;
+  onImportCsvRows?: (rows: FranchiseScheduleImportRow[]) => Promise<void> | void;
 }
 /** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
 interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
@@ -477,6 +508,8 @@ export interface FranchiseLensHubProps {
   onBack?: () => void;
   /** When present, roster rows/farm expose call-up & send-down affordances wired to the live engines. */
   actions?: FranchiseLensActions;
+  /** When present, the Schedule tab uses the live franchise schedule manager instead of the compact read-only digest. */
+  scheduleManager?: FranchiseLensScheduleManager;
 }
 
 const TABS = ["The Clubhouse", "Roster", "Lineups", "Stadium", "Tootwhistle Times", "Playoffs", "Moves"] as const;
@@ -504,7 +537,7 @@ function Money({ value, className }: { value: number; className?: string }) {
   );
 }
 
-export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: FranchiseLensHubProps) {
+export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions, scheduleManager }: FranchiseLensHubProps) {
   const [tab, setTab] = useState<string>("The Clubhouse");
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
   const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
@@ -560,7 +593,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
             </div>
 
             {tab === "The Clubhouse" ? (
-              <SeasonHome hub={hub} onAction={(a) => setOpenMoment(a)} />
+              <SeasonHome hub={hub} actions={actions} onAction={(a) => setOpenMoment(a)} />
             ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
@@ -583,7 +616,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
             ) : tab === "Stadium" ? (
               <StadiumTab hub={hub} active={active} />
             ) : tab === "Schedule" ? (
-              <ScheduleTab hub={hub} active={active} />
+              <ScheduleTab hub={hub} active={active} actions={actions} scheduleManager={scheduleManager} />
             ) : tab === "Almanac" ? (
               <AlmanacTab hub={hub} active={active} />
             ) : (
@@ -667,7 +700,7 @@ function Banner({ active }: { active: ActiveTeamVM }) {
   );
 }
 
-function SeasonHome({ hub, onAction }: { hub: HubVM; onAction?: (action: string) => void }) {
+function SeasonHome({ hub, actions, onAction }: { hub: HubVM; actions?: FranchiseLensActions; onAction?: (action: string) => void }) {
   const home = hub.home;
   if (!home) return <div className="fen-empty">The clubhouse is quiet — no season underway yet.</div>;
   return (
@@ -703,8 +736,32 @@ function SeasonHome({ hub, onAction }: { hub: HubVM; onAction?: (action: string)
                 <div className="fen-vs">@</div>
                 <div className="fen-mt you"><div className="lg">{home.nextGame.homeAbbr}</div><div className="nm">{home.nextGame.homeName}</div><div className="rc">{home.nextGame.homeRecord}</div></div>
               </div>
-              <button type="button" className="fen-bigplay">▶  PLAY BALL</button>
-              <div className="fen-simrow"><button type="button" className="fen-simbtn">Sim this game</button><button type="button" className="fen-simbtn">Sim the week</button></div>
+              <button
+                type="button"
+                className="fen-bigplay"
+                onClick={() => actions?.onScoreGame?.(home.nextGame?.scheduleGameId)}
+                disabled={!actions?.onScoreGame}
+              >
+                SCORE
+              </button>
+              <div className="fen-simrow">
+                <button
+                  type="button"
+                  className="fen-simbtn"
+                  onClick={() => actions?.onScoreOnlyGame?.(home.nextGame?.scheduleGameId)}
+                  disabled={!actions?.onScoreOnlyGame}
+                >
+                  SCORE ONLY
+                </button>
+                <button
+                  type="button"
+                  className="fen-simbtn"
+                  onClick={() => actions?.onSkipGame?.(home.nextGame?.scheduleGameId)}
+                  disabled={!actions?.onSkipGame}
+                >
+                  SKIP
+                </button>
+              </div>
               {home.nextGame.pulse ? <div className="fen-gpulse">{home.nextGame.pulse}</div> : null}
             </div>
           </div>
@@ -1760,23 +1817,66 @@ function AlmanacTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
 }
 
 /* ===== Schedule (team tab) ===== */
-function ScheduleRow({ g }: { g: ScheduleGameVM }) {
+function ScheduleRow({ g, actions }: { g: ScheduleGameVM; actions?: FranchiseLensActions }) {
   return (
     <div className={`fen-sgame${g.isNext ? " next" : ""}`}>
       <div className="sd">{g.date}</div>
       <div className="sm fen-chalk">{g.home ? "vs" : "@"} {g.opponent}</div>
       {g.result ? (
         <div className={`sr ${g.result.win ? "w" : "l"}`}>{g.result.win ? "W" : "L"} {g.result.teamScore}–{g.result.oppScore}</div>
-      ) : g.isNext ? (
-        <button type="button" className="fen-sched-play">▶ Play Ball</button>
       ) : (
-        <div className="sr soft">{g.note ?? (g.home ? "home" : "away")}</div>
+        <div className="fen-sched-actions">
+          {g.isNext ? (
+            <button
+              type="button"
+              className="fen-sched-play"
+              onClick={() => actions?.onScoreGame?.(g.scheduleGameId)}
+              disabled={!actions?.onScoreGame}
+            >
+              SCORE
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="fen-sched-lite"
+            onClick={() => actions?.onScoreOnlyGame?.(g.scheduleGameId)}
+            disabled={!actions?.onScoreOnlyGame}
+          >
+            Score Only
+          </button>
+          <button
+            type="button"
+            className="fen-sched-lite danger"
+            onClick={() => actions?.onSkipGame?.(g.scheduleGameId)}
+            disabled={!actions?.onSkipGame}
+          >
+            Skip
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-function ScheduleTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+function ScheduleTab({
+  hub,
+  active,
+  actions,
+  scheduleManager,
+}: {
+  hub: HubVM;
+  active: ActiveTeamVM;
+  actions?: FranchiseLensActions;
+  scheduleManager?: FranchiseLensScheduleManager;
+}) {
+  if (scheduleManager) {
+    return (
+      <div className="fen-sched-manager">
+        <ScheduleContent {...scheduleManager} />
+      </div>
+    );
+  }
+
   const sc = hub.schedule;
   if (!sc) return <div className="fen-empty">No schedule loaded for {active.name} yet.</div>;
   return (
@@ -1785,11 +1885,11 @@ function ScheduleTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
       <div className="fen-sched-grid">
         <div className="fen-sched-col">
           <div className="fen-sectlab">Coming Up</div>
-          {sc.upcoming.length ? sc.upcoming.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">Nothing on the docket.</div>}
+          {sc.upcoming.length ? sc.upcoming.map((g, i) => <ScheduleRow key={i} g={g} actions={actions} />) : <div className="fen-empty">Nothing on the docket.</div>}
         </div>
         <div className="fen-sched-col">
           <div className="fen-sectlab">Recent</div>
-          {sc.recent.length ? sc.recent.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">No games played yet.</div>}
+          {sc.recent.length ? sc.recent.map((g, i) => <ScheduleRow key={i} g={g} actions={actions} />) : <div className="fen-empty">No games played yet.</div>}
         </div>
       </div>
     </div>

@@ -258,6 +258,10 @@ export interface UseFranchiseLensDataReturn {
   hub: HubVM;
   isLoading: boolean;
   error: string | null;
+  seasonId: string;
+  franchiseConfig: StoredFranchiseConfig | null;
+  teamNameMap: Record<string, string>;
+  stadiumMap: Record<string, string>;
   /** Re-read every store and rebuild the view (call after a successful mutation). */
   reload: () => void;
   /** Promote a farm player to the active roster (reveals true ratings); reloads on success. */
@@ -269,6 +273,11 @@ export interface UseFranchiseLensDataReturn {
   /** Set a player's fitness state (carries into the next game launch, like elimination mode). */
   setFitness: (playerId: string, state: FitnessState) => Promise<LensRosterActionResult>;
 }
+
+type FranchiseLensViewReturn = Pick<
+  UseFranchiseLensDataReturn,
+  "teams" | "active" | "hub" | "isLoading" | "error"
+>;
 
 function isPitcher(player: Player): boolean {
   return PITCHER_POSITIONS.has(player.primaryPosition as string);
@@ -694,6 +703,10 @@ function buildScheduleVM(
     const home = game.homeTeamId === activeTeamId;
     const oppId = home ? game.awayTeamId : game.homeTeamId;
     const vm: ScheduleGameVM = {
+      scheduleGameId: game.id,
+      awayTeamId: game.awayTeamId,
+      homeTeamId: game.homeTeamId,
+      gameNumber: game.gameNumber,
       date: game.date || `Day ${game.dayNumber}`,
       opponent: teamMeta.get(oppId)?.abbr ?? oppId,
       home,
@@ -706,8 +719,8 @@ function buildScheduleVM(
     return vm;
   };
 
-  const upcoming = teamGames.filter((game) => !game.result).map(toVM);
-  const recent = teamGames.filter((game) => game.result).map(toVM);
+  const upcoming = teamGames.filter((game) => game.status === "SCHEDULED").map(toVM);
+  const recent = teamGames.filter((game) => game.status === "COMPLETED" && game.result).map(toVM);
   if (upcoming[0]) upcoming[0].isNext = true;
   return { upcoming: upcoming.slice(0, 10), recent: recent.slice(-10).reverse() };
 }
@@ -1165,7 +1178,7 @@ function buildNextGameVM(
   teamMeta: Map<string, TeamMeta>,
 ): NextGameVM | undefined {
   const next = schedule
-    .filter((g) => !g.result && (g.homeTeamId === activeTeamId || g.awayTeamId === activeTeamId))
+    .filter((g) => g.status === "SCHEDULED" && (g.homeTeamId === activeTeamId || g.awayTeamId === activeTeamId))
     .sort((a, b) => a.gameNumber - b.gameNumber)[0];
   if (!next) return undefined;
   const rec = (teamId: string) => {
@@ -1175,6 +1188,10 @@ function buildNextGameVM(
   const nameOf = (teamId: string) => teamMeta.get(teamId)?.name ?? teamId;
   const abbrOf = (teamId: string) => teamMeta.get(teamId)?.abbr ?? teamId;
   return {
+    scheduleGameId: next.id,
+    awayTeamId: next.awayTeamId,
+    homeTeamId: next.homeTeamId,
+    gameNumber: next.gameNumber,
     awayName: nameOf(next.awayTeamId),
     awayAbbr: abbrOf(next.awayTeamId),
     awayRecord: rec(next.awayTeamId),
@@ -1194,7 +1211,7 @@ function buildLineupsContextVM(
   config: StoredFranchiseConfig | null,
 ): LineupsContextVM {
   const next = schedule
-    .filter((g) => !g.result && (g.homeTeamId === activeTeamId || g.awayTeamId === activeTeamId))
+    .filter((g) => g.status === "SCHEDULED" && (g.homeTeamId === activeTeamId || g.awayTeamId === activeTeamId))
     .sort((a, b) => a.gameNumber - b.gameNumber)[0];
   const opponentTeamId = next
     ? next.homeTeamId === activeTeamId
@@ -1353,7 +1370,7 @@ function buildReturn(
   statsReady: boolean,
   isLoading: boolean,
   error: string | null,
-): Omit<UseFranchiseLensDataReturn, "reload" | "callUp" | "sendDown" | "executeTrade" | "setFitness"> {
+): FranchiseLensViewReturn {
   if (!raw || raw.teams.length === 0) {
     return {
       teams: [],
@@ -1784,8 +1801,19 @@ export function useFranchiseLensData(
     [raw, viewedTeamId, seasonNumber, statsReady, isLoading, error],
   );
   return useMemo(
-    () => ({ ...view, reload, callUp, sendDown, executeTrade, setFitness }),
-    [view, reload, callUp, sendDown, executeTrade, setFitness],
+    () => ({
+      ...view,
+      seasonId,
+      franchiseConfig: raw?.config ?? null,
+      teamNameMap: Object.fromEntries((raw?.teams ?? []).map((team) => [team.id, team.name])),
+      stadiumMap: Object.fromEntries((raw?.teams ?? []).map((team) => [team.id, team.stadium])),
+      reload,
+      callUp,
+      sendDown,
+      executeTrade,
+      setFitness,
+    }),
+    [view, seasonId, raw?.config, raw?.teams, reload, callUp, sendDown, executeTrade, setFitness],
   );
 }
 
