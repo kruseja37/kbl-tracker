@@ -37,6 +37,7 @@ import {
 import { toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
+import { LEGAL_ROSTER } from "../../../data/rosterConstruction";
 import type { LuxuryCapRow } from "../../../data/tierParams";
 import {
   createAuctionSessionId,
@@ -340,7 +341,7 @@ function buildPureShillAuctionTeams(input: {
   return Array.from({ length: input.count }, (_, index) => ({
     teamId: shillTeamId(input.leagueId, index),
     budgetRemaining: input.budget,
-    rosterSlotsRemaining: 22,
+    rosterSlotsRemaining: LEGAL_ROSTER.size,
     minSalary: LEAGUE_MINIMUM_SALARY,
     projectedTax: 0,
     roster: [],

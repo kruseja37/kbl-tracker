@@ -73,6 +73,14 @@ function payload(
       verdict,
       recommendedNumber: verdict === "pass" ? 0 : 75_000,
       capValue: verdict === "pass" ? 45_000 : 75_000,
+      suggestedMaxBid: verdict === "pass" ? 0 : 80_000,
+      priceRead: verdict === "pass" ? "pass" : "fair",
+      liquidityState: "neutral",
+      discretionaryBudget: 100_000,
+      minimumFutureFillReserve: 20_000,
+      replacementValueEstimate: 60_000,
+      scarcityModifier: 1,
+      reasonCodes: verdict === "pass" ? ["future-fill-protected"] : ["within-liquidity-ceiling"],
       chemistry: {
         premium: 3_000,
         teamLift: 3_000,
@@ -327,6 +335,36 @@ describe("WhisperPanel", () => {
     expect(screen.getByText("$96,000")).toBeInTheDocument();
     expect(screen.getByText("Go get him -- worth about $96,000 to you.")).toBeInTheDocument();
     expect(screen.queryByText("$809,714")).not.toBeInTheDocument();
+  });
+
+  test("liquidity row renders max bid, price read, fill reserve, and need signals", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: {
+        ...payload().worthToYou!,
+        suggestedMaxBid: 88_000,
+        priceRead: "stretch",
+        liquidityState: "constrained",
+        discretionaryBudget: 42_000,
+        minimumFutureFillReserve: 58_000,
+        reasonCodes: ["future-fill-protected", "liquidity-constrained", "priority-fit"],
+        needMultiplier: 1.12,
+        archetypeFitMultiplier: 1.08,
+      },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    const liquidity = within(screen.getByTestId("whisper-liquidity"));
+    expect(liquidity.getByText("MAX BID")).toBeInTheDocument();
+    expect(liquidity.getByText("$88,000")).toBeInTheDocument();
+    expect(liquidity.getByText("STRETCH")).toBeInTheDocument();
+    expect(liquidity.getByText("CONSTRAINED")).toBeInTheDocument();
+    expect(liquidity.getByText("Fill Reserve $58,000")).toBeInTheDocument();
+    expect(liquidity.getByText("Room $42,000")).toBeInTheDocument();
+    expect(screen.getByText("protect fill")).toBeInTheDocument();
+    expect(screen.getByText("cash tight")).toBeInTheDocument();
+    expect(screen.getByText("priority need")).toBeInTheDocument();
+    expect(screen.getByText("NEED +12%")).toBeInTheDocument();
+    expect(screen.getByText("FIT +8%")).toBeInTheDocument();
   });
 
   test("live high bid line reacts below and at the recommended number", () => {

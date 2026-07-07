@@ -87,7 +87,7 @@ import {
   type Light,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
-import type { CompletionCandidate } from "../../../engines/auctionCompletionFloor";
+import type { LiquidityCompletionCandidate } from "../../../engines/liquidityAwareBidding";
 import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
 import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
 import type { LeagueTemplate, Player, Team, UseLeagueBuilderDataReturn } from "../../hooks/useLeagueBuilderData";
@@ -1006,7 +1006,7 @@ export function LeagueBuilderAuctionDraft() {
     const needBreakdown = rosterShapeClean ? rosterNeedBreakdown(rosterShapes) : null;
     const ownBandPriorities = marketBandPrioritiesByTeamId.get(team.id) ?? null;
 
-    const remainingPool: CompletionCandidate[] = [];
+    const remainingPool: LiquidityCompletionCandidate[] = [];
     let remainingPoolClean = true;
     for (const playerId of session.availablePlayerIds) {
       const auctionPlayer = session.players[playerId];
@@ -1017,6 +1017,7 @@ export function LeagueBuilderAuctionDraft() {
       remainingPool.push({
         id: playerId,
         price: lotOpeningAsk(auctionPlayer, session.config),
+        value: auctionPlayer.iv,
         shape: auctionPlayer.pos,
       });
     }
@@ -1039,6 +1040,9 @@ export function LeagueBuilderAuctionDraft() {
           rosterWithCandidate,
           remainingPool,
           openSlotsAfterWin,
+          nextBid: minBid,
+          currentBid: session.currentLot.highBid,
+          bidIncrement: session.config.bidIncrement,
           ownBandPriorities,
           archetypeWeights: lotArchetypeWeights,
           needBreakdown,

@@ -40,6 +40,13 @@ import {
   chemistryAdviceForCandidate,
   chemistryProfileForPlayers,
 } from '../utils/chemistryIntelligence';
+import {
+  evaluateLiquidityAwareBid,
+  type LiquidityCompletionCandidate,
+  type LiquidityPriceRead,
+  type LiquidityReasonCode,
+  type LiquidityState,
+} from './liquidityAwareBidding';
 import type { Player } from '../utils/leagueBuilderStorage';
 import {
   identityEmbodiment,
@@ -88,6 +95,14 @@ export interface WorthToYou {
   verdict: 'push' | 'cap' | 'pass';
   recommendedNumber: number;
   capValue: number | null;
+  suggestedMaxBid: number;
+  priceRead: LiquidityPriceRead;
+  liquidityState: LiquidityState;
+  discretionaryBudget: number;
+  minimumFutureFillReserve: number;
+  replacementValueEstimate: number;
+  scarcityModifier: number;
+  reasonCodes: readonly LiquidityReasonCode[];
   handedness?: null;
 }
 
@@ -161,6 +176,9 @@ export interface WorthToYouInput {
   rosterWithCandidate: readonly RosterSlotPlayer[];
   remainingPool: readonly CompletionCandidate[];
   openSlotsAfterWin: number;
+  nextBid?: number | null;
+  currentBid?: number | null;
+  bidIncrement?: number | null;
   ownBandPriorities: BandPriorities;
   archetypeWeights: Partial<Record<Band, number>> | undefined;
   needBreakdown: RosterNeedBreakdown | null;
@@ -264,8 +282,26 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   );
   const chemistryContribution = Math.max(0, chemistry.premium);
   const worth = ownValue + chemistryContribution;
-  const recommendedNumber = Math.max(0, Math.min(worth, capValue ?? worth));
-  const verdict = worthVerdict(worth, capValue, input.market ?? null);
+  const fallbackLegalMax = capValue ?? (input.rosterWithCandidate.length >= LEGAL_ROSTER.size ? input.budgetRemaining : 0);
+  const liquidity = evaluateLiquidityAwareBid({
+    playerId: input.candidate.id,
+    iv: input.iv,
+    nextBid: input.nextBid ?? input.market?.band.low ?? 0,
+    currentBid: input.currentBid,
+    bidIncrement: input.bidIncrement ?? undefined,
+    legalMaxBid: fallbackLegalMax,
+    budgetRemaining: input.budgetRemaining,
+    rosterSlotsRemaining: input.openSlotsAfterWin + 1,
+    rosterShapes: input.rosterWithCandidate.slice(0, Math.max(0, input.rosterWithCandidate.length - 1)),
+    candidateShape: input.candidateShape,
+    remainingPool: input.remainingPool as readonly LiquidityCompletionCandidate[],
+    baseValuation: factors.needMultiplier > 0 ? worth / factors.needMultiplier : worth,
+    archetypeFitMultiplier: factors.archetypeFitMultiplier,
+    needMultiplier: factors.needMultiplier,
+    riskTolerance: 0.98,
+  });
+  const recommendedNumber = Math.max(0, Math.min(worth, liquidity.maxBid));
+  const verdict = worthVerdict(worth, liquidity.maxBid, input.market ?? null);
   return {
     iv: input.iv,
     ownValue,
@@ -277,6 +313,14 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     verdict,
     recommendedNumber,
     capValue,
+    suggestedMaxBid: liquidity.maxBid,
+    priceRead: liquidity.priceRead,
+    liquidityState: liquidity.liquidityState,
+    discretionaryBudget: liquidity.discretionaryBudget,
+    minimumFutureFillReserve: liquidity.minimumFutureFillReserve,
+    replacementValueEstimate: liquidity.replacementValueEstimate,
+    scarcityModifier: liquidity.scarcityModifier,
+    reasonCodes: liquidity.reasonCodes,
   };
 }
 

@@ -142,6 +142,9 @@ export interface UseLeagueBuilderDataReturn {
   isMLBSeeded: () => Promise<boolean>;
 
   // Utility
+  replaceLeagueLocal: (league: LeagueTemplate) => void;
+  replaceTeamsLocal: (teams: readonly Team[]) => void;
+  replacePlayersLocal: (players: readonly Player[]) => void;
   refresh: () => Promise<void>;
 }
 
@@ -232,6 +235,54 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
   const refresh = useCallback(async () => {
     await loadData({ silent: true });
   }, [loadData]);
+
+  const replaceLeagueLocal = useCallback((league: LeagueTemplate) => {
+    setLeagues((current) => {
+      let replaced = false;
+      const next = current.map((item) => {
+        if (item.id !== league.id) return item;
+        replaced = true;
+        return league;
+      });
+      return replaced ? next : [...next, league];
+    });
+  }, []);
+
+  const replaceTeamsLocal = useCallback((changedTeams: readonly Team[]) => {
+    if (changedTeams.length === 0) return;
+    setTeams((current) => {
+      const changedById = new Map(changedTeams.map((team) => [team.id, team]));
+      const seen = new Set<string>();
+      const next = current.map((team) => {
+        const changed = changedById.get(team.id);
+        if (!changed) return team;
+        seen.add(team.id);
+        return changed;
+      });
+      for (const team of changedTeams) {
+        if (!seen.has(team.id)) next.push(team);
+      }
+      return next;
+    });
+  }, []);
+
+  const replacePlayersLocal = useCallback((changedPlayers: readonly Player[]) => {
+    if (changedPlayers.length === 0) return;
+    setPlayers((current) => {
+      const changedById = new Map(changedPlayers.map((player) => [player.id, player]));
+      const seen = new Set<string>();
+      const next = current.map((player) => {
+        const changed = changedById.get(player.id);
+        if (!changed) return player;
+        seen.add(player.id);
+        return changed;
+      });
+      for (const player of changedPlayers) {
+        if (!seen.has(player.id)) next.push(player);
+      }
+      return next;
+    });
+  }, []);
 
   // ============================================
   // LEAGUE OPERATIONS
@@ -772,6 +823,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     isMLBSeeded,
 
     // Utility
+    replaceLeagueLocal,
+    replaceTeamsLocal,
+    replacePlayersLocal,
     refresh,
   };
 }

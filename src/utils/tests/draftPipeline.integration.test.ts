@@ -1866,7 +1866,11 @@ describe('draft pipeline integration', () => {
     // Unlock re-opens the pool for editing.
     const unlocked = await unlockLeaguePool(LEAGUE_ID);
     expect(unlocked?.locked).toBe(false);
-    await expect(addPlayersToLeaguePool([removedCuratedPlayerId], LEAGUE_ID)).resolves.toBeUndefined();
+    // add/remove now resolve to the changed Player[] (feeds useLeagueBuilderData's silent local
+    // refresh); re-adding the previously-removed curated player returns exactly that one player.
+    await expect(addPlayersToLeaguePool([removedCuratedPlayerId], LEAGUE_ID)).resolves.toEqual([
+      expect.objectContaining({ id: removedCuratedPlayerId }),
+    ]);
     expect((await registerLeaguePoolForLeague(LEAGUE_ID)).players).toHaveLength(mlbSlots + 2);
   }, 30_000);
 
