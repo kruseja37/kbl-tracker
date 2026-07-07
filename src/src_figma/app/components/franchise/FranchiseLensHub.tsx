@@ -53,6 +53,10 @@ export interface ImpactCardVM {
 }
 
 export interface NextGameVM {
+  scheduleGameId?: string;
+  awayTeamId?: string;
+  homeTeamId?: string;
+  gameNumber?: number;
   awayName: string; awayAbbr: string; awayRecord: string;
   homeName: string; homeAbbr: string; homeRecord: string;
   meta?: string;
@@ -304,6 +308,10 @@ export interface MomentsVM {
 
 /* ===== Schedule (team-scoped — the club's fixtures + results) ===== */
 export interface ScheduleGameVM {
+  scheduleGameId?: string;
+  awayTeamId?: string;
+  homeTeamId?: string;
+  gameNumber?: number;
   date: string;            // "Wk 9 · Wed"
   opponent: string;        // abbr
   home: boolean;           // home (vs) vs away (@)
@@ -465,6 +473,7 @@ export interface FranchiseLensActions {
   onSendDown: (playerId: string, teamId: string) => Promise<RosterActionResult>;
   onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
   onSetFitness: (playerId: string, state: FitnessState) => Promise<RosterActionResult>;
+  onScoreGame?: (scheduleGameId?: string) => void;
 }
 /** A roster move awaiting the user's confirm — call-up from the farm, send-down from the drawer. */
 interface PendingMove { kind: "call-up" | "send-down"; playerId: string; teamId: string; name: string }
@@ -560,7 +569,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
             </div>
 
             {tab === "The Clubhouse" ? (
-              <SeasonHome hub={hub} onAction={(a) => setOpenMoment(a)} />
+              <SeasonHome hub={hub} actions={actions} onAction={(a) => setOpenMoment(a)} />
             ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
@@ -583,7 +592,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions }: 
             ) : tab === "Stadium" ? (
               <StadiumTab hub={hub} active={active} />
             ) : tab === "Schedule" ? (
-              <ScheduleTab hub={hub} active={active} />
+              <ScheduleTab hub={hub} active={active} actions={actions} />
             ) : tab === "Almanac" ? (
               <AlmanacTab hub={hub} active={active} />
             ) : (
@@ -667,7 +676,7 @@ function Banner({ active }: { active: ActiveTeamVM }) {
   );
 }
 
-function SeasonHome({ hub, onAction }: { hub: HubVM; onAction?: (action: string) => void }) {
+function SeasonHome({ hub, actions, onAction }: { hub: HubVM; actions?: FranchiseLensActions; onAction?: (action: string) => void }) {
   const home = hub.home;
   if (!home) return <div className="fen-empty">The clubhouse is quiet — no season underway yet.</div>;
   return (
@@ -703,7 +712,14 @@ function SeasonHome({ hub, onAction }: { hub: HubVM; onAction?: (action: string)
                 <div className="fen-vs">@</div>
                 <div className="fen-mt you"><div className="lg">{home.nextGame.homeAbbr}</div><div className="nm">{home.nextGame.homeName}</div><div className="rc">{home.nextGame.homeRecord}</div></div>
               </div>
-              <button type="button" className="fen-bigplay">▶  PLAY BALL</button>
+              <button
+                type="button"
+                className="fen-bigplay"
+                onClick={() => actions?.onScoreGame?.(home.nextGame?.scheduleGameId)}
+                disabled={!actions?.onScoreGame}
+              >
+                SCORE
+              </button>
               <div className="fen-simrow"><button type="button" className="fen-simbtn">Sim this game</button><button type="button" className="fen-simbtn">Sim the week</button></div>
               {home.nextGame.pulse ? <div className="fen-gpulse">{home.nextGame.pulse}</div> : null}
             </div>
@@ -1760,7 +1776,7 @@ function AlmanacTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
 }
 
 /* ===== Schedule (team tab) ===== */
-function ScheduleRow({ g }: { g: ScheduleGameVM }) {
+function ScheduleRow({ g, actions }: { g: ScheduleGameVM; actions?: FranchiseLensActions }) {
   return (
     <div className={`fen-sgame${g.isNext ? " next" : ""}`}>
       <div className="sd">{g.date}</div>
@@ -1768,7 +1784,14 @@ function ScheduleRow({ g }: { g: ScheduleGameVM }) {
       {g.result ? (
         <div className={`sr ${g.result.win ? "w" : "l"}`}>{g.result.win ? "W" : "L"} {g.result.teamScore}–{g.result.oppScore}</div>
       ) : g.isNext ? (
-        <button type="button" className="fen-sched-play">▶ Play Ball</button>
+        <button
+          type="button"
+          className="fen-sched-play"
+          onClick={() => actions?.onScoreGame?.(g.scheduleGameId)}
+          disabled={!actions?.onScoreGame}
+        >
+          SCORE
+        </button>
       ) : (
         <div className="sr soft">{g.note ?? (g.home ? "home" : "away")}</div>
       )}
@@ -1776,7 +1799,7 @@ function ScheduleRow({ g }: { g: ScheduleGameVM }) {
   );
 }
 
-function ScheduleTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
+function ScheduleTab({ hub, active, actions }: { hub: HubVM; active: ActiveTeamVM; actions?: FranchiseLensActions }) {
   const sc = hub.schedule;
   if (!sc) return <div className="fen-empty">No schedule loaded for {active.name} yet.</div>;
   return (
@@ -1785,11 +1808,11 @@ function ScheduleTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }) {
       <div className="fen-sched-grid">
         <div className="fen-sched-col">
           <div className="fen-sectlab">Coming Up</div>
-          {sc.upcoming.length ? sc.upcoming.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">Nothing on the docket.</div>}
+          {sc.upcoming.length ? sc.upcoming.map((g, i) => <ScheduleRow key={i} g={g} actions={actions} />) : <div className="fen-empty">Nothing on the docket.</div>}
         </div>
         <div className="fen-sched-col">
           <div className="fen-sectlab">Recent</div>
-          {sc.recent.length ? sc.recent.map((g, i) => <ScheduleRow key={i} g={g} />) : <div className="fen-empty">No games played yet.</div>}
+          {sc.recent.length ? sc.recent.map((g, i) => <ScheduleRow key={i} g={g} actions={actions} />) : <div className="fen-empty">No games played yet.</div>}
         </div>
       </div>
     </div>
