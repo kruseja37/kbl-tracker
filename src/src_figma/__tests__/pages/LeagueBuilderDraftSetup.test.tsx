@@ -750,6 +750,33 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.queryByRole("button", { name: /apply recommended cap/i })).not.toBeInTheDocument();
   });
 
+  test("displays the retuned inflationary state as Cap Rich near a 1.30 cap ratio", async () => {
+    const legalPlayers = makeLegalRosterPlayers(10_000);
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a"],
+        draftPoolMode: "pool-first",
+        salaryCap: 1_034_526,
+      }),
+      teams: [makeTeam("team-a")],
+      players: legalPlayers,
+      pool: makePool({
+        locked: false,
+        players: legalPlayers.map((player) => ({ id: player.id, iv: 10_000, salary: 10_000 })),
+        totalSlots: legalPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByLabelText("Cap fit diagnostic")).toBeInTheDocument();
+    expect(capFitDiagnosticText()).toContain("Cap Fit: Cap Rich");
+    expect(capFitDiagnosticText()).toContain("Suggested Neutral Cap: $795,789");
+    expect(capFitDiagnosticText()).toContain("Current Cap: $1,034,526");
+    expect(capFitDiagnosticText()).not.toContain("Very Loose");
+    expect(saveLeagueTemplate).not.toHaveBeenCalled();
+  });
+
   test("changing Pool Quality does not mutate salary cap while the diagnostic stays visible", async () => {
     mockLeagueData({
       league: makeLeague({ draftPoolMode: "pool-first", salaryCap: 900_000 }),
