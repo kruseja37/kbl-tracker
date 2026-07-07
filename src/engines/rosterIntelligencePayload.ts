@@ -282,7 +282,7 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   );
   const chemistryContribution = Math.max(0, chemistry.premium);
   const worth = ownValue + chemistryContribution;
-  const fallbackLegalMax = capValue ?? (input.rosterWithCandidate.length >= 22 ? input.budgetRemaining : 0);
+  const fallbackLegalMax = capValue ?? (input.rosterWithCandidate.length >= LEGAL_ROSTER.size ? input.budgetRemaining : 0);
   const liquidity = evaluateLiquidityAwareBid({
     playerId: input.candidate.id,
     iv: input.iv,

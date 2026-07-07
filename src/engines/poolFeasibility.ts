@@ -9,6 +9,7 @@ import {
   type ArchetypeStat,
   type HistoricalArchetype,
 } from '../data/historicalArchetypes';
+import { LEGAL_ROSTER } from '../data/rosterConstruction';
 import type { TierKey } from '../data/tierParams';
 
 export const STRONG_PERCENTILE = 0.67;
@@ -172,7 +173,7 @@ export function analyzePoolFeasibility(
     // diagnostic (it leaves rosters $30–$150 over a ~$1.07M budget on convergence), NOT a composition
     // gate — feasibility is about player TYPES + bodies, per the brief. `built.solvent` stays in the
     // output for the draft-guide/UI to surface budget pressure later.
-    const notFieldable = built.rosterSize < 22;
+    const notFieldable = built.rosterSize < LEGAL_ROSTER.size;
     const hasBindingShortfall = shortfalls.some((shortfall) => shortfall.binding && shortfall.needCount > 0);
     const hasAnyShortfall = shortfalls.some((shortfall) => shortfall.needCount > 0);
     const support: ArchetypeFeasibility['support'] = notFieldable || hasBindingShortfall

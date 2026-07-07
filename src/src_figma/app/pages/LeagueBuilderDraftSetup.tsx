@@ -1975,7 +1975,7 @@ export function LeagueBuilderDraftSetup() {
     const numeric = report.numericShape;
     console.info("Draft setup production numeric pool shape", {
       preset: numeric?.preset ?? poolBalancePreset,
-      demand: numeric?.requiredRosterDemand ?? report.sizing?.demandBase ?? league.teamIds.length * 22,
+      demand: numeric?.requiredRosterDemand ?? report.sizing?.demandBase ?? league.teamIds.length * LEGAL_ROSTER.size,
       targetPoolSize: numeric?.targetSize ?? report.sizing?.finalSize ?? result.size,
       actualPoolSize: result.size,
       slackFactor: numeric?.poolSlackFactor ?? report.sizing?.requestedMultiplier ?? null,
@@ -2411,7 +2411,7 @@ export function LeagueBuilderDraftSetup() {
           (poolSizeTarget.clamped ? "text-[var(--ballpark-status-warn)]" : "text-[var(--ballpark-chalk)]")
         }
       >
-        {poolSizeTarget.effectiveTarget} PLAYERS · {league?.teamIds.length ?? 0} CLUBS × 22
+        {poolSizeTarget.effectiveTarget} PLAYERS · {league?.teamIds.length ?? 0} CLUBS × {LEGAL_ROSTER.size}
         {shills > 0 ? ` + ${shills} SHILLS` : ""}
       </div>
     </div>

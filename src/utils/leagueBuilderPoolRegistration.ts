@@ -1,6 +1,7 @@
 import {
   BALANCE_MODE_DEFAULT,
 } from '../data/rosterEngineConstants';
+import { LEGAL_ROSTER } from '../data/rosterConstruction';
 import {
   calculateIvBaseSalary,
   type PlayerForSalary,
@@ -114,7 +115,7 @@ export async function registerLeaguePoolForLeague(leagueId: string): Promise<Reg
     leagueId: league.id,
     tier: league.tier ?? 'juiced',
     balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
-    totalSlots: league.teamIds.length * 22,
+    totalSlots: league.teamIds.length * LEGAL_ROSTER.size,
     salaryCap: resolveLeagueSalaryCap(league),
     players: leaguePlayers.map((player) => ({
       id: player.id,

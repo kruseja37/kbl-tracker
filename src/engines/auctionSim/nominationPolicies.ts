@@ -39,7 +39,7 @@ export function selectAuctionSimNominee(
 
   if (config.nominationPolicy === 'marketPressure') {
     return remainingPlayers
-      .map((player) => ({ player, score: player.iv * (1 + scarcityPressure(player, teams, remainingPlayers)) }))
+      .map((player) => ({ player, score: player.iv * (1 + scarcityPressure(player, teams, remainingPlayers, config.rosterSize)) }))
       .sort(byScoreDescIdAsc)[0].player;
   }
 
