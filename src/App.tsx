@@ -94,6 +94,16 @@ const LeagueBuilderDraft = lazy(() =>
     default: module.LeagueBuilderDraft,
   })),
 );
+const LeagueBuilderDraftSetup = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderDraftSetup").then((module) => ({
+    default: module.LeagueBuilderDraftSetup,
+  })),
+);
+const LeagueBuilderAuctionDraft = lazy(() =>
+  import("./src_figma/app/pages/LeagueBuilderAuctionDraft").then((module) => ({
+    default: module.LeagueBuilderAuctionDraft,
+  })),
+);
 const LeagueBuilderRules = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
     default: module.LeagueBuilderRules,
@@ -254,6 +264,14 @@ function App() {
           element={<LeagueBuilderRosters />}
         />
         <Route path="/league-builder/draft" element={<LeagueBuilderDraft />} />
+        <Route
+          path="/league-builder/draft-setup"
+          element={<LeagueBuilderDraftSetup />}
+        />
+        <Route
+          path="/league-builder/auction-draft"
+          element={<LeagueBuilderAuctionDraft />}
+        />
         <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
         {/* Almanac - Figma Design */}
