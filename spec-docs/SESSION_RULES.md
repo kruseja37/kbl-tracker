@@ -8,10 +8,11 @@
 
 Before any work begins, Claude MUST read these files in order:
 1. `spec-docs/SESSION_RULES.md` (this file)
-2. `spec-docs/AUDIT_LOG.md` (where we are in the audit)
-3. `spec-docs/AUDIT_PLAN.md` (what we're doing and how)
-4. `spec-docs/SESSION_LOG.md` (what happened last session)
-5. `spec-docs/CURRENT_STATE.md` (overall app state)
+2. `spec-docs/PATHWAY_TO_V1_2026-07-07.md` (the plan of record: phases, gates, agent roles, runbook)
+3. `spec-docs/V1_BUILD_STATUS.md` (the status SOT — A-to-Z 13-stage build status; update THIS in place with every landing)
+4. `spec-docs/UI_TRUTH_MAP.md` (UI truth: what actually renders per route — merged is not the same as routed)
+5. `spec-docs/SESSION_LOG.md` (what happened last session)
+6. `spec-docs/CURRENT_STATE.md` (overall app state; see `spec-docs/AUDIT_LOG.md` for fine-grained finding-level history if needed)
 
 After reading, Claude MUST restate:
 - Current audit phase and status
@@ -527,6 +528,51 @@ agent edits the ratified rules without JK. (JK ruling 2026-06-14.)
 - **v1 status reads = current code vs `ROADMAP_TO_V1.md` + recent breadcrumbs ONLY; never feed pre-June-10 docs (JK correction 2026-06-22):** When assessing "what's done / what's left to v1," always anchor on `spec-docs/ROADMAP_TO_V1.md` (the evidence-backed, commit/file:line-grounded roadmap) compared against CURRENT code, then follow breadcrumbs to features added in the last few days (recent commits + the live ledgers `PARALLEL_LANE_LOG.md` / `AUTONOMOUS_RUN_LOG.md` + recently-touched specs). Do NOT pull pre-~June-10 docs (gap-analyses, audit syntheses, completion-roadmap predecessors, UX-redesign gap docs) into a v1 status read — they describe SUPERSEDED or ABANDONED targets and inject large amounts of noise (e.g. measuring code against an un-adopted GameTracker redesign spec → a phantom "83% gaps"). Because the freshest evidence-backed roadmap already folds the durable history, and stale docs cause false blockers + waste JK's review time. (Origin: a v1 breakdown that went back to 2026-03-15 / 05-27 / 06-09 docs and reported GameTracker as the "weakest pillar, ~83% gaps" — when Elimination Mode + the GameTracker UI are in fact fully built; the gap doc was code-vs-a-proposed-redesign, never adopted.)
 
 - **Never report a background Codex dispatch as "working normally" without checking elapsed time; bound the wait (JK correction 2026-06-25 — "you're hallucinating"):** When a `codex exec` build is dispatched `run_in_background` and the plan is to wait for the harness completion notification, ALWAYS (a) attach a shell-native self-kill watchdog so the job CANNOT run unbounded (macOS has no `timeout`), and (b) before stating any status to JK, check the process's actual `etime` (`ps -o etime -p <pid>`) AND whether output/files have advanced — never assert "it's still thinking, this is normal" from nothing. Because a HUNG Codex produces no completion event and therefore no notification, so passive waiting can silently burn hours; the Captain told JK a dispatch was "the normal thinking-before-typing phase" when it had in fact been hung for 2h7m with zero output and zero files written — an unverified assertion (the exact anti-hallucination failure). A correct status read = real `etime` + real output-delta, and a re-dispatch must be watchdog-bounded so the next hang is caught in minutes, not hours. (Extends the existing [codex-dispatch-watchdog] mechanism memory from "have a watchdog" to "actually bound + actively verify, never passively assume.")
+
+## Lessons 2026-07-07 (the lineage-reunification episode — ratified, not pending)
+
+On 2026-07-07 the repo was discovered to have forked into two incompatible "trunks": the real v1 work
+(soul layer, freeze, L-SIM, ~1,194 commits of history) lived only on local branches nobody had pushed,
+while GitHub `main` sat frozen at 2026-05-21 and a second agent, working from GitHub only, built a new
+parallel line on top of that stale base and presented it as the established arc. JK ruled the old trunk
+the product, published it as `main`, archived the GitHub-only line at
+`archive/draft-economy-2026-07-07`, and ported the GitHub line's genuinely new economy work onto the
+real `main`. These four lessons are the process fix, effective immediately:
+
+- **Merged ≠ routed — verify what RENDERS, not what exists in the tree:** When assessing whether a UI
+  surface is live or canonical, never trust that a branch merge or a component's presence in the tree
+  means it's what users see — always walk the live router in a real browser and record what actually
+  renders. Because a component can be fully merged onto trunk and still be dead: the polished
+  FranchiseLens hub was merged into trunk, but `/franchise/:id` kept routing to the old `FranchiseHome`
+  while the new hub sat unrouted at `/__preview/franchise-lens` — every "[UI] DONE" status in
+  `V1_BUILD_STATUS.md` §3 meant "exists in tree," not "is what renders," until the `UI_TRUTH_MAP.md`
+  browser walk proved it route by route.
+
+- **A handoff's story about repo state is unverified until git/browser-proven:** When a session handoff
+  or a fresh agent's summary asserts what branch is canonical, what's merged, or what a feature does,
+  never adopt that story at face value — reconcile it against actual git commands (`git log`,
+  `git merge-base --is-ancestor`, `gh pr list`) and, for UI claims, a real browser walk, before building
+  on it. Because a GitHub-only agent inherited a handoff that presented a parallel, six-week-stale line
+  as "the established arc," complete with rules that contradicted JK's standing rulings (no luxury tax,
+  no reserve prices) — and a second agent compounded it by treating that handoff's account as ground
+  truth without re-verifying against the real trunk.
+
+- **Sim measurement gates economics changes, browser gates UI changes:** When proposing or landing a
+  change to draft/auction economics (pool sizing, reserve prices, curve-quota pulls, cap math), the
+  acceptance gate is the sim harness's measured numbers (histogram + budget curves), never a
+  plausibility argument — and when proposing or landing a change to what a user sees or clicks, the
+  acceptance gate is a same-session real browser walk, never a code read. Do not substitute one gate for
+  the other: an economics change that "looks right" in code is unproven until the sim harness measures
+  it; a UI change that builds clean is unproven until it's seen rendering.
+
+- **Two sources of truth = the root cause of the July fork — one published main, always:** Never let a
+  second, undeclared "true" trunk or status doc coexist with the published one — every session works
+  from ONE pushed, protected `main` and ONE in-place-updated status SOT (`V1_BUILD_STATUS.md`), and any
+  doc that would compete with it gets a superseded banner immediately, not eventually. Because the
+  entire July fork happened exactly this way: v1 work lived on local branches nobody pushed, the SOT
+  went stale the day after an assembly landed, and a GitHub-only agent rebuilt "the truth" from a
+  six-week-old snapshot — producing two incompatible universes that took a full remediation day to
+  reconcile.
 
 ### Pending cleanup (not a rule — a tracked repo action)
 - **spec-assembler duplicate:** two divergent copies exist —

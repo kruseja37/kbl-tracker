@@ -1158,3 +1158,8 @@ Previous `CURRENT_STATE.md` live header was the 2026-07-07 CUT1 route-cutover ba
 ## Outgoing Live Header Snapshot — before 2026-07-07 Lever A REJECT remediation session end
 
 Previous `CURRENT_STATE.md` live header was the 2026-07-07 Lever A steps 4-6 sandbox-complete banner. This session refreshed the live header to record the F1 blocker fix, the F2 production-state-machine harness hardening and falsification check, the F3 stale PASSED-row handling, the exhaustion-cleanup reserve-price amendment, and the current full-suite caveat for unrelated DraftSetup/AwardsWatchlist UI order flakes.
+---
+
+## Outgoing Live Header Snapshot — before 2026-07-07 CUT1-1 Lens parity completion
+
+Previous `CURRENT_STATE.md` live header said the CUT1 route cutover batch had partially landed, with CUT1-2 and CUT1-4 complete and CUT1-1 stopped because the Lens had data but no SCORE/GameTracker launch path. This session completed the CUT1-1 product parity work: shared FranchiseHome/Lens SCORE launch, Lens score-only and skip, post-game reflection coverage, and the `/franchise/:franchiseId` route flip. Browser verification remains outstanding because this sandbox cannot bind localhost (`listen EPERM`).

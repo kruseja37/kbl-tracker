@@ -19,7 +19,9 @@ interface ScheduleContentProps {
   teamNameMap?: Record<string, string>;
   onDeleteGame?: (gameId: string) => void;
   onEditGame?: (game: ScheduledGame) => void;
+  onScoreGame?: (game: ScheduledGame) => void;
   onEnterFinalScore?: (game: ScheduledGame) => void;
+  onSkipGame?: (game: ScheduledGame) => void;
   onImportCsvRows?: (rows: FranchiseScheduleImportRow[]) => Promise<void> | void;
 }
 
@@ -36,7 +38,9 @@ export function ScheduleContent({
   teamNameMap = {},
   onDeleteGame,
   onEditGame,
+  onScoreGame,
   onEnterFinalScore,
+  onSkipGame,
   onImportCsvRows,
 }: ScheduleContentProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -95,6 +99,34 @@ export function ScheduleContent({
         aria-label={`Enter score-only final score for game ${game.gameNumber}`}
       >
         Score Only
+      </button>
+    );
+  };
+
+  const renderScoreGameButton = (game: ScheduledGame) => {
+    if (!onScoreGame || game.status !== 'SCHEDULED') return null;
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onScoreGame(game); }}
+        className="bg-[var(--franchise-gold)] border-[2px] border-[var(--franchise-gold-dark)] px-2 py-1 text-[8px] text-[var(--franchise-ink)] hover:bg-[var(--franchise-gold-light)] transition-colors font-bold"
+        title="Score this game in GameTracker"
+        aria-label={`Score game ${game.gameNumber} in GameTracker`}
+      >
+        SCORE
+      </button>
+    );
+  };
+
+  const renderSkipGameButton = (game: ScheduledGame) => {
+    if (!onSkipGame || game.status !== 'SCHEDULED') return null;
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onSkipGame(game); }}
+        className="bg-[var(--franchise-loss-deep)] border-[2px] border-[var(--franchise-loss-alt)] px-2 py-1 text-[8px] text-white hover:bg-[var(--franchise-loss-alt)] transition-colors"
+        title="Mark game skipped"
+        aria-label={`Skip game ${game.gameNumber}`}
+      >
+        SKIP
       </button>
     );
   };
@@ -408,7 +440,9 @@ export function ScheduleContent({
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                   )}
+                  {renderScoreGameButton(nextGame)}
                   {renderFinalScoreButton(nextGame)}
+                  {renderSkipGameButton(nextGame)}
                   {renderDeleteButton(nextGame.id)}
                 </div>
               </div>
@@ -454,7 +488,9 @@ export function ScheduleContent({
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                       )}
+                      {index === 0 ? renderScoreGameButton(game) : null}
                       {renderFinalScoreButton(game)}
+                      {renderSkipGameButton(game)}
                       {renderDeleteButton(game.id)}
                     </div>
                   </div>
@@ -488,6 +524,7 @@ export function ScheduleContent({
                     </button>
                   )}
                   {renderFinalScoreButton(game)}
+                  {renderSkipGameButton(game)}
                   {renderDeleteButton(game.id)}
                 </div>
               </div>

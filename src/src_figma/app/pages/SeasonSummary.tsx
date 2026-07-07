@@ -545,13 +545,6 @@ export function SeasonSummary() {
     );
   }
 
-  function manifestStatusClass(status: string): string {
-    if (status === 'trusted' || status === 'included') return 'text-[var(--franchise-win-pale)]';
-    if (status === 'blocked') return 'text-[var(--franchise-loss-text-alt)]';
-    if (status === 'incomplete') return 'text-[var(--franchise-gold-amber-alt)]';
-    return 'text-[var(--franchise-text)]/70';
-  }
-
   // ============================================
   // RENDER
   // ============================================
@@ -869,65 +862,7 @@ export function SeasonSummary() {
         )}
 
         {/* ============================================ */}
-        {/* 5. SEASON HANDOFF MANIFEST */}
-        {/* ============================================ */}
-        <SectionHeader title="Season Complete Manifest" section="manifest" />
-        {expandedSection === "manifest" && (
-          <div className="bg-[var(--franchise-header)] border-[6px] border-[var(--franchise-border)] p-4 space-y-3">
-            {persistedSummary?.manifest ? (
-              <>
-                <div className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-[9px] text-[var(--franchise-gold)] uppercase">Read-only awards-aware handoff package</div>
-                    <div className={`text-[9px] uppercase ${manifestStatusClass(persistedSummary.manifest.status)}`}>
-                      {persistedSummary.manifest.status.replace(/-/g, ' ')}
-                    </div>
-                  </div>
-                  <div className="mt-2 text-[10px] text-[var(--franchise-text)]/70 leading-relaxed">
-                    This summary records Mode 2 season evidence for review only. Final True Value handoff authority,
-                    salary movement, morale automation, relationship mutation, season rollover, and Mode 3/offseason execution remain blocked.
-                  </div>
-                </div>
-
-                {persistedSummary.manifest.blockers.length > 0 && (
-                  <div className="bg-[var(--franchise-loss-panel-deep)]/70 border-[3px] border-[var(--franchise-loss-border)] p-3">
-                    <div className="text-[9px] text-[var(--franchise-loss-text-alt)] uppercase mb-1">Completion blockers</div>
-                    {persistedSummary.manifest.blockers.map((blocker) => (
-                      <div key={blocker} className="text-[9px] text-[var(--franchise-loss-text-alt)]/90">- {blocker}</div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {persistedSummary.manifest.categories.map((category) => (
-                    <div key={category.key} className="bg-[var(--franchise-panel)] border-[3px] border-[var(--franchise-border)] p-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="text-[9px] text-[var(--franchise-text)] uppercase">{category.label}</div>
-                        <div className={`text-[8px] uppercase whitespace-nowrap ${manifestStatusClass(category.status)}`}>
-                          {category.status.replace(/-/g, ' ')}
-                        </div>
-                      </div>
-                      <div className="mt-1 text-[9px] text-[var(--franchise-text)]/65 leading-relaxed">{category.detail}</div>
-                      {category.blockers.slice(0, 1).map((blocker) => (
-                        <div key={blocker} className="mt-1 text-[8px] text-[var(--franchise-loss-text-alt)]/90">{blocker}</div>
-                      ))}
-                      {category.warnings.slice(0, 1).map((warning) => (
-                        <div key={warning} className="mt-1 text-[8px] text-[var(--franchise-gold-amber-alt)]/90">{warning}</div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="text-[10px] text-[var(--franchise-text)]/50 italic text-center py-4">
-                No persisted awards-aware handoff manifest is available yet.
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ============================================ */}
-        {/* 6. START PLAYOFFS BUTTON */}
+        {/* 5. START PLAYOFFS BUTTON */}
         {/* ============================================ */}
         <div className="pt-4 pb-8">
           <button

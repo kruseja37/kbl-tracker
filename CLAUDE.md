@@ -8,7 +8,11 @@
 - Codex bridge instructions: AGENTS.md
 - Codex repo skills: .agents/skills/ (derived COPY mirror of .claude/skills/ + spec-docs/skills/; never edit by hand — run scripts/sync-codex-skills.sh)
 - Codex MCP config: .codex/config.toml
-- Always work on main unless JK says otherwise
+- Plan of record: spec-docs/PATHWAY_TO_V1_2026-07-07.md (phases, runbook, agent roles)
+- Status SOT: spec-docs/V1_BUILD_STATUS.md — the ONE v1 status doc; update it IN PLACE with every landing (a stale SOT is a stop-ship defect)
+- UI truth: spec-docs/UI_TRUTH_MAP.md — what actually renders per route, not what merely exists in the tree
+- Draft economy thread: spec-docs/DRAFT_ECONOMY_RESET_2026-07-05.md + spec-docs/ECONOMY_MEASUREMENT_2026-07-07.md
+- **Always work on main — this is now literally true (2026-07-07):** GitHub `main` IS the product; the old trunk lineage was published to `main` today. The prior 2026-05→07 GitHub `main` history is archived at `archive/draft-economy-2026-07-07` — NEVER base new work on that archive. The large local branch/worktree forest (`experiment/manager-wpa-window` and the many `codex/*`/`claude/*` branches) is now historical; worktrees under `/private/tmp` are session-scoped scratch space, not sources of truth.
 
 ## Critical Architecture Facts (Phase 0 Confirmed)
 - App.tsx routes GameTracker to src/src_figma/app/pages/GameTracker.tsx ONLY
@@ -16,6 +20,18 @@
 - useGameState.ts (~12,585 lines) is the active state system — not deprecated
 - useGamePersistence.ts is wired to the inactive path only
 - 718 useState calls in src/src_figma + src/components/GameTracker/
+
+---
+
+## V1 Scope & Known State (2026-07-07 — point-in-time; `spec-docs/V1_BUILD_STATUS.md` is authoritative for anything later)
+
+**Scope:** v1 = league setup → end of regular season. Score/Skip + score-only game entry (no simulate — the simulate path exists in code but is hardcoded OFF, `FranchiseHome.tsx:181`, and is on the cut-over DELETE list). Playoffs and offseason are DEFERRED. All-Star = voting/selections only, no All-Star game. **JK's manual browser sign-off on real data is the sole acceptance gate** — nothing ships v1 without it.
+
+**Known live facts (verified 2026-07-07):**
+- Baseline test suite is fully green except two solo-green batch flakes — `LeagueBuilderDraftSetup` and `franchiseManualSmokeFixture` — both pass clean when run alone. Treat any OTHER red as a real regression, not baseline noise.
+- The `/franchise` route flip to the FranchiseLens hub is in flight (parity-gated — see `UI_TRUTH_MAP.md` row 15 and `V1_BUILD_STATUS.md` §3 S9).
+- Draft-economy Lever A (reserve prices) is in remediation — see `DRAFT_ECONOMY_RESET_2026-07-05.md` + `ECONOMY_MEASUREMENT_2026-07-07.md`.
+- The manual-smoke fixture league currently fails legal-22-roster validation — a known stale-fixture issue, not a product regression.
 
 ---
 
@@ -27,10 +43,11 @@ tool on exact paths — do NOT rely on compaction/summaries.** This is the singl
 canonical startup ritual for EVERY runtime (Claude Code, Codex, Claude chat).
 It must stay identical to the one in `spec-docs/SESSION_RULES.md`:
 1. `spec-docs/SESSION_RULES.md` — non-negotiable rules, roles, the triangle
-2. `spec-docs/AUDIT_LOG.md` — where we are in the audit (index for findings 056+)
-3. `spec-docs/AUDIT_PLAN.md` — what we're auditing and how
-4. `spec-docs/SESSION_LOG.md` — last session's work (read from the end if large)
-5. `spec-docs/CURRENT_STATE.md` — LIVE HEADER: phase / last done / next action
+2. `spec-docs/PATHWAY_TO_V1_2026-07-07.md` — the plan of record: phases, gates, agent roles, runbook
+3. `spec-docs/V1_BUILD_STATUS.md` — the status SOT (A-to-Z 13-stage build status); update THIS in place with every landing
+4. `spec-docs/UI_TRUTH_MAP.md` — UI truth: what actually renders per route (merged is not the same as routed)
+5. `spec-docs/SESSION_LOG.md` — last session's work (read from the end if large)
+6. `spec-docs/CURRENT_STATE.md` — LIVE HEADER: phase / last done / next action (see `spec-docs/AUDIT_LOG.md` for fine-grained finding-level history if needed)
 
 After reading, RESTATE: current phase, what was last completed, and the next
 action. WAIT for JK to confirm or correct before any work starts.
@@ -217,6 +234,16 @@ Defaults:
 - Codex is the default builder and local verifier for precise repo edits.
 - The builder/auditor triangle is mandatory: the agent that wrote a meaningful change does not audit its own diff.
 - Contracts and audit prompts must exist in `spec-docs/PROMPT_CONTRACTS.md` before handoff.
+
+**Operating protocol (restated 2026-07-07, the reunification ruling):**
+- One orchestrator per thread writes contracts and gates; it does not itself build.
+- Codex builds; reasoning effort is model-tiered — `xhigh` for engine/economics work, `medium` for mechanical work.
+- Adversarial audits split by risk: Opus audits product-math and high-risk diffs, Sonnet audits mechanical diffs.
+- Parallel lanes must be file-disjoint — prove the file-surface partition before running two lanes concurrently.
+- A worker never re-litigates scope on its own; scope changes route back through JK.
+- An UNKNOWN or a mid-build surprise is a STOP-and-report, never an improvisation.
+- No "ready" or "working" claim stands without a same-session real browser walk.
+- Ship as branch-per-slice PRs to `main` — no direct pushes to `main`, no giant combined PRs.
 
 ---
 

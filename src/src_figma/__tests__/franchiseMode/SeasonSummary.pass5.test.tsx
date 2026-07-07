@@ -348,17 +348,12 @@ describe('SeasonSummary Pass 5 persisted-summary fidelity', () => {
     expect(mocks.mockCreateNewPlayoff).not.toHaveBeenCalled();
   });
 
-  test('renders persisted awards-aware season-complete manifest without Mode 3 execution controls', async () => {
+  test('keeps the season-complete manifest out of the player view', async () => {
     render(<SeasonSummary />);
 
     await screen.findByText('SEASON 1 SUMMARY');
-    fireEvent.click(screen.getByRole('button', { name: /Season Complete Manifest/i }));
-
-    expect(screen.getByText(/Read-only awards-aware handoff package/i)).toBeInTheDocument();
-    expect(screen.getByText(/Awards and watchlists/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 finalized award row\(s\) captured/i)).toBeInTheDocument();
-    expect(screen.getByText(/Mode 3\/offseason and season rollover/i)).toBeInTheDocument();
-    expect(screen.getByText(/No Mode 3 execution/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Season Complete Manifest/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Read-only awards-aware handoff package/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mode 3|Offseason|Season Rollover/i })).not.toBeInTheDocument();
   });
 
