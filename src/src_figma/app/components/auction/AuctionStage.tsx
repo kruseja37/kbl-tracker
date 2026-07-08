@@ -28,6 +28,11 @@ export interface ScoutReadVM {
   grade2080: number;
   confidence: "Low" | "Medium" | "High";
   confidenceNote?: string;
+  valueLabel?: string;
+  gradeLabel?: string;
+  gradeBandLabel?: string;
+  confidenceBandLabel?: string;
+  toolBands?: Array<{ label: string; lower: number; upper: number }>;
 }
 
 export interface LotVM {
@@ -36,6 +41,7 @@ export interface LotVM {
   positions: string;
   personality: string;
   chemistry: string;
+  traitCountLabel?: string;
   batsThrows?: string;
   age?: number;
   objectPronoun?: "him" | "her";
@@ -49,6 +55,7 @@ export interface LotVM {
   /** Farm: the fogged scout read (covered by default, long-press to reveal). */
   scout?: ScoutReadVM;
   reserveAsk?: number | null;
+  reserveLabel?: string;
   highBid?: { amount: number; by: string; isYou: boolean } | null;
 }
 
@@ -230,7 +237,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
               <>
                 <div className="gonewrap">
                   <div className="lot">
-                    <Lot lot={vm.lot} />
+                    <Lot lot={vm.lot} tier={vm.tier} />
                   </div>
                   {vm.overlay === "sold" && (
                     <div className="stamp sold"><div><div className="s">SOLD</div></div></div>
@@ -533,9 +540,10 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
   );
 }
 
-function Lot({ lot }: { lot: LotVM }) {
+function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
   const [revealed, setRevealed] = useState(false);
   const name = <span className="name">{lot.name.toUpperCase()}</span>;
+  const isFarmLot = tier === "farm";
   return (
     <div className="lotinner">
       <div className="eyebrow">{lot.scout ? "On the block · prospect" : "On the block"}</div>
@@ -548,10 +556,19 @@ function Lot({ lot }: { lot: LotVM }) {
       )}
       <div className="axes">
         <span className="pos">{lot.positions}</span>
-        <span className="chip">{lot.personality}</span>
-        <span className="chip">{lot.chemistry}</span>
-        {lot.age !== undefined && <span className="chip">Age {lot.age}</span>}
-        {lot.batsThrows && <span className="chip">B/T {lot.batsThrows}</span>}
+        {isFarmLot ? (
+          <>
+            {lot.age !== undefined && <span className="chip">Age {lot.age}</span>}
+            {lot.traitCountLabel && <span className="chip">{lot.traitCountLabel}</span>}
+          </>
+        ) : (
+          <>
+            <span className="chip">{lot.personality}</span>
+            <span className="chip">{lot.chemistry}</span>
+            {lot.age !== undefined && <span className="chip">Age {lot.age}</span>}
+            {lot.batsThrows && <span className="chip">B/T {lot.batsThrows}</span>}
+          </>
+        )}
       </div>
 
       {lot.publicMarket && (
@@ -608,7 +625,7 @@ function Lot({ lot }: { lot: LotVM }) {
               <span style={{ fontSize: 18 }}>🔒</span> Scout report
             </button>
             <div className="body">
-              <ScoutBody scout={lot.scout} />
+              {revealed && <ScoutBody scout={lot.scout} />}
             </div>
           </div>
         </>
@@ -616,7 +633,7 @@ function Lot({ lot }: { lot: LotVM }) {
 
       {lot.reserveAsk !== null && lot.reserveAsk !== undefined && (
         <div className="reserve-ask">
-          <span>RESERVE</span>
+          <span>{lot.reserveLabel ?? "RESERVE"}</span>
           <b className="num">{money(lot.reserveAsk)}</b>
         </div>
       )}
@@ -648,6 +665,11 @@ function ScoutBody({ scout }: { scout: ScoutReadVM }) {
   const pinPct = Math.max(0, Math.min(100, ((scout.grade2080 - 20) / 60) * 100));
   return (
     <>
+      {scout.valueLabel && (
+        <div className="conf" style={{ marginTop: 0, marginBottom: 10 }}>
+          Scout value <b className="gold">{scout.valueLabel}</b>
+        </div>
+      )}
       <div className="eyebrow">
         Scout's price range <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>— narrow band = confident</span>
       </div>
@@ -668,6 +690,30 @@ function ScoutBody({ scout }: { scout: ScoutReadVM }) {
         <div><div className="eyebrow">Grade</div><div className="gval num">{scout.grade2080}</div></div>
         <div className="gtrack"><div className="pin" style={{ left: `${pinPct}%` }} /></div>
       </div>
+      {scout.gradeLabel && (
+        <div className="conf">
+          Scout grade <b>{scout.gradeLabel}</b>
+        </div>
+      )}
+      {scout.gradeBandLabel && (
+        <div className="conf">
+          Grade band <b>{scout.gradeBandLabel}</b>
+        </div>
+      )}
+      {scout.confidenceBandLabel && (
+        <div className="conf">
+          Confidence band <b>{scout.confidenceBandLabel}</b>
+        </div>
+      )}
+      {scout.toolBands && scout.toolBands.length > 0 && (
+        <div className="conf">
+          {scout.toolBands.map((band) => (
+            <span key={band.label} className="chip" style={{ marginRight: 6, marginTop: 6 }}>
+              {band.label} {band.lower}-{band.upper}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="conf">
         Confidence: <b className={scout.confidence === "High" ? "win" : scout.confidence === "Low" ? "loss" : "gold"}>{scout.confidence}</b>
         {scout.confidenceNote ? ` — ${scout.confidenceNote}` : ""}

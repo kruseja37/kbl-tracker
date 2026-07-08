@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, CheckCircle2, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
+import { ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
 
 import {
-  DraftRosterBoard,
   FARM_BOARD_TARGET,
   type BoardPriorityGap,
   type DraftBoardEntry,
 } from "../components/DraftRosterBoard";
-import { AuctionCoachBanner } from "../components/AuctionCoachBanner";
-import { LongPressReveal } from "../components/LongPressReveal";
+import {
+  AuctionStage,
+  type AuctionStageVM,
+  type LogItemVM,
+  type RosterSlotVM,
+} from "../components/auction/AuctionStage";
 import { auctionTransitionErrorCopy } from "../hooks/useAuctionDraft";
 import { useFarmAuctionDraft } from "../hooks/useFarmAuctionDraft";
 import {
@@ -53,6 +56,7 @@ const DRAFT_BOARD_GAP_KINDS = new Set([
   "bullpen",
   "depth_chart",
 ]);
+const FARM_STAGE_POSITIONS = ["C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "SP", "RP"] as const;
 
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
@@ -63,6 +67,11 @@ function minimumBid(session: AuctionSession): number | null {
   const lot = session.currentLot;
   if (!lot) return null;
   return lot.highBid === null ? lot.openingAsk : lot.highBid + session.config.bidIncrement;
+}
+
+function devSeedFromSearch(search: string): string | null {
+  const value = new URLSearchParams(search).get("devSeed")?.trim();
+  return value || null;
 }
 
 function teamDisplayName(team: Team | null | undefined): string {
@@ -82,29 +91,6 @@ function playerDisplayName(player: Player | null | undefined): string {
 
 function prospectPositions(prospect: LeagueBuilderProspectPlayerDto | null | undefined): string[] {
   return Array.from(new Set([prospect?.primaryPosition, prospect?.secondaryPosition].filter(Boolean) as string[]));
-}
-
-function positionBadges(prospect: LeagueBuilderProspectPlayerDto | null | undefined) {
-  const positions = prospectPositions(prospect);
-  if (positions.length === 0) {
-    return <span className="bg-[#3B7DD8] px-2 py-0.5 text-xs font-bold">POS</span>;
-  }
-  return positions.map((position) => (
-    <span key={position} className="bg-[#3B7DD8] px-2 py-0.5 text-xs font-bold">
-      {position}
-    </span>
-  ));
-}
-
-function scoutedGrade(prospect: LeagueBuilderProspectPlayerDto | null | undefined): string {
-  return prospect?.prospectProfile.scoutedGrade ?? "N/A";
-}
-
-function scoutGradeDisplay(prospect: LeagueBuilderProspectPlayerDto | null | undefined): string {
-  const grade = scoutedGrade(prospect);
-  const storedGrade = prospect?.prospectProfile.scoutedGrade;
-  if (!storedGrade) return grade;
-  return `${grade} (${gradeToTwentyEighty(storedGrade)})`;
 }
 
 function prospectTraitCount(prospect: LeagueBuilderProspectPlayerDto | null | undefined): 0 | 1 | 2 | "N/A" {
@@ -186,22 +172,97 @@ function resultText(
   return `${prospectName} PASSED`;
 }
 
-function resultNoticeClass(disposition: AuctionResult["disposition"] | undefined): string {
-  if (disposition === "SOLD") return "bg-[#2F7D46] border-[#E8E8D8]/40 text-[#E8E8D8]";
-  if (disposition === "SET_ASIDE") return "bg-[#6B3A3A] border-[#FFD27A] text-[#FFE8B0]";
-  return "bg-[#4A6844] border-[#FFD27A] text-[#FFD27A]";
+function stagePhaseLabel(state: AuctionSession["state"] | "SETUP"): string {
+  if (state === "AUCTION_COMPLETE") return "Farm auction complete";
+  if (state === "OPEN_BIDDING") return "Farm auction";
+  if (state === "RESOLVE") return "Reserve decision";
+  if (state === "SOLD" || state === "PASSED") return "Lot result";
+  if (state === "NOMINATION") return "Next nomination";
+  return "Farm draft setup";
 }
 
-function rosterPositionTally(
-  team: AuctionSession["teams"][number] | null | undefined,
+function stageLotLabel(session: AuctionSession | null): string {
+  if (!session) return "No active lot";
+  const isResolvedBeat = session.state === "SOLD" || session.state === "PASSED";
+  const nextLotNumber = session.results.length + (isResolvedBeat ? 0 : 1);
+  const current = Math.min(Math.max(1, nextLotNumber), session.playerOrder.length || Math.max(1, nextLotNumber));
+  const total = session.playerOrder.length || session.availablePlayerIds.length || current;
+  return `Lot ${current} of ${total}`;
+}
+
+function stageRosterLabel(teamState: AuctionSession["teams"][number] | null | undefined): string {
+  if (!teamState) return "farm board";
+  const filled = FARM_BOARD_TARGET - teamState.rosterSlotsRemaining;
+  return `${Math.max(0, filled)} of ${FARM_BOARD_TARGET} farmed`;
+}
+
+function farmStageSlotGroup(position: string): RosterSlotVM["group"] {
+  const upper = position.toUpperCase();
+  if (upper === "SP") return "ROTATION";
+  if (upper === "RP" || upper === "CP") return "BULLPEN";
+  if (upper.startsWith("FARM")) return "THE BENCH";
+  return "THE EIGHT";
+}
+
+function buildFarmStageSlots(entries: readonly DraftBoardEntry[]): RosterSlotVM[] {
+  const filled = entries.slice(0, FARM_BOARD_TARGET).map((entry, index) => {
+    const pos = entry.primaryPosition || "POS";
+    return {
+      slotId: `farm-${index + 1}-${entry.id}`,
+      pos,
+      group: farmStageSlotGroup(pos),
+      who: entry.name,
+      chip: prospectPositions({ primaryPosition: entry.primaryPosition, secondaryPosition: entry.secondaryPosition } as LeagueBuilderProspectPlayerDto).join("/") || pos,
+      filled: true,
+      isGap: false,
+      gapLabel: null,
+      depthNote: formatMoney(entry.salary),
+    };
+  });
+  const open = Array.from({ length: Math.max(0, FARM_BOARD_TARGET - filled.length) }, (_, index) => {
+    const label = FARM_STAGE_POSITIONS[(filled.length + index) % FARM_STAGE_POSITIONS.length];
+    return {
+      slotId: `farm-open-${index + 1}`,
+      pos: label,
+      group: farmStageSlotGroup(label),
+      who: "open",
+      chip: label,
+      filled: false,
+      isGap: true,
+      gapLabel: "OPEN",
+      depthNote: null,
+    };
+  });
+  return [...filled, ...open];
+}
+
+function buildFarmNeedLine(
+  priorityGaps: readonly BoardPriorityGap[],
+  budgetWarning: string | null,
+): ReactNode {
+  return (
+    <>
+      {budgetWarning ? <span>{budgetWarning}</span> : <span>Fill 10 farm slots without exposing true prospect numbers.</span>}
+      {priorityGaps.length > 0 && (
+        <span style={{ display: "block", marginTop: 6 }}>
+          <b>PRIORITY GAPS</b>: {priorityGaps.map((gap) => gap.label).join(" · ")}
+        </span>
+      )}
+    </>
+  );
+}
+
+function buildFarmStageLog(
+  session: AuctionSession | null,
   prospectById: Map<string, LeagueBuilderProspectPlayerDto>,
-): Array<[string, number]> {
-  const tally = new Map<string, number>();
-  for (const assignment of team?.roster ?? []) {
-    const position = prospectById.get(assignment.playerId)?.primaryPosition ?? "Unknown";
-    tally.set(position, (tally.get(position) ?? 0) + 1);
-  }
-  return [...tally.entries()].sort((left, right) => left[0].localeCompare(right[0]));
+  teamById: Map<string, Team>,
+): LogItemVM[] {
+  if (!session) return [];
+  return session.results.slice(-6).reverse().map((result) => ({
+    kind: result.disposition === "SOLD" ? "won" : result.disposition === "PASSED" ? "gone" : "rival",
+    text: resultText(result, prospectById, teamById),
+    amount: result.disposition === "SOLD" ? result.salary ?? undefined : undefined,
+  }));
 }
 
 export function LeagueBuilderFarmAuctionDraft() {
@@ -209,26 +270,17 @@ export function LeagueBuilderFarmAuctionDraft() {
   const auction = useFarmAuctionDraft();
   const { leagueData, loadFarmAuction, session } = auction;
   const [activeLeagueId, setActiveLeagueId] = useState("");
-  const [seed, setSeed] = useState(DEFAULT_FARM_AUCTION_SEED);
-  const [bidIncrement, setBidIncrement] = useState(1000);
   const [bidAmount, setBidAmount] = useState("");
-  const [helpOpen, setHelpOpen] = useState(false);
   const loadedKeyRef = useRef<string | null>(null);
+  const startedKeyRef = useRef<string | null>(null);
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
+  const requestedDevSeed = useMemo(() => devSeedFromSearch(window.location.search), []);
 
   useEffect(() => {
     if (!activeLeagueId && leagueData.leagues.length > 0) {
       setActiveLeagueId(resolveInitialLeagueId(leagueData.leagues, requestedLeagueId));
     }
   }, [activeLeagueId, leagueData.leagues, requestedLeagueId]);
-
-  useEffect(() => {
-    if (!activeLeagueId) return;
-    const key = `${activeLeagueId}:farm:1`;
-    if (loadedKeyRef.current === key) return;
-    loadedKeyRef.current = key;
-    void loadFarmAuction(activeLeagueId);
-  }, [activeLeagueId, loadFarmAuction]);
 
   const activeLeague = useMemo(
     () => leagueData.leagues.find((league) => league.id === activeLeagueId) ?? null,
@@ -242,6 +294,23 @@ export function LeagueBuilderFarmAuctionDraft() {
       .filter((team): team is Team => Boolean(team));
   }, [activeLeague, leagueData.teams]);
 
+  useEffect(() => {
+    if (!activeLeagueId || leagueTeams.length === 0) return;
+    const key = `${activeLeagueId}:farm:1`;
+    if (loadedKeyRef.current === key) return;
+    loadedKeyRef.current = key;
+    void loadFarmAuction(activeLeagueId).then((loaded) => {
+      if (loaded || startedKeyRef.current === key) return;
+      startedKeyRef.current = key;
+      void auction.initFarmAuction(activeLeagueId, {
+        nominationOrderSeed: requestedDevSeed ?? DEFAULT_FARM_AUCTION_SEED,
+        bidIncrement: 1000,
+        turnTimerSeconds: null,
+        excludeFromLeague: true,
+      });
+    });
+  }, [activeLeagueId, auction, leagueTeams.length, loadFarmAuction, requestedDevSeed]);
+
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
   const prospectById = useMemo(
@@ -254,7 +323,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   const lot = session?.currentLot ?? null;
   const lotAuctionPlayer = lot ? session?.players[lot.playerId] ?? null : null;
   const currentLotProspect = lot ? prospectById.get(lot.playerId) ?? null : null;
-  const activeSeed = session?.config.nominationOrderSeed ?? seed;
+  const activeSeed = session?.config.nominationOrderSeed ?? requestedDevSeed ?? DEFAULT_FARM_AUCTION_SEED;
   const currentLotScoutTeamId = auction.currentBidderTeamId ?? session?.pendingClaim?.teamId ?? null;
   const currentLotScoutFarmArchetypeKey = currentLotScoutTeamId
     ? teamById.get(currentLotScoutTeamId)?.farmArchetypeKey
@@ -274,10 +343,6 @@ export function LeagueBuilderFarmAuctionDraft() {
     ? getTeamAuctionMaxBid(session, auction.currentBidderTeamId)
     : null;
   const currentBidderIsCpu = auction.isCpuTeam(auction.currentBidderTeamId);
-  const currentRosterTally = useMemo(
-    () => rosterPositionTally(currentBidderTeamState, prospectById),
-    [currentBidderTeamState, prospectById],
-  );
   const rosterBoardTeamState = useMemo(() => {
     if (currentBidderTeamState) return currentBidderTeamState;
     const humanTeam = leagueData.teams.find((team) => team.controlledBy === "human");
@@ -385,10 +450,6 @@ export function LeagueBuilderFarmAuctionDraft() {
     return Math.min(Math.max(Math.round(amount), lower), upper);
   };
 
-  const nowTeam =
-    session?.state === "OPEN_BIDDING" ? currentBidder :
-    session?.state === "RESOLVE" && session.pendingClaim ? pendingClaimTeam :
-    null;
   const nowAction =
     session?.state === "NOMINATION" ? "surface next lot" :
     session?.state === "OPEN_BIDDING" ? "raise or pass" :
@@ -396,33 +457,6 @@ export function LeagueBuilderFarmAuctionDraft() {
     (session?.state === "SOLD" || session?.state === "PASSED") ? "confirm next lot" :
     session?.state === "AUCTION_COMPLETE" ? "auction complete" :
     "setup";
-
-  const handoffPrompt = useMemo(() => {
-    if (!session) return "Host setup";
-    if (session.state === "NOMINATION") {
-      return "Hold - up next.";
-    }
-    if (session.state === "OPEN_BIDDING") {
-      if (auction.currentBidderTeamId && !auction.isCpuTeam(auction.currentBidderTeamId)) {
-        return `Pass device to ${teamDisplayName(currentBidder)}`;
-      }
-      return "Hold - CPUs resolving";
-    }
-    if (session.state === "RESOLVE" && session.pendingClaim) {
-      if (!auction.isCpuTeam(session.pendingClaim.teamId)) return `Pass device to ${teamDisplayName(pendingClaimTeam)}`;
-      return "Hold - CPUs resolving";
-    }
-    if (session.state === "SOLD" || session.state === "PASSED") {
-      return "Confirm next lot.";
-    }
-    if (session.state === "AUCTION_COMPLETE") return "Auction complete.";
-    return "Hold - CPUs resolving";
-  }, [
-    auction,
-    currentBidder,
-    pendingClaimTeam,
-    session,
-  ]);
 
   const availablePoolCandidates = useMemo(() => {
     if (!session) return [];
@@ -439,459 +473,285 @@ export function LeagueBuilderFarmAuctionDraft() {
     return messages;
   }, [activeLeagueId, availablePoolCandidates.length, leagueTeams.length, session?.state]);
 
-  const beginAuction = () => {
-    void auction.initFarmAuction(activeLeagueId, {
-      nominationOrderSeed: seed,
-      bidIncrement,
-      turnTimerSeconds: null,
-      excludeFromLeague: true,
-    });
+  const stageFocusTeamState = currentBidderTeamState ?? (
+    session?.pendingClaim ? teamStateById.get(session.pendingClaim.teamId) ?? null : null
+  ) ?? (
+    latestResult?.disposition === "SOLD" && latestResult.winnerTeamId
+      ? teamStateById.get(latestResult.winnerTeamId) ?? null
+      : null
+  ) ?? rosterBoardTeamState;
+  const stageFocusTeam = stageFocusTeamState ? teamById.get(stageFocusTeamState.teamId) ?? null : currentBidder ?? pendingClaimTeam;
+  const stageFocusTeamName = stageFocusTeamState
+    ? teamDisplayName(teamById.get(stageFocusTeamState.teamId))
+    : stageFocusTeam
+      ? teamDisplayName(stageFocusTeam)
+      : "Farm roster";
+  const stageMaxBid = session && stageFocusTeamState
+    ? getTeamAuctionMaxBid(session, stageFocusTeamState.teamId)
+    : currentBidderMaxBid;
+  const stageBidAmount = clampBidAmount(Number(bidAmount)) ?? minBid ?? session?.pendingClaim?.price ?? 0;
+  const bidIncrement = session?.config.bidIncrement ?? 1000;
+  const stageBidPresets = useMemo(() => {
+    if (!session || minBid === null) return [];
+    const values = [minBid, minBid + bidIncrement, minBid + bidIncrement * 2, minBid + bidIncrement * 5];
+    return values.map((amount) => ({
+      label: amount === minBid ? "ASK" : `+${formatMoney(amount - minBid)}`,
+      amount,
+      enabled: stageMaxBid !== null && amount <= stageMaxBid && !auction.isWorking && !currentBidderIsCpu,
+      selected: clampBidAmount(Number(bidAmount)) === amount,
+    }));
+  }, [auction.isWorking, bidAmount, bidIncrement, clampBidAmount, currentBidderIsCpu, minBid, session, stageMaxBid]);
+  const stageSlots = useMemo(() => buildFarmStageSlots(rosterBoardEntries), [rosterBoardEntries]);
+  const stageLog = useMemo(
+    () => buildFarmStageLog(session, prospectById, teamById),
+    [prospectById, session, teamById],
+  );
+  const stageLotProspect = currentLotProspect ?? (latestResult ? prospectById.get(latestResult.playerId) ?? null : null);
+  const stagePendingClaim = session?.pendingClaim ?? null;
+  const stageCanPrimary =
+    Boolean(session) &&
+    !auction.isWorking &&
+    (
+      (session?.state === "OPEN_BIDDING" && Boolean(auction.currentBidderTeamId) && !currentBidderIsCpu && clampBidAmount(stageBidAmount) !== null) ||
+      (session?.state === "RESOLVE" && (!session.pendingClaim || !auction.isCpuTeam(session.pendingClaim.teamId))) ||
+      session?.state === "SOLD" ||
+      session?.state === "PASSED" ||
+      session?.state === "AUCTION_COMPLETE"
+    );
+  const stageCanPass =
+    Boolean(session) &&
+    !auction.isWorking &&
+    (
+      (session?.state === "OPEN_BIDDING" && Boolean(auction.currentBidderTeamId) && !currentBidderIsCpu) ||
+      (session?.state === "RESOLVE" && Boolean(stagePendingClaim) && !auction.isCpuTeam(stagePendingClaim?.teamId))
+    );
+  const stagePrimaryLabel =
+    session?.state === "RESOLVE" && stagePendingClaim ? `CLAIM ${formatMoney(stagePendingClaim.price)}` :
+    session?.state === "RESOLVE" ? "RESOLVE LOT" :
+    session?.state === "SOLD" || session?.state === "PASSED" ? "NEXT LOT" :
+    session?.state === "AUCTION_COMPLETE" ? "STAFF YOUR CLUBS" :
+    undefined;
+  const stageSecondaryLabel =
+    session?.state === "RESOLVE" && stagePendingClaim ? "Pass on reserve" :
+    session?.state === "OPEN_BIDDING" ? "Let prospect go" :
+    "No pass";
+  const auctionStageVm: AuctionStageVM | null = session ? {
+    tier: "farm",
+    status: {
+      phaseLabel: stagePhaseLabel(session.state),
+      lotLabel: stageLotLabel(session),
+      rosterLabel: stageRosterLabel(stageFocusTeamState),
+      nowText: session.state === "OPEN_BIDDING" && auction.currentBidderTeamId
+        ? `${teamDisplayName(teamById.get(auction.currentBidderTeamId))} — ${nowAction}`
+        : session.state === "RESOLVE" && session.pendingClaim
+          ? `${teamDisplayName(teamById.get(session.pendingClaim.teamId))} — ${nowAction}`
+          : nowAction,
+      teamName: stageFocusTeamName,
+      teamPrimary: stageFocusTeam?.colors.primary ?? "#C4A853",
+      teamSecondary: stageFocusTeam?.colors.secondary ?? "#E8E8D8",
+    },
+    lot: {
+      name: stageLotProspect ? prospectDisplayName(stageLotProspect) : session.state === "AUCTION_COMPLETE" ? "Farm auction complete" : "Next prospect surfacing",
+      positions: prospectPositions(stageLotProspect).join(" / ") || "POS",
+      personality: "",
+      chemistry: "",
+      traitCountLabel: `Traits ${prospectTraitCount(stageLotProspect)}`,
+      age: stageLotProspect?.age,
+      objectPronoun: "him",
+      scout: currentLotRange ? {
+        rangeLow: currentLotRange.low,
+        rangeHigh: currentLotRange.high,
+        mid: currentLotRange.displayedEstimate,
+        grade2080: stageLotProspect?.prospectProfile.scoutedGrade
+          ? gradeToTwentyEighty(stageLotProspect.prospectProfile.scoutedGrade)
+          : 50,
+        confidence: currentLotRange.overallBand === 3 ? "High" : currentLotRange.overallBand === 7 ? "Low" : "Medium",
+        confidenceNote: "Farm archetype band.",
+        valueLabel: formatScoutRange(currentLotRange),
+        gradeLabel: stageLotProspect?.prospectProfile.scoutedGrade
+          ? `${stageLotProspect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(stageLotProspect.prospectProfile.scoutedGrade)})`
+          : "N/A",
+        gradeBandLabel: `${currentLotRange.overallGradeBand.best}-${currentLotRange.overallGradeBand.worst}`,
+        confidenceBandLabel: String(currentLotRange.overallBand),
+        toolBands: Object.entries(currentLotRange.toolBands).map(([tool, band]) => ({
+          label: tool.toUpperCase(),
+          lower: band.lower,
+          upper: band.upper,
+        })),
+      } : undefined,
+      reserveAsk: lot?.openingAsk ?? stagePendingClaim?.price ?? null,
+      reserveLabel: "OPENING",
+      highBid: lot?.highBid !== null && lot?.highBid !== undefined
+        ? {
+            amount: lot.highBid,
+            by: lot.highBidder ? teamDisplayName(teamById.get(lot.highBidder)) : "opening",
+            isYou: Boolean(lot.highBidder && !auction.isCpuTeam(lot.highBidder)),
+          }
+        : null,
+    },
+    move: {
+      walletLabel: `${stageFocusTeamName} wallet`,
+      wallet: stageFocusTeamState?.budgetRemaining ?? 0,
+      maxBid: stageMaxBid ?? 0,
+      slotsLeft: stageFocusTeamState?.rosterSlotsRemaining ?? 0,
+      ceilingNote: session.pendingClaim
+        ? `${teamDisplayName(teamById.get(session.pendingClaim.teamId))} can claim at reserve or let the prospect leave the board.`
+        : stageMaxBid !== null && minBid !== null && minBid > stageMaxBid
+          ? `Can't afford this prospect and still fill the farm - ${formatMoney(minBid - stageMaxBid)} short.`
+          : stageMaxBid !== null
+            ? `Room up to ${formatMoney(stageMaxBid)} while keeping money for the empty farm slots.`
+            : "Farm wallet read pending.",
+      presets: stageBidPresets,
+      currentBid: stageBidAmount,
+      canBid: stageCanPrimary,
+      canPass: stageCanPass,
+      primaryLabel: stagePrimaryLabel,
+      secondaryLabel: stageSecondaryLabel,
+      cpuTurnName: null,
+      cpuDecision: null,
+    },
+    board: {
+      title: `${stageFocusTeamName} · ${rosterBoardEntries.length} of ${FARM_BOARD_TARGET}`,
+      hint: rosterBoardBudgetWarning ? "budget watch" : "farm gaps",
+      columns: 5,
+      slots: stageSlots,
+      needLine: buildFarmNeedLine(rosterBoardPriorityGaps, rosterBoardBudgetWarning),
+    },
+    log: stageLog,
+    help: (
+      <>
+        <b>Scout report</b> stays covered by default. The range, grade band, confidence band, and tool bands come from the farm archetype.
+      </>
+    ),
+    overlay: session.state === "SOLD" ? "sold" : session.state === "PASSED" ? "gone" : null,
+  } : null;
+
+  const handleStagePrimary = () => {
+    if (!session) return;
+    if (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId) {
+      const clamped = clampBidAmount(Number(bidAmount)) ?? clampBidAmount(stageBidAmount);
+      if (clamped === null) return;
+      setBidAmount(String(clamped));
+      void auction.bid(auction.currentBidderTeamId, clamped);
+      return;
+    }
+    if (session.state === "RESOLVE") {
+      void (session.pendingClaim ? auction.claimAtReserve() : auction.resolve());
+      return;
+    }
+    if (session.state === "SOLD" || session.state === "PASSED") {
+      void auction.advance();
+      return;
+    }
+    if (session.state === "AUCTION_COMPLETE") {
+      navigate(activeLeague ? staffHireRouteForLeague(activeLeague) : "/league-builder/staff-hire");
+    }
   };
 
+  const handleStageSecondary = () => {
+    if (!session) return;
+    if (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId) {
+      void auction.pass(auction.currentBidderTeamId);
+      return;
+    }
+    if (session.state === "RESOLVE" && session.pendingClaim) {
+      void auction.pass(session.pendingClaim.teamId);
+    }
+  };
+
+  const toolbar = (
+    <div className="row" style={{ marginBottom: 14 }}>
+      <button
+        type="button"
+        aria-label="Back to League Builder"
+        onClick={() => navigate("/league-builder")}
+        className="help-toggle"
+      >
+        <ArrowLeft size={16} /> Back
+      </button>
+      <span className="chip">Farm auction</span>
+      {auction.isWorking && (
+        <span className="chip">
+          <RefreshCw size={14} className="animate-spin" /> Syncing
+        </span>
+      )}
+      {auction.farmTierCap ? <span className="chip">Farm cap {formatMoney(auction.farmTierCap)}</span> : null}
+      {auction.cpuTeamIds.length > 0 ? <span className="chip">AI clubs {auction.cpuTeamIds.length}</span> : null}
+    </div>
+  );
   if (leagueData.isLoading) {
     return (
-      <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-lg">Loading farm auction...</div>
+      <div className="auc-root">
+        <div className="wrap">
+          <div className="card">Loading farm auction...</div>
+        </div>
       </div>
     );
   }
 
   if (leagueData.error) {
     return (
-      <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-xl text-red-400">Error: {leagueData.error}</div>
+      <div className="auc-root">
+        <div className="wrap">
+          <div className="card loss">Error: {leagueData.error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (blockers.length > 0) {
+    return (
+      <div className="auc-root">
+        <div className="wrap">
+          {toolbar}
+          <div className="card">
+            <div className="eyebrow">Blocked</div>
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+              {blockers.map((blocker) => (
+                <div key={blocker} className="row">
+                  <ShieldAlert size={16} />
+                  <span>{blocker}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!auctionStageVm) {
+    return (
+      <div className="auc-root">
+        <div className="wrap">
+          {toolbar}
+          <div className="card">
+            <div className="row">
+              <RefreshCw size={16} className="animate-spin" />
+              <span>{auction.isWorking ? "Starting farm auction..." : "Preparing farm auction..."}</span>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <button
-              aria-label="Back to League Builder"
-              onClick={() => navigate("/league-builder")}
-              className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-            >
-              <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
-            </button>
-            <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-              <Gavel className="w-6 h-6" style={{ color: "#FFD27A" }} />
-              <h1
-                className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
-                style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
-              >
-                FARM AUCTION - scouted values
-              </h1>
+    <AuctionStage
+      vm={auctionStageVm}
+      toolbar={(
+        <>
+          {toolbar}
+          {auction.error && (
+            <div className="card" style={{ marginBottom: 14, color: "var(--auc-loss)" }}>
+              {auctionTransitionErrorCopy(auction.error)}
             </div>
-          </div>
-          {session?.state === "AUCTION_COMPLETE" && (
-            <span className="flex items-center gap-2 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 px-4 py-2 font-bold">
-              <CheckCircle2 className="w-5 h-5" />
-              FARM AUCTION COMPLETE
-            </span>
           )}
-        </div>
-
-        {auction.error && (
-          <div className="mb-6 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
-            {auctionTransitionErrorCopy(auction.error)}
-          </div>
-        )}
-
-        <div className="mb-6 bg-[#3B7DD8] border-[6px] border-[#E8E8D8] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-          <div className="text-xs text-[#E8E8D8]/70 font-bold">HANDOFF</div>
-          <div className="text-xl font-bold">
-            Now: {nowTeam ? teamDisplayName(nowTeam) : "Host"} — {nowAction}
-          </div>
-          <div className="mt-1 text-sm text-[#E8E8D8]/85 font-bold">{handoffPrompt}</div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
-          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <h2 className="font-bold mb-4 text-lg">SETUP</h2>
-
-            <label htmlFor="farm-auction-league" className="block text-xs text-[#E8E8D8]/70 mb-1">LEAGUE</label>
-            <select
-              id="farm-auction-league"
-              value={activeLeagueId}
-              onChange={(event) => {
-                setActiveLeagueId(event.target.value);
-                loadedKeyRef.current = null;
-              }}
-              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4"
-            >
-              {leagueData.leagues.map((league) => (
-                <option key={league.id} value={league.id}>
-                  {league.name}
-                </option>
-              ))}
-            </select>
-
-            <label htmlFor="farm-auction-seed" className="block text-xs text-[#E8E8D8]/70 mb-1">SEED</label>
-            <input
-              id="farm-auction-seed"
-              value={seed}
-              onChange={(event) => setSeed(event.target.value)}
-              disabled={Boolean(session)}
-              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4 disabled:opacity-60"
-            />
-
-            <div className="grid grid-cols-1 gap-3">
-              <label className="block text-xs text-[#E8E8D8]/70">
-                BID INCREMENT
-                <input
-                  value={bidIncrement}
-                  onChange={(event) => setBidIncrement(Number(event.target.value) || 0)}
-                  disabled={Boolean(session)}
-                  type="number"
-                  min={1}
-                  className="mt-1 w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none disabled:opacity-60"
-                />
-              </label>
-            </div>
-
-            {!session && (
-              <button
-                onClick={beginAuction}
-                disabled={!activeLeagueId || leagueTeams.length === 0 || auction.isWorking}
-                className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B7DD8] hover:bg-[#4B8DE8] disabled:opacity-50 disabled:hover:bg-[#3B7DD8] border-4 border-[#E8E8D8] transition font-bold"
-              >
-                {auction.isWorking ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserCheck className="w-5 h-5" />}
-                <span>{auction.isWorking ? "STARTING" : "BEGIN FARM AUCTION"}</span>
-              </button>
-            )}
-
-            <div className="mt-5 grid grid-cols-3 gap-3">
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">TEAMS</div>
-                <div className="font-bold text-xl">{leagueTeams.length}</div>
-              </div>
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">AI CLUBS</div>
-                <div className="font-bold text-xl">{auction.cpuTeamIds.length}</div>
-              </div>
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">FARM CAP</div>
-                <div className="font-bold text-xl">{auction.farmTierCap ? formatMoney(auction.farmTierCap) : "Pending"}</div>
-              </div>
-            </div>
-
-            {blockers.length ? (
-              <div className="mt-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4">
-                <div className="flex items-center gap-2 font-bold mb-2">
-                  <ShieldAlert className="w-5 h-5" />
-                  BLOCKED
-                </div>
-                <ul className="space-y-1 text-sm text-[#FFE8B0]">
-                  {blockers.map((blocker) => (
-                    <li key={blocker}>{blocker}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <h2 className="font-bold text-lg">STATE: {session?.state ?? "SETUP"}</h2>
-              {session && <div className="text-sm text-[#E8E8D8]/60">Seed {session.config.nominationOrderSeed}</div>}
-              <button
-                type="button"
-                aria-label={helpOpen ? "Hide farm auction help" : "Show farm auction help"}
-                onClick={() => setHelpOpen((open) => !open)}
-                className="ml-auto h-9 w-9 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-              >
-                ?
-              </button>
-            </div>
-
-            {helpOpen && (
-              <div className="mb-4 space-y-3">
-                <AuctionCoachBanner tier="farm" state={session?.state ?? "SETUP"} />
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm text-[#E8E8D8]/80">
-                  Press and hold Scout report to reveal your scout's private range and grade.
-                </div>
-              </div>
-            )}
-
-            {!session && (
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-[#E8E8D8]/80">
-                No active farm auction session. Configure the league, then begin.
-              </div>
-            )}
-
-            {session?.state === "NOMINATION" && (
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                <div className="text-xs text-[#E8E8D8]/60">UP NEXT</div>
-                <div className="text-xl font-bold">Next prospect is coming up...</div>
-                <div className="mt-1 text-sm text-[#E8E8D8]/70">
-                  Available pool: {availablePoolCandidates.length} prospects
-                </div>
-              </div>
-            )}
-
-            {session?.state === "OPEN_BIDDING" && lot && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60">UP NOW</div>
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <div className="text-xl font-bold">{prospectDisplayName(currentLotProspect)}</div>
-                      {positionBadges(currentLotProspect)}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm text-[#E8E8D8]/75">
-                      <div>Age {currentLotProspect?.age ?? "N/A"}</div>
-                      <div>Traits {prospectTraitCount(currentLotProspect)}</div>
-                      <LongPressReveal
-                        label="Scout report"
-                        className="sm:col-span-2 text-left bg-transparent border-0 p-0 text-[#E8E8D8]/75 cursor-pointer hover:text-[#E8E8D8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E8E8D8]"
-                      >
-                        <span className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <span>Scout value {formatScoutRange(currentLotRange)}</span>
-                          <span>Scout grade {scoutGradeDisplay(currentLotProspect)}</span>
-                          {currentLotRange ? (
-                            <>
-                              <span>Grade band {currentLotRange.overallGradeBand.best}-{currentLotRange.overallGradeBand.worst}</span>
-                              <span>Confidence band {currentLotRange.overallBand}</span>
-                              {Object.entries(currentLotRange.toolBands).map(([tool, band]) => (
-                                <span key={tool}>{tool.toUpperCase()} {band.lower}-{band.upper}</span>
-                              ))}
-                            </>
-                          ) : null}
-                        </span>
-                      </LongPressReveal>
-                      <div>Opening {formatMoney(lot.openingAsk)}</div>
-                    </div>
-                  </div>
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60">HIGH BID</div>
-                    <div className="text-xl font-bold">{lot.highBid === null ? "No bid yet" : formatMoney(lot.highBid)}</div>
-                    <div className="text-sm text-[#E8E8D8]/70">
-                      {lot.highBidder ? teamDisplayName(teamById.get(lot.highBidder)) : "No bidder yet"}
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60">CURRENT BIDDER</div>
-                    <div className="text-xl font-bold">{teamDisplayName(currentBidder)}</div>
-                    <div className="text-sm text-[#E8E8D8]/70">
-                      Still in: {lot.stillIn.map((teamId) => teamDisplayName(teamById.get(teamId))).join(", ")}
-                    </div>
-                  </div>
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60">YOUR REMAINING BUDGET</div>
-                    <div className="text-xl font-bold">{formatMoney(currentBidderTeamState?.budgetRemaining)}</div>
-                    <div className="text-sm text-[#E8E8D8]/70">{teamDisplayName(currentBidder)}</div>
-                  </div>
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60">YOUR MAX BID</div>
-                    <div className="text-xl font-bold">{formatMoney(currentBidderMaxBid)}</div>
-                    <div className="text-sm text-[#FFD27A] font-bold">Teams below the current ask are auto-passed.</div>
-                  </div>
-                </div>
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-4">
-                    <div>
-                      <div className="text-xs text-[#E8E8D8]/60">ROSTER SLOTS REMAINING</div>
-                      <div className="text-3xl font-bold">{currentBidderTeamState?.rosterSlotsRemaining ?? "N/A"}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#E8E8D8]/60 mb-2">CURRENT FARM POSITION TALLY</div>
-                      {currentRosterTally.length > 0 ? (
-                        <div className="flex flex-wrap gap-2">
-                          {currentRosterTally.map(([position, count]) => (
-                            <span key={position} className="bg-[#2d3d2f] border-2 border-[#E8E8D8]/20 px-2 py-1 text-xs font-bold">
-                              {position}: {count}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-[#E8E8D8]/70">No farm auction prospects rostered yet.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {auction.currentBidderTeamId ? (
-                  <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="text-xs text-[#E8E8D8]/60 mb-3">RAISE</div>
-                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px_auto] gap-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        {[1, 2, 5].map((multiple) => {
-                          const amount = minBid === null ? null : minBid + session.config.bidIncrement * multiple;
-                          const disabled = auction.isWorking
-                            || currentBidderIsCpu
-                            || amount === null
-                            || currentBidderMaxBid === null
-                            || amount > currentBidderMaxBid;
-                          return (
-                            <button
-                              key={multiple}
-                              type="button"
-                              onClick={() => amount !== null && void auction.bid(auction.currentBidderTeamId!, amount)}
-                              disabled={disabled}
-                              className="px-4 py-2 bg-[#2F7D46] hover:bg-[#3F8D56] disabled:opacity-50 disabled:hover:bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold"
-                            >
-                              +{multiple}x {formatMoney(amount)}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <label className="block text-xs text-[#E8E8D8]/70 font-bold">
-                        CUSTOM BID
-                        <input
-                          aria-label="Custom bid amount"
-                          value={bidAmount}
-                          onChange={(event) => setBidAmount(event.target.value)}
-                          onBlur={() => {
-                            const clamped = clampBidAmount(Number(bidAmount));
-                            if (clamped !== null) setBidAmount(String(clamped));
-                          }}
-                          type="number"
-                          min={minBid ?? undefined}
-                          max={currentBidderMaxBid ?? undefined}
-                          disabled={auction.isWorking || currentBidderIsCpu}
-                          className="mt-1 w-full bg-[#2d3d2f] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none disabled:opacity-50"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const clamped = clampBidAmount(Number(bidAmount));
-                          if (clamped === null) return;
-                          setBidAmount(String(clamped));
-                          void auction.bid(auction.currentBidderTeamId!, clamped);
-                        }}
-                        disabled={auction.isWorking || currentBidderIsCpu || clampBidAmount(Number(bidAmount)) === null}
-                        className="self-end px-4 py-2 bg-[#2F7D46] hover:bg-[#3F8D56] disabled:opacity-50 disabled:hover:bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold"
-                      >
-                        RAISE CUSTOM
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => void auction.pass(auction.currentBidderTeamId!)}
-                      disabled={auction.isWorking || currentBidderIsCpu}
-                      className="mt-3 px-4 py-2 bg-[#6B3A3A] hover:bg-[#7B4A4A] disabled:opacity-50 border-4 border-[#E8E8D8] font-bold"
-                    >
-                      PASS
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => void auction.resolve()}
-                    disabled={auction.isWorking}
-                    className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                  >
-                    RESOLVE LOT
-                  </button>
-                )}
-              </div>
-            )}
-
-            {session?.state === "RESOLVE" && (
-              <div className="space-y-4">
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                  <div className="text-xs text-[#E8E8D8]/60">PENDING CLAIM</div>
-                  <div className="text-xl font-bold">
-                    {session.pendingClaim
-                      ? `${teamDisplayName(pendingClaimTeam)} can claim ${prospectDisplayName(currentLotProspect)} at ${formatMoney(session.pendingClaim.price)}`
-                      : "Ready to resolve"}
-                  </div>
-                </div>
-                {session.pendingClaim ? (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => void auction.claimAtReserve()}
-                      disabled={auction.isWorking || auction.isCpuTeam(session.pendingClaim.teamId)}
-                      className="px-4 py-2 bg-[#2F7D46] hover:bg-[#3F8D56] disabled:opacity-50 border-4 border-[#E8E8D8] font-bold"
-                    >
-                      CLAIM AT RESERVE
-                    </button>
-                    <button
-                      onClick={() => void auction.pass(session.pendingClaim!.teamId)}
-                      disabled={auction.isWorking || auction.isCpuTeam(session.pendingClaim.teamId)}
-                      className="px-4 py-2 bg-[#6B3A3A] hover:bg-[#7B4A4A] disabled:opacity-50 border-4 border-[#E8E8D8] font-bold"
-                    >
-                      PASS
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => void auction.resolve()}
-                    disabled={auction.isWorking}
-                    className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                  >
-                    RESOLVE
-                  </button>
-                )}
-              </div>
-            )}
-
-            {(session?.state === "SOLD" || session?.state === "PASSED") && (
-              <div className="space-y-4">
-                <div className={`${resultNoticeClass(latestResult?.disposition)} border-4 p-4`}>
-                  <div className="text-xs text-[#E8E8D8]/60">LAST RESULT</div>
-                  <div className="text-xl font-bold">{latestResult ? resultText(latestResult, prospectById, teamById) : session.state}</div>
-                </div>
-                <button
-                  onClick={() => void auction.advance()}
-                  disabled={auction.isWorking}
-                  className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                >
-                  NEXT LOT
-                </button>
-              </div>
-            )}
-
-            {session?.state === "AUCTION_COMPLETE" && (
-              <div className="bg-[#2F7D46] border-4 border-[#E8E8D8]/40 p-4 font-bold">
-                FARM AUCTION COMPLETE. Farm rosters are filled in the auction session.
-                <div className="mt-2 text-sm text-[#E8E8D8]/85">
-                  Draft complete. Next: set your league's starting team morale and fan morale, then launch the franchise.
-                </div>
-                <button
-                  onClick={() => navigate(activeLeague ? staffHireRouteForLeague(activeLeague) : "/league-builder/staff-hire")}
-                  className="mt-4 px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] font-bold"
-                >
-                  Continue to Staff Your Clubs
-                </button>
-              </div>
-            )}
-          </section>
-        </div>
-
-        {session && (
-          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <h2 className="font-bold text-lg mb-4">LOT LOG</h2>
-            <div className="space-y-2">
-              {session.results.slice(-12).reverse().map((result, index) => (
-                <div key={`${result.playerId}-${session.results.length - index}`} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm">
-                  {resultText(result, prospectById, teamById)}
-                </div>
-              ))}
-              {session.results.length === 0 && (
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm text-[#E8E8D8]/70">
-                  No lots resolved yet.
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {session && (
-          <DraftRosterBoard
-            tier="farm"
-            entries={rosterBoardEntries}
-            target={FARM_BOARD_TARGET}
-            payroll={rosterBoardPayroll}
-            walletRemaining={rosterBoardTeamState?.budgetRemaining ?? null}
-            priorityGaps={rosterBoardPriorityGaps}
-            budgetWarning={rosterBoardBudgetWarning}
-          />
-        )}
-      </div>
-    </div>
+        </>
+      )}
+      onSelectPreset={(amount) => setBidAmount(String(Math.round(amount)))}
+      onBid={handleStagePrimary}
+      onPass={handleStageSecondary}
+    />
   );
 }
