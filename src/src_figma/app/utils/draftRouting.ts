@@ -50,6 +50,10 @@ export function farmDraftRouteForLeague(league: Pick<LeagueTemplate, "id" | "dra
   return withLeagueId(farmDraftRouteForFormat(league.draftFormat), league.id);
 }
 
+export function draftSetupRouteForLeague(league: Pick<LeagueTemplate, "id">, options?: DraftRouteOptions): string {
+  return withLeagueId("/league-builder/draft-setup", league.id, options);
+}
+
 export function scoutHireRouteForLeague(league: Pick<LeagueTemplate, "id">, options?: DraftRouteOptions): string {
   return withLeagueId("/league-builder/scout-hire", league.id, options);
 }
@@ -60,6 +64,20 @@ export function staffHireRouteForLeague(league: Pick<LeagueTemplate, "id">): str
 
 export function franchiseSetupRouteForLeague(league: Pick<LeagueTemplate, "id">): string {
   return withLeagueId("/franchise/setup", league.id);
+}
+
+export function draftArcRouteChainForLeague(
+  league: Pick<LeagueTemplate, "id" | "draftFormat">,
+  options?: DraftRouteOptions,
+): string[] {
+  return [
+    draftSetupRouteForLeague(league, options),
+    draftRouteForLeague(league, options),
+    scoutHireRouteForLeague(league, options),
+    farmDraftRouteForLeague(league),
+    staffHireRouteForLeague(league),
+    franchiseSetupRouteForLeague(league),
+  ];
 }
 
 export function leagueIdFromSearch(search: string): string | null {

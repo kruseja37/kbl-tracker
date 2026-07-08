@@ -431,7 +431,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
-  test("starts at scout hire once the pool is locked and every club has both identities", async () => {
+  test("starts at the MLB auction once the pool is locked and every club has both identities", async () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
@@ -440,7 +440,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0&reserveK=0.65");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
   test("CUT2-1 flips THE FLOOR status in-session after locking the pool", async () => {
@@ -661,7 +661,7 @@ describe("LeagueBuilderDraftSetup", () => {
     );
   });
 
-  test("carries the selected shill count into scout hire", async () => {
+  test("carries the selected shill count into the MLB auction", async () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
@@ -672,7 +672,7 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Increase shill bidders/i }));
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=2&reserveK=0.65");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=2&reserveK=0.65");
   });
 
   test("CUT2-2 persists selected shill count and reloads it without a URL carrier", async () => {
@@ -700,7 +700,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=1&reserveK=0.65");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=1&reserveK=0.65");
   });
 
   test("CUT2-2 30-club shill pressure does not inflate the pool-lock floor", async () => {
@@ -755,7 +755,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /START THE DRAFT/i }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=1&reserveK=0.65");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=1&reserveK=0.65");
   });
 
   test("CUT2-2 30-club shill pressure does not inflate the pool-lock floor", async () => {
@@ -924,7 +924,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
-  test("R5 completed draft renders RUN IT BACK and resets to a fresh scout-hire start", async () => {
+  test("R5 completed draft renders RUN IT BACK and resets to a fresh MLB auction start", async () => {
     vi.mocked(getAuctionSession).mockResolvedValue({
       leagueId: "league-page",
       seasonNumber: 1,
@@ -943,7 +943,7 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(runItBack);
     expect(screen.getByText("SURE?")).toBeInTheDocument();
     expect(screen.getByText(
-      "Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay. You'll draft again from scout hire.",
+      "Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay. You'll draft again from the MLB auction.",
     )).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm run it back" }));
@@ -958,7 +958,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const start = screen.getByRole("button", { name: /START THE DRAFT/i });
     expect(start).toBeEnabled();
     fireEvent.click(start);
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&shills=0&reserveK=0.65");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
   test("R4 disables RUN IT BACK when a franchise already references the league", async () => {

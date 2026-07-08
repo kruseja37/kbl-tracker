@@ -116,7 +116,7 @@ describe("ScoutHire", () => {
     cleanup();
   });
 
-  test("reveals auto-assigned scouts and preserves shill count when continuing to the live auction", async () => {
+  test("reveals auto-assigned scouts and continues to the farm auction", async () => {
     render(<ScoutHire />);
 
     await waitFor(() => {
@@ -132,6 +132,14 @@ describe("ScoutHire", () => {
     await waitFor(() => {
       expect(persistScoutHiresForLeague).toHaveBeenCalled();
     });
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/farm-auction-draft?leagueId=league-page");
+  });
+
+  test("back navigation returns to the MLB auction with the drafted leagueId", async () => {
+    render(<ScoutHire />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Back to MLB auction/i }));
+
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=3");
   });
 

@@ -132,6 +132,7 @@ export interface AuctionCompleteVM {
   blockedCount: number;
   summary: string;
   onProceed: () => void;
+  proceedLabel?: string;
   overrideArmed: boolean;
   onArmOverride: () => void;
   onConfirmOverride: () => void;
@@ -464,7 +465,7 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
         )}
         {complete.allLegal ? (
           <PressButton variant="gold" size="lg" onClick={complete.onProceed}>
-            FARM DRAFT →
+            {complete.proceedLabel ?? "FARM DRAFT"} →
           </PressButton>
         ) : (
           <>

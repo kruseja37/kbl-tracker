@@ -781,7 +781,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.getByText(/SOLD to Market Shill 1/)).toBeInTheDocument();
   });
 
-  test("P1: complete all-legal handoff check shows green rows and navigates to farm draft", async () => {
+  test("P11: complete all-legal handoff check shows green rows and navigates to scout reveal", async () => {
     const players = await saveCompletedAuctionForPage();
     mockLeagueData({ players, pool: makePool(players) });
 
@@ -789,11 +789,11 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
     expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
-    expect(screen.getByText("Every club fields a legal 22. The farm draft is next.")).toBeInTheDocument();
+    expect(screen.getByText("Every club fields a legal 22. Scout reveal is next.")).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /FARM DRAFT/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /SCOUT REVEAL/i })[0]);
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/farm-auction-draft?leagueId=league-page");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&reserveK=0.65");
   });
 
   test("P2: blocked complete handoff focuses the panel and requires the two-step override", async () => {
@@ -820,7 +820,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(screen.getByRole("button", { name: "PROCEED ANYWAY" }));
     fireEvent.click(screen.getByRole("button", { name: "YES — HAND OFF AS-IS" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/farm-auction-draft?leagueId=league-page");
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&reserveK=0.65");
   });
 
   test("P3: complete handoff reads positions from stored player records, not session enrichment", async () => {
@@ -866,7 +866,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     await waitFor(() => {
       expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
     });
-    expect(screen.getByRole("button", { name: /FARM DRAFT/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /SCOUT REVEAL/i })).toBeInTheDocument();
     expect(screen.getByText("Settled 1 seat from Market Shills at league minimum.")).toBeInTheDocument();
 
     unmount();
@@ -897,6 +897,6 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(panel);
-    expect(screen.queryByRole("button", { name: /FARM DRAFT/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /SCOUT REVEAL/i })).not.toBeInTheDocument();
   });
 });
