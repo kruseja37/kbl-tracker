@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
@@ -432,6 +432,29 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(screen.getByText("Slots left")).toBeInTheDocument();
     expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
     expect(screen.getByText(/SS coverage below target/)).toBeInTheDocument();
+
+    // P4: Assistant-GM whisper on the farm lot -- team-a is the human seat on the clock right
+    // now (OPEN_BIDDING, pre-BID), so the panel must be live, not the dormant "WAITING ON THE
+    // TABLE" state (today's bug: the farm page never threads a whisperPayload at all).
+    const whisperStrip = screen.getByTestId("whisper-strip");
+    expect(whisperStrip).not.toBeDisabled();
+    fireEvent.click(whisperStrip);
+    const whisperBody = screen.getByTestId("whisper-body");
+    expect(whisperBody).toBeInTheDocument();
+    // A real, classified verdict rendered (push/cap/pass) -- not blank, not fabricated.
+    const verdictEl = document.querySelector(".whisper-verdict");
+    expect(verdictEl).not.toBeNull();
+    expect((verdictEl?.textContent ?? "").length).toBeGreaterThan(0);
+    expect(verdictEl?.className ?? "").toMatch(/\b(push|cap|pass)\b/);
+    // MAX BID (the liquidity-adjusted ceiling) renders, band-derived from the scout read.
+    expect(within(whisperBody).getByText("MAX BID")).toBeInTheDocument();
+    // Budget light is a REAL read (not the 'unknown' stub), while shape/identity/chemistry --
+    // which have no farm data source yet -- stay honest 'unknown' stubs rather than fake reads.
+    expect(within(whisperBody).getByRole("button", { name: "BUDGET" })).not.toHaveAttribute("data-status", "unknown");
+    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).toHaveAttribute("data-status", "unknown");
+    expect(within(whisperBody).getByRole("button", { name: "IDENTITY" })).toHaveAttribute("data-status", "unknown");
+    // Close it back up before continuing the existing flow below.
+    fireEvent.click(whisperStrip);
 
     fireEvent.click(screen.getByRole("button", { name: /BID/i }));
     await waitFor(() => {

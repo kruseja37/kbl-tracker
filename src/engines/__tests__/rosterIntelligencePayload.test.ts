@@ -11,6 +11,7 @@ import type { Band, BandPriorities } from '../leagueConstruction';
 import {
   PAYLOAD_TUNING,
   assembleBoard,
+  assembleFarmWhisper,
   assembleFiveLights,
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
@@ -943,6 +944,73 @@ describe('roster intelligence payload assembly', () => {
       seatTeamId: 'seat',
       generatedAtLotIndex: 4,
       board: [{ playerId: 'p1', worth: 1, matchedShape: null }],
+    });
+  });
+
+  describe('P4: farm whisper adapter (assembleFarmWhisper)', () => {
+    test('renders a band-derived verdict, room-relation-ready market, and a real (non-fabricated) budget light', () => {
+      const assembly = assembleFarmWhisper({
+        candidateId: 'prospect-echo',
+        band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+        budgetRemaining: 300_000,
+        rosterSlotsRemaining: 6,
+        minSalary: 1_000,
+        nextBid: 20_000,
+        currentBid: null,
+        bidIncrement: 1_000,
+        positionIsOpenNeed: true,
+      });
+
+      expect(assembly.market.band).toEqual({ low: 20_000, median: 28_000, high: 40_000 });
+      expect(assembly.worth.iv).toBe(28_000);
+      expect(assembly.worth.needMultiplier).toBeGreaterThan(1);
+      expect(assembly.worth.ownValue).toBeGreaterThan(assembly.worth.iv);
+      expect(['push', 'cap', 'pass']).toContain(assembly.worth.verdict);
+      // The one-ceiling invariant: capValue (raw budget) is a DIFFERENT, honestly-labeled number
+      // from suggestedMaxBid (the reserved ceiling that drives the verdict).
+      expect(assembly.worth.capValue).toBe(300_000);
+      expect(assembly.worth.suggestedMaxBid).toBeLessThanOrEqual(assembly.worth.capValue);
+      // No fake chemistry/shape/identity reads -- honest 'unknown' stubs.
+      expect(assembly.worth.chemistryReadout).toBeUndefined();
+      expect(assembly.scorecard.shape.status).toBe('unknown');
+      expect(assembly.scorecard.identity.status).toBe('unknown');
+      expect(assembly.scorecard.chemistry.status).toBe('unknown');
+      // Budget IS real and driven by the same ceiling as the verdict.
+      expect(assembly.scorecard.budget.status).not.toBe('unknown');
+    });
+
+    test('pass verdict, room-relation, and budget light agree when the farm ceiling sits below the band (F9 semantics reused for farm)', () => {
+      const assembly = assembleFarmWhisper({
+        candidateId: 'prospect-thin-wallet',
+        band: { low: 50_000, high: 70_000, displayedEstimate: 60_000 },
+        budgetRemaining: 5_000,
+        rosterSlotsRemaining: 4,
+        minSalary: 1_000,
+        nextBid: 50_000,
+        currentBid: null,
+        positionIsOpenNeed: false,
+      });
+
+      expect(assembly.worth.suggestedMaxBid).toBeLessThan(assembly.market.band.low);
+      expect(assembly.worth.verdict).toBe('pass');
+      expect(assembly.scorecard.budget.status).not.toBe('green');
+    });
+
+    test('open roster-slot need raises the read; a covered position does not', () => {
+      const base = {
+        candidateId: 'prospect-need-probe',
+        band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+        budgetRemaining: 300_000,
+        rosterSlotsRemaining: 6,
+        minSalary: 1_000,
+        nextBid: 20_000,
+        currentBid: null as number | null,
+      };
+      const open = assembleFarmWhisper({ ...base, positionIsOpenNeed: true });
+      const covered = assembleFarmWhisper({ ...base, positionIsOpenNeed: false });
+
+      expect(open.worth.needMultiplier).toBeGreaterThan(covered.worth.needMultiplier);
+      expect(covered.worth.needMultiplier).toBe(1);
     });
   });
 });

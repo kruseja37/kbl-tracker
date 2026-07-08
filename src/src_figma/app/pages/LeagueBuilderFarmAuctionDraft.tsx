@@ -34,6 +34,11 @@ import {
   tiltAnalyzerFindings,
 } from "../../../engines/farmArchetypeTilt";
 import {
+  assembleFarmWhisper,
+  assembleRosterIntelligencePayload,
+  type RosterIntelligencePayload,
+} from "../../../engines/rosterIntelligencePayload";
+import {
   analyzeDraftRoster,
   type DraftAnalyzerFarmEntry,
   type DraftAnalyzerMlbEntry,
@@ -436,6 +441,84 @@ export function LeagueBuilderFarmAuctionDraft() {
       ? "Filling your remaining slots would exceed your budget"
       : null;
   }, [rosterBoardTeamState]);
+
+  // P4: Assistant-GM whisper for farm lots (mirrors the MLB whisperPayload useMemo in
+  // LeagueBuilderAuctionDraft.tsx, gated the same way -- only the human seat actually on the
+  // clock during OPEN_BIDDING/RESOLVE gets a read, never a CPU club).
+  const whisperSeatTeamId = useMemo(() => {
+    if (!session) return null;
+    if (session.state === "OPEN_BIDDING") return auction.currentBidderTeamId;
+    if (session.state === "RESOLVE") return session.pendingClaim?.teamId ?? null;
+    return null;
+  }, [auction.currentBidderTeamId, session]);
+
+  const farmWhisperPayload = useMemo<RosterIntelligencePayload | null>(() => {
+    if (!session || !session.currentLot) return null;
+    if (!whisperSeatTeamId || auction.isCpuTeam(whisperSeatTeamId)) return null;
+    // currentLotRange/currentLotScoutTeamId are already scoped to whoever's scout lens applies
+    // to the CURRENT lot; only build the whisper when that matches the seat on the clock.
+    if (currentLotScoutTeamId !== whisperSeatTeamId || !currentLotRange) return null;
+
+    const teamState = teamStateById.get(whisperSeatTeamId);
+    const team = teamById.get(whisperSeatTeamId);
+    if (!teamState || !team) return null;
+
+    const lotPlayerId = session.currentLot.playerId;
+    const lotPrimaryPosition: DraftPosition | null = currentLotProspect?.primaryPosition ?? null;
+    const seatRosterPositions = new Set<DraftPosition>(
+      teamState.roster
+        .map((assignment) => prospectById.get(assignment.playerId)?.primaryPosition)
+        .filter((pos): pos is DraftPosition => Boolean(pos)),
+    );
+    // "Farm roster-slot needs" input (P4): the only signal available without a farm need-
+    // breakdown engine -- does the seat's roster already have ANY prospect at this position?
+    const positionIsOpenNeed = lotPrimaryPosition !== null && !seatRosterPositions.has(lotPrimaryPosition);
+
+    const assembly = assembleFarmWhisper({
+      candidateId: lotPlayerId,
+      band: {
+        low: currentLotRange.low,
+        high: currentLotRange.high,
+        displayedEstimate: currentLotRange.displayedEstimate,
+      },
+      budgetRemaining: teamState.budgetRemaining,
+      rosterSlotsRemaining: teamState.rosterSlotsRemaining,
+      minSalary: teamState.minSalary,
+      nextBid: minBid ?? currentLotRange.low,
+      currentBid: session.currentLot.highBid,
+      bidIncrement: session.config.bidIncrement,
+      positionIsOpenNeed,
+    });
+
+    return Object.assign(
+      assembleRosterIntelligencePayload({
+        seatTeamId: whisperSeatTeamId,
+        generatedAtLotIndex: session.results.length,
+        market: assembly.market,
+        worthToYou: assembly.worth,
+        scorecard: assembly.scorecard,
+      }),
+      {
+        seatClubName: teamDisplayName(team),
+        seatPrimary: team.colors.primary,
+        currentLotPlayerId: lotPlayerId,
+        currentHighBid: session.currentLot.highBid,
+        objectPronoun: currentLotProspect?.gender === "F" ? "her" : "him",
+      },
+    );
+  }, [
+    auction,
+    currentLotProspect,
+    currentLotRange,
+    currentLotScoutTeamId,
+    minBid,
+    prospectById,
+    session,
+    teamById,
+    teamStateById,
+    whisperSeatTeamId,
+  ]);
+
   const latestResult = session?.results.at(-1) ?? null;
 
   useEffect(() => {
@@ -739,6 +822,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   return (
     <AuctionStage
       vm={auctionStageVm}
+      whisperPayload={farmWhisperPayload}
       toolbar={(
         <>
           {toolbar}
