@@ -673,6 +673,50 @@ The scout should say:
 
 > At $42k, the true cost is about $49k after tax. That keeps Optimal alive but breaks Conservative because you lose the budget cushion for one bullpen slot.
 
+### 13.3 Real Consequences Of Archetype Drift
+
+Going against archetype must be explained as a real budget consequence, not as vague flavor.
+
+The product language is:
+
+> Going against archetype does not make the player worse. It makes the player more expensive for this team.
+
+The scout must communicate five consequences:
+
+1. Higher effective cost
+
+   A $40k player might behave like a $70k player after tax.
+
+2. Lower future bid power
+
+   The tax eats money the GM needs for later players.
+
+3. Plan breakage
+
+   Conservative might break first, then Optimal, leaving only Aggressive alive.
+
+4. Roster squeeze
+
+   The GM may still win the player, but now needs cheaper bench, pitching, or farm fallback later.
+
+5. Hidden tradeoff
+
+   Without a good scout, the GM thinks:
+
+   > I bought a $38k pitcher.
+
+   The truth may be:
+
+   > I bought a $38k pitcher and accidentally burned $60k of future flexibility.
+
+The scout should say this plainly.
+
+Example:
+
+> This bid is legal, but not clean. His salary is $38k; his true Bash Brothers cost is closer to $80k because command pitching is taxed hard in your build.
+
+This is the standard for tax language. The guide must translate every major off-archetype bid into true cost, future bid power, plan survival, and roster squeeze.
+
 ## 14. Bid Impact Model
 
 Every bid option should be evaluated as a scenario.
@@ -1226,4 +1270,3 @@ Recommended initial rulings:
 4. Start with a quicker farm review, then expand if needed.
 5. Yes, CPU teams should eventually get hidden plans.
 6. Show plain-language recommendations first; formulas can remain in Help or debug views.
-
