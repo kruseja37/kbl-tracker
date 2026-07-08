@@ -6733,3 +6733,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Reworked ScoutHire into a no-choice deterministic reveal: specialties are the archetype row's 3-band areas, weaknesses are the 7-band areas, labels/summaries come from the row rationale, and `draftStaffingPersistence` keeps the same saved record shape.
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused prospect/farm auction suites pass 41/41; focused new data/value/startup/ScoutHire suites pass 22/22; targeted draft-staffing persistence integration pass 1/1. Full `NODE_ENV= npx vitest run` produced 9,126 pass / 3 fail / 10 skipped, with only the characterized `LeagueBuilderDraftSetup` order-sensitive block failing; the full `LeagueBuilderDraftSetup.test.tsx` solo rerun passed 57/57.
 - Next: independent audit of the F2/F3 diff, then continue the Mode-1 punchlist sequencing.
+## 2026-07-08 (Codex, attended) — M2b arm rating last mile
+
+- Completed **M2b** on `lane/m2b-arm`: `src/engines/expectedStatsCategoryRates.ts` now emits `armThrowingRate` for hitters with catcher or outfield arm evidence instead of leaving the category unfed.
+- Catcher signal uses existing `catcherCaughtStealingRate` and stored `caughtStealingAgainst` / `stolenBasesAllowed` fields, matching the RA-8 weighted rate `(CS*0.95)/((CS*0.95)+(SB_allowed*0.45))`.
+- Outfield signal uses stored `outfieldAssists + baserunnersHeld` over LF/CF/RF games, matching the documented v1 OF arm-per-game approximation. Players with no C/OF arm exposure omit `armThrowingRate` sample and actual, so they do not move. Pitchers still emit no arm signal.
+- Added regression coverage in `expectedStatsCategoryRates.test.ts` for catcher mapping, OF mapping, no-arm omission, and pitcher omission; added checkpoint signal tests proving catcher/OF arm category data can move arm while empty arm data does not.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused expectedStats/checkpoint suite pass 7 files / 106 tests; full `NODE_ENV= npx vitest run` had only `LeagueBuilderDraftSetup.test.tsx` batch reds, and the solo file rerun passed 60/60.
+- Commit: `00466697 fix(ratings): feed the arm rating — connect RA-8 last mile [M2b]`.
+- Next: independent audit of the three-file M2b diff; do not broaden into the known DraftSetup batch behavior unless separately assigned.

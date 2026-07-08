@@ -1,9 +1,9 @@
 /**
  * RA-2a season-row -> expected-stats category-rate adapter.
  *
- * Dormant/null-gated categories from RATINGS_ADJUSTMENT_SPEC §3B +
+ * Null-gated categories from RATINGS_ADJUSTMENT_SPEC §3B +
  * DECISIONS_LOG 2026-06-23 RA-2:
- * - armThrowingRate: RA-8 catcher caught-stealing season fields are not stored yet.
+ * - armThrowingRate: C/OF only; omitted when no arm-relevant season exposure exists.
  * - pitcher non-pitching power/contact/speed/fielding categories: RA-11a cumulative leg.
  * - speedBaserunningRate: live from RA-2c-3 extraBasesTaken/advancementOpportunities
  *   season fields; populated by the RA-2c-3b writer, so it remains 0 until then.
@@ -14,6 +14,7 @@
  */
 
 import type { ExpectedStatsCategory } from './expectedStatsEngine';
+import { catcherCaughtStealingRate } from './catcherCaughtStealingAggregator';
 import {
   calcSLG,
   type PlayerSeasonBatting,
@@ -40,6 +41,18 @@ const setSample = (
 ): void => {
   sampleSizeByCat[category] = sampleSize;
 };
+
+function finiteOrZero(value: number | null | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function outfieldGames(fielding: PlayerSeasonFielding): number {
+  return (
+    finiteOrZero(fielding.gamesByPosition.LF) +
+    finiteOrZero(fielding.gamesByPosition.CF) +
+    finiteOrZero(fielding.gamesByPosition.RF)
+  );
+}
 
 const emitActual = (
   actualByCat: Partial<Record<ExpectedStatsCategory, number>>,
@@ -131,6 +144,31 @@ function addHitterRates(
   }
 }
 
+function addArmRate(result: CategoryRateResult, fielding?: PlayerSeasonFielding): void {
+  if (!fielding) {
+    return;
+  }
+
+  const catcherSample =
+    finiteOrZero(fielding.caughtStealingAgainst) + finiteOrZero(fielding.stolenBasesAllowed);
+  if (catcherSample > 0) {
+    const rate = catcherCaughtStealingRate(fielding);
+    setSample(result.sampleSizeByCat, 'armThrowingRate', catcherSample);
+    if (rate !== null) {
+      emitActual(result.actualByCat, 'armThrowingRate', rate);
+    }
+    return;
+  }
+
+  const outfieldSample =
+    finiteOrZero(fielding.outfieldAssists) + finiteOrZero(fielding.baserunnersHeld);
+  const gamesInOutfield = outfieldGames(fielding);
+  if (outfieldSample > 0 && gamesInOutfield > 0) {
+    setSample(result.sampleSizeByCat, 'armThrowingRate', outfieldSample);
+    emitActual(result.actualByCat, 'armThrowingRate', outfieldSample / gamesInOutfield);
+  }
+}
+
 function addPitcherRates(
   result: CategoryRateResult,
   pitching?: PlayerSeasonPitching,
@@ -181,6 +219,7 @@ export function toExpectedStatsCategoryRates(input: CategoryRateInput): Category
 
   if (input.role === 'hitter') {
     addHitterRates(result, input.batting, input.fielding);
+    addArmRate(result, input.fielding);
   } else {
     addPitcherRates(result, input.pitching);
     addHitterRates(result, input.batting, input.fielding);

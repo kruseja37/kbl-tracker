@@ -1171,3 +1171,6 @@ Previous `CURRENT_STATE.md` live header's first row was the 2026-07-07 Lever A R
 ## Outgoing Live Header Snapshot — before 2026-07-08 M1D F2/F3 farm bands session end
 
 Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 F4 prospect curve banner. This session refreshed the live header to record M1D F2/F3: farm scout confidence bands sourced from farm archetype, ScoutHire auto-specialization from the same table, Scout value fog around the true farm opening ask, ScoutHire-independent farm auction reads, focused green gates, and the full-suite caveat for the characterized `LeagueBuilderDraftSetup` order-sensitive block that passed in the full-file solo rerun.
+## Outgoing Live Header Snapshot — before 2026-07-08 M2b arm rating last-mile session end
+
+Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 M1c P1 CPU identity auto-assign banner. This session refreshed the live header to record the Mode-2 M2b `armThrowingRate` last-mile fix on `lane/m2b-arm`, the catcher RA-8 and OF arm-rate emissions, the green tsc/build/focused gates, and the full-suite caveat that only known `LeagueBuilderDraftSetup.test.tsx` batch reds appeared before passing 60/60 in a solo file rerun.

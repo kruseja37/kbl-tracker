@@ -281,4 +281,45 @@ describe('checkpointRatingSignal RA-2c-1', () => {
     expect(computeCheckpointRatingSignals(belowFloor).cumulative.get('speed-target')?.speed).toBeUndefined();
     expect(computeCheckpointRatingSignals(atFloor).cumulative.get('speed-target')?.speed).toEqual(expect.any(Number));
   });
+
+  test('catcher CS-rate arm data can produce a finite arm signal', () => {
+    const cohort = [
+      ratedCategoryMember('catcher-target', 'C', 'armThrowingRate', 'arm', 0.700, 10),
+      ...[0.260, 0.310, 0.360, 0.410, 0.460, 0.510].map((rate, i) => (
+        ratedCategoryMember(`catcher-peer-${i}`, 'C', 'armThrowingRate', 'arm', rate, 10)
+      )),
+    ];
+
+    expect(computeCheckpointRatingSignals(cohort).cumulative.get('catcher-target')?.arm)
+      .toBeGreaterThan(0);
+  });
+
+  test('OF assist-based arm data can produce a finite arm signal', () => {
+    const cohort = [
+      ratedCategoryMember('of-target', 'cornerOF', 'armThrowingRate', 'arm', 0.500, 10),
+      ...[0.050, 0.100, 0.150, 0.200, 0.250, 0.300].map((rate, i) => (
+        ratedCategoryMember(`of-peer-${i}`, 'cornerOF', 'armThrowingRate', 'arm', rate, 10)
+      )),
+    ];
+
+    expect(computeCheckpointRatingSignals(cohort).cumulative.get('of-target')?.arm)
+      .toBeGreaterThan(0);
+  });
+
+  test('position players with no arm category data produce no arm movement', () => {
+    const cohort = Array.from({ length: 6 }, (_, i): CheckpointSignalMember => ({
+      playerId: `of-no-arm-${i}`,
+      role: 'hitter',
+      ageBand: '25-31',
+      ratings: { arm: 70 + i },
+      poolKey: 'cornerOF',
+      categoryRates: {
+        actualByCat: {},
+        sampleSizeByCat: {},
+      },
+    }));
+
+    expect(computeCheckpointRatingSignals(cohort).cumulative.get('of-no-arm-0')?.arm)
+      .toBeUndefined();
+  });
 });
