@@ -6721,3 +6721,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; DraftSetup solo pass 60/60; full suite pass with constrained workers via `NODE_ENV= npx vitest run --maxWorkers=2` = 599 files passed / 5 skipped, 9,125 tests passed / 9 skipped. The initial unconstrained default full run hit suite-load timeouts/noise, but DraftSetup passed solo and in the constrained full run.
 - Commit message: `feat(draft-setup): CPU identity auto-assign [P1]`.
 - Next: audit the P1 diff against the JK-ratified behavior and then continue the Mode 1 punchlist queue.
+
+## 2026-07-08 (Codex, attended) — M2b arm rating last mile
+
+- Completed **M2b** on `lane/m2b-arm`: `src/engines/expectedStatsCategoryRates.ts` now emits `armThrowingRate` for hitters with catcher or outfield arm evidence instead of leaving the category unfed.
+- Catcher signal uses existing `catcherCaughtStealingRate` and stored `caughtStealingAgainst` / `stolenBasesAllowed` fields, matching the RA-8 weighted rate `(CS*0.95)/((CS*0.95)+(SB_allowed*0.45))`.
+- Outfield signal uses stored `outfieldAssists + baserunnersHeld` over LF/CF/RF games, matching the documented v1 OF arm-per-game approximation. Players with no C/OF arm exposure omit `armThrowingRate` sample and actual, so they do not move. Pitchers still emit no arm signal.
+- Added regression coverage in `expectedStatsCategoryRates.test.ts` for catcher mapping, OF mapping, no-arm omission, and pitcher omission; added checkpoint signal tests proving catcher/OF arm category data can move arm while empty arm data does not.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused expectedStats/checkpoint suite pass 7 files / 106 tests; full `NODE_ENV= npx vitest run` had only `LeagueBuilderDraftSetup.test.tsx` batch reds, and the solo file rerun passed 60/60.
+- Commit: `00466697 fix(ratings): feed the arm rating — connect RA-8 last mile [M2b]`.
+- Next: independent audit of the three-file M2b diff; do not broaden into the known DraftSetup batch behavior unless separately assigned.

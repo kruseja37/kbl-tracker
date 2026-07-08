@@ -1167,3 +1167,7 @@ Previous `CURRENT_STATE.md` live header said the CUT1 route cutover batch had pa
 ## Outgoing Live Header Snapshot — before 2026-07-08 F4 prospect curve session end
 
 Previous `CURRENT_STATE.md` live header's first row was the 2026-07-07 Lever A REJECT remediation banner. This session refreshed the live header to record the Mode-1 punchlist F4 measurement harness, the seeded prospect grade-curve quota fix, the before/after histogram evidence, the focused green gates, and the full-suite caveat for an unrelated `LeagueBuilderDraftSetup` timing red that passed on exact-test and full-file reruns.
+
+## Outgoing Live Header Snapshot — before 2026-07-08 M2b arm rating last-mile session end
+
+Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 M1c P1 CPU identity auto-assign banner. This session refreshed the live header to record the Mode-2 M2b `armThrowingRate` last-mile fix on `lane/m2b-arm`, the catcher RA-8 and OF arm-rate emissions, the green tsc/build/focused gates, and the full-suite caveat that only known `LeagueBuilderDraftSetup.test.tsx` batch reds appeared before passing 60/60 in a solo file rerun.
