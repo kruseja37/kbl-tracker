@@ -37,3 +37,12 @@ Colors/borders/shadows only — no copy changes, no DOM restructuring. Known tes
 
 ## §6 Sequencing
 Reskin lane dispatches AFTER Wave 2 (rankings board) lands — same files. Wave 2 builds its new UI to THIS standard from birth — hard-edge treatments per JK's one-language ruling, even inside the whisper (a transitional mixed look next to the not-yet-converted stage is accepted until the sweep lands). Exemplar repoint (§1 key finding) happens inside the reskin lane, first commit, so the sweep never propagates stale hex.
+
+## §7 THE TEXT LAW (JK ruling 2026-07-08 — BINDING, journey-wide A-to-Z)
+
+Every visible string on every draft-journey screen is classified into exactly one of three classes, and rendered accordingly:
+1. **TUTORIAL** — explanatory/how-it-works text valuable only to beginners → lives ONLY behind the screen's Help button (top-right, consistent placement journey-wide; screens lacking a Help affordance gain one). Never default-visible.
+2. **ALWAYS-VALUABLE** — live data, controls, team-/lot-conditioned intelligence → permanently visible.
+3. **SITUATIONAL** — useful sometimes, noise other times → expandable/retractable, with the collapse state PERSISTED per user preference (per-screen+section key; lightweight local persistence, no DB schema).
+
+Execution protocol: (a) inventory every static string across the journey surfaces and classify into the three classes — captain RATIFIES the classification table before any sweep; (b) sweep lane moves TUTORIAL strings behind Help and adds missing Help buttons + situational collapse affordances, copy UNCHANGED (relocation, not rewording — test-characterized strings keep their content); (c) JK's eye gates the result like the reskin. Extends design principle 8 (anti-generic) from the whisper to the entire journey.
