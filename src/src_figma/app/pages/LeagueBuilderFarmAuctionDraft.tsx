@@ -23,6 +23,7 @@ import {
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
+  lotOpeningAsk,
   type AuctionPlayer,
   type AuctionResult,
   type AuctionSession,
@@ -36,8 +37,11 @@ import {
 import {
   assembleFarmWhisper,
   assembleRosterIntelligencePayload,
+  type BoardEntry,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
+import { toRosterSlotPlayer } from "../../../engines/rosterNeed";
+import type { RosterSlotPlayer } from "../../../data/rosterConstruction";
 import {
   analyzeDraftRoster,
   type DraftAnalyzerFarmEntry,
@@ -101,6 +105,46 @@ function prospectPositions(prospect: LeagueBuilderProspectPlayerDto | null | und
 function prospectTraitCount(prospect: LeagueBuilderProspectPlayerDto | null | undefined): 0 | 1 | 2 | "N/A" {
   if (!prospect) return "N/A";
   return [prospect.trait1, prospect.trait2].filter(Boolean).length as 0 | 1 | 2;
+}
+
+// COCKPIT W1d (the MLB bridge): both the MLB Player and the farm prospect DTO carry the same
+// primaryPosition/secondaryPosition/trait1/trait2 shape toRosterSlotPlayer (rosterNeed.ts:48)
+// expects -- one mapper covers both sides of the bridge (MLB roster shapes AND the candidate
+// prospect's own shape), matching the canonical mapper reuse pattern used elsewhere in the app.
+function toBridgeRosterShape(entry: {
+  primaryPosition: string;
+  secondaryPosition?: string | null;
+  trait1?: string | null;
+  trait2?: string | null;
+}): RosterSlotPlayer {
+  return toRosterSlotPlayer({
+    primaryPosition: entry.primaryPosition,
+    secondaryPosition: entry.secondaryPosition,
+    traits: [entry.trait1, entry.trait2],
+  });
+}
+
+// COCKPIT W1d item 5 (the bridge headline, farm "Tier 1"): promotes the top 1-2 already-tilted
+// rosterBoardPriorityGaps into a short, team-conditioned retro-voiced line for the whisper's
+// always-visible strip. Anti-generic law (design principle 8): this varies with THIS team's actual
+// MLB+farm gap findings -- there is no generic fallback sentence when gaps are absent (the strip
+// simply doesn't render, per WhisperPanel's bridgeHeadline-is-falsy guard).
+// REWORK (audit note (h), 2026-07-08): the gaps' SOURCE team (rosterBoardTeamState, which falls
+// back to the first human club when nobody is "on the clock") can transiently differ from the
+// whisper's SEAT team in RESOLVE state (pending-claim team). The whisper is a private, seat-only
+// read -- another club's gaps must never render in it, so the headline is suppressed on any
+// source/seat mismatch. Exported for its unit test.
+export function buildFarmBridgeHeadline(
+  gaps: readonly BoardPriorityGap[],
+  sourceTeamId: string | null | undefined,
+  seatTeamId: string | null | undefined,
+): string | null {
+  if (!sourceTeamId || !seatTeamId || sourceTeamId !== seatTeamId) return null;
+  if (gaps.length === 0) return null;
+  // "·" mirrors the separator the existing PRIORITY GAPS needline already uses (buildFarmNeedLine
+  // above) -- one visual language for gap lists across the farm floor.
+  const top = gaps.slice(0, 2).map((gap) => gap.label.replace(/\.$/, "")).join(" · ");
+  return `Board flags: ${top} — work the farm floor there first.`;
 }
 
 // WT-D: a farm prospect (LeagueBuilderProspectPlayerDto) is a *different* DTO shape from the
@@ -508,6 +552,63 @@ export function LeagueBuilderFarmAuctionDraft() {
     return null;
   }, [auction.currentBidderTeamId, session]);
 
+  // COCKPIT W1d item 4(i) (REWORKED per audit fog-law finding, 2026-07-08): a REAL farm board --
+  // remaining prospects ranked AND displayed by `range.displayedEstimate`, the seeded, jittered,
+  // fog-CARRYING scout point estimate (archetypeBandValueRange, the SAME scout math the
+  // on-the-block lot already uses). NEVER the band midpoint: the band is built SYMMETRIC around
+  // the true opening ask (low = ask*(1-w), high = ask*(1+w)), so (low+high)/2 === lotOpeningAsk
+  // === a pure function of TRUE IV -- the midpoint cancels the fog exactly (corrected fog rule,
+  // DRAFT_COCKPIT_DESIGN §2.5: on any fogged surface, no derived quantity may be an exact
+  // deterministic function of a true-value anchor). Only the current lot carries a live opening
+  // ask, so every OTHER remaining prospect gets a hypothetical one via the exported, pure
+  // `lotOpeningAsk` -- consumed ONLY as archetypeBandValueRange's input, never surfaced.
+  const farmBoardEntries = useMemo<BoardEntry[]>(() => {
+    if (!session || !whisperSeatTeamId) return [];
+    const farmArchetypeKey = teamById.get(whisperSeatTeamId)?.farmArchetypeKey;
+    const currentLotId = session.currentLot?.playerId;
+    return session.availablePlayerIds
+      .filter((playerId) => playerId !== currentLotId)
+      .map((playerId): BoardEntry | null => {
+        const auctionPlayer = session.players[playerId];
+        const prospect = prospectById.get(playerId);
+        if (!auctionPlayer || !prospect) return null;
+        const openingAsk = lotOpeningAsk(auctionPlayer, session.config);
+        const range = scoutRangeForProspect({
+          prospect,
+          auctionPlayer,
+          openingAsk,
+          teamId: whisperSeatTeamId,
+          farmArchetypeKey,
+          seed: activeSeed,
+        });
+        if (!range) return null;
+        return {
+          playerId,
+          // Fog law: the displayed/ranking worth is the jittered scout estimate -- NOT the band
+          // midpoint, which algebraically reconstructs the true-IV-derived reserve (see the
+          // useMemo doc comment above).
+          worth: range.displayedEstimate,
+          matchedShape: prospect.primaryPosition,
+          needTag: null,
+          fitTag: null,
+          note: prospectDisplayName(prospect),
+        };
+      })
+      .filter((entry): entry is BoardEntry => entry !== null)
+      .sort((a, b) => b.worth - a.worth);
+  }, [activeSeed, prospectById, session, teamById, whisperSeatTeamId]);
+
+  // WT-D pattern: board rows open the (fogged) profile popover the same way the on-the-block lot
+  // and won-roster names already do.
+  const farmBoardPlayers = useMemo(() => {
+    const map: Record<string, Player> = {};
+    for (const entry of farmBoardEntries) {
+      const prospect = prospectById.get(entry.playerId);
+      if (prospect) map[entry.playerId] = prospectToProfilePlayer(prospect);
+    }
+    return map;
+  }, [farmBoardEntries, prospectById]);
+
   const farmWhisperPayload = useMemo<RosterIntelligencePayload | null>(() => {
     if (!session || !session.currentLot) return null;
     if (!whisperSeatTeamId || auction.isCpuTeam(whisperSeatTeamId)) return null;
@@ -520,15 +621,16 @@ export function LeagueBuilderFarmAuctionDraft() {
     if (!teamState || !team) return null;
 
     const lotPlayerId = session.currentLot.playerId;
-    const lotPrimaryPosition: DraftPosition | null = currentLotProspect?.primaryPosition ?? null;
-    const seatRosterPositions = new Set<DraftPosition>(
-      teamState.roster
-        .map((assignment) => prospectById.get(assignment.playerId)?.primaryPosition)
-        .filter((pos): pos is DraftPosition => Boolean(pos)),
-    );
-    // "Farm roster-slot needs" input (P4): the only signal available without a farm need-
-    // breakdown engine -- does the seat's roster already have ANY prospect at this position?
-    const positionIsOpenNeed = lotPrimaryPosition !== null && !seatRosterPositions.has(lotPrimaryPosition);
+
+    // COCKPIT W1d (the MLB bridge, §2.5): the seat's ALREADY-COMPLETE MLB roster, mapped through
+    // toRosterSlotPlayer (rosterNeed.ts:48) to the SAME legality shape rosterNeedBreakdown /
+    // depthReport expect. Empty when the roster can't be resolved -- assembleFarmWhisper falls
+    // back permissively (neutral need, SHAPE stays an honest 'unknown' stub).
+    const mlbRosterShapes: RosterSlotPlayer[] = (auction.mlbRosterPlayerIdsByTeamId[whisperSeatTeamId] ?? [])
+      .map((playerId) => playerById.get(playerId))
+      .filter((mlbPlayer): mlbPlayer is Player => Boolean(mlbPlayer))
+      .map((mlbPlayer) => toBridgeRosterShape(mlbPlayer));
+    const candidateShape = currentLotProspect ? toBridgeRosterShape(currentLotProspect) : null;
 
     const assembly = assembleFarmWhisper({
       candidateId: lotPlayerId,
@@ -543,7 +645,11 @@ export function LeagueBuilderFarmAuctionDraft() {
       nextBid: minBid ?? currentLotRange.low,
       currentBid: session.currentLot.highBid,
       bidIncrement: session.config.bidIncrement,
-      positionIsOpenNeed,
+      mlbRosterShapes,
+      candidateShape,
+      // COCKPIT W1d fork 3 (dark-first): wired but inert while FARM_CHEM_FIT_ENABLED is false.
+      prospectChemistry: currentLotProspect?.chemistry ?? null,
+      mlbRosterChemistryCounts: auction.mlbRosterChemistryByTeamId[whisperSeatTeamId],
     });
 
     return Object.assign(
@@ -552,6 +658,7 @@ export function LeagueBuilderFarmAuctionDraft() {
         generatedAtLotIndex: session.results.length,
         market: assembly.market,
         worthToYou: assembly.worth,
+        board: farmBoardEntries,
         scorecard: assembly.scorecard,
       }),
       {
@@ -560,6 +667,15 @@ export function LeagueBuilderFarmAuctionDraft() {
         currentLotPlayerId: lotPlayerId,
         currentHighBid: session.currentLot.highBid,
         objectPronoun: currentLotProspect?.gender === "F" ? "her" : "him",
+        boardPlayers: farmBoardPlayers,
+        // COCKPIT W1d item 5: the bridge headline, promoted from the already-tilted priority gaps.
+        // Suppressed whenever the gaps' source team isn't the whisper's seat team (audit note (h)).
+        bridgeHeadline: buildFarmBridgeHeadline(
+          rosterBoardPriorityGaps,
+          rosterBoardTeamState?.teamId ?? null,
+          whisperSeatTeamId,
+        ),
+        chemFitLabel: assembly.chemFitLabel,
       },
     );
   }, [
@@ -567,8 +683,12 @@ export function LeagueBuilderFarmAuctionDraft() {
     currentLotProspect,
     currentLotRange,
     currentLotScoutTeamId,
+    farmBoardEntries,
+    farmBoardPlayers,
     minBid,
-    prospectById,
+    playerById,
+    rosterBoardPriorityGaps,
+    rosterBoardTeamState,
     session,
     teamById,
     teamStateById,

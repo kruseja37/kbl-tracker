@@ -24,6 +24,7 @@
 import {
   LEGAL_ROSTER,
   canCover,
+  depthReport,
   isCloser,
   type FieldPosition,
   type RosterSlotPlayer,
@@ -284,4 +285,80 @@ export function playerFillsHardRequirement(
     if (need.pitcherFloorNeed > 0) return true;
   }
   return need.catcherCoverNeed > 0 && canCover(shape, 'C');
+}
+
+// ---------------------------------------------------------------------------------------------
+// COCKPIT W1d — the farm MLB-bridge (DRAFT_COCKPIT_DESIGN_2026-07-08.md §2.5, JK directive): the
+// ONE sanctioned new function this lane adds. The farm Asst GM's job is reasoning about "who to
+// go after given who we have sitting in front of them at the MLB level" — the canonical cases are
+// coverage-aware: a star SS who ALSO covers IF/OF (Handley Dexterez type) makes the team MORE open
+// to a dedicated backup SS prospect (the star already covers everywhere else); a pure SS with no
+// secondary (Ozzie Smith type) means do NOT chase another SS early. `ownNeedMultiplier`
+// (auctionMarketModel.ts:398) already prices the HARD legality deficit; this adds the missing
+// SOFT depth "teeth" — until now that signal only ever became a SENTENCE (shapeLight), never a
+// number.
+// ---------------------------------------------------------------------------------------------
+
+export type DepthCoverageTier = 'covered' | 'adequate' | 'thin';
+
+/**
+ * SIM-TUNE (JK-tunable; dated 2026-07-08, COCKPIT W1d farm bridge). Retune here only — every
+ * caller (assembleFarmWhisper) reads through this table, never a literal.
+ */
+export const DEPTH_NEED_NUDGE: Readonly<Record<DepthCoverageTier, number>> = {
+  covered: 0.92,
+  adequate: 1.0,
+  thin: 1.12,
+};
+
+/** Hitters: depthReport's coverer count at the prospect's field position (secondaryPosition/group
+ * -aware — the Handley 'IF/OF' vs Ozzie no-secondary distinction). Per the design's own wording
+ * ("covered (≥2 coverers) ... thin (<2 coverers)") coverage is a clean binary at this threshold —
+ * 'adequate' is reserved as the neutral fallback for an unresolvable position, never fabricated. */
+function depthCoverageTierForHitter(
+  mlbRosterShapes: readonly RosterSlotPlayer[],
+  position: string,
+): DepthCoverageTier {
+  if (!(LEGAL_ROSTER.fieldPositions as readonly string[]).includes(position)) return 'adequate';
+  const report = depthReport([...mlbRosterShapes]);
+  const row = report.positions.find((entry) => entry.position === position);
+  const coverers = row?.coverers ?? 0;
+  return coverers >= 2 ? 'covered' : 'thin';
+}
+
+/** Pitchers have no depthReport notion (field-position only) — read rosterNeedBreakdown's
+ * class-aware arm counts instead (rotation/bullpen/closer), per the design's explicit instruction.
+ * Exact-at-floor is 'adequate' (no deficit, no surplus); below floor is 'thin'; above is 'covered'. */
+function depthCoverageTierForPitcher(
+  mlbRosterShapes: readonly RosterSlotPlayer[],
+  prospect: RosterSlotPlayer,
+): DepthCoverageTier {
+  const pitchers = mlbRosterShapes.filter((p) => p.isPitcher);
+  const { pureSp, pureRelief, closers } = classifyArms(pitchers);
+  const tierFor = (count: number, floor: number): DepthCoverageTier => {
+    if (count < floor) return 'thin';
+    return count === floor ? 'adequate' : 'covered';
+  };
+  if (prospect.role === 'CP') return tierFor(closers, LEGAL_ROSTER.minClosers);
+  if (prospect.role === 'SP') return tierFor(pureSp, LEGAL_ROSTER.startingPitchers);
+  // RP, SP/RP swings, and unresolved pitcher roles all read the general bullpen class.
+  return tierFor(pureRelief, LEGAL_ROSTER.minRelievers);
+}
+
+/**
+ * The ONE sanctioned new function (COCKPIT W1d): converts the MLB roster's coverage-aware depth
+ * signal at the farm prospect's position/role into a small bounded multiplier. Pure, deterministic;
+ * reads only the MLB side — never sharpens farm scout fog (the valuation this feeds still prices
+ * off the scouted band, not true IV). Composed + clamped by the caller alongside
+ * `ownNeedMultiplier`, mirroring `priorityNeedModifier`'s own bounds discipline
+ * (liquidityAwareBidding.ts:81).
+ */
+export function depthAwareNeedNudge(
+  mlbRosterShapes: readonly RosterSlotPlayer[],
+  prospectShape: RosterSlotPlayer,
+): number {
+  const tier = prospectShape.isPitcher
+    ? depthCoverageTierForPitcher(mlbRosterShapes, prospectShape)
+    : depthCoverageTierForHitter(mlbRosterShapes, prospectShape.position);
+  return DEPTH_NEED_NUDGE[tier];
 }

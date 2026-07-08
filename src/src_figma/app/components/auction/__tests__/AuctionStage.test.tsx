@@ -231,11 +231,57 @@ describe("AuctionStage roster board player popover (WT-D)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Farm Prospect" }));
 
     expect(screen.getByText("Farm - scouting only")).toBeInTheDocument();
+    // COCKPIT W1d (WT-D audit follow-up): positive assertions for the FULL band branch, not just
+    // the SCOUT cell and the absence of true ratings.
     expect(screen.getByText("SCOUT")).toBeInTheDocument();
+    expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.getByText("POT")).toBeInTheDocument();
+    expect(screen.getByText("A-")).toBeInTheDocument();
+    expect(screen.getByText("CONF")).toBeInTheDocument();
+    expect(screen.getByText("medium")).toBeInTheDocument();
+    expect(screen.getByText("NAME")).toBeInTheDocument();
+    expect(screen.getByText("Scout Jones")).toBeInTheDocument();
     expect(screen.queryByText("POW")).not.toBeInTheDocument();
     expect(screen.queryByText("99")).not.toBeInTheDocument();
     expect(screen.queryByText("Bug Eater")).not.toBeInTheDocument();
     expect(screen.queryByText("Iron Man")).not.toBeInTheDocument();
+  });
+
+  test("COCKPIT W1d defense-in-depth: farm tier forces revealFull off even when ratingRevealState is unset (neither 'hidden' nor 'revealed')", () => {
+    // A synthetic edge case -- real farm prospects always carry the 'hidden' literal, which
+    // already gates this completely (WT-D audit finding). But draftProfileModel's shouldReveal
+    // treats an UNSET ratingRevealState as "reveal if revealFull is true" -- so before this
+    // hardening, a bare `revealFull` (always true) at this call site would have leaked full
+    // ratings for any farm-tier record that somehow lacked the 'hidden' literal. AuctionStage now
+    // passes revealFull={vm.tier !== "farm"}, closing that gap independent of the record's own
+    // reveal state.
+    const stageVm = vm();
+    stageVm.tier = "farm";
+    const prospect = makeTestPlayer({
+      id: "farm-adversarial",
+      firstName: "Farm",
+      lastName: "Adversarial",
+      ratingRevealState: undefined,
+      power: 99,
+      prospectProfile: {
+        scoutedGrade: "B",
+        potentialGrade: "A-",
+        scoutConfidence: "medium",
+        scoutName: "Scout Jones",
+        archetypeFamily: "Power Bat",
+      },
+    });
+    stageVm.board.slots = stageVm.board.slots.map((s) =>
+      s.slotId === "SS" ? { ...s, who: "Farm Adversarial", player: prospect } : s,
+    );
+
+    render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Farm Adversarial" }));
+
+    expect(screen.getByText("Farm - scouting only")).toBeInTheDocument();
+    expect(screen.getByText("SCOUT")).toBeInTheDocument();
+    expect(screen.queryByText("POW")).not.toBeInTheDocument();
+    expect(screen.queryByText("99")).not.toBeInTheDocument();
   });
 
   test("an overflow entry with a resolvable player opens the profile popover", () => {

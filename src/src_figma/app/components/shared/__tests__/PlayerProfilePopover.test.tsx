@@ -79,7 +79,17 @@ describe("PlayerProfilePopover", () => {
     fireEvent.click(screen.getByRole("button", { name: "Mara Slate" }));
 
     expect(screen.getByText("Farm - scouting only")).toBeInTheDocument();
+    // COCKPIT W1d (WT-D audit follow-up): positive assertions that the band branch actually
+    // RENDERS its scout bands -- not just that the hidden data is absent. All four band cells
+    // (SCOUT/POT/CONF/NAME) and their values must appear.
+    expect(screen.getByText("SCOUT")).toBeInTheDocument();
     expect(screen.getByText("B")).toBeInTheDocument();
+    expect(screen.getByText("POT")).toBeInTheDocument();
+    expect(screen.getByText("A-")).toBeInTheDocument();
+    expect(screen.getByText("CONF")).toBeInTheDocument();
+    expect(screen.getByText("medium")).toBeInTheDocument();
+    expect(screen.getByText("NAME")).toBeInTheDocument();
+    expect(screen.getByText("Scout Vale")).toBeInTheDocument();
     expect(screen.queryByText("91")).not.toBeInTheDocument();
     expect(screen.queryByText("POW")).not.toBeInTheDocument();
   });

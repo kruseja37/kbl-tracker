@@ -8,6 +8,7 @@ import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
 import { archetypeBandValueRange } from "../../../engines/scoutValueRange";
 import {
   deriveAuctionSessionNominationSeed,
+  lotOpeningAsk,
   seededNominationOrder,
   surfaceNextPlayer,
 } from "../../../engines/auctionStateMachine";
@@ -27,7 +28,10 @@ import {
   type LeagueBuilderProspectPlayerDto,
   type ProspectScoutDescriptor,
 } from "../../../utils/prospectScoutingDraftEngine";
-import { LeagueBuilderFarmAuctionDraft } from "../../app/pages/LeagueBuilderFarmAuctionDraft";
+import {
+  LeagueBuilderFarmAuctionDraft,
+  buildFarmBridgeHeadline,
+} from "../../app/pages/LeagueBuilderFarmAuctionDraft";
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -217,6 +221,19 @@ function prospectDisplayName(prospect: LeagueBuilderProspectPlayerDto): string {
 
 function prospectPositions(prospect: LeagueBuilderProspectPlayerDto): string[] {
   return Array.from(new Set([prospect.primaryPosition, prospect.secondaryPosition].filter(Boolean) as string[]));
+}
+
+function prospectRatingsOf(prospect: LeagueBuilderProspectPlayerDto): Record<string, number> {
+  return {
+    power: prospect.power,
+    contact: prospect.contact,
+    speed: prospect.speed,
+    fielding: prospect.fielding,
+    arm: prospect.arm,
+    velocity: prospect.velocity,
+    junk: prospect.junk,
+    accuracy: prospect.accuracy,
+  };
 }
 
 function formatScoutRange(range: { displayedEstimate: number; low: number; high: number }): string {
@@ -438,7 +455,12 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(screen.getByText("Most you can bid")).toBeInTheDocument();
     expect(screen.getByText("Slots left")).toBeInTheDocument();
     expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
-    expect(screen.getByText(/SS coverage below target/)).toBeInTheDocument();
+    // COCKPIT W1d: the bridge headline (always-visible, zero taps) now ALSO promotes this same
+    // team-conditioned gap text, so the SS-gap phrase legitimately appears twice on the page.
+    expect(screen.getAllByText(/SS coverage below target/).length).toBeGreaterThan(0);
+    const bridgeStrip = screen.getByTestId("whisper-farm-bridge");
+    expect(bridgeStrip).toHaveTextContent(/Board flags:/);
+    expect(bridgeStrip).toHaveTextContent(/coverage below target/);
 
     // P4: Assistant-GM whisper on the farm lot -- team-a is the human seat on the clock right
     // now (OPEN_BIDDING, pre-BID), so the panel must be live, not the dormant "WAITING ON THE
@@ -455,11 +477,74 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(verdictEl?.className ?? "").toMatch(/\b(push|cap|pass)\b/);
     // MAX BID (the liquidity-adjusted ceiling) renders, band-derived from the scout read.
     expect(within(whisperBody).getByText("MAX BID")).toBeInTheDocument();
-    // Budget light is a REAL read (not the 'unknown' stub), while shape/identity/chemistry --
-    // which have no farm data source yet -- stay honest 'unknown' stubs rather than fake reads.
+    // COCKPIT W1d: Budget AND SHAPE are both real reads now (SHAPE un-stubs once the seat's MLB
+    // roster resolves -- team-a's fixture roster here is missing SS/CF/RF and carries no
+    // pitchers, so shapeLight correctly reads it as an incomplete/illegal roster, i.e. 'red', not
+    // the old 'unknown' stub). IDENTITY/CHEMISTRY are DELETED from the farm light row entirely.
     expect(within(whisperBody).getByRole("button", { name: "BUDGET" })).not.toHaveAttribute("data-status", "unknown");
-    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).toHaveAttribute("data-status", "unknown");
-    expect(within(whisperBody).getByRole("button", { name: "IDENTITY" })).toHaveAttribute("data-status", "unknown");
+    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).not.toHaveAttribute("data-status", "unknown");
+    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).toHaveAttribute("data-status", "red");
+    expect(within(whisperBody).queryByRole("button", { name: "IDENTITY" })).not.toBeInTheDocument();
+    expect(within(whisperBody).queryByRole("button", { name: "CHEMISTRY" })).not.toBeInTheDocument();
+    // COCKPIT W1d item 4(i), REWORKED per the audit's fog-law finding: the farm board's ranking
+    // AND display key must be `range.displayedEstimate` (the seeded, jittered, fog-CARRYING scout
+    // point estimate) -- NEVER the band midpoint, because archetypeBandValueRange builds the band
+    // SYMMETRIC around the true opening ask, so (low+high)/2 === lotOpeningAsk === a pure
+    // function of TRUE IV (the exact leak the audit proved algebraically).
+    const farmBoard = within(whisperBody).getByTestId("whisper-board");
+    expect(farmBoard).not.toHaveTextContent("The board's bare");
+    expect(farmBoard.textContent).toMatch(/\d+ NAMES LEFT/);
+    // Recompute the board exactly the way the page does (same seeds, same team lens).
+    const expectedBoard = baseCandidates
+      .filter(({ candidate }) => candidate.playerId !== surfacedLot.playerId)
+      .map(({ candidate, prospect }) => {
+        const openingAsk = lotOpeningAsk(candidate, surfaced.config);
+        const overallBand = scoutOverallBandForPosition(
+          prospect.primaryPosition as DraftPosition,
+          targetFarmArchetypeKey,
+          prospectRatingsOf(prospect),
+        );
+        const range = archetypeBandValueRange(
+          openingAsk,
+          overallBand,
+          `${targetSessionSeed}:value-band:${prospect.id}:${targetTeamId}`,
+        );
+        return { prospect, openingAsk, range, midpoint: (range.low + range.high) / 2 };
+      })
+      .sort((a, b) => b.range.displayedEstimate - a.range.displayedEstimate);
+    // Expand the full board so every row is rendered for the assertions below.
+    fireEvent.click(within(farmBoard).getByRole("button", { name: "FULL BOARD" }));
+    const boardRows = Array.from(farmBoard.querySelectorAll(".whisper-board-row"));
+    expect(boardRows.length).toBe(expectedBoard.length);
+    // (a) Seeded-fixture lock: the top-ranked row's rendered worth IS the displayedEstimate.
+    expect(boardRows[0].querySelector(".whisper-board-name")?.textContent).toBe(
+      prospectDisplayName(expectedBoard[0].prospect),
+    );
+    expect(boardRows[0].querySelector(".whisper-worth")?.textContent).toBe(
+      formatMoney(expectedBoard[0].range.displayedEstimate),
+    );
+    // (b) Adversarial midpoint lock: pick a uniquely-named fixture whose ROUNDED displayedEstimate
+    // and midpoint diverge, and prove the rendered figure equals the former and differs from the
+    // latter -- if anyone regresses worth back to the midpoint, this fails. Also prove the
+    // midpoint IS the true anchor this lock guards against (midpoint === lotOpeningAsk).
+    const nameCounts = new Map<string, number>();
+    for (const entry of expectedBoard) {
+      const name = prospectDisplayName(entry.prospect);
+      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+    }
+    const divergent = expectedBoard.find((entry) =>
+      Math.round(entry.range.displayedEstimate) !== Math.round(entry.midpoint) &&
+      nameCounts.get(prospectDisplayName(entry.prospect)) === 1,
+    );
+    expect(divergent).toBeDefined();
+    expect(divergent!.midpoint).toBeCloseTo(divergent!.openingAsk, 6);
+    const divergentRow = boardRows.find((row) =>
+      row.querySelector(".whisper-board-name")?.textContent === prospectDisplayName(divergent!.prospect),
+    );
+    expect(divergentRow).toBeDefined();
+    const divergentWorthText = divergentRow!.querySelector(".whisper-worth")?.textContent;
+    expect(divergentWorthText).toBe(formatMoney(divergent!.range.displayedEstimate));
+    expect(divergentWorthText).not.toBe(formatMoney(divergent!.midpoint));
     // Close it back up before continuing the existing flow below.
     fireEvent.click(whisperStrip);
 
@@ -491,5 +576,25 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const trait of [target.prospect.trait1, target.prospect.trait2].filter(Boolean)) {
       expect(screen.queryByText(trait!)).not.toBeInTheDocument();
     }
+  });
+});
+
+describe("buildFarmBridgeHeadline — COCKPIT W1d rework (audit note (h))", () => {
+  const gaps = [
+    { id: "g1", severity: "high", label: "SS coverage below target" },
+    { id: "g2", severity: "warn", label: "Bullpen coverage is thin" },
+  ];
+
+  test("renders the team-conditioned headline only when the gaps' source team IS the whisper seat", () => {
+    expect(buildFarmBridgeHeadline(gaps, "team-a", "team-a")).toBe(
+      "Board flags: SS coverage below target · Bullpen coverage is thin — work the farm floor there first.",
+    );
+    // RESOLVE-state transient: rosterBoardTeamState (human fallback) != pendingClaim seat --
+    // another club's gaps must never render in the seat's private whisper.
+    expect(buildFarmBridgeHeadline(gaps, "team-a", "team-b")).toBeNull();
+    expect(buildFarmBridgeHeadline(gaps, null, "team-a")).toBeNull();
+    expect(buildFarmBridgeHeadline(gaps, "team-a", null)).toBeNull();
+    // Anti-generic law: no gaps, no headline -- never a generic fallback sentence.
+    expect(buildFarmBridgeHeadline([], "team-a", "team-a")).toBeNull();
   });
 });

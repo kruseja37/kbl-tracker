@@ -364,7 +364,12 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                             {s.who !== undefined && (
                               <div className={`who${s.filled ? "" : " faint"}`}>
                                 {s.player ? (
-                                  <PlayerProfilePopover player={s.player} revealFull>
+                                  // COCKPIT W1d (WT-D audit follow-up): revealFull is tier-gated
+                                  // here as defense-in-depth -- farm prospects always carry the
+                                  // 'hidden' ratingRevealState literal (shouldReveal gates on
+                                  // that regardless of this prop), but a farm-tier board should
+                                  // never even ASK for the full reveal.
+                                  <PlayerProfilePopover player={s.player} revealFull={vm.tier !== "farm"}>
                                     <span className="who-clickable">{s.who || "open"}</span>
                                   </PlayerProfilePopover>
                                 ) : (
@@ -394,7 +399,9 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                       <span key={entry.playerId} className="chip">
                         <b>{entry.chip}</b>{" "}
                         {entry.player ? (
-                          <PlayerProfilePopover player={entry.player} revealFull>
+                          // COCKPIT W1d (WT-D audit follow-up): same tier-gated defense-in-depth
+                          // as the roster-slot popover above.
+                          <PlayerProfilePopover player={entry.player} revealFull={vm.tier !== "farm"}>
                             <span className="who-clickable">{entry.name}</span>
                           </PlayerProfilePopover>
                         ) : (
@@ -574,7 +581,10 @@ function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
     <div className="lotinner">
       <div className="eyebrow">{lot.scout ? "On the block · prospect" : "On the block"}</div>
       {lot.player ? (
-        <PlayerProfilePopover player={lot.player} revealFull={!lot.scout}>
+        // COCKPIT W1d (WT-D audit follow-up): gate on `tier` directly rather than `!lot.scout` --
+        // belt-and-suspenders so a farm lot can never reveal full ratings even if `lot.scout`
+        // were ever absent for some edge-case reason.
+        <PlayerProfilePopover player={lot.player} revealFull={isFarmLot ? false : !lot.scout}>
           {name}
         </PlayerProfilePopover>
       ) : (

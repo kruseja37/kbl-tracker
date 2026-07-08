@@ -21,6 +21,7 @@ import {
   computeOwnValue,
   computeOwnValueFactors,
   estimateMarket,
+  ownNeedMultiplier,
   type ArchetypeLiftTable,
   type EstimatedMarket,
   type MarketLotView,
@@ -31,11 +32,13 @@ import {
   type CompletionCandidate,
 } from './auctionCompletionFloor';
 import {
+  depthAwareNeedNudge,
   rosterNeedBreakdown,
   wouldStrandRoster,
   type RosterNeedBreakdown,
   type RosterPositionMap,
 } from './rosterNeed';
+import { chemistryFitPriceMultiplier } from './chemistryFitValue';
 import {
   chemistryAdviceForCandidate,
   chemistryProfileForPlayers,
@@ -70,15 +73,26 @@ export interface Light {
 
 export interface FiveLights {
   shape: Light;
-  identity: Light;
-  chemistry: Light;
+  /**
+   * COCKPIT W1d (2026-07-08): optional because the farm scorecard (`assembleFarmWhisper`) omits
+   * this entirely — farm has no identity-archetype model, and the design's honest-surface rule
+   * (§1.4) says a dead "read coming" stub is deleted, not decorated. `assembleFiveLights` (MLB)
+   * ALWAYS sets this; only the farm branch may omit it. WhisperPanel's farm light order never
+   * asks for this key.
+   */
+  identity?: Light;
+  /**
+   * COCKPIT W1d (2026-07-08): optional for the same reason as `identity` above — farm has no
+   * chemistry-SYNERGY model (the separate chemistry-FIT bridge, fork 3, folds into needMultiplier
+   * instead and never populates this light).
+   */
+  chemistry?: Light;
   /**
    * COCKPIT W1a/b (2026-07-08): BALANCE is DELETED from the MLB cockpit (design doc §2 Tier 2 —
    * honest surfaces beat a dead "Balance read coming." stub) pending the Fable HANDEDNESS-SIGNAL
-   * constants spec. Optional (not removed outright) ONLY because the farm whisper
-   * (`assembleFarmWhisper`, W1d lane, NOT touched here) still populates it as an unmodeled stub —
-   * this field stays legal for that branch to keep compiling untouched. The MLB path
-   * (`assembleFiveLights`) never sets it; WhisperPanel's MLB lights row no longer reads it.
+   * constants spec. The farm scorecard (COCKPIT W1d) never populates this either — farm renders
+   * ONLY shape + budget. The MLB path (`assembleFiveLights`) never sets it; WhisperPanel's lights
+   * row no longer reads it in either tier.
    */
   balance?: Light;
   budget: Light;
@@ -706,15 +720,21 @@ function familyWord(family: ChemistryCode): string {
 }
 
 // ---------------------------------------------------------------------------------------------
-// FARM WHISPER (P4, 2026-07-08): a branch beside the MLB payload builder above, NOT a new engine.
-// The farm auction has no legal-roster-shape model (RosterSlotPlayer/LEGAL_ROSTER are MLB-only),
-// so this cannot call assembleWorthToYou/assembleFiveLights directly. Instead it feeds the SAME
-// untouched liquidityAwareBidding engine + the SAME worthVerdict/budgetStatusFromHeadroom helpers
-// with farm-appropriate inputs: the archetype scout band as the market read, farm budget/roster
-// slots as the liquidity inputs, and a simple roster-slot-need signal (position already covered
-// on the seat's farm roster or not). Shape/identity/chemistry lights and chemistry synergy have no
-// farm data source yet, so they render as honest 'unknown' stubs rather than fabricated reads —
-// only budget (real, ceiling-driven) is computed.
+// FARM WHISPER (P4, 2026-07-08; MLB BRIDGE added COCKPIT W1d, 2026-07-08): a branch beside the
+// MLB payload builder above, NOT a new engine. The farm auction has no legal-roster-shape model of
+// its own (RosterSlotPlayer/LEGAL_ROSTER are MLB-only), so this still cannot call
+// assembleWorthToYou/assembleFiveLights directly — but per DRAFT_COCKPIT_DESIGN_2026-07-08.md §2.5
+// (JK directive at ratification), the farm Asst GM's whole job is bridging the MLB roster to the
+// farm board: "who should we go after given who we have sitting in front of them at the MLB
+// level." This branch now reads the seat's ALREADY-COMPLETE MLB roster (mapped to the SAME
+// RosterSlotPlayer legality shape via rosterNeed.ts's toRosterSlotPlayer) to drive need + depth +
+// the SHAPE light — it still feeds the SAME untouched liquidityAwareBidding engine + the SAME
+// worthVerdict/budgetStatusFromHeadroom helpers, with farm-appropriate inputs (the archetype scout
+// band as the market read, farm budget/roster slots as the liquidity inputs). Identity and
+// chemistry-SYNERGY still have no farm data source, so those two are DELETED from the farm
+// scorecard entirely (not stubbed) — only SHAPE and BUDGET render on farm (WhisperPanel's farm
+// light order never asks for the other two). FOG LAW: none of this sharpens farm scout fog — the
+// valuation still prices off the scouted band (input.band), never a true IV.
 // ---------------------------------------------------------------------------------------------
 
 export interface FarmWhisperBand {
@@ -722,6 +742,15 @@ export interface FarmWhisperBand {
   high: number;
   displayedEstimate: number;
 }
+
+/**
+ * COCKPIT W1d fork 3 (RESOLVED YES, dark-first, 2026-07-08 — DRAFT_COCKPIT_DESIGN_2026-07-08.md
+ * §4 fork 3): OFF by default. When true, the chemistry-fit read (i) folds into the SAME
+ * needMultiplier composition below (one ceiling, no new composition rule) and (ii) a Tier-2 chip
+ * label is produced; while false, farmChemFitMultiplier/farmChemFitLabel are no-ops and output is
+ * byte-identical to the pre-W1d shape. Flip only after a JK feel-pass on the farm floor.
+ */
+const FARM_CHEM_FIT_ENABLED = false;
 
 export interface FarmWhisperInput {
   candidateId: string;
@@ -734,15 +763,34 @@ export interface FarmWhisperInput {
   nextBid: number;
   currentBid: number | null;
   bidIncrement?: number;
-  /** True when the lot's primary position has NO covering prospect on the seat's farm roster yet
-   * — the only "roster-slot needs" signal available without a farm need-breakdown engine. */
-  positionIsOpenNeed: boolean;
+  /**
+   * COCKPIT W1d: the seat's MLB roster, mapped through toRosterSlotPlayer (rosterNeed.ts:48) to
+   * the SAME legality shape rosterNeedBreakdown/depthReport expect. Empty when the MLB roster
+   * can't be resolved — permissive fallback (neutral need, SHAPE stays an honest 'unknown' stub),
+   * never a fabricated read (design principle 4).
+   */
+  mlbRosterShapes: readonly RosterSlotPlayer[];
+  /**
+   * COCKPIT W1d: the farm prospect on the block, mapped to the SAME legality shape an MLB roster
+   * slot would carry — used ONLY to test which MLB hard requirement / depth class it would
+   * address if it were an MLB player; the prospect itself is never added to any roster (fog law:
+   * this is reasoning THROUGH the fog, not sharpening it). Null when unresolvable.
+   */
+  candidateShape: RosterSlotPlayer | null;
+  /** COCKPIT W1d fork 3 (dark-first): the prospect's own chemistry code/word. */
+  prospectChemistry?: string | null;
+  /** COCKPIT W1d fork 3 (dark-first): the MLB roster's chemistry-family counts — already
+   * computed, never read until now (useFarmAuctionDraft.ts:206-230). */
+  mlbRosterChemistryCounts?: Partial<Record<ChemistryCode, number>>;
 }
 
 export interface FarmWhisperAssembly {
   market: MarketRead;
   worth: WorthToYou;
   scorecard: FiveLights;
+  /** COCKPIT W1d fork 3 (dark-first): a Tier-2 chip label ("Chem fit +8% — Spirited room"). Only
+   * ever non-null when FARM_CHEM_FIT_ENABLED is true AND the fit produces a positive bump. */
+  chemFitLabel: string | null;
 }
 
 const FARM_NEUTRAL_CHEMISTRY: ChemistryTipBreakdown = {
@@ -759,15 +807,66 @@ const FARM_NEUTRAL_CHEMISTRY: ChemistryTipBreakdown = {
 
 const FARM_UNMODELED_LIGHT = (sentence: string): Light => ({ status: 'unknown', sentence });
 
-/** Small, honest need bump — the same clamp range (0.85-1.35) evaluateLiquidityAwareBid expects
- * of a needMultiplier, applied only when the lot fills a position the seat has zero coverage at. */
-const FARM_OPEN_NEED_MULTIPLIER = 1.15;
+/**
+ * SIM-TUNE (JK-tunable; dated 2026-07-08, COCKPIT W1d). Clamp bounds for the farm need-multiplier
+ * composition below, mirroring priorityNeedModifier's OWN bounds discipline exactly
+ * (liquidityAwareBidding.ts:81 — clamp(needMultiplier, 0.85, 1.35)). One ceiling, one clamp: the
+ * composed multiplier still flows through evaluateLiquidityAwareBid's own identical clamp, so this
+ * is belt-and-suspenders on the SAME bound, not a second rule.
+ */
+const FARM_NEED_MULTIPLIER_MIN = 0.85;
+const FARM_NEED_MULTIPLIER_MAX = 1.35;
+
+function clampFarmNeedMultiplier(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(FARM_NEED_MULTIPLIER_MAX, Math.max(FARM_NEED_MULTIPLIER_MIN, value));
+}
+
+/**
+ * The flag-INDEPENDENT chem-fit math (COCKPIT W1d fork 3) — kept separate from the
+ * FARM_CHEM_FIT_ENABLED gate below so it stays directly unit-testable in isolation (proving the
+ * math is correct and ready) without needing to flip the module constant. `assembleFarmWhisper`
+ * is the ONLY caller gated by the flag.
+ */
+export function computeFarmChemFitLabel(
+  prospectChemistry: string | null | undefined,
+  rosterChemistryCounts: Partial<Record<ChemistryCode, number>> | null | undefined,
+): string | null {
+  if (!prospectChemistry || !rosterChemistryCounts) return null;
+  const multiplier = chemistryFitPriceMultiplier(prospectChemistry, rosterChemistryCounts);
+  const bumpPct = Math.round((multiplier - 1) * 100);
+  if (bumpPct <= 0) return null;
+  const word = familyWord(normalizeToChemistryCode(prospectChemistry));
+  return `Chem fit +${bumpPct}% — ${word} room`;
+}
+
+function farmChemFitMultiplier(input: FarmWhisperInput): number {
+  if (!FARM_CHEM_FIT_ENABLED || !input.prospectChemistry || !input.mlbRosterChemistryCounts) return 1;
+  return chemistryFitPriceMultiplier(input.prospectChemistry, input.mlbRosterChemistryCounts);
+}
+
+function farmChemFitLabel(input: FarmWhisperInput): string | null {
+  if (!FARM_CHEM_FIT_ENABLED) return null;
+  return computeFarmChemFitLabel(input.prospectChemistry, input.mlbRosterChemistryCounts);
+}
 
 export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembly {
-  const needMultiplier = input.positionIsOpenNeed ? FARM_OPEN_NEED_MULTIPLIER : 1;
+  const hasMlbRoster = input.mlbRosterShapes.length > 0;
+  const mlbNeed = hasMlbRoster ? rosterNeedBreakdown([...input.mlbRosterShapes]) : null;
+  // openSlots for ownNeedMultiplier: the MLB roster is a closed book by farm-auction time (no more
+  // MLB slots open THIS draft), so urgency is binary — any live hard deficit saturates it to 1
+  // (Math.max(1, minimumAdditions) makes min(1, minimumAdditions/openSlots) = 1 whenever a
+  // deficit exists, matching the ownNeedMultiplier contract without inventing a fake slot count).
+  const own = ownNeedMultiplier(mlbNeed, input.candidateShape, mlbNeed ? Math.max(1, mlbNeed.minimumAdditions) : 1);
+  const depthNudge = hasMlbRoster && input.candidateShape
+    ? depthAwareNeedNudge(input.mlbRosterShapes, input.candidateShape)
+    : 1;
+  const chemFit = farmChemFitMultiplier(input);
+  const needMultiplier = clampFarmNeedMultiplier(own * depthNudge * chemFit);
+
   const iv = input.band.displayedEstimate;
   const ownValue = iv * needMultiplier;
-  const worth = ownValue; // no chemistry premium modeled for farm lots yet
+  const worth = ownValue; // no chemistry-PREMIUM (synergy) modeled for farm lots yet — only fit
 
   const market: MarketRead = {
     playerId: input.candidateId,
@@ -820,13 +919,18 @@ export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembl
     reasonCodes: liquidity.reasonCodes,
   };
 
+  // SHAPE un-stubs for free once the MLB roster is resolvable (§2.5 ground truth) — reuses the
+  // SAME shapeLight() the MLB cockpit uses, fed the seat's MLB roster read-only (no strand-check:
+  // a farm prospect never joins the MLB roster directly, so there is nothing to strand). Identity
+  // and chemistry-synergy have no farm data source and are DELETED, not stubbed.
+  const shape = hasMlbRoster
+    ? shapeLight({ players: [...input.mlbRosterShapes] })
+    : FARM_UNMODELED_LIGHT('Farm roster-shape read coming.');
+
   const scorecard: FiveLights = {
-    shape: FARM_UNMODELED_LIGHT('Farm roster-shape read coming.'),
-    identity: FARM_UNMODELED_LIGHT('Identity read coming.'),
-    chemistry: FARM_UNMODELED_LIGHT('Chemistry read coming.'),
-    balance: FARM_UNMODELED_LIGHT('Balance read coming.'),
+    shape,
     budget: budgetStatusFromHeadroom(liquidity.maxBid - market.band.median),
   };
 
-  return { market, worth: worthToYou, scorecard };
+  return { market, worth: worthToYou, scorecard, chemFitLabel: farmChemFitLabel(input) };
 }
