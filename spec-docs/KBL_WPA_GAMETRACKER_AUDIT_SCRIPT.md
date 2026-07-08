@@ -1,5 +1,7 @@
 # KBL WPA GameTracker Audit Script
 
+**SUPERSEDED (2026-07-08): not a source of truth — describes the RETIRED tactical+lineup_delta architecture; governed by MWAR_STEP1_CONTRACT.md + V1_CANON_2026-07-07.md §6 MOY ruling per SOT_REGISTER_2026-07-08.md.**
+
 Purpose: record a controlled GameTracker game so we can verify that real UI input produces the event/enrichment data needed for KBL WPA attribution.
 
 This is not for testing season value or WAR. This is only for Elimination Mode bracket/tourney WPA storytelling.

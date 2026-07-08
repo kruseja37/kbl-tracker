@@ -1,5 +1,7 @@
 # KBL WPA Attribution Multiplier Table Draft
 
+**SUPERSEDED (2026-07-08): not a source of truth — describes the RETIRED tactical+lineup_delta architecture; governed by MWAR_STEP1_CONTRACT.md + V1_CANON_2026-07-07.md §6 MOY ruling per SOT_REGISTER_2026-07-08.md.**
+
 ## New Thread Implementation Prompt
 
 Use this document to implement KBL WPA attribution for Elimination Mode bracket/tourney storytelling.

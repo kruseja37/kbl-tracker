@@ -1,5 +1,7 @@
 # MANAGER-WPA / MANAGER-OF-THE-YEAR — §18(4) CERTIFICATION READ
 
+**STALE (2026-07-08): certified the pre-rearchitecture manager-WPA metric (2026-06-16); needs re-certification against MWAR_STEP1_CONTRACT.md's 3:2:1 model per SOT_REGISTER_2026-07-08.md — not a current source of truth.**
+
 **Created:** 2026-06-16
 **Author:** Captain (Opus 4.8). Method: a `moy-reconciliation-read` workflow — 5 decorrelated mappers (v2 decision
 truth-layer, lineup-delta scalar, deprecated mWAR, MOY surface/record/greenfield, the denomination crux) + 3

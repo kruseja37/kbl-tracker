@@ -265,6 +265,9 @@ small-town beat reporter, not an engineer. Plain, warm, concrete.
 "projected", "early look", "live", "final", "not yet").
 
 ### 7.3 NOT banned — honest "not yet" states (D11 #14/#15)
+
+**STALE CLAIM ANNOTATION (2026-07-08): this section's "player & fan morale genuinely inactive" framing pre-dates the 2026-07-07 MORALE FULL-WIRING ruling (V1_CANON_2026-07-07.md §6) — all matrix rows are ordered wired, not blocked; update the copy guidance per SOT_REGISTER_2026-07-08.md.**
+
 `blocked` / `not yet available` / `coming later` are **allowed and correct** for
 features that are genuinely inactive: **salary movement, player & fan morale,
 Mode 3, expected-wins persistence, the offseason ceremony/voting.** Keep these

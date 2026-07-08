@@ -47,6 +47,8 @@ Each needs a proxy from populated data; three sub-classes:
 
 ## D. BUCKET C — needs a new input (33), grouped by the ONE blocking input
 
+**SECTION SUPERSEDED BY §VI (2026-07-08): this section's framing is overridden by §VI's resolved §9 model per SOT_REGISTER_2026-07-08.md — FINDING-150 proved builds anchored on this stale section. Do not build from §D; read §VI.**
+
 | Blocking input | Traits (count) | What's needed |
 |---|---|---|
 | **Ball-strike count** (ABSENT — no count field; `gameState.balls/strikes` reset every AB, `advanceCount('ball')` has zero callers) | First Pitch Slayer, First Pitch Prayer, Composed, BB Prone, Big Hack, Little Hack, Gets Ahead, Falls Behind (**8**) | persist the count (count-at-contact or per-pitch sequence) |
@@ -75,6 +77,8 @@ Independently verified by adversarial verifiers. Corrections applied: **Magic Ha
 ---
 
 ## V. OPEN DECISIONS FOR JK (§9 traits-from-reality scope)
+
+**SECTION SUPERSEDED BY §VI (2026-07-08): these "open" decisions were RESOLVED by §VI (JK design session, 2026-06-16) per SOT_REGISTER_2026-07-08.md — FINDING-150 proved builds anchored on this stale section. Do not build from §V; read §VI.**
 
 The §9 feature ambition is set by **which new inputs to add** (each unlocks a C-cluster) and **which no-proxy traits to cut.** Recommendations are the Captain's.
 

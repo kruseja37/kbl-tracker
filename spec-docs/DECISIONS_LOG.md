@@ -5,6 +5,12 @@
 
 ---
 
+## July 2026
+
+### 2026-07-08 CORRECTION: fame WAR-legitimacy floor — the "continuous, DONE" record below is WRONG; code still runs the 4-bucket model
+
+**Corrects (does not edit) the 2026-06-23 "FAME→MORALE taps" entry below**, whose Context line records A1.2 leg-a as "the fame WAR-floor gravity patch (fork-free, ratified continuous/upward-only — DONE, commit `bc24dff4`)". The 2026-07-08 spec-anchored verification (SOT_REGISTER_2026-07-08.md §3.4) proved only HALF of that landed: the upward-only DIRECTION was fixed, but the CONTINUOUS curve was not — `src/utils/franchiseFameCompute.ts:131` still calls `warPercentileToMeritLevel` (the 4 discrete `{low,average,high,elite}` buckets that RA1_FAME_MODEL_PROPOSAL.md correction 2 ratified replacing). The gap (replace with a continuous curve interpolating the same anchors + update the L-SIM invariant in the same diff) is now queued in the SOT_REGISTER §4c pre-tuning gap lists ("Fame status/celebrity layer" block). Per the never-edit-old-entries rule, the original entry stands as written; this entry is the record that its DONE claim was a bookkeeping error.
+
 ## June 2026
 
 ### 2026-06-27 (REBRAND/RELOCATION): engine is built-dark and complete — left dark for v1 (JK ruling)

@@ -1,5 +1,7 @@
 # KBL Manager WPA Implementation Spec
 
+**SUPERSEDED (2026-07-08): not a source of truth — describes the RETIRED tactical+lineup_delta architecture; governed by MWAR_STEP1_CONTRACT.md + V1_CANON_2026-07-07.md §6 MOY ruling per SOT_REGISTER_2026-07-08.md.**
+
 **Date:** 2026-05-11  
 **Status:** Approved product direction; ready for implementation  
 **Supersedes:** `MANAGER_MOMENTS_TRACKING_SPEC.md` for new work, and replaces legacy mWAR as the primary manager-value system  

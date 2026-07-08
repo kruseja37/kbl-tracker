@@ -1,5 +1,7 @@
 # MODE 2: FRANCHISE SEASON — V1 BUILD SPEC
 
+**SUPERSEDED (2026-07-08): not a source of truth — stale 2026-03-09 duplicate-filename copy; the live doc is spec-docs/MODE_2_V1_FINAL.md, itself amended by FRANCHISE_V1_LIVING_SEASON_SPEC.md, per SOT_REGISTER_2026-07-08.md.**
+
 **Version:** V1 Final | **Generated:** 2026-03-05
 **Source:** MODE_2_FRANCHISE_SEASON_UPDATED.md (gospel) + MODE_2_V1_DRAFT.md (triage rulings)
 **Phase A Tally:** 10 KEEP | 14 SIMPLIFY | 3 DEFER

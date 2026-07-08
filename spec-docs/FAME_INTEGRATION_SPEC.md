@@ -1,5 +1,7 @@
 # Fame Integration Spec
 
+**SUPERSEDED (2026-07-08): not a source of truth — STALE (2026-04-14), governed by FRANCHISE_V1_LIVING_SEASON_SPEC.md §20 (FAME LOCKED, FAME-1..14) per SOT_REGISTER_2026-07-08.md.**
+
 **Companion to:** `BEAT_REPORTER_DATA_MODEL_SPEC.md`, `SPECIAL_EVENTS_SPEC.md`, `BEAT_REPORTER_VOICE_SPEC.md`
 **Status:** Draft — v1 scoped to GameTracker + Exhibition + Elimination; Franchise documented but deferred
 **Last Updated:** 2026-04-14

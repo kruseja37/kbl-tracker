@@ -1,5 +1,7 @@
 # KBL Fan Morale System Specification
 
+**SUPERSEDED (2026-07-08): not a source of truth — governed by FRANCHISE_V1_LIVING_SEASON_SPEC.md §8 (dampener) + §13 (four teeth) per SOT_REGISTER_2026-07-08.md. Never formally reconciled; do not build from this doc.**
+
 **Version**: 1.1
 **Status**: Draft
 **Last Updated**: February 2026

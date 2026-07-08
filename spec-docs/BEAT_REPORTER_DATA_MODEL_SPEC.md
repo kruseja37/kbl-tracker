@@ -1,5 +1,7 @@
 # Beat Reporter Data Model Spec
 
+**SUPERSEDED (2026-07-08): not a source of truth — effectively superseded in practice by REPORTER_CERTIFICATION.md's wiring findings (2026-06-16); live anchor is MODE_2_V1_FINAL.md §16 + SCOUTING_INTELLIGENCE_SPEC.md §10 per SOT_REGISTER_2026-07-08.md.**
+
 **Companion to:** `BEAT_REPORTER_VOICE_SPEC.md`
 **Status:** Draft — pre-implementation
 **Last Updated:** 2026-04-14
