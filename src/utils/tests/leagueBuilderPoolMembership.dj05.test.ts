@@ -146,6 +146,14 @@ describe('DJ-05 league pool membership', () => {
     expect(ids(locked.players)).toEqual(['A', 'D']);
   });
 
+  test('F20: lock rejects registration drift from the displayed player ids', async () => {
+    await seedFixture('pool-first', ['A']);
+
+    await expect(lockLeaguePool(LEAGUE_ID, { expectedPlayerIds: ['A'] })).rejects.toThrow(
+      /Draft pool changed while locking/i,
+    );
+  });
+
   test('T5: listRosteredButUnassigned reports only design-first roster strays', async () => {
     await seedFixture('design-first');
     expect(ids(await listRosteredButUnassigned(LEAGUE_ID))).toEqual(['B', 'C']);

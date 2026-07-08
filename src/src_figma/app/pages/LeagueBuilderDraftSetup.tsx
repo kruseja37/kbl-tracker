@@ -304,7 +304,9 @@ interface IdentityAutoAssignInput {
   players: readonly Player[];
 }
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
-type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing" | "g1" | "numericShape">;
+type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing" | "g1" | "numericShape"> & {
+  playerIds: string[];
+};
 type HandEditLedger = { handAdds: string[]; handRemoves: string[] };
 type PoolExtractedBasis = NonNullable<LeagueTemplate["poolExtractedBasis"]>;
 type PoolProvenanceState = {
@@ -876,6 +878,7 @@ function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: num
     sizing,
     g1: result.g1,
     numericShape: result.numericShape,
+    playerIds: sortedIds(result.players.map((player) => player.id)),
   };
 }
 
@@ -1676,6 +1679,15 @@ export function LeagueBuilderDraftSetup() {
     () => humanTeams.filter((team) => Boolean(team.rosterDesign?.lockedAt)).length,
     [humanTeams],
   );
+  const displayedPoolIds = useMemo(
+    () => sortedIds(inPoolPlayers.map((player) => player.id)),
+    [inPoolPlayers],
+  );
+  const modeAFinalizedDisplayMismatch =
+    poolMode === "design-first" &&
+    Boolean(league?.poolExtractedAt) &&
+    Boolean(modeAReport) &&
+    modeAReport!.playerIds.join("|") !== displayedPoolIds.join("|");
   const modeAStaleTeams = league?.poolExtractedAt
     ? humanTeams.filter((team) => {
         const lockedAt = team.rosterDesign?.lockedAt;
@@ -1683,7 +1695,7 @@ export function LeagueBuilderDraftSetup() {
       })
     : [];
   const designsStale = poolMode === "design-first" && modeAStaleTeams.length > 0;
-  const poolTrailing = designsStale || basisStale;
+  const poolTrailing = designsStale || basisStale || modeAFinalizedDisplayMismatch;
   const rosterDesignToneByTeamId = useMemo(() => {
     const tones = new Map<string, ReturnType<typeof rosterDesignStatusTone>>();
     for (const team of humanTeams) {
@@ -1864,7 +1876,9 @@ export function LeagueBuilderDraftSetup() {
       : poolMode === "design-first" && !allHumanDesignsLocked
         ? "lock every club's design first"
         : poolTrailing
-          ? "finish the re-plan — lock the edits, then re-extract"
+          ? modeAFinalizedDisplayMismatch
+            ? "re-extract so the displayed pool matches the final pool"
+            : "finish the re-plan — lock the edits, then re-extract"
           : !poolReady
             ? "lock a sufficient player pool first"
             : !identitiesReady
@@ -2540,7 +2554,7 @@ export function LeagueBuilderDraftSetup() {
   const handleLock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      const lockedPool = await lockLeaguePool(activeLeagueId);
+      const lockedPool = await lockLeaguePool(activeLeagueId, { expectedPlayerIds: displayedPoolIds });
       setPoolRecord(lockedPool);
       setLockConfirm(false);
     }, { refreshPool: false });
@@ -2683,7 +2697,7 @@ export function LeagueBuilderDraftSetup() {
     inPoolPlayers.length > 0 &&
     sufficiency.meetsFloor &&
     allHumanDesignsLocked &&
-    !modeAStale;
+    !poolTrailing;
   const poolFirstLegalCompletionBlocked =
     poolMode === "pool-first" && poolFirstManualShapeDiagnostics?.legalCompletionFeasible === false;
   const runModeALock = () => {
