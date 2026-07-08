@@ -85,4 +85,36 @@ Created league: **GauntletD8** (8 teams, Juiced tier, Auction/Taxed — same see
 
 F20 (silent re-extraction on lock — pre-lock design-target fit can mislead) · F16 pattern re-observed (noted on the F16 row) · P2 marked LANDED-BY-GAUNTLET (§2).
 
-**Legs remaining:** shills 1-2 (leg 2's shills-default partially covers — shill purchases proven live), k=0, 6-team, RUN-IT-BACK iterate leg.
+**Legs remaining:** ~~shills 1-2~~ (leg 3 below), k=0, 6-team, RUN-IT-BACK iterate leg.
+
+---
+
+# LEG 3
+
+**Leg 3 = shills FULL-DRAFT.** Two runs: GauntletD8 resumed from lot 30 to the end, plus "GauntletD8 Copy" (pool-first, shills=2 default) as a fresh full run after the first hit a live bug. Targets: **P10** shill dissolution at completion + farm shill-absence spot-check (F13 regression) + human-seat-never-CPU. Walker transcript: session task `a2a8684ffc9125224`. Report below transcribed verbatim.
+
+## VERDICT: MIXED → SHILL DISSOLUTION PROVEN CLEAN (IndexedDB-verified, 8 real clubs only, zero shill roster holders) + farm shill-absence + human-seat-never-CPU all CONFIRMED. The leg's discovery — the F21 completion deadlock — was FIXED AND MERGED the same night (`3f98eb06`, lane M1Q).
+
+---
+
+MIXED: GauntletD8 hit a real completion-deadlock bug; the fallback league proves SHILLS DISSOLVE CLEAN once an auction actually completes.
+
+1. Completion: GauntletD8 (resumed at lot 30/246) did NOT complete — the pool ran dry at lot 246/246 with Crocodons and Freebooters each 1 player short of a legal 22. Traced the bug: the completion gate (`finalizeTerminalAuction` in `auctionStateMachine.ts`) runs its own backfill cascade, still finds a shortfall, and permanently refuses to set state `AUCTION_COMPLETE`. But the one recovery button ("settle empty seats from Market Shills," `settleShortClubs`) only works when state IS `AUCTION_COMPLETE` — a circular deadlock with no UI escape. "NEXT LOT" clicks became true no-ops (byte-identical DOM before/after). Per the mission's fallback rule, I duplicated the league (GauntletD8 Copy, pool-first setup, shills=2 default) and drove that one through all 245 lots — it completed cleanly.
+
+2. Shill dissolution (fresh league, real full run): "MLB DRAFT COMPLETE — THE HANDOFF CHECK" listed only the 8 real clubs, every one "22 of 22 ✓ LEGAL 22" — no shill entity appeared. Verified underneath in IndexedDB: the persisted `teamRosters` store has exactly 8 team entries (22 players each) and zero entries with a shill team ID. The two shills capped out at their designed 10-win limit and never surface as roster holders anywhere downstream — clean dissolve, no stranded players. (In the original GauntletD8's session data the shills still showed 10 held picks each in the live in-progress session object — that's normal/expected mid-draft bookkeeping, not a leak, since that draft never reached the commit step.)
+
+3. Budgets: healthy in both runs. Fresh-league real clubs finished with $118–$387,691 left over (normal auction spread, nobody negative). Original GauntletD8's Beewolves seat (which I drove) had $607k of $1.2M left with a full roster.
+
+4. Console errors: zero, across both MLB runs and the farm auction. HMR landed mid-session exactly as flagged (multiple vite reconnects, an unrelated whisper-panel file hot-updated) with no errors and no state corruption.
+
+Farm auction (fresh league, 36 lots run): config showed "AI clubs: 7" with no shill slot at all; 36-lot log had zero "Market Shill" mentions — shills correctly absent. Beewolves needed an explicit human bid/pass on every single lot (73 manual actions) — confirms no CPU auto-controlled the human seat.
+
+Rough edges: my own aggressive/naive auto-bidding in the first run likely contributed to draining the pool unevenly (should be noted as a caveat, not a clean isolated repro of the shortfall). Separately hit a distinct, narrower warning message ("Can't afford her and still fill the roster") that a naive bid-loop can spin on forever if not special-cased — minor UX/automation gotcha, not a correctness bug.
+
+---
+
+## Findings from leg 3 (→ `MODE1_PUNCHLIST_2026-07-08.md`)
+
+**F21** — the completion deadlock (pool-exhausted shortfall + settle gated on `AUCTION_COMPLETE` = circular trap) — **FIXED AND MERGED same night** (lane M1Q `3f98eb06`, audit CLEAN APPROVE: automatic shill reclamation in the terminal cascade). P10 marked LANDED-BY-GAUNTLET (dissolution proof).
+
+**Legs remaining:** k=0, 6-team, RUN-IT-BACK iterate leg.

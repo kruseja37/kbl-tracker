@@ -1,10 +1,10 @@
 # MORNING PACKET — 2026-07-08 (overnight AUTH-4 run)
 
 ## Bottom line
-**The draft is walkthrough-ready.** Both gauntlet legs passed end-to-end in a real browser: 8-team drafts complete A-Z with every club legal, in BOTH pool modes, zero console errors, zero manual pool adds. (Leg 3 — full shills draft proving shill dissolution — was still running at packet time; result appended below when done.)
+**The draft is walkthrough-ready. ALL THREE gauntlet legs passed or proved their target** in a real browser: 8-team drafts complete A-Z with every club legal, in BOTH pool modes, zero console errors, zero manual pool adds. Leg 3 (full shills draft): **shill dissolution proven clean** — IndexedDB-verified, only the 8 real clubs hold rosters, zero stranded players; the farm confirmed shill-free; the human seat was never CPU-driven. Leg 3's one discovery — a completion deadlock on pool-exhausted shortfall (F21) — **was FIXED AND MERGED overnight.**
 
-## What landed (16 audited lane merges, each adversarially audited pre-merge)
-Nomination shuffle [F1] · prospect curve [F4] · Phase-2 activation switch (Mode-2 keystone) · CPU identity auto-fill [P1] · farm shill takeover fix [F13] · farm scouting overhaul (archetype bands, honest scout values, auto-scouts) [F2/F3/F7/F10] · arm slots + lot trait count + primary-area band [F12] · arm-rating feed (RA-8) · league handoff + hired staff to hub [F6/P5] · completion guarantee — no silent short rosters [F14] · farm auction on AuctionStage [P3] · post-freeze summary [P6] · rules prune (~1,400 decorative lines gone) [P7] · conference editor [P8] · scout reveal adjacent to farm [P11] · whisper one-ceiling + farm whisper [F9/P4].
+## What landed (17 audited lane merges, each adversarially audited pre-merge)
+Nomination shuffle [F1] · prospect curve [F4] · Phase-2 activation switch (Mode-2 keystone) · CPU identity auto-fill [P1] · farm shill takeover fix [F13] · farm scouting overhaul (archetype bands, honest scout values, auto-scouts) [F2/F3/F7/F10] · arm slots + lot trait count + primary-area band [F12] · arm-rating feed (RA-8) · league handoff + hired staff to hub [F6/P5] · completion guarantee — no silent short rosters [F14] · farm auction on AuctionStage [P3] · post-freeze summary [P6] · rules prune (~1,400 decorative lines gone) [P7] · conference editor [P8] · scout reveal adjacent to farm [P11] · whisper one-ceiling + farm whisper [F9/P4] · shill reclamation in the terminal cascade — no completion deadlock [F21].
 
 ## Suggested walkthrough (~30-45 min)
 1. League Office → create an 8-team league → Draft Setup: try AUTO-FILL REMAINING, lock the pool (pool-first may need one Regenerate — known F19; design-first locked first-try).
