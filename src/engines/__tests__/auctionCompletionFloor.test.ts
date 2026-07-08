@@ -275,6 +275,11 @@ function ok<T extends { ok: boolean; session: AuctionSession }>(result: T): Auct
   return result.session;
 }
 
+function reject<T extends { ok: boolean; session: AuctionSession }>(result: T): T & { ok: false } {
+  expect(result.ok).toBe(false);
+  return result as T & { ok: false };
+}
+
 function driveAllPassToCompletion(
   start: AuctionSession,
   maxSteps = 50,
@@ -513,6 +518,74 @@ describe('the broken-floor repro pair', () => {
       underbidder: null,
       numBidders: 1,
     });
+  });
+
+  test('M1J: nomination-exhaustion terminal path backfills active passed lots before completing', () => {
+    const rostered = TEMPLATE.slice(0, 21).map((shape, i) => player(`m1j-${i}`, shape));
+    const passed = player('m1j-cp', { isPitcher: true, position: 'P', role: 'CP' });
+    const budget = 20_000;
+    let session = midDraftSession({
+      teams: [team('team-a', budget, rostered.map((p) => p.playerId), 1, 0)],
+      rostered: [...rostered, passed],
+      available: [],
+    });
+    session = {
+      ...session,
+      state: 'NOMINATION',
+      results: [
+        {
+          playerId: passed.playerId,
+          disposition: 'PASSED',
+          nominatorTeamId: 'team-a',
+          winnerTeamId: null,
+          salary: null,
+        },
+      ],
+    };
+
+    session = ok(surfaceNextPlayer(session));
+
+    expect(session.state).toBe('AUCTION_COMPLETE');
+    expect(session.teams[0].rosterSlotsRemaining).toBe(0);
+    expect(session.teams[0].budgetRemaining).toBeCloseTo(budget - LEAGUE_MINIMUM_SALARY, 6);
+    expect(session.results[0]).toMatchObject({
+      disposition: 'SOLD',
+      winnerTeamId: 'team-a',
+      salary: LEAGUE_MINIMUM_SALARY,
+    });
+  });
+
+  test('M1J: enriched genuinely uncompletable exhaustion is explicit and not AUCTION_COMPLETE', () => {
+    const rostered = TEMPLATE.slice(0, 21).map((shape, i) => player(`m1j-bad-${i}`, shape));
+    const passed = player('m1j-extra-bat', { isPitcher: false, position: 'LF', secondaryPosition: 'OF' });
+    let session = midDraftSession({
+      teams: [team('team-a', 20_000, rostered.map((p) => p.playerId), 1, 0)],
+      rostered: [...rostered, passed],
+      available: [],
+    });
+    session = {
+      ...session,
+      state: 'NOMINATION',
+      results: [
+        {
+          playerId: passed.playerId,
+          disposition: 'PASSED',
+          nominatorTeamId: 'team-a',
+          winnerTeamId: null,
+          salary: null,
+        },
+      ],
+    };
+
+    const result = reject(surfaceNextPlayer(session));
+
+    expect(result.reason).toBe('auction-uncompletable');
+    expect(result.session.state).toBe('NOMINATION');
+    expect(result.session.terminalShortfall).toEqual({
+      status: 'uncompletable',
+      teamIds: ['team-a'],
+    });
+    expect(result.session.teams[0].rosterSlotsRemaining).toBe(1);
   });
 
   test('F2 (C3-fix-2 F7): loadBearingTeam Criterion 1 refuses an unaffordable completion-critical rescue on the SURPLUS branch', () => {

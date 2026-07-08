@@ -126,6 +126,7 @@ export interface UseAuctionDraftReturn {
 }
 
 const AUCTION_TRANSITION_REASON_COPY: Record<string, string> = {
+  "auction-uncompletable": "This draft cannot finish a legal roster from the remaining pool.",
   "bid-strands-roster": "That bid would leave you unable to fill a legal roster.",
   "claim-strands-roster": "That claim would leave you unable to fill a legal roster.",
   "bid-below-minimum": "That bid is below the current asking price.",
