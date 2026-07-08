@@ -70,6 +70,13 @@ type RosterDesignerProps = {
   mode: DraftPoolMode;
   players: readonly Player[];
   allPlayers?: readonly Player[];
+  // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2, UNIVERSE-FIX1):
+  // the auto-fit CANDIDATE feed (shortlist ranking + the per-slot "best fit" suggestion),
+  // scoped to the checked source leagues. Deliberately a SEPARATE channel from `allPlayers`,
+  // which stays the full unfiltered app player set for PIN NAME LOOKUPS only (a manually pinned
+  // player must still resolve its display name even if a later universe toggle excludes them).
+  // Falls back to `allPlayers ?? players` when omitted, preserving pre-fix test/caller behavior.
+  candidatePlayers?: readonly Player[];
   lockedPool: boolean;
   budget: number;
   tier: TierKey;
@@ -303,6 +310,7 @@ export function RosterDesigner({
   mode,
   players,
   allPlayers,
+  candidatePlayers,
   lockedPool,
   budget,
   tier,
@@ -387,7 +395,10 @@ export function RosterDesigner({
     setResetConfirm(false);
   }, [team.id, team.rosterDesign?.lockedAt, team.rosterDesign?.pins, team.rosterDesign?.rankOverrides, team.rosterDesign?.slots]);
 
-  const sourcePlayers = mode === "design-first" && !lockedPool ? (allPlayers ?? players) : players;
+  // UNIVERSE-FIX1: candidatePlayers (page-supplied, universe-scoped) takes priority over the
+  // legacy allPlayers/players fallback chain so the shortlist/target auto-fit only ever draws
+  // from the checked source leagues, never the whole app player database.
+  const sourcePlayers = mode === "design-first" && !lockedPool ? (candidatePlayers ?? allPlayers ?? players) : players;
   const designPool = useMemo(() => buildRosterDesignPool(sourcePlayers), [sourcePlayers]);
   const labelPlayers = allPlayers ?? players;
   const fullPlayerById = useMemo(() => new Map(labelPlayers.map((player) => [player.id, player])), [labelPlayers]);

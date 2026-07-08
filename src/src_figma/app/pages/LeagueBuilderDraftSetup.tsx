@@ -1600,9 +1600,14 @@ export function LeagueBuilderDraftSetup() {
     () => leagueTeams.filter((team) => teamOwnerId(team, seats) !== "cpu"),
     [leagueTeams, seats],
   );
+  // UNIVERSE-FIX1: pre-extraction (unlocked design-first), the candidate feed for every automatic
+  // computation downstream of this value (roster-design feasibility tone, archetype draftability
+  // ranking, identity reroll) must respect the checked source leagues — universePlayers, not the
+  // raw app-wide players. Once locked or in pool-first, it stays inPoolPlayers (already-committed
+  // pool membership, orthogonal to universe curation).
   const rosterDesignerPlayers = useMemo(
-    () => (poolMode === "design-first" && !locked ? players : inPoolPlayers),
-    [inPoolPlayers, locked, players, poolMode],
+    () => (poolMode === "design-first" && !locked ? universePlayers : inPoolPlayers),
+    [inPoolPlayers, locked, universePlayers, poolMode],
   );
   const rosterDesignerPoolKey = useMemo(
     () => sortedIds(rosterDesignerPlayers.map((player) => [
@@ -1643,9 +1648,12 @@ export function LeagueBuilderDraftSetup() {
     () => resolveLeagueSalaryCap(league),
     [league],
   );
+  // UNIVERSE-FIX1: this re-derives the locked designs' archetype-fit target (buildBest22Target)
+  // to compute extraction priority hints — must draw from universePlayers, not raw players, or
+  // it recommends/prioritizes players the checked source leagues never actually offered.
   const designFirstIdentityCriticalIds = useMemo(
-    () => designFirstIdentityCriticalPlayerIds(humanTeams, players, league?.tier, tierBudget),
-    [humanTeams, league?.tier, players, tierBudget],
+    () => designFirstIdentityCriticalPlayerIds(humanTeams, universePlayers, league?.tier, tierBudget),
+    [humanTeams, league?.tier, universePlayers, tierBudget],
   );
   const tierReferenceCap = TIER_CAPS[league?.tier ?? "juiced"].tierCap;
   const parsedSalaryCapInput = parseSalaryCapInput(salaryCapInput);
@@ -1708,10 +1716,13 @@ export function LeagueBuilderDraftSetup() {
       engineGeneratedPlayers: demandPlayers.filter((player) => poolProvenance.engineGeneratedIds.has(player.id)),
       selectedTeamRosterIds,
       poolSourceMode,
-      fullPoolEligibleCandidateCount: players.length,
+      // UNIVERSE-FIX1: this diagnostic count must reflect the checked-source-league universe, not
+      // the whole app player database, to stay consistent with what buildPoolFirstShapeResult's
+      // real extraction (which already uses universePlayers) would report for the same field.
+      fullPoolEligibleCandidateCount: universePlayers.length,
       legalCompletionFeasible: legal,
     });
-  }, [inPoolPlayers, league, players.length, poolBalancePreset, poolBalanceTuning, poolMode, poolProvenance, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
+  }, [inPoolPlayers, league, universePlayers.length, poolBalancePreset, poolBalanceTuning, poolMode, poolProvenance, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
   const poolFirstManualShapeWarnings = useMemo(() => {
     if (!poolFirstManualShapeDiagnostics) return [];
     const warnings: string[] = [];
@@ -2556,7 +2567,8 @@ export function LeagueBuilderDraftSetup() {
       poolSourceMode: numeric?.poolSourceMode ?? poolSourceMode,
       selectedTeamRosterCandidateCount: numeric?.selectedTeamRosterCandidateCount ?? selectedTeamRosterIds.size,
       selectedTeamRosterFinalCount: numeric?.selectedTeamRosterFinalCount ?? 0,
-      fullPoolEligibleCandidateCount: numeric?.fullPoolEligibleCandidateCount ?? players.length,
+      // UNIVERSE-FIX1: console diagnostic fallback — same universe-scoped semantics as above.
+      fullPoolEligibleCandidateCount: numeric?.fullPoolEligibleCandidateCount ?? universePlayers.length,
       engineGeneratedFromSelectedTeamRosterCount: numeric?.engineGeneratedFromSelectedTeamRosterCount ?? 0,
       engineGeneratedFromFullPoolCount: numeric?.engineGeneratedFromFullPoolCount ?? 0,
       hardKeepFromSelectedTeamRosterCount: numeric?.hardKeepFromSelectedTeamRosterCount ?? 0,
@@ -3682,6 +3694,7 @@ export function LeagueBuilderDraftSetup() {
                     mode={poolMode}
                     players={rosterDesignerPlayers}
                     allPlayers={players}
+                    candidatePlayers={universePlayers}
                     lockedPool={locked}
                     budget={tierBudget}
                     tier={league.tier ?? "juiced"}
