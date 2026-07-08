@@ -72,7 +72,15 @@ export interface FiveLights {
   shape: Light;
   identity: Light;
   chemistry: Light;
-  balance: Light;
+  /**
+   * COCKPIT W1a/b (2026-07-08): BALANCE is DELETED from the MLB cockpit (design doc §2 Tier 2 —
+   * honest surfaces beat a dead "Balance read coming." stub) pending the Fable HANDEDNESS-SIGNAL
+   * constants spec. Optional (not removed outright) ONLY because the farm whisper
+   * (`assembleFarmWhisper`, W1d lane, NOT touched here) still populates it as an unmodeled stub —
+   * this field stays legal for that branch to keep compiling untouched. The MLB path
+   * (`assembleFiveLights`) never sets it; WhisperPanel's MLB lights row no longer reads it.
+   */
+  balance?: Light;
   budget: Light;
 }
 
@@ -105,7 +113,6 @@ export interface WorthToYou {
   replacementValueEstimate: number;
   scarcityModifier: number;
   reasonCodes: readonly LiquidityReasonCode[];
-  handedness?: null;
 }
 
 export interface ChemistryReadoutFamily {
@@ -414,7 +421,7 @@ export function assembleFiveLights(input: FiveLightsInput): FiveLights {
     }),
     identity: identityLight(input.identity),
     chemistry: chemistryLight(input.chemistryPlayers),
-    balance: balanceLight(),
+    // COCKPIT W1a/b: BALANCE deleted, not stubbed (see FiveLights.balance doc comment).
     budget: input.budget ? budgetLight(input.budget) : unknownBudgetLight(),
   };
 }
@@ -679,11 +686,6 @@ function identityLight(input: IdentityLightInput | undefined): Light {
     sentence: 'This roster is drifting away from the chosen identity.',
     detailKey: 'identity',
   };
-}
-
-function balanceLight(): Light {
-  // TODO(BALANCE): pending Fable HANDEDNESS-SIGNAL constants spec.
-  return { status: 'unknown', sentence: 'Balance read coming.' };
 }
 
 function baseballList(items: readonly FieldPosition[]): string {

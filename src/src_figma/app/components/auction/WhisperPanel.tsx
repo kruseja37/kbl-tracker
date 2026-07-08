@@ -3,15 +3,33 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type {
   BoardEntry,
   ChemistryReadout,
-  Light,
   RosterIntelligencePayload,
   WorthToYou,
 } from "../../../../engines/rosterIntelligencePayload";
+import { gradeBandToPriceRange } from "../../../../engines/gradeBandPrice";
+import type { Grade } from "../../../../engines/gradeEngine";
+import type { LiquidityReasonCode } from "../../../../engines/liquidityAwareBidding";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 
+/**
+ * COCKPIT W1a/b (2026-07-08, DRAFT_COCKPIT_DESIGN_2026-07-08.md): "mlb" turns on the always-visible
+ * Tier-1 verdict strip + Tier-2 promoted read; "farm" preserves the pre-cockpit collapsed-panel-only
+ * behavior untouched (W1d, a later lane, builds the farm bridge). Declared locally (not imported
+ * from AuctionStage.tsx) to avoid a circular type dependency between the two sibling files.
+ */
+type WhisperTier = "mlb" | "farm";
+
 interface WhisperPanelProps {
   payload: RosterIntelligencePayload | null;
+  /** Defaults to "mlb" -- this file's own tests are all MLB-shaped fixtures. */
+  tier?: WhisperTier;
+}
+
+interface WhisperNominationChip {
+  position: string;
+  pWithin: number;
+  withinLots: number;
 }
 
 interface WhisperPayloadMeta {
@@ -23,6 +41,10 @@ interface WhisperPayloadMeta {
   boardMeta?: Record<string, { name?: string; positions?: string }>;
   boardPlayers?: Record<string, Player>;
   bidVsPass?: WhisperBidVsPass | null;
+  /** COCKPIT W1a (RB-3): the marginal luxury tax this candidate adds, from auctionMarginalTax. */
+  marginalTax?: number | null;
+  /** COCKPIT W1b: WAIT/CHASE read from nominationOdds, computed by the page (session-scoped). */
+  nominationChip?: WhisperNominationChip | null;
 }
 
 interface WhisperBidVsPassTarget {
@@ -53,17 +75,26 @@ interface WhisperBidVsPass {
   pass: WhisperBidVsPassBranch;
 }
 
-const LIGHT_ORDER = ["shape", "identity", "chemistry", "balance", "budget"] as const;
+// COCKPIT W1a/b: BALANCE is deleted from this order (rosterIntelligencePayload.ts FiveLights.balance
+// doc comment) -- these 4 keys are the only lights that render in EITHER tier now.
+const LIGHT_ORDER = ["shape", "identity", "chemistry", "budget"] as const;
 type LightKey = (typeof LIGHT_ORDER)[number];
+
+// COCKPIT W1a: MLB overallGrade is exact/known (never fogged, unlike farm scout bands), so the
+// "normal price" band is a deterministic +/-1-tier window around the candidate's own grade -- NOT
+// the scouting-confidence band math (scoutOverallGradeBand, farm-only, seeded/randomized). Only
+// gradeBandToPriceRange (build-dark, already tested) is called; no new pricing math.
+const GRADE_PRICE_LADDER: readonly Grade[] = ["S", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D"];
 
 const NO_READ_LINE = "No read yet -- still doing my homework on this club.";
 const EMPTY_BOARD_LINE = "The board's bare. Finish the roster with what's left on the floor.";
-const HELP_LINE = "Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.";
+export const HELP_LINE = "Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.";
 
-export function WhisperPanel({ payload }: WhisperPanelProps) {
+export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [selectedLight, setSelectedLight] = useState<LightKey>("shape");
+  const [revealedLight, setRevealedLight] = useState<LightKey | null>(null);
   const [flashVerdict, setFlashVerdict] = useState(false);
   const previousVerdict = useRef<WorthToYou["verdict"] | null>(null);
   const meta = (payload ?? {}) as WhisperPayloadMeta;
@@ -72,6 +103,7 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
   const board = payload?.board ?? [];
   const scorecard = payload?.scorecard;
   const worth = payload?.worthToYou;
+  const isMlb = tier === "mlb";
 
   const defaultLight = useMemo(() => {
     if (!scorecard) return "shape";
@@ -84,11 +116,13 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
   useEffect(() => {
     setOpen(false);
     setExpanded(false);
+    setRevealedLight(null);
     previousVerdict.current = null;
   }, [payload?.seatTeamId]);
 
   useEffect(() => {
     setSelectedLight(defaultLight);
+    setRevealedLight(null);
   }, [defaultLight, payload?.generatedAtLotIndex]);
 
   useEffect(() => {
@@ -114,12 +148,70 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
     );
   }
 
+  const lotPlayerForGrade = meta.currentLotPlayerId ? meta.boardPlayers?.[meta.currentLotPlayerId] : undefined;
+
+  function renderLights(mode: "mlb" | "farm") {
+    if (!scorecard) return null;
+    const activeKey = mode === "mlb" ? revealedLight : selectedLight;
+    return (
+      <section className="whisper-section whisper-lights-wrap" data-testid="whisper-lights">
+        <div className="whisper-lights-row">
+          {LIGHT_ORDER.map((key) => {
+            const light = scorecard[key];
+            const active = activeKey === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                className={`whisper-light ${active ? "selected" : ""}`}
+                data-status={light.status}
+                aria-label={key.toUpperCase()}
+                title={light.status === "unknown" ? NO_READ_LINE : light.sentence}
+                onClick={() => (mode === "mlb" ? setRevealedLight(key) : setSelectedLight(key))}
+              >
+                <span className="whisper-dot" />
+                <span>{key.toUpperCase()}</span>
+              </button>
+            );
+          })}
+        </div>
+        {mode === "farm" ? (
+          <p className="whisper-light-sentence">
+            {scorecard[selectedLight].status === "unknown" ? NO_READ_LINE : scorecard[selectedLight].sentence}
+          </p>
+        ) : (
+          revealedLight && (
+            <p className="whisper-light-sentence" data-testid="whisper-tier2-light-sentence">
+              {scorecard[revealedLight].status === "unknown" ? NO_READ_LINE : scorecard[revealedLight].sentence}
+            </p>
+          )
+        )}
+      </section>
+    );
+  }
+
   return (
     <section
       className={`whisper-panel${open ? " open" : ""}`}
       style={{ "--whisper-team": teamPrimary } as CSSProperties}
     >
       <WhisperStyles />
+
+      {isMlb && worth && (
+        <WhisperVerdictStrip payload={payload} marginalTax={meta.marginalTax ?? null} />
+      )}
+
+      {isMlb && (
+        <section className="whisper-tier2" data-testid="whisper-tier2">
+          {meta.bidVsPass && <CompactBidVsPass bidVsPass={meta.bidVsPass} />}
+          <div className="whisper-tier2-chips">
+            <NominationOddsChip chip={meta.nominationChip ?? null} />
+            <GradeSanityChip player={lotPlayerForGrade} />
+          </div>
+          {renderLights("mlb")}
+        </section>
+      )}
+
       <button
         type="button"
         className="whisper-strip"
@@ -140,38 +232,12 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
             currentHighBid={meta.currentHighBid ?? null}
             objectPronoun={meta.objectPronoun ?? "him"}
             flash={flashVerdict}
+            tier={tier}
           />
 
           {meta.bidVsPass && <BidVsPassSection bidVsPass={meta.bidVsPass} />}
 
-          {scorecard && (
-            <section className="whisper-section" data-testid="whisper-lights">
-              <div className="whisper-lights-row">
-                {LIGHT_ORDER.map((key) => {
-                  const light = scorecard[key];
-                  const active = selectedLight === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`whisper-light ${active ? "selected" : ""}`}
-                      data-status={light.status}
-                      aria-label={key.toUpperCase()}
-                      onClick={() => setSelectedLight(key)}
-                    >
-                      <span className="whisper-dot" />
-                      <span>{key.toUpperCase()}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="whisper-light-sentence">
-                {scorecard[selectedLight].status === "unknown"
-                  ? NO_READ_LINE
-                  : scorecard[selectedLight].sentence}
-              </p>
-            </section>
-          )}
+          {!isMlb && renderLights("farm")}
 
           {worth?.chemistryReadout && <ChemistryReadoutSection readout={worth.chemistryReadout} />}
 
@@ -223,6 +289,122 @@ export function WhisperPanel({ payload }: WhisperPanelProps) {
       )}
     </section>
   );
+}
+
+/** COCKPIT W1a Tier 1 -- THE CALL. Always visible on the stage, zero taps (design doc §2). */
+function WhisperVerdictStrip({
+  payload,
+  marginalTax,
+}: {
+  payload: RosterIntelligencePayload;
+  marginalTax: number | null;
+}) {
+  const worth = payload.worthToYou;
+  if (!worth) return null;
+
+  const verdictWord = worth.verdict === "push"
+    ? "PUSH"
+    : worth.verdict === "pass"
+      ? "WALK"
+      : `CAP ${money(worth.recommendedNumber)}`;
+
+  // ONE CEILING (F9, design §1.3): recommendedNumber is already Math.min(worth, suggestedMaxBid) --
+  // the SAME liquidity-adjusted ceiling the verdict/room-relation/budget light agree on -- never
+  // capValue (the unreserved completion ceiling). TRUE COST only adds the marginal tax on top.
+  const trueCost = marginalTax !== null && marginalTax !== 0
+    ? worth.recommendedNumber + marginalTax
+    : null;
+
+  const fitPct = signedPercent(worth.archetypeFitMultiplier - 1);
+  const identityStatus = payload.scorecard?.identity?.status ?? "unknown";
+  const topReason = worth.reasonCodes[0];
+
+  return (
+    <section className="whisper-tier1" data-testid="whisper-tier1">
+      <span className={`whisper-tier1-verdict ${worth.verdict}`} data-testid="whisper-tier1-verdict">
+        {verdictWord}
+      </span>
+      <span className="whisper-tier1-number" data-testid="whisper-tier1-number">
+        YOUR NUMBER {worth.recommendedNumber === 0 ? "PASS" : money(worth.recommendedNumber)}
+        {trueCost !== null && (
+          <span className="whisper-tier1-truecost" data-testid="whisper-tier1-truecost">
+            {" "}— TRUE COST {money(trueCost)} AFTER TAX
+          </span>
+        )}
+      </span>
+      <span
+        className={`chip whisper-tier1-fit whisper-tier1-fit-${identityStatus}`}
+        data-testid="whisper-tier1-fit"
+      >
+        FIT {fitPct}
+      </span>
+      {topReason && (
+        <span className="chip whisper-tier1-reason" data-testid="whisper-tier1-reason">
+          {reasonCodeLabel(topReason)}
+        </span>
+      )}
+    </section>
+  );
+}
+
+/** COCKPIT W1b Tier 2 item 1 -- Bid-vs-Pass promoted to a permanently visible compact readout. */
+function CompactBidVsPass({ bidVsPass }: { bidVsPass: WhisperBidVsPass }) {
+  return (
+    <div className="whisper-tier2-bidpass" data-testid="whisper-tier2-bidpass">
+      <div className="whisper-tier2-bidpass-row">
+        <span className="lab">BID {money(bidVsPass.bidAmount)}</span>
+        <span className="num">{money(bidVsPass.bid.budgetAfter)} left</span>
+        <span className="muted">{additionsPhrase(bidVsPass.bid.needAfter)}</span>
+      </div>
+      <div className="whisper-tier2-bidpass-row">
+        <span className="lab">PASS</span>
+        <span className="num">{money(bidVsPass.pass.budgetAfter)} left</span>
+        <span className="muted">{additionsPhrase(bidVsPass.pass.needAfter)}</span>
+      </div>
+    </div>
+  );
+}
+
+function additionsPhrase(need: WhisperBidVsPassNeed | null): string {
+  if (!need) return "needs read unavailable";
+  if (need.minimumAdditions === 0) return "roster clean";
+  return `${need.minimumAdditions} to fill`;
+}
+
+/** COCKPIT W1b Tier 2 item 2 -- WAIT/CHASE, wired from the zero-caller nominationOdds engine. */
+function NominationOddsChip({ chip }: { chip: WhisperNominationChip | null | undefined }) {
+  if (!chip) return null;
+  const pct = Math.round(chip.pWithin * 100);
+  return (
+    <span className="chip whisper-tier2-odds" data-testid="whisper-tier2-nomination-odds">
+      Next {chip.position}: ~{pct}% within {chip.withinLots} lots
+    </span>
+  );
+}
+
+/** COCKPIT W1b Tier 2 item 3 -- grade sanity chip, wired from the build-dark gradeBandPrice engine. */
+function GradeSanityChip({ player }: { player: Player | undefined | null }) {
+  if (!player) return null;
+  const range = gradeSanityRange(player.overallGrade);
+  if (!range) return null;
+  return (
+    <span className="chip whisper-tier2-grade" data-testid="whisper-tier2-grade">
+      Normal for a {range.grade}: {money(range.low)}–{money(range.high)}
+    </span>
+  );
+}
+
+function gradeSanityRange(overallGrade: string): { grade: Grade; low: number; high: number } | null {
+  const idx = GRADE_PRICE_LADDER.indexOf(overallGrade as Grade);
+  // leagueBuilderStorage's Grade union carries a 13th value ('D-') gradeEngine's GRADE_SALARY_BOUNDS
+  // has no entry for -- treat it (and any other unrecognized value) as the ladder's worst known
+  // tier ('D') rather than crash or fabricate a bound.
+  const grade = idx === -1 ? "D" : GRADE_PRICE_LADDER[idx];
+  const gradeIndex = GRADE_PRICE_LADDER.indexOf(grade);
+  const best = GRADE_PRICE_LADDER[Math.max(0, gradeIndex - 1)];
+  const worst = GRADE_PRICE_LADDER[Math.min(GRADE_PRICE_LADDER.length - 1, gradeIndex + 1)];
+  const range = gradeBandToPriceRange({ best, worst });
+  return { grade, low: range.low, high: range.high };
 }
 
 function ChemistryReadoutSection({ readout }: { readout: ChemistryReadout }) {
@@ -322,6 +504,7 @@ function WhisperHeadline({
   currentHighBid,
   objectPronoun,
   flash,
+  tier,
 }: {
   worth: WorthToYou | undefined;
   board: readonly BoardEntry[];
@@ -329,6 +512,7 @@ function WhisperHeadline({
   currentHighBid: number | null;
   objectPronoun: "him" | "her";
   flash: boolean;
+  tier: WhisperTier;
 }) {
   if (!worth) {
     const bestName = board[0]?.note ?? board[0]?.playerId;
@@ -347,6 +531,12 @@ function WhisperHeadline({
   const relation = roomRelation(worth.suggestedMaxBid, market);
   const verdictText = verdictLine(worth, objectPronoun);
   const liveBidText = liveBidLine(worth, currentHighBid, objectPronoun);
+  // COCKPIT W1a declutter: on the MLB cockpit the top-priority reason + FIT chip are already
+  // promoted to the always-visible Tier-1 strip (WhisperVerdictStrip) -- this tap-through detail
+  // shows the REMAINING reason chips only, so nothing repeats itself. Farm has no Tier-1 promotion
+  // yet (W1d), so it keeps the full original set.
+  const remainingReasonCodes = tier === "mlb" ? worth.reasonCodes.slice(1) : worth.reasonCodes;
+  const includeFitChip = tier !== "mlb";
   return (
     <section className="whisper-headline" data-testid="whisper-headline">
       <div className={`whisper-verdict ${worth.verdict} ${flash ? "flash" : ""}`}>
@@ -386,10 +576,10 @@ function WhisperHeadline({
         )}
       </div>
       <div className="whisper-reason-row">
-        {liquidityReasonLabels(worth).map((label) => (
+        {liquidityReasonLabels(remainingReasonCodes).map((label) => (
           <span key={label} className="chip whisper-reason-chip">{label}</span>
         ))}
-        {prioritySignalLabels(worth).map((label) => (
+        {prioritySignalLabels(worth, includeFitChip).map((label) => (
           <span key={label} className="chip whisper-priority-chip">{label}</span>
         ))}
       </div>
@@ -435,12 +625,14 @@ function BoardRow({
   );
 }
 
-function lightRank(light: Light): number {
+function lightRank(light: { status: LightStatusLike }): number {
   if (light.status === "red") return 0;
   if (light.status === "amber") return 1;
   if (light.status === "green") return 2;
   return 3;
 }
+
+type LightStatusLike = "green" | "amber" | "red" | "unknown";
 
 function verdictLine(worth: WorthToYou, objectPronoun: "him" | "her"): string {
   if (worth.verdict === "push") return `Go get ${objectPronoun} -- worth about ${money(worth.recommendedNumber)} to you.`;
@@ -462,44 +654,45 @@ function liquidityStateLabel(state: WorthToYou["liquidityState"]): string {
   return state.toUpperCase();
 }
 
-function liquidityReasonLabels(worth: WorthToYou): string[] {
-  const labels = worth.reasonCodes.map((code) => {
-    switch (code) {
-      case "above-remaining-budget":
-        return "over budget";
-      case "above-legal-ceiling":
-        return "legal cap";
-      case "below-minimum-bid":
-        return "bid floor";
-      case "emergency-fill":
-        return "must fill";
-      case "future-fill-protected":
-        return "protect fill";
-      case "late-budget-surplus":
-        return "late cash";
-      case "liquidity-constrained":
-        return "cash tight";
-      case "near-complete":
-        return "near done";
-      case "priority-fit":
-        return "priority need";
-      case "scarce-replacement":
-        return "scarce repl.";
-      case "similar-replacements":
-        return "similar repl.";
-      case "within-liquidity-ceiling":
-        return "under ceiling";
-    }
-  });
-  return labels.slice(0, 4);
+function reasonCodeLabel(code: LiquidityReasonCode): string {
+  switch (code) {
+    case "above-remaining-budget":
+      return "over budget";
+    case "above-legal-ceiling":
+      return "legal cap";
+    case "below-minimum-bid":
+      return "bid floor";
+    case "emergency-fill":
+      return "must fill";
+    case "future-fill-protected":
+      return "protect fill";
+    case "late-budget-surplus":
+      return "late cash";
+    case "liquidity-constrained":
+      return "cash tight";
+    case "near-complete":
+      return "near done";
+    case "priority-fit":
+      return "priority need";
+    case "scarce-replacement":
+      return "scarce repl.";
+    case "similar-replacements":
+      return "similar repl.";
+    case "within-liquidity-ceiling":
+      return "under ceiling";
+  }
 }
 
-function prioritySignalLabels(worth: WorthToYou): string[] {
+function liquidityReasonLabels(codes: readonly LiquidityReasonCode[]): string[] {
+  return codes.map(reasonCodeLabel).slice(0, 4);
+}
+
+function prioritySignalLabels(worth: WorthToYou, includeFit: boolean): string[] {
   const labels: string[] = [];
   if (Math.abs(worth.needMultiplier - 1) >= 0.02) {
     labels.push(`NEED ${signedPercent(worth.needMultiplier - 1)}`);
   }
-  if (Math.abs(worth.archetypeFitMultiplier - 1) >= 0.02) {
+  if (includeFit && Math.abs(worth.archetypeFitMultiplier - 1) >= 0.02) {
     labels.push(`FIT ${signedPercent(worth.archetypeFitMultiplier - 1)}`);
   }
   return labels;
@@ -562,6 +755,88 @@ function WhisperStyles() {
   return (
     <style>{`
       .auc-root .whisper-panel { margin-bottom: 16px; }
+      .auc-root .whisper-tier1 {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+        padding: 10px 13px;
+        border-radius: var(--auc-r-ctl);
+        border: 1px solid var(--auc-hairline);
+        border-left: 4px solid var(--whisper-team, var(--ballpark-brass));
+        background: var(--auc-inset);
+        box-shadow: var(--auc-shadow-card);
+      }
+      .auc-root .whisper-tier1-verdict {
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+      }
+      .auc-root .whisper-tier1-verdict.push { color: #34d399; }
+      .auc-root .whisper-tier1-verdict.cap { color: var(--ballpark-brass); }
+      .auc-root .whisper-tier1-verdict.pass { color: color-mix(in srgb, var(--ballpark-sage) 85%, transparent); }
+      .auc-root .whisper-tier1-number {
+        flex: 1 1 auto;
+        min-width: 160px;
+        color: var(--auc-text);
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .auc-root .whisper-tier1-truecost { color: var(--ballpark-scoreboard-yellow); }
+      .auc-root .whisper-tier1-fit {
+        font-size: 10.5px;
+        padding: 4px 8px;
+      }
+      .auc-root .whisper-tier1-fit-green { color: #34d399; border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.08); }
+      .auc-root .whisper-tier1-fit-amber { color: #fbbf24; border-color: rgba(251, 191, 36, 0.45); background: rgba(251, 191, 36, 0.08); }
+      .auc-root .whisper-tier1-fit-red { color: #fca5a5; border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.09); }
+      .auc-root .whisper-tier1-fit-unknown { color: var(--auc-muted); border-color: rgba(232, 232, 216, 0.18); background: rgba(232, 232, 216, 0.04); }
+      .auc-root .whisper-tier1-reason {
+        color: var(--ballpark-brass);
+        border-color: rgba(202, 164, 94, 0.58);
+        background: rgba(202, 164, 94, 0.1);
+        font-size: 9.5px;
+        padding: 3px 7px;
+      }
+      .auc-root .whisper-tier2 {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 9px 13px;
+        border-radius: var(--auc-r-ctl);
+        border: 1px solid var(--auc-hairline);
+        background: rgba(0, 0, 0, 0.1);
+      }
+      .auc-root .whisper-tier2-bidpass {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .auc-root .whisper-tier2-bidpass-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .auc-root .whisper-tier2-bidpass-row .lab { color: var(--auc-text); font-weight: 900; }
+      .auc-root .whisper-tier2-bidpass-row .num { color: var(--ballpark-brass); font-weight: 800; }
+      .auc-root .whisper-tier2-bidpass-row .muted { color: var(--auc-muted); }
+      .auc-root .whisper-tier2-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .auc-root .whisper-tier2-odds,
+      .auc-root .whisper-tier2-grade {
+        font-size: 10.5px;
+        padding: 4px 8px;
+        color: var(--auc-text);
+        border-color: rgba(232, 232, 216, 0.18);
+        background: rgba(232, 232, 216, 0.04);
+      }
       .auc-root .whisper-strip {
         width: 100%;
         min-height: 44px;
@@ -812,31 +1087,32 @@ function WhisperStyles() {
         color: var(--auc-muted);
         font-size: 12px;
       }
+      .auc-root .whisper-lights-wrap { border-top: 0; padding-top: 0; }
       .auc-root .whisper-lights-row {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 6px;
       }
       .auc-root .whisper-light {
         appearance: none;
         display: grid;
         justify-items: center;
-        gap: 6px;
+        gap: 4px;
         min-width: 0;
-        padding: 0 2px 8px;
+        padding: 0 2px 6px;
         border: 0;
         border-bottom: 2px solid transparent;
         background: transparent;
         color: var(--auc-muted);
-        font-size: 10.5px;
+        font-size: 10px;
         font-weight: 800;
         letter-spacing: 0.1em;
         cursor: pointer;
       }
       .auc-root .whisper-light.selected { border-bottom-color: var(--ballpark-brass); }
       .auc-root .whisper-dot {
-        width: 14px;
-        height: 14px;
+        width: 12px;
+        height: 12px;
         border-radius: 999px;
         border: 3px solid currentColor;
       }
@@ -845,10 +1121,10 @@ function WhisperStyles() {
       .auc-root .whisper-light[data-status="red"] .whisper-dot { background: #DC3545; border-color: #DC3545; }
       .auc-root .whisper-light[data-status="unknown"] .whisper-dot { background: transparent; border-color: rgba(232, 232, 216, 0.45); }
       .auc-root .whisper-light-sentence {
-        min-height: 40px;
-        margin: 10px 0 0;
+        min-height: 0;
+        margin: 6px 0 0;
         color: var(--auc-text);
-        font-size: 13px;
+        font-size: 12px;
       }
       .auc-root .whisper-chemistry-readout {
         display: flex;
@@ -989,6 +1265,8 @@ function WhisperStyles() {
       }
       @media (max-width: 620px) {
         .auc-root .whisper-branch-grid { grid-template-columns: 1fr; }
+        .auc-root .whisper-tier1 { flex-direction: column; align-items: flex-start; }
+        .auc-root .whisper-lights-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .auc-root .whisper-chemistry-row {
           grid-template-columns: minmax(0, 1fr) auto auto;
         }

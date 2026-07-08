@@ -796,7 +796,9 @@ describe('roster intelligence payload assembly', () => {
     expect(scorecard.chemistry.status).toBe('green');
     expect(scorecard.budget.status).toBe('green');
     expect(scorecard.identity.status).toBe('green');
-    expect(scorecard.balance).toEqual({ status: 'unknown', sentence: 'Balance read coming.' });
+    // COCKPIT W1a/b (2026-07-08): BALANCE is deleted from the MLB scorecard, not stubbed --
+    // assembleFiveLights never sets it (FiveLights.balance is now optional, farm-only).
+    expect(scorecard.balance).toBeUndefined();
   });
 
   test('five-lights red/amber cases stay explicit and provisional identity can be absent', () => {

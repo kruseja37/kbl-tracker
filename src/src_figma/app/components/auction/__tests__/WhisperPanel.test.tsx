@@ -9,6 +9,7 @@ import {
 import { assembleFiveLights, type FiveLights } from "../../../../../engines/rosterIntelligencePayload";
 import type { SimPlayer } from "../../../../../engines/archetypeBalanceSimulator";
 import type { RosterIntelligencePayload } from "../../../../../engines/rosterIntelligencePayload";
+import type { Player } from "../../../../../utils/leagueBuilderStorage";
 
 afterEach(() => {
   cleanup();
@@ -190,11 +191,12 @@ describe("WhisperPanel", () => {
     expect(screen.getByTestId("whisper-strip").outerHTML).toBe(pushStrip);
   });
 
-  test("hollow balance, absent scorecard, and absent lot follow the dormant piece rules", () => {
+  test("COCKPIT W1a/b: BALANCE is fully removed (deleted, not hidden), absent scorecard, and absent lot follow the dormant piece rules", () => {
     render(<WhisperPanel payload={payload()} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
-    expect(screen.getByRole("button", { name: "BALANCE" })).toHaveAttribute("data-status", "unknown");
+    expect(screen.queryByRole("button", { name: "BALANCE" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Balance read coming.")).not.toBeInTheDocument();
 
     cleanup();
     render(<WhisperPanel payload={payload("push", { scorecard: undefined })} />);
@@ -462,5 +464,162 @@ describe("WhisperPanel", () => {
     expect(screen.getByRole("button", { name: "CHEMISTRY" })).toHaveAttribute("data-status", "unknown");
     fireEvent.click(screen.getByRole("button", { name: "CHEMISTRY" }));
     expect(screen.getByText("No read yet -- still doing my homework on this club.")).toBeInTheDocument();
+  });
+});
+
+describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)", () => {
+  test("Tier 1 (whisper-tier1) and Tier 2 (whisper-tier2) render without opening the panel", () => {
+    render(<WhisperPanel payload={payload("push")} />);
+
+    expect(screen.getByTestId("whisper-tier1")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-tier2")).toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
+  });
+
+  test("VERDICT word maps push/cap/pass to PUSH/CAP $X/WALK, and FIT chip promotes the archetype multiplier", () => {
+    const { rerender } = render(<WhisperPanel payload={payload("push")} />);
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("PUSH");
+
+    rerender(<WhisperPanel payload={payload("pass")} />);
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("WALK");
+
+    rerender(<WhisperPanel payload={payload("cap", {
+      worthToYou: { ...payload("cap").worthToYou!, recommendedNumber: 61_000, archetypeFitMultiplier: 1.08 },
+    })} />);
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("CAP $61,000");
+    expect(screen.getByTestId("whisper-tier1-fit")).toHaveTextContent("FIT +8%");
+  });
+
+  test("ONE reason phrase shows only the top-priority reasonCode; the rest wait behind the tap-through", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: {
+        ...payload().worthToYou!,
+        reasonCodes: ["future-fill-protected", "liquidity-constrained", "priority-fit"],
+      },
+    })} />);
+
+    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("protect fill");
+    // The remaining two reason codes are NOT duplicated in the always-visible Tier-1/2 area.
+    expect(screen.queryByText("cash tight")).not.toBeInTheDocument();
+    expect(screen.queryByText("priority need")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    // ...but they DO surface in the Tier-3 tap-through, without repeating the promoted one.
+    expect(screen.getByText("cash tight")).toBeInTheDocument();
+    expect(screen.getByText("priority need")).toBeInTheDocument();
+  });
+
+  test("TRUE COST after tax renders only when the marginal tax is nonzero", () => {
+    const base = payload("push", {
+      worthToYou: { ...payload().worthToYou!, recommendedNumber: 40_000 },
+    });
+
+    const { rerender } = render(<WhisperPanel payload={Object.assign(base, { marginalTax: 12_000 })} />);
+    expect(screen.getByTestId("whisper-tier1-number")).toHaveTextContent("YOUR NUMBER $40,000");
+    expect(screen.getByTestId("whisper-tier1-truecost")).toHaveTextContent("TRUE COST $52,000 AFTER TAX");
+
+    rerender(<WhisperPanel payload={Object.assign(payload("push", {
+      worthToYou: { ...payload().worthToYou!, recommendedNumber: 40_000 },
+    }), { marginalTax: 0 })} />);
+    expect(screen.getByTestId("whisper-tier1-number")).toHaveTextContent("YOUR NUMBER $40,000");
+    expect(screen.queryByTestId("whisper-tier1-truecost")).not.toBeInTheDocument();
+
+    cleanup();
+    render(<WhisperPanel payload={Object.assign(payload("push", {
+      worthToYou: { ...payload().worthToYou!, recommendedNumber: 40_000 },
+    }), { marginalTax: null })} />);
+    expect(screen.queryByTestId("whisper-tier1-truecost")).not.toBeInTheDocument();
+  });
+
+  test("ONE CEILING regression: the Tier-1 number always derives from recommendedNumber (bounded by suggestedMaxBid), never capValue", () => {
+    render(<WhisperPanel payload={Object.assign(payload("cap", {
+      worthToYou: {
+        ...payload("cap").worthToYou!,
+        recommendedNumber: 61_000,
+        suggestedMaxBid: 61_000,
+        // The unreserved completion ceiling is wildly larger than the liquidity-adjusted number --
+        // if the Tier-1 strip ever read capValue instead of recommendedNumber this would leak in.
+        capValue: 809_714,
+      },
+    }), { marginalTax: 5_000 })} />);
+
+    const number = screen.getByTestId("whisper-tier1-number");
+    expect(number).toHaveTextContent("YOUR NUMBER $61,000");
+    expect(screen.getByTestId("whisper-tier1-truecost")).toHaveTextContent("TRUE COST $66,000 AFTER TAX");
+    expect(number.textContent ?? "").not.toContain("809,714");
+    expect(screen.getByTestId("whisper-tier1-truecost").textContent ?? "").not.toContain("814,714");
+  });
+
+  test("WAIT/CHASE chip (nominationOdds) renders when a comparable remains and hides otherwise", () => {
+    const { rerender } = render(<WhisperPanel payload={Object.assign(payload("push"), {
+      nominationChip: { position: "CF", pWithin: 0.7231, withinLots: 3 },
+    })} />);
+    expect(screen.getByTestId("whisper-tier2-nomination-odds")).toHaveTextContent("Next CF: ~72% within 3 lots");
+
+    rerender(<WhisperPanel payload={Object.assign(payload("push"), { nominationChip: null })} />);
+    expect(screen.queryByTestId("whisper-tier2-nomination-odds")).not.toBeInTheDocument();
+  });
+
+  test("grade sanity chip renders a real price band around the on-the-block player's exact overallGrade", () => {
+    const lotPlayer: Player = {
+      id: "lot-star",
+      firstName: "Lot",
+      lastName: "Star",
+      gender: "M",
+      age: 27,
+      bats: "R",
+      throws: "R",
+      primaryPosition: "1B",
+      power: 60,
+      contact: 60,
+      speed: 50,
+      fielding: 50,
+      arm: 50,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+      arsenal: [],
+      overallGrade: "B+",
+      personality: "Competitive",
+      chemistry: "Crafty",
+      morale: 50,
+      mojo: "Normal",
+      fame: 0,
+      salary: 10_000,
+      createdDate: "2026-01-01",
+      lastModified: "2026-01-01",
+      isCustom: true,
+    };
+
+    render(<WhisperPanel payload={Object.assign(payload("push"), {
+      currentLotPlayerId: "lot-star",
+      boardPlayers: { "lot-star": lotPlayer },
+    })} />);
+
+    expect(screen.getByTestId("whisper-tier2-grade")).toHaveTextContent("Normal for a B+:");
+  });
+
+  test("lights become compact icons above the fold: sentence hidden until tapped, no sentence shown by default", () => {
+    render(<WhisperPanel payload={payload("push")} />);
+
+    // The 4 non-BALANCE lights render inside whisper-tier2 without opening the panel.
+    expect(within(screen.getByTestId("whisper-tier2")).getByRole("button", { name: "SHAPE" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("whisper-tier2")).getByRole("button", { name: "BUDGET" })).toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-tier2-light-sentence")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "IDENTITY" }));
+    expect(screen.getByTestId("whisper-tier2-light-sentence")).toHaveTextContent("Identity is clean.");
+  });
+
+  test("farm tier is unaffected: no Tier-1/Tier-2 promotion, lights stay inside the tap-through body", () => {
+    render(<WhisperPanel payload={payload("push")} tier="farm" />);
+
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-tier2")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "SHAPE" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(within(screen.getByTestId("whisper-body")).getByRole("button", { name: "SHAPE" })).toBeInTheDocument();
+    expect(within(screen.getByTestId("whisper-body")).getByRole("button", { name: "BUDGET" })).toBeInTheDocument();
   });
 });
