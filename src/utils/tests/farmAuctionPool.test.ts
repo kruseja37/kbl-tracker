@@ -188,6 +188,30 @@ describe('buildFarmAuctionPool AUC-5.1a', () => {
     expect(priceFarmAuctionProspect(sameHitterWithDifferentSalary)).toBe(priceFarmAuctionProspect(hitter));
   });
 
+  test('F12a passes generated pitcher arm slots into farm IV pricing', () => {
+    const pitcher = makeProspect({
+      id: 'known-sub-slot-pitcher',
+      firstName: 'Known',
+      lastName: 'Subslot',
+      primaryPosition: 'SP',
+      trait1: undefined,
+      trait2: undefined,
+      armSlot: 'Sub',
+      salary: 1,
+    });
+    const neutralPitcher = {
+      ...pitcher,
+      armSlot: null,
+    };
+    const subIv = calculateIvBaseSalary(toFarmAuctionSalaryPlayer(pitcher));
+    const neutralIv = calculateIvBaseSalary(toFarmAuctionSalaryPlayer(neutralPitcher));
+
+    expect(toFarmAuctionSalaryPlayer(pitcher).armSlot).toBe('Sub');
+    expect(subIv.ivBreakdown.angle).toBeGreaterThan(0);
+    expect(priceFarmAuctionProspect(pitcher) - priceFarmAuctionProspect(neutralPitcher)).toBe(subIv.ivBreakdown.angle);
+    expect(priceFarmAuctionProspect(pitcher) - priceFarmAuctionProspect(neutralPitcher)).toBe(subIv.ivBase - neutralIv.ivBase);
+  });
+
   test('builds generated prospects as unassigned AuctionPlayer records priced by the MLB path', () => {
     const pool = buildFarmAuctionPool(BASE_INPUT);
     const hitter = pool.prospects.find((prospect) => !['SP', 'SP/RP', 'RP', 'CP'].includes(prospect.primaryPosition));
