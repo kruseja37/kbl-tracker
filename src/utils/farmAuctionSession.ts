@@ -27,6 +27,8 @@ export interface BuildFarmAuctionSessionInput {
   scoutsByTeamId?: Record<string, ProspectScoutDescriptor | undefined>;
   seed: string;
   config?: Partial<AuctionSetupConfig>;
+  sessionId?: string;
+  sessionLaunchNonce?: string;
   poolMultiplier?: number;
 }
 
@@ -69,6 +71,8 @@ export function buildFarmAuctionSession(
     teams: teamInputs,
     players: pool.auctionPlayers,
     config,
+    sessionId: input.sessionId,
+    sessionLaunchNonce: input.sessionLaunchNonce,
   }) as CpuShillAuctionSession;
 
   return { session, pool, farmTierCap };

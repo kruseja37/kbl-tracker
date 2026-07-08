@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { LEAGUE_MINIMUM_SALARY, reservePriceCurve } from '../../data/rosterEngineConstants';
 import {
   advanceLot,
+  deriveAuctionSessionNominationSeed,
   initAuctionSession,
   isActivePassedResult,
   MAX_RESERVE_RENOMINATION_PASSES,
@@ -113,6 +114,25 @@ function drainAllPassAuction(session: AuctionSession): AuctionSession {
   return next;
 }
 
+function surfacedOrder(session: AuctionSession): string[] {
+  const surfaced: string[] = [];
+  let next = session;
+
+  while (next.state !== 'AUCTION_COMPLETE') {
+    next = ok(surfaceNextPlayer(next));
+    if (next.state === 'AUCTION_COMPLETE') break;
+    const playerId = next.currentLot?.playerId;
+    if (playerId === undefined) throw new Error('Expected a surfaced player');
+    surfaced.push(playerId);
+    next = passAllNoBidActors(next);
+    if (next.state !== 'AUCTION_COMPLETE') {
+      next = ok(advanceLot(next));
+    }
+  }
+
+  return surfaced;
+}
+
 const PRIOR_RESULT: AuctionResult = {
   playerId: 'already-surfaced',
   disposition: 'PASSED',
@@ -128,6 +148,37 @@ describe('auctionStateMachine one-chance engine path', () => {
     expect(selectNextNominee(session)).toBe('high');
     expect(selectNextNominee(session)).toBe('high');
     expect(selectNextNominee({ ...session, availablePlayerIds: [...session.availablePlayerIds] })).toBe('high');
+  });
+
+  test('session-derived nomination seeds are stable on resume and differ across fixed draft instances', () => {
+    const baseSeed = 'same-pool-seed';
+    const sessionId = 'league-1::startup-auction-draft::1';
+    const firstSeed = deriveAuctionSessionNominationSeed({
+      sessionId,
+      launchNonce: 'launch-a',
+      baseSeed,
+    });
+    const secondSeed = deriveAuctionSessionNominationSeed({
+      sessionId,
+      launchNonce: 'launch-b',
+      baseSeed,
+    });
+    const players: AuctionPlayer[] = Array.from({ length: 12 }, (_, index) => ({
+      playerId: `player-${String(index).padStart(2, '0')}`,
+      iv: 1_000 - index * 10,
+      ivPercentile: 100 - index * 6,
+    }));
+    const firstSession = makeSession({ seed: firstSeed, players, teams: [
+      { teamId: 'A', budgetRemaining: 100_000, rosterSlotsRemaining: 12, minSalary: 0 },
+    ], nominationOrder: ['A'] });
+    const resumedSession = { ...firstSession, availablePlayerIds: [...firstSession.availablePlayerIds] };
+    const secondSession = makeSession({ seed: secondSeed, players, teams: [
+      { teamId: 'A', budgetRemaining: 100_000, rosterSlotsRemaining: 12, minSalary: 0 },
+    ], nominationOrder: ['A'] });
+
+    expect(selectNextNominee(firstSession)).toBe(selectNextNominee(resumedSession));
+    expect(surfacedOrder(firstSession)).toEqual(surfacedOrder(resumedSession));
+    expect(surfacedOrder(firstSession)).not.toEqual(surfacedOrder(secondSession));
   });
 
   test('surface resolve advance drains every pool player exactly once', () => {

@@ -119,6 +119,10 @@ export interface AuctionResult {
 export interface AuctionSession {
   state: AuctionState;
   config: AuctionSetupConfig;
+  /** Per-draft-instance nonce; present on F1+ sessions so new drafts do not reuse pool/league seed order. */
+  sessionLaunchNonce?: string;
+  /** Original setup/pool seed retained for regeneration paths that should not consume the instance seed. */
+  sessionBaseSeed?: string;
   teams: readonly AuctionTeamState[];
   nominationOrder: readonly string[];
   nominationIndex: number;
@@ -139,6 +143,8 @@ export interface InitAuctionSessionInput {
   players: readonly AuctionPlayer[];
   config?: Partial<AuctionSetupConfig>;
   nominationOrder?: readonly string[];
+  sessionId?: string;
+  sessionLaunchNonce?: string;
 }
 
 export type AuctionRejectionReason =
@@ -168,10 +174,42 @@ export type AuctionTransitionResult =
 
 export const MAX_RESERVE_RENOMINATION_PASSES = 2;
 
+export function createAuctionSessionLaunchNonce(): string {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint32Array(4);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(36).padStart(7, '0')).join('-');
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function deriveAuctionSessionNominationSeed(input: {
+  sessionId: string;
+  launchNonce: string;
+  baseSeed: string;
+}): string {
+  return `${input.baseSeed}:session:${input.sessionId}:launch:${input.launchNonce}`;
+}
+
 export function initAuctionSession(input: InitAuctionSessionInput): AuctionSession {
-  const config: AuctionSetupConfig = {
+  const baseConfig: AuctionSetupConfig = {
     ...DEFAULT_AUCTION_SETUP_CONFIG,
     ...input.config,
+  };
+  const config: AuctionSetupConfig = {
+    ...baseConfig,
+    nominationOrderSeed: input.sessionId && input.sessionLaunchNonce
+      ? deriveAuctionSessionNominationSeed({
+          sessionId: input.sessionId,
+          launchNonce: input.sessionLaunchNonce,
+          baseSeed: baseConfig.nominationOrderSeed,
+        })
+      : baseConfig.nominationOrderSeed,
   };
   const teams = input.teams.map(normalizeTeam);
   const teamIds = teams.map((team) => team.teamId);
@@ -195,6 +233,8 @@ export function initAuctionSession(input: InitAuctionSessionInput): AuctionSessi
   return {
     state: bornComplete ? 'AUCTION_COMPLETE' : 'NOMINATION',
     config,
+    ...(input.sessionLaunchNonce ? { sessionLaunchNonce: input.sessionLaunchNonce } : {}),
+    ...(input.sessionId && input.sessionLaunchNonce ? { sessionBaseSeed: baseConfig.nominationOrderSeed } : {}),
     teams,
     nominationOrder,
     nominationIndex: nominationIndex === -1 ? 0 : nominationIndex,

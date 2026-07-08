@@ -31,3 +31,8 @@
 ## 2026-02-17
 - Created `src/components/GameTracker/gameEngine.ts` and moved `processRunnerOutcomes`, `isForceOut`, `calculateSimpleWinProbability`, `calculateLOB`, and the pitcher stats updater into it so the GameTracker component now imports pure helpers for MLB rule handling, RBI adjustments, win probability, and pitcher bookkeeping.
 - No tests executed during this refactor step.
+
+## 2026-07-08
+- Landed Mode 1 punch-list F1 on `lane/m1a-nomseed`: MLB and farm auction nomination order now derives from a per-session launch nonce plus persisted auction session id, not only league/pool identity. Resume uses the persisted derived seed; legacy/direct callers without a session id retain prior seed behavior.
+- Preserved Lever A reserve behavior and existing shill/non-completing team contracts while threading the new seed through `useAuctionDraft`, `useFarmAuctionDraft`, and `buildFarmAuctionSession`.
+- Verification: `npx tsc -b --pretty false` pass; `npm run build` pass; focused auction/farm gate pass (`9 files, 108 tests`); full `npm test -- --reporter=verbose` showed `4 failed / 9120 passed / 9 skipped` from untouched `GameTrackerLaunchState` and `LeagueBuilderDraftSetup` full-suite parallel flakes, and the failed files passed in isolation (`2 files, 66 tests`).

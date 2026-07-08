@@ -8,10 +8,15 @@ import { normalizeToChemistryCode } from "../../../data/chemistryCanonical";
 import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
 import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
 import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
-import { seededNominationOrder, surfaceNextPlayer } from "../../../engines/auctionStateMachine";
+import {
+  deriveAuctionSessionNominationSeed,
+  seededNominationOrder,
+  surfaceNextPlayer,
+} from "../../../engines/auctionStateMachine";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import {
   __resetLeagueBuilderDatabaseForTests,
+  createFarmAuctionSessionId,
   saveScoutProfile,
 } from "../../../utils/leagueBuilderStorage";
 import {
@@ -31,6 +36,7 @@ import {
 } from "../../hooks/useLeagueBuilderData";
 
 const mockNavigate = vi.fn();
+const TEST_SESSION_LAUNCH_NONCE = "00000000-0000-4000-8000-000000000001";
 
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
@@ -168,7 +174,14 @@ function mockLeagueData() {
 
 function seedWithFirst(teamIds: readonly string[], firstTeamId: string): string {
   const seed = Array.from({ length: 1_000 }, (_, index) => `farm-page-seed-${index}`).find(
-    (candidate) => seededNominationOrder(teamIds, candidate)[0] === firstTeamId,
+    (candidate) => {
+      const sessionSeed = deriveAuctionSessionNominationSeed({
+        sessionId: createFarmAuctionSessionId(LEAGUE_ID, 1),
+        launchNonce: TEST_SESSION_LAUNCH_NONCE,
+        baseSeed: candidate,
+      });
+      return seededNominationOrder(teamIds, sessionSeed)[0] === firstTeamId;
+    },
   );
   if (!seed) throw new Error(`No seed found for first team ${firstTeamId}`);
   return seed;
@@ -219,12 +232,14 @@ function openEngineLot(session: ReturnType<typeof buildFarmAuctionSession>["sess
 describe("LeagueBuilderFarmAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(TEST_SESSION_LAUNCH_NONCE);
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
     await seedScoutProfiles();
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
@@ -254,6 +269,8 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
         nominationWeightExponent: 3,
         flatReserveFloor: LEAGUE_MINIMUM_SALARY,
       },
+      sessionId: createFarmAuctionSessionId(LEAGUE_ID, 1),
+      sessionLaunchNonce: TEST_SESSION_LAUNCH_NONCE,
     });
     const surfaced = openEngineLot(expected.session);
     const surfacedLot = surfaced.currentLot!;
@@ -284,15 +301,21 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     }));
     const target = baseCandidates.find((candidate) => candidate.candidate.playerId === surfacedLot.playerId);
     if (!target) throw new Error("Expected the engine-surfaced farm lot in the candidate list.");
-    const targetTeamId = "team-a";
+    const targetTeamId = surfacedLot.bidTurnTeamId ?? "team-a";
     const targetScout = SCOUTS_BY_TEAM_ID[targetTeamId];
+    const targetSessionSeed = deriveAuctionSessionNominationSeed({
+      sessionId: createFarmAuctionSessionId(LEAGUE_ID, 1),
+      launchNonce: TEST_SESSION_LAUNCH_NONCE,
+      baseSeed: seed,
+    });
     const targetBand = scoutOverallGradeBand(
       target.prospect.prospectProfile.trueGrade,
       scoutTierForPosition(target.prospect.primaryPosition as DraftPosition, targetScout),
-      `${seed}:grade-band:${target.prospect.id}:${targetTeamId}`,
+      `${targetSessionSeed}:grade-band:${target.prospect.id}:${targetTeamId}`,
     );
     const targetPriceRange = gradeBandToPriceRange(targetBand);
-    const targetChemFit = chemistryFitPriceMultiplier(target.prospect.chemistry, rosterChemistryCounts);
+    const targetRosterChemistryCounts = targetTeamId === "team-a" ? rosterChemistryCounts : {};
+    const targetChemFit = chemistryFitPriceMultiplier(target.prospect.chemistry, targetRosterChemistryCounts);
     const targetRange = {
       w: 0,
       low: targetPriceRange.low * targetChemFit,

@@ -278,7 +278,51 @@ describe("useAuctionDraft", () => {
     const persisted = await getAuctionSession("league-init");
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
     expect(persisted?.session.currentLot?.playerId).toBe(result.current.session?.currentLot?.playerId);
-    expect(persisted?.session.config.nominationOrderSeed).toBe(seed);
+    expect(persisted?.session.sessionLaunchNonce).toEqual(expect.any(String));
+    expect(persisted?.session.sessionBaseSeed).toBe(seed);
+    expect(persisted?.session.config.nominationOrderSeed).not.toBe(seed);
+    expect(persisted?.session.config.nominationOrderSeed).toContain(seed);
+    expect(persisted?.session.config.nominationOrderSeed).toContain(createAuctionSessionId("league-init", 1));
+    expect(persisted?.session.config.nominationOrderSeed).toContain(persisted?.session.sessionLaunchNonce ?? "");
+  });
+
+  test("starts consecutive MLB auctions for the same pool with different session-derived nomination seeds", async () => {
+    const teamIds = ["human", "other"];
+    const setupSeed = seedWithFirst(teamIds, "human");
+    mockLeagueData({
+      leagues: [makeLeague("league-f1", teamIds)],
+      teams: teamIds.map((id) => makeTeam(id)),
+      pools: { "league-f1": makePool("league-f1") },
+    });
+    for (const player of ["p1", "p2", "p3", "p4"].map((id) => makePlayer(id))) {
+      await savePlayer(player);
+    }
+
+    const { result } = renderHook(() => useAuctionDraft());
+
+    await act(async () => {
+      await result.current.initAuction("league-f1", {
+        nominationOrderSeed: setupSeed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+    const firstSeed = result.current.session?.config.nominationOrderSeed;
+    const firstNonce = result.current.session?.sessionLaunchNonce;
+    const firstPlayerOrder = result.current.session?.playerOrder;
+
+    await act(async () => {
+      await result.current.initAuction("league-f1", {
+        nominationOrderSeed: setupSeed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    expect(result.current.session?.playerOrder).toEqual(firstPlayerOrder);
+    expect(result.current.session?.config.nominationOrderSeed).not.toBe(firstSeed);
+    expect(result.current.session?.sessionLaunchNonce).not.toBe(firstNonce);
+    expect(result.current.session?.config.nominationOrderSeed).toContain(createAuctionSessionId("league-f1", 1));
   });
 
   test("initializes new auction budgets from league salaryCap instead of a stale locked pool stamp", async () => {
@@ -382,17 +426,19 @@ describe("useAuctionDraft", () => {
     await act(async () => {
       await result.current.bid("human", openingAsk!);
     });
-    expect(result.current.session?.nominationOrder).toEqual(["human", "other", "cpu"]);
-    expect(result.current.currentBidderTeamId).toBe("other");
+    const bidderAfterHuman = result.current.currentBidderTeamId;
+    expect(bidderAfterHuman === "other" || bidderAfterHuman === "cpu").toBe(true);
     expect(result.current.session?.currentLot).toMatchObject({
       highBidder: "human",
-      bidTurnTeamId: "other",
+      bidTurnTeamId: bidderAfterHuman,
       stillIn: ["human", "cpu", "other"],
     });
 
-    await act(async () => {
-      await result.current.pass("other");
-    });
+    if (bidderAfterHuman === "other") {
+      await act(async () => {
+        await result.current.pass("other");
+      });
+    }
 
     expect(result.current.session?.state).toBe("OPEN_BIDDING");
     expect(result.current.currentBidderTeamId).toBe("cpu");
@@ -400,12 +446,24 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.currentLot).toMatchObject({
       highBidder: "human",
       bidTurnTeamId: "cpu",
-      stillIn: ["human", "cpu"],
     });
+    expect(result.current.session?.currentLot?.stillIn).toContain("human");
+    expect(result.current.session?.currentLot?.stillIn).toContain("cpu");
+    if (bidderAfterHuman === "other") {
+      expect(result.current.session?.currentLot?.stillIn).not.toContain("other");
+    } else {
+      expect(result.current.session?.currentLot?.stillIn).toContain("other");
+    }
 
     await act(async () => {
       await result.current.pass("cpu");
     });
+
+    if (bidderAfterHuman !== "other") {
+      await act(async () => {
+        await result.current.pass("other");
+      });
+    }
 
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
@@ -578,7 +636,7 @@ describe("useAuctionDraft", () => {
     expect(persisted?.session.currentLot?.playerId).toBe(result.current.session?.currentLot?.playerId);
   });
 
-  test("uses the same seed to produce the same nomination order", async () => {
+  test("uses the same setup seed to produce new session-derived MLB nomination order seeds", async () => {
     const teamIds = ["alpha", "bravo", "charlie"];
     const seed = "stable-auction-order";
     mockLeagueData({
@@ -599,6 +657,8 @@ describe("useAuctionDraft", () => {
       });
     });
     const firstOrder = result.current.session?.nominationOrder;
+    const firstSeed = result.current.session?.config.nominationOrderSeed;
+    const firstNonce = result.current.session?.sessionLaunchNonce;
 
     await act(async () => {
       await result.current.initAuction("league-seed-b", {
@@ -607,7 +667,11 @@ describe("useAuctionDraft", () => {
       });
     });
 
-    expect(result.current.session?.nominationOrder).toEqual(firstOrder);
+    expect(firstOrder).toBeDefined();
+    expect(result.current.session?.config.nominationOrderSeed).not.toBe(firstSeed);
+    expect(result.current.session?.sessionLaunchNonce).not.toBe(firstNonce);
+    expect(result.current.session?.config.nominationOrderSeed).toContain(seed);
+    expect(result.current.session?.config.nominationOrderSeed).toContain(createAuctionSessionId("league-seed-b", 1));
   });
 
   test("lone survivor requires claimAtReserve and sells at reserve", async () => {
