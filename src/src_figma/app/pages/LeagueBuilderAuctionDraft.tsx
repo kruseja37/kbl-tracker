@@ -40,17 +40,23 @@ import {
 } from "../../../engines/cpuShillBidding";
 import { reservePriceCurve } from "../../../data/rosterEngineConstants";
 import { LEGAL_ROSTER, twoWayVariantFromTraits, type RosterSlotPlayer } from "../../../data/rosterConstruction";
-import { DEFAULT_AUCTION_SETUP_CONFIG, scaledShillDefault } from "../../../data/auctionEngineConstants";
+import {
+  DEFAULT_AUCTION_SETUP_CONFIG,
+  DEFAULT_NOMINATION_WEIGHT_EXPONENT,
+  scaledShillDefault,
+} from "../../../data/auctionEngineConstants";
 import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
   buildArchetypeLiftTable,
   buildLotViewFromSession,
   estimateMarket,
+  nominationOdds,
   projectBidVsPass,
   type BoardProjection,
   type EstimatedMarket,
   type SessionMarketOptions,
 } from "../../../engines/auctionMarketModel";
+import { auctionMarginalTax } from "../../../engines/auctionLuxuryTax";
 import { settleFromShills } from "../../../engines/auctionSettleFromShills";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import {
@@ -92,7 +98,13 @@ import {
 import type { LiquidityCompletionCandidate } from "../../../engines/liquidityAwareBidding";
 import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
 import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
-import type { LeagueTemplate, Player, Team, UseLeagueBuilderDataReturn } from "../../hooks/useLeagueBuilderData";
+import {
+  toConstructionPlayer,
+  type LeagueTemplate,
+  type Player,
+  type Team,
+  type UseLeagueBuilderDataReturn,
+} from "../../hooks/useLeagueBuilderData";
 
 type DraftPool = Awaited<ReturnType<UseLeagueBuilderDataReturn["getRegisteredPool"]>>;
 
@@ -135,6 +147,10 @@ const DRAFT_BOARD_GAP_KINDS = new Set([
 ]);
 
 const HISTORICAL_ARCHETYPE_BY_ID = new Map(HISTORICAL_ARCHETYPES.map((archetype) => [archetype.id, archetype]));
+
+// COCKPIT W1b Tier-2 WAIT/CHASE chip (nominationOdds, auctionMarketModel.ts:613): "within K lots"
+// horizon. K=3 per DRAFT_COCKPIT_DESIGN_2026-07-08.md §2 Tier 2 example ("within 3 lots").
+const NOMINATION_ODDS_WITHIN_LOTS = 3;
 
 const UNKNOWN_SHAPE_LIGHT: Light = {
   status: "unknown",
@@ -1031,6 +1047,30 @@ export function LeagueBuilderAuctionDraft() {
     const needBreakdown = rosterShapeClean ? rosterNeedBreakdown(rosterShapes) : null;
     const ownBandPriorities = marketBandPrioritiesByTeamId.get(team.id) ?? null;
 
+    // COCKPIT W1b: WAIT/CHASE chip -- odds the best remaining same-position player surfaces
+    // within NOMINATION_ODDS_WITHIN_LOTS lots. Honest surface: omitted when nothing comparable
+    // remains in the pool (excludes the current lot itself, which is already on the block).
+    const nominationChip = (() => {
+      if (!lotShape) return null;
+      const remainingForOdds = session.availablePlayerIds
+        .filter((id) => id !== lotPlayerId)
+        .map((id) => session.players[id])
+        .filter((candidate): candidate is AuctionPlayer => Boolean(candidate));
+      const comparable = remainingForOdds.filter((candidate) => candidate.pos?.position === lotShape.position);
+      if (comparable.length === 0) return null;
+      const bestComparable = [...comparable].sort((a, b) => b.ivPercentile - a.ivPercentile)[0];
+      const exponent = session.config.nominationWeightExponent ?? DEFAULT_NOMINATION_WEIGHT_EXPONENT;
+      const odds = nominationOdds(
+        [bestComparable.playerId],
+        remainingForOdds.map((candidate) => ({ playerId: candidate.playerId, ivPercentile: candidate.ivPercentile })),
+        exponent,
+        NOMINATION_ODDS_WITHIN_LOTS,
+      )[0];
+      return odds
+        ? { position: lotShape.position, pWithin: odds.pWithin, withinLots: NOMINATION_ODDS_WITHIN_LOTS }
+        : null;
+    })();
+
     const remainingPool: LiquidityCompletionCandidate[] = [];
     let remainingPoolClean = true;
     for (const playerId of session.availablePlayerIds) {
@@ -1112,6 +1152,19 @@ export function LeagueBuilderAuctionDraft() {
     }
     const identityArchetype = resolveAuctionWhisperIdentityArchetype(team);
     const identityTier = registeredPool?.tier ?? "standard";
+
+    // COCKPIT W1a (RB-3): TRUE COST after tax -- the marginal tax this specific candidate adds to
+    // the team's total, over and above what the team already owes. Reuses the existing tested
+    // auctionMarginalTax engine (zero prior callers); gated on the same roster-clean signal the
+    // sibling reads use so a truncated roster mapping never fabricates a tax figure.
+    const marginalTax = worthToYou && lotPlayer && rosterPlayersClean
+      ? auctionMarginalTax(
+          rosterPlayers.map(toConstructionPlayer),
+          toConstructionPlayer(lotPlayer),
+          team.capIdentity,
+          identityTier,
+        )
+      : null;
     const identityZByPlayerId = identityArchetype && comparisonPool.length > 0
       ? (() => {
           const scorer = archetypeFitScorer(identityArchetype, identityTier);
@@ -1219,6 +1272,8 @@ export function LeagueBuilderAuctionDraft() {
         boardMeta,
         boardPlayers,
         bidVsPass,
+        marginalTax,
+        nominationChip,
       },
     );
   }, [

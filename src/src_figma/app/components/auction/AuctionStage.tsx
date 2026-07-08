@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { RosterIntelligencePayload } from "../../../../engines/rosterIntelligencePayload";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
-import { WhisperPanel } from "./WhisperPanel";
+import { HELP_LINE, WhisperPanel } from "./WhisperPanel";
 import { PressButton } from "../ballpark";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 
@@ -327,13 +327,11 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
 
           {/* RIGHT — roster need board + lot log */}
           <div>
-            <WhisperPanel key={whisperPayload?.seatTeamId ?? "dormant"} payload={whisperPayload} />
+            <WhisperPanel key={whisperPayload?.seatTeamId ?? "dormant"} payload={whisperPayload} tier={vm.tier} />
             {helpOpen && (
               <div className="help-panel whisper-help">
                 <div className="help-mark">?</div>
-                <div className="txt">
-                  Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.
-                </div>
+                <div className="txt">{HELP_LINE}</div>
               </div>
             )}
 
