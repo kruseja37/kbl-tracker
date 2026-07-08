@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
-import { gradeBandToPriceRange, gradeMidpointSalary } from '../gradeBandPrice';
+import { gradeBandToPriceRange, gradeMidpointSalary, gradePriceRange } from '../gradeBandPrice';
+import { GRADE_SALARY_BOUNDS } from '../ratingsAdjustmentEngine';
 
 describe('gradeBandPrice S7a', () => {
   test('calculates grade midpoint from canonical salary bounds', () => {
@@ -39,5 +40,17 @@ describe('gradeBandPrice S7a', () => {
     expect(range.low).toBeLessThanOrEqual(range.high);
     expect(range.low).toBe(gradeMidpointSalary('D'));
     expect(range.high).toBe(gradeMidpointSalary('A'));
+  });
+
+  // COCKPIT W1b (captain ruling 2026-07-08): single-grade price range is a pure table read of
+  // GRADE_SALARY_BOUNDS -- floor/ceiling verbatim, never a midpoint or a synthesized window.
+  test('gradePriceRange reads the grade\'s own floor and ceiling verbatim from GRADE_SALARY_BOUNDS', () => {
+    for (const grade of ['S', 'A', 'B+', 'C-', 'D'] as const) {
+      expect(gradePriceRange(grade)).toEqual({
+        low: GRADE_SALARY_BOUNDS[grade].floor,
+        high: GRADE_SALARY_BOUNDS[grade].ceiling,
+      });
+    }
+    expect(gradePriceRange('B+').low).not.toBe(gradeMidpointSalary('B+'));
   });
 });

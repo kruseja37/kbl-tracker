@@ -153,12 +153,21 @@ contract-vs-code contradiction rather than improvising.
   `best === worst` (asserted by the engine's own test: "collapses single-grade bands to one
   midpoint"). MLB `overallGrade` is exact/known (no scouting fog), so there is no natural
   "best/worst" scouting band to reuse (the farm's `scoutOverallGradeBand` is seeded/randomized fog
-  math — wrong tool, and forbidden as a farm-only function anyway). Judgment call: built a small,
-  deterministic +/-1-ladder-step window around the candidate's own grade (best = one tier better,
-  worst = one tier worse, clamped at the ladder ends) purely to pick which TWO already-priced
-  grades to feed into the existing tested `gradeBandToPriceRange` — no new pricing math, just a
-  selection of inputs. Flagging this as an explicit interpretation of "Normal for a B+: $35–55K"
-  in case the captain/JK want a different window convention; trivial to change (one constant) if so.
+  math — wrong tool, and forbidden as a farm-only function anyway). Initial judgment call: a
+  ±1-ladder-step midpoint window around the candidate's own grade, flagged for review.
+  **CAPTAIN RULING (2026-07-08, rework commit): REJECTED — the ±1-step window was an invented
+  parameter and semantically wider than "normal for a B+" (it spanned neighboring grades'
+  midpoints instead of the grade's own salary band). REWORKED to the ruled shape:** a new pure
+  table-read accessor `gradePriceRange(grade)` in `gradeBandPrice.ts` (returns
+  `GRADE_SALARY_BOUNDS[grade].floor/.ceiling` verbatim — a read of the same tested table the file
+  already imports, explicitly NOT a math edit), and `WhisperPanel.gradeSanityRange` now calls it
+  for the player's exact grade. `GRADE_PRICE_LADDER` and the best/worst synthesis are deleted; the
+  remaining `PRICED_GRADES` list is a validity guard only (which grades the bounds table prices),
+  never a pricing ladder. The chip copy is unchanged ("Normal for a B+: $low–$high") but now means
+  the grade's actual salary floor-to-ceiling. Tests updated to lock the displayed dollars to
+  `GRADE_SALARY_BOUNDS[grade].floor/.ceiling` verbatim (the no-new-math regression lock) plus a
+  dedicated `'D-'`-fallback test, and a new engine test pins `gradePriceRange` to the table
+  (including a guard that it is NOT the midpoint).
 - `leagueBuilderStorage.ts`'s own `Grade` type (13 values, includes `'D-'`) is NOT the same type as
   `gradeEngine.ts`'s `Grade` (12 values, no `'D-'`) that `GRADE_SALARY_BOUNDS`/`gradeBandPrice` are
   keyed on — two same-named but different unions (an existing repo pattern; multiple other files
@@ -195,6 +204,11 @@ contract-vs-code contradiction rather than improvising.
   `WhisperPanel.tsx`'s own inline `<style>` block (confirmed no `.whisper-*` classes exist in the
   shared theme file); the new Tier-1/2 CSS was added there for consistency with the existing
   pattern, not because the theme file needed changes.
+- `src/engines/gradeBandPrice.ts` — (rework commit, captain ruling) new `gradePriceRange(grade)`
+  pure table-read accessor; existing functions byte-identical.
+- `src/engines/__tests__/gradeBandPrice.test.ts` — (rework commit) new test pinning
+  `gradePriceRange` to `GRADE_SALARY_BOUNDS` floor/ceiling verbatim and asserting it is not the
+  midpoint.
 - `spec-docs/contracts/CONTRACT_W1AB_MLB_COCKPIT_2026-07-08.md` — this file.
 
 ### Render-tree structure (WhisperPanel.tsx)
@@ -316,8 +330,37 @@ EXIT:0
 2. `auctionMarginalTax`'s use of the tier's GLOBAL default luxury caps (not the registered pool's
    possibly-customized caps) — a pre-existing engine characteristic, surfaced for awareness, not
    fixed here (would be an engine-math edit, out of scope).
-3. The MLB "grade sanity" ±1-ladder-step window is an interpretation, not a spec-mandated formula
-   (MLB grades are exact, unlike farm's fogged scouting bands) — flagged above with the exact
-   mechanism in case a different band width is preferred.
-4. No contradiction required a full STOP — all three items above were resolvable within the
-   letter of the contract via the documented judgment calls.
+3. The MLB "grade sanity" ±1-ladder-step window was flagged as an interpretation — **captain ruled
+   REWORK (2026-07-08)**; reworked in a follow-up commit to the grade's own
+   `GRADE_SALARY_BOUNDS` floor/ceiling via a new pure `gradePriceRange` table-read accessor (full
+   detail in the ground-truth section above).
+4. No contradiction required a full STOP — items 1-2 were resolvable within the letter of the
+   contract via the documented judgment calls; item 3 was flagged and resolved by captain ruling.
+
+### Rework gate tails (grade-sanity chip ruling, follow-up commit)
+
+```
+$ npx tsc -b --pretty false; echo TSC_EXIT:$?
+TSC_EXIT:0
+```
+
+```
+$ npx vitest run <WhisperPanel, AuctionStage, both auction page suites, rosterIntelligencePayload,
+  gradeBandPrice, auctionLuxuryTax, auctionMarketModel>
+ ✓ src/engines/__tests__/auctionLuxuryTax.test.ts (4 tests) 6ms
+ ✓ src/engines/__tests__/auctionMarketModel.test.ts (20 tests) 22ms
+ ✓ src/engines/__tests__/gradeBandPrice.test.ts (7 tests) 5ms
+ ✓ src/engines/__tests__/rosterIntelligencePayload.test.ts (24 tests) 39ms
+ ✓ src/src_figma/app/components/auction/__tests__/AuctionStage.test.tsx (9 tests) 778ms
+ ✓ src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx (25 tests) 861ms
+ ✓ src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx (1 test) 843ms
+ ✓ src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx (20 tests) 2940ms
+ Test Files  8 passed (8)
+      Tests  110 passed (110)
+```
+
+```
+$ npm run build; echo BUILD_EXIT:$?
+✓ built (PWA v1.2.0, precache 182 entries)
+BUILD_EXIT:0
+```

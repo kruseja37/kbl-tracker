@@ -6,7 +6,7 @@ import type {
   RosterIntelligencePayload,
   WorthToYou,
 } from "../../../../engines/rosterIntelligencePayload";
-import { gradeBandToPriceRange } from "../../../../engines/gradeBandPrice";
+import { gradePriceRange } from "../../../../engines/gradeBandPrice";
 import type { Grade } from "../../../../engines/gradeEngine";
 import type { LiquidityReasonCode } from "../../../../engines/liquidityAwareBidding";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
@@ -80,11 +80,13 @@ interface WhisperBidVsPass {
 const LIGHT_ORDER = ["shape", "identity", "chemistry", "budget"] as const;
 type LightKey = (typeof LIGHT_ORDER)[number];
 
-// COCKPIT W1a: MLB overallGrade is exact/known (never fogged, unlike farm scout bands), so the
-// "normal price" band is a deterministic +/-1-tier window around the candidate's own grade -- NOT
-// the scouting-confidence band math (scoutOverallGradeBand, farm-only, seeded/randomized). Only
-// gradeBandToPriceRange (build-dark, already tested) is called; no new pricing math.
-const GRADE_PRICE_LADDER: readonly Grade[] = ["S", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D"];
+// COCKPIT W1b grade-sanity chip (captain ruling 2026-07-08, superseding the initial ±1-step
+// window): MLB overallGrade is exact/known (never fogged, unlike farm scout bands), so "normal
+// for a B+" means that grade's OWN salary floor-to-ceiling — a pure gradePriceRange table read of
+// the tested GRADE_SALARY_BOUNDS. Zero invented parameters, no synthesized window. This list is a
+// VALIDITY GUARD only (which grades the bounds table prices), never a pricing ladder:
+// leagueBuilderStorage's 13-value Grade union carries 'D-' which the 12-value engine table lacks.
+const PRICED_GRADES: readonly Grade[] = ["S", "A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D"];
 
 const NO_READ_LINE = "No read yet -- still doing my homework on this club.";
 const EMPTY_BOARD_LINE = "The board's bare. Finish the roster with what's left on the floor.";
@@ -395,15 +397,12 @@ function GradeSanityChip({ player }: { player: Player | undefined | null }) {
 }
 
 function gradeSanityRange(overallGrade: string): { grade: Grade; low: number; high: number } | null {
-  const idx = GRADE_PRICE_LADDER.indexOf(overallGrade as Grade);
-  // leagueBuilderStorage's Grade union carries a 13th value ('D-') gradeEngine's GRADE_SALARY_BOUNDS
-  // has no entry for -- treat it (and any other unrecognized value) as the ladder's worst known
-  // tier ('D') rather than crash or fabricate a bound.
-  const grade = idx === -1 ? "D" : GRADE_PRICE_LADDER[idx];
-  const gradeIndex = GRADE_PRICE_LADDER.indexOf(grade);
-  const best = GRADE_PRICE_LADDER[Math.max(0, gradeIndex - 1)];
-  const worst = GRADE_PRICE_LADDER[Math.min(GRADE_PRICE_LADDER.length - 1, gradeIndex + 1)];
-  const range = gradeBandToPriceRange({ best, worst });
+  // 'D-' (and any other unrecognized value) falls back to the worst priced tier ('D') rather than
+  // crash or fabricate a bound -- see PRICED_GRADES doc comment.
+  const grade: Grade = (PRICED_GRADES as readonly string[]).includes(overallGrade)
+    ? (overallGrade as Grade)
+    : "D";
+  const range = gradePriceRange(grade);
   return { grade, low: range.low, high: range.high };
 }
 

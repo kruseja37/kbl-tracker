@@ -9,7 +9,45 @@ import {
 import { assembleFiveLights, type FiveLights } from "../../../../../engines/rosterIntelligencePayload";
 import type { SimPlayer } from "../../../../../engines/archetypeBalanceSimulator";
 import type { RosterIntelligencePayload } from "../../../../../engines/rosterIntelligencePayload";
+import { GRADE_SALARY_BOUNDS } from "../../../../../engines/ratingsAdjustmentEngine";
 import type { Player } from "../../../../../utils/leagueBuilderStorage";
+
+/** Mirrors WhisperPanel's money() formatting so the grade-chip locks assert exact rendered text. */
+function chipMoney(value: number): string {
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function gradeChipPlayer(overallGrade: Player["overallGrade"]): Player {
+  return {
+    id: "lot-star",
+    firstName: "Lot",
+    lastName: "Star",
+    gender: "M",
+    age: 27,
+    bats: "R",
+    throws: "R",
+    primaryPosition: "1B",
+    power: 60,
+    contact: 60,
+    speed: 50,
+    fielding: 50,
+    arm: 50,
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
+    arsenal: [],
+    overallGrade,
+    personality: "Competitive",
+    chemistry: "Crafty",
+    morale: 50,
+    mojo: "Normal",
+    fame: 0,
+    salary: 10_000,
+    createdDate: "2026-01-01",
+    lastModified: "2026-01-01",
+    isCustom: true,
+  };
+}
 
 afterEach(() => {
   cleanup();
@@ -560,43 +598,37 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     expect(screen.queryByTestId("whisper-tier2-nomination-odds")).not.toBeInTheDocument();
   });
 
-  test("grade sanity chip renders a real price band around the on-the-block player's exact overallGrade", () => {
-    const lotPlayer: Player = {
-      id: "lot-star",
-      firstName: "Lot",
-      lastName: "Star",
-      gender: "M",
-      age: 27,
-      bats: "R",
-      throws: "R",
-      primaryPosition: "1B",
-      power: 60,
-      contact: 60,
-      speed: 50,
-      fielding: 50,
-      arm: 50,
-      velocity: 0,
-      junk: 0,
-      accuracy: 0,
-      arsenal: [],
-      overallGrade: "B+",
-      personality: "Competitive",
-      chemistry: "Crafty",
-      morale: 50,
-      mojo: "Normal",
-      fame: 0,
-      salary: 10_000,
-      createdDate: "2026-01-01",
-      lastModified: "2026-01-01",
-      isCustom: true,
-    };
+  test("grade sanity chip shows the grade's OWN GRADE_SALARY_BOUNDS floor-to-ceiling verbatim (no-new-math regression lock)", () => {
+    // Captain ruling 2026-07-08: "normal for a B+" = that grade's own salary floor/ceiling from
+    // the tested GRADE_SALARY_BOUNDS table -- never a synthesized window spanning neighboring
+    // grades. Assert the displayed dollars equal the table entry verbatim so any drift toward
+    // invented band math fails here.
+    const lotPlayer = gradeChipPlayer("B+");
 
     render(<WhisperPanel payload={Object.assign(payload("push"), {
       currentLotPlayerId: "lot-star",
       boardPlayers: { "lot-star": lotPlayer },
     })} />);
 
-    expect(screen.getByTestId("whisper-tier2-grade")).toHaveTextContent("Normal for a B+:");
+    const bounds = GRADE_SALARY_BOUNDS["B+"];
+    expect(screen.getByTestId("whisper-tier2-grade")).toHaveTextContent(
+      `Normal for a B+: ${chipMoney(bounds.floor)}–${chipMoney(bounds.ceiling)}`,
+    );
+  });
+
+  test("grade sanity chip falls back to the worst priced tier (D) for storage's 'D-', which the bounds table lacks", () => {
+    const lotPlayer = gradeChipPlayer("D-");
+
+    render(<WhisperPanel payload={Object.assign(payload("push"), {
+      currentLotPlayerId: "lot-star",
+      boardPlayers: { "lot-star": lotPlayer },
+    })} />);
+
+    const bounds = GRADE_SALARY_BOUNDS["D"];
+    expect(screen.getByTestId("whisper-tier2-grade")).toHaveTextContent(
+      `Normal for a D: ${chipMoney(bounds.floor)}–${chipMoney(bounds.ceiling)}`,
+    );
+    expect(screen.getByTestId("whisper-tier2-grade").textContent ?? "").not.toContain("D-");
   });
 
   test("lights become compact icons above the fold: sentence hidden until tapped, no sentence shown by default", () => {
