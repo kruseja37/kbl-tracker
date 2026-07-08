@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   mockListSeasonNewsItemsForFranchiseSeason: vi.fn(),
   mockListGameStoriesForFranchiseSeason: vi.fn(),
   mockListReporters: vi.fn(),
+  mockListManagerProfiles: vi.fn(),
   mockComputeFranchiseRaceCandidateRows: vi.fn(),
   mockLoadFranchiseConditionSnapshots: vi.fn(),
   mockSaveFranchiseFitness: vi.fn(),
@@ -130,6 +131,10 @@ vi.mock("../../../utils/reporterStorage", () => ({
   listReporters: mocks.mockListReporters,
 }));
 
+vi.mock("../../../utils/managerIdentityStorage", () => ({
+  listManagerProfiles: mocks.mockListManagerProfiles,
+}));
+
 vi.mock("../../../utils/franchiseAwardsEngine", () => ({
   computeFranchiseRaceCandidateRows: mocks.mockComputeFranchiseRaceCandidateRows,
 }));
@@ -164,6 +169,8 @@ function team(id: string, name: string, abbreviation: string) {
     colors: { primary: "#123456", secondary: "#abcdef" },
     stadium: `${name} Park`,
     leagueIds: ["league-1"],
+    managerId: `${id}-manager`,
+    managerName: `${name} Manager`,
   };
 }
 
@@ -269,7 +276,35 @@ describe("useFranchiseLensData schedule reflection", () => {
     mocks.mockGetFranchiseFameRecordRowsByScope.mockResolvedValue([]);
     mocks.mockListSeasonNewsItemsForFranchiseSeason.mockResolvedValue([]);
     mocks.mockListGameStoriesForFranchiseSeason.mockResolvedValue([]);
-    mocks.mockListReporters.mockResolvedValue([]);
+    mocks.mockListReporters.mockImplementation(async (filter: { franchiseId?: string; leagueId?: string }) =>
+      filter.leagueId === "league-1"
+        ? [{
+          id: "reporter-draft",
+          teamId: "home-team",
+          leagueId: "league-1",
+          name: "Rita Wire",
+          personality: "BALANCED",
+          voiceStyle: "THE_CALLER",
+          eraFlavor: "MODERN_LOCAL",
+          avatarEra: "headset",
+          avatarColors: { primary: "#123456", secondary: "#abcdef" },
+          currentMood: "BALANCED",
+          moodMomentum: 0,
+          createdAt: 1,
+          updatedAt: 1,
+          changed_at: 1,
+        }]
+        : [],
+    );
+    mocks.mockListManagerProfiles.mockResolvedValue([
+      {
+        managerId: "home-team-manager",
+        displayName: "Mina Dugout",
+        createdByUser: true,
+        defaultManager: false,
+        managementStyle: { label: "Analytics" },
+      },
+    ]);
     mocks.mockComputeFranchiseRaceCandidateRows.mockResolvedValue({});
     mocks.mockLoadFranchiseConditionSnapshots.mockResolvedValue([]);
     mocks.mockGetRecentMilestones.mockResolvedValue([]);
@@ -282,7 +317,13 @@ describe("useFranchiseLensData schedule reflection", () => {
 
     expect(mocks.mockCalculateStandings).toHaveBeenCalledWith("franchise-reflect-season-1");
     expect(mocks.mockGetAllGamesByFranchise).toHaveBeenCalledWith("franchise-reflect", 1);
+    expect(mocks.mockListReporters).toHaveBeenCalledWith({ franchiseId: "franchise-reflect" });
+    expect(mocks.mockListReporters).toHaveBeenCalledWith({ leagueId: "league-1" });
     expect(result.current.seasonId).toBe("franchise-reflect-season-1");
+    expect(result.current.active?.managerName).toBe("Mina Dugout");
+    expect(result.current.active?.managerStyle).toBe("Analytics");
+    expect(result.current.active?.reporter?.name).toBe("Rita Wire");
+    expect(result.current.active?.reporter?.avatar).toBe("headset");
     expect(result.current.hub.home?.nextGame?.scheduleGameId).toBe("game-next");
     expect(result.current.hub.home?.nextGame?.awayRecord).toBe("1-0");
     expect(result.current.hub.schedule?.upcoming.map((game) => game.scheduleGameId)).toEqual(["game-next"]);
