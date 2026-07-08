@@ -2,7 +2,7 @@
 
 **Version**: 2.0
 **Status**: CANONICAL (v1 farm-prospect generation) — supersedes v1.0 §5 grade/rating model
-**Last Updated**: 2026-06-20
+**Last Updated**: 2026-07-08
 
 ---
 
@@ -256,6 +256,31 @@ Arsenal generation exists in the live engine (`prospectScoutingDraftEngine.ts:42
 - **Arsenal size = real-pool role tapers, scaled by junk within the role's range:** **SP & SP/RP 3–5 · RP 2–4 · CP 2–3** (higher junk → upper end of the role's range). (`SP/RP` taper = derive from the real pool at build time; default SP-like 3–5.)
 - **Adopt `smb4PlayerGenerator.buildArsenal`** (`src/engines/smb4PlayerGenerator.ts:567`) — it already encodes exactly this rule with the canonical vocabulary `FASTBALL_PITCH_TYPES=["4F","2F","CF"]` / `OFFSPEED_PITCH_TYPES=["SL","CB","CH","FK","SB"]` (`:409-411`) and a ≥1-fastball/≥1-off-speed guard (`:584-590`). **Retire `gradeEngine.generateArsenal`** (`gradeEngine.ts:382`, the orphaned force-`4F`+`2F` impl). This matches the §5.1/A decision to anchor on the `scoreSmb4Player`/`smb4PlayerGenerator` family.
 - **Arsenal feeds the grade** (`arsenal_count +1.01/pitch`, `pitch_*` flags) → fix the arsenal in §5.2 step 2 before the rating solve.
+
+---
+
+## 8.1 Pitcher Arm Slot — **F12a, anchored to the real pitcher pool**
+
+Generated position players carry **no arm slot** (`null`). Generated pitchers draw
+one arm slot from the same union used by stock pitchers: `High | Mid | Low | Sub`.
+The draw is deterministic/seeded and anchored to `src/data/playerDatabase.ts`
+pitchers, not hand-tuned.
+
+Measured current database pitcher-pool distribution:
+
+| Arm slot | Count | Share |
+|---|---:|---:|
+| High | 65 | 36.31% |
+| Mid | 65 | 36.31% |
+| Low | 44 | 24.58% |
+| Sub | 5 | 2.79% |
+| **Total** | **179** | **100.00%** |
+
+Implementation rule: the prospect generator derives these counts from
+`playerDatabase.ts` at runtime and performs a seeded weighted draw for generated
+pitchers only. This keeps same-seed determinism intact while letting the farm IV
+pipeline price pitcher arm-slot layers the same way it prices stock-pool pitchers.
+Hitters stay `null`.
 
 ---
 

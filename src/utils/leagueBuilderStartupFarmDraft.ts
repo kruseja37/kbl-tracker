@@ -1078,7 +1078,11 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
     const reports = scouts.map((scout) => {
       const descriptor = toScoutDescriptor(scout);
       const report = scoutProspect(candidate, descriptor, session.seed);
-      const bandTier = scoutOverallTierForPosition(candidate.position, pickSlot.farmArchetypeKey);
+      const bandTier = scoutOverallTierForPosition(
+        candidate.position,
+        pickSlot.farmArchetypeKey,
+        candidate.ratings as unknown as Record<string, number>,
+      );
       const toolBands = scoutToolBands({
         ratings: candidate.ratings as unknown as Record<string, number>,
         position: candidate.position,

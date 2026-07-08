@@ -8,6 +8,7 @@ import { isTraitEligibleForRole } from '../../engines/traitRealityScorer';
 import { countTraitPolarity, normalizeTrait, scoreSmb4Player } from '../../engines/smb4GradeEmulator';
 import {
   buildProspectPlayerForPick,
+  drawProspectArmSlot,
   drawProspectAge,
   generateProspectPool,
   generateProspectScoutingDraft,
@@ -22,11 +23,13 @@ import {
   prospectSalaryForDraftRound,
   HITTER_SCOUT_TOOLS,
   PITCHER_SCOUT_TOOLS,
+  REAL_PITCHER_ARM_SLOT_DISTRIBUTION,
   SCOUT_OVERALL_BAND_WIDTHS,
   SCOUT_TOOL_BAND_WIDTHS,
   scoutProspect,
   scoutOverallGradeBand,
   scoutOverallBandForPosition,
+  scoutOverallTierForPosition,
   scoutToolBand,
   scoutToolBands,
   type GeneratedProspectCandidate,
@@ -83,8 +86,8 @@ const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
 const SECTION_10_AGE_TOLERANCE = 0.015;
 const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
 const B11_B8_NON_AGE_RNG_PROOF = {
-  length: 29715,
-  hash: '3fb2b9cd',
+  length: 29721,
+  hash: '1623f137',
 } as const;
 
 const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
@@ -1163,11 +1166,46 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(neutralErrors.some((error) => error > 0)).toBe(true);
   });
 
-  test('F2 overall grade band follows the mean-rounded farm-archetype rule', () => {
-    expect(scoutOverallBandForPosition('CF', 'web-gems')).toBe(5);
-    expect(scoutOverallBandForPosition('SP', 'the-opener')).toBe(5);
-    expect(scoutOverallBandForPosition('CF', 'whiteyball')).toBe(5);
+  test('s8.4 overall grade band follows the primary-area farm-archetype rule', () => {
+    const gloveFirst = {
+      power: 50,
+      contact: 50,
+      speed: 50,
+      fielding: 82,
+      arm: 70,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+    };
+    const batFirst = {
+      power: 82,
+      contact: 70,
+      speed: 50,
+      fielding: 50,
+      arm: 50,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+    };
+
+    expect(scoutOverallBandForPosition('CF', 'web-gems', gloveFirst)).toBe(3);
+    expect(scoutOverallBandForPosition('CF', 'web-gems', batFirst)).toBe(7);
     expect(scoutOverallBandForPosition('CF', undefined)).toBe(5);
+
+    const gloveBand = scoutOverallGradeBand(
+      'B',
+      scoutOverallTierForPosition('CF', 'web-gems', gloveFirst),
+      's8.4:web-gems:glove',
+    );
+    const batBand = scoutOverallGradeBand(
+      'B',
+      scoutOverallTierForPosition('CF', 'web-gems', batFirst),
+      's8.4:web-gems:bat',
+    );
+
+    expect(overallGradeIndex(gloveBand.worst) - overallGradeIndex(gloveBand.best)).toBeLessThan(
+      overallGradeIndex(batBand.worst) - overallGradeIndex(batBand.best),
+    );
   });
 
   test('S3 scout tool bands contain the true value with tier-width deterministic ranges', () => {
@@ -1401,6 +1439,66 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(byTeam.get('team-a')).toBe(10);
     expect(byTeam.get('team-b')).toBe(10);
     expect(output.farmAssignments.every((assignment) => assignment.ratingRevealState === 'hidden')).toBe(true);
+  });
+
+  test('F12a generated pitcher arm slots are seeded and anchored to the real pitcher pool', () => {
+    expect(REAL_PITCHER_ARM_SLOT_DISTRIBUTION).toEqual({
+      total: 179,
+      counts: {
+        High: 65,
+        Mid: 65,
+        Low: 44,
+        Sub: 5,
+      },
+      weights: [
+        ['High', 65],
+        ['Mid', 65],
+        ['Low', 44],
+        ['Sub', 5],
+      ],
+    });
+    expect(drawProspectArmSlot('f12-arm-slot-seed', 'SS')).toBeNull();
+    expect(drawProspectArmSlot('f12-arm-slot-seed', 'SP')).toBe(drawProspectArmSlot('f12-arm-slot-seed', 'SP'));
+
+    const samples = Array.from(
+      { length: 17_900 },
+      (_, index) => drawProspectArmSlot(`f12-arm-slot-sample-${index}`, 'SP'),
+    );
+    const observed = {
+      High: samples.filter((slot) => slot === 'High').length / samples.length,
+      Mid: samples.filter((slot) => slot === 'Mid').length / samples.length,
+      Low: samples.filter((slot) => slot === 'Low').length / samples.length,
+      Sub: samples.filter((slot) => slot === 'Sub').length / samples.length,
+    };
+
+    for (const [slot, count] of Object.entries(REAL_PITCHER_ARM_SLOT_DISTRIBUTION.counts)) {
+      const expected = count / REAL_PITCHER_ARM_SLOT_DISTRIBUTION.total;
+      expect(Math.abs(observed[slot as keyof typeof observed] - expected)).toBeLessThanOrEqual(0.01);
+    }
+  });
+
+  test('F12a generated hitters keep null arm slots while pitchers carry real arm slots', () => {
+    const prospects = generateProspectPool({
+      leagueId: 'f12-arm-slot-generated-pool',
+      seasonNumber: 1,
+      seed: 'f12-arm-slot-generated-pool-seed',
+      teamCount: 10,
+      poolMultiplier: 3,
+    }, 180);
+    const pitchers = prospects.filter((prospect) => PITCHER_POSITIONS.has(prospect.primaryPosition));
+    const hitters = prospects.filter((prospect) => !PITCHER_POSITIONS.has(prospect.primaryPosition));
+
+    expect(pitchers.length).toBeGreaterThan(0);
+    expect(hitters.length).toBeGreaterThan(0);
+    expect(pitchers.every((prospect) => prospect.armSlot !== null)).toBe(true);
+    expect(hitters.every((prospect) => prospect.armSlot === null)).toBe(true);
+    expect(generateProspectPool({
+      leagueId: 'f12-arm-slot-generated-pool',
+      seasonNumber: 1,
+      seed: 'f12-arm-slot-generated-pool-seed',
+      teamCount: 10,
+      poolMultiplier: 3,
+    }, 180).map((prospect) => prospect.armSlot)).toEqual(prospects.map((prospect) => prospect.armSlot));
   });
 
   test('round-based prospect salary helper is shared with visible reports and persisted players', () => {

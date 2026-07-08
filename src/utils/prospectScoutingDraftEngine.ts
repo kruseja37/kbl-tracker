@@ -19,6 +19,7 @@ import {
 import { assignTier, ELITE_PITCH_TRAITS, NEGATIVE_TRAIT_FRACTION } from '../data/traitTierConfig';
 import { TRAIT_OPPOSITES } from '../engines/traitAcquisition';
 import { FIRST_NAMES as SMB4_FIRST_NAMES, LAST_NAMES as SMB4_LAST_NAMES } from '../data/nameDatabase';
+import { PLAYERS as SMB4_PLAYERS, type PlayerData } from '../data/playerDatabase';
 import type { Position } from '../types/game';
 import { prospectSalaryForDraftRound } from './prospectSalary';
 import {
@@ -66,6 +67,18 @@ export const PITCHER_SCOUT_TOOLS = [
 ] as const;
 export type ScoutArea = typeof HITTER_SCOUT_TOOLS[number] | typeof PITCHER_SCOUT_TOOLS[number];
 export type ScoutTier = 'high' | 'medium' | 'low';
+export type ProspectArmSlot = NonNullable<PlayerData['armSlot']>;
+
+const PRIMARY_SCOUT_AREA_ORDER = [
+  'power',
+  'contact',
+  'speed',
+  'fielding',
+  'arm',
+  'velocity',
+  'junk',
+  'accuracy',
+] as const satisfies readonly ScoutArea[];
 
 export type ScoutSpecialty =
   | DraftPosition
@@ -213,7 +226,7 @@ export interface LeagueBuilderProspectPlayerDto {
   age: number;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
-  armSlot: null;
+  armSlot: ProspectArmSlot | null;
   primaryPosition: DraftPosition;
   secondaryPosition?: Position;
   power: number;
@@ -548,6 +561,34 @@ const CITIES = [
   { city: 'Boise', state: 'ID' },
 ];
 
+const ARM_SLOT_VALUES = ['High', 'Mid', 'Low', 'Sub'] as const satisfies readonly ProspectArmSlot[];
+
+function buildRealPitcherArmSlotDistribution(): {
+  total: number;
+  counts: Record<ProspectArmSlot, number>;
+  weights: Array<[ProspectArmSlot, number]>;
+} {
+  const counts: Record<ProspectArmSlot, number> = {
+    High: 0,
+    Mid: 0,
+    Low: 0,
+    Sub: 0,
+  };
+
+  for (const player of Object.values(SMB4_PLAYERS)) {
+    if (!player.isPitcher || !player.armSlot) continue;
+    counts[player.armSlot] += 1;
+  }
+
+  return {
+    total: ARM_SLOT_VALUES.reduce((sum, slot) => sum + counts[slot], 0),
+    counts,
+    weights: ARM_SLOT_VALUES.map((slot) => [slot, counts[slot]]),
+  };
+}
+
+export const REAL_PITCHER_ARM_SLOT_DISTRIBUTION = buildRealPitcherArmSlotDistribution();
+
 function hashString(input: string): number {
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
@@ -714,6 +755,12 @@ function drawProspectBats(seed: string): ProspectBatHand {
 
 function drawProspectThrows(seed: string, bats: ProspectBatHand): ProspectThrowHand {
   return pickWeighted(`${seed}:throws`, PROSPECT_THROWS_BY_BATS[bats]);
+}
+
+export function drawProspectArmSlot(seed: string, position: DraftPosition): ProspectArmSlot | null {
+  if (!isPitcher(position)) return null;
+  if (REAL_PITCHER_ARM_SLOT_DISTRIBUTION.total <= 0) return 'Mid';
+  return pickWeighted(`${seed}:arm-slot`, REAL_PITCHER_ARM_SLOT_DISTRIBUTION.weights);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1236,22 +1283,27 @@ export function scoutTierForArea(area: ScoutArea, farmArchetypeKey?: string): Sc
 export function scoutOverallBandForPosition(
   position: DraftPosition,
   farmArchetypeKey?: string,
+  ratings?: Record<string, number>,
 ): ScoutConfidenceBand {
-  const tools = isPitcher(position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
-  const mean = tools.reduce(
-    (sum, tool) => sum + scoutConfidenceBandForArea(farmArchetypeKey, tool),
-    0,
-  ) / tools.length;
-  if (mean < 4) return 3;
-  if (mean > 6) return 7;
-  return 5;
+  if (!ratings || !farmArchetypeKey) return 5;
+  const applicableTools = new Set<ScoutArea>(isPitcher(position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS);
+  const orderedTools = PRIMARY_SCOUT_AREA_ORDER.filter((tool) => applicableTools.has(tool));
+  const firstTool = orderedTools[0];
+  if (!firstTool) return 5;
+  const primaryArea = orderedTools.reduce<ScoutArea>((best, tool) => {
+    const bestValue = ratings[best] ?? Number.NEGATIVE_INFINITY;
+    const toolValue = ratings[tool] ?? Number.NEGATIVE_INFINITY;
+    return toolValue > bestValue ? tool : best;
+  }, firstTool);
+  return scoutConfidenceBandForArea(farmArchetypeKey, primaryArea);
 }
 
 export function scoutOverallTierForPosition(
   position: DraftPosition,
   farmArchetypeKey?: string,
+  ratings?: Record<string, number>,
 ): ScoutTier {
-  return scoutTierForBand(scoutOverallBandForPosition(position, farmArchetypeKey));
+  return scoutTierForBand(scoutOverallBandForPosition(position, farmArchetypeKey, ratings));
 }
 
 export const SCOUT_TOOL_BAND_WIDTHS: Record<ScoutTier, number> = {
@@ -1535,6 +1587,7 @@ function buildPlayerDto(input: {
   const salary = prospectSalaryForDraftRound(draftPick.round);
   const bats = candidate.bats ?? drawProspectBats(seed);
   const throws = candidate.throws ?? drawProspectThrows(seed, bats);
+  const armSlot = drawProspectArmSlot(seed, candidate.position);
   return {
     id: playerId,
     firstName: candidate.firstName,
@@ -1544,7 +1597,7 @@ function buildPlayerDto(input: {
     age: drawProspectAge(seed),
     bats,
     throws,
-    armSlot: null,
+    armSlot,
     primaryPosition: candidate.position,
     secondaryPosition: candidate.secondaryPosition,
     power: candidate.ratings.power,
