@@ -284,8 +284,18 @@ export async function importRosteredPlayersToLeaguePool(leagueId: string): Promi
  * registering before regen does not perturb the IV snapshot; it guarantees regen covers the
  * frozen membership itself.
  */
-export async function lockLeaguePool(leagueId: string): Promise<RegisteredPool> {
+export async function lockLeaguePool(
+  leagueId: string,
+  options: { expectedPlayerIds?: readonly string[] } = {},
+): Promise<RegisteredPool> {
   const pool = await registerLeaguePoolForLeague(leagueId);
+  if (options.expectedPlayerIds) {
+    const expected = sortedUniqueIds(options.expectedPlayerIds);
+    const actual = sortedUniqueIds(pool.players.map((player) => player.id));
+    if (expected.length !== actual.length || expected.some((id, index) => id !== actual[index])) {
+      throw new Error('Draft pool changed while locking. Regenerate the pool, then lock the displayed list.');
+    }
+  }
   await regenerateAndPersistLeaguePoolAxes(leagueId, pool.players.map((p) => p.id));
   const locked: RegisteredPool = { ...pool, locked: true, lockedAt: Date.now() };
   await saveRegisteredPool(locked);

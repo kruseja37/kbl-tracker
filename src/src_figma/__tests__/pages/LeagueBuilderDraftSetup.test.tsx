@@ -274,6 +274,17 @@ function makeLegalRosterPlayerSet(prefix: string, salary: number): Player[] {
   }));
 }
 
+function makeFinalizedDesignFirstPlayers(): Player[] {
+  return [
+    ...makeLegalRosterPlayerSet("one", 10_000),
+    ...makeLegalRosterPlayerSet("two", 10_000),
+    ...makePlayers(11).map((player) => ({
+      ...player,
+      id: `extra-${player.id}`,
+    })),
+  ];
+}
+
 function makeQualityRosterPlayerSet(prefix: string, rating: number): Player[] {
   return makeLegalRosterPlayerSet(prefix, 10_000).map((player) => ({
     ...player,
@@ -468,6 +479,9 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.getAllByText(/pool locked/i).length).toBeGreaterThan(0);
     });
     expect(screen.queryByText(/lock a sufficient player pool first/i)).not.toBeInTheDocument();
+    expect(lockLeaguePool).toHaveBeenCalledWith("league-page", {
+      expectedPlayerIds: players.map((player) => player.id).sort(),
+    });
     expect(leagueData.refresh).toHaveBeenCalled();
   });
 
@@ -496,6 +510,9 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.getAllByText(/pool locked/i).length).toBeGreaterThan(0);
     });
     expect(screen.queryByText(/lock a sufficient player pool first/i)).not.toBeInTheDocument();
+    expect(lockLeaguePool).toHaveBeenCalledWith("league-page", {
+      expectedPlayerIds: players.map((player) => player.id).sort(),
+    });
     expect(leagueData.refresh).toHaveBeenCalled();
   });
 
@@ -786,15 +803,22 @@ describe("LeagueBuilderDraftSetup", () => {
   });
 
   test("blocks design-first draft start when a locked design changed after pool extraction", async () => {
+    const displayedPlayers = makeFinalizedDesignFirstPlayers();
     mockLeagueData({
       league: makeLeague({
         draftPoolMode: "design-first",
         poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        modeAExtractedIds: displayedPlayers.map((player) => player.id),
       }),
       teams: [
         makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
         makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-03T00:00:00.000Z") }),
       ],
+      players: displayedPlayers,
+      pool: makePool({
+        players: displayedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: displayedPlayers.length,
+      }),
     });
 
     render(<LeagueBuilderDraftSetup />);
@@ -808,15 +832,22 @@ describe("LeagueBuilderDraftSetup", () => {
   });
 
   test("enables design-first draft start when all locked designs predate the extracted pool", async () => {
+    const displayedPlayers = makeFinalizedDesignFirstPlayers();
     mockLeagueData({
       league: makeLeague({
         draftPoolMode: "design-first",
         poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        modeAExtractedIds: displayedPlayers.map((player) => player.id),
       }),
       teams: [
         makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
         makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-02T00:00:00.000Z") }),
       ],
+      players: displayedPlayers,
+      pool: makePool({
+        players: displayedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: displayedPlayers.length,
+      }),
     });
 
     render(<LeagueBuilderDraftSetup />);
@@ -1399,6 +1430,73 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.queryByText("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.")).not.toBeInTheDocument();
     });
     expect(await screen.findByText(/Sized to .*added .* for affordability/i)).toBeInTheDocument();
+  });
+
+  test("F20 design-first blocks lock when the displayed pool is not the finalized pool", async () => {
+    const displayedPlayers = makePlayers(DEFAULT_TEST_POOL_SIZE);
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      ],
+      players: displayedPlayers,
+      pool: makePool({
+        locked: false,
+        players: displayedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: displayedPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/re-extract so the displayed pool matches the final pool/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^LOCK POOL$/i })).toBeDisabled();
+    expect(screen.queryByText(/Sized to/i)).not.toBeInTheDocument();
+  });
+
+  test("F20 design-first lock persists the displayed finalized pool without re-extracting", async () => {
+    const displayedPlayers = makeFinalizedDesignFirstPlayers();
+    const unlockedPool = makePool({
+      locked: false,
+      players: displayedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      totalSlots: displayedPlayers.length,
+    });
+    vi.mocked(lockLeaguePool).mockResolvedValue({ ...unlockedPool, locked: true });
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        modeAExtractedIds: displayedPlayers.map((player) => player.id),
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      ],
+      players: displayedPlayers,
+      pool: unlockedPool,
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^LOCK POOL$/i })).not.toBeDisabled();
+    });
+    vi.mocked(extractPoolFromDemand).mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /^LOCK POOL$/i }));
+
+    await waitFor(() => {
+      expect(lockLeaguePool).toHaveBeenCalledWith("league-page", {
+        expectedPlayerIds: displayedPlayers.map((player) => player.id).sort(),
+      });
+    });
+    expect(extractPoolFromDemand).not.toHaveBeenCalled();
   });
 
   test("pool-first regeneration uses numeric-shaped slack target instead of exact roster demand", async () => {
