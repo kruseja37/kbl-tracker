@@ -216,6 +216,14 @@ export interface BudgetLightInput {
   remainingPool: readonly CompletionCandidate[];
   openSlotsAfterWin: number;
   market?: MarketRead | null;
+  /**
+   * F9 RULING (2026-07-08): the SAME liquidity-adjusted ceiling that drives the verdict and the
+   * room-relation read (WorthToYou.suggestedMaxBid) — the ONE number every display read must
+   * agree on. `null` when no liquidity read exists yet for this seat/lot (e.g. worthToYou could
+   * not be assembled); the light renders 'unknown' rather than fabricate a status from the
+   * unreserved completion ceiling.
+   */
+  liquidityMaxBid: number | null;
 }
 
 export interface IdentityLightInput {
@@ -422,22 +430,28 @@ export function assembleRosterIntelligencePayload(
   };
 }
 
+/**
+ * F9 RULING (2026-07-08): the SECOND parameter here is the liquidity-ADJUSTED ceiling
+ * (WorthToYou.suggestedMaxBid) — every caller must pass the reserved number, never the
+ * unreserved completion ceiling (WorthToYou.capValue), so the verdict agrees with every other
+ * ceiling-driven display read (room-relation, budget light).
+ */
 function worthVerdict(
   contextualWorth: number,
-  capValue: number | null,
+  maxBid: number | null,
   market: MarketRead | null,
 ): WorthToYou['verdict'] {
   // Without a market read we cannot prove a bargain: no affordable ceiling passes, any positive
   // ceiling is a hard cap, and push remains reserved for market-justified bargains.
-  if (capValue === null) return 'pass';
-  if (!market) return capValue === null || capValue <= 0 ? 'pass' : 'cap';
+  if (maxBid === null) return 'pass';
+  if (!market) return maxBid === null || maxBid <= 0 ? 'pass' : 'cap';
 
-  if (capValue < market.band.low) return 'pass';
+  if (maxBid < market.band.low) return 'pass';
   if (contextualWorth < market.band.low * PAYLOAD_TUNING.worthPassLowBandFraction) return 'pass';
 
   const comfortableCeiling = market.band.median * (1 + PAYLOAD_TUNING.worthPushMedianMargin);
   const justified = contextualWorth >= market.band.median * PAYLOAD_TUNING.worthMarketJustificationFraction;
-  if (capValue >= comfortableCeiling && justified) return 'push';
+  if (maxBid >= comfortableCeiling && justified) return 'push';
 
   return 'cap';
 }
@@ -572,22 +586,12 @@ function nearestChemistryOpportunity(profile: readonly FamilyChemistryProfile[])
   return `${reachable.distanceToNextTier} more ${familyName} ${noun} ${verb} ${familyName} traits at the ${target} tier`;
 }
 
-function budgetLight(input: BudgetLightInput): Light {
-  const capValue = completionBidCeiling(
-    input.budgetRemaining,
-    input.rosterWithCandidate,
-    input.remainingPool,
-    input.openSlotsAfterWin,
-  );
-  if (capValue === null) {
-    return {
-      status: 'red',
-      sentence: 'The finish quote is infeasible from the players left.',
-      detailKey: 'budget',
-    };
-  }
-  const target = input.market?.band.median ?? 0;
-  const headroom = capValue - target;
+/**
+ * F9 RULING (2026-07-08): shared by the MLB budget light and the farm whisper's budget read so
+ * both agree with the verdict/room-relation reads on the SAME liquidity-adjusted ceiling. Pure
+ * headroom classification only — callers own sourcing the ceiling honestly.
+ */
+function budgetStatusFromHeadroom(headroom: number): Light {
   if (headroom >= PAYLOAD_TUNING.budgetInsuranceBuffer) {
     return {
       status: 'green',
@@ -607,6 +611,31 @@ function budgetLight(input: BudgetLightInput): Light {
     sentence: 'The median read traps the rest of the roster.',
     detailKey: 'budget',
   };
+}
+
+function budgetLight(input: BudgetLightInput): Light {
+  // Infeasibility is a distinct, roster-legality question (can the roster be completed AT ALL
+  // from what's left) — independent of which ceiling number prices the headroom, so this stays
+  // sourced from the verified completion quote regardless of the F9 fix below.
+  const completionCeiling = completionBidCeiling(
+    input.budgetRemaining,
+    input.rosterWithCandidate,
+    input.remainingPool,
+    input.openSlotsAfterWin,
+  );
+  if (completionCeiling === null) {
+    return {
+      status: 'red',
+      sentence: 'The finish quote is infeasible from the players left.',
+      detailKey: 'budget',
+    };
+  }
+  // F9 FIX: headroom is priced off the liquidity-adjusted ceiling (the SAME number driving the
+  // verdict and room-relation), not the unreserved completion ceiling above — otherwise this
+  // light can read green while the verdict says pass.
+  if (input.liquidityMaxBid === null) return unknownBudgetLight();
+  const target = input.market?.band.median ?? 0;
+  return budgetStatusFromHeadroom(input.liquidityMaxBid - target);
 }
 
 function unknownBudgetLight(): Light {
