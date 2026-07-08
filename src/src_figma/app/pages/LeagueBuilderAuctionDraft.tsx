@@ -83,6 +83,7 @@ import {
   lotOpeningAsk,
   type AuctionPlayer,
   type AuctionResult,
+  type AuctionResultDisposition,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
 import {
@@ -586,24 +587,45 @@ function isRosterSlotPlayer(shape: RosterSlotPlayer | undefined): shape is Roste
 }
 
 /**
- * COCKPIT WAVE 2 (B3/S3.4 auto-advance): when the MOST RECENTLY resolved lot (sale or pass-out --
- * either way the player permanently leaves availablePlayerIds, see auctionStateMachine.ts's
- * nominate transition) was the GM's OWN explicit #1 at that position, name the promoted next
- * target. Scoped deliberately to the GM-ranked case only (the spec's OR clause also allows the
- * engine's own natural top pick when the GM never ranked anyone, but that needs cross-turn history
- * tracking this lane does not build -- see the build report). No new engine math: this is pure
- * selection over the already-ranked board. Extracted as a pure function (no React, no session
- * plumbing) so it is directly unit-testable without driving a full auction through the UI.
+ * COCKPIT WAVE 2 (B3/S3.4 auto-advance): when the MOST RECENTLY resolved lot was a SALE of the
+ * GM's OWN explicit #1 at that position, name the promoted next target. SOLD-ONLY GATE (Wave-2
+ * audit Note 1, captain-ratified 2026-07-08): only a SOLD disposition permanently removes the
+ * player from availablePlayerIds — `finalizePassedLot` (auctionStateMachine.ts:919-953) RECYCLES a
+ * first-pass player BACK into availablePlayerIds under reserve pricing (ON by default,
+ * MAX_RESERVE_RENOMINATION_PASSES=2), so a PASSED result's player can still be on the board and
+ * announcing a "promotion" for him would be false. Scoped deliberately to the GM-ranked case only
+ * (the spec's OR clause also allows the engine's own natural top pick when the GM never ranked
+ * anyone, but that needs cross-turn history tracking this lane does not build -- see the build
+ * report). No new engine math: this is pure selection over the already-ranked board. Extracted as
+ * a pure function (no React, no session plumbing) so it is directly unit-testable without driving
+ * a full auction through the UI.
+ *
+ * Line variants (Wave-2 audit Note 5, captain design ruling): when the promoted target IS the
+ * player on the block RIGHT NOW (the board includes the current lot), say so — that is the single
+ * most valuable state to announce; otherwise the standard "Next up" promotion copy.
  */
 export function computeBoardAutoAdvanceLine(input: {
   latestResultPlayerId: string | undefined;
+  latestResultDisposition: AuctionResultDisposition | undefined;
   soldPosition: TaxonomyPosition | undefined;
+  currentLotPlayerId: string | undefined;
   board: readonly BoardEntry[];
   boardRankOverrides: Team["boardRankOverrides"] | undefined;
   boardMeta: Record<string, { name?: string; positions?: string }>;
 }): string | null {
-  const { latestResultPlayerId, soldPosition, board, boardRankOverrides, boardMeta } = input;
+  const {
+    latestResultPlayerId,
+    latestResultDisposition,
+    soldPosition,
+    currentLotPlayerId,
+    board,
+    boardRankOverrides,
+    boardMeta,
+  } = input;
   if (!latestResultPlayerId || !soldPosition) return null;
+  // Audit Note 1: SOLD only. A PASSED lot may have been recycled back onto the board (reserve
+  // pricing), and SET_ASIDE is not a competitive departure either — announce neither.
+  if (latestResultDisposition !== 'SOLD') return null;
   const positionOverride = boardRankOverrides?.byPosition?.[soldPosition];
   if (!positionOverride?.length) return null;
   // Reconstruct "available immediately before this resolution" = current available + the
@@ -618,6 +640,12 @@ export function computeBoardAutoAdvanceLine(input: {
   if (!promoted) return null;
   const rankLabel = positionOverride.indexOf(promoted.playerId) + 1;
   const promotedName = boardMeta[promoted.playerId]?.name ?? promoted.note ?? promoted.playerId;
+  // Audit Note 5: the promoted target may be the player being auctioned RIGHT NOW.
+  if (promoted.playerId === currentLotPlayerId) {
+    return rankLabel > 0
+      ? `On the block now: ${promotedName} — your #${rankLabel} at ${soldPosition}.`
+      : `On the block now: ${promotedName} at ${soldPosition}.`;
+  }
   return rankLabel > 0
     ? `Next up at ${soldPosition}: ${promotedName} — your #${rankLabel}.`
     : `Next up at ${soldPosition}: ${promotedName}.`;
@@ -1302,7 +1330,9 @@ export function LeagueBuilderAuctionDraft() {
       : undefined;
     const nextUpLine = computeBoardAutoAdvanceLine({
       latestResultPlayerId: latestResult?.playerId,
+      latestResultDisposition: latestResult?.disposition,
       soldPosition,
+      currentLotPlayerId: lotPlayerId,
       board,
       boardRankOverrides: team.boardRankOverrides,
       boardMeta,

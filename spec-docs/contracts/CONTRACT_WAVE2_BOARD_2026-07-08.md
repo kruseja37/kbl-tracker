@@ -214,3 +214,52 @@ tight per the contract's instruction.
   `saveTeam` + `replaceTeamsLocal` (the same optimistic-local-state pattern
   `handleSaveRosterDesign` already uses on the setup page) rather than the hook's `updateTeam`
   wrapper, for consistency with the existing codebase convention on this exact page.
+
+---
+
+## AUDIT REWORK (follow-up commit, 2026-07-08 — Wave-2 audit APPROVE-WITH-NOTES, Notes 1 + 5)
+
+### Note 1 fix — SOLD-only disposition gate on the auto-advance line
+The original `computeBoardAutoAdvanceLine` treated ANY latest result as a permanent departure.
+That was wrong under reserve pricing (ON by default, k=0.65): `finalizePassedLot`
+(auctionStateMachine.ts:919-953) recycles a first-pass player BACK into `availablePlayerIds`
+(`nextPassCount < MAX_RESERVE_RENOMINATION_PASSES` = 2) while still appending a PASSED result —
+so the "departed" player could still be on the board and the line would falsely announce/mislabel
+a promotion. **Disposition-passing shape chosen (auditor-suggested primary, captain-ratified):**
+the function gained a `latestResultDisposition: AuctionResultDisposition | undefined` input and
+bails unless it is exactly `'SOLD'` — deliberately NOT the board-presence-bail equivalent, so a
+FINAL pass-out (player genuinely gone for good) also stays quiet: a pass-out is not a competitive
+departure worth announcing, and `SET_ASIDE` is likewise excluded. The caller threads
+`latestResult?.disposition` through. The function's doc comment, which previously claimed
+"sale or pass-out — either way the player permanently leaves availablePlayerIds," was corrected
+to the truth (only SOLD permanently removes; PASSED may recycle).
+
+### Note 5 upgrade — on-the-block line variant
+The live board includes the current lot, so the GM's promoted next target can be the player being
+auctioned RIGHT NOW. The function gained a `currentLotPlayerId` input; when the promoted target's
+id matches it, the line switches to the captain-specified copy
+`"On the block now: {name} — your #{rank} at {position}."` (with a rank-less fallback
+`"On the block now: {name} at {position}."` when the promoted player was never explicitly
+ranked, mirroring the existing rank-less fallback of the "Next up" variant). Otherwise the
+original `"Next up at {position}: {name} — your #{rank}."` copy is unchanged. Word budget: both
+variants are single tight sentences (~8 words), same discipline as before.
+
+### Tests (extended, function stays pure)
+`LeagueBuilderAuctionDraft.computeBoardAutoAdvanceLine.test.ts` grew from 9 to 16 tests via a
+shared `soldInput` base fixture: (a) PASSED-and-recycled → NO line; (a2) FINAL PASSED (player
+gone) → still no line (gate is disposition, not board presence); (a3) SET_ASIDE → no line;
+(b) SOLD → identical line as pre-rework; (c) promoted target IS the current lot → on-the-block
+variant, exact copy asserted; (c2) on-block + unranked promoted → rank-less on-block variant;
+(d) promoted target not on block (unrelated current lot) → standard variant. All 9 pre-rework
+behavioral cases preserved.
+
+### Rework gates (verbatim tails)
+- `npx tsc -b --pretty false` → clean, exit 0.
+- `npm run build` → `✓ built in 11.07s`, precache 184 entries, exit 0.
+- computeBoardAutoAdvanceLine suite: 16/16 passed.
+- WhisperPanel suite: 35/35 passed (no changes needed — the panel renders whatever `nextUpLine`
+  the page computes).
+- LeagueBuilderAuctionDraft suite: 20/20 passed.
+
+Touched surfaces: `LeagueBuilderAuctionDraft.tsx` (function + caller + one import),
+its computeBoardAutoAdvanceLine unit-test file, this contract. Nothing else.
