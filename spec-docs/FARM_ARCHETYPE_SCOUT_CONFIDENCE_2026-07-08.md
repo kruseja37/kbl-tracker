@@ -1,6 +1,6 @@
 # Farm-Archetype → Scout-Confidence Table — DESIGN DRAFT
 
-**Status: RATIFIED by Fable (captain design authority), 2026-07-08. Rulings on the three open questions are in �8. This table is the authored source for F2/F3.**
+**Status: RATIFIED by Fable (captain design authority), 2026-07-08. Rulings on the three open questions are in �8. This table is the authored source for F2/F3.**
 **Repo read (read-only): `/private/tmp/kbl-port2`. This file is the only write.**
 
 ## What this closes
@@ -259,4 +259,4 @@ for the shared-pool-vs-per-team-pool fork this implies.
 1. **Row balance: rough balance ACCEPTED as drafted.** 45 threes / 38 sevens, no row skewed worse than +1. Forcing exact per-row parity would fabricate sacrifice areas the archetype designs themselves don't have. The table in §4 is final.
 2. **Rotation/Bullpen conflicts (The Opener, HDH Royals): magnitude-wins tie-break KEPT.** Both resolve to boosted (3), matching each archetype's headline identity. No 5-neutralization.
 3. **ScoutHire: execute the §11 deprecation now (auto-specialization).** Once bands derive from the farm archetype, a scout-hire choice changes nothing — a decorative knob, which the v1 prune rules forbid. Each team's scout auto-derives from its farm archetype row (specialties = the 3-band areas, weaknesses = the 7-band areas). The ScoutHire screen becomes a no-choice "meet your scout" reveal. Persistence record SHAPE unchanged (auto-fill the same fields the hire flow wrote), so staff carry-through (P5) keeps working. Journey placement is NOT moved in this ticket (P11 handles that separately).
-4. **Overall grade band tier** (replacing the retired per-prospect uniform tier): the MEAN of the prospect's applicable per-area bands, rounded to the nearest of {3,5,7}; exact midpoints round to 5. Deterministic, no new judgment inputs.
+4. **Overall grade band tier** — AMENDED 2026-07-08 (post-audit): the mean rule as first written produces a CONSTANT 5 for all 24 archetypes (the table's per-row balance forces every mean into [4.2, 5.8]) — an archetype-blind overall band is a dead knob. **Amended rule: overall band = the archetype's band for the prospect's PRIMARY area, where primary area = the prospect's highest-true-rated applicable scouting area (ties broken by fixed area order: power, contact, speed, fielding, arm, velocity, junk, accuracy).** Deterministic; varies by prospect AND archetype (a defense-first org reads glove-first prospects tight, bat-first prospects loose). The money-fog width (scout value range) follows the same overall band. Implementation rides lane M1H (the mean rule shipped in M1D is superseded by this amendment).
