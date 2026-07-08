@@ -355,6 +355,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByText('ADDITIONAL OPTIONS')).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.getByText('PLAYOFF SETTINGS (playoffs deferred -- settings saved for later)')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Pool Play.*deferred/i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /Best Record Bye.*deferred/i })).toBeDisabled();
     });

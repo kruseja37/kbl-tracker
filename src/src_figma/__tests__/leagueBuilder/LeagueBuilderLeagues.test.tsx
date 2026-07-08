@@ -191,6 +191,15 @@ describe('LeagueBuilderLeagues Component', () => {
       });
     });
 
+    test('does not show the unconsumed default rules preset selector', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+
+      expect(screen.queryByText('Default Rules Preset')).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue('Standard')).not.toBeInTheDocument();
+      expect(screen.queryByDisplayValue('Quick Game')).not.toBeInTheDocument();
+    });
+
     test('salary cap seeds from tier and reseeds only before the field is edited', async () => {
       await renderSettledLeagueBuilderLeagues();
       await openCreateLeagueModal();
@@ -243,6 +252,7 @@ describe('LeagueBuilderLeagues Component', () => {
         expect(mockCreateLeague).toHaveBeenCalledWith(expect.objectContaining({
           name: 'Cap League',
           salaryCap: 1_000_000,
+          defaultRulesPreset: 'standard',
         }));
       });
     });

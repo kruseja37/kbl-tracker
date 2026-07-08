@@ -1018,7 +1018,7 @@ function Step3PlayoffSettings({
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>PLAYOFF SETTINGS</h2>
+      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>PLAYOFF SETTINGS (playoffs deferred -- settings saved for later)</h2>
       <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Configure the postseason structure</p>
 
       {/* Teams Qualifying */}
