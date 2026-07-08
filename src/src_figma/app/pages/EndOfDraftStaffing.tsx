@@ -169,7 +169,7 @@ export function EndOfDraftStaffing() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#243024] text-[#E8E8D8] p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
         <div className="flex items-center gap-3 font-bold">
           <RefreshCw className="w-5 h-5 animate-spin" />
           Loading staff hire...
@@ -180,45 +180,45 @@ export function EndOfDraftStaffing() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#243024] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-xl text-[#E0857A] font-bold">Error: {error}</div>
+      <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
+        <div className="text-xl text-[var(--ballpark-sacrifice-red)] font-bold">Error: {error}</div>
       </div>
     );
   }
 
   if (!activeLeague) {
     return (
-      <div className="min-h-screen bg-[#243024] text-[#E8E8D8] p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
         <div className="text-xl font-bold">No league found for staff hire.</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#243024] text-[#E8E8D8] p-6" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
+    <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-6" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
       <div className="max-w-[1040px] mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <button
             aria-label="Back to farm auction"
             type="button"
             onClick={() => navigate(farmDraftRouteForLeague(activeLeague))}
-            className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+            className="p-3 bg-[var(--ballpark-action-green)] hover:bg-[var(--ballpark-action-green-hover)] border-4 border-[var(--ballpark-chalk)] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <div className="mb-1 text-xs font-bold tracking-[0.2em] text-[#C4A853]">END OF DRAFT</div>
+            <div className="mb-1 text-xs font-bold tracking-[0.2em] text-[var(--ballpark-brass)]">END OF DRAFT</div>
             <h1 className="text-2xl font-bold" style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.8)" }}>Staff Your Clubs</h1>
-            <div className="text-sm text-[#E8E8D8]/65">{activeLeague.name}</div>
+            <div className="text-sm text-[var(--ballpark-chalk)]/65">{activeLeague.name}</div>
           </div>
         </div>
 
-        <div className="mb-5 bg-[#2d3d2f] border-4 border-[#4A6844] p-4 text-sm text-[#E8E8D8]/75">
+        <div className="mb-5 bg-[var(--ballpark-panel)] border-4 border-[var(--ballpark-panel-border)] p-4 text-sm text-[var(--ballpark-chalk)]/75">
           Hire one manager and one beat reporter for each human-controlled club before the franchise freeze. CPU clubs keep the existing auto-fill path.
         </div>
 
         {humanTeams.length === 0 ? (
-          <div className="mb-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
+          <div className="mb-5 bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-4 text-[var(--ballpark-warn-text)] font-bold">
             No human-controlled teams are assigned in this league.
           </div>
         ) : null}
@@ -227,35 +227,35 @@ export function EndOfDraftStaffing() {
           {humanTeams.map((team) => {
             const form = formsByTeamId[team.id] ?? defaultStaffForm(team, 0);
             return (
-              <section key={team.id} className="bg-[#2d3d2f] border-4 border-[#4A6844] p-4">
+              <section key={team.id} className="bg-[var(--ballpark-panel)] border-4 border-[var(--ballpark-panel-border)] p-4">
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-lg font-bold text-[#E8E8D8]" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
+                  <span className="text-lg font-bold text-[var(--ballpark-chalk)]" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
                     {teamDisplayName(team)}
                   </span>
-                  <span className="text-[11px] text-[#E8E8D8]/55">{team.abbreviation}</span>
+                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55">{team.abbreviation}</span>
                   <button
                     type="button"
                     onClick={() => rollNames(team)}
-                    className="ml-auto flex items-center gap-1 text-[11px] text-[#C4A853] hover:underline"
+                    className="ml-auto flex items-center gap-1 text-[11px] text-[var(--ballpark-brass)] hover:underline"
                   >
                     <Shuffle className="w-3.5 h-3.5" /> roll names
                   </button>
                 </div>
 
                 <div className="mb-4">
-                  <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.16em] text-[#C4A853] mb-2">
+                  <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] mb-2">
                     <ClipboardList className="w-3.5 h-3.5" /> MANAGER
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <input
                       value={form.managerName}
                       onChange={(event) => updateForm(team.id, { managerName: event.target.value })}
-                      className="flex-1 min-w-[140px] bg-[#34472f] border-2 border-[#4A6844] focus:border-[#C4A853] outline-none px-3 py-2 text-sm font-bold text-[#E8E8D8]"
+                      className="flex-1 min-w-[140px] bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] focus:border-[var(--ballpark-brass)] outline-none px-3 py-2 text-sm font-bold tracking-wider text-[var(--ballpark-chalk)] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                     />
                     <select
                       value={form.managerStyle}
                       onChange={(event) => updateForm(team.id, { managerStyle: managerStyleFromValue(event.target.value) })}
-                      className="bg-[#34472f] border-2 border-[#4A6844] outline-none px-2 py-2 text-sm font-bold text-[#E8E8D8]"
+                      className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] outline-none px-2 py-2 text-sm font-bold tracking-wider text-[var(--ballpark-chalk)] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                     >
                       {MANAGER_STYLES.map((style) => <option key={style}>{style}</option>)}
                     </select>
@@ -263,7 +263,7 @@ export function EndOfDraftStaffing() {
                 </div>
 
                 <div>
-                  <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.16em] text-[#C4A853] mb-2">
+                  <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] mb-2">
                     <Mic className="w-3.5 h-3.5" /> BEAT REPORTER
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -271,7 +271,7 @@ export function EndOfDraftStaffing() {
                       aria-label="Reporter avatar"
                       value={form.reporterAvatar}
                       onChange={(event) => updateForm(team.id, { reporterAvatar: reporterAvatarFromValue(event.target.value) })}
-                      className="bg-[#34472f] border-2 border-[#4A6844] outline-none px-2 py-2 text-sm font-bold text-[#E8E8D8]"
+                      className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] outline-none px-2 py-2 text-sm font-bold tracking-wider text-[var(--ballpark-chalk)] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                     >
                       {REPORTER_AVATARS.map((avatar) => (
                         <option key={avatar.era} value={avatar.era}>{avatar.label}</option>
@@ -280,12 +280,12 @@ export function EndOfDraftStaffing() {
                     <input
                       value={form.reporterName}
                       onChange={(event) => updateForm(team.id, { reporterName: event.target.value })}
-                      className="flex-1 min-w-[120px] bg-[#34472f] border-2 border-[#4A6844] focus:border-[#C4A853] outline-none px-3 py-2 text-sm font-bold text-[#E8E8D8]"
+                      className="flex-1 min-w-[120px] bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] focus:border-[var(--ballpark-brass)] outline-none px-3 py-2 text-sm font-bold tracking-wider text-[var(--ballpark-chalk)] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                     />
                     <select
                       value={form.reporterPersona}
                       onChange={(event) => updateForm(team.id, { reporterPersona: reporterPersonaFromValue(event.target.value) })}
-                      className="bg-[#34472f] border-2 border-[#4A6844] outline-none px-2 py-2 text-sm font-bold text-[#E8E8D8]"
+                      className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] outline-none px-2 py-2 text-sm font-bold tracking-wider text-[var(--ballpark-chalk)] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
                     >
                       {REPORTER_PERSONAS.map((persona) => <option key={persona}>{persona}</option>)}
                     </select>
@@ -297,7 +297,7 @@ export function EndOfDraftStaffing() {
         </div>
 
         {saveError ? (
-          <div className="mb-4 bg-[#6B3A3A] border-4 border-[#FFD27A] p-3 text-[#FFE8B0] font-bold">
+          <div className="mb-4 bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-3 text-[var(--ballpark-warn-text)] font-bold">
             {saveError}
           </div>
         ) : null}
@@ -306,7 +306,7 @@ export function EndOfDraftStaffing() {
           type="button"
           disabled={!staffReady || saving || humanTeams.length === 0}
           onClick={() => void continueToFreeze()}
-          className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
+          className="flex items-center gap-2 bg-[var(--ballpark-brass)] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[var(--ballpark-chalk)] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
         >
           {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : null}
           Confirm Staff and Continue to Franchise Setup <ChevronRight className="w-5 h-5" />

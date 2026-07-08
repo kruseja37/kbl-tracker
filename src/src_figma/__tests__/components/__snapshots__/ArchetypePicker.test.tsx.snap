@@ -6,7 +6,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
     class="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3"
   >
     <div
-      class="text-xs font-bold tracking-[0.2em] text-[#C4A853]"
+      class="text-xs font-bold tracking-[0.2em] text-[var(--ballpark-brass)]"
     >
       TEAM IDENTITY
     </div>
@@ -15,50 +15,50 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
     class="flex flex-wrap gap-3 mb-2"
   >
     <button
-      class="flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors border-[#C4A853] bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)]"
+      class="flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)]"
       type="button"
     >
       <div
-        class="text-[10px] font-bold tracking-[0.18em] text-[#C4A853]"
+        class="text-[10px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)]"
       >
         MLB IDENTITY · sets affordability
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] truncate"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] truncate"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         — pick one —
       </div>
       <div
-        class="text-[11px] text-[#E8E8D8]/55"
+        class="text-[11px] text-[var(--ballpark-chalk)]/55"
       >
         what's cheap to build
       </div>
     </button>
     <button
-      class="flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors border-[#4A6844] bg-[#2d3d2f] hover:bg-[#34472f]"
+      class="flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] hover:bg-[#34472f]"
       type="button"
     >
       <div
-        class="text-[10px] font-bold tracking-[0.18em] text-[#C4A853]"
+        class="text-[10px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)]"
       >
         FARM IDENTITY · steers your scout
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] truncate"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] truncate"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         — pick one —
       </div>
       <div
-        class="text-[11px] text-[#E8E8D8]/55"
+        class="text-[11px] text-[var(--ballpark-chalk)]/55"
       >
         what your scout hunts
       </div>
     </button>
   </div>
   <div
-    class="text-[12px] text-[#E8E8D8]/55 mb-4"
+    class="text-[12px] text-[var(--ballpark-chalk)]/55 mb-4"
   >
     Choosing your MLB identity — it shifts your luxury-tax ceilings, making your style cheap to over-stack.
   </div>
@@ -66,7 +66,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
     class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"
   >
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -76,7 +76,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         POWER
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Murderers' Row
@@ -88,7 +88,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1927 Yankees
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Mash and hit for average — but never run.
       </div>
@@ -96,37 +96,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Speed
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -136,7 +136,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         POWER
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Bomba Squad
@@ -148,7 +148,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2019 Twins
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Launch-angle thunder: 430 feet or a whiff.
       </div>
@@ -156,37 +156,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Contact
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Speed
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -196,7 +196,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         POWER
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Bash Brothers
@@ -208,7 +208,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1989 Athletics
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Forearm-bashing bombs and cannon arms; the pitching leaks.
       </div>
@@ -216,43 +216,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Arm
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -262,7 +262,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         SPEED
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Whiteyball
@@ -274,7 +274,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1985 Cardinals
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Turf-burning thieves and elite gloves; power is for other teams.
       </div>
@@ -282,37 +282,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -322,7 +322,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         DEFENSE
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Go-Go Small Ball
@@ -334,7 +334,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1959 White Sox
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Put it in play, beat out the hit, win with the glove.
       </div>
@@ -342,37 +342,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -382,7 +382,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Dead-Ball Suppressors
@@ -394,7 +394,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1906 Cubs
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Win 2–1: a bunt, a steal, and a junkballer who never gives in.
       </div>
@@ -402,43 +402,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Rotation junk
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen velocity
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -448,7 +448,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         SPEED
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Billy Ball Burners
@@ -460,7 +460,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1982 Athletics (Rickey Henderson)
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Steal first; the staff is an afterthought.
       </div>
@@ -468,37 +468,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -508,7 +508,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Junkball Surgeons
@@ -520,7 +520,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1995 Braves
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Maddux–Glavine: paint corners, change speeds; ordinary bats.
       </div>
@@ -528,43 +528,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Rotation command
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Rotation junk
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation velocity
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -574,7 +574,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Flamethrowers
@@ -586,7 +586,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1963 Dodgers (Koufax/Drysdale)
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Koufax–Drysdale heat; the lineup is along for the ride.
       </div>
@@ -594,37 +594,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Rotation velocity
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Contact
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -634,7 +634,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Nasty Boys
@@ -646,7 +646,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1990 Reds
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         A power pen that misses bats and a few zones.
       </div>
@@ -654,31 +654,31 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Bullpen velocity
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -688,7 +688,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         HDH Royals
@@ -700,7 +700,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2014 Royals
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Shorten the game: a lockdown pen and fast gloves.
       </div>
@@ -708,43 +708,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Bullpen command
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -754,7 +754,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         The Opener
@@ -766,7 +766,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2018 Rays
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Bullpenning: relievers over starters.
       </div>
@@ -774,43 +774,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Bullpen velocity
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Bullpen junk
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation velocity
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -820,7 +820,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         The Oriole Way
@@ -832,7 +832,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1969 Orioles
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Run prevention: elite gloves behind pinpoint starters.
       </div>
@@ -840,43 +840,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Rotation command
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Speed
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen velocity
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -886,7 +886,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         PITCHING
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Shift-Era Suppressors
@@ -898,7 +898,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2008 Rays
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Modern run prevention: defense and power arms, light bats.
       </div>
@@ -906,43 +906,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Rotation velocity
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Contact
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -952,7 +952,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         DEFENSE
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Big Red Machine
@@ -964,7 +964,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1975 Reds
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         The complete offense that out-scores its ordinary rotation.
       </div>
@@ -972,43 +972,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation velocity
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1018,7 +1018,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         SPEED
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Hit 'Em Where They Ain't
@@ -1030,7 +1030,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2001 Mariners
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Slap it through the hole, leg out the extra base; the fences stay safe.
       </div>
@@ -1038,37 +1038,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1078,7 +1078,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         SPEED
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Toolsy Burners
@@ -1090,7 +1090,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2007 Phillies
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Power and wheels up and down the order; the arms and gloves are the price.
       </div>
@@ -1098,43 +1098,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Defense
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1144,7 +1144,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         DEFENSE
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Cannon Corps
@@ -1156,7 +1156,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1971 Pirates
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Rocket arms and sure hands; runners freeze and the bats stay quiet.
       </div>
@@ -1164,43 +1164,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Arm
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Speed
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1210,7 +1210,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         POWER
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Gap-to-Gap
@@ -1222,7 +1222,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2003 Red Sox
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Line drives in the gaps all day; the pitching just tries to keep up.
       </div>
@@ -1230,43 +1230,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen velocity
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1276,7 +1276,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         DEFENSE
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Web Gems
@@ -1288,7 +1288,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1969 Mets
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Highlight-reel gloves turn every ball into an out; the bats are an afterthought.
       </div>
@@ -1296,43 +1296,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Arm
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Contact
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1342,7 +1342,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         DEFENSE
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Launch & Leather
@@ -1354,7 +1354,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2016 Cubs
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Mash and pick it clean; if the staff could find the zone they would be unbeatable.
       </div>
@@ -1362,43 +1362,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Rotation command
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Bullpen command
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1408,7 +1408,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         POWER
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         No-Glove Offense
@@ -1420,7 +1420,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1930 Phillies
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Out-score everybody and pray the ball is never hit your way.
       </div>
@@ -1428,43 +1428,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Power
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Contact
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Defense
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Arm
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1474,7 +1474,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         SPEED
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Wheels & Cannons
@@ -1486,7 +1486,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         1980 Expos
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Steal a base, gun down a runner; the long ball belongs to the other guys.
       </div>
@@ -1494,37 +1494,37 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Arm
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
     <button
-      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
+      class="relative text-left border-4 p-4 transition-transform active:scale-[0.99] border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]"
       type="button"
     >
       <div
@@ -1534,7 +1534,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         BALANCED
       </div>
       <div
-        class="text-lg font-bold text-[#E8E8D8] leading-tight pr-16"
+        class="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16"
         style="text-shadow: 1px 1px 2px rgba(0,0,0,0.8);"
       >
         Rangy Defenders
@@ -1546,7 +1546,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         2017 Diamondbacks
       </div>
       <div
-        class="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]"
+        class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
         Cover every blade of grass and throw out anybody; the runs come the hard way.
       </div>
@@ -1554,43 +1554,43 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
       >
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Speed
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Arm
         </span>
         <span
-          class="text-[#9FE0A0]"
+          class="text-[var(--ballpark-boost-green)]"
         >
           +
           Defense
         </span>
         <span
-          class="text-[#E8E8D8]/40"
+          class="text-[var(--ballpark-chalk)]/40"
         >
           →
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Power
         </span>
         <span
-          class="text-[#E0857A]"
+          class="text-[var(--ballpark-sacrifice-red)]"
         >
           −
           Contact
         </span>
       </div>
       <div
-        class="mt-3 pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30"
+        class="mt-3 pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30"
       >
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
