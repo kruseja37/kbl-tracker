@@ -30,6 +30,7 @@ import {
   saveRegisteredPool,
   saveTeamRoster,
   type Grade,
+  type LeagueTemplate,
   type Player,
 } from './leagueBuilderStorage';
 import { MLB_AUCTION_ROSTER_SLOTS } from './leagueBuilderAuctionPipeline';
@@ -50,6 +51,39 @@ import type { SimPlayer } from '../engines/archetypeBalanceSimulator';
 /** A player is IN the league pool iff it carries an assignment for that league. */
 export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean {
   return Boolean(player.leagueAssignments?.some((assignment) => assignment.leagueId === leagueId));
+}
+
+/**
+ * Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2/§7): which league ids
+ * feed a league's draft-pool extraction. Absent `sourceLeagueIds` defaults to the league's OWN id
+ * only — every existing league (created before this feature) resolves to exactly today's
+ * behavior. An explicit empty array is a real, distinct state (JK ruling 2026-07-08: a user may
+ * un-check their own league entirely) and must NOT be treated as "absent" / defaulted back — only
+ * `undefined` triggers the default.
+ */
+export function resolveSourceLeagueIds(league: Pick<LeagueTemplate, 'id' | 'sourceLeagueIds'>): string[] {
+  return league.sourceLeagueIds ?? [league.id];
+}
+
+/**
+ * True if the player is a candidate for THIS league's draft-pool extraction under the checked
+ * source-league set (§2). Forward-compat dedup placeholder (§3): player identity in this app is a
+ * single global row with multi-league `leagueAssignments`, so a union over `sourceLeagueIds` can
+ * never produce an identity collision under the current data model. A "most-recently-updated
+ * league wins" tie-break would only become meaningful if a future feature forks player ratings
+ * per league — no such primitive exists today, so none is implemented here.
+ *
+ * A player with NO `leagueAssignments` at all (empty or undefined) is never-claimed raw material
+ * — e.g. every SMB4/MLB seed's `free-agent` players are seeded with `leagueAssignments: []`
+ * (`convertPlayer`, leagueBuilderStorage.ts) — and stays in EVERY league's universe regardless of
+ * the checked source set. Excluding them would make freshly seeded free agents permanently
+ * unreachable by ANY league's extraction (nobody "owns" them to check a box for), which is a real
+ * production regression this filter must not introduce — it only needs to narrow the universe
+ * among players some OTHER league has already claimed, not orphan players nobody has claimed yet.
+ */
+export function isPlayerInSourceUniverse(player: Player, sourceLeagueIds: readonly string[]): boolean {
+  if (!player.leagueAssignments || player.leagueAssignments.length === 0) return true;
+  return sourceLeagueIds.some((leagueId) => isPlayerInLeaguePool(player, leagueId));
 }
 
 function sortedUniqueIds(ids: readonly string[] | undefined): string[] {

@@ -150,10 +150,21 @@ export interface LeagueTemplate {
     poolSizeMultiplier: number;
     shills?: number;
     identityByTeamId: Record<string, string | null>;
+    /** Sorted sourceLeagueIds at extraction time (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8) — feeds
+     * poolBasisStaleLines so a source-league change is flagged the same way a cap/dial/shill/
+     * identity change already is. Absent on records extracted before this feature. */
+    sourceLeagueIds?: string[];
   };
   modeAExtractedIds?: string[];
   modeAHandAdds?: string[];
   modeAHandRemoves?: string[];
+  /** Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08): which leagues' player
+   * pools feed this league's draft extraction. Absent = legacy behavior, resolves to [this league's
+   * own id] only (see resolveSourceLeagueIds in leagueBuilderPoolBuilder.ts) — every existing league
+   * keeps its current universe byte-identical until a user actively checks a box. An explicit empty
+   * array is a real, distinct state (the user unchecked every league, including their own) and must
+   * NOT be treated as "absent" / defaulted back. */
+  sourceLeagueIds?: string[];
   tier?: TierKey;
   salaryCap?: number;
   poolSizeMultiplier?: number;

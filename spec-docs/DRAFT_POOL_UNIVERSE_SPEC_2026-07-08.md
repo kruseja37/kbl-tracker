@@ -1,6 +1,6 @@
-# Draft-Available Player Universe — Spec Draft (PARKED)
+# Draft-Available Player Universe — Spec Draft (BUILDING)
 
-**PARKED — captain-ratified structure, JK not yet committed to build (2026-07-08). Three open JK forks inside; single-seam verdict (both extraction modes converge on one adapter call, LeagueBuilderDraftSetup.tsx ~:2029/:2055); revised size: small-to-moderate (the anticipated dedup problem doesn't exist — players are shared global rows with multi-league leagueAssignments). Do not build from this until JK commits + rules the forks.**
+**BUILDING (2026-07-08) — JK ruled all three §10 forks the same day this spec was captured; see the rulings recorded at the top of §10 below. Single-seam verdict (both extraction modes converge on one adapter call, LeagueBuilderDraftSetup.tsx ~:2029/:2055 at capture time, re-verified at ~:2043/:2069 at build time); size: small-to-moderate (the anticipated dedup problem doesn't exist — players are shared global rows with multi-league leagueAssignments). Build lane: CONTRACT_UNIVERSE_2026-07-08.md.**
 
 Status: **parked feature**, captured 2026-07-08 per JK so context isn't lost. Not scheduled to any lane. Grounded against `main` as of this session; re-verify file:line citations before build (this area — Draft Setup / pool extraction — moves fast).
 
@@ -87,7 +87,15 @@ Placement: a checkbox list of leagues sits with the existing pool-source control
 
 **Suggested lane split**: one lane for data/resolver plumbing (§2–§5, mostly non-UI, touches `LeagueTemplate` type + `leagueBuilderPoolBuilder.ts`/`leaguePlayerAdapter.ts`), one lane for Draft Setup UI (§6–§7, all in `LeagueBuilderDraftSetup.tsx`). §8 is small enough to ride whichever lane lands second, since it depends on `sourceLeagueIds` existing.
 
-## 10. Open questions for JK
+## 10. Open questions for JK — RULED 2026-07-08
+
+**JK rulings (2026-07-08), resolving all three forks below; where a ruling conflicts with the recommendation prose underneath it, the ruling wins:**
+
+1. **Own league IS un-checkable.** JK's use case: a user keeps their own league's teams purely for branding, un-checks their own league, and checks other league(s) as the player source — so they never have to strip placeholder players off their branded rosters. The additive-only guardrail recommended below is REPLACED by warn-don't-block: (a) if the resolved universe is EMPTY → extraction disabled with a plain one-line hint naming the cause; (b) if the universe is smaller than the demand target → extraction proceeds, the existing engine top-up path (§5 `engineGeneratedCount`) covers the shortfall, and the UI says plainly how many players were engine-generated.
+2. **The checkbox list shows ALL leagues in the app** — flat list, each with its player-pool count. Default state: own league checked, others unchecked (preserves today's behavior exactly for existing leagues).
+3. **`sourceLeagueIds` persists ON THE LEAGUE RECORD** (`LeagueTemplate`), not sessionStorage. Absent field = `[ownLeagueId]` semantics (back-compat for every existing league).
+
+Original open-question framing (superseded by the rulings above, kept for context):
 
 1. **Can a user un-check their own league?** Recommended default: no — the active league is always implicitly included and its checkbox is locked on, so "curate from others" is additive-only and can never produce an empty/self-excluding universe. Confirm this is the intended guardrail.
 2. **Does the checkbox list show ALL leagues in the app, or only leagues the current user/profile owns?** No existing multi-user/ownership scoping was found on `LeagueTemplate` in this pass — if leagues are already single-profile-scoped elsewhere, that answers it; if not, this is a real UX decision (a long unfiltered list vs. some grouping).

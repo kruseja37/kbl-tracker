@@ -79,6 +79,8 @@ import {
   foldHandEditLedger,
   importRosteredPlayersToLeaguePool,
   isPlayerInLeaguePool,
+  isPlayerInSourceUniverse,
+  resolveSourceLeagueIds,
   computePlayerIv,
   computePlayerGrade,
   lockLeaguePool,
@@ -883,7 +885,7 @@ function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: num
 }
 
 function buildPoolExtractedBasis(
-  league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier">,
+  league: Pick<LeagueTemplate, "id" | "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds">,
   leagueTeams: readonly Team[],
   cap: number,
   shills: number,
@@ -898,6 +900,9 @@ function buildPoolExtractedBasis(
     poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     shills: clampDraftShillCount(shills),
     identityByTeamId,
+    // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: the draft pool sources are a basis input like cap/
+    // dial/shills/identity — a change here must trip the same "re-extract" staleness signal.
+    sourceLeagueIds: sortedIds(resolveSourceLeagueIds(league)),
   };
 }
 
@@ -916,6 +921,16 @@ function poolBasisStaleLines(
   }
   if (extractedBasis.shills !== undefined && extractedBasis.shills !== liveBasis.shills) {
     lines.push("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.");
+  }
+  // Absent sourceLeagueIds on an older extractedBasis (pre-feature record) means "not tracked
+  // yet" — treat as unknown/no-op rather than a false-positive mismatch against a live basis
+  // that now always reports a resolved (possibly single-element) array.
+  if (extractedBasis.sourceLeagueIds !== undefined) {
+    const previousSources = sortedIds(extractedBasis.sourceLeagueIds);
+    const currentSources = sortedIds(liveBasis.sourceLeagueIds ?? []);
+    if (previousSources.join("|") !== currentSources.join("|")) {
+      lines.push("THE DRAFT POOL SOURCES CHANGED — RE-EXTRACT TO PULL FROM THE NEW SET.");
+    }
   }
   const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
   const identityKeys = sortedIds([
@@ -1366,6 +1381,10 @@ export function LeagueBuilderDraftSetup() {
       previousRemoves: league?.modeAHandRemoves,
       lastExtractedIds: league?.modeAExtractedIds,
       currentMemberIds: inPoolPlayers.map((player) => player.id),
+      // Deliberately the FULL app player set, not universePlayers (curated source-league filter):
+      // this only sanity-checks that hand-adds/hand-removes still reference a real player. The
+      // manual shuttle (availablePlayers) can add any player in the app regardless of the checked
+      // source leagues (§6), so narrowing this would silently prune a valid manual hand-add.
       universeIds: players.map((player) => player.id),
     });
   }, [
@@ -1381,6 +1400,39 @@ export function LeagueBuilderDraftSetup() {
     () => (activeLeagueId ? players.filter((p) => !isPlayerInLeaguePool(p, activeLeagueId)) : []),
     [players, activeLeagueId],
   );
+
+  // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2/§7). Coarse selection:
+  // which leagues' player pools feed THIS league's draft extraction. Absent sourceLeagueIds
+  // resolves to [this league's own id] — byte-identical to today's behavior until a user actively
+  // checks a second box (JK ruling 2026-07-08 #3). NOTE: this only narrows the automatic
+  // extraction universe (demandUniverseFromPlayers below) — the manual pool shuttle (§6, poolShuttle
+  // further down) intentionally still offers every player in the app via availablePlayers above, so
+  // fine curation (add/remove five specific guys) is unrestricted by the checkbox list.
+  const sourceLeagueIds = useMemo(
+    () => (league ? resolveSourceLeagueIds(league) : []),
+    [league],
+  );
+  const universePlayers = useMemo(
+    () => (league ? players.filter((p) => isPlayerInSourceUniverse(p, sourceLeagueIds)) : players),
+    [players, league, sourceLeagueIds],
+  );
+  const universeEmpty = Boolean(league) && universePlayers.length === 0;
+  const universeEmptyHint = sourceLeagueIds.length === 0
+    ? "No draft pool sources are checked — check at least one league below to enable extraction."
+    : "The checked league(s) have no players yet — check a league that has players, or add players to one of them.";
+  // Player-pool count per league, for the checkbox list (ruling 2026-07-08 #2: show every league
+  // in the app with its count). Computed once over players+leagues, not per-row.
+  const leaguePlayerCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const candidate of leagues) {
+      let count = 0;
+      for (const player of players) {
+        if (isPlayerInLeaguePool(player, candidate.id)) count += 1;
+      }
+      counts.set(candidate.id, count);
+    }
+    return counts;
+  }, [leagues, players]);
   const inPoolClassifiedDemandPlayers = useMemo<ClassifiedDemandPlayer[]>(() => {
     return demandUniverseFromPlayers(inPoolPlayers).map((player) => ({
       player,
@@ -1905,7 +1957,7 @@ export function LeagueBuilderDraftSetup() {
   }, [league, replaceLeagueLocal, setupMutationBlockMessage]);
 
   const saveLeagueDraftSetup = useCallback(
-    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves">>) => {
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves" | "sourceLeagueIds">>) => {
       if (!league) return;
       const saved = await saveLeagueTemplate({ ...league, ...patch });
       replaceLeagueLocal(saved);
@@ -1919,6 +1971,22 @@ export function LeagueBuilderDraftSetup() {
       assertPoolCanMutate();
       if (locked) throw new Error("Pool is locked. Unlock it before changing pool size.");
       await saveLeagueDraftSetup({ poolSizeMultiplier });
+    }, { refreshData: false, refreshPool: false });
+
+  // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7): toggle one league
+  // in/out of this league's draft-pool source set. Own league IS un-checkable (JK ruling
+  // 2026-07-08 #1) — no special-case guard here. Persists the FULL next set on the league record
+  // (ruling #3), not sessionStorage.
+  const handleToggleSourceLeague = (leagueId: string) =>
+    runAction(async () => {
+      if (!league) return;
+      const current = new Set(sourceLeagueIds);
+      if (current.has(leagueId)) {
+        current.delete(leagueId);
+      } else {
+        current.add(leagueId);
+      }
+      await saveLeagueDraftSetup({ sourceLeagueIds: sortedIds([...current]) });
     }, { refreshData: false, refreshPool: false });
 
   const handlePoolQualityCenterChange = (nextQualityCenter: PoolQualityCenter) => {
@@ -2041,7 +2109,10 @@ export function LeagueBuilderDraftSetup() {
       .filter((archetype): archetype is (typeof HISTORICAL_ARCHETYPES)[number] => Boolean(archetype));
     const designPinIdSet = new Set(lockedDesignPinPlayerIds);
     return extractPoolFromDemand(
-      demandUniverseFromPlayers(players),
+      // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2): the ONE filter,
+      // applied at both extraction call sites, narrows the candidate array to players who belong
+      // to a checked source league before the demand adapter ever sees them.
+      demandUniverseFromPlayers(universePlayers),
       lockedDesigns,
       selectedArchetypes,
       league.tier ?? "juiced",
@@ -2057,7 +2128,7 @@ export function LeagueBuilderDraftSetup() {
         designPriorityIds: designFirstIdentityCriticalIds,
       },
     );
-  }, [designFirstIdentityCriticalIds, humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, players, poolQualityCenter, shills, tierBudget]);
+  }, [designFirstIdentityCriticalIds, humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, universePlayers, poolQualityCenter, shills, tierBudget]);
 
   const buildPoolFirstShapeResult = useCallback((provenance: PoolProvenanceState): PoolFromDemandResult => {
     if (!league) throw new Error("League not found.");
@@ -2067,7 +2138,9 @@ export function LeagueBuilderDraftSetup() {
     const hardKeepSet = setUnion(provenance.seedProtectedIds, provenance.userAddedIds, new Set(rosterDesignPinPlayerIds));
     const hardKeepIds = sortedIds([...hardKeepSet]);
     return extractPoolFromDemand(
-      demandUniverseFromPlayers(players),
+      // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2) — same filtered
+      // input as buildModeAResult above; both extraction paths converge on this one seam.
+      demandUniverseFromPlayers(universePlayers),
       [],
       selectedArchetypes,
       league.tier ?? "juiced",
@@ -2087,7 +2160,7 @@ export function LeagueBuilderDraftSetup() {
         priorityIds: sortedIds([...selectedTeamRosterIds]),
       },
     );
-  }, [league, leagueTeams, players, poolBalancePreset, poolBalanceTuning.poolSlackFactor, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
+  }, [league, leagueTeams, universePlayers, poolBalancePreset, poolBalanceTuning.poolSlackFactor, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
 
   useEffect(() => {
     setReExtractConfirm(false);
@@ -2528,6 +2601,9 @@ export function LeagueBuilderDraftSetup() {
         previousRemoves: league.modeAHandRemoves,
         lastExtractedIds: league.modeAExtractedIds,
         currentMemberIds: players.filter((player) => isPlayerInLeaguePool(player, activeLeagueId)).map((player) => player.id),
+        // Deliberately the FULL app player set here too — see the matching comment on
+        // modeAHandLedger above (§6: the manual shuttle is unrestricted by the source-league
+        // checkboxes, so this validity check must not narrow to universePlayers).
         universeIds: players.map((player) => player.id),
       });
       const result = buildModeAResult(folded);
@@ -2649,12 +2725,15 @@ export function LeagueBuilderDraftSetup() {
     teamIds: league?.teamIds ?? [],
     dial: league?.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     shills,
+    // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: source-league selection is a basis input like the
+    // cap/dial/shills above — a change here must trip the same recheck-staleness signal.
+    sources: sortedIds(sourceLeagueIds),
     designs: humanTeams.map((team) => ({
       id: team.id,
       lockedAt: team.rosterDesign?.lockedAt ?? null,
       slots: team.rosterDesign?.slots ?? null,
     })),
-  }), [humanTeams, inPoolPlayers, league?.poolSizeMultiplier, league?.teamIds, shills, tierBudget]);
+  }), [humanTeams, inPoolPlayers, league?.poolSizeMultiplier, league?.teamIds, shills, sourceLeagueIds, tierBudget]);
   const runRecheck = useCallback(() => {
     if (!recheckVisible) return;
     const report = buildRecheckReport({
@@ -3016,6 +3095,14 @@ export function LeagueBuilderDraftSetup() {
   ) : null;
 
   const activePoolShapeReport = poolMode === "pool-first" ? poolFirstShapeReport : modeAReport;
+  // §5 top-up copy (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 / JK ruling 2026-07-08 #1b): the engine
+  // top-up count already existed (engineGeneratedByBand) but only ever surfaced as a bare number
+  // inside a dense diagnostic strip, and design-first had no equivalent plain copy at all. This
+  // reads honestly regardless of mode, so a thin curated universe still tells the user plainly
+  // how many players the engine generated to cover the gap.
+  const engineGeneratedCountForCopy = activePoolShapeReport?.numericShape?.engineGeneratedByBand
+    ? Object.values(activePoolShapeReport.numericShape.engineGeneratedByBand).reduce((sum, count) => sum + count, 0)
+    : (poolMode === "pool-first" ? poolProvenance.engineGeneratedIds.size : 0);
   const playerByIdForDiagnostics = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const identityCriticalDiagnostic = activePoolShapeReport?.numericShape
     && activePoolShapeReport.numericShape.identityCriticalCandidateCount > 0
@@ -3158,6 +3245,56 @@ export function LeagueBuilderDraftSetup() {
             </div>
           ))}
       </div>
+    </div>
+  ) : null;
+
+  // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7): the league checkbox
+  // list. Flat list of EVERY league in the app (JK ruling 2026-07-08 #2), own league included and
+  // NOT locked (ruling #1) — default state (nothing ever touched) is own-league-only, byte-
+  // identical to today. Rendered in BOTH pool modes, at every sub-state, per the spec.
+  const sourceLeaguesPanel = league ? (
+    <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2 mb-4">
+      <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
+        DRAFT POOL SOURCES
+      </div>
+      <div className="text-[10px] font-bold text-[var(--ballpark-chalk)]/65 mb-2">
+        Which leagues' player pools feed this league's draft. Uncheck your own league to keep its
+        branded rosters without drafting from them.
+      </div>
+      <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+        {leagues.map((candidate) => {
+          const checked = sourceLeagueIds.includes(candidate.id);
+          const count = leaguePlayerCounts.get(candidate.id) ?? 0;
+          return (
+            <label
+              key={candidate.id}
+              className="flex items-center gap-2 text-[11px] text-[var(--ballpark-chalk)] cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={poolEditingBlocked || busy}
+                onChange={() => handleToggleSourceLeague(candidate.id)}
+                className="accent-[var(--ballpark-brass)]"
+              />
+              <span className="flex-1">
+                {candidate.name}
+                {candidate.id === activeLeagueId ? " (this league)" : ""}
+              </span>
+              <span className="text-[var(--ballpark-chalk)]/55">{count} player{count === 1 ? "" : "s"}</span>
+            </label>
+          );
+        })}
+      </div>
+      {universeEmpty ? (
+        <div className="mt-2 text-[11px] font-bold text-[var(--ballpark-status-red-bright)]">
+          {universeEmptyHint}
+        </div>
+      ) : engineGeneratedCountForCopy > 0 ? (
+        <div className="mt-2 text-[11px] text-[var(--ballpark-chalk)]/70">
+          {engineGeneratedCountForCopy} player{engineGeneratedCountForCopy === 1 ? "" : "s"} engine-generated to help fill the roster demand.
+        </div>
+      ) : null}
     </div>
   ) : null;
 
@@ -3541,6 +3678,7 @@ export function LeagueBuilderDraftSetup() {
             ) : null}
             {poolMode === "design-first" ? (
               <div className="space-y-5">
+                {sourceLeaguesPanel}
                 {modeAState === "waiting" || modeAState === "ready" ? (
                   <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-5">
                     <div className="text-sm font-bold text-[var(--ballpark-brass)] mb-2">
@@ -3551,11 +3689,13 @@ export function LeagueBuilderDraftSetup() {
                         ? `${designsLocked} of ${humanTeams.length} designs in. Still to come: ${modeAWaitingTeams.map((team) => formatClubName(team, ownerName, seats)).join(", ")}`
                         : humanTeams.length === 0
                           ? "No club designs to collect — the pool draws from the league's identities."
-                          : "Ready to build the pool to order."}
+                          : universeEmpty
+                            ? universeEmptyHint
+                            : "Ready to build the pool to order."}
                     </div>
                     <PressButton
                       onClick={handleExtractPool}
-                      disabled={modeAState !== "ready" || busy || savedDraftMutationBlocked}
+                      disabled={modeAState !== "ready" || busy || savedDraftMutationBlocked || universeEmpty}
                       variant="gold"
                       size="lg"
                       shadow={4}
@@ -3618,7 +3758,7 @@ export function LeagueBuilderDraftSetup() {
                           {reExtractConfirm ? (
                             <>
                               <span className="text-xs font-bold text-[var(--ballpark-chalk)]/75">REDRAW?</span>
-                              <PressButton size="sm" variant="affirm" onClick={handleExtractPool} disabled={busy || !allHumanDesignsLocked}>
+                              <PressButton size="sm" variant="affirm" onClick={handleExtractPool} disabled={busy || !allHumanDesignsLocked || universeEmpty}>
                                 <Check className="w-3 h-3" />
                               </PressButton>
                               <PressButton size="sm" variant="destruct" onClick={() => setReExtractConfirm(false)} disabled={busy}>
@@ -3631,7 +3771,7 @@ export function LeagueBuilderDraftSetup() {
                           ) : (
                             <PressButton
                               onClick={runModeAReExtract}
-                              disabled={busy || savedDraftMutationBlocked || !allHumanDesignsLocked}
+                              disabled={busy || savedDraftMutationBlocked || !allHumanDesignsLocked || universeEmpty}
                               size="sm"
                             >
                               <Download className="w-4 h-4" /> RE-EXTRACT
@@ -3773,6 +3913,7 @@ export function LeagueBuilderDraftSetup() {
               </div>
             ) : (
               <>
+                {sourceLeaguesPanel}
                 {poolShuttle}
                 <div className="flex flex-wrap items-center gap-4 mb-6">
                   {sufficiencyChip}
@@ -3879,7 +4020,7 @@ export function LeagueBuilderDraftSetup() {
                   </PressButton>
                   <PressButton
                     onClick={handleRegenerateProductionPool}
-                    disabled={poolEditingBlocked || busy}
+                    disabled={poolEditingBlocked || busy || universeEmpty}
                     size="sm"
                     variant="affirm"
                   >
@@ -3887,7 +4028,7 @@ export function LeagueBuilderDraftSetup() {
                   </PressButton>
                   <PressButton
                     onClick={handleRerollProductionPool}
-                    disabled={poolEditingBlocked || busy}
+                    disabled={poolEditingBlocked || busy || universeEmpty}
                     size="sm"
                   >
                     <RefreshCw className="w-4 h-4" /> Reroll generated players
