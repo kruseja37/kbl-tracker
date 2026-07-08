@@ -223,6 +223,14 @@ function formatScoutRange(range: { displayedEstimate: number; low: number; high:
   return `${formatMoney(range.displayedEstimate)} estimate [${formatMoney(range.low)}-${formatMoney(range.high)}]`;
 }
 
+function expectTextContent(text: string): void {
+  expect(textContentNode(text)).toBeVisible();
+}
+
+function textContentNode(text: string): HTMLElement {
+  return screen.getByText((_, node) => node?.textContent === text);
+}
+
 function openEngineLot(session: ReturnType<typeof buildFarmAuctionSession>["session"]) {
   const result = surfaceNextPlayer(session);
   if (!result.ok || !result.session.currentLot) {
@@ -234,6 +242,7 @@ function openEngineLot(session: ReturnType<typeof buildFarmAuctionSession>["sess
 describe("LeagueBuilderFarmAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    window.history.pushState({}, "", "/league-builder/farm-auction-draft");
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(TEST_SESSION_LAUNCH_NONCE);
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
@@ -370,25 +379,23 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     const expectedOpeningPrice = formatMoney(surfacedLot.openingAsk);
     const expectedBidAmount = Math.ceil(surfacedLot.openingAsk);
     const expectedSalePrice = formatMoney(expectedBidAmount);
+    window.history.pushState({}, "", `/league-builder/farm-auction-draft?leagueId=${LEAGUE_ID}&devSeed=${encodeURIComponent(seed)}`);
 
     render(<LeagueBuilderFarmAuctionDraft />);
 
-    expect(screen.getByText("FARM AUCTION - scouted values")).toBeInTheDocument();
-    expect(screen.getByText("STATE: SETUP")).toBeInTheDocument();
+    expect(screen.getByText("Farm auction")).toBeInTheDocument();
+    expect(screen.queryByLabelText("SEED")).not.toBeInTheDocument();
+    expect(screen.queryByText("BID INCREMENT")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /BEGIN FARM AUCTION/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/CPU COUNT/i)).not.toBeInTheDocument();
-    expect(screen.getByText("AI CLUBS")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("SEED"), { target: { value: seed } });
-    fireEvent.click(await screen.findByRole("button", { name: /BEGIN FARM AUCTION/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: OPEN_BIDDING")).toBeInTheDocument();
+      expect(screen.getByText(targetName.toUpperCase())).toBeInTheDocument();
     });
 
-    expect(screen.getByText("UP NOW")).toBeInTheDocument();
+    expect(screen.getByText("On the block · prospect")).toBeInTheDocument();
     expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /SCOUT SORT/i })).not.toBeInTheDocument();
-    expect(screen.getByText(targetName)).toBeInTheDocument();
     for (const position of prospectPositions(target.prospect)) {
       expect(screen.getAllByText(position).length).toBeGreaterThan(0);
     }
@@ -397,25 +404,23 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const trait of [target.prospect.trait1, target.prospect.trait2].filter(Boolean)) {
       expect(screen.queryByText(trait!)).not.toBeInTheDocument();
     }
-    expect(screen.queryByText("Press and hold Scout report to reveal your scout's private range and grade.")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show farm auction help" }));
-    expect(screen.getByText("Press and hold Scout report to reveal your scout's private range and grade.")).toBeInTheDocument();
     const scoutReportControl = screen.getByRole("button", { name: "Scout report" });
     expect(scoutReportControl).toBeInTheDocument();
-    expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
-    expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();
-    expect(screen.getByText(`Opening ${expectedOpeningPrice}`)).toBeInTheDocument();
+    expect(screen.queryByText((_, node) => node?.textContent === `Scout value ${targetRangeText}`)).not.toBeInTheDocument();
+    expect(screen.queryByText((_, node) => node?.textContent === targetGradeText)).not.toBeInTheDocument();
+    expect(screen.getByText("OPENING")).toBeInTheDocument();
+    expect(screen.getByText(expectedOpeningPrice)).toBeInTheDocument();
     fireEvent.pointerDown(scoutReportControl);
-    expect(screen.getByText(`Scout value ${targetRangeText}`)).toBeInTheDocument();
-    expect(screen.getByText(targetGradeText)).toBeInTheDocument();
-    expect(screen.getByText(`Grade band ${targetBand.best}-${targetBand.worst}`)).toBeInTheDocument();
-    expect(screen.getByText(`Confidence band ${targetOverallBand}`)).toBeInTheDocument();
+    expectTextContent(`Scout value ${targetRangeText}`);
+    expectTextContent(targetGradeText);
+    expectTextContent(`Grade band ${targetBand.best}-${targetBand.worst}`);
+    expectTextContent(`Confidence band ${targetOverallBand}`);
     for (const [tool, band] of Object.entries(targetToolBands)) {
       expect(screen.getByText(`${tool.toUpperCase()} ${band.lower}-${band.upper}`)).toBeInTheDocument();
     }
     fireEvent.pointerUp(scoutReportControl);
-    expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
-    expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();
+    expect(screen.queryByText((_, node) => node?.textContent === `Scout value ${targetRangeText}`)).not.toBeInTheDocument();
+    expect(screen.queryByText((_, node) => node?.textContent === targetGradeText)).not.toBeInTheDocument();
     expect(targetRange.low).not.toBe(targetRange.high);
     expect(targetRange.low).toBeLessThanOrEqual(surfacedLot.openingAsk);
     expect(targetRange.high).toBeGreaterThanOrEqual(surfacedLot.openingAsk);
@@ -423,28 +428,19 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(targetRange.displayedEstimate).toBeGreaterThan(targetRange.low);
     expect(targetRange.displayedEstimate).toBeLessThan(targetRange.high);
     expect(screen.queryByText(/True grade|Ratings/i)).not.toBeInTheDocument();
-    expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
-    expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
-    expect(screen.getByText("ROSTER SLOTS REMAINING")).toBeInTheDocument();
+    expect(screen.getByText("Most you can bid")).toBeInTheDocument();
+    expect(screen.getByText("Slots left")).toBeInTheDocument();
     expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
     expect(screen.getByText(/SS coverage below target/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /BID/i }));
     await waitFor(() => {
-      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(expectedBidAmount);
+      expect(screen.getByText(/Farm Keys — raise or pass/)).toBeInTheDocument();
     });
-
-    fireEvent.click(screen.getByRole("button", { name: /RAISE CUSTOM/i }));
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("Custom bid amount")).toHaveValue(
-        expectedBidAmount + 1000,
-      );
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "PASS" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Let prospect go/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("STATE: SOLD")).toBeInTheDocument();
+      expect(screen.getByText("SOLD")).toBeInTheDocument();
     });
 
     expect(

@@ -6763,3 +6763,14 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Falsification check: temporarily restored the direct nomination-exhaustion completion path and reran the M1J matrix; every row failed with 0 legal rosters and all real teams short/illegal. Restored the fix and reran green.
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused auction/farm/UI suites pass 105/105; M1J opt-in matrix pass; full `NODE_ENV= npx vitest run` = 9,147 pass / 3 fail / 11 skipped, with only the known `LeagueBuilderDraftSetup.test.tsx` CUT2-2 batch reds; solo rerun of `LeagueBuilderDraftSetup.test.tsx` passed 60/60.
 - Next: independent audit of the M1J terminal-path diff before broader draft-economy tuning.
+
+## 2026-07-08 (Codex, attended) — M1K farm AuctionStage fold
+
+- Completed **P3/M1K** on `lane/m1k-farmstage`: `LeagueBuilderFarmAuctionDraft.tsx` now renders the farm draft floor through the shared `AuctionStage` farm tier instead of the legacy farm-only register.
+- Kept the fold presentation-only: no engine/hook files changed. `useFarmAuctionDraft` still owns route/session persistence, crash-safe resume, M1G no-shill/human-safe behavior, M1a nomination seed, completion, and Lever A state transitions.
+- Removed visible setup controls from the draft floor. The page loads an existing farm session or starts with the persisted/default setup context; tests/dev can still pass `leagueId` and `devSeed` through the URL without exposing SEED / BID INCREMENT / CPU COUNT / BEGIN controls in the floor UI.
+- Extended `AuctionStage` farm presentation to preserve farm law: strict lot card shows only name, age, positions, and trait count; no trait names, arm slot, or true ratings. Scout details are unmounted while covered and reveal only on press/hold, carrying scout value fog, grade band, confidence band, and per-tool bands from the existing M1D calculations.
+- Adapted farm page tests without weakening privacy assertions: no trait-name leak, no true-grade/ratings leak, bands/fog/tool bands render only under reveal, and stage bidding/resolution still drives SOLD.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused farm/page/hook/AuctionStage suites pass 17/17 (plus 1 default-skipped opt-in farm distribution oracle); full `NODE_ENV= npx vitest run` produced 9,145 pass / 10 fail / 11 skipped under suite pressure, with all exact failing tests passing in isolated rerun 12/12.
+- Browser gate attempted: Vite dev server started, but Browser/node_repl failed before attach with `sandboxCwd must be an absolute file URI`; fallback Playwright Chromium failed to launch due macOS Mach port `Permission denied (1100)`. No browser/app defect was observed.
+- Next: independent audit of the four-file presentation fold and strict farm privacy surface.

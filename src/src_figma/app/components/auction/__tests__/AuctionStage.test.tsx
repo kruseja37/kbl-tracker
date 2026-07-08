@@ -141,6 +141,7 @@ describe("AuctionStage roster board", () => {
     };
 
     const { container } = render(<AuctionStage vm={stageVm} />);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Scout report" }));
     const band = container.querySelector<HTMLElement>(".rangebar i");
 
     expect(parseFloat(band?.style.left ?? "")).toBeCloseTo(40.91, 2);
