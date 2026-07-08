@@ -1,0 +1,1 @@
+../spec-docs/JK_BROWSER_CHECKLIST_2026-07-08.md

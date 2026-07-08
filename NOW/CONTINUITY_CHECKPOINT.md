@@ -1,0 +1,1 @@
+../spec-docs/CONTINUITY_CHECKPOINT.md

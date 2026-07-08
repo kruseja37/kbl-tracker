@@ -1,0 +1,1 @@
+../spec-docs/PATHWAY_TO_V1_2026-07-07.md

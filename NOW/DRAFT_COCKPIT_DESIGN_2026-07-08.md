@@ -1,0 +1,1 @@
+../spec-docs/DRAFT_COCKPIT_DESIGN_2026-07-08.md

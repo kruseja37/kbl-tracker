@@ -1,0 +1,1 @@
+../spec-docs/DRAFT_SKIN_STANDARD_2026-07-08.md
