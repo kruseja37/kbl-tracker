@@ -1,0 +1,95 @@
+# JK BROWSER CHECKLIST — Cockpit Wave Closure (2026-07-08)
+
+**Why this doc exists:** the entire cockpit wave — Wave 1 (MLB tiers + popovers + farm bridge),
+Wave 2 (the sortable board), and the reskin sweep — is now merged to `main`, each piece pre-merge
+adversarially audited by Opus. Per the Browser-verification-backlog ruling
+(`V1_CANON_2026-07-07.md` §6), every accumulated JK-eye item from those audits is collected here
+into ONE consolidated walkthrough instead of being checked piecemeal. This is the gate before
+cockpit work continues — nothing past it (the P9 wrong-fit penalty, the verification battery)
+starts until this pass is walked.
+
+**How to use it:** work top to bottom on a real league in the browser. Check each box as you go.
+Where a box asks a design question rather than a pass/fail, a recommendation is given — you can
+just say "yes" / "no" / "change it to X."
+
+---
+
+## 1. THE MLB DRAFT FLOOR
+
+- [ ] The **TRUE COST** tax line and the **WAIT / CHASE** odds chip show real, sensible-looking
+      numbers on a live lot (not zero, not obviously wrong) — bid on a couple of players and watch
+      these update.
+- [ ] The verdict strip (the compact readout above every lot) reads clearly in about 5 seconds,
+      including the auto-advance line when it appears (see next item).
+- [ ] The sortable board (your ranked player list) appears on the live floor, drag-reordering
+      persists across lots, and after you WIN a ranked player, the strip either says **"Next up at
+      [position]: [name] — your #[rank]"** (a future pick) or **"On the block now: [name] — your
+      #[rank]"** (when that promoted player happens to be the one currently up for bid).
+- [ ] The gold **BID** button looks the same everywhere it appears on this floor and matches the
+      gold buttons on other screens (Setup, End of Draft).
+
+## 2. DRAFT SETUP
+
+- [ ] Starting a brand-new league: the default draft pool is still the full player universe,
+      unchanged from before — no surprise narrowing.
+- [ ] Toggling which leagues feed the pool (the source-league checkboxes) correctly triggers the
+      "your pool may be stale, re-check it" banner when it should.
+- [ ] The new **"rank your board"** tab exists (both the global view and the per-position view),
+      and reordering there persists if you leave the tab and come back.
+- [ ] Pin a player who belongs to a league you've since UNCHECKED as a source — the app should
+      show that player as **"LEFT THE POOL"** rather than silently keeping or dropping them.
+- [ ] **THE BLUE ACCENTS QUESTION** — three spots on this screen are still blue while everything
+      else has moved to the new brass/chalk/green look: the pitch-arsenal toggle buttons and the
+      Save button on the player-edit panel, plus the accent trim on the Available Players column
+      header. *Recommendation: tokenize these to match the rest of the screen, unless you want
+      blue reserved as a deliberate "this is different" signal color somewhere on the app.* Your
+      call — tokenize them, or tell us blue stays as intentional signal color.
+
+## 3. THE FARM FLOOR
+
+- [ ] The farm bridge headline (the note about what your MLB roster needs) names real gaps for
+      your actual team, not generic filler.
+- [ ] Farm board values stay fogged (no exact true price shown) even as you rank/reorder players.
+- [ ] Tapping a scout report reveals it; it stays covered until you tap.
+- [ ] A won farm prospect's popover shows only a scouting BAND (a range), never an exact number.
+- [ ] The BALANCE icon is absent from the farm whisper (it was intentionally removed — this is
+      expected, not a bug; it returns once a future handedness-balance design is built).
+
+## 4. END OF DRAFT
+
+- [ ] The staffing screen and the archetype picker wear the current look (a bit deeper green than
+      before — this is a deliberate design change, not a bug).
+- [ ] The HANDOFF banner (the one that hands you off to franchise setup) is green/brass, not blue.
+
+## 5. EVERYWHERE — THE OVERALL FEEL
+
+- [ ] The whole journey — setup, MLB floor, farm floor, end of draft — reads as ONE consistent
+      look from start to finish (this was the whole point of the reskin).
+- [ ] On real, busy screens (lots of players, lots of data), the greens and other colors still
+      read clearly — nothing gets muddy or hard to tell apart.
+- [ ] Text and buttons are easy to read at a glance on the live auction stage (the new sharper,
+      flatter look shouldn't have made anything harder to read).
+- [ ] A few blue accents remain on the stage on purpose (rival-team tags, position badges) — do
+      these read as intentional signal colors to you, or do they feel like leftover debt that
+      should also convert? Your call.
+
+---
+
+## What a PASS means
+
+A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin) is accepted as
+done. Any items you flag as "fix this" get ticketed and scheduled; anything you flag as "actually
+I want this different" gets treated as a new design fork, not a bug. Once you've walked it, work
+moves on to the wrong-fit penalty (P9) and a broader verification pass — those don't start before
+this checklist is walked.
+
+## Two open JK rulings elsewhere (not part of this checklist)
+
+These are unrelated open questions from other parts of the project, surfaced here so nothing gets
+lost — they don't need to be answered during this walkthrough, but they're still waiting on you:
+
+1. **The "legends" historical-player project** — a bar-room-style refinement pass is running in
+   the background (separate backlog repo); a second round of sample "eye-test" cards for you to
+   react to is still being prepared, not ready yet.
+2. **The shelf-ceiling / rating-scale question** for that same legends project — parked alongside
+   it, no action needed from you right now.
