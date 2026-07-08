@@ -335,6 +335,8 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
 
     expect(screen.getByText("FARM AUCTION - scouted values")).toBeInTheDocument();
     expect(screen.getByText("STATE: SETUP")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/CPU COUNT/i)).not.toBeInTheDocument();
+    expect(screen.getByText("AI CLUBS")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("SEED"), { target: { value: seed } });
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN FARM AUCTION/i }));
