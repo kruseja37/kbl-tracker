@@ -370,3 +370,20 @@ Ordered per the requested framework. "Blocker" here means: blocks §16 Simulatio
 **Critic's completeness verdict** (from the workflow result): "VERDICT ACCURACY: 14 of 15 CONFIRMED correct; 1 OVERTURNED" (relationships rivalry board — see §1 row 13). The critic explicitly caveats its own completeness review was based on only 4 of 9 clusters due to a truncated JSON delivery, so its risk list above is inferential, not exhaustive.
 
 **UI_TRUTH_MAP.md staleness — re-walk needed.** Commit `260397bc` ("Flip franchise route to lens") landed *during* this audit day and flipped `/franchise/:id` from the old `FranchiseHome` shell to `FranchiseLensHub`. Most clusters ([PM],[FM],[RR],[MH],[TR],[RA],[RI] in part) traced *before* this flip and describe `/franchise/:id` as still rendering the old hub, citing `UI_TRUTH_MAP.md` row 15/49/50 as their source — those citations are now stale. The [FN] cluster (which ran after the flip) independently discovered a real consequence of it: the season-end honors trigger, which lived only in the now-unrouted `FranchiseHome.tsx`, was silently stranded with no replacement caller (§1 row under Fame/§2 item 4). The critic formally re-verified and overturned exactly one finding on this basis (relationships rivalry board, §1 row 13); the same staleness likely affects — but was NOT independently re-verified for — the traits UI-surfaces row, the ratings-checkpoint-console row, and the roster-intelligence Moves-tab row (all three cite the identical pre-flip routing premise). **Recommendation: a full `UI_TRUTH_MAP.md` re-walk against post-flip HEAD should run before the next audit or before any UI-reachability claim in this matrix is used to plan work**, since several PARTIAL/MISSING verdicts above may already be one route-mapping-refresh away from resolving themselves for free (or, per the [FN] finding, revealing a second silent regression).
+
+
+---
+## §5 EXECUTION RECONCILIATION ADDENDUM (2026-07-08, full 137-row disposition pass)
+**Counts:** 68 LANDED (incl. all 12 flag-activation rows via M2a) / 2 IN-FLIGHT (M1D, since merged) / 45 QUEUED-RULED / 12 RULED-OUT / 10 were UNOWNED — owners now assigned below. §2 blocker cross-check: 16/17 owned; #15 (home-park rival 2x fan-morale amplifier) = the one open JK fork.
+**Formerly-unowned items → owners (all now queued):**
+1. Pre-move relationship intel / reporter heads-up (§24.5, built+tested, zero callers) → C4-C in-season lane (transaction-pipeline trigger).
+2. Relationship-flare reporter emission (§24.7) → reporter wave; blocker-5 scope EXTENDED to all 8 dark emission kinds (was 5).
+3. GameTracker "+Fame" iconic-event channel (live popups on a non-persisted parallel tracker; never reaches franchise fame record) → new wire ticket fameEvents→franchiseFameCompute; exception-class under the GameTracker freeze (living-season tracking = IN).
+4. §8C position-mismatch scout/analyzer display half (T-6b) → trait-UI (S11).
+5. Fame leaderboard UI (preview-only) → LENS-PARITY/Almanac embed.
+6. Fame pip vs heat-model reconciliation (Almanac card) → fame-completion at flag-flip.
+7. Race visibility-vs-emission valve (never audited) → targeted audit + reporter wave (emission side).
+8. Franchise in-game commentary (hardcoded false; CANON §4 CONTRADICTION — canon claims wired) → beat-reporter lane; canon corrected this date.
+9. SeasonNewsItem→Almanac ingestion (missing wire; Almanac never imports seasonNewsStorage) → Almanac lane.
+10. MatchupDramaBar (dev-preview, hand-authored data) → JK retire-vs-promote ruling (asked 2026-07-08).
+**Stale verdicts superseded by landings:** all 12 flag-activation rows (M2a landed); Rules Presets leave-alone (superseded by RULES-V1-PRUNE); record-overtake→HISTORY ruled; TV frozen-IV drift resolved (peer-percentile ratified); scout-hire-gates-MLB premise corrected (F10); pre-lens-flip truth-map citations await the queued re-walk. Coverage caveat: 6 NOT-AUDITED rows (non-MOY awards, mojo/fitness, milestones, tiebreakers, schedule pipeline, adaptive-standards) marked LANDED by inference from V1_BUILD_STATUS S9/S10/S12 — spec-anchored verification of these rides the SOT-roundup workflow (running).
