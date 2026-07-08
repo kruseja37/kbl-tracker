@@ -17,7 +17,7 @@ import { getFranchiseSeasonId } from '../../utils/franchisePersistenceContract';
 import { getHomeParkRival } from '../../utils/franchiseHomeParkRivalStorage';
 import { isFranchisePhase2StadiumRecordsEnabled } from '../../utils/franchisePhase2Flags';
 import { getNextFranchiseGame } from '../../utils/scheduleStorage';
-import { getAllTeams, getAllLeagueTemplates, type LeagueTemplate, type Conference, type Division, type Team as LeagueBuilderTeam } from '../../utils/leagueBuilderStorage';
+import { getAllTeams, getAllLeagueTemplates, getLeagueTemplate, type LeagueTemplate, type Conference, type Division, type Team as LeagueBuilderTeam } from '../../utils/leagueBuilderStorage';
 import { getAllFranchiseTeams } from '../../utils/franchisePlayerStorage';
 import type { StoredFranchiseConfig } from '../../types/franchise';
 
@@ -246,6 +246,7 @@ function distributeEvenly<T>(items: T[], groupCount: number): T[][] {
 function buildFranchiseLeagueTemplate(
   config: StoredFranchiseConfig | null,
   franchiseTeams: LeagueBuilderTeam[],
+  sourceLeagueTemplate?: LeagueTemplate | null,
 ): LeagueTemplate | null {
   const franchiseTeamIds = new Set(franchiseTeams.map((team) => team.id));
   const configuredTeamIds = config?.teams.selectedTeams ?? [];
@@ -253,6 +254,35 @@ function buildFranchiseLeagueTemplate(
     .filter((teamId) => franchiseTeamIds.has(teamId));
 
   if (teamIds.length === 0) return null;
+
+  if (sourceLeagueTemplate?.conferences?.length) {
+    const selectedTeamIds = new Set(teamIds);
+    const divisions = (sourceLeagueTemplate.divisions ?? []).flatMap((division) => {
+      const divisionTeamIds = (division.teamIds ?? []).filter((teamId) => selectedTeamIds.has(teamId));
+      return divisionTeamIds.length > 0
+        ? [{ ...division, teamIds: divisionTeamIds }]
+        : [];
+    });
+    const usedDivisionIds = new Set(divisions.map((division) => division.id));
+    const conferences = sourceLeagueTemplate.conferences.flatMap((conference) => {
+      const divisionIds = conference.divisionIds.filter((divisionId) => usedDivisionIds.has(divisionId));
+      return divisionIds.length > 0
+        ? [{ ...conference, divisionIds }]
+        : [];
+    });
+    const assignedTeamIds = new Set(divisions.flatMap((division) => division.teamIds));
+
+    if (conferences.length > 0 && teamIds.every((teamId) => assignedTeamIds.has(teamId))) {
+      return {
+        ...sourceLeagueTemplate,
+        id: config?.league ?? sourceLeagueTemplate.id,
+        name: config?.leagueDetails?.name ?? config?.franchiseName ?? sourceLeagueTemplate.name,
+        teamIds,
+        conferences,
+        divisions,
+      };
+    }
+  }
 
   const conferenceCount = Math.max(1, config?.leagueDetails?.conferences ?? 2);
   const divisionCount = Math.max(1, config?.leagueDetails?.divisions ?? Math.min(teamIds.length, 4));
@@ -469,7 +499,11 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
           if (cancelled) return;
 
           if (teams.length > 0) {
-            setLeagueTemplate(buildFranchiseLeagueTemplate(config, teams));
+            const sourceTemplate = config?.league
+              ? await getLeagueTemplate(config.league).catch(() => null)
+              : null;
+            if (cancelled) return;
+            setLeagueTemplate(buildFranchiseLeagueTemplate(config, teams, sourceTemplate));
             const nameMap: Record<string, string> = {};
             for (const t of teams) {
               nameMap[t.id] = t.name;

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   mockGetNextFranchiseGame: vi.fn(),
   mockGetAllTeams: vi.fn(),
   mockGetAllLeagueTemplates: vi.fn(),
+  mockGetLeagueTemplate: vi.fn(),
   mockGetAllFranchiseTeams: vi.fn(),
 }));
 
@@ -52,6 +53,7 @@ vi.mock('../../../utils/scheduleStorage', () => ({
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getAllTeams: mocks.mockGetAllTeams,
   getAllLeagueTemplates: mocks.mockGetAllLeagueTemplates,
+  getLeagueTemplate: mocks.mockGetLeagueTemplate,
 }));
 
 vi.mock('../../../utils/franchisePlayerStorage', () => ({
@@ -183,9 +185,25 @@ describe('useFranchiseData franchise scoped reads', () => {
         divisions: [],
       },
     ]);
+    mocks.mockGetLeagueTemplate.mockResolvedValue({
+      id: 'league-1',
+      name: 'Copied League',
+      teamIds: ['team-a', 'team-b'],
+      conferences: [
+        { id: 'conf-north', name: 'North Circuit', abbreviation: 'NC', divisionIds: ['division-conf-north'] },
+        { id: 'conf-south', name: 'South Circuit', abbreviation: 'SC', divisionIds: ['division-conf-south'] },
+      ],
+      divisions: [
+        { id: 'division-conf-north', name: 'North Circuit', conferenceId: 'conf-north', teamIds: ['team-a'] },
+        { id: 'division-conf-south', name: 'South Circuit', conferenceId: 'conf-south', teamIds: ['team-b'] },
+      ],
+      defaultRulesPreset: 'preset-1',
+      createdDate: '2026-01-01T00:00:00.000Z',
+      lastModified: '2026-01-01T00:00:00.000Z',
+    });
   });
 
-  test('uses franchise-owned team snapshots for visible names and stadiums', async () => {
+  test('uses franchise-owned team snapshots and source league conferences for visible standings', async () => {
     const { result } = renderHook(() => useFranchiseData('franchise-1', 1));
 
     await waitFor(() => {
@@ -194,8 +212,10 @@ describe('useFranchiseData franchise scoped reads', () => {
     });
 
     expect(result.current.leagueName).toBe('Copied League');
-    expect(result.current.standings.Eastern['Division 1'][0].team).toBe('Copied Apples');
-    expect(result.current.standings.Eastern['Division 1'][0].teamId).toBe('team-a');
+    expect(result.current.standings.Eastern['North Circuit'][0].team).toBe('Copied Apples');
+    expect(result.current.standings.Eastern['North Circuit'][0].teamId).toBe('team-a');
+    expect(result.current.standings.Western['South Circuit'][0].team).toBe('Copied Bears');
+    expect(result.current.standings.Western['South Circuit'][0].teamId).toBe('team-b');
     expect(result.current.lensTeamId).toBe('team-a');
     expect(result.current.rivalTeamId).toBe('team-b');
     expect(mocks.mockGetHomeParkRival).toHaveBeenCalledWith(
@@ -208,6 +228,7 @@ describe('useFranchiseData franchise scoped reads', () => {
       'team-a',
     );
     expect(mocks.mockGetAllFranchiseTeams).toHaveBeenCalledWith('franchise-1');
+    expect(mocks.mockGetLeagueTemplate).toHaveBeenCalledWith('league-1');
     expect(mocks.mockGetAllTeams).not.toHaveBeenCalled();
     expect(mocks.mockGetAllLeagueTemplates).not.toHaveBeenCalled();
   });

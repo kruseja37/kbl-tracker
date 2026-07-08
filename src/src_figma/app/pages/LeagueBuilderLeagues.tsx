@@ -41,6 +41,17 @@ import {
   salaryCapAdvisory as getSalaryCapAdvisory,
   salaryCapHardError as getSalaryCapHardError,
 } from "../utils/salaryCapInput";
+import {
+  assignTeamToConference,
+  buildConferenceDraftFromLeague,
+  buildConferenceStructure,
+  createBalancedConferenceDraft,
+  createConferenceDraft,
+  createSingleConferenceDraft,
+  syncConferenceDraftTeamIds,
+  validateConferenceDraft,
+  type ConferenceAssignmentDraft,
+} from "../../../utils/leagueConferenceEditor";
 
 // ============================================
 // TYPES
@@ -57,6 +68,8 @@ interface LeagueFormData {
   balanceMode: BalanceMode;
   checkpointCadence: CheckpointCadence;
   color: string;
+  conferences: ConferenceAssignmentDraft[];
+  conferencesTouched: boolean;
 }
 
 const DEFAULT_FORM_DATA: LeagueFormData = {
@@ -70,6 +83,8 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   balanceMode: BALANCE_MODE_DEFAULT,
   checkpointCadence: CHECKPOINT_CADENCE_DEFAULT,
   color: "#5A8352",
+  conferences: [],
+  conferencesTouched: false,
 };
 
 const TIER_OPTIONS: Array<{ value: TierKey; label: string }> = [
@@ -148,6 +163,23 @@ export function LeagueBuilderLeagues() {
   const parsedSalaryCap = parseSalaryCapInput(formData.salaryCap);
   const salaryCapHardError = getSalaryCapHardError(parsedSalaryCap);
   const salaryCapAdvisory = getSalaryCapAdvisory(parsedSalaryCap, tierReference);
+  const selectedTeams = useMemo(
+    () => teams.filter((team) => formData.teamIds.includes(team.id)),
+    [formData.teamIds, teams],
+  );
+  const conferenceValidation = useMemo(
+    () => validateConferenceDraft(formData.teamIds, formData.conferences),
+    [formData.teamIds, formData.conferences],
+  );
+  const conferenceAssignmentByTeamId = useMemo(() => {
+    const assignments = new Map<string, string>();
+    for (const conference of formData.conferences) {
+      for (const teamId of conference.teamIds) {
+        assignments.set(teamId, conference.id);
+      }
+    }
+    return assignments;
+  }, [formData.conferences]);
 
   // Set default rules preset when data loads
   useEffect(() => {
@@ -169,6 +201,8 @@ export function LeagueBuilderLeagues() {
       ...DEFAULT_FORM_DATA,
       defaultRulesPreset: rulesPresets.find((p) => p.isDefault)?.id || rulesPresets[0]?.id || "",
       salaryCap: formatSalaryCapInput(TIER_CAPS[DEFAULT_FORM_DATA.tier].tierCap),
+      conferences: [],
+      conferencesTouched: false,
     });
     setIsModalOpen(true);
   };
@@ -191,6 +225,8 @@ export function LeagueBuilderLeagues() {
       balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
       checkpointCadence: league.checkpointCadence ?? CHECKPOINT_CADENCE_DEFAULT,
       color: league.color || "#5A8352",
+      conferences: buildConferenceDraftFromLeague(league),
+      conferencesTouched: false,
     });
     setIsModalOpen(true);
   };
@@ -225,10 +261,21 @@ export function LeagueBuilderLeagues() {
       setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
       return;
     }
+    if (!conferenceValidation.valid) {
+      setSaveError(conferenceValidation.message ?? "Fix conference assignments before saving.");
+      return;
+    }
 
     setIsSaving(true);
     setSaveError(null);
     try {
+      const conferencePatch = formData.conferencesTouched
+        ? buildConferenceStructure(formData.conferences)
+        : {
+            conferences: editingLeague?.conferences ?? [],
+            divisions: editingLeague?.divisions ?? [],
+          };
+
       if (editingLeague) {
         await updateLeague({
           ...editingLeague,
@@ -242,14 +289,15 @@ export function LeagueBuilderLeagues() {
           balanceMode: formData.balanceMode,
           checkpointCadence: formData.checkpointCadence,
           color: formData.color,
+          ...conferencePatch,
         });
       } else {
         await createLeague({
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
           teamIds: formData.teamIds,
-          conferences: [],
-          divisions: [],
+          conferences: conferencePatch.conferences,
+          divisions: conferencePatch.divisions,
           defaultRulesPreset: formData.defaultRulesPreset,
           draftFormat: formData.draftFormat,
           tier: formData.tier,
@@ -313,11 +361,95 @@ export function LeagueBuilderLeagues() {
       setSaveError(savedAuctionMutationMessage ?? "League Builder changes are temporarily locked.");
       return;
     }
+    setFormData((prev) => {
+      const nextTeamIds = prev.teamIds.includes(teamId)
+        ? prev.teamIds.filter((id) => id !== teamId)
+        : [...prev.teamIds, teamId];
+      const hasConferenceEditor = prev.conferences.length > 0;
+      return {
+        ...prev,
+        teamIds: nextTeamIds,
+        conferences: hasConferenceEditor
+          ? syncConferenceDraftTeamIds(prev.conferences, nextTeamIds)
+          : prev.conferences,
+        conferencesTouched: hasConferenceEditor ? true : prev.conferencesTouched,
+      };
+    });
+  };
+
+  const setSingleConference = () => {
     setFormData((prev) => ({
       ...prev,
-      teamIds: prev.teamIds.includes(teamId)
-        ? prev.teamIds.filter((id) => id !== teamId)
-        : [...prev.teamIds, teamId],
+      conferences: createSingleConferenceDraft(prev.teamIds),
+      conferencesTouched: true,
+    }));
+  };
+
+  const setBalancedConferences = () => {
+    setFormData((prev) => ({
+      ...prev,
+      conferences: createBalancedConferenceDraft(prev.teamIds),
+      conferencesTouched: true,
+    }));
+  };
+
+  const clearConferences = () => {
+    setFormData((prev) => ({
+      ...prev,
+      conferences: [],
+      conferencesTouched: true,
+    }));
+  };
+
+  const addConference = () => {
+    setFormData((prev) => ({
+      ...prev,
+      conferences: [
+        ...prev.conferences,
+        createConferenceDraft(`Conference ${prev.conferences.length + 1}`, prev.conferences.map((conference) => conference.id)),
+      ],
+      conferencesTouched: true,
+    }));
+  };
+
+  const updateConferenceName = (conferenceId: string, name: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      conferences: prev.conferences.map((conference) => (
+        conference.id === conferenceId
+          ? {
+              ...conference,
+              name,
+              abbreviation: name.trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((word) => word[0])
+                .join("")
+                .slice(0, 4)
+                .toUpperCase() || conference.abbreviation,
+            }
+          : conference
+      )),
+      conferencesTouched: true,
+    }));
+  };
+
+  const removeConference = (conferenceId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      conferences: syncConferenceDraftTeamIds(
+        prev.conferences.filter((conference) => conference.id !== conferenceId),
+        prev.teamIds,
+      ),
+      conferencesTouched: true,
+    }));
+  };
+
+  const assignTeam = (teamId: string, conferenceId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      conferences: assignTeamToConference(prev.conferences, teamId, conferenceId),
+      conferencesTouched: true,
     }));
   };
 
@@ -699,6 +831,137 @@ export function LeagueBuilderLeagues() {
                   </div>
                 )}
               </div>
+
+              {/* Conference Assignment */}
+              <div className="bg-[#4A6844] border-[4px] border-[#3F5A3A] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                  <div>
+                    <div className="text-sm font-bold">Conferences</div>
+                    <div className="text-xs text-[#E8E8D8]/60">
+                      {formData.conferences.length > 0
+                        ? `${formData.conferences.length} active`
+                        : "No conference structure"}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.conferences.length === 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={setSingleConference}
+                          className="px-3 py-2 bg-[#5A8352] hover:bg-[#6A9362] border-[3px] border-[#E8E8D8]/50 text-xs font-bold transition"
+                        >
+                          Single
+                        </button>
+                        <button
+                          type="button"
+                          onClick={setBalancedConferences}
+                          className="px-3 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-[3px] border-[#E8E8D8]/50 text-xs font-bold transition"
+                        >
+                          Balanced split
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={setBalancedConferences}
+                          className="px-3 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-[3px] border-[#E8E8D8]/50 text-xs font-bold transition"
+                        >
+                          Balanced split
+                        </button>
+                        <button
+                          type="button"
+                          onClick={addConference}
+                          className="px-3 py-2 bg-[#5A8352] hover:bg-[#6A9362] border-[3px] border-[#E8E8D8]/50 text-xs font-bold transition inline-flex items-center gap-1"
+                          title="Add conference"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearConferences}
+                          className="px-3 py-2 bg-[#633B2E] hover:bg-[#7A4938] border-[3px] border-[#E8E8D8]/50 text-xs font-bold transition"
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {formData.conferences.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {formData.conferences.map((conference) => (
+                        <div key={conference.id} className="bg-[#3F5A3A] border-[3px] border-[#2F4A2A] p-3">
+                          <div className="flex items-center gap-2">
+                            <input
+                              aria-label={`Conference name ${conference.name}`}
+                              type="text"
+                              value={conference.name}
+                              onChange={(event) => updateConferenceName(conference.id, event.target.value)}
+                              className="min-w-0 flex-1 bg-[#4A6844] border-[3px] border-[#2F4A2A] p-2 text-sm text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                            />
+                            {formData.conferences.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeConference(conference.id)}
+                                className="p-2 bg-red-800 hover:bg-red-700 border-[3px] border-red-500/50 transition"
+                                title={`Remove ${conference.name}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="mt-2 text-xs text-[#E8E8D8]/60">
+                            {conference.teamIds.length} team{conference.teamIds.length !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedTeams.length > 0 ? (
+                      <div>
+                        <div className="text-xs font-bold mb-2 text-[#E8E8D8]/70">Team assignments</div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {selectedTeams.map((team) => (
+                            <label key={team.id} className="flex items-center gap-2 bg-[#3F5A3A] border-[3px] border-[#2F4A2A] p-2">
+                              <span
+                                className="w-3 h-3 rounded-full shrink-0"
+                                style={{ backgroundColor: team.colors.primary }}
+                              />
+                              <span className="min-w-0 flex-1 text-sm truncate">{team.name}</span>
+                              <select
+                                aria-label={`${team.name} conference`}
+                                value={conferenceAssignmentByTeamId.get(team.id) ?? ""}
+                                onChange={(event) => assignTeam(team.id, event.target.value)}
+                                className="bg-[#4A6844] border-[3px] border-[#2F4A2A] p-2 text-xs text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
+                              >
+                                <option value="" disabled>Pick</option>
+                                {formData.conferences.map((conference) => (
+                                  <option key={conference.id} value={conference.id}>
+                                    {conference.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-[#E8E8D8]/60">Select teams before assigning conferences.</div>
+                    )}
+
+                    {!conferenceValidation.valid && (
+                      <div className="bg-red-900/50 border-4 border-red-500 p-3 text-sm text-red-100">
+                        {conferenceValidation.message}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Modal Footer */}
@@ -711,7 +974,7 @@ export function LeagueBuilderLeagues() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formData.name.trim() || Boolean(salaryCapHardError) || editingLeagueMutationBlocked || isSaving}
+                disabled={!formData.name.trim() || Boolean(salaryCapHardError) || !conferenceValidation.valid || editingLeagueMutationBlocked || isSaving}
                 className="px-6 py-2 bg-[#5599FF] hover:bg-[#3366FF] border-[3px] border-[#E8E8D8] transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSaving ? (
