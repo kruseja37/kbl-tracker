@@ -7,8 +7,12 @@ import {
   CHEMISTRY_TARGET_SOURCE_TOLERANCE,
 } from '../../data/chemistryCanonical';
 import type { Player } from '../../utils/leagueBuilderStorage';
-import { PERSONALITY_POOL } from '../../utils/prospectScoutingDraftEngine';
+import { PERSONALITY_POOL, PERSONALITY_WEIGHTS } from '../../utils/prospectScoutingDraftEngine';
 import { regenerateLeaguePoolPlayerAxes } from '../leaguePoolAxisRegen';
+
+// Same-order tolerance as the chemistry distribution test above — wide enough to be flake-proof
+// under a fixed seed while still documenting the JK-ruled tilt away from Droopy/Timid.
+const PERSONALITY_TARGET_SOURCE_TOLERANCE = 0.03;
 
 function makePlayer(id: string, overrides: Partial<Player> = {}): Player {
   return {
@@ -110,6 +114,35 @@ describe('regenerateLeaguePoolPlayerAxes RB-0b-1', () => {
       const actualShare = (counts[word] ?? 0) / playerCount;
       expect(Math.abs(actualShare - CHEMISTRY_TARGET_DISTRIBUTION[code]))
         .toBeLessThanOrEqual(CHEMISTRY_TARGET_SOURCE_TOLERANCE);
+    }
+  });
+
+  test('large pool personality distribution tilts away from Droopy/Timid per JK-ruled weights', () => {
+    const playerCount = 600;
+    const regenerated = regenerateLeaguePoolPlayerAxes(makePlayers(playerCount), 'league-axis-personality');
+    const counts = regenerated.reduce<Record<string, number>>((acc, player) => {
+      acc[player.personality] = (acc[player.personality] ?? 0) + 1;
+      return acc;
+    }, {});
+    const totalWeight = PERSONALITY_WEIGHTS.reduce((sum, [, weight]) => sum + weight, 0);
+
+    expect(Object.keys(counts).sort()).toEqual([...PERSONALITY_POOL].sort());
+
+    for (const [personality, weight] of PERSONALITY_WEIGHTS) {
+      const target = weight / totalWeight;
+      const actualShare = (counts[personality] ?? 0) / playerCount;
+      expect(Math.abs(actualShare - target)).toBeLessThanOrEqual(PERSONALITY_TARGET_SOURCE_TOLERANCE);
+    }
+
+    // Droopy and Timid (the tilted-away-from personalities) must each land below every other
+    // personality's share — documents the JK ruling, not just the raw tolerance band.
+    const droopyShare = (counts['Droopy'] ?? 0) / playerCount;
+    const timidShare = (counts['Timid'] ?? 0) / playerCount;
+    for (const personality of PERSONALITY_POOL) {
+      if (personality === 'Droopy' || personality === 'Timid') continue;
+      const share = (counts[personality] ?? 0) / playerCount;
+      expect(droopyShare).toBeLessThan(share);
+      expect(timidShare).toBeLessThan(share);
     }
   });
 

@@ -1,6 +1,7 @@
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import type { FranchiseFarmRecord } from './franchiseFarmStorage';
 import {
+  normalizeStoredPersonality,
   type Chemistry,
   type Grade,
   type Personality,
@@ -11,6 +12,8 @@ import {
 } from './leagueBuilderStorage';
 import { playerHasFranchisePitchingModel } from './franchisePlayerRatingModel';
 
+export { normalizeStoredPersonality } from './leagueBuilderStorage';
+
 export const FRANCHISE_PROFILE_PRIMARY_POSITIONS: Position[] = [
   'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY',
 ];
@@ -18,7 +21,7 @@ export const FRANCHISE_PROFILE_SECONDARY_POSITIONS: Position[] = [
   'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF', 'DH', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP', 'TWO-WAY',
 ];
 export const FRANCHISE_PROFILE_GRADES: Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'];
-export const FRANCHISE_PROFILE_PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
+export const FRANCHISE_PROFILE_PERSONALITIES: Personality[] = ['Competitive', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
 export const FRANCHISE_PROFILE_CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
 export const FRANCHISE_PROFILE_PITCH_TYPES: PitchType[] = ['4F', '2F', 'CB', 'SL', 'CH', 'FK', 'CF', 'SB', 'SC', 'KN'];
 
@@ -308,8 +311,12 @@ export function validateFranchisePlayerProfileEdit({
       const arsenal = parsePitchArsenal(value, errors);
       if (arsenal) sanitizedChanges.arsenal = arsenal;
     } else if (field === 'personality') {
-      const personality = parseEnumValue(field, value, FRANCHISE_PROFILE_PERSONALITIES, errors);
-      if (personality) sanitizedChanges.personality = personality;
+      // Migration care: persisted players may still carry a legacy chemistry-word personality
+      // (e.g. "Scholarly") from before the dropdown was narrowed to the canonical 7. Normalize
+      // rather than reject so an unrelated edit to this profile doesn't get blocked by stale data.
+      if (value != null && value !== '') {
+        sanitizedChanges.personality = normalizeStoredPersonality(value);
+      }
     } else if (field === 'chemistry') {
       const chemistry = parseEnumValue(field, value, FRANCHISE_PROFILE_CHEMISTRIES, errors);
       if (chemistry) sanitizedChanges.chemistry = chemistry;

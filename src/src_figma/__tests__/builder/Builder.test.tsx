@@ -212,7 +212,9 @@ describe("Builder", () => {
           arsenal: "4F|SL|CH|SC|KN",
           trait1: "Imaginary Trait",
           trait2: "Elite 4",
-          personality: "Competitive",
+          // "Scholarly" is a chemistry word, not a canonical personality (WT-B taxonomy fix) —
+          // a legacy/invalid value here should fall back to "Relaxed", not crash or pass through.
+          personality: "Scholarly",
           overallGrade: "E",
           builderSource: "player-builder",
         },
@@ -239,7 +241,7 @@ describe("Builder", () => {
     fireEvent.click(screen.getByRole("button", { name: /Player Builder/i }));
     fireEvent.click(screen.getAllByLabelText(/^View /)[0]);
 
-    expect(optionValues("Personality")).toEqual(["Tough", "Relaxed", "Egotistical", "Jolly", "Timid", "Droopy"]);
+    expect(optionValues("Personality")).toEqual(["Competitive", "Tough", "Relaxed", "Egotistical", "Jolly", "Timid", "Droopy"]);
     expect(optionValues("Chemistry")).toEqual(["Competitive", "Spirited", "Crafty", "Scholarly", "Disciplined"]);
   });
 

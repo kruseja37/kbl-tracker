@@ -7,12 +7,14 @@ import {
 import type { Chemistry, Personality, Player } from '../utils/leagueBuilderStorage';
 import {
   generateHiddenPersonalityModifiers,
-  PERSONALITY_POOL,
-  pick,
+  PERSONALITY_WEIGHTS,
+  pickWeighted,
   randomUnit,
 } from '../utils/prospectScoutingDraftEngine';
 
-const PERSONALITY_CHOICES = PERSONALITY_POOL as readonly Personality[];
+// PERSONALITY_WEIGHTS values are canonical Personality words (validated by
+// leaguePoolAxisRegen.test.ts); cast narrows the generic string weights to the Player field type.
+const PERSONALITY_WEIGHT_ENTRIES = PERSONALITY_WEIGHTS as Array<[Personality, number]>;
 
 function buildChemistryQuotaCodes(playerCount: number): ChemistryCode[] {
   if (playerCount <= 0) {
@@ -94,7 +96,7 @@ export function regenerateLeaguePoolPlayerAxes(players: Player[], leagueId: stri
     const seed = `${leagueId}:${player.id}`;
     return {
       ...player,
-      personality: pick(`${seed}:personality`, PERSONALITY_CHOICES),
+      personality: pickWeighted(`${seed}:personality`, PERSONALITY_WEIGHT_ENTRIES),
       hiddenPersonalityModifiers: generateHiddenPersonalityModifiers(seed),
       chemistry: chemistryAssignments.get(player.id) ?? (CHEMISTRY_CODE_TO_WORD[CHEMISTRY_CODES[0]] as Chemistry),
     };

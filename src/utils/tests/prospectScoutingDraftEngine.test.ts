@@ -13,6 +13,8 @@ import {
   generateProspectPool,
   generateProspectScoutingDraft,
   gradeDistance,
+  PERSONALITY_POOL,
+  PERSONALITY_WEIGHTS,
   PROSPECT_AGE_BANDS,
   PROSPECT_ELITE_PITCH_TRAITS,
   PROSPECT_HITTER_NEGATIVE_TRAIT_POOL,
@@ -85,9 +87,14 @@ const SECTION_13_POSITION_PLAYER_MAX_SHARE = 0.70;
 const SECTION_10_AGE_SAMPLE_SIZE = 20_000;
 const SECTION_10_AGE_TOLERANCE = 0.015;
 const SECTION_10_GRADE_CORRELATION_TOLERANCE = 0.05;
+// Updated 2026-07-08 (WT-B, JK ruling): personality is now a weighted draw tilted away from
+// Droopy/Timid instead of a uniform pick, which intentionally changes the generated personality
+// values captured in this full-output snapshot. Verified the isolation property itself still
+// holds (reverting only the personality draw reproduces the prior golden hash unchanged) — this
+// is not a regression, just an updated baseline for the JK-ruled behavior change.
 const B11_B8_NON_AGE_RNG_PROOF = {
-  length: 29721,
-  hash: '1623f137',
+  length: 29691,
+  hash: '1383d3da',
 } as const;
 
 const B11_B8_RNG_PROOF_INPUT: ProspectScoutingDraftInput = {
@@ -1530,4 +1537,36 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(gradeDistance('B', 'B')).toBe(0);
     expect(gradeDistance('B', 'C+')).toBe(2);
   });
+
+  test('JK-ruled personality draw tilts away from Droopy/Timid across a large generated pool', () => {
+    const prospects = generateProspectPool({
+      leagueId: 'personality-weighted-draw',
+      seasonNumber: 1,
+      seed: 'personality-weighted-draw-seed',
+      teamDraftOrder: BASE_INPUT.teamDraftOrder,
+    }, 3000);
+    const counts = prospects.reduce<Record<string, number>>((acc, prospect) => {
+      acc[prospect.personality] = (acc[prospect.personality] ?? 0) + 1;
+      return acc;
+    }, {});
+    const totalWeight = PERSONALITY_WEIGHTS.reduce((sum, [, weight]) => sum + weight, 0);
+
+    expect(prospects).toHaveLength(3000);
+    expect(Object.keys(counts).sort()).toEqual([...PERSONALITY_POOL].sort());
+
+    for (const [personality, weight] of PERSONALITY_WEIGHTS) {
+      const target = weight / totalWeight;
+      const actualShare = (counts[personality] ?? 0) / prospects.length;
+      expect(Math.abs(actualShare - target)).toBeLessThanOrEqual(0.03);
+    }
+
+    const droopyShare = (counts['Droopy'] ?? 0) / prospects.length;
+    const timidShare = (counts['Timid'] ?? 0) / prospects.length;
+    for (const personality of PERSONALITY_POOL) {
+      if (personality === 'Droopy' || personality === 'Timid') continue;
+      const share = (counts[personality] ?? 0) / prospects.length;
+      expect(droopyShare).toBeLessThan(share);
+      expect(timidShare).toBeLessThan(share);
+    }
+  }, 60_000);
 });
