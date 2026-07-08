@@ -4,6 +4,7 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 
 const mockNavigate = vi.fn();
 const mockInitializeFranchise = vi.fn();
+const mockLoadFranchiseFreezeSummary = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
 
 vi.mock('react-router', () => ({
@@ -12,6 +13,10 @@ vi.mock('react-router', () => ({
 
 vi.mock('../../../utils/franchiseInitializer', () => ({
   initializeFranchise: (...args: unknown[]) => mockInitializeFranchise(...args),
+}));
+
+vi.mock('../../../utils/franchiseFreezeSummary', () => ({
+  loadFranchiseFreezeSummary: (...args: unknown[]) => mockLoadFranchiseFreezeSummary(...args),
 }));
 
 vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
@@ -106,6 +111,29 @@ describe('FranchiseSetup extra innings runner delay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInitializeFranchise.mockResolvedValue('franchise-1');
+    mockLoadFranchiseFreezeSummary.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      leagueName: 'Kruse Baseball League',
+      teamCount: 0,
+      frozenPlayerRows: 0,
+      settledSalaryPlayerRows: 0,
+      draftBaselineRows: 0,
+      draftBaselineContractRows: 0,
+      rosterTotals: { mlb: 0, farm: 0 },
+      morale: {
+        playerCount: 0,
+        playerAverage: null,
+        playerMin: null,
+        playerMax: null,
+        teamFanCount: 0,
+        teamFanAverage: null,
+        teamFanMin: null,
+        teamFanMax: null,
+      },
+      teams: [],
+      notDisplayable: [],
+    });
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
       ownership: 'league-builder-mode-1',
