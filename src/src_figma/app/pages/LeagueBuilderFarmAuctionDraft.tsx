@@ -18,17 +18,14 @@ import {
   staffHireRouteForLeague,
 } from "../utils/draftRouting";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
-import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
   type AuctionPlayer,
   type AuctionResult,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
-import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
-import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
-import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
-import type { ScoutValueRange } from "../../../engines/scoutValueRange";
+import { gradeToTwentyEighty, type Grade } from "../../../engines/gradeEngine";
+import { archetypeBandValueRange, type ScoutValueRange } from "../../../engines/scoutValueRange";
 import {
   sortByTiltedPriority,
   tiltAnalyzerFindings,
@@ -39,11 +36,12 @@ import {
   type DraftAnalyzerMlbEntry,
 } from "../../../utils/rosterAnalyzerDraftAdapter";
 import {
+  scoutOverallBandForPosition,
   scoutOverallGradeBand,
-  scoutTierForPosition,
+  scoutOverallTierForPosition,
+  scoutToolBands,
   type DraftPosition,
   type LeagueBuilderProspectPlayerDto,
-  type ProspectScoutDescriptor,
 } from "../../../utils/prospectScoutingDraftEngine";
 import type { Player, Team } from "../../hooks/useLeagueBuilderData";
 
@@ -109,29 +107,59 @@ function scoutGradeDisplay(prospect: LeagueBuilderProspectPlayerDto | null | und
   return `${grade} (${gradeToTwentyEighty(storedGrade)})`;
 }
 
+type FarmScoutRead = ScoutValueRange & {
+  toolBands: Record<string, { lower: number; upper: number }>;
+  overallGradeBand: { best: Grade; worst: Grade };
+  overallBand: 3 | 5 | 7;
+};
+
+function prospectRatings(prospect: LeagueBuilderProspectPlayerDto): Record<string, number> {
+  return {
+    power: prospect.power,
+    contact: prospect.contact,
+    speed: prospect.speed,
+    fielding: prospect.fielding,
+    arm: prospect.arm,
+    velocity: prospect.velocity,
+    junk: prospect.junk,
+    accuracy: prospect.accuracy,
+  };
+}
+
 function scoutRangeForProspect(input: {
   prospect: LeagueBuilderProspectPlayerDto | null | undefined;
   auctionPlayer: AuctionPlayer | null | undefined;
+  openingAsk: number | null | undefined;
   teamId: string | null | undefined;
-  scoutsByTeamId: Record<string, ProspectScoutDescriptor | undefined> | null;
-  rosterChemistryCounts: Partial<Record<ChemistryCode, number>>;
+  farmArchetypeKey: string | undefined;
   seed: string;
-}): ScoutValueRange | null {
-  const { prospect, auctionPlayer, teamId, scoutsByTeamId, rosterChemistryCounts, seed } = input;
+}): FarmScoutRead | null {
+  const { prospect, auctionPlayer, openingAsk, teamId, farmArchetypeKey, seed } = input;
   if (!prospect || !auctionPlayer || !teamId) return null;
-  const scout = scoutsByTeamId?.[teamId];
-  if (!scout) return null;
+  if (typeof openingAsk !== "number" || !Number.isFinite(openingAsk) || openingAsk <= 0) return null;
+  const position = prospect.primaryPosition as DraftPosition;
+  const overallBand = scoutOverallBandForPosition(position, farmArchetypeKey);
   const band = scoutOverallGradeBand(
     prospect.prospectProfile.trueGrade,
-    scoutTierForPosition(prospect.primaryPosition as DraftPosition, scout),
+    scoutOverallTierForPosition(position, farmArchetypeKey),
     `${seed}:grade-band:${prospect.id}:${teamId}`,
   );
-  const priceRange = gradeBandToPriceRange(band);
-  const chemFit = chemistryFitPriceMultiplier(prospect.chemistry, rosterChemistryCounts);
-  const low = priceRange.low * chemFit;
-  const high = priceRange.high * chemFit;
-  const displayedEstimate = (low + high) / 2;
-  return { w: 0, low, high, displayedEstimate };
+  const range = archetypeBandValueRange(
+    openingAsk,
+    overallBand,
+    `${seed}:value-band:${prospect.id}:${teamId}`,
+  );
+  return {
+    ...range,
+    toolBands: scoutToolBands({
+      ratings: prospectRatings(prospect),
+      position,
+      farmArchetypeKey,
+      seed: `${seed}:tool-bands:${prospect.id}:${teamId}`,
+    }),
+    overallGradeBand: band,
+    overallBand,
+  };
 }
 
 function formatScoutRange(range: ScoutValueRange | null): string {
@@ -168,47 +196,6 @@ function rosterPositionTally(
     tally.set(position, (tally.get(position) ?? 0) + 1);
   }
   return [...tally.entries()].sort((left, right) => left[0].localeCompare(right[0]));
-}
-
-function rosterChemistryTally(
-  team: AuctionSession["teams"][number] | null | undefined,
-  prospectById: Map<string, LeagueBuilderProspectPlayerDto>,
-): Partial<Record<ChemistryCode, number>> {
-  const tally: Partial<Record<ChemistryCode, number>> = {};
-  for (const assignment of team?.roster ?? []) {
-    const prospect = prospectById.get(assignment.playerId);
-    if (!prospect) continue;
-    const chemistry = normalizeToChemistryCode(prospect.chemistry);
-    tally[chemistry] = (tally[chemistry] ?? 0) + 1;
-  }
-  return tally;
-}
-
-function mergeChemistryTallies(
-  ...tallies: Array<Partial<Record<ChemistryCode, number>> | null | undefined>
-): Partial<Record<ChemistryCode, number>> {
-  const merged: Partial<Record<ChemistryCode, number>> = {};
-  for (const tally of tallies) {
-    for (const [chemistry, count] of Object.entries(tally ?? {}) as Array<[ChemistryCode, number]>) {
-      if (!Number.isFinite(count) || count <= 0) continue;
-      merged[chemistry] = (merged[chemistry] ?? 0) + count;
-    }
-  }
-  return merged;
-}
-
-function rosterChemistryCountsForTeamId(
-  teamId: string | null | undefined,
-  session: AuctionSession | null | undefined,
-  mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>>,
-  prospectById: Map<string, LeagueBuilderProspectPlayerDto>,
-): Partial<Record<ChemistryCode, number>> {
-  if (!teamId) return {};
-  const team = session?.teams.find((candidate) => candidate.teamId === teamId);
-  return mergeChemistryTallies(
-    mlbRosterChemistryByTeamId[teamId],
-    rosterChemistryTally(team, prospectById),
-  );
 }
 
 export function LeagueBuilderFarmAuctionDraft() {
@@ -272,21 +259,15 @@ export function LeagueBuilderFarmAuctionDraft() {
   const currentLotProspect = lot ? prospectById.get(lot.playerId) ?? null : null;
   const activeSeed = session?.config.nominationOrderSeed ?? seed;
   const currentLotScoutTeamId = auction.currentBidderTeamId ?? session?.pendingClaim?.teamId ?? null;
-  const currentLotRosterChemistryCounts = useMemo(
-    () => rosterChemistryCountsForTeamId(
-      currentLotScoutTeamId,
-      session,
-      auction.mlbRosterChemistryByTeamId,
-      prospectById,
-    ),
-    [auction.mlbRosterChemistryByTeamId, currentLotScoutTeamId, prospectById, session],
-  );
+  const currentLotScoutFarmArchetypeKey = currentLotScoutTeamId
+    ? teamById.get(currentLotScoutTeamId)?.farmArchetypeKey
+    : undefined;
   const currentLotRange = scoutRangeForProspect({
     prospect: currentLotProspect,
     auctionPlayer: lotAuctionPlayer,
+    openingAsk: lot?.openingAsk,
     teamId: currentLotScoutTeamId,
-    scoutsByTeamId: auction.scoutsByTeamId,
-    rosterChemistryCounts: currentLotRosterChemistryCounts,
+    farmArchetypeKey: currentLotScoutFarmArchetypeKey,
     seed: activeSeed,
   });
   const minBid = session ? minimumBid(session) : null;
@@ -688,6 +669,15 @@ export function LeagueBuilderFarmAuctionDraft() {
                         <span className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <span>Scout value {formatScoutRange(currentLotRange)}</span>
                           <span>Scout grade {scoutGradeDisplay(currentLotProspect)}</span>
+                          {currentLotRange ? (
+                            <>
+                              <span>Grade band {currentLotRange.overallGradeBand.best}-{currentLotRange.overallGradeBand.worst}</span>
+                              <span>Confidence band {currentLotRange.overallBand}</span>
+                              {Object.entries(currentLotRange.toolBands).map(([tool, band]) => (
+                                <span key={tool}>{tool.toUpperCase()} {band.lower}-{band.upper}</span>
+                              ))}
+                            </>
+                          ) : null}
                         </span>
                       </LongPressReveal>
                       <div>Opening {formatMoney(lot.openingAsk)}</div>

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Check, ChevronRight, Eye, RefreshCw, Target } from "lucide-react";
 
-import { getScoutProfilesForLeague } from "../../../utils/leagueBuilderStorage";
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import {
   draftRouteForLeague,
@@ -22,15 +21,6 @@ function teamDisplayName(team: Team): string {
   return `${team.location} ${team.nickname}`.trim() || team.name;
 }
 
-function selectedTeamForScout(
-  scoutId: string,
-  selectedByTeamId: Record<string, string | undefined>,
-  teams: readonly Team[],
-): Team | null {
-  const teamId = Object.entries(selectedByTeamId).find(([, selectedScoutId]) => selectedScoutId === scoutId)?.[0];
-  return teamId ? teams.find((team) => team.id === teamId) ?? null : null;
-}
-
 export function ScoutHire() {
   const navigate = useNavigate();
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
@@ -38,7 +28,6 @@ export function ScoutHire() {
   const requestedReservePriceK = useMemo(() => reservePriceKFromSearch(window.location.search), []);
   const { leagues, teams, isLoading, error } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
-  const [selectedByTeamId, setSelectedByTeamId] = useState<Record<string, string | undefined>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -63,44 +52,14 @@ export function ScoutHire() {
     [leagueTeams],
   );
   const scoutPool = useMemo<LiveScoutCandidate[]>(
-    () => activeLeague ? buildLiveScoutPool(activeLeague.id, leagueTeams.length) : [],
-    [activeLeague, leagueTeams.length],
+    () => activeLeague ? buildLiveScoutPool(activeLeague.id, leagueTeams) : [],
+    [activeLeague, leagueTeams],
   );
-
-  useEffect(() => {
-    if (!activeLeague) return;
-    let cancelled = false;
-    const scoutPoolIds = new Set(scoutPool.map((scout) => scout.id));
-    void getScoutProfilesForLeague(activeLeague.id).then((savedScouts) => {
-      if (cancelled) return;
-      setSelectedByTeamId((current) => {
-        const next = { ...current };
-        for (const scout of savedScouts) {
-          if (scout.teamId && scoutPoolIds.has(scout.id)) next[scout.teamId] = scout.id;
-        }
-        return next;
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeLeague, scoutPool]);
-
-  const allHumanTeamsReady = humanTeams.every((team) => selectedByTeamId[team.id]);
-
-  const chooseScout = (teamId: string, scoutId: string): void => {
-    setSaveError(null);
-    setSelectedByTeamId((current) => {
-      const next = { ...current };
-      for (const [candidateTeamId, selectedScoutId] of Object.entries(next)) {
-        if (selectedScoutId === scoutId && candidateTeamId !== teamId) {
-          next[candidateTeamId] = undefined;
-        }
-      }
-      next[teamId] = next[teamId] === scoutId ? undefined : scoutId;
-      return next;
-    });
-  };
+  const scoutByTeamId = useMemo(
+    () => new Map(scoutPool.map((scout) => [scout.teamId, scout])),
+    [scoutPool],
+  );
+  const allHumanTeamsReady = humanTeams.length > 0 && humanTeams.every((team) => scoutByTeamId.has(team.id));
 
   const continueToDraft = async (): Promise<void> => {
     if (!activeLeague || !allHumanTeamsReady) return;
@@ -110,7 +69,7 @@ export function ScoutHire() {
       await persistScoutHiresForLeague({
         leagueId: activeLeague.id,
         teams: leagueTeams,
-        selectedScoutIdsByTeamId: selectedByTeamId,
+        selectedScoutIdsByTeamId: {},
         pool: scoutPool,
       });
       navigate(draftRouteForLeague(activeLeague, {
@@ -169,14 +128,14 @@ export function ScoutHire() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <div className="mb-1 text-xs font-bold tracking-[0.2em] text-[#C4A853]">SCOUT DRAFT</div>
-            <h1 className="text-2xl font-bold" style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.8)" }}>Hire Your Draft Scouts</h1>
+            <div className="mb-1 text-xs font-bold tracking-[0.2em] text-[#C4A853]">SCOUT REVEAL</div>
+            <h1 className="text-2xl font-bold" style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.8)" }}>Meet Your Draft Scouts</h1>
             <div className="text-sm text-[#E8E8D8]/65">{activeLeague.name}</div>
           </div>
         </div>
 
         <div className="mb-5 bg-[#2d3d2f] border-4 border-[#4A6844] p-4 text-sm text-[#E8E8D8]/75">
-          Human clubs choose from the shared pool. CPU clubs auto-fill when you continue, so the farm draft scouting gate still has one hired scout per team.
+          Each club's scout is assigned from its farm identity. CPU clubs are assigned quietly when you continue, so the farm draft keeps one scout per team.
         </div>
 
         {humanTeams.length === 0 ? (
@@ -190,7 +149,7 @@ export function ScoutHire() {
             <h2 className="text-sm font-bold tracking-[0.12em] text-[#C4A853] mb-3">HUMAN CLUBS</h2>
             <div className="space-y-3">
               {humanTeams.map((team) => {
-                const chosenScout = scoutPool.find((scout) => scout.id === selectedByTeamId[team.id]);
+                const chosenScout = scoutByTeamId.get(team.id);
                 return (
                   <div key={team.id} className="bg-[#34472f] border-2 border-[#4A6844] p-3">
                     <div className="font-bold">{teamDisplayName(team)}</div>
@@ -208,15 +167,14 @@ export function ScoutHire() {
 
           <section>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {scoutPool.map((scout) => {
-                const assignedTeam = selectedTeamForScout(scout.id, selectedByTeamId, humanTeams);
+              {humanTeams.map((team) => {
+                const scout = scoutByTeamId.get(team.id);
+                if (!scout) return null;
                 return (
                   <div key={scout.id} className="relative text-left border-4 border-[#4A6844] bg-[#34472f] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]">
-                    {assignedTeam ? (
-                      <span className="absolute top-2 right-2 flex items-center gap-1 bg-[#C4A853] text-[#1A1A1A] text-[9px] font-bold tracking-wider px-1.5 py-0.5">
-                        <Check className="w-2.5 h-2.5" /> {assignedTeam.abbreviation}
-                      </span>
-                    ) : null}
+                    <span className="absolute top-2 right-2 flex items-center gap-1 bg-[#C4A853] text-[#1A1A1A] text-[9px] font-bold tracking-wider px-1.5 py-0.5">
+                      <Check className="w-2.5 h-2.5" /> {team.abbreviation}
+                    </span>
                     <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#C4A853] mb-2">
                       <Target className="w-3 h-3" /> {scout.specialtyLabel.toUpperCase()}
                     </div>
@@ -232,28 +190,9 @@ export function ScoutHire() {
                       <span className="text-[11px] font-bold text-[#9FE0A0]">{scout.eye}</span>
                       <span className="text-[9px] text-[#E8E8D8]/40">eye</span>
                     </div>
-                    <div className="grid grid-cols-1 gap-2">
-                      {humanTeams.map((team) => {
-                        const isSelected = selectedByTeamId[team.id] === scout.id;
-                        const isTakenByOther = Boolean(assignedTeam && assignedTeam.id !== team.id);
-                        return (
-                          <button
-                            key={team.id}
-                            type="button"
-                            disabled={isTakenByOther || saving}
-                            onClick={() => chooseScout(team.id, scout.id)}
-                            className={`text-[11px] font-bold border-2 px-2 py-1 text-left transition ${
-                              isSelected
-                                ? "border-[#C4A853] bg-[#C4A853] text-[#1A1A1A]"
-                                : isTakenByOther
-                                  ? "border-[#4A6844]/40 bg-[#2a352b] text-[#E8E8D8]/35"
-                                  : "border-[#4A6844] bg-[#2d3d2f] hover:border-[#C4A853]"
-                            }`}
-                          >
-                            {isSelected ? "Hired by " : "Hire for "}{team.abbreviation}
-                          </button>
-                        );
-                      })}
+                    <div className="grid grid-cols-1 gap-2 text-[11px] text-[#E8E8D8]/65">
+                      <div>Tight: {scout.specialties.length ? scout.specialties.join(", ") : "balanced"}</div>
+                      <div>Wide: {scout.weaknesses.length ? scout.weaknesses.join(", ") : "none"}</div>
                     </div>
                   </div>
                 );
@@ -274,10 +213,10 @@ export function ScoutHire() {
                 className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
               >
                 {saving ? <RefreshCw className="w-5 h-5 animate-spin" /> : null}
-                Continue to MLB Auction <ChevronRight className="w-5 h-5" />
+                Confirm Scouts <ChevronRight className="w-5 h-5" />
               </button>
               {!allHumanTeamsReady && humanTeams.length > 0 ? (
-                <span className="text-[11px] text-[#E8E8D8]/50">hire one scout for every human club</span>
+                <span className="text-[11px] text-[#E8E8D8]/50">scout assignment is still loading</span>
               ) : null}
             </div>
           </section>

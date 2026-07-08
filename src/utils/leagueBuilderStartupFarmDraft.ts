@@ -32,8 +32,8 @@ import {
   PROSPECT_SCOUTING_DRAFT_ENGINE_VERSION,
   scoutAccuracy,
   scoutOverallGradeBand,
+  scoutOverallTierForPosition,
   scoutProspect,
-  scoutTierForPosition,
   scoutToolBands,
   visibleReportForProspectPlayer,
   type DraftPosition,
@@ -108,6 +108,7 @@ export interface StartupScoutDraftPickSlot {
   pickNumber: number;
   teamId: string;
   teamName?: string;
+  farmArchetypeKey?: string;
 }
 
 export interface StartupProspectBoardReport extends VisibleSafeProspectReport {
@@ -870,6 +871,7 @@ function buildProspectPickOrder(teamStates: DraftTeamState[]): StartupScoutDraft
         pickNumber,
         teamId: state.team.id,
         teamName: teamDisplayNameForDraft(state.team),
+        farmArchetypeKey: state.team.farmArchetypeKey,
       });
       remainingByTeamId.set(state.team.id, remaining - 1);
     }
@@ -1076,11 +1078,11 @@ function buildBoardForSession(session: LeagueBuilderStartupDraftSession): Startu
     const reports = scouts.map((scout) => {
       const descriptor = toScoutDescriptor(scout);
       const report = scoutProspect(candidate, descriptor, session.seed);
-      const bandTier = scoutTierForPosition(candidate.position, descriptor);
+      const bandTier = scoutOverallTierForPosition(candidate.position, pickSlot.farmArchetypeKey);
       const toolBands = scoutToolBands({
         ratings: candidate.ratings as unknown as Record<string, number>,
         position: candidate.position,
-        scout: descriptor,
+        farmArchetypeKey: pickSlot.farmArchetypeKey,
         seed: `${session.seed}:tool-bands:${candidate.candidateId}:${scout.id}`,
       });
       const overallGradeBand = scoutOverallGradeBand(

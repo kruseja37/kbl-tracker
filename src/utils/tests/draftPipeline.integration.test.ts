@@ -358,6 +358,7 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
       ...team,
       leagueIds: Array.from(new Set([...(team.leagueIds ?? []), LEAGUE_ID])),
       controlledBy: teamId === TEAM_IDS[0] ? 'human' : 'ai',
+      farmArchetypeKey: teamId === TEAM_IDS[0] ? 'web-gems' : 'bomba-squad',
     });
 
     const seededRoster = await getTeamRoster(teamId);
@@ -634,7 +635,7 @@ async function seedCompleteFranchiseReadyLeague(
     leagueId,
     teams,
     selectedScoutIdsByTeamId: {},
-    pool: buildLiveScoutPool(leagueId, teams.length),
+    pool: buildLiveScoutPool(leagueId, teams),
   });
 }
 
@@ -1546,15 +1547,14 @@ describe('draft pipeline integration', () => {
       return team;
     }));
     const humanTeam = leagueTeams.find((team) => team.controlledBy === 'human') ?? leagueTeams[0];
-    const scoutPool = buildLiveScoutPool(LEAGUE_ID, leagueTeams.length);
-    const selectedScout = scoutPool[2];
+    const scoutPool = buildLiveScoutPool(LEAGUE_ID, leagueTeams);
+    const humanScout = scoutPool.find((scout) => scout.teamId === humanTeam.id);
+    if (!humanScout) throw new Error('Human auto scout missing from generated pool.');
 
     const savedScouts = await persistScoutHiresForLeague({
       leagueId: LEAGUE_ID,
       teams: leagueTeams,
-      selectedScoutIdsByTeamId: {
-        [humanTeam.id]: selectedScout.id,
-      },
+      selectedScoutIdsByTeamId: {},
       pool: scoutPool,
     });
     const scoutsByTeam = await getScoutProfilesForLeague(LEAGUE_ID);
@@ -1564,7 +1564,9 @@ describe('draft pipeline integration', () => {
     expect(new Set(scoutsByTeam.map((scout) => scout.teamId)).size).toBe(TEAM_IDS.length);
     expect(scoutsByTeam.find((scout) => scout.teamId === humanTeam.id)).toEqual(
       expect.objectContaining({
-        id: selectedScout.id,
+        id: humanScout.id,
+        specialties: ['fielding', 'arm'],
+        weaknesses: ['power', 'contact'],
         leagueId: LEAGUE_ID,
         teamId: humanTeam.id,
         hiredPick: expect.objectContaining({ teamId: humanTeam.id }),
@@ -1961,7 +1963,7 @@ describe('draft pipeline integration', () => {
     }
 
     // The launch gate also demands exactly one hired scout per team.
-    const scoutPool = buildLiveScoutPool(leagueId, teams.length);
+    const scoutPool = buildLiveScoutPool(leagueId, teams);
     await persistScoutHiresForLeague({
       leagueId,
       teams,

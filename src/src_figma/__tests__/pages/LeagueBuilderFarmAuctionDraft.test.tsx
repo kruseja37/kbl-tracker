@@ -4,10 +4,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
-import { normalizeToChemistryCode } from "../../../data/chemistryCanonical";
-import { chemistryFitPriceMultiplier } from "../../../engines/chemistryFitValue";
-import { gradeBandToPriceRange } from "../../../engines/gradeBandPrice";
 import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
+import { archetypeBandValueRange } from "../../../engines/scoutValueRange";
 import {
   deriveAuctionSessionNominationSeed,
   seededNominationOrder,
@@ -17,11 +15,14 @@ import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import {
   __resetLeagueBuilderDatabaseForTests,
   createFarmAuctionSessionId,
+  deleteScoutProfilesForLeague,
   saveScoutProfile,
 } from "../../../utils/leagueBuilderStorage";
 import {
+  scoutOverallBandForPosition,
   scoutOverallGradeBand,
-  scoutTierForPosition,
+  scoutOverallTierForPosition,
+  scoutToolBands,
   type DraftPosition,
   type LeagueBuilderProspectPlayerDto,
   type ProspectScoutDescriptor,
@@ -114,6 +115,7 @@ function makeTeam(id: string): Team {
     stadium: "Farm Park",
     controlledBy: "human",
     leagueIds: [LEAGUE_ID],
+    farmArchetypeKey: id === "team-a" ? "web-gems" : "bomba-squad",
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
   };
@@ -246,6 +248,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
 
   test("renders the obscured farm auction flow with positions and scout ranges only", async () => {
     const { leagueData, teams } = mockLeagueData();
+    await deleteScoutProfilesForLeague(LEAGUE_ID);
     teams[0].farmCapIdentity = {
       increase: ["Defense First"],
       decrease: [],
@@ -281,7 +284,6 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
         const prospect = prospectById.get(candidate.playerId)!;
         return { candidate, prospect };
       });
-    const boostedChemistry = normalizeToChemistryCode(baseCandidates[0].prospect.chemistry);
     const mlbPlayers = [
       { id: "mlb-c", firstName: "Mlb", lastName: "Catcher", primaryPosition: "C" },
       { id: "mlb-1b", firstName: "Mlb", lastName: "First", primaryPosition: "1B" },
@@ -289,7 +291,6 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       { id: "mlb-3b", firstName: "Mlb", lastName: "Third", primaryPosition: "3B" },
       { id: "mlb-lf", firstName: "Mlb", lastName: "Left", primaryPosition: "LF" },
     ];
-    const rosterChemistryCounts = { [boostedChemistry]: mlbPlayers.length };
     const mlbRosterPlayerIds = mlbPlayers.map((player) => player.id);
     leagueData.players = mlbPlayers.map((player) => ({
       ...player,
@@ -302,7 +303,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     const target = baseCandidates.find((candidate) => candidate.candidate.playerId === surfacedLot.playerId);
     if (!target) throw new Error("Expected the engine-surfaced farm lot in the candidate list.");
     const targetTeamId = surfacedLot.bidTurnTeamId ?? "team-a";
-    const targetScout = SCOUTS_BY_TEAM_ID[targetTeamId];
+    const targetFarmArchetypeKey = teams.find((team) => team.id === targetTeamId)?.farmArchetypeKey;
     const targetSessionSeed = deriveAuctionSessionNominationSeed({
       sessionId: createFarmAuctionSessionId(LEAGUE_ID, 1),
       launchNonce: TEST_SESSION_LAUNCH_NONCE,
@@ -310,25 +311,37 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     });
     const targetBand = scoutOverallGradeBand(
       target.prospect.prospectProfile.trueGrade,
-      scoutTierForPosition(target.prospect.primaryPosition as DraftPosition, targetScout),
+      scoutOverallTierForPosition(target.prospect.primaryPosition as DraftPosition, targetFarmArchetypeKey),
       `${targetSessionSeed}:grade-band:${target.prospect.id}:${targetTeamId}`,
     );
-    const targetPriceRange = gradeBandToPriceRange(targetBand);
-    const targetRosterChemistryCounts = targetTeamId === "team-a" ? rosterChemistryCounts : {};
-    const targetChemFit = chemistryFitPriceMultiplier(target.prospect.chemistry, targetRosterChemistryCounts);
-    const targetRange = {
-      w: 0,
-      low: targetPriceRange.low * targetChemFit,
-      high: targetPriceRange.high * targetChemFit,
-      displayedEstimate: ((targetPriceRange.low * targetChemFit) + (targetPriceRange.high * targetChemFit)) / 2,
-    };
+    const targetOverallBand = scoutOverallBandForPosition(target.prospect.primaryPosition as DraftPosition, targetFarmArchetypeKey);
+    const targetRange = archetypeBandValueRange(
+      surfacedLot.openingAsk,
+      targetOverallBand,
+      `${targetSessionSeed}:value-band:${target.prospect.id}:${targetTeamId}`,
+    );
+    const targetToolBands = scoutToolBands({
+      ratings: {
+        power: target.prospect.power,
+        contact: target.prospect.contact,
+        speed: target.prospect.speed,
+        fielding: target.prospect.fielding,
+        arm: target.prospect.arm,
+        velocity: target.prospect.velocity,
+        junk: target.prospect.junk,
+        accuracy: target.prospect.accuracy,
+      },
+      position: target.prospect.primaryPosition as DraftPosition,
+      farmArchetypeKey: targetFarmArchetypeKey,
+      seed: `${targetSessionSeed}:tool-bands:${target.prospect.id}:${targetTeamId}`,
+    });
     const targetName = prospectDisplayName(target.prospect);
     const targetRangeText = formatScoutRange(targetRange);
     const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
     const targetAgeText = `Age ${target.prospect.age}`;
     const targetRangeMidpoint = (targetRange.low + targetRange.high) / 2;
-    const expectedOpeningPrice = formatMoney(LEAGUE_MINIMUM_SALARY);
-    const expectedBidAmount = Math.ceil(LEAGUE_MINIMUM_SALARY);
+    const expectedOpeningPrice = formatMoney(surfacedLot.openingAsk);
+    const expectedBidAmount = Math.ceil(surfacedLot.openingAsk);
     const expectedSalePrice = formatMoney(expectedBidAmount);
 
     render(<LeagueBuilderFarmAuctionDraft />);
@@ -362,15 +375,21 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     fireEvent.pointerDown(scoutReportControl);
     expect(screen.getByText(`Scout value ${targetRangeText}`)).toBeInTheDocument();
     expect(screen.getByText(targetGradeText)).toBeInTheDocument();
+    expect(screen.getByText(`Grade band ${targetBand.best}-${targetBand.worst}`)).toBeInTheDocument();
+    expect(screen.getByText(`Confidence band ${targetOverallBand}`)).toBeInTheDocument();
+    for (const [tool, band] of Object.entries(targetToolBands)) {
+      expect(screen.getByText(`${tool.toUpperCase()} ${band.lower}-${band.upper}`)).toBeInTheDocument();
+    }
     fireEvent.pointerUp(scoutReportControl);
     expect(screen.queryByText(`Scout value ${targetRangeText}`)).not.toBeInTheDocument();
     expect(screen.queryByText(targetGradeText)).not.toBeInTheDocument();
     expect(targetRange.low).not.toBe(targetRange.high);
-    expect(targetRangeMidpoint).toBeCloseTo(targetRange.displayedEstimate, 10);
-    expect(targetRangeMidpoint).not.toBe(target.candidate.iv);
-    expect(screen.queryByText(formatMoney(target.candidate.iv))).not.toBeInTheDocument();
-    expect(screen.queryByText(/\b(POW|CON|SPD|FLD|ARM|VEL|JNK|ACC)\b/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Overall|True grade|Ratings/i)).not.toBeInTheDocument();
+    expect(targetRange.low).toBeLessThanOrEqual(surfacedLot.openingAsk);
+    expect(targetRange.high).toBeGreaterThanOrEqual(surfacedLot.openingAsk);
+    expect(targetRangeMidpoint).toBeCloseTo(surfacedLot.openingAsk, 10);
+    expect(targetRange.displayedEstimate).toBeGreaterThan(targetRange.low);
+    expect(targetRange.displayedEstimate).toBeLessThan(targetRange.high);
+    expect(screen.queryByText(/True grade|Ratings/i)).not.toBeInTheDocument();
     expect(screen.getByText("YOUR REMAINING BUDGET")).toBeInTheDocument();
     expect(screen.getByText("YOUR MAX BID")).toBeInTheDocument();
     expect(screen.getByText("ROSTER SLOTS REMAINING")).toBeInTheDocument();

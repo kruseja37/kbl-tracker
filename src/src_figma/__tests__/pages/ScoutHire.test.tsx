@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { ScoutHire } from "../../app/pages/ScoutHire";
+import { buildLiveScoutPool } from "../../app/utils/draftStaffingPersistence";
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -87,6 +88,7 @@ function makeTeam(id: string): Team {
     stadium: "Page Park",
     controlledBy: "human",
     leagueIds: ["league-page"],
+    farmArchetypeKey: id === "team-a" ? "web-gems" : "bomba-squad",
     createdDate: "2026-01-01",
     lastModified: "2026-01-01",
   };
@@ -114,18 +116,36 @@ describe("ScoutHire", () => {
     cleanup();
   });
 
-  test("preserves shill count when continuing to the live auction", async () => {
+  test("reveals auto-assigned scouts and preserves shill count when continuing to the live auction", async () => {
     render(<ScoutHire />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Continue to MLB Auction/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: /Confirm Scouts/i })).toBeEnabled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /Continue to MLB Auction/i }));
+    expect(screen.getByText(/SCOUT REVEAL/i)).toBeInTheDocument();
+    expect(screen.getByText(/Fielding \/ Arm/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Hire for/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirm Scouts/i }));
 
     await waitFor(() => {
       expect(persistScoutHiresForLeague).toHaveBeenCalled();
     });
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=3");
+  });
+
+  test("auto scout assignment is deterministic and archetype-specific", () => {
+    const webGemsTeam = makeTeam("team-a");
+    const bombaTeam = makeTeam("team-b");
+    const first = buildLiveScoutPool("league-page", [webGemsTeam]);
+    const second = buildLiveScoutPool("league-page", [webGemsTeam]);
+    const different = buildLiveScoutPool("league-page", [bombaTeam]);
+
+    expect(second[0]).toEqual(first[0]);
+    expect(first[0].specialties).toEqual(["fielding", "arm"]);
+    expect(first[0].weaknesses).toEqual(["power", "contact"]);
+    expect(different[0].specialties).toEqual(["power"]);
+    expect(different[0].weaknesses).toEqual(["contact", "speed"]);
   });
 });

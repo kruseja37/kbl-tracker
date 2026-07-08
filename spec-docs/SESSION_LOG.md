@@ -6704,3 +6704,15 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - After fix, the N=500 opt-in histogram is exact to spec (0.0pp total absolute deviation), and the existing 40k §13 prospect distribution check reports 0pp grade deviations.
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused prospect/farm suite with opt-in F4 invariant pass (12 files / 119 tests). Full `NODE_ENV= npm test` was attempted: 9,121 pass / 1 fail / 10 skipped, with the lone red an unrelated `LeagueBuilderDraftSetup` duplicate CUT2-2 timing failure; the exact test rerun passed twice, and the full `LeagueBuilderDraftSetup.test.tsx` file rerun passed 57/57.
 - Next: independent audit of the F4 diff, then continue Mode-1 punchlist/gauntlet sequencing.
+
+## 2026-07-08 (Codex, attended) — M1D F2/F3 farm bands + scout auto-specialization
+
+- Completed **F2/F3** in `/private/tmp/kbl-m1d-farmbands` after verifying M1b had merged to `origin/main` (`dbfc2a48 Merge lane M1b: prospect generation to spec curve [F4]`). The ratified source spec `spec-docs/FARM_ARCHETYPE_SCOUT_CONFIDENCE_2026-07-08.md` was already tracked in the worktree and used as the table source.
+- Added `src/data/farmArchetypeScoutConfidence.ts`: all 24 historical farm archetypes mapped to 8 scout areas with 3/5/7 confidence bands plus rationale strings, typed against the prospect engine's exported tool vocabulary, with unknown/missing archetype fallback to all-medium band 5.
+- Reworked `prospectScoutingDraftEngine` so `scoutToolBands` applies per-area archetype confidence instead of one position tier; overall scout grade confidence now uses the captain ruling mean-rounded 3/5/7 rule over the applicable hitter/pitcher areas.
+- Threaded the verified persisted field `farmArchetypeKey` through startup farm draft pick slots and farm auction reads. Farm auction lot reveal now shows scout value, grade band/confidence, and per-tool numeric ranges from the archetype-derived bands.
+- Fixed F7 by replacing the old static grade-salary Scout value estimate with a fogged range around the true farm opening ask, using the archetype-derived overall confidence band width.
+- Fixed F10 by making farm auction scout reads independent of visiting ScoutHire; archetype-bearing teams still get deterministic banded reads when saved scout profiles are absent or fail to load.
+- Reworked ScoutHire into a no-choice deterministic reveal: specialties are the archetype row's 3-band areas, weaknesses are the 7-band areas, labels/summaries come from the row rationale, and `draftStaffingPersistence` keeps the same saved record shape.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused prospect/farm auction suites pass 41/41; focused new data/value/startup/ScoutHire suites pass 22/22; targeted draft-staffing persistence integration pass 1/1. Full `NODE_ENV= npx vitest run` produced 9,126 pass / 3 fail / 10 skipped, with only the characterized `LeagueBuilderDraftSetup` order-sensitive block failing; the full `LeagueBuilderDraftSetup.test.tsx` solo rerun passed 57/57.
+- Next: independent audit of the F2/F3 diff, then continue the Mode-1 punchlist sequencing.
