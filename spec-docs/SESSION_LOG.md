@@ -6712,3 +6712,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Added the DEV/test-gated `/__preview/phase2-activation` console with global activation, per-flag On/Off/Inherit controls, activate-all, save, and reset. No production route or always-on UI was added.
 - Added `src/utils/tests/franchisePhase2Activation.test.ts` covering default-off unchanged, persisted global activation flipping a getter, per-flag override precedence, and test-only setter precedence.
 - Gates: `npx tsc -b --pretty false` pass; focused activation/flag-adjacent suite pass 10 files / 59 tests; `npm run build` pass; L-SIM smoke pass 24/24 games with all CRITICAL invariants green. Full `NODE_ENV= npx vitest run` produced 15 failures outside M2a; the non-LeagueBuilder set passed isolated 5 files / 134 tests with expanded timeout, and `LeagueBuilderDraftSetup.test.tsx` narrowed to the existing CUT2-2 30-club shill pressure red (disabled `START THE DRAFT`) when run solo with expanded timeout.
+## 2026-07-08 (Codex, attended) — Mode 1 P1 CPU identity auto-assign
+
+- Completed **P1** from `spec-docs/MODE1_PUNCHLIST_2026-07-08.md` §2 on `lane/m1c-autoassign`: Draft Setup THE CLUBS now supports deterministic `Auto-fill remaining` and per-club reroll for MLB + farm identities.
+- Behavior: fills only missing CPU identities by default, preserves user-set identities, requires explicit opt-in for human clubs, excludes LOCKED draftability archetypes, uses a visible `leagueId:nonce` seed, and reroll changes auto-filled slots without rewriting manual picks.
+- Implementation uses the existing archetype catalog, current draftability verdicts, existing `selectTeamArchetype` persistence, and a diversity-first planner with roster-strength tiebreaking when the pool source is `team-roster-priority`.
+- Regression coverage added in `LeagueBuilderDraftSetup.test.tsx` for deterministic planning, reroll variation, LOCKED exclusion, CPU-only default fill, preservation of user picks, and include-human opt-in.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; DraftSetup solo pass 60/60; full suite pass with constrained workers via `NODE_ENV= npx vitest run --maxWorkers=2` = 599 files passed / 5 skipped, 9,125 tests passed / 9 skipped. The initial unconstrained default full run hit suite-load timeouts/noise, but DraftSetup passed solo and in the constrained full run.
+- Commit message: `feat(draft-setup): CPU identity auto-assign [P1]`.
+- Next: audit the P1 diff against the JK-ratified behavior and then continue the Mode 1 punchlist queue.

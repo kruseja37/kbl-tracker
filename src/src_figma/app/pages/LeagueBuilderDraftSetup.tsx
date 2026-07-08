@@ -279,6 +279,31 @@ type LeaguePoolRecord = {
 };
 
 type ClubEditorMode = "identity" | "design" | null;
+type IdentityAutoFillSlot = "mlb" | "farm";
+type IdentityAutoFillMode = "fill-empty" | "reroll-team";
+type IdentityAutoFilledSlotKey = `${string}:${IdentityAutoFillSlot}`;
+
+export interface IdentityAutoAssignment {
+  teamId: string;
+  mlbKey?: string;
+  farmKey?: string;
+  slots: IdentityAutoFillSlot[];
+}
+
+interface IdentityAutoAssignInput {
+  leagueId: string;
+  nonce: number;
+  teams: readonly Team[];
+  seats: readonly DraftSetupSeat[];
+  draftability?: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }>;
+  includeHumanTeams: boolean;
+  autoFilledSlots?: ReadonlySet<IdentityAutoFilledSlotKey>;
+  mode: IdentityAutoFillMode;
+  rerollTeamId?: string;
+  poolSourceMode: PoolSourceMode;
+  activeLeagueId: string;
+  players: readonly Player[];
+}
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
 type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing" | "g1" | "numericShape">;
 type HandEditLedger = { handAdds: string[]; handRemoves: string[] };
@@ -307,6 +332,7 @@ const POOL_PROVENANCE_SESSION_PREFIX = "kbl:draft-pool-provenance:";
 const POOL_SOURCE_MODE_SESSION_PREFIX = "kbl:draft-pool-source-mode:";
 const POOL_QUALITY_CENTER_SESSION_PREFIX = "kbl:draft-pool-quality-center:";
 const RESERVE_PRICE_K_SESSION_PREFIX = "kbl:draft-reserve-price-k:";
+const IDENTITY_AUTO_FILL_NONCE_SESSION_PREFIX = "kbl:draft-identity-auto-fill-nonce:";
 const SHARED_POOL_RECHECK_TAG = "SHARED POOL";
 
 const ASK_SPOT_ORDER = new Map(
@@ -388,6 +414,203 @@ function teamOwnerId(team: Team, seats: readonly DraftSetupSeat[]): string {
 
 function sortedIds(ids: readonly string[]): string[] {
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
+}
+
+function identityAutoFilledSlotKey(teamId: string, slot: IdentityAutoFillSlot): IdentityAutoFilledSlotKey {
+  return `${teamId}:${slot}`;
+}
+
+function hashStringToUint32(value: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededUnit(seed: string): number {
+  return hashStringToUint32(seed) / 0x100000000;
+}
+
+function teamRosterPlayers(players: readonly Player[], activeLeagueId: string, teamId: string): Player[] {
+  if (!activeLeagueId || !teamId) return [];
+  return players.filter((player) =>
+    player.leagueAssignments?.some((assignment) =>
+      assignment.leagueId === activeLeagueId &&
+      assignment.teamId === teamId &&
+      assignment.rosterStatus !== "FREE_AGENT"
+    )
+  );
+}
+
+function playerStatForArchetypeStat(player: Player, stat: (typeof HISTORICAL_ARCHETYPES)[number]["boosts"][number]): number {
+  switch (stat) {
+    case "POW":
+      return player.power;
+    case "CON":
+      return player.contact;
+    case "SPD":
+      return player.speed;
+    case "FLD":
+      return player.fielding;
+    case "ARM":
+      return player.arm;
+    case "ROT_VEL":
+    case "PEN_VEL":
+      return player.velocity ?? 0;
+    case "ROT_JNK":
+    case "PEN_JNK":
+      return player.junk ?? 0;
+    case "ROT_ACC":
+    case "PEN_ACC":
+      return player.accuracy ?? 0;
+    default:
+      return 0;
+  }
+}
+
+function rosterFitForArchetype(teamPlayers: readonly Player[], archetype: (typeof HISTORICAL_ARCHETYPES)[number]): number {
+  if (teamPlayers.length === 0 || archetype.boosts.length === 0) return 0;
+  const relevantPlayers = teamPlayers.filter((player) => {
+    const boostsPitching = archetype.boosts.some((stat) => stat.startsWith("ROT_") || stat.startsWith("PEN_"));
+    if (!boostsPitching) return true;
+    const pitcherRole = player.primaryPosition;
+    if (archetype.boosts.some((stat) => stat.startsWith("ROT_"))) {
+      return pitcherRole === "SP" || pitcherRole === "SP/RP";
+    }
+    return pitcherRole === "RP" || pitcherRole === "CP" || pitcherRole === "SP/RP";
+  });
+  const sample = relevantPlayers.length > 0 ? relevantPlayers : teamPlayers;
+  const total = sample.reduce((sum, player) =>
+    sum + archetype.boosts.reduce((inner, stat) => inner + playerStatForArchetypeStat(player, stat), 0),
+    0,
+  );
+  return total / (sample.length * archetype.boosts.length);
+}
+
+function chooseAutoFillArchetype(input: {
+  leagueId: string;
+  nonce: number;
+  teamId: string;
+  slot: IdentityAutoFillSlot;
+  candidates: readonly (typeof HISTORICAL_ARCHETYPES)[number][];
+  assignmentCounts: ReadonlyMap<string, number>;
+  poolSourceMode: PoolSourceMode;
+  rosterPlayers: readonly Player[];
+}): string | null {
+  const ranked = input.candidates
+    .map((archetype) => ({
+      archetype,
+      diversityCount: input.assignmentCounts.get(archetype.id) ?? 0,
+      rosterFit: input.poolSourceMode === "team-roster-priority"
+        ? rosterFitForArchetype(input.rosterPlayers, archetype)
+        : 0,
+      tie: seededUnit(`${input.leagueId}:${input.nonce}:${input.teamId}:${input.slot}:${archetype.id}`),
+    }))
+    .sort((a, b) =>
+      a.diversityCount - b.diversityCount ||
+      b.rosterFit - a.rosterFit ||
+      a.tie - b.tie ||
+      a.archetype.id.localeCompare(b.archetype.id)
+    );
+  return ranked[0]?.archetype.id ?? null;
+}
+
+export function buildIdentityAutoAssignPlan(input: IdentityAutoAssignInput): IdentityAutoAssignment[] {
+  const lockedArchetypeIds = new Set(
+    Object.entries(input.draftability ?? {})
+      .filter(([, verdict]) => verdict.band === "LOCKED")
+      .map(([archetypeId]) => archetypeId),
+  );
+  const candidates = HISTORICAL_ARCHETYPES.filter((archetype) => !lockedArchetypeIds.has(archetype.id));
+  if (candidates.length === 0) return [];
+
+  const autoSlots = input.autoFilledSlots ?? new Set<IdentityAutoFilledSlotKey>();
+  const mutableSlot = (team: Team, slot: IdentityAutoFillSlot): boolean => {
+    if (input.mode === "fill-empty") {
+      return slot === "mlb" ? !team.mlbArchetypeKey : !team.farmArchetypeKey;
+    }
+    if (team.id !== input.rerollTeamId) return false;
+    const current = slot === "mlb" ? team.mlbArchetypeKey : team.farmArchetypeKey;
+    return !current || autoSlots.has(identityAutoFilledSlotKey(team.id, slot));
+  };
+  const scopedTeam = (team: Team): boolean =>
+    input.includeHumanTeams || teamOwnerId(team, input.seats) === "cpu";
+
+  const counts = new Map<string, number>();
+  for (const team of input.teams) {
+    const keys: Array<[IdentityAutoFillSlot, string | undefined | null]> = [
+      ["mlb", team.mlbArchetypeKey],
+      ["farm", team.farmArchetypeKey],
+    ];
+    for (const [slot, key] of keys) {
+      if (!key || mutableSlot(team, slot)) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const nextTeams = new Map(input.teams.map((team) => [team.id, { ...team }]));
+  const assignments: IdentityAutoAssignment[] = [];
+  for (const team of [...input.teams].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!scopedTeam(team)) continue;
+    const slots: IdentityAutoFillSlot[] = [];
+    if (mutableSlot(team, "mlb")) slots.push("mlb");
+    if (mutableSlot(team, "farm")) slots.push("farm");
+    if (slots.length === 0) continue;
+
+    const nextTeam = nextTeams.get(team.id) ?? { ...team };
+    const assignment: IdentityAutoAssignment = { teamId: team.id, slots: [] };
+    const rosterPlayers = teamRosterPlayers(input.players, input.activeLeagueId, team.id);
+
+    for (const slot of slots) {
+      const currentKey = slot === "mlb" ? team.mlbArchetypeKey : team.farmArchetypeKey;
+      const slotCandidates = currentKey && candidates.length > 1
+        ? candidates.filter((archetype) => archetype.id !== currentKey)
+        : candidates;
+      const selected = chooseAutoFillArchetype({
+        leagueId: input.leagueId,
+        nonce: input.nonce,
+        teamId: team.id,
+        slot,
+        candidates: slotCandidates,
+        assignmentCounts: counts,
+        poolSourceMode: input.poolSourceMode,
+        rosterPlayers,
+      });
+      if (!selected) continue;
+      counts.set(selected, (counts.get(selected) ?? 0) + 1);
+      assignment.slots.push(slot);
+      if (slot === "mlb") {
+        assignment.mlbKey = selected;
+        nextTeam.mlbArchetypeKey = selected;
+      } else {
+        assignment.farmKey = selected;
+        nextTeam.farmArchetypeKey = selected;
+      }
+    }
+
+    nextTeams.set(team.id, nextTeam);
+    if (assignment.slots.length > 0) assignments.push(assignment);
+  }
+
+  return assignments;
+}
+
+function identityAutoFillNonceSessionKey(leagueId: string): string {
+  return `${IDENTITY_AUTO_FILL_NONCE_SESSION_PREFIX}${leagueId}`;
+}
+
+function loadIdentityAutoFillNonceFromSession(leagueId: string | null): number {
+  if (!leagueId || typeof window === "undefined") return 0;
+  const raw = window.sessionStorage.getItem(identityAutoFillNonceSessionKey(leagueId));
+  const parsed = raw ? Number.parseInt(raw, 10) : 0;
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0;
+}
+
+function saveIdentityAutoFillNonceToSession(leagueId: string, nonce: number): void {
+  if (!leagueId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(identityAutoFillNonceSessionKey(leagueId), String(Math.max(0, Math.floor(nonce))));
 }
 
 function designFirstIdentityCriticalPlayerIds(
@@ -996,6 +1219,11 @@ export function LeagueBuilderDraftSetup() {
   const [draftability, setDraftability] = useState<
     Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> | undefined
   >(undefined);
+  const [identityAutoFillNonce, setIdentityAutoFillNonce] = useState(() =>
+    loadIdentityAutoFillNonceFromSession(activeLeagueId)
+  );
+  const [includeHumanIdentityAutoFill, setIncludeHumanIdentityAutoFill] = useState(false);
+  const [autoFilledIdentitySlots, setAutoFilledIdentitySlots] = useState<Set<IdentityAutoFilledSlotKey>>(new Set());
   const [recheckReport, setRecheckReport] = useState<RecheckReport | null>(null);
   const [lastRecheckKey, setLastRecheckKey] = useState<string | null>(null);
   const autoRecheckTriggerRef = useRef<string | null>(null);
@@ -1020,6 +1248,16 @@ export function LeagueBuilderDraftSetup() {
       return leagueTeams[0].id;
     });
   }, [leagueTeams]);
+
+  useEffect(() => {
+    setIdentityAutoFillNonce(loadIdentityAutoFillNonceFromSession(activeLeagueId));
+    setAutoFilledIdentitySlots(new Set());
+  }, [activeLeagueId]);
+
+  useEffect(() => {
+    if (!activeLeagueId) return;
+    saveIdentityAutoFillNonceToSession(activeLeagueId, identityAutoFillNonce);
+  }, [activeLeagueId, identityAutoFillNonce]);
 
   const refreshPool = useCallback(async (leagueId: string) => {
     setPoolRecord(await loadPoolRecord(leagueId));
@@ -1593,6 +1831,25 @@ export function LeagueBuilderDraftSetup() {
       window.clearTimeout(timer);
     };
   }, [league?.tier, rosterDesignerPoolKey, tierBudget]);
+  const resolveIdentityDraftability = useCallback(() => {
+    if (draftability && Object.keys(draftability).length > 0) return draftability;
+    if (rosterDesignerPlayers.length === 0) return draftability;
+    const rows = rankAllArchetypesForPool(
+      demandUniverseFromPlayers(rosterDesignerPlayers),
+      league?.tier ?? "juiced",
+      { budgetOverride: tierBudget },
+    );
+    return draftabilityRecordFromRows(rows);
+  }, [draftability, league?.tier, rosterDesignerPlayers, tierBudget]);
+  const identityAutoFillRemaining = useMemo(() => {
+    const scopedTeams = leagueTeams.filter((team) =>
+      includeHumanIdentityAutoFill || teamOwnerId(team, seats) === "cpu"
+    );
+    return scopedTeams.reduce((sum, team) =>
+      sum + (team.mlbArchetypeKey ? 0 : 1) + (team.farmArchetypeKey ? 0 : 1),
+      0,
+    );
+  }, [includeHumanIdentityAutoFill, leagueTeams, seats]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey) && Boolean(team.farmArchetypeKey));
   const poolReady = locked && sufficiency.meetsFloor;
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
@@ -1970,7 +2227,89 @@ export function LeagueBuilderDraftSetup() {
       }
       const saved = await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey);
       replaceTeamsLocal([saved]);
+      setAutoFilledIdentitySlots((previous) => {
+        const next = new Set(previous);
+        next.delete(identityAutoFilledSlotKey(selectedTeam.id, slot));
+        return next;
+      });
     });
+
+  const persistIdentityAutoAssignments = useCallback(
+    async (assignments: readonly IdentityAutoAssignment[]) => {
+      if (assignments.length === 0) return;
+      const savedTeams: Team[] = [];
+      const nextAutoSlots = new Set(autoFilledIdentitySlots);
+      for (const assignment of assignments) {
+        const team = leagueTeams.find((candidate) => candidate.id === assignment.teamId);
+        if (!team) continue;
+        const nextMlbKey = assignment.mlbKey ?? team.mlbArchetypeKey;
+        const nextFarmKey = assignment.farmKey ?? team.farmArchetypeKey;
+        if (!nextMlbKey) continue;
+        const saved = await selectTeamArchetype({ ...team }, nextMlbKey, nextFarmKey);
+        savedTeams.push(saved);
+        for (const slot of assignment.slots) {
+          nextAutoSlots.add(identityAutoFilledSlotKey(team.id, slot));
+        }
+      }
+      if (savedTeams.length > 0) {
+        replaceTeamsLocal(savedTeams);
+        setAutoFilledIdentitySlots(nextAutoSlots);
+      }
+    },
+    [autoFilledIdentitySlots, leagueTeams, replaceTeamsLocal],
+  );
+
+  const handleAutoFillRemainingIdentities = () =>
+    runAction(async () => {
+      if (!league || !setupCanMutate()) return;
+      const assignments = buildIdentityAutoAssignPlan({
+        leagueId: league.id,
+        nonce: identityAutoFillNonce,
+        teams: leagueTeams,
+        seats,
+        draftability: resolveIdentityDraftability(),
+        includeHumanTeams: includeHumanIdentityAutoFill,
+        autoFilledSlots: autoFilledIdentitySlots,
+        mode: "fill-empty",
+        poolSourceMode,
+        activeLeagueId,
+        players,
+      });
+      if (assignments.length === 0) {
+        throw new Error("No empty identities available for auto-fill.");
+      }
+      await persistIdentityAutoAssignments(assignments);
+    }, { refreshData: false, refreshPool: false });
+
+  const handleRerollTeamIdentities = (teamId: string) =>
+    runAction(async () => {
+      if (!league || !setupCanMutate()) return;
+      const team = leagueTeams.find((candidate) => candidate.id === teamId);
+      if (!team) return;
+      if (!includeHumanIdentityAutoFill && teamOwnerId(team, seats) !== "cpu") {
+        throw new Error("Turn on human-club auto-fill before rerolling a human club.");
+      }
+      const nextNonce = identityAutoFillNonce + 1;
+      const assignments = buildIdentityAutoAssignPlan({
+        leagueId: league.id,
+        nonce: nextNonce,
+        teams: leagueTeams,
+        seats,
+        draftability: resolveIdentityDraftability(),
+        includeHumanTeams: includeHumanIdentityAutoFill,
+        autoFilledSlots: autoFilledIdentitySlots,
+        mode: "reroll-team",
+        rerollTeamId: teamId,
+        poolSourceMode,
+        activeLeagueId,
+        players,
+      });
+      if (assignments.length === 0) {
+        throw new Error("That club has no empty or auto-filled identities to reroll.");
+      }
+      setIdentityAutoFillNonce(nextNonce);
+      await persistIdentityAutoAssignments(assignments);
+    }, { refreshData: false, refreshPool: false });
 
   const handleSaveRosterDesign = useCallback(
     async (team: Team, rosterDesign: NonNullable<Team["rosterDesign"]>) => {
@@ -3008,12 +3347,43 @@ export function LeagueBuilderDraftSetup() {
                 Each team picks an MLB identity (sets what's cheap to build) and a farm identity (steers your scout) from 24 historical team archetypes — all balanced, so no identity builds a stronger team; the difference is the shape of the team you can build.
               </HelpNote>
             ) : null}
+            <div className="mb-3 flex flex-wrap items-center gap-3 border-2 border-[var(--ballpark-panel-border)] bg-[#243024] px-3 py-2">
+              <PressButton
+                size="sm"
+                onClick={() => void handleAutoFillRemainingIdentities()}
+                disabled={Boolean(setupMutationBlockMessage) || busy || identityAutoFillRemaining === 0}
+              >
+                <RefreshCw className="w-4 h-4" /> Auto-fill remaining
+              </PressButton>
+              <label className="flex items-center gap-2 text-[11px] font-bold text-[var(--ballpark-chalk)]/70">
+                <input
+                  type="checkbox"
+                  checked={includeHumanIdentityAutoFill}
+                  onChange={(event) => setIncludeHumanIdentityAutoFill(event.target.checked)}
+                  disabled={Boolean(setupMutationBlockMessage) || busy}
+                  className="h-4 w-4 accent-[var(--ballpark-brass)]"
+                />
+                include human clubs
+              </label>
+              <span className="text-[11px] font-bold text-[var(--ballpark-chalk)]/55">
+                {identityAutoFillRemaining} empty slot{identityAutoFillRemaining === 1 ? "" : "s"} · seed {league.id}:{identityAutoFillNonce}
+              </span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {leagueTeams.map((team) => {
                 const ownerId = teamOwnerId(team, seats);
                 const isHuman = ownerId !== "cpu";
                 const mlb = archetypeByKey(team.mlbArchetypeKey);
                 const farm = archetypeByKey(team.farmArchetypeKey);
+                const rerollableSlots = (team.mlbArchetypeKey ? 0 : 1) +
+                  (team.farmArchetypeKey ? 0 : 1) +
+                  (autoFilledIdentitySlots.has(identityAutoFilledSlotKey(team.id, "mlb")) ? 1 : 0) +
+                  (autoFilledIdentitySlots.has(identityAutoFilledSlotKey(team.id, "farm")) ? 1 : 0);
+                const rerollDisabled =
+                  Boolean(setupMutationBlockMessage) ||
+                  busy ||
+                  rerollableSlots === 0 ||
+                  (isHuman && !includeHumanIdentityAutoFill);
                 const isSelected = team.id === selectedTeamId;
                 const designLocked = Boolean(team.rosterDesign?.lockedAt);
                 const designEdited = Boolean(team.rosterDesign);
@@ -3080,6 +3450,16 @@ export function LeagueBuilderDraftSetup() {
                         className="flex items-center gap-1 text-[11px] font-bold text-[var(--ballpark-brass)] hover:underline"
                       >
                         {mlb ? <><Check className="w-3 h-3" /> identity set · edit</> : <>set identity <ChevronRight className="w-3 h-3" /></>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleRerollTeamIdentities(team.id)}
+                        disabled={rerollDisabled}
+                        className="flex items-center gap-1 text-[11px] font-bold text-[var(--ballpark-brass)] hover:underline disabled:opacity-35 disabled:no-underline"
+                        aria-label={`Reroll identities for ${team.name}`}
+                        title={isHuman && !includeHumanIdentityAutoFill ? "Turn on include human clubs first" : undefined}
+                      >
+                        <RefreshCw className="w-3 h-3" /> reroll
                       </button>
                       {isHuman ? (
                         <button
