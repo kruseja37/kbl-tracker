@@ -17,8 +17,8 @@ Nomination shuffle [F1] · prospect curve [F4] · Phase-2 activation switch (Mod
 Style mismash everywhere (F5 reskin deliberately after correctness) · pool-first may need one Regenerate (F19) + stale legality ✗ until RE-CHECK (F15) · archetype market advisory reads far too gloomy (F16) · farm-gaps sidebar static during the draft (F17) · press-hold band reveal unverified by scripted browsers (tool limitation) · pool-first LOCK can refuse opaquely, no in-UI recovery hint, if a roster changes after the once-per-league auto-import — reload remounts and clears it (F20's residual, F22).
 
 ## Questions for JK
-1. **F18:** farm slots aren't position-enforced — a passive team can end with an all-pitcher farm class. Enforce, or keep advisory?
-2. **Morale wave fork (Mode-2, parked per your priority):** the RIVALRY_SWEEP pair — see MORALE_WAVE_BUILD_PLAN_2026-07-08.md.
+1. **F18:** farm slots aren't position-enforced — a passive team can end with an all-pitcher farm class. Enforce, or keep advisory? — **ANSWERED (2026-07-08 morning, verbal): keep advisory.** JK — "teams should be allowed to draft whoever they want to meet their needs in the farm draft." No build; gaps display stays as-is. See `V1_CANON_2026-07-07.md` §6.
+2. **Morale wave fork (Mode-2, parked per your priority):** the RIVALRY_SWEEP pair — see MORALE_WAVE_BUILD_PLAN_2026-07-08.md. — **ANSWERED (2026-07-08 morning, verbal): APPROVED.** Series inference (consecutive scheduled games vs the same opponent = one series) BUILDS, no new user input needed — the last morale-wave JK-fork is closed; the plan now awaits only captain ratification + Mode-1 completion. See `V1_CANON_2026-07-07.md` §6.
 
 ## Parked honestly
 Anti-hoarding economy fix (F8/F11): failed its measurement gate, but the gauntlet proved the instrument's pools were the artifact (real drafts complete). Parked on its branch pending a properly-based harness. Not a walkthrough blocker. · Codex flaked overnight (5 startup stalls) — builds rerouted to Claude-side workers, same audit gate.
