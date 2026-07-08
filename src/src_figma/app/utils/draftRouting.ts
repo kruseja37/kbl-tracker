@@ -58,6 +58,10 @@ export function staffHireRouteForLeague(league: Pick<LeagueTemplate, "id">): str
   return withLeagueId("/league-builder/staff-hire", league.id);
 }
 
+export function franchiseSetupRouteForLeague(league: Pick<LeagueTemplate, "id">): string {
+  return withLeagueId("/franchise/setup", league.id);
+}
+
 export function leagueIdFromSearch(search: string): string | null {
   return new URLSearchParams(search).get("leagueId");
 }

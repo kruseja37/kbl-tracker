@@ -5,6 +5,7 @@ import { ArrowLeft, ChevronRight, ClipboardList, Mic, RefreshCw, Shuffle } from 
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import {
   farmDraftRouteForLeague,
+  franchiseSetupRouteForLeague,
   leagueIdFromSearch,
   resolveInitialLeagueId,
 } from "../utils/draftRouting";
@@ -158,7 +159,7 @@ export function EndOfDraftStaffing() {
           };
         }),
       });
-      navigate("/franchise/setup");
+      navigate(franchiseSetupRouteForLeague(activeLeague));
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : "Could not save draft staff.");
     } finally {

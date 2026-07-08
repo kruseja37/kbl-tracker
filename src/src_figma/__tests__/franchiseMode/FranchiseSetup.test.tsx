@@ -16,6 +16,7 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 const mockNavigate = vi.fn();
 const mockInitializeFranchise = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
+const mockGetMlbDraftSession = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
@@ -109,6 +110,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     getRoster: vi.fn(),
     updateRoster: vi.fn(),
     removeRoster: vi.fn(),
+    getMlbDraftSession: (...args: unknown[]) => mockGetMlbDraftSession(...args),
     seedSMB4Data: vi.fn(),
     isSMB4Seeded: vi.fn(() => Promise.resolve(false)),
     refresh: vi.fn(),
@@ -122,7 +124,9 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 describe('FranchiseSetup Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, '', '/franchise/setup');
     mockInitializeFranchise.mockResolvedValue('franchise-1');
+    mockGetMlbDraftSession.mockResolvedValue(null);
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
       ownership: 'league-builder-mode-1',
@@ -194,6 +198,39 @@ describe('FranchiseSetup Component', () => {
     test('shows league description text', () => {
       render(<FranchiseSetup />);
       expect(screen.getByText(/Choose the league template/i)).toBeInTheDocument();
+    });
+
+    test('auto-selects the leagueId passed from draft staffing handoff', async () => {
+      window.history.pushState({}, '', '/franchise/setup?leagueId=summer');
+
+      render(<FranchiseSetup />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /NEXT/i })).not.toBeDisabled();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+
+      expect(screen.getByText('SEASON SETTINGS')).toBeInTheDocument();
+    });
+
+    test('keeps manual setup entry on the full picker without a leagueId param', () => {
+      render(<FranchiseSetup />);
+
+      expect(screen.getByText('SELECT A LEAGUE')).toBeInTheDocument();
+      expect(screen.getByText('KRUSE BASEBALL LEAGUE')).toBeInTheDocument();
+      expect(screen.getByText('SUMMER LEAGUE')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /NEXT/i })).toBeDisabled();
+    });
+
+    test('badges only leagues with completed draft sessions', async () => {
+      mockGetMlbDraftSession.mockImplementation(async (leagueId: string) =>
+        leagueId === 'summer' ? { pickOrder: [{ round: 1, pick: 1, teamId: 'team-17' }], completedPicks: [{ round: 1, pick: 1, teamId: 'team-17', playerId: 'player-1' }] } : null
+      );
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('Draft complete')).toBeInTheDocument();
+      expect(screen.getAllByText('Draft complete')).toHaveLength(1);
     });
   });
 
