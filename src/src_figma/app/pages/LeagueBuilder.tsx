@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Database, Users, User, Folder, Shuffle, Settings, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
+import { Database, Users, User, Folder, Shuffle, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
 import { BallparkShell } from "../components/ballpark";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
-  const { leagues, teams, players, rulesPresets, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
+  const { leagues, teams, players, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
 
   const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | null>(null);
   const [seedResult, setSeedResult] = useState<{ source: string; teams: number; players: number } | null>(null);
@@ -199,14 +199,6 @@ export function LeagueBuilder() {
             onClick={() => navigate(leagues[0] ? `/league-builder/draft-setup?leagueId=${leagues[0].id}` : "/league-builder/draft-setup")}
           />
 
-          <ModuleCard
-            icon={<Settings className="w-8 h-8" />}
-            title="RULES"
-            description="Game, season, and simulation settings"
-            count={isLoading ? "..." : `${rulesPresets.length} preset${rulesPresets.length !== 1 ? 's' : ''}`}
-            color="#DD0000"
-            onClick={() => navigate("/league-builder/rules")}
-          />
         </div>
 
         {/* Current Leagues Section */}

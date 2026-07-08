@@ -61,7 +61,6 @@ interface LeagueFormData {
   name: string;
   description: string;
   teamIds: string[];
-  defaultRulesPreset: string;
   draftFormat: 'auction' | 'snake';
   tier: TierKey;
   salaryCap: string;
@@ -76,7 +75,6 @@ const DEFAULT_FORM_DATA: LeagueFormData = {
   name: "",
   description: "",
   teamIds: [],
-  defaultRulesPreset: "",
   draftFormat: "auction",
   tier: "juiced",
   salaryCap: TIER_CAPS.juiced.tierCap.toLocaleString(),
@@ -129,7 +127,6 @@ export function LeagueBuilderLeagues() {
   const {
     leagues,
     teams,
-    rulesPresets,
     isLoading,
     error,
     createLeague,
@@ -181,14 +178,6 @@ export function LeagueBuilderLeagues() {
     return assignments;
   }, [formData.conferences]);
 
-  // Set default rules preset when data loads
-  useEffect(() => {
-    if (rulesPresets.length > 0 && !formData.defaultRulesPreset) {
-      const defaultPreset = rulesPresets.find((p) => p.isDefault) || rulesPresets[0];
-      setFormData((prev) => ({ ...prev, defaultRulesPreset: defaultPreset.id }));
-    }
-  }, [rulesPresets, formData.defaultRulesPreset]);
-
   // ============================================
   // HANDLERS
   // ============================================
@@ -199,7 +188,6 @@ export function LeagueBuilderLeagues() {
     setSalaryCapDirty(false);
     setFormData({
       ...DEFAULT_FORM_DATA,
-      defaultRulesPreset: rulesPresets.find((p) => p.isDefault)?.id || rulesPresets[0]?.id || "",
       salaryCap: formatSalaryCapInput(TIER_CAPS[DEFAULT_FORM_DATA.tier].tierCap),
       conferences: [],
       conferencesTouched: false,
@@ -218,7 +206,6 @@ export function LeagueBuilderLeagues() {
       name: league.name,
       description: league.description || "",
       teamIds: league.teamIds,
-      defaultRulesPreset: league.defaultRulesPreset,
       draftFormat: "auction",
       tier,
       salaryCap: formatSalaryCapInput(salaryCap),
@@ -282,7 +269,7 @@ export function LeagueBuilderLeagues() {
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
           teamIds: formData.teamIds,
-          defaultRulesPreset: formData.defaultRulesPreset,
+          defaultRulesPreset: editingLeague.defaultRulesPreset,
           draftFormat: formData.draftFormat,
           tier: formData.tier,
           salaryCap: parsedSalaryCap,
@@ -298,7 +285,7 @@ export function LeagueBuilderLeagues() {
           teamIds: formData.teamIds,
           conferences: conferencePatch.conferences,
           divisions: conferencePatch.divisions,
-          defaultRulesPreset: formData.defaultRulesPreset,
+          defaultRulesPreset: "standard",
           draftFormat: formData.draftFormat,
           tier: formData.tier,
           salaryCap: parsedSalaryCap,
@@ -662,24 +649,6 @@ export function LeagueBuilderLeagues() {
                   />
                   <span className="text-sm text-[#E8E8D8]/70">{formData.color}</span>
                 </div>
-              </div>
-
-              {/* Rules Preset */}
-              <div>
-                <label className="block text-sm font-bold mb-2">Default Rules Preset</label>
-                <select
-                  value={formData.defaultRulesPreset}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, defaultRulesPreset: e.target.value }))
-                  }
-                  className="w-full bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-[#E8E8D8] focus:border-[#E8E8D8] outline-none"
-                >
-                  {rulesPresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.name} {preset.isDefault ? "(Default)" : ""}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               {/* League Tier */}

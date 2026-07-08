@@ -345,13 +345,17 @@ describe('FranchiseSetup Component', () => {
   });
 
   describe('Franchise v1 release gates', () => {
-    test('marks unsupported setup events as deferred instead of selectable', () => {
+    test('removes unsupported setup event controls instead of showing decorative knobs', () => {
       render(<FranchiseSetup />);
       selectLeagueAndAdvance(1);
 
-      expect(screen.getByRole('button', { name: /All-Star Game.*deferred in v1/i })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: /All-Star Game/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Trade Deadline/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Mercy Rule/i })).not.toBeInTheDocument();
+      expect(screen.queryByText('ADDITIONAL OPTIONS')).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.getByText('PLAYOFF SETTINGS (playoffs deferred -- settings saved for later)')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Pool Play.*deferred/i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /Best Record Bye.*deferred/i })).toBeDisabled();
     });

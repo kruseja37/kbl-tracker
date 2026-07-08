@@ -141,10 +141,10 @@ describe('LeagueBuilder Component', () => {
       expect(screen.getByText('Build the pool, set identities, lock, and draft')).toBeInTheDocument();
     });
 
-    test('renders RULES module card', () => {
+    test('does not render the pruned RULES module card', () => {
       render(<LeagueBuilder />);
-      expect(screen.getByText('RULES')).toBeInTheDocument();
-      expect(screen.getByText('Game, season, and simulation settings')).toBeInTheDocument();
+      expect(screen.queryByText('RULES')).not.toBeInTheDocument();
+      expect(screen.queryByText('Game, season, and simulation settings')).not.toBeInTheDocument();
     });
 
     test('shows league count', () => {
@@ -167,9 +167,9 @@ describe('LeagueBuilder Component', () => {
       expect(screen.getByText('3 rosters')).toBeInTheDocument();
     });
 
-    test('shows preset count', () => {
+    test('does not show the decorative rules preset count', () => {
       render(<LeagueBuilder />);
-      expect(screen.getByText('1 preset')).toBeInTheDocument();
+      expect(screen.queryByText('1 preset')).not.toBeInTheDocument();
     });
 
     test('shows Setup for draft setup', () => {
@@ -211,10 +211,9 @@ describe('LeagueBuilder Component', () => {
       );
     });
 
-    test('RULES card navigates to rules page', () => {
+    test('RULES card is not available for navigation', () => {
       render(<LeagueBuilder />);
-      fireEvent.click(screen.getByText('RULES'));
-      expect(mockNavigate).toHaveBeenCalledWith('/league-builder/rules');
+      expect(screen.queryByText('RULES')).not.toBeInTheDocument();
     });
   });
 

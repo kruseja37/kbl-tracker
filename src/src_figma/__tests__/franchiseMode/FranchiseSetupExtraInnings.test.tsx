@@ -194,16 +194,13 @@ describe('FranchiseSetup extra innings runner delay', () => {
     );
   });
 
-  test('hides the sub-choice and shows the Sudden Death v1 hint', async () => {
+  test('does not expose the unwired Sudden Death option', async () => {
     await renderSeasonStep();
 
     fireEvent.click(screen.getByRole('button', { name: 'Runner on 2nd' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Sudden Death' }));
 
-    expect(screen.queryByText('GHOST RUNNER ARRIVES')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '1st extra inning' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '2nd extra inning' })).not.toBeInTheDocument();
-    expect(screen.getByText('ℹ️ Sudden Death: not tracked in v1 — plays as Standard')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sudden Death' })).not.toBeInTheDocument();
+    expect(screen.queryByText('ℹ️ Sudden Death: not tracked in v1 — plays as Standard')).not.toBeInTheDocument();
   });
 
   test('restores the byte-identical Standard hint after switching back', async () => {
