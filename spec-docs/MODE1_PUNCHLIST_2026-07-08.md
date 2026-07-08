@@ -20,6 +20,8 @@
 | F10 | A league can begin (and farm-draft) having skipped Scout Hire entirely — only symptom is silent "N/A" scout ranges everywhere. Also: code-verified premise correction to P11 (scout-hire does NOT actually gate the MLB auction today). | confusing → structural | beginAuction blockers (LeagueBuilderAuctionDraft.tsx:1225-1258) check no scout state; loadOptionalFarmScouts → null → "N/A" | **Structurally resolved by lane M1D**: bands/scout identity derive from the farm ARCHETYPE at draft time, not from ScoutHire persistence — a skipped reveal screen can no longer kill scouting. M1D contract hardened accordingly; P11 annotated |
 | F11 | The roster advisor only warns "too thin," never "over-stacked" — five shortstops + one emergency catcher draws zero findings. | confusing | analyzeRoster keys only off thinPositions (rosterAnalyzerEngine.ts:840,898,923) | Fold into **M1E** (the advisor names post-hoc what F8's pricing fix prevents) |
 
+**Also parked alongside F8/F11:** `spec-docs/DRAFT_POOL_UNIVERSE_SPEC_2026-07-08.md` — multi-league curated draft-pool sources, captain-ratified spec draft, PARKED (JK not yet committed to build; 3 open JK forks inside; do not build until JK commits + rules the forks).
+
 ## §1c JK ITEMS 2026-07-08 EVENING (diagnosis in flight)
 | ID | Item | Status |
 |---|---|---|
