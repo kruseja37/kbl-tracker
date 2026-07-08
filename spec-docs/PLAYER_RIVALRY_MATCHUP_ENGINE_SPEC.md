@@ -1,6 +1,8 @@
 # Player Rivalry — Pitcher↔Batter Matchup Engine (DESIGN CAPTURE)
 
-> **Status:** DESIGN CAPTURE — JK note 2026-06-26, **not yet ruled / not yet built.** Captured here (Write-First) so it isn't lost; needs a JK design pass before contracting. Companions: `FRANCHISE_V1_LIVING_SEASON_SPEC.md §24` (relationships + §24.7 charged matchups) · `STADIUM_ANALYTICS_SPEC_V2.md §5.6` (the park-record-overtake rivalry edge, "hop-6").
+**RATIFIED-AS-AMENDED 2026-07-08 — read WITH spec-docs/MATCHUP_ENGINE_RECONCILIATION_2026-07-08.md (which governs on conflict); overtake edges = RIVALRY per the 2026-07-08 reversal.**
+
+> **Status:** ~~DESIGN CAPTURE — JK note 2026-06-26, **not yet ruled / not yet built.** Captured here (Write-First) so it isn't lost; needs a JK design pass before contracting.~~ RATIFIED-AS-AMENDED per the banner above (JK, 2026-07-08); the reconciliation doc is the builder contract basis — spawn rule = mutual-WPA, per-PA channel boundaries, sizes, and sequencing all live there. Companions: `FRANCHISE_V1_LIVING_SEASON_SPEC.md §24` (relationships + §24.7 charged matchups) · `STADIUM_ANALYTICS_SPEC_V2.md §5.6` (the park-record-overtake rivalry edge, "hop-6").
 
 ## The vision (JK)
 Every at-bat between a given **pitcher and batter** accumulates into their head-to-head matchup history (the top-left GameTracker matchup panel), so over a season it gets **richer and more meaningful**. That history **feeds the relationship engine**: once a **rivalry** spawns between the two, each at-bat and each game outcome carries a **larger morale impact** when those rivals face each other than a no-rivalry matchup does. The engine should understand **both the aggregate AND recent form** — so a pitcher "knows" this hitter is **3-for-his-last-4 with 2 HR** off him and feels **extra pressure** to win the at-bat (and vice-versa for the hitter).
