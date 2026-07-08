@@ -330,7 +330,7 @@ function buildStageNeedLine(
   );
 }
 
-function buildStageRosterSlots(frame: AuctionBoardFrame): RosterSlotVM[] {
+function buildStageRosterSlots(frame: AuctionBoardFrame, playerById: Map<string, Player>): RosterSlotVM[] {
   return frame.seats.map((seat) => ({
     slotId: seat.slotId,
     pos: seat.label,
@@ -341,6 +341,18 @@ function buildStageRosterSlots(frame: AuctionBoardFrame): RosterSlotVM[] {
     isGap: seat.isGap,
     gapLabel: seat.gapLabel,
     depthNote: seat.depthNote,
+    // WT-D: resolve the won player so the roster board can open their profile popover.
+    player: seat.player ? playerById.get(seat.player.playerId) ?? null : null,
+  }));
+}
+
+function buildStageOverflow(
+  frame: AuctionBoardFrame,
+  playerById: Map<string, Player>,
+): NonNullable<AuctionStageVM["board"]["overflow"]> {
+  return frame.overflow.map((entry) => ({
+    ...entry,
+    player: playerById.get(entry.playerId) ?? null,
   }));
 }
 
@@ -1303,7 +1315,14 @@ export function LeagueBuilderAuctionDraft() {
       selected: clampBidAmount(Number(bidAmount)) === amount,
     }));
   }, [auction.isWorking, bidAmount, bidIncrement, clampBidAmount, currentBidderIsCpu, minBid, session, stageMaxBid]);
-  const stageRosterSlots = useMemo(() => buildStageRosterSlots(rosterBoardFrame), [rosterBoardFrame]);
+  const stageRosterSlots = useMemo(
+    () => buildStageRosterSlots(rosterBoardFrame, playerById),
+    [rosterBoardFrame, playerById],
+  );
+  const stageOverflow = useMemo(
+    () => buildStageOverflow(rosterBoardFrame, playerById),
+    [rosterBoardFrame, playerById],
+  );
   const stageLog = useMemo(
     () => buildStageLog(session, playerById, teamNameById, stageFocusTeamState?.teamId),
     [playerById, session, stageFocusTeamState?.teamId, teamNameById],
@@ -1493,7 +1512,7 @@ export function LeagueBuilderAuctionDraft() {
       title: `${stageFocusTeamName} · ${rosterBoardEntries.length} of ${LEGAL_ROSTER.size}`,
       hint: rosterBoardBudgetWarning ? "budget watch" : "gaps glow",
       slots: stageRosterSlots,
-      overflow: rosterBoardFrame.overflow,
+      overflow: stageOverflow,
       needLine: buildStageNeedLine(rosterBoardFrame, rosterBoardPriorityGaps, rosterBoardBudgetWarning),
     },
     log: stageLog,

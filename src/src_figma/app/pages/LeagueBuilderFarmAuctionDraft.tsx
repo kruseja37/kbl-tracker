@@ -103,6 +103,56 @@ function prospectTraitCount(prospect: LeagueBuilderProspectPlayerDto | null | un
   return [prospect.trait1, prospect.trait2].filter(Boolean).length as 0 | 1 | 2;
 }
 
+// WT-D: a farm prospect (LeagueBuilderProspectPlayerDto) is a *different* DTO shape from the
+// league's `Player` type -- PlayerProfilePopover/buildDraftProfileModel need `Player`. This is a
+// presentational-only adapter (page-local, never persisted, never fed back into any engine): a
+// prospect's `ratingRevealState` is always the literal 'hidden', so buildDraftProfileModel's
+// shouldReveal gate always takes the scout-band branch for these -- the handful of fields with
+// widened DTO types (arsenal/personality/chemistry/etc.) are never read on that branch. See
+// PlayerProfilePopover.tsx + draftProfileModel.ts (shouldReveal) -- NOT modified by this lane.
+function prospectToProfilePlayer(prospect: LeagueBuilderProspectPlayerDto): Player {
+  return {
+    id: prospect.id,
+    firstName: prospect.firstName,
+    lastName: prospect.lastName,
+    gender: prospect.gender,
+    jerseyNumber: prospect.jerseyNumber,
+    age: prospect.age,
+    bats: prospect.bats,
+    throws: prospect.throws,
+    armSlot: prospect.armSlot,
+    primaryPosition: prospect.primaryPosition as Player["primaryPosition"],
+    secondaryPosition: prospect.secondaryPosition,
+    power: prospect.power,
+    contact: prospect.contact,
+    speed: prospect.speed,
+    fielding: prospect.fielding,
+    arm: prospect.arm,
+    velocity: prospect.velocity,
+    junk: prospect.junk,
+    accuracy: prospect.accuracy,
+    arsenal: prospect.arsenal as Player["arsenal"],
+    overallGrade: prospect.overallGrade as Player["overallGrade"],
+    trait1: prospect.trait1,
+    trait2: prospect.trait2,
+    personality: prospect.personality as Player["personality"],
+    chemistry: prospect.chemistry as Player["chemistry"],
+    hiddenPersonalityModifiers: prospect.hiddenPersonalityModifiers,
+    morale: prospect.morale,
+    mojo: prospect.mojo,
+    fame: prospect.fame,
+    salary: prospect.salary,
+    contractYears: prospect.contractYears,
+    ratingRevealState: prospect.ratingRevealState,
+    isCustom: prospect.isCustom,
+    sourceDatabase: prospect.sourceDatabase,
+    hometown: prospect.hometown,
+    prospectProfile: prospect.prospectProfile,
+    createdDate: "",
+    lastModified: "",
+  };
+}
+
 type FarmScoutRead = ScoutValueRange & {
   toolBands: Record<string, { lower: number; upper: number }>;
   overallGradeBand: { best: Grade; worst: Grade };
@@ -209,9 +259,13 @@ function farmStageSlotGroup(position: string): RosterSlotVM["group"] {
   return "THE EIGHT";
 }
 
-function buildFarmStageSlots(entries: readonly DraftBoardEntry[]): RosterSlotVM[] {
+function buildFarmStageSlots(
+  entries: readonly DraftBoardEntry[],
+  prospectById: Map<string, LeagueBuilderProspectPlayerDto>,
+): RosterSlotVM[] {
   const filled = entries.slice(0, FARM_BOARD_TARGET).map((entry, index) => {
     const pos = entry.primaryPosition || "POS";
+    const prospect = prospectById.get(entry.id);
     return {
       slotId: `farm-${index + 1}-${entry.id}`,
       pos,
@@ -222,6 +276,8 @@ function buildFarmStageSlots(entries: readonly DraftBoardEntry[]): RosterSlotVM[
       isGap: false,
       gapLabel: null,
       depthNote: formatMoney(entry.salary),
+      // WT-D: resolve the won prospect so the farm roster board can open their (fogged) profile popover.
+      player: prospect ? prospectToProfilePlayer(prospect) : null,
     };
   });
   const open = Array.from({ length: Math.max(0, FARM_BOARD_TARGET - filled.length) }, (_, index) => {
@@ -584,7 +640,10 @@ export function LeagueBuilderFarmAuctionDraft() {
       selected: clampBidAmount(Number(bidAmount)) === amount,
     }));
   }, [auction.isWorking, bidAmount, bidIncrement, clampBidAmount, currentBidderIsCpu, minBid, session, stageMaxBid]);
-  const stageSlots = useMemo(() => buildFarmStageSlots(rosterBoardEntries), [rosterBoardEntries]);
+  const stageSlots = useMemo(
+    () => buildFarmStageSlots(rosterBoardEntries, prospectById),
+    [rosterBoardEntries, prospectById],
+  );
   const stageLog = useMemo(
     () => buildFarmStageLog(session, prospectById, teamById),
     [prospectById, session, teamById],
@@ -634,6 +693,10 @@ export function LeagueBuilderFarmAuctionDraft() {
       teamSecondary: stageFocusTeam?.colors.secondary ?? "#E8E8D8",
     },
     lot: {
+      // WT-D: lets the on-the-block name open the profile popover -- the prospect's
+      // ratingRevealState is always 'hidden' so buildDraftProfileModel always renders the
+      // scout-band view (never true ratings/trait names) for a not-yet-revealed prospect.
+      player: stageLotProspect ? prospectToProfilePlayer(stageLotProspect) : null,
       name: stageLotProspect ? prospectDisplayName(stageLotProspect) : session.state === "AUCTION_COMPLETE" ? "Farm auction complete" : "Next prospect surfacing",
       positions: prospectPositions(stageLotProspect).join(" / ") || "POS",
       personality: "",

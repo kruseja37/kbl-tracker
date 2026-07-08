@@ -476,5 +476,20 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(
       screen.getAllByText(`${targetName} SOLD to Farm Caps for ${expectedSalePrice}`).length,
     ).toBeGreaterThan(0);
+
+    // WT-D: the just-won prospect's name on the farm roster board must now open the profile
+    // popover -- but since ratingRevealState stays 'hidden' pre-call-up, it must show scout bands
+    // only, never the true ratings grid or the raw trait names (same privacy invariant already
+    // asserted above for the on-the-block card). Farm Caps (team-a) is the roster-board focus
+    // once the auction settles back to no-active-bidder, and this prospect is its only entry, so
+    // its slot testid is deterministic: farm-1-<prospectId>.
+    const wonSlot = screen.getByTestId(`auction-board-slot-farm-1-${target.prospect.id}`);
+    fireEvent.click(within(wonSlot).getByRole("button", { name: targetName }));
+
+    expect(await screen.findByText("Farm - scouting only")).toBeInTheDocument();
+    expect(screen.queryByText("POW")).not.toBeInTheDocument();
+    for (const trait of [target.prospect.trait1, target.prospect.trait2].filter(Boolean)) {
+      expect(screen.queryByText(trait!)).not.toBeInTheDocument();
+    }
   });
 });
