@@ -5,6 +5,11 @@ import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hook
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
 import {
+  loadFranchiseFreezeSummary,
+  type FranchiseFreezeSummary,
+  type FranchiseFreezeTeamSummary,
+} from "../../../utils/franchiseFreezeSummary";
+import {
   getAuctionSession,
   type LeagueBuilderAuctionSession,
 } from "../../../utils/leagueBuilderStorage";
@@ -80,6 +85,21 @@ function isDraftSessionComplete(session: LeagueBuilderAuctionSession | null): bo
   return session?.session.state === "AUCTION_COMPLETE";
 }
 
+function formatNumber(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Not stored";
+  return Math.round(value).toLocaleString();
+}
+
+function formatMoney(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Not stored";
+  return `$${Math.round(value).toLocaleString()}`;
+}
+
+function formatMoraleRange(min: number | null, average: number | null, max: number | null): string {
+  if (min === null || average === null || max === null) return "Not stored";
+  return `${Math.round(min)} / ${Math.round(average)} / ${Math.round(max)}`;
+}
+
 function buildConfigForSelectedLeague(
   current: FranchiseConfig,
   leagueId: string,
@@ -126,6 +146,7 @@ export function FranchiseSetup() {
   } = useLeagueBuilderData();
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
+  const [postFreezeSummary, setPostFreezeSummary] = useState<FranchiseFreezeSummary | null>(null);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
   const [draftedLeagueIds, setDraftedLeagueIds] = useState<Set<string>>(() => new Set());
   const [isInitializing, setIsInitializing] = useState(false);
@@ -263,14 +284,9 @@ export function FranchiseSetup() {
           ].join(' ')}`);
         }
         const franchiseId = await initializeFranchise(config);
+        const summary = await loadFranchiseFreezeSummary(franchiseId);
+        setPostFreezeSummary(summary);
         setIsInitializing(false);
-        navigate(`/franchise/${franchiseId}`, {
-          replace: true,
-          state: {
-            createdFromSetup: true,
-            franchiseId,
-          },
-        });
       } catch (err) {
         setInitError(err instanceof Error ? err.message : 'Failed to create franchise');
         setIsInitializing(false);
@@ -286,6 +302,17 @@ export function FranchiseSetup() {
 
   const handleCancel = () => {
     navigate("/");
+  };
+
+  const handleEnterFranchise = () => {
+    if (!postFreezeSummary) return;
+    navigate(`/franchise/${postFreezeSummary.franchiseId}`, {
+      replace: true,
+      state: {
+        createdFromSetup: true,
+        franchiseId: postFreezeSummary.franchiseId,
+      },
+    });
   };
 
   const canProceed = () => {
@@ -455,58 +482,164 @@ export function FranchiseSetup() {
             </div>
           ) : (
             <>
-              {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} draftedLeagueIds={draftedLeagueIds} />}
-              {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
-              {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
-              {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
-              {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
-              {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
+              {postFreezeSummary ? (
+                <PostFreezeSummaryPanel summary={postFreezeSummary} />
+              ) : (
+                <>
+                  {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} draftedLeagueIds={draftedLeagueIds} />}
+                  {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
+                  {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
+                  {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
+                  {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
+                  {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
+                </>
+              )}
             </>
           )}
         </div>
 
         {/* Footer */}
         <div className="border-t-[6px] border-[#E8E8D8] px-8 py-5 flex items-center justify-end gap-3 bg-[#4A6A42]">
-          {currentStep > 1 && (
+          {postFreezeSummary ? (
             <button
-              onClick={handleBack}
-              className="px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide flex items-center gap-2"
-              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+              onClick={handleEnterFranchise}
+              className="px-8 py-3 border-4 border-[#E8E8D8] bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] font-bold text-sm tracking-wide flex items-center gap-2 transition-all"
+              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
             >
-              <ArrowLeft className="w-4 h-4" />
-              BACK
+              <Gamepad2 className="w-4 h-4" />
+              ENTER YOUR FRANCHISE
             </button>
+          ) : (
+            <>
+              {currentStep > 1 && (
+                <button
+                  onClick={handleBack}
+                  className="px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide flex items-center gap-2"
+                  style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  BACK
+                </button>
+              )}
+              <button
+                onClick={handleCancel}
+                className="px-6 py-3 text-[#DD0000] hover:text-[#FF0000] transition-all font-bold text-sm tracking-wide"
+                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}
+                disabled={!canAdvance}
+                className={`px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
+                  canAdvance
+                    ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
+                    : "bg-[#3A5A32] text-[#8A9A82] border-[#8A9A82] cursor-not-allowed"
+                }`}
+                style={canAdvance ? { textShadow: '1px 1px 0px rgba(0,0,0,0.2)' } : {}}
+              >
+                {currentStep === totalSteps ? (
+                  <>
+                    <Gamepad2 className="w-4 h-4" />
+                    START FRANCHISE
+                  </>
+                ) : (
+                  <>
+                    NEXT
+                    <ArrowLeft className="w-4 h-4 rotate-180" />
+                  </>
+                )}
+              </button>
+            </>
           )}
-          <button
-            onClick={handleCancel}
-            className="px-6 py-3 text-[#DD0000] hover:text-[#FF0000] transition-all font-bold text-sm tracking-wide"
-            style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
-          >
-            CANCEL
-          </button>
-          <button
-            onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}
-            disabled={!canAdvance}
-            className={`px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
-              canAdvance
-                ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
-                : "bg-[#3A5A32] text-[#8A9A82] border-[#8A9A82] cursor-not-allowed"
-            }`}
-            style={canAdvance ? { textShadow: '1px 1px 0px rgba(0,0,0,0.2)' } : {}}
-          >
-            {currentStep === totalSteps ? (
-              <>
-                <Gamepad2 className="w-4 h-4" />
-                START FRANCHISE
-              </>
-            ) : (
-              <>
-                NEXT
-                <ArrowLeft className="w-4 h-4 rotate-180" />
-              </>
-            )}
-          </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FreezeStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-[#2A4A22] border-2 border-[#E8E8D8]/40 p-3">
+      <p className="text-[9px] uppercase tracking-wide text-[#E8E8D8]/60" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{label}</p>
+      <p className="mt-1 text-sm font-bold text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{value}</p>
+    </div>
+  );
+}
+
+function FreezeTeamRow({ team }: { team: FranchiseFreezeTeamSummary }) {
+  return (
+    <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 border-t border-[#E8E8D8]/20 py-2 text-[10px] text-[#E8E8D8]/80">
+      <span className="font-bold text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{team.teamName}</span>
+      <span>{formatMoney(team.payrollBaseline)}</span>
+      <span>{formatNumber(team.mlbRosterCount)} MLB / {formatNumber(team.farmRosterCount)} FARM</span>
+      <span>{formatNumber(team.fanMoraleBaseline)}</span>
+    </div>
+  );
+}
+
+function PostFreezeSummaryPanel({ summary }: { summary: FranchiseFreezeSummary }) {
+  const shownTeams = summary.teams.slice(0, 8);
+  const hiddenTeamCount = Math.max(0, summary.teams.length - shownTeams.length);
+
+  return (
+    <div>
+      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>FREEZE SUMMARY</h2>
+      <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+        Read-only snapshot loaded from the franchise save after initialization.
+      </p>
+
+      <div className="bg-[#3A5A32] border-4 border-[#E8E8D8] p-5 space-y-5">
+        <div>
+          <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FROZEN LEDGER</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <FreezeStat label="Franchise" value={summary.leagueName} />
+            <FreezeStat label="Player rows" value={formatNumber(summary.frozenPlayerRows)} />
+            <FreezeStat label="Settled salaries" value={formatNumber(summary.settledSalaryPlayerRows)} />
+            <FreezeStat label="Draft TV rows" value={formatNumber(summary.draftBaselineRows)} />
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FOUR FREEZE NUMBERS</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <FreezeStat label="Contract values" value={formatNumber(summary.draftBaselineContractRows)} />
+            <FreezeStat label="Player morale" value={formatNumber(summary.morale.playerCount)} />
+            <FreezeStat label="Fan morale" value={formatNumber(summary.morale.teamFanCount)} />
+            <FreezeStat label="Roster snapshot" value={`${formatNumber(summary.rosterTotals.mlb)} MLB / ${formatNumber(summary.rosterTotals.farm)} FARM`} />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-3">
+          <FreezeStat label="Player morale min / avg / max" value={formatMoraleRange(summary.morale.playerMin, summary.morale.playerAverage, summary.morale.playerMax)} />
+          <FreezeStat label="Fan morale min / avg / max" value={formatMoraleRange(summary.morale.teamFanMin, summary.morale.teamFanAverage, summary.morale.teamFanMax)} />
+        </div>
+
+        <div className="bg-[#2A4A22] border-2 border-[#E8E8D8]/50 p-4">
+          <div className="grid grid-cols-[1.4fr_1fr_1fr_1fr] gap-3 pb-2 text-[9px] uppercase tracking-wide text-[#C4A853]">
+            <span>Team</span>
+            <span>Payroll baseline</span>
+            <span>Roster count</span>
+            <span>Fan morale</span>
+          </div>
+          {shownTeams.map((team) => <FreezeTeamRow key={team.teamId} team={team} />)}
+          {hiddenTeamCount > 0 && (
+            <p className="border-t border-[#E8E8D8]/20 pt-2 text-[10px] text-[#E8E8D8]/60">
+              +{hiddenTeamCount} more teams frozen in the same persisted roster snapshot.
+            </p>
+          )}
+        </div>
+
+        {summary.notDisplayable.length > 0 && (
+          <div className="bg-[#1A3A12] border-2 border-[#C4A853] p-4">
+            <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>NOT DISPLAYABLE FROM PERSISTED FREEZE DATA</p>
+            <ul className="space-y-1">
+              {summary.notDisplayable.map((gap) => (
+                <li key={gap} className="text-[10px] leading-5 text-[#E8E8D8]/75">{gap}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

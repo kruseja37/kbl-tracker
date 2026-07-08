@@ -15,6 +15,7 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 
 const mockNavigate = vi.fn();
 const mockInitializeFranchise = vi.fn();
+const mockLoadFranchiseFreezeSummary = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
 const mockGetAuctionSession = vi.fn();
 
@@ -24,6 +25,10 @@ vi.mock('react-router', () => ({
 
 vi.mock('../../../utils/franchiseInitializer', () => ({
   initializeFranchise: (...args: unknown[]) => mockInitializeFranchise(...args),
+}));
+
+vi.mock('../../../utils/franchiseFreezeSummary', () => ({
+  loadFranchiseFreezeSummary: (...args: unknown[]) => mockLoadFranchiseFreezeSummary(...args),
 }));
 
 vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
@@ -129,6 +134,52 @@ describe('FranchiseSetup Component', () => {
     vi.clearAllMocks();
     window.history.pushState({}, '', '/franchise/setup');
     mockInitializeFranchise.mockResolvedValue('franchise-1');
+    mockLoadFranchiseFreezeSummary.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      seasonId: 'franchise-1-season-1',
+      leagueName: 'Kruse Baseball League',
+      teamCount: 2,
+      frozenPlayerRows: 64,
+      settledSalaryPlayerRows: 44,
+      draftBaselineRows: 44,
+      draftBaselineContractRows: 44,
+      rosterTotals: {
+        mlb: 44,
+        farm: 20,
+      },
+      morale: {
+        playerCount: 44,
+        playerAverage: 54,
+        playerMin: 41,
+        playerMax: 68,
+        teamFanCount: 2,
+        teamFanAverage: 50,
+        teamFanMin: 46,
+        teamFanMax: 54,
+      },
+      teams: [
+        {
+          teamId: 'team-1',
+          teamName: 'Team 1',
+          payrollBaseline: 123456,
+          mlbRosterCount: 22,
+          farmRosterCount: 10,
+          fanMoraleBaseline: 54,
+        },
+        {
+          teamId: 'team-2',
+          teamName: 'Team 2',
+          payrollBaseline: 98765,
+          mlbRosterCount: 22,
+          farmRosterCount: 10,
+          fanMoraleBaseline: 46,
+        },
+      ],
+      notDisplayable: [
+        'Exact freeze-engine team payroll totals are not persisted as a team aggregate; only player-level contract values and the roster-copy salary baseline are readable.',
+        'Draft slot class and pay class are not persisted; only the final starting morale baseline is readable.',
+      ],
+    });
     mockGetAuctionSession.mockResolvedValue(null);
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
@@ -223,6 +274,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.getByText('KRUSE BASEBALL LEAGUE')).toBeInTheDocument();
       expect(screen.getByText('SUMMER LEAGUE')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /NEXT/i })).toBeDisabled();
+      expect(screen.queryByText('FREEZE SUMMARY')).not.toBeInTheDocument();
     });
 
     test('badges only leagues with completed auction sessions', async () => {
@@ -328,7 +380,7 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByText(/Generate new fictional players/i)).not.toBeInTheDocument();
     });
 
-    test('starts franchise when League Builder farm and scouting state is prepared', async () => {
+    test('renders the post-freeze summary with persisted fixture values before entering the lens', async () => {
       render(<FranchiseSetup />);
       selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
@@ -342,6 +394,17 @@ describe('FranchiseSetup Component', () => {
         expect(mockInitializeFranchise).toHaveBeenCalled();
       });
       expect(mockInitializeFranchise).toHaveBeenCalled();
+      expect(mockLoadFranchiseFreezeSummary).toHaveBeenCalledWith('franchise-1');
+      expect(await screen.findByText('FREEZE SUMMARY')).toBeInTheDocument();
+      expect(screen.getByText('Kruse Baseball League')).toBeInTheDocument();
+      expect(screen.getAllByText('44').length).toBeGreaterThan(0);
+      expect(screen.getByText('$123,456')).toBeInTheDocument();
+      expect(screen.getAllByText('22 MLB / 10 FARM')).toHaveLength(2);
+      expect(screen.getByText('41 / 54 / 68')).toBeInTheDocument();
+      expect(screen.getByText(/Exact freeze-engine team payroll totals are not persisted/i)).toBeInTheDocument();
+      expect(mockNavigate).not.toHaveBeenCalledWith('/franchise/franchise-1', expect.anything());
+
+      fireEvent.click(screen.getByRole('button', { name: /ENTER YOUR FRANCHISE/i }));
       expect(mockNavigate).toHaveBeenCalledWith('/franchise/franchise-1', {
         replace: true,
         state: {
