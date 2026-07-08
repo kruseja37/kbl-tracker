@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -869,6 +869,29 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /SCOUT REVEAL/i })[0]);
 
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&reserveK=0.65");
+  });
+
+  // WT-D: already-won MLB players were plain, unclickable text on the roster board. This proves
+  // the page-level wiring (playerById resolved in buildStageRosterSlots) actually reaches the
+  // shared PlayerProfilePopover -- the component-level fog/reveal behavior itself is covered by
+  // AuctionStage.test.tsx and PlayerProfilePopover.test.tsx.
+  test("WT-D: a rostered player's name on the complete-screen roster board opens the profile popover with real ratings", async () => {
+    const players = await saveCompletedAuctionForPage();
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
+
+    // team-a is the default roster-board focus once the auction is complete (no active bidder/
+    // pending claim/latest winner) -- every one of its fixture players shares the "Free Agent"
+    // display name, so scope the query to a single known slot rather than matching by name.
+    const catcherSlot = screen.getByTestId("auction-board-slot-C");
+    fireEvent.click(within(catcherSlot).getByRole("button", { name: "Free Agent" }));
+
+    expect(screen.getByText("POW")).toBeInTheDocument();
+    expect(screen.getAllByText("70").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
   });
 
   test("P2: blocked complete handoff focuses the panel and requires the two-step override", async () => {

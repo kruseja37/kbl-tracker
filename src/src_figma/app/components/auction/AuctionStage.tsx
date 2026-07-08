@@ -101,6 +101,8 @@ export interface RosterSlotVM {
   isGap: boolean;
   gapLabel?: string | null;
   depthNote?: string | null;
+  /** WT-D: the rostered player behind `who`, when resolvable — powers the roster-board popover. */
+  player?: Player | null;
 }
 
 export interface BoardVM {
@@ -108,7 +110,7 @@ export interface BoardVM {
   hint: string;
   columns?: number;
   slots: RosterSlotVM[];
-  overflow?: Array<{ playerId: string; name: string; chip: string }>;
+  overflow?: Array<{ playerId: string; name: string; chip: string; player?: Player | null }>;
   needLine: React.ReactNode;
 }
 
@@ -361,7 +363,17 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                           >
                             <div className="p">{s.pos}</div>
                             {s.chip && <div className="slot-chip">{s.chip}</div>}
-                            {s.who !== undefined && <div className={`who${s.filled ? "" : " faint"}`}>{s.who || "open"}</div>}
+                            {s.who !== undefined && (
+                              <div className={`who${s.filled ? "" : " faint"}`}>
+                                {s.player ? (
+                                  <PlayerProfilePopover player={s.player} revealFull>
+                                    <span className="who-clickable">{s.who || "open"}</span>
+                                  </PlayerProfilePopover>
+                                ) : (
+                                  s.who || "open"
+                                )}
+                              </div>
+                            )}
                             {s.depthNote && <div className="depth-note">{s.depthNote}</div>}
                             {s.gapLabel && (
                               <div data-testid={`auction-board-gap-${s.slotId}`} className="gap-label">
@@ -380,9 +392,16 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                   <div className="overflow-title">OVERFLOW — {vm.board.overflow.length} UNSEATED</div>
                   <div className="overflow-note">These players don't fit the legal 22 frame — resolve before launch.</div>
                   <div className="overflow-list">
-                    {vm.board.overflow.map((player) => (
-                      <span key={player.playerId} className="chip">
-                        <b>{player.chip}</b> {player.name}
+                    {vm.board.overflow.map((entry) => (
+                      <span key={entry.playerId} className="chip">
+                        <b>{entry.chip}</b>{" "}
+                        {entry.player ? (
+                          <PlayerProfilePopover player={entry.player} revealFull>
+                            <span className="who-clickable">{entry.name}</span>
+                          </PlayerProfilePopover>
+                        ) : (
+                          entry.name
+                        )}
                       </span>
                     ))}
                   </div>

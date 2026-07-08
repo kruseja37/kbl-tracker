@@ -3,10 +3,44 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import { AuctionStage, type AuctionStageVM, type RosterSlotVM } from "../AuctionStage";
 import { LEGAL_ROSTER } from "../../../../../data/rosterConstruction";
+import type { Player } from "../../../../../utils/leagueBuilderStorage";
 
 afterEach(() => {
   cleanup();
 });
+
+function makeTestPlayer(overrides: Partial<Player> = {}): Player {
+  return {
+    id: "test-player",
+    firstName: "Won",
+    lastName: "Player",
+    gender: "M",
+    age: 27,
+    bats: "R",
+    throws: "R",
+    primaryPosition: "SS",
+    power: 65,
+    contact: 70,
+    speed: 55,
+    fielding: 60,
+    arm: 50,
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
+    arsenal: [],
+    overallGrade: "B",
+    personality: "Competitive",
+    chemistry: "Crafty",
+    morale: 50,
+    mojo: "Normal",
+    fame: 0,
+    salary: 10_000,
+    createdDate: "2026-01-01",
+    lastModified: "2026-01-01",
+    isCustom: true,
+    ...overrides,
+  };
+}
 
 function slot(slotId: string, group: RosterSlotVM["group"], chip: string): RosterSlotVM {
   return {
@@ -146,5 +180,84 @@ describe("AuctionStage roster board", () => {
 
     expect(parseFloat(band?.style.left ?? "")).toBeCloseTo(40.91, 2);
     expect(parseFloat(band?.style.right ?? "")).toBeCloseTo(40.91, 2);
+  });
+});
+
+// WT-D: already-won (rostered) players were plain, unclickable text on both the roster board and
+// the overflow rail -- JK 2026-07-08 asked for the existing PlayerProfilePopover on those names so
+// GMs can see profile data informing roster construction. These tests cover the component-level
+// wiring in isolation (VM -> popover), independent of the page-level playerById/prospectById
+// plumbing (covered separately in the page suites).
+describe("AuctionStage roster board player popover (WT-D)", () => {
+  test("clicking a rostered player's name opens the profile popover with full ratings", () => {
+    const stageVm = vm();
+    const player = makeTestPlayer({ id: "won-1", firstName: "Won", lastName: "Player" });
+    stageVm.board.slots = stageVm.board.slots.map((s) =>
+      s.slotId === "SS" ? { ...s, who: "Won Player", player } : s,
+    );
+
+    render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Won Player" }));
+
+    expect(screen.getByText("POW")).toBeInTheDocument();
+    expect(screen.getByText("65")).toBeInTheDocument();
+    expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
+  });
+
+  test("a hidden farm prospect's roster-slot popover shows scout bands only -- never true ratings or trait names", () => {
+    const stageVm = vm();
+    stageVm.tier = "farm";
+    const prospect = makeTestPlayer({
+      id: "farm-1",
+      firstName: "Farm",
+      lastName: "Prospect",
+      ratingRevealState: "hidden",
+      trait1: "Bug Eater",
+      trait2: "Iron Man",
+      power: 99,
+      prospectProfile: {
+        scoutedGrade: "B",
+        potentialGrade: "A-",
+        scoutConfidence: "medium",
+        scoutName: "Scout Jones",
+        archetypeFamily: "Power Bat",
+      },
+    });
+    stageVm.board.slots = stageVm.board.slots.map((s) =>
+      s.slotId === "SS" ? { ...s, who: "Farm Prospect", player: prospect } : s,
+    );
+
+    render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Farm Prospect" }));
+
+    expect(screen.getByText("Farm - scouting only")).toBeInTheDocument();
+    expect(screen.getByText("SCOUT")).toBeInTheDocument();
+    expect(screen.queryByText("POW")).not.toBeInTheDocument();
+    expect(screen.queryByText("99")).not.toBeInTheDocument();
+    expect(screen.queryByText("Bug Eater")).not.toBeInTheDocument();
+    expect(screen.queryByText("Iron Man")).not.toBeInTheDocument();
+  });
+
+  test("an overflow entry with a resolvable player opens the profile popover", () => {
+    const stageVm = vm();
+    const player = makeTestPlayer({ id: "overflow-1", firstName: "Over", lastName: "Flow" });
+    stageVm.board.overflow = [{ playerId: "overflow-1", name: "Over Flow", chip: "IF", player }];
+
+    render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Over Flow" }));
+
+    expect(screen.getByText("POW")).toBeInTheDocument();
+  });
+
+  test("a slot or overflow entry without a resolvable player renders plain text and never crashes", () => {
+    const stageVm = vm();
+    stageVm.board.overflow = [{ playerId: "missing-1", name: "No Record", chip: "IF" }];
+
+    const { container } = render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("No Record")).toBeInTheDocument();
+    // No PlayerProfilePopover trigger anywhere -- neither the missing-player overflow entry nor
+    // any of legalSlots()'s player-less roster-board slots render the popover's role="button" span.
+    expect(container.querySelector('[role="button"]')).toBeNull();
   });
 });

@@ -193,6 +193,10 @@
 .auc-root .slot { background: var(--auc-inset); border: 1px solid var(--auc-hairline); border-radius: 10px; padding: 9px 6px; text-align: center; }
 .auc-root .slot .p { font-family: var(--auc-font-num); font-weight: 700; font-size: 12px; color: var(--auc-muted); }
 .auc-root .slot .who { font-size: 10.5px; color: var(--auc-text); margin-top: 3px; min-height: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* WT-D: rostered/overflow player names that open the profile popover -- cursor-pointer already
+   comes from PlayerProfilePopover's trigger wrapper; this adds the same subtle gold-on-hover
+   affordance the rest of the auction stage uses (mirrors .letgo:hover), no new visual language. */
+.auc-root .who-clickable:hover { color: var(--auc-gold-bright); text-decoration: underline dotted; text-underline-offset: 2px; }
 .auc-root .slot-chip { display: inline-flex; align-items: center; justify-content: center; margin-top: 4px; min-width: 30px; border-radius: 999px; border: 1px solid var(--auc-hairline); background: rgba(0, 0, 0, 0.2); color: var(--ballpark-chalk); font-family: var(--auc-font-num); font-size: 10px; font-weight: 800; padding: 1px 6px; }
 .auc-root .slot.filled { background: rgba(62, 157, 90, 0.12); border-color: rgba(62, 157, 90, 0.35); }
 .auc-root .slot.filled .p { color: var(--auc-win); }
