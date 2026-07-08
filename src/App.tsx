@@ -1,7 +1,8 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Navigate, Routes, Route } from "react-router-dom";
 import { PostGameRouteBoundary } from "./components/PostGameRouteBoundary";
 import { FRANCHISE_MANUAL_SMOKE_SETUP_ROUTE } from "./utils/franchiseManualSmokeFixtureGate";
+import { hydrateFranchisePhase2ActivationCache } from "./utils/franchisePhase2Activation";
 
 // Global styles
 import "./styles/global.css";
@@ -242,6 +243,11 @@ const BetweenInningSummaryPreview = lazy(() =>
     default: module.BetweenInningSummaryPreview,
   })),
 );
+const Phase2ActivationConsole = lazy(() =>
+  import("./src_figma/app/pages/Phase2ActivationConsole").then((module) => ({
+    default: module.Phase2ActivationConsole,
+  })),
+);
 const enablePreviewRoutes = import.meta.env.DEV || import.meta.env.MODE === "test";
 const enableFranchiseVisualSmokePreviewRoute =
   import.meta.env.DEV || import.meta.env.MODE === "test";
@@ -294,13 +300,28 @@ const FranchiseLensSeedPlayed = enableFranchiseManualSmokeSetupRoute
  * but are no longer routed.
  */
 function App() {
+  const [phase2ActivationHydrated, setPhase2ActivationHydrated] = useState(false);
+  const loadingFallback = (
+    <div className="min-h-screen bg-black flex items-center justify-center text-white font-['Press_Start_2P'] text-xs">
+      LOADING...
+    </div>
+  );
+
+  useEffect(() => {
+    let mounted = true;
+    hydrateFranchisePhase2ActivationCache().finally(() => {
+      if (mounted) setPhase2ActivationHydrated(true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (!phase2ActivationHydrated) return loadingFallback;
+
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen bg-black flex items-center justify-center text-white font-['Press_Start_2P'] text-xs">
-          LOADING...
-        </div>
-      }
+      fallback={loadingFallback}
     >
       <Routes>
         {/* Main Menu - Figma Design */}
@@ -441,6 +462,10 @@ function App() {
             <Route
               path="/__preview/between-inning-summary"
               element={<BetweenInningSummaryPreview />}
+            />
+            <Route
+              path="/__preview/phase2-activation"
+              element={<Phase2ActivationConsole />}
             />
           </>
         ) : null}
