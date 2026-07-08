@@ -2647,7 +2647,7 @@ describe("LeagueBuilderDraftSetup", () => {
   // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 — draft-available player universe.
   // -----------------------------------------------------------------------------------------
 
-  test("UNIVERSE renders every league with a player count; own league checked by default and not locked", async () => {
+  test("UNIVERSE renders every league with a player count; ALL leagues checked by default (unfiltered), none locked", async () => {
     const nativePlayers = makePlayers(5);
     const otherLeaguePlayers = Array.from({ length: 3 }, (_, index) =>
       makePlayer(100 + index, {
@@ -2668,8 +2668,9 @@ describe("LeagueBuilderDraftSetup", () => {
 
     const ownCheckbox = await screen.findByLabelText(/Page League/i);
     const otherCheckbox = screen.getByLabelText(/Legends League/i);
+    // Captain rework 2026-07-08: absent field = unfiltered = every league renders checked.
     expect(ownCheckbox).toBeChecked();
-    expect(otherCheckbox).not.toBeChecked();
+    expect(otherCheckbox).toBeChecked();
     expect(ownCheckbox.closest("label")?.textContent).toContain(`${nativePlayers.length} player`);
     expect(otherCheckbox.closest("label")?.textContent).toContain(`${otherLeaguePlayers.length} player`);
     // Enablement settles once the pool-lock status and saved-auction check both resolve (async on mount).
@@ -2678,7 +2679,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
-  test("UNIVERSE: default resolves to own league only; checking another league persists sourceLeagueIds and the next mount draws from both", async () => {
+  test("UNIVERSE: absent field extracts from the FULL player set byte-identically; first toggle writes the explicit list and switches to filtered", async () => {
     const nativePlayers = makeLegalRosterPlayerSet("native", 10_000);
     const curatedPlayers = makeLegalRosterPlayerSet("curated", 10_000).map((player) => ({
       ...player,
@@ -2699,22 +2700,25 @@ describe("LeagueBuilderDraftSetup", () => {
 
     await clickDraftSetupButton(/Regenerate production-shaped pool/i);
     await waitFor(() => expect(extractPoolFromDemand).toHaveBeenCalled());
-    const universeBefore = new Set(
-      (vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[0] as Array<{ id: string }>).map((p) => p.id),
-    );
-    for (const player of nativePlayers) expect(universeBefore.has(player.id)).toBe(true);
-    for (const player of curatedPlayers) expect(universeBefore.has(player.id)).toBe(false);
+    // Byte-identical assertion: with the field absent, the extraction universe IS the full
+    // player set — every id, exactly, no filter applied (pre-feature behavior).
+    const universeBefore = (vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[0] as Array<{ id: string }>)
+      .map((p) => p.id)
+      .sort();
+    expect(universeBefore).toEqual(allPlayers.map((p) => p.id).sort());
 
+    // First toggle: un-check the other league → writes the explicit full list minus the toggled
+    // league (from then on the record carries an explicit array).
     const otherCheckbox = await screen.findByLabelText(/Legends League/i);
     fireEvent.click(otherCheckbox);
     await waitFor(() => {
       expect(saveLeagueTemplate).toHaveBeenCalledWith(
-        expect.objectContaining({ sourceLeagueIds: ["league-page", "other-league"] }),
+        expect.objectContaining({ sourceLeagueIds: ["league-page"] }),
       );
     });
 
     vi.mocked(extractPoolFromDemand).mockClear();
-    const nextLeague = { ...league, sourceLeagueIds: ["league-page", "other-league"] };
+    const nextLeague = { ...league, sourceLeagueIds: ["league-page"] };
     mockLeagueData({
       league: nextLeague,
       leagues: [nextLeague, otherLeague],
@@ -2728,7 +2732,9 @@ describe("LeagueBuilderDraftSetup", () => {
     const universeAfter = new Set(
       (vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[0] as Array<{ id: string }>).map((p) => p.id),
     );
-    for (const player of curatedPlayers) expect(universeAfter.has(player.id)).toBe(true);
+    // Explicit array behavior: curated-league players excluded, native players kept.
+    for (const player of nativePlayers) expect(universeAfter.has(player.id)).toBe(true);
+    for (const player of curatedPlayers) expect(universeAfter.has(player.id)).toBe(false);
   });
 
   test("UNIVERSE: empty resolved universe disables extraction and shows a plain cause hint", async () => {
@@ -2749,6 +2755,31 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText(/No draft pool sources are checked/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Reroll generated players/i })).toBeDisabled();
+  });
+
+  test("UNIVERSE: explicit zero leagues checked but free agents present keeps extraction enabled with an honest info line", async () => {
+    // Audit Finding 3 honesty tweak (captain 2026-07-08): warn-don't-block stands — never-claimed
+    // free agents keep the universe alive, so extraction stays enabled, but the UI says so plainly.
+    const freeAgents = makeLegalRosterPlayerSet("fa", 10_000).map((player) => ({
+      ...player,
+      leagueAssignments: [],
+    }));
+    const league = makeLeague({ sourceLeagueIds: [] });
+    mockLeagueData({
+      league,
+      leagues: [league],
+      players: freeAgents,
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("No league sources checked — drafting from unclaimed free agents only.")).toBeInTheDocument();
+    expect(screen.queryByText(/No draft pool sources are checked/i)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).toBeEnabled();
+    });
+    expect(screen.getByRole("button", { name: /Reroll generated players/i })).toBeEnabled();
   });
 
   test("UNIVERSE: thin universe surfaces a plain engine-generated count instead of a bare number", async () => {
@@ -2779,34 +2810,47 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText(/players? engine-generated to help fill the roster demand/i)).toBeInTheDocument();
   });
 
-  test("F20 UNIVERSE: a source-league change trips THE DRAFT POOL SOURCES CHANGED and blocks lock", async () => {
+  test("F20 UNIVERSE: a source-league change trips THE DRAFT POOL SOURCES CHANGED and blocks lock; legacy unfiltered records never retro-nag", async () => {
     const teams = [
       makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
       makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
     ];
-    const extractedBasis = {
-      cap: 1_000_000,
-      poolSizeMultiplier: 1.35,
-      identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
-      sourceLeagueIds: ["league-page"],
-    };
-    const baseLeague = makeLeague({
+    const otherLeague = makeLeague({ id: "other-league", name: "Legends League", teamIds: [] });
+
+    // Phase 1 — legacy/no-touch: extracted basis has NO sourceLeagueIds (pre-feature record) and
+    // the league field is absent (untouched unfiltered default). Both mean "drawn from
+    // everything" — provably equivalent, so no retro-nag.
+    const legacyLeague = makeLeague({
       draftPoolMode: "design-first",
       poolExtractedAt: "2026-01-02T00:00:00.000Z",
-      poolExtractedBasis: extractedBasis,
+      poolExtractedBasis: {
+        cap: 1_000_000,
+        poolSizeMultiplier: 1.35,
+        identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+      },
       salaryCap: 1_000_000,
       poolSizeMultiplier: 1.35,
     });
-    const otherLeague = makeLeague({ id: "other-league", name: "Legends League", teamIds: [] });
-
-    mockLeagueData({ league: baseLeague, leagues: [baseLeague, otherLeague], teams, pool: makePool() });
+    mockLeagueData({ league: legacyLeague, leagues: [legacyLeague, otherLeague], teams, pool: makePool() });
     const { rerender } = render(<LeagueBuilderDraftSetup />);
-
     await waitFor(() => {
       expect(screen.queryByText(/THE DRAFT POOL SOURCES CHANGED/i)).not.toBeInTheDocument();
     });
 
-    const changedLeague = { ...baseLeague, sourceLeagueIds: ["league-page", "other-league"] };
+    // Phase 2 — explicit-and-matching: extracted with an explicit set, live set unchanged → quiet.
+    const matchedLeague = {
+      ...legacyLeague,
+      poolExtractedBasis: { ...legacyLeague.poolExtractedBasis!, sourceLeagueIds: ["league-page"] },
+      sourceLeagueIds: ["league-page"],
+    };
+    mockLeagueData({ league: matchedLeague, leagues: [matchedLeague, otherLeague], teams, pool: makePool() });
+    rerender(<LeagueBuilderDraftSetup />);
+    await waitFor(() => {
+      expect(screen.queryByText(/THE DRAFT POOL SOURCES CHANGED/i)).not.toBeInTheDocument();
+    });
+
+    // Phase 3 — the live set moves off the extracted set → staleness line + start blocked.
+    const changedLeague = { ...matchedLeague, sourceLeagueIds: ["league-page", "other-league"] };
     mockLeagueData({ league: changedLeague, leagues: [changedLeague, otherLeague], teams, pool: makePool() });
     rerender(<LeagueBuilderDraftSetup />);
 

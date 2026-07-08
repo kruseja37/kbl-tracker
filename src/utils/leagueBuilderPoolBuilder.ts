@@ -55,14 +55,22 @@ export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean 
 
 /**
  * Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2/§7): which league ids
- * feed a league's draft-pool extraction. Absent `sourceLeagueIds` defaults to the league's OWN id
- * only — every existing league (created before this feature) resolves to exactly today's
- * behavior. An explicit empty array is a real, distinct state (JK ruling 2026-07-08: a user may
- * un-check their own league entirely) and must NOT be treated as "absent" / defaulted back — only
- * `undefined` triggers the default.
+ * feed a league's draft-pool extraction.
+ *
+ * Returns `null` for "unfiltered" — an absent `sourceLeagueIds` means ALL leagues are checked and
+ * the universe filter is skipped entirely, which is provably byte-identical to the pre-feature
+ * behavior (extraction always drew from every player row in the app). Captain correction
+ * 2026-07-08 post-audit: the earlier own-league-only default was a contract framing error, not a
+ * JK ruling — it silently excluded every other league's players (e.g. the ~440 SMB4 'sml' seed
+ * players) from a brand-new league's very first extraction.
+ *
+ * An explicit array (any content) is the curated state and IS filtered. An explicit empty array
+ * is a real, distinct state (JK ruling 2026-07-08: a user may un-check every league, including
+ * their own) and must NOT be treated as "absent" — it resolves to free-agents-only, because
+ * never-claimed players bypass the filter (see isPlayerInSourceUniverse).
  */
-export function resolveSourceLeagueIds(league: Pick<LeagueTemplate, 'id' | 'sourceLeagueIds'>): string[] {
-  return league.sourceLeagueIds ?? [league.id];
+export function resolveSourceLeagueIds(league: Pick<LeagueTemplate, 'sourceLeagueIds'>): string[] | null {
+  return league.sourceLeagueIds ?? null;
 }
 
 /**

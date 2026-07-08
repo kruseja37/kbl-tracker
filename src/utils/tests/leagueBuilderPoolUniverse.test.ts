@@ -71,17 +71,59 @@ function makePlayer(id: string, assignmentLeagueIds: string[] = []): Player {
 // ---------------------------------------------------------------------------------------------
 
 describe('resolveSourceLeagueIds', () => {
-  test('back-compat: absent sourceLeagueIds resolves to [own league id] only', () => {
-    expect(resolveSourceLeagueIds({ id: OWN_LEAGUE_ID, sourceLeagueIds: undefined })).toEqual([OWN_LEAGUE_ID]);
+  test('back-compat: absent sourceLeagueIds resolves to null = UNFILTERED (all leagues, filter skipped)', () => {
+    // Captain correction 2026-07-08 post-audit: absent means "drawn from everything", byte-
+    // identical to pre-feature behavior — NOT own-league-only (that earlier default was a
+    // contract framing error, and would have excluded e.g. the SMB4 'sml' seed players from a
+    // brand-new league's first extraction).
+    expect(resolveSourceLeagueIds({ sourceLeagueIds: undefined })).toBeNull();
   });
 
   test('explicit empty array stays empty — own league IS un-checkable (JK ruling 2026-07-08 #1)', () => {
-    expect(resolveSourceLeagueIds({ id: OWN_LEAGUE_ID, sourceLeagueIds: [] })).toEqual([]);
+    expect(resolveSourceLeagueIds({ sourceLeagueIds: [] })).toEqual([]);
   });
 
   test('explicit set (including a mix of own + other leagues) is returned as-is', () => {
-    expect(resolveSourceLeagueIds({ id: OWN_LEAGUE_ID, sourceLeagueIds: [OTHER_LEAGUE_ID] }))
+    expect(resolveSourceLeagueIds({ sourceLeagueIds: [OTHER_LEAGUE_ID] }))
       .toEqual([OTHER_LEAGUE_ID]);
+  });
+});
+
+describe('unfiltered default — byte-identical universe (captain rework 2026-07-08)', () => {
+  test('absent field: resolve returns null and a null-guarded filter yields the FULL player set, byte-identical', () => {
+    // This mirrors the exact page-level composition: universe = resolved === null ? players : players.filter(...).
+    const players = [
+      makePlayer('own-1', [OWN_LEAGUE_ID]),
+      makePlayer('other-1', [OTHER_LEAGUE_ID]),
+      makePlayer('third-1', ['a-third-league']),
+      makePlayer('fa-1', []),
+    ];
+    const resolved = resolveSourceLeagueIds({ sourceLeagueIds: undefined });
+    const universe = resolved === null ? players : players.filter((p) => isPlayerInSourceUniverse(p, resolved));
+    // Byte-identical: the very same array reference — no filter pass ran at all.
+    expect(universe).toBe(players);
+    expect(universe.map((p) => p.id)).toEqual(['own-1', 'other-1', 'third-1', 'fa-1']);
+  });
+
+  test('explicit array (first toggle materializes it) switches to filtered behavior', () => {
+    const players = [
+      makePlayer('own-1', [OWN_LEAGUE_ID]),
+      makePlayer('other-1', [OTHER_LEAGUE_ID]),
+      makePlayer('fa-1', []),
+    ];
+    const resolved = resolveSourceLeagueIds({ sourceLeagueIds: [OWN_LEAGUE_ID] });
+    const universe = resolved === null ? players : players.filter((p) => isPlayerInSourceUniverse(p, resolved));
+    expect(universe.map((p) => p.id)).toEqual(['own-1', 'fa-1']);
+  });
+
+  test('explicit [] = free-agents-only (never-claimed players bypass the filter)', () => {
+    const players = [
+      makePlayer('own-1', [OWN_LEAGUE_ID]),
+      makePlayer('fa-1', []),
+    ];
+    const resolved = resolveSourceLeagueIds({ sourceLeagueIds: [] });
+    const universe = resolved === null ? players : players.filter((p) => isPlayerInSourceUniverse(p, resolved));
+    expect(universe.map((p) => p.id)).toEqual(['fa-1']);
   });
 });
 
@@ -147,8 +189,8 @@ describe('sourceLeagueIds persistence (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7/�
 
     const reloaded = await getLeagueTemplate(OWN_LEAGUE_ID);
     expect(reloaded?.sourceLeagueIds).toBeUndefined();
-    // Back-compat resolution still works correctly off the absent field.
-    expect(resolveSourceLeagueIds(reloaded!)).toEqual([OWN_LEAGUE_ID]);
+    // Back-compat resolution off the absent field = null = unfiltered (all leagues).
+    expect(resolveSourceLeagueIds(reloaded!)).toBeNull();
   });
 
   test('an explicit sourceLeagueIds set (including an empty array) round-trips exactly on the league record', async () => {

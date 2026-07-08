@@ -885,7 +885,7 @@ function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: num
 }
 
 function buildPoolExtractedBasis(
-  league: Pick<LeagueTemplate, "id" | "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds">,
+  league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds">,
   leagueTeams: readonly Team[],
   cap: number,
   shills: number,
@@ -895,6 +895,7 @@ function buildPoolExtractedBasis(
   for (const teamId of league.teamIds) {
     identityByTeamId[teamId] = teamsById.get(teamId)?.mlbArchetypeKey ?? null;
   }
+  const resolvedSources = resolveSourceLeagueIds(league);
   return {
     cap,
     poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
@@ -902,7 +903,9 @@ function buildPoolExtractedBasis(
     identityByTeamId,
     // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: the draft pool sources are a basis input like cap/
     // dial/shills/identity — a change here must trip the same "re-extract" staleness signal.
-    sourceLeagueIds: sortedIds(resolveSourceLeagueIds(league)),
+    // Absent (unfiltered) stays absent here too, so a pre-feature record and an untouched
+    // post-feature record are indistinguishable — both mean "drawn from everything".
+    ...(resolvedSources !== null ? { sourceLeagueIds: sortedIds(resolvedSources) } : {}),
   };
 }
 
@@ -922,13 +925,14 @@ function poolBasisStaleLines(
   if (extractedBasis.shills !== undefined && extractedBasis.shills !== liveBasis.shills) {
     lines.push("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.");
   }
-  // Absent sourceLeagueIds on an older extractedBasis (pre-feature record) means "not tracked
-  // yet" — treat as unknown/no-op rather than a false-positive mismatch against a live basis
-  // that now always reports a resolved (possibly single-element) array.
-  if (extractedBasis.sourceLeagueIds !== undefined) {
-    const previousSources = sortedIds(extractedBasis.sourceLeagueIds);
-    const currentSources = sortedIds(liveBasis.sourceLeagueIds ?? []);
-    if (previousSources.join("|") !== currentSources.join("|")) {
+  // Sources comparison is null-aware: absent = unfiltered (all leagues), which is both the
+  // pre-feature meaning and the untouched-default meaning, so legacy records never retro-nag.
+  // A move between unfiltered and any explicit curated set IS a real universe change and trips
+  // the line, as does any change between two explicit sets.
+  {
+    const previousSources = extractedBasis.sourceLeagueIds ? sortedIds(extractedBasis.sourceLeagueIds).join("|") : null;
+    const currentSources = liveBasis.sourceLeagueIds ? sortedIds(liveBasis.sourceLeagueIds).join("|") : null;
+    if (previousSources !== currentSources) {
       lines.push("THE DRAFT POOL SOURCES CHANGED — RE-EXTRACT TO PULL FROM THE NEW SET.");
     }
   }
@@ -1403,23 +1407,36 @@ export function LeagueBuilderDraftSetup() {
 
   // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2/§7). Coarse selection:
   // which leagues' player pools feed THIS league's draft extraction. Absent sourceLeagueIds
-  // resolves to [this league's own id] — byte-identical to today's behavior until a user actively
-  // checks a second box (JK ruling 2026-07-08 #3). NOTE: this only narrows the automatic
-  // extraction universe (demandUniverseFromPlayers below) — the manual pool shuttle (§6, poolShuttle
-  // further down) intentionally still offers every player in the app via availablePlayers above, so
-  // fine curation (add/remove five specific guys) is unrestricted by the checkbox list.
-  const sourceLeagueIds = useMemo(
-    () => (league ? resolveSourceLeagueIds(league) : []),
+  // resolves to null = UNFILTERED (all leagues checked) — the filter below is skipped entirely,
+  // provably byte-identical to pre-feature behavior (captain correction 2026-07-08 post-audit:
+  // the earlier own-league-only default was a contract framing error that silently excluded every
+  // other league's players from a new league's first extraction). Only an explicit array (written
+  // on the first user toggle) narrows the universe. NOTE: the narrowing only applies to the
+  // automatic extraction universe (demandUniverseFromPlayers below) — the manual pool shuttle
+  // (§6, poolShuttle further down) intentionally still offers every player in the app via
+  // availablePlayers above, so fine curation (add/remove five specific guys) is unrestricted by
+  // the checkbox list.
+  const explicitSourceLeagueIds = useMemo(
+    () => (league ? resolveSourceLeagueIds(league) : null),
     [league],
   );
   const universePlayers = useMemo(
-    () => (league ? players.filter((p) => isPlayerInSourceUniverse(p, sourceLeagueIds)) : players),
-    [players, league, sourceLeagueIds],
+    () => (league && explicitSourceLeagueIds !== null
+      ? players.filter((p) => isPlayerInSourceUniverse(p, explicitSourceLeagueIds))
+      : players),
+    [players, league, explicitSourceLeagueIds],
   );
-  const universeEmpty = Boolean(league) && universePlayers.length === 0;
-  const universeEmptyHint = sourceLeagueIds.length === 0
+  // New warn-don't-block gating exists ONLY for the explicitly curated state — the unfiltered
+  // default must not introduce any behavior change vs pre-feature (even for a zero-player app).
+  const universeEmpty = Boolean(league) && explicitSourceLeagueIds !== null && universePlayers.length === 0;
+  const universeEmptyHint = (explicitSourceLeagueIds?.length ?? 0) === 0
     ? "No draft pool sources are checked — check at least one league below to enable extraction."
     : "The checked league(s) have no players yet — check a league that has players, or add players to one of them.";
+  // Audit Finding 3 honesty tweak (captain 2026-07-08): explicitly zero leagues checked, but
+  // never-claimed free agents keep the universe alive — extraction stays enabled (warn-don't-block)
+  // with an honest info line instead of silence.
+  const universeFreeAgentsOnly =
+    Boolean(league) && explicitSourceLeagueIds !== null && explicitSourceLeagueIds.length === 0 && universePlayers.length > 0;
   // Player-pool count per league, for the checkbox list (ruling 2026-07-08 #2: show every league
   // in the app with its count). Computed once over players+leagues, not per-row.
   const leaguePlayerCounts = useMemo(() => {
@@ -1976,11 +1993,14 @@ export function LeagueBuilderDraftSetup() {
   // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7): toggle one league
   // in/out of this league's draft-pool source set. Own league IS un-checkable (JK ruling
   // 2026-07-08 #1) — no special-case guard here. Persists the FULL next set on the league record
-  // (ruling #3), not sessionStorage.
+  // (ruling #3), not sessionStorage. While the field is absent (unfiltered default) every league
+  // renders checked; the FIRST toggle materializes the explicit full list minus/plus the toggled
+  // league — from then on the record carries an explicit array. No write-back happens on load,
+  // only on this user action.
   const handleToggleSourceLeague = (leagueId: string) =>
     runAction(async () => {
       if (!league) return;
-      const current = new Set(sourceLeagueIds);
+      const current = new Set(explicitSourceLeagueIds ?? leagues.map((candidate) => candidate.id));
       if (current.has(leagueId)) {
         current.delete(leagueId);
       } else {
@@ -2727,13 +2747,14 @@ export function LeagueBuilderDraftSetup() {
     shills,
     // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: source-league selection is a basis input like the
     // cap/dial/shills above — a change here must trip the same recheck-staleness signal.
-    sources: sortedIds(sourceLeagueIds),
+    // null = unfiltered (absent field); distinct from every explicit array, including [].
+    sources: explicitSourceLeagueIds === null ? null : sortedIds(explicitSourceLeagueIds),
     designs: humanTeams.map((team) => ({
       id: team.id,
       lockedAt: team.rosterDesign?.lockedAt ?? null,
       slots: team.rosterDesign?.slots ?? null,
     })),
-  }), [humanTeams, inPoolPlayers, league?.poolSizeMultiplier, league?.teamIds, shills, sourceLeagueIds, tierBudget]);
+  }), [explicitSourceLeagueIds, humanTeams, inPoolPlayers, league?.poolSizeMultiplier, league?.teamIds, shills, tierBudget]);
   const runRecheck = useCallback(() => {
     if (!recheckVisible) return;
     const report = buildRecheckReport({
@@ -3263,7 +3284,9 @@ export function LeagueBuilderDraftSetup() {
       </div>
       <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
         {leagues.map((candidate) => {
-          const checked = sourceLeagueIds.includes(candidate.id);
+          // Absent field (unfiltered default) renders every league checked — the on-screen
+          // truth of "drawn from everything". An explicit array renders exactly its members.
+          const checked = explicitSourceLeagueIds === null || explicitSourceLeagueIds.includes(candidate.id);
           const count = leaguePlayerCounts.get(candidate.id) ?? 0;
           return (
             <label
@@ -3290,7 +3313,12 @@ export function LeagueBuilderDraftSetup() {
         <div className="mt-2 text-[11px] font-bold text-[var(--ballpark-status-red-bright)]">
           {universeEmptyHint}
         </div>
-      ) : engineGeneratedCountForCopy > 0 ? (
+      ) : universeFreeAgentsOnly ? (
+        <div className="mt-2 text-[11px] text-[var(--ballpark-chalk)]/70">
+          No league sources checked — drafting from unclaimed free agents only.
+        </div>
+      ) : null}
+      {!universeEmpty && engineGeneratedCountForCopy > 0 ? (
         <div className="mt-2 text-[11px] text-[var(--ballpark-chalk)]/70">
           {engineGeneratedCountForCopy} player{engineGeneratedCountForCopy === 1 ? "" : "s"} engine-generated to help fill the roster demand.
         </div>

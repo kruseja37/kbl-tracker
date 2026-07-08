@@ -20,13 +20,16 @@ Today, when a league extracts its draft pool (either pool-first or design-first)
 
 `players` is component state populated once from `getAllPlayers()` in the data hook — `src/src_figma/hooks/useLeagueBuilderData.ts:211` (initial load) and `:304` (refresh) — which returns **every player row in the app**, with **no league filter applied before it reaches the resolver**. That is the surprising-but-verified baseline: today, any league can already extract any player in the database into its own pool; `isPlayerInLeaguePool` (`src/utils/leagueBuilderPoolBuilder.ts:51-53`) is only used to split "already a member of THIS league" from "everything else," not to gate the universe by source league.
 
-**The change:** insert one filter step before `demandUniverseFromPlayers(players)` is called at both of the two call sites above:
+**The change:** insert one filter step before `demandUniverseFromPlayers(players)` is called at both of the two call sites above (as-built shape, per the 2026-07-08 post-audit default correction — see §10):
 
 ```
-universe = players.filter(p =>
-  (league.sourceLeagueIds ?? [league.id]).some(id => isPlayerInLeaguePool(p, id))
-)
-demandUniverseFromPlayers(universe)   // same call, filtered input
+resolved = league.sourceLeagueIds ?? null        // null = UNFILTERED (absent field)
+universe = resolved === null
+  ? players                                      // filter skipped — byte-identical to pre-feature
+  : players.filter(p =>
+      !p.leagueAssignments?.length               // never-claimed free agents bypass the filter
+      || resolved.some(id => isPlayerInLeaguePool(p, id)))
+demandUniverseFromPlayers(universe)              // same call, filtered input
 ```
 
 Both `buildModeAResult` and `buildPoolFirstShapeResult` read from the same `players` variable already in scope (`useCallback` deps at `:2046` and `:2076` both list `players`), so this is a one-place change replicated at two call sites, not two divergent implementations — the resolver stays single-seam. Nothing downstream of `extractPoolFromDemand` changes for either mode.
@@ -64,7 +67,7 @@ Both ledgers are keyed by `player.id`, so a curated-universe player excluded via
 
 Placement: a checkbox list of leagues sits with the existing pool-source controls on Draft Setup — the same visual neighborhood as `poolSourceMode` (team-roster-priority vs full-pool, session-persisted at `:700-713`) and the reserve-price dial (`ReservePriceDial`, `:758+`). Suggested label: "Draft pool sources" with the active league pre-checked and locked-on (can't uncheck your own league), plus one row per other existing league template, each with a checkbox.
 
-**Default = current behavior, byte-identical for untouched setups**: `sourceLeagueIds` defaults to `[league.id]` only. A league record with no explicit `sourceLeagueIds` (every existing league today) resolves to exactly the current universe-filter no-op, so this ships with zero behavior change until a user actively checks a second box.
+**Default = current behavior, byte-identical for untouched setups (CORRECTED 2026-07-08 post-audit)**: an absent `sourceLeagueIds` means ALL leagues checked — the universe filter is skipped entirely, which is the only default that is truly byte-identical to pre-feature behavior (extraction has always drawn from every player row in the app, including other leagues' members). Every league checkbox renders CHECKED while the field is absent; the first user toggle materializes the explicit full list minus/plus the toggled league onto the record (no write-back on load, only on user action), and from then on the explicit array is filtered. The earlier draft of this paragraph said absent defaults to `[league.id]` only — that claim of byte-identity was FALSE (it would have excluded every other league's players, e.g. the ~440 SMB4 `'sml'` seed players, from a new league's first extraction) and came from a captain contract framing error, not a JK ruling. Precisely: **absent = all leagues = unfiltered; explicit array = curated; explicit `[]` = unclaimed free agents only** (never-claimed players bypass the filter so seeded free agents can never be orphaned).
 
 ## 8. Interactions
 
@@ -92,8 +95,10 @@ Placement: a checkbox list of leagues sits with the existing pool-source control
 **JK rulings (2026-07-08), resolving all three forks below; where a ruling conflicts with the recommendation prose underneath it, the ruling wins:**
 
 1. **Own league IS un-checkable.** JK's use case: a user keeps their own league's teams purely for branding, un-checks their own league, and checks other league(s) as the player source — so they never have to strip placeholder players off their branded rosters. The additive-only guardrail recommended below is REPLACED by warn-don't-block: (a) if the resolved universe is EMPTY → extraction disabled with a plain one-line hint naming the cause; (b) if the universe is smaller than the demand target → extraction proceeds, the existing engine top-up path (§5 `engineGeneratedCount`) covers the shortfall, and the UI says plainly how many players were engine-generated.
-2. **The checkbox list shows ALL leagues in the app** — flat list, each with its player-pool count. Default state: own league checked, others unchecked (preserves today's behavior exactly for existing leagues).
-3. **`sourceLeagueIds` persists ON THE LEAGUE RECORD** (`LeagueTemplate`), not sessionStorage. Absent field = `[ownLeagueId]` semantics (back-compat for every existing league).
+2. **The checkbox list shows ALL leagues in the app** — flat list, each with its player-pool count.
+3. **`sourceLeagueIds` persists ON THE LEAGUE RECORD** (`LeagueTemplate`), not sessionStorage.
+
+**Captain correction (2026-07-08, post-adversarial-audit — REQUIRED REWORK, applied):** the default-state clauses originally attached to rulings 2 and 3 ("own league checked, others unchecked" / "absent field = `[ownLeagueId]` semantics") were a captain contract framing error, NOT part of JK's rulings — JK only ruled the list contents, un-checkability, and record persistence. The audit's Finding 1 proved the own-league-only default was not back-compat: a brand-new league's first extraction would have drawn 0 own members + ~66 free agents while excluding the ~440 SMB4 `'sml'` seed players, where pre-feature behavior draws from ALL players. Corrected default semantics (as built): **absent field = ALL leagues checked = unfiltered (filter skipped, byte-identical to pre-feature); the first user toggle writes the explicit full list ± the toggled league; explicit array = curated; explicit `[]` = unclaimed free agents only, extraction enabled with an honest info line ("No league sources checked — drafting from unclaimed free agents only."), while a truly empty universe still disables extraction with a cause-naming hint.**
 
 Original open-question framing (superseded by the rulings above, kept for context):
 

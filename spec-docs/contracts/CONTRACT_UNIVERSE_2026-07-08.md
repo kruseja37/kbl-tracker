@@ -9,8 +9,16 @@ You are a builder on the KBL Tracker repo (React+TS+Vite+IndexedDB tracker for S
 
 ## JK RULINGS (2026-07-08 — resolve the spec's §10 open questions; where they conflict with older spec prose, the rulings win)
 1. Own league IS un-checkable. The additive-only guardrail in the spec is REPLACED by warn-don't-block: (a) empty resolved universe → extraction disabled with a plain one-line hint naming the cause; (b) universe smaller than demand target → extraction proceeds, existing engine top-up (§5 `engineGeneratedCount`) covers the shortfall, UI says plainly how many players were engine-generated.
-2. Checkbox list shows ALL leagues in the app — flat list, each with its player-pool count. Default: own league checked, others unchecked (byte-identical to today for untouched leagues).
-3. `sourceLeagueIds` persists ON THE LEAGUE RECORD (`LeagueTemplate`), not sessionStorage. Absent field = `[ownLeagueId]` semantics (back-compat for every existing league).
+2. Checkbox list shows ALL leagues in the app — flat list, each with its player-pool count.
+3. `sourceLeagueIds` persists ON THE LEAGUE RECORD (`LeagueTemplate`), not sessionStorage.
+
+### CAPTAIN CORRECTION (2026-07-08 post-adversarial-audit — REQUIRED REWORK, supersedes the default-state clauses this contract originally attached to rulings 2/3)
+The original clauses "Default: own league checked, others unchecked" and "Absent field = `[ownLeagueId]` semantics" were the captain's contract framing error, NOT JK rulings — JK only ruled list contents, un-checkability, and record persistence. Audit Finding 1: the own-league-only default was not back-compat (a new league's default universe = 0 own members + ~66 free agents, EXCLUDING the ~440 SMB4 `'sml'` seed players; pre-feature behavior draws from ALL players). Corrected semantics, as re-built:
+- **Absent/undefined `sourceLeagueIds` = ALL leagues checked = UNFILTERED.** `resolveSourceLeagueIds` returns `null` for "unfiltered" and the universe filter is skipped entirely — provably byte-identical to pre-feature behavior. None of the new gating (empty-universe disable, free-agent info line) applies in the unfiltered state.
+- **UI**: absent field renders every league checkbox CHECKED. The first user toggle writes the explicit full list minus/plus the toggled league (an explicit array from then on). Still no write-back on load — only on user action.
+- **Explicit array (any content) = curated**, filtered exactly as originally built. Explicit `[]` = unclaimed free agents only.
+- **Audit Finding 3 honesty tweak**: explicit `[]` with free agents keeping the universe non-empty → extraction stays enabled (warn-don't-block stands) with the info line "No league sources checked — drafting from unclaimed free agents only." The disable+hint remains for the truly-zero universe.
+- **F20 basis comparison is null-aware**: absent-in-basis = unfiltered (a pre-feature record and an untouched default are equivalent), so legacy records never retro-nag; unfiltered↔explicit and explicit↔explicit changes both trip the staleness line.
 
 ## VERIFIED FILE:LINE MAP (re-verified from source this session; spec's citations had drifted ~10-15 lines from insertions since capture)
 - Universe resolver call sites (both read `players` in scope): `buildModeAResult` → `extractPoolFromDemand(demandUniverseFromPlayers(players), ...)` at `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:2043-2044`; `buildPoolFirstShapeResult` → same shape at `:2069-2070`.
