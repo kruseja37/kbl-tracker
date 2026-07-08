@@ -311,10 +311,36 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     });
     const targetBand = scoutOverallGradeBand(
       target.prospect.prospectProfile.trueGrade,
-      scoutOverallTierForPosition(target.prospect.primaryPosition as DraftPosition, targetFarmArchetypeKey),
+      scoutOverallTierForPosition(
+        target.prospect.primaryPosition as DraftPosition,
+        targetFarmArchetypeKey,
+        {
+          power: target.prospect.power,
+          contact: target.prospect.contact,
+          speed: target.prospect.speed,
+          fielding: target.prospect.fielding,
+          arm: target.prospect.arm,
+          velocity: target.prospect.velocity,
+          junk: target.prospect.junk,
+          accuracy: target.prospect.accuracy,
+        },
+      ),
       `${targetSessionSeed}:grade-band:${target.prospect.id}:${targetTeamId}`,
     );
-    const targetOverallBand = scoutOverallBandForPosition(target.prospect.primaryPosition as DraftPosition, targetFarmArchetypeKey);
+    const targetOverallBand = scoutOverallBandForPosition(
+      target.prospect.primaryPosition as DraftPosition,
+      targetFarmArchetypeKey,
+      {
+        power: target.prospect.power,
+        contact: target.prospect.contact,
+        speed: target.prospect.speed,
+        fielding: target.prospect.fielding,
+        arm: target.prospect.arm,
+        velocity: target.prospect.velocity,
+        junk: target.prospect.junk,
+        accuracy: target.prospect.accuracy,
+      },
+    );
     const targetRange = archetypeBandValueRange(
       surfacedLot.openingAsk,
       targetOverallBand,

@@ -29,6 +29,7 @@ import {
   scoutProspect,
   scoutOverallGradeBand,
   scoutOverallBandForPosition,
+  scoutOverallTierForPosition,
   scoutToolBand,
   scoutToolBands,
   type GeneratedProspectCandidate,
@@ -1165,11 +1166,46 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(neutralErrors.some((error) => error > 0)).toBe(true);
   });
 
-  test('F2 overall grade band follows the mean-rounded farm-archetype rule', () => {
-    expect(scoutOverallBandForPosition('CF', 'web-gems')).toBe(5);
-    expect(scoutOverallBandForPosition('SP', 'the-opener')).toBe(5);
-    expect(scoutOverallBandForPosition('CF', 'whiteyball')).toBe(5);
+  test('s8.4 overall grade band follows the primary-area farm-archetype rule', () => {
+    const gloveFirst = {
+      power: 50,
+      contact: 50,
+      speed: 50,
+      fielding: 82,
+      arm: 70,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+    };
+    const batFirst = {
+      power: 82,
+      contact: 70,
+      speed: 50,
+      fielding: 50,
+      arm: 50,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+    };
+
+    expect(scoutOverallBandForPosition('CF', 'web-gems', gloveFirst)).toBe(3);
+    expect(scoutOverallBandForPosition('CF', 'web-gems', batFirst)).toBe(7);
     expect(scoutOverallBandForPosition('CF', undefined)).toBe(5);
+
+    const gloveBand = scoutOverallGradeBand(
+      'B',
+      scoutOverallTierForPosition('CF', 'web-gems', gloveFirst),
+      's8.4:web-gems:glove',
+    );
+    const batBand = scoutOverallGradeBand(
+      'B',
+      scoutOverallTierForPosition('CF', 'web-gems', batFirst),
+      's8.4:web-gems:bat',
+    );
+
+    expect(overallGradeIndex(gloveBand.worst) - overallGradeIndex(gloveBand.best)).toBeLessThan(
+      overallGradeIndex(batBand.worst) - overallGradeIndex(batBand.best),
+    );
   });
 
   test('S3 scout tool bands contain the true value with tier-width deterministic ranges', () => {

@@ -1283,22 +1283,27 @@ export function scoutTierForArea(area: ScoutArea, farmArchetypeKey?: string): Sc
 export function scoutOverallBandForPosition(
   position: DraftPosition,
   farmArchetypeKey?: string,
+  ratings?: Record<string, number>,
 ): ScoutConfidenceBand {
-  const tools = isPitcher(position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
-  const mean = tools.reduce(
-    (sum, tool) => sum + scoutConfidenceBandForArea(farmArchetypeKey, tool),
-    0,
-  ) / tools.length;
-  if (mean < 4) return 3;
-  if (mean > 6) return 7;
-  return 5;
+  if (!ratings || !farmArchetypeKey) return 5;
+  const applicableTools = new Set<ScoutArea>(isPitcher(position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS);
+  const orderedTools = PRIMARY_SCOUT_AREA_ORDER.filter((tool) => applicableTools.has(tool));
+  const firstTool = orderedTools[0];
+  if (!firstTool) return 5;
+  const primaryArea = orderedTools.reduce<ScoutArea>((best, tool) => {
+    const bestValue = ratings[best] ?? Number.NEGATIVE_INFINITY;
+    const toolValue = ratings[tool] ?? Number.NEGATIVE_INFINITY;
+    return toolValue > bestValue ? tool : best;
+  }, firstTool);
+  return scoutConfidenceBandForArea(farmArchetypeKey, primaryArea);
 }
 
 export function scoutOverallTierForPosition(
   position: DraftPosition,
   farmArchetypeKey?: string,
+  ratings?: Record<string, number>,
 ): ScoutTier {
-  return scoutTierForBand(scoutOverallBandForPosition(position, farmArchetypeKey));
+  return scoutTierForBand(scoutOverallBandForPosition(position, farmArchetypeKey, ratings));
 }
 
 export const SCOUT_TOOL_BAND_WIDTHS: Record<ScoutTier, number> = {

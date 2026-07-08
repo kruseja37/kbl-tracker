@@ -6733,3 +6733,14 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Reworked ScoutHire into a no-choice deterministic reveal: specialties are the archetype row's 3-band areas, weaknesses are the 7-band areas, labels/summaries come from the row rationale, and `draftStaffingPersistence` keeps the same saved record shape.
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused prospect/farm auction suites pass 41/41; focused new data/value/startup/ScoutHire suites pass 22/22; targeted draft-staffing persistence integration pass 1/1. Full `NODE_ENV= npx vitest run` produced 9,126 pass / 3 fail / 10 skipped, with only the characterized `LeagueBuilderDraftSetup` order-sensitive block failing; the full `LeagueBuilderDraftSetup.test.tsx` solo rerun passed 57/57.
 - Next: independent audit of the F2/F3 diff, then continue the Mode-1 punchlist sequencing.
+
+## 2026-07-08 (Codex, attended) — M1H F12 arm-slot/card + s8.4 overall band amendment
+
+- Completed **F12a** on `lane/m1h-armslot`: `LeagueBuilderProspectPlayerDto.armSlot` now allows real arm slots, generated pitchers draw a deterministic weighted slot from the current real stock-pitcher distribution, and generated hitters stay `null`. Measured distribution: High 65/36.31%, Mid 65/36.31%, Low 44/24.58%, Sub 5/2.79%, total 179.
+- Verified the farm auction DTO/IV path passes generated pitcher arm slots into `calculateIvBaseSalary`; the focused Farm IV test pins that the arm-slot angle layer engages for a generated `Sub` pitcher.
+- Completed **F12b**: the farm auction UP NOW lot card shows trait COUNT only, with no trait-name disclosure and no startup-board stripping beyond the F12c ruling.
+- Completed **s8.4-amended**: overall scout band and scout-value fog now use the archetype band for the prospect's primary applicable scouting area (highest true rating; tie order power/contact/speed/fielding/arm/velocity/junk/accuracy). No-archetype fallback remains band 5.
+- Updated `PROSPECT_GENERATION_SPEC.md` with the anchored pitcher arm-slot rule and the measured table; updated the deterministic RNG-proof hash deliberately for the new arm-slot field.
+- Gates: `npx tsc -b --pretty false` pass; focused prospect/farm/page suites pass 78/78; `npm run build` pass; full `NODE_ENV= npx vitest run` produced 9,141 pass / 1 fail / 10 skipped, with the lone red the known `LeagueBuilderDraftSetup` CUT2-2 batch case; the full `LeagueBuilderDraftSetup.test.tsx` solo rerun passed 60/60.
+- Browser gate attempted against `npm run dev -- --host 127.0.0.1 --port 5173`, but Browser/node_repl failed before attach with `sandboxCwd must be an absolute file URI`; no app/browser defect was observed.
+- Next: independent audit of M1H, then continue the Mode-1 punchlist sequencing.

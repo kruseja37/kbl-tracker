@@ -143,10 +143,11 @@ function scoutRangeForProspect(input: {
   if (!prospect || !auctionPlayer || !teamId) return null;
   if (typeof openingAsk !== "number" || !Number.isFinite(openingAsk) || openingAsk <= 0) return null;
   const position = prospect.primaryPosition as DraftPosition;
-  const overallBand = scoutOverallBandForPosition(position, farmArchetypeKey);
+  const ratings = prospectRatings(prospect);
+  const overallBand = scoutOverallBandForPosition(position, farmArchetypeKey, ratings);
   const band = scoutOverallGradeBand(
     prospect.prospectProfile.trueGrade,
-    scoutOverallTierForPosition(position, farmArchetypeKey),
+    scoutOverallTierForPosition(position, farmArchetypeKey, ratings),
     `${seed}:grade-band:${prospect.id}:${teamId}`,
   );
   const range = archetypeBandValueRange(
@@ -157,7 +158,7 @@ function scoutRangeForProspect(input: {
   return {
     ...range,
     toolBands: scoutToolBands({
-      ratings: prospectRatings(prospect),
+      ratings,
       position,
       farmArchetypeKey,
       seed: `${seed}:tool-bands:${prospect.id}:${teamId}`,
