@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
 import { LEAGUE_MINIMUM_SALARY, auctionMaxBid } from '../../data/rosterEngineConstants';
-import type { RosterSlotPlayer } from '../../data/rosterConstruction';
+import { LEGAL_ROSTER, isLegalRoster, type RosterSlotPlayer } from '../../data/rosterConstruction';
 import { cheapestLegalCompletion, type CompletionCandidate } from '../auctionCompletionFloor';
+import { settleFromShills } from '../auctionSettleFromShills';
 import {
   advanceLot,
   claimLoneSurvivor,
@@ -769,6 +770,180 @@ describe('the broken-floor repro pair', () => {
     const noTax = auctionMaxBid(50_000, 3, LEAGUE_MINIMUM_SALARY, 0);
     expect(getTeamAuctionMaxBid(session, 'team-a')).toBe(noTax);
     expect(getTeamAuctionMaxBid(session, 'team-a')).not.toBe(withTax);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// F21 (tonight's gauntlet leg 3, live browser 8-team + 2-shill pool-first draft): the pool ran dry
+// with two real clubs each 1 short of a legal 22 while market shills held won players. The old
+// terminal cascade only ever pulled from PASSED lots (backfillFromPassedLots) — never from
+// shill-held rosters — so it refused AUCTION_COMPLETE on the shortfall while the ONLY recovery
+// (settleFromShills) is itself gated on state === AUCTION_COMPLETE. Circular deadlock; NEXT LOT
+// became a permanent no-op. The fix: finalizeTerminalAuction now reclaims shill-held players via
+// the settle-from-shills CORE (auctionSettleFromShills.ts) before ever declaring a shortfall.
+// ---------------------------------------------------------------------------------------------
+
+describe('F21: terminal-cascade shill reclamation (the leg-3 deadlock)', () => {
+  const missingCpShapes = TEMPLATE.filter((_, index) => index !== 21); // no CP → minClosers=0
+  const missing3bShapes = TEMPLATE.filter((_, index) => index !== 3); // no primary 3B
+
+  function repro(shillRoster: AuctionPlayer[]): AuctionSession {
+    const rosteredA = missingCpShapes.map((shape, i) => player(`a21-${i}`, shape));
+    const rosteredB = missing3bShapes.map((shape, i) => player(`b21-${i}`, shape));
+    const teams = [
+      team('team-a', 50_000, rosteredA.map((p) => p.playerId), 1, 0),
+      team('team-b', 50_000, rosteredB.map((p) => p.playerId), 1, 0),
+      team('shill', 50_000, shillRoster.map((p) => p.playerId), LEGAL_ROSTER.size - shillRoster.length, 0),
+    ];
+    let session = midDraftSession({
+      teams,
+      rostered: [...rosteredA, ...rosteredB, ...shillRoster],
+      available: [],
+    });
+    session = {
+      ...session,
+      state: 'PASSED',
+      nominationOrder: ['team-a', 'team-b', 'shill'],
+      config: { ...session.config, nonCompletingTeamIds: ['shill'] },
+      results: [],
+    };
+    return session;
+  }
+
+  test('a/b: pool-exhausted shortfall reclaims shill-held players position-aware; both real clubs finish legal, no real player is stranded', () => {
+    const shillCp = player('shill-cp', { isPitcher: true, position: 'P', role: 'CP' });
+    const shill3b = player('shill-3b', { isPitcher: false, position: '3B', secondaryPosition: null });
+    // Distractors mirroring the live repro's "shills holding ~10 players" shape — neither fills
+    // either club's actual hole, proving the pick is need-driven, not first-available.
+    const distractor1b = player('shill-extra-1b', { isPitcher: false, position: '1B', secondaryPosition: 'OF' });
+    const distractorRp = player('shill-extra-rp', { isPitcher: true, position: 'P', role: 'RP' });
+    const session = repro([shillCp, shill3b, distractor1b, distractorRp]);
+
+    const result = advanceLot(session);
+    expect(result.ok).toBe(true);
+    const completed = ok(result);
+
+    expect(completed.state).toBe('AUCTION_COMPLETE');
+    expect(completed.terminalShortfall).toBeUndefined();
+
+    const teamA = completed.teams.find((t) => t.teamId === 'team-a')!;
+    const teamB = completed.teams.find((t) => t.teamId === 'team-b')!;
+    expect(teamA.rosterSlotsRemaining).toBe(0);
+    expect(teamB.rosterSlotsRemaining).toBe(0);
+    // Position-aware: team-a's hole was a CP, team-b's was a 3B — each gets exactly its need,
+    // not the other's distractor.
+    expect(teamA.roster.map((a) => a.playerId)).toContain('shill-cp');
+    expect(teamB.roster.map((a) => a.playerId)).toContain('shill-3b');
+    const shapesA = teamA.roster.map((a) => completed.players[a.playerId]!.pos!);
+    const shapesB = teamB.roster.map((a) => completed.players[a.playerId]!.pos!);
+    expect(isLegalRoster(shapesA)).toBe(true);
+    expect(isLegalRoster(shapesB)).toBe(true);
+
+    // Persisted rosters: only the two real clubs hold the players that mattered — the shill keeps
+    // its two UNNEEDED distractors (it was never a real franchise; those bodies were pure market
+    // pressure) but has given up the two players either real club actually needed. No real player
+    // is left short or unassigned.
+    const shill = completed.teams.find((t) => t.teamId === 'shill')!;
+    expect(shill.roster.map((a) => a.playerId).sort()).toEqual(['shill-extra-1b', 'shill-extra-rp']);
+    expect(teamA.roster).toHaveLength(LEGAL_ROSTER.size);
+    expect(teamB.roster).toHaveLength(LEGAL_ROSTER.size);
+
+    // The deadlock is broken: settleFromShills (previously UNREACHABLE — state never reached
+    // AUCTION_COMPLETE) is now callable at all. With both real clubs already full, it correctly
+    // reports them already-complete and leaves the shill's own leftover distractors untouched —
+    // those never needed a real home.
+    const settled = settleFromShills({
+      session: completed,
+      positions: Object.fromEntries(
+        Object.entries(completed.players)
+          .filter((entry): entry is [string, AuctionPlayer & { pos: RosterSlotPlayer }] => Boolean(entry[1].pos))
+          .map(([id, p]) => [id, p.pos]),
+      ),
+      shillTeamIds: ['shill'],
+    });
+    expect(settled.ok).toBe(false);
+    expect(settled.outcomes.every((outcome) => outcome.status === 'already-complete')).toBe(true);
+  });
+
+  test('c: no suitable shill player still emits the explicit uncompletable status (no deadlock, no silent completion)', () => {
+    // The shill holds bodies that fill NEITHER club's hole (no CP anywhere, no 3B anywhere).
+    const distractor1b = player('shill-extra-1b', { isPitcher: false, position: '1B', secondaryPosition: 'OF' });
+    const distractorRp = player('shill-extra-rp', { isPitcher: true, position: 'P', role: 'RP' });
+    const session = repro([distractor1b, distractorRp]);
+
+    const result = reject(advanceLot(session));
+
+    expect(result.reason).toBe('auction-uncompletable');
+    expect(result.session.state).not.toBe('AUCTION_COMPLETE');
+    expect(result.session.terminalShortfall?.status).toBe('uncompletable');
+    expect(result.session.terminalShortfall?.teamIds).toEqual(expect.arrayContaining(['team-a', 'team-b']));
+    // The shill's unrelated bodies were never touched.
+    const shill = result.session.teams.find((t) => t.teamId === 'shill')!;
+    expect(shill.roster).toHaveLength(2);
+  });
+
+  test('reserve-enabled: the reclaimed pick is priced via the Lever-A affordable cap, not the flat ask', () => {
+    const shillCp = player('shill-cp', { isPitcher: true, position: 'P', role: 'CP' }, 100_000);
+    const shill3b = player('shill-3b', { isPitcher: false, position: '3B', secondaryPosition: null }, 100_000);
+    let session = repro([shillCp, shill3b]);
+    const tightBudget = 5_000; // below the flat ASK (10_000) — the flat charge would overspend.
+    session = {
+      ...session,
+      config: { ...session.config, reserveFractionK: 0.65, flatReserveFloor: undefined },
+      teams: session.teams.map((t) =>
+        t.teamId === 'team-a' || t.teamId === 'team-b' ? { ...t, budgetRemaining: tightBudget } : t,
+      ),
+    };
+
+    const completed = ok(advanceLot(session));
+
+    expect(completed.state).toBe('AUCTION_COMPLETE');
+    const teamA = completed.teams.find((t) => t.teamId === 'team-a')!;
+    const teamB = completed.teams.find((t) => t.teamId === 'team-b')!;
+    // openSlots=1 for each ⇒ affordableSlotPrice = budgetRemaining itself; capped charge = the
+    // full (tight) budget, never negative, never above it, never below minSalary.
+    expect(teamA.budgetRemaining).toBeCloseTo(0, 6);
+    expect(teamB.budgetRemaining).toBeCloseTo(0, 6);
+    expect(teamA.roster.at(-1)!.salary).toBeCloseTo(tightBudget, 6);
+    expect(teamB.roster.at(-1)!.salary).toBeCloseTo(tightBudget, 6);
+  });
+
+  test('e: determinism — the identical session in produces the identical settlement out', () => {
+    const shillCp = player('shill-cp', { isPitcher: true, position: 'P', role: 'CP' });
+    const shill3b = player('shill-3b', { isPitcher: false, position: '3B', secondaryPosition: null });
+    const distractor1b = player('shill-extra-1b', { isPitcher: false, position: '1B', secondaryPosition: 'OF' });
+    const session = repro([shillCp, shill3b, distractor1b]);
+    const clone = JSON.parse(JSON.stringify(session)) as AuctionSession;
+
+    const first = ok(advanceLot(session));
+    const second = ok(advanceLot(clone));
+
+    expect(second).toEqual(first);
+  });
+
+  test('d: normal completion (no shortfall) never invokes reclamation — shill roster untouched pre-settle', () => {
+    // Both real clubs are ALREADY legal and full; the shill still holds a body. Nothing should be
+    // pulled from it during finalizeTerminalAuction — that only happens on a genuine shortfall.
+    const rosteredA = TEMPLATE.map((shape, i) => player(`full-a-${i}`, shape));
+    const shillBody = player('shill-untouched', { isPitcher: true, position: 'P', role: 'RP' });
+    const teams = [
+      team('team-a', 50_000, rosteredA.map((p) => p.playerId), 0, 0),
+      team('shill', 50_000, [shillBody.playerId], LEGAL_ROSTER.size - 1, 0),
+    ];
+    let session = midDraftSession({ teams, rostered: [...rosteredA, shillBody], available: [] });
+    session = {
+      ...session,
+      state: 'PASSED',
+      nominationOrder: ['team-a', 'shill'],
+      config: { ...session.config, nonCompletingTeamIds: ['shill'] },
+      results: [],
+    };
+
+    const completed = ok(advanceLot(session));
+
+    expect(completed.state).toBe('AUCTION_COMPLETE');
+    const shill = completed.teams.find((t) => t.teamId === 'shill')!;
+    expect(shill.roster.map((a) => a.playerId)).toEqual(['shill-untouched']);
   });
 });
 
