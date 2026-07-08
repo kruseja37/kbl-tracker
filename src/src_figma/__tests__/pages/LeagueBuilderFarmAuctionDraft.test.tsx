@@ -339,6 +339,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     const targetRangeText = formatScoutRange(targetRange);
     const targetGradeText = `Scout grade ${target.prospect.prospectProfile.scoutedGrade} (${gradeToTwentyEighty(target.prospect.prospectProfile.scoutedGrade)})`;
     const targetAgeText = `Age ${target.prospect.age}`;
+    const targetTraitCountText = `Traits ${[target.prospect.trait1, target.prospect.trait2].filter(Boolean).length}`;
     const targetRangeMidpoint = (targetRange.low + targetRange.high) / 2;
     const expectedOpeningPrice = formatMoney(surfacedLot.openingAsk);
     const expectedBidAmount = Math.ceil(surfacedLot.openingAsk);
@@ -366,6 +367,10 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       expect(screen.getAllByText(position).length).toBeGreaterThan(0);
     }
     expect(screen.getByText(targetAgeText)).toBeInTheDocument();
+    expect(screen.getByText(targetTraitCountText)).toBeInTheDocument();
+    for (const trait of [target.prospect.trait1, target.prospect.trait2].filter(Boolean)) {
+      expect(screen.queryByText(trait!)).not.toBeInTheDocument();
+    }
     expect(screen.queryByText("Press and hold Scout report to reveal your scout's private range and grade.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show farm auction help" }));
     expect(screen.getByText("Press and hold Scout report to reveal your scout's private range and grade.")).toBeInTheDocument();

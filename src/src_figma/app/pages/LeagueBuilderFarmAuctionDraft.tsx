@@ -107,6 +107,11 @@ function scoutGradeDisplay(prospect: LeagueBuilderProspectPlayerDto | null | und
   return `${grade} (${gradeToTwentyEighty(storedGrade)})`;
 }
 
+function prospectTraitCount(prospect: LeagueBuilderProspectPlayerDto | null | undefined): 0 | 1 | 2 | "N/A" {
+  if (!prospect) return "N/A";
+  return [prospect.trait1, prospect.trait2].filter(Boolean).length as 0 | 1 | 2;
+}
+
 type FarmScoutRead = ScoutValueRange & {
   toolBands: Record<string, { lower: number; upper: number }>;
   overallGradeBand: { best: Grade; worst: Grade };
@@ -637,6 +642,7 @@ export function LeagueBuilderFarmAuctionDraft() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm text-[#E8E8D8]/75">
                       <div>Age {currentLotProspect?.age ?? "N/A"}</div>
+                      <div>Traits {prospectTraitCount(currentLotProspect)}</div>
                       <LongPressReveal
                         label="Scout report"
                         className="sm:col-span-2 text-left bg-transparent border-0 p-0 text-[#E8E8D8]/75 cursor-pointer hover:text-[#E8E8D8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E8E8D8]"
