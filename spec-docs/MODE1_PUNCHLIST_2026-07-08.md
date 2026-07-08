@@ -20,6 +20,12 @@
 | F10 | A league can begin (and farm-draft) having skipped Scout Hire entirely — only symptom is silent "N/A" scout ranges everywhere. Also: code-verified premise correction to P11 (scout-hire does NOT actually gate the MLB auction today). | confusing → structural | beginAuction blockers (LeagueBuilderAuctionDraft.tsx:1225-1258) check no scout state; loadOptionalFarmScouts → null → "N/A" | **Structurally resolved by lane M1D**: bands/scout identity derive from the farm ARCHETYPE at draft time, not from ScoutHire persistence — a skipped reveal screen can no longer kill scouting. M1D contract hardened accordingly; P11 annotated |
 | F11 | The roster advisor only warns "too thin," never "over-stacked" — five shortstops + one emergency catcher draws zero findings. | confusing | analyzeRoster keys only off thinPositions (rosterAnalyzerEngine.ts:840,898,923) | Fold into **M1E** (the advisor names post-hoc what F8's pricing fix prevents) |
 
+## §1c JK ITEMS 2026-07-08 EVENING (diagnosis in flight)
+| ID | Item | Status |
+|---|---|---|
+| F12 | **Farm prospect generation currency check** — verify the farm generator is the NEWEST path using all IV-engine inputs (litmus: pitcher arm slots, added ~2026-07-01, must be generated on farm prospects) AND the farm lot UI shows exactly: name, age, primary/secondary position, trait COUNT — no other specifics (banded scout reads per F2 are spec-required, not over-disclosure). | Tracer dispatched 2026-07-08; findings will update this row |
+| F13 | **Farm draft CPU takeover of a user team** (JK Friday): with a shill configured in the MLB draft and no shill wiring in the farm draft, the engine treated a USER team as a CPU/shill bidder — it silently bid and won players. Suspected: farm role assignment doesn't read Draft Setup ownership (or single-human assumption). | Diagnosis dispatched 2026-07-08; fix lane after root cause (watch collision with M1a's farm-hook edits) |
+
 ## §2 THE REST OF THE PUNCH LIST (from today's audits; all ticketed)
 | ID | Item | Why it gates the A-Z test |
 |---|---|---|
