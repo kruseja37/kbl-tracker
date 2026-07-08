@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type {
   BoardEntry,
   ChemistryReadout,
+  Light,
   RosterIntelligencePayload,
   WorthToYou,
 } from "../../../../engines/rosterIntelligencePayload";
@@ -14,9 +15,11 @@ import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 
 /**
  * COCKPIT W1a/b (2026-07-08, DRAFT_COCKPIT_DESIGN_2026-07-08.md): "mlb" turns on the always-visible
- * Tier-1 verdict strip + Tier-2 promoted read; "farm" preserves the pre-cockpit collapsed-panel-only
- * behavior untouched (W1d, a later lane, builds the farm bridge). Declared locally (not imported
- * from AuctionStage.tsx) to avoid a circular type dependency between the two sibling files.
+ * Tier-1 verdict strip + Tier-2 promoted read. COCKPIT W1d (§2.5, same doc): "farm" keeps the
+ * tap-through body (no MLB-style Tier-1/2 promotion — fog is the point, per JK's directive) but
+ * gains its own zero-tap bridge headline above the strip, a narrowed 2-light row (SHAPE + BUDGET
+ * only), and a dark-first chem-fit chip. Declared locally (not imported from AuctionStage.tsx) to
+ * avoid a circular type dependency between the two sibling files.
  */
 type WhisperTier = "mlb" | "farm";
 
@@ -45,6 +48,13 @@ interface WhisperPayloadMeta {
   marginalTax?: number | null;
   /** COCKPIT W1b: WAIT/CHASE read from nominationOdds, computed by the page (session-scoped). */
   nominationChip?: WhisperNominationChip | null;
+  /** COCKPIT W1d (farm Tier-1, team-conditioned): the MLB-bridge read, e.g. "MLB thin at C and
+   * the pen -- chase catchers and bullpen arms," built from the page's already-tilted
+   * rosterBoardPriorityGaps. Always visible above the strip when present; never rendered on MLB. */
+  bridgeHeadline?: string | null;
+  /** COCKPIT W1d fork 3 (dark-first): the chem-fit Tier-2 chip label from assembleFarmWhisper's
+   * chemFitLabel -- only ever non-null once FARM_CHEM_FIT_ENABLED flips on. */
+  chemFitLabel?: string | null;
 }
 
 interface WhisperBidVsPassTarget {
@@ -76,9 +86,17 @@ interface WhisperBidVsPass {
 }
 
 // COCKPIT W1a/b: BALANCE is deleted from this order (rosterIntelligencePayload.ts FiveLights.balance
-// doc comment) -- these 4 keys are the only lights that render in EITHER tier now.
-const LIGHT_ORDER = ["shape", "identity", "chemistry", "budget"] as const;
-type LightKey = (typeof LIGHT_ORDER)[number];
+// doc comment) -- these 4 keys are the only lights the MLB tier renders.
+const MLB_LIGHT_ORDER = ["shape", "identity", "chemistry", "budget"] as const;
+// COCKPIT W1d (design §2.5, §4 honesty pass): farm renders ONLY shape + budget -- identity and
+// chemistry-synergy have no farm data source and are DELETED, not stubbed (assembleFarmWhisper no
+// longer populates those keys at all; FiveLights.identity/chemistry are optional for exactly this).
+const FARM_LIGHT_ORDER = ["shape", "budget"] as const;
+type LightKey = (typeof MLB_LIGHT_ORDER)[number];
+
+function lightOrderForTier(tier: WhisperTier): readonly LightKey[] {
+  return tier === "farm" ? FARM_LIGHT_ORDER : MLB_LIGHT_ORDER;
+}
 
 // COCKPIT W1b grade-sanity chip (captain ruling 2026-07-08, superseding the initial ±1-step
 // window): MLB overallGrade is exact/known (never fogged, unlike farm scout bands), so "normal
@@ -109,11 +127,13 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
 
   const defaultLight = useMemo(() => {
     if (!scorecard) return "shape";
-    return LIGHT_ORDER
+    const order = lightOrderForTier(tier);
+    return order
       .map((key) => ({ key, light: scorecard[key] }))
-      .sort((left, right) => lightRank(left.light) - lightRank(right.light) || LIGHT_ORDER.indexOf(left.key) - LIGHT_ORDER.indexOf(right.key))[0]
+      .filter((entry): entry is { key: LightKey; light: Light } => Boolean(entry.light))
+      .sort((left, right) => lightRank(left.light) - lightRank(right.light) || order.indexOf(left.key) - order.indexOf(right.key))[0]
       ?.key ?? "shape";
-  }, [scorecard]);
+  }, [scorecard, tier]);
 
   useEffect(() => {
     setOpen(false);
@@ -154,12 +174,22 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
 
   function renderLights(mode: "mlb" | "farm") {
     if (!scorecard) return null;
+    const order = lightOrderForTier(mode);
     const activeKey = mode === "mlb" ? revealedLight : selectedLight;
+    const selectedSentence = scorecard[selectedLight];
+    const revealedSentence = revealedLight ? scorecard[revealedLight] : undefined;
     return (
       <section className="whisper-section whisper-lights-wrap" data-testid="whisper-lights">
-        <div className="whisper-lights-row">
-          {LIGHT_ORDER.map((key) => {
+        <div
+          className="whisper-lights-row"
+          // Farm always shows 2 lights (SHAPE + BUDGET) regardless of viewport -- override the
+          // shared 4-column class only for the narrower farm order; MLB keeps its existing
+          // class-driven layout (4 columns, 2 on mobile via the shared media query) untouched.
+          style={order.length !== MLB_LIGHT_ORDER.length ? { gridTemplateColumns: `repeat(${order.length}, minmax(0, 1fr))` } : undefined}
+        >
+          {order.map((key) => {
             const light = scorecard[key];
+            if (!light) return null;
             const active = activeKey === key;
             return (
               <button
@@ -178,13 +208,15 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
           })}
         </div>
         {mode === "farm" ? (
-          <p className="whisper-light-sentence">
-            {scorecard[selectedLight].status === "unknown" ? NO_READ_LINE : scorecard[selectedLight].sentence}
-          </p>
+          selectedSentence && (
+            <p className="whisper-light-sentence">
+              {selectedSentence.status === "unknown" ? NO_READ_LINE : selectedSentence.sentence}
+            </p>
+          )
         ) : (
-          revealedLight && (
+          revealedSentence && (
             <p className="whisper-light-sentence" data-testid="whisper-tier2-light-sentence">
-              {scorecard[revealedLight].status === "unknown" ? NO_READ_LINE : scorecard[revealedLight].sentence}
+              {revealedSentence.status === "unknown" ? NO_READ_LINE : revealedSentence.sentence}
             </p>
           )
         )}
@@ -201,6 +233,10 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
 
       {isMlb && worth && (
         <WhisperVerdictStrip payload={payload} marginalTax={meta.marginalTax ?? null} />
+      )}
+
+      {!isMlb && (meta.bridgeHeadline || meta.chemFitLabel) && (
+        <FarmBridgeStrip headline={meta.bridgeHeadline ?? null} chemFitLabel={meta.chemFitLabel ?? null} />
       )}
 
       {isMlb && (
@@ -343,6 +379,32 @@ function WhisperVerdictStrip({
       {topReason && (
         <span className="chip whisper-tier1-reason" data-testid="whisper-tier1-reason">
           {reasonCodeLabel(topReason)}
+        </span>
+      )}
+    </section>
+  );
+}
+
+/**
+ * COCKPIT W1d, farm "Tier 1" -- THE BRIDGE HEADLINE (design §2.5). Always visible above the strip,
+ * zero taps, team-conditioned (built from THIS team's rosterBoardPriorityGaps by the page) --
+ * satisfies the anti-generic law (principle 8): it varies with the actual MLB roster, never a
+ * generic explainer. The chem-fit chip is dark-first (fork 3) -- absent while the flag is off.
+ */
+function FarmBridgeStrip({
+  headline,
+  chemFitLabel,
+}: {
+  headline: string | null;
+  chemFitLabel: string | null;
+}) {
+  return (
+    <section className="whisper-tier1 whisper-farm-bridge" data-testid="whisper-farm-bridge">
+      <span className="eyebrow">FARM BRIDGE</span>
+      {headline && <span className="whisper-farm-bridge-text">{headline}</span>}
+      {chemFitLabel && (
+        <span className="chip whisper-farm-bridge-chem" data-testid="whisper-farm-chem-fit">
+          {chemFitLabel}
         </span>
       )}
     </section>
@@ -797,6 +859,20 @@ function WhisperStyles() {
         border-color: rgba(202, 164, 94, 0.58);
         background: rgba(202, 164, 94, 0.1);
         font-size: 9.5px;
+        padding: 3px 7px;
+      }
+      .auc-root .whisper-farm-bridge-text {
+        flex: 1 1 auto;
+        min-width: 160px;
+        color: var(--auc-text);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .auc-root .whisper-farm-bridge-chem {
+        color: var(--ballpark-brass);
+        border-color: rgba(202, 164, 94, 0.58);
+        background: rgba(202, 164, 94, 0.1);
+        font-size: 10px;
         padding: 3px 7px;
       }
       .auc-root .whisper-tier2 {

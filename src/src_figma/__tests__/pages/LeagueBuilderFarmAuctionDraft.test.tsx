@@ -438,7 +438,12 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(screen.getByText("Most you can bid")).toBeInTheDocument();
     expect(screen.getByText("Slots left")).toBeInTheDocument();
     expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
-    expect(screen.getByText(/SS coverage below target/)).toBeInTheDocument();
+    // COCKPIT W1d: the bridge headline (always-visible, zero taps) now ALSO promotes this same
+    // team-conditioned gap text, so the SS-gap phrase legitimately appears twice on the page.
+    expect(screen.getAllByText(/SS coverage below target/).length).toBeGreaterThan(0);
+    const bridgeStrip = screen.getByTestId("whisper-farm-bridge");
+    expect(bridgeStrip).toHaveTextContent(/Board flags:/);
+    expect(bridgeStrip).toHaveTextContent(/coverage below target/);
 
     // P4: Assistant-GM whisper on the farm lot -- team-a is the human seat on the clock right
     // now (OPEN_BIDDING, pre-BID), so the panel must be live, not the dormant "WAITING ON THE
@@ -455,11 +460,33 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(verdictEl?.className ?? "").toMatch(/\b(push|cap|pass)\b/);
     // MAX BID (the liquidity-adjusted ceiling) renders, band-derived from the scout read.
     expect(within(whisperBody).getByText("MAX BID")).toBeInTheDocument();
-    // Budget light is a REAL read (not the 'unknown' stub), while shape/identity/chemistry --
-    // which have no farm data source yet -- stay honest 'unknown' stubs rather than fake reads.
+    // COCKPIT W1d: Budget AND SHAPE are both real reads now (SHAPE un-stubs once the seat's MLB
+    // roster resolves -- team-a's fixture roster here is missing SS/CF/RF and carries no
+    // pitchers, so shapeLight correctly reads it as an incomplete/illegal roster, i.e. 'red', not
+    // the old 'unknown' stub). IDENTITY/CHEMISTRY are DELETED from the farm light row entirely.
     expect(within(whisperBody).getByRole("button", { name: "BUDGET" })).not.toHaveAttribute("data-status", "unknown");
-    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).toHaveAttribute("data-status", "unknown");
-    expect(within(whisperBody).getByRole("button", { name: "IDENTITY" })).toHaveAttribute("data-status", "unknown");
+    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).not.toHaveAttribute("data-status", "unknown");
+    expect(within(whisperBody).getByRole("button", { name: "SHAPE" })).toHaveAttribute("data-status", "red");
+    expect(within(whisperBody).queryByRole("button", { name: "IDENTITY" })).not.toBeInTheDocument();
+    expect(within(whisperBody).queryByRole("button", { name: "CHEMISTRY" })).not.toBeInTheDocument();
+    // COCKPIT W1d item 4(i): a REAL farm board -- the permanent "board's bare" boilerplate is
+    // gone, replaced by remaining prospects ranked by scouted value-range midpoint.
+    const farmBoard = within(whisperBody).getByTestId("whisper-board");
+    expect(farmBoard).not.toHaveTextContent("The board's bare");
+    expect(farmBoard.textContent).toMatch(/\d+ NAMES LEFT/);
+    // Every visible board row shows a REAL, known prospect name (never a raw playerId, never a
+    // fabricated one) with a $ worth figure -- never the currently-on-the-block lot itself.
+    const remainingProspectNames = new Set(
+      baseCandidates
+        .filter((candidate) => candidate.candidate.playerId !== surfacedLot.playerId)
+        .map((candidate) => prospectDisplayName(candidate.prospect)),
+    );
+    const boardNameEls = farmBoard.querySelectorAll(".whisper-board-name");
+    expect(boardNameEls.length).toBeGreaterThan(0);
+    for (const el of Array.from(boardNameEls)) {
+      expect(remainingProspectNames.has(el.textContent ?? "")).toBe(true);
+    }
+    expect(farmBoard.querySelectorAll(".whisper-worth").length).toBe(boardNameEls.length);
     // Close it back up before continuing the existing flow below.
     fireEvent.click(whisperStrip);
 

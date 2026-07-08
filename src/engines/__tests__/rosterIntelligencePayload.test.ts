@@ -15,6 +15,7 @@ import {
   assembleFiveLights,
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
+  computeFarmChemFitLabel,
   marketReadFromEstimate,
   type MarketRead,
 } from '../rosterIntelligencePayload';
@@ -949,7 +950,42 @@ describe('roster intelligence payload assembly', () => {
     });
   });
 
-  describe('P4: farm whisper adapter (assembleFarmWhisper)', () => {
+  describe('P4 / COCKPIT W1d: farm whisper adapter (assembleFarmWhisper) -- the MLB bridge', () => {
+    // A "floor-neutral" MLB roster (13 hitters, all 8 primaries filled, catcher depth 2, full
+    // pitching staff at every minimum) so ownNeedMultiplier reads exactly neutral (1) for a hitter
+    // SS candidate in EITHER variant below -- isolating depthAwareNeedNudge's contribution from
+    // any hard-legality noise, per the design's own acceptance-case wording.
+    const SS_DEPTH_PITCHERS: readonly RosterSlotPlayer[] = [
+      pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'),
+      pitcher('RP'), pitcher('RP'), pitcher('RP'), pitcher('CP'),
+    ];
+    // Ozzie case: the SS himself carries no secondary, and none of the other bench bodies'
+    // secondaries touch SS/IF -- exactly ONE coverer (thin).
+    const OZZIE_ROSTER: readonly RosterSlotPlayer[] = [
+      hitter('C'), hitter('1B'), hitter('2B'), hitter('3B'),
+      hitter('SS'), // Ozzie: pure SS, no secondary
+      hitter('LF'), hitter('CF'), hitter('RF'),
+      hitter('1B', 'C'), hitter('2B', 'RF'), hitter('3B', 'RF'), hitter('LF', 'RF'), hitter('CF', 'RF'),
+      ...SS_DEPTH_PITCHERS,
+    ];
+    // Handley case: the star SS's OWN secondary is 'IF/OF' (covers everywhere else), PLUS one
+    // other bench body whose secondary is SS itself -- two DISTINCT SS coverers (covered).
+    const HANDLEY_ROSTER: readonly RosterSlotPlayer[] = [
+      hitter('C'), hitter('1B'), hitter('2B'), hitter('3B'),
+      hitter('SS', 'IF/OF'), // Handley: star SS who also covers IF/OF
+      hitter('LF'), hitter('CF'), hitter('RF'),
+      hitter('1B', 'C'), hitter('2B', 'RF'), hitter('3B', 'RF'), hitter('LF', 'RF'), hitter('CF', 'SS'),
+      ...SS_DEPTH_PITCHERS,
+    ];
+    // A roster missing SS entirely -- a genuine HARD legality deficit (distinct from the
+    // depth-only Ozzie/Handley pair above), used to prove ownNeedMultiplier's OWN contribution.
+    const NO_SS_ROSTER: readonly RosterSlotPlayer[] = [
+      hitter('C'), hitter('1B'), hitter('2B'), hitter('3B'),
+      hitter('LF'), hitter('CF'), hitter('RF'),
+      hitter('1B', 'C'), hitter('2B', 'RF'), hitter('3B', 'RF'), hitter('LF', 'RF'), hitter('CF', 'RF'),
+      ...SS_DEPTH_PITCHERS,
+    ];
+
     test('renders a band-derived verdict, room-relation-ready market, and a real (non-fabricated) budget light', () => {
       const assembly = assembleFarmWhisper({
         candidateId: 'prospect-echo',
@@ -960,7 +996,9 @@ describe('roster intelligence payload assembly', () => {
         nextBid: 20_000,
         currentBid: null,
         bidIncrement: 1_000,
-        positionIsOpenNeed: true,
+        // Missing SS entirely (hard deficit) AND thin (0 coverers) -- both signals fire.
+        mlbRosterShapes: NO_SS_ROSTER,
+        candidateShape: hitter('SS'),
       });
 
       expect(assembly.market.band).toEqual({ low: 20_000, median: 28_000, high: 40_000 });
@@ -972,13 +1010,35 @@ describe('roster intelligence payload assembly', () => {
       // from suggestedMaxBid (the reserved ceiling that drives the verdict).
       expect(assembly.worth.capValue).toBe(300_000);
       expect(assembly.worth.suggestedMaxBid).toBeLessThanOrEqual(assembly.worth.capValue);
-      // No fake chemistry/shape/identity reads -- honest 'unknown' stubs.
+      // No fake chemistry/identity reads -- DELETED, not stubbed (FiveLights.identity/chemistry
+      // are optional precisely so the farm branch can omit them).
       expect(assembly.worth.chemistryReadout).toBeUndefined();
-      expect(assembly.scorecard.shape.status).toBe('unknown');
-      expect(assembly.scorecard.identity.status).toBe('unknown');
-      expect(assembly.scorecard.chemistry.status).toBe('unknown');
+      expect(assembly.scorecard.identity).toBeUndefined();
+      expect(assembly.scorecard.chemistry).toBeUndefined();
+      // SHAPE un-stubs for free once the MLB roster resolves -- this fixture is missing SS
+      // entirely, so shapeLight reads an incomplete/illegal roster (red), not 'unknown'.
+      expect(assembly.scorecard.shape.status).toBe('red');
       // Budget IS real and driven by the same ceiling as the verdict.
       expect(assembly.scorecard.budget.status).not.toBe('unknown');
+      // Chem-fit chip is dark (flag off by default).
+      expect(assembly.chemFitLabel).toBeNull();
+    });
+
+    test('SHAPE stays an honest unknown stub when the MLB roster cannot be resolved at all', () => {
+      const assembly = assembleFarmWhisper({
+        candidateId: 'prospect-no-mlb-data',
+        band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+        budgetRemaining: 300_000,
+        rosterSlotsRemaining: 6,
+        minSalary: 1_000,
+        nextBid: 20_000,
+        currentBid: null,
+        mlbRosterShapes: [],
+        candidateShape: null,
+      });
+
+      expect(assembly.scorecard.shape.status).toBe('unknown');
+      expect(assembly.worth.needMultiplier).toBe(1);
     });
 
     test('pass verdict, room-relation, and budget light agree when the farm ceiling sits below the band (F9 semantics reused for farm)', () => {
@@ -990,7 +1050,8 @@ describe('roster intelligence payload assembly', () => {
         minSalary: 1_000,
         nextBid: 50_000,
         currentBid: null,
-        positionIsOpenNeed: false,
+        mlbRosterShapes: [],
+        candidateShape: null,
       });
 
       expect(assembly.worth.suggestedMaxBid).toBeLessThan(assembly.market.band.low);
@@ -998,9 +1059,89 @@ describe('roster intelligence payload assembly', () => {
       expect(assembly.scorecard.budget.status).not.toBe('green');
     });
 
-    test('open roster-slot need raises the read; a covered position does not', () => {
+    describe('acceptance case (a)/(b): depth-aware coverage (Handley vs Ozzie), isolated from hard legality', () => {
+      test('a covered position (two SS-capable bodies) does not raise the read above 1.0', () => {
+        const covered = assembleFarmWhisper({
+          candidateId: 'ss-prospect-covered',
+          band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+          budgetRemaining: 300_000,
+          rosterSlotsRemaining: 6,
+          minSalary: 1_000,
+          nextBid: 20_000,
+          currentBid: null,
+          mlbRosterShapes: HANDLEY_ROSTER,
+          candidateShape: hitter('SS'),
+        });
+        expect(covered.worth.needMultiplier).toBeLessThanOrEqual(1.0);
+      });
+
+      test('a thin position (Ozzie: pure SS, no secondary anywhere) raises the read above 1.0', () => {
+        const thin = assembleFarmWhisper({
+          candidateId: 'ss-prospect-thin',
+          band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+          budgetRemaining: 300_000,
+          rosterSlotsRemaining: 6,
+          minSalary: 1_000,
+          nextBid: 20_000,
+          currentBid: null,
+          mlbRosterShapes: OZZIE_ROSTER,
+          candidateShape: hitter('SS'),
+        });
+        expect(thin.worth.needMultiplier).toBeGreaterThan(1.0);
+      });
+
+      test('the thin read is strictly higher than the covered read for the identical candidate', () => {
+        const base = {
+          candidateId: 'ss-prospect-compare',
+          band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+          budgetRemaining: 300_000,
+          rosterSlotsRemaining: 6,
+          minSalary: 1_000,
+          nextBid: 20_000,
+          currentBid: null as number | null,
+          candidateShape: hitter('SS'),
+        };
+        const covered = assembleFarmWhisper({ ...base, mlbRosterShapes: HANDLEY_ROSTER });
+        const thin = assembleFarmWhisper({ ...base, mlbRosterShapes: OZZIE_ROSTER });
+        expect(thin.worth.needMultiplier).toBeGreaterThan(covered.worth.needMultiplier);
+      });
+    });
+
+    test('acceptance case (c): a bullpen/closer-short MLB roster gives the RP/CP prospect the aggressive multiplier through ownNeedMultiplier', () => {
+      const bullpenShortRoster: RosterSlotPlayer[] = [
+        ...['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((pos) => hitter(pos)),
+        pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'),
+        pitcher('RP'), pitcher('RP'), // only 2 relief arms, NO closer -- a real hard deficit
+      ];
+      const bullpenFullRoster: RosterSlotPlayer[] = [
+        ...['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'].map((pos) => hitter(pos)),
+        pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'),
+        pitcher('RP'), pitcher('RP'), pitcher('RP'), pitcher('RP'), pitcher('CP'),
+      ];
       const base = {
-        candidateId: 'prospect-need-probe',
+        candidateId: 'cp-prospect',
+        band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+        budgetRemaining: 300_000,
+        rosterSlotsRemaining: 6,
+        minSalary: 1_000,
+        nextBid: 20_000,
+        currentBid: null as number | null,
+        candidateShape: pitcher('CP'),
+      };
+
+      const short = assembleFarmWhisper({ ...base, mlbRosterShapes: bullpenShortRoster });
+      const full = assembleFarmWhisper({ ...base, mlbRosterShapes: bullpenFullRoster });
+
+      // The short-bullpen roster hits ownNeedMultiplier's ceiling (1 + needWeight, clamp-composed
+      // to the same [0.85, 1.35] bound as priorityNeedModifier) -- the aggressive read.
+      expect(short.worth.needMultiplier).toBeCloseTo(1.35, 5);
+      expect(short.worth.needMultiplier).toBeGreaterThan(full.worth.needMultiplier);
+      expect(full.worth.needMultiplier).toBeLessThanOrEqual(1.0);
+    });
+
+    test('acceptance case (d): one-ceiling regression -- suggestedMaxBid is the ONLY number the need composition moves; capValue never re-derives from need', () => {
+      const base = {
+        candidateId: 'prospect-ceiling',
         band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
         budgetRemaining: 300_000,
         rosterSlotsRemaining: 6,
@@ -1008,11 +1149,57 @@ describe('roster intelligence payload assembly', () => {
         nextBid: 20_000,
         currentBid: null as number | null,
       };
-      const open = assembleFarmWhisper({ ...base, positionIsOpenNeed: true });
-      const covered = assembleFarmWhisper({ ...base, positionIsOpenNeed: false });
+      const neutral = assembleFarmWhisper({ ...base, mlbRosterShapes: [], candidateShape: null });
+      const aggressive = assembleFarmWhisper({
+        ...base,
+        mlbRosterShapes: OZZIE_ROSTER,
+        candidateShape: hitter('SS'),
+      });
 
-      expect(open.worth.needMultiplier).toBeGreaterThan(covered.worth.needMultiplier);
-      expect(covered.worth.needMultiplier).toBe(1);
+      // capValue is honestly the raw remaining budget in BOTH cases -- never re-derived from need.
+      expect(neutral.worth.capValue).toBe(300_000);
+      expect(aggressive.worth.capValue).toBe(300_000);
+      // The need composition changes suggestedMaxBid -- the ONE number that carries the
+      // multiplier through the single liquidity chain (no second ceiling anywhere).
+      expect(aggressive.worth.suggestedMaxBid).toBeGreaterThan(neutral.worth.suggestedMaxBid);
+      // recommendedNumber always derives from the SAME min(worth, suggestedMaxBid) rule.
+      expect(neutral.worth.recommendedNumber).toBe(Math.min(neutral.worth.ownValue, neutral.worth.suggestedMaxBid));
+      expect(aggressive.worth.recommendedNumber).toBe(Math.min(aggressive.worth.ownValue, aggressive.worth.suggestedMaxBid));
+    });
+  });
+
+  describe('COCKPIT W1d fork 3: chemistry-fit bridge (dark-first, RESOLVED YES 2026-07-08)', () => {
+    test('FARM_CHEM_FIT_ENABLED=false (default): chemistry inputs are wired but produce zero behavior change', () => {
+      const base = {
+        candidateId: 'prospect-chem',
+        band: { low: 20_000, high: 40_000, displayedEstimate: 28_000 },
+        budgetRemaining: 300_000,
+        rosterSlotsRemaining: 6,
+        minSalary: 1_000,
+        nextBid: 20_000,
+        currentBid: null as number | null,
+        mlbRosterShapes: [] as readonly RosterSlotPlayer[],
+        candidateShape: null as RosterSlotPlayer | null,
+      };
+      const withChem = assembleFarmWhisper({
+        ...base,
+        prospectChemistry: 'Spirited',
+        mlbRosterChemistryCounts: { SPI: 2 },
+      });
+      const withoutChem = assembleFarmWhisper(base);
+
+      expect(withChem.worth.needMultiplier).toBe(withoutChem.worth.needMultiplier);
+      expect(withChem.chemFitLabel).toBeNull();
+    });
+
+    test('the flag-independent chem-fit label math is correct and ready for when JK flips the flag on', () => {
+      // computeFarmChemFitLabel is exactly what assembleFarmWhisper would call once
+      // FARM_CHEM_FIT_ENABLED flips true -- tested directly so the math doesn't need the flag.
+      expect(computeFarmChemFitLabel('Spirited', { SPI: 2 })).toMatch(/^Chem fit \+\d+% — Spirited room$/);
+      // No bump (mid-tier, no tier crossing on the next add) -> no chip, ever.
+      expect(computeFarmChemFitLabel('Spirited', { SPI: 4 })).toBeNull();
+      expect(computeFarmChemFitLabel(null, { SPI: 2 })).toBeNull();
+      expect(computeFarmChemFitLabel('Spirited', undefined)).toBeNull();
     });
   });
 });

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import {
+  DEPTH_NEED_NUDGE,
+  depthAwareNeedNudge,
   rosterNeedBreakdown,
   playerFillsHardRequirement,
   teamRosterNeed,
@@ -117,6 +119,94 @@ describe('rosterNeedBreakdown', () => {
     expect(need.catcherCoverNeed).toBe(1);
     expect(need.hitterFloorNeed).toBe(5);
     expect(need.minimumAdditions).toBe(5);
+  });
+});
+
+describe('depthAwareNeedNudge — COCKPIT W1d farm bridge (DRAFT_COCKPIT_DESIGN_2026-07-08.md §2.5)', () => {
+  // 8-primary + full-staff roster so the SS candidate never trips ownNeedMultiplier's hard-deficit
+  // path in the calling test file — these fixtures isolate the DEPTH signal alone.
+  const fullStaff = [
+    pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'),
+    pitcher('RP'), pitcher('RP'), pitcher('RP'), pitcher('CP'),
+  ];
+
+  it('acceptance case (a) — Handley: a star SS whose own secondary is IF/OF, PLUS another SS-capable body, reads COVERED (<=1.0)', () => {
+    const handleyRoster: RosterSlotPlayer[] = [
+      hitter('C'), hitter('1B'), hitter('2B'), hitter('3B'),
+      hitter('SS', 'IF/OF'), // Handley: star SS who also covers IF/OF
+      hitter('LF'), hitter('CF'), hitter('RF'),
+      hitter('CF', 'SS'), // another SS-capable body -- coverers = 2
+      ...fullStaff,
+    ];
+    const nudge = depthAwareNeedNudge(handleyRoster, hitter('SS'));
+    expect(nudge).toBeLessThanOrEqual(1.0);
+    expect(nudge).toBe(DEPTH_NEED_NUDGE.covered);
+  });
+
+  it('acceptance case (b) — Ozzie: a pure SS with no secondary, and nobody else covering SS, reads THIN (>1.0)', () => {
+    const ozzieRoster: RosterSlotPlayer[] = [
+      hitter('C'), hitter('1B'), hitter('2B'), hitter('3B'),
+      hitter('SS'), // Ozzie: pure SS, no secondary
+      hitter('LF'), hitter('CF'), hitter('RF'),
+      hitter('CF', 'RF'), // bench body that does NOT touch SS/IF
+      ...fullStaff,
+    ];
+    const nudge = depthAwareNeedNudge(ozzieRoster, hitter('SS'));
+    expect(nudge).toBeGreaterThan(1.0);
+    expect(nudge).toBe(DEPTH_NEED_NUDGE.thin);
+  });
+
+  it('a group secondary (IF, not just exact SS) counts toward SS coverage — the Handley encoding', () => {
+    const roster: RosterSlotPlayer[] = [
+      hitter('SS'),
+      hitter('2B', 'IF'), // group secondary covers SS too
+    ];
+    expect(depthAwareNeedNudge(roster, hitter('SS'))).toBe(DEPTH_NEED_NUDGE.covered);
+  });
+
+  it('the Utility TRAIT never feeds this coverage math for hitters — only secondaryPosition does', () => {
+    // Per the design's explicit taxonomy warning: Utility governs out-of-position RATINGS quality
+    // only, never coverage counting. toRosterSlotPlayer's hitter branch never reads `traits` at
+    // all, so a 'Utility' trait with no secondaryPosition must NOT count as an SS coverer.
+    const utilityNoSecondary = toRosterSlotPlayer({ primaryPosition: '2B', traits: ['Utility'] });
+    const roster: RosterSlotPlayer[] = [hitter('SS'), utilityNoSecondary];
+    expect(depthAwareNeedNudge(roster, hitter('SS'))).toBe(DEPTH_NEED_NUDGE.thin);
+  });
+
+  describe('pitcher classes read rosterNeedBreakdown, not depthReport (no field-position notion for arms)', () => {
+    it('CP: below/at/above the closer floor map to thin/adequate/covered', () => {
+      const noCloser = [pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('RP'), pitcher('RP')];
+      const oneCloser = [...noCloser.slice(0, 5), pitcher('CP')];
+      const twoClosers = [...oneCloser, pitcher('CP')];
+
+      expect(depthAwareNeedNudge(noCloser, pitcher('CP'))).toBe(DEPTH_NEED_NUDGE.thin);
+      expect(depthAwareNeedNudge(oneCloser, pitcher('CP'))).toBe(DEPTH_NEED_NUDGE.adequate);
+      expect(depthAwareNeedNudge(twoClosers, pitcher('CP'))).toBe(DEPTH_NEED_NUDGE.covered);
+    });
+
+    it('RP: below/at/above the bullpen-class floor (4 relief arms) map to thin/adequate/covered', () => {
+      const thinBullpen = [pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('SP'), pitcher('RP'), pitcher('RP')];
+      const adequateBullpen = [...thinBullpen, pitcher('RP'), pitcher('CP')];
+      const coveredBullpen = [...adequateBullpen, pitcher('RP')];
+
+      expect(depthAwareNeedNudge(thinBullpen, pitcher('RP'))).toBe(DEPTH_NEED_NUDGE.thin);
+      expect(depthAwareNeedNudge(adequateBullpen, pitcher('RP'))).toBe(DEPTH_NEED_NUDGE.adequate);
+      expect(depthAwareNeedNudge(coveredBullpen, pitcher('RP'))).toBe(DEPTH_NEED_NUDGE.covered);
+    });
+
+    it('SP: below/at/above the rotation floor (4 starters) map to thin/adequate/covered', () => {
+      const thinRotation = [pitcher('SP'), pitcher('SP')];
+      const adequateRotation = [...thinRotation, pitcher('SP'), pitcher('SP')];
+      const coveredRotation = [...adequateRotation, pitcher('SP')];
+
+      expect(depthAwareNeedNudge(thinRotation, pitcher('SP'))).toBe(DEPTH_NEED_NUDGE.thin);
+      expect(depthAwareNeedNudge(adequateRotation, pitcher('SP'))).toBe(DEPTH_NEED_NUDGE.adequate);
+      expect(depthAwareNeedNudge(coveredRotation, pitcher('SP'))).toBe(DEPTH_NEED_NUDGE.covered);
+    });
+  });
+
+  it('an unresolvable hitter position (not one of the 8 field positions) falls back to the neutral adequate tier, never a fabricated read', () => {
+    expect(depthAwareNeedNudge([], hitter('DH'))).toBe(DEPTH_NEED_NUDGE.adequate);
   });
 });
 
