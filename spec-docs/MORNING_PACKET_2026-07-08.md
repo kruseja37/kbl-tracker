@@ -3,8 +3,8 @@
 ## Bottom line
 **The draft is walkthrough-ready. ALL THREE gauntlet legs passed or proved their target** in a real browser: 8-team drafts complete A-Z with every club legal, in BOTH pool modes, zero console errors, zero manual pool adds. Leg 3 (full shills draft): **shill dissolution proven clean** — IndexedDB-verified, only the 8 real clubs hold rosters, zero stranded players; the farm confirmed shill-free; the human seat was never CPU-driven. Leg 3's one discovery — a completion deadlock on pool-exhausted shortfall (F21) — **was FIXED AND MERGED overnight.**
 
-## What landed (17 audited lane merges, each adversarially audited pre-merge)
-Nomination shuffle [F1] · prospect curve [F4] · Phase-2 activation switch (Mode-2 keystone) · CPU identity auto-fill [P1] · farm shill takeover fix [F13] · farm scouting overhaul (archetype bands, honest scout values, auto-scouts) [F2/F3/F7/F10] · arm slots + lot trait count + primary-area band [F12] · arm-rating feed (RA-8) · league handoff + hired staff to hub [F6/P5] · completion guarantee — no silent short rosters [F14] · farm auction on AuctionStage [P3] · post-freeze summary [P6] · rules prune (~1,400 decorative lines gone) [P7] · conference editor [P8] · scout reveal adjacent to farm [P11] · whisper one-ceiling + farm whisper [F9/P4] · shill reclamation in the terminal cascade — no completion deadlock [F21].
+## What landed (18 audited lane merges, each adversarially audited pre-merge)
+Nomination shuffle [F1] · prospect curve [F4] · Phase-2 activation switch (Mode-2 keystone) · CPU identity auto-fill [P1] · farm shill takeover fix [F13] · farm scouting overhaul (archetype bands, honest scout values, auto-scouts) [F2/F3/F7/F10] · arm slots + lot trait count + primary-area band [F12] · arm-rating feed (RA-8) · league handoff + hired staff to hub [F6/P5] · completion guarantee — no silent short rosters [F14] · farm auction on AuctionStage [P3] · post-freeze summary [P6] · rules prune (~1,400 decorative lines gone) [P7] · conference editor [P8] · scout reveal adjacent to farm [P11] · whisper one-ceiling + farm whisper [F9/P4] · shill reclamation in the terminal cascade — no completion deadlock [F21] · what you see is what locks — pool lock now blocks-and-forces-re-extraction with a hard drift guard, a stricter route than first described [F20].
 
 ## Suggested walkthrough (~30-45 min)
 1. League Office → create an 8-team league → Draft Setup: try AUTO-FILL REMAINING, lock the pool (pool-first may need one Regenerate — known F19; design-first locked first-try).
@@ -14,7 +14,7 @@ Nomination shuffle [F1] · prospect curve [F4] · Phase-2 activation switch (Mod
 5. RUN IT BACK for a second lap if desired.
 
 ## Known rough edges (recorded, none blocking)
-Style mismash everywhere (F5 reskin deliberately after correctness) · pool-first may need one Regenerate (F19) + stale legality ✗ until RE-CHECK (F15) · archetype market advisory reads far too gloomy (F16) · farm-gaps sidebar static during the draft (F17) · lock silently re-extracts the design-first pool (F20) · press-hold band reveal unverified by scripted browsers (tool limitation).
+Style mismash everywhere (F5 reskin deliberately after correctness) · pool-first may need one Regenerate (F19) + stale legality ✗ until RE-CHECK (F15) · archetype market advisory reads far too gloomy (F16) · farm-gaps sidebar static during the draft (F17) · press-hold band reveal unverified by scripted browsers (tool limitation) · pool-first LOCK can refuse opaquely, no in-UI recovery hint, if a roster changes after the once-per-league auto-import — reload remounts and clears it (F20's residual, F22).
 
 ## Questions for JK
 1. **F18:** farm slots aren't position-enforced — a passive team can end with an all-pitcher farm class. Enforce, or keep advisory?
