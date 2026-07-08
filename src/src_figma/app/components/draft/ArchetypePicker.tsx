@@ -38,11 +38,11 @@ function BoostSacrifice({ a }: { a: TeamArchetype }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold">
       {a.boosts.map((b) => (
-        <span key={b} className="text-[#9FE0A0]">+{b}</span>
+        <span key={b} className="text-[var(--ballpark-boost-green)]">+{b}</span>
       ))}
-      <span className="text-[#E8E8D8]/40">→</span>
+      <span className="text-[var(--ballpark-chalk)]/40">→</span>
       {a.sacrifices.map((s) => (
-        <span key={s} className="text-[#E0857A]">−{s}</span>
+        <span key={s} className="text-[var(--ballpark-sacrifice-red)]">−{s}</span>
       ))}
     </div>
   );
@@ -59,15 +59,15 @@ function SlotButton({
       onClick={onClick}
       className={`flex-1 min-w-[220px] text-left border-4 px-4 py-3 transition-colors ${
         active
-          ? "border-[#C4A853] bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)]"
-          : "border-[#4A6844] bg-[#2d3d2f] hover:bg-[#34472f]"
+          ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)]"
+          : "border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] hover:bg-[#34472f]"
       }`}
     >
-      <div className="text-[10px] font-bold tracking-[0.18em] text-[#C4A853]">{label}</div>
-      <div className="text-lg font-bold text-[#E8E8D8] truncate" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
+      <div className="text-[10px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">{label}</div>
+      <div className="text-lg font-bold text-[var(--ballpark-chalk)] truncate" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
         {archetype ? archetype.name : "— pick one —"}
       </div>
-      <div className="text-[11px] text-[#E8E8D8]/55">{archetype ? archetype.era : hint}</div>
+      <div className="text-[11px] text-[var(--ballpark-chalk)]/55">{archetype ? archetype.era : hint}</div>
     </button>
   );
 }
@@ -86,9 +86,9 @@ function ArchetypeCard({
   const color = FAMILY_COLOR[a.family];
   const isLocked = draftability?.band === "LOCKED";
   const verdictLine = draftability?.band === "YELLOW" && draftability.reason
-    ? { copy: `▲ ${draftability.reason}`, className: "text-[#FFD27A]" }
+    ? { copy: `▲ ${draftability.reason}`, className: "text-[var(--ballpark-warn-border)]" }
     : draftability?.band === "LOCKED" && draftability.reason
-      ? { copy: `✕ ${draftability.reason}`, className: "text-[#E0857A]" }
+      ? { copy: `✕ ${draftability.reason}`, className: "text-[var(--ballpark-sacrifice-red)]" }
       : null;
   const lockedClass = isLocked ? " opacity-[0.55] grayscale-[0.25]" : "";
   return (
@@ -99,15 +99,15 @@ function ArchetypeCard({
       title={disabled ? disabledReason : undefined}
       className={`relative text-left border-4 p-4 transition-transform active:scale-[0.99]${lockedClass} ${
         isActiveSlotPick
-          ? "border-[#C4A853] bg-[#3a4d3c] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
-          : "border-[#4A6844] bg-[#34472f] hover:bg-[#3a4d3c] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
+          ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+          : "border-[var(--ballpark-panel-border)] bg-[#34472f] hover:bg-[var(--ballpark-card-active)] shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
       } disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#34472f]`}
     >
       {/* picked badges */}
       {pickedFor.length > 0 && (
         <div className="absolute top-2 right-2 flex gap-1">
           {pickedFor.map((s) => (
-            <span key={s} className="flex items-center gap-1 bg-[#C4A853] text-[#1A1A1A] text-[9px] font-bold tracking-wider px-1.5 py-0.5">
+            <span key={s} className="flex items-center gap-1 bg-[var(--ballpark-brass)] text-[#1A1A1A] text-[9px] font-bold tracking-wider px-1.5 py-0.5">
               <Check className="w-2.5 h-2.5" /> {s === "mlb" ? "MLB" : "FARM"}
             </span>
           ))}
@@ -119,17 +119,17 @@ function ArchetypeCard({
       >
         {a.family.toUpperCase()}
       </div>
-      <div className="text-lg font-bold text-[#E8E8D8] leading-tight pr-16" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
+      <div className="text-lg font-bold text-[var(--ballpark-chalk)] leading-tight pr-16" style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.8)" }}>
         {a.name}
       </div>
       <div className="text-[11px] font-bold tracking-wide mb-2" style={{ color }}>{a.era}</div>
-      <div className="text-[12px] text-[#E8E8D8]/70 leading-snug mb-3 min-h-[34px]">{a.lore}</div>
+      <div className="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]">{a.lore}</div>
       <BoostSacrifice a={a} />
       {verdictLine ? (
         <div className={`mt-3 text-[11px] font-bold leading-snug ${verdictLine.className}`}>{verdictLine.copy}</div>
       ) : null}
       {/* reserved matchup line — empirical, lands after Season 1 */}
-      <div className={`${verdictLine ? "mt-2" : "mt-3"} pt-2 border-t border-[#4A6844]/60 text-[10px] tracking-wide text-[#E8E8D8]/30`}>
+      <div className={`${verdictLine ? "mt-2" : "mt-3"} pt-2 border-t border-[var(--ballpark-panel-border)]/60 text-[10px] tracking-wide text-[var(--ballpark-chalk)]/30`}>
         ⚔ Strong vs · weak vs — revealed after Season 1
       </div>
     </button>
@@ -154,11 +154,11 @@ export function ArchetypePicker({
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
-        <div className="text-xs font-bold tracking-[0.2em] text-[#C4A853]">TEAM IDENTITY</div>
-        {teamLabel ? <div className="text-sm text-[#E8E8D8]/70">{teamLabel}</div> : null}
+        <div className="text-xs font-bold tracking-[0.2em] text-[var(--ballpark-brass)]">TEAM IDENTITY</div>
+        {teamLabel ? <div className="text-sm text-[var(--ballpark-chalk)]/70">{teamLabel}</div> : null}
       </div>
       {showDraftabilityPending ? (
-        <div className="text-[11px] text-[#E8E8D8]/45 mb-3">
+        <div className="text-[11px] text-[var(--ballpark-chalk)]/45 mb-3">
           Draftability reads appear once your player list is in.
         </div>
       ) : null}
@@ -168,7 +168,7 @@ export function ArchetypePicker({
         <SlotButton label="MLB IDENTITY · sets affordability" hint="what's cheap to build" archetype={mlb} active={slot === "mlb"} onClick={() => setSlot("mlb")} />
         <SlotButton label="FARM IDENTITY · steers your scout" hint="what your scout hunts" archetype={farm} active={slot === "farm"} onClick={() => setSlot("farm")} />
       </div>
-      <div className="text-[12px] text-[#E8E8D8]/55 mb-4">
+      <div className="text-[12px] text-[var(--ballpark-chalk)]/55 mb-4">
         {slot === "mlb"
           ? "Choosing your MLB identity — it shifts your luxury-tax ceilings, making your style cheap to over-stack."
           : "Choosing your farm identity — it focuses your scout on the prospects that fit this build."}

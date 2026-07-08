@@ -1099,7 +1099,7 @@ function WhisperStyles() {
         margin-bottom: 8px;
         padding: 10px 13px;
         border-radius: var(--auc-r-ctl);
-        border: 1px solid var(--auc-hairline);
+        border: 2px solid var(--auc-hairline);
         border-left: 4px solid var(--whisper-team, var(--ballpark-brass));
         background: var(--auc-inset);
         box-shadow: var(--auc-shadow-card);
@@ -1157,7 +1157,7 @@ function WhisperStyles() {
         margin-bottom: 10px;
         padding: 9px 13px;
         border-radius: var(--auc-r-ctl);
-        border: 1px solid var(--auc-hairline);
+        border: 2px solid var(--auc-hairline);
         background: rgba(0, 0, 0, 0.1);
       }
       .auc-root .whisper-tier2-bidpass {
@@ -1196,7 +1196,7 @@ function WhisperStyles() {
         gap: 12px;
         padding: 10px 13px;
         border-radius: var(--auc-r-ctl);
-        border: 1px solid var(--auc-hairline);
+        border: 2px solid var(--auc-hairline);
         border-left: 4px solid var(--whisper-team, var(--ballpark-brass));
         background: var(--auc-inset);
         color: var(--auc-text);
@@ -1368,7 +1368,7 @@ function WhisperStyles() {
       }
       .auc-root .whisper-branch-card {
         min-width: 0;
-        border: 1px solid rgba(232, 232, 216, 0.12);
+        border: 2px solid rgba(232, 232, 216, 0.12);
         background: rgba(0, 0, 0, 0.18);
         padding: 9px;
       }
@@ -1463,7 +1463,7 @@ function WhisperStyles() {
       .auc-root .whisper-dot {
         width: 12px;
         height: 12px;
-        border-radius: 999px;
+        border-radius: 0;
         border: 3px solid currentColor;
       }
       .auc-root .whisper-light[data-status="green"] .whisper-dot { background: #34d399; border-color: #34d399; }
@@ -1484,7 +1484,7 @@ function WhisperStyles() {
       .auc-root .whisper-chemistry-list {
         display: flex;
         flex-direction: column;
-        border: 1px solid rgba(232, 232, 216, 0.1);
+        border: 2px solid rgba(232, 232, 216, 0.1);
         background: rgba(0, 0, 0, 0.14);
       }
       .auc-root .whisper-chemistry-row {

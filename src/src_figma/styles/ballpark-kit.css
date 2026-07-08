@@ -21,6 +21,14 @@
   --ballpark-status-red: #DD0000;
   --ballpark-status-red-bright: #FF3C3C;
   --ballpark-status-warn: #fbbf24;
+  /* RESKIN 2026-07-08: warning-banner family (was copy-pasted bare hex in 3 files). */
+  --ballpark-warn-panel: #6B3A3A;
+  --ballpark-warn-border: #FFD27A;
+  --ballpark-warn-text: #FFE8B0;
+  /* RESKIN 2026-07-08: ArchetypePicker accents. */
+  --ballpark-boost-green: #9FE0A0;
+  --ballpark-sacrifice-red: #E0857A;
+  --ballpark-card-active: #3a4d3c;
   /* JK ruling 2026-07-02: ash-tan ground was distracting at page scale — the page ground
    * is the deep well green; ash (--ballpark-ground) stays accent-only, never the page. */
   --ballpark-page-bg: #243028;
@@ -145,9 +153,14 @@
 }
 
 .ballpark-press-gold {
-  background: #F0C36B;
-  color: #2B1B08;
-  border-color: #8B5A18;
+  background: var(--ballpark-brass);
+  color: #1A1A1A;
+  border: 5px solid var(--ballpark-chalk);
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.8);
+}
+
+.ballpark-press-gold:hover {
+  background: #D4B863;
 }
 
 .ballpark-panel {

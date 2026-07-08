@@ -806,7 +806,7 @@ function SlotGroup({
               className={classNames(
                 "w-full grid grid-cols-[76px_1fr_auto] gap-2 items-center border-2 px-2 py-2 text-left active:scale-[0.98]",
                 selected
-                  ? "border-[var(--ballpark-brass)] bg-[#3a4d3c]"
+                  ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)]"
                   : blocked
                     ? "border-[var(--ballpark-status-red-bright)] bg-[var(--ballpark-well)]"
                     : "border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] hover:border-[var(--ballpark-brass)]",
@@ -916,7 +916,7 @@ function SlotEditor({
   };
 
   return (
-    <div className="border-2 border-[var(--ballpark-panel-border)] bg-[#1f2a23] p-3">
+    <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
       <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-3">{slotLabel(slot)} — THE ASK</div>
       {lockedByDesign ? (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2">
@@ -1194,7 +1194,7 @@ function ShapeRow({
       disabled={disabled}
       className={classNames(
         "w-full border-b border-[var(--ballpark-panel-border)] px-3 py-2 text-left active:scale-[0.99] disabled:opacity-45",
-        selected ? "bg-[#3a4d3c]" : "hover:bg-[var(--ballpark-action-green)]",
+        selected ? "bg-[var(--ballpark-card-active)]" : "hover:bg-[var(--ballpark-action-green)]",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -1236,7 +1236,7 @@ function ToggleControl({
       aria-pressed={checked}
       className={classNames(
         "w-full flex items-center justify-between gap-3 border-2 px-3 py-2 text-left active:scale-[0.98] disabled:opacity-45",
-        checked ? "border-[var(--ballpark-brass)] bg-[#3a4d3c]" : "border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]",
+        checked ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)]" : "border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]",
       )}
     >
       <span className="text-[11px] font-bold tracking-wider text-[var(--ballpark-chalk)]">{label}</span>
