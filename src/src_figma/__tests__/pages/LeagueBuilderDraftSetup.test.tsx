@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LeagueBuilderDraftSetup,
+  buildIdentityAutoAssignPlan,
   comparePlayersByIvDesc,
   draftSetupSolvencyBannerText,
 } from "../../app/pages/LeagueBuilderDraftSetup";
@@ -65,7 +66,11 @@ vi.mock("../../../engines/archetypeIdentity", async () => {
   );
   return {
     ...actual,
-    selectTeamArchetype: vi.fn(async (team) => team),
+    selectTeamArchetype: vi.fn(async (team, mlbKey: string, farmKey?: string) => ({
+      ...team,
+      mlbArchetypeKey: mlbKey,
+      farmArchetypeKey: farmKey ?? team.farmArchetypeKey,
+    })),
   };
 });
 
@@ -379,6 +384,7 @@ function mockLeagueData({
     error: null,
     getRegisteredPool: vi.fn(async () => pool),
     updatePlayer: vi.fn(async (player: Player) => player),
+    replaceTeamsLocal: vi.fn(() => undefined),
     refresh: vi.fn(async () => undefined),
   } as unknown as UseLeagueBuilderDataReturn;
   vi.mocked(useLeagueBuilderData).mockReturnValue(leagueData);
@@ -508,6 +514,151 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     expect(screen.getByText(/set each club's identities/i)).toBeInTheDocument();
+  });
+
+  test("P1 planner is deterministic per seed, rerolls away from current auto-filled identities, and skips LOCKED archetypes", () => {
+    const seats = makeLeague().draftSeats ?? [];
+    const baseTeam = makeTeam("team-b", {
+      controlledBy: "ai",
+      gmSeatId: undefined,
+      gmSeatName: undefined,
+      mlbArchetypeKey: undefined,
+      farmArchetypeKey: undefined,
+    });
+    const input = {
+      leagueId: "league-page",
+      nonce: 7,
+      teams: [baseTeam],
+      seats,
+      draftability: {
+        "murderers-row": { band: "LOCKED" as const, reason: "test locked" },
+        whiteyball: { band: "LOCKED" as const, reason: "test locked" },
+      },
+      includeHumanTeams: false,
+      mode: "fill-empty" as const,
+      poolSourceMode: "full-pool" as const,
+      activeLeagueId: "league-page",
+      players: makePlayers(6),
+    };
+
+    const planA = buildIdentityAutoAssignPlan(input);
+    const planB = buildIdentityAutoAssignPlan(input);
+
+    expect(planA).toEqual(planB);
+    expect(planA).toHaveLength(1);
+    expect([planA[0].mlbKey, planA[0].farmKey]).not.toContain("murderers-row");
+    expect([planA[0].mlbKey, planA[0].farmKey]).not.toContain("whiteyball");
+
+    const rerollPlan = buildIdentityAutoAssignPlan({
+      ...input,
+      nonce: 8,
+      teams: [
+        makeTeam("team-b", {
+          controlledBy: "ai",
+          gmSeatId: undefined,
+          gmSeatName: undefined,
+          mlbArchetypeKey: planA[0].mlbKey,
+          farmArchetypeKey: planA[0].farmKey,
+        }),
+      ],
+      autoFilledSlots: new Set(["team-b:mlb", "team-b:farm"]),
+      mode: "reroll-team",
+      rerollTeamId: "team-b",
+    });
+
+    expect(rerollPlan).toHaveLength(1);
+    expect(rerollPlan[0].mlbKey).not.toBe(planA[0].mlbKey);
+    expect(rerollPlan[0].farmKey).not.toBe(planA[0].farmKey);
+  });
+
+  test("P1 auto-fill remaining fills only empty CPU identities and preserves human/user-set picks by default", async () => {
+    mockLeagueData({
+      league: makeLeague({ teamIds: ["team-a", "team-b", "team-c"] }),
+      teams: [
+        makeTeam("team-a", {
+          mlbArchetypeKey: undefined,
+          farmArchetypeKey: undefined,
+        }),
+        makeTeam("team-b", {
+          controlledBy: "ai",
+          gmSeatId: undefined,
+          gmSeatName: undefined,
+          mlbArchetypeKey: undefined,
+          farmArchetypeKey: undefined,
+        }),
+        makeTeam("team-c", {
+          controlledBy: "ai",
+          gmSeatId: undefined,
+          gmSeatName: undefined,
+          mlbArchetypeKey: "murderers-row",
+          farmArchetypeKey: "whiteyball",
+        }),
+      ],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const autoFill = await screen.findByRole("button", { name: /Auto-fill remaining/i });
+    await waitFor(() => expect(autoFill).toBeEnabled());
+    fireEvent.click(autoFill);
+
+    await waitFor(() => {
+      expect(selectTeamArchetype).toHaveBeenCalledTimes(1);
+    });
+    expect(selectTeamArchetype).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "team-b" }),
+      expect.any(String),
+      expect.any(String),
+    );
+    expect(selectTeamArchetype).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "team-a" }),
+      expect.any(String),
+      expect.any(String),
+    );
+    expect(selectTeamArchetype).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "team-c" }),
+      expect.any(String),
+      expect.any(String),
+    );
+  });
+
+  test("P1 auto-fill includes human empty identities only after explicit opt-in", async () => {
+    mockLeagueData({
+      teams: [
+        makeTeam("team-a", {
+          mlbArchetypeKey: undefined,
+          farmArchetypeKey: undefined,
+        }),
+        makeTeam("team-b", {
+          controlledBy: "ai",
+          gmSeatId: undefined,
+          gmSeatName: undefined,
+          mlbArchetypeKey: undefined,
+          farmArchetypeKey: undefined,
+        }),
+      ],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const autoFill = await screen.findByRole("button", { name: /Auto-fill remaining/i });
+    fireEvent.click(screen.getByLabelText(/include human clubs/i));
+    await waitFor(() => expect(autoFill).toBeEnabled());
+    fireEvent.click(autoFill);
+
+    await waitFor(() => {
+      expect(selectTeamArchetype).toHaveBeenCalledTimes(2);
+    });
+    expect(selectTeamArchetype).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "team-a" }),
+      expect.any(String),
+      expect.any(String),
+    );
+    expect(selectTeamArchetype).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "team-b" }),
+      expect.any(String),
+      expect.any(String),
+    );
   });
 
   test("carries the selected shill count into scout hire", async () => {
