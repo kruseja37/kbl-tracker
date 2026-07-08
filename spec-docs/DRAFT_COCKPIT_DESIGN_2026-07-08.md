@@ -1,7 +1,7 @@
 # THE DRAFT COCKPIT — Asst GM 10x Design
 
 **Date:** 2026-07-08 · **Author:** Fable (captain, UI/UX authority per JK 2026-07-02 mandate)
-**Status:** DESIGN — awaiting JK ratification. Waves 1–2 recommended for immediate build; Wave 3 gated.
+**Status:** RATIFIED — JK 2026-07-08 ("good ideas on the draft cockpit: ratify"). §4 forks resolved per captain recommendations. Amended same day with the farm-bridge directive (§2.5) from JK's ratification message.
 **Grounding:** three-tracer ground-truth sweep 2026-07-08 (spec archaeology / live-UI inventory / intelligence-engine menu). Every claim below is file:line-verified by that sweep; this doc cites the load-bearing ones only.
 
 ---
@@ -31,6 +31,7 @@ Root causes found:
 5. **Shared components** (JK Correction 7, 2026-07-04): popover and rank-reorder are the SAME components at setup and on the live floor.
 6. **Every visible line must change with the lot or die.** Static boilerplate goes behind Help.
 7. **Farm privacy holds.** All farm surfaces route through the existing scout-band gate (`draftProfileModel.shouldReveal`, ratingRevealState) — bands only, never true ratings.
+8. **Nothing team-generic above the fold** (JK ruling 2026-07-08): any content that reads identically for every team's Asst GM is clutter — "users will look at the generic stuff once and never again." Every default-visible element must be conditioned on THIS team's roster and situation; generic explainers live behind Help only.
 
 ---
 
@@ -60,10 +61,14 @@ Finishes ASST_GM_DRAFT_INTELLIGENCE_SPEC B3 + Corrections 5/7 exactly as JK rule
 ### Cross-cutting — clickable everything (extends WT-D)
 `PlayerProfilePopover` wraps: roster-board won-player names (RosterSlotVM + `player` field), overflow rail, **lot log** (LogItemVM gains playerId), and the **farm on-the-block name** (farm lot VM gains `player`, band-gated). Pattern proven at AuctionStage.tsx:552.
 
-### Farm parity & honesty
-- Farm whisper gets a **real board** (remaining prospects ranked by scouted value range midpoint, fog-respecting) — kills the permanent "The board's bare" boilerplate (WhisperPanel.tsx:60).
-- Lights on farm: render ONLY BUDGET + SHAPE (real reads); drop the four permanent "read coming" stubs.
-- Candidate: wire `chemistryFitValue` (built, zero callers) into farm pricing display as a Tier-2 chip — flagged BUILD-DARK first, JK feel-gates it.
+### §2.5 Farm cockpit — the MLB bridge (JK directive at ratification, 2026-07-08 — BINDING)
+JK: the farm auction must NOT feel like the MLB auction — fog is the point. The farm Asst GM's core value is **bridging the 22-man MLB roster with the farm board**: *"who should we go after given who we have sitting in front of them at the MLB level."*
+- **Coverage-aware positional need.** Recommendations must reason about secondary positions and flexibility. JK's canonical examples: a star SS who can play IF/OF (Utility-class, e.g. Handley Dexterez) → be MORE open to drafting a dedicated SS prospect, because the star covers everywhere else; a pure SS with no secondary (Ozzie Smith type) → do NOT recommend SS early and never overpay for one; a weak bullpen → aggressively chase the best highly-scouted RP/CP on the board.
+- **Chemistry bridge.** Surface how a prospect's chemistry would fit the MLB roster's chemistry profile (candidates: `chemistryFitValue` / `chemistryAdviceForCandidate` run against the MLB roster, fog-respecting).
+- **Scout confidence stays archetype-tilted** (existing farmArchetypeScoutConfidence): the scout grades best what aligns with the chosen farm archetype. The bridge prioritizes targets THROUGH the fog; it never sharpens the fog itself.
+- **Anti-generic rule applies doubly here** (principle 8): the current farm whisper's permanent stubs and boilerplate are exactly the look-once-never-again clutter — deleted, replaced only by team-conditioned reads.
+- **GROUND-TRUTH GATE before the W1d contract:** verify what the engines actually know — do rosterNeed/analyzer computations see secondary positions + flexibility traits (the 2026-07-02 audit flagged flexibility-as-value ABSENT)? Does the farm floor have the MLB roster in scope? Can the chemistry engines take (MLB roster, farm prospect) inputs? Tracer dispatched 2026-07-08; findings amend this section before contracting. If coverage-aware need is missing, it is the ONE sanctioned exception to principle 2 (a small, tested engine addition), built dark and feel-gated.
+- Carried from the honesty pass: real farm board (prospects ranked by scouted value-range midpoint, fog-respecting) killing the "board's bare" boilerplate (WhisperPanel.tsx:60); lights on farm render ONLY BUDGET + SHAPE; chemistry-fit chip ships dark-first (fork 3, RESOLVED YES).
 
 ### Setup discoverability
 The existing shortlist rank control stays where it is but gets a first-class entry: a "RANK YOUR BOARD" affordance in the Draft Setup flow (zone 4) jumping straight into RosterDesigner's shortlist, plus one hint line on first draft entry. No new ranking surface at setup — the built one surfaces.
@@ -74,7 +79,7 @@ The existing shortlist rank control stays where it is but gets a first-class ent
 
 **Wave 1 — wiring + presentation (no engine changes; fastest visible 10x):**
 W1a: Tier-1 verdict strip + TRUE COST tax line + single-reason discipline. W1b: Tier-2 promotion (bid-vs-pass out of collapse, nominationOdds chip, gradeBand chip, lights→icons, BALANCE removal, ≤60-word budget). W1c: popovers-everywhere (absorbs WT-D). W1d: farm honesty pass (real farm board, stub removal).
-File surfaces: W1a/W1b = WhisperPanel + rosterIntelligencePayload + LeagueBuilderAuctionDraft; W1c = AuctionStage + both pages' VM builders; W1d = farm page + payload. W1c/W1d partition-checked against W1a/W1b before concurrent dispatch; otherwise serialize.
+SEQUENCING (as-executed at ratification): W1c dispatched first (WT-D lane, in flight). W1a+W1b run as ONE lane (shared files: WhisperPanel + rosterIntelligencePayload + LeagueBuilderAuctionDraft) dispatched after WT-D lands (same-page overlap). W1d (farm bridge, §2.5) dispatched after the ground-truth tracer reports AND W1a/b lands (shared rosterIntelligencePayload.ts).
 
 **Wave 2 — the board (B3 + Corrections 5/7):** shared rank component extraction → assembleBoard rankOverrides → global/per-position views → auto-advance-on-sale. Single lane; heaviest UI work; browser-walk gated.
 
@@ -86,10 +91,10 @@ File surfaces: W1a/W1b = WhisperPanel + rosterIntelligencePayload + LeagueBuilde
 
 ---
 
-## §4 Open forks for JK (with recommendations)
+## §4 Forks — RESOLVED at ratification (JK 2026-07-08, per captain recommendations)
 
-1. **BALANCE light removal until the handedness spec lands** — recommend YES (honest surface beats a dead promise).
-2. **Wave 3 posture dial: build in this push or park behind the board wave?** — recommend park until Wave 2 is felt in-browser; the dial modulates a board the GM hasn't met yet.
-3. **Farm chemistry-fit chip (build-dark → feel-gate)** — recommend YES, dark first.
+1. **BALANCE light removal until the handedness spec lands** — RESOLVED YES (honest surface beats a dead promise).
+2. **Wave 3 posture dial** — RESOLVED PARK until Wave 2 is felt in-browser; the dial modulates a board the GM hasn't met yet.
+3. **Farm chemistry-fit chip** — RESOLVED YES, build-dark first, JK feel-gates.
 
 *(SOT updates on ratification: V1_BUILD_STATUS §5 refresh — its S5 body is stale per the sweep — and UI_TRUTH_MAP rows for the whisper/stage. Scribe books.)*
