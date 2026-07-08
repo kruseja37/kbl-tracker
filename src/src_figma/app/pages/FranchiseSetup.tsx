@@ -5,6 +5,10 @@ import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hook
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
 import {
+  getAuctionSession,
+  type LeagueBuilderAuctionSession,
+} from "../../../utils/leagueBuilderStorage";
+import {
   validatePreparedLeagueBuilderFarmScoutingState,
   type LeagueBuilderFarmScoutingValidationReport,
 } from "../../../utils/leagueBuilderFarmScoutingHandoff";
@@ -72,9 +76,8 @@ function setContentsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boole
   return true;
 }
 
-function isDraftSessionComplete(session: Awaited<ReturnType<ReturnType<typeof useLeagueBuilderData>["getMlbDraftSession"]>>): boolean {
-  if (!session) return false;
-  return session.pickOrder.length > 0 && session.completedPicks.length >= session.pickOrder.length;
+function isDraftSessionComplete(session: LeagueBuilderAuctionSession | null): boolean {
+  return session?.session.state === "AUCTION_COMPLETE";
 }
 
 function buildConfigForSelectedLeague(
@@ -120,12 +123,7 @@ export function FranchiseSetup() {
     isLoading,
     error,
     seedSMB4Data,
-    getMlbDraftSession: loadMlbDraftSession,
   } = useLeagueBuilderData();
-  const getMlbDraftSession = useMemo(
-    () => typeof loadMlbDraftSession === "function" ? loadMlbDraftSession : async () => null,
-    [loadMlbDraftSession],
-  );
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
@@ -171,7 +169,7 @@ export function FranchiseSetup() {
     let cancelled = false;
     Promise.all(
       leagues.map(async (league) => {
-        const session = await getMlbDraftSession(league.id, 1).catch(() => null);
+        const session = await getAuctionSession(league.id, 1).catch(() => null);
         return isDraftSessionComplete(session) ? league.id : null;
       }),
     ).then((ids) => {
@@ -182,7 +180,7 @@ export function FranchiseSetup() {
     return () => {
       cancelled = true;
     };
-  }, [getMlbDraftSession, isLoading, leagues]);
+  }, [isLoading, leagues]);
 
   useEffect(() => {
     if (!config.league) {

@@ -334,4 +334,17 @@ describe("useFranchiseLensData schedule reflection", () => {
       win: true,
     });
   });
+
+  test("falls back to team manager and no reporter when staffing stores are empty", async () => {
+    mocks.mockListReporters.mockResolvedValue([]);
+    mocks.mockListManagerProfiles.mockResolvedValue([]);
+
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.active?.managerName).toBe("Home Team Manager");
+    expect(result.current.active?.reporter).toBeUndefined();
+  });
 });
