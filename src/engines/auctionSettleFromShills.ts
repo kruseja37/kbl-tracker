@@ -26,6 +26,17 @@ export interface SettleFromShillsInput {
   fitScores?: SettleFitTable;
 }
 
+export interface SettleFromShillsOptions {
+  /**
+   * F21 terminal-cascade reclamation (auctionStateMachine.ts finalizeTerminalAuction): caps each
+   * reclaimed pick's charge at the team's per-open-slot affordable price — Lever A's own
+   * `max(minSalary, min(ask, budgetRemaining / openSlots))` rule, the SAME formula
+   * `backfillFromPassedLots` already applies to passed-lot cleanup fills. Absent/false preserves
+   * the post-completion "Settle Short Clubs" screen's existing flat-ask charge byte-identically.
+   */
+  affordableCapped?: boolean;
+}
+
 export type SettleClubStatus =
   | 'settled'
   | 'already-complete'
@@ -112,10 +123,20 @@ function rankCandidates(input: {
   teamId: string;
   leftoverIds: ReadonlySet<string>;
   fitScores?: SettleFitTable;
+  /** Open seats for this buyer — only consulted when `affordableCapped` is set. */
+  openSlots: number;
+  affordableCapped?: boolean;
 }): SettleCompletionCandidate[] {
   const reserveEnabled = auctionReservePriceEnabled(input.session.config);
-  const teamMinSalary =
-    input.session.teams.find((team) => team.teamId === input.teamId)?.minSalary ?? 0;
+  const team = input.session.teams.find((candidate) => candidate.teamId === input.teamId);
+  const teamMinSalary = team?.minSalary ?? 0;
+  // F21 Lever-A cap (mirrors backfillFromPassedLots's per-slot affordable price exactly): only
+  // evaluated when the caller opts in; +Infinity otherwise so `chargeFor` is a no-op passthrough.
+  const affordableSlotPrice = input.affordableCapped && team && input.openSlots > 0
+    ? team.budgetRemaining / input.openSlots
+    : Number.POSITIVE_INFINITY;
+  const chargeFor = (ask: number): number =>
+    input.affordableCapped ? Math.max(teamMinSalary, Math.min(ask, affordableSlotPrice)) : ask;
   const sorted = [...input.leftoverIds]
     .map((id) => {
       const player = input.session.players[id];
@@ -138,8 +159,8 @@ function rankCandidates(input: {
   return sorted.map((entry, rank) => ({
     id: entry.id,
     shape: entry.shape,
-    price: reserveEnabled ? entry.ask : rank,
-    chargePrice: reserveEnabled ? entry.ask : teamMinSalary,
+    price: reserveEnabled ? chargeFor(entry.ask) : rank,
+    chargePrice: reserveEnabled ? chargeFor(entry.ask) : teamMinSalary,
   }));
 }
 
@@ -235,6 +256,22 @@ export function settleFromShills(input: SettleFromShillsInput): SettleFromShills
     };
   }
 
+  return settleFromShillsCore(input);
+}
+
+/**
+ * The state-agnostic settlement core (F21 — extracted so `finalizeTerminalAuction`'s terminal
+ * cascade in auctionStateMachine.ts can reclaim shill-held players BEFORE the engine ever
+ * declares AUCTION_COMPLETE, not just after). `settleFromShills` above is the public,
+ * state-gated entry point the post-completion "Settle Short Clubs" UI action calls; it is
+ * unchanged and remains byte-identical. Callers invoking this directly are responsible for only
+ * doing so when settlement is actually appropriate for their session's current state.
+ */
+export function settleFromShillsCore(
+  input: SettleFromShillsInput,
+  options: SettleFromShillsOptions = {},
+): SettleFromShillsResult {
+  const { session } = input;
   const shillIds = new Set(input.shillTeamIds);
   const { ids: leftovers, sourceByPlayerId } = buildLeftoverPool(session, shillIds);
   let teams = [...session.teams];
@@ -278,6 +315,8 @@ export function settleFromShills(input: SettleFromShillsInput): SettleFromShills
       teamId: team.teamId,
       leftoverIds: leftovers,
       fitScores: input.fitScores,
+      openSlots,
+      affordableCapped: options.affordableCapped,
     });
     const quote = cheapestLegalCompletion(rosterShapes, candidates, openSlots);
     if (!quote.feasible) {

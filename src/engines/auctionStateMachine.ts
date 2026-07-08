@@ -21,7 +21,9 @@ import {
   rosterNeedBreakdown,
   wouldStrandRoster,
   type RosterNeedBreakdown,
+  type RosterPositionMap,
 } from './rosterNeed';
+import { settleFromShillsCore } from './auctionSettleFromShills';
 
 export type AuctionState =
   | 'SETUP'
@@ -659,10 +661,25 @@ export function advanceLot(session: AuctionSession): AuctionTransitionResult {
 function finalizeTerminalAuction(session: AuctionSession, mayBackfill: boolean): AuctionTransitionResult {
   // CLEANUP BACKFILL (FABLE-C3 + M1J): every terminal path, including nomination exhaustion,
   // must flow through the same passed-lot completion cascade before AUCTION_COMPLETE is allowed.
-  const backfilled = mayBackfill && !isAuctionComplete(session)
+  const passBackfilled = mayBackfill && !isAuctionComplete(session)
     ? backfillFromPassedLots(session)
     : session;
-  const shortfallTeamIds = enrichedCompletingShortfallTeamIds(backfilled);
+  let backfilled = passBackfilled;
+  let shortfallTeamIds = enrichedCompletingShortfallTeamIds(backfilled);
+
+  // SHILL RECLAMATION (F21 — the terminal-cascade deadlock): shills are pure market pressure whose
+  // rosters dissolve at completion anyway (auctionSettleFromShills.ts, today only reachable AFTER
+  // AUCTION_COMPLETE). When the pool is exhausted and real clubs are STILL short after the
+  // passed-lot cleanup above, their held players are a legitimate backfill source — reclaim them
+  // here, BEFORE the engine ever refuses completion, so a short real club and a stocked shill can
+  // no longer deadlock each other (can't complete because short; can't settle because not
+  // complete). No-ops when the session carries no shill teams — every pre-F21 / shill-less session
+  // keeps this exact shortfall behavior byte-identical.
+  if (shortfallTeamIds.length > 0) {
+    backfilled = reclaimShillHeldForShortfall(backfilled);
+    shortfallTeamIds = enrichedCompletingShortfallTeamIds(backfilled);
+  }
+
   if (shortfallTeamIds.length > 0) {
     return rejected({
       ...backfilled,
@@ -682,6 +699,34 @@ function finalizeTerminalAuction(session: AuctionSession, mayBackfill: boolean):
     pendingClaim: null,
     terminalShortfall: undefined,
   });
+}
+
+/** Every enriched player's legality shape on this session — engine-internal, no Player-record
+ * dependency (unlike the UI's buildSettleFromShillsInput), since AuctionPlayer.pos already carries
+ * it for any session enrichedCompletingShortfallTeamIds would consider. */
+function sessionPositionMap(session: AuctionSession): RosterPositionMap {
+  const positions: Record<string, RosterSlotPlayer> = {};
+  for (const [playerId, player] of Object.entries(session.players)) {
+    if (player.pos) positions[playerId] = player.pos;
+  }
+  return positions;
+}
+
+/**
+ * F21 terminal-cascade shill reclamation: reuses the settle-from-shills CORE (same candidate
+ * ranking, cheapest-legal-completion assembly, and double-entry source-team bookkeeping as the
+ * post-completion "Settle Short Clubs" screen) rather than a parallel implementation, with the
+ * Lever-A affordable price cap opted in (see auctionSettleFromShills.ts SettleFromShillsOptions).
+ * No-ops when the session carries no shill teams (config.nonCompletingTeamIds empty/absent).
+ */
+function reclaimShillHeldForShortfall(session: AuctionSession): AuctionSession {
+  const shillTeamIds = session.config.nonCompletingTeamIds ?? [];
+  if (shillTeamIds.length === 0) return session;
+  const result = settleFromShillsCore(
+    { session, positions: sessionPositionMap(session), shillTeamIds },
+    { affordableCapped: true },
+  );
+  return result.ok ? result.session : session;
 }
 
 function acceptedAfterLotFinalization(session: AuctionSession): AuctionTransitionResult {
