@@ -7,6 +7,7 @@ import {
   deriveAuctionSessionNominationSeed,
   initAuctionSession,
   seededNominationOrder,
+  surfaceNextPlayer,
 } from "../../../../engines/auctionStateMachine";
 import { LEAGUE_MINIMUM_SALARY } from "../../../../data/rosterEngineConstants";
 import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
@@ -27,7 +28,7 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../../hooks/useLeagueBuilderData";
-import { useFarmAuctionDraft } from "../useFarmAuctionDraft";
+import { deriveFarmCpuTeamIds, useFarmAuctionDraft } from "../useFarmAuctionDraft";
 
 vi.mock("../../../../utils/syncEngine", () => ({
   syncEngine: {
@@ -142,6 +143,24 @@ function seedWithOrder(leagueId: string, teamIds: string[], expectedOrder: strin
     },
   );
   if (!seed) throw new Error(`No seed found for order ${expectedOrder.join(",")}`);
+  return seed;
+}
+
+function seedWithLast(leagueId: string, teamIds: string[], expectedLast: string[]): string {
+  const seed = Array.from({ length: 5_000 }, (_, index) => `farm-auction-seed-${index}`).find(
+    (candidate) => {
+      const sessionSeed = deriveAuctionSessionNominationSeed({
+        sessionId: createFarmAuctionSessionId(leagueId),
+        launchNonce: TEST_SESSION_LAUNCH_NONCE,
+        baseSeed: candidate,
+      });
+      const order = seededNominationOrder(teamIds, sessionSeed);
+      return expectedLast.every((teamId, index) => (
+        order[order.length - expectedLast.length + index] === teamId
+      ));
+    },
+  );
+  if (!seed) throw new Error(`No seed found for last order ${expectedLast.join(",")}`);
   return seed;
 }
 
@@ -293,6 +312,52 @@ describe("useFarmAuctionDraft", () => {
     expect(persisted?.session.state).toBe("OPEN_BIDDING");
     expect(persisted?.session.currentLot?.openingAsk).toBe(LEAGUE_MINIMUM_SALARY);
     await expect(getAuctionSession("farm-init")).resolves.toBeNull();
+  });
+
+  test("hard-zeroes farm shills so humans in legacy last seats never become CPU bidders", async () => {
+    const teamIds = ["ai-a", "ai-b", "ai-c", "ai-d", "human-a", "human-b"];
+    const seed = seedWithLast("farm-no-human-borrow", teamIds, ["human-a", "human-b"]);
+    const teams = [
+      makeTeam("ai-a", "ai"),
+      makeTeam("ai-b", "ai"),
+      makeTeam("ai-c", "ai"),
+      makeTeam("ai-d", "ai"),
+      makeTeam("human-a", "human"),
+      makeTeam("human-b", "human"),
+    ];
+    mockLeagueData({
+      leagues: [makeLeague("farm-no-human-borrow", teamIds)],
+      teams,
+    });
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction("farm-no-human-borrow", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 2,
+        bidIncrement: 1_000,
+      });
+    });
+
+    expect(result.current.session?.config.cpuShillCount).toBe(0);
+    expect(result.current.session?.nominationOrder.slice(-2)).toEqual(["human-a", "human-b"]);
+    expect(result.current.cpuTeamIds).toEqual(
+      result.current.session?.nominationOrder.filter((teamId) => teamId.startsWith("ai-")),
+    );
+    expect(result.current.cpuTeamIds).not.toContain("human-a");
+    expect(result.current.cpuTeamIds).not.toContain("human-b");
+    expect(result.current.isCpuTeam("human-a")).toBe(false);
+    expect(result.current.isCpuTeam("human-b")).toBe(false);
+
+    const legacySession = {
+      ...result.current.session!,
+      config: {
+        ...result.current.session!.config,
+        cpuShillCount: 2,
+      },
+    };
+    expect(deriveFarmCpuTeamIds(legacySession, teams)).toEqual(result.current.cpuTeamIds);
   });
 
   test("seeds farm wallets with each team's own completed MLB unspent budget carryover", async () => {
@@ -553,6 +618,79 @@ describe("useFarmAuctionDraft", () => {
     expect(resumed.current.session?.state).toBe("OPEN_BIDDING");
     expect(resumed.current.session?.currentLot?.playerId).toBe(playerId);
     expect(resumed.current.activeLeagueId).toBe(leagueId);
+  });
+
+  test("heals persisted farm cpuShillCount before resume so human teams do not auto-bid", async () => {
+    const teamIds = ["ai-a", "ai-b", "human-a", "human-b"];
+    const leagueId = "farm-heal-human-borrow";
+    const legacyBase = initAuctionSession({
+      teams: teamIds.map((teamId) => ({
+        teamId,
+        budgetRemaining: 200_000,
+        rosterSlotsRemaining: FARM_AUCTION_ROSTER_SLOTS_PER_TEAM,
+      })),
+      players: [{ playerId: "legacy-prospect", iv: 25_000, ivPercentile: 60 }],
+      nominationOrder: teamIds,
+      config: {
+        nominationOrderSeed: "legacy-farm-heal",
+        bidIncrement: 1_000,
+        cpuShillCount: 2,
+        turnTimerSeconds: null,
+        excludeFromLeague: true,
+        nominationWeightExponent: 3,
+        flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      },
+    }) as CpuShillAuctionSession;
+    const surfaced = surfaceNextPlayer(legacyBase);
+    if (!surfaced.ok || !surfaced.session.currentLot) {
+      throw new Error("Expected legacy farm session to surface a lot.");
+    }
+    const legacySession = {
+      ...surfaced.session,
+      currentLot: {
+        ...surfaced.session.currentLot,
+        bidTurnTeamId: "human-a",
+        stillIn: teamIds,
+      },
+    } as CpuShillAuctionSession;
+    mockLeagueData({
+      leagues: [makeLeague(leagueId, teamIds)],
+      teams: [
+        makeTeam("ai-a", "ai"),
+        makeTeam("ai-b", "ai"),
+        makeTeam("human-a", "human"),
+        makeTeam("human-b", "human"),
+      ],
+    });
+    await saveAuctionSession({
+      id: createFarmAuctionSessionId(leagueId),
+      leagueId,
+      seasonNumber: 1,
+      seed: legacySession.config.nominationOrderSeed,
+      session: legacySession,
+      pool: {
+        prospects: [],
+        auctionPlayers: [{ playerId: "legacy-prospect", iv: 25_000, ivPercentile: 60 }],
+      },
+    });
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.loadFarmAuction(leagueId);
+    });
+
+    expect(result.current.session?.config.cpuShillCount).toBe(0);
+    expect(result.current.currentBidderTeamId).toBe("human-a");
+    expect(result.current.session?.results).toHaveLength(0);
+    expect(result.current.cpuTeamIds).toEqual(["ai-a", "ai-b"]);
+    expect(result.current.isCpuTeam("human-a")).toBe(false);
+    expect(result.current.isCpuTeam("human-b")).toBe(false);
+
+    const persisted = await getAuctionSessionById(createFarmAuctionSessionId(leagueId));
+    expect(persisted?.session.config.cpuShillCount).toBe(0);
+    expect(persisted?.session.currentLot?.bidTurnTeamId).toBe("human-a");
+    expect(persisted?.session.results).toHaveLength(0);
   });
 
   test("uses the same setup seed to produce the same farm pool with a new session nomination seed", async () => {

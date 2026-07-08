@@ -100,23 +100,41 @@ function teamDisplayName(team: Team | null | undefined): string {
 export function deriveFarmCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
   if (!session) return [];
   const ids = new Set<string>();
+  const humanTeamIds = new Set(
+    leagueTeams.filter((team) => team.controlledBy === "human").map((team) => team.id),
+  );
 
   for (const team of leagueTeams) {
     if (team.controlledBy === "ai") ids.add(team.id);
   }
 
   for (const teamId of Object.keys(session.cpuShills ?? {})) {
-    ids.add(teamId);
-  }
-
-  const count = Math.max(0, Math.min(session.config.cpuShillCount ?? 0, session.nominationOrder.length));
-  if (count > 0) {
-    for (const teamId of session.nominationOrder.slice(-count)) {
+    if (!humanTeamIds.has(teamId)) {
       ids.add(teamId);
     }
   }
 
   return session.nominationOrder.filter((teamId) => ids.has(teamId));
+}
+
+function healFarmNoShillConfig(session: CpuShillAuctionSession): {
+  session: CpuShillAuctionSession;
+  healed: boolean;
+} {
+  if ((session.config.cpuShillCount ?? 0) === 0) {
+    return { session, healed: false };
+  }
+
+  return {
+    session: {
+      ...session,
+      config: {
+        ...session.config,
+        cpuShillCount: 0,
+      },
+    },
+    healed: true,
+  };
 }
 
 function scoutProfileToDescriptor(scout: LeagueBuilderScoutProfile): ProspectScoutDescriptor {
@@ -403,8 +421,9 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
     });
     const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
     if (row.pool) {
+      const healed = healFarmNoShillConfig(row.session);
       const persistedPoolOrder = row.pool.auctionPlayers.map((player) => player.playerId);
-      const persistedOrder = row.session.playerOrder;
+      const persistedOrder = healed.session.playerOrder;
       const matchesPersistedOrder = persistedPoolOrder.length === persistedOrder.length
         && persistedPoolOrder.every((playerId, index) => playerId === persistedOrder[index]);
       if (!matchesPersistedOrder) {
@@ -416,7 +435,17 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
         });
       }
       poolRef.current = row.pool;
-      const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
+      if (healed.healed) {
+        await saveAuctionSessionById({
+          id: createFarmAuctionSessionId(leagueId, seasonNumber),
+          leagueId,
+          seasonNumber,
+          seed: healed.session.config.nominationOrderSeed,
+          session: healed.session,
+          pool: row.pool,
+        });
+      }
+      const resumed = await autoAdvanceCpu(healed.session, nextContext, nextLeagueTeams);
       setPool(row.pool);
       setScoutsByTeamId(nextScoutsByTeamId ?? null);
       setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
@@ -425,16 +454,17 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       return resumed;
     }
 
+    const healed = healFarmNoShillConfig(row.session);
     const regen = buildFarmAuctionSession({
       leagueId,
       seasonNumber,
       teams,
       scoutsByTeamId: nextScoutsByTeamId,
-      seed: row.session.sessionBaseSeed ?? row.session.config.nominationOrderSeed,
-      config: row.session.config,
+      seed: healed.session.sessionBaseSeed ?? healed.session.config.nominationOrderSeed,
+      config: healed.session.config,
     });
     const regeneratedOrder = regen.pool.auctionPlayers.map((player) => player.playerId);
-    const persistedOrder = row.session.playerOrder;
+    const persistedOrder = healed.session.playerOrder;
     const matchesPersistedOrder = regeneratedOrder.length === persistedOrder.length
       && regeneratedOrder.every((playerId, index) => playerId === persistedOrder[index]);
     if (!matchesPersistedOrder) {
@@ -446,7 +476,16 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       });
     }
     poolRef.current = regen.pool;
-    const resumed = await autoAdvanceCpu(row.session, nextContext, nextLeagueTeams);
+    if (healed.healed) {
+      await saveAuctionSessionById({
+        id: createFarmAuctionSessionId(leagueId, seasonNumber),
+        leagueId,
+        seasonNumber,
+        seed: healed.session.config.nominationOrderSeed,
+        session: healed.session,
+      });
+    }
+    const resumed = await autoAdvanceCpu(healed.session, nextContext, nextLeagueTeams);
     setPool(regen.pool);
     setScoutsByTeamId(nextScoutsByTeamId ?? null);
     setMlbRosterChemistryByTeamId(nextMlbRosterChemistryByTeamId);
@@ -484,7 +523,8 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       ...partialConfig,
       nominationOrderSeed: seed,
       bidIncrement: partialConfig.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement,
-      cpuShillCount: Math.max(0, Math.min(partialConfig.cpuShillCount ?? DEFAULT_AUCTION_SETUP_CONFIG.cpuShillCount, teams.length)),
+      // Farm v1 has no shills: real human clubs stay human, and AI clubs are the only CPU bidders.
+      cpuShillCount: 0,
       turnTimerSeconds: partialConfig.turnTimerSeconds ?? null,
       excludeFromLeague: partialConfig.excludeFromLeague ?? true,
       nominationWeightExponent: 3,

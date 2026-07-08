@@ -17,7 +17,6 @@ import {
   resolveInitialLeagueId,
   staffHireRouteForLeague,
 } from "../utils/draftRouting";
-import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
@@ -217,12 +216,10 @@ export function LeagueBuilderFarmAuctionDraft() {
   const { leagueData, loadFarmAuction, session } = auction;
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [seed, setSeed] = useState(DEFAULT_FARM_AUCTION_SEED);
-  const [cpuCount, setCpuCount] = useState(0);
   const [bidIncrement, setBidIncrement] = useState(1000);
   const [bidAmount, setBidAmount] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
   const loadedKeyRef = useRef<string | null>(null);
-  const cpuCountTouchedRef = useRef(false);
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
 
   useEffect(() => {
@@ -250,13 +247,6 @@ export function LeagueBuilderFarmAuctionDraft() {
       .map((teamId) => leagueData.teams.find((team) => team.id === teamId))
       .filter((team): team is Team => Boolean(team));
   }, [activeLeague, leagueData.teams]);
-
-  useEffect(() => {
-    if (session) return;
-    if (cpuCountTouchedRef.current) return;
-    if (leagueTeams.length === 0) return;
-    setCpuCount(scaledShillDefault(leagueTeams.length));
-  }, [session, leagueTeams.length]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
@@ -464,7 +454,6 @@ export function LeagueBuilderFarmAuctionDraft() {
   const beginAuction = () => {
     void auction.initFarmAuction(activeLeagueId, {
       nominationOrderSeed: seed,
-      cpuShillCount: cpuCount,
       bidIncrement,
       turnTimerSeconds: null,
       excludeFromLeague: true,
@@ -561,22 +550,7 @@ export function LeagueBuilderFarmAuctionDraft() {
               className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4 disabled:opacity-60"
             />
 
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-xs text-[#E8E8D8]/70">
-                CPU COUNT
-                <input
-                  value={cpuCount}
-                  onChange={(event) => {
-                    cpuCountTouchedRef.current = true;
-                    setCpuCount(Number(event.target.value) || 0);
-                  }}
-                  disabled={Boolean(session)}
-                  type="number"
-                  min={0}
-                  max={Math.max(0, leagueTeams.length - 1)}
-                  className="mt-1 w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none disabled:opacity-60"
-                />
-              </label>
+            <div className="grid grid-cols-1 gap-3">
               <label className="block text-xs text-[#E8E8D8]/70">
                 BID INCREMENT
                 <input
@@ -607,8 +581,8 @@ export function LeagueBuilderFarmAuctionDraft() {
                 <div className="font-bold text-xl">{leagueTeams.length}</div>
               </div>
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">CPU</div>
-                <div className="font-bold text-xl">{auction.cpuTeamIds.length || cpuCount}</div>
+                <div className="text-xs text-[#E8E8D8]/60">AI CLUBS</div>
+                <div className="font-bold text-xl">{auction.cpuTeamIds.length}</div>
               </div>
               <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
                 <div className="text-xs text-[#E8E8D8]/60">FARM CAP</div>

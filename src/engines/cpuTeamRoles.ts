@@ -28,10 +28,17 @@ export function deriveShillTeamIds(
   if (!session) return [];
   if (session.config.excludeFromLeague === false) return [];
 
-  const shillIds = deriveBaseShillCandidateIds(session);
+  const shillIds = deriveBaseShillCandidateIds(session, leagueTeams);
   const controlledCpuTeamIds = new Set(deriveControlledCpuTeamIds(leagueTeams));
+  const humanTeamIds = new Set(
+    leagueTeams.filter((team) => team.controlledBy === 'human').map((team) => team.id),
+  );
 
-  return session.nominationOrder.filter((teamId) => shillIds.has(teamId) && !controlledCpuTeamIds.has(teamId));
+  return session.nominationOrder.filter((teamId) => (
+    shillIds.has(teamId)
+    && !controlledCpuTeamIds.has(teamId)
+    && !humanTeamIds.has(teamId)
+  ));
 }
 
 export function classifyCpuTeams(
@@ -59,17 +66,27 @@ export function classifyCpuTeams(
   };
 }
 
-function deriveBaseShillCandidateIds(session: CpuRoleSession): Set<string> {
+function deriveBaseShillCandidateIds(
+  session: CpuRoleSession,
+  leagueTeams: readonly CpuTeamControlInfo[],
+): Set<string> {
   const ids = new Set<string>();
+  const humanTeamIds = new Set(
+    leagueTeams.filter((team) => team.controlledBy === 'human').map((team) => team.id),
+  );
 
   for (const teamId of Object.keys(session.cpuShills ?? {})) {
-    ids.add(teamId);
+    if (!humanTeamIds.has(teamId)) {
+      ids.add(teamId);
+    }
   }
 
   const count = deriveLastNominationOrderCount(session.config, session.nominationOrder);
   if (count > 0) {
     for (const teamId of session.nominationOrder.slice(-count)) {
-      ids.add(teamId);
+      if (!humanTeamIds.has(teamId)) {
+        ids.add(teamId);
+      }
     }
   }
 
@@ -81,19 +98,26 @@ function deriveAllCpuBidderTeamIds(
   leagueTeams: readonly CpuTeamControlInfo[],
 ): string[] {
   const ids = new Set<string>();
+  const humanTeamIds = new Set(
+    leagueTeams.filter((team) => team.controlledBy === 'human').map((team) => team.id),
+  );
 
   for (const team of leagueTeams) {
     if (team.controlledBy === 'ai') ids.add(team.id);
   }
 
   for (const teamId of Object.keys(session.cpuShills ?? {})) {
-    ids.add(teamId);
+    if (!humanTeamIds.has(teamId)) {
+      ids.add(teamId);
+    }
   }
 
   const count = deriveLastNominationOrderCount(session.config, session.nominationOrder);
   if (count > 0) {
     for (const teamId of session.nominationOrder.slice(-count)) {
-      ids.add(teamId);
+      if (!humanTeamIds.has(teamId)) {
+        ids.add(teamId);
+      }
     }
   }
 
