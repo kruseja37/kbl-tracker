@@ -1806,7 +1806,7 @@ export function LeagueBuilderAuctionDraft() {
 
   if (leagueData.isLoading) {
     return (
-      <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
         <div className="text-lg">Loading auction draft...</div>
       </div>
     );
@@ -1814,7 +1814,7 @@ export function LeagueBuilderAuctionDraft() {
 
   if (leagueData.error) {
     return (
-      <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
         <div className="text-xl text-red-400">Error: {leagueData.error}</div>
       </div>
     );
@@ -1851,21 +1851,21 @@ export function LeagueBuilderAuctionDraft() {
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
+    <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <button
               aria-label="Back to League Builder"
               onClick={() => navigate("/league-builder")}
-              className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              className="p-3 bg-[var(--ballpark-action-green)] hover:bg-[var(--ballpark-action-green-hover)] border-4 border-[var(--ballpark-chalk)] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
             >
-              <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
+              <ArrowLeft className="w-6 h-6 text-[var(--ballpark-chalk)]" />
             </button>
-            <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-              <Gavel className="w-6 h-6" style={{ color: "#FFD27A" }} />
+            <div className="flex items-center gap-3 bg-[var(--ballpark-action-green-hover)] border-[6px] border-[var(--ballpark-chalk)] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
+              <Gavel className="w-6 h-6" style={{ color: "var(--ballpark-warn-border)" }} />
               <h1
-                className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
+                className="text-2xl font-bold text-[var(--ballpark-chalk)] tracking-wider"
                 style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
               >
                 MLB AUCTION DRAFT
@@ -1875,22 +1875,22 @@ export function LeagueBuilderAuctionDraft() {
         </div>
 
         {auction.error && (
-          <div className="mb-6 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
+          <div className="mb-6 bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-4 text-[var(--ballpark-warn-text)] font-bold">
             {auctionTransitionErrorCopy(auction.error)}
           </div>
         )}
 
-        <div className="mb-6 bg-[#3B7DD8] border-[6px] border-[#E8E8D8] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-          <div className="text-xs text-[#E8E8D8]/70 font-bold">HANDOFF</div>
+        <div className="mb-6 bg-[var(--ballpark-action-green)] border-[6px] border-[var(--ballpark-brass)] p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
+          <div className="text-xs text-[var(--ballpark-chalk)]/70 font-bold">HANDOFF</div>
           <div className="text-xl font-bold">
             Now: {session?.state === "OPEN_BIDDING" && auction.currentBidderTeamId ? teamNameById(auction.currentBidderTeamId) : nowTeam ? teamDisplayName(nowTeam) : "Host"} — {nowAction}
           </div>
-          <div className="mt-1 text-sm text-[#E8E8D8]/85 font-bold">{handoffPrompt}</div>
+          <div className="mt-1 text-sm text-[var(--ballpark-chalk)]/85 font-bold">{handoffPrompt}</div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
           <PanelWithHeaderStrip title="SETUP">
-            <label htmlFor="auction-league" className="block text-xs text-[#E8E8D8]/70 mb-1">LEAGUE</label>
+            <label htmlFor="auction-league" className="block text-xs text-[var(--ballpark-chalk)]/70 mb-1">LEAGUE</label>
             <select
               id="auction-league"
               value={activeLeagueId}
@@ -1898,7 +1898,7 @@ export function LeagueBuilderAuctionDraft() {
                 setActiveLeagueId(event.target.value);
                 loadedKeyRef.current = null;
               }}
-              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4"
+              className="w-full bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 px-3 py-2 text-[var(--ballpark-chalk)] font-bold focus:border-[var(--ballpark-chalk)]/60 outline-none mb-4"
             >
               {leagueData.leagues.map((league) => (
                 <option key={league.id} value={league.id}>
@@ -1908,17 +1908,17 @@ export function LeagueBuilderAuctionDraft() {
             </select>
 
             <div className="grid grid-cols-1 gap-3">
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">ROOM SETTINGS</div>
+              <div className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 p-3">
+                <div className="text-xs text-[var(--ballpark-chalk)]/60">ROOM SETTINGS</div>
                 <div className="font-bold">Ready for the selected league</div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                  <div className="text-xs text-[#E8E8D8]/60">MARKET SHILLS</div>
+                <div className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 p-3">
+                  <div className="text-xs text-[var(--ballpark-chalk)]/60">MARKET SHILLS</div>
                   <div className="font-bold text-xl">{setupShillCount}</div>
                 </div>
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                  <div className="text-xs text-[#E8E8D8]/60">BID STEP</div>
+                <div className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 p-3">
+                  <div className="text-xs text-[var(--ballpark-chalk)]/60">BID STEP</div>
                   <div className="font-bold text-xl">{formatMoney(DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement)}</div>
                 </div>
               </div>
@@ -1939,23 +1939,23 @@ export function LeagueBuilderAuctionDraft() {
             )}
 
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">TEAMS</div>
+              <div className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 p-3">
+                <div className="text-xs text-[var(--ballpark-chalk)]/60">TEAMS</div>
                 <div className="font-bold text-xl">{leagueTeams.length}</div>
               </div>
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">MARKET SHILLS</div>
+              <div className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 p-3">
+                <div className="text-xs text-[var(--ballpark-chalk)]/60">MARKET SHILLS</div>
                 <div className="font-bold text-xl">{setupShillCount}</div>
               </div>
             </div>
 
             {blockers.length ? (
-              <div className="mt-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4">
+              <div className="mt-5 bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-4">
                 <div className="flex items-center gap-2 font-bold mb-2">
                   <ShieldAlert className="w-5 h-5" />
                   BLOCKED
                 </div>
-                <ul className="space-y-1 text-sm text-[#FFE8B0]">
+                <ul className="space-y-1 text-sm text-[var(--ballpark-warn-text)]">
                   {blockers.map((blocker) => (
                     <li key={blocker}>{blocker}</li>
                   ))}
@@ -1964,13 +1964,13 @@ export function LeagueBuilderAuctionDraft() {
             ) : null}
           </PanelWithHeaderStrip>
 
-          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+          <section className="bg-[var(--ballpark-panel)] border-[6px] border-[var(--ballpark-panel-border)] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between gap-4 mb-4">
               <h2 className="font-bold text-lg">STATE: {session?.state ?? "SETUP"}</h2>
             </div>
 
             {!session && (
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-[#E8E8D8]/80">
+              <div className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)]/30 p-4 text-[var(--ballpark-chalk)]/80">
                 The room is ready when the locked player pool can support every drafting club.
               </div>
             )}

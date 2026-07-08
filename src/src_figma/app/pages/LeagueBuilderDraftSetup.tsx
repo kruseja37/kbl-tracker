@@ -3209,8 +3209,8 @@ export function LeagueBuilderDraftSetup() {
       className={
         "flex items-center gap-2 px-4 py-2 border-4 text-sm font-bold " +
         (sufficiency.meetsFloor
-          ? "border-[var(--ballpark-action-green-hover)] text-[#9FE0A0] bg-[#3a4d3c]"
-          : "border-[#FFD27A] text-[#FFE8B0] bg-[#6B3A3A]")
+          ? "border-[var(--ballpark-action-green-hover)] text-[var(--ballpark-boost-green)] bg-[var(--ballpark-card-active)]"
+          : "border-[var(--ballpark-warn-border)] text-[var(--ballpark-warn-text)] bg-[var(--ballpark-warn-panel)]")
       }
     >
       {sufficiency.meetsFloor ? <Check className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
@@ -3266,7 +3266,7 @@ export function LeagueBuilderDraftSetup() {
         THE MONEY
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center min-w-[140px] bg-[#243024] border-2 border-[var(--ballpark-panel-border)] px-2 py-1.5 text-sm font-bold text-[var(--ballpark-chalk)]">
+        <label className="flex items-center min-w-[140px] bg-[var(--ballpark-page-bg)] border-2 border-[var(--ballpark-panel-border)] px-2 py-1.5 text-sm font-bold text-[var(--ballpark-chalk)]">
           <span className="text-[var(--ballpark-brass)] mr-1">$</span>
           <input
             aria-label="The money salary cap"
@@ -3425,7 +3425,7 @@ export function LeagueBuilderDraftSetup() {
         <> Design targets {identityCriticalDiagnostic.identityCriticalIncludedCount}/{identityCriticalDiagnostic.identityCriticalCandidateCount} included.</>
       ) : null}
       {identityCriticalMissingLines.length > 0 ? (
-        <div className="mt-1 text-[#FFE8B0]">
+        <div className="mt-1 text-[var(--ballpark-warn-text)]">
           Missing design targets: {identityCriticalMissingLines.join(" · ")}
         </div>
       ) : null}
@@ -3471,7 +3471,7 @@ export function LeagueBuilderDraftSetup() {
     <div
       className={`border-l-4 bg-[var(--ballpark-well)] px-4 py-3 text-sm ${
         poolFirstManualShapeWarnings.length
-          ? "border-[var(--ballpark-status-warn)] text-[#FFE8B0]"
+          ? "border-[var(--ballpark-status-warn)] text-[var(--ballpark-warn-text)]"
           : "border-[var(--ballpark-action-green)] text-[var(--ballpark-chalk)]"
       }`}
     >
@@ -3518,7 +3518,7 @@ export function LeagueBuilderDraftSetup() {
   ) : null;
 
   const marketOutlookPanel = composition ? (
-    <div className="border-4 border-[var(--ballpark-action-green-hover)] bg-[#2e3f30] p-4">
+    <div className="border-4 border-[var(--ballpark-action-green-hover)] bg-[var(--ballpark-well)] p-4">
       <div className="text-sm font-bold text-[var(--ballpark-chalk)] mb-2">
         Archetype market outlook — {composition.outlooks.filter((outlook) => outlook.pIdentityCompletion >= 0.9).length} of {composition.outlooks.length} archetypes look buildable in a contested draft
       </div>
@@ -3532,10 +3532,10 @@ export function LeagueBuilderDraftSetup() {
                 className={
                   "font-bold " +
                   (outlook.pIdentityCompletion >= 0.9
-                    ? "text-[#9FE0A0]"
+                    ? "text-[var(--ballpark-boost-green)]"
                     : outlook.pIdentityCompletion >= 0.6
                       ? "text-[var(--ballpark-brass)]"
-                      : "text-[#FFE8B0]")
+                      : "text-[var(--ballpark-warn-text)]")
                 }
               >
                 {Math.round(outlook.pIdentityCompletion * 100)}%
@@ -3685,9 +3685,9 @@ export function LeagueBuilderDraftSetup() {
       }
     >
       {(error || actionError || savedDraftLookupError) && (
-        <div className="bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 mb-6 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-[#FFD27A]" />
-          <span className="text-[#FFE8B0]">{actionError ?? savedDraftLookupError ?? error}</span>
+        <div className="bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-4 mb-6 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-[var(--ballpark-warn-border)]" />
+          <span className="text-[var(--ballpark-warn-text)]">{actionError ?? savedDraftLookupError ?? error}</span>
         </div>
       )}
 
@@ -3769,7 +3769,7 @@ export function LeagueBuilderDraftSetup() {
                     type="button"
                     onClick={() => void handleRemoveSeat(seat.id)}
                     disabled={seats.length <= 1 || Boolean(setupMutationBlockMessage) || busy}
-                    className="p-1.5 border-2 border-[var(--ballpark-panel-border)] hover:border-[#E0857A] disabled:opacity-30 active:scale-95"
+                    className="p-1.5 border-2 border-[var(--ballpark-panel-border)] hover:border-[var(--ballpark-sacrifice-red)] disabled:opacity-30 active:scale-95"
                     aria-label={"Remove " + seat.name}
                   >
                     <X className="w-3.5 h-3.5" />
@@ -3790,7 +3790,7 @@ export function LeagueBuilderDraftSetup() {
           <PanelWithHeaderStrip
             title="3 · THE CLUBS"
             rightSlot={
-              <span className={"text-[11px] font-bold " + (identitiesReady ? "text-[#9FE0A0]" : "text-[var(--ballpark-chalk)]/55")}>
+              <span className={"text-[11px] font-bold " + (identitiesReady ? "text-[var(--ballpark-boost-green)]" : "text-[var(--ballpark-chalk)]/55")}>
                 {identitiesReady ? "✓ every club has both identities" : "set each club's identities"}
               </span>
             }
@@ -3800,7 +3800,7 @@ export function LeagueBuilderDraftSetup() {
                 Each team picks an MLB identity (sets what's cheap to build) and a farm identity (steers your scout) from 24 historical team archetypes — all balanced, so no identity builds a stronger team; the difference is the shape of the team you can build.
               </HelpNote>
             ) : null}
-            <div className="mb-3 flex flex-wrap items-center gap-3 border-2 border-[var(--ballpark-panel-border)] bg-[#243024] px-3 py-2">
+            <div className="mb-3 flex flex-wrap items-center gap-3 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-page-bg)] px-3 py-2">
               <PressButton
                 size="sm"
                 onClick={() => void handleAutoFillRemainingIdentities()}
@@ -3865,7 +3865,7 @@ export function LeagueBuilderDraftSetup() {
                     className={
                       "border-4 p-3 " +
                       (isSelected
-                        ? "border-[var(--ballpark-brass)] bg-[#3a4d3c]"
+                        ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)]"
                         : "border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]")
                     }
                   >
@@ -3880,7 +3880,7 @@ export function LeagueBuilderDraftSetup() {
                         value={ownerId}
                         onChange={(event) => void handleOwnerChange(team.id, event.target.value)}
                         disabled={Boolean(setupMutationBlockMessage) || busy}
-                        className="ml-auto bg-[#243024] border-2 border-[var(--ballpark-panel-border)] text-xs font-bold px-2 py-1 text-[var(--ballpark-chalk)] outline-none"
+                        className="ml-auto bg-[var(--ballpark-page-bg)] border-2 border-[var(--ballpark-panel-border)] text-xs font-bold px-2 py-1 text-[var(--ballpark-chalk)] outline-none"
                       >
                         <option value="cpu">CPU</option>
                         {seats.map((seat) => (
@@ -4056,7 +4056,7 @@ export function LeagueBuilderDraftSetup() {
                           RE-PLAN IN PROGRESS · EDIT → LOCK → RE-EXTRACT
                         </div>
                         {modeAStaleTeams.length > 0 ? (
-                          <div className="flex flex-wrap gap-x-5 gap-y-1 mb-2 text-[#FFE8B0]">
+                          <div className="flex flex-wrap gap-x-5 gap-y-1 mb-2 text-[var(--ballpark-warn-text)]">
                             {modeAStaleTeams.map((team) => {
                               const lockedAt = team.rosterDesign?.lockedAt;
                               const owner = ownerName(teamOwnerId(team, seats));
@@ -4093,7 +4093,7 @@ export function LeagueBuilderDraftSetup() {
                       {poolSizeDial}
                       {moneyControl}
                       {solvencyBanner ? (
-                        <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
+                        <div className="border-l-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[var(--ballpark-warn-text)]">
                           {solvencyBanner}
                         </div>
                       ) : null}
@@ -4184,7 +4184,7 @@ export function LeagueBuilderDraftSetup() {
                     {modeAReport?.sizing?.messages.length ? (
                       <div className="grid gap-2">
                         {modeAReport.sizing.messages.map((message) => (
-                          <div key={message} className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[#FFE8B0]">
+                          <div key={message} className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-warn-text)]">
                             {message}
                           </div>
                         ))}
@@ -4196,7 +4196,7 @@ export function LeagueBuilderDraftSetup() {
                         <div className="text-[11px] font-bold tracking-[0.18em] text-[var(--ballpark-brass)] mb-2">THE GAPS</div>
                         <div className="grid gap-2">
                           {modeAReport.shortfalls.map((shortfall: DemandShortfall) => (
-                            <div key={shortfall.key} className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[#FFE8B0]">
+                            <div key={shortfall.key} className="border-l-4 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-well)] px-4 py-3 text-sm text-[var(--ballpark-warn-text)]">
                               {shortfall.message}
                             </div>
                           ))}
@@ -4263,7 +4263,7 @@ export function LeagueBuilderDraftSetup() {
                   {sufficiencyChip}
                   {moneyControl}
                   {solvencyBanner ? (
-                    <div className="border-l-4 border-[#FFD27A] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[#FFE8B0]">
+                    <div className="border-l-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[var(--ballpark-warn-text)]">
                       {solvencyBanner}
                     </div>
                   ) : null}
@@ -4549,7 +4549,7 @@ function FocusedPlayerPanel({
 
       <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-2">
         {ratings.map((rating) => (
-          <div key={rating.key} className="bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2">
+          <div key={rating.key} className="bg-[var(--ballpark-card-active)] border-2 border-[#4A6844] px-3 py-2">
             <div className="text-[10px] font-bold tracking-wider text-[#E8E8D8]/50">{rating.label}</div>
             <div className="text-lg font-bold text-[#E8E8D8]">{player[rating.key]}</div>
           </div>
@@ -4561,7 +4561,7 @@ function FocusedPlayerPanel({
 
 function StatBlock({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-[#3a4d3c] border-2 border-[#4A6844] px-3 py-2 min-w-0">
+    <div className="bg-[var(--ballpark-card-active)] border-2 border-[#4A6844] px-3 py-2 min-w-0">
       <div className="text-[10px] font-bold tracking-wider text-[#E8E8D8]/50">{label}</div>
       <div className="text-sm font-bold text-[#E8E8D8] truncate">{value}</div>
     </div>
@@ -4722,13 +4722,13 @@ function DraftSetupPlayerEditModal({
             </label>
             <label className="block">
               <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">Grade</span>
-              <div className="bg-[#3a4d3c] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
+              <div className="bg-[var(--ballpark-card-active)] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
                 {previewPlayer.overallGrade}
               </div>
             </label>
             <label className="block">
               <span className="block text-xs font-bold tracking-wider text-[#E8E8D8]/70 mb-1">VALUE</span>
-              <div className="bg-[#3a4d3c] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
+              <div className="bg-[var(--ballpark-card-active)] border-[3px] border-[#3F5A3A] px-3 py-2 font-bold text-[#C4A853]">
                 {formatMoney(previewIv)}
               </div>
             </label>
@@ -4923,7 +4923,7 @@ function Pane({
           ))}
         </select>
       </div>
-      <div className="h-[46vh] overflow-y-auto border-2 border-[#4A6844] bg-[#3a4d3c]">
+      <div className="h-[46vh] overflow-y-auto border-2 border-[#4A6844] bg-[var(--ballpark-card-active)]">
         {children}
       </div>
       <div className="flex items-center justify-between mt-3">
