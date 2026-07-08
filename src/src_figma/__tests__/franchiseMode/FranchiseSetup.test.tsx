@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 
 // ============================================
@@ -16,6 +16,7 @@ import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
 const mockNavigate = vi.fn();
 const mockInitializeFranchise = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
+const mockGetAuctionSession = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
@@ -28,6 +29,10 @@ vi.mock('../../../utils/franchiseInitializer', () => ({
 vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
   validatePreparedLeagueBuilderFarmScoutingState: (...args: unknown[]) =>
     mockValidatePreparedLeagueBuilderFarmScoutingState(...args),
+}));
+
+vi.mock('../../../utils/leagueBuilderStorage', () => ({
+  getAuctionSession: (...args: unknown[]) => mockGetAuctionSession(...args),
 }));
 
 // Mock league data — FranchiseSetup uses { leagues, teams, isLoading, error } from this hook
@@ -122,7 +127,9 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 describe('FranchiseSetup Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, '', '/franchise/setup');
     mockInitializeFranchise.mockResolvedValue('franchise-1');
+    mockGetAuctionSession.mockResolvedValue(null);
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
       ownership: 'league-builder-mode-1',
@@ -194,6 +201,47 @@ describe('FranchiseSetup Component', () => {
     test('shows league description text', () => {
       render(<FranchiseSetup />);
       expect(screen.getByText(/Choose the league template/i)).toBeInTheDocument();
+    });
+
+    test('auto-selects the leagueId passed from draft staffing handoff', async () => {
+      window.history.pushState({}, '', '/franchise/setup?leagueId=summer');
+
+      render(<FranchiseSetup />);
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /NEXT/i })).not.toBeDisabled();
+      });
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+
+      expect(screen.getByText('SEASON SETTINGS')).toBeInTheDocument();
+    });
+
+    test('keeps manual setup entry on the full picker without a leagueId param', () => {
+      render(<FranchiseSetup />);
+
+      expect(screen.getByText('SELECT A LEAGUE')).toBeInTheDocument();
+      expect(screen.getByText('KRUSE BASEBALL LEAGUE')).toBeInTheDocument();
+      expect(screen.getByText('SUMMER LEAGUE')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /NEXT/i })).toBeDisabled();
+    });
+
+    test('badges only leagues with completed auction sessions', async () => {
+      mockGetAuctionSession.mockImplementation(async (leagueId: string) => {
+        if (leagueId === 'summer') return { session: { state: 'AUCTION_COMPLETE' } };
+        if (leagueId === 'kbl') return { session: { state: 'OPEN_BIDDING' } };
+        return null;
+      });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('Draft complete')).toBeInTheDocument();
+      expect(screen.getAllByText('Draft complete')).toHaveLength(1);
+      expect(
+        within(screen.getByText('SUMMER LEAGUE').parentElement as HTMLElement).getByText('Draft complete'),
+      ).toBeInTheDocument();
+      expect(
+        within(screen.getByText('KRUSE BASEBALL LEAGUE').parentElement as HTMLElement).queryByText('Draft complete'),
+      ).not.toBeInTheDocument();
     });
   });
 

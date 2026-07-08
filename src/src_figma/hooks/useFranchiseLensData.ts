@@ -50,6 +50,7 @@ import {
 } from "../../utils/mojoFitnessStorage";
 import { FITNESS_STATES, type FitnessState } from "../../engines/fitnessEngine";
 import { getRecentMilestones, type CareerMilestone } from "../../utils/careerStorage";
+import { listManagerProfiles } from "../../utils/managerIdentityStorage";
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -120,6 +121,7 @@ import { listGameStoriesForFranchiseSeason } from "../../utils/gameStoriesStorag
 import { listReporters } from "../../utils/reporterStorage";
 import type { BeatReporter, GameStory, SeasonNewsItem } from "../../types/reporter";
 import type { StoredFranchiseConfig } from "../../types/franchise";
+import type { ManagerProfile } from "../../types/managerWpa";
 import type {
   ActiveTeamVM,
   AlmanacVM,
@@ -204,6 +206,7 @@ interface RawData {
   seasonNews: SeasonNewsItem[];
   gameStories: GameStory[];
   reporters: BeatReporter[];
+  managerProfiles: ManagerProfile[];
   raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>;
   conditionSnapshots: MojoFitnessSnapshot[];
   milestones: CareerMilestone[];
@@ -1105,6 +1108,20 @@ function buildNewsVM(
   };
 }
 
+function mergeReporters(...groups: BeatReporter[][]): BeatReporter[] {
+  const byId = new Map<string, BeatReporter>();
+  for (const group of groups) {
+    for (const reporter of group) {
+      byId.set(reporter.id, reporter);
+    }
+  }
+  return [...byId.values()];
+}
+
+function reporterAvatar(avatarEra: BeatReporter["avatarEra"]): "fedora" | "headset" | "cap" {
+  return avatarEra === "headset" || avatarEra === "cap" ? avatarEra : "fedora";
+}
+
 function buildCheckpointVM(
   ratingsOverlays: FranchiseRatingsOverlayRow[],
   traitOverlays: FranchiseTraitOverlayRow[],
@@ -1409,6 +1426,7 @@ function buildReturn(
     seasonNews,
     gameStories,
     reporters,
+    managerProfiles,
     raceScores,
     conditionSnapshots,
     milestones,
@@ -1508,6 +1526,14 @@ function buildReturn(
     .map((player) => buildPlayerRow(player, activeTeam.id, ctx))
     .sort((a, b) => (b.war ?? -Infinity) - (a.war ?? -Infinity) || a.name.localeCompare(b.name));
 
+  const managerById = new Map(managerProfiles.map((profile) => [profile.managerId, profile]));
+  const activeManagerProfile = activeTeam.managerId ? managerById.get(activeTeam.managerId) : undefined;
+  const activeReporter =
+    reporters.find((reporter) => reporter.teamId === activeTeam.id && (reporter as BeatReporter & { franchiseId?: string }).franchiseId === config?.franchiseId) ??
+    reporters.find((reporter) => reporter.teamId === activeTeam.id && reporter.leagueId === config?.league) ??
+    reporters.find((reporter) => reporter.teamId === activeTeam.id);
+  const byline = activeReporter ? activeReporter.name : "the Tootwhistle desk";
+
   const active: ActiveTeamVM = {
     id: activeTeam.id,
     name: activeTeam.name,
@@ -1520,11 +1546,17 @@ function buildReturn(
     seasonLabel: `Season ${seasonNumber}`,
     ballparkNickname: activeTeam.ballparkNickname,
     gmName: config?.gm?.displayName ?? config?.gmName,
-    managerName: activeTeam.managerName,
+    managerName: activeManagerProfile?.displayName ?? activeTeam.managerName,
+    managerStyle: activeManagerProfile?.managementStyle?.label,
+    reporter: activeReporter
+      ? {
+          name: activeReporter.name,
+          mood: activeReporter.currentMood,
+          avatar: reporterAvatar(activeReporter.avatarEra),
+        }
+      : undefined,
   };
 
-  const activeReporter = reporters.find((reporter) => reporter.teamId === activeTeam.id);
-  const byline = activeReporter ? activeReporter.name : "the Tootwhistle desk";
   const payroll = teamPlayers.reduce((sum, player) => sum + (Number(player.salary) || 0), 0);
   const checkpointVM = buildCheckpointVM(ratingsOverlays, traitOverlays, players);
 
@@ -1741,7 +1773,12 @@ export function useFranchiseLensData(
         // until the living season writes them; the Tootwhistle tab fills on a real played save.
         const seasonNews = await listSeasonNewsItemsForFranchiseSeason(franchiseId, seasonId).catch(() => []);
         const gameStories = await listGameStoriesForFranchiseSeason(franchiseId, seasonId).catch(() => []);
-        const reporters = await listReporters({ franchiseId }).catch((): BeatReporter[] => []);
+        const franchiseReporters = await listReporters({ franchiseId }).catch((): BeatReporter[] => []);
+        const leagueReporters = config?.league
+          ? await listReporters({ leagueId: config.league }).catch((): BeatReporter[] => [])
+          : [];
+        const reporters = mergeReporters(franchiseReporters, leagueReporters);
+        const managerProfiles = await listManagerProfiles().catch((): ManagerProfile[] => []);
         // Award races + Hardware frontrunners (WAR-led). Returns {} until the season has enough games
         // for a trustworthy WAR preview → empty on a gameless save, fills on a played one.
         const raceScores = await computeFranchiseRaceCandidateRows(
@@ -1777,6 +1814,7 @@ export function useFranchiseLensData(
           seasonNews: seasonNews ?? [],
           gameStories: gameStories ?? [],
           reporters: reporters ?? [],
+          managerProfiles: managerProfiles ?? [],
           raceScores: raceScores ?? {},
           conditionSnapshots: conditionSnapshots ?? [],
           milestones: milestones ?? [],

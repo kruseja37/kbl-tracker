@@ -1,9 +1,13 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
+import {
+  getAuctionSession,
+  type LeagueBuilderAuctionSession,
+} from "../../../utils/leagueBuilderStorage";
 import {
   validatePreparedLeagueBuilderFarmScoutingState,
   type LeagueBuilderFarmScoutingValidationReport,
@@ -49,6 +53,7 @@ const INITIAL_CONFIG: FranchiseConfig = {
 };
 
 const STANDARD_PLAYOFF_TEAM_COUNT_OPTIONS = [4, 6, 8, 10, 12];
+type FranchiseConfigSetter = Dispatch<SetStateAction<FranchiseConfig>>;
 
 function getValidPlayoffTeamCountOptions(teamCount: number): number[] {
   const standardOptions = STANDARD_PLAYOFF_TEAM_COUNT_OPTIONS.filter((count) => count <= teamCount);
@@ -63,12 +68,66 @@ function clampPlayoffTeamsQualifying(currentCount: number, teamCount: number): n
   return options[options.length - 1];
 }
 
+function setContentsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+}
+
+function isDraftSessionComplete(session: LeagueBuilderAuctionSession | null): boolean {
+  return session?.session.state === "AUCTION_COMPLETE";
+}
+
+function buildConfigForSelectedLeague(
+  current: FranchiseConfig,
+  leagueId: string,
+  leagues: readonly LeagueTemplate[],
+  teams: readonly Team[],
+): FranchiseConfig | null {
+  const league = leagues.find((candidate) => candidate.id === leagueId);
+  if (!league) return null;
+  const leagueTeamIds = league.teamIds ?? [];
+  const leagueTeams = teams.filter((team) => leagueTeamIds.includes(team.id));
+  const teamCount = leagueTeams.length || leagueTeamIds.length || 0;
+  const humanTeamIds = leagueTeams
+    .filter((team) => team.controlledBy === "human")
+    .map((team) => team.id);
+  return {
+    ...current,
+    league: leagueId,
+    leagueDetails: {
+      name: league.name,
+      teams: teamCount,
+      conferences: league.conferences?.length || 0,
+      divisions: league.divisions?.length || 0,
+    },
+    playoffs: {
+      ...current.playoffs,
+      teamsQualifying: clampPlayoffTeamsQualifying(current.playoffs.teamsQualifying, teamCount),
+    },
+    // Seed from the Draft Setup hub's ownership choices when present.
+    teams: {
+      ...current.teams,
+      selectedTeams: humanTeamIds,
+    },
+  };
+}
+
 export function FranchiseSetup() {
   const navigate = useNavigate();
-  const { leagues, teams, isLoading, error, seedSMB4Data } = useLeagueBuilderData();
+  const {
+    leagues,
+    teams,
+    isLoading,
+    error,
+    seedSMB4Data,
+  } = useLeagueBuilderData();
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
+  const [draftedLeagueIds, setDraftedLeagueIds] = useState<Set<string>>(() => new Set());
   const [isInitializing, setIsInitializing] = useState(false);
   const [showFreezeConfirm, setShowFreezeConfirm] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -77,6 +136,8 @@ export function FranchiseSetup() {
   const [farmScoutingLoading, setFarmScoutingLoading] = useState(false);
   const [farmScoutingError, setFarmScoutingError] = useState<string | null>(null);
   const autoSeedAttempted = useRef(false);
+  const handoffLeagueApplied = useRef(false);
+  const requestedLeagueId = useMemo(() => new URLSearchParams(window.location.search).get("leagueId"), []);
 
   // Auto-seed SMB4 data if no leagues exist (first-time setup)
   useEffect(() => {
@@ -88,6 +149,38 @@ export function FranchiseSetup() {
       });
     }
   }, [isLoading, error, leagues.length, seedSMB4Data]);
+
+  useEffect(() => {
+    if (handoffLeagueApplied.current || !requestedLeagueId || isLoading || leagues.length === 0) return;
+    if (!leagues.some((league) => league.id === requestedLeagueId)) return;
+    handoffLeagueApplied.current = true;
+    setConfig((current) => {
+      const nextConfig = buildConfigForSelectedLeague(current, requestedLeagueId, leagues, teams);
+      return nextConfig ?? current;
+    });
+    setExpandedLeague(requestedLeagueId);
+  }, [isLoading, leagues, requestedLeagueId, teams]);
+
+  useEffect(() => {
+    if (isLoading || leagues.length === 0) {
+      setDraftedLeagueIds((current) => current.size > 0 ? new Set() : current);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      leagues.map(async (league) => {
+        const session = await getAuctionSession(league.id, 1).catch(() => null);
+        return isDraftSessionComplete(session) ? league.id : null;
+      }),
+    ).then((ids) => {
+      if (cancelled) return;
+      const next = new Set(ids.filter((id): id is string => Boolean(id)));
+      setDraftedLeagueIds((current) => setContentsEqual(current, next) ? current : next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, leagues]);
 
   useEffect(() => {
     if (!config.league) {
@@ -362,7 +455,7 @@ export function FranchiseSetup() {
             </div>
           ) : (
             <>
-              {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} />}
+              {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} draftedLeagueIds={draftedLeagueIds} />}
               {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
               {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
               {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
@@ -427,45 +520,20 @@ function Step1SelectLeague({
   setExpandedLeague,
   leagues,
   teams,
+  draftedLeagueIds,
 }: {
   config: FranchiseConfig;
-  setConfig: (config: FranchiseConfig) => void;
+  setConfig: FranchiseConfigSetter;
   expandedLeague: string | null;
   setExpandedLeague: (id: string | null) => void;
   leagues: LeagueTemplate[];
   teams: Team[];
+  draftedLeagueIds: Set<string>;
 }) {
   const navigate = useNavigate();
 
   const selectLeague = (leagueId: string) => {
-    const league = leagues.find((l) => l.id === leagueId);
-    if (league) {
-      const leagueTeamIds = league.teamIds ?? [];
-      const leagueTeams = teams.filter(t => leagueTeamIds.includes(t.id));
-      const teamCount = leagueTeams.length || leagueTeamIds.length || 0;
-      const humanTeamIds = leagueTeams
-        .filter((team) => team.controlledBy === "human")
-        .map((team) => team.id);
-      setConfig({
-        ...config,
-        league: leagueId,
-        leagueDetails: {
-          name: league.name,
-          teams: teamCount,
-          conferences: league.conferences?.length || 0,
-          divisions: league.divisions?.length || 0,
-        },
-        playoffs: {
-          ...config.playoffs,
-          teamsQualifying: clampPlayoffTeamsQualifying(config.playoffs.teamsQualifying, teamCount),
-        },
-        // Seed from the Draft Setup hub's ownership choices when present.
-        teams: {
-          ...config.teams,
-          selectedTeams: humanTeamIds,
-        },
-      });
-    }
+    setConfig((current) => buildConfigForSelectedLeague(current, leagueId, leagues, teams) ?? current);
   };
 
   return (
@@ -477,6 +545,7 @@ function Step1SelectLeague({
         {leagues.map((league) => {
           const isSelected = config.league === league.id;
           const isExpanded = expandedLeague === league.id;
+          const isDrafted = draftedLeagueIds.has(league.id);
           const leagueTeamCount = teams.filter(t => league.teamIds?.includes(t.id)).length;
           const conferenceCount = league.conferences?.length || 0;
           const divisionCount = league.divisions?.length || 0;
@@ -501,7 +570,14 @@ function Step1SelectLeague({
                 </div>
 
                 <div className="flex-1">
-                  <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{league.name.toUpperCase()}</h3>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-bold text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>{league.name.toUpperCase()}</h3>
+                    {isDrafted ? (
+                      <span className="border-2 border-[#C4A853] bg-[#243024] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#FFD27A]">
+                        Draft complete
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="h-[1px] bg-[#E8E8D8]/30 mb-2" />
                   <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
                     {leagueTeamCount || league.teamIds?.length || 0} teams
