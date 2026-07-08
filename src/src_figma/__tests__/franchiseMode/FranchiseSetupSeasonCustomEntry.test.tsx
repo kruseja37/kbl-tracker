@@ -1,3 +1,12 @@
+/**
+ * WT-C: FranchiseSetup Season Settings custom games/innings entry.
+ *
+ * Covers the free-entry "Custom" inputs added alongside the preset buttons for
+ * games-per-team and innings-per-game, including clamp behavior at the documented
+ * bounds (games 8-200 per MODE_1_LEAGUE_BUILDER_FINAL.md §C-071; innings 3-9 per
+ * SMB4 regulation-length range) and that both values persist into the initialized
+ * franchise config.
+ */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { FranchiseSetup } from '../../app/pages/FranchiseSetup';
@@ -77,8 +86,6 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
   })),
 }));
 
-const STANDARD_HINT = "ℹ️ Standard: No runner placed, play until there's a winner";
-
 async function renderSeasonStep() {
   render(<FranchiseSetup />);
   await act(async () => {
@@ -88,11 +95,6 @@ async function renderSeasonStep() {
     fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
   });
   await waitFor(() => expect(screen.getByText('SEASON SETTINGS')).toBeInTheDocument());
-}
-
-function dotClass(buttonName: string): string {
-  const button = screen.getByRole('button', { name: buttonName });
-  return button.firstElementChild?.className ?? '';
 }
 
 async function finishFranchiseSetup() {
@@ -107,7 +109,7 @@ async function finishFranchiseSetup() {
   await waitFor(() => expect(mockInitializeFranchise).toHaveBeenCalled());
 }
 
-describe('FranchiseSetup extra innings runner delay', () => {
+describe('FranchiseSetup Season Settings custom games/innings entry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInitializeFranchise.mockResolvedValue('franchise-1');
@@ -150,94 +152,106 @@ describe('FranchiseSetup extra innings runner delay', () => {
     });
   });
 
-  test('keeps the ghost-runner sub-choice hidden under the Standard default', async () => {
+  test('accepts an in-range custom games-per-team value and persists it', async () => {
     await renderSeasonStep();
 
-    expect(screen.queryByText('GHOST RUNNER ARRIVES')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '1st extra inning' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '2nd extra inning' })).not.toBeInTheDocument();
-    expect(screen.getByText(STANDARD_HINT)).toBeInTheDocument();
-  });
+    const customGames = document.getElementById('season-games-per-team-custom') as HTMLInputElement;
+    expect(customGames).toBeInTheDocument();
 
-  test('reveals Runner on 2nd delay choices with the 1st extra inning selected', async () => {
-    await renderSeasonStep();
+    fireEvent.change(customGames, { target: { value: '50' } });
+    fireEvent.blur(customGames);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Runner on 2nd' }));
-
-    expect(screen.getByText('GHOST RUNNER ARRIVES')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '1st extra inning' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '2nd extra inning' })).toBeInTheDocument();
-    expect(dotClass('1st extra inning')).toContain('bg-[#C4A853]');
-    expect(dotClass('2nd extra inning')).not.toContain('bg-[#C4A853]');
-  });
-
-  test('writes delay 2 and shows the concrete 9-inning ghost-runner start inning', async () => {
-    await renderSeasonStep();
-
-    fireEvent.click(screen.getByRole('button', { name: '9' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Runner on 2nd' }));
-    fireEvent.click(screen.getByRole('button', { name: '2nd extra inning' }));
-
-    expect(dotClass('2nd extra inning')).toContain('bg-[#C4A853]');
-    expect(screen.getByText('ℹ️ Ghost runner takes second starting the 11th inning')).toBeInTheDocument();
+    expect(customGames.value).toBe('50');
 
     await finishFranchiseSetup();
 
     expect(mockInitializeFranchise).toHaveBeenCalledWith(
       expect.objectContaining({
-        season: expect.objectContaining({
-          inningsPerGame: 9,
-          extraInningsRule: 'Runner on 2nd',
-          extraInningsRunnerDelay: 2,
-        }),
+        season: expect.objectContaining({ gamesPerTeam: 50 }),
       }),
     );
   });
 
-  test('does not expose the unwired Sudden Death option', async () => {
+  test('clamps a custom games-per-team value above 200 down to 200', async () => {
     await renderSeasonStep();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Runner on 2nd' }));
+    const customGames = document.getElementById('season-games-per-team-custom') as HTMLInputElement;
+    fireEvent.change(customGames, { target: { value: '9999' } });
+    fireEvent.blur(customGames);
 
-    expect(screen.queryByRole('button', { name: 'Sudden Death' })).not.toBeInTheDocument();
-    expect(screen.queryByText('ℹ️ Sudden Death: not tracked in v1 — plays as Standard')).not.toBeInTheDocument();
+    expect(customGames.value).toBe('200');
   });
 
-  test('restores the byte-identical Standard hint after switching back', async () => {
+  test('clamps a custom games-per-team value below 8 up to 8', async () => {
     await renderSeasonStep();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Runner on 2nd' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Standard' }));
+    const customGames = document.getElementById('season-games-per-team-custom') as HTMLInputElement;
+    fireEvent.change(customGames, { target: { value: '1' } });
+    fireEvent.blur(customGames);
 
-    expect(screen.getByText(STANDARD_HINT)).toBeInTheDocument();
+    expect(customGames.value).toBe('8');
   });
 
-  // WT-C: JK's walkthrough missed this control entirely because it rendered as a plain
-  // radio-dot row while every other Season Settings choice used a bold box-button. This
-  // locks the box-button treatment in so the control stays visually on par going forward.
-  test('renders the extra innings rule as bold box-buttons matching Games/Innings (WT-C visibility fix)', async () => {
+  test('accepts an in-range custom innings-per-game value and persists it', async () => {
     await renderSeasonStep();
 
-    const standardButton = screen.getByRole('button', { name: 'Standard' });
-    const runnerButton = screen.getByRole('button', { name: 'Runner on 2nd' });
+    const customInnings = document.getElementById('season-innings-per-game-custom') as HTMLInputElement;
+    expect(customInnings).toBeInTheDocument();
 
-    expect(standardButton.className).toContain('border-4');
-    expect(standardButton.className).toContain('bg-[#C4A853]'); // Standard is selected by default
-    expect(runnerButton.className).toContain('border-4');
-    expect(runnerButton.className).not.toContain('bg-[#C4A853]');
-  });
+    fireEvent.change(customInnings, { target: { value: '5' } });
+    fireEvent.blur(customInnings);
 
-  test('persists the Standard extra-innings rule into the initialized franchise config', async () => {
-    await renderSeasonStep();
+    expect(customInnings.value).toBe('5');
 
     await finishFranchiseSetup();
 
     expect(mockInitializeFranchise).toHaveBeenCalledWith(
       expect.objectContaining({
-        season: expect.objectContaining({
-          extraInningsRule: 'Standard',
-        }),
+        season: expect.objectContaining({ inningsPerGame: 5 }),
       }),
     );
+  });
+
+  test('rejects (clamps) a custom innings-per-game value above 9 down to 9', async () => {
+    await renderSeasonStep();
+
+    const customInnings = document.getElementById('season-innings-per-game-custom') as HTMLInputElement;
+    fireEvent.change(customInnings, { target: { value: '20' } });
+    fireEvent.blur(customInnings);
+
+    expect(customInnings.value).toBe('9');
+  });
+
+  test('rejects (clamps) a custom innings-per-game value below 3 up to 3', async () => {
+    await renderSeasonStep();
+
+    const customInnings = document.getElementById('season-innings-per-game-custom') as HTMLInputElement;
+    fireEvent.change(customInnings, { target: { value: '1' } });
+    fireEvent.blur(customInnings);
+
+    expect(customInnings.value).toBe('3');
+  });
+
+  test('committing a custom games value on Enter blurs and clamps without needing a separate blur', async () => {
+    await renderSeasonStep();
+
+    const customGames = document.getElementById('season-games-per-team-custom') as HTMLInputElement;
+    fireEvent.change(customGames, { target: { value: '500' } });
+    fireEvent.keyDown(customGames, { key: 'Enter' });
+
+    expect(customGames.value).toBe('200');
+  });
+
+  test('clicking a preset button after a custom entry resyncs the custom input display', async () => {
+    await renderSeasonStep();
+
+    const customGames = document.getElementById('season-games-per-team-custom') as HTMLInputElement;
+    fireEvent.change(customGames, { target: { value: '50' } });
+    fireEvent.blur(customGames);
+    expect(customGames.value).toBe('50');
+
+    fireEvent.click(screen.getByRole('button', { name: '162' }));
+
+    expect(customGames.value).toBe('162');
   });
 });

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useState, useMemo, useEffect, useRef, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
@@ -59,6 +59,22 @@ const INITIAL_CONFIG: FranchiseConfig = {
 
 const STANDARD_PLAYOFF_TEAM_COUNT_OPTIONS = [4, 6, 8, 10, 12];
 type FranchiseConfigSetter = Dispatch<SetStateAction<FranchiseConfig>>;
+
+// WT-C: Season length is manual-schedule metadata, not a schedule-generator input —
+// franchiseInitializer.ts sets schedulePolicy.generatedSchedulesAllowed=false, so there is
+// no divisibility/parity constraint to derive here. Bounds below match the documented v1
+// product range (MODE_1_LEAGUE_BUILDER_FINAL.md §C-071: gamesPerTeam 8-200) and the SMB4
+// regulation-length range for innings (3-9; extra innings extend naturally beyond that).
+const GAMES_PER_TEAM_MIN = 8;
+const GAMES_PER_TEAM_MAX = 200;
+const INNINGS_PER_GAME_MIN = 3;
+const INNINGS_PER_GAME_MAX = 9;
+const GAMES_PER_TEAM_PRESETS = [16, 32, 40, 80, 128, 162];
+const INNINGS_PER_GAME_PRESETS = [6, 7, 9];
+
+function clampSeasonInt(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
 
 function getValidPlayoffTeamCountOptions(teamCount: number): number[] {
   const standardOptions = STANDARD_PLAYOFF_TEAM_COUNT_OPTIONS.filter((count) => count <= teamCount);
@@ -829,6 +845,49 @@ function Step2SeasonSettings({
     });
   };
 
+  const isCustomGamesActive = !GAMES_PER_TEAM_PRESETS.includes(config.season.gamesPerTeam);
+  const isCustomInningsActive = !INNINGS_PER_GAME_PRESETS.includes(config.season.inningsPerGame);
+
+  const [customGamesText, setCustomGamesText] = useState(String(config.season.gamesPerTeam));
+  const [customInningsText, setCustomInningsText] = useState(String(config.season.inningsPerGame));
+
+  useEffect(() => {
+    setCustomGamesText(String(config.season.gamesPerTeam));
+  }, [config.season.gamesPerTeam]);
+
+  useEffect(() => {
+    setCustomInningsText(String(config.season.inningsPerGame));
+  }, [config.season.inningsPerGame]);
+
+  const commitCustomGames = () => {
+    const parsed = Number.parseInt(customGamesText, 10);
+    const clamped = Number.isFinite(parsed)
+      ? clampSeasonInt(parsed, GAMES_PER_TEAM_MIN, GAMES_PER_TEAM_MAX)
+      : config.season.gamesPerTeam;
+    setCustomGamesText(String(clamped));
+    if (clamped !== config.season.gamesPerTeam) {
+      setConfig({ ...config, season: { ...config.season, gamesPerTeam: clamped } });
+    }
+  };
+
+  const commitCustomInnings = () => {
+    const parsed = Number.parseInt(customInningsText, 10);
+    const clamped = Number.isFinite(parsed)
+      ? clampSeasonInt(parsed, INNINGS_PER_GAME_MIN, INNINGS_PER_GAME_MAX)
+      : config.season.inningsPerGame;
+    setCustomInningsText(String(clamped));
+    if (clamped !== config.season.inningsPerGame) {
+      setConfig({ ...config, season: { ...config.season, inningsPerGame: clamped } });
+    }
+  };
+
+  const commitOnEnter = (commit: () => void) => (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.currentTarget.blur();
+      commit();
+    }
+  };
+
   return (
     <div>
       <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SEASON SETTINGS</h2>
@@ -863,8 +922,8 @@ function Step2SeasonSettings({
       {/* Games Per Team */}
       <div className="mb-6">
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>GAMES PER TEAM</p>
-        <div className="flex gap-2 flex-wrap">
-          {[16, 32, 40, 80, 128, 162].map((num) => (
+        <div className="flex gap-2 flex-wrap items-stretch">
+          {GAMES_PER_TEAM_PRESETS.map((num) => (
             <button
               key={num}
               onClick={() =>
@@ -883,14 +942,45 @@ function Step2SeasonSettings({
               {num}
             </button>
           ))}
+          <div
+            className={`flex items-center gap-2 h-10 px-3 border-4 text-sm font-bold transition-all ${
+              isCustomGamesActive
+                ? "bg-[#C4A853] border-[#C4A853] text-[#4A6A42]"
+                : "bg-[#4A6A42] border-[#E8E8D8] text-[#E8E8D8] focus-within:border-[#C4A853]"
+            }`}
+          >
+            <label
+              htmlFor="season-games-per-team-custom"
+              className="text-[10px] uppercase tracking-wide"
+              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+            >
+              Custom
+            </label>
+            <input
+              id="season-games-per-team-custom"
+              type="number"
+              inputMode="numeric"
+              min={GAMES_PER_TEAM_MIN}
+              max={GAMES_PER_TEAM_MAX}
+              value={customGamesText}
+              onChange={(e) => setCustomGamesText(e.target.value)}
+              onBlur={commitCustomGames}
+              onKeyDown={commitOnEnter(commitCustomGames)}
+              className="w-14 bg-transparent border-0 outline-none text-sm font-bold text-inherit"
+              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+            />
+          </div>
         </div>
+        <p className="text-[10px] text-[#E8E8D8]/50 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+          Custom range: {GAMES_PER_TEAM_MIN}–{GAMES_PER_TEAM_MAX} games per team.
+        </p>
       </div>
 
       {/* Innings Per Game */}
       <div className="mb-6">
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>INNINGS PER GAME</p>
-        <div className="flex gap-2">
-          {[6, 7, 9].map((num) => (
+        <div className="flex gap-2 flex-wrap items-stretch">
+          {INNINGS_PER_GAME_PRESETS.map((num) => (
             <button
               key={num}
               onClick={() =>
@@ -909,14 +999,49 @@ function Step2SeasonSettings({
               {num}
             </button>
           ))}
+          <div
+            className={`flex items-center gap-2 h-10 px-3 border-4 text-sm font-bold transition-all ${
+              isCustomInningsActive
+                ? "bg-[#C4A853] border-[#C4A853] text-[#4A6A42]"
+                : "bg-[#4A6A42] border-[#E8E8D8] text-[#E8E8D8] focus-within:border-[#C4A853]"
+            }`}
+          >
+            <label
+              htmlFor="season-innings-per-game-custom"
+              className="text-[10px] uppercase tracking-wide"
+              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+            >
+              Custom
+            </label>
+            <input
+              id="season-innings-per-game-custom"
+              type="number"
+              inputMode="numeric"
+              min={INNINGS_PER_GAME_MIN}
+              max={INNINGS_PER_GAME_MAX}
+              value={customInningsText}
+              onChange={(e) => setCustomInningsText(e.target.value)}
+              onBlur={commitCustomInnings}
+              onKeyDown={commitOnEnter(commitCustomInnings)}
+              className="w-14 bg-transparent border-0 outline-none text-sm font-bold text-inherit"
+              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
+            />
+          </div>
         </div>
+        <p className="text-[10px] text-[#E8E8D8]/50 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+          Custom range: {INNINGS_PER_GAME_MIN}–{INNINGS_PER_GAME_MAX} innings.
+        </p>
       </div>
 
       {/* Extra Innings Rule */}
       <div className="mb-6">
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>EXTRA INNINGS RULE</p>
         <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4">
-          <div className="flex gap-4 mb-2">
+          {/* WT-C: box-button treatment (matching Games/Innings above) replaces the prior
+              flat radio-dot rows — JK's walkthrough missed this control entirely because it
+              was the only Season Settings choice without the bold selected/unselected
+              contrast the rest of the step uses. */}
+          <div className="flex gap-2 flex-wrap mb-2">
             {["Standard", "Runner on 2nd"].map((rule) => (
               <button
                 key={rule}
@@ -932,18 +1057,13 @@ function Step2SeasonSettings({
                     },
                   })
                 }
-                className="flex items-center gap-2 text-xs text-[#E8E8D8]"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                className={`px-4 h-10 border-4 text-xs font-bold transition-all ${
+                  config.season.extraInningsRule === rule
+                    ? "bg-[#C4A853] border-[#C4A853] text-[#4A6A42]"
+                    : "bg-[#4A6A42] border-[#E8E8D8] text-[#E8E8D8] hover:border-[#C4A853]"
+                }`}
+                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
               >
-                <div
-                  className={`w-4 h-4 rounded-full border-2 ${
-                    config.season.extraInningsRule === rule ? "border-[#C4A853] bg-[#C4A853]" : "border-[#E8E8D8]"
-                  }`}
-                >
-                  {config.season.extraInningsRule === rule && (
-                    <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />
-                  )}
-                </div>
                 {rule}
               </button>
             ))}
