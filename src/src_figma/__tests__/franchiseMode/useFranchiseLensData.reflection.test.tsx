@@ -201,6 +201,12 @@ describe("useFranchiseLensData schedule reflection", () => {
       franchiseId: "franchise-reflect",
       franchiseName: "Reflection Franchise",
       league: "league-1",
+      leagueDetails: {
+        name: "Reflection League",
+        teams: 3,
+        conferences: 2,
+        divisions: 2,
+      },
       controlledTeams: [{ teamId: "home-team" }],
       gm: { displayName: "GM" },
     });
@@ -333,6 +339,20 @@ describe("useFranchiseLensData schedule reflection", () => {
       oppScore: 2,
       win: true,
     });
+  });
+
+  test("currently renders Lens standings as one league-wide group even when the franchise has conferences", async () => {
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.hub.standings?.divisions).toHaveLength(1);
+    expect(result.current.hub.standings?.divisions[0]?.name).toBe("Reflection League");
+    expect(result.current.hub.standings?.divisions[0]?.rows.map((row) => row.teamId).sort()).toEqual([
+      "away-team",
+      "home-team",
+      "next-team",
+    ]);
   });
 
   test("falls back to team manager and no reporter when staffing stores are empty", async () => {

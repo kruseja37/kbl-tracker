@@ -51,6 +51,8 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         name: 'Kruse Baseball',
         description: 'Main league',
         teamIds: ['team-1', 'team-2'],
+        conferences: [],
+        divisions: [],
         defaultRulesPreset: 'preset-1',
         draftFormat: 'auction',
         color: '#5A8352',
@@ -60,6 +62,8 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         id: 'league-2',
         name: 'Minor League',
         teamIds: ['team-3'],
+        conferences: [],
+        divisions: [],
         defaultRulesPreset: 'preset-1',
         draftFormat: 'snake',
         color: '#CC44CC',
@@ -124,6 +128,8 @@ describe('LeagueBuilderLeagues Component', () => {
           name: 'Kruse Baseball',
           description: 'Main league',
           teamIds: ['team-1', 'team-2'],
+          conferences: [],
+          divisions: [],
           defaultRulesPreset: 'preset-1',
           draftFormat: 'auction',
           color: '#5A8352',
@@ -133,6 +139,8 @@ describe('LeagueBuilderLeagues Component', () => {
           id: 'league-2',
           name: 'Minor League',
           teamIds: ['team-3'],
+          conferences: [],
+          divisions: [],
           defaultRulesPreset: 'preset-1',
           draftFormat: 'snake',
           color: '#CC44CC',
@@ -243,6 +251,47 @@ describe('LeagueBuilderLeagues Component', () => {
         expect(mockCreateLeague).toHaveBeenCalledWith(expect.objectContaining({
           name: 'Cap League',
           salaryCap: 1_000_000,
+        }));
+      });
+    });
+
+    test('keeps untouched conference fields empty on default league creation', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+      await createLeagueFromModal('Plain League');
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(expect.objectContaining({
+          name: 'Plain League',
+          conferences: [],
+          divisions: [],
+        }));
+      });
+    });
+
+    test('persists balanced conference assignments when the editor is used', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+
+      fireEvent.change(screen.getByPlaceholderText('e.g., Kruse Baseball League'), {
+        target: { value: 'Conference League' },
+      });
+      fireEvent.click(screen.getByLabelText('Sox'));
+      fireEvent.click(screen.getByLabelText('Tigers'));
+      fireEvent.click(screen.getByText('Balanced split'));
+      fireEvent.click(screen.getByRole('button', { name: /^create league$/i }));
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(expect.objectContaining({
+          name: 'Conference League',
+          conferences: [
+            { id: 'conf-1', name: 'Eastern', abbreviation: 'EAST', divisionIds: ['division-conf-1'] },
+            { id: 'conf-2', name: 'Western', abbreviation: 'WEST', divisionIds: ['division-conf-2'] },
+          ],
+          divisions: [
+            { id: 'division-conf-1', name: 'Eastern', conferenceId: 'conf-1', teamIds: ['team-1'] },
+            { id: 'division-conf-2', name: 'Western', conferenceId: 'conf-2', teamIds: ['team-2'] },
+          ],
         }));
       });
     });
@@ -386,6 +435,86 @@ describe('LeagueBuilderLeagues Component', () => {
             id: 'league-2',
           }),
         );
+      });
+    });
+
+    test('reloads, edits, and persists existing conference assignments', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      vi.mocked(useLeagueBuilderData).mockReturnValue({
+        leagues: [
+          {
+            id: 'league-1',
+            name: 'Kruse Baseball',
+            description: 'Main league',
+            teamIds: ['team-1', 'team-2', 'team-3'],
+            conferences: [
+              { id: 'conf-east', name: 'East Circuit', abbreviation: 'EC', divisionIds: ['div-east'] },
+              { id: 'conf-west', name: 'West Circuit', abbreviation: 'WC', divisionIds: ['div-west'] },
+            ],
+            divisions: [
+              { id: 'div-east', name: 'East Circuit', conferenceId: 'conf-east', teamIds: ['team-1'] },
+              { id: 'div-west', name: 'West Circuit', conferenceId: 'conf-west', teamIds: ['team-2', 'team-3'] },
+            ],
+            defaultRulesPreset: 'preset-1',
+            draftFormat: 'auction',
+            color: '#5A8352',
+            createdDate: '2026-01-15T00:00:00.000Z',
+          },
+          {
+            id: 'league-2',
+            name: 'Minor League',
+            teamIds: ['team-3'],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            draftFormat: 'auction',
+            color: '#CC44CC',
+            createdDate: '2026-01-20T00:00:00.000Z',
+          },
+        ],
+        teams: [
+          { id: 'team-1', name: 'Sox', colors: { primary: '#FF0000', secondary: '#FFFFFF' } },
+          { id: 'team-2', name: 'Tigers', colors: { primary: '#FF6600', secondary: '#000000' } },
+          { id: 'team-3', name: 'Bears', colors: { primary: '#0000FF', secondary: '#FFFFFF' } },
+        ],
+        rulesPresets: [
+          { id: 'preset-1', name: 'Standard', isDefault: true },
+        ],
+        isLoading: false,
+        error: null,
+        createLeague: mockCreateLeague,
+        updateLeague: mockUpdateLeague,
+        removeLeague: mockRemoveLeague,
+        duplicateLeague: mockDuplicateLeague,
+      });
+
+      await renderSettledLeagueBuilderLeagues();
+      fireEvent.click(screen.getAllByTitle('Edit league')[0]);
+
+      expect(await screen.findByLabelText('Conference name East Circuit')).toBeInTheDocument();
+      expect(screen.getByLabelText('Sox conference')).toHaveValue('conf-east');
+      expect(screen.getByLabelText('Bears conference')).toHaveValue('conf-west');
+
+      fireEvent.change(screen.getByLabelText('Conference name East Circuit'), {
+        target: { value: 'North Circuit' },
+      });
+      fireEvent.change(screen.getByLabelText('Bears conference'), {
+        target: { value: 'conf-east' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateLeague).toHaveBeenCalledWith(expect.objectContaining({
+          id: 'league-1',
+          conferences: [
+            { id: 'conf-east', name: 'North Circuit', abbreviation: 'NC', divisionIds: ['division-conf-east'] },
+            { id: 'conf-west', name: 'West Circuit', abbreviation: 'WC', divisionIds: ['division-conf-west'] },
+          ],
+          divisions: [
+            { id: 'division-conf-east', name: 'North Circuit', conferenceId: 'conf-east', teamIds: ['team-1', 'team-3'] },
+            { id: 'division-conf-west', name: 'West Circuit', conferenceId: 'conf-west', teamIds: ['team-2'] },
+          ],
+        }));
       });
     });
   });

@@ -654,6 +654,8 @@ function normalizePlayerRecord(player: LegacyPlayerRecord): Player {
 function normalizeLeagueTemplateRecord(template: LegacyLeagueTemplateRecord): LeagueTemplate {
   return {
     ...template,
+    conferences: template.conferences ?? [],
+    divisions: template.divisions ?? [],
     tier: template.tier ?? 'juiced',
     balanceMode: template.balanceMode ?? BALANCE_MODE_DEFAULT,
     checkpointCadence: normalizeCheckpointCadence(
