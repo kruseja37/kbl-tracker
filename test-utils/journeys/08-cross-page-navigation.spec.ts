@@ -21,7 +21,6 @@ const ALL_ROUTES = [
   { path: '/league-builder/players', name: 'LB-Players' },
   { path: '/league-builder/rosters', name: 'LB-Rosters' },
   { path: '/league-builder/draft', name: 'LB-Draft' },
-  { path: '/league-builder/rules', name: 'LB-Rules' },
 ];
 
 test.describe('Journey 8: Cross-Page Navigation', () => {

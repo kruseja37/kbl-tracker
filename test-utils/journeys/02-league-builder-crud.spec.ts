@@ -84,7 +84,6 @@ test.describe('Journey 2: League Builder CRUD', () => {
       { path: '/league-builder/players', name: 'Players' },
       { path: '/league-builder/rosters', name: 'Rosters' },
       { path: '/league-builder/draft', name: 'Draft' },
-      { path: '/league-builder/rules', name: 'Rules' },
     ];
 
     for (const sub of subPages) {

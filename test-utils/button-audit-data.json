@@ -136,17 +136,6 @@
       ]
     },
     {
-      "name": "LeagueBuilderRules",
-      "route": "/league-builder/rules",
-      "file": "src/src_figma/app/pages/LeagueBuilderRules.tsx",
-      "health": "GOOD",
-      "elements": [
-        { "id": "LRu-04", "type": "button", "label": "Duplicate preset", "tier": "A", "status": "WIRED", "handler": "handleDuplicate", "handlerFile": "LeagueBuilderRules.tsx:37", "destination": "hook.createRulesPreset() → saveRulesPreset()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
-        { "id": "LRu-06", "type": "button", "label": "Confirm delete preset", "tier": "A", "status": "WIRED", "handler": "handleDelete", "handlerFile": "LeagueBuilderRules.tsx:47", "destination": "hook.removeRulesPreset() → deleteRulesPreset()", "destinationFile": "src/utils/leagueBuilderStorage.ts" },
-        { "id": "LRu-35", "type": "button", "label": "CREATE/UPDATE preset", "tier": "A", "status": "WIRED", "handler": "handleSubmit", "handlerFile": "LeagueBuilderRules.tsx:431", "destination": "onSave → hook.createRulesPreset/updateRulesPreset() → saveRulesPreset()", "destinationFile": "src/utils/leagueBuilderStorage.ts" }
-      ]
-    },
-    {
       "name": "PostGameSummary",
       "route": "/post-game/:gameId",
       "file": "src/src_figma/app/pages/PostGameSummary.tsx",
