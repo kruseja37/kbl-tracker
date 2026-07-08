@@ -736,3 +736,116 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
   });
 });
+
+describe("COCKPIT WAVE 2: THE BOARD (setup + live GM-sortable global/per-position, auto-advance)", () => {
+  function positionBoard(): RosterIntelligencePayload["board"] {
+    return [
+      { playerId: "ss-hi", worth: 90_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Star Short", position: "SS" },
+      { playerId: "ss-lo", worth: 40_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Weak Short", position: "SS" },
+      { playerId: "cf-hi", worth: 80_000, matchedShape: "CF", needTag: null, fitTag: null, note: "Star Center", position: "CF" },
+      { playerId: "cf-lo", worth: 30_000, matchedShape: "CF", needTag: null, fitTag: null, note: "Weak Center", position: "CF" },
+    ];
+  }
+
+  test("the GLOBAL/PER-POSITION toggle appears on MLB with a non-empty board, and never on farm", () => {
+    render(<WhisperPanel payload={payload("push", { board: positionBoard() })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByTestId("whisper-board-view-toggle")).toBeInTheDocument();
+    cleanup();
+
+    render(<WhisperPanel payload={payload("push", { board: positionBoard() })} tier="farm" />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByTestId("whisper-board-view-toggle")).not.toBeInTheDocument();
+  });
+
+  test("PER-POSITION shows a tab per canonical position with counts, and 5-deep + SHOW ALL for a deep position", () => {
+    const deepBoard = Array.from({ length: 7 }, (_, index) => ({
+      playerId: `ss-${index}`,
+      worth: 700_000 - index * 1_000,
+      matchedShape: "SS",
+      needTag: null,
+      fitTag: null,
+      note: `Shortstop ${index}`,
+      position: "SS",
+    }));
+    render(<WhisperPanel payload={payload("push", { board: deepBoard })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByTestId("whisper-board-view-toggle").querySelector("button:nth-child(2)")!);
+
+    const positionView = screen.getByTestId("whisper-board-position-view");
+    expect(within(positionView).getByRole("button", { name: "SS (7)" })).toBeInTheDocument();
+    expect(within(positionView).getByRole("button", { name: "CF (0)" })).toBeInTheDocument();
+    // Default-selected position is the first canonical group (C, empty here) -- select SS.
+    fireEvent.click(within(positionView).getByRole("button", { name: "SS (7)" }));
+    expect(within(positionView).getAllByText(/^\$/)).toHaveLength(5);
+    fireEvent.click(within(positionView).getByRole("button", { name: "SHOW ALL 7" }));
+    expect(within(positionView).getAllByText(/^\$/)).toHaveLength(7);
+  });
+
+  test("GLOBAL expanded reorder calls onBoardReorderGlobal with the full new order", () => {
+    const onBoardReorderGlobal = vi.fn();
+    render(
+      <WhisperPanel
+        payload={Object.assign(payload("push", { board: positionBoard() }), { onBoardReorderGlobal })}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "FULL BOARD" }));
+    // positionBoard() literal order is [ss-hi, ss-lo, cf-hi, cf-lo] -- WhisperPanel renders board
+    // exactly as given (the engine, not this component, owns sort order). "Star Center" (cf-hi) is
+    // at index 2; moving it up swaps it with ss-lo at index 1.
+    fireEvent.click(screen.getByRole("button", { name: "Move Star Center up" }));
+    expect(onBoardReorderGlobal).toHaveBeenCalledWith(["ss-hi", "cf-hi", "ss-lo", "cf-lo"]);
+  });
+
+  test("PER-POSITION reorder calls onBoardReorderPosition with the position and preserves the hidden remainder", () => {
+    const onBoardReorderPosition = vi.fn();
+    const deepBoard = Array.from({ length: 6 }, (_, index) => ({
+      playerId: `ss-${index}`,
+      worth: 600_000 - index * 1_000,
+      matchedShape: "SS",
+      needTag: null,
+      fitTag: null,
+      note: `Shortstop ${index}`,
+      position: "SS",
+    }));
+    render(
+      <WhisperPanel payload={Object.assign(payload("push", { board: deepBoard }), { onBoardReorderPosition })} />,
+    );
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByTestId("whisper-board-view-toggle").querySelector("button:nth-child(2)")!);
+    fireEvent.click(screen.getByRole("button", { name: "Move Shortstop 1 up" }));
+
+    expect(onBoardReorderPosition).toHaveBeenCalledWith("SS", ["ss-1", "ss-0", "ss-2", "ss-3", "ss-4", "ss-5"]);
+  });
+
+  test("without reorder callbacks the board renders read-only -- no drag handle or arrow buttons anywhere", () => {
+    render(<WhisperPanel payload={payload("push", { board: positionBoard() })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "FULL BOARD" }));
+    expect(screen.queryByRole("button", { name: /^Move /i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Drag /i })).not.toBeInTheDocument();
+  });
+
+  test("the auto-advance 'Next up' Tier-2 line renders on MLB when present, and is absent otherwise / on farm", () => {
+    render(
+      <WhisperPanel
+        payload={Object.assign(payload("push"), { nextUpLine: "Next up at CF: Ramírez — your #2." })}
+      />,
+    );
+    expect(screen.getByTestId("whisper-next-up")).toHaveTextContent("Next up at CF: Ramírez — your #2.");
+    cleanup();
+
+    render(<WhisperPanel payload={payload("push")} />);
+    expect(screen.queryByTestId("whisper-next-up")).not.toBeInTheDocument();
+    cleanup();
+
+    render(
+      <WhisperPanel
+        payload={Object.assign(payload("push"), { nextUpLine: "Next up at CF: Ramírez — your #2." })}
+        tier="farm"
+      />,
+    );
+    expect(screen.queryByTestId("whisper-next-up")).not.toBeInTheDocument();
+  });
+});

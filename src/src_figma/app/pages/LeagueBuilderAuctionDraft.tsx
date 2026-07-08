@@ -91,10 +91,14 @@ import {
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
   marketReadFromEstimate,
+  sortBoardEntriesForPosition,
+  type BoardEntry,
   type FiveLights,
   type Light,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
+import type { TaxonomyPosition } from "../../../data/playerArchetypeTaxonomy";
+import { saveTeam } from "../../../utils/leagueBuilderStorage";
 import type { LiquidityCompletionCandidate } from "../../../engines/liquidityAwareBidding";
 import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
 import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
@@ -581,6 +585,44 @@ function isRosterSlotPlayer(shape: RosterSlotPlayer | undefined): shape is Roste
   return Boolean(shape);
 }
 
+/**
+ * COCKPIT WAVE 2 (B3/S3.4 auto-advance): when the MOST RECENTLY resolved lot (sale or pass-out --
+ * either way the player permanently leaves availablePlayerIds, see auctionStateMachine.ts's
+ * nominate transition) was the GM's OWN explicit #1 at that position, name the promoted next
+ * target. Scoped deliberately to the GM-ranked case only (the spec's OR clause also allows the
+ * engine's own natural top pick when the GM never ranked anyone, but that needs cross-turn history
+ * tracking this lane does not build -- see the build report). No new engine math: this is pure
+ * selection over the already-ranked board. Extracted as a pure function (no React, no session
+ * plumbing) so it is directly unit-testable without driving a full auction through the UI.
+ */
+export function computeBoardAutoAdvanceLine(input: {
+  latestResultPlayerId: string | undefined;
+  soldPosition: TaxonomyPosition | undefined;
+  board: readonly BoardEntry[];
+  boardRankOverrides: Team["boardRankOverrides"] | undefined;
+  boardMeta: Record<string, { name?: string; positions?: string }>;
+}): string | null {
+  const { latestResultPlayerId, soldPosition, board, boardRankOverrides, boardMeta } = input;
+  if (!latestResultPlayerId || !soldPosition) return null;
+  const positionOverride = boardRankOverrides?.byPosition?.[soldPosition];
+  if (!positionOverride?.length) return null;
+  // Reconstruct "available immediately before this resolution" = current available + the
+  // just-departed player -- the GM's effective current #1 is the first override entry still in
+  // that set. If it isn't the player who just left, this departure isn't the GM's own top target
+  // leaving (either a lower-ranked name went, or an earlier gap already promoted someone else) --
+  // stay quiet (anti-generic law, design §1.8).
+  const priorAvailableIds = new Set<string>([...board.map((entry) => entry.playerId), latestResultPlayerId]);
+  const gmsEffectiveTopBeforeThisResolution = positionOverride.find((id) => priorAvailableIds.has(id));
+  if (gmsEffectiveTopBeforeThisResolution !== latestResultPlayerId) return null;
+  const promoted = sortBoardEntriesForPosition(board, soldPosition, boardRankOverrides)[0];
+  if (!promoted) return null;
+  const rankLabel = positionOverride.indexOf(promoted.playerId) + 1;
+  const promotedName = boardMeta[promoted.playerId]?.name ?? promoted.note ?? promoted.playerId;
+  return rankLabel > 0
+    ? `Next up at ${soldPosition}: ${promotedName} — your #${rankLabel}.`
+    : `Next up at ${soldPosition}: ${promotedName}.`;
+}
+
 export function LeagueBuilderAuctionDraft() {
   const navigate = useNavigate();
   const auction = useAuctionDraft();
@@ -1013,6 +1055,48 @@ export function LeagueBuilderAuctionDraft() {
       .map((playerId) => session.players[playerId])
       .filter(Boolean);
   }, [session]);
+
+  // COCKPIT WAVE 2 (B3/Correction 5/7): mirrors the seatTeamId derivation inside whisperPayload
+  // below, kept as its own memo so the board-reorder persistence callbacks can resolve "which team
+  // am I saving to" without duplicating the whisperPayload memo itself.
+  const activeWhisperSeatTeamId = useMemo(() => {
+    if (!session) return null;
+    const seatTeamId =
+      session.state === "OPEN_BIDDING"
+        ? auction.currentBidderTeamId
+        : session.state === "RESOLVE"
+          ? session.pendingClaim?.teamId ?? null
+          : null;
+    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
+  }, [auction, session]);
+
+  const handleBoardReorderGlobal = useCallback((orderedIds: readonly string[]) => {
+    const team = activeWhisperSeatTeamId ? teamById.get(activeWhisperSeatTeamId) : null;
+    if (!team) return;
+    void (async () => {
+      const saved = await saveTeam({
+        ...team,
+        boardRankOverrides: { ...team.boardRankOverrides, global: [...orderedIds] },
+      });
+      leagueData.replaceTeamsLocal([saved]);
+    })();
+  }, [activeWhisperSeatTeamId, leagueData, teamById]);
+
+  const handleBoardReorderPosition = useCallback((position: TaxonomyPosition, orderedIds: readonly string[]) => {
+    const team = activeWhisperSeatTeamId ? teamById.get(activeWhisperSeatTeamId) : null;
+    if (!team) return;
+    void (async () => {
+      const saved = await saveTeam({
+        ...team,
+        boardRankOverrides: {
+          ...team.boardRankOverrides,
+          byPosition: { ...team.boardRankOverrides?.byPosition, [position]: [...orderedIds] },
+        },
+      });
+      leagueData.replaceTeamsLocal([saved]);
+    })();
+  }, [activeWhisperSeatTeamId, leagueData, teamById]);
+
   const whisperPayload = useMemo<RosterIntelligencePayload | null>(() => {
     if (!session || !session.currentLot) return null;
 
@@ -1207,6 +1291,21 @@ export function LeagueBuilderAuctionDraft() {
       // position-blind roster member truncates rosterShapes, which would fabricate false FILLS/deficit
       // tags. Undefined → boardNeedTag returns null (byte-identical to the no-need board).
       need: needBreakdown ?? undefined,
+      // COCKPIT WAVE 2 (Correction 5/7): the GM's own board order, a strong nudge on top of worth.
+      rankOverrides: team.boardRankOverrides,
+    });
+
+    // COCKPIT WAVE 2 (B3/S3.4 auto-advance): see computeBoardAutoAdvanceLine's doc comment.
+    const latestResult = session.results[session.results.length - 1];
+    const soldPosition = latestResult
+      ? (session.players[latestResult.playerId]?.pos?.position as TaxonomyPosition | undefined)
+      : undefined;
+    const nextUpLine = computeBoardAutoAdvanceLine({
+      latestResultPlayerId: latestResult?.playerId,
+      soldPosition,
+      board,
+      boardRankOverrides: team.boardRankOverrides,
+      boardMeta,
     });
 
     const positionMap: Record<string, NonNullable<AuctionPlayer["pos"]>> = {};
@@ -1274,10 +1373,18 @@ export function LeagueBuilderAuctionDraft() {
         bidVsPass,
         marginalTax,
         nominationChip,
+        // COCKPIT WAVE 2 (B3/Correction 5/7): the live Tier-3 board's GM order + write-back +
+        // auto-advance line.
+        boardRankOverrides: team.boardRankOverrides ?? null,
+        onBoardReorderGlobal: handleBoardReorderGlobal,
+        onBoardReorderPosition: handleBoardReorderPosition,
+        nextUpLine,
       },
     );
   }, [
     auction,
+    handleBoardReorderGlobal,
+    handleBoardReorderPosition,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
     marketLiftTable,

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -2954,5 +2954,73 @@ describe("LeagueBuilderDraftSetup", () => {
 
     expect(await screen.findByText("THE DRAFT POOL SOURCES CHANGED — RE-EXTRACT TO PULL FROM THE NEW SET.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+  });
+
+  test("COCKPIT WAVE 2: RANK YOUR BOARD scopes candidates to the pool (not the raw player set) and persists a reorder", async () => {
+    const starSs = makePlayer(0, {
+      id: "star-ss",
+      firstName: "Star",
+      lastName: "Short",
+      primaryPosition: "SS",
+      power: 99,
+      contact: 99,
+      speed: 99,
+      fielding: 99,
+      arm: 99,
+    });
+    const weakSs = makePlayer(1, {
+      id: "weak-ss",
+      firstName: "Weak",
+      lastName: "Short",
+      primaryPosition: "SS",
+      power: 20,
+      contact: 20,
+      speed: 20,
+      fielding: 20,
+      arm: 20,
+    });
+    const outsideSs = makePlayer(2, {
+      id: "outside-ss",
+      firstName: "Outside",
+      lastName: "Short",
+      primaryPosition: "SS",
+      power: 99,
+      contact: 99,
+      speed: 99,
+      fielding: 99,
+      arm: 99,
+      leagueAssignments: [], // never joined this league's pool -- must never surface as a candidate
+    });
+
+    mockLeagueData({
+      players: [starSs, weakSs, outsideSs],
+      pool: makePool({
+        players: [starSs, weakSs].map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await screen.findByText("3 · THE CLUBS");
+    const boardButtons = await screen.findAllByRole("button", { name: "rank your board ›" });
+    fireEvent.click(boardButtons[0]);
+
+    const globalList = await screen.findByTestId("rank-your-board-global");
+    expect(within(globalList).getByText("Star Short")).toBeInTheDocument();
+    expect(within(globalList).getByText("Weak Short")).toBeInTheDocument();
+    // UNIVERSE-FIX1 hard rule: automatic candidate feeds are pool-scoped, never the raw player set.
+    expect(within(globalList).queryByText("Outside Short")).not.toBeInTheDocument();
+
+    // Star clearly outranks Weak on raw valuation -- promoting Weak to #1 is a GM override.
+    fireEvent.click(screen.getByRole("button", { name: "Move Weak Short up" }));
+
+    await waitFor(() => {
+      expect(saveTeam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "team-a",
+          boardRankOverrides: { global: ["weak-ss", "star-ss"] },
+        }),
+      );
+    });
   });
 });
