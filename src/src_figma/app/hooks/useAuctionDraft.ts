@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   claimLoneSurvivor,
+  createAuctionSessionLaunchNonce,
   resolveLot,
   advanceLot,
   getCurrentBidderTeamId,
@@ -639,6 +640,8 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     const teams = [...realTeams, ...shillTeams];
     // FABLE-C1: position-enriched players power the machine's own_need strand guard (spec §5).
     const players = await buildAuctionPlayersWithPositions(sessionPool);
+    const sessionId = createAuctionSessionId(leagueId, MLB_AUCTION_SEASON);
+    const sessionLaunchNonce = createAuctionSessionLaunchNonce();
     const config: AuctionSetupConfig = {
       ...DEFAULT_AUCTION_SETUP_CONFIG,
       ...partialConfig,
@@ -657,7 +660,13 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     };
     const nextContext = { leagueId, seasonNumber: MLB_AUCTION_SEASON };
     const initialized = {
-      ...(initAuctionSession({ teams, players, config }) as CpuShillAuctionSession),
+      ...(initAuctionSession({
+        teams,
+        players,
+        config,
+        sessionId,
+        sessionLaunchNonce,
+      }) as CpuShillAuctionSession),
       cpuShills: {
         ...buildPureShillProfiles(leagueId, explicitShillCount),
         ...buildClubCpuProfiles(leagueId, nextLeagueTeams),

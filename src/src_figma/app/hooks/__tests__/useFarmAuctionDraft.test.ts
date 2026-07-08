@@ -3,7 +3,11 @@ import "fake-indexeddb/auto";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { initAuctionSession, seededNominationOrder } from "../../../../engines/auctionStateMachine";
+import {
+  deriveAuctionSessionNominationSeed,
+  initAuctionSession,
+  seededNominationOrder,
+} from "../../../../engines/auctionStateMachine";
 import { LEAGUE_MINIMUM_SALARY } from "../../../../data/rosterEngineConstants";
 import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
 import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM } from "../../../../utils/farmAuctionPool";
@@ -44,6 +48,7 @@ vi.mock("../../../hooks/useLeagueBuilderData", async () => {
 });
 
 const DB_NAME = "kbl-league-builder";
+const TEST_SESSION_LAUNCH_NONCE = "00000000-0000-4000-8000-000000000001";
 
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -124,10 +129,15 @@ function makeRosterWithMlb(teamId: string, mlbRoster: string[], farmRoster: stri
   };
 }
 
-function seedWithOrder(teamIds: string[], expectedOrder: string[]): string {
+function seedWithOrder(leagueId: string, teamIds: string[], expectedOrder: string[]): string {
   const seed = Array.from({ length: 5_000 }, (_, index) => `farm-auction-seed-${index}`).find(
     (candidate) => {
-      const order = seededNominationOrder(teamIds, candidate);
+      const sessionSeed = deriveAuctionSessionNominationSeed({
+        sessionId: createFarmAuctionSessionId(leagueId),
+        launchNonce: TEST_SESSION_LAUNCH_NONCE,
+        baseSeed: candidate,
+      });
+      const order = seededNominationOrder(teamIds, sessionSeed);
       return expectedOrder.every((teamId, index) => order[index] === teamId);
     },
   );
@@ -226,18 +236,20 @@ async function seedScoutProfile(leagueId: string, teamId: string): Promise<void>
 describe("useFarmAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(TEST_SESSION_LAUNCH_NONCE);
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
   test("initializes a locked league into an engine-surfaced farm lot with flat-floor reserve", async () => {
     const teamIds = ["human", "cpu"];
-    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
+    const seed = seedWithOrder("farm-init", teamIds, ["human", "cpu"]);
     mockLeagueData({
       leagues: [makeLeague("farm-init", teamIds)],
       teams: [makeTeam("human"), makeTeam("cpu", "ai")],
@@ -286,7 +298,7 @@ describe("useFarmAuctionDraft", () => {
   test("seeds farm wallets with each team's own completed MLB unspent budget carryover", async () => {
     const teamIds = ["human", "cpu"];
     const leagueId = "farm-carryover-complete";
-    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
+    const seed = seedWithOrder(leagueId, teamIds, ["human", "cpu"]);
     mockLeagueData({
       leagues: [makeLeague(leagueId, teamIds)],
       teams: [makeTeam("human"), makeTeam("cpu", "ai")],
@@ -329,9 +341,10 @@ describe("useFarmAuctionDraft", () => {
 
   test("does not carry MLB leftovers when the MLB auction row is missing or incomplete", async () => {
     const teamIds = ["human", "cpu"];
-    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
     const missingLeagueId = "farm-carryover-missing";
     const incompleteLeagueId = "farm-carryover-incomplete";
+    const missingSeed = seedWithOrder(missingLeagueId, teamIds, ["human", "cpu"]);
+    const incompleteSeed = seedWithOrder(incompleteLeagueId, teamIds, ["human", "cpu"]);
     mockLeagueData({
       leagues: [
         makeLeague(missingLeagueId, teamIds),
@@ -344,7 +357,7 @@ describe("useFarmAuctionDraft", () => {
 
     await act(async () => {
       await result.current.initFarmAuction(missingLeagueId, {
-        nominationOrderSeed: seed,
+        nominationOrderSeed: missingSeed,
         cpuShillCount: 0,
         bidIncrement: 1_000,
       });
@@ -369,7 +382,7 @@ describe("useFarmAuctionDraft", () => {
 
     await act(async () => {
       await result.current.initFarmAuction(incompleteLeagueId, {
-        nominationOrderSeed: seed,
+        nominationOrderSeed: incompleteSeed,
         cpuShillCount: 0,
         bidIncrement: 1_000,
       });
@@ -384,7 +397,7 @@ describe("useFarmAuctionDraft", () => {
 
   test("exposes derived MLB roster chemistry counts without persisting them into the farm auction session", async () => {
     const teamIds = ["human", "cpu"];
-    const seed = seedWithOrder(teamIds, ["human", "cpu"]);
+    const seed = seedWithOrder("farm-chemistry", teamIds, ["human", "cpu"]);
     mockLeagueData({
       leagues: [makeLeague("farm-chemistry", teamIds)],
       teams: [makeTeam("human"), makeTeam("cpu", "ai")],
@@ -437,7 +450,7 @@ describe("useFarmAuctionDraft", () => {
 
   test("drives engine-surfaced farm lot to bids to SOLD while a CPU farm team auto-acts", async () => {
     const teamIds = ["human", "other", "cpu"];
-    const seed = seedWithOrder(teamIds, ["human", "other", "cpu"]);
+    const seed = seedWithOrder("farm-loop", teamIds, ["human", "other", "cpu"]);
     mockLeagueData({
       leagues: [makeLeague("farm-loop", teamIds)],
       teams: [makeTeam("human"), makeTeam("other"), makeTeam("cpu", "ai")],
@@ -493,8 +506,8 @@ describe("useFarmAuctionDraft", () => {
 
   test("autosaves under the farm namespace, resumes by farm id, and does not clobber the MLB auction row", async () => {
     const teamIds = ["human", "other"];
-    const seed = seedWithOrder(teamIds, ["human", "other"]);
     const leagueId = "farm-persist";
+    const seed = seedWithOrder(leagueId, teamIds, ["human", "other"]);
     mockLeagueData({
       leagues: [makeLeague(leagueId, teamIds)],
       teams: [makeTeam("human"), makeTeam("other")],
@@ -522,6 +535,11 @@ describe("useFarmAuctionDraft", () => {
     expect(farmRow?.id).toBe(createFarmAuctionSessionId(leagueId));
     expect(farmRow?.session.state).toBe("OPEN_BIDDING");
     expect(farmRow?.session.currentLot?.playerId).toBe(playerId);
+    expect(farmRow?.session.sessionLaunchNonce).toEqual(expect.any(String));
+    expect(farmRow?.session.sessionBaseSeed).toBe(seed);
+    expect(farmRow?.session.config.nominationOrderSeed).toContain(seed);
+    expect(farmRow?.session.config.nominationOrderSeed).toContain(createFarmAuctionSessionId(leagueId));
+    expect(farmRow?.session.config.nominationOrderSeed).toContain(farmRow?.session.sessionLaunchNonce ?? "");
 
     const mlbRow = await getAuctionSession(leagueId);
     expect(mlbRow?.id).toBe(createAuctionSessionId(leagueId));
@@ -537,9 +555,12 @@ describe("useFarmAuctionDraft", () => {
     expect(resumed.current.activeLeagueId).toBe(leagueId);
   });
 
-  test("uses the same seed to produce the same farm pool and nomination order", async () => {
+  test("uses the same setup seed to produce the same farm pool with a new session nomination seed", async () => {
     const teamIds = ["alpha", "bravo", "charlie"];
     const seed = "stable-farm-auction-order";
+    vi.spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000002")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000003");
     mockLeagueData({
       leagues: [makeLeague("farm-seed", teamIds)],
       teams: teamIds.map((teamId) => makeTeam(teamId)),
@@ -556,6 +577,8 @@ describe("useFarmAuctionDraft", () => {
     const firstOrder = result.current.session?.nominationOrder;
     const firstPlayerOrder = result.current.session?.playerOrder;
     const firstPlayers = result.current.session?.players;
+    const firstNominationSeed = result.current.session?.config.nominationOrderSeed;
+    const firstLaunchNonce = result.current.session?.sessionLaunchNonce;
 
     await act(async () => {
       await result.current.initFarmAuction("farm-seed", {
@@ -564,15 +587,19 @@ describe("useFarmAuctionDraft", () => {
       });
     });
 
-    expect(result.current.session?.nominationOrder).toEqual(firstOrder);
+    expect(firstOrder).toBeDefined();
     expect(result.current.session?.playerOrder).toEqual(firstPlayerOrder);
     expect(result.current.session?.players).toEqual(firstPlayers);
+    expect(result.current.session?.config.nominationOrderSeed).not.toBe(firstNominationSeed);
+    expect(result.current.session?.sessionLaunchNonce).not.toBe(firstLaunchNonce);
+    expect(result.current.session?.config.nominationOrderSeed).toContain(seed);
+    expect(result.current.session?.config.nominationOrderSeed).toContain(createFarmAuctionSessionId("farm-seed"));
   });
 
   test("falls back to regenerating the farm pool for legacy saved rows without a pool", async () => {
     const teamIds = ["human", "other"];
     const leagueId = "farm-legacy-resume-pool";
-    const seed = seedWithOrder(teamIds, ["human", "other"]);
+    const seed = seedWithOrder(leagueId, teamIds, ["human", "other"]);
     mockLeagueData({
       leagues: [makeLeague(leagueId, teamIds)],
       teams: [makeTeam("human"), makeTeam("other")],
@@ -622,7 +649,7 @@ describe("useFarmAuctionDraft", () => {
   test("persists the generated farm pool and loads the saved DTO pool on resume", async () => {
     const teamIds = ["human", "other"];
     const leagueId = "farm-resume-pool";
-    const seed = seedWithOrder(teamIds, ["human", "other"]);
+    const seed = seedWithOrder(leagueId, teamIds, ["human", "other"]);
     mockLeagueData({
       leagues: [makeLeague(leagueId, teamIds)],
       teams: [makeTeam("human"), makeTeam("other")],

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   claimLoneSurvivor,
+  createAuctionSessionLaunchNonce,
   resolveLot,
   advanceLot,
   getCurrentBidderTeamId,
@@ -429,7 +430,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       seasonNumber,
       teams,
       scoutsByTeamId: nextScoutsByTeamId,
-      seed: row.session.config.nominationOrderSeed,
+      seed: row.session.sessionBaseSeed ?? row.session.config.nominationOrderSeed,
       config: row.session.config,
     });
     const regeneratedOrder = regen.pool.auctionPlayers.map((player) => player.playerId);
@@ -476,6 +477,8 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       leaguePlayers: leagueData.players,
     });
     const seed = partialConfig.nominationOrderSeed || DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed;
+    const sessionId = createFarmAuctionSessionId(leagueId, FARM_AUCTION_SEASON);
+    const sessionLaunchNonce = createAuctionSessionLaunchNonce();
     const config: AuctionSetupConfig = {
       ...DEFAULT_AUCTION_SETUP_CONFIG,
       ...partialConfig,
@@ -496,6 +499,8 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       scoutsByTeamId: nextScoutsByTeamId,
       seed,
       config,
+      sessionId,
+      sessionLaunchNonce,
     });
 
     setContext(nextContext);
