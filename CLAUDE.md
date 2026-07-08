@@ -305,6 +305,12 @@ If JK pastes new CLI output without a prior commit, Claude must say "Log first" 
 - Ruthlessly iterate — if the same mistake recurs, the rule wasn't specific enough; rewrite it
 - Review both ratified rules and the pending pen at session start alongside the other required files
 
+### Subagent Model Policy (JK directive 2026-07-08 — MANDATORY)
+- NEVER spawn an Agent/Workflow without an explicit model. Agents with no model override INHERIT the captain's expensive session model — this caused a real token-burn incident 2026-07-08.
+- Use the pinned agent types in `.claude/agents/`: `auditor` (opus, adversarial pre-merge audits), `tracer` (sonnet, investigation/tracing/design drafts), `scribe` (sonnet, docs landing). For raw Agent/Workflow calls, pass model explicitly: sonnet for mechanical work, opus only for adversarial audits or subtle math reconciliation.
+- Lane/process monitoring = long-running background bash sentinels (zero tokens while sleeping) that wake the captain ONLY on stall or completion. No timed captain heartbeats.
+- Captain (session-model) turns are reserved for: rulings, contracts, merge gates, and user communication.
+
 ### Subagent Strategy
 - Use subagents to keep main context window clean
 - Offload parallel analysis, research, and multi-file reads to subagents

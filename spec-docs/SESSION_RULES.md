@@ -363,6 +363,9 @@ When your context is approaching its limit (compaction near or imminent):
 
 ## Lessons Learned (pending JK ratification)
 
+- When spawning ANY subagent or workflow agent, always pass an explicit model (sonnet mechanical / opus audits) because agents without a model override silently inherit the captain's session model and burn its budget (2026-07-08 incident: SOT-sweep verifiers + design agents inherited Fable; JK flagged the burn twice).
+- When monitoring long background dispatches, always use a token-free bash sentinel that wakes the captain only on stall/completion, never a timed captain heartbeat, because each timed wake-up costs a full expensive-context turn with usually nothing to do.
+
 Auto-capture pen for the Self-Improvement Loop (see CLAUDE.md). Rules here are
 PROPOSALS, written the moment a JK correction happens (Write-First), in the form
 "When [situation], always [action] because [reason]." They are NOT yet in force.
