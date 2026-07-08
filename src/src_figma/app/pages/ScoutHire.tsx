@@ -5,6 +5,7 @@ import { ArrowLeft, Check, ChevronRight, Eye, RefreshCw, Target } from "lucide-r
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import {
   draftRouteForLeague,
+  farmDraftRouteForLeague,
   leagueIdFromSearch,
   reservePriceKFromSearch,
   resolveInitialLeagueId,
@@ -72,10 +73,7 @@ export function ScoutHire() {
         selectedScoutIdsByTeamId: {},
         pool: scoutPool,
       });
-      navigate(draftRouteForLeague(activeLeague, {
-        shillCount: requestedShillCount,
-        reservePriceK: requestedReservePriceK,
-      }));
+      navigate(farmDraftRouteForLeague(activeLeague));
     } catch (caught) {
       setSaveError(caught instanceof Error ? caught.message : "Could not save scout hires.");
     } finally {
@@ -115,13 +113,13 @@ export function ScoutHire() {
       <div className="max-w-[1120px] mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <button
-            aria-label="Back to draft setup"
+            aria-label="Back to MLB auction"
             type="button"
             onClick={() => {
-              const params = new URLSearchParams({ leagueId: activeLeague.id });
-              if (requestedShillCount !== null) params.set("shills", String(requestedShillCount));
-              if (requestedReservePriceK !== null) params.set("reserveK", String(requestedReservePriceK));
-              navigate(`/league-builder/draft-setup?${params.toString()}`);
+              navigate(draftRouteForLeague(activeLeague, {
+                shillCount: requestedShillCount,
+                reservePriceK: requestedReservePriceK,
+              }));
             }}
             className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           >

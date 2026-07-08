@@ -54,7 +54,6 @@ import {
   clampDraftShillCount,
   reservePriceKFromSearch,
   resolveInitialLeagueId,
-  scoutHireRouteForLeague,
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
@@ -2061,7 +2060,7 @@ export function LeagueBuilderDraftSetup() {
       {
         teams: league.teamIds.length,
         // Production pool-first shaping targets displayed league roster demand;
-        // draft shills affect scout-hire routing, not this source pool size.
+        // draft shills affect auction routing, not this source pool size.
         shills: 0,
         budgetPerTeam: tierBudget,
         poolBalancePreset,
@@ -2565,11 +2564,7 @@ export function LeagueBuilderDraftSetup() {
 
   const handleStartDraft = () => {
     if (!league || !startReady) return;
-    navigate(
-      hasSavedDraft
-        ? draftRouteForLeague(league, { shillCount: shills, reservePriceK })
-        : scoutHireRouteForLeague(league, { shillCount: shills, reservePriceK }),
-    );
+    navigate(draftRouteForLeague(league, { shillCount: shills, reservePriceK }));
   };
 
   const handleSaveEditedPlayer = useCallback(
@@ -3197,7 +3192,7 @@ export function LeagueBuilderDraftSetup() {
                       <X className="w-3 h-3" />
                     </PressButton>
                     <span className="max-w-[520px] text-[11px] text-[var(--ballpark-chalk)]/65">
-                      Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay. You'll draft again from scout hire.
+                      Clears the finished draft and every roster it handed out. Your pool, prices, designs, and identities stay. You'll draft again from the MLB auction.
                     </span>
                   </>
                 ) : (

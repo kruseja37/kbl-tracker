@@ -63,11 +63,11 @@ import { deriveShillTeamIds } from "../../../engines/cpuTeamRoles";
 import { rosterNeedBreakdown, toRosterSlotPlayer, type RosterNeedBreakdown, type RosterPositionMap } from "../../../engines/rosterNeed";
 import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
-  farmDraftRouteForLeague,
   leagueIdFromSearch,
   reservePriceKFromSearch,
   resolveInitialLeagueId,
   clampDraftShillCount,
+  scoutHireRouteForLeague,
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { DEFAULT_RESERVE_PRICE_K } from "../../../engines/auctionReservePrice";
@@ -746,17 +746,24 @@ export function LeagueBuilderAuctionDraft() {
     panel?.focus({ preventScroll: true });
   }, []);
 
-  const navigateToFarmDraft = useCallback(() => {
-    navigate(activeLeague ? farmDraftRouteForLeague(activeLeague) : "/league-builder/farm-auction-draft");
-  }, [activeLeague, navigate]);
+  const navigateToScoutReveal = useCallback(() => {
+    navigate(
+      activeLeague
+        ? scoutHireRouteForLeague(activeLeague, {
+            shillCount: requestedShillCount,
+            reservePriceK: requestedReservePriceK,
+          })
+        : "/league-builder/scout-hire",
+    );
+  }, [activeLeague, navigate, requestedReservePriceK, requestedShillCount]);
 
   const requestFarmDraftExit = useCallback(() => {
     if (canProceedToFarm) {
-      navigateToFarmDraft();
+      navigateToScoutReveal();
       return;
     }
     focusExitPanel();
-  }, [canProceedToFarm, focusExitPanel, navigateToFarmDraft]);
+  }, [canProceedToFarm, focusExitPanel, navigateToScoutReveal]);
 
   const currentBidder = auction.currentBidderTeamId ? teamById.get(auction.currentBidderTeamId) : null;
   const currentLotPlayer = session?.currentLot ? playerById.get(session.currentLot.playerId) : null;
@@ -1323,7 +1330,7 @@ export function LeagueBuilderAuctionDraft() {
     session?.state === "RESOLVE" && stagePendingClaim ? `CLAIM ${formatMoney(stagePendingClaim.price)}` :
     session?.state === "RESOLVE" ? "RESOLVE LOT" :
     session?.state === "SOLD" || session?.state === "PASSED" ? "NEXT LOT" :
-    session?.state === "AUCTION_COMPLETE" ? (canProceedToFarm ? "FARM DRAFT" : "REVIEW ROSTERS") :
+    session?.state === "AUCTION_COMPLETE" ? (canProceedToFarm ? "SCOUT REVEAL" : "REVIEW ROSTERS") :
     undefined;
   const stageSecondaryLabel =
     session?.state === "RESOLVE" && stagePendingClaim ? "Pass on reserve" :
@@ -1365,14 +1372,15 @@ export function LeagueBuilderAuctionDraft() {
       allLegal: exitReport.allLegal,
       blockedCount: exitReport.blockedCount,
       summary: exitReport.allLegal
-        ? "Every club fields a legal 22. The farm draft is next."
+        ? "Every club fields a legal 22. Scout reveal is next."
         : `${exitReport.blockedCount} of ${exitReport.clubs.length} clubs can't field a legal 22. ${auctionExitRepairGuidance(exitReport, settleSeatTotal > 0)}`,
       onProceed: requestFarmDraftExit,
+      proceedLabel: "SCOUT REVEAL",
       overrideArmed: exitOverrideArmed,
       onArmOverride: () => setExitOverrideArmed(true),
       onConfirmOverride: () => {
         setExitOverrideConfirmed(true);
-        navigateToFarmDraft();
+        navigateToScoutReveal();
       },
       onStayOverride: () => setExitOverrideArmed(false),
       settle: {
@@ -1397,7 +1405,7 @@ export function LeagueBuilderAuctionDraft() {
     auction,
     exitOverrideArmed,
     exitReport,
-    navigateToFarmDraft,
+    navigateToScoutReveal,
     requestFarmDraftExit,
     settleArmed,
     settledResultLine,

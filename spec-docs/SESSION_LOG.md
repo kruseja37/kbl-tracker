@@ -6792,3 +6792,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused rules/setup/launch suites pass 75/75; full `NODE_ENV= npx vitest run` had only known `LeagueBuilderDraftSetup.test.tsx` CUT2-2 batch reds, and the solo file rerun passed 60/60.
 - Browser smoke attempted against Vite dev server, but Browser/node_repl failed before attach with `sandboxCwd must be an absolute file URI`; no app/browser defect was observed.
 - Next: independent audit of the P7 prune inventory, especially the ambiguous playoff controls and the missing-knobs follow-up list.
+## 2026-07-08 (Codex, attended) — M1O/P11 scout reveal placement
+
+- Completed **P11** on `lane/m1o-scoutplace`: the ScoutHire reveal is now placed next to the farm phase instead of before the MLB auction.
+- Route/order behavior: `draft-setup -> MLB auction -> scout reveal -> farm auction -> staff hire -> franchise setup`, with `leagueId` threaded by the shared draft-route chain helper.
+- Scope preserved: no scout derivation logic changes, no reveal-content rewrite, no auction-page behavior changes beyond next/back targets, and `/league-builder/scout-hire` remains deep-linkable.
+- Draft Setup now starts the MLB auction directly. MLB auction completion/override proceed to ScoutHire. ScoutHire confirm proceeds to farm auction, and ScoutHire back returns to the MLB auction while preserving shill/reserve query state.
+- Updated route/page navigation tests for the new chain, direct Draft Setup -> MLB start, MLB completion -> ScoutHire, ScoutHire -> farm auction, and ScoutHire back -> MLB auction. Existing farm-scout derivation coverage remains green, confirming skipped ScoutHire does not gate farm reads.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused draft-routing/page-nav/farm-scout suites pass 7 files / 127 tests. Full `NODE_ENV= npx vitest run` produced 9,157 pass / 1 fail / 11 skipped, with the lone red the known `LeagueBuilderDraftSetup.test.tsx` CUT2-2 batch case; solo rerun of that file passed 60/60.
+- Next: independent audit of the P11 navigation-only diff before continuing Mode-1 punchlist sequencing.

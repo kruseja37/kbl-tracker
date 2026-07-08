@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  draftArcRouteChainForLeague,
   draftRouteForLeague,
   farmDraftRouteForFormat,
   farmDraftRouteForLeague,
@@ -27,5 +28,21 @@ describe("draftRouting", () => {
     expect(farmDraftRouteForLeague({ id: "legacy-snake", draftFormat: "snake" })).toBe(
       "/league-builder/farm-auction-draft?leagueId=legacy-snake",
     );
+  });
+
+  test("P11 orders the draft arc with scout reveal after MLB auction and before farm auction", () => {
+    expect(
+      draftArcRouteChainForLeague(
+        { id: "league-p11", draftFormat: "auction" },
+        { shillCount: 4, reservePriceK: 0.65 },
+      ),
+    ).toEqual([
+      "/league-builder/draft-setup?leagueId=league-p11&shills=4&reserveK=0.65",
+      "/league-builder/auction-draft?leagueId=league-p11&shills=4&reserveK=0.65",
+      "/league-builder/scout-hire?leagueId=league-p11&shills=4&reserveK=0.65",
+      "/league-builder/farm-auction-draft?leagueId=league-p11",
+      "/league-builder/staff-hire?leagueId=league-p11",
+      "/franchise/setup?leagueId=league-p11",
+    ]);
   });
 });
