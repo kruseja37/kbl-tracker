@@ -10,6 +10,8 @@
 | F4 | **Prospect quality inflated** — generated farm prospects do not match the spec's grade distribution curve. | Distribution defect | Measure: histogram generated prospects against PROSPECT_GENERATION_SPEC's curve (generator must be the inverse of the scoreSmb4Player grade oracle); fix the generator/pool-shaping to the curve; add the histogram to the gauntlet as a permanent invariant. |
 | F5 | **UI style mismash across the arc** (known; design pass ordered after correctness — Staff-Your-Clubs/ballpark kit target). | Cosmetic | Reskin wave rides the kit (built 2026-07-07); after the punch list. |
 
+**F4 landing note (2026-07-08):** `lane/m1b-curve` commits `bdb8c2d4` + `34419899` add the opt-in farm prospect histogram invariant and fix farm prospect target-grade sampling to the spec curve with seeded pool-level quotas. Tolerance used: max bucket deviation 1.5pp, total absolute deviation 8.0pp at N=500. Before fix: B- +2.0pp, C +2.2pp, total abs 8.8pp. After fix: exact N=500 distribution, total abs 0.0pp.
+
 ## §2 THE REST OF THE PUNCH LIST (from today's audits; all ticketed)
 | ID | Item | Why it gates the A-Z test |
 |---|---|---|
