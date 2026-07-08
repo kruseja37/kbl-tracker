@@ -1,3 +1,5 @@
+> **HISTORICAL — ruled OBSOLETE 2026-07-07** (see `spec-docs/V1_CANON_2026-07-07.md` §6): this worksheet referenced the old hub UI and is no longer an active JK markup task; the de-jargon principle is already canon via `UX_NORTH_STAR.md` §6 banned-words list. Kept for reference only, not for execution.
+
 # Franchise Hub — BUSY-SPOTS INVENTORY (for JK iPad review)
 
 **Status:** PROPOSAL ONLY — nothing refactored. Per JK ruling 2026-06-19:
