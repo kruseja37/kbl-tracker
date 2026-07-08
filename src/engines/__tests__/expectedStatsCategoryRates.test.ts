@@ -30,7 +30,6 @@ const PITCHER_LIVE_CATEGORIES: ExpectedStatsCategory[] = [
 ];
 
 const DORMANT_CATEGORIES: ExpectedStatsCategory[] = [
-  'armThrowingRate',
   'fieldingAvoidErrorRate',
 ];
 
@@ -215,6 +214,52 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
     expect('speedBaserunningRate' in result.actualByCat).toBe(false);
   });
 
+  test('maps catcher caught-stealing season fields to the RA-8 arm rate', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      fielding: baseFielding({
+        games: 12,
+        gamesByPosition: { C: 12 },
+        caughtStealingAgainst: 3,
+        stolenBasesAllowed: 7,
+      }),
+    });
+
+    expect(result.sampleSizeByCat.armThrowingRate).toBe(10);
+    expect(result.actualByCat.armThrowingRate).toBeCloseTo(0.475, 12);
+  });
+
+  test('maps OF assists and held runners to an OF arm event rate', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      fielding: baseFielding({
+        games: 20,
+        gamesByPosition: { RF: 20 },
+        outfieldAssists: 4,
+        baserunnersHeld: 6,
+      }),
+    });
+
+    expect(result.sampleSizeByCat.armThrowingRate).toBe(10);
+    expect(result.actualByCat.armThrowingRate).toBeCloseTo(0.5, 12);
+  });
+
+  test('omits arm sample and actual for position players with no C or OF arm exposure', () => {
+    const result = toExpectedStatsCategoryRates({
+      role: 'hitter',
+      fielding: baseFielding({
+        games: 20,
+        gamesByPosition: { SS: 20 },
+        putouts: 20,
+        assists: 40,
+        errors: 2,
+      }),
+    });
+
+    expect('armThrowingRate' in result.sampleSizeByCat).toBe(false);
+    expect('armThrowingRate' in result.actualByCat).toBe(false);
+  });
+
   test('maps a full pitcher season row to hand-worked live rates and samples', () => {
     const result = toExpectedStatsCategoryRates({
       role: 'pitcher',
@@ -312,6 +357,8 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       fieldingRangeRate: 9,
     });
     expectCategoriesAbsent(result, DORMANT_CATEGORIES);
+    expect('armThrowingRate' in result.actualByCat).toBe(false);
+    expect('armThrowingRate' in result.sampleSizeByCat).toBe(false);
   });
 
   test('omits all actual rates for a zero-PA hitter while emitting zero samples', () => {
@@ -364,7 +411,7 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
     expect(result.sampleSizeByCat.pitchingWeakContactRate).toBe(50);
   });
 
-  test('never emits dormant category keys in actual or sample maps', () => {
+  test('never emits dormant category keys or arm without C/OF exposure in actual or sample maps', () => {
     const hitter = toExpectedStatsCategoryRates({
       role: 'hitter',
       batting: baseBatting({ pa: 20, ab: 18, hits: 6, singles: 4, doubles: 1, homeRuns: 1 }),
@@ -385,6 +432,10 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
 
     expectCategoriesAbsent(hitter, DORMANT_CATEGORIES);
     expectCategoriesAbsent(pitcher, DORMANT_CATEGORIES);
+    expect('armThrowingRate' in hitter.actualByCat).toBe(false);
+    expect('armThrowingRate' in hitter.sampleSizeByCat).toBe(false);
+    expect('armThrowingRate' in pitcher.actualByCat).toBe(false);
+    expect('armThrowingRate' in pitcher.sampleSizeByCat).toBe(false);
   });
 
   test('hitter ignores pitching rows while pitcher combines pitching with non-pitching rows', () => {
@@ -406,5 +457,6 @@ describe('expectedStatsCategoryRates RA-2a adapter', () => {
       expect(category in pitcher.sampleSizeByCat).toBe(true);
     }
     expectCategoriesAbsent(pitcher, DORMANT_CATEGORIES);
+    expect('armThrowingRate' in pitcher.sampleSizeByCat).toBe(false);
   });
 });
