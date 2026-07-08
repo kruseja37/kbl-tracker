@@ -410,7 +410,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(screen.queryByText((_, node) => node?.textContent === targetGradeText)).not.toBeInTheDocument();
     expect(screen.getByText("OPENING")).toBeInTheDocument();
     expect(screen.getByText(expectedOpeningPrice)).toBeInTheDocument();
-    fireEvent.pointerDown(scoutReportControl);
+    fireEvent.click(scoutReportControl);
     expectTextContent(`Scout value ${targetRangeText}`);
     expectTextContent(targetGradeText);
     expectTextContent(`Grade band ${targetBand.best}-${targetBand.worst}`);
@@ -418,7 +418,14 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const [tool, band] of Object.entries(targetToolBands)) {
       expect(screen.getByText(`${tool.toUpperCase()} ${band.lower}-${band.upper}`)).toBeInTheDocument();
     }
-    fireEvent.pointerUp(scoutReportControl);
+    // HARDENING (WT-A): the privacy invariant (no raw trait names) must hold in the revealed
+    // state too, not just the covered state asserted above -- the scout VM only ever carries
+    // bands/grades (LeagueBuilderFarmAuctionDraft.tsx scout VM construction), so revealing the
+    // report can never leak a trait name.
+    for (const trait of [target.prospect.trait1, target.prospect.trait2].filter(Boolean)) {
+      expect(screen.queryByText(trait!)).not.toBeInTheDocument();
+    }
+    fireEvent.click(scoutReportControl);
     expect(screen.queryByText((_, node) => node?.textContent === `Scout value ${targetRangeText}`)).not.toBeInTheDocument();
     expect(screen.queryByText((_, node) => node?.textContent === targetGradeText)).not.toBeInTheDocument();
     expect(targetRange.low).not.toBe(targetRange.high);

@@ -432,6 +432,81 @@ async function saveCompletedAuctionForPage(options: {
   return allPlayers;
 }
 
+// WT-A: a mid-draft PASSED lot, saved directly (same fixture-injection pattern as
+// saveCompletedAuctionForPage above) so the UNSOLD-vs-GONE overlay predicate can be exercised
+// without needing to seed-search a real nomination/bidding sequence into a no-bid outcome.
+async function savePassedLotSessionForPage(options: {
+  reserveFractionK?: number;
+  recycled: boolean;
+}): Promise<Player[]> {
+  const players = makePlayers();
+  const playerId = "player-a";
+  const playerIds = players.map((player) => player.id);
+  const remainingPoolIds = playerIds.filter((id) => id !== playerId);
+
+  await saveTeamRoster(emptyRoster("team-a"));
+  await saveTeamRoster(emptyRoster("team-b"));
+  for (const player of players) {
+    await savePlayer(player);
+  }
+
+  const session: CpuShillAuctionSession = {
+    state: "PASSED",
+    config: {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      excludeFromLeague: true,
+      cpuShillCount: 0,
+      ...(options.reserveFractionK !== undefined ? { reserveFractionK: options.reserveFractionK } : {}),
+    },
+    teams: [
+      { teamId: "team-a", budgetRemaining: 900_000, rosterSlotsRemaining: 20, minSalary: 3_000, projectedTax: 0, roster: [] },
+      { teamId: "team-b", budgetRemaining: 900_000, rosterSlotsRemaining: 20, minSalary: 3_000, projectedTax: 0, roster: [] },
+    ],
+    nominationOrder: ["team-a", "team-b"],
+    nominationIndex: 0,
+    nominationRound: 1,
+    players: Object.fromEntries(
+      playerIds.map((id, index) => [id, { playerId: id, iv: 10_000 + index, ivPercentile: 50 }]),
+    ),
+    playerOrder: playerIds,
+    // This IS the engine's own recycled/permanent predicate (finalizePassedLot,
+    // auctionStateMachine.ts): first pass with reserve pricing re-adds the player here;
+    // a second pass (or reserve pricing off) does not.
+    availablePlayerIds: options.recycled ? [playerId, ...remainingPoolIds] : remainingPoolIds,
+    currentLot: {
+      playerId,
+      nominatorTeamId: "team-a",
+      openingAsk: 12_000,
+      highBid: null,
+      highBidder: null,
+      stillIn: [],
+      bidTurnTeamId: null,
+    },
+    pendingClaim: null,
+    results: [
+      {
+        playerId,
+        disposition: "PASSED",
+        nominatorTeamId: "team-a",
+        winnerTeamId: null,
+        salary: null,
+      },
+    ],
+    saleCount: 0,
+    passCountByPlayerId: { [playerId]: options.recycled ? 1 : 2 },
+    cpuShills: {},
+  };
+
+  await saveAuctionSession({
+    id: createAuctionSessionId("league-page", MLB_AUCTION_SEASON),
+    leagueId: "league-page",
+    seasonNumber: MLB_AUCTION_SEASON,
+    seed: session.config.nominationOrderSeed,
+    session,
+  });
+  return players;
+}
+
 function cpuDecisionSeedForTest(session: AuctionSession, kind: "bid" | "claim", teamId: string): string {
   const lot = session.currentLot;
   return [
@@ -898,5 +973,38 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(panel);
     expect(screen.queryByRole("button", { name: /SCOUT REVEAL/i })).not.toBeInTheDocument();
+  });
+
+  test("WT-A: a first pass recycled under reserve pricing shows UNSOLD, not the permanent GONE copy", async () => {
+    const players = await savePassedLotSessionForPage({ reserveFractionK: 0.65, recycled: true });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("UNSOLD")).toBeInTheDocument();
+    expect(screen.getByText(/Nobody bid at that price\. He'll get one more look later\./)).toBeInTheDocument();
+    expect(screen.queryByText("GONE")).not.toBeInTheDocument();
+    expect(screen.queryByText(/off the board for good/)).not.toBeInTheDocument();
+  });
+
+  test("WT-A: a second pass (recycling exhausted) shows the permanent GONE copy", async () => {
+    const players = await savePassedLotSessionForPage({ reserveFractionK: 0.65, recycled: false });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("GONE")).toBeInTheDocument();
+    expect(screen.getByText(/Nobody bid\. He's off the board for good\./)).toBeInTheDocument();
+    expect(screen.queryByText("UNSOLD")).not.toBeInTheDocument();
+  });
+
+  test("WT-A: reserve pricing off never recycles a passed lot -- GONE copy even on the first pass", async () => {
+    const players = await savePassedLotSessionForPage({ recycled: false });
+    mockLeagueData({ players, pool: makePool(players) });
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    expect(await screen.findByText("GONE")).toBeInTheDocument();
+    expect(screen.queryByText("UNSOLD")).not.toBeInTheDocument();
   });
 });

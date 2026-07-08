@@ -168,8 +168,8 @@ export interface AuctionStageVM {
   log: LogItemVM[];
   complete?: AuctionCompleteVM;
   help?: React.ReactNode;
-  /** preview-only: force a SOLD / GONE stamp over the lot */
-  overlay?: "sold" | "gone" | null;
+  /** preview-only: force a SOLD / UNSOLD / GONE stamp over the lot */
+  overlay?: "sold" | "unsold" | "gone" | null;
 }
 
 export interface AuctionStageProps {
@@ -242,6 +242,14 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                   </div>
                   {vm.overlay === "sold" && (
                     <div className="stamp sold"><div><div className="s">SOLD</div></div></div>
+                  )}
+                  {vm.overlay === "unsold" && (
+                    <div className="stamp unsold">
+                      <div>
+                        <div className="s">UNSOLD</div>
+                        <div className="note">Nobody bid at that price. {vm.lot.objectPronoun === "her" ? "She'll" : "He'll"} get one more look later.</div>
+                      </div>
+                    </div>
                   )}
                   {vm.overlay === "gone" && (
                     <div className="stamp gone">
@@ -619,11 +627,9 @@ function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
               type="button"
               className="cover"
               aria-label="Scout report"
-              onPointerDown={(e) => { e.preventDefault(); setRevealed(true); }}
-              onPointerUp={() => setRevealed(false)}
-              onPointerLeave={() => setRevealed(false)}
+              onClick={() => setRevealed((current) => !current)}
             >
-              <span style={{ fontSize: 18 }}>🔒</span> Scout report
+              <span style={{ fontSize: 18 }}>📋</span> {revealed ? "COVER IT" : "TAP FOR THE SCOUT REPORT"}
             </button>
             <div className="body">
               {revealed && <ScoutBody scout={lot.scout} />}

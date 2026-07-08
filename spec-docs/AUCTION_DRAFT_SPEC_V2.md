@@ -25,7 +25,8 @@ V1. The §2 bidding/CPU/wallet/persistence/hot-seat-UI shells SURVIVE; the **val
 Everything else from V1 that JK confirmed this session stands: auction is the v1 PRIMARY format
 (default; with a setup picker for auction-vs-snake), both tiers auction in an auction league (R1),
 MLB→farm is a user-driven link (not auto-advance), no draft trades in the auction (in-season only),
-scout-privacy = **default covered, long-press REVEALS** your own report.
+scout-privacy = **default covered, tap/click REVEALS** your own report (was long-press; changed to a
+tap/click toggle 2026-07-08 — see §3.6).
 
 ---
 
@@ -76,6 +77,13 @@ scout-privacy = **default covered, long-press REVEALS** your own report.
 - **If NO team bids:** the player is **permanently out of the draft** — he is gone for good, never
   re-surfaced. (This is the engagement-forcing rule: passivity now *costs* you the player.)
 - **No re-nomination, no set-aside-then-return.** Each player is exactly one irreversible decision.
+- **SUPERSEDED for the MLB tier (2026-07-07 reserve-price design, JK-approved):** with reserve pricing
+  on, a no-bid MLB player is **recycled back into the pool for exactly one more pass at the same
+  price** before he is truly gone (`MAX_RESERVE_RENOMINATION_PASSES`, `auctionStateMachine.ts`). Only
+  a SECOND no-bid pass (or reserve pricing off) is permanently out. The UI now shows an **UNSOLD**
+  stamp on the recycled first pass and reserves **GONE** for the truly permanent case (2026-07-08 UX
+  fix — the overlay previously said "gone for good" on the recycled pass too, which was false). The
+  **farm tier is unaffected and remains strict one-chance** (it never enables reserve pricing).
 
 ### 2.3 Roster-fill guarantee
 - The pool carries a **surplus** of players (more than `teams × slots`), so even with some going out
@@ -147,10 +155,13 @@ HIDDEN. The only value signal is the scout's range + 20–80 grade.
   team-hub advice.
 
 ### 3.6 Scout-privacy on the shared device (§6.1, corrected)
-- **Default COVERED.** A GM **long-presses to REVEAL** their own scout report; it **re-covers on
-  release.** Rationale: the iPad passes around the room; if reports were shown by default, a rival sees
-  your high-confidence A-grade on a player their off-specialty scout rates "B–D low confidence" → free
-  scouting that defeats per-team scouts. Covered-by-default protects your scout's edge.
+- **Default COVERED.** A GM **taps/clicks to REVEAL** their own scout report, and **taps/clicks again to
+  re-cover it** (JK ruling 2026-07-08 — was long-press/hold-to-reveal; the hold gesture glitched on the
+  auction floor because the cover control's own CSS hid itself the instant it revealed, which the
+  browser read as an accidental pointer-release and self-cancelled). Rationale: the iPad passes around
+  the room; if reports were shown by default, a rival sees your high-confidence A-grade on a player
+  their off-specialty scout rates "B–D low confidence" → free scouting that defeats per-team scouts.
+  Covered-by-default protects your scout's edge.
 - Scope = **scout reports only** (the price range + grade + confidence). Budgets, your max-bid, roster
   board stay visible. Applies to the farm + the scouting/prep phase. MLB players are public — no cover.
 

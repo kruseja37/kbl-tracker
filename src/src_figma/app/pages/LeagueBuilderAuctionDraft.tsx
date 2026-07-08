@@ -1504,7 +1504,17 @@ export function LeagueBuilderAuctionDraft() {
         CONTESTED means multiple clubs can push the room.
       </>
     ),
-    overlay: session.state === "SOLD" ? "sold" : session.state === "PASSED" ? "gone" : null,
+    // TRUTH-1 (JK ruling 2026-07-08): since the reserve-price feature (2026-07-07), a PASSED lot
+    // with reserve pricing enabled is recycled back into availablePlayerIds for exactly one more
+    // pass (finalizePassedLot, auctionStateMachine.ts) at the same price -- "gone for good" is a
+    // lie on that first pass. availablePlayerIds.includes(...) IS the engine's own recycled/
+    // permanent predicate (see isActivePassedResult), so reading it here can't drift from the
+    // engine's actual behavior.
+    overlay: session.state === "SOLD"
+      ? "sold"
+      : session.state === "PASSED"
+        ? (session.currentLot && session.availablePlayerIds.includes(session.currentLot.playerId) ? "unsold" : "gone")
+        : null,
   } : null;
 
   const handleStagePrimary = () => {
