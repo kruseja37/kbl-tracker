@@ -336,6 +336,23 @@ async function clickDraftSetupButton(name: string | RegExp): Promise<void> {
   });
 }
 
+// BOARDFIX1: mirrors RosterDesigner.test.tsx's own clickSlot/shortlistLines helpers so a
+// page-level test can drive into a slot's shortlist through the real club-editor render path.
+function clickSlot(label: string): void {
+  // The page renders several unrelated "SS"-labeled nodes (position <option>s, other panels) --
+  // the slot grid's own label is always the first match in document order.
+  const slotLabel = screen.getAllByText(label)[0];
+  const button = slotLabel.closest("button");
+  if (!button) throw new Error(`No button found for ${label}`);
+  fireEvent.click(button);
+}
+
+function shortlistLines(): string[] {
+  const rail = screen.getByText("THE ASK'S SHORTLIST").parentElement;
+  if (!rail) throw new Error("No shortlist rail found");
+  return Array.from(rail.querySelectorAll("span.min-w-0.truncate")).map((element) => element.textContent ?? "");
+}
+
 function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesign"]> {
   return { slots: [], lockedAt };
 }
@@ -3022,5 +3039,137 @@ describe("LeagueBuilderDraftSetup", () => {
         }),
       );
     });
+  });
+
+  test("BOARDFIX1 wiring: RANK YOUR BOARD's global list supports native drag-and-drop reorder end to end (draggable rows, drag/drop events commit through onReorderGlobal)", async () => {
+    const starSs = makePlayer(0, {
+      id: "star-ss", firstName: "Star", lastName: "Short", primaryPosition: "SS",
+      power: 99, contact: 99, speed: 99, fielding: 99, arm: 99,
+    });
+    const midSs = makePlayer(1, {
+      id: "mid-ss", firstName: "Mid", lastName: "Short", primaryPosition: "SS",
+      power: 60, contact: 60, speed: 60, fielding: 60, arm: 60,
+    });
+    const weakSs = makePlayer(2, {
+      id: "weak-ss", firstName: "Weak", lastName: "Short", primaryPosition: "SS",
+      power: 20, contact: 20, speed: 20, fielding: 20, arm: 20,
+    });
+
+    mockLeagueData({
+      players: [starSs, midSs, weakSs],
+      pool: makePool({
+        players: [starSs, midSs, weakSs].map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+    await screen.findByText("3 · THE CLUBS");
+    fireEvent.click((await screen.findAllByRole("button", { name: "rank your board ›" }))[0]);
+
+    const globalList = await screen.findByTestId("rank-your-board-global");
+    const dragHandle = within(globalList).getByRole("button", { name: /Drag Weak Short/i });
+    expect(dragHandle).toHaveAttribute("draggable", "true");
+
+    const dropRow = within(globalList).getByText("Star Short").closest("div") as HTMLElement;
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() };
+    fireEvent.dragStart(dragHandle, { dataTransfer });
+    fireEvent.dragOver(dropRow, { dataTransfer });
+    fireEvent.drop(dropRow, { dataTransfer });
+
+    await waitFor(() => {
+      expect(saveTeam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "team-a",
+          boardRankOverrides: { global: ["weak-ss", "star-ss", "mid-ss"] },
+        }),
+      );
+    });
+  });
+
+  test("BOARDFIX1 repro: design-first — the extracted pool must reach the roster-designer shortlist and the rank-your-board zone once EXTRACT POOL has run, even before the pool is separately locked", async () => {
+    const extractedPlayers = makeFinalizedDesignFirstPlayers(); // the drawn pool (55 players)
+    const leftoverUniversePlayer = makePlayer(900, {
+      id: "leftover-universe-ss",
+      firstName: "Leftover",
+      lastName: "Universe",
+      primaryPosition: "SS",
+      // Still part of the checked-league universe (no source-league restriction is set below, so
+      // universePlayers = every player in `players`) but was NOT drawn into this league's pool by
+      // EXTRACT POOL — must never surface on either ranking widget once the pool has been drawn.
+      leagueAssignments: [],
+    });
+    const players = [...extractedPlayers, leftoverUniversePlayer];
+    const extractedAt = "2026-01-05T00:00:00.000Z";
+    const designLockedAt = "2026-01-01T00:00:00.000Z"; // predates extraction -- not stale
+
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: extractedAt,
+        modeAExtractedIds: extractedPlayers.map((player) => player.id),
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+      ],
+      players,
+      // The exact post-extraction review window JK described ("EXTRACT the pool -> open the club
+      // editor's board tab (and the roster designer shortlists)") -- extracted, but the SEPARATE
+      // pool-LOCK step has not happened yet.
+      pool: makePool({
+        locked: false,
+        players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: extractedPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+    await screen.findByText("3 · THE CLUBS");
+
+    // Roster-designer shortlist (team-a): must scope to the extracted pool, not the universe.
+    const designButtons = await screen.findAllByRole("button", { name: /design locked/i });
+    fireEvent.click(designButtons[0]);
+    clickSlot("SS");
+    expect(shortlistLines().some((line) => line.includes("Leftover Universe"))).toBe(false);
+
+    // Rank-your-board zone (team-a): same effective-pool rule, same widget family.
+    const boardButtons = await screen.findAllByRole("button", { name: "rank your board ›" });
+    fireEvent.click(boardButtons[0]);
+    const globalList = await screen.findByTestId("rank-your-board-global");
+    expect(within(globalList).queryByText("Leftover Universe")).not.toBeInTheDocument();
+
+    // At this stage (pool extracted, not yet pool-locked), start-draft is correctly still
+    // disabled -- pool-LOCK is a real, separate required step, not a bug.
+    expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+  });
+
+  test("BOARDFIX1: once the pool is ALSO locked (the one remaining required step), start-draft activates -- no separate stuck-start defect once the real workflow completes", async () => {
+    const extractedPlayers = makeFinalizedDesignFirstPlayers(); // the drawn pool (55 players)
+    const extractedAt = "2026-01-05T00:00:00.000Z";
+    const designLockedAt = "2026-01-01T00:00:00.000Z"; // predates extraction -- not stale
+
+    mockLeagueData({
+      league: makeLeague({
+        draftPoolMode: "design-first",
+        poolExtractedAt: extractedAt,
+        modeAExtractedIds: extractedPlayers.map((player) => player.id),
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+      ],
+      players: extractedPlayers,
+      pool: makePool({
+        locked: true,
+        players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: extractedPlayers.length,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+    }, { timeout: 5000 });
   });
 });

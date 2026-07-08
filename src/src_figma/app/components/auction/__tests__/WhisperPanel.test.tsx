@@ -798,6 +798,55 @@ describe("COCKPIT WAVE 2: THE BOARD (setup + live GM-sortable global/per-positio
     expect(onBoardReorderGlobal).toHaveBeenCalledWith(["ss-hi", "cf-hi", "ss-lo", "cf-lo"]);
   });
 
+  test("BOARDFIX1 wiring: GLOBAL expanded board supports native drag-and-drop end to end, not just arrows", () => {
+    const onBoardReorderGlobal = vi.fn();
+    const { container } = render(
+      <WhisperPanel
+        payload={Object.assign(payload("push", { board: positionBoard() }), { onBoardReorderGlobal })}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "FULL BOARD" }));
+
+    const dragHandle = screen.getByRole("button", { name: "Drag Weak Center" });
+    expect(dragHandle).toHaveAttribute("draggable", "true");
+    const dropRow = screen.getByText("Star Short").closest("div") as HTMLElement;
+    const dataTransfer = { effectAllowed: "", setData: vi.fn() };
+    fireEvent.dragStart(dragHandle, { dataTransfer });
+    fireEvent.dragOver(dropRow, { dataTransfer });
+    fireEvent.drop(dropRow, { dataTransfer });
+
+    expect(onBoardReorderGlobal).toHaveBeenCalledWith(["cf-lo", "ss-hi", "ss-lo", "cf-hi"]);
+    // Sanity check this is the real reorder-list markup, not a fallback static list.
+    expect(container.querySelector(".whisper-board-reorder-list")).toBeInTheDocument();
+  });
+
+  test("BOARDFIX1: GLOBAL expanded board's rank badge supports type-in edit and send-to-top, with exactly one rank number per row", () => {
+    const onBoardReorderGlobal = vi.fn();
+    render(
+      <WhisperPanel
+        payload={Object.assign(payload("push", { board: positionBoard() }), { onBoardReorderGlobal })}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "FULL BOARD" }));
+
+    // Exactly one rank number per row -- the interactive RankReorderList badge, not a duplicate
+    // static ".whisper-rank" number from BoardRowFields (BOARDFIX1 suppresses the latter here).
+    expect(screen.getByRole("button", { name: "Set rank for Weak Center" })).toHaveTextContent("4");
+    expect(document.querySelectorAll(".whisper-rank").length).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Weak Center to top" }));
+    expect(onBoardReorderGlobal).toHaveBeenCalledWith(["cf-lo", "ss-hi", "ss-lo", "cf-hi"]);
+
+    onBoardReorderGlobal.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Star Center" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Star Center" });
+    fireEvent.change(input, { target: { value: "1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onBoardReorderGlobal).toHaveBeenCalledWith(["cf-hi", "ss-hi", "ss-lo", "cf-lo"]);
+  });
+
   test("PER-POSITION reorder calls onBoardReorderPosition with the position and preserves the hidden remainder", () => {
     const onBoardReorderPosition = vi.fn();
     const deepBoard = Array.from({ length: 6 }, (_, index) => ({

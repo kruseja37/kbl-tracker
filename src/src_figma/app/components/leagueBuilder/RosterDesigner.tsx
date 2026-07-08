@@ -389,7 +389,15 @@ export function RosterDesigner({
   // UNIVERSE-FIX1: candidatePlayers (page-supplied, universe-scoped) takes priority over the
   // legacy allPlayers/players fallback chain so the shortlist/target auto-fit only ever draws
   // from the checked source leagues, never the whole app player database.
-  const sourcePlayers = mode === "design-first" && !lockedPool ? (candidatePlayers ?? allPlayers ?? players) : players;
+  // BOARDFIX1 (2026-07-08): but only PRE-extraction (`!poolDrawn`) — once the pool has been
+  // drawn, `players` (the page's effective-pool value, extracted-pool-aware since BOARDFIX1's
+  // page-level fix) is the correct source even though the pool hasn't been separately LOCKED yet
+  // (`lockedPool`). Previously this fell back to `candidatePlayers` (the pre-extraction universe)
+  // for the entire post-extraction/pre-lock window, so the shortlist never reflected the pool the
+  // league had actually just drawn — the live bug JK reported.
+  const sourcePlayers = mode === "design-first" && !lockedPool && !poolDrawn
+    ? (candidatePlayers ?? allPlayers ?? players)
+    : players;
   const designPool = useMemo(() => buildRosterDesignPool(sourcePlayers), [sourcePlayers]);
   const labelPlayers = allPlayers ?? players;
   const fullPlayerById = useMemo(() => new Map(labelPlayers.map((player) => [player.id, player])), [labelPlayers]);
@@ -1118,6 +1126,9 @@ function ShortlistRail({
           rightWrapClassName="shrink-0 flex items-center gap-1"
           dragHandleClassName="shrink-0 border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
           arrowButtonClassName="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+          rankBadgeClassName="shrink-0 w-4 text-center text-[10px] font-bold text-[var(--ballpark-brass)]/75 hover:text-[var(--ballpark-brass)]"
+          rankInputClassName="shrink-0 w-8 border border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] text-center text-[10px] font-bold text-[var(--ballpark-chalk)] outline-none"
+          sendToTopClassName="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
           renderContent={(entry) => {
             const classification = classificationById.get(entry.playerId);
             const satisfaction = classification ? askSatisfaction(preference, classification) : null;

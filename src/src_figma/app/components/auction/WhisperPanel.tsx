@@ -422,6 +422,9 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
                         rightWrapClassName="contents"
                         dragHandleClassName="whisper-board-drag"
                         arrowButtonClassName="whisper-board-arrow"
+                        rankBadgeClassName="whisper-board-rank-badge"
+                        rankInputClassName="whisper-board-rank-input"
+                        sendToTopClassName="whisper-board-send-top"
                         renderContent={(entry, index) => (
                           <BoardRowFields
                             entry={entry}
@@ -429,6 +432,7 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
                             meta={meta.boardMeta?.[entry.playerId]}
                             player={meta.boardPlayers?.[entry.playerId]}
                             revealFull
+                            showRank={false}
                           />
                         )}
                         renderBeforeArrows={(entry) => (
@@ -793,6 +797,7 @@ function BoardRowFields({
   meta,
   player,
   revealFull,
+  showRank = true,
 }: {
   entry: BoardEntry;
   rank: number;
@@ -801,11 +806,15 @@ function BoardRowFields({
   /** COCKPIT W1d rework (audit note (g)): tier-gated by the caller (farm -> false), matching the
    * three AuctionStage popover sites -- belt-and-suspenders over the 'hidden' literal gate. */
   revealFull: boolean;
+  /** BOARDFIX1: RankReorderList now renders its own interactive "#N" rank badge (click-to-edit +
+   * send-to-top), so its callers suppress this static one to avoid a duplicate rank number. The
+   * static BoardRow (top-3 preview, farm's read-only list) keeps showing it. */
+  showRank?: boolean;
 }) {
   const name = <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>;
   return (
     <>
-      <span className="num whisper-rank">{rank}</span>
+      {showRank ? <span className="num whisper-rank">{rank}</span> : null}
       {player ? (
         <PlayerProfilePopover player={player} revealFull={revealFull}>
           {name}
@@ -933,6 +942,9 @@ function MlbBoardPositionView({
             rightWrapClassName="contents"
             dragHandleClassName="whisper-board-drag"
             arrowButtonClassName="whisper-board-arrow"
+            rankBadgeClassName="whisper-board-rank-badge"
+            rankInputClassName="whisper-board-rank-input"
+            sendToTopClassName="whisper-board-send-top"
             renderContent={(entry, index) => (
               <BoardRowFields
                 entry={entry}
@@ -940,6 +952,7 @@ function MlbBoardPositionView({
                 meta={boardMeta?.[entry.playerId]}
                 player={boardPlayers?.[entry.playerId]}
                 revealFull
+                showRank={false}
               />
             )}
             renderBeforeArrows={(entry) => (

@@ -617,6 +617,52 @@ describe("RosterDesigner extracted edit affordances and pins", () => {
     expect(screen.getByText(/Kay Frequin.*LEFT THE POOL/)).toBeInTheDocument();
   });
 
+  test("BOARDFIX1: once the pool is drawn (poolDrawn), the shortlist must scope to the extracted pool (players), not the pre-extraction candidatePlayers universe", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const extractedReliever = makePlayer("pool-rp", {
+      firstName: "Pool",
+      lastName: "Reliever",
+      primaryPosition: "RP",
+      velocity: 60,
+      junk: 60,
+      accuracy: 60,
+      salary: 15_000,
+    });
+    // Present in the pre-extraction candidatePlayers universe but NOT drawn into the extracted
+    // pool (`players`) -- once the pool has been drawn (poolDrawn), this player must disappear
+    // from the shortlist. This is the exact live bug JK hit: "the extracted pool doesn't get
+    // pulled into the team widget where GMs rank players and set up priorities."
+    const universeOnlyCloser = makePlayer("universe-cp", {
+      firstName: "Kay",
+      lastName: "Frequin",
+      primaryPosition: "CP",
+      velocity: 92,
+      junk: 94,
+      accuracy: 91,
+      salary: 12_000,
+    });
+
+    render(
+      <RosterDesigner
+        team={makeTeam("team-universe", "Universe")}
+        mode="design-first"
+        players={[extractedReliever]}
+        allPlayers={[extractedReliever, universeOnlyCloser]}
+        candidatePlayers={[extractedReliever, universeOnlyCloser]}
+        lockedPool={false}
+        poolDrawn
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    clickSlot("CP · CLOSER");
+
+    expect(shortlistLines().some((line) => line.includes("Kay Frequin"))).toBe(false);
+  });
+
   test("P9: readOnly hides pin chips, orphan pins report, and moving a pin keeps one slot claim", async () => {
     render(
       <RosterDesigner
@@ -861,6 +907,57 @@ describe("RosterDesigner rank override reorder", () => {
       "Test ss-cheap",
       "Test ss-mid",
       "Test ss-expensive",
+    ]);
+  });
+
+  test("R4 (BOARDFIX1): rank-badge type-in edit and send-to-top inherit harmlessly into RosterDesigner's shortlist", async () => {
+    const onSave = vi.fn(async () => undefined);
+    render(
+      <RosterDesigner
+        team={makeTeam("team-rank2", "Rank2")}
+        mode="pool-first"
+        players={players}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    clickSlot("SS");
+    expect(shortlistLines().slice(0, 3).map((line) => line.split(" · ")[0])).toEqual([
+      "Test ss-cheap",
+      "Test ss-mid",
+      "Test ss-expensive",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send Test ss-expensive to top" }));
+    expect(shortlistLines().slice(0, 3).map((line) => line.split(" · ")[0])).toEqual([
+      "Test ss-expensive",
+      "Test ss-cheap",
+      "Test ss-mid",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Test ss-mid" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Test ss-mid" });
+    fireEvent.change(input, { target: { value: "1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(shortlistLines().slice(0, 3).map((line) => line.split(" · ")[0])).toEqual([
+      "Test ss-mid",
+      "Test ss-expensive",
+      "Test ss-cheap",
+    ]);
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => undefined);
+
+    expect(onSave.mock.calls[onSave.mock.calls.length - 1][0].rankOverrides?.SS).toEqual([
+      "ss-mid",
+      "ss-expensive",
+      "ss-cheap",
     ]);
   });
 });

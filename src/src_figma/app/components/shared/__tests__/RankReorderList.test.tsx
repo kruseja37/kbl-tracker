@@ -31,6 +31,9 @@ function renderList(overrides: Partial<Parameters<typeof RankReorderList<Item>>[
       rightWrapClassName="right"
       dragHandleClassName="drag-handle"
       arrowButtonClassName="arrow-button"
+      rankBadgeClassName="rank-badge"
+      rankInputClassName="rank-input"
+      sendToTopClassName="send-to-top"
       renderContent={(item) => <span>{item.name}</span>}
       {...overrides}
     />,
@@ -123,5 +126,108 @@ describe("RankReorderList", () => {
     renderList({ "data-testid": "my-rank-list" });
     const list = screen.getByTestId("my-rank-list");
     expect(within(list).getByText("Alpha")).toBeInTheDocument();
+  });
+});
+
+describe("RankReorderList — BOARDFIX1 rank-badge edit + send-to-top", () => {
+  test("renders a numbered rank badge per row, labeled via itemLabel", () => {
+    renderList();
+    expect(screen.getByRole("button", { name: "Set rank for Alpha" })).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: "Set rank for Bravo" })).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: "Set rank for Charlie" })).toHaveTextContent("3");
+  });
+
+  test("clicking the rank badge opens a type-in input pre-filled with the current rank", () => {
+    renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Charlie" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Charlie" });
+    expect(input).toHaveValue(3);
+  });
+
+  test("Enter commits a valid target rank, moving the row and shifting the others", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Charlie" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Charlie" });
+    fireEvent.change(input, { target: { value: "1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onReorder).toHaveBeenCalledWith(["c", "a", "b"]);
+    // The edit closes back to the badge after committing.
+    expect(screen.getByRole("button", { name: "Set rank for Charlie" })).toBeInTheDocument();
+  });
+
+  test("Escape cancels without committing a reorder", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Charlie" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Charlie" });
+    fireEvent.change(input, { target: { value: "1" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Set rank for Charlie" })).toBeInTheDocument();
+  });
+
+  test("blur commits the typed rank (same as Enter)", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Alpha" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Alpha" });
+    fireEvent.change(input, { target: { value: "3" } });
+    fireEvent.blur(input);
+    expect(onReorder).toHaveBeenCalledWith(["b", "c", "a"]);
+  });
+
+  test("out-of-range numeric input clamps to [1, N] instead of canceling", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Alpha" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Alpha" });
+    fireEvent.change(input, { target: { value: "999" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // Clamped to N=3 -- moving Alpha to the bottom, same as rank 3.
+    expect(onReorder).toHaveBeenCalledWith(["b", "c", "a"]);
+
+    onReorder.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Charlie" }));
+    const secondInput = screen.getByRole("spinbutton", { name: "Set rank for Charlie" });
+    fireEvent.change(secondInput, { target: { value: "-5" } });
+    fireEvent.keyDown(secondInput, { key: "Enter" });
+    // Clamped to 1 -- moving Charlie to the top.
+    expect(onReorder).toHaveBeenCalledWith(["c", "a", "b"]);
+  });
+
+  test("non-numeric input cancels instead of committing", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Alpha" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Alpha" });
+    fireEvent.change(input, { target: { value: "abc" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  test("committing to the row's own current rank is a no-op", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Set rank for Bravo" }));
+    const input = screen.getByRole("spinbutton", { name: "Set rank for Bravo" });
+    fireEvent.change(input, { target: { value: "2" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  test("send-to-top moves a row straight to rank 1", () => {
+    const { onReorder } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "Send Charlie to top" }));
+    expect(onReorder).toHaveBeenCalledWith(["c", "a", "b"]);
+  });
+
+  test("send-to-top is disabled for the row already at rank 1", () => {
+    renderList();
+    expect(screen.getByRole("button", { name: "Send Alpha to top" })).toBeDisabled();
+  });
+
+  test("readOnly disables the rank badge (no edit) and hides send-to-top, but still renders the rank number", () => {
+    renderList({ readOnly: true });
+    const badge = screen.getByRole("button", { name: "Set rank for Alpha" });
+    expect(badge).toBeDisabled();
+    expect(badge).toHaveTextContent("1");
+    fireEvent.click(badge);
+    expect(screen.queryByRole("spinbutton", { name: "Set rank for Alpha" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Send Alpha to top/ })).toBeNull();
   });
 });
