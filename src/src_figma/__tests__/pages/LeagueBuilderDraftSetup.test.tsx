@@ -2364,6 +2364,104 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(result.numericShape?.identityCriticalMissingCount).toBe(0);
   });
 
+  // -----------------------------------------------------------------------------------------
+  // UNIVERSE-FIX1 (2026-07-08) — automatic candidate-sourcing paths (archetype auto-fit target
+  // picks, roster-design feasibility, archetype draftability ranking) must respect the checked
+  // source leagues, exactly like the two extraction call sites already do.
+  // -----------------------------------------------------------------------------------------
+
+  test("UNIVERSE-FIX1: design-first identity-critical auto-fit target only draws candidates from the checked source-league universe", async () => {
+    const outsideCloser = makePlayer(999, {
+      id: "outside-cp",
+      firstName: "Kay",
+      lastName: "Frequin",
+      primaryPosition: "CP",
+      salary: 10_000,
+      // Curated OUT: this player belongs only to a league that is not in sourceLeagueIds below.
+      leagueAssignments: [{ leagueId: "other-league", teamId: "", rosterStatus: "FREE_AGENT" }],
+    });
+    const sourcePlayers = [
+      ...makeLegalRosterPlayerSet("alpha", 10_000),
+      ...makeLegalRosterPlayerSet("beta", 10_000),
+      outsideCloser,
+    ];
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b"],
+        draftPoolMode: "design-first",
+        sourceLeagueIds: ["league-page"],
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      ],
+      players: sourcePlayers,
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(vi.mocked(buildBest22Target).mock.calls.length).toBeGreaterThan(0);
+    });
+
+    const simPools = vi.mocked(buildBest22Target).mock.calls.map(
+      (call) => call[1] as Array<{ id: string }>,
+    );
+    // At least one call actually saw a substantive candidate pool (proves the identity-critical
+    // loop ran for real, not a vacuous pass because the effect never fired).
+    expect(simPools.some((pool) => pool.some((player) => player.id.startsWith("alpha-") || player.id.startsWith("beta-")))).toBe(true);
+    // No call's candidate pool includes the curated-out closer — the auto-fit never even had the
+    // chance to recommend a player the checked source leagues didn't offer.
+    for (const pool of simPools) {
+      expect(pool.some((player) => player.id === "outside-cp")).toBe(false);
+    }
+  });
+
+  test("UNIVERSE-FIX1: absent sourceLeagueIds stays unfiltered — identity-critical auto-fit sees the same candidates as pre-fix", async () => {
+    const outsideCloser = makePlayer(999, {
+      id: "outside-cp",
+      firstName: "Kay",
+      lastName: "Frequin",
+      primaryPosition: "CP",
+      salary: 10_000,
+      leagueAssignments: [{ leagueId: "other-league", teamId: "", rosterStatus: "FREE_AGENT" }],
+    });
+    const sourcePlayers = [
+      ...makeLegalRosterPlayerSet("alpha", 10_000),
+      ...makeLegalRosterPlayerSet("beta", 10_000),
+      outsideCloser,
+    ];
+    mockLeagueData({
+      // No sourceLeagueIds field at all — the default, back-compat unfiltered case.
+      league: makeLeague({
+        teamIds: ["team-a", "team-b"],
+        draftPoolMode: "design-first",
+        salaryCap: 1_000_000,
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+        makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+      ],
+      players: sourcePlayers,
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(vi.mocked(buildBest22Target).mock.calls.length).toBeGreaterThan(0);
+    });
+
+    const simPools = vi.mocked(buildBest22Target).mock.calls.map(
+      (call) => call[1] as Array<{ id: string }>,
+    );
+    // Unfiltered default: the "other-league" closer is exactly as visible to the auto-fit as it
+    // was pre-feature — proves the fix didn't silently narrow the default (no-op) case.
+    expect(simPools.some((pool) => pool.some((player) => player.id === "outside-cp"))).toBe(true);
+  });
+
   test("design-first diagnostics name manual exclusions that block identity-critical target picks", async () => {
     const criticalReliever = makePlayer(1000, {
       id: "critical-rp",

@@ -563,6 +563,60 @@ describe("RosterDesigner extracted edit affordances and pins", () => {
     expect(saved.pins).toEqual({ CP: "universe-cp" });
   });
 
+  test("UNIVERSE-FIX1: candidatePlayers scopes the auto-fit shortlist to the draft universe; allPlayers still resolves orphaned pin names", async () => {
+    const onSave = vi.fn(async () => undefined);
+    const currentPoolReliever = makePlayer("pool-rp", {
+      firstName: "Pool",
+      lastName: "Reliever",
+      primaryPosition: "RP",
+      velocity: 60,
+      junk: 60,
+      accuracy: 60,
+      salary: 15_000,
+    });
+    // Stands in for a player belonging only to a league that is NOT checked in the source-league
+    // universe — present in the full app set (allPlayers) but absent from candidatePlayers.
+    const outsideCloser = makePlayer("outside-cp", {
+      firstName: "Kay",
+      lastName: "Frequin",
+      primaryPosition: "CP",
+      velocity: 92,
+      junk: 94,
+      accuracy: 91,
+      salary: 12_000,
+    });
+
+    render(
+      <RosterDesigner
+        team={makeTeam("team-universe", "Universe", {
+          rosterDesign: {
+            slots: seedRosterDesignSlots(),
+            pins: { CP: "outside-cp" },
+          },
+        })}
+        mode="design-first"
+        players={[currentPoolReliever]}
+        allPlayers={[currentPoolReliever, outsideCloser]}
+        candidatePlayers={[currentPoolReliever]}
+        lockedPool={false}
+        budget={500_000}
+        tier="juiced"
+        showHelp={false}
+        onSave={onSave}
+      />,
+    );
+
+    clickSlot("CP · CLOSER");
+
+    // The auto-fit CANDIDATE feed (shortlist) is scoped to candidatePlayers only — the curated-out
+    // closer must never appear as a selectable shortlist candidate.
+    expect(shortlistLines().some((line) => line.includes("Kay Frequin"))).toBe(false);
+    // But the pin's DISPLAY NAME still resolves via the full allPlayers set (a label lookup, not a
+    // candidate feed) — and because the player fell out of the (now-scoped) design pool, the UI
+    // correctly reports it as orphaned rather than silently pretending nothing changed.
+    expect(screen.getByText(/Kay Frequin.*LEFT THE POOL/)).toBeInTheDocument();
+  });
+
   test("P9: readOnly hides pin chips, orphan pins report, and moving a pin keeps one slot claim", async () => {
     render(
       <RosterDesigner
