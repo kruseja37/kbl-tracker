@@ -27,7 +27,7 @@ const INITIAL_CONFIG: FranchiseConfig = {
     extraInningsRule: "Standard",
     scheduleType: "Balanced",
     allStarGame: false,
-    tradeDeadline: true,
+    tradeDeadline: false,
     mercyRule: false,
   },
   playoffs: {
@@ -810,9 +810,7 @@ function Step2SeasonSettings({
   const extraInningsHint =
     config.season.extraInningsRule === "Runner on 2nd"
       ? `ℹ️ Ghost runner takes second starting the ${formatOrdinal(ghostRunnerStartInning)} inning`
-      : config.season.extraInningsRule === "Sudden Death"
-        ? "ℹ️ Sudden Death: not tracked in v1 — plays as Standard"
-        : "ℹ️ Standard: No runner placed, play until there's a winner";
+    : "ℹ️ Standard: No runner placed, play until there's a winner";
 
   const presets = [
     { id: "standard", name: "Standard", games: 32, innings: 7 },
@@ -919,7 +917,7 @@ function Step2SeasonSettings({
         <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>EXTRA INNINGS RULE</p>
         <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4">
           <div className="flex gap-4 mb-2">
-            {["Standard", "Runner on 2nd", "Sudden Death"].map((rule) => (
+            {["Standard", "Runner on 2nd"].map((rule) => (
               <button
                 key={rule}
                 onClick={() =>
@@ -1003,51 +1001,6 @@ function Step2SeasonSettings({
         </div>
       </div>
 
-      {/* Additional Options */}
-      <div>
-        <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>ADDITIONAL OPTIONS</p>
-        <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4 space-y-2">
-          {[
-            { key: "allStarGame", label: "All-Star Game", note: "(deferred in v1)", disabled: true },
-            { key: "tradeDeadline", label: "Trade Deadline", note: "(at 70% of season)", disabled: false },
-            { key: "mercyRule", label: "Mercy Rule", note: "(10 runs after 5 innings)", disabled: false },
-          ].map((option) => (
-            <button
-              key={option.key}
-              disabled={option.disabled}
-              onClick={() => {
-                if (option.disabled) return;
-                setConfig({
-                  ...config,
-                  season: {
-                    ...config.season,
-                    [option.key]: !config.season[option.key as keyof typeof config.season],
-                  },
-                });
-              }}
-              className={`flex items-center gap-3 text-xs text-[#E8E8D8] w-full ${
-                option.disabled ? "opacity-55 cursor-not-allowed" : ""
-              }`}
-              style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
-            >
-              <div
-                className={`w-5 h-5 border-2 flex items-center justify-center ${
-                  config.season[option.key as keyof typeof config.season]
-                    ? "border-[#C4A853] bg-[#C4A853]"
-                    : "border-[#E8E8D8]"
-                }`}
-              >
-                {config.season[option.key as keyof typeof config.season] && (
-                  <Check className="w-3 h-3 text-[#4A6A42]" />
-                )}
-              </div>
-              <span className="flex-1 text-left">
-                {option.label} <span className="text-[#E8E8D8]/50">{option.note}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -1684,10 +1637,6 @@ function Step6Confirm({
             <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
               {config.season.gamesPerTeam} games • {config.season.inningsPerGame} innings •{" "}
               manual schedule policy
-            </p>
-            <p className="text-xs text-[#E8E8D8]/50" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              {config.season.tradeDeadline && "Trade Deadline ✓"}
-              {!config.season.tradeDeadline && "No optional events enabled"}
             </p>
           </div>
 

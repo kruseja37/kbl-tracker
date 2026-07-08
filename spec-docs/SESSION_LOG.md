@@ -6774,3 +6774,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused farm/page/hook/AuctionStage suites pass 17/17 (plus 1 default-skipped opt-in farm distribution oracle); full `NODE_ENV= npx vitest run` produced 9,145 pass / 10 fail / 11 skipped under suite pressure, with all exact failing tests passing in isolated rerun 12/12.
 - Browser gate attempted: Vite dev server started, but Browser/node_repl failed before attach with `sandboxCwd must be an absolute file URI`; fallback Playwright Chromium failed to launch due macOS Mach port `Permission denied (1100)`. No browser/app defect was observed.
 - Next: independent audit of the four-file presentation fold and strict farm privacy surface.
+
+## 2026-07-08 (Codex, attended) — M1M P7 rules prune
+
+- Completed **P7 RULES-V1-PRUNE** on `lane/m1m-rulesprune`: every user-visible rules/season setup knob inventoried and either traced to a live consumer or removed from the UI.
+- Pruned the standalone League Builder rules preset editor into a non-editing handoff page, removed the decorative Rules cards from League Builder and Builder, removed the dev/test season-rules preview controls, and removed unwired Franchise Setup event controls: All-Star Game, Trade Deadline, Mercy Rule, and the unwired Sudden Death extra-innings option.
+- Preserved persisted rules/config fields and old-save launch compatibility; the UI no longer renders or writes the decorative knobs.
+- Left playoff setup controls untouched as ambiguous because playoff consumers exist but v1 playoffs are deferred and pruning them would cross multiple surfaces.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused rules/setup/launch suites pass 75/75; full `NODE_ENV= npx vitest run` had only known `LeagueBuilderDraftSetup.test.tsx` CUT2-2 batch reds, and the solo file rerun passed 60/60.
+- Browser smoke attempted against Vite dev server, but Browser/node_repl failed before attach with `sandboxCwd must be an absolute file URI`; no app/browser defect was observed.
+- Next: independent audit of the P7 prune inventory, especially the ambiguous playoff controls and the missing-knobs follow-up list.

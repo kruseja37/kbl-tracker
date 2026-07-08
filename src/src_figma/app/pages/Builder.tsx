@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  Settings,
   Shuffle,
   Trash2,
   User,
@@ -922,7 +921,6 @@ function LeagueBuilderPanel() {
     { title: "Players", icon: User, to: "/league-builder/players", color: "#3366FF" },
     { title: "Rosters", icon: Folder, to: "/league-builder/rosters", color: "#0066FF" },
     { title: "Draft", icon: Shuffle, to: farmDraftPath, color: "#7733DD" },
-    { title: "Rules", icon: Settings, to: "/league-builder/rules", color: "#DD0000" },
   ];
 
   return (
