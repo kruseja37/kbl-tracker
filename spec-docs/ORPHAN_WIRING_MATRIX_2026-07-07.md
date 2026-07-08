@@ -374,7 +374,7 @@ Ordered per the requested framework. "Blocker" here means: blocks §16 Simulatio
 
 ---
 ## §5 EXECUTION RECONCILIATION ADDENDUM (2026-07-08, full 137-row disposition pass)
-**Counts:** 68 LANDED (incl. all 12 flag-activation rows via M2a) / 2 IN-FLIGHT (M1D, since merged) / 45 QUEUED-RULED / 12 RULED-OUT / 10 were UNOWNED — owners now assigned below. §2 blocker cross-check: 16/17 owned; #15 (home-park rival 2x fan-morale amplifier) = the one open JK fork.
+**Counts:** 68 LANDED (incl. all 12 flag-activation rows via M2a) / 2 IN-FLIGHT (M1D, since merged) / 45 QUEUED-RULED / 12 RULED-OUT / 10 were UNOWNED — owners now assigned below. §2 blocker cross-check: 16/17 owned; #15 RULED (JK 2026-07-08): 2x per spec as wired starting point, tunable at s16 — zero open forks remain.
 **Formerly-unowned items → owners (all now queued):**
 1. Pre-move relationship intel / reporter heads-up (§24.5, built+tested, zero callers) → C4-C in-season lane (transaction-pipeline trigger).
 2. Relationship-flare reporter emission (§24.7) → reporter wave; blocker-5 scope EXTENDED to all 8 dark emission kinds (was 5).
@@ -385,5 +385,5 @@ Ordered per the requested framework. "Blocker" here means: blocks §16 Simulatio
 7. Race visibility-vs-emission valve (never audited) → targeted audit + reporter wave (emission side).
 8. Franchise in-game commentary (hardcoded false; CANON §4 CONTRADICTION — canon claims wired) → beat-reporter lane; canon corrected this date.
 9. SeasonNewsItem→Almanac ingestion (missing wire; Almanac never imports seasonNewsStorage) → Almanac lane.
-10. MatchupDramaBar (dev-preview, hand-authored data) → JK retire-vs-promote ruling (asked 2026-07-08).
+10. MatchupDramaBar → RULED RETIRED for v1 (JK 2026-07-08); moves to the s4 retirement list.
 **Stale verdicts superseded by landings:** all 12 flag-activation rows (M2a landed); Rules Presets leave-alone (superseded by RULES-V1-PRUNE); record-overtake→HISTORY ruled; TV frozen-IV drift resolved (peer-percentile ratified); scout-hire-gates-MLB premise corrected (F10); pre-lens-flip truth-map citations await the queued re-walk. Coverage caveat: 6 NOT-AUDITED rows (non-MOY awards, mojo/fitness, milestones, tiebreakers, schedule pipeline, adaptive-standards) marked LANDED by inference from V1_BUILD_STATUS S9/S10/S12 — spec-anchored verification of these rides the SOT-roundup workflow (running).
