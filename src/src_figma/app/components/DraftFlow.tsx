@@ -2,7 +2,14 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { ChevronDown, ChevronUp, X, Search, Plus, Clock, Trophy, Star, AlertCircle, CheckCircle, Sparkles } from "lucide-react";
 import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useOffseasonState, type DraftPick as StoredDraftPick } from "../../hooks/useOffseasonState";
-import { savePlayer, getTeam, getTeamRoster, saveTeamRoster, type TeamRoster } from "../../../utils/leagueBuilderStorage";
+import {
+  savePlayer,
+  getTeam,
+  getTeamRoster,
+  saveTeamRoster,
+  normalizeStoredPersonality,
+  type TeamRoster,
+} from "../../../utils/leagueBuilderStorage";
 import { getActiveFranchise, loadFranchise } from "../../../utils/franchiseManager";
 import { FIRST_NAMES, LAST_NAMES } from "../../../data/nameDatabase";
 import {
@@ -14,7 +21,8 @@ import {
   runFranchiseDraftDryRun,
   type FranchiseDraftAdapterData,
 } from "../../../utils/franchiseDraftAdapter";
-import { drawProspectAge } from "../../../utils/prospectScoutingDraftEngine";
+import { drawProspectAge, pick as pickSeeded, pickWeightedPersonality } from "../../../utils/prospectScoutingDraftEngine";
+import { CHEMISTRY_CODE_TO_WORD } from "../../../data/chemistryCanonical";
 import type { FranchiseOffseasonAdapterIssue } from "../../../utils/franchiseOffseasonAdapters";
 
 // Empty teams fallback — populated from IndexedDB when available
@@ -28,7 +36,11 @@ const CEILINGS: Record<string, Array<DraftProspect["potentialCeiling"]>> = {
   "C": ["B", "B-", "B-"],
   "C-": ["B-", "B-", "B-"],
 };
-const PERSONALITIES = ["LEADER", "COMPETITIVE", "CALM", "HOTHEAD"];
+// Canonical chemistry words (src/data/chemistryCanonical.ts) for the seeded uniform chemistry
+// draw at draft-commit time below. The old fake ["LEADER","COMPETITIVE","CALM","HOTHEAD"]
+// personality pool here was never part of the canonical 7-personality taxonomy and has been
+// removed — prospects now display and save the same weighted-drawn canonical personality.
+const CANONICAL_CHEMISTRY_WORDS = Object.values(CHEMISTRY_CODE_TO_WORD);
 
 type DraftScreen = 
   | "inactive-selection"
@@ -490,7 +502,7 @@ function PrototypeDraftFlow({ seasonId, seasonNumber = 1, franchiseId, onComplet
         grade,
         age: drawProspectAge(`draft-flow:${seasonId}:ai:${i}`),
         potentialCeiling: ceiling,
-        personality: pick(PERSONALITIES),
+        personality: pickWeightedPersonality(`draft-flow:${seasonId}:ai:${i}:personality`),
       };
 
       if (isPitcher) {
@@ -805,8 +817,12 @@ function PrototypeDraftFlow({ seasonId, seasonNumber = 1, franchiseId, onComplet
             accuracy: prospect.accuracy ?? 0,
             arsenal: isPitcher ? ['4F', 'SL'] : [],
             overallGrade: prospect.grade,
-            personality: 'Competitive',
-            chemistry: 'Competitive',
+            // Real draws (not hardcoded) — personality reuses whatever was already
+            // weighted-drawn and shown for this prospect on the draft board; chemistry is a
+            // seeded uniform pick from the canonical 5 (this dark flow doesn't need the
+            // chemistry quota system used by the real prospect-pool generator).
+            personality: normalizeStoredPersonality(prospect.personality),
+            chemistry: pickSeeded(`draft-flow:${seasonId}:${prospect.id}:chemistry`, CANONICAL_CHEMISTRY_WORDS),
             morale: 75,
             mojo: 'Normal',
             fame: 0,

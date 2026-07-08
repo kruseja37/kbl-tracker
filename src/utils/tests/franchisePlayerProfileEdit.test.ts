@@ -166,7 +166,10 @@ describe('franchise player profile manual edit utility', () => {
     expect(result.errors.join(' ')).toContain('primaryPosition must be one of');
     expect(result.errors.join(' ')).toContain('secondaryPosition must be one of');
     expect(result.errors.join(' ')).toContain('arsenal must be one of');
-    expect(result.errors.join(' ')).toContain('personality must be one of');
+    // personality is no longer reject-on-invalid (WT-B migration care): an unrecognized value
+    // normalizes to the canonical fallback instead of blocking the whole edit.
+    expect(result.errors.join(' ')).not.toContain('personality must be one of');
+    expect(result.sanitizedChanges.personality).toBe('Relaxed');
     expect(result.errors.join(' ')).toContain('chemistry must be one of');
     expect(result.errors.join(' ')).toContain('overallGrade must be one of');
   });

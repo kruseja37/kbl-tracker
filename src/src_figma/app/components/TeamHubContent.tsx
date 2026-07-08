@@ -26,6 +26,7 @@ import {
   FRANCHISE_PROFILE_PITCH_TYPES,
   FRANCHISE_PROFILE_PRIMARY_POSITIONS,
   FRANCHISE_PROFILE_SECONDARY_POSITIONS,
+  normalizeStoredPersonality,
   type FranchisePlayerProfileEditPayload,
 } from "../../../utils/franchisePlayerProfileEdit";
 import { playerHasFranchisePitchingModel } from "../../../utils/franchisePlayerRatingModel";
@@ -922,7 +923,9 @@ function buildProfileEditForm(player: Player): FranchiseProfileEditForm {
     arsenal: (player.arsenal ?? []).join(', '),
     trait1: player.trait1 ?? '',
     trait2: player.trait2 ?? '',
-    personality: player.personality,
+    // Migration care: normalize any legacy chemistry-word personality (e.g. "Scholarly") a
+    // player may still carry from the old 11-item dropdown to a canonical value.
+    personality: normalizeStoredPersonality(player.personality),
     chemistry: player.chemistry,
     overallGrade: player.overallGrade,
   };

@@ -241,7 +241,7 @@ const SMB4_TRAIT_OPTIONS = [
   "Wild Thrower",
   "Workhorse",
 ];
-const PERSONALITIES: Personality[] = ["Tough", "Relaxed", "Egotistical", "Jolly", "Timid", "Droopy"];
+const PERSONALITIES: Personality[] = ["Competitive", "Tough", "Relaxed", "Egotistical", "Jolly", "Timid", "Droopy"];
 const CHEMISTRIES: Chemistry[] = ["Competitive", "Spirited", "Crafty", "Scholarly", "Disciplined"];
 const MOJO_STATES: MojoState[] = ["On Fire", "Hot", "Normal", "Cold", "Ice Cold"];
 const PLAYER_ARCHETYPES: PlayerArchetype[] = [

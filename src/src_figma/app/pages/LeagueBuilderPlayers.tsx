@@ -38,6 +38,7 @@ import {
   getLeaguePlayerOverride,
   setLeaguePlayerOverride,
   removeLeaguePlayerOverride,
+  normalizeStoredPersonality,
   type PlayerAttributes,
   type PlayerArchetype,
 } from "../../../utils/leagueBuilderStorage";
@@ -59,7 +60,7 @@ import {
 const PRIMARY_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'];
 const SECONDARY_POSITIONS: Position[] = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'IF', 'OF', 'IF/OF', '1B/OF', 'P', 'SP', 'RP', 'CP', 'SP/RP'];
 const GRADES: Grade[] = ['S', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-'];
-const PERSONALITIES: Personality[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
+const PERSONALITIES: Personality[] = ['Competitive', 'Tough', 'Relaxed', 'Egotistical', 'Jolly', 'Timid', 'Droopy'];
 const CHEMISTRIES: Chemistry[] = ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined'];
 const PITCH_TYPES: PitchType[] = ['4F', '2F', 'CB', 'SL', 'CH', 'FK', 'CF', 'SB', 'SC', 'KN'];
 const PLAYER_ARCHETYPES: PlayerArchetype[] = [
@@ -364,7 +365,10 @@ export function LeagueBuilderPlayers() {
     overallGrade: player.overallGrade,
     trait1: player.trait1 || "",
     trait2: player.trait2 || "",
-    personality: player.personality,
+    // Migration care: normalize any legacy chemistry-word personality (e.g. "Scholarly") a player
+    // may still carry from the old 11-item dropdown, so the edit form always shows/saves a value
+    // that's actually in the canonical PERSONALITIES list below.
+    personality: normalizeStoredPersonality(player.personality),
     chemistry: player.chemistry,
     teamId: "",
     rosterStatus: 'FREE_AGENT',

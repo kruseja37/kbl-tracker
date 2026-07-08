@@ -387,6 +387,19 @@ const POSITION_PRIMARY_WEIGHTS: Array<[DraftPosition, number]> = [
 ];
 const CHEMISTRY_POOL = ['Competitive', 'Crafty', 'Disciplined', 'Spirited', 'Scholarly'];
 export const PERSONALITY_POOL = ['Competitive', 'Relaxed', 'Droopy', 'Jolly', 'Tough', 'Timid', 'Egotistical'];
+
+// JK ruling 2026-07-08: personality draw is weighted (NOT quota-enforced) with a slight tilt
+// away from Droopy and Timid — riskier personality types for player development/relationships
+// that were coming up a bit too often under the prior uniform draw. Weights sum to 1.00.
+export const PERSONALITY_WEIGHTS: Array<[string, number]> = [
+  ['Egotistical', 0.16],
+  ['Competitive', 0.16],
+  ['Tough', 0.16],
+  ['Relaxed', 0.16],
+  ['Jolly', 0.16],
+  ['Droopy', 0.10],
+  ['Timid', 0.10],
+];
 const PROSPECT_MIN_RATING = 20;
 const PROSPECT_MAX_RATING = 99;
 const PROSPECT_BASE_RATING_CENTER = 60;
@@ -729,7 +742,7 @@ function pickSecondProspectTrait(
     : undefined;
 }
 
-function pickWeighted<T extends string>(seed: string, weights: Array<[T, number]>): T {
+export function pickWeighted<T extends string>(seed: string, weights: Array<[T, number]>): T {
   const total = weights.reduce((sum, [, weight]) => sum + weight, 0);
   let roll = randomUnit(seed) * total;
   for (const [value, weight] of weights) {
@@ -737,6 +750,12 @@ function pickWeighted<T extends string>(seed: string, weights: Array<[T, number]
     if (roll <= 0) return value;
   }
   return weights[weights.length - 1][0];
+}
+
+// Seeded weighted personality draw (see PERSONALITY_WEIGHTS above). Deterministic per seed via
+// the same randomUnit hash used by every other draw in this engine.
+export function pickWeightedPersonality(seed: string): string {
+  return pickWeighted(`${seed}:weighted-personality`, PERSONALITY_WEIGHTS);
 }
 
 function pickWeightedValue<T>(seed: string, weights: Array<[T, number]>): T {
@@ -1522,7 +1541,7 @@ function buildCandidate(
     arsenal: solvedArsenal,
     trait1,
     trait2,
-    personality: pick(`${seed}:personality`, PERSONALITY_POOL),
+    personality: pickWeightedPersonality(`${seed}:personality`),
     chemistry: pick(`${seed}:chemistry`, CHEMISTRY_POOL),
     hiddenPersonalityModifiers: generateHiddenPersonalityModifiers(seed),
   };

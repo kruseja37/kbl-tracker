@@ -20,6 +20,7 @@ import {
   type CheckpointCadence,
 } from '../data/rosterEngineConstants';
 import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../data/chemistryCanonical';
+import { normalizePersonality, type CanonicalPersonality } from '../engines/masterMoraleMatrix';
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { DesignSlot } from '../engines/rosterDesignFeasibility';
@@ -71,9 +72,35 @@ export type Grade = 'S' | 'A+' | 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | '
 
 export type PitchType = '4F' | '2F' | 'CB' | 'SL' | 'CH' | 'FK' | 'CF' | 'SB' | 'SC' | 'KN';
 
-export type Personality = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' |
-  'Disciplined' | 'Tough' | 'Relaxed' | 'Egotistical' |
+// Canonical 7 personalities (salaryCalculator.ts + masterMoraleMatrix.ts CANONICAL_PERSONALITIES).
+// NOTE: this used to also include the 4 chemistry words (Crafty/Disciplined/Scholarly/Spirited) —
+// those leaked in from the Chemistry list by mistake. See normalizeStoredPersonality() below for
+// safely reconciling any already-persisted players who picked one of those bad values.
+export type Personality = 'Competitive' | 'Tough' | 'Relaxed' | 'Egotistical' |
   'Jolly' | 'Timid' | 'Droopy';
+
+const CANONICAL_PERSONALITY_TO_TITLE_CASE: Record<CanonicalPersonality, Personality> = {
+  COMPETITIVE: 'Competitive',
+  TOUGH: 'Tough',
+  RELAXED: 'Relaxed',
+  EGOTISTICAL: 'Egotistical',
+  JOLLY: 'Jolly',
+  TIMID: 'Timid',
+  DROOPY: 'Droopy',
+};
+
+/**
+ * Reconciles a possibly-stale/legacy personality value (e.g. a chemistry word like "Scholarly"
+ * picked from an old bad dropdown) into one of the canonical 7. Reuses masterMoraleMatrix's
+ * LEGACY_PERSONALITY_RECONCILIATION table so there is one source of truth for the mapping;
+ * anything unmapped falls back to "Relaxed", matching that engine's own fallback.
+ */
+export function normalizeStoredPersonality(value: unknown): Personality {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return 'Relaxed';
+  }
+  return CANONICAL_PERSONALITY_TO_TITLE_CASE[normalizePersonality(value)];
+}
 
 export type Chemistry = 'Competitive' | 'Spirited' | 'Crafty' | 'Scholarly' | 'Disciplined';
 
