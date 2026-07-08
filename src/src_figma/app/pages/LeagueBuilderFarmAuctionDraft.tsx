@@ -809,8 +809,8 @@ export function LeagueBuilderFarmAuctionDraft() {
           ? `${teamDisplayName(teamById.get(session.pendingClaim.teamId))} — ${nowAction}`
           : nowAction,
       teamName: stageFocusTeamName,
-      teamPrimary: stageFocusTeam?.colors.primary ?? "#C4A853",
-      teamSecondary: stageFocusTeam?.colors.secondary ?? "#E8E8D8",
+      teamPrimary: stageFocusTeam?.colors.primary ?? "var(--ballpark-brass)",
+      teamSecondary: stageFocusTeam?.colors.secondary ?? "var(--ballpark-chalk)",
     },
     lot: {
       // WT-D: lets the on-the-block name open the profile popover -- the prospect's

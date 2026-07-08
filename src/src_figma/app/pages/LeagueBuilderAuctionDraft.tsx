@@ -1649,8 +1649,8 @@ export function LeagueBuilderAuctionDraft() {
         : session.state === "RESOLVE" && session.pendingClaim
           ? teamNameById(session.pendingClaim.teamId)
           : nowTeam ? teamDisplayName(nowTeam) : undefined,
-      teamPrimary: nowTeam?.colors.primary ?? (stageFocusTeam?.colors.primary ?? "#C4A853"),
-      teamSecondary: nowTeam?.colors.secondary ?? (stageFocusTeam?.colors.secondary ?? "#E8E8D8"),
+      teamPrimary: nowTeam?.colors.primary ?? (stageFocusTeam?.colors.primary ?? "var(--ballpark-brass)"),
+      teamSecondary: nowTeam?.colors.secondary ?? (stageFocusTeam?.colors.secondary ?? "var(--ballpark-chalk)"),
     },
     lot: {
       player: stageLotPlayer,
