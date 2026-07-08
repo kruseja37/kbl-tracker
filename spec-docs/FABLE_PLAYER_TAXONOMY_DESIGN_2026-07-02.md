@@ -138,6 +138,20 @@ mapping as the likely pollution source. Containment note: the lock-time axis reg
 ticket #4) already re-stamps every DRAFT-league player's personality from the canonical 7 —
 pollution survives only on non-draft paths and via the editor.
 
+**SHIPPED (2026-07-08, WT-B, merge `a4de48c7`, lane `bcc47014`) — approach note:** the
+cleanup landed via a different mechanism than sketched above. Rather than a deterministic
+re-pick keyed on player id, `leagueBuilderStorage.normalizeStoredPersonality()` reconciles a
+polluted legacy value by REUSING `masterMoraleMatrix`'s existing `LEGACY_PERSONALITY_RECONCILIATION`
+table (verified entries incl. Crafty→Tough, Disciplined→Tough, Spirited→Jolly; Scholarly has no
+explicit row in that table and falls through to the same engine's RELAXED default, same as any
+other unmapped legacy value) — one source of truth instead of a second mapping. `Personality` is
+narrowed 11→7; the edit
+forms (`LeagueBuilderPlayers`, `franchisePlayerProfileEdit`, `TeamHubContent`) normalize on
+load; `Builder.tsx`'s missing "Competitive" was restored; the dark offseason `DraftFlow.tsx`
+no longer hardcodes personality/chemistry. The weighted-draw tilt away from Droopy/Timid (JK
+ruling, 2026-07-08 morning) rides the same lane. Governing contract:
+`spec-docs/contracts/CONTRACT_WTB_PERSONALITY_2026-07-08.md`. Audit: APPROVE-WITH-NOTES.
+
 ### 2.2b The per-slot preference input (the C4-B dropdown contract)
 
 What a GM sets per roster slot in ROBUST mode:
