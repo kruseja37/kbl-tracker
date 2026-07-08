@@ -50,7 +50,7 @@
 
 ## §3 THE MODE-1 GAUNTLET (the validation harness — runs after F1-F4 + P1/P2 land; re-runs after every subsequent P-item)
 Scripted end-to-end browser journeys (league build → import → draft setup → lock → scout hire → MLB auction → farm auction → staffing → freeze → rules → launch → lens lands), across the grid:
-- {pool-first, design-first} × {6-team SML-scale, 30-team MLB-scale} × {shills 0, shills default} × {reserve k=0, k=0.65}
+- {pool-first, design-first} × {6-team SML-scale, 8-team v1-scale} × {shills 0, shills 1-2} × {reserve k=0, k=0.65} — **grid re-based per JK ruling 2026-07-08: v1 draft scale = 8 teams (+1-2 shills); 30-team configs are post-v1**
 - Invariants per run: zero 404s · zero console errors · pool locks with zero hand-adds · **nomination order differs between two consecutive drafts of the same pool (F1 regression)** · farm bands render + derive from archetype (F2/F3) · prospect histogram within curve tolerance (F4) · every roster completes legally (no auto-fill stranding; budgets alive per reset-doc targets) · session mid-draft crash/resume preserves state · staffing identities reach the hub (P5) · freeze summary shown (P6) · launch lands on the lens with a playable schedule flow.
 - Plus one RUN-IT-BACK iterate-loop leg (edit-wall, re-draft same league).
 - Output: MODE1_GAUNTLET_REPORT (pass/fail per invariant per config), committed per run.

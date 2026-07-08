@@ -134,6 +134,8 @@ One clamp widening rides along: `liquidityAwareBidding.ts:81` `clamp(needMultipl
 
 ## 5. Acceptance metrics — the sim gate (M1E, Lever-A-style)
 
+**GATE BASIS RE-RULED (JK, 2026-07-08 late): v1 draft scale = 8 teams (+1-2 shills). The binding rows run at {6-team, 8-team} rooms with PRODUCTION-SIZED pools (the demand-shaped pool the real Draft Setup builds for that room — NOT the raw 660-player universe); 30-team rows are post-v1 diagnostics only. The 23-CP universe shortfall is moot at 8 teams.**
+
 **Two harness lanes are REQUIRED** (honesty note: the `auctionSim` bidding policies never call `cpuShillBidding.ts` — biddingPolicies.ts:12-35 routes to `rawWillingnessToPay`/`marginalValueBidder` only — so a sim-only gate would not exercise the live path JK sees):
 1. **auctionSim lane:** `simulateAuction` (runAuctionSim.ts:256) over the F8-confirmation shapes — **{6-team, 12-team} × {k=0 + autoFill zero, k=0.65 + autoFill reserve} × 5 fixed seeds × {rationalBaseline, marginalValueV2Liquidity}**, real shipped player DB via the production pool path (currently 660 players across 30 teams; the "440-player" figure in earlier F8 evidence described that run, not a requirement — AMENDED per M1E BLOCKED ruling, Fable 2026-07-08) — 40 runs, ≥ the 36-roster evidence base that confirmed F8.
 2. **Live-engine lane:** the state-machine driver pattern from `leverAReserveMeasurement.ts` (its `LeverAProductionTerminationCheck` machinery, lines 68-79) driving REAL `cpuBidOnLot`/`cpuDecideLoneSurvivor` with `needAwareCompletion: true`, same shapes/seeds.
