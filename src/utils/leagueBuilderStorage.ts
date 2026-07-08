@@ -150,10 +150,26 @@ export interface LeagueTemplate {
     poolSizeMultiplier: number;
     shills?: number;
     identityByTeamId: Record<string, string | null>;
+    /** Sorted sourceLeagueIds at extraction time (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8) — feeds
+     * poolBasisStaleLines so a source-league change is flagged the same way a cap/dial/shill/
+     * identity change already is. Absent = extracted from the unfiltered universe (a pre-feature
+     * record or an untouched post-feature default — the two are equivalent, so legacy records
+     * never retro-nag). */
+    sourceLeagueIds?: string[];
   };
   modeAExtractedIds?: string[];
   modeAHandAdds?: string[];
   modeAHandRemoves?: string[];
+  /** Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08): which leagues' player
+   * pools feed this league's draft extraction. Absent field = UNFILTERED — all leagues checked, the
+   * universe filter skipped entirely, byte-identical to pre-feature behavior (see
+   * resolveSourceLeagueIds in leagueBuilderPoolBuilder.ts; captain correction 2026-07-08
+   * post-audit — an earlier own-league-only default was a contract framing error, not a JK
+   * ruling). The field becomes an explicit array on the first user toggle and is filtered from
+   * then on. An explicit empty array is a real, distinct state (the user unchecked every league,
+   * including their own — resolves to unclaimed free agents only) and must NOT be treated as
+   * "absent" / defaulted back. */
+  sourceLeagueIds?: string[];
   tier?: TierKey;
   salaryCap?: number;
   poolSizeMultiplier?: number;
