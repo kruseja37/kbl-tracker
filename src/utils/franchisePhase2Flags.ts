@@ -1,9 +1,22 @@
+import {
+  resolveFranchisePhase2FlagActivation,
+  type FranchisePhase2FlagKey,
+} from './franchisePhase2Activation';
+
 export const FRANCHISE_PHASE2_MORALE_ENABLED_DEFAULT = false;
 
 let franchisePhase2MoraleEnabledOverride: boolean | null = null;
 
+function resolvePhase2Flag(
+  flagKey: FranchisePhase2FlagKey,
+  testOverride: boolean | null,
+  compiledDefault: boolean,
+): boolean {
+  return testOverride ?? resolveFranchisePhase2FlagActivation(flagKey, compiledDefault);
+}
+
 export function isFranchisePhase2MoraleEnabled(): boolean {
-  return franchisePhase2MoraleEnabledOverride ?? FRANCHISE_PHASE2_MORALE_ENABLED_DEFAULT;
+  return resolvePhase2Flag('morale', franchisePhase2MoraleEnabledOverride, FRANCHISE_PHASE2_MORALE_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2MoraleEnabledForTests(enabled: boolean | null): void {
@@ -15,7 +28,7 @@ export const FRANCHISE_PHASE2_FAME_ENABLED_DEFAULT = false;
 let franchisePhase2FameEnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2FameEnabled(): boolean {
-  return franchisePhase2FameEnabledOverride ?? FRANCHISE_PHASE2_FAME_ENABLED_DEFAULT;
+  return resolvePhase2Flag('fame', franchisePhase2FameEnabledOverride, FRANCHISE_PHASE2_FAME_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2FameEnabledForTests(enabled: boolean | null): void {
@@ -27,7 +40,7 @@ export const FRANCHISE_PHASE2_FLASHPOINT_ENABLED_DEFAULT = false;
 let franchisePhase2FlashpointEnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2FlashpointEnabled(): boolean {
-  return franchisePhase2FlashpointEnabledOverride ?? FRANCHISE_PHASE2_FLASHPOINT_ENABLED_DEFAULT;
+  return resolvePhase2Flag('flashpoint', franchisePhase2FlashpointEnabledOverride, FRANCHISE_PHASE2_FLASHPOINT_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2FlashpointEnabledForTests(enabled: boolean | null): void {
@@ -39,7 +52,7 @@ export const FRANCHISE_PHASE2_CHECKPOINT_ENABLED_DEFAULT = false;
 let franchisePhase2CheckpointEnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2CheckpointEnabled(): boolean {
-  return franchisePhase2CheckpointEnabledOverride ?? FRANCHISE_PHASE2_CHECKPOINT_ENABLED_DEFAULT;
+  return resolvePhase2Flag('checkpoint', franchisePhase2CheckpointEnabledOverride, FRANCHISE_PHASE2_CHECKPOINT_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2CheckpointEnabledForTests(enabled: boolean | null): void {
@@ -51,7 +64,7 @@ export const FRANCHISE_PHASE2_TRAITS_ENABLED_DEFAULT = false;
 let franchisePhase2TraitsEnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2TraitsEnabled(): boolean {
-  return franchisePhase2TraitsEnabledOverride ?? FRANCHISE_PHASE2_TRAITS_ENABLED_DEFAULT;
+  return resolvePhase2Flag('traits', franchisePhase2TraitsEnabledOverride, FRANCHISE_PHASE2_TRAITS_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2TraitsEnabledForTests(enabled: boolean | null): void {
@@ -63,7 +76,7 @@ export const FRANCHISE_PHASE2_L10_ENABLED_DEFAULT = false;
 let franchisePhase2L10EnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2L10Enabled(): boolean {
-  return franchisePhase2L10EnabledOverride ?? FRANCHISE_PHASE2_L10_ENABLED_DEFAULT;
+  return resolvePhase2Flag('l10', franchisePhase2L10EnabledOverride, FRANCHISE_PHASE2_L10_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2L10EnabledForTests(enabled: boolean | null): void {
@@ -75,7 +88,7 @@ export const FRANCHISE_PHASE2_L11_ENABLED_DEFAULT = false;
 let franchisePhase2L11EnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2L11Enabled(): boolean {
-  return franchisePhase2L11EnabledOverride ?? FRANCHISE_PHASE2_L11_ENABLED_DEFAULT;
+  return resolvePhase2Flag('l11', franchisePhase2L11EnabledOverride, FRANCHISE_PHASE2_L11_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2L11EnabledForTests(enabled: boolean | null): void {
@@ -87,7 +100,7 @@ export const FRANCHISE_PHASE2_L12_ENABLED_DEFAULT = false;
 let franchisePhase2L12EnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2L12Enabled(): boolean {
-  return franchisePhase2L12EnabledOverride ?? FRANCHISE_PHASE2_L12_ENABLED_DEFAULT;
+  return resolvePhase2Flag('l12', franchisePhase2L12EnabledOverride, FRANCHISE_PHASE2_L12_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2L12EnabledForTests(enabled: boolean | null): void {
@@ -99,7 +112,7 @@ export const FRANCHISE_PHASE2_L13_ENABLED_DEFAULT = false;
 let franchisePhase2L13EnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2L13Enabled(): boolean {
-  return franchisePhase2L13EnabledOverride ?? FRANCHISE_PHASE2_L13_ENABLED_DEFAULT;
+  return resolvePhase2Flag('l13', franchisePhase2L13EnabledOverride, FRANCHISE_PHASE2_L13_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2L13EnabledForTests(enabled: boolean | null): void {
@@ -111,7 +124,7 @@ export const FRANCHISE_PHASE2_L14_ENABLED_DEFAULT = false;
 let franchisePhase2L14EnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2L14Enabled(): boolean {
-  return franchisePhase2L14EnabledOverride ?? FRANCHISE_PHASE2_L14_ENABLED_DEFAULT;
+  return resolvePhase2Flag('l14', franchisePhase2L14EnabledOverride, FRANCHISE_PHASE2_L14_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2L14EnabledForTests(enabled: boolean | null): void {
@@ -123,7 +136,7 @@ export const FRANCHISE_PHASE2_STADIUM_RECORDS_ENABLED_DEFAULT = false;
 let franchisePhase2StadiumRecordsEnabledOverride: boolean | null = null;
 
 export function isFranchisePhase2StadiumRecordsEnabled(): boolean {
-  return franchisePhase2StadiumRecordsEnabledOverride ?? FRANCHISE_PHASE2_STADIUM_RECORDS_ENABLED_DEFAULT;
+  return resolvePhase2Flag('stadiumRecords', franchisePhase2StadiumRecordsEnabledOverride, FRANCHISE_PHASE2_STADIUM_RECORDS_ENABLED_DEFAULT);
 }
 
 export function setFranchisePhase2StadiumRecordsEnabledForTests(enabled: boolean | null): void {

@@ -12,6 +12,7 @@ import { FranchisePregameLaunchOverlay } from "../components/FranchisePregameLau
 import { FranchiseLensHub } from "../components/franchise/FranchiseLensHub";
 import { useFranchiseLensData } from "../../hooks/useFranchiseLensData";
 import { useScheduleData, type ScheduledGame } from "../../hooks/useScheduleData";
+import { hydrateFranchisePhase2ActivationCache } from "../../../utils/franchisePhase2Activation";
 import { repairFranchisePersistence } from "../../../utils/franchiseInitializer";
 import {
   buildFranchiseGameTrackerNavigation,
@@ -64,6 +65,10 @@ export function FranchiseLens() {
     useFranchiseLensData(franchiseId, seasonNumber, viewedTeamId);
   const leagueId = franchiseConfig?.league ?? hub.lineups?.leagueId ?? "sml";
   const useDH = resolveFranchiseGameUseDH(franchiseConfig);
+
+  useEffect(() => {
+    void hydrateFranchisePhase2ActivationCache();
+  }, [franchiseId]);
 
   useEffect(() => {
     if (!toastMessage) return;
