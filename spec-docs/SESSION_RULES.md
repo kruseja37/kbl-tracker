@@ -588,3 +588,5 @@ real `main`. These four lessons are the process fix, effective immediately:
   GAMETRACKER_SCOPE_LOCK_WORKING) and repoint if needed. JK does the deletion.
   (`spec-simplifier` also dupes across both sources but is byte-identical —
   harmless, optional dedup.)
+
+- When a lane changes any seeded draw, grep ALL test directories for golden fixtures/pinned hashes derived from that engine's outputs (src/**/tests AND src/**/__tests__), not just the engine's own suite — a stale second pin in src/utils/tests/ survived WT-B's focused gates and only the full merged-tree suite caught it (2026-07-08).
