@@ -251,11 +251,12 @@ holes I'd target in the farm" (`§3.5`). One button: **Enter the Farm Draft.** T
 Identical structure, three differences that ARE the farm draft (`§3.4`, `§3.6`):
 - **Value is fogged.** No IV, no ratings. The lot shows name, position, personality, chemistry — and a
   **covered scout report.**
-- **The scout report is the value signal, and it's private.** Covered by default; **press-and-hold to
-  reveal** (re-covers on release) so a rival across the table can't free-ride off your A-grade. Inside:
-  a **price-range bar** whose *width = the scout's uncertainty* (tight = confident), and a **20-80 grade**
-  rendered as a war-room gauge (a marked scale, not a letter). The hold gesture gets a clear covered
-  state ("🔒 Hold to see your scout's read") and a smooth reveal.
+- **The scout report is the value signal, and it's private.** Covered by default; **tap/click to
+  reveal** (tap/click again to re-cover — JK ruling 2026-07-08, was press-and-hold; the hold gesture
+  glitched on the floor, see `AUCTION_DRAFT_SPEC_V2.md` §3.6) so a rival across the table can't
+  free-ride off your A-grade. Inside: a **price-range bar** whose *width = the scout's uncertainty*
+  (tight = confident), and a **20-80 grade** rendered as a war-room gauge (a marked scale, not a
+  letter). The toggle gets a clear covered state ("📋 Tap for the scout report") and a smooth reveal.
 - **Farm wallet** (post-carryover) is the money line.
 
 ### 5.5 Draft Summary / Freeze recap (new) — "the team you built"
@@ -285,9 +286,10 @@ The four-number bridge (`§10`) made visible so the fingerprint survives into Mo
   Presets above the ceiling are dimmed *with the reason*, not silently disabled.
 - **Luxury tax, gently.** A slim posture meter on the budget: on-identity spend is cheap (green), heavy
   off-identity spend bites (ambers toward red) — leeway, never a wall (`§4.2`).
-- **Long-press scout reveal (farm).** Covered card → press-and-hold reveals range + grade → release
-  re-covers. The privacy rationale is shown once ("your scout's read stays yours — the iPad goes around
-  the table").
+- **Tap/click scout reveal (farm).** Covered card → tap/click reveals range + grade → tap/click again
+  re-covers (JK ruling 2026-07-08 — was press-and-hold; the hold gesture glitched on the auction floor).
+  The privacy rationale is shown once ("your scout's read stays yours — the iPad goes around the
+  table").
 - **Hot-seat handoff.** The status bar is the single truth of who holds the device; human turns prompt
   "Pass to [team]"; CPU turns resolve in place with a brief, calm beat — never a handoff (`§2.4`, `§3.2`).
 
@@ -309,7 +311,7 @@ existing hook/engine seam. (Hooks: `useAuctionDraft`, `useFarmAuctionDraft`.)
 | "Most you can bid" | solvency ceiling | `auctionMaxBid` from luxury-tax calc |
 | YOUR ROSTER need board | gaps from Roster Analyzer | `DraftRosterBoard` (reuse) |
 | Carryover moment | unspent MLB × rate → farm | `computeMlbToFarmCarryover`, `initFarmAuction` |
-| Farm fog + long-press reveal | hidden value, private scout read | `LongPressReveal` (reuse), scout descriptors |
+| Farm fog + tap/click reveal | hidden value, private scout read | inline reveal toggle in `AuctionStage` (`Lot`), scout descriptors (2026-07-08: not the shared `LongPressReveal` component — that is `LeagueBuilderDraft.tsx`'s separate prospect-draft screen, a different JK ruling) |
 | CPU turns resolve in place | CPU auto-advance | `autoAdvanceCpu`, `isCpuTeam` |
 | Persistence on every action | session save | `saveAuctionSession*` (unchanged) |
 

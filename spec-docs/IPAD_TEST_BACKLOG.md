@@ -29,8 +29,9 @@ A data bug is far cheaper to catch now than after the sims pile seasons of data 
 - [ ] **Full auction, MLB then farm** — nomination, open bidding, the "Now: [team] —
       [action]" banner, passing the iPad around (CPU turns don't hand off), one-chance
       "no bid = gone," SOLD/PASSED notices, "Proceed to Farm Auction." *(BV-3)*
-- [ ] **Scout info covered by default, long-press to reveal** the price range + grade;
-      it re-covers when you let go. *(BV-11)*
+- [ ] **Scout info covered by default, tap/click to reveal** the price range + grade;
+      tap/click again to re-cover it (changed 2026-07-08 from long-press — the hold gesture
+      glitched on the auction floor). *(BV-11)*
 - [ ] **Roster board + draft guidance** — the position-slot board, the gap/priority
       highlights, the over-budget warning, the per-phase coach line. *(BV-9, BV-12)*
 - [ ] **Draft-format picker** (Auction vs Snake) at league setup saves and sticks. *(BV-13a)*

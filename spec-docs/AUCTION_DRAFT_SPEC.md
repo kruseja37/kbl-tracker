@@ -510,8 +510,9 @@ Because the draft room passes **one iPad** around, each GM's **private scouting 
 grade-range + scout-confidence — which differs per team, since each hires its own scout per Q8) must
 not be visible to rivals, or a GM could read a better report and free-ride.
 
-- **Default COVERED.** A GM reveals their own report only via a **long-press (press-and-hold)**
-  gesture; it **re-covers on release**.
+- **Default COVERED.** A GM reveals their own report via a **tap/click** toggle, and taps/clicks again
+  to re-cover it (JK ruling 2026-07-08 — was long-press/press-and-hold; the hold gesture glitched on
+  the auction floor, see `AUCTION_DRAFT_SPEC_V2.md` §3.6 for the root cause).
 - **Scope = scout reports ONLY.** Budgets, target lists, and the solvency-capped max-bid stay
   visible (rivals seeing your budget is part of the game). (JK 2026-06-20)
 - **Applies to** the farm auction (§3) + the scouting/draft-prep phase. MLB-auction player grades are

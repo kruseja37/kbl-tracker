@@ -284,7 +284,8 @@ rows, and ALWAYS a guard on dirty-state navigation (Rosters has none today). Col
   checklist filled — no "it looks right" claims.
 - **V4. Preview-route gate:** production build serves 404 (or NotFound) for `/__preview/*`.
 - **V5. Farm-auction fold (R-IA4):** a full MLB→farm auction run with zero register change
-  mid-journey; farm fog (press-and-hold reveal) works on the stage.
+  mid-journey; farm fog (tap/click reveal — changed 2026-07-08 from press-and-hold) works on
+  the stage.
 
 ---
 
