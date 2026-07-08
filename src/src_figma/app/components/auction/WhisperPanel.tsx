@@ -341,7 +341,10 @@ function WhisperHeadline({
     );
   }
 
-  const relation = roomRelation(worth.capValue, market);
+  // F9 RULING: room-relation is driven by the SAME liquidity-adjusted ceiling as the verdict and
+  // budget light (worth.suggestedMaxBid), never the unreserved worth.capValue — otherwise this
+  // line can say "inside expectations" while the verdict above says pass.
+  const relation = roomRelation(worth.suggestedMaxBid, market);
   const verdictText = verdictLine(worth, objectPronoun);
   const liveBidText = liveBidLine(worth, currentHighBid, objectPronoun);
   return (
@@ -352,7 +355,10 @@ function WhisperHeadline({
       <div className="whisper-number-row">
         <div>
           <div className="eyebrow">YOUR NUMBER</div>
-          <div className={`whisper-number num ${worth.verdict === "cap" ? "gold" : ""}`}>
+          <div
+            className={`whisper-number num ${worth.verdict === "cap" ? "gold" : ""}`}
+            data-testid="whisper-your-number"
+          >
             {worth.recommendedNumber === 0 ? "PASS" : money(worth.recommendedNumber)}
           </div>
         </div>
@@ -371,6 +377,13 @@ function WhisperHeadline({
         <span className="spacer" />
         <span className="whisper-liquidity-small">Fill Reserve {money(worth.minimumFutureFillReserve)}</span>
         <span className="whisper-liquidity-small">Room {money(worth.discretionaryBudget)}</span>
+        {/* F9 RULING: capValue (the unreserved ceiling) may render ONLY under this distinct,
+            honestly-labeled line -- it must never drive the verdict/room-relation/budget light. */}
+        {worth.capValue !== null && (
+          <span className="whisper-liquidity-small" data-testid="whisper-total-capacity">
+            Total Capacity {money(worth.capValue)}
+          </span>
+        )}
       </div>
       <div className="whisper-reason-row">
         {liquidityReasonLabels(worth).map((label) => (
@@ -516,12 +529,12 @@ function liveBidLine(
 }
 
 function roomRelation(
-  capValue: number | null,
+  maxBid: number,
   market: RosterIntelligencePayload["market"],
 ): string | null {
-  if (capValue === null || !market) return null;
-  if (capValue < market.band.low) return "The room wants more than you should give.";
-  if (capValue > market.band.high) return "You'd be paying past the room -- make sure you mean it.";
+  if (!market) return null;
+  if (maxBid < market.band.low) return "The room wants more than you should give.";
+  if (maxBid > market.band.high) return "You'd be paying past the room -- make sure you mean it.";
   return "That sits inside what the room expects.";
 }
 

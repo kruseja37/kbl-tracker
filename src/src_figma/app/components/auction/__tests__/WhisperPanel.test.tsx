@@ -332,9 +332,57 @@ describe("WhisperPanel", () => {
     })} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
-    expect(screen.getByText("$96,000")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-your-number")).toHaveTextContent("$96,000");
     expect(screen.getByText("Go get him -- worth about $96,000 to you.")).toBeInTheDocument();
-    expect(screen.queryByText("$809,714")).not.toBeInTheDocument();
+    // F9 ruling: capValue may render ONLY under the separately-labeled Total Capacity line --
+    // never silently reused as the headline number.
+    expect(screen.getByTestId("whisper-your-number")).not.toHaveTextContent("$809,714");
+    expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Total Capacity $809,714");
+  });
+
+  describe("F9: one ceiling drives verdict, room-relation, and budget light", () => {
+    test("pass verdict, room-relation, and budget light all agree when maxBid sits below the market low, even though the unreserved capacity sits INSIDE the band", () => {
+      render(<WhisperPanel payload={payload("pass", {
+        worthToYou: {
+          ...payload("pass").worthToYou!,
+          // The unreserved ceiling sits comfortably inside the market band (50k-90k) -- pre-fix,
+          // roomRelation(capValue) would have rendered "inside what the room expects" here.
+          capValue: 70_000,
+          // The liquidity-reserved ceiling (the one the verdict is actually built from) is well
+          // under the market low.
+          suggestedMaxBid: 10_000,
+        },
+      })} />);
+      fireEvent.click(screen.getByTestId("whisper-strip"));
+
+      expect(screen.getByText("Let him go.")).toBeInTheDocument();
+      expect(screen.getByText("The room wants more than you should give.")).toBeInTheDocument();
+      expect(screen.queryByText("That sits inside what the room expects.")).not.toBeInTheDocument();
+      // The fixture's scorecard.budget is always red (see payload() above) -- confirming no light
+      // anywhere on the panel reads green while the verdict says pass.
+      expect(screen.getByRole("button", { name: "BUDGET" })).toHaveAttribute("data-status", "red");
+      // capValue still surfaces, but ONLY under its own honestly-labeled line.
+      expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Total Capacity $70,000");
+    });
+
+    test("room-relation and budget light stay green/consistent when nothing is reserved (maxBid === capValue)", () => {
+      render(<WhisperPanel payload={payload("push", {
+        worthToYou: {
+          ...payload("push").worthToYou!,
+          capValue: 75_000,
+          suggestedMaxBid: 75_000,
+        },
+        scorecard: {
+          ...payload("push").scorecard!,
+          budget: light("green", "You can meet this price and still insure the finish."),
+        },
+      })} />);
+      fireEvent.click(screen.getByTestId("whisper-strip"));
+
+      expect(screen.getByText("That sits inside what the room expects.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "BUDGET" })).toHaveAttribute("data-status", "green");
+      expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Total Capacity $75,000");
+    });
   });
 
   test("liquidity row renders max bid, price read, fill reserve, and need signals", () => {

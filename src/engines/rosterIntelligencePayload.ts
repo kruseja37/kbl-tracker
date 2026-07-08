@@ -91,7 +91,9 @@ export interface WorthToYou {
   needMultiplier: number;
   chemistry: ChemistryTipBreakdown;
   chemistryContribution: number;
-  chemistryReadout: ChemistryReadout;
+  /** Absent when the seat has no chemistry-tier model for this read (e.g. the farm whisper
+   * adapter, which does not model chemistry synergy) — omit the section rather than fake one. */
+  chemistryReadout?: ChemistryReadout;
   verdict: 'push' | 'cap' | 'pass';
   recommendedNumber: number;
   capValue: number | null;
@@ -216,6 +218,14 @@ export interface BudgetLightInput {
   remainingPool: readonly CompletionCandidate[];
   openSlotsAfterWin: number;
   market?: MarketRead | null;
+  /**
+   * F9 RULING (2026-07-08): the SAME liquidity-adjusted ceiling that drives the verdict and the
+   * room-relation read (WorthToYou.suggestedMaxBid) — the ONE number every display read must
+   * agree on. `null` when no liquidity read exists yet for this seat/lot (e.g. worthToYou could
+   * not be assembled); the light renders 'unknown' rather than fabricate a status from the
+   * unreserved completion ceiling.
+   */
+  liquidityMaxBid: number | null;
 }
 
 export interface IdentityLightInput {
@@ -422,22 +432,28 @@ export function assembleRosterIntelligencePayload(
   };
 }
 
+/**
+ * F9 RULING (2026-07-08): the SECOND parameter here is the liquidity-ADJUSTED ceiling
+ * (WorthToYou.suggestedMaxBid) — every caller must pass the reserved number, never the
+ * unreserved completion ceiling (WorthToYou.capValue), so the verdict agrees with every other
+ * ceiling-driven display read (room-relation, budget light).
+ */
 function worthVerdict(
   contextualWorth: number,
-  capValue: number | null,
+  maxBid: number | null,
   market: MarketRead | null,
 ): WorthToYou['verdict'] {
   // Without a market read we cannot prove a bargain: no affordable ceiling passes, any positive
   // ceiling is a hard cap, and push remains reserved for market-justified bargains.
-  if (capValue === null) return 'pass';
-  if (!market) return capValue === null || capValue <= 0 ? 'pass' : 'cap';
+  if (maxBid === null) return 'pass';
+  if (!market) return maxBid === null || maxBid <= 0 ? 'pass' : 'cap';
 
-  if (capValue < market.band.low) return 'pass';
+  if (maxBid < market.band.low) return 'pass';
   if (contextualWorth < market.band.low * PAYLOAD_TUNING.worthPassLowBandFraction) return 'pass';
 
   const comfortableCeiling = market.band.median * (1 + PAYLOAD_TUNING.worthPushMedianMargin);
   const justified = contextualWorth >= market.band.median * PAYLOAD_TUNING.worthMarketJustificationFraction;
-  if (capValue >= comfortableCeiling && justified) return 'push';
+  if (maxBid >= comfortableCeiling && justified) return 'push';
 
   return 'cap';
 }
@@ -572,22 +588,12 @@ function nearestChemistryOpportunity(profile: readonly FamilyChemistryProfile[])
   return `${reachable.distanceToNextTier} more ${familyName} ${noun} ${verb} ${familyName} traits at the ${target} tier`;
 }
 
-function budgetLight(input: BudgetLightInput): Light {
-  const capValue = completionBidCeiling(
-    input.budgetRemaining,
-    input.rosterWithCandidate,
-    input.remainingPool,
-    input.openSlotsAfterWin,
-  );
-  if (capValue === null) {
-    return {
-      status: 'red',
-      sentence: 'The finish quote is infeasible from the players left.',
-      detailKey: 'budget',
-    };
-  }
-  const target = input.market?.band.median ?? 0;
-  const headroom = capValue - target;
+/**
+ * F9 RULING (2026-07-08): shared by the MLB budget light and the farm whisper's budget read so
+ * both agree with the verdict/room-relation reads on the SAME liquidity-adjusted ceiling. Pure
+ * headroom classification only — callers own sourcing the ceiling honestly.
+ */
+function budgetStatusFromHeadroom(headroom: number): Light {
   if (headroom >= PAYLOAD_TUNING.budgetInsuranceBuffer) {
     return {
       status: 'green',
@@ -607,6 +613,31 @@ function budgetLight(input: BudgetLightInput): Light {
     sentence: 'The median read traps the rest of the roster.',
     detailKey: 'budget',
   };
+}
+
+function budgetLight(input: BudgetLightInput): Light {
+  // Infeasibility is a distinct, roster-legality question (can the roster be completed AT ALL
+  // from what's left) — independent of which ceiling number prices the headroom, so this stays
+  // sourced from the verified completion quote regardless of the F9 fix below.
+  const completionCeiling = completionBidCeiling(
+    input.budgetRemaining,
+    input.rosterWithCandidate,
+    input.remainingPool,
+    input.openSlotsAfterWin,
+  );
+  if (completionCeiling === null) {
+    return {
+      status: 'red',
+      sentence: 'The finish quote is infeasible from the players left.',
+      detailKey: 'budget',
+    };
+  }
+  // F9 FIX: headroom is priced off the liquidity-adjusted ceiling (the SAME number driving the
+  // verdict and room-relation), not the unreserved completion ceiling above — otherwise this
+  // light can read green while the verdict says pass.
+  if (input.liquidityMaxBid === null) return unknownBudgetLight();
+  const target = input.market?.band.median ?? 0;
+  return budgetStatusFromHeadroom(input.liquidityMaxBid - target);
 }
 
 function unknownBudgetLight(): Light {
@@ -670,4 +701,130 @@ function nextTierLabel(tier: 'L1' | 'L2' | 'L3'): ChemistryReadoutFamily['nextTi
 
 function familyWord(family: ChemistryCode): string {
   return CHEMISTRY_CODE_TO_WORD[family];
+}
+
+// ---------------------------------------------------------------------------------------------
+// FARM WHISPER (P4, 2026-07-08): a branch beside the MLB payload builder above, NOT a new engine.
+// The farm auction has no legal-roster-shape model (RosterSlotPlayer/LEGAL_ROSTER are MLB-only),
+// so this cannot call assembleWorthToYou/assembleFiveLights directly. Instead it feeds the SAME
+// untouched liquidityAwareBidding engine + the SAME worthVerdict/budgetStatusFromHeadroom helpers
+// with farm-appropriate inputs: the archetype scout band as the market read, farm budget/roster
+// slots as the liquidity inputs, and a simple roster-slot-need signal (position already covered
+// on the seat's farm roster or not). Shape/identity/chemistry lights and chemistry synergy have no
+// farm data source yet, so they render as honest 'unknown' stubs rather than fabricated reads —
+// only budget (real, ceiling-driven) is computed.
+// ---------------------------------------------------------------------------------------------
+
+export interface FarmWhisperBand {
+  low: number;
+  high: number;
+  displayedEstimate: number;
+}
+
+export interface FarmWhisperInput {
+  candidateId: string;
+  /** The scout archetype band for this lot (SCOUTING_INTELLIGENCE_SPEC / farmArchetypeTilt) —
+   * the farm's only market-read analogue; there is no rival-demand simulation for farm lots. */
+  band: FarmWhisperBand;
+  budgetRemaining: number;
+  rosterSlotsRemaining: number;
+  minSalary: number;
+  nextBid: number;
+  currentBid: number | null;
+  bidIncrement?: number;
+  /** True when the lot's primary position has NO covering prospect on the seat's farm roster yet
+   * — the only "roster-slot needs" signal available without a farm need-breakdown engine. */
+  positionIsOpenNeed: boolean;
+}
+
+export interface FarmWhisperAssembly {
+  market: MarketRead;
+  worth: WorthToYou;
+  scorecard: FiveLights;
+}
+
+const FARM_NEUTRAL_CHEMISTRY: ChemistryTipBreakdown = {
+  premium: 0,
+  teamLift: 0,
+  ownContext: 0,
+  family: 'SCH',
+  crossing: null,
+  countsBefore: { SPI: 0, DIS: 0, CMP: 0, SCH: 0, CRA: 0 },
+  countsAfter: { SPI: 0, DIS: 0, CMP: 0, SCH: 0, CRA: 0 },
+  distanceToNextTier: null,
+  liftedTraitCount: 0,
+};
+
+const FARM_UNMODELED_LIGHT = (sentence: string): Light => ({ status: 'unknown', sentence });
+
+/** Small, honest need bump — the same clamp range (0.85-1.35) evaluateLiquidityAwareBid expects
+ * of a needMultiplier, applied only when the lot fills a position the seat has zero coverage at. */
+const FARM_OPEN_NEED_MULTIPLIER = 1.15;
+
+export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembly {
+  const needMultiplier = input.positionIsOpenNeed ? FARM_OPEN_NEED_MULTIPLIER : 1;
+  const iv = input.band.displayedEstimate;
+  const ownValue = iv * needMultiplier;
+  const worth = ownValue; // no chemistry premium modeled for farm lots yet
+
+  const market: MarketRead = {
+    playerId: input.candidateId,
+    band: { low: input.band.low, median: input.band.displayedEstimate, high: input.band.high },
+    // Farm has no rival-demand simulation (auctionMarketModel is MLB-only) — these three are
+    // inert placeholders; WhisperPanel never reads them (only market.band is consumed).
+    interestedTeams: 0,
+    contested: null,
+    likelyPass: false,
+  };
+
+  const liquidity = evaluateLiquidityAwareBid({
+    playerId: input.candidateId,
+    iv,
+    nextBid: input.nextBid,
+    currentBid: input.currentBid,
+    bidIncrement: input.bidIncrement,
+    legalMaxBid: null,
+    budgetRemaining: input.budgetRemaining,
+    rosterSlotsRemaining: input.rosterSlotsRemaining,
+    minSalary: input.minSalary,
+    baseValuation: iv,
+    needMultiplier,
+    riskTolerance: 1,
+  });
+
+  const verdict = worthVerdict(worth, liquidity.maxBid, market);
+  const recommendedNumber = Math.max(0, Math.min(worth, liquidity.maxBid));
+
+  const worthToYou: WorthToYou = {
+    iv,
+    ownValue,
+    archetypeFitMultiplier: 1,
+    needMultiplier,
+    chemistry: FARM_NEUTRAL_CHEMISTRY,
+    chemistryContribution: 0,
+    verdict,
+    recommendedNumber,
+    // "Total capacity" (F9 ruling): the farm has no verified completion-cost engine, so this is
+    // honestly the raw remaining budget, not a completion-verified number — WhisperPanel labels
+    // it distinctly and never uses it to drive the verdict/room-relation/budget reads.
+    capValue: input.budgetRemaining,
+    suggestedMaxBid: liquidity.maxBid,
+    priceRead: liquidity.priceRead,
+    liquidityState: liquidity.liquidityState,
+    discretionaryBudget: liquidity.discretionaryBudget,
+    minimumFutureFillReserve: liquidity.minimumFutureFillReserve,
+    replacementValueEstimate: liquidity.replacementValueEstimate,
+    scarcityModifier: liquidity.scarcityModifier,
+    reasonCodes: liquidity.reasonCodes,
+  };
+
+  const scorecard: FiveLights = {
+    shape: FARM_UNMODELED_LIGHT('Farm roster-shape read coming.'),
+    identity: FARM_UNMODELED_LIGHT('Identity read coming.'),
+    chemistry: FARM_UNMODELED_LIGHT('Chemistry read coming.'),
+    balance: FARM_UNMODELED_LIGHT('Balance read coming.'),
+    budget: budgetStatusFromHeadroom(liquidity.maxBid - market.band.median),
+  };
+
+  return { market, worth: worthToYou, scorecard };
 }

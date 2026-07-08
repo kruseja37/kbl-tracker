@@ -1171,6 +1171,12 @@ export function LeagueBuilderAuctionDraft() {
             remainingPool,
             openSlotsAfterWin,
             market,
+            // F9 RULING: the budget light must agree with the verdict/room-relation reads, so it
+            // is driven by the SAME liquidity-adjusted ceiling (worthToYou.suggestedMaxBid), not
+            // a second unreserved completionBidCeiling call. null when worthToYou itself could
+            // not be assembled (e.g. missing ownBandPriorities) -- the light renders 'unknown'
+            // rather than fabricate a status off the wrong number.
+            liquidityMaxBid: worthToYou?.suggestedMaxBid ?? null,
           }
         : undefined,
       identity: identityArchetype && identityRoster.length > 0 && comparisonPool.length > 0
