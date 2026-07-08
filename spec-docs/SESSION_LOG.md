@@ -6694,3 +6694,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Commits: `19ed3c9c` SCORE launch; `70464093` score-only/skip; `99ef7693` reflection coverage; `260397bc` route flip; `d7fb94b6` shared launch-util tests; `317042a7` fixup for the secondary router table. The fixup could not be autosquashed in this sandbox because the worktree gitdir is outside the writable root and Git failed creating rebase/reset metadata with `Operation not permitted`.
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused parity set pass 38/38; full `NODE_ENV= npx vitest run` ended at 9,086 pass / 3 fail / 8 skipped, with only the known `LeagueBuilderDraftSetup.test.tsx` batch timeouts.
 - Browser gate remains outstanding: `npm run preview -- --host 127.0.0.1` failed with `listen EPERM 127.0.0.1:4173`. Captain should run the seeded franchise Playwright checklist in a localhost-capable environment, then autosquash the `317042a7` fixup if desired.
+
+## 2026-07-08 (Codex, attended) — Mode-1 punchlist F4 prospect curve
+
+- Completed **F4 prospect quality distribution** on `lane/m1b-curve` in `/private/tmp/kbl-m1b-curve`.
+- Measurement commit `bdb8c2d4 test(farm): prospect distribution harness [F4-measure]` adds a permanent opt-in Vitest invariant: `RUN_FARM_PROSPECT_DISTRIBUTION=1` builds a real farm auction session / production farm pool (N=500), scores prospects through `scoreSmb4Player`, buckets oracle grades against `PROSPECT_GENERATION_SPEC` §3.2, and logs measured-vs-spec rows.
+- Pre-fix measurement at the routed farm seed failed the selected tolerance: B- +2.0pp, C +2.2pp, total absolute deviation 8.8pp against max bucket 1.5pp / total 8.0pp.
+- Fix commit `34419899 fix(farm): prospect generation to spec curve [F4]` changes prospect target-grade selection from independent per-candidate random draws to a seeded largest-remainder quota sequence plus seeded shuffle, then leaves the existing oracle-inverse `scoreSmb4Player` rating solver to realize each grade. MLB pool shaping, IV curves, and the oracle were not touched.
+- After fix, the N=500 opt-in histogram is exact to spec (0.0pp total absolute deviation), and the existing 40k §13 prospect distribution check reports 0pp grade deviations.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused prospect/farm suite with opt-in F4 invariant pass (12 files / 119 tests). Full `NODE_ENV= npm test` was attempted: 9,121 pass / 1 fail / 10 skipped, with the lone red an unrelated `LeagueBuilderDraftSetup` duplicate CUT2-2 timing failure; the exact test rerun passed twice, and the full `LeagueBuilderDraftSetup.test.tsx` file rerun passed 57/57.
+- Next: independent audit of the F4 diff, then continue Mode-1 punchlist/gauntlet sequencing.
