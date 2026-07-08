@@ -6753,3 +6753,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Gates: `npx tsc -b --pretty false` pass; focused prospect/farm/page suites pass 78/78; `npm run build` pass; full `NODE_ENV= npx vitest run` produced 9,141 pass / 1 fail / 10 skipped, with the lone red the known `LeagueBuilderDraftSetup` CUT2-2 batch case; the full `LeagueBuilderDraftSetup.test.tsx` solo rerun passed 60/60.
 - Browser gate attempted against `npm run dev -- --host 127.0.0.1 --port 5173`, but Browser/node_repl failed before attach with `sandboxCwd must be an absolute file URI`; no app/browser defect was observed.
 - Next: independent audit of M1H, then continue the Mode-1 punchlist sequencing.
+
+## 2026-07-08 (Codex, attended) — M1J auction completion terminal fix
+
+- Fixed the live completion bug on `lane/m1j-completion`: nomination exhaustion in `surfaceNextPlayer` no longer accepts `AUCTION_COMPLETE` directly. It now routes through the same terminal finalizer used by sold/exhaustion paths, which reuses the existing `backfillFromPassedLots` FABLE-C3 cleanup and Lever A exhaustion-affordability rule.
+- Added strict enriched-MLB terminal validation: completing teams with position-enriched 22-man rosters cannot finish short or illegal. If the existing cleanup cannot complete them, the transition rejects with `auction-uncompletable` and a `terminalShortfall` marker instead of silently completing short.
+- Added UI error copy for the new explicit terminal reason and focused regression coverage in `auctionCompletionFloor.test.ts`.
+- Added permanent opt-in M1J matrix coverage at `scripts/m1jCompletionLiveMatrix.test.ts` (`RUN_M1J_COMPLETION_MATRIX=1`) over {6-team,8-team} x {0,2 shills} x {k0,k065}, seeds `m1e-s1..s3`. Fixed run: every row 100% legal 22-man rosters and zero uncompletable flags.
+- Falsification check: temporarily restored the direct nomination-exhaustion completion path and reran the M1J matrix; every row failed with 0 legal rosters and all real teams short/illegal. Restored the fix and reran green.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused auction/farm/UI suites pass 105/105; M1J opt-in matrix pass; full `NODE_ENV= npx vitest run` = 9,147 pass / 3 fail / 11 skipped, with only the known `LeagueBuilderDraftSetup.test.tsx` CUT2-2 batch reds; solo rerun of `LeagueBuilderDraftSetup.test.tsx` passed 60/60.
+- Next: independent audit of the M1J terminal-path diff before broader draft-economy tuning.

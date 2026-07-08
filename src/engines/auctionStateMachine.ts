@@ -9,7 +9,7 @@ import {
   reservePriceCurve,
 } from '../data/rosterEngineConstants';
 import { RESERVE_PRICE_OFF_K, normalizeReservePriceK, reserveP } from './auctionReservePrice';
-import { canCover, isCloser, type RosterSlotPlayer } from '../data/rosterConstruction';
+import { LEGAL_ROSTER, canCover, isCloser, isLegalRoster, type RosterSlotPlayer } from '../data/rosterConstruction';
 import {
   cheapestLegalCompletion,
   completionBidCeiling,
@@ -136,6 +136,11 @@ export interface AuctionSession {
   saleCount: number;
   /** Positive-k sessions bound renominations by player; absent preserves pre-Lever-A saved sessions. */
   passCountByPlayerId?: Readonly<Record<string, number>>;
+  /** Explicit terminal marker when an enriched MLB auction cannot legally complete. */
+  terminalShortfall?: {
+    status: 'uncompletable';
+    teamIds: readonly string[];
+  };
 }
 
 export interface InitAuctionSessionInput {
@@ -149,6 +154,7 @@ export interface InitAuctionSessionInput {
 
 export type AuctionRejectionReason =
   | 'auction-complete'
+  | 'auction-uncompletable'
   | 'bid-above-solvency-cap'
   | 'bid-below-minimum'
   | 'bid-strands-roster'
@@ -425,12 +431,7 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
 
   const playerId = selectNextNominee(session);
   if (playerId === null) {
-    return accepted({
-      ...session,
-      state: 'AUCTION_COMPLETE',
-      currentLot: null,
-      pendingClaim: null,
-    });
+    return finalizeTerminalAuction(session, true);
   }
 
   const player = session.players[playerId];
@@ -439,12 +440,7 @@ export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionRes
     .filter((team) => team.rosterSlotsRemaining > 0)
     .map((team) => team.teamId);
   if (stillIn.length === 0) {
-    return accepted({
-      ...session,
-      state: 'AUCTION_COMPLETE',
-      currentLot: null,
-      pendingClaim: null,
-    });
+    return finalizeTerminalAuction(session, session.availablePlayerIds.length === 0);
   }
 
   const openingBidderIndex = findNextOpenNominationIndex(
@@ -591,7 +587,7 @@ export function resolveLot(session: AuctionSession): AuctionTransitionResult {
     return accepted({ ...session, state: 'OPEN_BIDDING', pendingClaim: null });
   }
   if (lot.highBid !== null && lot.highBidder !== null) {
-    return accepted(finalizeSoldLot(session, lot.highBidder, lot.highBid));
+    return acceptedAfterLotFinalization(finalizeSoldLot(session, lot.highBidder, lot.highBid));
   }
   if (lot.stillIn.length === 1) {
     return accepted({
@@ -605,7 +601,7 @@ export function resolveLot(session: AuctionSession): AuctionTransitionResult {
     });
   }
 
-  return accepted(resolveNoBidLot(session));
+  return acceptedAfterLotFinalization(resolveNoBidLot(session));
 }
 
 export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionResult {
@@ -621,7 +617,7 @@ export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionRes
 
   if (bidWouldStrand(session, team, claim.playerId)) return rejected(session, 'bid-strands-roster');
 
-  return accepted(finalizeSoldLot(
+  return acceptedAfterLotFinalization(finalizeSoldLot(
     withBidLogEntry(session, { teamId: claim.teamId, action: 'claim', amount: claim.price }),
     claim.teamId,
     claim.price,
@@ -632,7 +628,7 @@ export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionR
   if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
   if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
 
-  return accepted(resolveNoBidLot(session));
+  return acceptedAfterLotFinalization(resolveNoBidLot(session));
 }
 
 export function advanceLot(session: AuctionSession): AuctionTransitionResult {
@@ -641,20 +637,7 @@ export function advanceLot(session: AuctionSession): AuctionTransitionResult {
     return rejected(session, 'expected-passed-or-sold');
   }
   if (isAuctionComplete(session) || session.availablePlayerIds.length === 0) {
-    // CLEANUP BACKFILL (FABLE-C3, the completion GUARANTEE): pool exhausted with a completing
-    // team still unfilled was, until now, a silently broken draft (the strict 22/10 launch
-    // validation throws downstream). The passed-out players still exist — re-offer them as
-    // forced fills for the cheapest verified-legal completion. The one-chance rule bends ONLY
-    // in the state that would otherwise be a failed draft.
-    const backfilled = session.availablePlayerIds.length === 0 && !isAuctionComplete(session)
-      ? backfillFromPassedLots(session)
-      : session;
-    return accepted({
-      ...backfilled,
-      state: 'AUCTION_COMPLETE',
-      currentLot: null,
-      pendingClaim: null,
-    });
+    return finalizeTerminalAuction(session, session.availablePlayerIds.length === 0);
   }
 
   const next = findNextOpenNominationIndex(session.teams, session.nominationOrder, session.nominationIndex + 1);
@@ -671,6 +654,40 @@ export function advanceLot(session: AuctionSession): AuctionTransitionResult {
     nominationIndex,
     nominationRound,
   });
+}
+
+function finalizeTerminalAuction(session: AuctionSession, mayBackfill: boolean): AuctionTransitionResult {
+  // CLEANUP BACKFILL (FABLE-C3 + M1J): every terminal path, including nomination exhaustion,
+  // must flow through the same passed-lot completion cascade before AUCTION_COMPLETE is allowed.
+  const backfilled = mayBackfill && !isAuctionComplete(session)
+    ? backfillFromPassedLots(session)
+    : session;
+  const shortfallTeamIds = enrichedCompletingShortfallTeamIds(backfilled);
+  if (shortfallTeamIds.length > 0) {
+    return rejected({
+      ...backfilled,
+      currentLot: null,
+      pendingClaim: null,
+      terminalShortfall: {
+        status: 'uncompletable',
+        teamIds: shortfallTeamIds,
+      },
+    }, 'auction-uncompletable');
+  }
+
+  return accepted({
+    ...backfilled,
+    state: 'AUCTION_COMPLETE',
+    currentLot: null,
+    pendingClaim: null,
+    terminalShortfall: undefined,
+  });
+}
+
+function acceptedAfterLotFinalization(session: AuctionSession): AuctionTransitionResult {
+  return session.state === 'AUCTION_COMPLETE'
+    ? finalizeTerminalAuction(session, false)
+    : accepted(session);
 }
 
 export function seededNominationOrder(teamIds: readonly string[], seed: string): string[] {
@@ -779,6 +796,34 @@ function backfillFromPassedLots(session: AuctionSession): AuctionSession {
   }
 
   return { ...session, teams, results, saleCount };
+}
+
+function enrichedCompletingShortfallTeamIds(session: AuctionSession): string[] {
+  if (!Object.values(session.players).some((player) => player.pos !== undefined)) return [];
+  const shortfallTeamIds: string[] = [];
+  for (const team of session.teams) {
+    if (isNonCompletingTeam(session, team.teamId)) continue;
+
+    const rosterShapes: RosterSlotPlayer[] = [];
+    let enriched = true;
+    for (const assignment of team.roster) {
+      const shape = session.players[assignment.playerId]?.pos;
+      if (!shape) {
+        enriched = false;
+        break;
+      }
+      rosterShapes.push(shape);
+    }
+
+    // Farm/legacy sessions do not carry MLB legality shapes. Preserve their existing terminal
+    // behavior; MLB auctions with enriched positions get the strict no-short-complete guard.
+    if (!enriched) continue;
+    if (team.roster.length + team.rosterSlotsRemaining !== LEGAL_ROSTER.size) continue;
+    if (team.rosterSlotsRemaining > 0 || !isLegalRoster(rosterShapes)) {
+      shortfallTeamIds.push(team.teamId);
+    }
+  }
+  return shortfallTeamIds;
 }
 
 function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: number): AuctionSession {
