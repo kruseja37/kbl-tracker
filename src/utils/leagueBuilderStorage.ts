@@ -24,6 +24,7 @@ import { normalizePersonality, type CanonicalPersonality } from '../engines/mast
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { DesignSlot } from '../engines/rosterDesignFeasibility';
+import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
@@ -229,6 +230,19 @@ export interface Team {
     lockedAt?: string;
     pins?: Record<string, string>;
     rankOverrides?: Record<string, string[]>;
+  };
+  /**
+   * COCKPIT WAVE 2 (ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md Correction 5/7): the GM's own
+   * explicit big-board + per-position order, distinct from and orthogonal to
+   * `rosterDesign.rankOverrides` above (which feeds `buildBest22Target`'s per-SLOT preference
+   * bonus). This field feeds `assembleBoard`'s live Tier-3 board rank blend (auction-picking
+   * priority — "who do I chase next"), both at setup (RANK YOUR BOARD) and live in the whisper.
+   * Absent = pure engine order (no write until the GM reorders something) — no DB version bump,
+   * same as any other new optional field on an already-stored record.
+   */
+  boardRankOverrides?: {
+    global?: string[];
+    byPosition?: Partial<Record<TaxonomyPosition, string[]>>;
   };
   captainPlayerId?: string | null;
   fanHopefulPlayerId?: string | null;

@@ -15,10 +15,13 @@ import {
   assembleFiveLights,
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
+  boardPositionGroups,
   computeFarmChemFitLabel,
   marketReadFromEstimate,
+  sortBoardEntriesForPosition,
   type MarketRead,
 } from '../rosterIntelligencePayload';
+import { BEST22_TUNING } from '../best22Target';
 
 const hitter = (position: string, secondaryPosition?: string | null): RosterSlotPlayer => ({
   isPitcher: false,
@@ -760,6 +763,102 @@ describe('roster intelligence payload assembly', () => {
       at: 'IDENTITY',
       absent: null,
       below: null,
+    });
+  });
+
+  describe('COCKPIT WAVE 2: board rank-blend (Correction 5/7)', () => {
+    test('assembleBoard populates position from candidate.shape.position, and omits it when shape is absent', () => {
+      const board = assembleBoard({
+        rosterPlayers: [],
+        candidates: [
+          { playerId: 'shaped', iv: 100, chemistry: chemistry(0), shape: hitter('SS') },
+          { playerId: 'shapeless', iv: 100, chemistry: chemistry(0) },
+        ],
+      });
+      expect(board.find((entry) => entry.playerId === 'shaped')?.position).toBe('SS');
+      expect(board.find((entry) => entry.playerId === 'shapeless')).not.toHaveProperty('position');
+    });
+
+    test('absent rankOverrides leaves assembleBoard byte-identical to the pre-Wave-2 worth-only order', () => {
+      const candidates = [
+        { playerId: 'x', iv: 100, chemistry: chemistry(0) },
+        { playerId: 'y', iv: 105, chemistry: chemistry(0) },
+        { playerId: 'z', iv: 90, chemistry: chemistry(0) },
+      ];
+      expect(assembleBoard({ rosterPlayers: [], candidates }).map((entry) => entry.playerId)).toEqual(['y', 'x', 'z']);
+    });
+
+    test('the GM global rank (ruling 1: a STRONG NUDGE) measurably moves a close-call candidate to the top, ports best22Target.BEST22_TUNING.gmPreferenceWeight', () => {
+      expect(BEST22_TUNING.gmPreferenceWeight).toBe(2.5);
+      const candidates = [
+        { playerId: 'x', iv: 100, chemistry: chemistry(0) },
+        { playerId: 'y', iv: 105, chemistry: chemistry(0) },
+        { playerId: 'z', iv: 90, chemistry: chemistry(0) },
+      ];
+      // No override: worth-only order is y, x, z.
+      expect(assembleBoard({ rosterPlayers: [], candidates }).map((entry) => entry.playerId)).toEqual(['y', 'x', 'z']);
+      // GM ranks z #1 -- the nudge moves it from last to first, ahead of the higher-worth y and x,
+      // but the displayed worth numbers stay the honest, un-nudged values (F9 one ceiling).
+      const nudged = assembleBoard({ rosterPlayers: [], candidates, rankOverrides: { global: ['z'] } });
+      expect(nudged.map((entry) => entry.playerId)).toEqual(['z', 'y', 'x']);
+      expect(nudged.find((entry) => entry.playerId === 'z')?.worth).toBe(90);
+    });
+
+    test('a clearly-superior candidate the GM never ranked still wins over the GM order (ruling 1: not a hard constraint)', () => {
+      const candidates = [
+        { playerId: 'dominant', iv: 1_000_000, chemistry: chemistry(0) },
+        { playerId: 'b', iv: 105, chemistry: chemistry(0) },
+        { playerId: 'a', iv: 100, chemistry: chemistry(0) },
+        { playerId: 'c', iv: 95, chemistry: chemistry(0) },
+        { playerId: 'd', iv: 90, chemistry: chemistry(0) },
+        { playerId: 'e', iv: 10, chemistry: chemistry(0) },
+      ];
+      // GM ranks the worst-worth candidate ('e') #1 -- it surges past the close-clustered b/a/c/d,
+      // but the untouched, order-of-magnitude-superior 'dominant' candidate is unreachable by the
+      // nudge and still ranks first overall.
+      const board = assembleBoard({ rosterPlayers: [], candidates, rankOverrides: { global: ['e'] } });
+      expect(board[0].playerId).toBe('dominant');
+      expect(board[1].playerId).toBe('e');
+      expect(board.map((entry) => entry.playerId).slice(2)).toEqual(['b', 'a', 'c', 'd']);
+    });
+
+    test('boardPositionGroups returns exactly the 12 canonical TaxonomyPosition groups (8 field + SP/SP-RP/RP/CP)', () => {
+      expect(boardPositionGroups()).toEqual(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP']);
+    });
+
+    test('sortBoardEntriesForPosition filters to one position and blends that position\'s OWN rank overrides only', () => {
+      const board = assembleBoard({
+        rosterPlayers: [],
+        candidates: [
+          { playerId: 'ss-x', iv: 100, chemistry: chemistry(0), shape: hitter('SS') },
+          { playerId: 'ss-y', iv: 105, chemistry: chemistry(0), shape: hitter('SS') },
+          { playerId: 'ss-z', iv: 90, chemistry: chemistry(0), shape: hitter('SS') },
+          { playerId: 'cf-1', iv: 200, chemistry: chemistry(0), shape: hitter('CF') },
+          { playerId: 'cf-2', iv: 150, chemistry: chemistry(0), shape: hitter('CF') },
+        ],
+      });
+
+      const rankOverrides = { byPosition: { SS: ['ss-z'] } };
+      const ssView = sortBoardEntriesForPosition(board, 'SS', rankOverrides);
+      const cfView = sortBoardEntriesForPosition(board, 'CF', rankOverrides);
+
+      // SS: the position-scoped nudge (computed from the SS-only worth spread) moves ss-z to the
+      // top of its own group, exactly mirroring the global-board flip test above.
+      expect(ssView.map((entry) => entry.playerId)).toEqual(['ss-z', 'ss-y', 'ss-x']);
+      // CF: entirely unaffected by the SS override -- plain worth order, and no SS names leak in.
+      expect(cfView.map((entry) => entry.playerId)).toEqual(['cf-1', 'cf-2']);
+    });
+
+    test('sortBoardEntriesForPosition with no rankOverrides for that position keeps plain worth order', () => {
+      const board = assembleBoard({
+        rosterPlayers: [],
+        candidates: [
+          { playerId: 'ss-x', iv: 100, chemistry: chemistry(0), shape: hitter('SS') },
+          { playerId: 'ss-y', iv: 105, chemistry: chemistry(0), shape: hitter('SS') },
+        ],
+      });
+      expect(sortBoardEntriesForPosition(board, 'SS').map((entry) => entry.playerId)).toEqual(['ss-y', 'ss-x']);
+      expect(sortBoardEntriesForPosition(board, 'SS', {}).map((entry) => entry.playerId)).toEqual(['ss-y', 'ss-x']);
     });
   });
 

@@ -31,6 +31,7 @@ import {
   clubCheckTargetCopy,
   designVerdictCopy,
   designVerdictTone,
+  formatVerdictMoney,
   targetVerdictState,
   type TargetVerdictState,
   type VerdictTone,
@@ -145,6 +146,15 @@ import {
   type ReservePriceK,
 } from "../../../engines/auctionReservePrice";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
+import {
+  assembleBoard,
+  boardPositionGroups,
+  sortBoardEntriesForPosition,
+  type BoardEntry,
+} from "../../../engines/rosterIntelligencePayload";
+import type { TaxonomyPosition } from "../../../data/playerArchetypeTaxonomy";
+import { RankReorderList } from "../components/shared/RankReorderList";
+import { PlayerProfilePopover } from "../components/shared/PlayerProfilePopover";
 import {
   formatSalaryCapInput,
   formatSalaryCapMoney,
@@ -279,7 +289,7 @@ type LeaguePoolRecord = {
   players: readonly unknown[];
 };
 
-type ClubEditorMode = "identity" | "design" | null;
+type ClubEditorMode = "identity" | "design" | "board" | null;
 type IdentityAutoFillSlot = "mlb" | "farm";
 type IdentityAutoFillMode = "fill-empty" | "reroll-team";
 type IdentityAutoFilledSlotKey = `${string}:${IdentityAutoFillSlot}`;
@@ -961,6 +971,220 @@ function rosterPositionMap(players: readonly Player[]): RosterPositionMap {
   ]));
 }
 
+export const BOARD_POSITION_DEPTH = 5;
+
+/**
+ * COCKPIT WAVE 2 (B3 + Correction 5/7) -- "RANK YOUR BOARD" setup zone. Born on the
+ * DRAFT_SKIN_STANDARD_2026-07-08.md hard-edge treatments (border-2/4, no radius, brass/chalk).
+ * GLOBAL is the full ranked pool (scrollable); PER-POSITION is 5-deep with an expand toggle. Both
+ * are GM-sortable through the SAME shared RankReorderList used by the live whisper board.
+ */
+export function RankYourBoardZone({
+  boardEntries,
+  playerById,
+  boardRankOverrides,
+  disabled,
+  disabledReason,
+  showHelp,
+  onReorderGlobal,
+  onReorderPosition,
+}: {
+  boardEntries: readonly BoardEntry[];
+  playerById: ReadonlyMap<string, Player>;
+  boardRankOverrides: Team["boardRankOverrides"];
+  disabled: boolean;
+  disabledReason?: string | null;
+  showHelp: boolean;
+  onReorderGlobal: (orderedIds: readonly string[]) => void;
+  onReorderPosition: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
+}) {
+  const [viewMode, setViewMode] = useState<"global" | "position">("global");
+  const positionGroups = boardPositionGroups();
+  const positionCounts = useMemo(() => {
+    const counts = new Map<TaxonomyPosition, number>();
+    for (const entry of boardEntries) {
+      if (!entry.position) continue;
+      if (!positionGroups.includes(entry.position as TaxonomyPosition)) continue;
+      const position = entry.position as TaxonomyPosition;
+      counts.set(position, (counts.get(position) ?? 0) + 1);
+    }
+    return counts;
+    // positionGroups is a fixed 12-value constant (boardPositionGroups()) -- stable across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardEntries]);
+  const firstPopulatedPosition = positionGroups.find((position) => (positionCounts.get(position) ?? 0) > 0) ?? positionGroups[0];
+  const [selectedPosition, setSelectedPosition] = useState<TaxonomyPosition>(firstPopulatedPosition);
+  const [positionExpanded, setPositionExpanded] = useState(false);
+
+  const positionView = useMemo(
+    () => sortBoardEntriesForPosition(boardEntries, selectedPosition, boardRankOverrides),
+    [boardEntries, selectedPosition, boardRankOverrides],
+  );
+  const visiblePositionView = positionExpanded ? positionView : positionView.slice(0, BOARD_POSITION_DEPTH);
+
+  // A reorder committed against a VISIBLE subset (the 5-deep default, or global's own full list)
+  // must not silently drop the rank of anything currently hidden below the fold -- append the
+  // untouched remainder in its existing relative order so no information is lost.
+  const withStableRemainder = (visible: readonly BoardEntry[], full: readonly BoardEntry[]) =>
+    (orderedVisibleIds: readonly string[]) => {
+      const movedIds = new Set(orderedVisibleIds);
+      const remainder = full.map((entry) => entry.playerId).filter((id) => !movedIds.has(id));
+      return [...orderedVisibleIds, ...remainder];
+    };
+
+  const rowClassName = (_entry: BoardEntry, _index: number, dragged: boolean) =>
+    `flex items-center justify-between gap-2 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-1.5 text-[11px] text-[var(--ballpark-chalk)]${dragged ? " opacity-50" : ""}`;
+
+  const boardEntryLabel = (entry: BoardEntry): string => {
+    const player = playerById.get(entry.playerId);
+    if (entry.note) return entry.note;
+    return player ? `${player.firstName} ${player.lastName}` : entry.playerId;
+  };
+
+  const renderRow = (entry: BoardEntry) => {
+    const player = playerById.get(entry.playerId);
+    const name = (
+      <span className="min-w-0 truncate font-bold">
+        {boardEntryLabel(entry)}
+      </span>
+    );
+    return (
+      <span className="min-w-0 flex items-center gap-2">
+        {player ? (
+          <PlayerProfilePopover player={player} revealFull>
+            {name}
+          </PlayerProfilePopover>
+        ) : (
+          name
+        )}
+        <span className="shrink-0 border border-[var(--ballpark-panel-border)] px-1 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
+          {entry.matchedShape ?? entry.position ?? "POS"}
+        </span>
+      </span>
+    );
+  };
+
+  const renderWorth = (entry: BoardEntry) => (
+    <span className="shrink-0 text-[11px] font-bold text-[var(--ballpark-chalk)]/80">
+      {formatVerdictMoney(entry.worth)}
+    </span>
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[11px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)]">RANK YOUR BOARD</div>
+        <div className="flex border-2 border-[var(--ballpark-panel-border)]">
+          <button
+            type="button"
+            onClick={() => setViewMode("global")}
+            className={`px-3 py-1.5 text-[11px] font-bold tracking-wider ${viewMode === "global" ? "bg-[var(--ballpark-brass)] text-[#1A1A1A]" : "text-[var(--ballpark-chalk)]/75 hover:bg-[var(--ballpark-action-green)]"}`}
+          >
+            GLOBAL
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("position")}
+            className={`px-3 py-1.5 text-[11px] font-bold tracking-wider ${viewMode === "position" ? "bg-[var(--ballpark-brass)] text-[#1A1A1A]" : "text-[var(--ballpark-chalk)]/75 hover:bg-[var(--ballpark-action-green)]"}`}
+          >
+            PER-POSITION
+          </button>
+        </div>
+      </div>
+
+      {showHelp ? (
+        <div className="border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs leading-relaxed text-[var(--ballpark-chalk)]/75">
+          This is your board -- how you'd chase the pool if every pick were yours. Drag or use the arrows to put your guys where you want them; the auction whisper carries this order into the live draft as a strong nudge (a clearly better, cheaper option can still win out). GLOBAL ranks everyone; PER-POSITION goes five deep at each spot.
+        </div>
+      ) : null}
+
+      {disabled && disabledReason ? (
+        <div className="text-[11px] text-[var(--ballpark-status-warn)]">{disabledReason}</div>
+      ) : null}
+
+      {boardEntries.length === 0 ? (
+        <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-3 text-[11px] text-[var(--ballpark-chalk)]/55">
+          NOBODY IN THE POOL TO RANK YET
+        </div>
+      ) : viewMode === "global" ? (
+        <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2 max-h-[420px] overflow-y-auto">
+          <RankReorderList
+            items={boardEntries}
+            getId={(entry) => entry.playerId}
+            itemLabel={(entry) => boardEntryLabel(entry)}
+            onReorder={(orderedIds) => onReorderGlobal(withStableRemainder(boardEntries, boardEntries)(orderedIds))}
+            readOnly={disabled}
+            rowClassName={rowClassName}
+            leftWrapClassName="min-w-0 flex items-center gap-1.5 flex-1"
+            rightWrapClassName="shrink-0 flex items-center gap-2"
+            dragHandleClassName="shrink-0 border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
+            arrowButtonClassName="border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+            renderContent={(entry) => renderRow(entry)}
+            renderBeforeArrows={(entry) => renderWorth(entry)}
+            data-testid="rank-your-board-global"
+          />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-1">
+            {positionGroups.map((position) => (
+              <button
+                key={position}
+                type="button"
+                onClick={() => {
+                  setSelectedPosition(position);
+                  setPositionExpanded(false);
+                }}
+                className={`px-2 py-1 text-[10px] font-bold tracking-wider border-2 ${
+                  selectedPosition === position
+                    ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-brass)] text-[#1A1A1A]"
+                    : "border-[var(--ballpark-panel-border)] text-[var(--ballpark-chalk)]/75 hover:border-[var(--ballpark-brass)]"
+                }`}
+              >
+                {position} ({positionCounts.get(position) ?? 0})
+              </button>
+            ))}
+          </div>
+          {positionView.length === 0 ? (
+            <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-3 text-[11px] text-[var(--ballpark-chalk)]/55">
+              NOBODY IN THE POOL AT {selectedPosition} YET
+            </div>
+          ) : (
+            <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
+              <RankReorderList
+                items={visiblePositionView}
+                getId={(entry) => entry.playerId}
+                itemLabel={(entry) => boardEntryLabel(entry)}
+                onReorder={(orderedIds) =>
+                  onReorderPosition(selectedPosition, withStableRemainder(visiblePositionView, positionView)(orderedIds))
+                }
+                readOnly={disabled}
+                rowClassName={rowClassName}
+                leftWrapClassName="min-w-0 flex items-center gap-1.5 flex-1"
+                rightWrapClassName="shrink-0 flex items-center gap-2"
+                dragHandleClassName="shrink-0 border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
+                arrowButtonClassName="border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+                renderContent={(entry) => renderRow(entry)}
+                renderBeforeArrows={(entry) => renderWorth(entry)}
+                data-testid="rank-your-board-position"
+              />
+              {positionView.length > BOARD_POSITION_DEPTH ? (
+                <button
+                  type="button"
+                  onClick={() => setPositionExpanded((current) => !current)}
+                  className="mt-2 text-[11px] font-bold tracking-wider text-[var(--ballpark-brass)] hover:underline"
+                >
+                  {positionExpanded ? "SHOW TOP 5 ONLY" : `SHOW ALL ${positionView.length}`}
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function buildLeagueSeatabilityRow(
   poolPlayers: readonly Player[],
   leagueTeams: readonly Team[],
@@ -1624,6 +1848,35 @@ export function LeagueBuilderDraftSetup() {
     ].join(":"))).join("|"),
     [rosterDesignerPlayers],
   );
+
+  // COCKPIT WAVE 2 (B3 + Correction 5/7) -- "RANK YOUR BOARD": the setup zone's global +
+  // per-position GM board. CANDIDATE SET follows the UNIVERSE-FIX1 hard rule -- rosterDesignerPlayers
+  // is the SAME effective-pool source RosterDesigner's own shortlist already uses (extracted pool
+  // once locked, else the checked-universe players), never the raw app-wide player set. Default
+  // engine order is the page's EXISTING valuation (ivById/computePlayerIv) -- no chemistry, no
+  // identity fit, no new pricing math: `worth` on every entry below is exactly the stored IV.
+  const boardPlayerById = useMemo(
+    () => new Map(rosterDesignerPlayers.map((player) => [player.id, player])),
+    [rosterDesignerPlayers],
+  );
+  const boardEntries = useMemo<BoardEntry[]>(() => {
+    const candidates = rosterDesignerPlayers.map((player) => ({
+      playerId: player.id,
+      iv: ivById.get(player.id) ?? 0,
+      matchedShape: player.secondaryPosition ? `${player.primaryPosition}/${player.secondaryPosition}` : player.primaryPosition,
+      shape: toRosterSlotPlayer({
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition ?? null,
+        traits: [player.trait1, player.trait2],
+      }),
+    }));
+    return assembleBoard({
+      candidates,
+      rosterPlayers: [],
+      rankOverrides: selectedTeam?.boardRankOverrides,
+    });
+  }, [rosterDesignerPlayers, ivById, selectedTeam?.boardRankOverrides]);
+
   const inPoolPlayerIdsKey = useMemo(
     () => sortedIds(inPoolPlayers.map((player) => player.id)).join("|"),
     [inPoolPlayers],
@@ -2432,6 +2685,20 @@ export function LeagueBuilderDraftSetup() {
     async (team: Team, rosterDesign: NonNullable<Team["rosterDesign"]>) => {
       try {
         const saved = await saveTeam({ ...team, rosterDesign });
+        replaceTeamsLocal([saved]);
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [replaceTeamsLocal],
+  );
+
+  // COCKPIT WAVE 2 (Correction 5/7): persists the GM's own big-board / per-position order —
+  // separate from rosterDesign.rankOverrides above (per-slot preference feeding buildBest22Target).
+  const handleSaveBoardRankOverrides = useCallback(
+    async (team: Team, boardRankOverrides: NonNullable<Team["boardRankOverrides"]>) => {
+      try {
+        const saved = await saveTeam({ ...team, boardRankOverrides });
         replaceTeamsLocal([saved]);
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
@@ -3671,6 +3938,18 @@ export function LeagueBuilderDraftSetup() {
                           )}
                         </button>
                       ) : null}
+                      {isHuman ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedTeamId(team.id);
+                            setClubEditorMode("board");
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-bold text-[var(--ballpark-brass)] hover:underline"
+                        >
+                          rank your board ›
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -3688,7 +3967,7 @@ export function LeagueBuilderDraftSetup() {
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage ?? undefined}
                   />
-                ) : selectedTeamConfig.ownerId !== "cpu" ? (
+                ) : clubEditorMode === "design" && selectedTeamConfig.ownerId !== "cpu" ? (
                   <RosterDesigner
                     team={selectedTeam}
                     mode={poolMode}
@@ -3703,6 +3982,30 @@ export function LeagueBuilderDraftSetup() {
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage}
                     onSave={(rosterDesign) => handleSaveRosterDesign(selectedTeam, rosterDesign)}
+                  />
+                ) : clubEditorMode === "board" && selectedTeamConfig.ownerId !== "cpu" ? (
+                  <RankYourBoardZone
+                    boardEntries={boardEntries}
+                    playerById={boardPlayerById}
+                    boardRankOverrides={selectedTeam.boardRankOverrides}
+                    disabled={Boolean(setupMutationBlockMessage) || busy}
+                    disabledReason={setupMutationBlockMessage}
+                    showHelp={showHelp}
+                    onReorderGlobal={(orderedIds) =>
+                      void handleSaveBoardRankOverrides(selectedTeam, {
+                        ...selectedTeam.boardRankOverrides,
+                        global: [...orderedIds],
+                      })
+                    }
+                    onReorderPosition={(position, orderedIds) =>
+                      void handleSaveBoardRankOverrides(selectedTeam, {
+                        ...selectedTeam.boardRankOverrides,
+                        byPosition: {
+                          ...selectedTeam.boardRankOverrides?.byPosition,
+                          [position]: [...orderedIds],
+                        },
+                      })
+                    }
                   />
                 ) : null}
               </div>

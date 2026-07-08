@@ -10,6 +10,12 @@ import {
   type FieldPosition,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
+import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
+// COCKPIT WAVE 2 (Correction 5/7): the board's GM-order blend PORTS best22Target's tuned
+// gmPreferenceWeight constant rather than inventing a second nudge magnitude (design doc §1.2 "no
+// new math" + the contract's "reuse/port its constant" instruction). best22Target.ts itself is
+// untouched — this is a read-only import of its existing tuning table.
+import { BEST22_TUNING } from './best22Target';
 import {
   CHEMISTRY_CODES,
   CHEMISTRY_CODE_TO_WORD,
@@ -159,6 +165,14 @@ export interface BoardEntry {
   needTag: string | null;
   fitTag: 'IDENTITY' | null;
   note?: string;
+  /**
+   * COCKPIT WAVE 2: the candidate's canonical single position (RosterSlotPlayer.position — e.g.
+   * 'SS', 'SP/RP'), when the candidate carried a `shape`. Populates the live board's PER-POSITION
+   * grouping (Correction 5). Only the 12 TaxonomyPosition values are recognized groups; anything
+   * else (legacy 'P'/'TWO-WAY' primaries, or candidates with no shape at all) is undefined here and
+   * simply omitted from every per-position view while still appearing in the global board.
+   */
+  position?: string;
 }
 
 export interface RosterIntelligencePayload {
@@ -220,10 +234,24 @@ export interface BoardCandidate {
   note?: string;
 }
 
+/**
+ * COCKPIT WAVE 2 (Correction 5/7): the GM's own explicit board order — mirrors
+ * `Team.boardRankOverrides` (leagueBuilderStorage.ts), which is the field's storage home. `global`
+ * drives `assembleBoard`'s returned order; `byPosition` drives `sortBoardEntriesForPosition`'s
+ * per-position 5-deep views. Both are a STRONG NUDGE blended with worth, never a hard override —
+ * ruling 1 (ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md §1).
+ */
+export interface BoardRankOverrides {
+  global?: readonly string[];
+  byPosition?: Partial<Record<TaxonomyPosition, readonly string[]>>;
+}
+
 export interface BoardInput {
   candidates: readonly BoardCandidate[];
   rosterPlayers: readonly Player[];
   need?: RosterNeedBreakdown;
+  /** Optional — omitted or absent-for-this-scope falls back to pure worth-ranked order. */
+  rankOverrides?: BoardRankOverrides;
 }
 
 export interface ShapeLightInput {
@@ -384,28 +412,79 @@ export function buildChemistryReadout(
   };
 }
 
+/** Population std-dev, matching best22Target's local `meanStd` (that file is a forbidden edit
+ * surface for this lane, so this is a small, faithful re-implementation, not new math). */
+function standardDeviation(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+/**
+ * COCKPIT WAVE 2 rank-blend (Correction 5/7): the GM's explicit order is a STRONG NUDGE on TOP of
+ * worth, mirroring best22Target's `slotPreferenceBonus` gmPreferenceWeight term exactly —
+ * `gmPreferenceWeight / (1 + rank)`, scaled by the pool's own spread (`u`/here `scale`) so the
+ * nudge stays proportionate to how spread-out `worth` actually is for this candidate set (falls
+ * back to 1 when the set has zero spread, same `|| 1` guard as best22Target). This only ever
+ * changes SORT ORDER — the displayed `worth` number is untouched (F9 one-ceiling rule: no new
+ * displayed number, only new ranking).
+ */
+function sortByGmBlend(entries: readonly BoardEntry[], orderedIds: readonly string[] | undefined): BoardEntry[] {
+  const scale = standardDeviation(entries.map((entry) => entry.worth)) || 1;
+  const rankBonus = (playerId: string): number => {
+    if (!orderedIds?.length) return 0;
+    const rank = orderedIds.indexOf(playerId);
+    return rank >= 0 ? (BEST22_TUNING.gmPreferenceWeight / (1 + rank)) * scale : 0;
+  };
+  return [...entries].sort((a, b) =>
+    Number(Boolean(b.needTag)) - Number(Boolean(a.needTag)) ||
+    Number(Boolean(b.fitTag)) - Number(Boolean(a.fitTag)) ||
+    (b.worth + rankBonus(b.playerId)) - (a.worth + rankBonus(a.playerId)) ||
+    a.playerId.localeCompare(b.playerId),
+  );
+}
+
 export function assembleBoard(input: BoardInput): BoardEntry[] {
-  return input.candidates
-    .map((candidate) => {
-      const chemistry = candidate.chemistry ??
-        (candidate.candidate
-          ? chemistryAdviceForCandidate(candidate.candidate, input.rosterPlayers)
-          : null);
-      return {
-        playerId: candidate.playerId,
-        worth: candidate.iv + (chemistry?.premium ?? 0),
-        matchedShape: candidate.matchedShape ?? null,
-        needTag: boardNeedTag(candidate.shape, input.need),
-        fitTag: boardFitTag(candidate.identityZ),
-        ...(candidate.note ? { note: candidate.note } : {}),
-      };
-    })
-    .sort((a, b) =>
-      Number(Boolean(b.needTag)) - Number(Boolean(a.needTag)) ||
-      Number(Boolean(b.fitTag)) - Number(Boolean(a.fitTag)) ||
-      b.worth - a.worth ||
-      a.playerId.localeCompare(b.playerId),
-    );
+  const entries = input.candidates.map((candidate) => {
+    const chemistry = candidate.chemistry ??
+      (candidate.candidate
+        ? chemistryAdviceForCandidate(candidate.candidate, input.rosterPlayers)
+        : null);
+    return {
+      playerId: candidate.playerId,
+      worth: candidate.iv + (chemistry?.premium ?? 0),
+      matchedShape: candidate.matchedShape ?? null,
+      needTag: boardNeedTag(candidate.shape, input.need),
+      fitTag: boardFitTag(candidate.identityZ),
+      ...(candidate.shape?.position ? { position: candidate.shape.position } : {}),
+      ...(candidate.note ? { note: candidate.note } : {}),
+    };
+  });
+  return sortByGmBlend(entries, input.rankOverrides?.global);
+}
+
+const TAXONOMY_POSITIONS: readonly TaxonomyPosition[] =
+  ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'];
+
+/**
+ * COCKPIT WAVE 2 (Correction 5): the per-position 5-deep view. Filters an already-assembled board
+ * to one canonical TaxonomyPosition and re-sorts with THAT position's own rank-override list and
+ * its own local worth spread (a position-scoped nudge, not the global one). Callers slice to 5 for
+ * display; this returns the full filtered+sorted set so the page/panel controls the depth.
+ */
+export function sortBoardEntriesForPosition(
+  entries: readonly BoardEntry[],
+  position: TaxonomyPosition,
+  rankOverrides?: BoardRankOverrides,
+): BoardEntry[] {
+  const positionEntries = entries.filter((entry) => entry.position === position);
+  return sortByGmBlend(positionEntries, rankOverrides?.byPosition?.[position]);
+}
+
+/** The 12 canonical position groups the per-position board recognizes (8 field + SP/SP-RP/RP/CP). */
+export function boardPositionGroups(): readonly TaxonomyPosition[] {
+  return TAXONOMY_POSITIONS;
 }
 
 function boardNeedTag(shape: RosterSlotPlayer | undefined, need: RosterNeedBreakdown | undefined): string | null {

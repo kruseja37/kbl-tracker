@@ -1,17 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, useRef, type CSSProperties } from "react";
 
-import type {
-  BoardEntry,
-  ChemistryReadout,
-  Light,
-  RosterIntelligencePayload,
-  WorthToYou,
+import {
+  boardPositionGroups,
+  sortBoardEntriesForPosition,
+  type BoardEntry,
+  type BoardRankOverrides,
+  type ChemistryReadout,
+  type Light,
+  type RosterIntelligencePayload,
+  type WorthToYou,
 } from "../../../../engines/rosterIntelligencePayload";
 import { gradePriceRange } from "../../../../engines/gradeBandPrice";
 import type { Grade } from "../../../../engines/gradeEngine";
 import type { LiquidityReasonCode } from "../../../../engines/liquidityAwareBidding";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
+import type { TaxonomyPosition } from "../../../../data/playerArchetypeTaxonomy";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
+import { RankReorderList } from "../shared/RankReorderList";
 
 /**
  * COCKPIT W1a/b (2026-07-08, DRAFT_COCKPIT_DESIGN_2026-07-08.md): "mlb" turns on the always-visible
@@ -55,6 +60,20 @@ interface WhisperPayloadMeta {
   /** COCKPIT W1d fork 3 (dark-first): the chem-fit Tier-2 chip label from assembleFarmWhisper's
    * chemFitLabel -- only ever non-null once FARM_CHEM_FIT_ENABLED flips on. */
   chemFitLabel?: string | null;
+  /** COCKPIT WAVE 2 (B3/Correction 5/7): the seat team's raw GM board order, needed to compute the
+   * per-position 5-deep views (sortBoardEntriesForPosition needs the byPosition override map).
+   * MLB only -- the farm board (out of scope for this wave) never reads this. */
+  boardRankOverrides?: BoardRankOverrides | null;
+  /** Persists a GLOBAL reorder (the full board, in its new order) back to Team.boardRankOverrides.
+   * Absent = read-only board (e.g. every pre-Wave-2 test fixture, and any tier other than MLB). */
+  onBoardReorderGlobal?: (orderedIds: readonly string[]) => void;
+  /** Persists a PER-POSITION reorder for one canonical position back to Team.boardRankOverrides. */
+  onBoardReorderPosition?: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
+  /** COCKPIT WAVE 2 (B3, S3.4 auto-advance): "Next up at CF: Ramírez -- your #2." -- a single
+   * Tier-2 line naming the promoted next target after a lot resolves and a ranked player left the
+   * pool. Team-conditioned; absent when nothing meaningful changed (anti-generic law, design §1.8).
+   * MLB only. */
+  nextUpLine?: string | null;
 }
 
 interface WhisperBidVsPassTarget {
@@ -110,12 +129,25 @@ const NO_READ_LINE = "No read yet -- still doing my homework on this club.";
 const EMPTY_BOARD_LINE = "The board's bare. Finish the roster with what's left on the floor.";
 export const HELP_LINE = "Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.";
 
+/** COCKPIT WAVE 2: default the PER-POSITION tab to the first canonical group that actually has
+ * remaining candidates, rather than always "C" -- an empty first tab is dead-clutter (design §1.8). */
+function firstPopulatedBoardPosition(board: readonly BoardEntry[]): TaxonomyPosition {
+  const groups = boardPositionGroups();
+  const populated = new Set(board.map((entry) => entry.position).filter((position): position is string => Boolean(position)));
+  return groups.find((position) => populated.has(position)) ?? groups[0];
+}
+
 export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [selectedLight, setSelectedLight] = useState<LightKey>("shape");
   const [revealedLight, setRevealedLight] = useState<LightKey | null>(null);
   const [flashVerdict, setFlashVerdict] = useState(false);
+  // COCKPIT WAVE 2 (B3/Correction 5/7): Tier-3 board view state -- GLOBAL (the pre-existing flat
+  // board, now GM-sortable when expanded) vs PER-POSITION (5-deep per canonical position).
+  const [boardViewMode, setBoardViewMode] = useState<"global" | "position">("global");
+  const [boardPosition, setBoardPosition] = useState<TaxonomyPosition>(() => firstPopulatedBoardPosition(payload?.board ?? []));
+  const [boardPositionExpanded, setBoardPositionExpanded] = useState(false);
   const previousVerdict = useRef<WorthToYou["verdict"] | null>(null);
   const meta = (payload ?? {}) as WhisperPayloadMeta;
   const clubName = meta.seatClubName ?? payload?.seatTeamId ?? "";
@@ -124,6 +156,25 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   const scorecard = payload?.scorecard;
   const worth = payload?.worthToYou;
   const isMlb = tier === "mlb";
+
+  // COCKPIT WAVE 2: per-position counts (for the tab row) and the position-scoped, GM-blended
+  // 5-deep view. MLB only -- board entries carry `position` from assembleBoard's candidate.shape;
+  // farm never populates it and never renders this view.
+  const boardPositionCounts = useMemo(() => {
+    const counts = new Map<TaxonomyPosition, number>();
+    const groups = boardPositionGroups();
+    for (const entry of board) {
+      if (entry.position && groups.includes(entry.position as TaxonomyPosition)) {
+        const position = entry.position as TaxonomyPosition;
+        counts.set(position, (counts.get(position) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [board]);
+  const boardPositionView = useMemo(
+    () => sortBoardEntriesForPosition(board, boardPosition, meta.boardRankOverrides ?? undefined),
+    [board, boardPosition, meta.boardRankOverrides],
+  );
 
   const defaultLight = useMemo(() => {
     if (!scorecard) return "shape";
@@ -139,7 +190,13 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
     setOpen(false);
     setExpanded(false);
     setRevealedLight(null);
+    setBoardViewMode("global");
+    setBoardPositionExpanded(false);
+    setBoardPosition(firstPopulatedBoardPosition(board));
     previousVerdict.current = null;
+    // board is intentionally excluded -- this effect fires once per seat change (matching the
+    // pre-existing open/expanded reset above), not on every same-seat lot recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload?.seatTeamId]);
 
   useEffect(() => {
@@ -242,6 +299,9 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
       {isMlb && (
         <section className="whisper-tier2" data-testid="whisper-tier2">
           {meta.bidVsPass && <CompactBidVsPass bidVsPass={meta.bidVsPass} />}
+          {meta.nextUpLine && (
+            <p className="whisper-next-up" data-testid="whisper-next-up">{meta.nextUpLine}</p>
+          )}
           <div className="whisper-tier2-chips">
             <NominationOddsChip chip={meta.nominationChip ?? null} />
             <GradeSanityChip player={lotPlayerForGrade} />
@@ -284,7 +344,27 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
               <div className="eyebrow">YOUR BOARD</div>
               <span className="chip">{board.length} NAMES LEFT</span>
               <span className="spacer" />
-              {board.length > 3 && (
+              {/* COCKPIT WAVE 2 (Correction 5): MLB-only GLOBAL/PER-POSITION toggle -- absent on
+                  farm (out of scope) and absent on an empty board. */}
+              {isMlb && board.length > 0 && (
+                <div className="whisper-board-view-toggle" data-testid="whisper-board-view-toggle">
+                  <button
+                    type="button"
+                    className={`whisper-board-view-btn${boardViewMode === "global" ? " active" : ""}`}
+                    onClick={() => setBoardViewMode("global")}
+                  >
+                    GLOBAL
+                  </button>
+                  <button
+                    type="button"
+                    className={`whisper-board-view-btn${boardViewMode === "position" ? " active" : ""}`}
+                    onClick={() => setBoardViewMode("position")}
+                  >
+                    PER-POSITION
+                  </button>
+                </div>
+              )}
+              {(!isMlb || boardViewMode === "global") && board.length > 3 && (
                 <button type="button" className="whisper-board-toggle" onClick={() => setExpanded((current) => !current)}>
                   {expanded ? "FOLD IT UP" : "FULL BOARD"}
                 </button>
@@ -292,34 +372,86 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
             </div>
             {board.length === 0 ? (
               <p className="whisper-empty">{EMPTY_BOARD_LINE}</p>
+            ) : isMlb && boardViewMode === "position" ? (
+              <MlbBoardPositionView
+                position={boardPosition}
+                positionCounts={boardPositionCounts}
+                positionView={boardPositionView}
+                expanded={boardPositionExpanded}
+                boardMeta={meta.boardMeta}
+                boardPlayers={meta.boardPlayers}
+                currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
+                onSelectPosition={(position) => {
+                  setBoardPosition(position);
+                  setBoardPositionExpanded(false);
+                }}
+                onToggleExpanded={() => setBoardPositionExpanded((current) => !current)}
+                onReorderPosition={meta.onBoardReorderPosition}
+              />
             ) : (
               <>
-                <div className="whisper-board-list">
-                  {board.slice(0, 3).map((entry, index) => (
-                    <BoardRow
-                      key={entry.playerId}
-                      entry={entry}
-                      rank={index + 1}
-                      meta={meta.boardMeta?.[entry.playerId]}
-                      player={meta.boardPlayers?.[entry.playerId]}
-                      currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
-                      revealFull={isMlb}
-                    />
-                  ))}
-                </div>
-                {expanded && (
-                  <div className="whisper-board-well">
-                    {board.slice(3).map((entry, index) => (
+                {(!isMlb || !expanded) && (
+                  <div className="whisper-board-list">
+                    {board.slice(0, 3).map((entry, index) => (
                       <BoardRow
                         key={entry.playerId}
                         entry={entry}
-                        rank={index + 4}
+                        rank={index + 1}
                         meta={meta.boardMeta?.[entry.playerId]}
                         player={meta.boardPlayers?.[entry.playerId]}
                         currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
                         revealFull={isMlb}
                       />
                     ))}
+                  </div>
+                )}
+                {expanded && (
+                  <div className="whisper-board-well">
+                    {isMlb ? (
+                      <RankReorderList
+                        items={board}
+                        getId={(entry) => entry.playerId}
+                        itemLabel={(entry) => meta.boardMeta?.[entry.playerId]?.name ?? entry.note ?? entry.playerId}
+                        onReorder={(orderedIds) => meta.onBoardReorderGlobal?.(orderedIds)}
+                        readOnly={!meta.onBoardReorderGlobal}
+                        listClassName="whisper-board-reorder-list"
+                        rowClassName={(entry, _index, dragged) =>
+                          `whisper-board-row${(meta.currentLotPlayerId ?? payload.market?.playerId) === entry.playerId ? " on-block" : ""}${dragged ? " dragged" : ""}`
+                        }
+                        leftWrapClassName="contents"
+                        rightWrapClassName="contents"
+                        dragHandleClassName="whisper-board-drag"
+                        arrowButtonClassName="whisper-board-arrow"
+                        renderContent={(entry, index) => (
+                          <BoardRowFields
+                            entry={entry}
+                            rank={index + 1}
+                            meta={meta.boardMeta?.[entry.playerId]}
+                            player={meta.boardPlayers?.[entry.playerId]}
+                            revealFull
+                          />
+                        )}
+                        renderBeforeArrows={(entry) => (
+                          <BoardRowTrailing
+                            entry={entry}
+                            meta={meta.boardMeta?.[entry.playerId]}
+                            onBlock={(meta.currentLotPlayerId ?? payload.market?.playerId) === entry.playerId}
+                          />
+                        )}
+                      />
+                    ) : (
+                      board.slice(3).map((entry, index) => (
+                        <BoardRow
+                          key={entry.playerId}
+                          entry={entry}
+                          rank={index + 4}
+                          meta={meta.boardMeta?.[entry.playerId]}
+                          player={meta.boardPlayers?.[entry.playerId]}
+                          currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
+                          revealFull={isMlb}
+                        />
+                      ))
+                    )}
                   </div>
                 )}
               </>
@@ -653,6 +785,60 @@ function WhisperHeadline({
   );
 }
 
+/** The rank number + popover-wrapped name -- shared by the static BoardRow and the GM-sortable
+ * RankReorderList row (COCKPIT WAVE 2). */
+function BoardRowFields({
+  entry,
+  rank,
+  meta,
+  player,
+  revealFull,
+}: {
+  entry: BoardEntry;
+  rank: number;
+  meta: { name?: string; positions?: string } | undefined;
+  player: Player | undefined;
+  /** COCKPIT W1d rework (audit note (g)): tier-gated by the caller (farm -> false), matching the
+   * three AuctionStage popover sites -- belt-and-suspenders over the 'hidden' literal gate. */
+  revealFull: boolean;
+}) {
+  const name = <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>;
+  return (
+    <>
+      <span className="num whisper-rank">{rank}</span>
+      {player ? (
+        <PlayerProfilePopover player={player} revealFull={revealFull}>
+          {name}
+        </PlayerProfilePopover>
+      ) : (
+        name
+      )}
+    </>
+  );
+}
+
+/** The need/fit chips, position label, on-block chip, and worth figure -- shared the same way. */
+function BoardRowTrailing({
+  entry,
+  meta,
+  onBlock,
+}: {
+  entry: BoardEntry;
+  meta: { name?: string; positions?: string } | undefined;
+  onBlock: boolean;
+}) {
+  return (
+    <>
+      {entry.needTag && <span className="chip whisper-need-chip">{entry.needTag}</span>}
+      {entry.fitTag && <span className="chip whisper-fit-chip">{entry.fitTag}</span>}
+      <span className="pos">{meta?.positions ?? entry.matchedShape ?? "POS"}</span>
+      {onBlock && <span className="chip whisper-on-block">ON THE BLOCK</span>}
+      <span className="spacer" />
+      <span className="num whisper-worth">{money(entry.worth)}</span>
+    </>
+  );
+}
+
 function BoardRow({
   entry,
   rank,
@@ -666,28 +852,111 @@ function BoardRow({
   meta: { name?: string; positions?: string } | undefined;
   player: Player | undefined;
   currentLotPlayerId: string | undefined;
-  /** COCKPIT W1d rework (audit note (g)): tier-gated by the caller (farm -> false), matching the
-   * three AuctionStage popover sites -- belt-and-suspenders over the 'hidden' literal gate. */
   revealFull: boolean;
 }) {
   const onBlock = currentLotPlayerId === entry.playerId;
-  const name = <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>;
   return (
     <div className={`whisper-board-row${onBlock ? " on-block" : ""}`}>
-      <span className="num whisper-rank">{rank}</span>
-      {player ? (
-        <PlayerProfilePopover player={player} revealFull={revealFull}>
-          {name}
-        </PlayerProfilePopover>
+      <BoardRowFields entry={entry} rank={rank} meta={meta} player={player} revealFull={revealFull} />
+      <BoardRowTrailing entry={entry} meta={meta} onBlock={onBlock} />
+    </div>
+  );
+}
+
+/** COCKPIT WAVE 2 (Correction 5): the 5-deep-per-position Tier-3 view, GM-sortable via the same
+ * shared RankReorderList the global view and the setup RANK YOUR BOARD zone both use. */
+const TIER3_POSITION_DEPTH = 5;
+
+function MlbBoardPositionView({
+  position,
+  positionCounts,
+  positionView,
+  expanded,
+  boardMeta,
+  boardPlayers,
+  currentLotPlayerId,
+  onSelectPosition,
+  onToggleExpanded,
+  onReorderPosition,
+}: {
+  position: TaxonomyPosition;
+  positionCounts: ReadonlyMap<TaxonomyPosition, number>;
+  positionView: readonly BoardEntry[];
+  expanded: boolean;
+  boardMeta: Record<string, { name?: string; positions?: string }> | undefined;
+  boardPlayers: Record<string, Player> | undefined;
+  currentLotPlayerId: string | undefined;
+  onSelectPosition: (position: TaxonomyPosition) => void;
+  onToggleExpanded: () => void;
+  onReorderPosition: ((position: TaxonomyPosition, orderedIds: readonly string[]) => void) | undefined;
+}) {
+  const groups = boardPositionGroups();
+  const visible = expanded ? positionView : positionView.slice(0, TIER3_POSITION_DEPTH);
+
+  // A reorder committed against the visible 5-deep window must not drop the rank of anything
+  // currently hidden below the fold -- append the untouched remainder in its existing order.
+  const withStableRemainder = (orderedVisibleIds: readonly string[]): string[] => {
+    const movedIds = new Set(orderedVisibleIds);
+    const remainder = positionView.map((entry) => entry.playerId).filter((id) => !movedIds.has(id));
+    return [...orderedVisibleIds, ...remainder];
+  };
+
+  return (
+    <div className="whisper-board-position-view" data-testid="whisper-board-position-view">
+      <div className="whisper-board-position-tabs">
+        {groups.map((candidate) => (
+          <button
+            key={candidate}
+            type="button"
+            className={`whisper-board-position-tab${candidate === position ? " active" : ""}`}
+            onClick={() => onSelectPosition(candidate)}
+          >
+            {candidate} ({positionCounts.get(candidate) ?? 0})
+          </button>
+        ))}
+      </div>
+      {positionView.length === 0 ? (
+        <p className="whisper-empty">Nobody left in the pool at {position}.</p>
       ) : (
-        name
+        <>
+          <RankReorderList
+            items={visible}
+            getId={(entry) => entry.playerId}
+            itemLabel={(entry) => boardMeta?.[entry.playerId]?.name ?? entry.note ?? entry.playerId}
+            onReorder={(orderedIds) => onReorderPosition?.(position, withStableRemainder(orderedIds))}
+            readOnly={!onReorderPosition}
+            listClassName="whisper-board-reorder-list"
+            rowClassName={(entry, _index, dragged) =>
+              `whisper-board-row${currentLotPlayerId === entry.playerId ? " on-block" : ""}${dragged ? " dragged" : ""}`
+            }
+            leftWrapClassName="contents"
+            rightWrapClassName="contents"
+            dragHandleClassName="whisper-board-drag"
+            arrowButtonClassName="whisper-board-arrow"
+            renderContent={(entry, index) => (
+              <BoardRowFields
+                entry={entry}
+                rank={index + 1}
+                meta={boardMeta?.[entry.playerId]}
+                player={boardPlayers?.[entry.playerId]}
+                revealFull
+              />
+            )}
+            renderBeforeArrows={(entry) => (
+              <BoardRowTrailing
+                entry={entry}
+                meta={boardMeta?.[entry.playerId]}
+                onBlock={currentLotPlayerId === entry.playerId}
+              />
+            )}
+          />
+          {positionView.length > TIER3_POSITION_DEPTH && (
+            <button type="button" className="whisper-board-toggle" onClick={onToggleExpanded}>
+              {expanded ? "TOP 5 ONLY" : `SHOW ALL ${positionView.length}`}
+            </button>
+          )}
+        </>
       )}
-      {entry.needTag && <span className="chip whisper-need-chip">{entry.needTag}</span>}
-      {entry.fitTag && <span className="chip whisper-fit-chip">{entry.fitTag}</span>}
-      <span className="pos">{meta?.positions ?? entry.matchedShape ?? "POS"}</span>
-      {onBlock && <span className="chip whisper-on-block">ON THE BLOCK</span>}
-      <span className="spacer" />
-      <span className="num whisper-worth">{money(entry.worth)}</span>
     </div>
   );
 }
@@ -1270,8 +1539,88 @@ function WhisperStyles() {
         letter-spacing: 0.1em;
         cursor: pointer;
       }
+      /* COCKPIT WAVE 2 (Correction 5/7): hard-edge treatments per DRAFT_SKIN_STANDARD_2026-07-08 --
+         this UI is born on the standard rather than matching the not-yet-converted --auc-* stage. */
+      .auc-root .whisper-board-view-toggle {
+        display: flex;
+        border: 2px solid var(--ballpark-panel-border);
+      }
+      .auc-root .whisper-board-view-btn {
+        appearance: none;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--ballpark-chalk);
+        opacity: 0.75;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      .auc-root .whisper-board-view-btn.active {
+        background: var(--ballpark-brass);
+        color: #1a1a1a;
+        opacity: 1;
+      }
+      .auc-root .whisper-board-drag,
+      .auc-root .whisper-board-arrow {
+        appearance: none;
+        border: 2px solid var(--ballpark-panel-border);
+        border-radius: 0;
+        background: transparent;
+        color: var(--ballpark-brass);
+        padding: 2px;
+        cursor: pointer;
+        flex-shrink: 0;
+        display: inline-flex;
+      }
+      .auc-root .whisper-board-drag:hover,
+      .auc-root .whisper-board-arrow:hover {
+        border-color: var(--ballpark-brass);
+      }
+      .auc-root .whisper-board-arrow:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+      .auc-root .whisper-board-row.dragged { opacity: 0.5; }
+      .auc-root .whisper-next-up {
+        border-left: 4px solid var(--ballpark-brass);
+        padding-left: 8px;
+        margin: 0 0 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ballpark-chalk);
+      }
+      .auc-root .whisper-board-position-view { margin-top: 4px; }
+      .auc-root .whisper-board-position-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+      .auc-root .whisper-board-position-tab {
+        appearance: none;
+        border: 2px solid var(--ballpark-panel-border);
+        border-radius: 0;
+        background: transparent;
+        color: var(--ballpark-chalk);
+        opacity: 0.75;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        padding: 3px 6px;
+        cursor: pointer;
+      }
+      .auc-root .whisper-board-position-tab.active {
+        background: var(--ballpark-brass);
+        color: #1a1a1a;
+        opacity: 1;
+        border-color: var(--ballpark-brass);
+      }
       .auc-root .whisper-board-list,
-      .auc-root .whisper-board-well {
+      .auc-root .whisper-board-well,
+      .auc-root .whisper-board-reorder-list {
         display: flex;
         flex-direction: column;
       }

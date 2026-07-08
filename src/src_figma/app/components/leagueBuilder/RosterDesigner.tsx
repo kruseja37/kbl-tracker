@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Check, GripVertical, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { PressButton } from "../ballpark";
 import {
   buildDefaultDesignSlots,
@@ -45,6 +45,7 @@ import {
 } from "./designVerdict";
 import type { DraftPoolMode, Player, Team } from "../../../../utils/leagueBuilderStorage";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
+import { RankReorderList } from "../shared/RankReorderList";
 
 export { buildRosterDesignPool } from "../../engines/leaguePlayerAdapter";
 
@@ -158,16 +159,6 @@ function applyRankOverrideOrder(
     .filter((entry): entry is RankedPoolEntry => Boolean(entry));
   const rankedIds = new Set(ranked.map((entry) => entry.playerId));
   return [...ranked, ...entries.filter((entry) => !rankedIds.has(entry.playerId))];
-}
-
-function movePlayerId(entries: readonly RankedPoolEntry[], fromIndex: number, toIndex: number): string[] {
-  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= entries.length || toIndex >= entries.length) {
-    return entries.map((entry) => entry.playerId);
-  }
-  const nextEntries = [...entries];
-  const [moved] = nextEntries.splice(fromIndex, 1);
-  nextEntries.splice(toIndex, 0, moved);
-  return nextEntries.map((entry) => entry.playerId);
 }
 
 function defaultPreferenceForSlot(slotId: string): SlotPreference {
@@ -1103,124 +1094,77 @@ function ShortlistRail({
   onUnpin: () => void;
   onReorder: (orderedPlayerIds: readonly string[]) => void;
 }) {
-  const [draggedPlayerId, setDraggedPlayerId] = useState<string | null>(null);
-  const commitMove = (fromIndex: number, toIndex: number) => {
-    if (readOnly || fromIndex === toIndex) return;
-    onReorder(movePlayerId(entries, fromIndex, toIndex));
-  };
-
   return (
     <div className="border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
       <div className="mb-2 text-[10px] font-bold tracking-[0.14em] text-[var(--ballpark-brass)]">THE ASK&apos;S SHORTLIST</div>
       {entries.length === 0 ? (
         <div className="text-[11px] leading-snug text-[var(--ballpark-chalk)]/45">NOBODY IN THE POOL FITS THIS ASK YET</div>
       ) : (
-        <div className="space-y-1.5">
-          {entries.map((entry, index) => {
+        // COCKPIT WAVE 2 (Correction 7): the drag+arrow reorder mechanics live in the shared
+        // RankReorderList component now (extracted from this exact markup) — no behavior change.
+        <RankReorderList
+          items={entries}
+          getId={(entry) => entry.playerId}
+          itemLabel={(entry) => entry.playerName ?? entry.playerId}
+          onReorder={onReorder}
+          readOnly={readOnly}
+          rowClassName={(_entry, _index, dragged) =>
+            classNames(
+              "flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75",
+              dragged && "opacity-50",
+            )
+          }
+          leftWrapClassName="min-w-0 flex items-center gap-1.5"
+          rightWrapClassName="shrink-0 flex items-center gap-1"
+          dragHandleClassName="shrink-0 border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
+          arrowButtonClassName="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+          renderContent={(entry) => {
             const classification = classificationById.get(entry.playerId);
             const satisfaction = classification ? askSatisfaction(preference, classification) : null;
             const runnerUp = satisfaction?.shapeMatch === "runnerUp";
-            const isTarget = targetPick?.playerId === entry.playerId;
-            const pinnedHere = pinnedPlayerId === entry.playerId;
             const fullPlayer = fullPlayerById.get(entry.playerId);
-            const dragIndex = draggedPlayerId ? entries.findIndex((candidate) => candidate.playerId === draggedPlayerId) : -1;
             const name = (
               <span className="min-w-0 truncate">
                 {runnerUp ? <span className="text-[var(--ballpark-status-warn)]">≈ </span> : null}
                 {entry.playerName ?? entry.playerId} · {entry.shape} · {formatVerdictMoney(entry.salary)}
               </span>
             );
+            return fullPlayer ? (
+              <PlayerProfilePopover player={fullPlayer} revealFull>
+                {name}
+              </PlayerProfilePopover>
+            ) : (
+              name
+            );
+          }}
+          renderBeforeArrows={(entry) =>
+            targetPick?.playerId === entry.playerId ? (
+              <span className="border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
+                TARGET
+              </span>
+            ) : null
+          }
+          renderAfterArrows={(entry) => {
+            const pinnedHere = pinnedPlayerId === entry.playerId;
             return (
-              <div
-                key={entry.playerId}
-                onDragOver={(event) => {
-                  if (readOnly || !draggedPlayerId || draggedPlayerId === entry.playerId) return;
-                  event.preventDefault();
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (dragIndex >= 0) commitMove(dragIndex, index);
-                  setDraggedPlayerId(null);
+              <button
+                type="button"
+                onClick={() => {
+                  if (pinnedHere) onUnpin();
+                  else onPin(entry.playerId);
                 }}
                 className={classNames(
-                  "flex items-center justify-between gap-2 text-[11px] text-[var(--ballpark-chalk)]/75",
-                  draggedPlayerId === entry.playerId && "opacity-50",
+                  "border px-1.5 py-0.5 text-[9px] font-bold tracking-wider active:scale-95",
+                  pinnedHere
+                    ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-brass)] text-[#1A1A1A]"
+                    : "border-[var(--ballpark-panel-border)] text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)]",
                 )}
               >
-                <span className="min-w-0 flex items-center gap-1.5">
-                  {!readOnly ? (
-                    <button
-                      type="button"
-                      draggable
-                      aria-label={`Drag ${entry.playerName ?? entry.playerId}`}
-                      title="Drag to rank"
-                      onDragStart={(event) => {
-                        event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData("text/plain", entry.playerId);
-                        setDraggedPlayerId(entry.playerId);
-                      }}
-                      onDragEnd={() => setDraggedPlayerId(null)}
-                      className="shrink-0 border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
-                    >
-                      <GripVertical className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  ) : null}
-                  {fullPlayer ? (
-                    <PlayerProfilePopover player={fullPlayer} revealFull>
-                      {name}
-                    </PlayerProfilePopover>
-                  ) : (
-                    name
-                  )}
-                </span>
-                <span className="shrink-0 flex items-center gap-1">
-                  {isTarget ? (
-                    <span className="border border-[var(--ballpark-brass)] px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-[var(--ballpark-brass)]">
-                      TARGET
-                    </span>
-                  ) : null}
-                  {!readOnly ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => commitMove(index, index - 1)}
-                        disabled={index === 0}
-                        aria-label={`Move ${entry.playerName ?? entry.playerId} up`}
-                        className="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
-                      >
-                        <ArrowUp className="h-3 w-3" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => commitMove(index, index + 1)}
-                        disabled={index === entries.length - 1}
-                        aria-label={`Move ${entry.playerName ?? entry.playerId} down`}
-                        className="border border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
-                      >
-                        <ArrowDown className="h-3 w-3" aria-hidden="true" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (pinnedHere) onUnpin();
-                          else onPin(entry.playerId);
-                        }}
-                        className={classNames(
-                          "border px-1.5 py-0.5 text-[9px] font-bold tracking-wider active:scale-95",
-                          pinnedHere
-                            ? "border-[var(--ballpark-brass)] bg-[var(--ballpark-brass)] text-[#1A1A1A]"
-                            : "border-[var(--ballpark-panel-border)] text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)]",
-                        )}
-                      >
-                        {pinnedHere ? "PINNED ✓" : "PIN"}
-                      </button>
-                    </>
-                  ) : null}
-                </span>
-              </div>
+                {pinnedHere ? "PINNED ✓" : "PIN"}
+              </button>
             );
-          })}
-        </div>
+          }}
+        />
       )}
     </div>
   );
