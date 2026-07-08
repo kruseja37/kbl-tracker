@@ -129,7 +129,17 @@ function toBridgeRosterShape(entry: {
 // always-visible strip. Anti-generic law (design principle 8): this varies with THIS team's actual
 // MLB+farm gap findings -- there is no generic fallback sentence when gaps are absent (the strip
 // simply doesn't render, per WhisperPanel's bridgeHeadline-is-falsy guard).
-function buildFarmBridgeHeadline(gaps: readonly BoardPriorityGap[]): string | null {
+// REWORK (audit note (h), 2026-07-08): the gaps' SOURCE team (rosterBoardTeamState, which falls
+// back to the first human club when nobody is "on the clock") can transiently differ from the
+// whisper's SEAT team in RESOLVE state (pending-claim team). The whisper is a private, seat-only
+// read -- another club's gaps must never render in it, so the headline is suppressed on any
+// source/seat mismatch. Exported for its unit test.
+export function buildFarmBridgeHeadline(
+  gaps: readonly BoardPriorityGap[],
+  sourceTeamId: string | null | undefined,
+  seatTeamId: string | null | undefined,
+): string | null {
+  if (!sourceTeamId || !seatTeamId || sourceTeamId !== seatTeamId) return null;
   if (gaps.length === 0) return null;
   // "·" mirrors the separator the existing PRIORITY GAPS needline already uses (buildFarmNeedLine
   // above) -- one visual language for gap lists across the farm floor.
@@ -542,11 +552,16 @@ export function LeagueBuilderFarmAuctionDraft() {
     return null;
   }, [auction.currentBidderTeamId, session]);
 
-  // COCKPIT W1d item 4(i): a REAL farm board -- remaining prospects ranked by scouted value-range
-  // midpoint (archetypeBandValueRange, the SAME fog-respecting scout math the on-the-block lot
-  // already uses). Only the current lot carries a live opening ask, so every OTHER remaining
-  // prospect gets a hypothetical one via the exported, pure `lotOpeningAsk` -- no new math, no
-  // true IV anywhere; ranking is purely on the scouted range.
+  // COCKPIT W1d item 4(i) (REWORKED per audit fog-law finding, 2026-07-08): a REAL farm board --
+  // remaining prospects ranked AND displayed by `range.displayedEstimate`, the seeded, jittered,
+  // fog-CARRYING scout point estimate (archetypeBandValueRange, the SAME scout math the
+  // on-the-block lot already uses). NEVER the band midpoint: the band is built SYMMETRIC around
+  // the true opening ask (low = ask*(1-w), high = ask*(1+w)), so (low+high)/2 === lotOpeningAsk
+  // === a pure function of TRUE IV -- the midpoint cancels the fog exactly (corrected fog rule,
+  // DRAFT_COCKPIT_DESIGN §2.5: on any fogged surface, no derived quantity may be an exact
+  // deterministic function of a true-value anchor). Only the current lot carries a live opening
+  // ask, so every OTHER remaining prospect gets a hypothetical one via the exported, pure
+  // `lotOpeningAsk` -- consumed ONLY as archetypeBandValueRange's input, never surfaced.
   const farmBoardEntries = useMemo<BoardEntry[]>(() => {
     if (!session || !whisperSeatTeamId) return [];
     const farmArchetypeKey = teamById.get(whisperSeatTeamId)?.farmArchetypeKey;
@@ -569,7 +584,10 @@ export function LeagueBuilderFarmAuctionDraft() {
         if (!range) return null;
         return {
           playerId,
-          worth: (range.low + range.high) / 2,
+          // Fog law: the displayed/ranking worth is the jittered scout estimate -- NOT the band
+          // midpoint, which algebraically reconstructs the true-IV-derived reserve (see the
+          // useMemo doc comment above).
+          worth: range.displayedEstimate,
           matchedShape: prospect.primaryPosition,
           needTag: null,
           fitTag: null,
@@ -651,7 +669,12 @@ export function LeagueBuilderFarmAuctionDraft() {
         objectPronoun: currentLotProspect?.gender === "F" ? "her" : "him",
         boardPlayers: farmBoardPlayers,
         // COCKPIT W1d item 5: the bridge headline, promoted from the already-tilted priority gaps.
-        bridgeHeadline: buildFarmBridgeHeadline(rosterBoardPriorityGaps),
+        // Suppressed whenever the gaps' source team isn't the whisper's seat team (audit note (h)).
+        bridgeHeadline: buildFarmBridgeHeadline(
+          rosterBoardPriorityGaps,
+          rosterBoardTeamState?.teamId ?? null,
+          whisperSeatTeamId,
+        ),
         chemFitLabel: assembly.chemFitLabel,
       },
     );
@@ -665,6 +688,7 @@ export function LeagueBuilderFarmAuctionDraft() {
     minBid,
     playerById,
     rosterBoardPriorityGaps,
+    rosterBoardTeamState,
     session,
     teamById,
     teamStateById,

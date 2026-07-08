@@ -150,8 +150,10 @@ threads `prospectChemistry`/`mlbRosterChemistryCounts` (from the already-compute
   useMemo). Every remaining prospect (`session.availablePlayerIds`, excluding the current lot) gets
   a hypothetical opening ask via the exported, pure `lotOpeningAsk` (auctionStateMachine.ts —
   normally only computed for the CURRENT lot), then the SAME `scoutRangeForProspect` helper this
-  page already uses for the on-the-block card. Ranked by scouted value-range midpoint
-  `(low + high) / 2` (no true IV anywhere). `farmBoardPlayers` (a parallel map) lets board rows
+  page already uses for the on-the-block card. Ranked AND displayed by `range.displayedEstimate`
+  (the seeded, jittered, fog-carrying scout point estimate) — REWORKED per the audit's fog-law
+  finding; see the "Adversarial audit rework" section below (the initially-shipped band midpoint
+  reconstructed the true opening ask exactly). `farmBoardPlayers` (a parallel map) lets board rows
   open the fogged profile popover, matching the WT-D "clickable everything" pattern. Threaded into
   `assembleRosterIntelligencePayload({ board: farmBoardEntries, ... })` and the whisper meta's
   `boardPlayers`. `EMPTY_BOARD_LINE` no longer renders once any prospects remain.
@@ -170,10 +172,8 @@ floor there first."`. Rendered by a new always-visible `FarmBridgeStrip` compone
 `WhisperPanel.tsx` (testid `whisper-farm-bridge`), positioned above the collapsible strip — zero
 taps, farm-only, absent when there are no gaps (no generic fallback sentence). Measured word count
 for a representative 2-gap fixture: **18 words** (well under the ≤60 budget; a 1-gap case runs
-shorter). Known limitation: the headline's source team (`rosterBoardTeamState`, via
-`rosterBoardPriorityGaps`) can diverge from the whisper's seat team (`whisperSeatTeamId`) in the
-RESOLVE-state edge case (pending-claim team without a "current bidder"); OPEN_BIDDING (the dominant
-live-whisper state) is always aligned. Flagged for a future lane, not fixed here (see below).
+shorter). The RESOLVE-state source/seat divergence originally flagged as a known limitation is now
+FIXED — see the "Adversarial audit rework" section below (audit note (h)).
 
 ### Item 6 — WT-D audit follow-ups
 - (i) `revealFull` is now tier-gated (`vm.tier !== "farm"` / `isFarmLot ? false : !lot.scout`) at
@@ -191,3 +191,41 @@ specifically calls out only its "scout cover block" — a carve-out that only ma
 rest of the file is otherwise in-bounds. Item 6(i) is achievable ONLY inside `AuctionStage.tsx`
 (the `revealFull` JSX prop lives there, not in the page file), and the prior WT-D audit explicitly
 queued this exact fix for W1d. Proceeded on that basis; flagging for the auditor's attention.
+
+---
+
+## ADVERSARIAL AUDIT REWORK (2026-07-08, follow-up commit — verdict on e32b42d6 was REJECT on one blocking finding)
+
+**THE FINDING (fog-law leak, proven algebraically):** the farm board's initial ranking/display key
+`worth = (range.low + range.high) / 2` cancels the fog EXACTLY. `archetypeBandValueRange` builds
+the band SYMMETRIC around the true opening ask (`low = ask·(1−w)`, `high = ask·(1+w)`), so the
+midpoint `=== lotOpeningAsk ===` a pure function of TRUE IV. The board therefore both ORDERED by
+true value and PRINTED the true-IV-derived reserve price on every un-nominated row. The design
+doc's own "range midpoint" wording contributed; the captain corrected it on main.
+
+**THE CORRECTED FOG RULE (DRAFT_COCKPIT_DESIGN §2.5 fog-math correction, now binding):** on any
+fogged surface, no derived quantity may be an exact deterministic function of a true-value anchor.
+
+**Rework delivered (5 items, same-lane follow-up commit):**
+1. `LeagueBuilderFarmAuctionDraft.tsx` — board `worth` (ranking AND display) is now
+   `range.displayedEstimate`, the seeded/jittered fog-carrying scout point estimate. The shared
+   `BoardRow` component is untouched (MLB legitimately shows true worth); only what farm
+   `entry.worth` CONTAINS changed. Evidence from the seeded page fixture (prospect "Leonardo
+   Bagwell", band-7): openingAsk 1666.49; band [1199.87, 2133.11]; midpoint 1666.49 (=== the true
+   ask — the leak); displayedEstimate 2068.92 (what now renders: $2,069 ≠ $1,666).
+2. The page test's leak-characterizing board assertions are replaced with fog-preserving locks:
+   (a) the top-ranked row's rendered worth `=== money(range.displayedEstimate)` recomputed
+   end-to-end from the same seeds; (b) an adversarial midpoint lock — a uniquely-named seeded
+   fixture whose rounded displayedEstimate ≠ rounded midpoint, asserting the rendered figure
+   equals the former, differs from the latter, AND that the midpoint equals `lotOpeningAsk` to 6
+   decimals (proving the lock guards the real anchor).
+3. Audit note (g): `WhisperPanel.tsx`'s `BoardRow` popover no longer hardcodes `revealFull` — it
+   takes a `revealFull` prop passed as `isMlb` from both call sites (top-3 list + expanded well),
+   making the belt-and-suspenders uniform with the three AuctionStage sites. New WhisperPanel test
+   proves the farm board row renders the scout-band branch even for an UNSET `ratingRevealState`
+   (with an MLB control asserting the full reveal still works there).
+4. Audit note (h): `buildFarmBridgeHeadline` now takes `(gaps, sourceTeamId, seatTeamId)` and
+   returns null on any source/seat mismatch — suppressing the transient RESOLVE-state wrong-team
+   headline (`rosterBoardTeamState` human-fallback ≠ `pendingClaim` seat). Exported + unit-tested
+   (match renders, mismatch/null-source/null-seat/empty-gaps all suppress).
+5. This contract section + the corrected item 4(i)/item 5 wording above.

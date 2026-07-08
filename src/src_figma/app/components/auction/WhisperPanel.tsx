@@ -303,6 +303,7 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
                       meta={meta.boardMeta?.[entry.playerId]}
                       player={meta.boardPlayers?.[entry.playerId]}
                       currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
+                      revealFull={isMlb}
                     />
                   ))}
                 </div>
@@ -316,6 +317,7 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
                         meta={meta.boardMeta?.[entry.playerId]}
                         player={meta.boardPlayers?.[entry.playerId]}
                         currentLotPlayerId={meta.currentLotPlayerId ?? payload.market?.playerId}
+                        revealFull={isMlb}
                       />
                     ))}
                   </div>
@@ -657,12 +659,16 @@ function BoardRow({
   meta,
   player,
   currentLotPlayerId,
+  revealFull,
 }: {
   entry: BoardEntry;
   rank: number;
   meta: { name?: string; positions?: string } | undefined;
   player: Player | undefined;
   currentLotPlayerId: string | undefined;
+  /** COCKPIT W1d rework (audit note (g)): tier-gated by the caller (farm -> false), matching the
+   * three AuctionStage popover sites -- belt-and-suspenders over the 'hidden' literal gate. */
+  revealFull: boolean;
 }) {
   const onBlock = currentLotPlayerId === entry.playerId;
   const name = <span className="whisper-board-name">{meta?.name ?? entry.note ?? entry.playerId}</span>;
@@ -670,7 +676,7 @@ function BoardRow({
     <div className={`whisper-board-row${onBlock ? " on-block" : ""}`}>
       <span className="num whisper-rank">{rank}</span>
       {player ? (
-        <PlayerProfilePopover player={player} revealFull>
+        <PlayerProfilePopover player={player} revealFull={revealFull}>
           {name}
         </PlayerProfilePopover>
       ) : (

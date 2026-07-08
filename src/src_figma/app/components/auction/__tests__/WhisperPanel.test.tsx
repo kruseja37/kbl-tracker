@@ -700,4 +700,39 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     );
     expect(screen.getByTestId("whisper-farm-chem-fit")).toHaveTextContent("Chem fit +8% — Spirited room");
   });
+
+  test("COCKPIT W1d rework (audit note g): a farm board row's popover is tier-gated to scout bands even for an UNSET ratingRevealState; MLB keeps the full reveal", () => {
+    // Adversarial record: no 'hidden' literal at all (unset) -- before the rework, BoardRow's
+    // hardcoded revealFull would have taken draftProfileModel's reveal branch for this player on
+    // the FARM tier. The tier gate must hold on its own.
+    const boardPlayer: Player = {
+      ...gradeChipPlayer("B"),
+      id: "seat-a-only",
+      ratingRevealState: undefined,
+      prospectProfile: {
+        scoutedGrade: "B",
+        potentialGrade: "A-",
+        scoutConfidence: "medium",
+        scoutName: "Scout Vale",
+      },
+    } as Player;
+    const boardExtras = {
+      boardPlayers: { "seat-a-only": boardPlayer },
+      boardMeta: { "seat-a-only": { name: "Seat A Slider" } },
+    };
+
+    const { unmount } = render(<WhisperPanel payload={Object.assign(payload("push"), boardExtras)} tier="farm" />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "Seat A Slider" }));
+    expect(screen.getByText("Farm - scouting only")).toBeInTheDocument();
+    expect(screen.queryByText("POW")).not.toBeInTheDocument();
+    unmount();
+
+    // MLB control: the SAME record on the MLB tier legitimately reveals full ratings.
+    render(<WhisperPanel payload={Object.assign(payload("push"), boardExtras)} tier="mlb" />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "Seat A Slider" }));
+    expect(screen.getByText("POW")).toBeInTheDocument();
+    expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
+  });
 });
