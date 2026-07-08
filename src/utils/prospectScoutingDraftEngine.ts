@@ -286,6 +286,57 @@ const STANDARD_GRADE_WEIGHTS: Array<[Grade, number]> = [
   ['D', 8],
   ['A+', 0],
 ];
+
+function buildSpecGradeSequence(count: number, seed: string): Grade[] {
+  if (count <= 0) return [];
+
+  const weightedGrades = STANDARD_GRADE_WEIGHTS.filter(([, weight]) => weight > 0);
+  const totalWeight = weightedGrades.reduce((sum, [, weight]) => sum + weight, 0);
+  const quotaRows = weightedGrades.map(([grade, weight], orderIndex) => {
+    const exactCount = (count * weight) / totalWeight;
+    const floorCount = Math.floor(exactCount);
+    return {
+      grade,
+      orderIndex,
+      count: floorCount,
+      remainder: exactCount - floorCount,
+      tieBreak: randomUnit(`${seed}:quota:${grade}`),
+    };
+  });
+
+  let assignedCount = quotaRows.reduce((sum, row) => sum + row.count, 0);
+  const remainders = [...quotaRows].sort((left, right) => {
+    const remainderDiff = right.remainder - left.remainder;
+    if (Math.abs(remainderDiff) > 1e-12) return remainderDiff;
+    const tieDiff = left.tieBreak - right.tieBreak;
+    if (Math.abs(tieDiff) > 1e-12) return tieDiff;
+    return left.orderIndex - right.orderIndex;
+  });
+
+  for (let index = 0; assignedCount < count; index += 1) {
+    const row = remainders[index % remainders.length];
+    row.count += 1;
+    assignedCount += 1;
+  }
+
+  const grades: Grade[] = [];
+  for (const row of quotaRows) {
+    for (let index = 0; index < row.count; index += 1) {
+      grades.push(row.grade);
+    }
+  }
+
+  for (let index = grades.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.min(
+      index,
+      Math.floor(randomUnit(`${seed}:shuffle:${index}`) * (index + 1)),
+    );
+    [grades[index], grades[swapIndex]] = [grades[swapIndex], grades[index]];
+  }
+
+  return grades;
+}
+
 const POSITION_PRIMARY_WEIGHTS: Array<[DraftPosition, number]> = [
   ['SP', 18],
   ['SP/RP', 6],
@@ -1288,11 +1339,15 @@ export function generateHiddenPersonalityModifiers(seed: string): HiddenPersonal
   };
 }
 
-function buildCandidate(input: ProspectScoutingDraftInput, index: number): GeneratedProspectCandidate {
+function buildCandidate(
+  input: ProspectScoutingDraftInput,
+  index: number,
+  targetGradeOverride?: Grade,
+): GeneratedProspectCandidate {
   const seed = `${input.seed}:candidate:${index}`;
   const position = pickWeightedValue(`${seed}:position`, POSITION_PRIMARY_WEIGHTS);
   const secondaryPosition = chooseSecondary(position, seed);
-  const targetGrade = pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
+  const targetGrade = targetGradeOverride ?? pickWeighted(`${seed}:grade`, STANDARD_GRADE_WEIGHTS);
   const bats = drawProspectBats(seed);
   const throws = drawProspectThrows(seed, bats);
   const traitPool = isPitcher(position) ? PROSPECT_PITCHER_TRAIT_POOL : PROSPECT_HITTER_TRAIT_POOL;
@@ -1545,8 +1600,9 @@ export function generateProspectPool(
   };
   const usedIds = new Set(input.existingPlayerIds ?? []);
 
+  const targetGrades = buildSpecGradeSequence(count, `${input.seed}:farm-pool:grade-curve`);
   const candidates = rebalanceProspectChemistryToTarget(
-    Array.from({ length: count }, (_, index) => buildCandidate(engineInput, index)),
+    Array.from({ length: count }, (_, index) => buildCandidate(engineInput, index, targetGrades[index])),
     `${input.seed}:chemistry-rebalance`,
   );
 
@@ -1627,8 +1683,9 @@ export function generateProspectScoutingDraft(
   const pickOrder = buildPickOrder(input);
   const totalPicks = pickOrder.length;
   const poolSize = Math.max(totalPicks, totalPicks * (input.candidatePoolMultiplier ?? 3));
+  const targetGrades = buildSpecGradeSequence(poolSize, `${input.seed}:draft-class:grade-curve`);
   const draftClass = rebalanceProspectChemistryToTarget(
-    Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index)),
+    Array.from({ length: poolSize }, (_, index) => buildCandidate(input, index, targetGrades[index])),
     `${input.seed}:chemistry-rebalance`,
   );
   const available = [...draftClass];
