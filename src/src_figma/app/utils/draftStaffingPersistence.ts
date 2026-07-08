@@ -1,4 +1,8 @@
 import { SMB4_FIRST_NAMES, SMB4_LAST_NAMES } from "../../../data/smb4NameDatabase";
+import {
+  FARM_ARCHETYPE_SCOUT_CONFIDENCE,
+  type ScoutConfidenceBand,
+} from "../../../data/farmArchetypeScoutConfidence";
 import type { ReporterAvatarEra, ReporterPersonality, VoiceStyle } from "../../../types/reporter";
 import {
   deleteScoutProfilesForLeague,
@@ -15,8 +19,11 @@ import {
 import { createReporter, getReporterForTeam, updateReporter } from "../../../utils/reporterStorage";
 import {
   scoutAccuracy,
+  HITTER_SCOUT_TOOLS,
+  PITCHER_SCOUT_TOOLS,
   type DraftPosition,
   type ProspectScoutDescriptor,
+  type ScoutArea,
   type ScoutSpecialty,
 } from "../../../utils/prospectScoutingDraftEngine";
 import type { BeatReporter } from "../../../types/reporter";
@@ -96,60 +103,14 @@ const SCOUT_SPECIALTY_VALUES = [
   "catching",
   "power",
   "contact",
+  "fielding",
+  "arm",
+  "velocity",
+  "junk",
+  "accuracy",
   "defense",
   "speed",
 ] as const satisfies readonly ScoutSpecialty[];
-
-const SCOUT_ARCHETYPES = [
-  {
-    specialtyLabel: "Infielders",
-    specialties: ["infield", "SS", "2B"],
-    weaknesses: ["CP"],
-    accuracyModifier: 2,
-    summary: "Middle-infield reads are tight; bullpen projection is weaker.",
-  },
-  {
-    specialtyLabel: "Arms",
-    specialties: ["pitching", "SP", "SP/RP"],
-    weaknesses: ["LF"],
-    accuracyModifier: 1,
-    summary: "Spots rotation arms and swingman value before the room catches up.",
-  },
-  {
-    specialtyLabel: "Speed and glove",
-    specialties: ["speed", "defense", "CF"],
-    weaknesses: ["power"],
-    accuracyModifier: 0,
-    summary: "Sharp on defense-first athletes; skeptical of one-tool power.",
-  },
-  {
-    specialtyLabel: "Power",
-    specialties: ["power", "1B", "RF"],
-    weaknesses: ["speed"],
-    accuracyModifier: -1,
-    summary: "Loves thump and corner bats; can miss late-blooming runners.",
-  },
-  {
-    specialtyLabel: "Generalist",
-    specialties: [],
-    weaknesses: [],
-    accuracyModifier: 4,
-    summary: "No deep specialty, but the floor is steady across the board.",
-  },
-  {
-    specialtyLabel: "Catchers",
-    specialties: ["catching", "C"],
-    weaknesses: ["CF"],
-    accuracyModifier: 1,
-    summary: "Finds receiving and game-calling value that public IV underweights.",
-  },
-] as const satisfies readonly {
-  specialtyLabel: string;
-  specialties: NonNullable<ProspectScoutDescriptor["specialties"]>;
-  weaknesses: NonNullable<ProspectScoutDescriptor["weaknesses"]>;
-  accuracyModifier: number;
-  summary: string;
-}[];
 
 function hashStringToUint32(value: string): number {
   let hash = 2166136261;
@@ -189,6 +150,66 @@ function averageAccuracy(accuracyByPosition: Record<string, number>): number {
   const values = Object.values(accuracyByPosition);
   if (values.length === 0) return 65;
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+const SCOUT_AREAS = Array.from(new Set([
+  ...HITTER_SCOUT_TOOLS,
+  ...PITCHER_SCOUT_TOOLS,
+])) as ScoutArea[];
+
+const SCOUT_AREA_LABELS: Record<ScoutArea, string> = {
+  power: "Power",
+  contact: "Contact",
+  speed: "Speed",
+  fielding: "Fielding",
+  arm: "Arm",
+  velocity: "Velocity",
+  junk: "Junk",
+  accuracy: "Accuracy",
+};
+
+function areasForBand(
+  farmArchetypeKey: string | undefined,
+  band: ScoutConfidenceBand,
+): ScoutArea[] {
+  const row = farmArchetypeKey ? FARM_ARCHETYPE_SCOUT_CONFIDENCE[farmArchetypeKey] : undefined;
+  return SCOUT_AREAS.filter((area) => (row?.bands[area] ?? 5) === band);
+}
+
+function areaLabel(areas: readonly ScoutArea[]): string {
+  if (areas.length === 0) return "Generalist";
+  return areas.map((area) => SCOUT_AREA_LABELS[area]).join(" / ");
+}
+
+function buildAutoScoutForTeam(leagueId: string, team: Team, index: number): LiveScoutCandidate {
+  const seed = `${leagueId}:live-scout:${team.id}:${team.farmArchetypeKey ?? "medium"}`;
+  const name = `${pickBySeed(SMB4_FIRST_NAMES, `${seed}:first`)} ${pickBySeed(SMB4_LAST_NAMES, `${seed}:last`)}`;
+  const specialties = areasForBand(team.farmArchetypeKey, 3);
+  const weaknesses = areasForBand(team.farmArchetypeKey, 7);
+  const row = team.farmArchetypeKey ? FARM_ARCHETYPE_SCOUT_CONFIDENCE[team.farmArchetypeKey] : undefined;
+  const baseCandidate = {
+    id: `live-scout-${leagueId}-${team.id}`,
+    leagueId,
+    teamId: team.id,
+    name,
+    specialties,
+    weaknesses,
+    seed,
+    specialtyLabel: areaLabel(specialties),
+    summary: row?.rationale ?? "Balanced farm scout: no farm archetype is set, so every area is treated as a medium-confidence read.",
+    hiredPick: {
+      round: 1,
+      pickNumber: index + 1,
+      teamId: team.id,
+    },
+  };
+  const accuracyByPosition = scoutAccuracyByPosition(baseCandidate);
+
+  return {
+    ...baseCandidate,
+    accuracyByPosition,
+    eye: averageAccuracy(accuracyByPosition),
+  };
 }
 
 function trimOrFallback(value: string, fallback: string): string {
@@ -234,51 +255,15 @@ export function isHumanControlledTeam(team: Pick<Team, "controlledBy">): boolean
   return team.controlledBy !== "ai";
 }
 
-export function buildLiveScoutPool(leagueId: string, teamCount: number): LiveScoutCandidate[] {
-  const scoutCount = Math.max(6, teamCount * 2);
-
-  return Array.from({ length: scoutCount }, (_, index) => {
-    const seed = `${leagueId}:live-scout:${index + 1}`;
-    const archetype = SCOUT_ARCHETYPES[index % SCOUT_ARCHETYPES.length];
-    const name = `${pickBySeed(SMB4_FIRST_NAMES, `${seed}:first`)} ${pickBySeed(SMB4_LAST_NAMES, `${seed}:last`)}`;
-    const baseCandidate = {
-      id: `live-scout-${leagueId}-${index + 1}`,
-      leagueId,
-      name,
-      specialties: [...archetype.specialties],
-      weaknesses: [...archetype.weaknesses],
-      seed,
-      specialtyLabel: archetype.specialtyLabel,
-      summary: archetype.summary,
-    };
-    const accuracyByPosition = scoutAccuracyByPosition(baseCandidate);
-
-    return {
-      ...baseCandidate,
-      accuracyByPosition,
-      eye: averageAccuracy(accuracyByPosition) + archetype.accuracyModifier,
-    };
-  });
+export function buildLiveScoutPool(leagueId: string, teams: readonly Team[]): LiveScoutCandidate[] {
+  return teams.map((team, index) => buildAutoScoutForTeam(leagueId, team, index));
 }
 
 export async function persistScoutHiresForLeague(input: PersistScoutHiresInput): Promise<LeagueBuilderScoutProfile[]> {
-  const pool = input.pool ?? buildLiveScoutPool(input.leagueId, input.teams.length);
-  const candidateById = new Map(pool.map((candidate) => [candidate.id, candidate]));
-  const assignedScoutIds = new Set<string>();
+  const pool = input.pool ?? buildLiveScoutPool(input.leagueId, input.teams);
+  const candidateByTeamId = new Map(pool.map((candidate) => [candidate.teamId, candidate]));
   const scoutInputs = input.teams.map((team, index) => {
-    const selectedScoutId = input.selectedScoutIdsByTeamId[team.id];
-    const candidate = selectedScoutId
-      ? candidateById.get(selectedScoutId)
-      : pool.find((scout) => !assignedScoutIds.has(scout.id));
-
-    if (!candidate) {
-      throw new Error(`No available scout for ${team.name}.`);
-    }
-    if (assignedScoutIds.has(candidate.id)) {
-      throw new Error(`${candidate.name} has already been hired by another team.`);
-    }
-
-    assignedScoutIds.add(candidate.id);
+    const candidate = candidateByTeamId.get(team.id) ?? buildAutoScoutForTeam(input.leagueId, team, index);
     return toScoutProfileInput(candidate, team.id, index + 1);
   });
 

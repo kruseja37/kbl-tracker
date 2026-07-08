@@ -26,7 +26,7 @@ import {
   SCOUT_TOOL_BAND_WIDTHS,
   scoutProspect,
   scoutOverallGradeBand,
-  scoutTierForPosition,
+  scoutOverallBandForPosition,
   scoutToolBand,
   scoutToolBands,
   type GeneratedProspectCandidate,
@@ -1163,19 +1163,11 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(neutralErrors.some((error) => error > 0)).toBe(true);
   });
 
-  test('scout tier uses exact position membership', () => {
-    expect(scoutTierForPosition('CF', {
-      specialties: ['CF', 'outfield'],
-      weaknesses: ['CP', 'pitching'],
-    })).toBe('high');
-    expect(scoutTierForPosition('CP', {
-      specialties: ['CF', 'outfield'],
-      weaknesses: ['CP', 'pitching'],
-    })).toBe('low');
-    expect(scoutTierForPosition('LF', {
-      specialties: ['outfield'],
-      weaknesses: ['pitching'],
-    })).toBe('medium');
+  test('F2 overall grade band follows the mean-rounded farm-archetype rule', () => {
+    expect(scoutOverallBandForPosition('CF', 'web-gems')).toBe(5);
+    expect(scoutOverallBandForPosition('SP', 'the-opener')).toBe(5);
+    expect(scoutOverallBandForPosition('CF', 'whiteyball')).toBe(5);
+    expect(scoutOverallBandForPosition('CF', undefined)).toBe(5);
   });
 
   test('S3 scout tool bands contain the true value with tier-width deterministic ranges', () => {
@@ -1252,7 +1244,7 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     });
   });
 
-  test('S3 scout tool band maps expose hitter and pitcher tool sets using S2 position tiers', () => {
+  test('S3 scout tool band maps expose hitter and pitcher tool sets using farm archetype area tiers', () => {
     const ratings = {
       power: 58,
       contact: 61,
@@ -1266,19 +1258,18 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     const hitterBands = scoutToolBands({
       ratings,
       position: 'CF',
-      scout: { specialties: ['CF'] },
+      farmArchetypeKey: 'web-gems',
       seed: 's3-hitter-tools',
     });
     const pitcherBands = scoutToolBands({
       ratings,
       position: 'SP',
-      scout: { weaknesses: ['SP'] },
+      farmArchetypeKey: 'the-opener',
       seed: 's3-pitcher-tools',
     });
     const mediumBands = scoutToolBands({
       ratings,
       position: 'CF',
-      scout: { specialties: ['SS'] },
       seed: 's3-medium-tools',
     });
 
@@ -1288,15 +1279,44 @@ describe('shared deterministic prospect/scouting draft engine', () => {
     expect(hitterBands).not.toHaveProperty('accuracy');
     expect(Object.keys(pitcherBands).sort()).toEqual([...PITCHER_SCOUT_TOOLS].sort());
     expect(pitcherBands).not.toHaveProperty('arm');
-    expect(Object.values(hitterBands).every((band) =>
-      band.upper - band.lower === SCOUT_TOOL_BAND_WIDTHS.high,
-    )).toBe(true);
+    expect(hitterBands.fielding.upper - hitterBands.fielding.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.high);
+    expect(hitterBands.arm.upper - hitterBands.arm.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.high);
+    expect(hitterBands.power.upper - hitterBands.power.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.low);
+    expect(hitterBands.contact.upper - hitterBands.contact.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.low);
     expect(Object.values(mediumBands).every((band) =>
       band.upper - band.lower === SCOUT_TOOL_BAND_WIDTHS.medium,
     )).toBe(true);
-    expect(Object.values(pitcherBands).every((band) =>
-      band.upper - band.lower === SCOUT_TOOL_BAND_WIDTHS.low,
-    )).toBe(true);
+    expect(pitcherBands.velocity.upper - pitcherBands.velocity.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.high);
+    expect(pitcherBands.junk.upper - pitcherBands.junk.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.high);
+    expect(pitcherBands.accuracy.upper - pitcherBands.accuracy.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.low);
+  });
+
+  test('F2 different farm archetypes produce different widths for the same prospect area', () => {
+    const ratings = {
+      power: 58,
+      contact: 61,
+      speed: 64,
+      fielding: 67,
+      arm: 70,
+      velocity: 73,
+      junk: 76,
+      accuracy: 79,
+    };
+    const webGems = scoutToolBands({
+      ratings,
+      position: 'CF',
+      farmArchetypeKey: 'web-gems',
+      seed: 'same-prospect:web',
+    });
+    const bomba = scoutToolBands({
+      ratings,
+      position: 'CF',
+      farmArchetypeKey: 'bomba-squad',
+      seed: 'same-prospect:bomba',
+    });
+
+    expect(webGems.fielding.upper - webGems.fielding.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.high);
+    expect(bomba.fielding.upper - bomba.fielding.lower).toBe(SCOUT_TOOL_BAND_WIDTHS.medium);
   });
 
   test('scout weakness can worsen matching-position scouted-grade accuracy', () => {

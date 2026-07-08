@@ -42,6 +42,7 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
+import { buildLiveScoutPool } from "../utils/draftStaffingPersistence";
 
 export { getCurrentBidderTeamId } from "../../../engines/auctionStateMachine";
 
@@ -166,12 +167,27 @@ function resolveScoutsByTeamId(
 
 async function loadOptionalFarmScouts(
   leagueId: string,
+  leagueTeams: readonly Team[],
 ): Promise<Record<string, ProspectScoutDescriptor | undefined> | undefined> {
   try {
-    return resolveScoutsByTeamId(await getScoutProfilesForLeague(leagueId));
+    return resolveScoutsByTeamId(await getScoutProfilesForLeague(leagueId)) ?? archetypeScoutsByTeamId(leagueId, leagueTeams);
   } catch {
-    return undefined;
+    return archetypeScoutsByTeamId(leagueId, leagueTeams);
   }
+}
+
+function archetypeScoutsByTeamId(
+  leagueId: string,
+  leagueTeams: readonly Team[],
+): Record<string, ProspectScoutDescriptor | undefined> {
+  return Object.fromEntries(
+    buildLiveScoutPool(leagueId, leagueTeams).map((scout) => [scout.teamId, {
+      scoutId: scout.id,
+      scoutName: scout.name,
+      specialties: scout.specialties as ProspectScoutDescriptor["specialties"],
+      weaknesses: scout.weaknesses as ProspectScoutDescriptor["weaknesses"],
+    }]),
+  );
 }
 
 async function buildFarmAuctionTeams(input: {
@@ -419,7 +435,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       getRoster: leagueData.getRoster,
       leaguePlayers: leagueData.players,
     });
-    const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
+    const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId, nextLeagueTeams);
     if (row.pool) {
       const healed = healFarmNoShillConfig(row.session);
       const persistedPoolOrder = row.pool.auctionPlayers.map((player) => player.playerId);
@@ -531,7 +547,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       flatReserveFloor: LEAGUE_MINIMUM_SALARY,
     };
     const nextContext = { leagueId, seasonNumber: FARM_AUCTION_SEASON };
-    const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId);
+    const nextScoutsByTeamId = await loadOptionalFarmScouts(leagueId, nextLeagueTeams);
     const result = buildFarmAuctionSession({
       leagueId,
       seasonNumber: FARM_AUCTION_SEASON,

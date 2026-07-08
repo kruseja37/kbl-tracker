@@ -33,6 +33,35 @@ export function perceivedValueRange(
   };
 }
 
+const ARCHETYPE_BAND_WIDTHS: Record<3 | 5 | 7, number> = {
+  3: 0.08,
+  5: 0.16,
+  7: 0.28,
+};
+
+export function archetypeBandValueRange(
+  trueOpeningAsk: number,
+  overallBand: 3 | 5 | 7,
+  seed: string,
+): ScoutValueRange {
+  if (!Number.isFinite(trueOpeningAsk) || trueOpeningAsk <= 0) {
+    throw new Error('archetypeBandValueRange requires a positive finite true opening ask.');
+  }
+
+  const w = ARCHETYPE_BAND_WIDTHS[overallBand];
+  const low = trueOpeningAsk * (1 - w);
+  const high = trueOpeningAsk * (1 + w);
+  const jitter = seededUnit(seed) * w * 2 - w;
+  const displayedEstimate = forceOpenObscuredEstimate(trueOpeningAsk * (1 + jitter), trueOpeningAsk, low, high);
+
+  return {
+    w,
+    low,
+    high,
+    displayedEstimate,
+  };
+}
+
 function forceOpenObscuredEstimate(value: number, trueIV: number, low: number, high: number): number {
   if (high <= low) return trueIV;
 

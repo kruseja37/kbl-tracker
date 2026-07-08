@@ -6721,3 +6721,15 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; DraftSetup solo pass 60/60; full suite pass with constrained workers via `NODE_ENV= npx vitest run --maxWorkers=2` = 599 files passed / 5 skipped, 9,125 tests passed / 9 skipped. The initial unconstrained default full run hit suite-load timeouts/noise, but DraftSetup passed solo and in the constrained full run.
 - Commit message: `feat(draft-setup): CPU identity auto-assign [P1]`.
 - Next: audit the P1 diff against the JK-ratified behavior and then continue the Mode 1 punchlist queue.
+
+## 2026-07-08 (Codex, attended) — M1D F2/F3 farm bands + scout auto-specialization
+
+- Completed **F2/F3** in `/private/tmp/kbl-m1d-farmbands` after verifying M1b had merged to `origin/main` (`dbfc2a48 Merge lane M1b: prospect generation to spec curve [F4]`). The ratified source spec `spec-docs/FARM_ARCHETYPE_SCOUT_CONFIDENCE_2026-07-08.md` was already tracked in the worktree and used as the table source.
+- Added `src/data/farmArchetypeScoutConfidence.ts`: all 24 historical farm archetypes mapped to 8 scout areas with 3/5/7 confidence bands plus rationale strings, typed against the prospect engine's exported tool vocabulary, with unknown/missing archetype fallback to all-medium band 5.
+- Reworked `prospectScoutingDraftEngine` so `scoutToolBands` applies per-area archetype confidence instead of one position tier; overall scout grade confidence now uses the captain ruling mean-rounded 3/5/7 rule over the applicable hitter/pitcher areas.
+- Threaded the verified persisted field `farmArchetypeKey` through startup farm draft pick slots and farm auction reads. Farm auction lot reveal now shows scout value, grade band/confidence, and per-tool numeric ranges from the archetype-derived bands.
+- Fixed F7 by replacing the old static grade-salary Scout value estimate with a fogged range around the true farm opening ask, using the archetype-derived overall confidence band width.
+- Fixed F10 by making farm auction scout reads independent of visiting ScoutHire; archetype-bearing teams still get deterministic banded reads when saved scout profiles are absent or fail to load.
+- Reworked ScoutHire into a no-choice deterministic reveal: specialties are the archetype row's 3-band areas, weaknesses are the 7-band areas, labels/summaries come from the row rationale, and `draftStaffingPersistence` keeps the same saved record shape.
+- Gates: `npx tsc -b --pretty false` pass; `npm run build` pass; focused prospect/farm auction suites pass 41/41; focused new data/value/startup/ScoutHire suites pass 22/22; targeted draft-staffing persistence integration pass 1/1. Full `NODE_ENV= npx vitest run` produced 9,126 pass / 3 fail / 10 skipped, with only the characterized `LeagueBuilderDraftSetup` order-sensitive block failing; the full `LeagueBuilderDraftSetup.test.tsx` solo rerun passed 57/57.
+- Next: independent audit of the F2/F3 diff, then continue the Mode-1 punchlist sequencing.

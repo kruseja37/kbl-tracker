@@ -266,6 +266,7 @@ export interface LeagueBuilderStartupDraftSession {
     pickNumber: number;
     teamId: string;
     teamName?: string;
+    farmArchetypeKey?: string;
   }>;
   prospectPool: unknown[];
   completedPicks: unknown[];

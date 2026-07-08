@@ -1167,3 +1167,7 @@ Previous `CURRENT_STATE.md` live header said the CUT1 route cutover batch had pa
 ## Outgoing Live Header Snapshot — before 2026-07-08 F4 prospect curve session end
 
 Previous `CURRENT_STATE.md` live header's first row was the 2026-07-07 Lever A REJECT remediation banner. This session refreshed the live header to record the Mode-1 punchlist F4 measurement harness, the seeded prospect grade-curve quota fix, the before/after histogram evidence, the focused green gates, and the full-suite caveat for an unrelated `LeagueBuilderDraftSetup` timing red that passed on exact-test and full-file reruns.
+
+## Outgoing Live Header Snapshot — before 2026-07-08 M1D F2/F3 farm bands session end
+
+Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 F4 prospect curve banner. This session refreshed the live header to record M1D F2/F3: farm scout confidence bands sourced from farm archetype, ScoutHire auto-specialization from the same table, Scout value fog around the true farm opening ask, ScoutHire-independent farm auction reads, focused green gates, and the full-suite caveat for the characterized `LeagueBuilderDraftSetup` order-sensitive block that passed in the full-file solo rerun.

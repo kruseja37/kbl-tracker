@@ -27,6 +27,10 @@ import {
   type GeneratorArchetypeFamily,
   type TaxonomyRole as ArchetypeRole,
 } from '../data/playerArchetypeTaxonomy';
+import {
+  scoutConfidenceBandForArea,
+  type ScoutConfidenceBand,
+} from '../data/farmArchetypeScoutConfidence';
 
 export { prospectSalaryForDraftRound } from './prospectSalary';
 
@@ -50,6 +54,18 @@ export type DraftPosition =
 
 type PitcherDraftPosition = Extract<DraftPosition, 'SP' | 'SP/RP' | 'RP' | 'CP'>;
 type FieldingDraftPosition = Exclude<DraftPosition, 'DH' | PitcherDraftPosition>;
+export const HITTER_SCOUT_TOOLS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;
+export const PITCHER_SCOUT_TOOLS = [
+  'velocity',
+  'junk',
+  'accuracy',
+  'power',
+  'contact',
+  'speed',
+  'fielding',
+] as const;
+export type ScoutArea = typeof HITTER_SCOUT_TOOLS[number] | typeof PITCHER_SCOUT_TOOLS[number];
+export type ScoutTier = 'high' | 'medium' | 'low';
 
 export type ScoutSpecialty =
   | DraftPosition
@@ -63,6 +79,11 @@ export type ScoutSpecialty =
   | 'catching'
   | 'power'
   | 'contact'
+  | 'fielding'
+  | 'arm'
+  | 'velocity'
+  | 'junk'
+  | 'accuracy'
   | 'defense'
   | 'speed';
 
@@ -1168,7 +1189,9 @@ function specialtyMatches(position: DraftPosition, specialty: ScoutSpecialty): b
   if (specialty === 'OF' || specialty === 'outfield') return ['LF', 'CF', 'RF'].includes(position);
   if (specialty === 'IF' || specialty === 'INF' || specialty === 'infield') return ['1B', '2B', 'SS', '3B'].includes(position);
   if (specialty === 'catching') return position === 'C';
-  if (specialty === 'defense') return ['C', '2B', 'SS', 'CF'].includes(position);
+  if (specialty === 'defense' || specialty === 'fielding') return ['C', '2B', 'SS', 'CF'].includes(position);
+  if (specialty === 'arm') return ['C', 'LF', 'CF', 'RF', 'SS', '3B'].includes(position);
+  if (specialty === 'velocity' || specialty === 'junk' || specialty === 'accuracy') return isPitcher(position);
   if (specialty === 'speed') return ['SS', 'CF', 'LF'].includes(position);
   if (specialty === 'power') return ['1B', '3B', 'LF', 'RF', 'CP'].includes(position);
   if (specialty === 'contact') return ['C', '2B', 'SS'].includes(position);
@@ -1200,41 +1223,52 @@ export function scoutAccuracy(position: DraftPosition, scout?: ProspectScoutDesc
   return clamp(baseAccuracy(position) + (scout?.accuracyModifier ?? 0) + specialtyBonus - weaknessPenalty, 45, 92);
 }
 
-export function scoutTierForPosition(
-  position: DraftPosition,
-  scout?: { specialties?: string[]; weaknesses?: string[] },
-): 'high' | 'medium' | 'low' {
-  if (scout?.specialties?.includes(position)) return 'high';
-  if (scout?.weaknesses?.includes(position)) return 'low';
+export function scoutTierForBand(band: ScoutConfidenceBand): ScoutTier {
+  if (band === 3) return 'high';
+  if (band === 7) return 'low';
   return 'medium';
 }
 
-export const SCOUT_TOOL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = {
+export function scoutTierForArea(area: ScoutArea, farmArchetypeKey?: string): ScoutTier {
+  return scoutTierForBand(scoutConfidenceBandForArea(farmArchetypeKey, area));
+}
+
+export function scoutOverallBandForPosition(
+  position: DraftPosition,
+  farmArchetypeKey?: string,
+): ScoutConfidenceBand {
+  const tools = isPitcher(position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
+  const mean = tools.reduce(
+    (sum, tool) => sum + scoutConfidenceBandForArea(farmArchetypeKey, tool),
+    0,
+  ) / tools.length;
+  if (mean < 4) return 3;
+  if (mean > 6) return 7;
+  return 5;
+}
+
+export function scoutOverallTierForPosition(
+  position: DraftPosition,
+  farmArchetypeKey?: string,
+): ScoutTier {
+  return scoutTierForBand(scoutOverallBandForPosition(position, farmArchetypeKey));
+}
+
+export const SCOUT_TOOL_BAND_WIDTHS: Record<ScoutTier, number> = {
   high: 30,
   medium: 50,
   low: 70,
 };
 
-export const SCOUT_OVERALL_BAND_WIDTHS: Record<'high' | 'medium' | 'low', number> = {
+export const SCOUT_OVERALL_BAND_WIDTHS: Record<ScoutTier, number> = {
   high: 3,
   medium: 5,
   low: 7,
 };
 
-export const HITTER_SCOUT_TOOLS = ['power', 'contact', 'speed', 'fielding', 'arm'] as const;
-export const PITCHER_SCOUT_TOOLS = [
-  'velocity',
-  'junk',
-  'accuracy',
-  'power',
-  'contact',
-  'speed',
-  'fielding',
-] as const;
-
 export function scoutToolBand(
   trueValue: number,
-  tier: 'high' | 'medium' | 'low',
+  tier: ScoutTier,
   seed: string,
 ): { lower: number; upper: number } {
   const width = SCOUT_TOOL_BAND_WIDTHS[tier];
@@ -1248,7 +1282,7 @@ export function scoutToolBand(
 
 export function scoutOverallGradeBand(
   trueGrade: Grade,
-  tier: 'high' | 'medium' | 'low',
+  tier: ScoutTier,
   seed: string,
 ): { best: Grade; worst: Grade } {
   const width = SCOUT_OVERALL_BAND_WIDTHS[tier];
@@ -1267,13 +1301,13 @@ export function scoutOverallGradeBand(
 export function scoutToolBands(input: {
   ratings: Record<string, number>;
   position: DraftPosition;
-  scout?: { specialties?: string[]; weaknesses?: string[] };
+  farmArchetypeKey?: string;
   seed: string;
 }): Record<string, { lower: number; upper: number }> {
-  const tier = scoutTierForPosition(input.position, input.scout);
   const tools = isPitcher(input.position) ? PITCHER_SCOUT_TOOLS : HITTER_SCOUT_TOOLS;
   const bands: Record<string, { lower: number; upper: number }> = {};
   for (const tool of tools) {
+    const tier = scoutTierForArea(tool, input.farmArchetypeKey);
     bands[tool] = scoutToolBand(input.ratings[tool] ?? 0, tier, `${input.seed}:${tool}`);
   }
   return bands;
