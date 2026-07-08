@@ -148,11 +148,6 @@ const ScoutHire = lazy(() =>
 const MyTeamsSwitcherPreview = lazy(() =>
   import("./src_figma/app/pages/MyTeamsSwitcherPreview").then((module) => ({ default: module.MyTeamsSwitcherPreview })),
 );
-const LeagueBuilderRules = lazy(() =>
-  import("./src_figma/app/pages/LeagueBuilderRules").then((module) => ({
-    default: module.LeagueBuilderRules,
-  })),
-);
 const AlmanacHome = lazy(() =>
   import("./src_figma/app/pages/AlmanacHome").then((module) => ({
     default: module.AlmanacHome,
@@ -407,7 +402,6 @@ function App() {
           element={<LeagueBuilderFarmAuctionDraft />}
         />
         <Route path="/league-builder/staff-hire" element={<EndOfDraftStaffing />} />
-        <Route path="/league-builder/rules" element={<LeagueBuilderRules />} />
 
         {/* Almanac - Figma Design */}
         <Route path="/almanac" element={<AlmanacHome />} />
