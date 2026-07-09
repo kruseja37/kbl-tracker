@@ -1,5 +1,12 @@
 import { LEAGUE_MINIMUM_SALARY } from '../data/rosterEngineConstants';
 import type { RosterSlotPlayer } from '../data/rosterConstruction';
+import type { LuxuryCapRow } from '../data/tierParams';
+import {
+  luxuryTax,
+  shiftLuxuryCaps,
+  type ConstructionPlayer,
+  type TeamCapIdentity,
+} from './leagueConstruction';
 import {
   cheapestLegalCompletion,
   conservativePoolReserve,
@@ -37,6 +44,7 @@ export interface LiquidityAwareBidInput {
   rosterShapes?: readonly RosterSlotPlayer[];
   candidateShape?: RosterSlotPlayer | null;
   remainingPool?: readonly LiquidityCompletionCandidate[];
+  completionTaxContext?: LiquidityCompletionTaxContext;
   baseValuation?: number;
   archetypeFitMultiplier?: number;
   needMultiplier?: number;
@@ -45,6 +53,13 @@ export interface LiquidityAwareBidInput {
 
 export interface LiquidityCompletionCandidate extends CompletionCandidate {
   value?: number;
+}
+
+export interface LiquidityCompletionTaxContext {
+  currentRosterWithCandidate: readonly ConstructionPlayer[];
+  playerById: ReadonlyMap<string, ConstructionPlayer>;
+  capIdentity?: TeamCapIdentity;
+  baseCaps: readonly LuxuryCapRow[];
 }
 
 export interface LiquidityAwareBidRead {
@@ -70,11 +85,20 @@ export interface LiquidityAwareBidRead {
 const DEFAULT_RISK_TOLERANCE = 1;
 const QUALITY_COMPLETION_TARGET_PERCENTILE = 0.35;
 
+interface FutureFillReserve {
+  reserve: number;
+  incrementalTax: number;
+}
+
 export function evaluateLiquidityAwareBid(input: LiquidityAwareBidInput): LiquidityAwareBidRead {
   const minSalary = finitePositive(input.minSalary) ? input.minSalary! : LEAGUE_MINIMUM_SALARY;
-  const legalMaxBid = Math.max(0, Math.min(input.budgetRemaining, input.legalMaxBid ?? input.budgetRemaining));
   const openSlotsAfterWin = Math.max(0, input.rosterSlotsRemaining - 1);
-  const minimumFutureFillReserve = estimateMinimumFutureFillReserve(input, minSalary, openSlotsAfterWin);
+  const futureFill = estimateMinimumFutureFillReserve(input, minSalary, openSlotsAfterWin);
+  const legalMaxBid = Math.max(
+    0,
+    Math.min(input.budgetRemaining, input.legalMaxBid ?? input.budgetRemaining) - futureFill.incrementalTax,
+  );
+  const minimumFutureFillReserve = futureFill.reserve;
   const discretionaryBudget = Math.max(0, input.budgetRemaining - minimumFutureFillReserve);
   const replacementValueEstimate = estimateReplacementValue(input);
   const scarcityModifier = estimateScarcityModifier(input, replacementValueEstimate);
@@ -134,20 +158,49 @@ function estimateMinimumFutureFillReserve(
   input: LiquidityAwareBidInput,
   minSalary: number,
   openSlotsAfterWin: number,
-): number {
+): FutureFillReserve {
   const minSalaryReserve = openSlotsAfterWin * minSalary;
   const rosterShapes = input.rosterShapes ?? [];
   const candidateShape = input.candidateShape ?? null;
   const remainingPool = input.remainingPool ?? [];
   if (candidateShape && remainingPool.length >= openSlotsAfterWin) {
     const quote = cheapestLegalCompletion([...rosterShapes, candidateShape], remainingPool, openSlotsAfterWin);
-    if (quote.feasible) return Math.max(minSalaryReserve, quote.cost);
-    return Math.max(minSalaryReserve, conservativePoolReserve(remainingPool, openSlotsAfterWin));
+    if (quote.feasible) {
+      const incrementalTax = completionTaxForQuote(input.completionTaxContext, quote.pickIds);
+      return {
+        reserve: Math.max(minSalaryReserve, quote.cost) + incrementalTax,
+        incrementalTax,
+      };
+    }
+    return { reserve: Math.max(minSalaryReserve, conservativePoolReserve(remainingPool, openSlotsAfterWin)), incrementalTax: 0 };
   }
   if (remainingPool.length > 0) {
-    return Math.max(minSalaryReserve, conservativePoolReserve(remainingPool, openSlotsAfterWin));
+    return { reserve: Math.max(minSalaryReserve, conservativePoolReserve(remainingPool, openSlotsAfterWin)), incrementalTax: 0 };
   }
-  return minSalaryReserve;
+  return { reserve: minSalaryReserve, incrementalTax: 0 };
+}
+
+function completionTaxForQuote(
+  context: LiquidityCompletionTaxContext | undefined,
+  pickIds: readonly string[],
+): number {
+  if (!context || pickIds.length === 0) return 0;
+  const completionPlayers: ConstructionPlayer[] = [];
+  for (const id of pickIds) {
+    const player = context.playerById.get(id);
+    if (!player) return 0;
+    completionPlayers.push(player);
+  }
+  const caps = context.capIdentity
+    ? shiftLuxuryCaps([...context.baseCaps], context.capIdentity)
+    : [...context.baseCaps];
+  const currentTax = luxuryTax([...context.currentRosterWithCandidate], caps, 'taxed').charged;
+  const completedTax = luxuryTax(
+    [...context.currentRosterWithCandidate, ...completionPlayers],
+    caps,
+    'taxed',
+  ).charged;
+  return Math.max(0, completedTax - currentTax);
 }
 
 function estimateReplacementValue(input: LiquidityAwareBidInput): number {

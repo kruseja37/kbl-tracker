@@ -51,6 +51,7 @@ import {
 } from '../utils/chemistryIntelligence';
 import {
   evaluateLiquidityAwareBid,
+  type LiquidityCompletionTaxContext,
   type LiquidityCompletionCandidate,
   type LiquidityPriceRead,
   type LiquidityReasonCode,
@@ -221,6 +222,7 @@ export interface WorthToYouInput {
   budgetRemaining: number;
   rosterWithCandidate: readonly RosterSlotPlayer[];
   remainingPool: readonly CompletionCandidate[];
+  completionTaxContext?: LiquidityCompletionTaxContext;
   openSlotsAfterWin: number;
   nextBid?: number | null;
   currentBid?: number | null;
@@ -381,6 +383,7 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     rosterShapes: input.rosterWithCandidate.slice(0, Math.max(0, input.rosterWithCandidate.length - 1)),
     candidateShape: input.candidateShape,
     remainingPool: input.remainingPool as readonly LiquidityCompletionCandidate[],
+    completionTaxContext: input.completionTaxContext,
     baseValuation: factors.needMultiplier > 0 ? worth / factors.needMultiplier : worth,
     archetypeFitMultiplier: factors.archetypeFitMultiplier,
     needMultiplier: factors.needMultiplier,
