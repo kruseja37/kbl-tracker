@@ -539,6 +539,15 @@ describe('LeagueBuilderLeagues Component', () => {
         expect(mockDuplicateLeague).toHaveBeenCalledWith('league-1');
       });
     });
+
+    test('COPYFIX-1 duplicate failure surfaces a visible error instead of a silent no-op', async () => {
+      mockDuplicateLeague.mockRejectedValueOnce(new Error('Team not found: ghost-team'));
+      await renderSettledLeagueBuilderLeagues();
+
+      fireEvent.click(screen.getAllByTitle('Duplicate league')[0]);
+
+      expect(await screen.findByText('Team not found: ghost-team')).toBeInTheDocument();
+    });
   });
 
   describe('Delete League', () => {

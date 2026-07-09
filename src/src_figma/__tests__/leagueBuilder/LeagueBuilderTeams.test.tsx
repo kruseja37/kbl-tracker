@@ -8,7 +8,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderTeams } from '../../app/pages/LeagueBuilderTeams';
-import { getAuctionSession, type Team } from '../../../utils/leagueBuilderStorage';
+import { getAuctionSession, getAuctionSessionById, type Team } from '../../../utils/leagueBuilderStorage';
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
 import { archetypeToCapIdentity } from '../../../engines/archetypeIdentity';
 
@@ -29,6 +29,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    getAuctionSessionById: vi.fn(async () => null),
   };
 });
 
@@ -106,6 +107,7 @@ describe('LeagueBuilderTeams Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(getAuctionSessionById).mockResolvedValue(null);
   });
 
   describe('Header', () => {
@@ -374,6 +376,48 @@ describe('LeagueBuilderTeams Component', () => {
       await waitFor(() => {
         expect(mockRemoveTeam).toHaveBeenCalledWith('team-1');
       });
+    });
+
+    test('COPYFIX-4 in-progress farm auction blocks team deletion through the shared guard', async () => {
+      vi.mocked(getAuctionSessionById).mockResolvedValue({
+        id: 'farm-auction-league-1-season-1',
+        leagueId: 'league-1',
+        seasonNumber: 1,
+        seed: 'farm-guard',
+        createdDate: '2026-07-09T00:00:00.000Z',
+        lastModified: '2026-07-09T00:00:00.000Z',
+        session: {
+          state: 'OPEN_BIDDING',
+          config: {},
+          teams: [],
+          nominationOrder: [],
+          nominationIndex: 0,
+          nominationRound: 0,
+          players: {},
+          playerOrder: [],
+          availablePlayerIds: [],
+          currentLot: null,
+          pendingClaim: null,
+          results: [],
+          saleCount: 0,
+        },
+      } as Awaited<ReturnType<typeof getAuctionSessionById>>);
+
+      render(<LeagueBuilderTeams />);
+      await waitFor(() => {
+        expect(vi.mocked(getAuctionSession)).toHaveBeenCalledWith('league-1', expect.any(Number));
+      });
+      await waitFor(() => {
+        expect(vi.mocked(getAuctionSessionById)).toHaveBeenCalled();
+      });
+
+      fireEvent.click(screen.getAllByTitle('Delete team')[0]);
+      fireEvent.click(screen.getByTitle('Confirm delete'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/saved auction is in progress/i)).toBeInTheDocument();
+      });
+      expect(mockRemoveTeam).not.toHaveBeenCalled();
     });
   });
 
