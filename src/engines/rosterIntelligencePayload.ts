@@ -234,6 +234,14 @@ export interface WorthToYouInput {
   needBreakdown: RosterNeedBreakdown | null;
   candidateShape: RosterSlotPlayer | null;
   market?: MarketRead | null;
+  /**
+   * TAXTEETH (2026-07-08): the marginal luxury tax this specific candidate adds (the same
+   * auctionMarginalTaxWithCaps figure TRUE COST displays), reserved out of the ceiling this feeds
+   * (see fallbackLegalMax below) so worthToYou.suggestedMaxBid can never recommend a bid the
+   * engine's tax-aware sessionBidCeiling would reject. Absent/0 is byte-identical to pre-TAXTEETH
+   * behavior (the vast majority of teams, under the tax threshold).
+   */
+  marginalTax?: number | null;
 }
 
 export interface BoardCandidate {
@@ -354,7 +362,12 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   );
   const chemistryContribution = Math.max(0, chemistry.premium);
   const worth = ownValue + chemistryContribution;
-  const fallbackLegalMax = capValue ?? (input.rosterWithCandidate.length >= LEGAL_ROSTER.size ? input.budgetRemaining : 0);
+  const uncappedLegalMax = capValue ?? (input.rosterWithCandidate.length >= LEGAL_ROSTER.size ? input.budgetRemaining : 0);
+  // TAXTEETH (2026-07-08): reserve the marginal tax out of the ceiling BEFORE it becomes
+  // legalMaxBid below, so suggestedMaxBid (F9's one ceiling) can never exceed what the team could
+  // actually settle at. capValue itself is left untouched -- it keeps its own "Total Capacity"
+  // (unreserved) display meaning (WhisperPanel.tsx F9 ruling comment).
+  const fallbackLegalMax = Math.max(0, uncappedLegalMax - (input.marginalTax ?? 0));
   const resolvedNextBid = input.nextBid ?? input.market?.band.low ?? 0;
   const liquidity = evaluateLiquidityAwareBid({
     playerId: input.candidate.id,

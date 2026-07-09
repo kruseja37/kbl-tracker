@@ -1087,6 +1087,53 @@ describe('roster intelligence payload assembly', () => {
       const leading = assembleWorthToYou({ ...baseInput, nextBid: baseline.suggestedMaxBid + 1, seatIsHighBidder: true });
       expect(leading.liveCall).toBe('lead');
     });
+
+    test('TAXTEETH Item 2: for a taxed team, suggestedMaxBid never exceeds the settle-ability ceiling', () => {
+      // A generous-budget, near-complete seat (openSlotsAfterWin: 0 -> nothing to reserve for
+      // future slots, so capValue == budgetRemaining) facing a real marginal tax bill. The F9
+      // one-ceiling law says suggestedMaxBid is THE displayed ceiling; TAXTEETH's honesty
+      // guarantee requires it never recommend a bid the team could not actually settle (bid + its
+      // own marginal tax <= budget).
+      const candidate = player({ id: 'taxed-echo', chemistry: 'Scholarly' });
+      const budgetRemaining = 100_000;
+      const marginalTax = 30_000;
+      const worth = assembleWorthToYou({
+        candidate,
+        iv: 500_000, // deliberately huge so liquidityAdjustedValue never becomes the binding constraint
+        rosterPlayers: [],
+        budgetRemaining,
+        rosterWithCandidate: GREEN_ROSTER,
+        remainingPool: [],
+        openSlotsAfterWin: 0,
+        ...neutralSeat(),
+        market: market({ band: { low: 10_000, median: 20_000, high: 30_000 } }),
+        marginalTax,
+      });
+
+      // capValue keeps its own "Total Capacity" (unreserved) meaning -- untouched by tax.
+      expect(worth.capValue).toBe(budgetRemaining);
+      // suggestedMaxBid (the ONE ceiling every display read must agree on) reserves the tax.
+      expect(worth.suggestedMaxBid).toBe(budgetRemaining - marginalTax);
+      // The invariant, general form: for every reachable displayed ceiling B (suggestedMaxBid),
+      // budget >= B + marginalTax(B) -- settling at the recommended ceiling never overdraws.
+      expect(budgetRemaining).toBeGreaterThanOrEqual(worth.suggestedMaxBid + marginalTax);
+
+      // Sanity: an untaxed (marginalTax absent) team at the identical fixture is unaffected --
+      // proves this is a real, additive reservation, not a fixture artifact.
+      const untaxed = assembleWorthToYou({
+        candidate,
+        iv: 500_000,
+        rosterPlayers: [],
+        budgetRemaining,
+        rosterWithCandidate: GREEN_ROSTER,
+        remainingPool: [],
+        openSlotsAfterWin: 0,
+        ...neutralSeat(),
+        market: market({ band: { low: 10_000, median: 20_000, high: 30_000 } }),
+      });
+      expect(untaxed.suggestedMaxBid).toBe(budgetRemaining);
+      expect(untaxed.suggestedMaxBid).toBeGreaterThan(worth.suggestedMaxBid);
+    });
   });
 
   test('assembleRosterIntelligencePayload omits absent optional sections', () => {
