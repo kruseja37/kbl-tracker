@@ -60,12 +60,20 @@ export function designTargetChipCopy(
 
 // SETUPTAX (2026-07-09): buildBest22Target's `feasible` folds three independent gates --
 // legalRoster && solvent && floorMet (best22Target.ts:282) -- into one boolean. `solvent` is
-// `salary + tax <= budget`, so a target that fails ONLY on tax (allIn > budget) is
-// distinguishable from the other two failure modes using fields ALREADY on Best22Target
-// (allIn, budget, feasible) -- no engine change, no new field. This is the SAME condition
-// `solvent` tests internally; we just read it back out from the exposed sum.
+// `salary + tax <= budget`, so insolvency is readable back out of fields ALREADY on
+// Best22Target (totalSalary, allIn, budget, feasible) -- no engine change, no new field.
+//
+// REWORK (audit Finding 1, captain ruling 2026-07-09): tax must be the MARGINAL cause, so the
+// predicate also requires totalSalary <= budget. Without that clause it reduced to plain
+// !solvent -- a target whose SALARY ALONE blew the budget (tax $0) still took the amber
+// "OVERSHOOTS WITH TAX" treatment and the strip rendered "OWES $0 TAX". When salary alone
+// overshoots, this returns false and every caller falls through to the pre-lane generic
+// infeasible path, byte-identical to before this lane.
 export function isBest22TargetTaxOvershoot(target: Best22Target | null): boolean {
-  return Boolean(target) && !target!.feasible && target!.allIn > target!.budget;
+  return Boolean(target)
+    && !target!.feasible
+    && target!.totalSalary <= target!.budget
+    && target!.allIn > target!.budget;
 }
 
 export function designTargetStripCopy(state: TargetVerdictState, target: Best22Target | null): string | null {

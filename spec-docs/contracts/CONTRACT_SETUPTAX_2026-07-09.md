@@ -40,11 +40,38 @@ doc-comment moved), poolAffordabilityDiagnostic.ts, RosterDesigner.tsx, leagueBu
 poolFeasibility.ts, archetypeBalanceSimulator.ts, auctionPoolSizing.ts are BYTE-IDENTICAL to base —
 zero engine-math changes, exactly as guardrailed.
 
-DEVIATION FROM THE STOP-CLAUSE (declared, not silent): item 1's tax-overshoot signal is
-`!target.feasible && target.allIn > target.budget` — this reads ONLY fields already exposed on
-Best22Target (allIn, budget, feasible; best22Target.ts:44-48), no engine output was extended. This
-is exactly the arithmetic the contract's own §1 uses to define the case ("salary+tax > budget"),
-so it required no engine change and no STOP.
+DEVIATION FROM THE STOP-CLAUSE (declared, not silent): item 1's tax-overshoot signal reads ONLY
+fields already exposed on Best22Target (totalSalary, allIn, budget, feasible; best22Target.ts:
+44-48), no engine output was extended.
+
+CORRECTION (rework, audit Finding 1 + captain ruling 2026-07-09): the first build implemented
+the §1 predicate LITERALLY as written in this contract ("target.feasible is false due to
+solvency (salary+tax > budget)") — i.e. `!feasible && allIn > budget` — which reduces to plain
+!solvent and let a SALARY-ONLY overshoot (tax $0) take the tax treatment, rendering "OWES $0
+TAX". The captain confirmed the §1 literal wording was the contract's own imprecision, and
+ruled: TIGHTEN the predicate, don't soften the copy. Final predicate:
+`!feasible && totalSalary <= budget && allIn > budget` — tax is genuinely the MARGINAL cause.
+When salary alone overshoots, every caller falls through to the pre-lane generic infeasible
+path (byte-identical copy + tone), pinned by new tests using the auditor's exact fixture
+(totalSalary 1,300,000 / totalTax 0 / budget 1,000,000 / feasible false):
+  - designVerdict.test.ts "isBest22TargetTaxOvershoot does NOT fire when salary alone blows the
+    budget" (also covers salary-over-plus-tax — still salary-caused, no fire — and the boundary
+    case salary exactly at budget with tax pushing over — tax-marginal, fires) and the extended
+    strip-copy test (generic copy, never "OWES $0 TAX"). RED before the tighten (the received
+    string literally reproduced the auditor's "OWES $0 TAX"), GREEN after.
+  - universe.test.tsx "SETUPTAX: CLUB CHECK row keeps pre-lane behavior when salary alone blows
+    the budget": green floor dot, "IDENTITY WON'T EXPRESS" target segment, no OVERSHOOTS-WITH-
+    TAX headline, no demoted FLOOR clause, no TAX WATCH banner anywhere. RED before the tighten
+    ("IDENTITY WON'T EXPRESS" never rendered — the row wrongly took the tax path), GREEN after.
+  The true tax-marginal fixtures (salary under budget, allIn over) were already in the suite
+  from the first build and stayed green through the tighten — the TAX treatment still fires
+  where it should.
+
+REWORK GATES (re-run after the tighten): `npx tsc -b` exit 0; `npm run build` exit 0
+(✓ built in 10.09s, same PWA tail); 8-file targeted suite = 8 passed, 138/138 tests (was 136 —
+the 2 new pins). One batch run showed a single red in poolLock.test.tsx ("repeated pool-first
+regenerate is idempotent...") — an UNTOUCHED file in the documented solo-green batch-flake
+family; it passed solo (21/21) and the full 8-file batch re-run was clean (138/138).
 
 PER-ITEM EVIDENCE
 
@@ -52,7 +79,8 @@ Item 1 — THE CLUB CHECK two-truth row.
   isBest22TargetTaxOvershoot/clubCheckToneWithTaxOverride/clubCheckTaxOvershootCopy/
   clubCheckFloorSecondaryCopy added to designVerdict.ts; clubCheckRows computation in
   LeagueBuilderDraftSetup.tsx now swaps primary/secondary + escalates tone green→amber ONLY
-  when targetState === "infeasible" AND allIn > budget. Verified the PRE-EXISTING characterized
+  when targetState === "infeasible" AND totalSalary <= budget AND allIn > budget (the
+  tax-marginal predicate — see the CORRECTION block above). Verified the PRE-EXISTING characterized
   test ("renders CLUB CHECK target segments without changing the floor dot gate",
   universe.test.tsx) still asserts a GREEN dot for its `feasible:false, allIn:45_000` fixture
   (budget stays the untouched default 1_000_000, so allIn < budget — not tax-driven) — confirms

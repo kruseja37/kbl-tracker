@@ -128,12 +128,54 @@ describe("SETUPTAX tax-overshoot copy", () => {
     expect(isBest22TargetTaxOvershoot(null)).toBe(false);
   });
 
+  // SETUPTAX rework (audit Finding 1, captain ruling 2026-07-09): tax must be the MARGINAL
+  // cause. A target whose SALARY ALONE blows the budget is a salary problem, not a tax
+  // problem -- it must fall through to the pre-lane generic infeasible path, never render
+  // "OWES $0 TAX", and never take the amber tax override.
+  test("isBest22TargetTaxOvershoot does NOT fire when salary alone blows the budget", () => {
+    // The auditor's fixture: pure salary overshoot, zero tax.
+    expect(isBest22TargetTaxOvershoot(makeTarget({
+      totalSalary: 1_300_000,
+      totalTax: 0,
+      allIn: 1_300_000,
+      budget: 1_000_000,
+      feasible: false,
+    }))).toBe(false);
+    // Salary over budget WITH tax on top: salary is already over on its own -- not tax-marginal.
+    expect(isBest22TargetTaxOvershoot(makeTarget({
+      totalSalary: 1_100_000,
+      totalTax: 200_000,
+      allIn: 1_300_000,
+      budget: 1_000_000,
+      feasible: false,
+    }))).toBe(false);
+    // Salary exactly at budget with tax pushing over: tax IS the marginal cause.
+    expect(isBest22TargetTaxOvershoot(makeTarget({
+      totalSalary: 1_000_000,
+      totalTax: 1,
+      allIn: 1_000_001,
+      budget: 1_000_000,
+      feasible: false,
+    }))).toBe(true);
+  });
+
   test("designTargetStripCopy names TAX as the cause only for a tax-driven infeasible target", () => {
     expect(designTargetStripCopy("infeasible", makeTaxInsolventTarget())).toBe(
       "YOUR IDENTITY'S TARGET BUILD OWES $330,000 TAX — $1,230,000 ALL-IN OVER YOUR $1,000,000 CAP; THE FLOOR STILL BUILDS",
     );
     // Byte-identical to the pre-SETUPTAX characterized string for the non-tax infeasible case.
     expect(designTargetStripCopy("infeasible", makeTarget({ feasible: false }))).toBe(
+      "THIS POOL CAN'T EXPRESS YOUR IDENTITY UNDER THE CAP — THE FLOOR STILL BUILDS",
+    );
+    // Audit Finding 1's exact failure mode: a salary-only overshoot must get the generic
+    // pre-lane copy, NOT "OWES $0 TAX".
+    expect(designTargetStripCopy("infeasible", makeTarget({
+      totalSalary: 1_300_000,
+      totalTax: 0,
+      allIn: 1_300_000,
+      budget: 1_000_000,
+      feasible: false,
+    }))).toBe(
       "THIS POOL CAN'T EXPRESS YOUR IDENTITY UNDER THE CAP — THE FLOOR STILL BUILDS",
     );
   });
