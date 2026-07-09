@@ -1021,3 +1021,149 @@ describe('DIAG: auction gauntlet D1 strand — tax vs supply isolation', () => {
     expect(true).toBe(true);
   }, GAUNTLET_TIMEOUT_MS);
 });
+
+describe('DIAG2: competitive-lot tax self-consistency (harness instrumentation model check)', () => {
+  const universe = ALL_MLB_PLAYERS.map(toDemandPlayer);
+  const leaguePlayers = ALL_MLB_PLAYERS.map(toLeagueBuilderPlayer);
+  const playerById = new Map(leaguePlayers.map((player) => [player.id, player]));
+  const d1 = buildDraftSpecs().find((s) => s.id === 'D1')!;
+
+  test('record impliedTax vs before-winner.projectedTax on every competitive settlement', () => {
+    const teamIds = getLeagueTeamIds('mlb').slice(0, d1.teamCount);
+    const teams = teamIds.map((teamId, index) => buildTeam({ id: teamId, archetype: d1.archetypes[index], index }));
+    const pool = extractProductionPool({ spec: d1, universe, tier: DEFAULT_TIER });
+    const auctionPlayers = toAuctionPlayers(pool, playerById);
+    const taxContext = buildTaxContext({ pool, teams, players: leaguePlayers });
+    const spec: DraftSpec = { ...d1, id: 'D1c', label: 'D1c competitive', competitive: true };
+
+    let session = buildSession({ spec, pool, teams, auctionPlayers });
+    let prevResultsLen = session.results.length;
+    const mismatches: Array<{ player: string; winner: string; salary: number; impliedTax: number; beforeProjectedTax: number; delta: number }> = [];
+    let settlements = 0;
+
+    for (let step = 0; step < 6000 && session.state !== 'AUCTION_COMPLETE'; step += 1) {
+      const before = session;
+      let next: AuctionTransitionResult | null = null;
+      if (session.state === 'NOMINATION') {
+        next = surfaceNextPlayer(session);
+        if (next.ok) { session = applyAuctionLuxuryTaxForLot(next.session as CpuShillAuctionSession, taxContext); }
+        else break;
+        continue;
+      } else if (session.state === 'OPEN_BIDDING') {
+        const bidder = getCurrentBidderTeamId(session);
+        if (!bidder) { next = resolveLot(session); }
+        else {
+          const decision = cpuBidOnLot(session, bidder, `gauntlet:${spec.id}`, { needAwareCompletion: true });
+          next = decision.kind === 'bid' ? strandSafeBidTransition(session, bidder, decision.bid, true) : passBid(session, bidder);
+        }
+      } else if (session.state === 'RESOLVE') {
+        next = session.pendingClaim ? passLoneSurvivorOut(session) : resolveLot(session);
+      } else if (session.state === 'SOLD' || session.state === 'PASSED') {
+        next = advanceLot(session);
+      } else break;
+
+      if (!next.ok) break;
+      const after = next.session as CpuShillAuctionSession;
+
+      // Detect newly-appended SOLD active-lot settlements.
+      for (let i = prevResultsLen; i < after.results.length; i += 1) {
+        const r = after.results[i];
+        if (r.disposition !== 'SOLD' || !r.winnerTeamId || r.salary == null) continue;
+        if (before.currentLot?.playerId !== r.playerId) continue;
+        const bt = before.teams.find((t) => t.teamId === r.winnerTeamId);
+        const at = after.teams.find((t) => t.teamId === r.winnerTeamId);
+        if (!bt || !at) continue;
+        const impliedTax = bt.budgetRemaining - at.budgetRemaining - r.salary;
+        const delta = impliedTax - bt.projectedTax;
+        settlements += 1;
+        if (Math.abs(delta) > 1e-6) {
+          mismatches.push({ player: r.playerId, winner: r.winnerTeamId, salary: round2(r.salary), impliedTax: round2(impliedTax), beforeProjectedTax: round2(bt.projectedTax), delta: round2(delta) });
+        }
+      }
+      prevResultsLen = after.results.length;
+      session = after;
+    }
+
+    console.log(`\n### COMPETITIVE SETTLEMENT SELF-CONSISTENCY: completed=${session.state === 'AUCTION_COMPLETE'} settlements=${settlements} mismatches=${mismatches.length}`);
+    if (mismatches.length > 0) {
+      console.log('First 10 mismatches (impliedTax != before-winner.projectedTax):');
+      console.table(mismatches.slice(0, 10));
+    }
+    expect(true).toBe(true);
+  }, GAUNTLET_TIMEOUT_MS);
+});
+
+describe('DIAG3: claim-path tax self-consistency (matches builder competitive path)', () => {
+  const universe = ALL_MLB_PLAYERS.map(toDemandPlayer);
+  const leaguePlayers = ALL_MLB_PLAYERS.map(toLeagueBuilderPlayer);
+  const playerById = new Map(leaguePlayers.map((player) => [player.id, player]));
+  const d1 = buildDraftSpecs().find((s) => s.id === 'D1')!;
+
+  test('record impliedTax on competitive+claim settlements (cpuDecideLoneSurvivor path)', () => {
+    const teamIds = getLeagueTeamIds('mlb').slice(0, d1.teamCount);
+    const teams = teamIds.map((teamId, index) => buildTeam({ id: teamId, archetype: d1.archetypes[index], index }));
+    const pool = extractProductionPool({ spec: d1, universe, tier: DEFAULT_TIER });
+    const auctionPlayers = toAuctionPlayers(pool, playerById);
+    const taxContext = buildTaxContext({ pool, teams, players: leaguePlayers });
+    const spec: DraftSpec = { ...d1, id: 'D1cc', label: 'D1cc competitive+claim', competitive: true };
+
+    let session = buildSession({ spec, pool, teams, auctionPlayers });
+    let prevResultsLen = session.results.length;
+    const mismatches: Array<{ player: string; winner: string; salary: number; impliedTax: number; beforeProjectedTax: number; delta: number; via: string }> = [];
+    let settlements = 0;
+
+    for (let step = 0; step < 6000 && session.state !== 'AUCTION_COMPLETE'; step += 1) {
+      const before = session;
+      let next: AuctionTransitionResult | null = null;
+      let via = '';
+      if (session.state === 'NOMINATION') {
+        const n = surfaceNextPlayer(session);
+        if (!n.ok) break;
+        session = applyAuctionLuxuryTaxForLot(n.session as CpuShillAuctionSession, taxContext);
+        continue;
+      } else if (session.state === 'OPEN_BIDDING') {
+        const bidder = getCurrentBidderTeamId(session);
+        if (!bidder) { next = resolveLot(session); via = 'resolveLot'; }
+        else {
+          const decision = cpuBidOnLot(session, bidder, `gauntlet:${spec.id}`, { needAwareCompletion: true });
+          next = decision.kind === 'bid' ? strandSafeBidTransition(session, bidder, decision.bid, true) : passBid(session, bidder);
+          via = decision.kind === 'bid' ? 'bid' : 'pass';
+        }
+      } else if (session.state === 'RESOLVE') {
+        if (session.pendingClaim) {
+          const dec = cpuDecideLoneSurvivor(session, session.pendingClaim.teamId, `gauntlet:${spec.id}`, { needAwareCompletion: true });
+          next = dec.kind === 'claim' ? strandSafeClaimTransition(session, true) : passLoneSurvivorOut(session);
+          via = dec.kind === 'claim' ? 'claim' : 'passLone';
+        } else { next = resolveLot(session); via = 'resolveLot'; }
+      } else if (session.state === 'SOLD' || session.state === 'PASSED') {
+        next = advanceLot(session); via = 'advance';
+      } else break;
+
+      if (!next.ok) break;
+      const after = next.session as CpuShillAuctionSession;
+      for (let i = prevResultsLen; i < after.results.length; i += 1) {
+        const r = after.results[i];
+        if (r.disposition !== 'SOLD' || !r.winnerTeamId || r.salary == null) continue;
+        if (before.currentLot?.playerId !== r.playerId) continue;
+        const bt = before.teams.find((t) => t.teamId === r.winnerTeamId);
+        const at = after.teams.find((t) => t.teamId === r.winnerTeamId);
+        if (!bt || !at) continue;
+        const impliedTax = bt.budgetRemaining - at.budgetRemaining - r.salary;
+        const delta = impliedTax - bt.projectedTax;
+        settlements += 1;
+        if (Math.abs(delta) > 1e-6) {
+          mismatches.push({ player: r.playerId, winner: r.winnerTeamId, salary: round2(r.salary), impliedTax: round2(impliedTax), beforeProjectedTax: round2(bt.projectedTax), delta: round2(delta), via });
+        }
+      }
+      prevResultsLen = after.results.length;
+      session = after;
+    }
+
+    console.log(`\n### CLAIM-PATH SELF-CONSISTENCY: completed=${session.state === 'AUCTION_COMPLETE'} settlements=${settlements} mismatches=${mismatches.length}`);
+    if (mismatches.length > 0) {
+      console.log('First 12 mismatches:');
+      console.table(mismatches.slice(0, 12));
+    }
+    expect(true).toBe(true);
+  }, GAUNTLET_TIMEOUT_MS);
+});
