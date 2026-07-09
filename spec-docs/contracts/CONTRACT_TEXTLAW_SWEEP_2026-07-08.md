@@ -45,3 +45,125 @@ Do NOT run the full vitest suite — the captain runs one full pass post-merge.
 
 ## DELIVERABLE
 Everything committed on your worktree branch (contract first, then work; logical commits fine). Final commit updates the contract file with: per-item file:line evidence, the Item C failing-then-passing repro output, gate outputs (exit codes + pass counts), and any deviations honestly flagged. Your final message: summary + commit hash(es) + any surprises. A surprise or UNKNOWN mid-build = STOP and report, do not improvise scope.
+
+---
+
+## EXECUTION EVIDENCE (2026-07-08, post-build)
+
+Commits on this worktree branch (`worktree-agent-aa929ccdf455e9315`, based on `fb3c9fd9`):
+1. `fe3d98d3` — contract landed first.
+2. `93317821` — Item C fix (repro-first).
+3. `72a3a9b2` — Item A (Text Law sweep).
+4. `712126b2` — Item B (whisper-board CSS).
+
+### ITEM C — repro-first evidence
+
+**Failing run on unmodified code** (test added at `LeagueBuilderDraftSetup.test.tsx`, describe block "BOARDFIX2: instant reorders with debounced persistence (Item C)", test name "TEXTLAW-SWEEP Item C repro: an unflushed edit from an outgoing club must not be dropped when a different club's edit lands inside the same debounce window"):
+
+```
+ FAIL  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx > LeagueBuilderDraftSetup > BOARDFIX2: instant reorders with debounced persistence (Item C) > TEXTLAW-SWEEP Item C repro...
+AssertionError: expected "vi.fn()" to be called with arguments: [ ObjectContaining{…} ]
+
+Received:
+  1st vi.fn() call:
+  [
+-   ObjectContaining {
++   {
++     "abbreviation": "TEAM-B",
+      "boardRankOverrides": {
+        "global": [
+          "star-ss",
+-         "mid-ss",
+          "high-ss",
+          "low-ss",
++         "mid-ss",
+          "weak-ss",
+        ],
+      },
+-     "id": "team-a",
++     "id": "team-b",
+      ...
+    },
+  ]
+Number of calls: 1
+```
+saveTeam was called exactly ONCE, only for team-b -- team-a's edit was silently dropped, exactly as the bug predicts. (Full raw terminal output captured during the session; reproduced here verbatim minus fixture noise.)
+
+**After the fix** (same test, unmodified assertions):
+```
+ ✓ src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx (88 tests | 86 skipped) 1303ms
+     ✓ a burst of 5 rapid moves calls saveTeam ONCE after the debounce settles, not once per move 769ms
+     ✓ TEXTLAW-SWEEP Item C repro: an unflushed edit from an outgoing club must not be dropped when a different club's edit lands inside the same debounce window 533ms
+ Test Files  1 passed (1)
+      Tests  2 passed | 86 skipped (88)
+```
+Both the repro AND the sibling "5 rapid moves = 1 save" regression test pass -- no double-flush regression introduced.
+
+**Fix mechanism**: `LeagueBuilderDraftSetup.tsx:2769-2802`. `pendingBoardRankOverridesRef.current = pendingBoardRankOverrides` moved from inside a `useEffect` to a plain statement in the render body (line 2775) -- mirrors `RosterDesigner.tsx:339`'s `renderedTeamIdRef.current = team.id` pattern, so the ref is current-as-of-THIS-render by the time any effect cleanup runs in the same commit. The debounce effect's cleanup (line 2796-2801) now checks that ref: if it points at a pending edit for a DIFFERENT club than the outgoing effect instance closed over, it flushes the outgoing club's edit immediately instead of silently discarding it. Guarded with an explicit non-null + team-id compare so the normal self-clear-after-successful-save path (ref becomes null) does not trigger a duplicate flush.
+
+### ITEM A — per-sub-item file:line evidence (post-edit line numbers; content-located per the contract's own warning about stale §7 line numbers)
+
+| Sub-item | File:line | Class |
+|---|---|---|
+| Universe-sources explainer | `LeagueBuilderDraftSetup.tsx:3755` | Help-gated |
+| Pool-quality explainer (LOCKED) | `LeagueBuilderDraftSetup.tsx:4503` | Help-gated, byte-identical |
+| Room-check explainer (LOCKED) | `LeagueBuilderDraftSetup.tsx:3565` | Help-gated, byte-identical |
+| Cap Fit methodology line 1 (LOCKED) | `LeagueBuilderDraftSetup.tsx:3525` | Help-gated, byte-identical |
+| Cap Fit methodology line 2 (LOCKED) | `LeagueBuilderDraftSetup.tsx:3528` | Help-gated, byte-identical |
+| Cap Fit fused line (SPLIT) | `LeagueBuilderDraftSetup.tsx:3533-3534` | `{summary}` always-visible; static clause Help-gated |
+| Design-first stray notice (SPLIT) | `LeagueBuilderDraftSetup.tsx:3705-3706` | `{N} + names` always-visible; explanation clause Help-gated |
+| ArchetypePicker identity paragraphs | `ArchetypePicker.tsx:175-181` | Help-gated via new `showHelp` prop (parent-wired, `LeagueBuilderDraftSetup.tsx:4163`), no second Help button |
+| AuctionStage farm fog line | `AuctionStage.tsx:653-657` | Help-gated via existing local `helpOpen`, threaded to `Lot` |
+| AuctionStage scout-band legend (public market) | `AuctionStage.tsx:621-624` | Help-gated |
+| AuctionStage scout-band legend (scout report) | `AuctionStage.tsx:713-715` | Help-gated via `helpOpen` threaded to `ScoutBody` |
+| AuctionStage phase-label pill (REVERSE FIX) | `AuctionStage.tsx:222` | Always-visible (was `{helpOpen && ...}`, now unconditional) |
+| EndOfDraftStaffing instruction banner + new Help button | `EndOfDraftStaffing.tsx:87, 218-226, 230-234` | New `showHelp` state + top-right Help button; banner Help-gated |
+
+DO-NOT-TOUCH items (A4) verified untouched: hub card subtitles, all state-triggered warnings/banners (overflow rail, stale-pool, legality, settle/handoff confirmations), CPU-turn fallback text, farm need-line, empty states, `draft-readiness-panel` (still unconditionally rendered per its own gate, no `showHelp` involvement).
+
+No situational/collapse mechanism was added anywhere (A5) -- every relocation is either always-visible or Help-gated boolean, nothing new is expandable/retractable.
+
+### Test updates required by the sweep (and why)
+
+- `LeagueBuilderDraftSetup.test.tsx`: three existing tests ("renders the advisory Cap Fit diagnostic...", "renders RE-CHECK with roster-law blocker wording" -- the room-check text assertion, "renders Pool Quality stops with the 68 baseline default") now open Help (`fireEvent.click(screen.getByRole("button", { name: "?" }))`) before checking the now-gated LOCKED strings; assertions are otherwise byte-identical to the original strings.
+- `LeagueBuilderAuctionDraft.test.tsx`: the MLB phase-label assertion (`"MLB auction"`) no longer needs a Help click to appear -- updated to assert presence before AND after the click (reverse fix, A3).
+- `LeagueBuilderFarmAuctionDraft.test.tsx`: "Farm auction" now renders twice on that page (the page's own always-visible toolbar chip, unchanged, plus the now-always-visible AuctionStage phase-label pill, same text by coincidence) -- assertion changed from `getByText` (which throws on multiple matches) to `getAllByText(...).length > 0`. This is a pre-existing toolbar chip the sweep did not touch; the reverse fix simply makes the same phrase appear from a second source now that both are unconditional.
+- `ArchetypePicker.test.tsx.snap`: regenerated deliberately (B4 test) -- diff is exactly the removal of the identity-explainer `<div>` (5 lines), nothing else changed.
+
+### GATES — full evidence
+
+**1. `npx tsc -b`** — clean, exit 0, zero output.
+
+**2. `npm run build`** — exit 0. Final lines:
+```
+✓ built in 10.15s
+PWA v1.2.0
+mode      generateSW
+precache  185 entries (5320.32 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1d305bb8.js
+```
+(Only the pre-existing "chunks larger than 500kB" advisory warning, unrelated to this diff.)
+
+**3. Focused suites** (all run and passing):
+- `RankReorderList.test.tsx` — 21/21 passed
+- `RosterDesigner.test.tsx` — 22/22 passed (includes "flushes an edited outgoing club before loading another club" -- the sibling pattern this lane's Item C fix mirrors)
+- `WhisperPanel.test.tsx` — 38/38 passed
+- `LeagueBuilderAuctionDraft.test.tsx` — 20/20 passed
+- `LeagueBuilderAuctionDraft.computeBoardAutoAdvanceLine.test.ts` — 16/16 passed
+- `LeagueBuilderFarmAuctionDraft.test.tsx` — 2/2 passed
+- `LeagueBuilderDraftSetup.RankYourBoardZone.test.tsx` — 7/7 passed
+- `ArchetypePicker.test.tsx` — 5/5 passed (snapshot regenerated)
+- `EndOfDraftStaffing.test.tsx` — 1/1 passed
+- `AuctionStage.test.tsx` — 10/10 passed (not explicitly in the contract's gate list but directly touched by this lane; run as an extra check)
+- `LeagueBuilderDraftSetup.test.tsx` — run SOLO per the known-flake rule — 88/88 passed
+
+Total: 230/230 passed across all touched/gated suites. Full vitest suite intentionally NOT run (captain runs one full pass post-merge per the contract).
+
+### Deviations from the literal contract text (all minor, flagged honestly)
+
+1. The Cap Fit fused-line split kept "Advisory guidance only." grouped with the static clause that moves behind Help (the contract named only the "Pool quality and salary cap are separate…" clause explicitly) -- treated as one continuous static sentence-group following the dynamic `{summary}`, since splitting mid-sentence would have been worse relocation hygiene. Flagging for JK's eye per the reskin-lane precedent ("JK's eye gates the result").
+2. The design-first stray notice's Help-gated clause capitalization changed from "a drawn pool..." to "A drawn pool..." (lowercase to uppercase) because it now starts a new sentence when visible standalone after the always-visible clause's period -- the only textual change anywhere in this sweep, and it is not test-characterized.
+3. AuctionStage's `ScoutBody` eyebrow ("Scout's price range — narrow band = confident") was gated as a WHOLE line (not split into an always-visible label + Help-gated hint) since the contract calls both AuctionStage instances "legend lines" (plural, full-line) rather than SPLIT items, matching how the sibling "Scout band: low / expected / stretch" line was treated.
+
