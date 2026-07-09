@@ -1196,6 +1196,12 @@ function WhisperStyles() {
         border-left: 4px solid var(--whisper-team, var(--ballpark-brass));
         background: var(--auc-inset);
         box-shadow: var(--auc-shadow-card);
+        /* FLOORREFIT Move 2: THE CALL stays visible while THE BOARD scrolls beneath it, now that
+           the whisper is the right column's natural (unclamped) flow -- the page is the only
+           scroll context, so this sticks relative to the viewport as it scrolls. */
+        position: sticky;
+        top: 12px;
+        z-index: 3;
       }
       .auc-root .whisper-tier1-verdict {
         font-size: 15px;
@@ -1313,9 +1319,9 @@ function WhisperStyles() {
         animation: none;
       }
       .auc-root .whisper-body {
+        /* FLOORREFIT Move 2: the clamp is deleted -- the whisper is the right column's natural
+           flow now; the page is the one scroll context (design doc §1.1). */
         padding: 16px;
-        max-height: min(56vh, 480px);
-        overflow-y: auto;
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -1778,8 +1784,8 @@ function WhisperStyles() {
         flex-direction: column;
       }
       .auc-root .whisper-board-well {
-        max-height: 190px;
-        overflow-y: auto;
+        /* FLOORREFIT Move 2: the internal board clamp is deleted too -- zero nested overflow-y:auto
+           on the floor (design doc §1.1). */
         margin-top: 8px;
         background: rgba(0, 0, 0, 0.22);
         border-top: 1px solid rgba(0, 0, 0, 0.35);
