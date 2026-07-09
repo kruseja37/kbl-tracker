@@ -46,12 +46,14 @@ import {
   type Team,
 } from '../useLeagueBuilderData';
 
+const syncEngineMock = vi.hoisted(() => ({
+  isSuppressed: vi.fn(() => true),
+  upsert: vi.fn(),
+  remove: vi.fn(),
+}));
+
 vi.mock('../../../utils/syncEngine', () => ({
-  syncEngine: {
-    isSuppressed: () => true,
-    upsert: vi.fn(),
-    remove: vi.fn(),
-  },
+  syncEngine: syncEngineMock,
 }));
 
 const DB_NAME = 'kbl-league-builder';
@@ -245,6 +247,7 @@ async function renderLoadedLeagueBuilderHook() {
 describe('useLeagueBuilderData', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    syncEngineMock.isSuppressed.mockReturnValue(true);
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME);
   });
@@ -605,14 +608,77 @@ describe('useLeagueBuilderData', () => {
     expect(league?.divisions[0]?.teamIds).toEqual(['team-b']);
   });
 
-  test('COPYFIX-1 load normalizes ghost team ids out of damaged leagues', async () => {
-    await saveLeagueTemplate(makeLeague());
-    await saveTeam(makeTeam('team-a'));
+  test('COPYFIX-1R empty teams table load never persists a membership heal', async () => {
+    const ghostedLeague = makeLeague({
+      teamIds: ['team-a', 'team-b'],
+      divisions: [
+        { id: 'div-a', name: 'North', conferenceId: 'conf-a', teamIds: ['team-a', 'team-b'] },
+      ],
+    });
+    await saveLeagueTemplate(ghostedLeague);
+    syncEngineMock.upsert.mockClear();
+    syncEngineMock.isSuppressed.mockReturnValue(false);
 
     const { result } = await renderLoadedLeagueBuilderHook();
 
-    expect(result.current.leagues.find((league) => league.id === 'test-league')?.teamIds).toEqual(['team-a']);
-    expect(result.current.leagues.find((league) => league.id === 'test-league')?.divisions[0]?.teamIds).toEqual(['team-a']);
+    expect(result.current.leagues.find((league) => league.id === 'test-league')?.teamIds).toEqual(['team-a', 'team-b']);
+    expect(await getLeagueTemplate('test-league')).toEqual(expect.objectContaining({
+      teamIds: ghostedLeague.teamIds,
+      divisions: ghostedLeague.divisions,
+    }));
+    expect(syncEngineMock.upsert).not.toHaveBeenCalled();
+  });
+
+  test('COPYFIX-1R partial teams table load never persists a membership heal', async () => {
+    const partialLeague = makeLeague({
+      teamIds: ['team-a', 'team-b'],
+      divisions: [
+        { id: 'div-a', name: 'North', conferenceId: 'conf-a', teamIds: ['team-a', 'team-b'] },
+      ],
+    });
+    await saveLeagueTemplate(partialLeague);
+    await saveTeam(makeTeam('team-a'));
+    syncEngineMock.upsert.mockClear();
+    syncEngineMock.isSuppressed.mockReturnValue(false);
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+
+    expect(result.current.leagues.find((league) => league.id === 'test-league')?.teamIds).toEqual(['team-a', 'team-b']);
+    expect(await getLeagueTemplate('test-league')).toEqual(expect.objectContaining({
+      teamIds: partialLeague.teamIds,
+      divisions: partialLeague.divisions,
+    }));
+    expect(syncEngineMock.upsert).not.toHaveBeenCalled();
+  });
+
+  test('COPYFIX-1R duplicate skips ghost teams without mutating the source league', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await saveLeagueTemplate(makeLeague({
+      teamIds: ['team-a', 'ghost-team', 'team-b'],
+      divisions: [
+        { id: 'div-a', name: 'North', conferenceId: 'conf-a', teamIds: ['team-a', 'ghost-team', 'team-b'] },
+      ],
+    }));
+    await saveTeam(makeTeam('team-a'));
+    await saveTeam(makeTeam('team-b'));
+    const sourceBefore = await getLeagueTemplate('test-league');
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+    let copiedLeague: LeagueTemplate | null = null;
+    await act(async () => {
+      copiedLeague = await result.current.duplicateLeague('test-league');
+    });
+
+    expect(copiedLeague?.teamIds).toHaveLength(2);
+    expect(copiedLeague?.divisions[0]?.teamIds).toEqual(copiedLeague?.teamIds);
+    const copiedTeams = await Promise.all(copiedLeague!.teamIds.map((teamId) => getTeam(teamId)));
+    expect(copiedTeams.map((team) => team?.name).sort()).toEqual(['Scroll Safe Club', 'Scroll Safe Club']);
+    expect(await getLeagueTemplate('test-league')).toEqual(sourceBefore);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[useLeagueBuilderData] duplicateLeague skipped missing teams',
+      expect.objectContaining({ leagueId: 'test-league', missingTeamIds: ['ghost-team'] }),
+    );
+    warnSpy.mockRestore();
   });
 
   test('COPYFIX-2 drafted pool-first duplicate starts with source pool members, empty rosters, and no minted farm leak', async () => {
