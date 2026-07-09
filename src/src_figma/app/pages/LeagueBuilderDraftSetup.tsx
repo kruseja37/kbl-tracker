@@ -1119,6 +1119,9 @@ export function RankYourBoardZone({
             rightWrapClassName="shrink-0 flex items-center gap-2"
             dragHandleClassName="shrink-0 border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
             arrowButtonClassName="border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+            rankBadgeClassName="shrink-0 w-7 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-page-bg)] px-1 py-0.5 text-center text-[10px] font-bold text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:opacity-45 active:scale-95"
+            rankInputClassName="shrink-0 w-10 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-page-bg)] px-1 py-0.5 text-center text-[10px] font-bold text-[var(--ballpark-chalk)] outline-none"
+            sendToTopClassName="border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
             renderContent={(entry) => renderRow(entry)}
             renderBeforeArrows={(entry) => renderWorth(entry)}
             data-testid="rank-your-board-global"
@@ -1164,6 +1167,9 @@ export function RankYourBoardZone({
                 rightWrapClassName="shrink-0 flex items-center gap-2"
                 dragHandleClassName="shrink-0 border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] active:scale-95 cursor-grab"
                 arrowButtonClassName="border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
+                rankBadgeClassName="shrink-0 w-7 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-page-bg)] px-1 py-0.5 text-center text-[10px] font-bold text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:opacity-45 active:scale-95"
+                rankInputClassName="shrink-0 w-10 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-page-bg)] px-1 py-0.5 text-center text-[10px] font-bold text-[var(--ballpark-chalk)] outline-none"
+                sendToTopClassName="border-2 border-[var(--ballpark-panel-border)] p-0.5 text-[var(--ballpark-brass)] hover:border-[var(--ballpark-brass)] disabled:cursor-not-allowed disabled:opacity-35 active:scale-95"
                 renderContent={(entry) => renderRow(entry)}
                 renderBeforeArrows={(entry) => renderWorth(entry)}
                 data-testid="rank-your-board-position"
@@ -1824,14 +1830,21 @@ export function LeagueBuilderDraftSetup() {
     () => leagueTeams.filter((team) => teamOwnerId(team, seats) !== "cpu"),
     [leagueTeams, seats],
   );
-  // UNIVERSE-FIX1: pre-extraction (unlocked design-first), the candidate feed for every automatic
+  // UNIVERSE-FIX1: pre-extraction (nothing drawn yet), the candidate feed for every automatic
   // computation downstream of this value (roster-design feasibility tone, archetype draftability
-  // ranking, identity reroll) must respect the checked source leagues — universePlayers, not the
-  // raw app-wide players. Once locked or in pool-first, it stays inPoolPlayers (already-committed
-  // pool membership, orthogonal to universe curation).
+  // ranking, identity reroll, the Wave-2 ranking widgets) must respect the checked source leagues
+  // — universePlayers, not the raw app-wide players. Once the pool has been EXTRACTED — or in
+  // pool-first, where "the pool" and "the universe" are the same concept — it switches to
+  // inPoolPlayers, the actual drawn pool.
+  // BOARDFIX1 (2026-07-08): this used to gate on `locked` (the separate, later pool-LOCK step)
+  // instead of on extraction, so the entire post-extraction/pre-lock review window kept feeding
+  // every ranking/priority widget (RosterDesigner's shortlist, the RANK YOUR BOARD zone) the
+  // pre-extraction universe instead of the pool the league was actually about to draft from —
+  // the live bug JK reported ("the extracted pool doesn't get pulled into the team widget where
+  // GMs rank players and set up priorities").
   const rosterDesignerPlayers = useMemo(
-    () => (poolMode === "design-first" && !locked ? universePlayers : inPoolPlayers),
-    [inPoolPlayers, locked, universePlayers, poolMode],
+    () => (poolMode === "design-first" && !league?.poolExtractedAt ? universePlayers : inPoolPlayers),
+    [inPoolPlayers, league?.poolExtractedAt, universePlayers, poolMode],
   );
   const rosterDesignerPoolKey = useMemo(
     () => sortedIds(rosterDesignerPlayers.map((player) => [

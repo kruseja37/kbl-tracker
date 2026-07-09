@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ChevronsUp, GripVertical } from "lucide-react";
 
 /**
  * COCKPIT WAVE 2 (Correction 7, ASST_GM_DRAFT_INTELLIGENCE_SPEC_2026-07-04.md §7): the drag +
@@ -11,11 +11,19 @@ import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
  * REQUIRED prop (no shared default look) so each caller makes its skin choice explicit: the
  * shortlist keeps its pre-existing 1px-border treatment (no behavior/visual change), while new
  * Wave-2 UI is born on the DRAFT_SKIN_STANDARD_2026-07-08.md hard-edge treatments.
+ *
+ * BOARDFIX1 (2026-07-08): drag + arrows alone make a long-distance move (e.g. 44th overall to
+ * top-5) impractical — native HTML5 drag doesn't auto-scroll a scrolling list, and arrows require
+ * one click per rank. Two affordances close that gap, built once here so every caller (setup
+ * board, live board, and — harmlessly, at 5 items — RosterDesigner's shortlist) gets them
+ * identically: the rank badge becomes a click-to-edit "type a target rank" control, and a
+ * "send to top" quick action sits next to the arrows.
  */
 export interface RankReorderListProps<T> {
   items: readonly T[];
   getId: (item: T) => string;
-  /** Used to build the "Drag {label}" / "Move {label} up" / "Move {label} down" aria-labels. */
+  /** Used to build the "Drag {label}" / "Move {label} up" / "Move {label} down" /
+   *  "Set rank for {label}" / "Send {label} to top" aria-labels. */
   itemLabel: (item: T) => string;
   onReorder: (orderedIds: readonly string[]) => void;
   readOnly?: boolean;
@@ -32,6 +40,13 @@ export interface RankReorderListProps<T> {
   rightWrapClassName: string;
   dragHandleClassName: string;
   arrowButtonClassName: string;
+  /** BOARDFIX1: the "#N" rank badge, click-to-edit into a type-in target rank. Required alongside
+   *  rankInputClassName/sendToTopClassName — same no-shared-default-look discipline as every other
+   *  style prop. Rendered UNCONDITIONALLY (even readOnly), matching renderBeforeArrows. */
+  rankBadgeClassName: string;
+  rankInputClassName: string;
+  /** "Send to top" quick action, rendered next to the arrows — hidden when readOnly. */
+  sendToTopClassName: string;
   "data-testid"?: string;
 }
 
@@ -72,13 +87,52 @@ export function RankReorderList<T>({
   rightWrapClassName,
   dragHandleClassName,
   arrowButtonClassName,
+  rankBadgeClassName,
+  rankInputClassName,
+  sendToTopClassName,
   "data-testid": dataTestId,
 }: RankReorderListProps<T>) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   const commitMove = (fromIndex: number, toIndex: number) => {
     if (readOnly || fromIndex === toIndex) return;
     onReorder(moveRankedId(items, getId, fromIndex, toIndex));
+  };
+
+  const beginEdit = (id: string, currentRank: number) => {
+    if (readOnly) return;
+    setEditingId(id);
+    setEditValue(String(currentRank));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditValue("");
+  };
+
+  /** Enter and blur both commit; non-numeric input cancels; a valid number clamps to [1, N]. */
+  const commitEdit = (fromIndex: number) => {
+    const trimmed = editValue.trim();
+    if (trimmed.length === 0 || !/^-?\d+$/.test(trimmed)) {
+      cancelEdit();
+      return;
+    }
+    const parsed = Number.parseInt(trimmed, 10);
+    const clamped = Math.min(Math.max(parsed, 1), items.length);
+    cancelEdit();
+    commitMove(fromIndex, clamped - 1);
+  };
+
+  const handleEditKeyDown = (event: KeyboardEvent<HTMLInputElement>, fromIndex: number) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitEdit(fromIndex);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEdit();
+    }
   };
 
   return (
@@ -86,8 +140,10 @@ export function RankReorderList<T>({
       {items.map((item, index) => {
         const id = getId(item);
         const label = itemLabel(item);
+        const rank = index + 1;
         const dragIndex = draggedId ? items.findIndex((candidate) => getId(candidate) === draggedId) : -1;
         const dragged = draggedId === id;
+        const editing = editingId === id;
         return (
           <div
             key={id}
@@ -120,12 +176,48 @@ export function RankReorderList<T>({
                   <GripVertical className="h-3 w-3" aria-hidden="true" />
                 </button>
               ) : null}
+              {editing ? (
+                <input
+                  type="number"
+                  autoFocus
+                  min={1}
+                  max={items.length}
+                  value={editValue}
+                  aria-label={`Set rank for ${label}`}
+                  className={rankInputClassName}
+                  onChange={(event) => setEditValue(event.target.value)}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onKeyDown={(event) => handleEditKeyDown(event, index)}
+                  onBlur={() => commitEdit(index)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  aria-label={`Set rank for ${label}`}
+                  title="Click to type a target rank"
+                  onClick={() => beginEdit(id, rank)}
+                  className={rankBadgeClassName}
+                >
+                  {rank}
+                </button>
+              )}
               {renderContent(item, index)}
             </span>
             <span className={rightWrapClassName}>
               {renderBeforeArrows?.(item, index)}
               {!readOnly ? (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => commitMove(index, 0)}
+                    disabled={index === 0}
+                    aria-label={`Send ${label} to top`}
+                    title="Send to top"
+                    className={sendToTopClassName}
+                  >
+                    <ChevronsUp className="h-3 w-3" aria-hidden="true" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => commitMove(index, index - 1)}
