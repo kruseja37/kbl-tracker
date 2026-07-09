@@ -72,6 +72,57 @@ export function moveRankedId<T>(
   return next.map(getId);
 }
 
+/**
+ * BOARDFIX2 (2026-07-08): materializes a FULL displayed order from a "natural" (engine/worth)
+ * order plus an optional explicit GM override id sequence.
+ *
+ * Root cause this fixes: the live/setup board list (rosterIntelligencePayload.ts's
+ * `sortByGmBlend`, out of this lane's allowed-edit surface — it's engine math) treats the GM's
+ * explicit rank order as a NUDGE bonus added on top of raw worth, then re-sorts by
+ * worth+bonus — it never MATERIALIZES the override as literal positions. A player explicitly
+ * ranked #6 can still get leapfrogged back to #4 (or anywhere else) if enough higher-worth
+ * players sit below rank 6, because their raw worth advantage can exceed the bonus a rank-6 nudge
+ * grants. That is JK's exact reported symptom ("type in 6 and player moves to 4") — the sparse-
+ * override hypothesis floated at dispatch time turned out not to be it (this component's own
+ * commitEdit already receives and clamps against the FULL displayed `items` array); the blend's
+ * bonus-vs-worth math is the real mechanism, even against a COMPLETE override permutation.
+ *
+ * Fix (caller-side, no engine edit needed): stop trusting the blend's SORT ORDER for anything the
+ * user directly drags/types on. Instead, place every id that appears in `overrideIds` at EXACTLY
+ * its override index (dropping any override id no longer present in `natural` — e.g. a player who
+ * left the pool), then fill the remaining slots with the entries NOT in the override, in their
+ * `natural` relative order (worth-ranked, since `natural`'s own order is unaffected by whether the
+ * blend was given an override — every non-overridden id's bonus is always 0 regardless). The
+ * result: a rank-edit lands exactly where it was typed and STAYS there on every subsequent render,
+ * because once a view's ids are all present in the override (the common case after any edit, since
+ * every move here persists the FULL reordered id list — see moveRankedId above), materialize is a
+ * pure permutation, not a nudge.
+ */
+export function materializeRankOrder<T>(
+  natural: readonly T[],
+  getId: (item: T) => string,
+  overrideIds: readonly string[] | undefined,
+): T[] {
+  if (!overrideIds || overrideIds.length === 0) return [...natural];
+  const byId = new Map(natural.map((item) => [getId(item), item]));
+  const placed = new Set<string>();
+  const result: T[] = [];
+  for (const id of overrideIds) {
+    if (placed.has(id)) continue;
+    const item = byId.get(id);
+    if (!item) continue;
+    result.push(item);
+    placed.add(id);
+  }
+  for (const item of natural) {
+    const id = getId(item);
+    if (placed.has(id)) continue;
+    result.push(item);
+    placed.add(id);
+  }
+  return result;
+}
+
 export function RankReorderList<T>({
   items,
   getId,

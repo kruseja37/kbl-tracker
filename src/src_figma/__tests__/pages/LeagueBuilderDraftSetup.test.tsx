@@ -357,6 +357,22 @@ function makeLockedRosterDesign(lockedAt: string): NonNullable<Team["rosterDesig
   return { slots: [], lockedAt };
 }
 
+// BOARDFIX2 (Items B/C): five SS candidates with a wide, deliberate worth spread -- reused across
+// the rank-edit-lands-at-position and reorder-perf test groups below.
+function fiveGradedSsPlayers(): Player[] {
+  return [
+    makePlayer(0, { id: "star-ss", firstName: "Star", lastName: "Short", primaryPosition: "SS", power: 99, contact: 99, speed: 99, fielding: 99, arm: 99 }),
+    makePlayer(1, { id: "high-ss", firstName: "High", lastName: "Short", primaryPosition: "SS", power: 85, contact: 85, speed: 85, fielding: 85, arm: 85 }),
+    makePlayer(2, { id: "mid-ss", firstName: "Mid", lastName: "Short", primaryPosition: "SS", power: 60, contact: 60, speed: 60, fielding: 60, arm: 60 }),
+    makePlayer(3, { id: "low-ss", firstName: "Low", lastName: "Short", primaryPosition: "SS", power: 35, contact: 35, speed: 35, fielding: 35, arm: 35 }),
+    makePlayer(4, { id: "weak-ss", firstName: "Weak", lastName: "Short", primaryPosition: "SS", power: 20, contact: 20, speed: 20, fielding: 20, arm: 20 }),
+  ];
+}
+
+function globalBoardOrder(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll("span.min-w-0.truncate.font-bold")).map((el) => el.textContent ?? "");
+}
+
 function makeBest22Target(overrides: Partial<Best22Target> = {}): Best22Target {
   return {
     picks: [],
@@ -435,6 +451,10 @@ describe("LeagueBuilderDraftSetup", () => {
   });
 
   afterEach(async () => {
+    // BOARDFIX2: a defensive safety net -- one test in this file (Item C's debounce perf test)
+    // uses vi.useFakeTimers() scoped to itself with a try/finally restore; this guarantees any
+    // leaked fake-timer state can never bleed into the next test's own (real-timer) waitFor calls.
+    vi.useRealTimers();
     cleanup();
     await act(async () => undefined);
     window.sessionStorage.clear();
@@ -1036,7 +1056,9 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Could not confirm whether a saved auction exists/i)).toBeInTheDocument();
+      // BOARDFIX2: the new readiness panel (Item A) surfaces this SAME message a second time near
+      // START THE DRAFT, so this now legitimately renders twice -- assert presence, not uniqueness.
+      expect(screen.getAllByText(/Could not confirm whether a saved auction exists/i).length).toBeGreaterThan(0);
     });
 
     expect(screen.getByRole("button", { name: /UNLOCK/i })).toBeDisabled();
@@ -1473,7 +1495,11 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    expect(await screen.findByText(/re-extract so the displayed pool matches the final pool/i)).toBeInTheDocument();
+    // BOARDFIX2: the new readiness panel (Item A) surfaces this SAME reason a second time near
+    // START THE DRAFT, so this now legitimately renders twice -- assert presence, not uniqueness.
+    await waitFor(() => {
+      expect(screen.getAllByText(/re-extract so the displayed pool matches the final pool/i).length).toBeGreaterThan(0);
+    });
     expect(screen.getByRole("button", { name: /^LOCK POOL$/i })).toBeDisabled();
     expect(screen.queryByText(/Sized to/i)).not.toBeInTheDocument();
   });
@@ -3031,6 +3057,8 @@ describe("LeagueBuilderDraftSetup", () => {
     // Star clearly outranks Weak on raw valuation -- promoting Weak to #1 is a GM override.
     fireEvent.click(screen.getByRole("button", { name: "Move Weak Short up" }));
 
+    // BOARDFIX2 (Item C): the reorder now lands in a local pending overlay instantly and
+    // saveTeam only fires after the trailing debounce settles -- widen the wait past that delay.
     await waitFor(() => {
       expect(saveTeam).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3038,7 +3066,7 @@ describe("LeagueBuilderDraftSetup", () => {
           boardRankOverrides: { global: ["weak-ss", "star-ss"] },
         }),
       );
-    });
+    }, { timeout: 2000 });
   });
 
   test("BOARDFIX1 wiring: RANK YOUR BOARD's global list supports native drag-and-drop reorder end to end (draggable rows, drag/drop events commit through onReorderGlobal)", async () => {
@@ -3076,6 +3104,7 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.dragOver(dropRow, { dataTransfer });
     fireEvent.drop(dropRow, { dataTransfer });
 
+    // BOARDFIX2 (Item C): widen past the trailing debounce (see the comment on the sibling test).
     await waitFor(() => {
       expect(saveTeam).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3083,7 +3112,7 @@ describe("LeagueBuilderDraftSetup", () => {
           boardRankOverrides: { global: ["weak-ss", "star-ss", "mid-ss"] },
         }),
       );
-    });
+    }, { timeout: 2000 });
   });
 
   test("BOARDFIX1 repro: design-first — the extracted pool must reach the roster-designer shortlist and the rank-your-board zone once EXTRACT POOL has run, even before the pool is separately locked", async () => {
@@ -3171,5 +3200,437 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
     }, { timeout: 5000 });
+  });
+
+  // BOARDFIX2 (Item B): rank-edit lands at the displayed position. Root cause (confirmed via a
+  // direct scratch call against the UNTOUCHED assembleBoard/sortByGmBlend engine function before
+  // this lane's fix): the blend treats an explicit rank as a worth+rank NUDGE, not a positional
+  // materialize -- ranking the objectively weakest of 5 candidates #1 rendered him at position 2,
+  // not 1, because his worth deficit outweighed the bonus a rank-0 nudge grants. The fix
+  // (materializeRankOrder in RankReorderList.tsx, applied at every board-rendering call site)
+  // places override'd ids at their literal index and fills the rest in natural/worth order.
+  describe("BOARDFIX2: rank-edit lands at the displayed position (Item B)", () => {
+    test("GLOBAL: a mixed board (some explicitly ranked, the rest engine-ordered) renders overrides at their literal position and the rest by worth", async () => {
+      const players = fiveGradedSsPlayers();
+      mockLeagueData({
+        teams: [
+          makeTeam("team-a", { boardRankOverrides: { global: ["weak-ss", "star-ss"] } }),
+          makeTeam("team-b"),
+        ],
+        players,
+        pool: makePool({ players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })) }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      await screen.findByText("3 · THE CLUBS");
+      fireEvent.click((await screen.findAllByRole("button", { name: "rank your board ›" }))[0]);
+      const globalList = await screen.findByTestId("rank-your-board-global");
+
+      // "weak" and "star" are explicitly ranked (in that order); high/mid/low are the
+      // engine-ordered rest, filled in by worth.
+      expect(globalBoardOrder(globalList)).toEqual(["Weak Short", "Star Short", "High Short", "Mid Short", "Low Short"]);
+    });
+
+    test("GLOBAL: typing a target rank lands the player EXACTLY there, even against a large worth gap", async () => {
+      const players = fiveGradedSsPlayers();
+      mockLeagueData({
+        players,
+        pool: makePool({ players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })) }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      await screen.findByText("3 · THE CLUBS");
+      fireEvent.click((await screen.findAllByRole("button", { name: "rank your board ›" }))[0]);
+      const globalList = await screen.findByTestId("rank-your-board-global");
+
+      expect(globalBoardOrder(globalList)).toEqual(["Star Short", "High Short", "Mid Short", "Low Short", "Weak Short"]);
+
+      // Rank Weak (objectively the worst by a mile) #1 by typing it in.
+      fireEvent.click(within(globalList).getByRole("button", { name: "Set rank for Weak Short" }));
+      const input = within(globalList).getByRole("spinbutton", { name: "Set rank for Weak Short" });
+      fireEvent.change(input, { target: { value: "1" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => {
+        expect(globalBoardOrder(globalList)).toEqual(["Weak Short", "Star Short", "High Short", "Mid Short", "Low Short"]);
+      });
+
+      // Repeated edit stays consistent: now move Low to #2 (arrows/badge share the same
+      // materialize path -- verifies the FULL displayed order persists across successive edits,
+      // not just the first).
+      fireEvent.click(within(globalList).getByRole("button", { name: "Set rank for Low Short" }));
+      const secondInput = within(globalList).getByRole("spinbutton", { name: "Set rank for Low Short" });
+      fireEvent.change(secondInput, { target: { value: "2" } });
+      fireEvent.keyDown(secondInput, { key: "Enter" });
+
+      await waitFor(() => {
+        expect(globalBoardOrder(globalList)).toEqual(["Weak Short", "Low Short", "Star Short", "High Short", "Mid Short"]);
+      });
+
+      // Moving DOWN lands exactly too (not just up): send Weak back down to rank 4.
+      fireEvent.click(within(globalList).getByRole("button", { name: "Set rank for Weak Short" }));
+      const thirdInput = within(globalList).getByRole("spinbutton", { name: "Set rank for Weak Short" });
+      fireEvent.change(thirdInput, { target: { value: "4" } });
+      fireEvent.keyDown(thirdInput, { key: "Enter" });
+
+      await waitFor(() => {
+        expect(globalBoardOrder(globalList)).toEqual(["Low Short", "Star Short", "High Short", "Weak Short", "Mid Short"]);
+      });
+
+      // Persistence follows the debounced flush (Item C) -- the FULL final order reaches saveTeam.
+      await waitFor(() => {
+        expect(saveTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: "team-a",
+            boardRankOverrides: { global: ["low-ss", "star-ss", "high-ss", "weak-ss", "mid-ss"] },
+          }),
+        );
+      }, { timeout: 2000 });
+    });
+
+    test("PER-POSITION: typing a rank beyond the visible 5-deep window clamps to the last VISIBLE position, not the full list", async () => {
+      const players = [
+        ...fiveGradedSsPlayers(),
+        makePlayer(5, { id: "extra-ss", firstName: "Extra", lastName: "Short", primaryPosition: "SS", power: 10, contact: 10, speed: 10, fielding: 10, arm: 10 }),
+      ];
+      mockLeagueData({
+        players,
+        pool: makePool({ players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })) }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      await screen.findByText("3 · THE CLUBS");
+      fireEvent.click((await screen.findAllByRole("button", { name: "rank your board ›" }))[0]);
+      fireEvent.click(await screen.findByRole("button", { name: "PER-POSITION" }));
+      const positionList = await screen.findByTestId("rank-your-board-position");
+
+      // Only the top 5 (of 6) are visible by default -- "Extra Short" (weakest) is folded.
+      expect(globalBoardOrder(positionList)).toEqual(["Star Short", "High Short", "Mid Short", "Low Short", "Weak Short"]);
+
+      // Typing 99 on the visible #1 clamps to the last VISIBLE slot (5), not the full list (6).
+      fireEvent.click(within(positionList).getByRole("button", { name: "Set rank for Star Short" }));
+      const input = within(positionList).getByRole("spinbutton", { name: "Set rank for Star Short" });
+      fireEvent.change(input, { target: { value: "99" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => {
+        expect(globalBoardOrder(positionList)).toEqual(["High Short", "Mid Short", "Low Short", "Weak Short", "Star Short"]);
+      });
+      // Confirms the hidden 6th player's rank was never disturbed by a visible-window edit --
+      // persisted via the SAME stable-remainder mechanism BOARDFIX1 already proved.
+      await waitFor(() => {
+        expect(saveTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: "team-a",
+            boardRankOverrides: {
+              byPosition: { SS: ["high-ss", "mid-ss", "low-ss", "weak-ss", "star-ss", "extra-ss"] },
+            },
+          }),
+        );
+      }, { timeout: 2000 });
+    });
+  });
+
+  // BOARDFIX2 (Item C): reorders update a LOCAL pending overlay instantly; the actual saveTeam
+  // write is debounced (trailing ~500ms -- BOARD_RANK_SAVE_DEBOUNCE_MS) so a burst of rapid moves
+  // settles into ONE write, not one per click. Before this fix, every click awaited saveTeam then
+  // called replaceTeamsLocal synchronously, which reference-invalidated leagueTeams/humanTeams and
+  // retriggered every downstream memo keyed on them (see the liveClubVerdicts effect fix, now keyed
+  // on the content-based clubTargetDesignKey instead).
+  describe("BOARDFIX2: instant reorders with debounced persistence (Item C)", () => {
+    test("a burst of 5 rapid moves calls saveTeam ONCE after the debounce settles, not once per move", async () => {
+      const players = fiveGradedSsPlayers();
+      mockLeagueData({
+        players,
+        pool: makePool({ players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })) }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      await screen.findByText("3 · THE CLUBS");
+      fireEvent.click((await screen.findAllByRole("button", { name: "rank your board ›" }))[0]);
+      const globalList = await screen.findByTestId("rank-your-board-global");
+
+      // Fake timers ONLY from here -- the async findBy*/waitFor navigation above relies on real
+      // timers to poll; switching before the burst avoids hanging RTL's own internal polling.
+      vi.useFakeTimers();
+      try {
+        // "Mid Short" starts at rank 3 -- oscillate up/down/up/down/up (5 moves, never touching a
+        // boundary) to simulate a realistic rapid-click burst without any click landing on a
+        // disabled arrow.
+        const clickSequence = ["up", "down", "up", "down", "up"] as const;
+        for (const direction of clickSequence) {
+          fireEvent.click(within(globalList).getByRole("button", { name: `Move Mid Short ${direction}` }));
+        }
+
+        // Still within the debounce window -- nothing persisted yet despite 5 moves.
+        expect(saveTeam).not.toHaveBeenCalled();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(700);
+        });
+
+        expect(saveTeam).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // BOARDFIX2 (Item A): the readiness panel enumerates EVERY currently-true blocker across LOCK
+  // POOL and START THE DRAFT as its own plain-language line, always visible near "5 · THE FLOOR"
+  // -- replacing the previous single ~11px startBlocker line that showed only the first-priority
+  // reason. Happy path -> the panel is absent entirely.
+  describe("BOARDFIX2: the readiness panel (Item A)", () => {
+    test("happy path: once every gate is satisfied, the readiness panel renders nothing", async () => {
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      const designLockedAt = "2026-01-01T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "design-first",
+          poolExtractedAt: extractedAt,
+          modeAExtractedIds: extractedPlayers.map((player) => player.id),
+        }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+          makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        ],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+      }, { timeout: 5000 });
+      expect(screen.queryByTestId("draft-readiness-panel")).not.toBeInTheDocument();
+    });
+
+    test("names every club still missing an MLB/farm identity", async () => {
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      const designLockedAt = "2026-01-01T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "design-first",
+          poolExtractedAt: extractedAt,
+          modeAExtractedIds: extractedPlayers.map((player) => player.id),
+        }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+          makeTeam("team-b", {
+            rosterDesign: makeLockedRosterDesign(designLockedAt),
+            farmArchetypeKey: undefined,
+          }),
+        ],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/Keys — Player 2 \(needs farm\)/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("names every club whose design isn't locked yet", async () => {
+      mockLeagueData({
+        league: makeLeague({ draftPoolMode: "design-first" }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
+          makeTeam("team-b"), // no rosterDesign -- not locked
+        ],
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/1 of 2 club designs not locked yet — waiting on Keys — Player 2/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("once every design is locked but the pool is only extracted (not yet locked), says so plainly", async () => {
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      const designLockedAt = "2026-01-01T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "design-first",
+          poolExtractedAt: extractedAt,
+          modeAExtractedIds: extractedPlayers.map((player) => player.id),
+        }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+          makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        ],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: false,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/extracted but not locked yet — LOCK POOL/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("names a locked pool that falls short of the required floor", async () => {
+      const smallPool = makeFinalizedDesignFirstPlayers().slice(0, 8);
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      const designLockedAt = "2026-01-01T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "design-first",
+          poolExtractedAt: extractedAt,
+          modeAExtractedIds: smallPool.map((player) => player.id),
+        }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+          makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        ],
+        players: smallPool,
+        pool: makePool({
+          locked: true,
+          players: smallPool.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: smallPool.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/short of what the draft needs/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("REAL-BLOCKER HUNT: a locked pool that goes stale AFTER lock (shill count changed since the extract) is a genuine sequence BOARDFIX1's happy-path tests never modeled", async () => {
+      // EXTRACT -> LOCK POOL -> a basis input (shills) moves afterward. `poolTrailing` correctly
+      // still gates startReady here (confirmed: this is NOT a bug -- the pool genuinely no longer
+      // matches the live basis). The pre-existing explanation for this lived only in the "4 · THE
+      // POOL" zone's own contextual banner and the tiny single-line startBlocker note; the new
+      // panel surfaces the SAME specific reason prominently right next to START THE DRAFT, where
+      // JK's literal complaint ("no way to start the draft") was actually looking.
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      const designLockedAt = "2026-01-01T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "design-first",
+          poolExtractedAt: extractedAt,
+          modeAExtractedIds: extractedPlayers.map((player) => player.id),
+          salaryCap: 1_064_387,
+          draftShillCount: 3, // moved AFTER the pool was drawn+locked
+          poolExtractedBasis: {
+            cap: 1_064_387,
+            poolSizeMultiplier: 1.25,
+            shills: 0,
+            identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+          },
+        }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+          makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        ],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/THE SHILL COUNT MOVED/i)).toBeInTheDocument();
+      expect(within(panel).getByText(/the pool is locked but the plan changed since — UNLOCK, re-extract, then re-lock/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("REAL-BLOCKER HUNT: a completed (not run-back) draft resolves cleanly -- no hidden residue blocks a fresh start when every gate is otherwise satisfied", async () => {
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      const designLockedAt = "2026-01-01T00:00:00.000Z";
+      vi.mocked(getAuctionSession).mockResolvedValue({ session: { state: "AUCTION_COMPLETE" } } as unknown as Awaited<ReturnType<typeof getAuctionSession>>);
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "design-first",
+          poolExtractedAt: extractedAt,
+          modeAExtractedIds: extractedPlayers.map((player) => player.id),
+        }),
+        teams: [
+          makeTeam("team-a", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+          makeTeam("team-b", { rosterDesign: makeLockedRosterDesign(designLockedAt) }),
+        ],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /^START THE DRAFT$/i })).toBeEnabled();
+      }, { timeout: 5000 });
+      expect(screen.queryByTestId("draft-readiness-panel")).not.toBeInTheDocument();
+    });
+
+    test("pool-first: names a pool that can't legally seat every club at 22 under the cap", async () => {
+      const expensivePlayers = makeLegalRosterPlayers(2_000_000); // one legal 22, priced way over a small cap
+      mockLeagueData({
+        league: makeLeague({ draftPoolMode: "pool-first", salaryCap: 1_000_000 }),
+        players: expensivePlayers,
+        pool: makePool({
+          locked: false,
+          players: expensivePlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: expensivePlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/can't legally seat every club at 22 under the cap/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("pool-first: a pool that hasn't been locked yet (and can legally seat every club) gets the generic lock instruction", async () => {
+      const legalPlayers = [
+        ...makeLegalRosterPlayerSet("one", 10_000),
+        ...makeLegalRosterPlayerSet("two", 10_000),
+      ];
+      mockLeagueData({
+        league: makeLeague({ draftPoolMode: "pool-first" }),
+        players: legalPlayers,
+        pool: makePool({
+          locked: false,
+          players: legalPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: legalPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText(/pool hasn't been locked yet — LOCK POOL/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
   });
 });

@@ -876,6 +876,34 @@ describe("COCKPIT WAVE 2: THE BOARD (setup + live GM-sortable global/per-positio
     expect(screen.queryByRole("button", { name: /^Drag /i })).not.toBeInTheDocument();
   });
 
+  test("BOARDFIX2 (Item B): PER-POSITION materializes an explicit rank override instead of blending it with worth", () => {
+    // Root cause this proves fixed: sortBoardEntriesForPosition's blend is a worth+rank NUDGE, not
+    // a positional override -- ranking the objectively weakest SS #1 used to render him wherever
+    // his worth deficit left him after the bonus, not literally first. materializeRankOrder
+    // (applied in WhisperPanel's boardPositionView memo) places him at his literal index.
+    const deepBoard: RosterIntelligencePayload["board"] = [
+      { playerId: "ss-star", worth: 500_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Star Short", position: "SS" },
+      { playerId: "ss-high", worth: 300_000, matchedShape: "SS", needTag: null, fitTag: null, note: "High Short", position: "SS" },
+      { playerId: "ss-mid", worth: 150_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Mid Short", position: "SS" },
+      { playerId: "ss-low", worth: 50_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Low Short", position: "SS" },
+      { playerId: "ss-weak", worth: 5_000, matchedShape: "SS", needTag: null, fitTag: null, note: "Weak Short", position: "SS" },
+    ];
+    render(
+      <WhisperPanel
+        payload={Object.assign(payload("push", { board: deepBoard }), {
+          boardRankOverrides: { byPosition: { SS: ["ss-weak"] } },
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByTestId("whisper-board-view-toggle").querySelector("button:nth-child(2)")!);
+    const positionView = screen.getByTestId("whisper-board-position-view");
+    fireEvent.click(within(positionView).getByRole("button", { name: "SS (5)" }));
+
+    const names = Array.from(positionView.querySelectorAll(".whisper-board-name")).map((el) => el.textContent);
+    expect(names).toEqual(["Weak Short", "Star Short", "High Short", "Mid Short", "Low Short"]);
+  });
+
   test("the auto-advance 'Next up' Tier-2 line renders on MLB when present, and is absent otherwise / on farm", () => {
     render(
       <WhisperPanel
