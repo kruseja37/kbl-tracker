@@ -1167,3 +1167,26 @@ describe('DIAG3: claim-path tax self-consistency (matches builder competitive pa
     expect(true).toBe(true);
   }, GAUNTLET_TIMEOUT_MS);
 });
+
+describe('DIAG4: do D2/D3 complete at NORMAL budget + default pool (no inflation)?', () => {
+  const universe = ALL_MLB_PLAYERS.map(toDemandPlayer);
+  const leaguePlayers = ALL_MLB_PLAYERS.map(toLeagueBuilderPlayer);
+  const playerById = new Map(leaguePlayers.map((p) => [p.id, p]));
+  const constructionById = new Map(leaguePlayers.map((p) => [p.id, toConstructionPlayer(p)]));
+  const rr = [HISTORICAL_ARCHETYPES.slice(0, 8), HISTORICAL_ARCHETYPES.slice(8, 16), HISTORICAL_ARCHETYPES.slice(16, 24)];
+
+  test('D2/D3 archetypes, competitive, NORMAL budget, DEFAULT pool multiplier', () => {
+    for (const [label, arch, seed] of [['D2@normal', rr[1], 'D2d'], ['D3@normal', rr[2], 'D3a']] as const) {
+      const spec: DraftSpec = { id: seed, label, kind: 'pool-first', teamCount: 8, archetypes: [...arch], competitive: true };
+      const teamIds = getLeagueTeamIds('mlb').slice(0, 8);
+      const teams = teamIds.map((teamId, index) => buildTeam({ id: teamId, archetype: arch[index], index }));
+      const pool = extractProductionPool({ spec, universe, tier: DEFAULT_TIER });
+      const auctionPlayers = toAuctionPlayers(pool, playerById);
+      const taxContext = buildTaxContext({ pool, teams, players: leaguePlayers });
+      const r = runVariant({ spec, pool, teams, auctionPlayers, taxContext, constructionById, taxMode: 'real', loneSurvivor: 'decline' });
+      const closers = pool.players.map((p) => buildSession({ spec, pool, teams, auctionPlayers }).players[p.id]?.pos).filter((s) => s?.isPitcher && s.role === 'CP').length;
+      console.log(`\n### ${label}: NORMAL budget=${round2(pool.tierCap)} default-pool size=${pool.players.length} closers=${closers} -> completed=${r.completed} tax=${r.totalChargedTax} strand=${r.strand ?? 'none'}`);
+    }
+    expect(true).toBe(true);
+  }, GAUNTLET_TIMEOUT_MS);
+});
