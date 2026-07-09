@@ -1099,10 +1099,26 @@ export function LeagueBuilderAuctionDraft() {
     return Math.min(Math.max(Math.round(amount), lower), upper);
   };
 
+  // FLOORREFIT Move 1: extended to also resolve during NOMINATION (the team whose turn it is in
+  // the nomination rotation) -- previously only OPEN_BIDDING/RESOLVE-claim resolved a team here, so
+  // the ON THE CLOCK banner had nobody to name during nomination. teamName/teamPrimary/teamSecondary
+  // below already fall back through this same `nowTeam`, so this one change cascades correctly.
+  const nominatingTeam = session?.state === "NOMINATION"
+    ? teamById.get(session.nominationOrder[session.nominationIndex] ?? "") ?? null
+    : null;
   const nowTeam =
     session?.state === "OPEN_BIDDING" ? currentBidder :
     session?.state === "RESOLVE" && session.pendingClaim ? pendingClaimTeam :
+    session?.state === "NOMINATION" ? nominatingTeam :
     null;
+  // FLOORREFIT Move 1: an independently-correct CPU/shill signal for the acting team named by
+  // `nowTeam` above -- NOT derived from move.cpuTurnName (the farm floor always leaves that null;
+  // see the FLOORREFIT contract's honest finding).
+  const nowTeamIsCpu = nowTeam ? auction.isCpuTeam(nowTeam.id) : false;
+  const nowTurnKind: "bid" | "nomination" | undefined =
+    session?.state === "NOMINATION" ? "nomination" :
+    session?.state === "OPEN_BIDDING" || (session?.state === "RESOLVE" && Boolean(session.pendingClaim)) ? "bid" :
+    undefined;
   const nowAction =
     session?.state === "NOMINATION" ? "surface next lot" :
     session?.state === "OPEN_BIDDING" ? "raise or pass" :
@@ -1835,6 +1851,8 @@ export function LeagueBuilderAuctionDraft() {
           : nowTeam ? teamDisplayName(nowTeam) : undefined,
       teamPrimary: nowTeam?.colors.primary ?? (stageFocusTeam?.colors.primary ?? "var(--ballpark-brass)"),
       teamSecondary: nowTeam?.colors.secondary ?? (stageFocusTeam?.colors.secondary ?? "var(--ballpark-chalk)"),
+      turnKind: nowTurnKind,
+      actingTeamIsCpu: nowTeamIsCpu,
     },
     lot: {
       player: stageLotPlayer,
@@ -1854,6 +1872,10 @@ export function LeagueBuilderAuctionDraft() {
             amount: lot.highBid,
             by: lot.highBidder ? teamNameById(lot.highBidder) : "opening",
             isYou: Boolean(lot.highBidder && !auction.isCpuTeam(lot.highBidder)),
+            // FLOORREFIT Move 4: holder swatch data -- absent (undefined) when the holder can't be
+            // resolved, which renders the name exactly as before, no swatch.
+            byTeamPrimary: lot.highBidder ? teamById.get(lot.highBidder)?.colors.primary : undefined,
+            byAbbreviation: lot.highBidder ? teamById.get(lot.highBidder)?.abbreviation : undefined,
           }
         : null,
     },

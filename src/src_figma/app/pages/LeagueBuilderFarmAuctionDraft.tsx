@@ -727,6 +727,13 @@ export function LeagueBuilderFarmAuctionDraft() {
     (session?.state === "SOLD" || session?.state === "PASSED") ? "confirm next lot" :
     session?.state === "AUCTION_COMPLETE" ? "auction complete" :
     "setup";
+  // FLOORREFIT Move 1: the farm floor's status.teamName is ALWAYS stageFocusTeamName (unlike MLB,
+  // which conditions it per-state) -- kept that way here (layout-only scope), just adding the two
+  // signals the banner needs on top of the same already-computed "acting team" concept.
+  const nowTurnKind: "bid" | "nomination" | undefined =
+    session?.state === "NOMINATION" ? "nomination" :
+    session?.state === "OPEN_BIDDING" || (session?.state === "RESOLVE" && Boolean(session.pendingClaim)) ? "bid" :
+    undefined;
 
   const availablePoolCandidates = useMemo(() => {
     if (!session) return [];
@@ -756,6 +763,10 @@ export function LeagueBuilderFarmAuctionDraft() {
     : stageFocusTeam
       ? teamDisplayName(stageFocusTeam)
       : "Farm roster";
+  // FLOORREFIT Move 1: an independently-correct CPU/shill signal for the acting team named by
+  // status.teamName (stageFocusTeamName above) -- NOT derived from move.cpuTurnName, which this
+  // floor always leaves null (see the FLOORREFIT contract's honest finding).
+  const stageFocusTeamIsCpu = stageFocusTeam ? auction.isCpuTeam(stageFocusTeam.id) : false;
   const stageMaxBid = session && stageFocusTeamState
     ? getTeamAuctionMaxBid(session, stageFocusTeamState.teamId)
     : currentBidderMaxBid;
@@ -822,6 +833,8 @@ export function LeagueBuilderFarmAuctionDraft() {
       teamName: stageFocusTeamName,
       teamPrimary: stageFocusTeam?.colors.primary ?? "var(--ballpark-brass)",
       teamSecondary: stageFocusTeam?.colors.secondary ?? "var(--ballpark-chalk)",
+      turnKind: nowTurnKind,
+      actingTeamIsCpu: stageFocusTeamIsCpu,
     },
     lot: {
       // WT-D: lets the on-the-block name open the profile popover -- the prospect's
@@ -863,6 +876,10 @@ export function LeagueBuilderFarmAuctionDraft() {
             amount: lot.highBid,
             by: lot.highBidder ? teamDisplayName(teamById.get(lot.highBidder)) : "opening",
             isYou: Boolean(lot.highBidder && !auction.isCpuTeam(lot.highBidder)),
+            // FLOORREFIT Move 4: holder swatch data -- absent (undefined) when the holder can't be
+            // resolved, which renders the name exactly as before, no swatch.
+            byTeamPrimary: lot.highBidder ? teamById.get(lot.highBidder)?.colors.primary : undefined,
+            byAbbreviation: lot.highBidder ? teamById.get(lot.highBidder)?.abbreviation : undefined,
           }
         : null,
     },

@@ -4,6 +4,7 @@ import type { Player } from "../../../../utils/leagueBuilderStorage";
 import { HELP_LINE, WhisperPanel } from "./WhisperPanel";
 import { PressButton } from "../ballpark";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
+import { OnTheClockBanner } from "./onTheClockBanner";
 
 /**
  * AuctionStage — the "Premium Retro" auction-draft stage (MLB + farm), the
@@ -56,7 +57,15 @@ export interface LotVM {
   scout?: ScoutReadVM;
   reserveAsk?: number | null;
   reserveLabel?: string;
-  highBid?: { amount: number; by: string; isYou: boolean } | null;
+  highBid?: {
+    amount: number;
+    by: string;
+    isYou: boolean;
+    /** FLOORREFIT Move 4: the holding team's primary color, for the 4px left-border swatch.
+     * Absent (fallback) renders the holder name exactly as before, no swatch. */
+    byTeamPrimary?: string;
+    byAbbreviation?: string;
+  } | null;
 }
 
 export interface PresetVM {
@@ -173,6 +182,13 @@ export interface AuctionStageVM {
     teamName?: string;
     teamPrimary?: string;
     teamSecondary?: string;
+    /** FLOORREFIT Move 1: which kind of turn is live -- drives the ON THE CLOCK banner's generic
+     * (non-viewer) copy. Absent for states with no well-defined acting team. */
+    turnKind?: "bid" | "nomination";
+    /** FLOORREFIT Move 1: whether the acting team (whichever team `teamName` names) is CPU/shill-
+     * controlled -- an independently-correct signal computed by each page, NOT derived from
+     * `move.cpuTurnName` (the farm floor always leaves that null; see the FLOORREFIT contract). */
+    actingTeamIsCpu?: boolean;
   };
   lot: LotVM;
   move: MoveVM;
@@ -250,6 +266,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
               <HandoffCheckPanel complete={vm.complete} />
             ) : (
               <>
+                <OnTheClockBanner status={vm.status} />
                 <div className="gonewrap">
                   <div className="lot">
                     <Lot lot={vm.lot} tier={vm.tier} helpOpen={helpOpen} />
@@ -333,11 +350,22 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                   )}
 
                 </div>
+
+                {/* FLOORREFIT Move 6: the roster fill board moves here (left column, under the bid
+                    controls -- today's dead space) from the right column's bottom. */}
+                <RosterBoardCard board={vm.board} boardSlots={boardSlots} tier={vm.tier} />
               </>
             )}
+
+            {/* FLOORREFIT Move 6, complete-screen carve-out: the board rendered independent of
+                vm.complete in the ORIGINAL right-column placement (a dedicated WT-D test covers a
+                rostered player's popover on the complete-screen board) -- kept independent here too,
+                so it now sits below the handoff-check panel on the complete screen instead of
+                nested inside the bid-controls fragment above (which only exists pre-complete). */}
+            {vm.complete && <RosterBoardCard board={vm.board} boardSlots={boardSlots} tier={vm.tier} />}
           </div>
 
-          {/* RIGHT — roster need board + lot log */}
+          {/* RIGHT — the advisor, uncaged (FLOORREFIT §2) + lot log */}
           <div>
             <WhisperPanel key={whisperPayload?.seatTeamId ?? "dormant"} payload={whisperPayload} tier={vm.tier} />
             {helpOpen && (
@@ -346,86 +374,6 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                 <div className="txt">{HELP_LINE}</div>
               </div>
             )}
-
-            <div className="card board">
-              <div className="row">
-                <div className="eyebrow">{vm.board.title}</div>
-                <div className="spacer" />
-                <span className="chip">{vm.board.hint}</span>
-              </div>
-              <div className="board-groups">
-                {(["THE EIGHT", "ROTATION", "BULLPEN", "THE BENCH"] as const).map((group) => {
-                  const groupSlots = boardSlots.filter((slot) => slot.group === group);
-                  if (groupSlots.length === 0) return null;
-                  const benchFilled = group === "THE BENCH" ? groupSlots.filter((slot) => slot.filled).length : null;
-                  return (
-                    <div key={group} className="board-group">
-                      <div className="board-group-title">
-                        {group}
-                        {benchFilled !== null && <span>BENCH {benchFilled}/{groupSlots.length}</span>}
-                      </div>
-                      <div className="slots" style={vm.board.columns ? { gridTemplateColumns: `repeat(${vm.board.columns}, 1fr)` } : undefined}>
-                        {groupSlots.map((s) => (
-                          <div
-                            key={s.slotId}
-                            data-testid={`auction-board-slot-${s.slotId}`}
-                            className={`slot${s.filled ? " filled" : ""}${s.isGap ? " gap" : ""}`}
-                          >
-                            <div className="p">{s.pos}</div>
-                            {s.chip && <div className="slot-chip">{s.chip}</div>}
-                            {s.who !== undefined && (
-                              <div className={`who${s.filled ? "" : " faint"}`}>
-                                {s.player ? (
-                                  // COCKPIT W1d (WT-D audit follow-up): revealFull is tier-gated
-                                  // here as defense-in-depth -- farm prospects always carry the
-                                  // 'hidden' ratingRevealState literal (shouldReveal gates on
-                                  // that regardless of this prop), but a farm-tier board should
-                                  // never even ASK for the full reveal.
-                                  <PlayerProfilePopover player={s.player} revealFull={vm.tier !== "farm"}>
-                                    <span className="who-clickable">{s.who || "open"}</span>
-                                  </PlayerProfilePopover>
-                                ) : (
-                                  s.who || "open"
-                                )}
-                              </div>
-                            )}
-                            {s.depthNote && <div className="depth-note">{s.depthNote}</div>}
-                            {s.gapLabel && (
-                              <div data-testid={`auction-board-gap-${s.slotId}`} className="gap-label">
-                                {s.gapLabel}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {vm.board.overflow && vm.board.overflow.length > 0 && (
-                <div data-testid="auction-board-overflow" className="overflow-rail">
-                  <div className="overflow-title">OVERFLOW — {vm.board.overflow.length} UNSEATED</div>
-                  <div className="overflow-note">These players don't fit the legal 22 frame — resolve before launch.</div>
-                  <div className="overflow-list">
-                    {vm.board.overflow.map((entry) => (
-                      <span key={entry.playerId} className="chip">
-                        <b>{entry.chip}</b>{" "}
-                        {entry.player ? (
-                          // COCKPIT W1d (WT-D audit follow-up): same tier-gated defense-in-depth
-                          // as the roster-slot popover above.
-                          <PlayerProfilePopover player={entry.player} revealFull={vm.tier !== "farm"}>
-                            <span className="who-clickable">{entry.name}</span>
-                          </PlayerProfilePopover>
-                        ) : (
-                          entry.name
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="needline">{vm.board.needLine}</div>
-            </div>
 
             {vm.log.length > 0 && (
               <div className="card log">
@@ -465,6 +413,96 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
 
         {supplemental}
       </div>
+    </div>
+  );
+}
+
+type ResolvedRosterSlotVM = RosterSlotVM & { slotId: string; group: BoardGroupName };
+
+/** FLOORREFIT Move 6: the roster fill board, shared by both of AuctionStage's render sites (the
+ * normal left-column-under-bid-controls placement, and the complete-screen carve-out that keeps it
+ * visible alongside the handoff-check panel, matching pre-refit behavior). Same JSX, testids, and
+ * classes the original single copy had -- only lifted into its own component to avoid tripling it. */
+function RosterBoardCard({ board, boardSlots, tier }: { board: BoardVM; boardSlots: readonly ResolvedRosterSlotVM[]; tier: AuctionTier }) {
+  return (
+    <div className="card board">
+      <div className="row">
+        <div className="eyebrow">{board.title}</div>
+        <div className="spacer" />
+        <span className="chip">{board.hint}</span>
+      </div>
+      <div className="board-groups">
+        {(["THE EIGHT", "ROTATION", "BULLPEN", "THE BENCH"] as const).map((group) => {
+          const groupSlots = boardSlots.filter((slot) => slot.group === group);
+          if (groupSlots.length === 0) return null;
+          const benchFilled = group === "THE BENCH" ? groupSlots.filter((slot) => slot.filled).length : null;
+          return (
+            <div key={group} className="board-group">
+              <div className="board-group-title">
+                {group}
+                {benchFilled !== null && <span>BENCH {benchFilled}/{groupSlots.length}</span>}
+              </div>
+              <div className="slots" style={board.columns ? { gridTemplateColumns: `repeat(${board.columns}, 1fr)` } : undefined}>
+                {groupSlots.map((s) => (
+                  <div
+                    key={s.slotId}
+                    data-testid={`auction-board-slot-${s.slotId}`}
+                    className={`slot${s.filled ? " filled" : ""}${s.isGap ? " gap" : ""}`}
+                  >
+                    <div className="p">{s.pos}</div>
+                    {s.chip && <div className="slot-chip">{s.chip}</div>}
+                    {s.who !== undefined && (
+                      <div className={`who${s.filled ? "" : " faint"}`}>
+                        {s.player ? (
+                          // COCKPIT W1d (WT-D audit follow-up): revealFull is tier-gated here as
+                          // defense-in-depth -- farm prospects always carry the 'hidden'
+                          // ratingRevealState literal (shouldReveal gates on that regardless of
+                          // this prop), but a farm-tier board should never even ASK for the full
+                          // reveal.
+                          <PlayerProfilePopover player={s.player} revealFull={tier !== "farm"}>
+                            <span className="who-clickable">{s.who || "open"}</span>
+                          </PlayerProfilePopover>
+                        ) : (
+                          s.who || "open"
+                        )}
+                      </div>
+                    )}
+                    {s.depthNote && <div className="depth-note">{s.depthNote}</div>}
+                    {s.gapLabel && (
+                      <div data-testid={`auction-board-gap-${s.slotId}`} className="gap-label">
+                        {s.gapLabel}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {board.overflow && board.overflow.length > 0 && (
+        <div data-testid="auction-board-overflow" className="overflow-rail">
+          <div className="overflow-title">OVERFLOW — {board.overflow.length} UNSEATED</div>
+          <div className="overflow-note">These players don't fit the legal 22 frame — resolve before launch.</div>
+          <div className="overflow-list">
+            {board.overflow.map((entry) => (
+              <span key={entry.playerId} className="chip">
+                <b>{entry.chip}</b>{" "}
+                {entry.player ? (
+                  // COCKPIT W1d (WT-D audit follow-up): same tier-gated defense-in-depth as the
+                  // roster-slot popover above.
+                  <PlayerProfilePopover player={entry.player} revealFull={tier !== "farm"}>
+                    <span className="who-clickable">{entry.name}</span>
+                  </PlayerProfilePopover>
+                ) : (
+                  entry.name
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="needline">{board.needLine}</div>
     </div>
   );
 }
@@ -635,11 +673,19 @@ function Lot({ lot, tier, helpOpen }: { lot: LotVM; tier: AuctionTier; helpOpen:
       {lot.publicMarket && (
         <div className="market-read ballpark-feed-card">
           <div className="market-read-main">
-            <div className="eyebrow">Public market</div>
-            <div className="market-band" aria-label="Public market price band">
-              <span className="num">{money(lot.publicMarket.band.low)}</span>
-              <b className="num">{money(lot.publicMarket.band.median)}</b>
-              <span className="num">{money(lot.publicMarket.band.high)}</span>
+            {/* FLOORREFIT Move 5: the three unlabeled boxes + the eyebrow collapse into one quiet
+                mono line ("MARKET $lo · $mid · $hi") -- "MARKET" is the label now, so the old
+                "Public market" eyebrow is gone (Say-it-once, design §1.2). The reserve ask folds in
+                right here whenever this lot HAS a public-market read; a lot with a reserve but no
+                public-market read (farm) keeps the standalone reserve chip below, unchanged. */}
+            <div className="market-line num" aria-label="Public market price band">
+              MARKET {money(lot.publicMarket.band.low)} · {money(lot.publicMarket.band.median)} · {money(lot.publicMarket.band.high)}
+              {lot.reserveAsk !== null && lot.reserveAsk !== undefined && (
+                <span className="market-line-reserve">
+                  {" "}
+                  — <b>{lot.reserveLabel ?? "RESERVE"}</b> {money(lot.reserveAsk)}
+                </span>
+              )}
             </div>
             {helpOpen && (
               <div className="muted" style={{ fontSize: 12.5 }}>
@@ -694,7 +740,9 @@ function Lot({ lot, tier, helpOpen }: { lot: LotVM; tier: AuctionTier; helpOpen:
         </>
       )}
 
-      {lot.reserveAsk !== null && lot.reserveAsk !== undefined && (
+      {/* Standalone reserve chip only when there's no public-market line to fold it into (farm
+          floor, or any MLB lot without a public-market read) -- no number lost either way. */}
+      {!lot.publicMarket && lot.reserveAsk !== null && lot.reserveAsk !== undefined && (
         <div className="reserve-ask">
           <span>{lot.reserveLabel ?? "RESERVE"}</span>
           <b className="num">{money(lot.reserveAsk)}</b>
@@ -706,8 +754,24 @@ function Lot({ lot, tier, helpOpen }: { lot: LotVM; tier: AuctionTier; helpOpen:
         <div className="row" style={{ marginTop: 6 }}>
           <div className="amt num">{lot.highBid ? money(lot.highBid.amount) : "$0"}</div>
           <div className="spacer" />
-          <div className={lot.highBid ? "by" : "by muted"}>
-            {lot.highBid ? lot.highBid.by : "opening — be the first"}
+          <div
+            className={`by${lot.highBid ? "" : " muted"}${lot.highBid?.byTeamPrimary ? " swatch" : ""}`}
+            style={
+              lot.highBid?.byTeamPrimary
+                ? ({ "--holder-color": lot.highBid.byTeamPrimary } as React.CSSProperties)
+                : undefined
+            }
+          >
+            {lot.highBid ? (
+              <>
+                {/* FLOORREFIT Move 4: the holder's team abbreviation, colored to match the swatch --
+                    "who's winning" reads at a glance. Absent (fallback) leaves the name as today. */}
+                {lot.highBid.byAbbreviation && <b className="by-abbr">{lot.highBid.byAbbreviation}</b>}
+                {lot.highBid.by}
+              </>
+            ) : (
+              "opening — be the first"
+            )}
           </div>
         </div>
       </div>
