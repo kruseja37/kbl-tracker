@@ -239,6 +239,34 @@ export async function addPlayersToLeaguePool(playerIds: string[], leagueId: stri
 }
 
 /**
+ * Copy league-pool membership from one league id to another. This reads the source league's
+ * assignment register only; writes go through the canonical bulk writer so target rows are
+ * normalized to FREE_AGENT and pool idempotency stays centralized.
+ */
+export async function copyLeaguePoolMembership(
+  sourceLeagueId: string,
+  targetLeagueId: string,
+): Promise<number> {
+  const players = await getAllPlayers();
+  const playerIds = players.flatMap((player) => {
+    if (!isPlayerInLeaguePool(player, sourceLeagueId)) return [];
+    if (isPlayerInLeaguePool(player, targetLeagueId)) return [];
+
+    const sourceAssignment = player.leagueAssignments?.find(
+      (assignment) => assignment.leagueId === sourceLeagueId,
+    );
+    const isSourceMintedFarmProspect =
+      player.draftedAsFarmProspect === true &&
+      sourceAssignment?.rosterStatus === 'FARM';
+
+    return isSourceMintedFarmProspect ? [] : [player.id];
+  });
+
+  await addPlayersToLeaguePool(playerIds, targetLeagueId);
+  return playerIds.length;
+}
+
+/**
  * Remove players from the league pool in bulk. Rejected while the pool is locked. Removal is
  * AUTHORITATIVE against BOTH pool-first membership sources: it drops the league assignment AND
  * pulls the player off the league's branded-team rosters. The latter is essential in pool-first

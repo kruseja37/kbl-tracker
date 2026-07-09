@@ -11,6 +11,7 @@ import {
   createFarmAuctionSessionId,
   createMlbDraftSessionId,
   createStartupDraftSessionId,
+  getAllPlayers,
   getAuctionSession,
   getAuctionSessionById,
   getLeagueTemplate,
@@ -22,6 +23,7 @@ import {
   getTeam,
   getTeamRoster,
   getPlayersByTeam,
+  initializeDefaultPresets,
   saveAuctionSession,
   saveAuctionSessionById,
   saveLeagueTemplate,
@@ -37,6 +39,7 @@ import { DEFAULT_AUCTION_SETUP_CONFIG } from '../../../data/auctionEngineConstan
 import type { CpuShillAuctionSession } from '../../../engines/cpuShillBidding';
 import type { RegisteredPool } from '../../../engines/leagueConstruction';
 import { importRosteredPlayersToLeaguePool, isPlayerInLeaguePool } from '../../../utils/leagueBuilderPoolBuilder';
+import { MLB_AUCTION_SEASON } from '../../../utils/leagueBuilderAuctionPipeline';
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -44,12 +47,14 @@ import {
   type Team,
 } from '../useLeagueBuilderData';
 
+const syncEngineMock = vi.hoisted(() => ({
+  isSuppressed: vi.fn(() => true),
+  upsert: vi.fn(),
+  remove: vi.fn(),
+}));
+
 vi.mock('../../../utils/syncEngine', () => ({
-  syncEngine: {
-    isSuppressed: () => true,
-    upsert: vi.fn(),
-    remove: vi.fn(),
-  },
+  syncEngine: syncEngineMock,
 }));
 
 const DB_NAME = 'kbl-league-builder';
@@ -158,6 +163,80 @@ function makeAuctionSession(seed: string): CpuShillAuctionSession {
   };
 }
 
+function assignmentRows(player: Player | null) {
+  return (player?.leagueAssignments ?? []).map(({ leagueId, teamId, rosterStatus }) => ({
+    leagueId,
+    teamId,
+    rosterStatus,
+  }));
+}
+
+async function seedPostDraftPoolFirstLeague() {
+  const leagueId = 'postdraft-league';
+  const teamAId = 'team-a';
+  const teamBId = 'team-b';
+  const wonAId = 'won-a';
+  const wonBId = 'won-b';
+  const unwonId = 'unwon-free-agent';
+  const mintedFarmId = 'minted-farm';
+  const candidateIds = [wonAId, wonBId, unwonId];
+
+  await saveLeagueTemplate(makeLeague({
+    id: leagueId,
+    draftPoolMode: 'pool-first',
+  }));
+  await saveTeam(makeTeam(teamAId, { leagueIds: [leagueId] }));
+  await saveTeam(makeTeam(teamBId, { leagueIds: [leagueId] }));
+  await savePlayer(makePlayer(wonAId, {
+    leagueAssignments: [{ leagueId, teamId: teamAId, rosterStatus: 'MLB' }],
+  }));
+  await savePlayer(makePlayer(wonBId, {
+    leagueAssignments: [{ leagueId, teamId: teamBId, rosterStatus: 'MLB' }],
+  }));
+  await savePlayer(makePlayer(unwonId, {
+    leagueAssignments: [{ leagueId, teamId: '', rosterStatus: 'FREE_AGENT' }],
+  }));
+  await savePlayer(makePlayer(mintedFarmId, {
+    draftedAsFarmProspect: true,
+    leagueAssignments: [{ leagueId, teamId: teamAId, rosterStatus: 'FARM' }],
+  }));
+  await saveTeamRoster({
+    ...createEmptyTeamRoster(teamAId),
+    mlbRoster: [wonAId],
+    farmRoster: [mintedFarmId],
+  });
+  await saveTeamRoster({
+    ...createEmptyTeamRoster(teamBId),
+    mlbRoster: [wonBId],
+  });
+  await saveRegisteredPool({
+    leagueId,
+    tier: 'standard',
+    balanceMode: 'taxed',
+    players: candidateIds.map((id, index) => ({ id, iv: 100_000 + index, salary: 10_000 + index })),
+    tierCap: 900_000,
+    luxuryCaps: [],
+    pickValueChart: [],
+    totalSlots: candidateIds.length,
+    poolSurplusWarning: false,
+    locked: true,
+    lockedAt: 1,
+  });
+  await saveAuctionSession({
+    id: createAuctionSessionId(leagueId, MLB_AUCTION_SEASON),
+    leagueId,
+    seasonNumber: MLB_AUCTION_SEASON,
+    seed: 'auction-postdraft',
+    session: makeAuctionSession('auction-postdraft'),
+  });
+
+  return {
+    leagueId,
+    candidateIds,
+    mintedFarmId,
+  };
+}
+
 async function renderLoadedLeagueBuilderHook() {
   const hook = renderHook(() => useLeagueBuilderData());
   await waitFor(() => {
@@ -169,6 +248,7 @@ async function renderLoadedLeagueBuilderHook() {
 describe('useLeagueBuilderData', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    syncEngineMock.isSuppressed.mockReturnValue(true);
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME);
   });
@@ -239,6 +319,7 @@ describe('useLeagueBuilderData', () => {
         slots: [{ slotId: 'CF', kind: 'pos', position: 'CF' }],
         lockedAt,
         pins: { CF: 'player-pinned' },
+        rankOverrides: { CF: ['player-pinned', 'player-backup'] },
       },
       lineupWithDH: [{ battingOrder: 1, playerId: 'drafted-player', fieldingPosition: 'CF' }],
       lineupWithoutDH: [{ battingOrder: 1, playerId: 'drafted-player', fieldingPosition: 'CF' }],
@@ -298,6 +379,7 @@ describe('useLeagueBuilderData', () => {
     expect(copiedTeamA?.rosterDesign?.lockedAt).toBeUndefined();
     expect(copiedTeamA?.rosterDesign?.slots).toEqual([{ slotId: 'CF', kind: 'pos', position: 'CF' }]);
     expect(copiedTeamA?.rosterDesign?.pins).toEqual({ CF: 'player-pinned' });
+    expect(copiedTeamA?.rosterDesign?.rankOverrides).toEqual({ CF: ['player-pinned', 'player-backup'] });
     expect(copiedTeamA?.lineupWithDH).toEqual([]);
     expect(copiedTeamA?.lineupWithoutDH).toEqual([]);
     expect(copiedTeamA?.startingRotation).toEqual([]);
@@ -510,5 +592,127 @@ describe('useLeagueBuilderData', () => {
     );
     await expect(getPlayersByTeam('team-a', 'test-league')).resolves.toHaveLength(1);
     await expect(getPlayersByTeam(copiedLeague!.teamIds[0], copyId)).resolves.toHaveLength(0);
+  });
+
+  test('COPYFIX-1 removeTeam prunes deleted ids from league membership and divisions', async () => {
+    await saveLeagueTemplate(makeLeague());
+    await saveTeam(makeTeam('team-a'));
+    await saveTeam(makeTeam('team-b'));
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+    await act(async () => {
+      await result.current.removeTeam('team-a');
+    });
+
+    const league = await getLeagueTemplate('test-league');
+    expect(league?.teamIds).toEqual(['team-b']);
+    expect(league?.divisions[0]?.teamIds).toEqual(['team-b']);
+  });
+
+  test('COPYFIX-1R empty teams table load never persists a membership heal', async () => {
+    const ghostedLeague = makeLeague({
+      teamIds: ['team-a', 'team-b'],
+      divisions: [
+        { id: 'div-a', name: 'North', conferenceId: 'conf-a', teamIds: ['team-a', 'team-b'] },
+      ],
+    });
+    await saveLeagueTemplate(ghostedLeague);
+    await initializeDefaultPresets();
+    syncEngineMock.upsert.mockClear();
+    syncEngineMock.isSuppressed.mockReturnValue(false);
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+
+    expect(result.current.leagues.find((league) => league.id === 'test-league')?.teamIds).toEqual(['team-a', 'team-b']);
+    expect(await getLeagueTemplate('test-league')).toEqual(expect.objectContaining({
+      teamIds: ghostedLeague.teamIds,
+      divisions: ghostedLeague.divisions,
+    }));
+    expect(syncEngineMock.upsert).not.toHaveBeenCalled();
+  });
+
+  test('COPYFIX-1R partial teams table load never persists a membership heal', async () => {
+    const partialLeague = makeLeague({
+      teamIds: ['team-a', 'team-b'],
+      divisions: [
+        { id: 'div-a', name: 'North', conferenceId: 'conf-a', teamIds: ['team-a', 'team-b'] },
+      ],
+    });
+    await saveLeagueTemplate(partialLeague);
+    await saveTeam(makeTeam('team-a'));
+    await initializeDefaultPresets();
+    syncEngineMock.upsert.mockClear();
+    syncEngineMock.isSuppressed.mockReturnValue(false);
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+
+    expect(result.current.leagues.find((league) => league.id === 'test-league')?.teamIds).toEqual(['team-a', 'team-b']);
+    expect(await getLeagueTemplate('test-league')).toEqual(expect.objectContaining({
+      teamIds: partialLeague.teamIds,
+      divisions: partialLeague.divisions,
+    }));
+    expect(syncEngineMock.upsert).not.toHaveBeenCalled();
+  });
+
+  test('COPYFIX-1R duplicate skips ghost teams without mutating the source league', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await saveLeagueTemplate(makeLeague({
+      teamIds: ['team-a', 'ghost-team', 'team-b'],
+      divisions: [
+        { id: 'div-a', name: 'North', conferenceId: 'conf-a', teamIds: ['team-a', 'ghost-team', 'team-b'] },
+      ],
+    }));
+    await saveTeam(makeTeam('team-a'));
+    await saveTeam(makeTeam('team-b'));
+    const sourceBefore = await getLeagueTemplate('test-league');
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+    let copiedLeague: LeagueTemplate | null = null;
+    await act(async () => {
+      copiedLeague = await result.current.duplicateLeague('test-league');
+    });
+
+    expect(copiedLeague?.teamIds).toHaveLength(2);
+    expect(copiedLeague?.divisions[0]?.teamIds).toEqual(copiedLeague?.teamIds);
+    const copiedTeams = await Promise.all(copiedLeague!.teamIds.map((teamId) => getTeam(teamId)));
+    expect(copiedTeams.map((team) => team?.name).sort()).toEqual(['Scroll Safe Club', 'Scroll Safe Club']);
+    expect(await getLeagueTemplate('test-league')).toEqual(sourceBefore);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[useLeagueBuilderData] duplicateLeague skipped missing teams',
+      expect.objectContaining({ leagueId: 'test-league', missingTeamIds: ['ghost-team'] }),
+    );
+    warnSpy.mockRestore();
+  });
+
+  test('COPYFIX-2 drafted pool-first duplicate starts with source pool members, empty rosters, and no minted farm leak', async () => {
+    const fixture = await seedPostDraftPoolFirstLeague();
+    const playerCountBefore = (await getAllPlayers()).length;
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+    let copiedLeague: LeagueTemplate | null = null;
+    await act(async () => {
+      copiedLeague = await result.current.duplicateLeague(fixture.leagueId);
+    });
+    const copyId = copiedLeague!.id;
+
+    const copiedRosters = await Promise.all(copiedLeague!.teamIds.map((teamId) => getTeamRoster(teamId)));
+    expect(copiedRosters.every(Boolean)).toBe(true);
+    for (const roster of copiedRosters) {
+      expect(roster?.mlbRoster).toEqual([]);
+      expect(roster?.farmRoster).toEqual([]);
+    }
+
+    for (const playerId of fixture.candidateIds) {
+      const player = await getPlayer(playerId);
+      expect(isPlayerInLeaguePool(player!, copyId)).toBe(true);
+      expect(assignmentRows(player)).toEqual(
+        expect.arrayContaining([{ leagueId: copyId, teamId: '', rosterStatus: 'FREE_AGENT' }]),
+      );
+    }
+    const mintedFarm = await getPlayer(fixture.mintedFarmId);
+    expect(mintedFarm?.leagueAssignments?.some((assignment) => assignment.leagueId === copyId)).toBe(false);
+    expect(await getAllPlayers()).toHaveLength(playerCountBefore);
+
+    await expect(importRosteredPlayersToLeaguePool(copyId)).resolves.toBe(0);
   });
 });

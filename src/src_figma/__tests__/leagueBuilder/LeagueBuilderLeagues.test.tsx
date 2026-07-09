@@ -14,7 +14,7 @@ import {
   farmDraftRouteForFormat,
   farmDraftRouteForLeague,
 } from '../../app/utils/draftRouting';
-import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
+import { getAuctionSession, getAuctionSessionById } from '../../../utils/leagueBuilderStorage';
 import { TIER_CAPS } from '../../../data/tierParams';
 import { SALARY_CAP_FLOOR, salaryCapHardError } from '../../app/utils/salaryCapInput';
 
@@ -35,6 +35,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    getAuctionSessionById: vi.fn(async () => null),
   };
 });
 
@@ -120,6 +121,7 @@ describe('LeagueBuilderLeagues Component', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(getAuctionSessionById).mockResolvedValue(null);
     const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
     vi.mocked(useLeagueBuilderData).mockReturnValue({
       leagues: [
@@ -323,6 +325,46 @@ describe('LeagueBuilderLeagues Component', () => {
       await renderSettledLeagueBuilderLeagues();
       expect(screen.getByText('2 teams')).toBeInTheDocument();
       expect(screen.getByText('1 team')).toBeInTheDocument();
+    });
+
+    test('COPYFIX-1R team counts filter ghost ids without mutating league data', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      vi.mocked(useLeagueBuilderData).mockReturnValue({
+        leagues: [
+          {
+            id: 'league-ghost',
+            name: 'Ghost League',
+            teamIds: ['team-1', 'ghost-team', 'team-2'],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            draftFormat: 'auction',
+            color: '#5A8352',
+            createdDate: '2026-01-15T00:00:00.000Z',
+          },
+        ],
+        teams: [
+          { id: 'team-1', name: 'Sox', colors: { primary: '#FF0000', secondary: '#FFFFFF' } },
+          { id: 'team-2', name: 'Tigers', colors: { primary: '#FF6600', secondary: '#000000' } },
+        ],
+        rulesPresets: [{ id: 'preset-1', name: 'Standard', isDefault: true }],
+        isLoading: false,
+        error: null,
+        createLeague: mockCreateLeague,
+        updateLeague: mockUpdateLeague,
+        removeLeague: mockRemoveLeague,
+        duplicateLeague: mockDuplicateLeague,
+      });
+
+      render(<LeagueBuilderLeagues />);
+      await waitFor(() => {
+        expect(vi.mocked(getAuctionSession)).toHaveBeenCalledWith('league-ghost', expect.any(Number));
+      });
+
+      expect(screen.getByText('2 teams')).toBeInTheDocument();
+      fireEvent.click(screen.getAllByTitle('Edit league')[0]);
+      expect(await screen.findByLabelText('Sox')).toBeChecked();
+      expect(screen.queryByLabelText('ghost-team')).not.toBeInTheDocument();
     });
 
     test('renders edit buttons for each league', async () => {
@@ -538,6 +580,27 @@ describe('LeagueBuilderLeagues Component', () => {
       await waitFor(() => {
         expect(mockDuplicateLeague).toHaveBeenCalledWith('league-1');
       });
+    });
+
+    test('COPYFIX-1R duplicate tolerance does not surface the old ghost-team hard error', async () => {
+      mockDuplicateLeague.mockResolvedValueOnce(undefined);
+      await renderSettledLeagueBuilderLeagues();
+
+      fireEvent.click(screen.getAllByTitle('Duplicate league')[0]);
+
+      await waitFor(() => {
+        expect(mockDuplicateLeague).toHaveBeenCalledWith('league-1');
+      });
+      expect(screen.queryByText('Team not found: ghost-team')).not.toBeInTheDocument();
+    });
+
+    test('COPYFIX-1 duplicate genuine failure surfaces a visible error instead of a silent no-op', async () => {
+      mockDuplicateLeague.mockRejectedValueOnce(new Error('Storage unavailable'));
+      await renderSettledLeagueBuilderLeagues();
+
+      fireEvent.click(screen.getAllByTitle('Duplicate league')[0]);
+
+      expect(await screen.findByText('Storage unavailable')).toBeInTheDocument();
     });
   });
 

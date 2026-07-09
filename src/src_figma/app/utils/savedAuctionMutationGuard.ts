@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { MLB_AUCTION_SEASON } from "../../../utils/leagueBuilderAuctionPipeline";
-import { getAuctionSession } from "../../../utils/leagueBuilderStorage";
+import {
+  createFarmAuctionSessionId,
+  getAuctionSession,
+  getAuctionSessionById,
+} from "../../../utils/leagueBuilderStorage";
 
 export const SAVED_AUCTION_RECORD_LOCK_MESSAGE =
   "A saved auction is in progress. Resume that draft before changing League Builder records.";
@@ -47,10 +51,16 @@ export function useSavedAuctionMutationGuard(leagueIds: Array<string | null | un
       setLockedPlayerIds([]);
 
     void Promise.all(
-      resolvedLeagueIds.map(async (leagueId) => ({
-        leagueId,
-        row: await getAuctionSession(leagueId, MLB_AUCTION_SEASON),
-      })),
+      resolvedLeagueIds.flatMap((leagueId) => [
+        (async () => ({
+          leagueId,
+          row: await getAuctionSession(leagueId, MLB_AUCTION_SEASON),
+        }))(),
+        (async () => ({
+          leagueId,
+          row: await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
+        }))(),
+      ]),
     )
       .then((rows) => {
         if (cancelled) return;

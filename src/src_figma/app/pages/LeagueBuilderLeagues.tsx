@@ -145,6 +145,10 @@ export function LeagueBuilderLeagues() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const showCheckpointCadenceControl = isFranchisePhase2L13Enabled();
   const allLeagueIds = useMemo(() => leagues.map((league) => league.id), [leagues]);
+  const loadedTeamIds = useMemo(() => new Set(teams.map((team) => team.id)), [teams]);
+  const displayTeamCount = (league: LeagueTemplate) => (
+    league.teamIds.filter((teamId) => loadedTeamIds.has(teamId)).length
+  );
   const savedAuctionGuard = useSavedAuctionMutationGuard(allLeagueIds);
   const isLeagueMutationBlocked = (leagueId: string | null | undefined) => {
     if (!leagueId) return false;
@@ -320,9 +324,11 @@ export function LeagueBuilderLeagues() {
 
   const handleDuplicate = async (id: string) => {
     try {
+      setSaveError(null);
       await duplicateLeague(id);
     } catch (err) {
       console.error("Failed to duplicate league:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to duplicate league.");
     }
   };
 
@@ -510,7 +516,7 @@ export function LeagueBuilderLeagues() {
                       <div className="flex items-center gap-4 mt-1 text-xs text-[#E8E8D8]/60">
                         <span className="flex items-center gap-1">
                           <Users className="w-3 h-3" />
-                          {league.teamIds.length} team{league.teamIds.length !== 1 ? "s" : ""}
+                          {displayTeamCount(league)} team{displayTeamCount(league) !== 1 ? "s" : ""}
                         </span>
                         <span>{formatTier(league.tier)}</span>
                         <span>{formatBalanceMode(league.balanceMode)}</span>
