@@ -2,7 +2,7 @@
 
 **This folder is the single entry point for picking up KBL Tracker work on any day.** Everything in it is either this index or a live link to a canonical file — there are NO copies here, so nothing in this folder can rot. If any document in the project disagrees with this index, this index gets fixed the same day (report it); if any document disagrees with `git log`, git wins.
 
-**Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-08.
+**Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09.
 
 ## Read order for any new agent (or future you)
 
@@ -19,9 +19,15 @@
 
 ## Binding design standards (consult before touching UI or draft systems)
 
-- `DRAFT_COCKPIT_DESIGN_2026-07-08.md` — the ratified Asst GM / draft UX design (principles §1 are law).
+- `DRAFT_COCKPIT_DESIGN_2026-07-08.md` — the ratified Asst GM / draft UX design (principles §1 are law; §2.6/§2.7 amendments landed 2026-07-09).
 - `DRAFT_SKIN_STANDARD_2026-07-08.md` — the one skin A-to-Z: tokens, recipes, §7 Text Law + ratified classification.
+- `AUCTION_FLOOR_REFIT_2026-07-09.md` — the ratified auction-floor layout ruling (table, not a dashboard); governs the FLOORREFIT build.
 - `UI_TRUTH_MAP.md` — what actually renders per route (merged ≠ routed).
+
+## Audit records
+
+- `COCKPIT_WIRING_AUDIT_2026-07-08.md` — the full spec-to-wiring sweep behind the §2.6/§2.7 design amendments (10 confirmed gaps, adversarially re-verified).
+- `SETUP_DRAFT_INTEGRITY_AUDIT_2026-07-09.md` — the setup→draft integrity sweep (8 confirmed / 10 downgraded / 4 refuted / 17 safe; feeds the STALEPARITY/COPYFIX/GAUNTLET lanes).
 
 ## Side projects (live in other locations — links, not symlinks)
 

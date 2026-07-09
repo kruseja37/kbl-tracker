@@ -13,6 +13,11 @@ written — a self-explaining readiness panel, rank numbers that now land exactl
 them, and tutorial text moving behind Help. **Section 6 below** covers those; everything above is
 unchanged and still needs your walk.
 
+**Update, 2026-07-09:** your walkthrough of the sections above caught the advisor panel "stuck"
+mid-bid — that's now fixed, along with the tax ruling you made and a sale-log tap fix. **Section 7
+below** covers those three plus one heads-up (a floor-layout redesign is built but not yet in scope
+to walk). Everything above is still open and still needs your eye.
+
 **How to use it:** work top to bottom on a real league in the browser. Check each box as you go.
 Where a box asks a design question rather than a pass/fail, a recommendation is given — you can
 just say "yes" / "no" / "change it to X."
@@ -107,6 +112,40 @@ through the draft.
       confusing rather than clean.* Your call.
 
 ---
+
+## 7. TODAY'S FIXES (2026-07-09) — THE ADVISOR MOVES WITH THE BID, THE TAX ACTUALLY COSTS MONEY, AND A CLEANER FLOOR
+
+These landed after your last walk found the advisor panel "stuck" mid-bid. Same idea as Section 6 — walk
+these on a real league, check each box.
+
+- [ ] **The advisor's call now moves as the bid moves.** Nominate a player and watch the whole
+      panel — the word at top, the sentence below it, and the fine print — as you and the CPUs bid
+      him up. It should always read as ONE consistent story: "Go get him" while the price is still
+      good, "Past your number — only if you mean it" once you're stretching, "Let him go" once
+      you're past your ceiling, and **"You're on top — sit tight"** the moment you're the high
+      bidder. It should never say one thing at the top and a contradicting thing underneath (that
+      was the bug you caught last time).
+- [ ] **Win a player on a team that's over the tax line, and watch your budget.** The tax now
+      actually costs money — it used to just be a number on the screen. After you win the player,
+      your remaining budget should drop by the win price PLUS the tax, and that combined number
+      should match the "TRUE COST" figure the advisor showed you before you bid. If your budget only
+      drops by the win price, something's wrong.
+- [ ] **On the Teams page, an archetype team's identity section is now locked.** Open a team that
+      has an MLB archetype assigned — the tax-identity section should show as read-only with a
+      note saying it's set by the archetype, instead of being an editable form. (Teams WITHOUT an
+      archetype still edit normally.) This closes a bug where just saving a team's name or color
+      could quietly scramble its tax numbers.
+- [ ] **Sale-log names are tappable.** In the running list of what's sold so far, tap a player's
+      name and confirm a profile popover opens, the same way it already does for the on-the-block
+      player and the roster board.
+- [ ] **The advisor's "one reason" chip leads with what actually matters.** Where the panel gives
+      you one short reason for its read on a player, confirm it's leading with the most important
+      thing (budget/ceiling problems first, then scarcity, then fit) rather than whatever happened
+      to sort first alphabetically.
+- [ ] **THE FLOOR LAYOUT QUESTION** — a redesigned, less-cramped auction floor (advisor panel no
+      longer boxed into its own tiny scrolling window; a color banner announcing whose turn it is)
+      is built and gated behind its own audit — not yet in this checklist's scope to walk, but
+      flagging it's coming next so you know what to expect on your next pass.
 
 ## What a PASS means
 
