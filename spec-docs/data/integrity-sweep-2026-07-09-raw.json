@@ -1,0 +1,1087 @@
+{
+  "summary": "Sweep every league-builder/team-setup surface that writes draft inputs for two-writer, staleness, and divergence hazards; adversarially verify each claim",
+  "agentCount": 27,
+  "logs": [
+    "Sweep: 39 findings, 22 unique hazards to verify, 17 verified-safe",
+    "Verify: 8 confirmed, 10 downgraded, 4 refuted"
+  ],
+  "result": {
+    "confirmed": [
+      {
+        "gap": {
+          "id": "SB-2",
+          "title": "Club MLB identity is editable after a pool-first lock and feeds both the extraction and the live auction's CPU bidding, with no re-extract warning",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "ArchetypePicker's disabled prop is `Boolean(setupMutationBlockMessage) || busy` (LeagueBuilderDraftSetup.tsx:4162) — never `poolEditingBlocked`/`locked`. handlePick (:2644-2661) only guards on setupCanMutate(), which only checks hasSavedDraft (:2277-2281, :1597-1599). buildPoolFirstShapeResult builds selectedArchetypes from every team's LIVE mlbArchetypeKey (:2475-2477) and passes it into extractPoolFromDemand, which uses it to compute the archetype-feasibility floors that seed the pool (poolFromDemand.ts:1773 `extractDraftPool(universe, selectedArchetypes, tier, ...)`). Separately, the live auction reads the CURRENT team record's mlbArchetypeKey to drive CPU bid targeting (LeagueBuilderAuctionDraft.tsx:561-563 `team.mlbArchetypeKey ? HISTORICAL_ARCHETYPE_BY_ID.get(...) `, consumed at :1433 `archetypeFitScorer(identityArchetype, identityTier)`).",
+          "detail": "Sequence: lock a pool-first pool, then change a club's MLB identity (own club or any other club — the picker isn't restricted to unlocked/human-only). The pool contents stay frozen at the old identity mix; the live auction's bidding logic picks up the NEW identity immediately. No field on the readiness panel reflects this divergence, and Start Draft stays enabled (poolReady/identitiesReady are both still true). This is the same class of bug as the capIdentity clobber JK already found, but on a different field (mlbArchetypeKey) and a different failure mode (drift, not overwrite).",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-2",
+          "verdict": "CONFIRMED",
+          "evidence": "All cited file:line claims verified, and the gap is stronger than stated. (1) ArchetypePicker disabled = Boolean(setupMutationBlockMessage) || busy (LeagueBuilderDraftSetup.tsx:4162), and setupMutationBlockMessage is truthy ONLY on hasSavedDraft/lookupError/unchecked (:1597-1599) — NOT on pool lock. The stronger poolEditingBlocked = locked || … exists (:1591) but is not used here. handlePick guards only setupCanMutate()→setupMutationBlockMessage (:2644-2661, :2277-2281). The 'identity set · edit' entry button is ungated (:4092-4100). Reachable in the locked-but-no-saved-draft window (hasSavedDraft only true when an in-progress auction session row exists, :1544-1552). (2) Pool extraction consumes live mlbArchetypeKey: buildPoolFirstShapeResult maps team.mlbArchetypeKey→selectedArchetypes (:2475-2477)→extractPoolFromDemand→extractDraftPool(universe, selectedArchetypes, tier, …) (poolFromDemand.ts:1773). (3) Live auction reads live identity for CPU bidding: team=teamById.get(seatTeamId) from live leagueData.teams (:803)→resolveAuctionWhisperIdentityArchetype(team) (LeagueBuilderAuctionDraft.tsx:560-565, called :1430)→archetypeFitScorer(identityArchetype, identityTier) (:1433). (4) selectTeamArchetype (archetypeIdentity.ts:84-102) writes only the team record; never unlocks/re-extracts the pool. (5) NO staleness coverage in pool-first: poolBasisStaleLines DOES detect identity change with a 'CHANGED ITS IDENTITY — RE-EXTRACT' line (:960-964) and buildPoolExtractedBasis captures mlbArchetypeKey (:905-907), but basisStaleLines gates it to poolMode==='design-first' && poolExtractedAt (:2049-2054); pool-first clears poolExtractedAt/Basis to undefined on mode switch (:2587-2588) and its only writer is the design-first handleExtractPool (:3030-3031), so pool-first stores no basis at all; currentRecheckKey omits mlbArchetypeKey (:3133-3147) so recheckStale never fires; pool-first readinessReasons branch (:3247+) has no identity-drift line. draftReady stays true: identitiesReady only checks presence (:2253), poolReady=locked&&meetsFloor (:2254), poolTrailing not gated for pool-first (:2258).",
+          "notes": "Could not refute on any axis (reachability, re-derivation, staleness coverage, or recent-lane overlap). Class STALE-BASIS / CONFIRMED-HAZARD is correct. Severity fairness: the identity-drift detector already EXISTS in code (poolBasisStaleLines) and is wired for design-first — the fix is to run it (and persist a basis) for pool-first too, which is why this is a genuine oversight rather than a missing subsystem. Divergence is FULL on the auction CPU-bidding side (targets identity mix B immediately); on the pool-CONTENTS side it may be modest because in sizing mode the identity floors are a 'verdict/fit input' not the primary source selector (poolFromDemand.ts:1778-1781). Not overstated. No overlap with TEAMIDGUARD (capIdentity, different field; selectTeamArchetype intentionally rewrites capIdentity), BOARDFIX2 (its basis-staleness is the very design-first-only detector that excludes pool-first), or TAXTEETH (budgets)."
+        }
+      },
+      {
+        "gap": {
+          "id": "SB-4",
+          "title": "Pool quality center and pool balance preset — the shaping dials that most directly control pool composition — are not diffed at all in pool-first, and poolQualityCenter isn't captured in the basis snapshot in either mode",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "poolQualityCenter feeds extraction in both modes: LeagueBuilderDraftSetup.tsx:2465 (design-first) and :2494 (pool-first). buildPoolExtractedBasis (:897-920) never captures poolQualityCenter — its PoolExtractedBasis fields are only cap, poolSizeMultiplier, shills, identityByTeamId, sourceLeagueIds. poolBalancePreset is pool-first-only (design-first hardcodes 'balanced' by omitting it from the options object at :2459-2469) and is plain useState('balanced') with NO persistence at all (:1461) — it silently resets to 'balanced' on every page reload.",
+          "detail": "In design-first mode this omission from the explicit basis diff is harmless because a SEPARATE mechanism (modeAFinalizedDisplayMismatch, see SB-6) catches poolQualityCenter drift by recomputing the whole extraction and diffing player IDs. Pool-first has no such backstop (SB-1), so a poolQualityCenter or poolBalancePreset change after a pool-first lock is completely invisible — including the poolBalancePreset reset-to-default-on-reload case, which means simply reloading the setup page after locking a non-default-preset pool silently changes the live shaping target out from under the locked pool with zero indication.",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-4",
+          "verdict": "CONFIRMED",
+          "evidence": "All five sub-claims verified at HEAD c0a24363:\n\n1. poolQualityCenter feeds extraction in BOTH modes: design-first buildModeAResult passes it (LeagueBuilderDraftSetup.tsx:2465), pool-first buildPoolFirstShapeResult passes both poolBalancePreset AND poolQualityCenter (:2493-2494). CONFIRMED.\n\n2. buildPoolExtractedBasis (:897-919) returns ONLY {cap, poolSizeMultiplier, shills, identityByTeamId, sourceLeagueIds?}. Neither poolQualityCenter nor poolBalancePreset is captured. poolBasisStaleLines (:922-961) diffs only those same five fields — never quality/preset. CONFIRMED the basis snapshot is structurally incomplete for these two dials in BOTH modes.\n\n3. poolBalancePreset is pool-first-only: design-first options object (:2459-2469) omits it (only poolQualityCenter at :2465); pool-first options (:2487-2501) include it at :2493. Its selector renders only inside the pool-first UI branch (:4457 else-branch → :4469 POOL BALANCE buttons). CONFIRMED.\n\n4. poolBalancePreset is plain useState(\"balanced\") (:1461) with NO load/save. setPoolBalancePreset is called ONLY from the UI click (:4481). No session/localStorage/template persistence exists (grep confirms only poolQualityCenter has load/savePoolQualityCenterFromSession at :739/:746, called at :1462-1463/:2535/:2552). So preset silently resets to \"balanced\" on every remount/reload. CONFIRMED.\n\n5. Pool-first has NO staleness backstop. basisStaleLines is gated `poolMode === \"design-first\"` (:2050), modeAFinalizedDisplayMismatch is gated design-first (:2064-2065), designsStale is design-first (:2075) → poolTrailing = designsStale||basisStale||modeAFinalizedDisplayMismatch (:2076) is ALWAYS false in pool-first. Readiness gate explicitly skips poolTrailing for pool-first: `(poolMode === \"pool-first\" || (allHumanDesignsLocked && !poolTrailing))` (:2258). So a quality/preset change after a pool-first lock triggers zero indication. CONFIRMED.\n\nDesign-first is indeed backstopped: modeAReport recomputes buildModeAResult (dep on poolQualityCenter, :2471) and modeAFinalizedDisplayMismatch (:2064-2068) diffs recomputed playerIds vs displayed pool IDs, tripping poolTrailing on quality drift. The pool-first diagnostic (poolFirstManualShapeDiagnostics, :2002-2022) recomputes LIVE against the current dial — it is a display panel, not a lock-time-vs-now staleness comparison, and is never persisted.\n\nRefutation attempts that FAILED: (a) no re-derivation at auction start neutralizes it — extraction happens only on explicit generate/re-extract via extractPoolFromDemand, not at draft start; (b) no recent lane covers it — TEAMIDGUARD is capIdentity, BOARDFIX2 is boardRankOverrides, TAXTEETH is budgets; basis snapshot code shows no quality/preset field; (c) the sequence is user-reachable — both dials are live buttons in the pool-first setup screen.",
+          "notes": "Class STALE-BASIS / CONFIRMED-HAZARD is correct. Two precision points, neither an overstatement by the claim: (1) The claim correctly scopes reset-on-reload to poolBalancePreset only — poolQualityCenter IS session-persisted (:1462-1463, :2552), so it does NOT reset on reload; the claim does not wrongly say otherwise. Note the persistence is sessionStorage keyed by leagueId+poolMode, so it survives same-tab reload but not a new tab/session. (2) Severity nuance for the reader: the divergence is between the DISPLAYED shaping target/diagnostics and the LOCKED pool — the already-locked auction pool players (persisted inPoolPlayers) are NOT retroactively mutated by a post-lock dial change. The harm is the missing guardrail (user proceeds to draft believing the pool matches a setting it was not drawn with, or re-extracts into an unintended shape after a silent preset reset), not corruption of the locked pool itself. This is squarely what STALE-BASIS is defined to catch, and pool-first catches none of it. Incremental value over SB-1: even if pool-first turned basis-staleness ON, poolQualityCenter/preset still wouldn't be caught because they were never added to buildPoolExtractedBasis."
+        }
+      },
+      {
+        "gap": {
+          "id": "SB-12",
+          "title": "Design-first's live recompute-and-diff net runs on a debounced 0ms timer, not synchronously with the edit",
+          "class": "LATENT",
+          "evidence": "The effect that recomputes modeAReport (and therefore modeAFinalizedDisplayMismatch) is `window.setTimeout(..., 0)` gated (LeagueBuilderDraftSetup.tsx:2513-2521), not a synchronous useMemo.",
+          "detail": "In ordinary use this is not reachable — a real Start Draft click is a separate physical user action that always occurs after the browser has processed the pending zero-delay timeout from the prior edit's render, so poolTrailing is correctly true by the time startReady is evaluated. Noting it only because it's the one place in the otherwise-solid design-first net where the safety property depends on task-queue ordering rather than being trivially synchronous — not worth fixing, just worth knowing it's there if a future refactor turns this into a programmatic/scripted flow (tests, automation) that could click faster than a human.",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-12",
+          "verdict": "CONFIRMED",
+          "evidence": "The async gating is real and load-bearing. modeAReport (hence modeAFinalizedDisplayMismatch) is set for passive edits ONLY via window.setTimeout(...,0) at LeagueBuilderDraftSetup.tsx:2514-2521 — not a synchronous useMemo. The only synchronous setModeAReport calls are inside explicit action handlers (re-extract :3037, pool-first :2922), which also realign the pool, so they leave no mismatch; a passive dial edit has no synchronous recompute path. poolTrailing = designsStale || basisStale || modeAFinalizedDisplayMismatch (:2076); the first two terms are synchronous (:2049-2055, :2069-2075) but the third is the SOLE guard for divergence classes the basis check misses: poolBasisStaleLines (:922-961) compares only cap/poolSizeMultiplier/shills/sourceLeagueIds/identity and NOT poolQualityCenter, which is a real input to buildModeAResult (:2465). poolTrailing feeds startReady (:2256-2258); handleStartDraft (:3066-3069) reads render-scoped startReady with NO click-time re-derivation, and the button is disabled={busy||!startReady} (:4677) so a stale-true window is clickable. Refutation attempts all fail: not re-derived at consumption, not covered by a synchronous check, not addressed by TEAMIDGUARD/BOARDFIX2/TAXTEETH.",
+          "notes": "Class LATENT and low severity are both CORRECT — no downgrade needed, but no upgrade either. The stale window is exactly one macrotask (the queued setTimeout 0). A human's Start-Draft click is a separate pointer event in a later macrotask, always processed after the pending timer fires and re-renders, so poolTrailing is correct by the time a person can physically click. The hazard is only reachable by a programmatic/scripted flow (tests, automation) that dispatches edit-then-click within a single task. The claim's self-framing ('not worth fixing, just worth knowing; a future refactor to a programmatic/scripted flow could click faster than a human') is accurate. Concrete example of the one input that only the async term guards: changing poolQualityCenter in design-first mode is absent from poolBasisStaleLines, so during the one-render window after that dial change, modeAFinalizedDisplayMismatch is still false (stale modeAReport) and startReady is stale-true. Recommend leaving as-is; if ever hardened, the fix is to make the design-first recompute-and-diff synchronous (useMemo) rather than a debounced effect, OR add a synchronous edit-generation guard to startReady."
+        }
+      },
+      {
+        "gap": {
+          "id": "SEATS-02",
+          "title": "A dangling team id in league.teamIds is permanently unrecoverable through the UI and hard-crashes \"Duplicate League\"",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "The League editor's team-selection checklist only renders currently-live teams (`teams.map(...)`, src/src_figma/app/pages/LeagueBuilderLeagues.tsx:776-798) while the displayed 'selected' count reads straight off `formData.teamIds` seeded from the stale `league.teamIds` (line 208, 767) — there is no checkbox for an id whose team no longer exists, so the user has no way to uncheck/remove it. duplicateLeague then hard-fails on that exact condition: it maps `original.teamIds` through `getTeam(teamId)` and throws `Team not found: ${teamId}` the instant one resolves to null (src/src_figma/hooks/useLeagueBuilderData.ts:374-378). The League page's Duplicate handler swallows that throw with only `console.error` — no `setSaveError`, unlike its sibling `handleDelete` two functions above it — so the click silently no-ops from the user's perspective (src/src_figma/app/pages/LeagueBuilderLeagues.tsx:321-327 vs 306-319).",
+          "detail": "Once any team has ever been deleted while still a league member (see SEATS-01), that league is permanently stuck with a ghost id in teamIds AND its Duplicate League button becomes a silent dead button forever — the user gets zero feedback that anything failed. This directly answers the prompt's 'copy-league deep-copy paths' ask: the deep copy doesn't just leak draft output (see SEATS-05) — for this class of league it doesn't run at all, invisibly.",
+          "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+        },
+        "verdict": {
+          "gap_id": "SEATS-02",
+          "verdict": "CONFIRMED",
+          "evidence": "Full chain verified with file:line. (1) deleteTeam (src/utils/leagueBuilderStorage.ts:1105-1119) deletes only the GLOBAL_TEAMS record and never scrubs the id from any league.teamIds. (2) Teams-page handleDelete (src/src_figma/app/pages/LeagueBuilderTeams.tsx:664-678) guards deletion ONLY on a saved auction session (isMutationBlockedForLeagueIds at :666), not on league membership, so a league-member team is deletable -> ghost id persists. (3) No auto-heal: normalizeLeagueTemplateRecord (leagueBuilderStorage.ts:711-723) spreads ...template and does not filter teamIds against live teams; removeTeam->refresh (useLeagueBuilderData.ts:583-592) reloads through that same non-scrubbing normalizer. (4) League editor checklist renders only live teams via teams.map (LeagueBuilderLeagues.tsx:776), so no checkbox is emitted for the ghost id and toggleTeam can never remove it; count reads formData.teamIds.length (767) seeded from stale league.teamIds (208); save writes teamIds: formData.teamIds verbatim (271) re-persisting the ghost. (5) duplicateLeague throws `Team not found: ${teamId}` on first null (useLeagueBuilderData.ts:374-378), and this runs before the division check so it fires first. (6) handleDuplicate swallows with console.error only, no setSaveError (LeagueBuilderLeagues.tsx:321-327), unlike sibling handleDelete which sets it (315-318); Duplicate button wired at :550.",
+          "notes": "Could not refute on any axis. Refutation attempts that failed: (a) no re-derivation at consumption — duplicateLeague consumes original.teamIds raw and getTeam returns null for the ghost; (b) no staleness/scrub covers it — neither the load normalizer nor refresh filters teamIds against live teams; (c) sequence IS user-reachable — the only delete guard is the saved-auction lock, so a league with assigned teams but no saved draft session allows deleting a member team; (d) not covered by TEAMIDGUARD (that lane is capIdentity-specific) or BOARDFIX2/TAXTEETH. Correct taxonomy class is DANGLING-REF (stale team id in persisted league state). Severity language ('permanently stuck', 'silent dead button forever') matches code behavior and is not overstated — the ghost is unremovable via the checklist and Duplicate silently dead for that league. Scope note: impact is confined to the Duplicate-League path plus a phantom in the 'N selected' count; it does not by itself corrupt an in-progress draft, so it is a moderate-severity correctness/UX bug, not a data-loss-in-active-draft bug — but the claim did not assert the latter. Verdict stands CONFIRMED, not DOWNGRADED."
+        }
+      },
+      {
+        "gap": {
+          "id": "SEATS-04",
+          "title": "The saved-auction mutation guard used on Teams/Leagues/Players only checks the MLB auction session — a live Farm auction is completely invisible to it",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "useSavedAuctionMutationGuard calls `getAuctionSession(leagueId, MLB_AUCTION_SEASON)` exclusively (src/src_figma/app/utils/savedAuctionMutationGuard.ts:20-53), which resolves via `createAuctionSessionId` (src/utils/leagueBuilderStorage.ts:1876-1881) — a different session id/key than the farm auction's `createFarmAuctionSessionId` (leagueBuilderStorage.ts:1683, used throughout src/src_figma/app/hooks/useFarmAuctionDraft.ts, e.g. lines 302, 412, 456, 497, 535). The guard is reused verbatim on all three edit surfaces: LeagueBuilderTeams.tsx, LeagueBuilderLeagues.tsx, LeagueBuilderPlayers.tsx.",
+          "detail": "A user with a Farm auction in progress (saved, not yet AUCTION_COMPLETE) can freely navigate to the Teams page and edit or delete any team — including the exact farmCapIdentity/archetype fields the live farm auction is pricing off (SEATS-03) — or to the Leagues page and add/remove teams (see SEATS-05-adjacent staleness gap) or the Players page and edit player ratings, with zero lock message, because the guard's message ('A saved auction is in progress...') was written as if it covers any draft but structurally only ever checks the MLB one. Draft Setup's own separate `hasSavedDraft` flag (LeagueBuilderDraftSetup.tsx:1546-1550) has the identical MLB-only blind spot for its own seat/owner/archetype-reassignment handlers (handleOwnerChange, handleRemoveSeat, handlePick), so the same gap exists on the page that actually writes controlledBy/gmSeatId.",
+          "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+        },
+        "verdict": {
+          "gap_id": "SEATS-04",
+          "verdict": "CONFIRMED",
+          "evidence": "Guard is MLB-only: useSavedAuctionMutationGuard calls getAuctionSession(leagueId, MLB_AUCTION_SEASON) (savedAuctionMutationGuard.ts:52), which resolves via createAuctionSessionId → `…::startup-auction-draft::1` (leagueBuilderStorage.ts:1876). Farm auction persists/resumes under a DISTINCT id, createFarmAuctionSessionId → `…::startup-farm-auction-draft::1` (leagueBuilderStorage.ts:1683; used in useFarmAuctionDraft.ts:302,412,456,497,535). Both season constants equal 1 (useFarmAuctionDraft.ts:49; leagueBuilderAuctionPipeline.ts:39), so ONLY the id string differs and the guard can never match a farm session. Guard is applied verbatim on all three edit surfaces: LeagueBuilderTeams.tsx:280, LeagueBuilderPlayers.tsx:234, LeagueBuilderLeagues.tsx:148 — none reference any farm session (grep for farm/createFarmAuctionSessionId on those three pages returns nothing). Farm auction is routed and user-reachable: App.tsx:401-402 (/league-builder/farm-auction-draft), navigated from Builder.tsx:917. Divergence is real, not a frozen snapshot: loadFarmAuction (useFarmAuctionDraft.ts:412-437) re-reads live leagueData.leagues/teams and rebuilds bidding teams via buildFarmAuctionTeams({getRoster, leaguePlayers}) on every resume; the no-persisted-pool branch (474+) fully regenerates the pool from live records. DraftSetup half also confirmed: hasSavedDraft set from getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON) (LeagueBuilderDraftSetup.tsx:1546) → setupMutationBlockMessage (1597) → setupCanMutate() (2277) → gates handleRemoveSeat (2611) and handleOwnerChange (2629, which write controlledBy/gmSeatId). All MLB-only.",
+          "notes": "CONFIRMED-HAZARD, parity gap, user-reachable. Not covered by TEAMIDGUARD (capIdentity rebuild), BOARDFIX2 (basis staleness), or TAXTEETH (budgets) — none add farm-session awareness. One honest nuance that does NOT refute: when a farm session is persisted WITH its pool (per-pick crash-safe branch, useFarmAuctionDraft.ts:439-472), already-set lot IVs come from the snapshot, so player-RATING edits don't retroactively re-price already-priced lots — so the claim's blanket 'edit player ratings' framing is slightly broad. But team add/edit/delete still leaks via the live team rebuild in BOTH branches, and the no-pool branch regenerates pricing entirely from live records. Severity holds at CONFIRMED because the guard structurally omits an entire live, routed auction surface and the generic lock message ('A saved auction is in progress') misleads the user into believing all auctions are protected. Recommended remediation scope: guard should check BOTH createAuctionSessionId and createFarmAuctionSessionId (and DraftSetup's hasSavedDraft likewise)."
+        }
+      },
+      {
+        "gap": {
+          "id": "SEATS-06",
+          "title": "Post-draft pool-first league copy still leaks the original draft's output into the copy's draftable pool — the fix exists but is stranded off main",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "Current main's duplicateLeague (src/src_figma/hooks/useLeagueBuilderData.ts:369-518) has no AUCTION_COMPLETE fork and no `copyLeaguePoolMembership()` call — it always resets pool-extraction bookkeeping to undefined and, for pool-first leagues, copies the ORIGINAL team's mlbRoster/farmRoster 1:1 into the copy (lines 452-462), which is exactly the shape of the ticketed bug (spec-docs/MERGE_CERTIFICATION_2026-07-08.md row R4: 'copying a drafted pool-first league leaks draft output into the copy's draftable pool'). A real fix landed and was audited CLEAN at commit 84a0a162 (`fix(league-builder): post-draft pool-first copy starts pre-draft`), but `git merge-base --is-ancestor 84a0a162 HEAD` returns false against current main (c0a24363) and `copyLeaguePoolMembership` does not exist anywhere in src/ today — confirmed by grep.",
+          "detail": "Anyone using 'Duplicate League' on a league whose draft is already complete gets a copy whose draftable pool is contaminated with the source league's won MLB players and minted farm prospects (a degenerate pool), because main never picked up the already-audited fix. This isn't a new discovery of the bug itself (it's already ticketed), but it IS confirmation that the bug is still live on main right now and the fix is sitting stranded on an unmerged branch — worth flagging so it doesn't get assumed 'done' from the merge-certification doc.",
+          "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+        },
+        "verdict": {
+          "gap_id": "SEATS-06",
+          "verdict": "CONFIRMED",
+          "evidence": "Git: `git merge-base --is-ancestor 84a0a162 HEAD` exits 1 against main c0a24363 (fix NOT merged); `grep -rn copyLeaguePoolMembership src/` returns zero hits (fix function absent from live code). duplicateLeague on current main (src/src_figma/hooks/useLeagueBuilderData.ts:369-518) has no AUCTION_COMPLETE fork; for pool-first (copyUsesPoolFirst, line 409) it copies the original team's mlbRoster/farmRoster 1:1 into the copy at lines 452-462. Leak mechanism CONFIRMED at consumption point: src/utils/leagueBuilderPoolBuilder.ts:6-7 states pool membership = leagueAssignments (Source A) PLUS team rosters (Source B) in pool-first only; importRosteredPlayersToLeaguePool (lines 291-302) reads each team's mlbRoster+farmRoster and imports those IDs into the league pool; listRosteredButUnassigned (lines 348-353) returns [] for pool-first, so there is NO filter stripping rostered players in pool-first. Thus the copied drafted rosters seed the copy's draftable pool. User-reachable: LeagueBuilderLeagues.tsx:323 calls duplicateLeague from the Duplicate League UI action. MERGE_CERTIFICATION_2026-07-08.md row R4 marks the fix branch (84a0a162) as STRANDED.",
+          "notes": "Could not refute on any of the four adversarial axes: (1) re-derivation — pool build reads team rosters as Source B in pool-first, no strip; (2) merge status — 84a0a162 confirmed not an ancestor of HEAD; (3) reachability — wired to a real UI button; (4) covered-by-recent-lane — TEAMIDGUARD/BOARDFIX2/TAXTEETH touch different fields, and R4 itself marks the fix stranded. No overstatement: the trigger (finish a pool-first draft, then Duplicate/run-it-back) is the intended copy workflow, not an exotic sequence. Class CONFIRMED-HAZARD and severity are correct as stated. Note the framing caveat the claim itself makes: this is confirmation the already-ticketed bug is still LIVE on main and the audited fix is stranded, not a net-new discovery — value is preventing it from being assumed done off the merge-cert doc."
+        }
+      },
+      {
+        "gap": {
+          "id": "F7",
+          "title": "The mutation guard is a UI-layer convenience check, not a storage-layer invariant",
+          "class": "LATENT",
+          "evidence": "savePlayer (leagueBuilderStorage.ts:1167) and saveTeam have no session/lock awareness of their own; useSavedAuctionMutationGuard is duplicated per-page (LeagueBuilderPlayers.tsx, LeagueBuilderTeams.tsx, LeagueBuilderLeagues.tsx per the import grep) rather than enforced once at the write boundary. I found no OTHER edit surface for existing MLB-pool players today — the farm startup-draft's savePlayer calls (leagueBuilderStartupFarmDraft.ts:713, :1420) write newly generated prospects into a different pool, not edits to existing MLB pool members — so this is not a currently demonstrated live bug.",
+          "detail": "Flagging as bounded/latent: any future write path to savePlayer/saveTeam that doesn't route through one of the three guarded pages (an import tool, a bulk-edit feature, a sync-merge path) would silently bypass all of the protection described in F5, including during an active draft.",
+          "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+        },
+        "verdict": {
+          "gap_id": "F7",
+          "verdict": "CONFIRMED",
+          "evidence": "Every factual assertion in F7 holds at c0a24363:\n\n1. savePlayer has zero session/lock awareness — leagueBuilderStorage.ts:1167-1213 is a pure write to the GLOBAL_PLAYERS store (readwrite tx, store.put), no auction-session lookup anywhere in the body.\n2. saveTeam is likewise lock-unaware — leagueBuilderStorage.ts:1080-1103 is a pure put into GLOBAL_TEAMS, no session awareness.\n3. The guard is a UI-layer React hook, not a storage invariant — savedAuctionMutationGuard.ts:20 (useSavedAuctionMutationGuard) uses useEffect/useState/useMemo and calls getAuctionSession; it returns a `blocked` flag the *page* must honor. It is imported and instantiated per-page in exactly three pages: LeagueBuilderTeams.tsx:58/280, LeagueBuilderLeagues.tsx:35/148, LeagueBuilderPlayers.tsx:51/234. The write functions themselves never consult it.\n4. No other live free-edit surface to existing pool players today — the ~20 other savePlayer callers (grep) are draft-internal pipelines/seeders (leagueBuilderPoolBuilder.ts:229/260, leagueBuilderAuctionPipeline.ts:261/308/405, leagueBuilderStartupFarmDraft.ts:713/1420, franchiseInitializer, seed fixtures) that run inside controlled flows, not arbitrary user edits during a saved auction. The one live user-edit path — useLeagueBuilderData.ts:620 (trackChanges) driving the LeagueBuilderPlayers editor — IS one of the three guarded pages.\n\nI could not refute the claim with file:line proof: any future write path (import tool, bulk edit, sync-merge) added outside those three pages would indeed bypass the guard, and nothing at the storage boundary would stop it. The claim is factually accurate and correctly self-classifies as LATENT / \"not a currently demonstrated live bug.\"",
+          "notes": "One refinement (does not change the CONFIRMED/LATENT verdict, but bounds the Detail's blast radius): the auction ECONOMICS are snapshot-isolated and cannot be corrupted by any savePlayer write, present or future. The locked pool is stored as PoolPlayerPriced {id, iv, salary} (leagueConstruction.ts:28) inside a SEPARATE IndexedDB store, registeredPools/keyPath leagueId (leagueBuilderStorage.ts:897-898), frozen on lock (leagueBuilderPoolBuilder.ts:342-343). savePlayer writes to GLOBAL_PLAYERS — a different store — so iv/salary/reserve/tierCap/budget the auction consumes (useAuctionDraft.ts:212 poolById; buildAuctionTeams pricing off pool.players) are immune. HOWEVER, positions/traits ARE re-read live via getPlayer at build/resume — buildAuctionPlayersWithPositions:109 pulls stored.primaryPosition/secondaryPosition/trait1/trait2 into the auctionPlayer.pos that powers the machine's own_need strand guard (useAuctionDraft.ts:661-662). So the guard protects a GENUINE reference (live) read of position/eligibility, not just defense-in-depth: a bypass write to a player's position while a saved auction is paused, then resumed, could shift eligibility strands. F7's Detail (\"bypass all protection ... during an active draft\") is therefore slightly overstated on the economics axis (snapshot-isolated) but real on the position/eligibility axis. Net: legitimate low-priority architecture observation; severity stays LATENT."
+        }
+      },
+      {
+        "gap": {
+          "id": "F5",
+          "title": "Duplicate League hand-reconstructs each copied team's rosterDesign, silently dropping rankOverrides (and lockedAt) with no explanation",
+          "class": "LATENT",
+          "evidence": "src/src_figma/hooks/useLeagueBuilderData.ts:411-425 (the team-copy destructure for `duplicateLeague` excludes id/createdDate/lastModified/lineup fields/optimalLineup fields/rivalries -- NOT `rosterDesign`, so it would otherwise flow through via `...teamCopyInput`); :426-437 (immediately after, `rosterDesign` is explicitly overwritten as `{slots: structuredClone(...), pins: {...}}` only -- the object-literal's later key wins over the spread, so `lockedAt` and `rankOverrides` are dropped even though the Team type carries both, src/utils/leagueBuilderStorage.ts:228-233).",
+          "detail": "Dropping `lockedAt` on a league copy looks intentional (a fresh copy shouldn't start pre-locked). Dropping `rankOverrides` -- the GM's own per-slot ranking preference that feeds `buildBest22Target`'s slot-preference bonus (comment at leagueBuilderStorage.ts:236-241) -- has no comment explaining why it's excluded while `pins` (which player is locked into which slot) is kept. This only fires on the 'Duplicate League' action (LeagueBuilderLeagues.tsx), and losing a ranking preference is not itself a correctness bug (design falls back to default ordering), so this is LATENT/minor rather than a live economic hazard -- but it's a genuine unexplained asymmetric field-drop worth a one-line product ruling (intentional reset vs. oversight).",
+          "dimension": "SILENT-CLOBBER + shape drift on save paths (league builder / team setup)"
+        },
+        "verdict": {
+          "gap_id": "F5",
+          "verdict": "CONFIRMED",
+          "evidence": "useLeagueBuilderData.ts:411-425 destructure omits id/createdDate/lastModified/lineup*/optimalLineup*/rivalries but NOT rosterDesign, so full rosterDesign (with lockedAt+rankOverrides) rides through ...teamCopyInput. useLeagueBuilderData.ts:426-437 then re-specifies rosterDesign:{slots,pins} only; the later literal key wins over the spread, dropping lockedAt and rankOverrides. Team type carries both: leagueBuilderStorage.ts:230 (lockedAt), :232 (rankOverrides). rankOverrides is genuinely consumed, not re-derived: fed to buildBest22Target per-slot bonus (best22Target.ts:168,204) and read at LeagueBuilderDraftSetup.tsx:655,2094,2150; it is manual GM input (RosterDesigner arrow-reorder, RosterDesigner.test R1 line 825) so it cannot be reconstructed. Sibling manual field pins IS kept — asymmetric drop. User-reachable: LeagueBuilderLeagues.tsx:321-323 handleDuplicate -> duplicateLeague(id) on the Leagues page.",
+          "notes": "Refutation attempts all fail. Re-derived at consumption? No — rankOverrides is manual preference, not derivable. Staleness-covered? N/A — this is a copy-time field drop, not a pool/basis staleness path. User-reachable? Yes, Duplicate button. Already handled by a lane? No — TEAMIDGUARD=capIdentity, BOARDFIX2=board/basis staleness, TAXTEETH=budgets; none touch duplicateLeague's rosterDesign reconstruction. Severity is correctly stated (LATENT/minor, not an economic hazard): the copied league keeps slots+pins but silently loses the GM's per-slot ranking preference, which falls back to default order (best22Target.ts R3 asserts absent rankOverrides = byte-identical target). lockedAt drop is defensibly intentional (copy also resets poolExtractedAt at :401-402 so a fresh copy starts unlocked); the rankOverrides drop is the genuinely unexplained asymmetric part. Claim is accurate as written and appropriately conservative — no downgrade. Recommend a one-line product ruling: intentional reset vs oversight."
+        }
+      }
+    ],
+    "downgraded": [
+      {
+        "gap": {
+          "id": "MONEY-1",
+          "title": "League Editor writes the same auction budget field but ignores pool-lock state — Draft Setup's own edit-wall doesn't cover it",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "league.salaryCap has TWO writers: (1) LeagueBuilderDraftSetup.tsx 'THE MONEY' widget — input readOnly={poolEditingBlocked} (line 3460), Apply button disabled={...poolEditingBlocked...} (line 3470), where poolEditingBlocked = locked || savedDraftMutationBlocked (line 1591); and (2) LeagueBuilderLeagues.tsx 'Edit League' modal — tier <select> (line 659) and salary-cap <input> (line 681) have NO disabled prop at all; only the final SAVE button is gated, by disabled={...editingLeagueMutationBlocked...} (line 946), and editingLeagueMutationBlocked = isLeagueMutationBlocked(editingLeague?.id) (line 158) which resolves purely from useSavedAuctionMutationGuard — that hook (src/src_figma/app/utils/savedAuctionMutationGuard.ts:49-58) only checks getAuctionSession(leagueId,...) for an ACTIVE (non-AUCTION_COMPLETE) saved session. It never reads pool.locked. handleSave (LeagueBuilderLeagues.tsx:266-280) always spreads salaryCap: parsedSalaryCap into updateLeague(), which is a bare saveLeagueTemplate() pass-through with zero validation (src/utils/leagueBuilderStorage.ts:963-983).",
+          "detail": "Precise answer to JK's 5 questions: (1) THE MONEY chain: league.salaryCap (edited by either surface) -> resolveLeagueSalaryCap(league) [defaults to TIER_CAPS[tier].tierCap if unset, leagueBuilderStorage.ts:183-184] -> tierBudget in Draft Setup -> baked into the locked RegisteredPool's tierCap at lock time (lockLeaguePool -> registerLeaguePoolForLeague, leagueBuilderPoolBuilder.ts:329-345 and leagueBuilderPoolRegistration.ts:114-119) -> AND separately re-read fresh at draft start (useAuctionDraft.ts:640-643: sessionPool.tierCap = resolveLeagueSalaryCap(league), overriding whatever was baked into the locked pool) -> seeds every real team's budgetRemaining = tierCap - alreadyCommittedSalaries (leagueBuilderAuctionPipeline.ts:144) and every shill's budgetRemaining = tierCap (useAuctionDraft.ts:654-659) -> consumed per-lot by sessionBidCeiling and finalizeSoldLot in auctionStateMachine.ts (lines 382-437, 889-906). (2) The Team Editor has NO dollar salary-cap or budget field at all (grep of LeagueBuilderTeams.tsx for $/money/budget/salary returns nothing but 'cap identity/cap modification' UI strings). What JK is thinking of is capIdentity/farmCapIdentity (TeamCapIdentity: bandPriorities + increase/decrease modifier slots, leagueConstruction.ts:23) — an archetype-driven LUXURY-TAX identity, not a budget. It is wired live: identityByTeamId feeds auctionMarginalTaxWithCaps every lot (useAuctionDraft.ts:206-279), and that marginal tax is reserved in the bid ceiling and DEDUCTED from the SAME budgetRemaining pool at settlement (auctionStateMachine.ts: budgetRemaining: team.budgetRemaining - salary - team.projectedTax, line 905) — so the two 'caps' share terminology and share the same money pool at settlement, but they are different fields with different owners and different write paths. Also: LUXURY_CAP_TABLES (the tax band thresholds capIdentity shifts) is keyed by tier only (leagueConstruction.ts:319) and does NOT rescale when a custom salaryCap override is set — a secondary, lower-severity note under item 4 below. (3) They CAN diverge: if JK edits salaryCap via the League Editor after the pool is locked but before a draft session is saved, league.salaryCap changes while the already-locked RegisteredPool's tierCap (and the pool composition/pricing that was validated against the OLD cap at lock time) stays frozen. The auction, when eventually started, wins: initAuction always re-derives tierCap fresh from the current league.salaryCap (useAuctionDraft.ts:642), so no two-value corruption reaches the live auction math — but the pool's membership/affordability was never re-validated against the new number. (4) THE MONEY widget itself cannot be edited between pool-lock and draft-start (poolEditingBlocked = locked || savedDraftMutationBlocked correctly spans that whole window) — but the League Editor's salary-cap/tier fields CAN be edited and saved in exactly that window, because its guard only trips once an active auction session exists, which is strictly later than pool-lock. Changing the Tier dropdown alone (not touching the cap field) silently rewrites salaryCap too, if the league was still at tier-par: handleTierChange (LeagueBuilderLeagues.tsx:329-335) auto-overwrites formData.salaryCap with the new tier's default whenever salaryCapDirty is false — a very easy, non-obvious trigger (JK could just be trying a different tier for flavor and unknowingly reset the cap). The only safety net is a soft, non-blocking advisory: Draft Setup's 'CAN EVERY CLUB BUILD A LEGAL 22 UNDER $X?' panel recomputes live from tierBudget and shows a 'pool changed — re-check' dot when currentRecheckKey (includes cap, line 3133-3148) diverges from the last-run key (line 3162) — but recheckStale is referenced ONLY in that display panel (line 3556) and NEVER appears in readinessReasons or startReady/startBlocker (lines 3205-3265, 2256-2263), so START THE DRAFT stays fully clickable even with a stale/red recheck report showing on screen. (5) Yes — the cap gates: a hard floor validated on every edit (SALARY_CAP_FLOOR = 22 x LEAGUE_MINIMUM_SALARY, salaryCapInput.ts:4,21-28, enough to always afford a bare-minimum legal 22 in isolation) plus a soft advisory band (<50% or >200% of tier par, salaryCapInput.ts:30-35); it feeds the pre-lock 'legal 22 under cap' feasibility check that blocks LOCK POOL (poolFirstLegalCompletionBlocked, line 3192-3193, 3253-3254); and it reserves per-lot bid room plus the marginal luxury-tax charge in the live auction (auctionStateMachine.ts as above). There is NO per-team budget override anywhere in the data model — Team (leagueBuilderStorage.ts:192-260) has no such field, and resolveLeagueSalaryCap takes only the league record — the cap is strictly league-wide and uniform across every real club and every shill.",
+          "dimension": "MONEY"
+        },
+        "verdict": {
+          "gap_id": "MONEY-1",
+          "verdict": "DOWNGRADED",
+          "evidence": "CONFIRMED core facts: (1) Two writers of league.salaryCap; the League Editor SAVE gates only on editingLeagueMutationBlocked (LeagueBuilderLeagues.tsx:158,247,946) -> isLeagueMutationBlocked (149-156) -> useSavedAuctionMutationGuard, which reads ONLY getAuctionSession for a non-AUCTION_COMPLETE active session (savedAuctionMutationGuard.ts:49-58,87). grep of LeagueBuilderLeagues.tsx shows NO pool/locked/RegisteredPool reference at all -> no pool.locked awareness. Tier <select> (658-659) and cap <input> (675-683) have no disabled; handleTierChange auto-overwrites salaryCap when !salaryCapDirty (329-335). (2) The live auction re-derives tierCap fresh from resolveLeagueSalaryCap(league) OVER the frozen locked pool (useAuctionDraft.ts at src/src_figma/app/hooks/useAuctionDraft.ts:636-643) -> snapshot(membership)/reference(cap) mix is real. (3) recheckStale IS display-only (DraftSetup.tsx:3162, used only at 3556) and absent from startReady (2256-2260).\n\nBUT the claim's proof that START stays clickable rests on the WRONG variable. A cap change is caught by a separate mechanism the claim never examined: poolBasisStaleLines compares extractedBasis.cap !== liveBasis.cap and emits THE CAP MOVED - RE-EXTRACT (DraftSetup.tsx:929). tierBudget = resolveLeagueSalaryCap(league) (1945-1946) and buildPoolExtractedBasis sets cap from it (897-910), so a post-lock League-Editor cap edit makes livePoolExtractedBasis.cap diverge from the frozen league.poolExtractedBasis.cap (only written at extract, 3031). That feeds basisStale (2055) -> poolTrailing (2076), and startReady requires !poolTrailing for design-first (2258). So in DESIGN-FIRST mode START is BLOCKED, not clickable.\n\nSurviving hazard is POOL-FIRST-ONLY: basisStaleLines is hardcoded [] for pool-first (2050 gates on design-first), and startReady short-circuits past poolTrailing for pool-first (2258: poolMode===pool-first || ...). poolReady = locked && sufficiency.meetsFloor is count-based (2254), no cap term; poolFirstLegalCompletionBlocked is surfaced only when !locked (3252-3254) and is absent from startReady. So in pool-first a post-lock cap edit reaches the fresh-tierCap auction with no staleness gate and no re-validation of the frozen pool's legal-22 feasibility.",
+          "notes": "Real but overstated. Correct class: STALE-BASIS (not the framed two-writer-reaches-auction corruption -- the auction consistently uses the NEW cap, which the claim itself conceded). Correct scope: pool-first draft mode ONLY; the design-first path (the one BOARDFIX2 hardened, and the mode in JK's cited real league) is genuinely protected by the basisStale/poolTrailing cap-move gate the claim missed. Severity: LOW-MED, not the claimed always-clickable universal. Two remedies if pursued: (a) extend basis-staleness (or a legal-22 recheck) to pool-first mode so a post-lock cap edit blocks START there too, and/or (b) add pool.locked awareness to the League Editor's mutation guard so cap/tier edits are walled once any league pool is locked -- mirroring Draft Setup's own poolEditingBlocked. The TEAMIDGUARD lane (capIdentity) is unrelated to this budget field and does not cover it."
+        }
+      },
+      {
+        "gap": {
+          "id": "SB-1",
+          "title": "The entire staleness system (poolTrailing/basisStaleLines) is design-first-only — pool-first mode has zero coverage of any kind",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "LeagueBuilderDraftSetup.tsx:2049-2053 gates basisStaleLines on `poolMode === \"design-first\"` (returns [] otherwise). :2064-2068 gates modeAFinalizedDisplayMismatch the same way. :2069-2075 gates modeAStaleTeams/designsStale the same way. :2076 `poolTrailing = designsStale || basisStale || modeAFinalizedDisplayMismatch` is therefore always false for poolMode===\"pool-first\". :2258 startReady = `... && (poolMode === \"pool-first\" || (allHumanDesignsLocked && !poolTrailing))` — pool-first's readiness check literally never consults poolTrailing.",
+          "detail": "Every one of the other pool-first findings below (SB-2 through SB-5) is a symptom of this one root cause: nobody ever built a pool-first equivalent of the design-first basis-diff or live-recompute-and-diff. A pool-first draft can be locked, then have its shaping inputs edited freely, then started, and the readiness panel will show nothing wrong the whole time. Design-first mode has its own real protection (see SB-6, SAFE) — this is specifically a pool-first gap.",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-1",
+          "verdict": "DOWNGRADED",
+          "evidence": "STRUCTURAL FACT — CONFIRMED exactly as claimed. In LeagueBuilderDraftSetup.tsx: basisStaleLines gates on poolMode===\"design-first\" (2049-2054, returns [] otherwise); modeAFinalizedDisplayMismatch gates on design-first (2064-2068); designsStale gates on design-first (2075); poolTrailing = designsStale || basisStale || modeAFinalizedDisplayMismatch (2076) is therefore always false in pool-first; startReady's pool-first branch is `(poolMode === \"pool-first\" || (allHumanDesignsLocked && !poolTrailing))` (2258), so pool-first readiness never consults poolTrailing. All four cited lines are correct. There is no pool-first equivalent of the design-first locked-vs-live basis diff.\n\nHAZARD FRAMING — REFUTED. SB-1's concrete divergence path (\"a pool-first draft can be locked, then have its shaping inputs edited freely, then started, readiness panel shows nothing wrong\") is not user-reachable. poolEditingBlocked = locked || savedDraftMutationBlocked (1591), and EVERY pool-shaping input is disabled while the pool is locked: THE MONEY/tierBudget input readOnly={poolEditingBlocked} (3460) + apply disabled (3470) + explicit \"UNLOCK THE POOL TO MOVE THE MONEY\" line (3447); balance preset buttons disabled={poolEditingBlocked||busy} (4484); quality center (4514); source mode (4546); import (4561); regenerate pool (4568); reroll pool (4576); reset manual edits (4583); pool-size multiplier (3421); add/remove players (3293-3360); pool-mode toggle disabled={locked||...} (3921). tierBudget is read live from the league record via resolveLeagueSalaryCap (1945-1948), but you cannot change it without unlocking. And once unlocked, poolReady = locked && sufficiency.meetsFloor (2254) is false, so startReady (2256-2260) is false — you cannot start an unlocked pool. So \"edit shaping inputs freely after lock, then start\" is impossible: locked blocks the edits, unlocked blocks the start.\n\nCORRECT-BY-DESIGN rationale: design-first NEEDS the staleness diff because its pool is EXTRACTED from team rosterDesigns/archetypes that live on TEAM records editable on OTHER surfaces (RosterDesigner/LeagueBuilderTeams) — league.poolExtractedBasis (extract-time snapshot) vs livePoolExtractedBasis (recomputed from current team records, 2045-2047) catches that external drift. Pool-first's pool is authored directly on this screen behind the lock; there is no external basis to trail, so the missing diff is largely correct-by-design, not a coverage gap.\n\nRESIDUAL (narrow, belongs to sibling findings): shill-count buttons (4646/4656) and seat controls (3957/3966/3978) are gated on setupMutationBlockMessage, which is `hasSavedDraft ? ... : (savedDraftChecked ? null : ...)` (1597-1599) and does NOT include `locked`. So shills/seats CAN be edited after pool-lock (before a draft is saved) and no pool-first staleness check covers them. That is a genuine but far narrower post-lock-editable surface — the non-SHAPING setup inputs — which is SB-2..SB-5 territory and requires proving those actually feed the live auction to rise to a hazard.",
+          "notes": "Downgrade rationale: SB-1's STRUCTURAL observation (no pool-first staleness system; startReady bypasses poolTrailing) is true and unrefutable at the cited lines. But its CONFIRMED-HAZARD classification is overstated: the specific divergence path it describes — locking a pool then editing SHAPING inputs freely and starting — is blocked in both directions (all shaping inputs are readOnly/disabled while locked via poolEditingBlocked at 1591; start is impossible while unlocked because poolReady requires locked at 2254). For the shaping-input path as written, the correct class is SAFE (single-surface, lock-gated). The pool-first pool is self-contained behind the lock with no external derivation basis, so the absence of a basis-diff is by-design rather than a gap. A real but much narrower LATENT residue exists only in the non-shaping setup inputs (shills at 4646/4656, seats) which are gated on setupMutationBlockMessage (1597) rather than locked — that concern is properly the domain of the specific sibling findings SB-2..SB-5, not the sweeping \"zero coverage of any kind = CONFIRMED-HAZARD\" root-cause claim. Recommend re-scoping SB-1 to a SAFE/informational structural note and letting the symptom findings carry any real hazard, each needing a proven auction-consumption path."
+        }
+      },
+      {
+        "gap": {
+          "id": "SB-5",
+          "title": "Team count / league roster membership is edited on a separate page with a guard that has no concept of a locked draft-setup pool, and pool-first has no downstream catch for it",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "league.teamIds is edited on LeagueBuilderLeagues.tsx via handleToggleTeam-style logic (:352-358) gated only by useSavedAuctionMutationGuard (:148-157, :237-239) — a guard that (per savedAuctionMutationGuard.ts:34-93) blocks ONLY when an actual saved AUCTION SESSION row exists (`row.session.state !== \"AUCTION_COMPLETE\"`, line 57), never when a draft-setup pool is merely locked. `teams: league.teamIds.length` is a direct extraction-sizing input in both extraction calls (LeagueBuilderDraftSetup.tsx:2461 design-first, :2488 pool-first).",
+          "detail": "Design-first is incidentally protected: adding/removing a team changes the key set in identityByTeamId (basis diff, :949-959) and leagueTeams is a dep of buildModeAResult so modeAFinalizedDisplayMismatch also catches it (SB-6). Pool-first has neither mechanism (SB-1), so a team added or removed from the league after a pool-first lock — on a totally different page that doesn't even know the draft-setup pool exists — produces a pool sized for the wrong team count with no warning anywhere.",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-5",
+          "verdict": "DOWNGRADED",
+          "evidence": "Claim's sub-facts verified TRUE: (1) basis-staleness is design-first-only — basisStaleLines gated on poolMode===\"design-first\" (LeagueBuilderDraftSetup.tsx:2050), modeAFinalizedDisplayMismatch gated (:2065), designsStale gated (:2075), all folding into poolTrailing (:2076) which is therefore always false in pool-first; (2) useSavedAuctionMutationGuard blocks only on a live non-AUCTION_COMPLETE session row (savedAuctionMutationGuard.ts:57), unaware of a locked pool; (3) both extraction call sites read live league.teamIds.length (:2461 design-first, :2488 pool-first). BUT the conclusion (\"no warning anywhere\", CONFIRMED-HAZARD) is REFUTED by a mode-agnostic downstream catch the claim missed: sufficiency = evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length, ...) reads the LIVE team count (:1804-1807), its floor scales with teamCount (leagueBuilderPoolBuilder.ts:404,435-446), poolReady = locked && sufficiency.meetsFloor (:2254), and startReady requires poolReady in BOTH modes with no pool-first bypass (:2256-2258). handleStartDraft hard-returns unless startReady (:3067). Adding a team after a pool-first lock therefore flips meetsFloor false -> START blocked, startBlocker \"lock a sufficient player pool first\" (:2272), plus plain-language readiness reason \"The locked pool is N players short of what the draft needs.\" (:3236-3237, :3260-3261).",
+          "notes": "Correct class: SAFE for the harmful direction (staleness-covered by the demand-sufficiency floor, which is the actual correctness boundary — leagueBuilderPoolBuilder.ts:399). At most LATENT-cosmetic: pool-first lacks the design-first \"re-extract for the new club identity/count\" nag, so when an added team keeps the locked pool above floor but no longer target-SHAPED for the new count, no redraw prompt appears — but that pool is still legally draftable, so no broken-draft path. Team-removed direction is harmless (oversized pool). Not user-reachable into an illegal/undersized draft: the START gate reads live team count and blocks. Severity: LOW polish gap, not a CONFIRMED-HAZARD. Note the pool-first shape diagnostics (:1982-2043) also re-read live teamIds.length, giving partial composition re-evaluation."
+        }
+      },
+      {
+        "gap": {
+          "id": "SEATS-01",
+          "title": "Deleting a team never prunes it from league.teamIds — the stale count feeds real pool-sizing math for the auction",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "deleteTeam() is a bare single-store delete with zero cascade — src/utils/leagueBuilderStorage.ts:1105-1119. handleDelete in the Teams editor calls removeTeam(id) → deleteTeam(id) with no league/roster cleanup — src/src_figma/app/pages/LeagueBuilderTeams.tsx:664-678 and src/src_figma/hooks/useLeagueBuilderData.ts:583-592. Nothing else in the codebase prunes a deleted id out of any league's teamIds/divisions/conferences (grepped leagueBuilderStorage.ts, useLeagueBuilderData.ts, LeagueBuilderLeagues.tsx — no such write path exists). That raw, un-pruned league.teamIds.length is then used as the authoritative team count for the REAL draftable-pool extraction: registerLeaguePoolForLeague computes `totalSlots: league.teamIds.length * LEGAL_ROSTER.size` (src/utils/leagueBuilderPoolRegistration.ts:118) — not a diagnostic, the actual pool sizing consumed by the auction — and also feeds Draft Setup's pool-affordability/legality math the same way (computePoolAffordabilityDiagnostic teamCount, resolvePoolSizingTarget teams, seatAllClubs at src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:1968, 1985, 1990, 1998).",
+          "detail": "Sequence: create a league with N teams, delete one team from the Teams page (no active MLB auction, so nothing blocks it), return to Draft Setup. league.teamIds still lists N ids; every team-count-driven calculation (recommended shill count, pool demand/totalSlots, affordability legality) is computed as if there are still N real teams when only N-1 exist. The extracted pool for that league is oversized relative to the surviving roster demand, and the affordability/legality diagnostics are miscalibrated. This is a genuine, easily-reachable divergence between the 'club roster' the game will actually run (leagueTeams, correctly filtered everywhere it's rendered) and the 'team count' fed into the pool-sizing engine (raw league.teamIds.length, never pruned). Additionally, registerLeaguePoolForLeague's design-first roster-union step (leagueBuilderPoolRegistration.ts:100-110) iterates the same un-pruned league.teamIds and calls getTeamRoster(teamId) for each — since deleteTeam also never calls deleteTeamRoster, the deleted team's stale TeamRoster record survives and its old mlbRoster/farmRoster player ids get unioned back into the draftable pool candidate set for design-first leagues, a second-order leak from the identical root cause.",
+          "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+        },
+        "verdict": {
+          "gap_id": "SEATS-01",
+          "verdict": "DOWNGRADED",
+          "evidence": "The root defect is REAL and reachable, but the headline mechanism (\"stale count feeds real pool-sizing math consumed by the auction / oversizes the extracted pool\") is REFUTED by tracing to the consumption point.\n\nCONFIRMED-TRUE facts:\n- deleteTeam is a bare single-store delete, no cascade: src/utils/leagueBuilderStorage.ts:1104-1119. removeTeam just calls deleteTeam+refresh (useLeagueBuilderData.ts:583-592); handleDelete only blocks on a SAVED-AUCTION lock (LeagueBuilderTeams.tsx:664-678 + isMutationBlockedForLeagueIds at 282-299), so deleting an in-league team BEFORE draft lock is fully user-reachable.\n- Nothing prunes the deleted id from league.teamIds on this path. normalizeLeagueTemplateRecord (leagueBuilderStorage.ts:714-722) fills defaults only, no teamIds reconciliation. LeagueBuilderLeagues.tsx:353 prunes teamIds but only for the separate \"remove team from league\" action, not team deletion.\n- deleteTeam does NOT delete the TeamRoster record.\n- A genuine two-count divergence exists: leagueTeams FILTERS teamIds against existing teams (DraftSetup.tsx:1442-1447, `.map(find).filter(compactTeams)` → N-1), while league.teamIds.length is used RAW at 1787, 1805, 1968, 1985, 1990, 1998 and at leagueBuilderPoolRegistration.ts:118.\n\nREFUTATION of the severity/mechanism:\n- totalSlots (leagueBuilderPoolRegistration.ts:118 = teamIds.length * LEGAL_ROSTER.size) is INERT. Grepping totalSlots/poolSurplusWarning across src (non-test) returns ONLY their definitions: leagueConstruction.ts:33,46,321,322 and 47. totalSlots is stored on RegisteredPool and only feeds poolSurplusWarning (leagueConstruction.ts:322) — and NOTHING reads either field back. The auction never consumes totalSlots for sizing. So \"the actual pool sizing consumed by the auction\" is false.\n- The actual auction seats come from the FILTERED leagueTeams, not raw teamIds: normalizeDraftSeats iterates leagueTeams (DraftSetup.tsx:408-421), seats = normalizeDraftSeats(league, leagueTeams) (1449). The deleted team creates NO phantom seat and NO phantom lot — the real draft runs with the correct N-1 clubs.\n- The pool player SET is assignment-driven (registerLeaguePoolForLeague:93-95 adds any player whose leagueAssignments include this league); it is not scaled by teamIds.length. The claimed roster-union second-order leak (leagueBuilderPoolRegistration.ts:100-110, pool-first only) is LATENT/largely redundant: a deleted team's former roster players still carry their leagueAssignment to this league (deleteTeam doesn't touch players), so they are already captured by the assignment loop; the union adds nothing except in an assignment/roster-membership divergence edge case.",
+          "notes": "Correct classification: CONFIRMED-HAZARD but LOW-to-MEDIUM severity, and scoped to Draft Setup ADVISORY DIAGNOSTICS, not the live auction. The real, user-reachable impact of the un-pruned teamIds is that the phantom (deleted) club inflates the team count fed to computePoolAffordabilityDiagnostic (1968), resolvePoolSizingTarget (1985), the seatAllClubs legality preview (1990-1998), recommendedShillCount (1787), and evaluatePoolDemandSufficiency (1805) — so affordability/legality/shill/demand guidance is miscalibrated by one club and can mislead the user. It does NOT oversize the actual auction pool, create a phantom seat, or corrupt the lots that are drafted; totalSlots is dead metadata and the auction seats/lots derive from the correctly-filtered leagueTeams and the assignment-driven player set. The claim is worth fixing (prune teamIds in deleteTeam's cascade, and delete the orphaned TeamRoster) but should be logged as a diagnostics-accuracy defect, not an auction-pool-sizing corruption. The roster-union leak is a real second-order concern only under an assignment/roster mismatch and should be noted as LATENT."
+        }
+      },
+      {
+        "gap": {
+          "id": "SEATS-03",
+          "title": "farmCapIdentity is a sibling of the already-ticketed capIdentity clobber — the legacy Teams-page editor overwrites it unconditionally too, and TEAMIDGUARD's scoped ruling doesn't mention it",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "archetypeIdentity.ts's selectTeamArchetype is the designed single writer for BOTH fields together: `team.capIdentity = archetypeToCapIdentity(mlbArch)` and `team.farmCapIdentity = archetypeToCapIdentity(farmArch)` (src/engines/archetypeIdentity.ts:90-99), called from Draft Setup's archetype picker (src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:2654, 2674). The legacy Teams-page editor renders a fully separate 'Farm Identity (Cap)' section (LeagueBuilderTeams.tsx:1865-2000) whose state seeds from `team.farmCapIdentity` via `normalizeCapIdentity` — which drops `rawShift` (LeagueBuilderTeams.tsx:147-156, 418) — and whose handleSave unconditionally rebuilds farmCapIdentity from the coarse composeIdentity/CAP_MODIFICATION_FRACTIONS vocabulary on every save regardless of what the user actually touched (LeagueBuilderTeams.tsx:601-608, 640), mirroring the exact clobber the CONTRACT_TEAMIDGUARD_2026-07-09 lane was written to fix. That contract (spec-docs/contracts/CONTRACT_TEAMIDGUARD_2026-07-09.md, commit 229af08f) scopes its ruling and its guardrails explicitly to 'capIdentity' — the word farmCapIdentity does not appear anywhere in it.",
+          "detail": "Reachable exactly like the flagged capIdentity bug: pick a farm archetype for a team in Draft Setup, then edit that same team on the Teams page (e.g. just fix a typo in the stadium name) and save — the precise archetype-derived farm tax shifts (including rawShift) get silently replaced by the coarse legacy vocabulary, while the displayed farm-archetype label (which reads `farmArchetypeKey` only, never `farmCapIdentity`) still looks correct. Since the farm auction prices off farmCapIdentity, this is the same dollar-charging divergence TEAMIDGUARD is fixing for the MLB side, just left open on the farm side unless the builder generalizes the fix rather than special-casing 'capIdentity' literally.",
+          "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+        },
+        "verdict": {
+          "gap_id": "SEATS-03",
+          "verdict": "DOWNGRADED",
+          "evidence": "The clobber mechanism is real and user-reachable: TeamCapIdentity carries rawShift (src/engines/leagueConstruction.ts:23), archetypeToCapIdentity populates it (src/engines/archetypeIdentity.ts:45), normalizeCapIdentity omits rawShift when seeding the form (src/src_figma/app/pages/LeagueBuilderTeams.tsx:147-156, 418), and handleSave rebuilds farmCapIdentity without rawShift on every save (LeagueBuilderTeams.tsx:601-608, 640). HOWEVER the claimed impact class is refuted at the actual consumption point. The ONLY non-test runtime consumer of a persisted team.farmCapIdentity is LeagueBuilderFarmAuctionDraft.tsx:533,539 -> tiltAnalyzerFindings -> archetypeBandWeights (src/engines/farmArchetypeTilt.ts:38-63), which reads identity.increase or falls back to bandPriorities and NEVER reads rawShift. A full grep of every rawShift and every farmCapIdentity reference confirms no farm consumer touches rawShift, so its loss is inert. There is no farm luxury tax / dollar pricing off farmCapIdentity: auctionLuxuryTax.ts consumes only capIdentity and has no farm analog. The farm consumer produces rosterBoardPriorityGaps, a top-5 advisory gap-hint list ({id,severity,label}) in the assistant-GM roster board (LeagueBuilderFarmAuctionDraft.tsx:539-545) - it charges no dollars, shifts no cap, resolves no lot. So the evidence's core assertion \"the farm auction prices off farmCapIdentity, this is the same dollar-charging divergence\" is false.",
+          "notes": "Correct class is SILENT-CLOBBER at cosmetic/LATENT severity, NOT a CONFIRMED dollar-charging hazard. The one genuinely-consumed field that can diverge is increase: normalizeIdentityMods caps at 2 elements (LeagueBuilderTeams.tsx:142) while a farm archetype can carry 3 boosts (fixture ['SPD','ARM','FLD'], archetypeIdentity.test.ts:162), so an untouched open+save truncates 3->2 and reorders archetypeBandWeights, changing the ORDER of up-to-5 advisory gap hints. That is a display-order artifact in the farm assistant-GM board, not a mispriced auction. Still worth generalizing the TEAMIDGUARD fix to cover farmCapIdentity for cleanliness, but it is not the dollar-divergence the ticket asserts. rawShift specifically is dead weight on the farm side today."
+        }
+      },
+      {
+        "gap": {
+          "id": "SEATS-05",
+          "title": "Adding a brand-new (archetype-less) team to a league after the pool is locked produces zero staleness warning",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "Nothing blocks adding a team to a league post-lock: the Leagues-page team checklist is gated only by `editingLeagueMutationBlocked`, i.e. the same MLB-auction-only guard from SEATS-04 (LeagueBuilderLeagues.tsx:149-158, 789) — it never checks `poolRecord.locked`. The pool's own staleness detector, poolBasisStaleLines (LeagueBuilderDraftSetup.tsx:922-961), compares `identityByTeamId` per team id between the snapshot taken at lock time and the live value; a team present only on the live side gets `previous = null` (not a key in the old snapshot) and `current = liveBasis.identityByTeamId[teamId] ?? null`. A freshly created team has no `mlbArchetypeKey` at all (LeagueBuilderTeams.tsx's create/edit form never sets it — only selectTeamArchetype does), so `current` is also `null`; the comparison `if (previous === current) continue;` (line 957) then silently skips emitting any stale line for that team.",
+          "detail": "Sequence: lock the draft pool → go to Leagues, add a newly-created team (no archetype assigned yet) to the league → return to Draft Setup. `poolTrailing`/the re-extract banner stays green even though the real team count just changed — the pool was sized and priced for the old roster of clubs and is now silently short one club's worth of demand. This is exactly the STALE-BASIS class requested: a setting (team membership) that changes draft behavior without tripping the pool's own staleness detector. Note the detector DOES correctly fire when a team is *removed* from the league post-lock (its old identity value still exists in the snapshot and no longer matches `null` on the live side) — only the archetype-less-team-added direction is silent.",
+          "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+        },
+        "verdict": {
+          "gap_id": "SEATS-05",
+          "verdict": "DOWNGRADED",
+          "evidence": "Narrow claim is accurate: poolBasisStaleLines skips null===null for an archetype-less added team (LeagueBuilderDraftSetup.tsx:955-957), so that one detector emits no line. But the claimed silent/user-reachable harm is refuted by two live gates keyed on live league.teamIds, both re-evaluated on return to Draft Setup: (1) identitiesReady (:2253) = leagueTeams.every(team => mlbArchetypeKey && farmArchetypeKey); an archetype-less team makes it false, blocking draft start (:2258) with explicit copy 'give every club an MLB and a farm identity first' (:2274), chips 'set each club's identities' (:3989) and 'identity needed' (:4672). (2) sufficiency (:1804-1807) is computed on live teamIds.length and live poolSizeTargetOverride (built from live teamIds.length, :1791); adding a team raises teamCount -> raises hardFloor in poolDemandModel (leagueBuilderPoolBuilder.ts:435-446); if the locked pool is now short, meetsFloor=false -> poolReady=false (:2254) -> draft blocked with 'The locked pool is N short of what the draft needs' (:3237,:3261) and chip 'Pool X / Y draft slots · need N more' (:3402-3405). The green-banner window is exactly the archetype-less window that identitiesReady blocks; the instant the team gets an archetype (becoming draft-eligible), identityByTeamId goes null->key so previous!==current and the staleness line fires 'CHANGED ITS IDENTITY' (:957-958). No reachable state has (draft can start) AND (stale from added team) AND (no warning).",
+          "notes": "Correct class = SAFE (covered), not CONFIRMED-HAZARD. The poolBasisStaleLines null-blindness is a real but harmless gap in one detector; the actual harm (silent short pool / bad draft) cannot be reached because identitiesReady and sufficiency both block draft start in exactly this scenario, both on live team count. Severity: no reachable divergence. Removed-team direction the claim credits is likewise redundantly covered. Only a purely cosmetic point survives: a green staleness banner momentarily coexisting with a red identity/sufficiency gate is slightly inconsistent messaging, but the draft cannot start and the user is clearly told what to fix."
+        }
+      },
+      {
+        "gap": {
+          "id": "F1",
+          "title": "Pool lock freezes membership+IV but never blocks player-record edits — only an active auction SESSION does",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "assertPoolUnlocked (src/utils/leagueBuilderPoolBuilder.ts:210-215) is called only from addPlayersToLeaguePool (:223) and removePlayersFromLeaguePool (:251) — pure membership ops. savePlayer (src/utils/leagueBuilderStorage.ts:1167-1207) has zero lock/session check. The only guard on the player editor is useSavedAuctionMutationGuard (src/src_figma/app/utils/savedAuctionMutationGuard.ts:20-94), wired into LeagueBuilderPlayers.tsx:234/296-298, and it queries getAuctionSession(leagueId, MLB_AUCTION_SEASON) (:52) — an ACTUAL SESSION ROW — never RegisteredPool.locked. lockLeaguePool's own doc comment (src/engines/leagueConstruction.ts:48-54) says locking freezes 'membership + per-player IV' and 'this exact snapshot is what the auction consumes' — the Draft Setup screen tells the user the same thing verbatim ('LOCK POOL to freeze prices for the auction', LeagueBuilderDraftSetup.tsx:3235). Neither claim covers position/traits, and nothing stops an edit in the gap between clicking LOCK POOL and clicking Start Draft (initAuction, useAuctionDraft.ts:616).",
+          "detail": "This is the root gap. It is fully reachable in normal use: LOCK POOL is a documented, expected step users are told to take before Start Draft, and there is no reason a user wouldn't sit on a locked pool for a while (reviewing the board) before starting. During that window the Players page's guard sees no active session, so it reports blocked=false and lets any rating/position/salary edit through with zero warning — directly contradicting the 'frozen snapshot' promise shown to the user on the same screen.",
+          "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+        },
+        "verdict": {
+          "gap_id": "F1",
+          "verdict": "DOWNGRADED",
+          "evidence": "Guard architecture claim is TRUE: useSavedAuctionMutationGuard queries getAuctionSession (savedAuctionMutationGuard.ts:52) and blocks only on an active session row (state!==AUCTION_COMPLETE, :57), never RegisteredPool.locked; savePlayer (leagueBuilderStorage.ts:1167-1213) has no lock/session check; assertPoolUnlocked (leagueBuilderPoolBuilder.ts:210-215) guards only pool add/remove. The LOCK-POOL-then-Start-Draft window leaves blocked=false, user-reachable. BUT the claimed severity is refuted at the consumption point. In initAuction a locked pool is consumed as the frozen snapshot (pool = existingPool, useAuctionDraft.ts:636-638), and buildAuctionPlayers reads IV strictly from pool.players — the snapshot (leagueBuilderAuctionPipeline.ts:81-93). So rating/salary/IV edits during the lock window do NOT reach the auction; the on-screen promise 'LOCK POOL to freeze PRICES' (LeagueBuilderDraftSetup.tsx:3235) is genuinely kept. The ONLY live-read leak is buildAuctionPlayersWithPositions (leagueBuilderAuctionPipeline.ts:108-109), which re-reads primaryPosition/secondaryPosition/trait1/trait2 via getPlayer and feeds them ONLY into the soft, permissive own_need nomination guard (§5 doc comment, :95-100) — not the economy. So a position/trait edit in the lock window does diverge from the frozen snapshot, but a rating/salary edit does not.",
+          "notes": "Real hazard, correct class (SNAPSHOT-VS-REFERENCE), but overstated in scope and severity. Claim frames it as 'any rating/position/salary edit contradicts the frozen-snapshot promise' and calls it 'the root gap.' Correct picture: prices/IV/salary — the quantity the UI explicitly promises is frozen — are genuinely frozen (auction reads them from pool.players snapshot, not live). The only genuine live-read leak is position/traits into the soft own_need nomination-strand guard (permissive, cannot cause a false rejection per its own doc). Severity LATENT/low, not the economy-corrupting root gap described: (a) prices are safe, (b) the leaked fields hit only a soft guidance guard, (c) it requires the unusual sequence of editing a player's position AFTER locking but BEFORE starting. Worth a fix (extend the mutation guard to also check RegisteredPool.locked so the frozen-snapshot semantics are complete for positions too), but it is not a stars/scrubs-economy divergence."
+        }
+      },
+      {
+        "gap": {
+          "id": "F2",
+          "title": "Position/legality (`pos`) is captured LIVE at Start Draft, not frozen at Lock — desyncs from the already-frozen, position-aware IV",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "buildAuctionPlayers (src/utils/leagueBuilderAuctionPipeline.ts:81-93) derives iv straight from the frozen pool.players[].iv (safe, matches F4). But buildAuctionPlayersWithPositions (:102-121) does `const stored = await fetchPlayer(auctionPlayer.playerId)` (:109) — a LIVE getPlayer call — and builds `pos: toRosterSlotPlayer({ primaryPosition: stored.primaryPosition, secondaryPosition: stored.secondaryPosition, traits: [...] })` (:113-117) from whatever the player's CURRENT record says. This runs once inside initAuction (useAuctionDraft.ts:662: `const players = await buildAuctionPlayersWithPositions(sessionPool)`), and the result is persisted into the session (AuctionPlayer.pos, src/engines/auctionStateMachine.ts:37-47) — never refreshed again. Meanwhile iv was computed by calculateIvBaseSalary(toSalaryPlayer(player)) at registerLeaguePoolForLeague time (src/utils/leagueBuilderPoolRegistration.ts:114-125), and toSalaryPlayer derives pitcherRole from primaryPosition (leagueBuilderPoolRegistration.ts:39-58) — IV pricing IS position/role-aware (matches memory notes: SP>SP/RP>CP>RP repricing).",
+          "detail": "Combine with F1: if a player's position is edited after LOCK but before Start Draft (e.g. CP -> SP), the auction prices him using the OLD position's IV (frozen, cheaper CP pricing) but treats his roster legality/own-need using the NEW position (SP) for the entire draft. A team could win a player at CP-discounted pricing while he actually occupies the more valuable SP slot for good — the exact kind of pricing-model break the CP scarcity discount was built to prevent (see require-a-closer-and-cp-valuation memory).",
+          "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+        },
+        "verdict": {
+          "gap_id": "F2",
+          "verdict": "DOWNGRADED",
+          "evidence": "Every technical link in the claim is CONFIRMED with file:line: (1) When the pool is locked, initAuction consumes the frozen pool as-is — pool = existingPool, IV never recomputed (useAuctionDraft.ts:636-638); the regenerate call before it only refreshes scouting axes, not IV (leaguePoolAxisRegenPersist.ts:15-19). (2) pos is read LIVE via getPlayer and built from the current record (leagueBuilderAuctionPipeline.ts:109-117), called once at useAuctionDraft.ts:662. (3) The frozen IV was computed from the position-aware basis at lock time (leagueBuilderPoolRegistration.ts:39-58 pitcherRole from primaryPosition; :122 calculateIvBaseSalary). (4) The lock deliberately freezes membership+IV, NOT position — RegisteredPool players are {id,iv,salary} only (leagueConstruction.ts:41,48-56), so position is structurally not in the snapshot and MUST be read live. (5) Pricing consumes iv (auctionStateMachine.ts:340 reservePriceCurve(ivPercentile)*iv) while legality/own_need/feasibility consume .pos (auctionStateMachine.ts:502-540), confirming the intra-auction inconsistency. REFUTATION of the CONFIRMED-HAZARD class: the divergence does NOT occur in the normal flow (extract -> lock -> Start Draft), where frozen IV and live pos reflect the same position. It requires editing a pool player's primaryPosition AFTER lock and BEFORE Start Draft. That window is unguarded — savedAuctionMutationGuard.ts:52,57 blocks player edits ONLY when an active auction SESSION already exists (post-Start-Draft), and the base-tab save writes primaryPosition via updatePlayer without touching/unlocking/re-registering the pool (LeagueBuilderPlayers.tsx:636,675-679). And no staleness signal catches it: poolBasisStaleLines compares only cap/pool-size-dial/shills/sourceLeagueIds/per-team-identity, never player position (LeagueBuilderDraftSetup.tsx:929-959). So the path is real and completely unguarded (not SAFE) but requires an out-of-order post-lock position edit — the task taxonomy's definition of LATENT ('needs an unusual sequence'), not CONFIRMED-HAZARD ('concrete divergence path' in a normal flow).",
+          "notes": "Verdict: mechanism fully real, class overstated by one notch. Correct class = LATENT. Correct dimension unchanged (STALE-BASIS + SNAPSHOT-VS-REFERENCE hybrid: frozen IV snapshot vs live position reference, with attribute edits escaping the basis-staleness detector). Severity: medium-low — needs the user to re-open the Players tab and change a pool player's position after locking but before starting, without re-extracting; harmful magnitude is the IV delta across a position/role-multiplier boundary (largest for role-class flips like CP<->SP that move the scarcity-discount band). Two things worth a follow-up but NOT part of this verification: (a) any OTHER surface that mutates a locked-pool player's primaryPosition without an active session (team roster designer, archetype re-roll) would ride the same unguarded window and could push this toward CONFIRMED — I only verified the direct player-editor path; (b) the clean fix is symmetric — either freeze pos into the locked snapshot alongside iv, or add primaryPosition/role to the basis-staleness comparison so a post-lock position edit trips a RE-EXTRACT nag. Adjacent lanes (TEAMIDGUARD capIdentity, BOARDFIX2 basis, TAXTEETH budgets) do NOT cover player-attribute edits — this is a distinct gap."
+        }
+      },
+      {
+        "gap": {
+          "id": "F3",
+          "title": "The real (TAXTEETH-consumed) marginal luxury-tax math reads player ratings and team capIdentity 100% live — never frozen, refreshed on every reload/resume, and invisible to the pool's own staleness detector",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "buildAuctionLuxuryTaxContext (useAuctionDraft.ts:206-217) builds `playerById: new Map(input.players...)` and `identityByTeamId: new Map(input.leagueTeams.map(t => [t.id, t.capIdentity]))` from `leagueData.players`/`leagueData.teams` — the LIVE hook state (getAllPlayers/getAllTeams under the hood, useLeagueBuilderData.ts:208-217). This is called at both loadAuction (:592-596, on every resume/mount of the draft screen) and initAuction (:697-701). applyAuctionLuxuryTaxForLot (:247-279) then calls resolveConstructionPlayer -> toConstructionPlayer(player) (:226-233), reading player.power/contact/speed/fielding/arm/velocity/junk/accuracy STRAIGHT off the live record for every committed roster player plus the current lot's candidate, on every lot (called at :523 inside the per-transition path). Per the TAXTEETH contract comment (:236-246) this projectedTax is 'a REAL, consumed quantity' that gates bid ceilings and is charged at settlement — not display-only. Separately, poolBasisStaleLines (LeagueBuilderDraftSetup.tsx:922-961) — the mechanism that is supposed to catch a stale pool basis — only compares `identityByTeamId[teamId]` built from `team.mlbArchetypeKey` (:906), a STRING LABEL, never the derived `TeamCapIdentity` object (`capIdentity`, leagueConstruction.ts:23) the tax engine actually reads.",
+          "detail": "Two compounding effects. (1) Same lock-window gap as F1/F2: nothing stops a ratings or capIdentity edit between LOCK and Start Draft, and since this context is rebuilt from live data at every initAuction/loadAuction, the tax model an in-progress draft uses can literally change if you close and reopen the draft screen after some other edit landed on a player or team it references. (2) The staleness detector watches the archetype LABEL, not the derived capIdentity the math consumes — this is exactly why the original TEAMIDGUARD bug ('archetype label stayed correct' while capIdentity was silently clobbered) was invisible to the pool's own re-extract warning. Even after TEAMIDGUARD's save-path fix lands, this detection gap remains architecturally open for any other future divergence between label and derived identity.",
+          "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+        },
+        "verdict": {
+          "gap_id": "F3",
+          "verdict": "DOWNGRADED",
+          "evidence": "All technical facts confirmed. (1) buildAuctionLuxuryTaxContext builds playerById from live leagueData.players and identityByTeamId from live team.capIdentity (useAuctionDraft.ts:213-214), invoked at loadAuction (:595) and initAuction (:700). (2) The pool snapshot never froze ratings: RegisteredPool.players = PoolPlayerPriced[] = {id, iv, salary} (leagueConstruction.ts:28,41); the tax needs ConstructionPlayer.bat/pit which only exist on live records via toConstructionPlayer -> player.power/contact/... (useLeagueBuilderData.ts:161-186). (3) projectedTax is genuinely consumed, not display-only: bid-ceiling reservation (auctionStateMachine.ts:390-391) and settlement charge budgetRemaining - salary - team.projectedTax (:905). (4) poolBasisStaleLines compares the mlbArchetypeKey string label (LeagueBuilderDraftSetup.tsx:906,954-958), never the derived capIdentity.\n\nREFUTATION of the headline severity (\"refreshed on every reload/resume\", \"in-progress draft tax can literally change if you close and reopen the draft screen after some other edit landed\"): useSavedAuctionMutationGuard (savedAuctionMutationGuard.ts:49-65,87) blocks ALL player/team/league mutations whenever getAuctionSession returns a row with state !== 'AUCTION_COMPLETE'. It is wired into LeagueBuilderPlayers (ratings edit hard-blocked in handleSave, :296-298,567-568 and save button disabled :1663), LeagueBuilderTeams (capIdentity, :280,297-299), and LeagueBuilderLeagues (:148-154). Since initAuction persists the session (useAuctionDraft.ts:702) BEFORE any resume can occur, the live player/team data that loadAuction re-reads on every resume (:595) cannot have changed via League Builder while a draft is in progress. The in-progress / reload / resume divergence vector is therefore NOT user-reachable through the standard edit surfaces.\n\nRESIDUAL reachable divergence: only in the LOCK-to-START window (no auction session exists yet, so the guard is inactive; LeagueBuilderPlayers ratings edit is gated by session-existence only, NOT by pool lock, :296-298 -- contrast LeagueBuilderDraftSetup:1591 poolEditingBlocked = locked || savedDraftMutationBlocked which DOES block the DraftSetup edit path when locked). Sequence: lock pool -> Players screen -> buff a pool player -> return -> Start Draft; tax teeth read the new ratings while the frozen-IV price basis is stale, and a pure-ratings edit evades poolBasisStaleLines (which watches cap/dial/shills/sources/identity-label, never ratings or IV). The capIdentity half of the claim is the TEAMIDGUARD field itself; for a LEGITIMATE archetype change, label and capIdentity move together so the label-watch DOES trip the stale line -- the detector only misses a label/identity desync, which is precisely the TEAMIDGUARD clobber (explicitly out of scope).",
+          "notes": "Correct classification: LATENT, low severity -- not CONFIRMED-HAZARD. The savedAuctionMutationGuard forecloses the entire in-progress/resume/reload divergence the claim leads with; the residual is a narrow STALE-BASIS window (lock -> edit ratings on the Players screen -> start draft) that requires an unusual multi-step sequence and affects only the secondary marginal-tax budget reservation, while the price basis (frozen IV) is what the pool review actually showed. The staleness-detector 'gap' is a non-finding for ratings (there was never a frozen ratings basis to be stale against) and, for capIdentity, reduces to the out-of-scope TEAMIDGUARD label/identity-desync case. Worth a one-line note that the Players screen is guarded by session-existence but not by pool-lock, if closing the lock->start window for ratings edits is desired for basis coherence; not a ship blocker."
+        }
+      },
+      {
+        "gap": {
+          "id": "F1",
+          "title": "Board-rank autosave uses a stale team snapshot and silently reverts a concurrent archetype pick",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:1896 (`pendingBoardRankOverrides` state holds `{team: Team; overrides}`); :4191-4207 (`onReorderGlobal`/`onReorderPosition` call `setPendingBoardRankOverrides({team: selectedTeam, overrides})`, capturing the WHOLE team object at reorder time); :977 (`BOARD_RANK_SAVE_DEBOUNCE_MS = 500`); :2788-2803 (the debounce effect's deps are `[pendingBoardRankOverrides, flushBoardRankOverrides]` -- NOT `teams`/`selectedTeam` -- so a later save elsewhere on the SAME team does not refresh or cancel this pending flush); :2757-2766 (`flushBoardRankOverrides(team, boardRankOverrides)` calls `saveTeam({...team, boardRankOverrides})` with the captured, possibly-stale `team`); :2644-2661 (`handlePick`, the archetype-pick handler, calls `saveTeam`/`selectTeamArchetype` and `replaceTeamsLocal` independently); src/utils/leagueBuilderStorage.ts:1080-1103 (`saveTeam` is an unconditional whole-record `store.put(fullTeam)` -- no merge with the current stored record); src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:1423,4153-4208 (`clubEditorMode` -- Identity/Design/Board are mutually exclusive tabs for the same `selectedTeam`, switched via `setClubEditorMode`, so reorder-then-pick within one tab session is a normal single-user action, not a multi-tab edge case).",
+          "detail": "Sequence: GM reorders their 'RANK YOUR BOARD' list for a team (Board tab) -> pendingBoardRankOverrides captures that team's FULL current object plus the new overrides, and a 500ms save timer starts. Within that window the GM switches to the Identity tab (RankYourBoardZone unmounts, but the pending state and timer live in the parent and keep running) and picks a new MLB archetype for the SAME team. handlePick saves the new archetype/capIdentity immediately and updates the visible team list. ~500ms after the ORIGINAL reorder, the board-rank timer fires using the team snapshot from BEFORE the archetype pick, and saveTeam does a full-record replace -- writing the reordered board (correct) but silently reverting capIdentity/mlbArchetypeKey (and any other field changed in that window, e.g. farmArchetypeKey, gmSeatId, controlledBy) back to their pre-pick values. flushBoardRankOverrides then pushes that reverted record back into the visible team list via replaceTeamsLocal, so the archetype picker itself visibly un-picks moments later -- not just a silent DB divergence. This is a sibling of the TEAMIDGUARD capIdentity clobber (same 'saveTeam is a full replace, callers use a captured snapshot' root cause) but lives entirely inside LeagueBuilderDraftSetup.tsx, which the TEAMIDGUARD fix (scoped to LeagueBuilderTeams.tsx only) does not touch.",
+          "dimension": "SILENT-CLOBBER + shape drift on save paths (league builder / team setup)"
+        },
+        "verdict": {
+          "gap_id": "F1",
+          "verdict": "DOWNGRADED",
+          "evidence": "Mechanism fully confirmed, but reachability is a sub-500ms cross-tab race, so class should be LATENT not CONFIRMED-HAZARD.\n\nCONFIRMED mechanics (I could not refute any link):\n- selectedTeam is a live ref into leagueTeams: LeagueBuilderDraftSetup.tsx:1830 (`leagueTeams.find((team) => team.id === selectedTeamId) ?? null`).\n- Reorder handlers freeze that whole object into pending state: :4191-4194 (onReorderGlobal `team: selectedTeam`) and :4197-4207 (onReorderPosition). pendingBoardRankOverrides holds `{team: Team; overrides}` at :1896.\n- handlePick sets a NEW capIdentity/mlbArchetypeKey and persists, without touching pending: :2644-2661; selectTeamArchetype mutates team.mlbArchetypeKey + team.capIdentity and saveTeam-persists at archetypeIdentity.ts:90-91,102.\n- Debounce effect deps are [pendingBoardRankOverrides, flushBoardRankOverrides] (:2803) — NOT teams/selectedTeam — so the pick does not reset the timer or refresh outgoing.team.\n- Flush writes the stale snapshot wholesale: flushBoardRankOverrides → saveTeam({...team, boardRankOverrides}) at :2759, invoked with outgoing.team at :2792. saveTeam is an unconditional whole-record store.put(fullTeam) with no merge against the stored record (leagueBuilderStorage.ts:1084-1094), so capIdentity/mlbArchetypeKey/farmArchetypeKey do revert.\n- Tab switches do not flush: setClubEditorMode at :4096/4117/4141 only swaps the mutually-exclusive editor tab (:4153-4209); it does not flush or cancel pendingBoardRankOverrides. TEAMIDGUARD (LeagueBuilderTeams.tsx-scoped) does not touch this file, so it is a genuine sibling.\n\nWhy DOWNGRADED (could not fully refute, but the CONFIRMED-HAZARD framing overstates it):\n1. Timing window is only BOARD_RANK_SAVE_DEBOUNCE_MS = 500ms measured from the LAST reorder (each reorder makes a new pending object → effect re-runs → :2796-2797 clears the old timer, :2791 starts a fresh 500ms). To clobber, the user must click a board-reorder control, switch from the Board tab to the Identity tab, AND click an archetype card — three interactions across two mutually-exclusive tabs — inside 500ms. That is a tight, unusual, timing-dependent sequence, not a routinely-hit path → LATENT, not user-reachable in the CONFIRMED sense.\n2. The revert is NOT fully silent as the title claims: after the flush, replaceTeamsLocal([saved]) at :2760 pushes the reverted record into the visible list, and ArchetypePicker's mlbKey is derived from selectedTeam.mlbArchetypeKey (:4158 via selectedTeamConfig), so the pick visibly un-selects in the same tab the user is looking at. The user gets immediate UI feedback and can re-pick (which then sticks, since pending has self-cleared at :2793). So the \"silently diverges into a locked pool\" danger is materially weaker than stated — it is a visible, recoverable revert, not a hidden DB divergence carried into the auction.",
+          "notes": "Real bug, correctly root-caused as a TEAMIDGUARD sibling living inside LeagueBuilderDraftSetup.tsx (same \"saveTeam is a full replace, caller flushes a captured snapshot\" pattern). Downgrade to LATENT: requires a sub-500ms reorder→tab-switch→archetype-pick race, and the clobber is visible/recoverable in the ArchetypePicker rather than a silent locked-pool divergence. Still worth fixing cheaply — either add teams/selectedTeam awareness so the flush re-reads the current record, or have flushBoardRankOverrides merge only boardRankOverrides onto the latest stored team (read-modify-write) instead of writing the frozen snapshot. Note the same stale-snapshot flush also affects any other field changed within the window (farmArchetypeKey, gmSeatId, gmSeatName, controlledBy via handleOwnerChange :2635-2641), so the fix should be the merge-on-flush approach rather than field-specific guarding."
+        }
+      }
+    ],
+    "refuted": [
+      {
+        "gap": {
+          "id": "MONEY-2",
+          "title": "Custom salary-cap override doesn't rescale the luxury-tax band table",
+          "class": "LATENT",
+          "evidence": "registerPool (leagueConstruction.ts:312-319): tierCap: cfg.salaryCap ?? computePoolTierCap(...) picks up the custom override, but luxuryCaps: LUXURY_CAP_TABLES[cfg.tier] is looked up purely by tier key and never adjusted for a custom cap that differs from that tier's default.",
+          "detail": "If JK sets THE MONEY well below or above the tier's par value (advisory-only warning fires outside the 0.5x-2x band, salaryCapInput.ts:30-35, but nothing blocks it), the luxury-tax thresholds that capIdentity shifts against stay pinned to the unmodified tier table. At an extreme low custom cap this could make every purchase look 'over the tax bands' relative to a much smaller total budget, distorting CPU shill/club tax-aware bidding behavior. This only manifests with a deliberately extreme custom cap (an unusual sequence a normal user is unlikely to hit without already seeing the advisory warning), and the tax deduction path itself is otherwise correctly wired (see MONEY-1 detail) — hence LATENT, not confirmed as a practical bug.",
+          "dimension": "MONEY"
+        },
+        "verdict": {
+          "gap_id": "MONEY-2",
+          "verdict": "REFUTED",
+          "evidence": "LUXURY_CAP_TABLES[tier].cap is a per-stat RATING-SUM concentration cap, not a dollar band: tierParams.ts:75 (`cap: number; // tier-scaled neutral cap (rating-sum)`), rows e.g. tierParams.ts:104 (hitters POW topN=8 cap=585.7). luxuryTax (leagueConstruction.ts:253-281) sums player RATINGS (playerRating, leagueConstruction.ts:246-251), subtracts row.cap (line 267), and charges a fixed dollar penalty from the row's own penaltyPer100/minAdder (line 270) — it NEVER references tierCap, the salary cap, or the total budget. The claim's stated mechanism (\"every purchase look over the tax bands relative to a much smaller total budget\") does not exist in code. The budget/luxury-cap independence is deliberate and documented: leagueConstruction.ts:299-300 (\"Luxury caps stay tier-fixed (separate rating-concentration lever)\") and archetypeBalanceSimulator.ts:13 (three distinct levers: shiftLuxuryCaps = per-stat caps, luxuryTax = over-cap concentration, computePoolTierCap = the budget). The engine test leagueConstruction.test.ts:531-532 explicitly locks the invariant that a custom salaryCap override changes tierCap but leaves luxuryCaps pinned to LUXURY_CAP_TABLES[tier] — the exact behavior the claim calls a bug is a characterized, asserted contract. registerPool (leagueConstruction.ts:312-323) correctly routes cfg.salaryCap to tierCap only; luxuryCaps is orthogonal by design.",
+          "notes": "Claim misidentifies the object: it treats a rating-concentration cap table as a dollar luxury-tax band table that should scale to the budget. It should not — they are two intentionally orthogonal levers (money = tierCap; rating concentration = luxuryCaps), documented and test-locked. The described divergence path is fabricated (no purchase-vs-budget comparison in luxuryTax) and directionally backwards (a low custom cap buys lower-rated players → fewer, not more, cap breaches). Not a member of any target hazard class (no two-writer, clobber, staleness, dangling-ref, or snapshot-vs-reference issue). The only residual is a pure tuning opinion (fixed-dollar penalties vs a deliberately tiny custom budget), which is not a bug and is already gated by the advisory 0.5x-2x band warning. Refuted with file:line proof."
+        }
+      },
+      {
+        "gap": {
+          "id": "SB-3",
+          "title": "Roster-design pins (even on unlocked designs) are editable after a pool-first lock and silently change what a re-extract would hard-keep",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "RosterDesigner's disabled prop is `Boolean(setupMutationBlockMessage) || busy` (LeagueBuilderDraftSetup.tsx:4178), not poolEditingBlocked. rosterDesignPinPlayerIds (:1938-1943) is built from EVERY human team's pins regardless of lockedAt, and buildPoolFirstShapeResult folds it into hardKeepIds (:2478-2479), which extractPoolFromDemand treats as pinnedIds.",
+          "detail": "A user can, after locking a pool-first pool, open an unlocked club's roster designer and pin/unpin players. This has zero effect on the already-locked pool membership and zero staleness signal — the only place it shows up is a would-be re-extract, which nothing prompts the user toward (no modeAFinalizedDisplayMismatch equivalent exists for pool-first).",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-3",
+          "verdict": "REFUTED",
+          "evidence": "Factual observations verified: RosterDesigner disabled prop = Boolean(setupMutationBlockMessage)||busy (LeagueBuilderDraftSetup.tsx:4178); setupMutationBlockMessage is null when no saved draft, NOT gated on locked (:1597) vs poolEditingBlocked = locked||savedDraftMutationBlocked (:1591); RosterDesigner internal readOnly = disabled||Boolean(lockedAt) keys off design lock not lockedPool (RosterDesigner.tsx:521), so pins stay editable on an unlocked design after pool-first lock; rosterDesignPinPlayerIds is unconditional (:1938) and folds into hardKeepIds in buildPoolFirstShapeResult (:2478-2479). BUT the hazard collapses at consumption: the draft consumes the locked pool membership, not rosterDesignPinPlayerIds. The sole consumer of that pin set is the pool-first re-extract regenerateProductionPool (:2879), and ALL THREE of its UI triggers are disabled while locked — regenerate (:4567), reroll (:4575), reset (:4581) — each disabled={poolEditingBlocked||...}, and poolEditingBlocked includes locked (:1591). So post-lock pin edits cannot feed any extract until the user clicks UNLOCK (:4597); after unlock, re-extraction is a deliberate rebuild-from-current-settings, which is expected behavior.",
+          "notes": "Real code observations, wrong classification. The claim's own Detail concedes \"zero effect on the already-locked pool membership\" — a CONFIRMED-HAZARD requires a divergence path the draft consumes, and none exists: the draft reads the frozen locked pool, and every pin-consuming re-extract button is disabled by poolEditingBlocked (which includes locked). Correct class = SAFE (single consumer, lock-gated at the button level). assertPoolCanMutate (:2574) omits a locked check, but that is redundant defense-in-depth since the button gate covers all reachable entry points — not a hole. The only residual is a missing staleness banner for an unlocked design drifting after a pool lock, which is a cosmetic UX nicety on a deliberately-frozen object, not a draft-consumed bug. No overlap with TEAMIDGUARD (capIdentity) — this is a different field. Recommend not surfacing to JK as a hazard."
+        }
+      },
+      {
+        "gap": {
+          "id": "SB-11",
+          "title": "farmArchetypeKey is absent from the basis snapshot in both modes — not traced to a confirmed consumption point within this investigation's scope",
+          "class": "LATENT",
+          "evidence": "buildPoolExtractedBasis's identityByTeamId only ever reads mlbArchetypeKey (LeagueBuilderDraftSetup.tsx:906). Every selectedArchetypes construction in this file (:2447-2449, :2475-2477) reads only mlbArchetypeKey. No reference to farmArchetypeKey was found feeding extractPoolFromDemand or the MLB auction's bidding logic in the files inspected.",
+          "detail": "This appears to be intentional and benign — farm identity likely drives a separate farm/prospect draft pipeline that this investigation didn't trace end-to-end (out of the requested surface list). Flagging as LATENT rather than SAFE because I did not positively confirm where farmArchetypeKey IS consumed or whether that consumer has its own staleness needs; recommend a follow-up pass on the farm draft pipeline specifically if JK wants full closure.",
+          "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+        },
+        "verdict": {
+          "gap_id": "SB-11",
+          "verdict": "REFUTED",
+          "evidence": "buildPoolExtractedBasis snapshots only mlbArchetypeKey (LeagueBuilderDraftSetup.tsx:906) — correct, because the MLB pool it governs is built exclusively from mlbArchetypeKey: selectedArchetypes maps mlbArchetypeKey at LeagueBuilderDraftSetup.tsx:2447-2449 and :2475-2477, fed to extractPoolFromDemand at :2451 and :2480; no farmArchetypeKey reference anywhere in MLB pool extraction. farmArchetypeKey's actual consumption points are all LIVE reads at farm-draft time: leagueBuilderStartupFarmDraft.ts:874 builds pick order from state.team.farmArchetypeKey per build; :1081-1090 applies scoutOverallTierForPosition/scoutToolBands using live pickSlot.farmArchetypeKey; LeagueBuilderFarmAuctionDraft.tsx:443 and :576 read teamById.get(...)?.farmArchetypeKey live. In every case it drives only scout confidence/grade-reveal bands, not pool composition — the persisted prospectPool is draft.draftClass (leagueBuilderStartupFarmDraft.ts:1225), independent of farmArchetypeKey. grep of src/ finds NO farm-specific pool basis or staleness structure (no farmPoolBasis/farmExtracted/farm-side basisStale).",
+          "notes": "The STALE-BASIS precondition (a locked snapshot keyed on farmArchetypeKey that live edits could silently diverge from) does not exist. farmArchetypeKey is read live at every consumption point, so a post-lock edit takes effect immediately rather than diverging. Its absence from the MLB pool basis is intentional and benign, not a coverage gap. Correct classification is SAFE (live single read, no snapshot to go stale), a downgrade from the claimed LATENT to no-hazard. The claimant's own admission that consumption was untraced is exactly the gap closed here. Note (out of scope, not a draft-pool hazard): persisted scout descriptors' specialties/weaknesses ARE seeded from farmArchetypeKey at scout generation (draftStaffingPersistence.ts:185-189) while the band tier at consumption is live — a minor mixed snapshot/live behavior inside the scout-staffing pipeline, which is explicitly documented as draft-session-only/deferred (leagueBuilderStartupFarmDraft.ts:276); it does not affect the MLB pool basis SB-11 concerns."
+        }
+      },
+      {
+        "gap": {
+          "id": "F2",
+          "title": "The pool/board re-extract staleness detector is archetype-KEY-only -- it never inspects capIdentity content, so a legacy (non-archetype) team's cap-identity edits after pool lock never trigger a re-extract warning",
+          "class": "CONFIRMED-HAZARD",
+          "evidence": "src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:897-920 (`buildPoolExtractedBasis` builds `identityByTeamId[teamId] = teamsById.get(teamId)?.mlbArchetypeKey ?? null` -- keyed purely on the archetype label, never on `team.capIdentity`); :922-961 (`poolBasisStaleLines` compares only that `identityByTeamId` map, plus cap/poolSizeMultiplier/shills/sourceLeagueIds -- no capIdentity comparison anywhere); :2049-2076 (`basisStale`/`poolTrailing` -- the ONLY 're-extract needed' signal shown to the user -- derives solely from `poolBasisStaleLines`); TEAMIDGUARD contract (spec-docs/contracts/CONTRACT_TEAMIDGUARD_2026-07-09.md, ruling item 2) explicitly keeps a legacy 'Team Identity (Cap)' editor for non-archetype teams as a supported, intended v1 path; src/src_figma/app/hooks/useAuctionDraft.ts:206-217 (`buildAuctionLuxuryTaxContext` reads `team.capIdentity` LIVE, per lot, feeding real per-lot luxury-tax math via `auctionMarginalTaxWithCaps` -- confirming capIdentity content genuinely drives live draft economics regardless of whether a team has an archetype).",
+          "detail": "For a team with no `mlbArchetypeKey` (using the legacy Team Identity (Cap) editor on the Teams page -- a real, supported product path per the TEAMIDGUARD ruling), `identityByTeamId[teamId]` evaluates to `null` both before AND after any cap-identity edit, since the comparison only ever looks at the archetype key. So editing that team's increase/decrease mod picks (which DOES change the capIdentity object the live auction reads every lot for tax math and CPU band-priority bidding behavior) after the pool has been extracted/locked produces ZERO 'settings changed since extraction, re-extract' warning -- the one mechanism designed to catch exactly this class of drift is structurally blind to it for any team using the legacy identity path. It is also blind to a capIdentity divergence on an ARCHETYPE team that didn't also change the key -- i.e. this detection gap will outlive the TEAMIDGUARD write-path fix, because the detector never inspects capIdentity's actual content, only the label next to it.",
+          "dimension": "SILENT-CLOBBER + shape drift on save paths (league builder / team setup)"
+        },
+        "verdict": {
+          "gap_id": "F2",
+          "verdict": "REFUTED",
+          "evidence": "capIdentity is consumed LIVE, never snapshotted, so no locked-pool-vs-settings divergence can exist. (1) useAuctionDraft.ts:214 builds the tax context's identityByTeamId directly from the CURRENT leagueTeams records: `new Map(input.leagueTeams.map((team) => [team.id, team.capIdentity]))`. (2) That context is rebuilt on every auction load/resume from live team records at useAuctionDraft.ts:592 and :697 (leagueTeams: nextLeagueTeams), and consumed per lot at :523. (3) The 'locked pool' RegisteredPool holds NO capIdentity — leagueConstruction.ts:37-46 lists only players/tierCap/luxuryCaps/pickValueChart/totalSlots; luxuryCaps are tier-fixed (leagueConstruction.ts:319 `LUXURY_CAP_TABLES[cfg.tier]`, test :512 'luxury caps stay tier-fixed'), and tier derives from cap which IS already in the staleness basis (LeagueBuilderDraftSetup.tsx:929). (4) Pool composition does not depend on capIdentity — poolFromDemand.ts has zero references to it; composition is archetype-driven, which is exactly why the staleness basis correctly keys identity on mlbArchetypeKey (LeagueBuilderDraftSetup.tsx:906). capIdentity is applied to base caps live at tax time (auctionLuxuryTax.ts:16-40 via shiftLuxuryCaps), not baked into the pool.",
+          "notes": "The claim's factual observations are all correct (buildPoolExtractedBasis keys on mlbArchetypeKey only; poolBasisStaleLines never compares capIdentity; capIdentity drives live tax math), but the CONFIRMED-HAZARD conclusion is backwards. The re-extract staleness detector protects SNAPSHOTTED pool state (composition + tier caps + dial + shills + sources). capIdentity is not part of any snapshot — it is a live per-lot input rebuilt from current team records on every auction load. Editing a legacy team's mod picks after pool lock is reflected immediately the next time the context builds; there is no silent divergence. Decisive point: even if the detector fired a warning and the user re-extracted, the redraw replaces PLAYERS, not capIdentity — re-extract is a no-op remedy for capIdentity, proving the staleness warning is structurally the wrong mechanism for it and its omission is correct, not a gap. The claim's own cited evidence ('reads capIdentity LIVE, per lot') is itself the refutation: live-read is the opposite of a staleness hazard. Correct classification: SAFE (single live-read consumption; staleness-detection not applicable). One unrelated LATENT note out of scope for F2: editing capIdentity mid-continuous-auction would recompute subsequent-lot tax on new caps while already-settled charges used old caps — but that is a live-mutation concern, not the missing-re-extract-warning divergence F2 claims, and requires the unusual sequence of navigating to the Teams editor mid-draft."
+        }
+      }
+    ],
+    "safe": [
+      {
+        "id": "MONEY-3",
+        "title": "Draft Setup's own salary-cap edit path is fully gated across the lock -> draft-start window",
+        "class": "SAFE",
+        "evidence": "poolEditingBlocked = locked || savedDraftMutationBlocked (LeagueBuilderDraftSetup.tsx:1591) disables both the salary-cap input (readOnly={poolEditingBlocked}, line 3460) and the Apply/Reset buttons (lines 3470, 3481) for the ENTIRE window from LOCK POOL through an active saved auction session. startReady itself requires poolReady = locked && sufficiency.meetsFloor for a fresh draft (lines 2254, 2256), and handleStartDraft double-checks startReady before navigating (line 3067), with the button itself disabled={busy || !startReady} (line 4677).",
+        "detail": "Within Draft Setup alone there is no reachable window to edit THE MONEY between lock and draft start — the only reachable divergence path runs through the separate League Editor surface (MONEY-1).",
+        "dimension": "MONEY"
+      },
+      {
+        "id": "MONEY-4",
+        "title": "Auction session init always re-derives the budget fresh from the live league record — a mid-session cap edit can't retroactively corrupt an in-progress draft",
+        "class": "SAFE",
+        "evidence": "useAuctionDraft.ts initAuction (line 640-643) sets sessionPool.tierCap = resolveLeagueSalaryCap(league) every time a NEW auction session is created, ignoring whatever tierCap was baked into the locked pool snapshot. loadAuction (lines 573-614), used to RESUME an existing session, never re-reads league.salaryCap at all — it restores each team's already-computed budgetRemaining from the persisted session row (getAuctionSession, leagueBuilderStorage.ts) and simply resumes CPU auto-advance.",
+        "detail": "Because the League Editor's guard (MONEY-1) DOES trip once a saved auction session exists (useSavedAuctionMutationGuard reads getAuctionSession and blocks on any non-AUCTION_COMPLETE row), there is no reachable path to edit league.salaryCap while a draft is actually in progress — the risk window is bounded to before the first 'Start/Resume' persist, matching MONEY-1's characterization exactly.",
+        "dimension": "MONEY"
+      },
+      {
+        "id": "MONEY-5",
+        "title": "No per-team budget override exists anywhere in the data model",
+        "class": "SAFE",
+        "evidence": "Team interface (leagueBuilderStorage.ts:192-260) has no budget/cap dollar field; resolveLeagueSalaryCap (leagueBuilderStorage.ts:183-184) takes only Pick<LeagueTemplate,'salaryCap'|'tier'>; buildAuctionTeams (leagueBuilderAuctionPipeline.ts:123-152) and buildPureShillAuctionTeams (useAuctionDraft.ts:351-371) both derive every team's starting budgetRemaining from the single sessionPool.tierCap value, with no team-specific override input anywhere in either function signature.",
+        "detail": "The salary cap is confirmed strictly league-wide and uniform across every real club and every pure-pressure shill for a given draft session — closing off any TWO-WRITER concern rooted in a hypothetical per-team money field.",
+        "dimension": "MONEY"
+      },
+      {
+        "id": "SB-6",
+        "title": "Design-first mode is genuinely well-covered — two independent, largely redundant safety nets bound the worry there",
+        "class": "SAFE",
+        "evidence": "Net 1 (explicit field diff): poolBasisStaleLines (LeagueBuilderDraftSetup.tsx:922-961) explicitly compares cap, poolSizeMultiplier, shills, sourceLeagueIds, and per-team mlbArchetypeKey against the snapshot taken at extraction time (buildPoolExtractedBasis, :897-920), surfacing plain-language re-extract lines. Net 2 (live recompute-and-diff): modeAFinalizedDisplayMismatch (:2064-2068) recomputes the FULL extraction (buildModeAResult, :2439-2471, whose deps include humanTeams, leagueTeams, league, universePlayers, poolQualityCenter, shills, tierBudget, lockedDesignPinPlayerIds) on every relevant change and diffs the resulting player-ID set against what's actually displayed/locked (displayedPoolIds, :2060-2063). Either signal sets poolTrailing=true (:2076), which blocks startReady (:2256-2260) until the user re-extracts.",
+        "detail": "Net 2 is the more important one: because it re-derives the WHOLE extraction result and diffs actual player IDs, it catches drift from fields that were never explicitly enumerated in the basis snapshot too — poolQualityCenter, the hand-add/hand-remove ledger, human/CPU control flags, and team-count changes are all deps of buildModeAResult and therefore all covered, even though only cap/poolSizeMultiplier/shills/sourceLeagueIds/mlbArchetypeKey are explicitly diffed by name. This is a strong design pattern; it just was never extended to pool-first (see SB-1).",
+        "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+      },
+      {
+        "id": "SB-7",
+        "title": "Cap, pool-size multiplier, and draft pool sources are hard-blocked (not just staleness-flagged) while the pool is locked, in both modes",
+        "class": "SAFE",
+        "evidence": "poolEditingBlocked = locked || savedDraftMutationBlocked (LeagueBuilderDraftSetup.tsx:1591). THE MONEY cap input is `readOnly={poolEditingBlocked}` and Apply is `disabled={... || poolEditingBlocked ...}` (:3460, :3470), with an explicit 'UNLOCK THE POOL TO MOVE THE MONEY' message (:3447). The pool-size dial buttons use `disabled={poolEditingBlocked || busy}` (:3421). The source-leagues checkbox list uses `disabled={poolEditingBlocked || busy}` (:3773). All three controls render unconditionally across both pool-mode branches (moneyControl/poolSizeDial at :4292-4293 and :4463; sourceLeaguesPanel at :4224 and :4459), so this protection applies to pool-first as well as design-first.",
+        "detail": "This bounds part of the worry: the three settings with the most direct, first-order effect on 'how big is the pool and where do the players come from' cannot be touched at all once locked, in either mode — the user must explicitly unlock (which flips locked back to false and forces re-evaluation of readiness) before touching them. The remaining hazard surface is specifically the settings that are NOT gated by poolEditingBlocked (identity, roster-design pins, quality center/preset, team count, human/CPU flags) — see SB-2 through SB-5.",
+        "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+      },
+      {
+        "id": "SB-8",
+        "title": "Reserve price (reservePriceK) cannot go stale by construction — it's read live at the one-time draft-start commit, then correctly frozen inside the saved session afterward",
+        "class": "SAFE",
+        "evidence": "handleStartDraft navigates with the CURRENT in-memory reservePriceK (LeagueBuilderDraftSetup.tsx:3066-3069, `draftRouteForLeague(league, { shillCount: shills, reservePriceK })`). On the auction page, beginAuction() only fires `auction.initAuction(..., { reserveFractionK: requestedReservePriceK, ... })` (LeagueBuilderAuctionDraft.tsx:1657-1665) when `!session` — i.e., only on a genuinely fresh start. Once a session exists, config values are read from `session.config` (e.g. :1612 `session?.config.bidIncrement ?? ...`), not re-derived from the URL/live state.",
+        "detail": "There's no two-stage lock-then-drift window for this setting the way there is for the player pool, so the STALE-BASIS pattern doesn't apply to it — it's either fresh at the moment it's committed, or already frozen inside a resumable session. Not a hazard.",
+        "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+      },
+      {
+        "id": "SB-9",
+        "title": "Board-rank overrides and pin lists are defensively coded against dangling references to players who leave the pool",
+        "class": "SAFE",
+        "evidence": "materializeRankOrder (RankReorderList.tsx:101-124) explicitly drops any overrideId not found in the current natural list (`if (!item) continue;`, line 113) before placing the remainder in worth order — documented at lines 90-93 as intentional ('dropping any override id no longer present in natural — e.g. a player who left the pool'). lockedDesignPinPlayerIds and rosterDesignPinPlayerIds (LeagueBuilderDraftSetup.tsx:1930-1943) both filter pin ids through `universePlayerIds.has(playerId)` before use.",
+        "detail": "Checked this specifically because a locked-then-re-extracted (design-first) or hand-edited pool routinely removes players that a GM's board-rank overrides or pins reference. Both surfaces silently drop the stale id rather than crashing or phantom-preserving it — this class of DANGLING-REF hazard is verified closed for these two data structures.",
+        "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+      },
+      {
+        "id": "SB-10",
+        "title": "Individual team-editor edits (name/colors/stadium/capIdentity/farmCapIdentity) don't feed pool extraction, so their weaker save-guard doesn't create a STALE-BASIS gap — but the guard itself is worth naming as the general pattern",
+        "class": "SAFE",
+        "evidence": "LeagueBuilderTeams.tsx handleSave's teamData payload (lines 609-643) has no mlbArchetypeKey/farmArchetypeKey field at all — only cosmetic/backstory/capIdentity/farmCapIdentity fields. capIdentity is read live during the auction for bid-tilt shaping (LeagueBuilderAuctionDraft.tsx:1039, :1364), not for pool composition. Team saves/deletes on that page are gated by useSavedAuctionMutationGuard (LeagueBuilderTeams.tsx:280, :295, :666-667) — the same 'only blocks once an actual saved auction session exists' guard as SB-5, which has no awareness of the draft-setup page's locked pool state.",
+        "detail": "This confirms the capIdentity finding JK already has (TEAMIDGUARD) is a SILENT-CLOBBER bug, not a STALE-BASIS gap — capIdentity is read fresh at draft time, so a wrong value is a live-behavior bug, not a staleness-detection miss. Flagging this as SAFE for the STALE-BASIS dimension specifically, per the instruction not to re-report that field. The underlying guard pattern (useSavedAuctionMutationGuard, blind to draft-setup's lock state) is the same one implicated in SB-5 for teamIds — worth JK knowing it's one guard shared by three different pages (LeagueBuilderTeams, LeagueBuilderLeagues, LeagueBuilderPlayers) all of which are blind to 'the draft-setup pool is locked.'",
+        "dimension": "STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system"
+      },
+      {
+        "id": "SEATS-07",
+        "title": "boardRankOverrides / rosterDesign.rankOverrides dangling player ids are handled safely by design",
+        "class": "SAFE",
+        "evidence": "materializeRankOrder explicitly drops any override id not present in the current `natural` list before placing the rest (src/src_figma/app/components/shared/RankReorderList.tsx:101-124), with an in-code comment calling out exactly this case ('dropping any override id no longer present in natural — e.g. a player who left the pool').",
+        "detail": "A stale player id left behind in a team's boardRankOverrides.global/byPosition after the pool changes (team rename/reorder, re-extraction, a player leaving the pool) is silently ignored on read rather than causing a crash or a phantom board entry. This bounds one of the four requested hazard classes (DANGLING-REF) to 'handled' for this specific field.",
+        "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+      },
+      {
+        "id": "SEATS-08",
+        "title": "Dangling rivalry opponentTeamId (from a deleted team) is safe at its one real consumption point; only a cosmetic blank-select remains in the Teams editor",
+        "class": "SAFE",
+        "evidence": "normalizeTeamRivalries only filters on 'is a nonempty string' (src/src_figma/app/engines/reporter/reporterContext.ts:339-344), but every actual USE of the result does a `.find(rivalry => rivalry.opponentTeamId === awayTeamId)` against a team id that is guaranteed to exist (the other team currently in the game) — lines 472-475 and 609-612. A rivalry pointing at a deleted team simply never matches and falls through to the `?? 0` default; no crash, no wrong value substituted.",
+        "detail": "The only place a dangling `opponentTeamId` is even mildly visible is cosmetic: the Teams-page rivalry editor's `<select value={rivalry.opponentTeamId}>` (LeagueBuilderTeams.tsx:1600-1611) has no matching `<option>` for a deleted opponent (options come from live `sameLeagueTeams`/`opponentOptions`, line 1584), so the dropdown renders blank until the user touches it — a UI polish gap, not a data-integrity one, since `handleDelete` never cleans up sibling teams' `rivalries[]` arrays and nothing downstream needs it to.",
+        "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+      },
+      {
+        "id": "SEATS-09",
+        "title": "Auction start correctly snapshots live team/seat/identity data exactly once — the intended SNAPSHOT-VS-REFERENCE pattern is implemented correctly",
+        "class": "SAFE",
+        "evidence": "initAuction (src/src_figma/app/hooks/useAuctionDraft.ts:616-704) builds `nextLeagueTeams` from the live `leagueData.teams` at the moment it's called, derives `realTeams`/`buildClubCpuProfiles` from that exact snapshot, and persists the result into the session (`persist(initialized, nextContext)`, line 702). initFarmAuction follows the identical pattern in useFarmAuctionDraft.ts. Resuming a session (loadAuction/loadFarmAuction) re-reads live roster/budget state for legitimate reasons (committed picks since last visit) but the CPU bidding profiles (`cpuShills`) are only ever added to via `healMissingClubCpuProfiles`, which adds a profile for a team newly flagged AI that's already in the frozen `nominationOrder` — it never rewrites an existing profile, so a mid-session seat edit (where reachable — see SEATS-04) doesn't silently reshape an in-flight CPU's bidding behavior once bidding has started for that team.",
+        "detail": "This bounds the 'SNAPSHOT-VS-REFERENCE confusion' hazard class: draft-start correctly treats live team records as the authoritative input at exactly one moment (session creation), then treats the persisted session as the source of truth for everything auction-mechanical thereafter. The genuine risk isn't a snapshot/reference mixup — it's that record edits are getting through during the live window at all on the farm side (SEATS-04), which is a mutation-guard gap, not a snapshot-design gap.",
+        "dimension": "SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock."
+      },
+      {
+        "id": "F4",
+        "title": "IV and salary — the actual auction pricing basis — genuinely freeze at lock/registration and are immune to post-lock rating edits",
+        "class": "SAFE",
+        "evidence": "registerLeaguePoolForLeague (src/utils/leagueBuilderPoolRegistration.ts:114-125) computes `iv: calculateIvBaseSalary(toSalaryPlayer(player)).ivBase` and `salary: player.salary` once, at registration/lock time, and persists them onto RegisteredPool.players (PoolPlayerPriced = {id, iv, salary}, leagueConstruction.ts:28). buildAuctionPlayers (leagueBuilderAuctionPipeline.ts:81-93) and buildAuctionTeams's committed-roster salary lookup (:128-149) both read exclusively from this frozen pool.players array, never re-deriving iv/salary from a live player fetch.",
+        "detail": "This bounds the worry for the pricing engine specifically: a post-lock rating edit does not retroactively reprice a player already in the locked pool. The hazard is confined to the fields that are NOT part of {iv, salary} — position/legality (F2) and the tax-context inputs (F3).",
+        "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+      },
+      {
+        "id": "F5",
+        "title": "Once an auction session is actually active, player edits ARE comprehensively blocked",
+        "class": "SAFE",
+        "evidence": "useSavedAuctionMutationGuard (savedAuctionMutationGuard.ts:49-68) filters to `row.session.state !== 'AUCTION_COMPLETE'` and sets `lockedPlayerIds = Object.keys(row.session.players)` — which, since session.players is built from the ENTIRE locked pool (buildAuctionPlayersWithPositions(sessionPool), useAuctionDraft.ts:662, sessionPool = the full locked pool), covers every player who could matter to the running draft, not just already-nominated ones. LeagueBuilderPlayers.tsx enforces this both on the modal-open block (:296-298, 567-568) and on the delete path (:695-698).",
+        "detail": "This closes the mid-draft edit vector for the one player-editing surface I found. Combined with F1, the exposure window is precisely bounded to 'pool locked, draft not yet started' — not the whole draft lifecycle.",
+        "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+      },
+      {
+        "id": "F6",
+        "title": "Pinned-player references (design-first roster designer) degrade gracefully on deletion or pool removal",
+        "class": "SAFE",
+        "evidence": "pinDisplayBySlot (RosterDesigner.tsx:460-496) resolves `poolPlayer = designPlayerById.get(playerId)` and sets `orphaned: !poolPlayer` (:490) — true whether the player left the pool's membership OR was deleted from the app entirely (both leave designPlayerById without an entry). The name fallback chain (:487, `poolPlayer?.name ?? (fullPlayer ? ... : playerId)`) prevents a crash even if fullPlayerById also lacks the record. The UI surfaces this as 'PINNED: X — LEFT THE POOL. RE-EXTRACT CAN BRING HIM BACK.' (:1051).",
+        "detail": "This is the DANGLING-REF class the brief asked about, and it's handled correctly — no silent stale display, no crash.",
+        "dimension": "PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)"
+      },
+      {
+        "id": "F3",
+        "title": "Backup/restore and cloud sync are raw whole-record round-trips -- no field-level schema reconstruction, so newer Team fields survive untouched",
+        "class": "SAFE",
+        "evidence": "src/utils/backupRestore.ts:1126-1154 (`exportDatabase` is a plain `store.getAll()` per store, no per-record transform); :1297-1376 (`restoreDatabase` is a plain `store.put(item)` per record, no per-record transform); :780-839 (the declared `kbl-league-builder` backup schema lists 11 stores at version 8 -- leagueTemplates, globalTeams, globalPlayers, rulesPresets, teamRosters, leaguePlayerOverrides, scoutProfiles, startupDraftSessions, registeredPools, mlbDraftSessions, auctionSessions); src/utils/leagueBuilderStorage.ts:48-62 (the live `DB_VERSION = 8` and `STORES` registry lists the exact same 11 stores) -- no missing/orphaned store between the two registries; src/utils/syncEngine.ts:42,52,62,73,98-99,359 (`upsert(dbName, storeName, recordKey, data: unknown)` -- the cloud sync payload type is an opaque `unknown` blob, not a field-mapped schema).",
+        "detail": "Because both the manual backup/restore path and the cloud sync path move whole records as opaque blobs (IndexedDB `getAll()`/`put()`, or an untyped `data` column), `capIdentity.rawShift`, `boardRankOverrides`, `mlbArchetypeKey`, and `rosterDesign` all round-trip byte-identical through backup/restore or sync. If a record was already clobbered by one of the save-path bugs above BEFORE the backup/sync ran, the backup faithfully preserves the already-clobbered value (garbage in, garbage out) -- but the backup/restore/sync layer itself introduces no ADDITIONAL field loss. This bounds the 'does the backup/restore registry silently strip a newer field' worry the dimension asked about: it does not, for this database.",
+        "dimension": "SILENT-CLOBBER + shape drift on save paths (league builder / team setup)"
+      },
+      {
+        "id": "F4",
+        "title": "Saved auction-session team state never embeds capIdentity/boardRankOverrides/mlbArchetypeKey -- those are always re-read live per lot, not snapshotted at draft start",
+        "class": "SAFE",
+        "evidence": "src/engines/auctionStateMachine.ts:1304-1321 (`normalizeTeam` builds `AuctionTeamState` from only `teamId, budgetRemaining, rosterSlotsRemaining, minSalary, projectedTax, roster` -- no identity/board fields at all); src/src_figma/app/hooks/useAuctionDraft.ts:206-217 (`buildAuctionLuxuryTaxContext` builds `identityByTeamId` from the live `leagueTeams` prop on every call, not from anything persisted inside the auction session); :304-319 (`buildClubCpuProfileForTeam`/`buildClubCpuProfiles` likewise read `team.mlbArchetypeKey`/`resolveClubBandPriorities(team)` from the live `leagueTeams` array).",
+        "detail": "Because the persisted auction/draft session never snapshots a team's identity or board-ranking fields, there is no SNAPSHOT-VS-REFERENCE staleness risk on the auction-consumption side for those specific fields -- a live capIdentity edit takes effect on the very next lot rather than requiring a session restart. This narrows where the real risk lives: it's entirely in the SAVE paths on the Draft Setup / Teams pages (see F1, F2), not in what the auction engine reads at start or per lot.",
+        "dimension": "SILENT-CLOBBER + shape drift on save paths (league builder / team setup)"
+      },
+      {
+        "id": "F6",
+        "title": "normalizeCapIdentity is the only object-reconstruction (non-spread) normalizer touching Team/League shapes anywhere in the codebase -- everything else preserves unknown fields",
+        "class": "SAFE",
+        "evidence": "src/src_figma/app/pages/LeagueBuilderTeams.tsx:147-156 (`normalizeCapIdentity` returns a hand-built `{bandPriorities, increase, decrease}` literal -- drops `rawShift`; already tracked as the TEAMIDGUARD fix-in-flight, not re-reported here); src/utils/leagueBuilderStorage.ts:698-709 (`normalizePlayerRecord` = `{...player, ...}` spread-based); :711-723 (`normalizeLeagueTemplateRecord` = `{...template, ...}` spread-based); :739-743 (`normalizeLeaguePlayerOverrideRecord` = `{...record}` spread-based). A full grep of every `function normalize*` in src/ (~100 hits) turned up no other object-reconstruction pattern operating on the Team or League record shape itself -- the rest are scalar/enum normalizers (position, hand, mojo, fitness, etc.) that don't touch whole-record persistence.",
+        "detail": "This bounds the dimension's 'grep for object-reconstruction normalizers on Team/League shapes' ask: normalizeCapIdentity is the sole instance, its exact bug is already the subject of the in-flight TEAMIDGUARD contract, and every other normalize-on-load path in the storage layer is spread-based and therefore forward-compatible with new optional fields by construction.",
+        "dimension": "SILENT-CLOBBER + shape drift on save paths (league builder / team setup)"
+      }
+    ]
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Sweep"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Verify"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "sweep:money",
+      "phaseIndex": 1,
+      "phaseTitle": "Sweep",
+      "agentId": "a92f23c8582b25fb0",
+      "model": "claude-sonnet-5",
+      "state": "done",
+      "startedAt": 1783605861930,
+      "queuedAt": 1783605860133,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "MONEY",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606322386,
+      "tokens": 165261,
+      "toolCalls": 48,
+      "durationMs": 460456,
+      "resultPreview": "{\"dimension\":\"MONEY\",\"findings\":[{\"id\":\"MONEY-1\",\"title\":\"League Editor writes the same auction budget field but ignores pool-lock state — Draft Setup's own edit-wall doesn't cover it\",\"class\":\"CONFIRMED-HAZARD\",\"evidence\":\"league.salaryCap has TWO writers: (1) LeagueBuilderDraftSetup.tsx 'THE MONEY' widget — input readOnly={poolEditingBlocked} (line 3460), Apply button disabled={...poolEditingBlo…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "sweep:basis-staleness",
+      "phaseIndex": 1,
+      "phaseTitle": "Sweep",
+      "agentId": "a0a42d5f7de65a5a6",
+      "model": "claude-sonnet-5",
+      "state": "done",
+      "startedAt": 1783605865614,
+      "queuedAt": 1783605860133,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "STALE-BASIS coverage — draft-setup + team-editor settings v…",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606414720,
+      "tokens": 161434,
+      "toolCalls": 53,
+      "durationMs": 549106,
+      "resultPreview": "{\"dimension\":\"STALE-BASIS coverage — draft-setup + team-editor settings vs. the poolTrailing/basisStaleLines readiness system\",\"findings\":[{\"id\":\"SB-1\",\"title\":\"The entire staleness system (poolTrailing/basisStaleLines) is design-first-only — pool-first mode has zero coverage of any kind\",\"class\":\"CONFIRMED-HAZARD\",\"evidence\":\"LeagueBuilderDraftSetup.tsx:2049-2053 gates basisStaleLines on `poolMod…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "sweep:teams-lifecycle",
+      "phaseIndex": 1,
+      "phaseTitle": "Sweep",
+      "agentId": "ad9e5080fc2281f17",
+      "model": "claude-sonnet-5",
+      "state": "done",
+      "startedAt": 1783605865754,
+      "queuedAt": 1783605860133,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS/TEAMS lifecycle — what breaks when teams change after…",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606516737,
+      "tokens": 221644,
+      "toolCalls": 82,
+      "durationMs": 650983,
+      "resultPreview": "{\"dimension\":\"SEATS/TEAMS lifecycle — what breaks when teams change after draft artifacts exist (add/delete/rename after pool extraction, after board-rank-overrides exist, after a saved auction session exists), seat/human-flag changes between lock and start, run-it-back / copy-league, and GM/archetype changes post-lock.\",\"findings\":[{\"id\":\"SEATS-01\",\"title\":\"Deleting a team never prunes it from le…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "sweep:player-edits",
+      "phaseIndex": 1,
+      "phaseTitle": "Sweep",
+      "agentId": "acaae649fc8f502ef",
+      "model": "claude-sonnet-5",
+      "state": "done",
+      "startedAt": 1783605861614,
+      "queuedAt": 1783605860133,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "PLAYER EDITS vs the locked pool (snapshot-vs-reference acro…",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606354962,
+      "tokens": 181977,
+      "toolCalls": 60,
+      "durationMs": 493348,
+      "resultPreview": "{\"dimension\":\"PLAYER EDITS vs the locked pool (snapshot-vs-reference across the auction pipeline)\",\"findings\":[{\"id\":\"F1\",\"title\":\"Pool lock freezes membership+IV but never blocks player-record edits — only an active auction SESSION does\",\"class\":\"CONFIRMED-HAZARD\",\"evidence\":\"assertPoolUnlocked (src/utils/leagueBuilderPoolBuilder.ts:210-215) is called only from addPlayersToLeaguePool (:223) and r…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "sweep:save-shapes",
+      "phaseIndex": 1,
+      "phaseTitle": "Sweep",
+      "agentId": "a78d18c7d6d52c3ff",
+      "model": "claude-sonnet-5",
+      "state": "done",
+      "startedAt": 1783605863984,
+      "queuedAt": 1783605860133,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SILENT-CLOBBER + shape drift on save paths (league builder …",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606514629,
+      "tokens": 194209,
+      "toolCalls": 68,
+      "durationMs": 650645,
+      "resultPreview": "{\"dimension\":\"SILENT-CLOBBER + shape drift on save paths (league builder / team setup)\",\"findings\":[{\"id\":\"F1\",\"title\":\"Board-rank autosave uses a stale team snapshot and silently reverts a concurrent archetype pick\",\"class\":\"CONFIRMED-HAZARD\",\"evidence\":\"src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:1896 (`pendingBoardRankOverrides` state holds `{team: Team; overrides}`); :4191-4207 (`onReo…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "verify:MONEY-1",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a7903ba0c4feaeb1c",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606519484,
+      "queuedAt": 1783606517917,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "MONEY-1",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606782866,
+      "tokens": 91663,
+      "toolCalls": 21,
+      "durationMs": 263382,
+      "resultPreview": "{\"gap_id\":\"MONEY-1\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"CONFIRMED core facts: (1) Two writers of league.salaryCap; the League Editor SAVE gates only on editingLeagueMutationBlocked (LeagueBuilderLeagues.tsx:158,247,946) -> isLeagueMutationBlocked (149-156) -> useSavedAuctionMutationGuard, which reads ONLY getAuctionSession for a non-AUCTION_COMPLETE active session (savedAuctionMutationGuard.ts:49-5…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 7,
+      "label": "verify:MONEY-2",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a2a421d803a433b7e",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606519405,
+      "queuedAt": 1783606517917,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "MONEY-2",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606612338,
+      "tokens": 83261,
+      "toolCalls": 10,
+      "durationMs": 92933,
+      "resultPreview": "{\"gap_id\":\"MONEY-2\",\"verdict\":\"REFUTED\",\"evidence\":\"LUXURY_CAP_TABLES[tier].cap is a per-stat RATING-SUM concentration cap, not a dollar band: tierParams.ts:75 (`cap: number; // tier-scaled neutral cap (rating-sum)`), rows e.g. tierParams.ts:104 (hitters POW topN=8 cap=585.7). luxuryTax (leagueConstruction.ts:253-281) sums player RATINGS (playerRating, leagueConstruction.ts:246-251), subtracts row…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 8,
+      "label": "verify:SB-1",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "abd6f255769f529ba",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606523714,
+      "queuedAt": 1783606517917,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-1",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606724173,
+      "tokens": 89885,
+      "toolCalls": 8,
+      "durationMs": 200459,
+      "resultPreview": "{\"gap_id\":\"SB-1\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"STRUCTURAL FACT — CONFIRMED exactly as claimed. In LeagueBuilderDraftSetup.tsx: basisStaleLines gates on poolMode===\\\"design-first\\\" (2049-2054, returns [] otherwise); modeAFinalizedDisplayMismatch gates on design-first (2064-2068); designsStale gates on design-first (2075); poolTrailing = designsStale || basisStale || modeAFinalizedDisplayMismat…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 9,
+      "label": "verify:SB-2",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "ac746580d418a397f",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606519961,
+      "queuedAt": 1783606517917,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-2",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606821929,
+      "tokens": 96778,
+      "toolCalls": 29,
+      "durationMs": 301968,
+      "resultPreview": "{\"gap_id\":\"SB-2\",\"verdict\":\"CONFIRMED\",\"evidence\":\"All cited file:line claims verified, and the gap is stronger than stated. (1) ArchetypePicker disabled = Boolean(setupMutationBlockMessage) || busy (LeagueBuilderDraftSetup.tsx:4162), and setupMutationBlockMessage is truthy ONLY on hasSavedDraft/lookupError/unchecked (:1597-1599) — NOT on pool lock. The stronger poolEditingBlocked = locked || … ex…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 10,
+      "label": "verify:SB-3",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a542eb9d416c8c2ff",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606525059,
+      "queuedAt": 1783606517917,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-3",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606737794,
+      "tokens": 82796,
+      "toolCalls": 16,
+      "durationMs": 212735,
+      "resultPreview": "{\"gap_id\":\"SB-3\",\"verdict\":\"REFUTED\",\"evidence\":\"Factual observations verified: RosterDesigner disabled prop = Boolean(setupMutationBlockMessage)||busy (LeagueBuilderDraftSetup.tsx:4178); setupMutationBlockMessage is null when no saved draft, NOT gated on locked (:1597) vs poolEditingBlocked = locked||savedDraftMutationBlocked (:1591); RosterDesigner internal readOnly = disabled||Boolean(lockedAt)…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 11,
+      "label": "verify:SB-4",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a6c8b256c99b734c3",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606519675,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-4",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606704931,
+      "tokens": 84003,
+      "toolCalls": 12,
+      "durationMs": 185256,
+      "resultPreview": "{\"gap_id\":\"SB-4\",\"verdict\":\"CONFIRMED\",\"evidence\":\"All five sub-claims verified at HEAD c0a24363:\\n\\n1. poolQualityCenter feeds extraction in BOTH modes: design-first buildModeAResult passes it (LeagueBuilderDraftSetup.tsx:2465), pool-first buildPoolFirstShapeResult passes both poolBalancePreset AND poolQualityCenter (:2493-2494). CONFIRMED.\\n\\n2. buildPoolExtractedBasis (:897-919) returns ONLY {c…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 12,
+      "label": "verify:SB-5",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a489279503efde0ac",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606614800,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-5",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606802460,
+      "tokens": 96404,
+      "toolCalls": 15,
+      "durationMs": 187660,
+      "resultPreview": "{\"gap_id\":\"SB-5\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"Claim's sub-facts verified TRUE: (1) basis-staleness is design-first-only — basisStaleLines gated on poolMode===\\\"design-first\\\" (LeagueBuilderDraftSetup.tsx:2050), modeAFinalizedDisplayMismatch gated (:2065), designsStale gated (:2075), all folding into poolTrailing (:2076) which is therefore always false in pool-first; (2) useSavedAuctionMutati…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 13,
+      "label": "verify:SB-11",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a64ac97c7c8d53634",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606710442,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-11",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606824666,
+      "tokens": 83854,
+      "toolCalls": 11,
+      "durationMs": 114224,
+      "resultPreview": "{\"gap_id\":\"SB-11\",\"verdict\":\"REFUTED\",\"evidence\":\"buildPoolExtractedBasis snapshots only mlbArchetypeKey (LeagueBuilderDraftSetup.tsx:906) — correct, because the MLB pool it governs is built exclusively from mlbArchetypeKey: selectedArchetypes maps mlbArchetypeKey at LeagueBuilderDraftSetup.tsx:2447-2449 and :2475-2477, fed to extractPoolFromDemand at :2451 and :2480; no farmArchetypeKey reference…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 14,
+      "label": "verify:SB-12",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a1a70708ae15baf8a",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606729304,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SB-12",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606916058,
+      "tokens": 86240,
+      "toolCalls": 11,
+      "durationMs": 186754,
+      "resultPreview": "{\"gap_id\":\"SB-12\",\"verdict\":\"CONFIRMED\",\"evidence\":\"The async gating is real and load-bearing. modeAReport (hence modeAFinalizedDisplayMismatch) is set for passive edits ONLY via window.setTimeout(...,0) at LeagueBuilderDraftSetup.tsx:2514-2521 — not a synchronous useMemo. The only synchronous setModeAReport calls are inside explicit action handlers (re-extract :3037, pool-first :2922), which also…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 15,
+      "label": "verify:SEATS-01",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "ac07283a759f0d2a4",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606745268,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS-01",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606946362,
+      "tokens": 84922,
+      "toolCalls": 17,
+      "durationMs": 201094,
+      "resultPreview": "{\"gap_id\":\"SEATS-01\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"The root defect is REAL and reachable, but the headline mechanism (\\\"stale count feeds real pool-sizing math consumed by the auction / oversizes the extracted pool\\\") is REFUTED by tracing to the consumption point.\\n\\nCONFIRMED-TRUE facts:\\n- deleteTeam is a bare single-store delete, no cascade: src/utils/leagueBuilderStorage.ts:1104-1119. re…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 16,
+      "label": "verify:SEATS-02",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a1a5c38f368f82536",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606785865,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS-02",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606918763,
+      "tokens": 76777,
+      "toolCalls": 15,
+      "durationMs": 132898,
+      "resultPreview": "{\"gap_id\":\"SEATS-02\",\"verdict\":\"CONFIRMED\",\"evidence\":\"Full chain verified with file:line. (1) deleteTeam (src/utils/leagueBuilderStorage.ts:1105-1119) deletes only the GLOBAL_TEAMS record and never scrubs the id from any league.teamIds. (2) Teams-page handleDelete (src/src_figma/app/pages/LeagueBuilderTeams.tsx:664-678) guards deletion ONLY on a saved auction session (isMutationBlockedForLeagueId…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 17,
+      "label": "verify:SEATS-03",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a1da6160b7081fdfd",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606805800,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS-03",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606951109,
+      "tokens": 82811,
+      "toolCalls": 14,
+      "durationMs": 145309,
+      "resultPreview": "{\"gap_id\":\"SEATS-03\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"The clobber mechanism is real and user-reachable: TeamCapIdentity carries rawShift (src/engines/leagueConstruction.ts:23), archetypeToCapIdentity populates it (src/engines/archetypeIdentity.ts:45), normalizeCapIdentity omits rawShift when seeding the form (src/src_figma/app/pages/LeagueBuilderTeams.tsx:147-156, 418), and handleSave rebuilds f…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 18,
+      "label": "verify:SEATS-04",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "ab06f64130ef8c774",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606827260,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS-04",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606970051,
+      "tokens": 77402,
+      "toolCalls": 11,
+      "durationMs": 142791,
+      "resultPreview": "{\"gap_id\":\"SEATS-04\",\"verdict\":\"CONFIRMED\",\"evidence\":\"Guard is MLB-only: useSavedAuctionMutationGuard calls getAuctionSession(leagueId, MLB_AUCTION_SEASON) (savedAuctionMutationGuard.ts:52), which resolves via createAuctionSessionId → `…::startup-auction-draft::1` (leagueBuilderStorage.ts:1876). Farm auction persists/resumes under a DISTINCT id, createFarmAuctionSessionId → `…::startup-farm-aucti…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 19,
+      "label": "verify:SEATS-05",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "aeb578022bf662bcb",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606829535,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS-05",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783606958642,
+      "tokens": 79515,
+      "toolCalls": 10,
+      "durationMs": 129107,
+      "resultPreview": "{\"gap_id\":\"SEATS-05\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"Narrow claim is accurate: poolBasisStaleLines skips null===null for an archetype-less added team (LeagueBuilderDraftSetup.tsx:955-957), so that one detector emits no line. But the claimed silent/user-reachable harm is refuted by two live gates keyed on live league.teamIds, both re-evaluated on return to Draft Setup: (1) identitiesReady (:2253…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 20,
+      "label": "verify:SEATS-06",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a614d2dfbee089bcd",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606925734,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "SEATS-06",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607028084,
+      "tokens": 70800,
+      "toolCalls": 6,
+      "durationMs": 102350,
+      "resultPreview": "{\"gap_id\":\"SEATS-06\",\"verdict\":\"CONFIRMED\",\"evidence\":\"Git: `git merge-base --is-ancestor 84a0a162 HEAD` exits 1 against main c0a24363 (fix NOT merged); `grep -rn copyLeaguePoolMembership src/` returns zero hits (fix function absent from live code). duplicateLeague on current main (src/src_figma/hooks/useLeagueBuilderData.ts:369-518) has no AUCTION_COMPLETE fork; for pool-first (copyUsesPoolFirst,…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 21,
+      "label": "verify:F1",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "acc362f4f34c4b17f",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606926650,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F1",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607086917,
+      "tokens": 82189,
+      "toolCalls": 14,
+      "durationMs": 160265,
+      "resultPreview": "{\"gap_id\":\"F1\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"Guard architecture claim is TRUE: useSavedAuctionMutationGuard queries getAuctionSession (savedAuctionMutationGuard.ts:52) and blocks only on an active session row (state!==AUCTION_COMPLETE, :57), never RegisteredPool.locked; savePlayer (leagueBuilderStorage.ts:1167-1213) has no lock/session check; assertPoolUnlocked (leagueBuilderPoolBuilder.ts:21…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 22,
+      "label": "verify:F2",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a38ef9a6d535a2ee1",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606953560,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F2",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607191117,
+      "tokens": 95784,
+      "toolCalls": 21,
+      "durationMs": 237557,
+      "resultPreview": "{\"gap_id\":\"F2\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"Every technical link in the claim is CONFIRMED with file:line: (1) When the pool is locked, initAuction consumes the frozen pool as-is — pool = existingPool, IV never recomputed (useAuctionDraft.ts:636-638); the regenerate call before it only refreshes scouting axes, not IV (leaguePoolAxisRegenPersist.ts:15-19). (2) pos is read LIVE via getPlayer a…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 23,
+      "label": "verify:F3",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "acd5371bfee0596c7",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606962868,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F3",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607260231,
+      "tokens": 100778,
+      "toolCalls": 19,
+      "durationMs": 297362,
+      "resultPreview": "{\"gap_id\":\"F3\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"All technical facts confirmed. (1) buildAuctionLuxuryTaxContext builds playerById from live leagueData.players and identityByTeamId from live team.capIdentity (useAuctionDraft.ts:213-214), invoked at loadAuction (:595) and initAuction (:700). (2) The pool snapshot never froze ratings: RegisteredPool.players = PoolPlayerPriced[] = {id, iv, salary} (…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 24,
+      "label": "verify:F7",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a55297a6f9dfb1b63",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606961350,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F7",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607186972,
+      "tokens": 86023,
+      "toolCalls": 20,
+      "durationMs": 225622,
+      "resultPreview": "{\"gap_id\":\"F7\",\"verdict\":\"CONFIRMED\",\"evidence\":\"Every factual assertion in F7 holds at c0a24363:\\n\\n1. savePlayer has zero session/lock awareness — leagueBuilderStorage.ts:1167-1213 is a pure write to the GLOBAL_PLAYERS store (readwrite tx, store.put), no auction-session lookup anywhere in the body.\\n2. saveTeam is likewise lock-unaware — leagueBuilderStorage.ts:1080-1103 is a pure put into GLOBA…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 25,
+      "label": "verify:F1",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a6e3bdb3765143f81",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783606977185,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F1",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607120282,
+      "tokens": 76548,
+      "toolCalls": 10,
+      "durationMs": 143097,
+      "resultPreview": "{\"gap_id\":\"F1\",\"verdict\":\"DOWNGRADED\",\"evidence\":\"Mechanism fully confirmed, but reachability is a sub-500ms cross-tab race, so class should be LATENT not CONFIRMED-HAZARD.\\n\\nCONFIRMED mechanics (I could not refute any link):\\n- selectedTeam is a live ref into leagueTeams: LeagueBuilderDraftSetup.tsx:1830 (`leagueTeams.find((team) => team.id === selectedTeamId) ?? null`).\\n- Reorder handlers free…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 26,
+      "label": "verify:F2",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a80859ab426e89293",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783607031377,
+      "queuedAt": 1783606517918,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F2",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607207913,
+      "tokens": 77535,
+      "toolCalls": 10,
+      "durationMs": 176536,
+      "resultPreview": "{\"gap_id\":\"F2\",\"verdict\":\"REFUTED\",\"evidence\":\"capIdentity is consumed LIVE, never snapshotted, so no locked-pool-vs-settings divergence can exist. (1) useAuctionDraft.ts:214 builds the tax context's identityByTeamId directly from the CURRENT leagueTeams records: `new Map(input.leagueTeams.map((team) => [team.id, team.capIdentity]))`. (2) That context is rebuilt on every auction load/resume from l…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 27,
+      "label": "verify:F5",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a600332e4ca99c14b",
+      "model": "claude-opus-4-8[1m]",
+      "state": "done",
+      "startedAt": 1783607089727,
+      "queuedAt": 1783606517919,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "F5",
+      "promptPreview": "Read-only investigation in /Users/johnkruse/Projects/kbl-tracker (main @ c0a24363 — includes CALLFIX, TAXTEETH, floor-refit docs). NO edits. CONTEXT: JK asked \"what else in the league builder/team setup might be getting in the way of our draft behavior/logic and risking bugs?\" after a real find of this class: the legacy Teams page (src/src_figma/app/pages/LeagueBuilderTeams.tsx) unconditionally re…",
+      "lastProgressAt": 1783607160581,
+      "tokens": 70019,
+      "toolCalls": 6,
+      "durationMs": 70854,
+      "resultPreview": "{\"gap_id\":\"F5\",\"verdict\":\"CONFIRMED\",\"evidence\":\"useLeagueBuilderData.ts:411-425 destructure omits id/createdDate/lastModified/lineup*/optimalLineup*/rivalries but NOT rosterDesign, so full rosterDesign (with lockedAt+rankOverrides) rides through ...teamCopyInput. useLeagueBuilderData.ts:426-437 then re-specifies rosterDesign:{slots,pins} only; the later literal key wins over the spread, dropping …"
+    }
+  ],
+  "totalTokens": 2780512,
+  "totalToolCalls": 617
+}

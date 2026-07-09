@@ -1,0 +1,1 @@
+../spec-docs/COCKPIT_WIRING_AUDIT_2026-07-08.md
