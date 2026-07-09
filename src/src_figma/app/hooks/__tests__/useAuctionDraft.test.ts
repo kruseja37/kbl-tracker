@@ -7,6 +7,7 @@ import {
   getTeamAuctionMaxBid,
   initAuctionSession,
   seededNominationOrder,
+  surfaceNextPlayer,
   type AuctionPlayer as EnginePlayer,
 } from "../../../../engines/auctionStateMachine";
 import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
@@ -841,6 +842,94 @@ describe("useAuctionDraft", () => {
     // the human roster is empty on both sides, "full total" and "marginal" tax are identical here,
     // so offTax is exactly the reservation this assertion checks for.
     expect(offMaxBid!).toBe(onMaxBid! - offTax!);
+  });
+
+  test("TAXTEETH back-compat: a mid-lot session saved before this change self-heals its stale projectedTax on load", async () => {
+    // A pre-TAXTEETH save could carry ANY stale number in team.projectedTax -- the old full-total
+    // recompute, or (older still) whatever normalizeTeam defaulted it to. This proves loadAuction
+    // always overwrites it with a fresh marginal-tax read before any bid/ceiling logic runs, so a
+    // mid-draft save from before this change loads and continues correctly rather than gating (or
+    // settling) off a number that no longer means what it used to.
+    const teamIds = ["human", "other"];
+    const seed = seedWithFirst(teamIds, "human");
+    const caps: LuxuryCapRow[] = [
+      {
+        group: "hitters",
+        stat: "CON",
+        topN: 1,
+        cap: 95,
+        penaltyCurve: 1,
+        penaltyPer100: 1_000_000,
+        minAdder: 0,
+      },
+    ];
+    const humanTeam: Team = {
+      ...makeTeam("human"),
+      capIdentity: { increase: ["POW"], decrease: ["CON"] },
+    };
+    const pool: RegisteredPool = { ...makePool("league-backcompat", ["off-fit"]), luxuryCaps: caps };
+    mockLeagueData({
+      leagues: [makeLeague("league-backcompat", teamIds)],
+      teams: [humanTeam, makeTeam("other")],
+      pools: { "league-backcompat": pool },
+      players: [makePlayer("off-fit", { power: 10, contact: 100 })],
+    });
+
+    // Build the mid-lot legacy session directly (the "crash-restore" shape other tests use), then
+    // hand-corrupt team.projectedTax to a value the real formula would never produce -- standing
+    // in for a stale pre-TAXTEETH save.
+    const legacyInit = initAuctionSession({
+      teams: [
+        { teamId: "human", budgetRemaining: 900_000, rosterSlotsRemaining: 22 },
+        { teamId: "other", budgetRemaining: 900_000, rosterSlotsRemaining: 22 },
+      ],
+      players: [{ playerId: "off-fit", iv: 90_000, ivPercentile: 90 }],
+      nominationOrder: teamIds,
+      config: { nominationOrderSeed: seed, bidIncrement: 1_000 },
+    });
+    const surfaced = surfaceNextPlayer(legacyInit);
+    if (!surfaced.ok) throw new Error("test setup: surfaceNextPlayer rejected");
+    const legacySession: CpuShillAuctionSession = {
+      ...surfaced.session,
+      teams: surfaced.session.teams.map((team) =>
+        team.teamId === "human" ? { ...team, projectedTax: 999_999 } : team,
+      ),
+    } as CpuShillAuctionSession;
+    expect(legacySession.currentLot?.playerId).toBe("off-fit");
+
+    await saveAuctionSession({
+      id: createAuctionSessionId("league-backcompat", 1),
+      leagueId: "league-backcompat",
+      seasonNumber: 1,
+      seed,
+      session: legacySession,
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+    await act(async () => {
+      await result.current.loadAuction("league-backcompat");
+    });
+
+    const humanAfterLoad = result.current.session?.teams.find((team) => team.teamId === "human");
+    // The stale 999,999 must be gone -- replaced by a fresh, finite, positive marginal tax read
+    // (a lone off-archetype player alone breaches the CON=95 cap), proving loadAuction always
+    // overwrites whatever a pre-TAXTEETH save carried before any bid/ceiling logic can read it.
+    expect(humanAfterLoad?.projectedTax).not.toBe(999_999);
+    expect(Number.isFinite(humanAfterLoad?.projectedTax)).toBe(true);
+    expect(humanAfterLoad?.projectedTax).toBeGreaterThan(0);
+
+    const ceiling = result.current.session ? getTeamAuctionMaxBid(result.current.session, "human") : null;
+    expect(ceiling).not.toBeNull();
+    expect(Number.isFinite(ceiling)).toBe(true);
+    // The auction must still be able to continue: the minimum legal bid clears well inside the
+    // healed ceiling.
+    const minimumBid = result.current.session?.currentLot?.openingAsk ?? 0;
+    expect(minimumBid).toBeLessThan(ceiling!);
+    await act(async () => {
+      await result.current.bid("human", minimumBid);
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.session?.currentLot?.highBid).toBe(minimumBid);
   });
 });
 
