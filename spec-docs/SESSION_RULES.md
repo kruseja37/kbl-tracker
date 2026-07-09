@@ -302,13 +302,16 @@ NODE_ENV=production, which poisons vitest with ~1,800 false failures). Node
 lives at `~/.nvm/versions/node/v20.20.0/bin` on non-interactive shells.
 
 **Characterized suite baseline** is maintained in CURRENT_STATE.md and updated
-on change. As of the EP1 close it was 7,140 tests / 383 files, with a known
-characterized set: fixed failures wpaRuntimeBoundary +
-franchiseNarrativeEventEligibility, and conditional-solo order-flakes
-franchiseManualSmokeFixture + GameTrackerLaunchState +
-franchiseOffseasonGuards.component (each passes when run solo). A new RED that
-is NOT in the characterized set is a real regression — never silently relabel
-it as baseline.
+on change. Current baseline (certified 2026-07-09, post-PR #45 FIXTUREFIX):
+**9,451 passed / 0 failed / 11 skipped.** Known conditional-solo order-flakes:
+`AwardsWatchlist`, `franchiseManualSmokeFixture`, `GameTrackerLaunchState`
+(each passes when run solo — see `CONTINUITY_CHECKPOINT.md` §6 for the
+standing flake list). The old `LeagueBuilderDraftSetup.test.tsx` mega-file
+flake (previously listed here) was ELIMINATED, not just characterized, by PR
+#40 FLAKEFIX (2026-07-09, `4e6cfd33`) — the 93-test file was split into five
+per-zone suites sharing one helper module. A new RED that is NOT in the
+characterized set is a real regression — never silently relabel it as
+baseline.
 
 ---
 
@@ -365,6 +368,8 @@ When your context is approaching its limit (compaction near or imminent):
 
 - When spawning ANY subagent or workflow agent, always pass an explicit model (sonnet mechanical / opus audits) because agents without a model override silently inherit the captain's session model and burn its budget (2026-07-08 incident: SOT-sweep verifiers + design agents inherited Fable; JK flagged the burn twice).
 - When monitoring long background dispatches, always use a token-free bash sentinel that wakes the captain only on stall/completion, never a timed captain heartbeat, because each timed wake-up costs a full expensive-context turn with usually nothing to do.
+- When a lane changes extraction/engine behavior that page-level test fixtures consume, always include the consuming pages' test suites in the lane's contract gates because POOLFLOOR was green by its own engine gates yet invalidated 26 tests across 4 page suites that only the closing full-suite run caught.
+- When SESSION_RULES prescribes rewrite-in-place for CURRENT_STATE.md's LIVE HEADER but practice is append-only banner stacking, always resolve the contradiction by JK ruling (pick one convention) because a 1,899-line append-only "live header" defeats its 30-second-answer purpose.
 
 Auto-capture pen for the Self-Improvement Loop (see CLAUDE.md). Rules here are
 PROPOSALS, written the moment a JK correction happens (Write-First), in the form

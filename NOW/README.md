@@ -1,5 +1,7 @@
 # NOW — start here, always
 
+**What this is:** KBL Tracker is a companion franchise/season tracker for the video game Super Mega Baseball 4 (SMB4) — league setup, live game tracking, and franchise/season stats for real SMB4 play, not a game in itself.
+
 **This folder is the single entry point for picking up KBL Tracker work on any day.** Everything in it is either this index or a live link to a canonical file — there are NO copies here, so nothing in this folder can rot. If any document in the project disagrees with this index, this index gets fixed the same day (report it); if any document disagrees with `git log`, git wins.
 
 **Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09 (the tax-coherence program books complete — PRs #37-#43, COPYFIX/GAUNTLET/TAXWIRE/FLAKEFIX/POOLFLOOR/TAXENGINE/SETUPTAX; all 14 links below re-checked against `origin/main` HEAD `6fa97d81` and confirmed resolving; the audit-records line already carried both `SETUP_DRAFT_INTEGRITY_AUDIT_2026-07-09.md` and `COCKPIT_WIRING_AUDIT_2026-07-08.md`, and the binding-standards line already carried `AUCTION_FLOOR_REFIT_2026-07-09.md` — verified current, not re-added; no new canonical doc needed adding or retiring this pass).
@@ -18,6 +20,7 @@
 | 6 | `MODE1_PUNCHLIST_2026-07-08.md` | The working ticket list: landed items + open tickets. |
 | 7 | `SESSION_RULES.md` | Non-negotiable operating rules, roles, the builder/auditor triangle. |
 | 8 | `PATHWAY_TO_V1_2026-07-07.md` | The plan of record: phases, gates, runbook. |
+| 9 | `AI_TEAM_OPERATING_MODEL.md` | The canonical team-protocol doc: JK/Opus/Codex roles, the builder≠auditor triangle, model routing, default-routing rules. |
 
 ## Binding design standards (consult before touching UI or draft systems)
 
@@ -30,6 +33,14 @@
 
 - `COCKPIT_WIRING_AUDIT_2026-07-08.md` — the full spec-to-wiring sweep behind the §2.6/§2.7 design amendments (10 confirmed gaps, adversarially re-verified).
 - `SETUP_DRAFT_INTEGRITY_AUDIT_2026-07-09.md` — the setup→draft integrity sweep (8 confirmed / 10 downgraded / 4 refuted / 17 safe; feeds the STALEPARITY/COPYFIX/GAUNTLET lanes).
+
+## Open JK rulings/questions
+
+- **HDH Royals archetype feel-check** — ARCHLOCK corrected a stale reference-sheet number; the underlying game numbers were already correct and deliberate. Open question is a pure feel gut-check: does HDH Royals feel balanced at its current strength? (`JK_BROWSER_CHECKLIST_2026-07-08.md` §8)
+- **Blue-accent tokenization call** — three Draft Setup spots (the arsenal-toggle buttons, the player-edit-panel Save button, the Available Players column accent) are still the app's pre-reskin blue; JK rules per-spot whether to tokenize to the canon palette or keep blue as a deliberate signal color. (`CONTINUITY_CHECKPOINT.md` §3, `MODE1_PUNCHLIST_2026-07-08.md`)
+- **Default-orange banner readability check** — a contrast bug on the ON THE CLOCK banner for teams using the app's default orange was found and fixed; JK's eye on a real default-orange team during the walkthrough is the final check. (`JK_BROWSER_CHECKLIST_2026-07-08.md` §8)
+- **Historical Legends — eye-test packet #2** — a second round of sample "eye-test" cards for JK to react to is still being prepared, not ready yet. (`JK_BROWSER_CHECKLIST_2026-07-08.md`, "Two open JK rulings elsewhere")
+- **Historical Legends — shelf-ceiling / rating-scale question** — parked alongside the eye-test packet; no action needed from JK right now. (`JK_BROWSER_CHECKLIST_2026-07-08.md`, "Two open JK rulings elsewhere")
 
 ## Side projects (live in other locations — links, not symlinks)
 
