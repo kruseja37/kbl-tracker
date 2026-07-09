@@ -2,7 +2,7 @@
 
 **This folder is the single entry point for picking up KBL Tracker work on any day.** Everything in it is either this index or a live link to a canonical file — there are NO copies here, so nothing in this folder can rot. If any document in the project disagrees with this index, this index gets fixed the same day (report it); if any document disagrees with `git log`, git wins.
 
-**Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09 (TAXENGINE local lane rework — all 14 links still resolve; TAXENGINE rework booked into the underlying docs; no new canonical doc needed adding or retiring this pass).
+**Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09 (the tax-coherence program books complete — PRs #37-#43, COPYFIX/GAUNTLET/TAXWIRE/FLAKEFIX/POOLFLOOR/TAXENGINE/SETUPTAX; all 14 links below re-checked against `origin/main` HEAD `6fa97d81` and confirmed resolving; the audit-records line already carried both `SETUP_DRAFT_INTEGRITY_AUDIT_2026-07-09.md` and `COCKPIT_WIRING_AUDIT_2026-07-08.md`, and the binding-standards line already carried `AUCTION_FLOOR_REFIT_2026-07-09.md` — verified current, not re-added; no new canonical doc needed adding or retiring this pass).
 
 ## Read order for any new agent (or future you)
 
