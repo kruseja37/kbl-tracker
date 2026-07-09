@@ -15,7 +15,8 @@ import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
-import { poolDemandModel } from "../../../engines/auctionPoolSizing";
+import { poolDemandModel, type ArchetypeCompletionOutlook } from "../../../engines/auctionPoolSizing";
+import type { ArchetypeFeasibility } from "../../../engines/poolFeasibility";
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -32,8 +33,10 @@ import {
 import {
   addPlayersToLeaguePool,
   computePlayerIv,
+  evaluatePoolComposition,
   lockLeaguePool,
   removePlayersFromLeaguePool,
+  type PoolCompositionReport,
 } from "../../../utils/leagueBuilderPoolBuilder";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
@@ -147,6 +150,10 @@ vi.mock("../../../utils/leagueBuilderPoolBuilder", async () => {
     importRosteredPlayersToLeaguePool: vi.fn(async () => 0),
     lockLeaguePool: vi.fn(async () => undefined),
     unlockLeaguePool: vi.fn(async () => undefined),
+    // SETUPTAX Item 4: no existing test in this file ever reaches a `locked` pool (the only
+    // gate that fires the REAL evaluatePoolComposition), so mocking it here is additive --
+    // every other test in this file still gets `actual`'s other exports and never calls this.
+    evaluatePoolComposition: vi.fn(),
   };
 });
 
@@ -487,6 +494,124 @@ describe("LeagueBuilderDraftSetup", () => {
     rerender(<LeagueBuilderDraftSetup />);
 
     expect(await screen.findByText(/CAN EVERY CLUB BUILD A LEGAL 22 UNDER \$900,000/i)).toBeInTheDocument();
+  });
+
+  // SETUPTAX Item 3: the setup screens stop promising what settlement won't honor. THE MONEY
+  // gains one ALWAYS-class line naming every club whose identity TARGET overshoots the cap once
+  // tax is added -- reusing the SAME buildBest22Target results THE CLUB CHECK already computes,
+  // not a new engine call. Not locked-gated (unlike the hard-cap solvency banner): tax insolvency
+  // should surface as early as possible, before the pool is even locked.
+  test("SETUPTAX: THE MONEY surfaces a TAX WATCH line for a club whose identity target overshoots the cap", async () => {
+    vi.mocked(buildBest22Target)
+      .mockReturnValueOnce(makeBest22Target())
+      .mockReturnValueOnce(makeBest22Target({
+        totalSalary: 970_000,
+        totalTax: 330_000,
+        allIn: 1_300_000,
+        budget: 1_000_000,
+        feasible: false,
+      }));
+    mockLeagueData({
+      league: makeLeague({ teamIds: ["team-a"], draftPoolMode: "pool-first" }),
+      teams: [makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") })],
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("THE MONEY")).toBeInTheDocument();
+    expect(await screen.findByText("TAX WATCH: Caps — You — identity targets overshoot the cap after tax.")).toBeInTheDocument();
+  });
+
+  // SETUPTAX Item 4: analyzePoolFeasibility (poolFeasibility.ts) already builds each archetype's
+  // roster and keeps `built.totalTax` on the feasibility result -- a SIBLING array on the same
+  // PoolCompositionReport the outlook panel already reads -- it just never reached this line.
+  // `evaluatePoolComposition` is mocked ONCE (mockResolvedValueOnce) so no other test in this
+  // file's default-locked initial render can inherit this fixture's data.
+  test("SETUPTAX: Archetype market outlook annotates a tax-owing archetype and leaves a tax-free one alone", async () => {
+    const outlooks: ArchetypeCompletionOutlook[] = [
+      {
+        archetypeId: "murderers-row",
+        archetypeName: "Murderers' Row",
+        pLegalCompletion: 0.95,
+        pIdentityCompletion: 0.95,
+        bindingClass: null,
+        note: null,
+      },
+      {
+        archetypeId: "whiteyball",
+        archetypeName: "Whiteyball",
+        pLegalCompletion: 0.4,
+        pIdentityCompletion: 0.4,
+        bindingClass: "startable arms",
+        note: "The market is tightest at startable arms — expect contested prices there.",
+      },
+    ];
+    const feasibilityResults: ArchetypeFeasibility[] = [
+      {
+        archetypeId: "murderers-row",
+        archetypeName: "Murderers' Row",
+        support: "supported",
+        built: {
+          name: "Murderers' Row",
+          totalIv: 1_000_000,
+          totalSalary: 970_000,
+          totalTax: 330_000,
+          rosterSize: 22,
+          solvent: false,
+          legalRoster: true,
+        },
+        shortfalls: [],
+        activationPrompt: null,
+      },
+      {
+        archetypeId: "whiteyball",
+        archetypeName: "Whiteyball",
+        support: "thin",
+        built: {
+          name: "Whiteyball",
+          totalIv: 800_000,
+          totalSalary: 800_000,
+          totalTax: 0,
+          rosterSize: 22,
+          solvent: true,
+          legalRoster: true,
+        },
+        shortfalls: [],
+        activationPrompt: null,
+      },
+    ];
+    const composition: PoolCompositionReport = {
+      demand: poolDemandModel(1, 0),
+      feasibility: { tier: "standard", budget: 1_000_000, poolSize: 100, results: feasibilityResults },
+      outlooks,
+    };
+    // Persistent (not `Once`): the composition effect can legitimately fire more than once
+    // (dep-array settles after an initial render), and a stale `undefined` on a later call
+    // would clobber the fixture. Reset at the end of this test so no LATER test's own
+    // default-locked initial render can inherit this fixture's data.
+    vi.mocked(evaluatePoolComposition).mockResolvedValue(composition);
+    mockLeagueData({
+      league: makeLeague({ teamIds: ["team-a"], draftPoolMode: "pool-first" }),
+      // No identity on the club itself -- otherwise its own MLB/farm archetype badge (default
+      // murderers-row/whiteyball) collides with this fixture's archetype names elsewhere on
+      // the page. This test only needs the market-outlook panel, not a club identity.
+      teams: [makeTeam("team-a", { mlbArchetypeKey: undefined, farmArchetypeKey: undefined })],
+      pool: makePool({ locked: true }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    // Scoped to the outlook panel itself: "Murderers' Row" also appears elsewhere on the page
+    // (an unrelated draftability headline), so an unscoped screen-wide lookup is ambiguous.
+    const outlookHeader = await screen.findByText(/Archetype market outlook/);
+    const outlookPanel = outlookHeader.closest("div")!.parentElement!;
+    const taxOwingRow = within(outlookPanel).getByText("Murderers' Row").closest("div");
+    expect(within(taxOwingRow!).getByText(/~\$330,000 TAX AT TARGET/)).toBeInTheDocument();
+    const taxFreeRow = within(outlookPanel).getByText("Whiteyball").closest("div");
+    expect(within(taxFreeRow!).queryByText(/TAX AT TARGET/)).not.toBeInTheDocument();
+
+    vi.mocked(evaluatePoolComposition).mockReset();
   });
 
   test("M2 THE MONEY uses the shared below-floor hard error and disables APPLY", async () => {

@@ -531,6 +531,158 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(troubleRow?.querySelector("[aria-hidden='true']")?.className).toContain("bg-[var(--ballpark-status-green)]");
   });
 
+  // SETUPTAX Item 1: the setup screens stop promising what settlement won't honor. A club whose
+  // FLOOR still builds (cheapest legal 22 under the salary-only diagnostic) but whose identity
+  // TARGET overshoots the cap once tax is added must not read as unqualified green.
+  test("SETUPTAX: CLUB CHECK row de-greens when the identity TARGET is insolvent from tax alone", async () => {
+    const legalPlayers = [
+      ...makeLegalRosterPlayers(1_000),
+      ...Array.from({ length: 60 }, (_, index) =>
+        makePlayer(200 + index, {
+          id: `taxdepth-${index}`,
+          primaryPosition: "CF",
+          salary: 1_000,
+        }),
+      ),
+    ];
+    vi.mocked(buildBest22Target)
+      .mockReturnValueOnce(makeBest22Target())
+      .mockReturnValueOnce(makeBest22Target())
+      .mockReturnValueOnce(makeBest22Target({ allIn: 30_000, feasible: true }))
+      .mockReturnValueOnce(makeBest22Target({
+        totalSalary: 970_000,
+        totalTax: 330_000,
+        allIn: 1_300_000,
+        budget: 1_000_000,
+        feasible: false,
+      }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c"],
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", {
+          name: "Target Ready",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: "murderers-row",
+          farmArchetypeKey: "whiteyball",
+        }),
+        makeTeam("team-b", {
+          name: "No Identity",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: undefined,
+        }),
+        makeTeam("team-c", {
+          name: "Tax Trouble",
+          gmSeatId: "seat-you",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: "whiteyball",
+          farmArchetypeKey: "murderers-row",
+        }),
+      ],
+      players: legalPlayers,
+      pool: makePool({
+        locked: false,
+        players: legalPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("THE CLUB CHECK")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("TARGET OVERSHOOTS WITH TAX · $1,300,000 ALL-IN vs $1,000,000 BUDGET")).toBeInTheDocument();
+    });
+
+    const troubleRow = screen.getByText((content) => content.includes("Tax Trouble ·")).closest("div");
+    // The dot can no longer read as unqualified green while the identity target owes more tax
+    // than the budget can absorb -- even though the salary-only floor still builds.
+    expect(troubleRow?.querySelector("[aria-hidden='true']")?.className).not.toContain("bg-[var(--ballpark-status-green)]");
+    expect(troubleRow?.querySelector("[aria-hidden='true']")?.className).toContain("bg-[var(--ballpark-status-warn)]");
+    // The floor truth survives as the secondary, labeled clause.
+    expect(within(troubleRow!).getByText(/^FLOOR BUILDS/)).toBeInTheDocument();
+  });
+
+  // SETUPTAX rework (audit Finding 1, captain ruling 2026-07-09): causal honesty cuts both
+  // ways. When SALARY ALONE blows the budget (tax $0), the tax treatment must NOT fire -- the
+  // row renders exactly the pre-lane behavior for that case: green floor dot (the floor still
+  // builds), the generic "IDENTITY WON'T EXPRESS" target segment, and no TAX text anywhere.
+  test("SETUPTAX: CLUB CHECK row keeps pre-lane behavior when salary alone blows the budget", async () => {
+    const legalPlayers = [
+      ...makeLegalRosterPlayers(1_000),
+      ...Array.from({ length: 60 }, (_, index) =>
+        makePlayer(300 + index, {
+          id: `salarydepth-${index}`,
+          primaryPosition: "CF",
+          salary: 1_000,
+        }),
+      ),
+    ];
+    vi.mocked(buildBest22Target)
+      .mockReturnValueOnce(makeBest22Target())
+      .mockReturnValueOnce(makeBest22Target())
+      .mockReturnValueOnce(makeBest22Target({ allIn: 30_000, feasible: true }))
+      // The auditor's fixture: pure salary overshoot, zero tax.
+      .mockReturnValueOnce(makeBest22Target({
+        totalSalary: 1_300_000,
+        totalTax: 0,
+        allIn: 1_300_000,
+        budget: 1_000_000,
+        feasible: false,
+      }));
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b", "team-c"],
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", {
+          name: "Target Ready",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: "murderers-row",
+          farmArchetypeKey: "whiteyball",
+        }),
+        makeTeam("team-b", {
+          name: "No Identity",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: undefined,
+        }),
+        makeTeam("team-c", {
+          name: "Salary Trouble",
+          gmSeatId: "seat-you",
+          rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z"),
+          mlbArchetypeKey: "whiteyball",
+          farmArchetypeKey: "murderers-row",
+        }),
+      ],
+      players: legalPlayers,
+      pool: makePool({
+        locked: false,
+        players: legalPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("THE CLUB CHECK")).toBeInTheDocument();
+    // Pre-lane target segment for an infeasible-with-identity club (byte-identical copy path).
+    await waitFor(() => {
+      expect(screen.getByText("IDENTITY WON'T EXPRESS")).toBeInTheDocument();
+    });
+
+    const salaryRow = screen.getByText((content) => content.includes("Salary Trouble ·")).closest("div");
+    // Pre-lane dot: the floor-only gate, green because the cheapest legal 22 still builds.
+    expect(salaryRow?.querySelector("[aria-hidden='true']")?.className).toContain("bg-[var(--ballpark-status-green)]");
+    // No tax treatment anywhere in the row: no overshoot headline, no demoted-floor clause.
+    expect(within(salaryRow!).queryByText(/OVERSHOOTS WITH TAX/)).not.toBeInTheDocument();
+    expect(within(salaryRow!).queryByText(/^FLOOR BUILDS/)).not.toBeInTheDocument();
+    // And THE MONEY's tax-watch line must not name this club either.
+    expect(screen.queryByText(/TAX WATCH:/)).not.toBeInTheDocument();
+  });
+
   test("B5 recomputes draftability on pool membership changes, not roster-design edits", async () => {
     const basePlayers = makePlayers(24);
     const baseTeams = [makeTeam("team-a"), makeTeam("team-b")];
