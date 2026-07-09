@@ -11,8 +11,12 @@
  * v1 boundaries (documented, deliberate):
  * - Price basis = pool salary (the IV-derived ask). Live auction prices differ; the market
  *   model refines per lot in the room. This is the Asst GM's pre-draft ESTIMATE.
- * - The team archetype enters as ADVISORY alignment (cap identity shifts tax, not
- *   legality); tax-exact feasibility rides the live board (C4-B).
+ * - The team archetype enters as ADVISORY alignment (cap identity shifts tax, not legality).
+ *   This engine's `evaluateRosterDesign` answers ONE question -- "can the CHEAPEST legal 22
+ *   be assembled under this cap" -- and stays SALARY-ONLY by design: completion here is an
+ *   untaxed-clamped floor, not an affordability verdict. Tax-exact affordability lives on
+ *   `buildBest22Target` (best22Target.ts: totalTax/allIn/solvent), surfaced to the Draft
+ *   Setup screens separately (SETUPTAX, 2026-07-09) rather than folded into this floor.
  * - Personality tilt is a SOFT preference (candidate ordering), never a hard filter — a
  *   tilt can't make a slot unfillable (the C3 anti-starve lesson).
  */

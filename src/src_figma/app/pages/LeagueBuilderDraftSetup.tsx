@@ -28,11 +28,16 @@ import {
   seedRosterDesignSlots,
 } from "../components/leagueBuilder/RosterDesigner";
 import {
+  clubCheckFloorSecondaryCopy,
   clubCheckTargetCopy,
+  clubCheckTaxOvershootCopy,
+  clubCheckToneWithTaxOverride,
   designVerdictCopy,
   designVerdictTone,
   formatVerdictMoney,
+  isBest22TargetTaxOvershoot,
   targetVerdictState,
+  taxWatchBannerText,
   type TargetVerdictState,
   type VerdictTone,
 } from "../components/leagueBuilder/designVerdict";
@@ -2139,6 +2144,16 @@ export function LeagueBuilderDraftSetup() {
     if (!locked) return null;
     return draftSetupSolvencyBannerText(inPoolDesignPool, tierBudget);
   }, [inPoolDesignPool, locked, tierBudget]);
+  // SETUPTAX Item 3: THE MONEY's tax-watch line. Reuses `targetByTeamId` -- already computed by
+  // the buildBest22Target effect above for THE CLUB CHECK -- so this is a pure read, no new
+  // engine call. Not `locked`-gated like solvencyBanner: surfacing a tax-insolvent identity
+  // target as early as possible (before lock) is the whole point of this lane.
+  const taxWatchLine = useMemo(() => {
+    const overshootNames = humanTeams
+      .filter((team) => isBest22TargetTaxOvershoot(targetByTeamId.get(team.id) ?? null))
+      .map((team) => formatClubName(team, ownerName, seats));
+    return taxWatchBannerText(overshootNames);
+  }, [humanTeams, ownerName, seats, targetByTeamId]);
   // BOARDFIX2 (Item C, perf audit): this used to depend on `humanTeams` (a referential array).
   // `replaceTeamsLocal` always creates a NEW `teams`/`leagueTeams`/`humanTeams` array reference on
   // ANY team save -- including a `boardRankOverrides`-only save from a rank-your-board reorder,
@@ -3191,19 +3206,30 @@ export function LeagueBuilderDraftSetup() {
   const modeAStale = modeAState === "review" || modeAState === "locked" ? modeAStaleTeams.length > 0 : false;
   const clubCheckRows = humanTeams.map((team) => {
     const verdict = liveClubVerdicts.get(team.id) ?? modeAReport?.designVerdicts.find((entry) => entry.teamId === team.id)?.result ?? null;
-    const tone = designVerdictTone(verdict, inPoolPlayers.length);
+    const floorTone = designVerdictTone(verdict, inPoolPlayers.length);
+    const floorCopy = designVerdictCopy(verdict, floorTone);
     const target = targetByTeamId.get(team.id) ?? null;
     const targetState = targetVerdictState({
       poolSize: inPoolPlayers.length,
       hasIdentity: Boolean(team.mlbArchetypeKey),
       target,
     });
+    // SETUPTAX Item 1: two-truth row -- when the identity TARGET is insolvent from tax alone
+    // (not from legality or the value floor), the row can't read as unqualified green just
+    // because the salary-only FLOOR still builds. Every other targetState (no-identity,
+    // feasible, infeasible-for-another-reason) falls through unchanged below.
+    const taxOvershoot = targetState === "infeasible" && isBest22TargetTaxOvershoot(target);
+    const tone = taxOvershoot ? clubCheckToneWithTaxOverride(floorTone, true) : floorTone;
+    const copy = taxOvershoot && target ? clubCheckTaxOvershootCopy(target) : floorCopy;
+    const targetCopy = taxOvershoot
+      ? clubCheckFloorSecondaryCopy(floorCopy)
+      : clubCheckTargetCopy(targetState, target);
     return {
       team,
       verdict,
       tone,
-      copy: designVerdictCopy(verdict, tone),
-      targetCopy: clubCheckTargetCopy(targetState, target),
+      copy,
+      targetCopy,
       targetState,
     };
   });
@@ -3808,24 +3834,36 @@ export function LeagueBuilderDraftSetup() {
         {[...composition.outlooks]
           .sort((a, b) => a.pIdentityCompletion - b.pIdentityCompletion)
           .slice(0, 6)
-          .map((outlook) => (
-            <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
-              <span
-                className={
-                  "font-bold " +
-                  (outlook.pIdentityCompletion >= 0.9
-                    ? "text-[var(--ballpark-boost-green)]"
-                    : outlook.pIdentityCompletion >= 0.6
-                      ? "text-[var(--ballpark-brass)]"
-                      : "text-[var(--ballpark-warn-text)]")
-                }
-              >
-                {Math.round(outlook.pIdentityCompletion * 100)}%
-              </span>
-              <span className="text-[var(--ballpark-chalk)]">{outlook.archetypeName}</span>
-              {outlook.note ? <span className="text-[#A8B8A0]">{outlook.note}</span> : null}
-            </div>
-          ))}
+          .map((outlook) => {
+            // SETUPTAX Item 4: analyzePoolFeasibility (poolFeasibility.ts) already builds each
+            // archetype's roster and keeps `built.totalTax` on the feasibility result -- it just
+            // never reaches this outlook line. Sibling array on the SAME composition report, no
+            // new engine call.
+            const builtTax = composition.feasibility.results.find(
+              (result) => result.archetypeId === outlook.archetypeId,
+            )?.built.totalTax;
+            return (
+              <div key={outlook.archetypeId} className="flex flex-wrap items-baseline gap-2 text-xs">
+                <span
+                  className={
+                    "font-bold " +
+                    (outlook.pIdentityCompletion >= 0.9
+                      ? "text-[var(--ballpark-boost-green)]"
+                      : outlook.pIdentityCompletion >= 0.6
+                        ? "text-[var(--ballpark-brass)]"
+                        : "text-[var(--ballpark-warn-text)]")
+                  }
+                >
+                  {Math.round(outlook.pIdentityCompletion * 100)}%
+                </span>
+                <span className="text-[var(--ballpark-chalk)]">{outlook.archetypeName}</span>
+                {outlook.note ? <span className="text-[#A8B8A0]">{outlook.note}</span> : null}
+                {builtTax && builtTax > 0 ? (
+                  <span className="text-[var(--ballpark-status-warn)]">· ~{formatVerdictMoney(builtTax)} TAX AT TARGET</span>
+                ) : null}
+              </div>
+            );
+          })}
       </div>
     </div>
   ) : null;
@@ -4385,6 +4423,11 @@ export function LeagueBuilderDraftSetup() {
                           {solvencyBanner}
                         </div>
                       ) : null}
+                      {taxWatchLine ? (
+                        <div className="border-l-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[var(--ballpark-warn-text)]">
+                          {taxWatchLine}
+                        </div>
+                      ) : null}
                       {modeAState !== "locked" ? (
                         <div ref={reExtractConfirmRef} className="flex flex-wrap items-center gap-2">
                           {reExtractConfirm ? (
@@ -4553,6 +4596,11 @@ export function LeagueBuilderDraftSetup() {
                   {solvencyBanner ? (
                     <div className="border-l-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[var(--ballpark-warn-text)]">
                       {solvencyBanner}
+                    </div>
+                  ) : null}
+                  {taxWatchLine ? (
+                    <div className="border-l-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-well)] px-4 py-3 text-sm font-bold text-[var(--ballpark-warn-text)]">
+                      {taxWatchLine}
                     </div>
                   ) : null}
                   <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 py-2">

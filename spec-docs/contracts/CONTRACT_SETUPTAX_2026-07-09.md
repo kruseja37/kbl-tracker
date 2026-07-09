@@ -22,3 +22,111 @@ Project typecheck clean; npm run build exit 0; the five split DraftSetup suites 
 
 ═══ DELIVERABLE ═══
 Contract-first; red repros BEFORE fixes; final contract update with per-item evidence + gate outputs + deviations. Final message: summary + hashes + surprises. UNKNOWN = STOP.
+
+───────────────────────────────────────────────────────────────────────────────────────────────
+FINAL EVIDENCE (posted after build) — 2026-07-09
+───────────────────────────────────────────────────────────────────────────────────────────────
+
+FILES TOUCHED (full diff surface, nothing else):
+- src/src_figma/app/components/leagueBuilder/designVerdict.ts (new pure helpers + Item 2's
+  `designTargetStripCopy` branch)
+- src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx (Items 1/3/4 wiring — display only)
+- src/engines/rosterDesignFeasibility.ts (THE RULING's one-comment replacement, doc-block only)
+- src/src_figma/__tests__/components/designVerdict.test.ts (Items 1/2 pure-function tests)
+- src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.universe.test.tsx (Item 1 render test)
+- src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.money.test.tsx (Items 3/4 render tests)
+Confirmed via `git diff --stat` that best22Target.ts, evaluateRosterDesign's code (only its
+doc-comment moved), poolAffordabilityDiagnostic.ts, RosterDesigner.tsx, leagueBuilderPoolBuilder.ts,
+poolFeasibility.ts, archetypeBalanceSimulator.ts, auctionPoolSizing.ts are BYTE-IDENTICAL to base —
+zero engine-math changes, exactly as guardrailed.
+
+DEVIATION FROM THE STOP-CLAUSE (declared, not silent): item 1's tax-overshoot signal is
+`!target.feasible && target.allIn > target.budget` — this reads ONLY fields already exposed on
+Best22Target (allIn, budget, feasible; best22Target.ts:44-48), no engine output was extended. This
+is exactly the arithmetic the contract's own §1 uses to define the case ("salary+tax > budget"),
+so it required no engine change and no STOP.
+
+PER-ITEM EVIDENCE
+
+Item 1 — THE CLUB CHECK two-truth row.
+  isBest22TargetTaxOvershoot/clubCheckToneWithTaxOverride/clubCheckTaxOvershootCopy/
+  clubCheckFloorSecondaryCopy added to designVerdict.ts; clubCheckRows computation in
+  LeagueBuilderDraftSetup.tsx now swaps primary/secondary + escalates tone green→amber ONLY
+  when targetState === "infeasible" AND allIn > budget. Verified the PRE-EXISTING characterized
+  test ("renders CLUB CHECK target segments without changing the floor dot gate",
+  universe.test.tsx) still asserts a GREEN dot for its `feasible:false, allIn:45_000` fixture
+  (budget stays the untouched default 1_000_000, so allIn < budget — not tax-driven) — confirms
+  the new branch is additive, not a rewording of the existing infeasible-for-another-reason case.
+  New repro: "SETUPTAX: CLUB CHECK row de-greens when the identity TARGET is insolvent from tax
+  alone" (universe.test.tsx) — RED against pre-fix source (waitFor timeout, "TARGET OVERSHOOTS
+  WITH TAX" never appears), GREEN after the fix (dot amber, primary copy names the tax figures,
+  secondary "FLOOR BUILDS ..." survives).
+
+Item 2 — cause-naming in the identity strip (designTargetStripCopy).
+  Pinned in designVerdict.test.ts: the byte-identical pre-existing assertion
+  (`designTargetStripCopy("infeasible", makeTarget({feasible:false}))` →
+  "THIS POOL CAN'T EXPRESS YOUR IDENTITY UNDER THE CAP — THE FLOOR STILL BUILDS") stays green
+  (that fixture's allIn 30,000 < budget 50,000 — non-tax cause, unchanged). New case
+  (allIn 1,230,000 > budget 1,000,000) returns "YOUR IDENTITY'S TARGET BUILD OWES $330,000 TAX —
+  $1,230,000 ALL-IN OVER YOUR $1,000,000 CAP; THE FLOOR STILL BUILDS". RosterDesigner.tsx was NOT
+  touched — it calls this same exported function, so the new branch reaches its identity-strip
+  render for free (confirmed via `git diff --stat` showing zero changes to RosterDesigner.tsx, and
+  RosterDesigner.test.tsx's full suite staying green with no new assertions needed there).
+  Red-before-fix proven via `git stash` of designVerdict.ts alone: 6 of 10 tests in
+  designVerdict.test.ts failed ("is not a function") before the fix, all 10 green after.
+
+Item 3 — THE MONEY tax-watch line.
+  taxWatchBannerText added to designVerdict.ts; taxWatchLine useMemo added to
+  LeagueBuilderDraftSetup.tsx reading targetByTeamId (already computed for THE CLUB CHECK, zero
+  new engine calls), rendered in BOTH the design-first and pool-first money rows. Deliberately
+  NOT locked-gated (unlike the hard-cap solvencyBanner) — tax insolvency surfaces as early as
+  possible. New repro: "SETUPTAX: THE MONEY surfaces a TAX WATCH line for a club whose identity
+  target overshoots the cap" (money.test.tsx) — RED against pre-fix page source (waitFor timeout,
+  text never appears), GREEN after the fix ("TAX WATCH: Caps — You — identity targets overshoot
+  the cap after tax.").
+
+Item 4 — Archetype market outlook tax annotation.
+  Confirmed by reading poolFeasibility.ts: `analyzePoolFeasibility` already builds each
+  archetype's roster into `ArchetypeFeasibility.built` (an `ArchetypeSimResult`, which carries
+  `totalTax`) and keeps it on `PoolCompositionReport.feasibility.results[]` — a SIBLING array to
+  `.outlooks[]` that the render never read. Wired a `.find()` lookup by archetypeId in the
+  existing outlook row map (LeagueBuilderDraftSetup.tsx) — zero new engine calls, zero engine
+  files touched. New repro: "SETUPTAX: Archetype market outlook annotates a tax-owing archetype
+  and leaves a tax-free one alone" (money.test.tsx, mocks `evaluatePoolComposition` — no OTHER
+  test in the file ever reaches a `locked`-pool initial render, confirmed via grep, so this mock
+  addition is additive; the mock is reset at the end of the test to prevent any cross-test
+  leakage) — RED against pre-fix page source (row renders, "· ~$330,000 TAX AT TARGET" absent),
+  GREEN after the fix.
+
+GATES (real outputs)
+
+Typecheck — `npx tsc -b`; exit 0, no output.
+
+Build — `npm run build`; exit 0. Tail:
+    ✓ built in 11.58s
+    PWA v1.2.0
+    mode      generateSW
+    precache  183 entries (5330.01 KiB)
+    files generated
+      dist/sw.js
+      dist/workbox-1d305bb8.js
+  (pre-existing chunk-size warnings only, no errors.)
+
+Targeted suites (the five split DraftSetup files + RosterDesigner + designVerdict — NOT the full
+suite, per the gate spec):
+    Test Files  8 passed (8)
+    Tests       136 passed (136)
+  Files: LeagueBuilderDraftSetup.{setup,universe,poolLock,board,money,RankYourBoardZone}.test.tsx,
+  RosterDesigner.test.tsx, designVerdict.test.ts.
+
+SURPRISES / NOTED SIDE EFFECTS (none block the gate, flagged for the audit)
+- `nonGreenClubCount` (LeagueBuilderDraftSetup.tsx) already filters `clubCheckRows` by
+  `row.tone !== "green"` to gate a "confirm before lock" prompt. Item 1's tone escalation means a
+  tax-overshoot club now correctly counts as non-green there too — an extra confirm click before
+  locking a pool with a tax-insolvent identity target. This is a direct, intended consequence of
+  "the row's TONE reflects it" (contract §1), not a separate change; `canModeALock` itself
+  (whether locking is ALLOWED at all) is untouched. Covered by the existing 136-test gate (no
+  regression), called out explicitly since it's a behavior change beyond pure text/color.
+- Item 4's test required mocking `evaluatePoolComposition` (money.test.tsx) since no existing
+  test in the five split suites ever reaches the `locked`-pool state that triggers the REAL
+  composition pipeline — this is new test infrastructure, not a product-code change.
