@@ -340,6 +340,9 @@ describe("LeagueBuilderDraftSetup", () => {
     // text settles from the same class of async pool-shape computation as the design-first
     // modeAReport, and can lag under batch-load CPU contention.
     expect(await screen.findByText(/Sized to 118 \(1\.34×\)/i, undefined, { timeout: 5000 })).toBeInTheDocument();
+    // SETUPHELP: the raw "Production shape" diagnostic dump now hides behind Help.
+    expect(screen.queryByText((content) => content.includes("Production shape: Balanced"))).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "?" }));
     expect(screen.getByText((content) =>
       content.includes("Production shape: Balanced") &&
       content.includes("demand 88") &&
@@ -432,6 +435,8 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(options.poolBalancePreset).toBe("balanced");
     expect(options.poolSizeMultiplier).toBe(1.25);
     expect(saveLeagueTemplate).not.toHaveBeenCalled();
+    // SETUPHELP: the raw "Production shape" diagnostic dump now hides behind Help.
+    fireEvent.click(screen.getByRole("button", { name: "?" }));
     // CONTRACT_FLAKEFIX_2026-07-09: widen past RTL's default 1000ms findBy budget for the same
     // async pool-shape-settle reason as the sibling regeneration tests above.
     expect(await screen.findByText((content) =>
@@ -975,6 +980,10 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
+    // SETUPHELP: the raw "Manual pool" diagnostic dump (and its embedded legality warning) now
+    // hides behind Help.
+    expect(screen.queryByText((content) => content.includes("Manual pool: Balanced"))).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "?" }));
     expect(await screen.findByText((content) =>
       content.includes("Manual pool: Balanced") && content.includes("legal no"),
     )).toBeInTheDocument();

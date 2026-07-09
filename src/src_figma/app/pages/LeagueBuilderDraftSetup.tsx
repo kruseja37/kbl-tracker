@@ -4767,8 +4767,11 @@ export function LeagueBuilderDraftSetup() {
                 </div>
                 {recheckPanel}
                 {sizingSummaryLine}
-                {numericShapeDiagnostics}
-                {manualShapeDiagnostics}
+                {/* SETUPHELP: these are raw engine diagnostic dumps -- tuning-valuable for
+                    JK/agents, not for GMs -- so they hide behind Help like every other
+                    explanatory text on this page that isn't a user-manipulable control. */}
+                {showHelp ? numericShapeDiagnostics : null}
+                {showHelp ? manualShapeDiagnostics : null}
                 {marketOutlookPanel}
               </>
             )}
