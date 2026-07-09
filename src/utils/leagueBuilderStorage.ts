@@ -1108,10 +1108,21 @@ export async function saveTeam(team: Omit<Team, 'id' | 'createdDate' | 'lastModi
   });
 }
 
+function pruneTeamIdFromLeagueTemplate(league: LeagueTemplate, teamId: string): LeagueTemplate {
+  return {
+    ...league,
+    teamIds: league.teamIds.filter((id) => id !== teamId),
+    divisions: league.divisions.map((division) => ({
+      ...division,
+      teamIds: division.teamIds.filter((id) => id !== teamId),
+    })),
+  };
+}
+
 export async function deleteTeam(id: string): Promise<void> {
   const db = await initLeagueBuilderDatabase();
 
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.GLOBAL_TEAMS, 'readwrite');
     const store = tx.objectStore(STORES.GLOBAL_TEAMS);
     const request = store.delete(id);
@@ -1122,6 +1133,14 @@ export async function deleteTeam(id: string): Promise<void> {
     };
     request.onerror = () => reject(request.error);
   });
+
+  const leagues = await getAllLeagueTemplates();
+  for (const league of leagues) {
+    if (!league.teamIds.includes(id) && !league.divisions.some((division) => division.teamIds.includes(id))) {
+      continue;
+    }
+    await saveLeagueTemplate(pruneTeamIdFromLeagueTemplate(league, id));
+  }
 }
 
 // ============================================

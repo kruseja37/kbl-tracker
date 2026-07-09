@@ -8,7 +8,7 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderPlayers } from '../../app/pages/LeagueBuilderPlayers';
-import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
+import { getAuctionSession, getAuctionSessionById } from '../../../utils/leagueBuilderStorage';
 
 // ============================================
 // MOCKS
@@ -27,6 +27,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    getAuctionSessionById: vi.fn(async () => null),
   };
 });
 
@@ -146,6 +147,7 @@ describe('LeagueBuilderPlayers Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(getAuctionSessionById).mockResolvedValue(null);
   });
 
   describe('Header', () => {

@@ -320,9 +320,11 @@ export function LeagueBuilderLeagues() {
 
   const handleDuplicate = async (id: string) => {
     try {
+      setSaveError(null);
       await duplicateLeague(id);
     } catch (err) {
       console.error("Failed to duplicate league:", err);
+      setSaveError(err instanceof Error ? err.message : "Failed to duplicate league.");
     }
   };
 

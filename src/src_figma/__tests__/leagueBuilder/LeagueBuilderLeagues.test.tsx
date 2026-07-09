@@ -14,7 +14,7 @@ import {
   farmDraftRouteForFormat,
   farmDraftRouteForLeague,
 } from '../../app/utils/draftRouting';
-import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
+import { getAuctionSession, getAuctionSessionById } from '../../../utils/leagueBuilderStorage';
 import { TIER_CAPS } from '../../../data/tierParams';
 import { SALARY_CAP_FLOOR, salaryCapHardError } from '../../app/utils/salaryCapInput';
 
@@ -35,6 +35,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    getAuctionSessionById: vi.fn(async () => null),
   };
 });
 
@@ -120,6 +121,7 @@ describe('LeagueBuilderLeagues Component', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(getAuctionSessionById).mockResolvedValue(null);
     const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
     vi.mocked(useLeagueBuilderData).mockReturnValue({
       leagues: [

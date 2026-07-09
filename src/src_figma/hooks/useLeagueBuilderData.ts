@@ -29,6 +29,7 @@ import {
   saveRulesPreset,
   deleteRulesPreset,
   getTeamRoster,
+  getAuctionSession,
   saveTeamRoster,
   createEmptyTeamRoster,
   clearTeamRoster,
@@ -51,6 +52,8 @@ import {
 } from '../../utils/leagueBuilderStorage';
 import type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
 import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegistration';
+import { copyLeaguePoolMembership } from '../../utils/leagueBuilderPoolBuilder';
+import { MLB_AUCTION_SEASON } from '../../utils/leagueBuilderAuctionPipeline';
 import type { PlayerForSalary } from '../../engines/salaryCalculator';
 
 // Re-export types for convenience
@@ -158,6 +161,25 @@ function toPitcherRole(position: Player['primaryPosition']): PlayerForSalary['pi
     : 'SP';
 }
 
+function normalizeLeagueTeamMembership(
+  league: LeagueTemplate,
+  existingTeamIds: ReadonlySet<string>,
+): { league: LeagueTemplate; changed: boolean } {
+  const teamIds = league.teamIds.filter((teamId) => existingTeamIds.has(teamId));
+  const divisions = league.divisions.map((division) => ({
+    ...division,
+    teamIds: division.teamIds.filter((teamId) => existingTeamIds.has(teamId)),
+  }));
+  const changed =
+    teamIds.length !== league.teamIds.length ||
+    divisions.some((division, index) => division.teamIds.length !== league.divisions[index]?.teamIds.length);
+
+  return {
+    league: changed ? { ...league, teamIds, divisions } : league,
+    changed,
+  };
+}
+
 export function toConstructionPlayer(player: Player): ConstructionPlayer {
   const isPitcher = player.primaryPosition === 'SP'
     || player.primaryPosition === 'RP'
@@ -205,12 +227,20 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       await initLeagueBuilderDatabase();
       await initializeDefaultPresets();
 
-      const [leaguesData, teamsData, playersData, presetsData] = await Promise.all([
+      const [rawLeaguesData, teamsData, playersData, presetsData] = await Promise.all([
         getAllLeagueTemplates(),
         getAllTeams(),
         getAllPlayers(),
         getAllRulesPresets(),
       ]);
+      const existingTeamIds = new Set(teamsData.map((team) => team.id));
+      const normalizedLeaguesData = rawLeaguesData.map((league) => normalizeLeagueTeamMembership(league, existingTeamIds));
+      const leaguesData = normalizedLeaguesData.map((entry) => entry.league);
+      for (const entry of normalizedLeaguesData) {
+        if (entry.changed) {
+          await saveLeagueTemplate(entry.league);
+        }
+      }
 
       setLeagues(leaguesData);
       setTeams(teamsData);
@@ -407,6 +437,8 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       const teamIdMap = new Map<string, string>();
       const copiedTeamsByOriginalId = new Map<string, Team>();
       const copyUsesPoolFirst = (original.draftPoolMode ?? 'pool-first') === 'pool-first';
+      const originalMlbAuctionSession = await getAuctionSession(original.id, MLB_AUCTION_SEASON);
+      const originalDrafted = originalMlbAuctionSession?.session.state === 'AUCTION_COMPLETE';
 
       for (const originalTeam of originalTeams) {
         const {
@@ -433,6 +465,10 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
                 pins: originalTeam.rosterDesign.pins
                   ? { ...originalTeam.rosterDesign.pins }
                   : undefined,
+                rankOverrides: originalTeam.rosterDesign.rankOverrides
+                  ? structuredClone(originalTeam.rosterDesign.rankOverrides)
+                  : undefined,
+                // A league copy starts editable; keep the GM's board preferences but never carry the source lock.
               }
             : undefined,
           lineupWithDH: [],
@@ -453,11 +489,13 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
           const originalRoster = await getTeamRoster(originalTeam.id);
           if (originalRoster) {
             const emptyRoster = createEmptyTeamRoster(copiedTeam.id);
-            await saveTeamRoster({
-              ...emptyRoster,
-              mlbRoster: [...originalRoster.mlbRoster],
-              farmRoster: [...originalRoster.farmRoster],
-            });
+            await saveTeamRoster(originalDrafted
+              ? emptyRoster
+              : {
+                  ...emptyRoster,
+                  mlbRoster: [...originalRoster.mlbRoster],
+                  farmRoster: [...originalRoster.farmRoster],
+                });
           }
         }
       }
@@ -508,6 +546,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
         modeAHandAdds: undefined,
         modeAHandRemoves: undefined,
       });
+      if (copyUsesPoolFirst && originalDrafted) {
+        await copyLeaguePoolMembership(original.id, duplicate.id);
+      }
       await refresh();
       return duplicate;
     } catch (err) {
