@@ -650,6 +650,8 @@ export function LeagueBuilderFarmAuctionDraft() {
       // COCKPIT W1d fork 3 (dark-first): wired but inert while FARM_CHEM_FIT_ENABLED is false.
       prospectChemistry: currentLotProspect?.chemistry ?? null,
       mlbRosterChemistryCounts: auction.mlbRosterChemistryByTeamId[whisperSeatTeamId],
+      // CALLFIX Item 1: THE LIVE CALL 'lead' rung -- same ladder as MLB.
+      seatIsHighBidder: session.currentLot.highBidder === whisperSeatTeamId,
     });
 
     return Object.assign(

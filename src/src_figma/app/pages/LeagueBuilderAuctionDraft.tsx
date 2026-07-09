@@ -1280,6 +1280,9 @@ export function LeagueBuilderAuctionDraft() {
           nextBid: minBid,
           currentBid: session.currentLot.highBid,
           bidIncrement: session.config.bidIncrement,
+          // CALLFIX Item 1: THE LIVE CALL 'lead' rung -- this seat already holds the current
+          // lot's high bid.
+          seatIsHighBidder: session.currentLot.highBidder === seatTeamId,
           ownBandPriorities,
           archetypeWeights: lotArchetypeWeights,
           needBreakdown,
