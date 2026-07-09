@@ -98,6 +98,7 @@ import {
   type Light,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
+import { materializeRankOrder } from "../components/shared/RankReorderList";
 import type { TaxonomyPosition } from "../../../data/playerArchetypeTaxonomy";
 import { saveTeam } from "../../../utils/leagueBuilderStorage";
 import type { LiquidityCompletionCandidate } from "../../../engines/liquidityAwareBidding";
@@ -586,6 +587,12 @@ function isRosterSlotPlayer(shape: RosterSlotPlayer | undefined): shape is Roste
   return Boolean(shape);
 }
 
+// BOARDFIX2 (Item C): trailing debounce for the live board's boardRankOverrides persistence --
+// see pendingBoardRankOverrides below for the full rationale. Mirrors
+// LeagueBuilderDraftSetup.tsx's own BOARD_RANK_SAVE_DEBOUNCE_MS constant (kept local rather than
+// cross-imported between sibling pages).
+const BOARD_RANK_SAVE_DEBOUNCE_MS = 500;
+
 /**
  * COCKPIT WAVE 2 (B3/S3.4 auto-advance): when the MOST RECENTLY resolved lot was a SALE of the
  * GM's OWN explicit #1 at that position, name the promoted next target. SOLD-ONLY GATE (Wave-2
@@ -636,7 +643,15 @@ export function computeBoardAutoAdvanceLine(input: {
   const priorAvailableIds = new Set<string>([...board.map((entry) => entry.playerId), latestResultPlayerId]);
   const gmsEffectiveTopBeforeThisResolution = positionOverride.find((id) => priorAvailableIds.has(id));
   if (gmsEffectiveTopBeforeThisResolution !== latestResultPlayerId) return null;
-  const promoted = sortBoardEntriesForPosition(board, soldPosition, boardRankOverrides)[0];
+  // BOARDFIX2 (Item B): `sortBoardEntriesForPosition`'s blend is a worth+rank NUDGE, not a
+  // positional override -- it can pick a DIFFERENT "#1" than the one the GM's override (and the
+  // materialized board the GM actually sees) literally names. Materialize the same way the
+  // rendered board does so the citation always matches what's on screen.
+  const promoted = materializeRankOrder(
+    sortBoardEntriesForPosition(board, soldPosition, undefined),
+    (entry) => entry.playerId,
+    positionOverride,
+  )[0];
   if (!promoted) return null;
   const rankLabel = positionOverride.indexOf(promoted.playerId) + 1;
   const promotedName = boardMeta[promoted.playerId]?.name ?? promoted.note ?? promoted.playerId;
@@ -1098,32 +1113,77 @@ export function LeagueBuilderAuctionDraft() {
     return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
   }, [auction, session]);
 
+  // BOARDFIX2 (Item C, perf): reorders on the LIVE board update this local, in-memory overlay
+  // INSTANTLY; the actual `saveTeam` write is debounced (trailing, see the effect below) so a
+  // burst of rapid moves fires ONE write after the burst settles, not one per click. Each
+  // synchronous `saveTeam` + `replaceTeamsLocal` used to reference-invalidate `teamById`, which is
+  // a dependency of the entire `whisperPayload` memo below (worth/scorecard/market/chemistry/
+  // liquidity engine calls) -- every rank click was recomputing the FULL whisper intelligence
+  // payload from scratch. Scoped by team object so switching seats never applies a stale pending
+  // write to the wrong team.
+  const [pendingBoardRankOverrides, setPendingBoardRankOverrides] = useState<{ team: Team; overrides: NonNullable<Team["boardRankOverrides"]> } | null>(null);
+
+  const flushBoardRankOverrides = useCallback(async (team: Team, boardRankOverrides: NonNullable<Team["boardRankOverrides"]>) => {
+    const saved = await saveTeam({ ...team, boardRankOverrides });
+    leagueData.replaceTeamsLocal([saved]);
+  }, [leagueData]);
+
+  const pendingBoardRankOverridesRef = useRef(pendingBoardRankOverrides);
+  useEffect(() => {
+    pendingBoardRankOverridesRef.current = pendingBoardRankOverrides;
+  });
+
+  // Trailing debounce: only the FINAL state after a burst of rapid moves settles reaches saveTeam.
+  useEffect(() => {
+    if (!pendingBoardRankOverrides) return undefined;
+    const timer = window.setTimeout(() => {
+      void flushBoardRankOverrides(pendingBoardRankOverrides.team, pendingBoardRankOverrides.overrides).then(() => {
+        setPendingBoardRankOverrides((current) => (current === pendingBoardRankOverrides ? null : current));
+      });
+    }, BOARD_RANK_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [pendingBoardRankOverrides, flushBoardRankOverrides]);
+
+  // Flush on unmount / tab-hide so a reorder made just before navigating away isn't dropped.
+  useEffect(() => {
+    const flushOnHide = () => {
+      const pending = pendingBoardRankOverridesRef.current;
+      if (document.visibilityState === "hidden" && pending) {
+        void flushBoardRankOverrides(pending.team, pending.overrides);
+        setPendingBoardRankOverrides(null);
+      }
+    };
+    document.addEventListener("visibilitychange", flushOnHide);
+    return () => {
+      document.removeEventListener("visibilitychange", flushOnHide);
+      const pending = pendingBoardRankOverridesRef.current;
+      if (pending) void flushBoardRankOverrides(pending.team, pending.overrides);
+    };
+  }, [flushBoardRankOverrides]);
+
   const handleBoardReorderGlobal = useCallback((orderedIds: readonly string[]) => {
     const team = activeWhisperSeatTeamId ? teamById.get(activeWhisperSeatTeamId) : null;
     if (!team) return;
-    void (async () => {
-      const saved = await saveTeam({
-        ...team,
-        boardRankOverrides: { ...team.boardRankOverrides, global: [...orderedIds] },
-      });
-      leagueData.replaceTeamsLocal([saved]);
-    })();
-  }, [activeWhisperSeatTeamId, leagueData, teamById]);
+    const current = pendingBoardRankOverridesRef.current?.team.id === team.id
+      ? pendingBoardRankOverridesRef.current.overrides
+      : team.boardRankOverrides;
+    setPendingBoardRankOverrides({ team, overrides: { ...current, global: [...orderedIds] } });
+  }, [activeWhisperSeatTeamId, teamById]);
 
   const handleBoardReorderPosition = useCallback((position: TaxonomyPosition, orderedIds: readonly string[]) => {
     const team = activeWhisperSeatTeamId ? teamById.get(activeWhisperSeatTeamId) : null;
     if (!team) return;
-    void (async () => {
-      const saved = await saveTeam({
-        ...team,
-        boardRankOverrides: {
-          ...team.boardRankOverrides,
-          byPosition: { ...team.boardRankOverrides?.byPosition, [position]: [...orderedIds] },
-        },
-      });
-      leagueData.replaceTeamsLocal([saved]);
-    })();
-  }, [activeWhisperSeatTeamId, leagueData, teamById]);
+    const current = pendingBoardRankOverridesRef.current?.team.id === team.id
+      ? pendingBoardRankOverridesRef.current.overrides
+      : team.boardRankOverrides;
+    setPendingBoardRankOverrides({
+      team,
+      overrides: {
+        ...current,
+        byPosition: { ...current?.byPosition, [position]: [...orderedIds] },
+      },
+    });
+  }, [activeWhisperSeatTeamId, teamById]);
 
   const whisperPayload = useMemo<RosterIntelligencePayload | null>(() => {
     if (!session || !session.currentLot) return null;
@@ -1312,16 +1372,23 @@ export function LeagueBuilderAuctionDraft() {
         };
       })
       .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
-    const board = assembleBoard({
+    // BOARDFIX2 (Item B): assembleBoard's own `rankOverrides` param feeds `sortByGmBlend` -- a
+    // worth+rank NUDGE, not a positional override (engine math, out of this lane's allowed-edit
+    // surface -- see materializeRankOrder's doc comment in RankReorderList.tsx for the full
+    // root-cause writeup). Every non-overridden entry's blend bonus is 0 regardless of whether an
+    // override is passed here, so calling WITHOUT one yields the same worth-ranked "natural" order
+    // for anyone not explicitly ranked -- then materializeRankOrder places the GM's real global
+    // override at its literal index on top, so a typed/dragged rank lands exactly where the GM
+    // put it (and computeBoardAutoAdvanceLine's citation, below, stays consistent with it).
+    const naturalBoard = assembleBoard({
       candidates: boardCandidates,
       rosterPlayers,
       // Gate need on rosterShapeClean like the sibling reads (worthToYou/scorecard/budget): a
       // position-blind roster member truncates rosterShapes, which would fabricate false FILLS/deficit
       // tags. Undefined → boardNeedTag returns null (byte-identical to the no-need board).
       need: needBreakdown ?? undefined,
-      // COCKPIT WAVE 2 (Correction 5/7): the GM's own board order, a strong nudge on top of worth.
-      rankOverrides: team.boardRankOverrides,
     });
+    const board = materializeRankOrder(naturalBoard, (entry) => entry.playerId, team.boardRankOverrides?.global);
 
     // COCKPIT WAVE 2 (B3/S3.4 auto-advance): see computeBoardAutoAdvanceLine's doc comment.
     const latestResult = session.results[session.results.length - 1];
@@ -1425,6 +1492,28 @@ export function LeagueBuilderAuctionDraft() {
     teamById,
     teamStateById,
   ]);
+
+  // BOARDFIX2 (Item C, perf): a CHEAP overlay -- re-sequencing an already-computed small array,
+  // spreading an object -- applied on top of the (heavy, rarely-recomputed) `whisperPayload`
+  // above. This is what makes a reorder feel instant: `pendingBoardRankOverrides` changes on every
+  // click, but only THIS lightweight memo reruns per click, never the engine calls
+  // (worth/scorecard/market/chemistry/liquidity) inside `whisperPayload` itself.
+  const displayedWhisperPayload = useMemo<RosterIntelligencePayload | null>(() => {
+    if (!whisperPayload) return whisperPayload;
+    if (!pendingBoardRankOverrides || pendingBoardRankOverrides.team.id !== whisperPayload.seatTeamId) {
+      return whisperPayload;
+    }
+    const overrideBoard = materializeRankOrder(
+      whisperPayload.board ?? [],
+      (entry) => entry.playerId,
+      pendingBoardRankOverrides.overrides.global,
+    );
+    return Object.assign({}, whisperPayload, {
+      board: overrideBoard,
+      boardRankOverrides: pendingBoardRankOverrides.overrides,
+    });
+  }, [whisperPayload, pendingBoardRankOverrides]);
+
   const bidIncrement = session?.config.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement;
   const setupShillCount = useMemo(
     () => clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)),
@@ -1824,7 +1913,7 @@ export function LeagueBuilderAuctionDraft() {
     return (
       <AuctionStage
         vm={auctionStageVm}
-        whisperPayload={whisperPayload}
+        whisperPayload={displayedWhisperPayload}
         toolbar={
           <div className="row" style={{ marginBottom: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <button

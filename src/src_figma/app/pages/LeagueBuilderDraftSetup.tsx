@@ -153,7 +153,7 @@ import {
   type BoardEntry,
 } from "../../../engines/rosterIntelligencePayload";
 import type { TaxonomyPosition } from "../../../data/playerArchetypeTaxonomy";
-import { RankReorderList } from "../components/shared/RankReorderList";
+import { RankReorderList, materializeRankOrder } from "../components/shared/RankReorderList";
 import { PlayerProfilePopover } from "../components/shared/PlayerProfilePopover";
 import {
   formatSalaryCapInput,
@@ -972,6 +972,9 @@ function rosterPositionMap(players: readonly Player[]): RosterPositionMap {
 }
 
 export const BOARD_POSITION_DEPTH = 5;
+// BOARDFIX2 (Item C): trailing debounce for boardRankOverrides persistence -- see
+// pendingBoardRankOverrides in LeagueBuilderDraftSetup for the full rationale.
+export const BOARD_RANK_SAVE_DEBOUNCE_MS = 500;
 
 /**
  * COCKPIT WAVE 2 (B3 + Correction 5/7) -- "RANK YOUR BOARD" setup zone. Born on the
@@ -1016,9 +1019,19 @@ export function RankYourBoardZone({
   const [selectedPosition, setSelectedPosition] = useState<TaxonomyPosition>(firstPopulatedPosition);
   const [positionExpanded, setPositionExpanded] = useState(false);
 
+  // BOARDFIX2: `sortBoardEntriesForPosition`'s own blend (a worth+rank NUDGE, not a positional
+  // override -- see materializeRankOrder's doc comment) can leapfrog a GM's explicit rank past a
+  // much-higher-worth entry ranked just below. Compute the position-scoped NATURAL order (no
+  // override passed -- every candidate's blend bonus is 0 either way, so this is identical to the
+  // worth-ranked fallback for anyone NOT explicitly ranked), then materialize the real override on
+  // top so a typed/dragged rank lands exactly where the GM put it and stays there.
+  const positionNatural = useMemo(
+    () => sortBoardEntriesForPosition(boardEntries, selectedPosition, undefined),
+    [boardEntries, selectedPosition],
+  );
   const positionView = useMemo(
-    () => sortBoardEntriesForPosition(boardEntries, selectedPosition, boardRankOverrides),
-    [boardEntries, selectedPosition, boardRankOverrides],
+    () => materializeRankOrder(positionNatural, (entry) => entry.playerId, boardRankOverrides?.byPosition?.[selectedPosition]),
+    [positionNatural, boardRankOverrides, selectedPosition],
   );
   const visiblePositionView = positionExpanded ? positionView : positionView.slice(0, BOARD_POSITION_DEPTH);
 
@@ -1872,6 +1885,20 @@ export function LeagueBuilderDraftSetup() {
     () => new Map(rosterDesignerPlayers.map((player) => [player.id, player])),
     [rosterDesignerPlayers],
   );
+
+  // BOARDFIX2 (Item C, perf): reorders (arrow/drag/badge-edit/send-to-top) update THIS local,
+  // in-memory overlay INSTANTLY; the actual `saveTeam` write is debounced (trailing, see the
+  // effect below) so a burst of rapid moves fires ONE write after the burst settles, not one
+  // write + one full leagueTeams-array replace PER CLICK -- each of which used to reference-
+  // invalidate leagueTeams/humanTeams and retrigger every downstream memo keyed on them (see the
+  // liveClubVerdicts effect fix further down). Scoped by team object (not just id) so switching
+  // the selected club never applies a stale pending write to the wrong team.
+  const [pendingBoardRankOverrides, setPendingBoardRankOverrides] = useState<{ team: Team; overrides: NonNullable<Team["boardRankOverrides"]> } | null>(null);
+  const effectiveBoardRankOverrides: Team["boardRankOverrides"] =
+    pendingBoardRankOverrides && selectedTeam && pendingBoardRankOverrides.team.id === selectedTeam.id
+      ? pendingBoardRankOverrides.overrides
+      : selectedTeam?.boardRankOverrides;
+
   const boardEntries = useMemo<BoardEntry[]>(() => {
     const candidates = rosterDesignerPlayers.map((player) => ({
       playerId: player.id,
@@ -1883,12 +1910,17 @@ export function LeagueBuilderDraftSetup() {
         traits: [player.trait1, player.trait2],
       }),
     }));
-    return assembleBoard({
-      candidates,
-      rosterPlayers: [],
-      rankOverrides: selectedTeam?.boardRankOverrides,
-    });
-  }, [rosterDesignerPlayers, ivById, selectedTeam?.boardRankOverrides]);
+    // BOARDFIX2 (Item B): assembleBoard's own `rankOverrides` param feeds `sortByGmBlend` -- a
+    // worth+rank NUDGE, not a positional override (see materializeRankOrder's doc comment in
+    // RankReorderList.tsx for the full root-cause writeup: it's engine math, out of this lane's
+    // allowed-edit surface). Every non-overridden entry's blend bonus is 0 regardless of whether
+    // an override is passed here, so calling WITHOUT one yields the exact same worth-ranked
+    // "natural" order for anyone not explicitly ranked -- then materializeRankOrder places the
+    // real override (global, or per-position further down in RankYourBoardZone) at its literal
+    // index on top, so a typed/dragged rank lands exactly where the GM put it.
+    const natural = assembleBoard({ candidates, rosterPlayers: [] });
+    return materializeRankOrder(natural, (entry) => entry.playerId, effectiveBoardRankOverrides?.global);
+  }, [rosterDesignerPlayers, ivById, effectiveBoardRankOverrides?.global]);
 
   const inPoolPlayerIdsKey = useMemo(
     () => sortedIds(inPoolPlayers.map((player) => player.id)).join("|"),
@@ -2065,6 +2097,17 @@ export function LeagueBuilderDraftSetup() {
     if (!locked) return null;
     return draftSetupSolvencyBannerText(inPoolDesignPool, tierBudget);
   }, [inPoolDesignPool, locked, tierBudget]);
+  // BOARDFIX2 (Item C, perf audit): this used to depend on `humanTeams` (a referential array).
+  // `replaceTeamsLocal` always creates a NEW `teams`/`leagueTeams`/`humanTeams` array reference on
+  // ANY team save -- including a `boardRankOverrides`-only save from a rank-your-board reorder,
+  // which this effect has nothing to do with. That meant every rank click reset this 200ms timer
+  // and eventually re-ran `evaluateRosterDesign` for every human team, even though nothing about
+  // roster-design feasibility had changed. Switched to `clubTargetDesignKey` -- the SAME content-
+  // based signature the auto-fit effect just below already keys on -- which captures every field
+  // `evaluateRosterDesign` (via `team.rosterDesign.slots`) or this effect's caller actually reads,
+  // and stays byte-identical across a boardRankOverrides-only change. `humanTeams` is still read
+  // inside the closure (this render's current value) -- it just no longer RETRIGGERS the effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const next = new Map<string, DesignFeasibilityResult>();
@@ -2077,7 +2120,7 @@ export function LeagueBuilderDraftSetup() {
       setLiveClubVerdicts(next);
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [humanTeams, inPoolDesignPool, tierBudget]);
+  }, [clubTargetDesignKey, inPoolDesignPool, tierBudget]);
   useEffect(() => {
     let cancelled = false;
     const timer = window.setTimeout(() => {
@@ -2708,7 +2751,9 @@ export function LeagueBuilderDraftSetup() {
 
   // COCKPIT WAVE 2 (Correction 5/7): persists the GM's own big-board / per-position order —
   // separate from rosterDesign.rankOverrides above (per-slot preference feeding buildBest22Target).
-  const handleSaveBoardRankOverrides = useCallback(
+  // BOARDFIX2 (Item C): this is now the DEBOUNCED flush target for the pendingBoardRankOverrides
+  // overlay above, not called directly per-reorder.
+  const flushBoardRankOverrides = useCallback(
     async (team: Team, boardRankOverrides: NonNullable<Team["boardRankOverrides"]>) => {
       try {
         const saved = await saveTeam({ ...team, boardRankOverrides });
@@ -2719,6 +2764,42 @@ export function LeagueBuilderDraftSetup() {
     },
     [replaceTeamsLocal],
   );
+
+  // BOARDFIX2 (Item C): keeps a ref in sync with the pending overlay so the unmount/tab-hide
+  // flush below always sees the LATEST pending edit, not a stale render's closure.
+  const pendingBoardRankOverridesRef = useRef(pendingBoardRankOverrides);
+  useEffect(() => {
+    pendingBoardRankOverridesRef.current = pendingBoardRankOverrides;
+  });
+
+  // Trailing debounce: every new reorder resets this timer: only the FINAL state after a burst of
+  // rapid moves settles actually reaches saveTeam (see the perf audit in the BOARDFIX2 contract).
+  useEffect(() => {
+    if (!pendingBoardRankOverrides) return undefined;
+    const timer = window.setTimeout(() => {
+      void flushBoardRankOverrides(pendingBoardRankOverrides.team, pendingBoardRankOverrides.overrides).then(() => {
+        setPendingBoardRankOverrides((current) => (current === pendingBoardRankOverrides ? null : current));
+      });
+    }, BOARD_RANK_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [pendingBoardRankOverrides, flushBoardRankOverrides]);
+
+  // Flush on unmount / tab-hide so a reorder made just before navigating away isn't dropped.
+  useEffect(() => {
+    const flushOnHide = () => {
+      const pending = pendingBoardRankOverridesRef.current;
+      if (document.visibilityState === "hidden" && pending) {
+        void flushBoardRankOverrides(pending.team, pending.overrides);
+        setPendingBoardRankOverrides(null);
+      }
+    };
+    document.addEventListener("visibilitychange", flushOnHide);
+    return () => {
+      document.removeEventListener("visibilitychange", flushOnHide);
+      const pending = pendingBoardRankOverridesRef.current;
+      if (pending) void flushBoardRankOverrides(pending.team, pending.overrides);
+    };
+  }, [flushBoardRankOverrides]);
 
   const handleAdd = () =>
     runAction(async () => {
@@ -3092,6 +3173,79 @@ export function LeagueBuilderDraftSetup() {
     !poolTrailing;
   const poolFirstLegalCompletionBlocked =
     poolMode === "pool-first" && poolFirstManualShapeDiagnostics?.legalCompletionFeasible === false;
+
+  // BOARDFIX2 (Item A): JK's real league still couldn't start even after BOARDFIX1's pool-display
+  // fix landed -- the gate itself was never wrong, but the ONLY explanation on screen was
+  // `startBlocker` above: a single ~11px line showing just the FIRST-priority reason, easy to
+  // miss, and never naming which clubs/what changed. This enumerates EVERY currently-true blocker
+  // across both LOCK POOL (canModeALock / the pool-first lock button's own
+  // poolFirstLegalCompletionBlocked) and START THE DRAFT (startReady) as its own plain-language
+  // line -- an ALWAYS-class state warning per DRAFT_SKIN_STANDARD_2026-07-08.md §7 (state-
+  // triggered warnings are RULED ALWAYS-visible, never Help-gated). Mirrors startReady's own
+  // formula term-for-term so "reasons is empty" and "startReady is true" never disagree (see the
+  // REAL-BLOCKER HUNT test coverage) -- happy path -> empty array -> the panel renders nothing.
+  const readinessReasons: string[] = [];
+  if (!savedDraftChecked) {
+    readinessReasons.push(CHECKING_SAVED_DRAFT_MESSAGE);
+  } else if (savedDraftLookupError) {
+    readinessReasons.push(savedDraftLookupError);
+  } else if (!hasSavedDraft) {
+    if (leagueTeams.length === 0) {
+      readinessReasons.push("No clubs are set up for this league yet.");
+    } else {
+      const identityGaps = leagueTeams.filter((team) => !team.mlbArchetypeKey || !team.farmArchetypeKey);
+      if (identityGaps.length > 0) {
+        const named = identityGaps.map((team) => {
+          const missing: string[] = [];
+          if (!team.mlbArchetypeKey) missing.push("MLB");
+          if (!team.farmArchetypeKey) missing.push("farm");
+          return `${formatClubName(team, ownerName, seats)} (needs ${missing.join(" + ")})`;
+        });
+        readinessReasons.push(
+          `${identityGaps.length} club${identityGaps.length === 1 ? "" : "s"} still need${identityGaps.length === 1 ? "s" : ""} an identity — ${named.join(", ")}.`,
+        );
+      }
+
+      if (poolMode === "design-first") {
+        if (!allHumanDesignsLocked) {
+          readinessReasons.push(
+            `${modeAWaitingTeams.length} of ${humanTeams.length} club design${humanTeams.length === 1 ? "" : "s"} not locked yet — waiting on ${modeAWaitingTeams.map((team) => formatClubName(team, ownerName, seats)).join(", ")}.`,
+          );
+        } else if (!league?.poolExtractedAt) {
+          readinessReasons.push("Every design is locked — EXTRACT POOL to draw the players.");
+        } else if (!locked) {
+          readinessReasons.push("The pool is extracted but not locked yet — LOCK POOL to freeze prices for the auction.");
+        } else if (!sufficiency.meetsFloor) {
+          readinessReasons.push(`The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`);
+        }
+        if (modeAStaleTeams.length > 0) {
+          readinessReasons.push(
+            `${modeAStaleTeams.length} club design${modeAStaleTeams.length === 1 ? "" : "s"} changed since the last extract — ${modeAStaleTeams.map((team) => formatClubName(team, ownerName, seats)).join(", ")}.`,
+          );
+        }
+        for (const line of basisStaleLines) readinessReasons.push(line);
+        if (modeAFinalizedDisplayMismatch) {
+          readinessReasons.push("Re-extract so the displayed pool matches the final pool.");
+        }
+        if (locked && (modeAStaleTeams.length > 0 || basisStaleLines.length > 0 || modeAFinalizedDisplayMismatch)) {
+          readinessReasons.push("The pool is locked but the plan changed since — UNLOCK, re-extract, then re-lock.");
+        }
+      } else {
+        if (!locked) {
+          if (poolFirstLegalCompletionBlocked) {
+            readinessReasons.push("The pool can't legally seat every club at 22 under the cap yet — add players or raise the cap, then LOCK POOL.");
+          } else if (inPoolPlayers.length === 0) {
+            readinessReasons.push("The pool is empty — add players below, then LOCK POOL.");
+          } else {
+            readinessReasons.push("The pool hasn't been locked yet — LOCK POOL to freeze prices for the auction.");
+          }
+        } else if (!sufficiency.meetsFloor) {
+          readinessReasons.push(`The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`);
+        }
+      }
+    }
+  }
+
   const runModeALock = () => {
     if (!canModeALock) return;
     if (nonGreenClubCount > 0 && !lockConfirm) {
@@ -4000,22 +4154,25 @@ export function LeagueBuilderDraftSetup() {
                   <RankYourBoardZone
                     boardEntries={boardEntries}
                     playerById={boardPlayerById}
-                    boardRankOverrides={selectedTeam.boardRankOverrides}
+                    boardRankOverrides={effectiveBoardRankOverrides}
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage}
                     showHelp={showHelp}
                     onReorderGlobal={(orderedIds) =>
-                      void handleSaveBoardRankOverrides(selectedTeam, {
-                        ...selectedTeam.boardRankOverrides,
-                        global: [...orderedIds],
+                      setPendingBoardRankOverrides({
+                        team: selectedTeam,
+                        overrides: { ...effectiveBoardRankOverrides, global: [...orderedIds] },
                       })
                     }
                     onReorderPosition={(position, orderedIds) =>
-                      void handleSaveBoardRankOverrides(selectedTeam, {
-                        ...selectedTeam.boardRankOverrides,
-                        byPosition: {
-                          ...selectedTeam.boardRankOverrides?.byPosition,
-                          [position]: [...orderedIds],
+                      setPendingBoardRankOverrides({
+                        team: selectedTeam,
+                        overrides: {
+                          ...effectiveBoardRankOverrides,
+                          byPosition: {
+                            ...effectiveBoardRankOverrides?.byPosition,
+                            [position]: [...orderedIds],
+                          },
                         },
                       })
                     }
@@ -4430,6 +4587,25 @@ export function LeagueBuilderDraftSetup() {
               <HelpNote>
                 Set shill pressure, check the room, then start. A live draft resumes from here.
               </HelpNote>
+            ) : null}
+            {/* BOARDFIX2 (Item A): an ALWAYS-visible readiness panel, not gated on showHelp or on
+                any specific pool-mode zone -- it names EVERY unmet condition across LOCK POOL and
+                START THE DRAFT so "no way to start the draft" always has a plain-language answer
+                right where the user is looking for it. Empty on the happy path -- nothing renders. */}
+            {readinessReasons.length > 0 ? (
+              <div
+                className="border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] px-4 py-3 mb-4"
+                data-testid="draft-readiness-panel"
+              >
+                <div className="text-[11px] font-bold tracking-[0.16em] text-[var(--ballpark-warn-text)] mb-2">
+                  WHAT'S HOLDING THE DRAFT UP
+                </div>
+                <ul className="grid gap-1 text-sm text-[var(--ballpark-warn-text)]">
+                  {readinessReasons.map((reason, index) => (
+                    <li key={`${index}-${reason}`}>• {reason}</li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
             <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(220px,280px)_1fr_auto] gap-4 items-center">
               <div className="flex items-center gap-3">

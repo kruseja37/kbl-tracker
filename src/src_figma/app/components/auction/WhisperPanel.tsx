@@ -16,7 +16,7 @@ import type { LiquidityReasonCode } from "../../../../engines/liquidityAwareBidd
 import type { Player } from "../../../../utils/leagueBuilderStorage";
 import type { TaxonomyPosition } from "../../../../data/playerArchetypeTaxonomy";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
-import { RankReorderList } from "../shared/RankReorderList";
+import { RankReorderList, materializeRankOrder } from "../shared/RankReorderList";
 
 /**
  * COCKPIT W1a/b (2026-07-08, DRAFT_COCKPIT_DESIGN_2026-07-08.md): "mlb" turns on the always-visible
@@ -171,9 +171,21 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
     }
     return counts;
   }, [board]);
+  // BOARDFIX2 (Item B): `sortBoardEntriesForPosition`'s own blend is a worth+rank NUDGE, not a
+  // positional override (see materializeRankOrder's doc comment) -- it can leapfrog a GM's
+  // explicit rank past a much-higher-worth entry ranked just below. `board` itself already
+  // arrives pre-materialized for the GLOBAL order (LeagueBuilderAuctionDraft.tsx), but the
+  // PER-POSITION view has its own, separate byPosition override -- compute the position-scoped
+  // NATURAL order (no override passed; every non-ranked candidate's blend bonus is 0 either way)
+  // and materialize the real per-position override on top so a typed/dragged rank lands exactly
+  // where the GM put it.
+  const boardPositionNatural = useMemo(
+    () => sortBoardEntriesForPosition(board, boardPosition, undefined),
+    [board, boardPosition],
+  );
   const boardPositionView = useMemo(
-    () => sortBoardEntriesForPosition(board, boardPosition, meta.boardRankOverrides ?? undefined),
-    [board, boardPosition, meta.boardRankOverrides],
+    () => materializeRankOrder(boardPositionNatural, (entry) => entry.playerId, meta.boardRankOverrides?.byPosition?.[boardPosition]),
+    [boardPositionNatural, meta.boardRankOverrides, boardPosition],
   );
 
   const defaultLight = useMemo(() => {
