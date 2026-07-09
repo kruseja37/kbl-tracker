@@ -25,3 +25,152 @@ npx tsc -b clean; npm run build exit 0; focused suites: auctionLuxuryTax, auctio
 
 ═══ DELIVERABLE ═══
 Contract-first; failing-repro commit BEFORE the fix; final contract update with evidence, the conformance table result, before/after arithmetic for every changed expected value, gate outputs. Final message: summary + hashes + surprises. UNKNOWN = STOP and report.
+
+───────────────────────────────────────────────────────────────────────────
+FINAL EVIDENCE (filled in by the builder lane, 2026-07-09)
+───────────────────────────────────────────────────────────────────────────
+
+CORRECTION TO THE CONFIRMED CITATION (surprise, reported not silently fixed):
+The prompt's root-cause citation is partially wrong. `normalizeIdentityMods`
+does NOT live at leagueConstruction.ts:143 (that line is `rawDeltaMagnitude`)
+and it does NOT run in the archetype path at all — it lives in
+src/src_figma/app/pages/LeagueBuilderTeams.tsx:135 and only truncates the
+*hand-picked* (non-archetype) identity editor's UI selection to 2 slots, a
+separate, correctly-scoped UI constraint. `archetypeToCapIdentity`
+(src/engines/archetypeIdentity.ts:31-47) never truncates: `increase`/
+`decrease` carry ALL of an archetype's boost/nerf names (3 for
+rangy-defenders), and `identityCapShift`'s coarse fallback loop
+(leagueConstruction.ts:217-234) processes every name in those arrays — none
+is literally "dropped". The real mechanism: `auctionShiftedCapsWithBaseCaps`
+(src/engines/auctionLuxuryTax.ts, pre-fix lines 22-32) rebuilt a NEW
+`{ increase, decrease }` object from `capIdentity` and never forwarded
+`capIdentity.rawShift`, so `identityCapShift`'s `if (identity.rawShift)`
+short-circuit (leagueConstruction.ts:212) always fell through to the coarse
+per-name `CAP_MODIFICATION_FRACTIONS` lookup for EVERY archetype-derived
+identity, on EVERY boosted/nerfed stat — not selectively the "third" one.
+The observable symptom (auction ignores an archetype's exact ratified cap
+shift) and the captain's ruling (rawShift must win, exactly like
+`shiftLuxuryCaps`/the snake draft) are both confirmed correct; only the
+specific truncation mechanism named in the citation was wrong. Root cause
+verified by direct code read plus the repro tests below, not assumed.
+
+REPRO (failing tests against unmodified code, commit c986aa2b, before the fix):
+  Test 1 -- rangy-defenders (boosts: SPD, ARM, FLD; rawShift.SPD = 0.12 vs
+  coarse CAP_MODIFICATION_FRACTIONS.SPD.SPD = 0.045455). Standard-tier
+  hitters/SPD base cap = 588.9. Coarse-shifted cap = 588.9 x 1.045455 =
+  615.668; exact rawShift-shifted cap = 588.9 x 1.12 = 659.568. An 8-hitter
+  roster at SPD 80 each (top-8 sum = 640) sits strictly between those two
+  numbers -- correct tax is 0, unmodified code charged 78,014.21.
+
+    AssertionError: expected 78014.20714612913 to be +0 // Object.is equality
+
+  Test 2 -- murderers-row (boosts: POW, CON; nerf: SPD; rawShift.POW = 0.075
+  vs coarse CAP_MODIFICATION_FRACTIONS.POW.POW = 0.02). An 8-hitter
+  POW-99 roster's tax computed off the exact rawShift-shifted caps is
+  3,009,046.14; unmodified code (coarse-shifted caps) charged 3,946,642.52 --
+  937,596.38 too much.
+
+    AssertionError: expected 3946642.5213884334 to be close to
+    3009046.1393780643, received difference is 937596.3820103691,
+    but expected 5e-9
+
+  Test 3 -- 24-archetype x 3-tier conformance sweep: auctionShiftedCaps
+  output did not deep-equal shiftLuxuryCaps(rawShift) for archetype #1
+  (murderers-row) at the very first tier checked (juiced), e.g. hitters/POW
+  cap 626.076 (coarse) vs 659.835 (exact) -- confirming the divergence is
+  universal across the catalog, not isolated to the two hand-picked
+  fixtures above.
+
+  Full run: `npx vitest run src/engines/__tests__/auctionLuxuryTax.test.ts`
+  -> Test Files 1 failed (1) / Tests 3 failed | 5 passed (8). The 5 passing
+  tests are the pre-existing suite (untouched, still exercising the
+  no-rawShift coarse path) plus the new byte-identical lock test, which
+  already passed pre-fix (as expected -- it only exercises the coarse path).
+
+  Repro committed at c986aa2b (test-only, before any src/ change).
+
+THE FIX (commit follows c986aa2b, src/engines/auctionLuxuryTax.ts only):
+  Before:
+    return capIdentity
+      ? shiftLuxuryCaps(baseCaps, {
+          increase: capIdentity.increase,
+          decrease: capIdentity.decrease,
+        })
+      : baseCaps;
+  After:
+    return capIdentity ? shiftLuxuryCaps(baseCaps, capIdentity) : baseCaps;
+  Delegates directly to the canonical `shiftLuxuryCaps` with the full
+  `TeamCapIdentity` object (structurally a superset of the `IdentityComposition`
+  it expects: same `increase`/`decrease`/`rawShift`, plus an inert extra
+  `bandPriorities` field `shiftLuxuryCaps` never reads) instead of
+  reconstructing a stripped copy. Zero formula duplication -- no cap-shift
+  math was reimplemented, only the call site changed. This is now IDENTICAL
+  in shape to the snake draft's own call (LeagueBuilderSnakeDraft.tsx:129,335:
+  `shiftLuxuryCaps(pool.luxuryCaps, currentTeam.capIdentity)`).
+
+CONFORMANCE TABLE RESULT (Item 3, post-fix):
+  24 archetypes x 3 tiers (juiced/standard/nerfed) = 72 checks, all pass:
+  `auctionShiftedCaps(archetypeToCapIdentity(arch), tier)` deep-equals
+  `shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], archetypeToCapIdentity(arch))`
+  for every archetype in HISTORICAL_ARCHETYPES, every tier. Catalog size
+  (24) is itself asserted so a future roster change can't silently shrink
+  coverage.
+
+RIPPLE (Item 2) -- NO expected-value changes were needed anywhere:
+  Every ripple suite in the gate list (auctionLuxuryTaxSettlement,
+  auctionStateMachine, auctionStateMachineOneChance, auctionCompletionFloor,
+  useAuctionDraft, rosterIntelligencePayload, liquidityAwareBidding, plus
+  archetypeIdentity) passed unmodified, before and after the fix, with their
+  existing fixtures. Traced why: none of those suites build a capIdentity via
+  `archetypeToCapIdentity` (grep-confirmed -- only auctionLuxuryTax.test.ts
+  and archetypeIdentity.test.ts import it); they either pass `capIdentity:
+  undefined`, hand-build a no-rawShift `{ increase, decrease }` identity, or
+  (rosterIntelligencePayload / auctionLuxuryTaxSettlement) inject a raw
+  `marginalTax`/`projectedTax` number directly rather than computing it from
+  a capIdentity. So the coarse path -- the only path those fixtures ever
+  exercised -- is unchanged by this fix (proven by the "coarse-only identity
+  stays byte-identical" lock test). This is a genuine zero-ripple outcome,
+  not a skipped check: 146 tests across 9 files, all green, both before and
+  after, confirmed by two full runs.
+  LeagueBuilderSnakeDraft.tsx has no test file (confirmed via find) -- not
+  addable to the conformance test without importing a .tsx page component
+  into an engine-level vitest run; the snake path's correctness is instead
+  established by direct citation (LeagueBuilderSnakeDraft.tsx:129,335 already
+  calls `shiftLuxuryCaps(caps, capIdentity)` verbatim, unchanged by this lane).
+  WhisperPanel.tsx / AuctionStage.tsx / LeagueBuilderTeams.tsx: zero diff
+  (confirmed via `git status --short` / `git diff --stat` showing only
+  src/engines/auctionLuxuryTax.ts + the one test file changed).
+
+GATES (real outputs):
+  npx tsc -b --clean            -> exit 0 (contract said "tsc -b clean";
+                                    literal `tsc -b clean` is invalid tsc
+                                    syntax -- TS5083, "clean" read as a
+                                    project path -- ran `tsc -b --clean`
+                                    then a full `tsc -b` rebuild instead)
+  npx tsc -b                    -> exit 0, no errors
+  npm run build                 -> exit 0 ("built in 11.14s"; PWA precache
+                                    185 entries; pre-existing >500kB chunk
+                                    warnings only, unrelated to this diff)
+  Focused suite (9 files, run twice -- pre-fix red then post-fix green):
+    auctionLuxuryTax.test.ts, auctionLuxuryTaxSettlement.test.ts,
+    auctionStateMachine.test.ts, auctionStateMachineOneChance.test.ts,
+    auctionCompletionFloor.test.ts, liquidityAwareBidding.test.ts,
+    useAuctionDraft.test.ts, rosterIntelligencePayload.test.ts,
+    archetypeIdentity.test.ts
+    -> Test Files 9 passed (9) / Tests 146 passed (146)
+
+DIFF SURFACE: src/engines/auctionLuxuryTax.ts (13 insertions, 6 deletions --
+  1 comment block + the one-line fix) + src/engines/__tests__/
+  auctionLuxuryTax.test.ts (new imports + 5 new tests: 3 repro/fix,
+  1 byte-identical lock, 1 conformance sweep). No other file touched.
+
+SURPRISES:
+  1. The citation correction above (normalizeIdentityMods location/role).
+  2. The fix was a single-line change (delegate instead of reconstruct) --
+     no "sibling auction-side cap-shift helper" was found; grep confirmed
+     auctionLuxuryTax.ts is the only engine-side place that ever rebuilt
+     `{ increase, decrease }` from a capIdentity.
+  3. Zero downstream expected-value drift -- every ripple suite's fixtures
+     turned out to only ever exercise the coarse (no-rawShift) path, so
+     there is no before/after arithmetic table to present beyond the two
+     repro tests' own numbers above.
