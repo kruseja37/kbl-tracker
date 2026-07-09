@@ -32,6 +32,9 @@ export interface ArchetypePickerProps {
   teamLabel?: string;
   disabled?: boolean;
   disabledReason?: string;
+  /** TEXTLAW-SWEEP: the identity explainer paragraphs are TUTORIAL-class and gate behind the
+   * PARENT's existing Help toggle -- this picker never renders a second Help button of its own. */
+  showHelp?: boolean;
 }
 
 function BoostSacrifice({ a }: { a: TeamArchetype }) {
@@ -144,6 +147,7 @@ export function ArchetypePicker({
   teamLabel,
   disabled = false,
   disabledReason,
+  showHelp = false,
 }: ArchetypePickerProps) {
   const [slot, setSlot] = useState<ArchetypeSlot>("mlb");
   const mlb = archetypeByKey(mlbKey);
@@ -168,11 +172,13 @@ export function ArchetypePicker({
         <SlotButton label="MLB IDENTITY · sets affordability" hint="what's cheap to build" archetype={mlb} active={slot === "mlb"} onClick={() => setSlot("mlb")} />
         <SlotButton label="FARM IDENTITY · steers your scout" hint="what your scout hunts" archetype={farm} active={slot === "farm"} onClick={() => setSlot("farm")} />
       </div>
-      <div className="text-[12px] text-[var(--ballpark-chalk)]/55 mb-4">
-        {slot === "mlb"
-          ? "Choosing your MLB identity — it shifts your luxury-tax ceilings, making your style cheap to over-stack."
-          : "Choosing your farm identity — it focuses your scout on the prospects that fit this build."}
-      </div>
+      {showHelp ? (
+        <div className="text-[12px] text-[var(--ballpark-chalk)]/55 mb-4">
+          {slot === "mlb"
+            ? "Choosing your MLB identity — it shifts your luxury-tax ceilings, making your style cheap to over-stack."
+            : "Choosing your farm identity — it focuses your scout on the prospects that fit this build."}
+        </div>
+      ) : null}
 
       {/* the card grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
