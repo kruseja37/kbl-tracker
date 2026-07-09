@@ -14,7 +14,7 @@ import {
   surfaceNextPlayer,
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
-import { computeAuctionTeamProjectedTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
 import type { BandPriorities, ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
 import {
   buildArchetypeShillProfile,
@@ -93,6 +93,13 @@ type AuctionLuxuryTaxContext = {
   poolById: Map<string, RegisteredPool["players"][number]>;
   playerById: Map<string, Player>;
   identityByTeamId: Map<string, TeamCapIdentity | undefined>;
+  /**
+   * TAXTEETH (2026-07-08): the pool's OWN resolved luxury caps -- the same `baseCaps` LeagueBuilder
+   * AuctionDraft.tsx's TRUE COST line now reads too (both route through
+   * auctionMarginalTaxWithCaps), so team.projectedTax and the whisper's displayed TRUE COST tax
+   * component are always the identical number for the identical roster+candidate, with no
+   * tier-vs-pool-caps divergence possible even if a league's caps are ever customized.
+   */
   baseCaps: LuxuryCapRow[];
 };
 
@@ -225,6 +232,18 @@ function resolveConstructionPlayer(
   return player ? toConstructionPlayer(player) : null;
 }
 
+/**
+ * TAXTEETH (JK ruling 2026-07-08, spec-docs/contracts/CONTRACT_TAXTEETH_2026-07-08.md): this used
+ * to compute each team's FULL total roster tax if it won the current lot's candidate (display
+ * only, per FABLE-C2B D4 -- "projectedTax stays on the saved team shape, display/advice only").
+ * TAXTEETH repoints it at the MARGINAL delta (auctionMarginalTaxWithCaps -- the same underlying
+ * formula TRUE COST uses, LeagueBuilderAuctionDraft.tsx, now sharing the pool-caps-based call)
+ * because team.projectedTax is now a REAL, consumed quantity: the pure engine
+ * (auctionStateMachine.ts) reads it to reserve the marginal tax in the bid ceiling
+ * (sessionBidCeiling) and to charge it at settlement (finalizeSoldLot). A "full total" number
+ * would double-count every prior lot's tax on every subsequent one; the marginal delta is the
+ * honest, once-per-acquisition cost of THIS specific win.
+ */
 export function applyAuctionLuxuryTaxForLot(
   session: CpuShillAuctionSession,
   ctx: AuctionLuxuryTaxContext | null | undefined,
@@ -248,7 +267,7 @@ export function applyAuctionLuxuryTaxForLot(
 
       return {
         ...team,
-        projectedTax: computeAuctionTeamProjectedTaxWithCaps(
+        projectedTax: auctionMarginalTaxWithCaps(
           committedRoster,
           candidate,
           ctx.identityByTeamId.get(team.teamId),

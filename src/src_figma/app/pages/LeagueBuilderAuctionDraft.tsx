@@ -56,7 +56,8 @@ import {
   type EstimatedMarket,
   type SessionMarketOptions,
 } from "../../../engines/auctionMarketModel";
-import { auctionMarginalTax } from "../../../engines/auctionLuxuryTax";
+import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import { LUXURY_CAP_TABLES } from "../../../data/tierParams";
 import { settleFromShills } from "../../../engines/auctionSettleFromShills";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import {
@@ -1403,14 +1404,20 @@ export function LeagueBuilderAuctionDraft() {
 
     // COCKPIT W1a (RB-3): TRUE COST after tax -- the marginal tax this specific candidate adds to
     // the team's total, over and above what the team already owes. Reuses the existing tested
-    // auctionMarginalTax engine (zero prior callers); gated on the same roster-clean signal the
-    // sibling reads use so a truncated roster mapping never fabricates a tax figure.
+    // auctionMarginalTaxWithCaps engine; gated on the same roster-clean signal the sibling reads
+    // use so a truncated roster mapping never fabricates a tax figure.
+    // TAXTEETH (2026-07-08): reads the pool's own resolved luxuryCaps (falling back to the tier
+    // default before a pool is registered) rather than re-deriving from identityTier alone -- the
+    // SAME baseCaps source useAuctionDraft.ts's applyAuctionLuxuryTaxForLot now feeds the engine's
+    // real settlement/bid-ceiling math, so this displayed number can never structurally diverge
+    // from what actually drains the team's budget (byte-identical to the prior tier-based call for
+    // every real pool today, since registerPool always sets luxuryCaps: LUXURY_CAP_TABLES[tier]).
     const marginalTax = worthToYou && lotPlayer && rosterPlayersClean
-      ? auctionMarginalTax(
+      ? auctionMarginalTaxWithCaps(
           rosterPlayers.map(toConstructionPlayer),
           toConstructionPlayer(lotPlayer),
           team.capIdentity,
-          identityTier,
+          registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
         )
       : null;
     const identityZByPlayerId = identityArchetype && comparisonPool.length > 0

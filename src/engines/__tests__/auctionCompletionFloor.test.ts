@@ -311,8 +311,20 @@ function driveAllPassToCompletion(
 
 describe('the broken-floor repro pair', () => {
   test('phantom-tax over-reserve: the old cap froze every team out; the new floor finishes the draft', () => {
-    // Two teams, two open slots each, needing arms; every lot asks 10k; both carry a 45k
-    // projected-tax figure (the live per-lot applyAuctionLuxuryTaxForLot shape).
+    // Two teams, two open slots each, needing arms; every lot asks 10k.
+    //
+    // TAXTEETH (JK ruling 2026-07-08) repointed team.projectedTax at a NARROWER quantity than the
+    // one this test was chartered to prove doesn't choke the floor: the MARGINAL tax of winning
+    // only the CURRENT lot's candidate (auctionMarginalTax), not the old per-lot FULL-roster
+    // recompute (computeAuctionTeamProjectedTaxWithCaps) that `applyAuctionLuxuryTaxForLot` used to
+    // write and that C2B stripped from the ceiling. A realistic one-acquisition marginal figure is
+    // bounded by a handful of cap-row breaches (a few thousand, per the tuned LUXURY_CAP_TABLES
+    // minAdder/penaltyPer100 magnitudes) -- nothing like the old cumulative full-roster number,
+    // which is preserved below ONLY as `phantomFullRosterTax`, a value fed straight into the
+    // still-unchanged, still-exported `auctionMaxBid` for documentary comparison, decoupled from
+    // the session fixture. The marginal figure is intentionally >0 so this test ALSO proves the
+    // new mechanism's real teeth: it now reduces the ceiling by a genuine amount (see the updated
+    // assertions below), just not the old phantom, ever-growing, every-team, every-lot amount.
     const rosterShapes = TEMPLATE.slice(0, 20);
     const rosteredA = rosterShapes.map((shape, i) => player(`a-${i}`, shape));
     const rosteredB = rosterShapes.map((shape, i) => player(`b-${i}`, shape));
@@ -323,23 +335,26 @@ describe('the broken-floor repro pair', () => {
       player('pool-cp-2', { isPitcher: true, position: 'P', role: 'CP' }),
     ];
     const budget = 50_000;
-    const tax = 45_000;
+    const phantomFullRosterTax = 45_000;
+    const marginalTax = 3_000;
     const teams = [
-      team('team-a', budget, rosteredA.map((p) => p.playerId), 2, tax),
-      team('team-b', budget, rosteredB.map((p) => p.playerId), 2, tax),
+      team('team-a', budget, rosteredA.map((p) => p.playerId), 2, marginalTax),
+      team('team-b', budget, rosteredB.map((p) => p.playerId), 2, marginalTax),
     ];
     let session = midDraftSession({ teams, rostered: [...rosteredA, ...rosteredB], available: pool });
 
-    // The OLD formula (still exported, unchanged) priced every team out of every lot:
-    const oldCap = auctionMaxBid(budget, 2, LEAGUE_MINIMUM_SALARY, tax);
+    // The OLD formula (still exported, unchanged), fed the OLD-style full-roster phantom number,
+    // still prices every team out of every lot -- this is exactly why C2B stripped it:
+    const oldCap = auctionMaxBid(budget, 2, LEAGUE_MINIMUM_SALARY, phantomFullRosterTax);
     expect(oldCap).toBeLessThan(ASK); // < the only price any lot can clear at → guaranteed strand
 
-    // The NEW floor reserves the real completion cost, not the phantom tax. Between lots the
-    // ceiling covers BOTH open slots (two 10k bodies); once a lot is up it prices winning THAT
-    // candidate (one remaining 10k body).
+    // The NEW floor reserves the real completion cost PLUS the real marginal tax -- not the old
+    // phantom full-roster figure. Between lots there is no specific candidate to reserve tax for
+    // (marginalTax is 0); once a lot is up it prices winning THAT candidate: completion cost for
+    // the one remaining slot, plus this candidate's own marginal tax contribution.
     expect(getTeamAuctionMaxBid(session, 'team-a')).toBe(budget - 2 * ASK);
     const surfaced = ok(surfaceNextPlayer(session));
-    expect(getTeamAuctionMaxBid(surfaced, 'team-a')).toBe(budget - ASK);
+    expect(getTeamAuctionMaxBid(surfaced, 'team-a')).toBe(budget - ASK - marginalTax);
 
     // Drive the machine to completion: 4 lots, alternating winners.
     for (let lot = 0; lot < 4; lot += 1) {

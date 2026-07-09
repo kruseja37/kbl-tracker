@@ -760,7 +760,7 @@ describe("useAuctionDraft", () => {
     });
   });
 
-  test("computes projected tax per surfaced lot for display, but the tax never gates the bid cap", async () => {
+  test("computes projected tax per surfaced lot, and TAXTEETH now reserves it in the bid cap", async () => {
     const teamIds = ["human", "other"];
     const seed = seedWithFirst(teamIds, "human");
     const caps: LuxuryCapRow[] = [
@@ -833,10 +833,14 @@ describe("useAuctionDraft", () => {
     expect(offTax!).toBeGreaterThan(0);
     expect(onMaxBid).not.toBeNull();
     expect(offMaxBid).not.toBeNull();
-    // FABLE-C2B (spec §6:186-193, JK 2026-07-01 "the floor is broken"): the projected tax stays
-    // computed per lot as ADVICE, but the phantom reservation is stripped from the HARD floor —
-    // the solvency cap no longer shrinks for an off-archetype lot.
-    expect(offMaxBid!).toBe(onMaxBid!);
+    // TAXTEETH (JK ruling 2026-07-08, spec-docs/contracts/CONTRACT_TAXTEETH_2026-07-08.md)
+    // supersedes the FABLE-C2B display-only ruling this test used to pin: the luxury tax must
+    // actually drain budget, so the ceiling now reserves the marginal tax of winning THIS specific
+    // candidate. Both pools are single-player (no `pos`), so this exercises the scalar fallback
+    // path (auctionMaxBid's own tax argument), not the enriched completion-based path — and since
+    // the human roster is empty on both sides, "full total" and "marginal" tax are identical here,
+    // so offTax is exactly the reservation this assertion checks for.
+    expect(offMaxBid!).toBe(onMaxBid! - offTax!);
   });
 });
 

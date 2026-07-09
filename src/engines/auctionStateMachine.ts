@@ -359,12 +359,22 @@ export function auctionReservePriceEnabled(config: AuctionSetupConfig): boolean 
  * the most this team can pay right now while the cheapest VERIFIED-legal completion of its roster
  * — from the players ACTUALLY LEFT, at their opening asks — stays affordable. When a lot is open,
  * the ceiling prices winning THAT candidate (his position joins the roster; the completion covers
- * the remaining slots). The phantom projectedTax reservation is STRIPPED per spec §6.
+ * the remaining slots). The phantom FULL-roster projectedTax reservation was STRIPPED per spec §6
+ * (it recomputed every team's entire hypothetical tax bill on every lot, collapsing every ceiling
+ * league-wide late in a draft — the exact bug C2B was chartered to fix).
+ *
+ * TAXTEETH (JK ruling 2026-07-08): team.projectedTax was repointed at a DIFFERENT, narrower
+ * quantity than the one C2B stripped -- the MARGINAL tax of winning only the CURRENT lot's
+ * candidate (auctionMarginalTax, the same formula the whisper's TRUE COST line uses), not the
+ * team's full cumulative tax bill. It is reserved here so a bid can never be accepted that the
+ * team could not actually settle (spec-docs/contracts/CONTRACT_TAXTEETH_2026-07-08.md). Only
+ * meaningful while a specific lot is open (it is 0 between lots, and always 0 for farm/shill
+ * sessions, which never populate it) -- so this is a no-op everywhere it doesn't apply.
  *
  * Fallbacks (C2B-FIX F1 split the two tiers):
  * - Position info MISSING (pre-C1 saved sessions, the farm auction, unenriched pools): the
- *   permissive scalar reserve `budget − (slots−1)×minSalary` — the pre-C2B formula with the tax
- *   term removed (the rosterNeed.ts uncertainty policy: never wrongly block a live bid).
+ *   permissive scalar reserve `budget − (slots−1)×minSalary − marginalTax` — the pre-C2B formula
+ *   with the phantom full-tax term removed and the real marginal tax term restored.
  * - ENRICHED but no verified completion exists: the price-aware conservative reserve — the
  *   cheapest real opening asks still in the pool, capped at the scalar — so a (genuinely or
  *   spuriously) infeasible read can never under-reserve into an endgame strand.
@@ -375,7 +385,10 @@ export function sessionBidCeiling(session: AuctionSession, teamId: string): numb
   // END-CHECKPOINT (FABLE-C3): a non-completing shill has no roster completion to reserve for —
   // its ceiling is simply its remaining budget (pure price pressure, spec §6 shill semantics).
   if (isNonCompletingTeam(session, teamId)) return Math.max(0, team.budgetRemaining);
-  const scalar = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, 0);
+  // TAXTEETH: projectedTax is the marginal tax of the CURRENT lot's candidate -- meaningless (and
+  // stale, referring to a since-resolved lot) with no lot open, so it is ignored between lots.
+  const marginalTax = session.currentLot ? team.projectedTax : 0;
+  const scalar = auctionMaxBid(team.budgetRemaining, team.rosterSlotsRemaining, team.minSalary, marginalTax);
 
   const rosterShapes: RosterSlotPlayer[] = [];
   for (const assignment of team.roster) {
@@ -410,13 +423,16 @@ export function sessionBidCeiling(session: AuctionSession, teamId: string): numb
   const minReserveCeiling = Math.max(0, team.budgetRemaining - openSlots * team.minSalary);
 
   const ceiling = completionBidCeiling(team.budgetRemaining, rosterShapes, pool, openSlots);
-  if (ceiling !== null) return Math.min(ceiling, minReserveCeiling);
+  // TAXTEETH: the primary (feasible-completion) path did not reserve for tax at all before this
+  // fix -- most real bids are gated here, not by the scalar below, so the subtraction must happen
+  // on this return too or the ceiling stays exactly as permissive as pre-fix.
+  if (ceiling !== null) return Math.max(0, Math.min(ceiling, minReserveCeiling) - marginalTax);
 
   // Defense-in-depth (C2B-FIX F1): on the ENRICHED path an infeasible completion read must never
   // hand back a ceiling looser than the prices actually left can honor — the bare scalar reserves
   // league minimums (~1.7k/slot) while every remaining lot clears at ≥ its opening ask, so the
   // scalar alone can bless an overspend into a strand. Reserve the cheapest real asks instead,
-  // and never exceed the scalar (the pre-C2B permissiveness bound).
+  // and never exceed the scalar (the pre-C2B permissiveness bound; already tax-aware above).
   const reserve = conservativePoolReserve(pool, openSlots);
   return Math.min(scalar, minReserveCeiling, Math.max(0, team.budgetRemaining - reserve));
 }
@@ -878,7 +894,15 @@ function finalizeSoldLot(session: AuctionSession, winnerTeamId: string, salary: 
     if (team.teamId !== winnerTeamId) return team;
     return {
       ...team,
-      budgetRemaining: team.budgetRemaining - salary,
+      // TAXTEETH (JK ruling 2026-07-08, spec-docs/contracts/CONTRACT_TAXTEETH_2026-07-08.md):
+      // team.projectedTax is the marginal luxury tax THIS team owes for winning THIS lot's
+      // candidate -- recomputed every lot by useAuctionDraft.ts's applyAuctionLuxuryTaxForLot via
+      // the canonical auctionMarginalTax engine (the exact formula the whisper's TRUE COST line
+      // uses). Charging it here, alongside salary, is what makes TRUE COST an honest number: the
+      // whisper's displayed price now equals what actually drains the team's budget. Teams under
+      // the tax threshold (the vast majority) carry projectedTax === 0, so this is byte-identical
+      // to the pre-fix salary-only settlement for them.
+      budgetRemaining: team.budgetRemaining - salary - team.projectedTax,
       rosterSlotsRemaining: Math.max(0, team.rosterSlotsRemaining - 1),
       roster: [...team.roster, { playerId: lot.playerId, salary }],
     };

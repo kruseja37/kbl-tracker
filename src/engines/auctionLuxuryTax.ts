@@ -65,3 +65,20 @@ export function auctionMarginalTax(
   return computeAuctionTeamProjectedTax(committedRoster, candidate, capIdentity, tier)
     - computeAuctionTeamProjectedTax(committedRoster, null, capIdentity, tier);
 }
+
+/**
+ * The `baseCaps`-taking sibling of `auctionMarginalTax` (TAXTEETH, 2026-07-08), for callers that
+ * already hold a pool's own resolved `luxuryCaps` rather than a bare tier key -- e.g. the
+ * per-lot session recompute (useAuctionDraft.ts applyAuctionLuxuryTaxForLot), which now feeds the
+ * engine's real settlement/bid-ceiling math and must not silently diverge from a league's actual
+ * caps the way a tier-keyed re-lookup could if pool-specific cap customization is ever added.
+ */
+export function auctionMarginalTaxWithCaps(
+  committedRoster: ConstructionRoster,
+  candidate: ConstructionPlayer,
+  capIdentity: TeamCapIdentity | undefined,
+  baseCaps: LuxuryCapRow[],
+): number {
+  return computeAuctionTeamProjectedTaxWithCaps(committedRoster, candidate, capIdentity, baseCaps)
+    - computeAuctionTeamProjectedTaxWithCaps(committedRoster, null, capIdentity, baseCaps);
+}
