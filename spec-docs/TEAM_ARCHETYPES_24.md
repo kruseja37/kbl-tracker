@@ -27,7 +27,9 @@ so a GM has real variety in every direction, not just the pitching-heavy skew th
 ### How these are balanced (and why it's trustworthy)
 1. **Equal total value.** Each archetype builds its best-possible 22-man roster from the same player pool; every
    archetype's total team value lands within **±10%** of the group average, across all three difficulty tiers
-   (max deviation observed: **4.4%**). No identity can build a richer roster than any other.
+   (max deviation observed, per tier, live gate as of ARCHLOCK 2026-07-09: **7.7%** juiced / **3.8%** standard /
+   **7.9%** nerfed — supersedes the earlier single-figure "4.4%" headline, which predated the 2026-07-04/05 economy
+   retunes). No identity can build a richer roster than any other.
 2. **Legal rosters only.** That comparison is run on **real, fieldable SMB4 rosters** — 8 field starters (one of
    each position), a required backup catcher, 4 starters, 4–5 relievers, a 4–5-man bench (14 position + 8 pitchers,
    or 13 + 9). So the result translates to an actual auction draft, not to impossible teams. (Canonical definition:
