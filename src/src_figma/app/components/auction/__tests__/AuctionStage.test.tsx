@@ -183,6 +183,57 @@ describe("AuctionStage roster board", () => {
   });
 });
 
+// FLOORREFIT (2026-07-09) Move 5: the three unlabeled market boxes + the reserve chip consolidate
+// into one quiet mono line; no number lost either way.
+describe("AuctionStage FLOORREFIT Move 5 -- market line consolidation", () => {
+  test("folds the reserve ask into the one market line when both a public-market read and a reserve exist", () => {
+    const stageVm = vm();
+    stageVm.lot.publicMarket = {
+      band: { low: 50_000, median: 70_000, high: 90_000 },
+      interestedTeams: 2,
+      contested: null,
+      likelyPass: false,
+    };
+    stageVm.lot.reserveAsk = 65_000;
+
+    const { container } = render(<AuctionStage vm={stageVm} />);
+
+    const line = screen.getByLabelText("Public market price band");
+    expect(line.textContent).toBe("MARKET $50,000 · $70,000 · $90,000 — RESERVE $65,000");
+    // No standalone reserve-ask chip duplicating the number the line already carries.
+    expect(container.querySelectorAll(".reserve-ask")).toHaveLength(0);
+  });
+
+  test("renders the market line without a reserve suffix when there is no reserve to fold in", () => {
+    const stageVm = vm();
+    stageVm.lot.publicMarket = {
+      band: { low: 50_000, median: 70_000, high: 90_000 },
+      interestedTeams: 2,
+      contested: null,
+      likelyPass: false,
+    };
+    stageVm.lot.reserveAsk = null;
+
+    render(<AuctionStage vm={stageVm} />);
+
+    const line = screen.getByLabelText("Public market price band");
+    expect(line.textContent).toBe("MARKET $50,000 · $70,000 · $90,000");
+  });
+
+  test("keeps the standalone RESERVE chip when there's a reserve but no public-market read (e.g. farm)", () => {
+    const stageVm = vm();
+    stageVm.tier = "farm";
+    stageVm.lot.publicMarket = undefined;
+    stageVm.lot.reserveAsk = 40_000;
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("RESERVE")).toBeInTheDocument();
+    expect(screen.getByText("$40,000")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Public market price band")).not.toBeInTheDocument();
+  });
+});
+
 // WT-D: already-won (rostered) players were plain, unclickable text on both the roster board and
 // the overflow rail -- JK 2026-07-08 asked for the existing PlayerProfilePopover on those names so
 // GMs can see profile data informing roster construction. These tests cover the component-level
@@ -305,6 +356,122 @@ describe("AuctionStage roster board player popover (WT-D)", () => {
     // No PlayerProfilePopover trigger anywhere -- neither the missing-player overflow entry nor
     // any of legalSlots()'s player-less roster-board slots render the popover's role="button" span.
     expect(container.querySelector('[role="button"]')).toBeNull();
+  });
+});
+
+// FLOORREFIT (2026-07-09): the ON THE CLOCK banner (Move 1) and the high-bid holder swatch (Move 4).
+describe("AuctionStage FLOORREFIT Move 1 -- ON THE CLOCK banner", () => {
+  test("renders above the lot with team-colored copy for a human turn", () => {
+    const stageVm = vm();
+    stageVm.status.teamName = "Page Caps";
+    stageVm.status.teamPrimary = "#001489";
+    stageVm.status.teamSecondary = "#FFFFFF";
+    stageVm.status.turnKind = "bid";
+    stageVm.status.actingTeamIsCpu = false;
+
+    render(<AuctionStage vm={stageVm} />);
+
+    const banner = screen.getByTestId("on-the-clock-banner");
+    expect(banner).toHaveTextContent("YOU'RE UP — PAGE CAPS");
+    expect(banner.className).toContain("otc-team");
+  });
+
+  test("falls back to the brass-on-ink band when the status carries the default CSS-var colors (no real team hex)", () => {
+    const stageVm = vm();
+    stageVm.status.teamName = "Page Caps";
+    stageVm.status.teamPrimary = "var(--ballpark-brass)";
+    stageVm.status.teamSecondary = "var(--ballpark-chalk)";
+    stageVm.status.actingTeamIsCpu = false;
+
+    render(<AuctionStage vm={stageVm} />);
+
+    const banner = screen.getByTestId("on-the-clock-banner");
+    expect(banner.className).toContain("otc-fallback");
+  });
+
+  test("CPU turns show the existing calm-wait nowText, not the punchy copy", () => {
+    const stageVm = vm();
+    stageVm.status.nowText = "Page Caps — raise or pass";
+    stageVm.status.teamName = "Page Caps";
+    stageVm.status.teamPrimary = "#FF6600";
+    stageVm.status.teamSecondary = "#001489";
+    stageVm.status.actingTeamIsCpu = true;
+
+    render(<AuctionStage vm={stageVm} />);
+
+    const banner = screen.getByTestId("on-the-clock-banner");
+    expect(banner).toHaveTextContent("Page Caps — raise or pass");
+    expect(banner).not.toHaveTextContent("YOU'RE UP");
+  });
+
+  test("does not render on the complete-screen handoff check (no lot, nothing on the clock)", () => {
+    const stageVm = vm();
+    stageVm.complete = {
+      clubs: [],
+      allLegal: true,
+      blockedCount: 0,
+      summary: "Every club fields a legal 22. Scout reveal is next.",
+      onProceed: () => {},
+      overrideArmed: false,
+      onArmOverride: () => {},
+      onConfirmOverride: () => {},
+    };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.queryByTestId("on-the-clock-banner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("auction-complete-panel")).toBeInTheDocument();
+  });
+});
+
+describe("AuctionStage FLOORREFIT Move 4 -- high-bid holder swatch", () => {
+  test("shows a colored swatch + abbreviation when the holder's team colors are resolvable", () => {
+    const stageVm = vm();
+    stageVm.lot.highBid = { amount: 50_000, by: "Page Caps", isYou: false, byTeamPrimary: "#001489", byAbbreviation: "CAP" };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("CAP")).toBeInTheDocument();
+    expect(screen.getByText("Page Caps")).toBeInTheDocument();
+    const holderRow = screen.getByText("Page Caps").closest(".by");
+    expect(holderRow?.className).toContain("swatch");
+  });
+
+  test("falls back to the plain name (no swatch) when holder colors/abbreviation are absent", () => {
+    const stageVm = vm();
+    stageVm.lot.highBid = { amount: 50_000, by: "Page Caps", isYou: false };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("Page Caps")).toBeInTheDocument();
+    const holderRow = screen.getByText("Page Caps").closest(".by");
+    expect(holderRow?.className).not.toContain("swatch");
+  });
+});
+
+// FLOORREFIT (2026-07-09) Move 6: the roster fill board now lives in the left column under the bid
+// controls, but stays independently visible on the complete-screen handoff check (matching prior
+// right-column behavior -- see the WT-D popover coverage above and in the page-level suites).
+describe("AuctionStage FLOORREFIT Move 6 -- roster board placement", () => {
+  test("renders the board on both the normal stage and the complete-screen handoff check", () => {
+    const nonComplete = render(<AuctionStage vm={vm()} />);
+    expect(nonComplete.getByTestId("auction-board-slot-backupC")).toBeInTheDocument();
+    nonComplete.unmount();
+
+    const stageVm = vm();
+    stageVm.complete = {
+      clubs: [],
+      allLegal: true,
+      blockedCount: 0,
+      summary: "Every club fields a legal 22. Scout reveal is next.",
+      onProceed: () => {},
+      overrideArmed: false,
+      onArmOverride: () => {},
+      onConfirmOverride: () => {},
+    };
+    render(<AuctionStage vm={stageVm} />);
+    expect(screen.getByTestId("auction-complete-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("auction-board-slot-backupC")).toBeInTheDocument();
   });
 });
 

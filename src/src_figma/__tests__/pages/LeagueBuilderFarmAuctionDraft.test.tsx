@@ -413,6 +413,14 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       expect(screen.getByText(targetName.toUpperCase())).toBeInTheDocument();
     });
 
+    // FLOORREFIT Move 1: the farm floor inherits the ON THE CLOCK banner identically -- every team
+    // in this fixture is human-controlled (makeTeam: controlledBy "human"), so the acting team's
+    // turn reads the personal "YOU'RE UP" copy, team-colored (both fixture teams carry valid hex).
+    const actingTeam = teams.find((team) => team.id === targetTeamId)!;
+    const banner = screen.getByTestId("on-the-clock-banner");
+    expect(banner).toHaveTextContent(`YOU'RE UP — ${teamDisplayName(actingTeam).toUpperCase()}`);
+    expect(banner.className).toContain("otc-team");
+
     expect(screen.getByText("On the block · prospect")).toBeInTheDocument();
     expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /SCOUT SORT/i })).not.toBeInTheDocument();
@@ -553,7 +561,11 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /BID/i }));
     await waitFor(() => {
-      expect(screen.getByText(/Farm Keys — raise or pass/)).toBeInTheDocument();
+      // FLOORREFIT R1 relocation: the statusbar "Now: Farm Keys — raise or pass" pill is retired --
+      // the ON THE CLOCK banner is the sole announcer of turn identity now, so the same
+      // information (the turn moved to Farm Keys after the bid) is asserted there. Same team
+      // specificity as the old assertion.
+      expect(screen.getByTestId("on-the-clock-banner")).toHaveTextContent("YOU'RE UP — FARM KEYS");
     });
     fireEvent.click(await screen.findByRole("button", { name: /Let prospect go/i }));
 

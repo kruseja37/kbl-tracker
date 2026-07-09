@@ -650,7 +650,10 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByRole("button", { name: /IV SORT/i })).not.toBeInTheDocument();
     expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Most you can bid")).toBeInTheDocument();
-    expect(screen.getByText(/Public market/i)).toBeInTheDocument();
+    // FLOORREFIT Move 5: the old "Public market" eyebrow is gone -- "MARKET" is the label now,
+    // inline in the consolidated mono line (design §1.2, say-it-once). Same coverage (the
+    // market-read block renders), same aria-label assertion right after it.
+    expect(screen.getByText(/^MARKET \$/)).toBeInTheDocument();
     expect(screen.getByLabelText("Public market price band")).toBeInTheDocument();
     expect(screen.queryByText(/Scout Insight:/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /BID/i })).toBeInTheDocument();
@@ -776,7 +779,12 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(firstBidButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Page (Caps|Keys) — raise or pass/)).toBeInTheDocument();
+      // FLOORREFIT R1 relocation: the statusbar "Now: {team} — raise or pass" pill is retired --
+      // the ON THE CLOCK banner is the sole announcer of turn identity now, so the same
+      // information (a human team is on the clock to act after the bid) is asserted there.
+      expect(screen.getByTestId("on-the-clock-banner")).toHaveTextContent(
+        /YOU'RE UP — PAGE (CAPS|KEYS)/,
+      );
       expect(screen.getByRole("button", { name: "Let him go" })).toBeEnabled();
     });
 
@@ -842,6 +850,11 @@ describe("LeagueBuilderAuctionDraft", () => {
   // so this exercises the EXACT SAME neutral code path (and therefore the exact same numbers) as
   // before the fix. Locks the deterministic band this seed + fixture produces as a real (not
   // synthetic) regression guard.
+  //
+  // FLOORREFIT Move 5: the DOM this queries changed (the three unlabeled boxes collapsed into one
+  // "MARKET $lo · $mid · $hi — RESERVE $r" mono line, same aria-label) -- the byte-identical target
+  // string is updated to the new format, still asserting the exact same three numbers (plus the
+  // reserve this fixture already carries), still a real regression guard.
   test("CALLFIX Item 5(d): the public market band is byte-identical for the no-seat (CPU-turn) case", async () => {
     const players = makePlayers();
     const leagueDataAllCpu = mockLeagueData({ players, pool: makePool(players) });
@@ -857,7 +870,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
 
     const band = screen.getByLabelText("Public market price band");
-    expect(band.textContent).toBe("$65,000$78,883$82,891");
+    expect(band.textContent).toBe("MARKET $65,000 · $78,883 · $82,891 — RESERVE $65,000");
   });
 
   test("shows a pure shill winner on the visible AuctionStage roster board after SOLD", async () => {
