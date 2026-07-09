@@ -505,6 +505,31 @@ describe("WhisperPanel", () => {
   });
 });
 
+describe("CALLFIX 2026-07-08 Item 1 REPRO: the live call must react to the CURRENT bid, not just the static worth verdict", () => {
+  test("REPRO (MLB): with currentHighBid far ABOVE recommendedNumber, the strip must NOT still say PUSH and the headline must NOT still say 'Go get him'", () => {
+    render(<WhisperPanel payload={Object.assign(payload("push"), {
+      currentHighBid: 999_000,
+      objectPronoun: "him" as const,
+    })} />);
+
+    // Tier-1 strip: always visible, zero taps -- the exact bug JK caught live ("frozen within a lot").
+    expect(screen.getByTestId("whisper-tier1-verdict")).not.toHaveTextContent("PUSH");
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByText(/^Go get him/)).not.toBeInTheDocument();
+  });
+
+  test("REPRO (farm): with currentHighBid far ABOVE recommendedNumber, the shared tap-through headline must NOT still say 'Go get him' (farm has no Tier-1 strip, but shares WhisperHeadline)", () => {
+    render(<WhisperPanel payload={Object.assign(payload("push"), {
+      currentHighBid: 999_000,
+      objectPronoun: "him" as const,
+    })} tier="farm" />);
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByText(/^Go get him/)).not.toBeInTheDocument();
+  });
+});
+
 describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)", () => {
   test("Tier 1 (whisper-tier1) and Tier 2 (whisper-tier2) render without opening the panel", () => {
     render(<WhisperPanel payload={payload("push")} />);
