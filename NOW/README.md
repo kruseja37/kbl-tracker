@@ -4,6 +4,8 @@
 
 **Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09 (the tax-coherence program books complete — PRs #37-#43, COPYFIX/GAUNTLET/TAXWIRE/FLAKEFIX/POOLFLOOR/TAXENGINE/SETUPTAX; all 14 links below re-checked against `origin/main` HEAD `6fa97d81` and confirmed resolving; the audit-records line already carried both `SETUP_DRAFT_INTEGRITY_AUDIT_2026-07-09.md` and `COCKPIT_WIRING_AUDIT_2026-07-08.md`, and the binding-standards line already carried `AUCTION_FLOOR_REFIT_2026-07-09.md` — verified current, not re-added; no new canonical doc needed adding or retiring this pass).
 
+**Same-day correction (added before this booking PR itself merged — the board was NOT actually clean at `6fa97d81`, it is genuinely clean now):** the "books complete" line above was written without an independent closing full-vitest run. One was subsequently run against that exact HEAD and found **26 deterministic failures across 4 files**, all traced to PR #41 POOLFLOOR's position-supply floors firing on stale, position-poor test fixtures — **zero product bugs**. Fixed test-only (zero product code) by PR #45 FIXTUREFIX (branch `claude/fixturefix-2026-07-09`, independent audit APPROVE) and **now MERGED to `main`** (`29fc3194`, 2026-07-09) — the full suite is genuinely green: 9451 passed / 0 failed. Full record: `CONTINUITY_CHECKPOINT.md`'s AMENDMENT banner.
+
 ## Read order for any new agent (or future you)
 
 | # | File (live link in this folder) | What it is |
