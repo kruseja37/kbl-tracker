@@ -505,4 +505,121 @@ describe('projectBidVsPass', () => {
     // BID branch (roster full after the win): nothing is signable at all.
     expect(projection!.bid.targets).toEqual([]);
   });
+
+  test('TAXWIRE Item 1: the BID branch nets projectedTax off budgetAfter -- a target flips unaffordable', () => {
+    // Full literal session (no `.pos` on any player, mirroring the F3 fixture's degraded-info
+    // path) so sessionBidCeiling stays on its scalar fallback and every bidder's raw valuation is
+    // driven purely by IV -- fit/bias/needMultiplier all resolve to 1 uniformly (no
+    // archetypeWeights on the candidate, no bandPriorities on the rival teams). 'rival'/'rival2'
+    // sit on budgets far above the candidate's IV so their ceilings never bind and 'me' never
+    // ranks in the market's top two -- predictedMedian for 'flip' is therefore driven ONLY by
+    // rival/rival2 and is IDENTICAL whether 'me' is taxed or not (verified: 43,690 in both
+    // branches). The flip below is attributable to the budgetAfter fix alone, not market noise.
+    const session: AuctionSession = {
+      state: 'OPEN_BIDDING',
+      config: {
+        format: 'auction',
+        bidIncrement: 1_000,
+        turnTimerSeconds: null,
+        nominationOrderSeed: 'taxwire-flip',
+        flatReserveFloor: 5_000,
+        cpuShillCount: 0,
+        excludeFromLeague: true,
+      },
+      teams: [
+        // 'me' carries a real marginal tax (TAXTEETH's team.projectedTax) for the CURRENT lot's
+        // candidate ('lot1').
+        { teamId: 'me', budgetRemaining: 60_000, rosterSlotsRemaining: 4, minSalary: 1_666.49, projectedTax: 8_000, roster: [] },
+        { teamId: 'rival', budgetRemaining: 300_000, rosterSlotsRemaining: 4, minSalary: 1_666.49, projectedTax: 0, roster: [] },
+        { teamId: 'rival2', budgetRemaining: 250_000, rosterSlotsRemaining: 4, minSalary: 1_666.49, projectedTax: 0, roster: [] },
+      ],
+      nominationOrder: ['me', 'rival', 'rival2'],
+      nominationIndex: 0,
+      nominationRound: 0,
+      players: {
+        lot1: { playerId: 'lot1', iv: 5_000, ivPercentile: 20 },
+        flip: { playerId: 'flip', iv: 78_000, ivPercentile: 90 },
+      },
+      playerOrder: ['lot1', 'flip'],
+      availablePlayerIds: ['flip'],
+      currentLot: {
+        playerId: 'lot1',
+        nominatorTeamId: 'me',
+        openingAsk: 10_000,
+        highBid: null,
+        highBidder: null,
+        stillIn: ['me', 'rival', 'rival2'],
+        bidTurnTeamId: 'me',
+      },
+      pendingClaim: null,
+      results: [],
+      saleCount: 0,
+    };
+
+    const projection = projectBidVsPass({
+      session,
+      options: { shillTeamIds: new Set<string>() },
+      teamId: 'me',
+      bidAmount: 10_000,
+      ownBandPriorities: {
+        Power: 1, Contact: 0.5, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0,
+      },
+    });
+    expect(projection).not.toBeNull();
+
+    // The fix: the BID branch's budgetAfter is budgetRemaining - bidAmount - projectedTax --
+    // exactly the settlement math finalizeSoldLot uses (auctionStateMachine.ts:905) -- NOT the
+    // pre-fix salary-only figure.
+    expect(projection!.bid.budgetAfter).toBe(60_000 - 10_000 - 8_000); // 42,000
+    // PASS never owes this lot's tax (no win, no settlement) -- untouched.
+    expect(projection!.pass.budgetAfter).toBe(60_000);
+
+    const flipBid = projection!.bid.targets.find((t) => t.playerId === 'flip');
+    const flipPass = projection!.pass.targets.find((t) => t.playerId === 'flip');
+    expect(flipBid).toBeDefined();
+    expect(flipPass).toBeDefined();
+    // 'flip' predictedMedian sits strictly between the taxed (42,000) and untaxed (50,000)
+    // budgetAfter -- the exact window that proves the correction, not just the raw number.
+    expect(flipBid!.predictedMedian).toBeGreaterThan(projection!.bid.budgetAfter);
+    expect(flipBid!.predictedMedian).toBeLessThan(60_000 - 10_000); // < the pre-fix, untaxed figure
+    // Tax-corrected BID branch: this team could not actually afford 'flip' after settling the
+    // current lot's tax bill -- the pre-fix code showed `affordable: true` here (the whole bug,
+    // READ-1 in the adversarially-verified whisper tax-awareness audit).
+    expect(flipBid!.affordable).toBe(false);
+    // The SAME candidate reads affordable on PASS (no tax owed there) -- proves the flip is caused
+    // by the tax term, not a market/legality quirk.
+    expect(flipPass!.affordable).toBe(true);
+  });
+
+  test('TAXWIRE: zero-tax teams are byte-identical to the pre-fix figure (lock)', () => {
+    let session = initAuctionSession({
+      teams: [
+        { teamId: 'me', budgetRemaining: 300_000, rosterSlotsRemaining: 4 },
+        { teamId: 'rival', budgetRemaining: 300_000, rosterSlotsRemaining: 4 },
+      ],
+      players: [
+        { playerId: 'p1', iv: 40_000, ivPercentile: 90 },
+        { playerId: 'p2', iv: 30_000, ivPercentile: 60 },
+      ],
+      nominationOrder: ['me', 'rival'],
+      config: { bidIncrement: 1_000, nominationOrderSeed: 'bvp-zero-tax' },
+    });
+    session = drive(surfaceNextPlayer(session));
+    // initAuctionSession always normalizes projectedTax to 0 (auctionStateMachine.ts's
+    // normalizeTeam) -- the real shape every non-tax-exposed team carries through the live app.
+    expect(session.teams.find((t) => t.teamId === 'me')?.projectedTax).toBe(0);
+
+    const projection = projectBidVsPass({
+      session,
+      options: { shillTeamIds: new Set<string>() },
+      teamId: 'me',
+      bidAmount: 25_000,
+      ownBandPriorities: {
+        Power: 1, Contact: 0.5, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0,
+      },
+    });
+    expect(projection).not.toBeNull();
+    // budgetRemaining - bidAmount - 0 === budgetRemaining - bidAmount: the fix is a no-op here.
+    expect(projection!.bid.budgetAfter).toBe(275_000);
+  });
 });
