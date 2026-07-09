@@ -1,0 +1,26 @@
+# CONTRACT: TAXENGINE — Fill Reserve/Room and the cash-posture chip learn the tax (the two engine-math gaps from the whisper tax audit)
+
+**Lane:** codex/taxengine-2026-07-09 (worktree /private/tmp/kbl-taxengine, base main @ bbf15b97 — includes TAXTEETH/TAXPRECISION/CALLFIX/the merged gauntlet suite).
+**Builder:** Codex (xhigh). **Rules:** this worktree only; commit here; no push/merge; independent audit follows; STOP on surprises. Repro-first on both items. ECONOMY-CRITICAL — the C2B history (a tax term in the ceiling once collapsed all late-draft bidding) makes bounded semantics mandatory; the merged gauntlet suite is your safety net and REQUIRED gate.
+
+## CONTEXT
+Since TAXTEETH, settlement drains salary + the current lot's marginal tax, and sessionBidCeiling reserves that CURRENT-lot tax. But two whisper quantities still project the FUTURE untaxed (adversarially-verified audit findings READ-3, READ-5):
+- **READ-3:** "Fill Reserve" / "Room" (WhisperPanel body ~:785-786) come from minimumFutureFillReserve / discretionaryBudget (src/engines/liquidityAwareBidding.ts:77-78, :133-151) via cheapestLegalCompletion / conservativePoolReserve (src/engines/auctionCompletionFloor.ts:448-464, :475-484) — pure price sums, zero tax anywhere in that file. For a tax-exposed team the displayed "what finishing costs / what's left over" overstates real capacity.
+- **READ-5:** the cash-posture chip (AGGRESSIVE/NEUTRAL/CONSTRAINED/EMERGENCY-FILL, resolveLiquidityState in liquidityAwareBidding.ts) reads untaxed cash — a team deep in tax can read AGGRESSIVE (and the posture feeds bid-shaping upward) at the exact moment its real wallet is tightest.
+
+## THE RULING (bounded semantics — this is the load-bearing design constraint)
+The reserve for remaining fills gains the INCREMENTAL tax of the CONCRETE cheapest-completion set: taxOfCompletion = luxuryTax(currentRoster ∪ completionSet).charged − luxuryTax(currentRoster).charged, computed via the canonical engine (src/engines/auctionLuxuryTax.ts / leagueConstruction.ts luxuryTax — zero formula duplication). NEVER a per-lot re-reserved hypothetical full-roster bill (the C2B disease): the quantity is recomputed per lot from the ACTUAL current roster + the ACTUAL current cheapest completion, shrinks naturally as slots fill, and is exactly zero for under-cap teams (completion sets are cheap/low-rated players — verify: for a team whose roster + cheap fills stays under all caps, the incremental tax is 0 and every displayed number is BYTE-IDENTICAL to today; lock test both sides).
+- **Item 1 (READ-3):** minimumFutureFillReserve += taxOfCompletion(team); Fill Reserve / Room / discretionaryBudget display the tax-net numbers. The suggestedMaxBid/one-ceiling coupling (F9) must remain consistent — extend the F9 invariant tests: for a taxed team, suggestedMaxBid never exceeds the largest B with budget >= B + marginalTax(B) + taxOfCompletion(after winning at B). Careful: winning the current lot CHANGES the completion set (one fewer slot) — the reserve used inside the ceiling must be the post-win completion's incremental tax, mirroring how completionBidCeiling already reserves post-win fill salaries.
+- **Item 2 (READ-5):** resolveLiquidityState's cash inputs become tax-net (discretionary = budget − fill reserve − completion tax, per Item 1's quantity). The posture must be able to flip for the tax-squeezed fixture (repro: a team whose untaxed read is AGGRESSIVE and taxed read is CONSTRAINED — red first, showing today's AGGRESSIVE).
+
+## REPRO-FIRST (both items)
+(a) Tax-exposed fixture: Fill Reserve/Room today exclude completion tax — write the correct-expectation test, show red, fix, green with exact arithmetic in the contract. (b) The posture flip fixture as above. (c) The under-cap byte-identity lock (must pass BOTH pre- and post-fix). (d) C2B regression: the re-pinned completion test (auctionCompletionFloor.test.ts:311-377 area) and the full auctionCompletionFloor suite stay green — and the MERGED gauntlet suite (src/engines/__tests__/auctionGauntlet.test.ts, six drafts) must complete green post-change (if your reserve makes any draft strand, your semantics are wrong — STOP and report, do not tune).
+
+## GUARDRAILS
+No changes to: settlement math, worthVerdict, liveCall ladder thresholds' FORM (they consume suggestedMaxBid — they inherit), reason-code priority, projectBidVsPass (TAXWIRE owns it — merged or merging), pool extraction (POOLFLOOR lane owns poolFromDemand/leagueBuilderPoolBuilder — do not touch), farm (tax-free — prove inertness), any UI copy beyond the numbers already rendered. Known: production-defaults stranding is a SUPPLY bug being fixed in POOLFLOOR — if your gauntlet gate hits it, use the approved six-draft suite (which completes) as the gate, not the production-defaults repro.
+
+## GATES (paste real outputs)
+Project typecheck gate; npm run build; suites: liquidityAwareBidding, auctionCompletionFloor, auctionLuxuryTax, auctionLuxuryTaxSettlement, auctionStateMachine, rosterIntelligencePayload (F9), WhisperPanel, LeagueBuilderAuctionDraft, the merged auctionGauntlet suite. NOT the full suite.
+
+## DELIVERABLE
+Contract-first; red repros BEFORE fixes; final contract update with per-item arithmetic evidence + gate outputs + deviations. Final message: summary + hashes + surprises. UNKNOWN = STOP.
