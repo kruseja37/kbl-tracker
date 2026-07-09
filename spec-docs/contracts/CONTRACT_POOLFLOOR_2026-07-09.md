@@ -20,3 +20,145 @@ Project typecheck gate clean; npm run build exit 0; poolFromDemand + leagueBuild
 
 ## DELIVERABLE
 Contract-first commit; red repro (port) BEFORE the fix; final contract update with evidence (incl. the exact extracted CP/C counts before/after for the D2 config), gate outputs, deviations. Final message: summary + hashes + surprises. UNKNOWN = STOP.
+
+---
+
+## FINAL BUILD UPDATE — Codex, 2026-07-09
+
+### Commits
+
+- Contract-first commit already present at lane start: `5ff10c1e contract(poolfloor): position-aware pool supply floors [captain]`.
+- Builder implementation commit: `9fdff0e8 fix(pool): enforce position-aware supply floors [POOLFLOOR]`.
+
+### Files changed
+
+- `src/engines/poolFromDemand.ts`
+  - Added `POSITION_SUPPLY_FLOOR_TUNING` as the single named slack dial.
+  - Derives hard legal-position floors from `LEGAL_ROSTER`: field positions, catcher depth, starters, relievers, closers.
+  - Tops up missing floor supply from the best remaining source candidates, preserving pool source priority semantics.
+  - Reports structured `position-floor:{position}` shortfalls when the source universe cannot satisfy a floor.
+- `src/utils/leagueBuilderPoolBuilder.ts`
+  - `evaluatePoolDemandSufficiency` now optionally evaluates the actual extracted pool's roster-slot shapes and returns `positionFloorReasons`.
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+  - Existing readiness panel now names the first failing hard-position floor for both design-first and pool-first modes.
+- `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`
+  - Downstream shared start gate passes actual locked-pool shapes into the same sufficiency helper and avoids misleading count-only blocker copy.
+- `src/engines/__tests__/poolFromDemand.test.ts`
+  - Added CP floor top-up, structured shortfall, and byte-identity/no-op coverage.
+- `src/utils/tests/poolDemandSufficiency.test.ts`
+  - Added structured position-floor reason coverage.
+- `src/engines/__tests__/auctionGauntletProductionDefaults.test.ts`
+  - Ported GAUNTLET-2 production-default repro from `45c8abef`, then added extraction supply evidence table.
+
+### Red-first evidence
+
+Command:
+
+```bash
+NODE_ENV= npx vitest run src/engines/__tests__/auctionGauntletProductionDefaults.test.ts --reporter=verbose
+```
+
+Pre-fix result:
+
+```text
+1 failed
+D2 GAUNTLET-2 D2 production-default shills transition rejected from PASSED: auction-uncompletable;
+terminalShortfall=red-sox; real open rosters red-sox:18+4 budget=54725.53 tax=77352.6
+remainingPool=0 remainingClosers=0;
+passedSupply total=29/C=0/SP=9/RP=13/CP=0;
+terminalBackstopSupply total=48/C=2/SP=17/RP=14/CP=0
+```
+
+### Extraction supply evidence
+
+Post-fix production-default extraction table from the ported GAUNTLET-2 test:
+
+```text
+draft  extractedPoolSize  primaryCBeforeFloor  primaryCAfterFloor  catcherDepthAfterFloor  cpBeforeFloor  cpAfterFloor
+D2     223                20                   20                  21                      8              11
+D3     223                20                   20                  21                      8              11
+```
+
+The D2 binding change is exactly `CP 8 -> 11` (`8 teams * minClosers 1 + slack 3`). C was already above floor and stayed byte-stable for the floor pass (`primary C 20 -> 20`, catcher depth 21).
+
+### Green evidence
+
+Typecheck:
+
+```bash
+npx tsc -b --pretty false
+```
+
+Result: exit 0, no output.
+
+Build:
+
+```bash
+npm run build
+```
+
+Result:
+
+```text
+tsc -b && vite build
+✓ 2644 modules transformed.
+✓ built in 10.77s
+PWA v1.2.0
+precache 183 entries (5333.44 KiB)
+```
+
+Vite emitted existing chunk/dynamic-import warnings only; build exit 0.
+
+Focused pool suites:
+
+```bash
+NODE_ENV= npx vitest run src/utils/tests/poolDemandSufficiency.test.ts src/engines/__tests__/poolFromDemand.test.ts src/engines/__tests__/poolFeasibility.test.ts --reporter=verbose
+```
+
+Result:
+
+```text
+Test Files  3 passed (3)
+Tests       79 passed (79)
+```
+
+Ported production-default GAUNTLET-2 repro:
+
+```bash
+NODE_ENV= npx vitest run src/engines/__tests__/auctionGauntletProductionDefaults.test.ts --reporter=verbose
+```
+
+Result:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed (1)
+D2 summary: surfacedLots=270, multiBidLots=98, totalChargedTax=3058042.41, shillReclaimedFills=2, shillReclaimedCost=29003.84
+D3 summary: surfacedLots=279, multiBidLots=88, totalChargedTax=3961916.95, shillReclaimedFills=0, shillReclaimedCost=0
+```
+
+Approved six-draft auction gauntlet:
+
+```bash
+NODE_ENV= npx vitest run src/engines/__tests__/auctionGauntlet.test.ts --reporter=verbose
+```
+
+Result:
+
+```text
+Test Files  1 passed (1)
+Tests       1 passed (1)
+AUCTION GAUNTLET SUMMARY: D1-D6 all complete; feasibleShortfallAtFinal=0 in the D6 table.
+```
+
+Byte-identity lock test:
+
+```text
+src/engines/__tests__/poolFromDemand.test.ts > leaves an already floor-sufficient selected pool byte-identical: PASS
+```
+
+### Deviations / surprises
+
+- Physical worktree path in this Codex session was `/private/tmp/kbl-poolfloor2`, while the contract text names `/private/tmp/kbl-poolfloor`. Branch was correct: `codex/poolfloor-2026-07-09`.
+- `npx tsx -e ...` was attempted for a one-off diagnostic but `tsx` was not installed locally and network is blocked; no repo state changed. The diagnostic was moved into the Vitest repro output instead.
+- No push or merge performed.
