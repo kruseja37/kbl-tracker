@@ -673,6 +673,53 @@ export function computeBoardAutoAdvanceLine(input: {
     : `Next up at ${soldPosition}: ${promotedName}.`;
 }
 
+/**
+ * CALLFIX (2026-07-08) Item 4: after a live rank edit, the board renders instantly from the local
+ * `pendingBoardRankOverrides` overlay (see the perf note on `displayedWhisperPayload` below), but
+ * BEFORE this fix the auto-advance "Next up" line stayed baked into the heavier `whisperPayload`
+ * memo, computed against the PERSISTED `team.boardRankOverrides` -- stale for up to
+ * BOARD_RANK_SAVE_DEBOUNCE_MS after the edit. If a lot resolved in that window, the citation could
+ * name the pre-edit "#1" even though the board on screen already showed the new order.
+ *
+ * This recomputes `board` AND `nextUpLine` from the SAME live overlay together, so they can never
+ * disagree -- exported standalone (no React) so the recompute itself is directly unit-testable,
+ * mirroring computeBoardAutoAdvanceLine's own "pure function, no session plumbing" discipline
+ * above. `boardMeta` is intentionally omitted from the computeBoardAutoAdvanceLine call: every
+ * BoardEntry.note already carries the same display name boardMeta would have looked up (see
+ * assembleBoard's boardCandidates construction in the whisperPayload memo), so the name-lookup
+ * fallback chain resolves identically without needing to thread it through here.
+ */
+export function applyLiveBoardRankOverlay(
+  payload: RosterIntelligencePayload,
+  overlay: { overrides: NonNullable<Team["boardRankOverrides"]> },
+  latestResult: {
+    latestResultPlayerId: string | undefined;
+    latestResultDisposition: AuctionResultDisposition | undefined;
+    soldPosition: TaxonomyPosition | undefined;
+    currentLotPlayerId: string | undefined;
+  },
+): RosterIntelligencePayload & { boardRankOverrides?: Team["boardRankOverrides"] | null; nextUpLine?: string | null } {
+  const overrideBoard = materializeRankOrder(
+    payload.board ?? [],
+    (entry) => entry.playerId,
+    overlay.overrides.global,
+  );
+  const nextUpLine = computeBoardAutoAdvanceLine({
+    latestResultPlayerId: latestResult.latestResultPlayerId,
+    latestResultDisposition: latestResult.latestResultDisposition,
+    soldPosition: latestResult.soldPosition,
+    currentLotPlayerId: latestResult.currentLotPlayerId,
+    board: overrideBoard,
+    boardRankOverrides: overlay.overrides,
+    boardMeta: {},
+  });
+  return Object.assign({}, payload, {
+    board: overrideBoard,
+    boardRankOverrides: overlay.overrides,
+    nextUpLine,
+  });
+}
+
 export function LeagueBuilderAuctionDraft() {
   const navigate = useNavigate();
   const auction = useAuctionDraft();
@@ -1513,16 +1560,20 @@ export function LeagueBuilderAuctionDraft() {
     if (!pendingBoardRankOverrides || pendingBoardRankOverrides.team.id !== whisperPayload.seatTeamId) {
       return whisperPayload;
     }
-    const overrideBoard = materializeRankOrder(
-      whisperPayload.board ?? [],
-      (entry) => entry.playerId,
-      pendingBoardRankOverrides.overrides.global,
-    );
-    return Object.assign({}, whisperPayload, {
-      board: overrideBoard,
-      boardRankOverrides: pendingBoardRankOverrides.overrides,
+    // CALLFIX Item 4: recompute the auto-advance line from THIS SAME live overlay -- cheap (pure
+    // array lookups over already-computed session/board data, no engine calls), and keeps the
+    // "your #N" citation honest even when a sale resolves in the same tick as an unflushed edit.
+    const latestResult = session?.results[session.results.length - 1];
+    const soldPosition = latestResult && session
+      ? (session.players[latestResult.playerId]?.pos?.position as TaxonomyPosition | undefined)
+      : undefined;
+    return applyLiveBoardRankOverlay(whisperPayload, pendingBoardRankOverrides, {
+      latestResultPlayerId: latestResult?.playerId,
+      latestResultDisposition: latestResult?.disposition,
+      soldPosition,
+      currentLotPlayerId: session?.currentLot?.playerId,
     });
-  }, [whisperPayload, pendingBoardRankOverrides]);
+  }, [whisperPayload, pendingBoardRankOverrides, session]);
 
   const bidIncrement = session?.config.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement;
   const setupShillCount = useMemo(
