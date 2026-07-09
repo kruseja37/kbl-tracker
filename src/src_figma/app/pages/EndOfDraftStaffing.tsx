@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, ChevronRight, ClipboardList, Mic, RefreshCw, Shuffle } from "lucide-react";
+import { ArrowLeft, ChevronRight, ClipboardList, HelpCircle, Mic, RefreshCw, Shuffle } from "lucide-react";
 
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
+import { PressButton } from "../components/ballpark";
 import {
   farmDraftRouteForLeague,
   franchiseSetupRouteForLeague,
@@ -80,6 +81,10 @@ export function EndOfDraftStaffing() {
   const [formsByTeamId, setFormsByTeamId] = useState<Record<string, StaffForm | undefined>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // TEXTLAW-SWEEP: this page had no Help affordance -- it gains ONE top-right Help toggle
+  // (journey-wide placement) so the instruction banner can gate behind it instead of always
+  // rendering.
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -211,11 +216,22 @@ export function EndOfDraftStaffing() {
             <h1 className="text-2xl font-bold" style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.8)" }}>Staff Your Clubs</h1>
             <div className="text-sm text-[var(--ballpark-chalk)]/65">{activeLeague.name}</div>
           </div>
+          <PressButton
+            size="sm"
+            variant="default"
+            aria-pressed={showHelp}
+            onClick={() => setShowHelp((value) => !value)}
+            className="ml-auto"
+          >
+            <HelpCircle className="w-4 h-4" /> ?
+          </PressButton>
         </div>
 
-        <div className="mb-5 bg-[var(--ballpark-panel)] border-4 border-[var(--ballpark-panel-border)] p-4 text-sm text-[var(--ballpark-chalk)]/75">
-          Hire one manager and one beat reporter for each human-controlled club before the franchise freeze. CPU clubs keep the existing auto-fill path.
-        </div>
+        {showHelp ? (
+          <div className="mb-5 bg-[var(--ballpark-panel)] border-4 border-[var(--ballpark-panel-border)] p-4 text-sm text-[var(--ballpark-chalk)]/75">
+            Hire one manager and one beat reporter for each human-controlled club before the franchise freeze. CPU clubs keep the existing auto-fill path.
+          </div>
+        ) : null}
 
         {humanTeams.length === 0 ? (
           <div className="mb-5 bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-4 text-[var(--ballpark-warn-text)] font-bold">

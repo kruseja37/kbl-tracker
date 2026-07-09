@@ -217,7 +217,9 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
           <button type="button" className={`help-toggle${helpOpen ? " active" : ""}`} onClick={() => setHelpOpen((open) => !open)}>
             Help
           </button>
-          {helpOpen && <span className="pill">{vm.status.phaseLabel}</span>}
+          {/* TEXTLAW-SWEEP A3 reverse fix: this is ALWAYS-class content (the phase itself, e.g.
+              "MLB auction") -- it was wrongly gated behind Help; now permanently visible. */}
+          <span className="pill">{vm.status.phaseLabel}</span>
           <span className="pill num">{vm.status.lotLabel}</span>
           <span className="pill">{vm.status.rosterLabel}</span>
           <span
@@ -240,7 +242,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
               <>
                 <div className="gonewrap">
                   <div className="lot">
-                    <Lot lot={vm.lot} tier={vm.tier} />
+                    <Lot lot={vm.lot} tier={vm.tier} helpOpen={helpOpen} />
                   </div>
                   {vm.overlay === "sold" && (
                     <div className="stamp sold"><div><div className="s">SOLD</div></div></div>
@@ -573,7 +575,7 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
   );
 }
 
-function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
+function Lot({ lot, tier, helpOpen }: { lot: LotVM; tier: AuctionTier; helpOpen: boolean }) {
   const [revealed, setRevealed] = useState(false);
   const name = <span className="name">{lot.name.toUpperCase()}</span>;
   const isFarmLot = tier === "farm";
@@ -616,9 +618,11 @@ function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
               <b className="num">{money(lot.publicMarket.band.median)}</b>
               <span className="num">{money(lot.publicMarket.band.high)}</span>
             </div>
-            <div className="muted" style={{ fontSize: 12.5 }}>
-              Scout band: low / expected / stretch
-            </div>
+            {helpOpen && (
+              <div className="muted" style={{ fontSize: 12.5 }}>
+                Scout band: low / expected / stretch
+              </div>
+            )}
           </div>
           <div className={`market-signal${lot.publicMarket.contested ? " contested" : ""}`}>
             {lot.publicMarket.contested ? (
@@ -646,9 +650,11 @@ function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
 
       {lot.scout && (
         <>
-          <p className="muted" style={{ fontSize: 13.5, margin: "2px 0 0" }}>
-            True value is in the fog. Your scout's read is yours alone — keep it covered.
-          </p>
+          {helpOpen && (
+            <p className="muted" style={{ fontSize: 13.5, margin: "2px 0 0" }}>
+              True value is in the fog. Your scout's read is yours alone — keep it covered.
+            </p>
+          )}
           <div className={`scout${revealed ? " revealed" : ""}`}>
             <button
               type="button"
@@ -659,7 +665,7 @@ function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
               <span style={{ fontSize: 18 }}>📋</span> {revealed ? "COVER IT" : "TAP FOR THE SCOUT REPORT"}
             </button>
             <div className="body">
-              {revealed && <ScoutBody scout={lot.scout} />}
+              {revealed && <ScoutBody scout={lot.scout} helpOpen={helpOpen} />}
             </div>
           </div>
         </>
@@ -686,7 +692,7 @@ function Lot({ lot, tier }: { lot: LotVM; tier: AuctionTier }) {
   );
 }
 
-function ScoutBody({ scout }: { scout: ScoutReadVM }) {
+function ScoutBody({ scout, helpOpen }: { scout: ScoutReadVM; helpOpen: boolean }) {
   const low = Math.min(scout.rangeLow, scout.rangeHigh);
   const high = Math.max(scout.rangeLow, scout.rangeHigh);
   const span = Math.max(0, high - low);
@@ -704,9 +710,11 @@ function ScoutBody({ scout }: { scout: ScoutReadVM }) {
           Scout value <b className="gold">{scout.valueLabel}</b>
         </div>
       )}
-      <div className="eyebrow">
-        Scout's price range <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>— narrow band = confident</span>
-      </div>
+      {helpOpen && (
+        <div className="eyebrow">
+          Scout's price range <span className="faint" style={{ textTransform: "none", letterSpacing: 0 }}>— narrow band = confident</span>
+        </div>
+      )}
       <div className="range">
         <div className="rangebar">
           <i style={{ left: `${leftPct}%`, right: `${rightPct}%` }} />

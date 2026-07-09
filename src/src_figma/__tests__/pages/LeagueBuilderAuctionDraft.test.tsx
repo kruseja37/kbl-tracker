@@ -640,7 +640,9 @@ describe("LeagueBuilderAuctionDraft", () => {
     await waitFor(() => {
       expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
     });
-    expect(screen.queryByText("MLB auction")).not.toBeInTheDocument();
+    // TEXTLAW-SWEEP A3 reverse fix: the phase-label pill is ALWAYS-class content -- no longer
+    // gated behind Help.
+    expect(screen.getByText("MLB auction")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Help" }));
     expect(screen.getByText("MLB auction")).toBeInTheDocument();
     expect(screen.getByText("On the block")).toBeInTheDocument();

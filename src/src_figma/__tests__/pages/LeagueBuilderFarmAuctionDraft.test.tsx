@@ -400,7 +400,10 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
 
     render(<LeagueBuilderFarmAuctionDraft />);
 
-    expect(screen.getByText("Farm auction")).toBeInTheDocument();
+    // TEXTLAW-SWEEP A3 reverse fix: the AuctionStage phase-label pill (also "Farm auction") is now
+    // ALWAYS-class content, so this text now renders twice on this page (toolbar chip + stage
+    // pill) -- assert presence via getAllByText rather than the single-match getByText.
+    expect(screen.getAllByText("Farm auction").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("SEED")).not.toBeInTheDocument();
     expect(screen.queryByText("BID INCREMENT")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /BEGIN FARM AUCTION/i })).not.toBeInTheDocument();

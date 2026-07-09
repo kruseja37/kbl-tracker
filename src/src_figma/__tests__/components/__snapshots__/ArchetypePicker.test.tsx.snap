@@ -58,11 +58,6 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
     </button>
   </div>
   <div
-    class="text-[12px] text-[var(--ballpark-chalk)]/55 mb-4"
-  >
-    Choosing your MLB identity — it shifts your luxury-tax ceilings, making your style cheap to over-stack.
-  </div>
-  <div
     class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3"
   >
     <button

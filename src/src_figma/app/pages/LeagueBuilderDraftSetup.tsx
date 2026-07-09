@@ -3519,14 +3519,19 @@ export function LeagueBuilderDraftSetup() {
               advisory only
             </span>
           </div>
+          {showHelp ? (
+            <>
+              <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
+                Based on the expected drafted window, not every player in the pool.
+              </div>
+              <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
+                Uses actual generated pool values, so source constraints or hard keeps can move the suggestion differently than the selected quality target.
+              </div>
+            </>
+          ) : null}
           <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
-            Based on the expected drafted window, not every player in the pool.
-          </div>
-          <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
-            Uses actual generated pool values, so source constraints or hard keeps can move the suggestion differently than the selected quality target.
-          </div>
-          <div className="mt-1 text-[10px] text-[var(--ballpark-chalk)]/60">
-            {poolAffordabilityDiagnostic.summary} Pool quality and salary cap are separate. Changing Pool Quality does not change the cap. Advisory guidance only.
+            {poolAffordabilityDiagnostic.summary}
+            {showHelp ? " Pool quality and salary cap are separate. Changing Pool Quality does not change the cap. Advisory guidance only." : null}
           </div>
         </div>
       ) : null}
@@ -3555,9 +3560,11 @@ export function LeagueBuilderDraftSetup() {
           </span>
         ) : null}
       </div>
-      <div className="mb-3 text-[11px] text-[var(--ballpark-chalk)]/60">
-        Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.
-      </div>
+      {showHelp ? (
+        <HelpNote>
+          Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.
+        </HelpNote>
+      ) : null}
       <div className="grid gap-2">
         {recheckReport ? recheckReport.rows.map((row) => (
           <div key={row.id} className="flex flex-wrap items-baseline gap-2 text-sm">
@@ -3695,7 +3702,8 @@ export function LeagueBuilderDraftSetup() {
 
   const designFirstStrayNotice = rosteredButUnassigned.length > 0 ? (
     <div className="text-[11px] leading-snug text-[var(--ballpark-chalk)]/70 font-[var(--ballpark-font-chrome)]">
-      {rosteredButUnassigned.length} rostered players aren&apos;t part of this pool — a drawn pool contains only what the draw picked. (
+      {rosteredButUnassigned.length} rostered players aren&apos;t part of this pool.
+      {showHelp ? " A drawn pool contains only what the draw picked." : null} (
       {rosteredButUnassigned.slice(0, 2).map((player) => player.name).join(", ")}
       {rosteredButUnassigned.length > 2 ? `, +${rosteredButUnassigned.length - 2} more` : ""}
       )
@@ -3742,10 +3750,12 @@ export function LeagueBuilderDraftSetup() {
       <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-2">
         DRAFT POOL SOURCES
       </div>
-      <div className="text-[10px] font-bold text-[var(--ballpark-chalk)]/65 mb-2">
-        Which leagues' player pools feed this league's draft. Uncheck your own league to keep its
-        branded rosters without drafting from them.
-      </div>
+      {showHelp ? (
+        <HelpNote>
+          Which leagues' player pools feed this league's draft. Uncheck your own league to keep its
+          branded rosters without drafting from them.
+        </HelpNote>
+      ) : null}
       <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
         {leagues.map((candidate) => {
           // Absent field (unfiltered default) renders every league checked — the on-screen
@@ -4151,6 +4161,7 @@ export function LeagueBuilderDraftSetup() {
                     onPick={handlePick}
                     disabled={Boolean(setupMutationBlockMessage) || busy}
                     disabledReason={setupMutationBlockMessage ?? undefined}
+                    showHelp={showHelp}
                   />
                 ) : clubEditorMode === "design" && selectedTeamConfig.ownerId !== "cpu" ? (
                   <RosterDesigner
@@ -4487,9 +4498,11 @@ export function LeagueBuilderDraftSetup() {
                     <div className="text-[10px] font-bold tracking-[0.16em] text-[var(--ballpark-brass)] font-[var(--ballpark-font-chrome)] mb-1">
                       POOL QUALITY
                     </div>
-                    <div className="text-[10px] font-bold text-[var(--ballpark-chalk)]/65 mb-2">
-                      Shift the numeric talent curve up or down while preserving the selected pool shape.
-                    </div>
+                    {showHelp ? (
+                      <div className="text-[10px] font-bold text-[var(--ballpark-chalk)]/65 mb-2">
+                        Shift the numeric talent curve up or down while preserving the selected pool shape.
+                      </div>
+                    ) : null}
                     <div className="flex flex-wrap gap-1">
                       {POOL_QUALITY_CENTER_STOPS.map((qualityCenter) => {
                         const active = poolQualityCenter === qualityCenter;

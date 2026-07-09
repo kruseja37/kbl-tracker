@@ -1120,6 +1120,9 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     expect(await screen.findByText("POOL QUALITY")).toBeInTheDocument();
+    // TEXTLAW-SWEEP: the pool-quality explainer is now Help-gated (byte-identical, relocated only).
+    expect(screen.queryByText("Shift the numeric talent curve up or down while preserving the selected pool shape.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "?" }));
     expect(screen.getByText("Shift the numeric talent curve up or down while preserving the selected pool shape.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "64" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "66" })).toBeInTheDocument();
@@ -1145,6 +1148,11 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(capFitDiagnosticText()).toContain("Suggested Neutral Cap:");
     expect(capFitDiagnosticText()).toContain("expected drafted window");
     expect(capFitDiagnosticText()).toContain("advisory only");
+    // TEXTLAW-SWEEP: the two methodology lines (LOCKED) and the fused line's static clause now
+    // gate behind Help -- the dynamic {summary} above stays visible without opening it.
+    expect(capFitDiagnosticText()).not.toContain("Based on the expected drafted window, not every player in the pool.");
+    expect(capFitDiagnosticText()).not.toContain("Pool quality and salary cap are separate.");
+    fireEvent.click(screen.getByRole("button", { name: "?" }));
     expect(capFitDiagnosticText()).toContain("Based on the expected drafted window, not every player in the pool.");
     expect(capFitDiagnosticText()).toContain("Uses actual generated pool values");
     expect(capFitDiagnosticText()).toContain("Pool quality and salary cap are separate. Changing Pool Quality does not change the cap.");
@@ -2640,6 +2648,11 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     expect(await screen.findByText("CAN EVERY CLUB BUILD A LEGAL 22 UNDER $1,000,000?")).toBeInTheDocument();
+    // TEXTLAW-SWEEP: the room-check explainer is now Help-gated (byte-identical, relocated only).
+    expect(screen.queryByText(
+      "Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.",
+    )).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "?" }));
     expect(screen.getByText(
       "Each club is checked drafting alone from the full pool; the last line checks all clubs sharing one pool.",
     )).toBeInTheDocument();
