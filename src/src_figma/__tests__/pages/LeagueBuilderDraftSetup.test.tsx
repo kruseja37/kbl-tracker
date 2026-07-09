@@ -3703,4 +3703,159 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     });
   });
+
+  // CONTRACT_STALEPARITY_2026-07-09: pool-first mode has ZERO staleness net today -- it stores no
+  // basis snapshot at all, basisStaleLines is hard-gated to design-first, and startReady never
+  // consults poolTrailing for pool-first. These three repros are written to FAIL against the
+  // pre-fix code (see the repro-commit evidence appended to the contract) and PASS once pool-first
+  // gets the same basis-snapshot-at-lock + detector + readinessReasons wiring design-first already
+  // has.
+  describe("STALEPARITY: pool-first gets the same staleness net design-first already has", () => {
+    test("REPRO (a): pool-first identity drift after lock names the club and blocks Start Draft", async () => {
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "pool-first",
+          salaryCap: 1_064_387,
+          poolExtractedAt: extractedAt,
+          poolExtractedBasis: {
+            cap: 1_064_387,
+            poolSizeMultiplier: 1.25,
+            shills: 0,
+            identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+          },
+        }),
+        teams: [
+          makeTeam("team-a"),
+          makeTeam("team-b", { mlbArchetypeKey: "whiteyball" }), // drifted since the pool was locked
+        ],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText("Keys CHANGED ITS IDENTITY — RE-EXTRACT TO RESTOCK FOR IT.")).toBeInTheDocument();
+      expect(within(panel).getByText(/the pool is locked but the plan changed since/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("REPRO (b): a fresh mount whose live pool-quality/balance dials default away from what locked the pool trips staleness lines", async () => {
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "pool-first",
+          salaryCap: 1_064_387,
+          poolExtractedAt: extractedAt,
+          poolExtractedBasis: {
+            cap: 1_064_387,
+            poolSizeMultiplier: 1.25,
+            shills: 0,
+            identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+            // Locked when the dials sat at 74 / grounded. A fresh mount with empty session
+            // storage (a different device, a cleared browser, a second tab) defaults live state
+            // back to 68 / balanced -- silent drift the pre-fix code never captures or detects.
+            poolQualityCenter: 74,
+            poolBalancePreset: "grounded",
+          },
+        }),
+        teams: [makeTeam("team-a"), makeTeam("team-b")],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(within(panel).getByText("THE POOL QUALITY DIAL MOVED — RE-EXTRACT TO REDRAW.")).toBeInTheDocument();
+      expect(within(panel).getByText("THE POOL BALANCE DIAL MOVED — RE-EXTRACT TO REDRAW.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("REPRO (c): a chosen pool-balance preset survives a remount instead of silently resetting to Balanced", async () => {
+      const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+        makeLegalRosterPlayerSet(prefix, 10_000),
+      );
+      mockLeagueData({
+        league: makeLeague({
+          teamIds: ["team-a", "team-b", "team-c", "team-d"],
+          draftPoolMode: "pool-first",
+        }),
+        teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+        players: currentPlayers,
+        pool: makePool({
+          locked: false,
+          players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: currentPlayers.length,
+        }),
+      });
+
+      const { unmount } = render(<LeagueBuilderDraftSetup />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
+      await waitFor(() => {
+        expect(window.sessionStorage.getItem("kbl:draft-pool-balance-preset:league-page:pool-first")).toBe("grounded");
+      });
+
+      unmount();
+      vi.mocked(extractPoolFromDemand).mockClear();
+
+      render(<LeagueBuilderDraftSetup />);
+      fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+      await waitFor(() => {
+        expect(extractPoolFromDemand).toHaveBeenCalled();
+      });
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { poolBalancePreset?: string };
+      expect(options.poolBalancePreset).toBe("grounded");
+    });
+
+    test("SURPRISE FIX: switching pool-first (with lock residue) to design-first clears the basis instead of leaking it across modes", async () => {
+      // The pre-existing handlePoolModeChange only cleared poolExtractedAt/poolExtractedBasis when
+      // SWITCHING TO pool-first -- safe under the old regime because pool-first never wrote those
+      // fields. Once pool-first also snapshots a basis at LOCK time (this contract's Item 1), the
+      // asymmetric clear becomes a real cross-mode leak: unlock a pool-first pool that was once
+      // locked, switch to design-first, and design-first inherits a basis it never actually built.
+      const residueLeague = makeLeague({
+        draftPoolMode: "pool-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+        poolExtractedBasis: {
+          cap: 1_000_000,
+          poolSizeMultiplier: 1.25,
+          shills: 0,
+          identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+        },
+        modeAExtractedIds: ["some-id"],
+      });
+      mockLeagueData({
+        league: residueLeague,
+        teams: [makeTeam("team-a"), makeTeam("team-b")],
+        pool: makePool({ locked: false }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^Design first$/i }));
+
+      await waitFor(() => {
+        expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+          draftPoolMode: "design-first",
+          poolExtractedAt: undefined,
+          poolExtractedBasis: undefined,
+          modeAExtractedIds: undefined,
+        }));
+      });
+    });
+  });
 });
