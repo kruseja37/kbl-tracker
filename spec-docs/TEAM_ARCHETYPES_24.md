@@ -60,7 +60,13 @@ Launch-angle thunder: 430 feet or a whiff. **+power → −contact −speed.**
 
 ### Bash Brothers — *1989 Athletics · 1996 Mariners*
 Forearm-bashing bombs and cannon arms; the pitching leaks. **+power +arm → −command (rotation & bullpen).**
-> Power +5 (cap +7.5%) · Arm +7 (cap +12%) · Rotation command −15 (cap −25%) · Bullpen command −18 (cap −30%)
+> Power +5 (cap +7.5%) · Arm +7 (cap +12%) · Rotation command −15 (cap −25%) · Bullpen command −9 (cap −15%)
+>
+> *Corrected 2026-07-09: bullpen command re-banded (−18 / cap −30% → −9 / cap −15%) — retuned for
+> value-parity during the 2026-07-04 economy work (require-a-closer, commit `f71059ec`; companion
+> reliever repricing `057f4525`). Re-verified empirically 2026-07-09 after JK challenged the retunes:
+> a balance-sim experiment (real sim, frozen IV oracle, today's economy) showed the OLD sheet value
+> blows the ±10% band (Bash −13.9% nerfed) while the current value sits in band at all three tiers.*
 
 ### Launch & Leather — *2016 Cubs · 2021 Astros*
 Mash and pick it clean; if the staff could find the zone they'd be unbeatable. **+power +defense → −command.**
@@ -160,7 +166,16 @@ Bullpenning: relievers over starters. **+bullpen → −rotation.**
 
 ### HDH Royals — *2014–15 Royals*
 Shorten the game: a lockdown pen and fast gloves. **+bullpen command +speed → −power −rotation command.**
-> Bullpen command +27 (cap +45%) · Speed +7 (cap +12%) · Power −5 (cap −7.5%) · Rotation command −15 (cap −25%)
+> Bullpen command +5 (cap +9%) · Speed +7 (cap +12%) · Power −2 (cap −2.5%) · Rotation command −4 (cap −6.25%)
+>
+> *Corrected 2026-07-09: retuned (bullpen command +27 / cap +45% → +5 / cap +9%; power −5 / cap −7.5%
+> → −2 / cap −2.5%; rotation command −15 / cap −25% → −4 / cap −6.25%; speed unchanged) for
+> value-parity during the 2026-07-04 economy work — the reliever repricing devalued the bullpen-command
+> boost's tax shelter, so the whole profile was re-pinned to hold 24/24 in band (commit `057f4525`;
+> companion require-a-closer re-band `f71059ec`). Re-verified empirically 2026-07-09 after JK
+> challenged the retunes: a balance-sim experiment (real sim, frozen IV oracle, today's economy)
+> showed the OLD sheet values blow the ±10% band (HDH −21.4% juiced) while the current values sit in
+> band at all three tiers; the fix-then-retune ordering inside `057f4525` was also verified.*
 
 ---
 

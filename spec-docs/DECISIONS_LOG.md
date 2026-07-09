@@ -3652,3 +3652,35 @@ identity path. The cap therefore guards nothing and blocks legitimate archetypes
 
 The identity-modification count cap is neutralized. The vocabulary check remains, and the luxury tax
 plus tier cap remain the balancing mechanisms.
+
+## 2026-07-09 — Archetype sheet-vs-code divergence resolved SPEC-TO-CODE + permanent conformance weld (ARCHLOCK)
+
+A full 24-archetype reconciliation found `spec-docs/TEAM_ARCHETYPES_24.md` diverging from
+`src/data/historicalArchetypes.ts` on exactly 2 archetypes — HDH Royals and Bash Brothers. Resolved
+**SPEC-TO-CODE**: the code values are deliberate, audited, ruled retunes and are KEPT; the sheet was the
+stale artifact and is corrected.
+
+Provenance of the two retunes (both during the 2026-07-04 economy work):
+- **HDH Royals** — retuned in `057f4525` (reliever repricing): PEN_ACC 1.5→0.3, POW −1.5→−0.5,
+  ROT_ACC −1→−0.25 (SPD unchanged), re-pinning value-parity to 24/24 in band after the repricing
+  devalued the bullpen-command tax shelter.
+- **Bash Brothers** — re-banded in `f71059ec` (require-a-closer): PEN_ACC −1→−0.5, keeping Bash in
+  band once the closer requirement made the bullpen-command sacrifice bind harder.
+
+JK challenged the retunes 2026-07-09 (concern: were they computed against the buggy valuation?). The
+captain's empirical re-verification CONFIRMED the retunes stand: (1) the bug JK remembered was the
+reliever/starter IV mispricing, fixed in `057f4525` BEFORE the HDH retune in that same commit
+(fix-then-retune ordering, safe); (2) Bash's re-band responds to the require-a-closer rule, not a bug;
+(3) the decisive balance-sim experiment (real `runBalanceSim`, real frozen `iv_oracle`, today's
+economy) showed reverting to the sheet values blows the ±10% band — HDH −21.4% juiced, Bash −13.9%
+nerfed — while the current code values sit comfortably in band at all three tiers; (4) the sheet's
+original values were themselves ratified under the buggy pricing (`efc7cfb6` pre-dates the fix).
+
+Actions taken (contract `spec-docs/contracts/CONTRACT_ARCHLOCK_2026-07-09.md`): sheet corrected with
+dated footnotes; permanent conformance weld added — `src/data/__tests__/archetypeSheetConformance.test.ts`
+embeds the full ratified 24-archetype shift table as literals and asserts `archetypeCapShift` matches it
+exactly (categories AND magnitudes), something the balance-sim gate structurally cannot do (it grades
+code against itself). Any future retune must update the sheet + the test table in the same commit.
+
+**OPEN (JK, parked, not ruled here):** whether HDH's identity at roughly 1/5 of its original magnitude
+still FEELS like a distinct archetype in play. The numbers are balanced; the feel question is JK's.
