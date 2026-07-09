@@ -700,7 +700,16 @@ export function projectBidVsPass(input: BidVsPassInput): { bid: BoardProjection;
 
   const project = (branch: 'bid' | 'pass'): BoardProjection => {
     const won = branch === 'bid';
-    const budgetAfter = won ? team.budgetRemaining - bidAmount : team.budgetRemaining;
+    // TAXWIRE Item 1 (2026-07-09, spec-docs/contracts/CONTRACT_TAXWIRE_2026-07-09.md): the winning
+    // branch now nets team.projectedTax off budgetAfter too -- the same marginal-tax figure the
+    // finalizeSoldLot settlement actually charges (auctionStateMachine.ts:905,
+    // budgetRemaining - salary - projectedTax) and the same figure sessionBidCeiling already
+    // reserves for THIS team's own bidding power (auctionStateMachine.ts:390-391). Before this fix
+    // the whisper's Bid-vs-Pass budgets and every downstream affordability flag (`affordable:
+    // market.band.median <= budgetAfter` below) showed the untaxed, salary-only figure --
+    // contradicting Tier-1 TRUE COST, which already prices the tax. PASS never wins the lot, so it
+    // never owes this lot's tax and stays untouched.
+    const budgetAfter = won ? team.budgetRemaining - bidAmount - (team.projectedTax ?? 0) : team.budgetRemaining;
     const rosterIds = team.roster.map((a) => a.playerId);
     const branchRosterIds = won ? [...rosterIds, lot.playerId] : rosterIds;
     const slotsAfter = won ? team.rosterSlotsRemaining - 1 : team.rosterSlotsRemaining;
