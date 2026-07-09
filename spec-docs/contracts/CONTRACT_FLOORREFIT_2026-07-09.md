@@ -297,3 +297,125 @@ regression (roster board vanishing from the complete screen) was caught by the p
 suite mid-build and fixed with a shared subcomponent instead of losing coverage. Team colors are
 confirmed always-populated for real league-builder clubs, so the banner's team-colored path is the
 common case in practice and the brass-on-ink fallback is defensive, not decorative.
+
+---
+
+## REWORK R1-R3 (captain bounce-back 2026-07-09, post-audit APPROVE-WITH-NOTES)
+
+**Rework commits (on top of the original five):**
+- `782c4cb3` -- fix(auction): FLOORREFIT R1 -- retire the duplicated who's-up pill
+- `d3d38322` -- fix(auction): FLOORREFIT R2+R3 -- contrast by direct comparison; nomination copy reachable
+- *(this commit)* -- docs(contract): R1-R3 evidence
+
+### R1 -- the duplicated who's-up pill is retired
+
+- **Deleted markup:** the `<span className="now team-now">... Now: {nowText}</span>` pill from the
+  AuctionStage statusbar (was AuctionStage.tsx:251-259). The pill carried no other content, so the
+  whole element is gone per the ruling; an explanatory comment marks the site
+  (AuctionStage.tsx:248-252). The phase/lot/roster pills (not who's-up content, not team-colored)
+  stay.
+- **Deleted CSS (all pill-only, grep-verified before deletion):** `.statusbar .now`, `.team-now`,
+  `.team-now span:last-child`, `.live`, and the `aucPulse` keyframe
+  (auction-theme.css, replaced by the R1 comment block at :79-82).
+- **VM unchanged:** `status.nowText`/`teamName`/`teamPrimary`/`teamSecondary` all remain -- the
+  banner consumes every one of them (nowText is the CPU calm-wait copy).
+- **Grep proof (post-change):** `grep -rn "team-now|className=\"live\"|aucPulse|statusbar .now"`
+  across the auction component tree + auction-theme.css -> only the R1 explanatory CSS comment.
+  Team-color surfaces remaining on the floor: the banner (`--otc-bg`, otc CSS block) and the
+  high-bid holder swatch (`--holder-color`, auction-theme.css:152-153) -- exactly the two the
+  ruling names.
+- **Test relocations (relocation-class, not weakenings; both forced by the pill deletion):**
+  - `LeagueBuilderAuctionDraft.test.tsx` ("renders open bidding..."): the post-bid waitFor read the
+    pill's `/Page (Caps|Keys) — raise or pass/` -- now asserts the same turn-moved information on
+    the banner (`YOU'RE UP — PAGE (CAPS|KEYS)` regex, same either-team looseness as before) and
+    keeps its second clause (Let-him-go enabled) untouched.
+  - `LeagueBuilderFarmAuctionDraft.test.tsx` (obscured-flow test): the post-bid waitFor read the
+    pill's `/Farm Keys — raise or pass/` (exact team) -- now asserts
+    `YOU'RE UP — FARM KEYS` on the banner, preserving the exact-team specificity.
+- **Explicitly out of scope, flagged for the delta audit (three pre-existing surfaces the ruling's
+  text could be read against but which are NOT who's-up announcers):**
+  1. The SETUP screen's HANDOFF panel "Now: {team} — {action}" line
+     (LeagueBuilderAuctionDraft.tsx:~2092): renders only when the stage does NOT (pre-auction setup,
+     no banner exists there), styled in ballpark tokens with zero team colors -- it is pass-the-
+     device guidance, not a stage duplicate. Untouched.
+  2. The complete-screen `handoff-chip` club dots (AuctionStage.tsx:524, auction-theme.css:193):
+     club identity on the legality report rows, not turn identity; the complete screen has no
+     banner and nobody on the clock. Untouched.
+  3. The whisper's seat-color left border (`--whisper-team` on `.whisper-tier1`/`.whisper-strip`):
+     marks whose ADVISOR the panel is (cockpit-era seat identity), not who is acting; whisper IA is
+     explicitly frozen by this lane's guardrails. Untouched.
+  If the captain wants law §1.3 enforced against (2) or (3) as well, that is a separate ruling --
+  deliberately not improvised here.
+
+### R2 -- auto-contrast by direct comparison
+
+- **The fix (onTheClockBanner.tsx):** `onTheClockTextTone` (:64-69) now computes the WCAG contrast
+  ratio of BOTH candidate tones against the band color and returns the higher --
+  `contrastRatio(band, ink) >= contrastRatio(band, chalk) ? "ink" : "chalk"`. The old
+  `luminance > 0.5` threshold is gone. New exports: `TEXT_TONE_RGB` (:34 -- ink #1A1A1A / chalk
+  #E8E8D8, the literal values behind the `.otc-ink-text` / `.otc-team` CSS, kept in one place so
+  the math and the CSS can't drift apart silently), `relativeLuminance` (:40), `contrastRatio`
+  (:49, order-independent 1..21).
+- **Behavior flips this causes (the point of the ruling):** #FF6600 (the app's DEFAULT team color)
+  chalk->ink (~2.4:1 -> ~5.9:1); #4CAF50 chalk->ink (~2.6:1 -> ~6.3:1). Dark navy #001489, white,
+  black: unchanged (the threshold happened to get the extremes right).
+- **Tests (onTheClockBanner.test.tsx):** a `test.each` palette -- #FF6600, #4CAF50, mid-blue
+  #005A9C, pure white, pure black -- asserts for EACH color that (a) the chosen tone's COMPUTED
+  contrast ratio >= the rejected tone's (the direct-comparison law itself) and (b) the chosen
+  ratio >= 4.5 (WCAG AA, "no unreadable band ever"). Plus WCAG anchor tests (white/black = 21:1
+  order-independent, self = 1:1, white lum = 1.0 / black = 0.0) locking the underlying math, the
+  named flip cases, and a component-level render asserting #FF6600 now gets `otc-ink-text`.
+- **Note on the mid-blue choice:** #005A9C. An earlier candidate (#3B7DD8, the floor's HANDOFF
+  blue) fails 4.5:1 against BOTH tones (ink ~4.2:1, chalk ~3.3:1) -- no two-tone system can clear
+  AA on every conceivable band color; the palette test asserts the ruling's named palette, and the
+  direct-comparison law guarantees the best available tone everywhere else.
+
+### R3 -- nomination copy reachable for humans
+
+- **The fix (onTheClockBanner.tsx:90-95):** the ladder is now three branches, first match wins:
+  CPU/unresolvable-name -> calm-wait `nowText` (unchanged); human + `turnKind === "nomination"` ->
+  `YOU'RE UP — {TEAM} — NOMINATE`; human otherwise -> `YOU'RE UP — {TEAM}`. The old non-viewer
+  branches (`{TEAM} IS ON THE CLOCK` / `{TEAM} TO NOMINATE`) and the `isViewerSeat` parameter are
+  DELETED -- they were human-unreachable (every caller passed `isViewerSeat = !actingTeamIsCpu`)
+  and the ruling says delete what remains dead. `OnTheClockCopyInput` shrinks accordingly; the
+  original contract's deviation note 2 (the unreachable-branches finding) is RESOLVED by this
+  ruling.
+- **Wiring:** zero page changes needed -- `turnKind: "nomination"` was already threaded on both
+  floors in the original build (MLB `nowTurnKind`, LeagueBuilderAuctionDraft.tsx:1118-1121; farm
+  `nowTurnKind`, LeagueBuilderFarmAuctionDraft.tsx:733-736), so the NOMINATE variant is live the
+  moment a human nomination turn renders.
+- **Tests:** both human variants at the ladder level (bid -> `YOU'RE UP — PAGE CAPS`, nomination ->
+  `YOU'RE UP — PAGE CAPS — NOMINATE`, no-turnKind -> plain bid form) and a component-level render
+  of the NOMINATE variant; CPU copy asserted unchanged for BOTH turnKinds.
+
+### Rework gate outputs (paste real, this session)
+
+**`npx tsc -b`** (after `tsc -b --clean` in the same session) -- exit 0, zero output:
+```
+$ npx tsc -b
+$ echo $?
+0
+```
+
+**`npm run build`** -- exit 0:
+```
+$ npm run build
+...
+BUILD_EXIT=0
+PWA v1.2.0
+mode      generateSW
+precache  185 entries (5325.44 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1d305bb8.js
+```
+
+**The six focused suites** (AuctionStage, WhisperPanel, onTheClockBanner, LeagueBuilderAuctionDraft,
+computeBoardAutoAdvanceLine, LeagueBuilderFarmAuctionDraft), run together:
+```
+ Test Files  6 passed (6)
+      Tests  138 passed (138)
+```
+(Was 129 before the rework: the banner suite grew 20 -> 29 -- the contrast-palette matrix, the WCAG
+anchors, and the NOMINATE variants -- and net zero elsewhere: the two relocated page assertions and
+the reworked ladder tests replace their predecessors one-for-one.)
