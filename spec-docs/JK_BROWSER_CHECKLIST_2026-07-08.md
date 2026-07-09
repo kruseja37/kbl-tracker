@@ -23,6 +23,13 @@ the bottom of Section 7 has now landed and is ready to walk — **Section 8 belo
 two smaller items (a pool-first staleness warning, and one open feel-question on a team identity's
 exact numbers). Everything above (Sections 1-7) is still open and still needs your eye.
 
+**Update, 2026-07-09 (the tax-coherence program completes):** every setup-screen and whisper number
+that touches affordability now accounts for the real luxury tax, plus a stronger safety net against
+a draft coming up short on closers. **Section 9 below** covers this — it is the LAST wave before
+your walkthrough. Everything above (Sections 1-8) is still open and still needs your eye. Once you
+walk Section 9, there is no more building queued behind this checklist — a full walkthrough closes
+the tax-coherence program.
+
 **How to use it:** work top to bottom on a real league in the browser. Check each box as you go.
 Where a box asks a design question rather than a pass/fail, a recommendation is given — you can
 just say "yes" / "no" / "change it to X."
@@ -189,14 +196,53 @@ round of fixes your captain ordered before it shipped. Walk it on a real league,
       using the HDH Royals identity and tell us if it feels right to you at its current strength —
       this isn't a bug, just a "does this feel balanced" gut-check.
 
+## 9. TODAY'S FIXES (2026-07-09, later) — THE SETUP SCREEN NOW KNOWS ABOUT TAX, AND A FEW CLEANUP ITEMS
+
+This is the last wave before your walkthrough. It closes the tax-honesty gap: everywhere in the
+draft that shows you an affordability number now accounts for the real luxury tax, not just the
+salary. Walk it on a real league that has at least one club running hot on tax.
+
+- [ ] **On Draft Setup, THE CLUB CHECK row tells you when tax — not just salary — is the problem.**
+      Build a club whose roster target is affordable on salary alone but tips over once tax is
+      added. The row should call this out by name with real numbers ("TARGET OVERSHOOTS WITH TAX ·
+      $X ALL-IN vs $Y BUDGET"), not just show a generic red/amber dot. If a club is over budget on
+      salary ALONE (no tax involved), it should NOT say anything about tax — that was a real bug we
+      caught and fixed (it briefly said "OWES $0 TAX" on a club that owed no tax at all).
+- [ ] **THE MONEY panel has a new TAX WATCH line.** It should list any club whose roster target
+      would overshoot the budget once tax is added, showing up before you even lock the pool.
+- [ ] **The archetype market outlook shows the tax owed per archetype**, alongside its other numbers.
+- [ ] **The identity strip (shared with the Roster Designer) names tax specifically** when tax is
+      the reason a target is out of reach, instead of a generic "over budget" message.
+- [ ] **The whisper's Fill Reserve / Room numbers and the cash-posture read now account for tax.**
+      Get a team close to full with some tax exposure and confirm the "money left to finish the
+      roster" figures look tax-aware (smaller than the old salary-only numbers would have shown),
+      not just the TRUE COST line from Section 7.
+- [ ] **The Bid-vs-Pass card's "if you win, $ left" number matches what actually happens.** Win a
+      lot on a taxed team and confirm the budget-remaining number the card showed you beforehand
+      matches your real remaining budget afterward — no gap between the preview and the settlement.
+- [ ] **If your pool ever comes up short on closers, the readiness panel says so in plain English**
+      (e.g., "the pool is short on closers") instead of silently letting a draft strand a team with
+      no legal way to finish. This should be rare at normal settings — it only shows up if your
+      league's universe genuinely doesn't have enough closers to go around.
+- [ ] **A full six-draft stress test now runs automatically as a permanent safety check** — every
+      time this part of the app changes, the team re-proves that a full draft completes cleanly
+      with real tax draining real budgets, in both pool-building modes. Nothing for you to click;
+      just know this backstop now exists.
+- [ ] **Duplicating a league is more forgiving of old data.** If you have an older, slightly damaged
+      league (one where a deleted team's id got stuck in the membership list), Duplicate League
+      should no longer silently fail — it should either work (skipping the stale reference) or show
+      you a clear error, never nothing.
+
 ## What a PASS means
 
-A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin) AND today's
-follow-on fixes (section 6 — the readiness panel, rank typing, and Help-gated text) are accepted
-as done. Any items you flag as "fix this" get ticketed and scheduled; anything you flag as
-"actually I want this different" gets treated as a new design fork, not a bug. Once you've walked
-it, work moves on to the wrong-fit penalty (P9) and a broader verification pass — those don't
-start before this checklist is walked.
+A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin), the floor refit
+(Section 8), and the tax-coherence program (Section 9 — setup screens, the whisper, CPU behavior,
+and full-draft completion all honest about the real luxury tax) are ALL accepted as done. Any items
+you flag as "fix this" get ticketed and scheduled; anything you flag as "actually I want this
+different" gets treated as a new design fork, not a bug. **As of 2026-07-09, this checklist is the
+ONLY remaining gate** — there is no more building queued behind it; a full walkthrough closes the
+tax-coherence program and clears the way for the next queued work (the wrong-fit penalty P9, a
+broader verification pass, and the v1.1 follow-up batch tracked in `CONTINUITY_CHECKPOINT.md`).
 
 ## Two open JK rulings elsewhere (not part of this checklist)
 
