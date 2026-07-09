@@ -210,6 +210,41 @@ describe('evaluateLiquidityAwareBid', () => {
     expect([...read.reasonCodes].sort()).toEqual(['emergency-fill', 'future-fill-protected', 'late-budget-surplus']);
   });
 
+  test('TAXWIRE Item 3: a tax-squeezed ceiling reads above-legal-ceiling first -- never dropped behind emergency-fill/future-fill-protected/late-budget-surplus', () => {
+    // Investigation finding (spec-docs/contracts/CONTRACT_TAXWIRE_2026-07-09.md Item 3): there is
+    // no dedicated "tax-completion" LiquidityReasonCode. The marginal tax reaches this engine
+    // ENTIRELY through legalMaxBid -- assembleWorthToYou (rosterIntelligencePayload.ts) computes
+    // `fallbackLegalMax = uncappedLegalMax - marginalTax` and passes that as `legalMaxBid` here
+    // (TAXTEETH Item 2, commit 391f2e2f). A tax squeeze therefore manifests as
+    // 'above-legal-ceiling' whenever it pushes nextBid above that reduced ceiling -- which is
+    // ALREADY the #1 slot in REASON_PRIORITY (a hard blocker, ranked even above the
+    // liquidity-emergency class). No priority-array move was needed: this fixture reuses the exact
+    // "preserves future fill reserve" scenario above (which alone produces
+    // future-fill-protected + emergency-fill + late-budget-surplus, and used to win the Tier-1
+    // reasonCodes[0] slot with 'future-fill-protected') and tightens legalMaxBid from $100,000 to
+    // $65,000 -- simulating a $35,000 marginal tax reservation on the same lot. The tax-driven code
+    // now wins the slot outright, proving WhisperPanel's `topReason = reasonCodes[0]`
+    // (WhisperPanel.tsx:510) can never silently drop the tax signal behind the chattier codes.
+    const read = evaluateLiquidityAwareBid({
+      playerId: 'target',
+      iv: 90_000,
+      nextBid: 70_000,
+      legalMaxBid: 65_000, // uncapped $100,000 minus a $35,000 marginal tax reservation
+      budgetRemaining: 100_000,
+      rosterSlotsRemaining: 3,
+      minSalary: 20_000,
+      baseValuation: 100_000,
+    });
+
+    expect(read.reasonCodes).toEqual([
+      'above-legal-ceiling',
+      'future-fill-protected',
+      'emergency-fill',
+      'late-budget-surplus',
+    ]);
+    expect(read.reasonCodes[0]).toBe('above-legal-ceiling');
+  });
+
   test('is deterministic for the same live inputs', () => {
     const input = {
       playerId: 'target',
