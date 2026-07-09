@@ -800,6 +800,15 @@ function WhisperHeadline({
           <span key={label} className="chip whisper-priority-chip">{label}</span>
         ))}
       </div>
+      {/* CALLFIX Item 5(c): the scarcity reason's Tier-3 tap-through detail -- checks the FULL
+          reasonCodes (not the MLB-trimmed remainingReasonCodes), so this still surfaces even when
+          scarce-replacement/similar-replacements is the one code already promoted to the MLB
+          Tier-1 strip. */}
+      {(worth.reasonCodes.includes("scarce-replacement") || worth.reasonCodes.includes("similar-replacements")) && (
+        <p className="whisper-scarcity-detail" data-testid="whisper-scarcity-detail">
+          Next-best replacement ~{money(worth.replacementValueEstimate)}
+        </p>
+      )}
       {liveBidText && <p className="whisper-live-bid">{liveBidText}</p>}
       <p className="whisper-why">{whyLine(worth)}</p>
       {relation && <p className="whisper-room-line">{relation}</p>}
@@ -1426,6 +1435,11 @@ function WhisperStyles() {
         font-size: 13.5px;
       }
       .auc-root .whisper-room-line {
+        margin: 0;
+        color: var(--auc-muted);
+        font-size: 12.5px;
+      }
+      .auc-root .whisper-scarcity-detail {
         margin: 0;
         color: var(--auc-muted);
         font-size: 12.5px;

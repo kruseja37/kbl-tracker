@@ -60,7 +60,6 @@ export interface AuctionTeamInput {
   budgetRemaining: number;
   rosterSlotsRemaining: number;
   minSalary?: number;
-  projectedTax?: number;
   roster?: readonly AuctionRosterAssignment[];
 }
 
@@ -1284,7 +1283,15 @@ function normalizeTeam(team: AuctionTeamInput): AuctionTeamState {
     budgetRemaining: team.budgetRemaining,
     rosterSlotsRemaining: team.rosterSlotsRemaining,
     minSalary: team.minSalary ?? LEAGUE_MINIMUM_SALARY,
-    projectedTax: team.projectedTax ?? 0,
+    // CALLFIX Item 5(b): AuctionTeamInput never carried a meaningful projectedTax -- every real
+    // caller either omitted it or passed 0, and auctionMaxBid's own two call sites (below and
+    // scripts/marketModelPredictor.ts) always pass a literal 0 for their projectedTax argument
+    // too, never team.projectedTax -- so the old `team.projectedTax ?? 0` pass-through was dead on
+    // arrival. AuctionTeamState.projectedTax stays a real, live field (useAuctionDraft.ts
+    // recomputes it per-lot via computeAuctionTeamProjectedTaxWithCaps); only the dead INPUT
+    // pass-through is removed here. TRUE COST is untouched -- it uses the separate
+    // auctionMarginalTax path (LeagueBuilderAuctionDraft.tsx), not this field.
+    projectedTax: 0,
     roster: team.roster ? [...team.roster] : [],
   };
 }

@@ -125,7 +125,6 @@ export interface WorthToYou {
   ownValue: number;
   archetypeFitMultiplier: number;
   needMultiplier: number;
-  chemistry: ChemistryTipBreakdown;
   chemistryContribution: number;
   /** Absent when the seat has no chemistry-tier model for this read (e.g. the farm whisper
    * adapter, which does not model chemistry synergy) — omit the section rather than fake one. */
@@ -142,7 +141,6 @@ export interface WorthToYou {
   discretionaryBudget: number;
   minimumFutureFillReserve: number;
   replacementValueEstimate: number;
-  scarcityModifier: number;
   reasonCodes: readonly LiquidityReasonCode[];
 }
 
@@ -390,7 +388,6 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     ownValue,
     archetypeFitMultiplier: factors.archetypeFitMultiplier,
     needMultiplier: factors.needMultiplier,
-    chemistry,
     chemistryContribution,
     chemistryReadout,
     verdict,
@@ -403,7 +400,6 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     discretionaryBudget: liquidity.discretionaryBudget,
     minimumFutureFillReserve: liquidity.minimumFutureFillReserve,
     replacementValueEstimate: liquidity.replacementValueEstimate,
-    scarcityModifier: liquidity.scarcityModifier,
     reasonCodes: liquidity.reasonCodes,
   };
 }
@@ -923,18 +919,6 @@ export interface FarmWhisperAssembly {
   chemFitLabel: string | null;
 }
 
-const FARM_NEUTRAL_CHEMISTRY: ChemistryTipBreakdown = {
-  premium: 0,
-  teamLift: 0,
-  ownContext: 0,
-  family: 'SCH',
-  crossing: null,
-  countsBefore: { SPI: 0, DIS: 0, CMP: 0, SCH: 0, CRA: 0 },
-  countsAfter: { SPI: 0, DIS: 0, CMP: 0, SCH: 0, CRA: 0 },
-  distanceToNextTier: null,
-  liftedTraitCount: 0,
-};
-
 const FARM_UNMODELED_LIGHT = (sentence: string): Light => ({ status: 'unknown', sentence });
 
 /**
@@ -1039,7 +1023,6 @@ export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembl
     ownValue,
     archetypeFitMultiplier: 1,
     needMultiplier,
-    chemistry: FARM_NEUTRAL_CHEMISTRY,
     chemistryContribution: 0,
     verdict,
     liveCall,
@@ -1054,7 +1037,6 @@ export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembl
     discretionaryBudget: liquidity.discretionaryBudget,
     minimumFutureFillReserve: liquidity.minimumFutureFillReserve,
     replacementValueEstimate: liquidity.replacementValueEstimate,
-    scarcityModifier: liquidity.scarcityModifier,
     reasonCodes: liquidity.reasonCodes,
   };
 

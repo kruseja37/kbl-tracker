@@ -91,11 +91,11 @@ import {
   assembleFiveLights,
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
-  marketReadFromEstimate,
   sortBoardEntriesForPosition,
   type BoardEntry,
   type FiveLights,
   type Light,
+  type MarketRead,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
 import { materializeRankOrder } from "../components/shared/RankReorderList";
@@ -1049,16 +1049,37 @@ export function LeagueBuilderAuctionDraft() {
       ? "Filling your remaining slots would exceed your budget"
       : null;
   }, [rosterBoardTeamState]);
+  // COCKPIT WAVE 2 (B3/Correction 5/7): mirrors the seatTeamId derivation inside whisperPayload
+  // below, kept as its own memo so the board-reorder persistence callbacks (and now publicMarket)
+  // can resolve "which team's perspective applies" without duplicating the whisperPayload memo
+  // itself. Moved above publicMarket (CALLFIX Item 5(d)) so the market read below can consume it.
+  const activeWhisperSeatTeamId = useMemo(() => {
+    if (!session) return null;
+    const seatTeamId =
+      session.state === "OPEN_BIDDING"
+        ? auction.currentBidderTeamId
+        : session.state === "RESOLVE"
+          ? session.pendingClaim?.teamId ?? null
+          : null;
+    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
+  }, [auction, session]);
+
   const publicMarket = useMemo<EstimatedMarket | null>(() => {
     if (!session) return null;
     const view = buildLotViewFromSession(session, {
       shillTeamIds: shillTeamIdSet,
-      advisedTeamId: null,
+      // CALLFIX Item 5(d): market single-source. When a human seat is active, this banner now
+      // consumes the SAME per-seat market read the whisper payload assembly reuses below (one
+      // estimateMarket call feeding both, so the CONTESTED/LIVE/QUIET banner and the whisper's own
+      // market-driven reads can never disagree). No active seat keeps the prior neutral
+      // (advisedTeamId: null) behavior byte-identical.
+      advisedTeamId: activeWhisperSeatTeamId,
       bandPrioritiesByTeamId: marketBandPrioritiesByTeamId,
       humanTeamIds: marketHumanTeamIds,
     });
     return view ? estimateMarket(view, marketLiftTable) : null;
   }, [
+    activeWhisperSeatTeamId,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
     marketLiftTable,
@@ -1152,20 +1173,6 @@ export function LeagueBuilderAuctionDraft() {
       .map((playerId) => session.players[playerId])
       .filter(Boolean);
   }, [session]);
-
-  // COCKPIT WAVE 2 (B3/Correction 5/7): mirrors the seatTeamId derivation inside whisperPayload
-  // below, kept as its own memo so the board-reorder persistence callbacks can resolve "which team
-  // am I saving to" without duplicating the whisperPayload memo itself.
-  const activeWhisperSeatTeamId = useMemo(() => {
-    if (!session) return null;
-    const seatTeamId =
-      session.state === "OPEN_BIDDING"
-        ? auction.currentBidderTeamId
-        : session.state === "RESOLVE"
-          ? session.pendingClaim?.teamId ?? null
-          : null;
-    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
-  }, [auction, session]);
 
   // BOARDFIX2 (Item C, perf): reorders on the LIVE board update this local, in-memory overlay
   // INSTANTLY; the actual `saveTeam` write is debounced (trailing, see the effect below) so a
@@ -1319,8 +1326,20 @@ export function LeagueBuilderAuctionDraft() {
       bandPrioritiesByTeamId: marketBandPrioritiesByTeamId,
       humanTeamIds: marketHumanTeamIds,
     };
-    const marketView = buildLotViewFromSession(session, marketOptions);
-    const market = marketView ? marketReadFromEstimate(marketView, marketLiftTable) : undefined;
+    // CALLFIX Item 5(d): market single-source. `publicMarket` (above) is already computed with
+    // THIS SAME seat as advisedTeamId (team.id === activeWhisperSeatTeamId whenever this memo
+    // reaches this point) -- reuse it instead of a second, independent estimateMarket() call that
+    // could disagree with the stage's own CONTESTED/LIVE/QUIET banner. marketOptions itself is
+    // still needed below for projectBidVsPass, an unrelated engine call.
+    const market: MarketRead | undefined = publicMarket && publicMarket.playerId === lotPlayerId
+      ? {
+          playerId: publicMarket.playerId,
+          band: publicMarket.band,
+          interestedTeams: publicMarket.interestedTeams,
+          contested: publicMarket.contested,
+          likelyPass: publicMarket.likelyPass,
+        }
+      : undefined;
 
     const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean && ownBandPriorities
       ? assembleWorthToYou({
@@ -1541,8 +1560,8 @@ export function LeagueBuilderAuctionDraft() {
     handleBoardReorderPosition,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
-    marketLiftTable,
     playerById,
+    publicMarket,
     registeredPool?.tier,
     session,
     shillTeamIdSet,

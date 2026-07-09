@@ -834,6 +834,32 @@ describe("LeagueBuilderAuctionDraft", () => {
     }
   });
 
+  // CALLFIX Item 5(d): the stage's public market banner used to ALWAYS compute its own,
+  // independent read with advisedTeamId: null -- now it reuses the SAME per-seat read the whisper
+  // payload assembly consumes when a human seat is on the clock, falling back to the prior neutral
+  // (advisedTeamId: null) read only when no human seat is active. With team-a AI-controlled and
+  // bidding first, this lot has no active human seat -- activeWhisperSeatTeamId resolves to null,
+  // so this exercises the EXACT SAME neutral code path (and therefore the exact same numbers) as
+  // before the fix. Locks the deterministic band this seed + fixture produces as a real (not
+  // synthetic) regression guard.
+  test("CALLFIX Item 5(d): the public market band is byte-identical for the no-seat (CPU-turn) case", async () => {
+    const players = makePlayers();
+    const leagueDataAllCpu = mockLeagueData({ players, pool: makePool(players) });
+    leagueDataAllCpu.teams = [makeTeam("team-a", { controlledBy: "ai" }), makeTeam("team-b")];
+    const seed = seedWhereCpuTeamBids(players, "team-a");
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
+
+    render(<LeagueBuilderAuctionDraft />);
+    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Review CPU decision")).toBeInTheDocument();
+    });
+
+    const band = screen.getByLabelText("Public market price band");
+    expect(band.textContent).toBe("$65,000$78,883$82,891");
+  });
+
   test("shows a pure shill winner on the visible AuctionStage roster board after SOLD", async () => {
     const players = makePlayers(66);
     mockLeagueData({ players, pool: makePool(players) });

@@ -122,19 +122,7 @@ function payload(
       discretionaryBudget: 100_000,
       minimumFutureFillReserve: 20_000,
       replacementValueEstimate: 60_000,
-      scarcityModifier: 1,
       reasonCodes: verdict === "pass" ? ["future-fill-protected"] : ["within-liquidity-ceiling"],
-      chemistry: {
-        premium: 3_000,
-        teamLift: 3_000,
-        ownContext: 0,
-        family: "CMP",
-        crossing: null,
-        countsBefore: { CMP: 0, CRA: 0, DIS: 0, SPI: 0, SCH: 0 },
-        countsAfter: { CMP: 1, CRA: 0, DIS: 0, SPI: 0, SCH: 0 },
-        distanceToNextTier: 1,
-        liftedTraitCount: 0,
-      },
       chemistryContribution: 3_000,
       chemistryReadout: {
         families: [
@@ -791,6 +779,34 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     fireEvent.click(screen.getByRole("button", { name: "Seat A Slider" }));
     expect(screen.getByText("POW")).toBeInTheDocument();
     expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
+  });
+});
+
+describe("CALLFIX 2026-07-08 Item 5(c): scarcity reason detail surfaces worth.replacementValueEstimate", () => {
+  test("renders 'Next-best replacement ~$X' when scarce-replacement or similar-replacements is present, absent otherwise", () => {
+    const { rerender } = render(<WhisperPanel payload={payload("push")} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByTestId("whisper-scarcity-detail")).not.toBeInTheDocument();
+
+    rerender(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["scarce-replacement"], replacementValueEstimate: 42_000 },
+    })} />);
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$42,000");
+
+    rerender(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["similar-replacements"], replacementValueEstimate: 18_500 },
+    })} />);
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$18,500");
+  });
+
+  test("surfaces even when scarce-replacement is the ONE code already promoted to the MLB Tier-1 strip (checks the full reasonCodes, not the trimmed remaining list)", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["scarce-replacement"], replacementValueEstimate: 55_000 },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("scarce repl.");
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$55,000");
   });
 });
 

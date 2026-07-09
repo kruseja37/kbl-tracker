@@ -22,6 +22,7 @@ import {
   type MarketRead,
 } from '../rosterIntelligencePayload';
 import { BEST22_TUNING } from '../best22Target';
+import { chemistryAdviceForCandidate } from '../../utils/chemistryIntelligence';
 
 const hitter = (position: string, secondaryPosition?: string | null): RosterSlotPlayer => ({
   isPitcher: false,
@@ -329,7 +330,10 @@ describe('roster intelligence payload assembly', () => {
       ...neutralSeat({ candidateShape: pitcher('SP') }),
       market: market({ band: { low: 70_000, median: 90_000, high: 110_000 } }),
     });
-    const valueWorth = valuePick.ownValue + valuePick.chemistry.premium;
+    // CALLFIX Item 5(a): worth.chemistry (the raw ChemistryTipBreakdown) is dropped from the
+    // payload -- chemistryContribution (the SAME already-clamped Math.max(0, premium) value the
+    // engine itself adds to worth) is the intended public readout.
+    const valueWorth = valuePick.ownValue + valuePick.chemistryContribution;
 
     expect(valuePick.capValue).toBe(809_714);
     expect(valuePick.recommendedNumber).toBe(valueWorth);
@@ -353,12 +357,13 @@ describe('roster intelligence payload assembly', () => {
   });
 
   test('assembleWorthToYou floors isolated chemistry penalties out of the recommended number', () => {
+    const isolatedCandidate = player({
+      id: 'isolated-scholar',
+      chemistry: 'Scholarly',
+      trait1: 'Big Hack',
+    });
     const isolatedTraitPick = assembleWorthToYou({
-      candidate: player({
-        id: 'isolated-scholar',
-        chemistry: 'Scholarly',
-        trait1: 'Big Hack',
-      }),
+      candidate: isolatedCandidate,
       iv: 50_000,
       rosterPlayers: [],
       budgetRemaining: 500_000,
@@ -369,7 +374,12 @@ describe('roster intelligence payload assembly', () => {
       market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
     });
 
-    expect(isolatedTraitPick.chemistry.premium).toBeLessThan(0);
+    // CALLFIX Item 5(a): worth.chemistry (the raw ChemistryTipBreakdown) is dropped from the
+    // payload -- independently recompute the raw premium via the SAME underlying engine call
+    // assembleWorthToYou makes internally, to prove this fixture genuinely has a NEGATIVE raw
+    // premium (not just a coincidental zero) before asserting the floor clamped it.
+    const rawPremium = chemistryAdviceForCandidate(isolatedCandidate, []).premium;
+    expect(rawPremium).toBeLessThan(0);
     expect(isolatedTraitPick.chemistryContribution).toBe(0);
     expect(isolatedTraitPick.recommendedNumber).toBe(isolatedTraitPick.ownValue);
   });
@@ -379,8 +389,9 @@ describe('roster intelligence payload assembly', () => {
       player({ id: 'scholar-1', chemistry: 'Scholarly', trait1: 'Big Hack' }),
       player({ id: 'scholar-2', chemistry: 'Scholarly', trait1: 'Bunter' }),
     ];
+    const tippedCandidate = player({ id: 'scholar-tip', chemistry: 'Scholarly' });
     const tippedPick = assembleWorthToYou({
-      candidate: player({ id: 'scholar-tip', chemistry: 'Scholarly' }),
+      candidate: tippedCandidate,
       iv: 50_000,
       rosterPlayers,
       budgetRemaining: 500_000,
@@ -391,10 +402,15 @@ describe('roster intelligence payload assembly', () => {
       market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
     });
 
-    expect(tippedPick.chemistry.crossing).toBe('L1->L2');
-    expect(tippedPick.chemistry.premium).toBeGreaterThan(0);
-    expect(tippedPick.chemistryContribution).toBe(tippedPick.chemistry.premium);
-    expect(tippedPick.recommendedNumber).toBe(tippedPick.ownValue + tippedPick.chemistry.premium);
+    // CALLFIX Item 5(a): worth.chemistry (the raw ChemistryTipBreakdown) is dropped from the
+    // payload -- the readout stays (chemistryReadout, built from the same local var), and this
+    // independently recomputes the raw chemistry advice via the SAME call the engine makes
+    // internally, to keep the crossing/premium assertions below meaningful.
+    const rawChemistry = chemistryAdviceForCandidate(tippedCandidate, rosterPlayers);
+    expect(rawChemistry.crossing).toBe('L1->L2');
+    expect(rawChemistry.premium).toBeGreaterThan(0);
+    expect(tippedPick.chemistryContribution).toBe(rawChemistry.premium);
+    expect(tippedPick.recommendedNumber).toBe(tippedPick.ownValue + rawChemistry.premium);
   });
 
   test('assembleWorthToYou attaches all five chemistry readout families with tier distances', () => {
