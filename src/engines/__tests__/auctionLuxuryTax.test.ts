@@ -4,7 +4,9 @@ import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
   type LuxuryCapRow,
+  type TierKey,
 } from '../../data/tierParams';
+import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import {
   luxuryTax,
   shiftLuxuryCaps,
@@ -17,6 +19,7 @@ import {
   auctionShiftedCaps,
   computeAuctionTeamProjectedTax,
 } from '../auctionLuxuryTax';
+import { archetypeToCapIdentity } from '../archetypeIdentity';
 
 const lowBat: ConstructionPlayer['bat'] = {
   POW: 1,
@@ -127,5 +130,103 @@ describe('auctionLuxuryTax', () => {
       withCandidate - withoutCandidate,
       8,
     );
+  });
+});
+
+/**
+ * TAXPRECISION (2026-07-09, spec-docs/contracts/CONTRACT_TAXPRECISION_2026-07-09.md): the auction
+ * tax must read a capIdentity's exact `rawShift` fractions -- the same short-circuit `shiftLuxuryCaps`
+ * (leagueConstruction.ts) and the snake draft (LeagueBuilderSnakeDraft.tsx:129,335) already honor --
+ * not the coarse `CAP_MODIFICATION_FRACTIONS` per-name table. Pre-fix, `auctionShiftedCapsWithBaseCaps`
+ * rebuilt `{ increase, decrease }` from the capIdentity and dropped `rawShift` entirely, so every
+ * archetype-selected team's auction-side caps were computed off the coarse table instead of its
+ * ratified exact percentages.
+ */
+describe('TAXPRECISION -- the auction reads a capIdentity\'s exact rawShift (repro then fix)', () => {
+  test('BUG REPRO: rangy-defenders (3 boosts) -- a roster over the coarse-shifted SPD cap but under the exact rawShift-shifted SPD cap owes zero tax', () => {
+    const tier: TierKey = 'standard';
+    const archetype = HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === 'rangy-defenders');
+    if (!archetype) throw new Error('Fixture archetype rangy-defenders not found');
+    const capIdentity = archetypeToCapIdentity(archetype);
+
+    // rangy-defenders boosts = ['SPD', 'ARM', 'FLD']; rawShift.SPD = 1 * ARCHETYPE_STAT_UNIT.SPD = 0.12.
+    // The coarse table's own 'SPD' row is only 0.045455 -- a materially smaller shift.
+    expect(capIdentity.rawShift?.SPD).toBeCloseTo(0.12, 10);
+    expect(CAP_MODIFICATION_FRACTIONS.SPD.SPD).toBeCloseTo(0.045455, 6);
+
+    const baseCap = LUXURY_CAP_TABLES[tier].find((row) => row.group === 'hitters' && row.stat === 'SPD');
+    if (!baseCap) throw new Error('Missing hitters/SPD cap row');
+    const coarseShiftedCap = baseCap.cap * (1 + CAP_MODIFICATION_FRACTIONS.SPD.SPD); // ~615.67
+    const exactShiftedCap = baseCap.cap * (1 + 0.12); // 659.568
+
+    // 8 hitters at SPD 80 -> top-8 SPD sum = 640: above the (wrong) coarse-shifted cap, below the
+    // (correct) exact rawShift-shifted cap.
+    const roster = Array.from({ length: 8 }, (_, index) => hitter(`spd-${index}`, { SPD: 80 }));
+    expect(640).toBeGreaterThan(coarseShiftedCap);
+    expect(640).toBeLessThanOrEqual(exactShiftedCap);
+
+    const tax = computeAuctionTeamProjectedTax(roster, null, capIdentity, tier);
+    expect(tax).toBe(0);
+  });
+
+  test('BUG REPRO: murderers-row (2 boosts, 1 nerf) -- the auction tax must equal the tax computed with the exact rawShift-shifted caps', () => {
+    const tier: TierKey = 'standard';
+    const archetype = HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === 'murderers-row');
+    if (!archetype) throw new Error('Fixture archetype murderers-row not found');
+    const capIdentity = archetypeToCapIdentity(archetype);
+
+    // rawShift differs from the coarse per-name table for every one of this archetype's mods.
+    expect(capIdentity.rawShift?.POW).toBeCloseTo(0.075, 10);
+    expect(CAP_MODIFICATION_FRACTIONS.POW.POW).toBeCloseTo(0.02, 6);
+
+    const roster = Array.from({ length: 8 }, (_, index) => hitter(`pow-${index}`, { POW: 99 }));
+    const baseCaps = LUXURY_CAP_TABLES[tier];
+    const exactCaps = shiftLuxuryCaps(baseCaps, capIdentity); // uses rawShift (identityCapShift short-circuit)
+    const expectedTax = luxuryTax(roster, exactCaps, 'taxed').charged;
+
+    const actualTax = computeAuctionTeamProjectedTax(roster, null, capIdentity, tier);
+    expect(actualTax).toBeCloseTo(expectedTax, 8);
+  });
+
+  test('coarse-only identity (no rawShift) stays byte-identical after the fix', () => {
+    const tier: TierKey = 'juiced';
+    const capIdentity: TeamCapIdentity = {
+      bandPriorities: { ...zeroPriorities, Defense: 5 },
+      increase: ['FLD'],
+      decrease: ['POW'],
+    };
+    const base = LUXURY_CAP_TABLES[tier];
+    const shifted = auctionShiftedCaps(capIdentity, tier);
+    const fld = findCap(shifted, 'hitters', 'FLD');
+    const pow = findCap(shifted, 'hitters', 'POW');
+    const baseFld = findCap(base, 'hitters', 'FLD');
+    const basePow = findCap(base, 'hitters', 'POW');
+
+    // Hand-computed expected values from the coarse CAP_MODIFICATION_FRACTIONS table -- pinned so a
+    // future change to shiftLuxuryCaps's delegation can't silently drift the coarse (rawShift-less)
+    // path, which is the vast majority of hand-built (non-archetype) teams.
+    expect(fld.cap).toBeCloseTo(baseFld.cap * (1 + CAP_MODIFICATION_FRACTIONS.FLD.FLD), 10);
+    expect(pow.cap).toBeCloseTo(basePow.cap * (1 - CAP_MODIFICATION_FRACTIONS.POW.POW), 10);
+  });
+
+  test('24-archetype conformance sweep: the auction-path shifted caps equal shiftLuxuryCaps(rawShift) exactly, for every archetype and tier', () => {
+    const tiers: TierKey[] = ['juiced', 'standard', 'nerfed'];
+    let checked = 0;
+
+    for (const archetype of HISTORICAL_ARCHETYPES) {
+      const capIdentity = archetypeToCapIdentity(archetype);
+      for (const tier of tiers) {
+        const baseCaps = LUXURY_CAP_TABLES[tier];
+        const auctionCaps = auctionShiftedCaps(capIdentity, tier);
+        const canonicalCaps = shiftLuxuryCaps(baseCaps, capIdentity);
+        expect(auctionCaps).toEqual(canonicalCaps);
+        checked += 1;
+      }
+    }
+
+    // 24 archetypes x 3 tiers -- fails loudly (not silently 0) if the catalog ever shrinks/grows
+    // without this test being revisited.
+    expect(checked).toBe(HISTORICAL_ARCHETYPES.length * tiers.length);
+    expect(HISTORICAL_ARCHETYPES.length).toBe(24);
   });
 });
