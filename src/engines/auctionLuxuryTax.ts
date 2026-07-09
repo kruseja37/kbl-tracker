@@ -19,16 +19,23 @@ export function auctionShiftedCaps(
   return auctionShiftedCapsWithBaseCaps(capIdentity, LUXURY_CAP_TABLES[tier]);
 }
 
+/**
+ * TAXPRECISION (2026-07-09, spec-docs/contracts/CONTRACT_TAXPRECISION_2026-07-09.md): delegate
+ * straight to the canonical shiftLuxuryCaps with the FULL capIdentity (not a rebuilt
+ * `{ increase, decrease }` literal) so archetype-selected teams' exact `rawShift` percentages win
+ * here exactly as they already do for the snake draft (LeagueBuilderSnakeDraft.tsx) and
+ * identityCapShift's own rawShift short-circuit (leagueConstruction.ts). Reconstructing the
+ * identity object here used to silently drop `rawShift`, forcing every archetype-selected team's
+ * auction-side caps through the coarser CAP_MODIFICATION_FRACTIONS per-name table instead of its
+ * ratified exact shift -- real dollars since TAXTEETH. capIdentity's extra `bandPriorities` field
+ * is inert for shiftLuxuryCaps (IdentityComposition doesn't read it); identities without a
+ * rawShift are unaffected -- byte-identical to the pre-fix coarse-table output.
+ */
 function auctionShiftedCapsWithBaseCaps(
   capIdentity: TeamCapIdentity | undefined,
   baseCaps: LuxuryCapRow[],
 ): LuxuryCapRow[] {
-  return capIdentity
-    ? shiftLuxuryCaps(baseCaps, {
-        increase: capIdentity.increase,
-        decrease: capIdentity.decrease,
-      })
-    : baseCaps;
+  return capIdentity ? shiftLuxuryCaps(baseCaps, capIdentity) : baseCaps;
 }
 
 export function computeAuctionTeamProjectedTaxWithCaps(
