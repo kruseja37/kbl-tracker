@@ -1648,12 +1648,29 @@ export function LeagueBuilderAuctionDraft() {
     () => clampDraftShillCount(requestedShillCount ?? scaledShillDefault(leagueTeams.length)),
     [leagueTeams.length, requestedShillCount],
   );
+  const setupPoolRosterShapes = useMemo(() => (
+    (registeredPool?.players ?? []).flatMap((poolPlayer) => {
+      const player = playerById.get(poolPlayer.id);
+      if (!player) return [];
+      return [toRosterSlotPlayer({
+        primaryPosition: player.primaryPosition,
+        secondaryPosition: player.secondaryPosition,
+        traits: [player.trait1, player.trait2],
+      })];
+    })
+  ), [playerById, registeredPool?.players]);
   // FABLE-C3-FIX-2 F6: the SAME market-clearing check as both Draft Setup screens — teams and
   // shills are separate demand kinds (shills demand their capped WINS, never 22 seats each). All
   // three Start-Draft gates now agree at every shill count.
   const setupPoolSufficiency = useMemo(
-    () => evaluatePoolDemandSufficiency(registeredPool?.players.length ?? 0, leagueTeams.length, setupShillCount),
-    [leagueTeams.length, registeredPool?.players.length, setupShillCount],
+    () => evaluatePoolDemandSufficiency(
+      registeredPool?.players.length ?? 0,
+      leagueTeams.length,
+      setupShillCount,
+      undefined,
+      setupPoolRosterShapes,
+    ),
+    [leagueTeams.length, registeredPool?.players.length, setupPoolRosterShapes, setupShillCount],
   );
   const setupPoolReady = Boolean(registeredPool?.locked) && setupPoolSufficiency.meetsFloor;
 
@@ -1669,7 +1686,12 @@ export function LeagueBuilderAuctionDraft() {
       } else if (!registeredPool?.locked) {
         messages.push("Lock a sufficient player pool before starting the auction.");
       } else if (!setupPoolSufficiency.meetsFloor) {
-        messages.push(`Locked player pool needs ${Math.abs(setupPoolSufficiency.surplus)} more player(s) for ${leagueTeams.length + setupShillCount} drafting teams.`);
+        const floor = setupPoolSufficiency.positionFloorReasons[0];
+        messages.push(
+          floor
+            ? `Locked player pool is short on ${floor.label.toLowerCase()} (${floor.available}/${floor.needed}). Re-extract before starting the auction.`
+            : `Locked player pool needs ${Math.abs(setupPoolSufficiency.surplus)} more player(s) for ${leagueTeams.length + setupShillCount} drafting teams.`,
+        );
       }
     }
     if (session?.state === "NOMINATION" && availablePoolCandidates.length === 0) messages.push("No nominatable players remain.");

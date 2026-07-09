@@ -39,7 +39,14 @@ import { poolDemandModel } from './auctionPoolSizing';
 import { scoreSmb4Player } from './smb4GradeEmulator';
 import type { HistoricalArchetype } from '../data/historicalArchetypes';
 import type { TierKey } from '../data/tierParams';
-import { canCover, canRelieve, canStart, isCloser, LEGAL_ROSTER } from '../data/rosterConstruction';
+import {
+  canCover,
+  canRelieve,
+  canStart,
+  isCloser,
+  LEGAL_ROSTER,
+  type RosterSlotPlayer,
+} from '../data/rosterConstruction';
 
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
@@ -61,6 +68,37 @@ export const POOL_FROM_DEMAND_TUNING = {
   contestMultiplier: 2,
 } as const;
 
+/**
+ * Captain-ruled hard-position supply slack. A legal-minimum position must be extracted at
+ * teams * minimum + max(minimumSlack, ceil(teams / teamsPerSlack)); tune here only.
+ */
+export const POSITION_SUPPLY_FLOOR_TUNING = {
+  minimumSlack: 2,
+  teamsPerSlack: 3,
+} as const;
+
+export type PositionSupplyFloorKind =
+  | 'field-position'
+  | 'catcher-depth'
+  | 'starter'
+  | 'reliever'
+  | 'closer';
+
+export interface PositionSupplyFloorTarget {
+  kind: PositionSupplyFloorKind;
+  position: string;
+  label: string;
+  minimumPerTeam: number;
+  teams: number;
+  slack: number;
+  needed: number;
+}
+
+export interface PositionSupplyFloorResult extends PositionSupplyFloorTarget {
+  available: number;
+  missing: number;
+}
+
 export interface DemandCellReport {
   /** The ask as keyed: position | shape | serialized hard tags. */
   key: string;
@@ -74,6 +112,8 @@ export interface DemandCellReport {
 
 export interface DemandShortfall {
   key: string;
+  /** Structured position key when the shortfall comes from a hard legal-position floor. */
+  position?: string;
   wanted: number;
   available: number;
   message: string;
@@ -89,6 +129,8 @@ export interface PoolFromDemandResult {
   shortfalls: DemandShortfall[];
   /** Every human design re-verified against the FINAL pool (the §6.1 hub-drift check). */
   designVerdicts: { teamId: string; result: DesignFeasibilityResult }[];
+  /** Hard legal-position floors evaluated against the final extracted pool. */
+  positionSupplyFloors: PositionSupplyFloorResult[];
   sizing?: PoolSizingResult;
   g1?: PoolG1Result;
   numericShape?: NumericPoolShapeDiagnostics;
@@ -581,6 +623,206 @@ function targetCountsByBand(targetSize: number, tuning: NumericPoolShapeTuning):
       .reduce((sum, window) => sum + window.targetShare, 0) },
   ];
   return largestRemainderCounts(entries, targetSize);
+}
+
+function positionSupplySlack(teamCount: number): number {
+  const teams = Math.max(0, Math.floor(teamCount));
+  if (teams === 0) return 0;
+  return Math.max(
+    POSITION_SUPPLY_FLOOR_TUNING.minimumSlack,
+    Math.ceil(teams / POSITION_SUPPLY_FLOOR_TUNING.teamsPerSlack),
+  );
+}
+
+function fieldPositionLabel(position: string): string {
+  if (position === 'C') return 'CATCHERS';
+  if (position === '1B') return 'FIRST BASEMEN';
+  if (position === '2B') return 'SECOND BASEMEN';
+  if (position === '3B') return 'THIRD BASEMEN';
+  if (position === 'SS') return 'SHORTSTOPS';
+  if (position === 'LF') return 'LEFT FIELDERS';
+  if (position === 'CF') return 'CENTER FIELDERS';
+  if (position === 'RF') return 'RIGHT FIELDERS';
+  return position;
+}
+
+function buildPositionSupplyFloorTarget(
+  teams: number,
+  slack: number,
+  input: Pick<PositionSupplyFloorTarget, 'kind' | 'position' | 'label' | 'minimumPerTeam'>,
+): PositionSupplyFloorTarget {
+  return {
+    ...input,
+    teams,
+    slack,
+    needed: teams > 0 && input.minimumPerTeam > 0
+      ? teams * input.minimumPerTeam + slack
+      : 0,
+  };
+}
+
+export function derivePositionSupplyFloorTargets(teamCount: number): PositionSupplyFloorTarget[] {
+  const teams = Math.max(0, Math.floor(teamCount));
+  if (teams === 0) return [];
+  const slack = positionSupplySlack(teams);
+  const targets: PositionSupplyFloorTarget[] = [];
+
+  for (const position of LEGAL_ROSTER.fieldPositions) {
+    targets.push(buildPositionSupplyFloorTarget(teams, slack, {
+      kind: 'field-position',
+      position,
+      label: fieldPositionLabel(position),
+      minimumPerTeam: 1,
+    }));
+  }
+
+  if (LEGAL_ROSTER.minCatchers > 1) {
+    targets.push(buildPositionSupplyFloorTarget(teams, slack, {
+      kind: 'catcher-depth',
+      position: 'CATCHER_DEPTH',
+      label: 'CATCHER DEPTH',
+      minimumPerTeam: LEGAL_ROSTER.minCatchers,
+    }));
+  }
+
+  if (LEGAL_ROSTER.startingPitchers > 0) {
+    targets.push(buildPositionSupplyFloorTarget(teams, slack, {
+      kind: 'starter',
+      position: 'SP',
+      label: 'STARTERS',
+      minimumPerTeam: LEGAL_ROSTER.startingPitchers,
+    }));
+  }
+
+  if (LEGAL_ROSTER.minClosers > 0) {
+    targets.push(buildPositionSupplyFloorTarget(teams, slack, {
+      kind: 'closer',
+      position: 'CP',
+      label: 'CLOSERS',
+      minimumPerTeam: LEGAL_ROSTER.minClosers,
+    }));
+  }
+
+  if (LEGAL_ROSTER.minRelievers > 0) {
+    targets.push(buildPositionSupplyFloorTarget(teams, slack, {
+      kind: 'reliever',
+      position: 'RP',
+      label: 'RELIEVERS',
+      minimumPerTeam: LEGAL_ROSTER.minRelievers,
+    }));
+  }
+
+  return targets.filter((target) => target.needed > 0);
+}
+
+export function matchesPositionSupplyFloor(
+  player: RosterSlotPlayer,
+  target: Pick<PositionSupplyFloorTarget, 'kind' | 'position'>,
+): boolean {
+  switch (target.kind) {
+    case 'field-position':
+      return !player.isPitcher && player.position === target.position;
+    case 'catcher-depth':
+      return canCover(player, 'C');
+    case 'starter':
+      return canStart(player);
+    case 'reliever':
+      return canRelieve(player);
+    case 'closer':
+      return isCloser(player);
+  }
+}
+
+export function evaluatePositionSupplyFloors(
+  players: readonly RosterSlotPlayer[],
+  teamCount: number,
+): PositionSupplyFloorResult[] {
+  return derivePositionSupplyFloorTargets(teamCount).map((target) => {
+    const available = players.filter((player) => matchesPositionSupplyFloor(player, target)).length;
+    return {
+      ...target,
+      available,
+      missing: Math.max(0, target.needed - available),
+    };
+  });
+}
+
+export interface PositionSupplyFloorApplication {
+  players: DemandUniversePlayer[];
+  floors: PositionSupplyFloorResult[];
+  injectedIds: string[];
+  shortfalls: DemandShortfall[];
+  messages: string[];
+}
+
+export function enforcePositionSupplyFloors(options: {
+  universe: readonly DemandUniversePlayer[];
+  players: readonly DemandUniversePlayer[];
+  teams: number;
+  fitOf?: (player: DemandUniversePlayer) => number;
+  excludedIds?: ReadonlySet<string>;
+  priorityIds?: ReadonlySet<string>;
+  poolSourceMode?: PoolSourceMode;
+}): PositionSupplyFloorApplication {
+  const current = new Map(options.players.map((player) => [player.id, player]));
+  const excludedIds = options.excludedIds ?? new Set<string>();
+  const fitOf = options.fitOf ?? (() => 0);
+  const priorityIds = options.poolSourceMode === 'team-roster-priority'
+    ? options.priorityIds ?? new Set<string>()
+    : new Set<string>();
+  const comparator = bySourceThenFitDescIdAsc(fitOf, priorityIds);
+  const injectedIds: string[] = [];
+  const messages: string[] = [];
+
+  for (const target of derivePositionSupplyFloorTargets(options.teams)) {
+    const currentPlayers = [...current.values()];
+    const floor = evaluatePositionSupplyFloors(currentPlayers, options.teams)
+      .find((candidate) => candidate.kind === target.kind && candidate.position === target.position);
+    const missing = floor?.missing ?? 0;
+    if (missing <= 0) continue;
+    const candidates = options.universe
+      .filter((player) => !current.has(player.id))
+      .filter((player) => !excludedIds.has(player.id))
+      .filter((player) => matchesPositionSupplyFloor(player, target))
+      .sort(comparator);
+    const picks = candidates.slice(0, missing);
+    for (const pick of picks) {
+      current.set(pick.id, pick);
+      injectedIds.push(pick.id);
+    }
+    if (picks.length > 0) {
+      messages.push(
+        `position supply floor added ${picks.length} ${target.label.toLowerCase()} `
+          + `(${floor?.available ?? 0}/${target.needed} before top-up).`,
+      );
+    }
+  }
+
+  const players = [...current.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const floors = evaluatePositionSupplyFloors(players, options.teams);
+  const shortfalls = floors.flatMap((floor) => {
+    if (floor.missing <= 0) return [];
+    const universeAvailable = options.universe
+      .filter((player) => !excludedIds.has(player.id))
+      .filter((player) => matchesPositionSupplyFloor(player, floor))
+      .length;
+    return [{
+      key: `position-floor:${floor.position}`,
+      position: floor.position,
+      wanted: floor.needed,
+      available: universeAvailable,
+      message: `The uploaded universe has ${universeAvailable} ${floor.label.toLowerCase()}; `
+        + `${floor.needed} required for ${floor.teams} club${floor.teams === 1 ? '' : 's'} plus hoarding slack.`,
+    }];
+  });
+
+  return {
+    players,
+    floors,
+    injectedIds,
+    shortfalls,
+    messages,
+  };
 }
 
 function countPlayersByBand(
@@ -1783,19 +2025,19 @@ export function extractPoolFromDemand(
   for (const { player } of classified) {
     if (reservedIds.has(player.id)) byId.set(player.id, player);
   }
+  const explicitProtectedIdsForExclusions = new Set<string>([
+    ...reservedIds,
+    ...(handReconcileEnabled ? requestedPinnedIds : []),
+  ]);
+  const effectiveExcludedIds = new Set(
+    [...requestedExcludedIds].filter((id) => !explicitProtectedIdsForExclusions.has(id)),
+  );
   if (!sizingEnabled) {
     for (const player of floors.players as DemandUniversePlayer[]) {
       if (!byId.has(player.id)) byId.set(player.id, player);
     }
   }
   if (reconcileEnabled) {
-    const explicitProtectedIds = new Set<string>([
-      ...reservedIds,
-      ...(handReconcileEnabled ? requestedPinnedIds : []),
-    ]);
-    const effectiveExcludedIds = new Set(
-      [...requestedExcludedIds].filter((id) => !explicitProtectedIds.has(id)),
-    );
     for (const id of effectiveExcludedIds) byId.delete(id);
     const classifiedById = new Map(classified.map(({ player }) => [player.id, player]));
     for (const id of [...new Set([...requestedDesignPriorityIds, ...requestedPinnedIds])].sort((a, b) => a.localeCompare(b))) {
@@ -1808,6 +2050,8 @@ export function extractPoolFromDemand(
   let sizing: PoolSizingResult | undefined;
   let g1: PoolG1Result | undefined;
   let numericShape: NumericPoolShapeDiagnostics | undefined;
+  let positionSupplyFloors: PositionSupplyFloorResult[] = [];
+  const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
 
   if (sizingEnabled) {
     const target = resolvePoolSizingTarget({
@@ -1821,13 +2065,6 @@ export function extractPoolFromDemand(
       ...(handReconcileEnabled ? requestedPinnedIds : []),
       ...requestedDesignPriorityIds,
     ]);
-    const explicitProtectedIds = new Set<string>([
-      ...reservedIds,
-      ...(handReconcileEnabled ? requestedPinnedIds : []),
-    ]);
-    const effectiveExcludedIds = new Set(
-      [...requestedExcludedIds].filter((id) => !explicitProtectedIds.has(id)),
-    );
     const designHardKeepIds = new Set<string>([
       ...(handReconcileEnabled ? requestedPinnedIds : []),
       ...requestedDesignPriorityIds,
@@ -1848,7 +2085,6 @@ export function extractPoolFromDemand(
           ]),
       );
     };
-    const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
     const beforeShape = players;
     const excludedForShape = handReconcileEnabled ? effectiveExcludedIds : new Set<string>();
     const shaped = shapePoolByNumericGrade({
@@ -1983,6 +2219,51 @@ export function extractPoolFromDemand(
       });
     }
 
+    const floorTopUp = enforcePositionSupplyFloors({
+      universe,
+      players,
+      teams: teamsForSizing,
+      fitOf,
+      excludedIds: excludedForShape,
+      priorityIds: requestedPriorityIds,
+      poolSourceMode: options.poolSourceMode ?? 'full-pool',
+    });
+    players = floorTopUp.players;
+    positionSupplyFloors = floorTopUp.floors;
+    injectedIds = [...injectedIds, ...floorTopUp.injectedIds];
+    shortfalls.push(...floorTopUp.shortfalls);
+    messages.push(...floorTopUp.messages);
+    if (numericShape) {
+      numericShape = buildNumericPoolShapeDiagnostics({
+        players,
+        requiredRosterDemand: target.demandBase,
+        targetSize: target.effectiveTarget,
+        preset: poolBalancePreset,
+        tuning: poolShapeTuning,
+        poolQualityCenter,
+        legalCompletionFeasible: g1?.holds ?? null,
+        quotaShortfalls: numericShape.quotaShortfalls,
+        messages: [...numericShape.messages, ...floorTopUp.messages],
+        hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
+        engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
+        designHardKeepIds,
+        identityCriticalIds: requestedDesignPriorityIds,
+        missingIdentityCriticalReasons: identityCriticalMissingReasons(),
+        selectedTeamRosterIds: requestedPriorityIds,
+        poolSourceMode: options.poolSourceMode ?? 'full-pool',
+        fullPoolEligibleCandidateCount: universe.filter((player) => !effectiveExcludedIds.has(player.id)).length,
+        preRepair: numericShape.preRepair,
+        postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning, poolQualityCenter),
+        g1AdditionsByRoleWindow: numericShape.g1AdditionsByRoleWindow ?? {},
+        g1RemovalsByRoleWindow: numericShape.g1RemovalsByRoleWindow ?? {},
+        g1LowTailAdditionsByRole: numericShape.g1LowTailAdditionsByRole ?? {},
+        g1Swaps: numericShape.g1Swaps ?? [],
+        curveViolations: numericShape.curveViolations ?? [],
+        g1AdditionCount: numericShape.g1AdditionCount ?? 0,
+        g1SwapCount: numericShape.g1SwapCount ?? 0,
+      });
+    }
+
     const finalSize = players.length;
     if (finalSize > target.ceilingTarget && !messages.some((message) => message.includes('Sized up to'))) {
       messages.push(trimClampMessage(target, finalSize, options.budgetPerTeam ?? Number.POSITIVE_INFINITY));
@@ -2010,6 +2291,21 @@ export function extractPoolFromDemand(
     };
   }
 
+  if (!sizingEnabled) {
+    const floorTopUp = enforcePositionSupplyFloors({
+      universe,
+      players,
+      teams: teamsForSizing,
+      fitOf,
+      excludedIds: handReconcileEnabled ? effectiveExcludedIds : new Set<string>(),
+      priorityIds: requestedPriorityIds,
+      poolSourceMode: options.poolSourceMode ?? 'full-pool',
+    });
+    players = floorTopUp.players;
+    positionSupplyFloors = floorTopUp.floors;
+    shortfalls.push(...floorTopUp.shortfalls);
+  }
+
   // 6. Re-verify every human design against the FINAL pool (the hub-drift check).
   const designPool = players.map(toDesignPoolPlayer);
   const budget = options.budgetPerTeam ?? Number.POSITIVE_INFINITY;
@@ -2025,6 +2321,7 @@ export function extractPoolFromDemand(
     cells,
     shortfalls,
     designVerdicts,
+    positionSupplyFloors,
     ...(sizing ? { sizing } : {}),
     ...(g1 ? { g1 } : {}),
     ...(numericShape ? { numericShape } : {}),

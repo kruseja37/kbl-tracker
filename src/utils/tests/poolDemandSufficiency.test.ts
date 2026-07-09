@@ -3,6 +3,8 @@ import { describe, expect, test } from 'vitest';
 
 import { evaluatePoolDemandSufficiency } from '../leagueBuilderPoolBuilder';
 import { SIZING_TUNING, poolDemandModel } from '../../engines/auctionPoolSizing';
+import { derivePositionSupplyFloorTargets } from '../../engines/poolFromDemand';
+import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 
 /**
  * CUT2-2: JK ruled 2026-07-07 that pure-pressure shills do not count toward the pool-lock floor.
@@ -69,5 +71,65 @@ describe('F6: the three Start-Draft gates agree at every shill count', () => {
     expect(withShillPressure.meetsFloor).toBe(true);
     expect(withShillPressure.mlbSlots).toBe(realClubFloor);
     expect(withShillPressure.expectedShillWins).toBe(10 * SIZING_TUNING.winsPerShill);
+  });
+});
+
+function floorShape(position: string): RosterSlotPlayer {
+  if (position === 'SP') return { isPitcher: true, position: 'P', role: 'SP' };
+  if (position === 'RP') return { isPitcher: true, position: 'P', role: 'RP' };
+  if (position === 'CP') return { isPitcher: true, position: 'P', role: 'CP' };
+  if (position === 'CATCHER_DEPTH') return { isPitcher: false, position: '1B', secondaryPosition: 'C' };
+  return { isPitcher: false, position };
+}
+
+function floorSatisfiedShapes(teamCount: number): RosterSlotPlayer[] {
+  const shapes: RosterSlotPlayer[] = [];
+  const targets = derivePositionSupplyFloorTargets(teamCount);
+  const primaryCatchers = targets.find((target) => target.position === 'C')?.needed ?? 0;
+  for (const target of targets) {
+    if (target.position === 'CATCHER_DEPTH') {
+      for (let index = 0; index < Math.max(0, target.needed - primaryCatchers); index += 1) {
+        shapes.push(floorShape(target.position));
+      }
+      continue;
+    }
+    if (target.position === 'RP') {
+      const closers = targets.find((candidate) => candidate.position === 'CP')?.needed ?? 0;
+      for (let index = 0; index < Math.max(0, target.needed - closers); index += 1) {
+        shapes.push(floorShape(target.position));
+      }
+      continue;
+    }
+    for (let index = 0; index < target.needed; index += 1) {
+      shapes.push(floorShape(target.position));
+    }
+  }
+  return shapes;
+}
+
+describe('evaluatePoolDemandSufficiency position-aware floors', () => {
+  test('fails with a structured reason when the actual pool is short on closers', () => {
+    const teamCount = 3;
+    const shapes = floorSatisfiedShapes(teamCount).filter((shape, index) => shape.role !== 'CP' || index % 2 === 0);
+    const cpNeeded = derivePositionSupplyFloorTargets(teamCount).find((target) => target.position === 'CP')!.needed;
+    const sufficiency = evaluatePoolDemandSufficiency(1_000, teamCount, 0, undefined, shapes);
+
+    expect(sufficiency.meetsFloor).toBe(false);
+    expect(sufficiency.surplus).toBeGreaterThan(0);
+    expect(sufficiency.positionFloorReasons).toContainEqual(expect.objectContaining({
+      position: 'CP',
+      label: 'CLOSERS',
+      needed: cpNeeded,
+      missing: expect.any(Number),
+    }));
+  });
+
+  test('keeps the count-only result green when the actual pool satisfies every hard position floor', () => {
+    const teamCount = 3;
+    const shapes = floorSatisfiedShapes(teamCount);
+    const sufficiency = evaluatePoolDemandSufficiency(1_000, teamCount, 0, undefined, shapes);
+
+    expect(sufficiency.meetsFloor).toBe(true);
+    expect(sufficiency.positionFloorReasons).toEqual([]);
   });
 });

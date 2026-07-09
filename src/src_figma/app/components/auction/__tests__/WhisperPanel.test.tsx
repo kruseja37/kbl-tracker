@@ -11,6 +11,8 @@ import type { SimPlayer } from "../../../../../engines/archetypeBalanceSimulator
 import type { RosterIntelligencePayload } from "../../../../../engines/rosterIntelligencePayload";
 import { GRADE_SALARY_BOUNDS } from "../../../../../engines/ratingsAdjustmentEngine";
 import type { Player } from "../../../../../utils/leagueBuilderStorage";
+import { projectBidVsPass } from "../../../../../engines/auctionMarketModel";
+import type { AuctionSession } from "../../../../../engines/auctionStateMachine";
 
 /** Mirrors WhisperPanel's money() formatting so the grade-chip locks assert exact rendered text. */
 function chipMoney(value: number): string {
@@ -334,6 +336,115 @@ describe("WhisperPanel", () => {
     rerender(<WhisperPanel payload={Object.assign(payload(), { bidVsPass: null })} />);
 
     expect(screen.queryByTestId("whisper-bid-vs-pass")).not.toBeInTheDocument();
+  });
+
+  test("TAXWIRE Item 2: the 'can't afford' chip is driven solely by the engine's tax-corrected affordable flag (subsumption proof)", () => {
+    // Proves BOARD-2 prong B is fully subsumed by the TAXWIRE Item 1 engine fix -- there is no
+    // second, untaxed affordability comparison anywhere in the display pipe. This feeds the REAL
+    // engine (auctionMarketModel.ts's projectBidVsPass, same tax-exposed fixture as the "TAXWIRE
+    // Item 1" engine-level test in auctionMarketModel.test.ts) straight through WhisperPanel's
+    // props -- the only re-shaping between the engine and this component is
+    // LeagueBuilderAuctionDraft.tsx's displayBidVsPassBranch/displayBidVsPassProjection, which
+    // pass `affordable: target.affordable` and `budgetAfter: branch.budgetAfter` through VERBATIM
+    // (no re-derivation) -- so this render test's payload is a faithful stand-in for production
+    // wiring.
+    const session: AuctionSession = {
+      state: "OPEN_BIDDING",
+      config: {
+        format: "auction",
+        bidIncrement: 1_000,
+        turnTimerSeconds: null,
+        nominationOrderSeed: "taxwire-flip",
+        flatReserveFloor: 5_000,
+        cpuShillCount: 0,
+        excludeFromLeague: true,
+      },
+      teams: [
+        { teamId: "me", budgetRemaining: 60_000, rosterSlotsRemaining: 4, minSalary: 1_666.49, projectedTax: 8_000, roster: [] },
+        { teamId: "rival", budgetRemaining: 300_000, rosterSlotsRemaining: 4, minSalary: 1_666.49, projectedTax: 0, roster: [] },
+        { teamId: "rival2", budgetRemaining: 250_000, rosterSlotsRemaining: 4, minSalary: 1_666.49, projectedTax: 0, roster: [] },
+      ],
+      nominationOrder: ["me", "rival", "rival2"],
+      nominationIndex: 0,
+      nominationRound: 0,
+      players: {
+        lot1: { playerId: "lot1", iv: 5_000, ivPercentile: 20 },
+        flip: { playerId: "flip", iv: 78_000, ivPercentile: 90 },
+      },
+      playerOrder: ["lot1", "flip"],
+      availablePlayerIds: ["flip"],
+      currentLot: {
+        playerId: "lot1",
+        nominatorTeamId: "me",
+        openingAsk: 10_000,
+        highBid: null,
+        highBidder: null,
+        stillIn: ["me", "rival", "rival2"],
+        bidTurnTeamId: "me",
+      },
+      pendingClaim: null,
+      results: [],
+      saleCount: 0,
+    };
+
+    const projection = projectBidVsPass({
+      session,
+      options: { shillTeamIds: new Set<string>() },
+      teamId: "me",
+      bidAmount: 10_000,
+      ownBandPriorities: {
+        Power: 1, Contact: 0.5, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0,
+      },
+    });
+    if (projection === null) throw new Error("expected a projection");
+
+    // The only mapping WhisperPanel needs beyond the raw ProjectedTarget is a display name/player
+    // reference (LeagueBuilderAuctionDraft.tsx's displayBidVsPassBranch) -- every numeric/boolean
+    // field is passed straight through.
+    const toWhisperTarget = (t: (typeof projection.bid.targets)[number]) => ({
+      playerId: t.playerId,
+      name: t.playerId,
+      player: null,
+      surplus: t.surplus,
+      ownValue: t.ownValue,
+      predictedMedian: t.predictedMedian,
+      affordable: t.affordable,
+    });
+
+    render(<WhisperPanel payload={Object.assign(payload(), {
+      bidVsPass: {
+        bidAmount: 10_000,
+        bid: {
+          branch: "bid" as const,
+          budgetAfter: projection.bid.budgetAfter,
+          needAfter: null,
+          targets: projection.bid.targets.map(toWhisperTarget),
+        },
+        pass: {
+          branch: "pass" as const,
+          budgetAfter: projection.pass.budgetAfter,
+          needAfter: null,
+          targets: projection.pass.targets.map(toWhisperTarget),
+        },
+      },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    // Sanity: this is the exact tax-corrected flip the Item 1 engine test proves --
+    // budgetAfter nets the $8,000 marginal tax, and the candidate's predictedMedian ($43,690)
+    // clears that taxed ceiling.
+    expect(projection.bid.budgetAfter).toBe(42_000);
+    expect(projection.bid.targets.find((t) => t.playerId === "flip")?.affordable).toBe(false);
+    expect(projection.pass.targets.find((t) => t.playerId === "flip")?.affordable).toBe(true);
+
+    const bidVsPass = within(screen.getByTestId("whisper-bid-vs-pass"));
+    // Exactly one "can't afford" chip renders -- on the taxed BID branch, not the untaxed PASS
+    // branch, for the identical candidate. No wiring in this component re-derives affordability;
+    // it only ever reads the boolean the engine already corrected.
+    expect(bidVsPass.getAllByText("can't afford")).toHaveLength(1);
+    const bidBranchCard = bidVsPass.getByText("BID $10,000").closest(".whisper-branch-card");
+    expect(bidBranchCard).not.toBeNull();
+    expect(within(bidBranchCard as HTMLElement).getByText("can't afford")).toBeInTheDocument();
   });
 
   test("chemistry readout renders five rows, marks the candidate family, and shows upward tips", () => {
