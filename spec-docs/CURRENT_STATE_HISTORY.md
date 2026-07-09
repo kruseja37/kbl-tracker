@@ -1174,3 +1174,7 @@ Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 F4 prospe
 ## Outgoing Live Header Snapshot — before 2026-07-08 M2b arm rating last-mile session end
 
 Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 M1c P1 CPU identity auto-assign banner. This session refreshed the live header to record the Mode-2 M2b `armThrowingRate` last-mile fix on `lane/m2b-arm`, the catcher RA-8 and OF arm-rate emissions, the green tsc/build/focused gates, and the full-suite caveat that only known `LeagueBuilderDraftSetup.test.tsx` batch reds appeared before passing 60/60 in a solo file rerun.
+
+## Outgoing Live Header Snapshot — before 2026-07-09 POOLFLOOR session end
+
+Previous `CURRENT_STATE.md` live header's first row was the 2026-07-09 scribe booking pass banner recording TAXPRECISION, FLOORREFIT, STALEPARITY, ARCHLOCK, and the open GAUNTLET stranding investigation. This session refreshed the live header to record the POOLFLOOR build in `/private/tmp/kbl-poolfloor2`, the red-first GAUNTLET-2 production-default repro, the hard-position extraction floors, the D2/D3 green gauntlet result, the focused gates, and the pending independent audit.
