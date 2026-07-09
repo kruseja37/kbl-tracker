@@ -22,6 +22,7 @@ import {
   type MarketRead,
 } from '../rosterIntelligencePayload';
 import { BEST22_TUNING } from '../best22Target';
+import { chemistryAdviceForCandidate } from '../../utils/chemistryIntelligence';
 
 const hitter = (position: string, secondaryPosition?: string | null): RosterSlotPlayer => ({
   isPitcher: false,
@@ -329,7 +330,10 @@ describe('roster intelligence payload assembly', () => {
       ...neutralSeat({ candidateShape: pitcher('SP') }),
       market: market({ band: { low: 70_000, median: 90_000, high: 110_000 } }),
     });
-    const valueWorth = valuePick.ownValue + valuePick.chemistry.premium;
+    // CALLFIX Item 5(a): worth.chemistry (the raw ChemistryTipBreakdown) is dropped from the
+    // payload -- chemistryContribution (the SAME already-clamped Math.max(0, premium) value the
+    // engine itself adds to worth) is the intended public readout.
+    const valueWorth = valuePick.ownValue + valuePick.chemistryContribution;
 
     expect(valuePick.capValue).toBe(809_714);
     expect(valuePick.recommendedNumber).toBe(valueWorth);
@@ -353,12 +357,13 @@ describe('roster intelligence payload assembly', () => {
   });
 
   test('assembleWorthToYou floors isolated chemistry penalties out of the recommended number', () => {
+    const isolatedCandidate = player({
+      id: 'isolated-scholar',
+      chemistry: 'Scholarly',
+      trait1: 'Big Hack',
+    });
     const isolatedTraitPick = assembleWorthToYou({
-      candidate: player({
-        id: 'isolated-scholar',
-        chemistry: 'Scholarly',
-        trait1: 'Big Hack',
-      }),
+      candidate: isolatedCandidate,
       iv: 50_000,
       rosterPlayers: [],
       budgetRemaining: 500_000,
@@ -369,7 +374,12 @@ describe('roster intelligence payload assembly', () => {
       market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
     });
 
-    expect(isolatedTraitPick.chemistry.premium).toBeLessThan(0);
+    // CALLFIX Item 5(a): worth.chemistry (the raw ChemistryTipBreakdown) is dropped from the
+    // payload -- independently recompute the raw premium via the SAME underlying engine call
+    // assembleWorthToYou makes internally, to prove this fixture genuinely has a NEGATIVE raw
+    // premium (not just a coincidental zero) before asserting the floor clamped it.
+    const rawPremium = chemistryAdviceForCandidate(isolatedCandidate, []).premium;
+    expect(rawPremium).toBeLessThan(0);
     expect(isolatedTraitPick.chemistryContribution).toBe(0);
     expect(isolatedTraitPick.recommendedNumber).toBe(isolatedTraitPick.ownValue);
   });
@@ -379,8 +389,9 @@ describe('roster intelligence payload assembly', () => {
       player({ id: 'scholar-1', chemistry: 'Scholarly', trait1: 'Big Hack' }),
       player({ id: 'scholar-2', chemistry: 'Scholarly', trait1: 'Bunter' }),
     ];
+    const tippedCandidate = player({ id: 'scholar-tip', chemistry: 'Scholarly' });
     const tippedPick = assembleWorthToYou({
-      candidate: player({ id: 'scholar-tip', chemistry: 'Scholarly' }),
+      candidate: tippedCandidate,
       iv: 50_000,
       rosterPlayers,
       budgetRemaining: 500_000,
@@ -391,10 +402,15 @@ describe('roster intelligence payload assembly', () => {
       market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
     });
 
-    expect(tippedPick.chemistry.crossing).toBe('L1->L2');
-    expect(tippedPick.chemistry.premium).toBeGreaterThan(0);
-    expect(tippedPick.chemistryContribution).toBe(tippedPick.chemistry.premium);
-    expect(tippedPick.recommendedNumber).toBe(tippedPick.ownValue + tippedPick.chemistry.premium);
+    // CALLFIX Item 5(a): worth.chemistry (the raw ChemistryTipBreakdown) is dropped from the
+    // payload -- the readout stays (chemistryReadout, built from the same local var), and this
+    // independently recomputes the raw chemistry advice via the SAME call the engine makes
+    // internally, to keep the crossing/premium assertions below meaningful.
+    const rawChemistry = chemistryAdviceForCandidate(tippedCandidate, rosterPlayers);
+    expect(rawChemistry.crossing).toBe('L1->L2');
+    expect(rawChemistry.premium).toBeGreaterThan(0);
+    expect(tippedPick.chemistryContribution).toBe(rawChemistry.premium);
+    expect(tippedPick.recommendedNumber).toBe(tippedPick.ownValue + rawChemistry.premium);
   });
 
   test('assembleWorthToYou attaches all five chemistry readout families with tier distances', () => {
@@ -1033,6 +1049,44 @@ describe('roster intelligence payload assembly', () => {
       expect(worth.suggestedMaxBid).toBe(worth.capValue);
       expect(worth.verdict).toBe('push');
     });
+
+    test('CALLFIX Item 1: liveCall thresholds 3/4 reference recommendedNumber/suggestedMaxBid specifically, not any other number', () => {
+      // A generous-budget, near-complete (openSlotsAfterWin: 0 -> aggressive) seat so the
+      // liquidity-adjusted ceiling (suggestedMaxBid) genuinely exceeds the raw worth
+      // (recommendedNumber) -- the exact "two different numbers" shape the ladder must key off.
+      const candidate = player({ id: 'ladder-echo', chemistry: 'Scholarly' });
+      const baseInput = {
+        candidate,
+        iv: 60_000,
+        rosterPlayers: [],
+        budgetRemaining: 500_000,
+        rosterWithCandidate: GREEN_ROSTER,
+        remainingPool: [],
+        openSlotsAfterWin: 0,
+        ...neutralSeat(),
+        market: market({ band: { low: 40_000, median: 50_000, high: 60_000 } }),
+      };
+      const baseline = assembleWorthToYou({ ...baseInput, nextBid: 1 });
+      // Precondition: this fixture must genuinely diverge the two ceilings and avoid a strategic
+      // pass, or the assertions below would pass vacuously.
+      expect(baseline.suggestedMaxBid).toBeGreaterThan(baseline.recommendedNumber);
+      expect(baseline.verdict).not.toBe('pass');
+
+      const atRecommended = assembleWorthToYou({ ...baseInput, nextBid: baseline.recommendedNumber });
+      expect(atRecommended.liveCall).toBe('push');
+
+      const midpoint = baseline.recommendedNumber
+        + Math.max(1, Math.ceil((baseline.suggestedMaxBid - baseline.recommendedNumber) / 2));
+      const betweenTheTwo = assembleWorthToYou({ ...baseInput, nextBid: midpoint });
+      expect(betweenTheTwo.liveCall).toBe('stretch');
+
+      const pastTheCeiling = assembleWorthToYou({ ...baseInput, nextBid: baseline.suggestedMaxBid + 1 });
+      expect(pastTheCeiling.liveCall).toBe('out');
+
+      // seatIsHighBidder always wins the ladder, regardless of price.
+      const leading = assembleWorthToYou({ ...baseInput, nextBid: baseline.suggestedMaxBid + 1, seatIsHighBidder: true });
+      expect(leading.liveCall).toBe('lead');
+    });
   });
 
   test('assembleRosterIntelligencePayload omits absent optional sections', () => {
@@ -1156,6 +1210,38 @@ describe('roster intelligence payload assembly', () => {
       expect(assembly.worth.suggestedMaxBid).toBeLessThan(assembly.market.band.low);
       expect(assembly.worth.verdict).toBe('pass');
       expect(assembly.scorecard.budget.status).not.toBe('green');
+    });
+
+    test('CALLFIX Item 1 (farm): liveCall thresholds 3/4 reference recommendedNumber/suggestedMaxBid specifically, same shared ladder as MLB', () => {
+      // rosterSlotsRemaining: 1 -> aggressive liquidity state, so suggestedMaxBid genuinely
+      // exceeds recommendedNumber (the same "two different numbers" shape as the MLB fixture).
+      const baseInput = {
+        candidateId: 'ladder-prospect',
+        band: { low: 40_000, high: 60_000, displayedEstimate: 50_000 },
+        budgetRemaining: 500_000,
+        rosterSlotsRemaining: 1,
+        minSalary: 1_000,
+        currentBid: null,
+        mlbRosterShapes: [],
+        candidateShape: null,
+      };
+      const baseline = assembleFarmWhisper({ ...baseInput, nextBid: 1 });
+      expect(baseline.worth.suggestedMaxBid).toBeGreaterThan(baseline.worth.recommendedNumber);
+      expect(baseline.worth.verdict).not.toBe('pass');
+
+      const atRecommended = assembleFarmWhisper({ ...baseInput, nextBid: baseline.worth.recommendedNumber });
+      expect(atRecommended.worth.liveCall).toBe('push');
+
+      const midpoint = baseline.worth.recommendedNumber
+        + Math.max(1, Math.ceil((baseline.worth.suggestedMaxBid - baseline.worth.recommendedNumber) / 2));
+      const betweenTheTwo = assembleFarmWhisper({ ...baseInput, nextBid: midpoint });
+      expect(betweenTheTwo.worth.liveCall).toBe('stretch');
+
+      const pastTheCeiling = assembleFarmWhisper({ ...baseInput, nextBid: baseline.worth.suggestedMaxBid + 1 });
+      expect(pastTheCeiling.worth.liveCall).toBe('out');
+
+      const leading = assembleFarmWhisper({ ...baseInput, nextBid: baseline.worth.suggestedMaxBid + 1, seatIsHighBidder: true });
+      expect(leading.worth.liveCall).toBe('lead');
     });
 
     describe('acceptance case (a)/(b): depth-aware coverage (Handley vs Ozzie), isolated from hard legality', () => {

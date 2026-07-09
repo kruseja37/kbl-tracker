@@ -148,7 +148,10 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   const [boardViewMode, setBoardViewMode] = useState<"global" | "position">("global");
   const [boardPosition, setBoardPosition] = useState<TaxonomyPosition>(() => firstPopulatedBoardPosition(payload?.board ?? []));
   const [boardPositionExpanded, setBoardPositionExpanded] = useState(false);
-  const previousVerdict = useRef<WorthToYou["verdict"] | null>(null);
+  // CALLFIX Item 1: tracks worth.liveCall (not the static worth.verdict) -- the flash should fire
+  // whenever the LIVE call actually changes, including a change driven purely by the bid moving
+  // (e.g. push -> lead when this seat tops the bid), not just a static reserve-price shift.
+  const previousVerdict = useRef<WorthToYou["liveCall"] | null>(null);
   const meta = (payload ?? {}) as WhisperPayloadMeta;
   const clubName = meta.seatClubName ?? payload?.seatTeamId ?? "";
   const teamPrimary = meta.seatPrimary ?? "var(--ballpark-brass)";
@@ -217,7 +220,7 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   }, [defaultLight, payload?.generatedAtLotIndex]);
 
   useEffect(() => {
-    const next = worth?.verdict ?? null;
+    const next = worth?.liveCall ?? null;
     if (open && previousVerdict.current !== null && next !== null && previousVerdict.current !== next) {
       setFlashVerdict(true);
       const timer = window.setTimeout(() => setFlashVerdict(false), 300);
@@ -225,7 +228,7 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
       return () => window.clearTimeout(timer);
     }
     previousVerdict.current = next;
-  }, [open, worth?.verdict]);
+  }, [open, worth?.liveCall]);
 
   if (!payload) {
     return (
@@ -490,11 +493,10 @@ function WhisperVerdictStrip({
   const worth = payload.worthToYou;
   if (!worth) return null;
 
-  const verdictWord = worth.verdict === "push"
-    ? "PUSH"
-    : worth.verdict === "pass"
-      ? "WALK"
-      : `CAP ${money(worth.recommendedNumber)}`;
+  // CALLFIX Item 1: THE LIVE CALL -- the strip word now derives from worth.liveCall (the
+  // live-bid-aware ladder), not the static worth.verdict, so it can never freeze on a stale call
+  // while the live bid moves past it within the same lot (the exact bug JK caught).
+  const verdictWord = liveCallStripWord(worth);
 
   // ONE CEILING (F9, design §1.3): recommendedNumber is already Math.min(worth, suggestedMaxBid) --
   // the SAME liquidity-adjusted ceiling the verdict/room-relation/budget light agree on -- never
@@ -509,7 +511,7 @@ function WhisperVerdictStrip({
 
   return (
     <section className="whisper-tier1" data-testid="whisper-tier1">
-      <span className={`whisper-tier1-verdict ${worth.verdict}`} data-testid="whisper-tier1-verdict">
+      <span className={`whisper-tier1-verdict ${liveCallClass(worth.liveCall)}`} data-testid="whisper-tier1-verdict">
         {verdictWord}
       </span>
       <span className="whisper-tier1-number" data-testid="whisper-tier1-number">
@@ -740,8 +742,12 @@ function WhisperHeadline({
   // budget light (worth.suggestedMaxBid), never the unreserved worth.capValue — otherwise this
   // line can say "inside expectations" while the verdict above says pass.
   const relation = roomRelation(worth.suggestedMaxBid, market);
-  const verdictText = verdictLine(worth, objectPronoun);
-  const liveBidText = liveBidLine(worth, currentHighBid, objectPronoun);
+  // CALLFIX Item 1: THE LIVE CALL -- headline text and the live-bid fine print BOTH derive from
+  // worth.liveCall now, the SAME ladder the Tier-1 strip reads, so they can never disagree with
+  // each other or with the strip (the exact bug JK caught: a frozen verdict while the live bid
+  // moved past it within the same lot). The old, independent liveBidLine comparison is gone.
+  const verdictText = liveCallHeadline(worth, currentHighBid, objectPronoun);
+  const liveBidText = liveCallFinePrint(worth, currentHighBid, objectPronoun);
   // COCKPIT W1a declutter: on the MLB cockpit the top-priority reason + FIT chip are already
   // promoted to the always-visible Tier-1 strip (WhisperVerdictStrip) -- this tap-through detail
   // shows the REMAINING reason chips only, so nothing repeats itself. Farm has no Tier-1 promotion
@@ -750,14 +756,14 @@ function WhisperHeadline({
   const includeFitChip = tier !== "mlb";
   return (
     <section className="whisper-headline" data-testid="whisper-headline">
-      <div className={`whisper-verdict ${worth.verdict} ${flash ? "flash" : ""}`}>
+      <div className={`whisper-verdict ${liveCallClass(worth.liveCall)} ${flash ? "flash" : ""}`}>
         {verdictText}
       </div>
       <div className="whisper-number-row">
         <div>
           <div className="eyebrow">YOUR NUMBER</div>
           <div
-            className={`whisper-number num ${worth.verdict === "cap" ? "gold" : ""}`}
+            className={`whisper-number num ${worth.liveCall === "stretch" ? "gold" : ""}`}
             data-testid="whisper-your-number"
           >
             {worth.recommendedNumber === 0 ? "PASS" : money(worth.recommendedNumber)}
@@ -794,6 +800,15 @@ function WhisperHeadline({
           <span key={label} className="chip whisper-priority-chip">{label}</span>
         ))}
       </div>
+      {/* CALLFIX Item 5(c): the scarcity reason's Tier-3 tap-through detail -- checks the FULL
+          reasonCodes (not the MLB-trimmed remainingReasonCodes), so this still surfaces even when
+          scarce-replacement/similar-replacements is the one code already promoted to the MLB
+          Tier-1 strip. */}
+      {(worth.reasonCodes.includes("scarce-replacement") || worth.reasonCodes.includes("similar-replacements")) && (
+        <p className="whisper-scarcity-detail" data-testid="whisper-scarcity-detail">
+          Next-best replacement ~{money(worth.replacementValueEstimate)}
+        </p>
+      )}
       {liveBidText && <p className="whisper-live-bid">{liveBidText}</p>}
       <p className="whisper-why">{whyLine(worth)}</p>
       {relation && <p className="whisper-room-line">{relation}</p>}
@@ -995,10 +1010,74 @@ function lightRank(light: { status: LightStatusLike }): number {
 
 type LightStatusLike = "green" | "amber" | "red" | "unknown";
 
-function verdictLine(worth: WorthToYou, objectPronoun: "him" | "her"): string {
-  if (worth.verdict === "push") return `Go get ${objectPronoun} -- worth about ${money(worth.recommendedNumber)} to you.`;
-  if (worth.verdict === "pass") return `Let ${objectPronoun} go.`;
-  return `Worth more than you can safely spend -- cap at ${money(worth.recommendedNumber)}.`;
+/**
+ * CALLFIX (2026-07-08) Item 1: THE LIVE CALL -- shared class bucket so the strip word, the
+ * headline color, and the YOUR NUMBER highlight all reuse the SAME existing push/cap/pass CSS
+ * treatments (no new color rules): 'lead' reads as a positive/on-top state (push's green), a
+ * price-driven or strategic 'out' reads as pass's faded state.
+ */
+function liveCallClass(liveCall: WorthToYou["liveCall"]): "push" | "cap" | "pass" {
+  if (liveCall === "lead" || liveCall === "push") return "push";
+  if (liveCall === "stretch") return "cap";
+  return "pass";
+}
+
+/** CALLFIX Item 1: the Tier-1 strip word -- ONE ladder, so it can never disagree with the headline. */
+function liveCallStripWord(worth: WorthToYou): string {
+  switch (worth.liveCall) {
+    case "lead":
+      return "ON TOP";
+    case "push":
+      return "PUSH";
+    case "stretch":
+      return `CAP ${money(worth.suggestedMaxBid)}`;
+    case "out":
+      return "WALK";
+  }
+}
+
+/** CALLFIX Item 1: the shared headline sentence (both tiers) -- derives from worth.liveCall, the
+ * SAME ladder the strip reads, so the two surfaces can never point in different directions. */
+function liveCallHeadline(
+  worth: WorthToYou,
+  currentHighBid: number | null,
+  objectPronoun: "him" | "her",
+): string {
+  switch (worth.liveCall) {
+    case "lead":
+      return currentHighBid !== null
+        ? `You're on top at ${money(currentHighBid)} -- sit tight.`
+        : "You're on top -- sit tight.";
+    case "push":
+      return worth.priceRead === "value"
+        ? `Go get ${objectPronoun} -- a bargain at this price.`
+        : `Go get ${objectPronoun} -- worth about ${money(worth.recommendedNumber)} to you.`;
+    case "stretch":
+      return "Past your number -- only if you mean it.";
+    case "out":
+      return worth.verdict === "pass"
+        ? `Let ${objectPronoun} go.`
+        : `Past your ceiling -- let ${objectPronoun} go.`;
+  }
+}
+
+/** CALLFIX Item 1: the small live-bid fine print -- keyed off the SAME liveCall ladder, only
+ * ever adding the numeric "$X to go" delta the headline doesn't spell out. Absent whenever the
+ * headline already says everything worth saying (lead/stretch/strategic-pass out). */
+function liveCallFinePrint(
+  worth: WorthToYou,
+  currentHighBid: number | null,
+  objectPronoun: "him" | "her",
+): string | null {
+  if (currentHighBid === null) return null;
+  if (worth.liveCall === "push") {
+    const delta = Math.max(0, worth.recommendedNumber - currentHighBid);
+    return `Still under your number -- ${money(delta)} to go`;
+  }
+  if (worth.liveCall === "out" && worth.verdict !== "pass") {
+    return `Past your ceiling -- let ${objectPronoun} go`;
+  }
+  return null;
 }
 
 function whyLine(worth: WorthToYou): string {
@@ -1070,17 +1149,6 @@ function candidateDeltaLabel(candidate: ChemistryReadout["candidate"]): string {
   return `+1 → ${candidate.countAfter}`;
 }
 
-function liveBidLine(
-  worth: WorthToYou,
-  currentHighBid: number | null,
-  objectPronoun: "him" | "her",
-): string | null {
-  if (currentHighBid === null) return null;
-  if (currentHighBid < worth.recommendedNumber) {
-    return `Still under your number -- ${money(worth.recommendedNumber - currentHighBid)} to go`;
-  }
-  return `Past your number -- let ${objectPronoun} go`;
-}
 
 function roomRelation(
   maxBid: number,
@@ -1367,6 +1435,11 @@ function WhisperStyles() {
         font-size: 13.5px;
       }
       .auc-root .whisper-room-line {
+        margin: 0;
+        color: var(--auc-muted);
+        font-size: 12.5px;
+      }
+      .auc-root .whisper-scarcity-detail {
         margin: 0;
         color: var(--auc-muted);
         font-size: 12.5px;

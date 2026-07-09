@@ -118,6 +118,16 @@ export interface LogItemVM {
   kind: "won" | "rival" | "gone";
   text: string;
   amount?: number;
+  /** WT-D pattern (CALLFIX 2026-07-08 Item 3, the 4th popover surface): the resolved player/
+   * prospect behind this row's headline name, when resolvable. Paired with `namePrefix` so the
+   * render wraps JUST that leading substring of `text` in the existing PlayerProfilePopover, the
+   * same way the roster board slot / overflow rail / on-the-block lot already do. System lines
+   * (or any row where the player can't be resolved) render `text` unchanged, plain. */
+  player?: Player | null;
+  /** The exact leading substring of `text` that names the player (e.g. "Avery Anchor" out of
+   * "Avery Anchor SOLD to Page Caps for $10,000") -- required alongside `player` so the render
+   * knows exactly how much of the string to wrap. */
+  namePrefix?: string;
 }
 
 export interface AuctionCompleteVM {
@@ -423,7 +433,20 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                 {vm.log.map((it, i) => (
                   <div key={i} className="logitem">
                     <span className={`tag ${it.kind}`}>{it.kind === "won" ? "Won" : it.kind === "rival" ? "Rival" : "Gone"}</span>
-                    {it.text}
+                    {/* CALLFIX Item 3 (WT-D pattern, the 4th popover surface): wrap just the
+                        headline name in the popover, same tier-gated reveal as the roster board
+                        slot / overflow rail above. System lines (no resolvable player) fall back
+                        to plain text, unchanged. */}
+                    {it.player && it.namePrefix && it.text.startsWith(it.namePrefix) ? (
+                      <>
+                        <PlayerProfilePopover player={it.player} revealFull={vm.tier !== "farm"}>
+                          <span className="who-clickable">{it.namePrefix}</span>
+                        </PlayerProfilePopover>
+                        {it.text.slice(it.namePrefix.length)}
+                      </>
+                    ) : (
+                      it.text
+                    )}
                     <span className="spacer" />
                     <span className={it.amount ? "num muted" : "faint"}>{it.amount ? money(it.amount) : "—"}</span>
                   </div>

@@ -561,8 +561,14 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
       expect(screen.getByText("SOLD")).toBeInTheDocument();
     });
 
+    // CALLFIX Item 3: the log row's headline name is now popover-wrapped (a separate element from
+    // the trailing "SOLD to ... for $X" text), so the sentence is split across sibling nodes --
+    // match on full element.textContent (a custom function matcher) instead of the default
+    // direct-child-text-only matcher, per testing-library's own guidance for this case.
     expect(
-      screen.getAllByText(`${targetName} SOLD to Farm Caps for ${expectedSalePrice}`).length,
+      screen.getAllByText((_content, element) =>
+        (element?.textContent ?? "").includes(`${targetName} SOLD to Farm Caps for ${expectedSalePrice}`),
+      ).length,
     ).toBeGreaterThan(0);
 
     // WT-D: the just-won prospect's name on the farm roster board must now open the profile

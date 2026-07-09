@@ -189,6 +189,27 @@ describe('evaluateLiquidityAwareBid', () => {
     expect(read.nextBidAllowed).toBe(true);
   });
 
+  test('CALLFIX Item 2: the reason chip order is priority-based, not alphabetical -- future-fill-protected and emergency-fill both outrank late-budget-surplus', () => {
+    // Reuses the exact "preserves future fill reserve" fixture above -- it already produces all
+    // three codes together, giving a real (not synthetic) case where alphabetical order would
+    // have picked the wrong "single reason" chip (WhisperPanel.tsx topReason = reasonCodes[0]).
+    const read = evaluateLiquidityAwareBid({
+      playerId: 'target',
+      iv: 90_000,
+      nextBid: 70_000,
+      legalMaxBid: 100_000,
+      budgetRemaining: 100_000,
+      rosterSlotsRemaining: 3,
+      minSalary: 20_000,
+      baseValuation: 100_000,
+    });
+
+    expect(read.reasonCodes).toEqual(['future-fill-protected', 'emergency-fill', 'late-budget-surplus']);
+    // Sanity: the OLD `.sort()` would have produced this alphabetical order instead -- proving
+    // this fixture actually exercises the bug this item fixes.
+    expect([...read.reasonCodes].sort()).toEqual(['emergency-fill', 'future-fill-protected', 'late-budget-surplus']);
+  });
+
   test('is deterministic for the same live inputs', () => {
     const input = {
       playerId: 'target',

@@ -91,11 +91,11 @@ import {
   assembleFiveLights,
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
-  marketReadFromEstimate,
   sortBoardEntriesForPosition,
   type BoardEntry,
   type FiveLights,
   type Light,
+  type MarketRead,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
 import { materializeRankOrder } from "../components/shared/RankReorderList";
@@ -385,15 +385,22 @@ function buildStageLog(
   focusTeamId: string | null | undefined,
 ): LogItemVM[] {
   if (!session) return [];
-  return session.results.slice(-6).reverse().map((result) => ({
-    kind: result.disposition === "PASSED" || result.disposition === "SET_ASIDE"
-      ? "gone"
-      : result.winnerTeamId === focusTeamId
-        ? "won"
-        : "rival",
-    text: resultText(result, playerById, teamNameById),
-    amount: result.salary ?? undefined,
-  }));
+  return session.results.slice(-6).reverse().map((result) => {
+    const player = playerById.get(result.playerId) ?? null;
+    return {
+      kind: result.disposition === "PASSED" || result.disposition === "SET_ASIDE"
+        ? "gone"
+        : result.winnerTeamId === focusTeamId
+          ? "won"
+          : "rival",
+      text: resultText(result, playerById, teamNameById),
+      amount: result.salary ?? undefined,
+      // CALLFIX Item 3: the 4th popover surface -- namePrefix is the exact leading substring of
+      // `text` (resultText always starts with playerDisplayName), so the render wraps just that.
+      player,
+      ...(player ? { namePrefix: playerDisplayName(player) } : {}),
+    };
+  });
 }
 
 function draftAnalyzerEntryFromPlayer(player: Player, salary: number): DraftAnalyzerMlbEntry {
@@ -664,6 +671,53 @@ export function computeBoardAutoAdvanceLine(input: {
   return rankLabel > 0
     ? `Next up at ${soldPosition}: ${promotedName} — your #${rankLabel}.`
     : `Next up at ${soldPosition}: ${promotedName}.`;
+}
+
+/**
+ * CALLFIX (2026-07-08) Item 4: after a live rank edit, the board renders instantly from the local
+ * `pendingBoardRankOverrides` overlay (see the perf note on `displayedWhisperPayload` below), but
+ * BEFORE this fix the auto-advance "Next up" line stayed baked into the heavier `whisperPayload`
+ * memo, computed against the PERSISTED `team.boardRankOverrides` -- stale for up to
+ * BOARD_RANK_SAVE_DEBOUNCE_MS after the edit. If a lot resolved in that window, the citation could
+ * name the pre-edit "#1" even though the board on screen already showed the new order.
+ *
+ * This recomputes `board` AND `nextUpLine` from the SAME live overlay together, so they can never
+ * disagree -- exported standalone (no React) so the recompute itself is directly unit-testable,
+ * mirroring computeBoardAutoAdvanceLine's own "pure function, no session plumbing" discipline
+ * above. `boardMeta` is intentionally omitted from the computeBoardAutoAdvanceLine call: every
+ * BoardEntry.note already carries the same display name boardMeta would have looked up (see
+ * assembleBoard's boardCandidates construction in the whisperPayload memo), so the name-lookup
+ * fallback chain resolves identically without needing to thread it through here.
+ */
+export function applyLiveBoardRankOverlay(
+  payload: RosterIntelligencePayload,
+  overlay: { overrides: NonNullable<Team["boardRankOverrides"]> },
+  latestResult: {
+    latestResultPlayerId: string | undefined;
+    latestResultDisposition: AuctionResultDisposition | undefined;
+    soldPosition: TaxonomyPosition | undefined;
+    currentLotPlayerId: string | undefined;
+  },
+): RosterIntelligencePayload & { boardRankOverrides?: Team["boardRankOverrides"] | null; nextUpLine?: string | null } {
+  const overrideBoard = materializeRankOrder(
+    payload.board ?? [],
+    (entry) => entry.playerId,
+    overlay.overrides.global,
+  );
+  const nextUpLine = computeBoardAutoAdvanceLine({
+    latestResultPlayerId: latestResult.latestResultPlayerId,
+    latestResultDisposition: latestResult.latestResultDisposition,
+    soldPosition: latestResult.soldPosition,
+    currentLotPlayerId: latestResult.currentLotPlayerId,
+    board: overrideBoard,
+    boardRankOverrides: overlay.overrides,
+    boardMeta: {},
+  });
+  return Object.assign({}, payload, {
+    board: overrideBoard,
+    boardRankOverrides: overlay.overrides,
+    nextUpLine,
+  });
 }
 
 export function LeagueBuilderAuctionDraft() {
@@ -995,16 +1049,37 @@ export function LeagueBuilderAuctionDraft() {
       ? "Filling your remaining slots would exceed your budget"
       : null;
   }, [rosterBoardTeamState]);
+  // COCKPIT WAVE 2 (B3/Correction 5/7): mirrors the seatTeamId derivation inside whisperPayload
+  // below, kept as its own memo so the board-reorder persistence callbacks (and now publicMarket)
+  // can resolve "which team's perspective applies" without duplicating the whisperPayload memo
+  // itself. Moved above publicMarket (CALLFIX Item 5(d)) so the market read below can consume it.
+  const activeWhisperSeatTeamId = useMemo(() => {
+    if (!session) return null;
+    const seatTeamId =
+      session.state === "OPEN_BIDDING"
+        ? auction.currentBidderTeamId
+        : session.state === "RESOLVE"
+          ? session.pendingClaim?.teamId ?? null
+          : null;
+    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
+  }, [auction, session]);
+
   const publicMarket = useMemo<EstimatedMarket | null>(() => {
     if (!session) return null;
     const view = buildLotViewFromSession(session, {
       shillTeamIds: shillTeamIdSet,
-      advisedTeamId: null,
+      // CALLFIX Item 5(d): market single-source. When a human seat is active, this banner now
+      // consumes the SAME per-seat market read the whisper payload assembly reuses below (one
+      // estimateMarket call feeding both, so the CONTESTED/LIVE/QUIET banner and the whisper's own
+      // market-driven reads can never disagree). No active seat keeps the prior neutral
+      // (advisedTeamId: null) behavior byte-identical.
+      advisedTeamId: activeWhisperSeatTeamId,
       bandPrioritiesByTeamId: marketBandPrioritiesByTeamId,
       humanTeamIds: marketHumanTeamIds,
     });
     return view ? estimateMarket(view, marketLiftTable) : null;
   }, [
+    activeWhisperSeatTeamId,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
     marketLiftTable,
@@ -1098,20 +1173,6 @@ export function LeagueBuilderAuctionDraft() {
       .map((playerId) => session.players[playerId])
       .filter(Boolean);
   }, [session]);
-
-  // COCKPIT WAVE 2 (B3/Correction 5/7): mirrors the seatTeamId derivation inside whisperPayload
-  // below, kept as its own memo so the board-reorder persistence callbacks can resolve "which team
-  // am I saving to" without duplicating the whisperPayload memo itself.
-  const activeWhisperSeatTeamId = useMemo(() => {
-    if (!session) return null;
-    const seatTeamId =
-      session.state === "OPEN_BIDDING"
-        ? auction.currentBidderTeamId
-        : session.state === "RESOLVE"
-          ? session.pendingClaim?.teamId ?? null
-          : null;
-    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
-  }, [auction, session]);
 
   // BOARDFIX2 (Item C, perf): reorders on the LIVE board update this local, in-memory overlay
   // INSTANTLY; the actual `saveTeam` write is debounced (trailing, see the effect below) so a
@@ -1265,8 +1326,20 @@ export function LeagueBuilderAuctionDraft() {
       bandPrioritiesByTeamId: marketBandPrioritiesByTeamId,
       humanTeamIds: marketHumanTeamIds,
     };
-    const marketView = buildLotViewFromSession(session, marketOptions);
-    const market = marketView ? marketReadFromEstimate(marketView, marketLiftTable) : undefined;
+    // CALLFIX Item 5(d): market single-source. `publicMarket` (above) is already computed with
+    // THIS SAME seat as advisedTeamId (team.id === activeWhisperSeatTeamId whenever this memo
+    // reaches this point) -- reuse it instead of a second, independent estimateMarket() call that
+    // could disagree with the stage's own CONTESTED/LIVE/QUIET banner. marketOptions itself is
+    // still needed below for projectBidVsPass, an unrelated engine call.
+    const market: MarketRead | undefined = publicMarket && publicMarket.playerId === lotPlayerId
+      ? {
+          playerId: publicMarket.playerId,
+          band: publicMarket.band,
+          interestedTeams: publicMarket.interestedTeams,
+          contested: publicMarket.contested,
+          likelyPass: publicMarket.likelyPass,
+        }
+      : undefined;
 
     const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean && ownBandPriorities
       ? assembleWorthToYou({
@@ -1280,6 +1353,9 @@ export function LeagueBuilderAuctionDraft() {
           nextBid: minBid,
           currentBid: session.currentLot.highBid,
           bidIncrement: session.config.bidIncrement,
+          // CALLFIX Item 1: THE LIVE CALL 'lead' rung -- this seat already holds the current
+          // lot's high bid.
+          seatIsHighBidder: session.currentLot.highBidder === seatTeamId,
           ownBandPriorities,
           archetypeWeights: lotArchetypeWeights,
           needBreakdown,
@@ -1484,8 +1560,8 @@ export function LeagueBuilderAuctionDraft() {
     handleBoardReorderPosition,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
-    marketLiftTable,
     playerById,
+    publicMarket,
     registeredPool?.tier,
     session,
     shillTeamIdSet,
@@ -1503,16 +1579,20 @@ export function LeagueBuilderAuctionDraft() {
     if (!pendingBoardRankOverrides || pendingBoardRankOverrides.team.id !== whisperPayload.seatTeamId) {
       return whisperPayload;
     }
-    const overrideBoard = materializeRankOrder(
-      whisperPayload.board ?? [],
-      (entry) => entry.playerId,
-      pendingBoardRankOverrides.overrides.global,
-    );
-    return Object.assign({}, whisperPayload, {
-      board: overrideBoard,
-      boardRankOverrides: pendingBoardRankOverrides.overrides,
+    // CALLFIX Item 4: recompute the auto-advance line from THIS SAME live overlay -- cheap (pure
+    // array lookups over already-computed session/board data, no engine calls), and keeps the
+    // "your #N" citation honest even when a sale resolves in the same tick as an unflushed edit.
+    const latestResult = session?.results[session.results.length - 1];
+    const soldPosition = latestResult && session
+      ? (session.players[latestResult.playerId]?.pos?.position as TaxonomyPosition | undefined)
+      : undefined;
+    return applyLiveBoardRankOverlay(whisperPayload, pendingBoardRankOverrides, {
+      latestResultPlayerId: latestResult?.playerId,
+      latestResultDisposition: latestResult?.disposition,
+      soldPosition,
+      currentLotPlayerId: session?.currentLot?.playerId,
     });
-  }, [whisperPayload, pendingBoardRankOverrides]);
+  }, [whisperPayload, pendingBoardRankOverrides, session]);
 
   const bidIncrement = session?.config.bidIncrement ?? DEFAULT_AUCTION_SETUP_CONFIG.bidIncrement;
   const setupShillCount = useMemo(

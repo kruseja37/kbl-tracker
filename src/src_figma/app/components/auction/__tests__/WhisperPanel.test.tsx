@@ -110,6 +110,10 @@ function payload(
       archetypeFitMultiplier: 1,
       needMultiplier: 1,
       verdict,
+      // CALLFIX Item 1: the default live-call mapping mirrors the legacy verdict 1:1 for these
+      // fixtures (no live bid signal in play) -- push/cap/pass -> push/stretch/out. Tests that
+      // need a DIFFERENT rung (e.g. 'lead') override worthToYou.liveCall explicitly.
+      liveCall: verdict === "push" ? "push" : verdict === "cap" ? "stretch" : "out",
       recommendedNumber: verdict === "pass" ? 0 : 75_000,
       capValue: verdict === "pass" ? 45_000 : 75_000,
       suggestedMaxBid: verdict === "pass" ? 0 : 80_000,
@@ -118,19 +122,7 @@ function payload(
       discretionaryBudget: 100_000,
       minimumFutureFillReserve: 20_000,
       replacementValueEstimate: 60_000,
-      scarcityModifier: 1,
       reasonCodes: verdict === "pass" ? ["future-fill-protected"] : ["within-liquidity-ceiling"],
-      chemistry: {
-        premium: 3_000,
-        teamLift: 3_000,
-        ownContext: 0,
-        family: "CMP",
-        crossing: null,
-        countsBefore: { CMP: 0, CRA: 0, DIS: 0, SPI: 0, SCH: 0 },
-        countsAfter: { CMP: 1, CRA: 0, DIS: 0, SPI: 0, SCH: 0 },
-        distanceToNextTier: 1,
-        liftedTraitCount: 0,
-      },
       chemistryContribution: 3_000,
       chemistryReadout: {
         families: [
@@ -455,21 +447,26 @@ describe("WhisperPanel", () => {
     expect(screen.getByText("FIT +8%")).toBeInTheDocument();
   });
 
-  test("live high bid line reacts below and at the recommended number", () => {
-    const { rerender } = render(<WhisperPanel payload={Object.assign(payload("push"), {
-      currentHighBid: 70_000,
-      objectPronoun: "him" as const,
-    })} />);
+  test("CALLFIX Item 1: the live-bid fine print AND the Tier-1 strip move together off the SAME liveCall -- they can never disagree", () => {
+    const under = Object.assign(payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, liveCall: "push" },
+    }), { currentHighBid: 70_000, objectPronoun: "him" as const });
+    const { rerender } = render(<WhisperPanel payload={under} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("PUSH");
     expect(screen.getByText("Still under your number -- $5,000 to go")).toBeInTheDocument();
 
-    rerender(<WhisperPanel payload={Object.assign(payload("push"), {
-      currentHighBid: 75_000,
-      objectPronoun: "him" as const,
-    })} />);
+    // The live bid has now moved past this seat's ceiling -- liveCall flips to 'out' (as the
+    // engine would compute once nextBid exceeds suggestedMaxBid). The strip flips WITH the fine
+    // print because both read the same field -- the exact defect this item fixes.
+    const over = Object.assign(payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, liveCall: "out" },
+    }), { currentHighBid: 82_000, objectPronoun: "him" as const });
+    rerender(<WhisperPanel payload={over} />);
 
-    expect(screen.getByText("Past your number -- let him go")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("WALK");
+    expect(screen.getByText("Past your ceiling -- let him go")).toBeInTheDocument();
   });
 
   test("FULL BOARD toggle renders the expanded board rows when more than three names remain", () => {
@@ -505,6 +502,51 @@ describe("WhisperPanel", () => {
   });
 });
 
+// CALLFIX 2026-07-08 Item 1: this describe block used to hold the FAILING repro proving the bug
+// JK caught live -- the Tier-1 strip and the shared tap-through headline stayed frozen on PUSH /
+// "Go get him" even once the live bid had moved past worth.recommendedNumber, because they read
+// the static worth.verdict directly instead of a live-bid-aware ladder (see
+// spec-docs/contracts/CONTRACT_CALLFIX_2026-07-08.md for the captured pre-fix failure output).
+// The engine now owns computing that ladder (worth.liveCall, rosterIntelligencePayload.ts) from
+// nextBid/currentBid/seatIsHighBidder -- WhisperPanel is a dumb reader of it. These tests are now
+// the PERMANENT regression guard: they prove the panel renders whatever liveCall says, and can
+// never independently derive a conflicting call from currentHighBid the way the old bug did.
+describe("CALLFIX 2026-07-08 Item 1: THE LIVE CALL -- strip and headline follow worth.liveCall, never a stale worth.verdict", () => {
+  test("FIXED (MLB): when the engine computes liveCall 'out', the strip and headline follow it, never freezing on a stale PUSH", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, liveCall: "out" },
+    })} />);
+
+    // Tier-1 strip: always visible, zero taps -- the exact surface JK caught frozen live.
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("WALK");
+    expect(screen.getByTestId("whisper-tier1-verdict")).not.toHaveTextContent("PUSH");
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByText(/^Go get him/)).not.toBeInTheDocument();
+    expect(screen.getByText("Past your ceiling -- let him go.")).toBeInTheDocument();
+  });
+
+  test("FIXED (farm): the shared tap-through headline follows liveCall too, even though farm has no Tier-1 strip", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, liveCall: "out" },
+    })} tier="farm" />);
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByText(/^Go get him/)).not.toBeInTheDocument();
+    expect(screen.getByText("Past your ceiling -- let him go.")).toBeInTheDocument();
+  });
+
+  test("FIXED: 'lead' renders ON TOP / sit-tight copy, driven by the engine's seatIsHighBidder input, not a price comparison", () => {
+    render(<WhisperPanel payload={Object.assign(payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, liveCall: "lead" },
+    }), { currentHighBid: 82_000, objectPronoun: "him" as const })} />);
+
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("ON TOP");
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByText("You're on top at $82,000 -- sit tight.")).toBeInTheDocument();
+  });
+});
+
 describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)", () => {
   test("Tier 1 (whisper-tier1) and Tier 2 (whisper-tier2) render without opening the panel", () => {
     render(<WhisperPanel payload={payload("push")} />);
@@ -514,15 +556,18 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
   });
 
-  test("VERDICT word maps push/cap/pass to PUSH/CAP $X/WALK, and FIT chip promotes the archetype multiplier", () => {
+  test("VERDICT word maps liveCall push/stretch/out to PUSH/CAP $X/WALK, and FIT chip promotes the archetype multiplier", () => {
     const { rerender } = render(<WhisperPanel payload={payload("push")} />);
     expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("PUSH");
 
     rerender(<WhisperPanel payload={payload("pass")} />);
     expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("WALK");
 
+    // CALLFIX Item 1: the 'stretch' strip reads worth.suggestedMaxBid (the absolute ceiling worth
+    // stretching for), not recommendedNumber (the number you've already passed to land in
+    // 'stretch') -- so both are set here to keep this test's original $61,000 lock intact.
     rerender(<WhisperPanel payload={payload("cap", {
-      worthToYou: { ...payload("cap").worthToYou!, recommendedNumber: 61_000, archetypeFitMultiplier: 1.08 },
+      worthToYou: { ...payload("cap").worthToYou!, recommendedNumber: 61_000, suggestedMaxBid: 61_000, archetypeFitMultiplier: 1.08 },
     })} />);
     expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("CAP $61,000");
     expect(screen.getByTestId("whisper-tier1-fit")).toHaveTextContent("FIT +8%");
@@ -734,6 +779,34 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     fireEvent.click(screen.getByRole("button", { name: "Seat A Slider" }));
     expect(screen.getByText("POW")).toBeInTheDocument();
     expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
+  });
+});
+
+describe("CALLFIX 2026-07-08 Item 5(c): scarcity reason detail surfaces worth.replacementValueEstimate", () => {
+  test("renders 'Next-best replacement ~$X' when scarce-replacement or similar-replacements is present, absent otherwise", () => {
+    const { rerender } = render(<WhisperPanel payload={payload("push")} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByTestId("whisper-scarcity-detail")).not.toBeInTheDocument();
+
+    rerender(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["scarce-replacement"], replacementValueEstimate: 42_000 },
+    })} />);
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$42,000");
+
+    rerender(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["similar-replacements"], replacementValueEstimate: 18_500 },
+    })} />);
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$18,500");
+  });
+
+  test("surfaces even when scarce-replacement is the ONE code already promoted to the MLB Tier-1 strip (checks the full reasonCodes, not the trimmed remaining list)", () => {
+    render(<WhisperPanel payload={payload("push", {
+      worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["scarce-replacement"], replacementValueEstimate: 55_000 },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("scarce repl.");
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$55,000");
   });
 });
 

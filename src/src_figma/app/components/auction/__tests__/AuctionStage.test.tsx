@@ -307,3 +307,70 @@ describe("AuctionStage roster board player popover (WT-D)", () => {
     expect(container.querySelector('[role="button"]')).toBeNull();
   });
 });
+
+// CALLFIX 2026-07-08 Item 3: the lot log is the 4th popover surface (never built) -- JK's audit
+// found the roster board slot, the overflow rail, and the on-the-block lot already popover-wrapped,
+// but a resolved lot's headline name in the log stayed plain text. Same WT-D wiring pattern.
+describe("AuctionStage lot log player popover (CALLFIX Item 3, the 4th popover surface)", () => {
+  test("a log row with a resolvable player opens the profile popover on just the name, leaving the rest of the sentence intact", () => {
+    const stageVm = vm();
+    const player = makeTestPlayer({ id: "log-1", firstName: "Log", lastName: "Winner" });
+    stageVm.log = [{
+      kind: "won",
+      text: "Log Winner SOLD to Caps for $12,000",
+      amount: 12_000,
+      player,
+      namePrefix: "Log Winner",
+    }];
+
+    render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Log Winner" }));
+
+    expect(screen.getByText("POW")).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_content, element) => (element?.textContent ?? "").includes("SOLD to Caps for $12,000")).length,
+    ).toBeGreaterThan(0);
+  });
+
+  test("a farm log row's popover is tier-gated to scout bands, never true ratings", () => {
+    const stageVm = vm();
+    stageVm.tier = "farm";
+    const prospect = makeTestPlayer({
+      id: "log-farm-1",
+      firstName: "Log",
+      lastName: "Prospect",
+      ratingRevealState: "hidden",
+      power: 99,
+      prospectProfile: {
+        scoutedGrade: "B",
+        potentialGrade: "A-",
+        scoutConfidence: "medium",
+        scoutName: "Scout Jones",
+      },
+    });
+    stageVm.log = [{
+      kind: "won",
+      text: "Log Prospect SOLD to Caps for $12,000",
+      amount: 12_000,
+      player: prospect,
+      namePrefix: "Log Prospect",
+    }];
+
+    render(<AuctionStage vm={stageVm} />);
+    fireEvent.click(screen.getByRole("button", { name: "Log Prospect" }));
+
+    expect(screen.getByText("Farm - scouting only")).toBeInTheDocument();
+    expect(screen.queryByText("POW")).not.toBeInTheDocument();
+    expect(screen.queryByText("99")).not.toBeInTheDocument();
+  });
+
+  test("a system log row with no resolvable player renders plain text -- no popover trigger, never crashes", () => {
+    const stageVm = vm();
+    stageVm.log = [{ kind: "gone", text: "Somebody PASSED" }];
+
+    const { container } = render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("Somebody PASSED")).toBeInTheDocument();
+    expect(container.querySelector('.logitem [role="button"]')).toBeNull();
+  });
+});

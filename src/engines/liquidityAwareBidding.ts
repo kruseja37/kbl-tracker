@@ -239,7 +239,47 @@ function buildReasonCodes(input: {
     reasons.add('late-budget-surplus');
   }
   if (input.nextBidAllowed) reasons.add('within-liquidity-ceiling');
-  return [...reasons].sort();
+  return [...reasons].sort(compareReasonPriority);
+}
+
+/**
+ * CALLFIX (2026-07-08) Item 2: explicit reason-priority order for the Tier-1 "one reason" chip
+ * (WhisperPanel.tsx topReason = reasonCodes[0]). The OLD `[...reasons].sort()` ordered codes
+ * ALPHABETICALLY -- an accident of spelling, not priority (e.g. 'above-legal-ceiling' only beat
+ * 'emergency-fill' because 'a' < 'e'). This mirrors the hand-ordered Set insertion order in
+ * buildReasonCodes below (which already encoded the intended severity), promoted to an explicit,
+ * directly-testable table: hard ceiling blockers > liquidity emergencies > scarcity > fit/need >
+ * everything informational/mechanical.
+ */
+export const REASON_PRIORITY: readonly LiquidityReasonCode[] = [
+  // Hard blockers: which ceiling stopped this bid.
+  'above-legal-ceiling',
+  'above-remaining-budget',
+  'future-fill-protected',
+  // Liquidity emergencies: the seat's overall cash/slot state.
+  'emergency-fill',
+  'liquidity-constrained',
+  // Scarcity: how replaceable this candidate is.
+  'scarce-replacement',
+  // Fit/need: this candidate's fit for a roster gap.
+  'priority-fit',
+  // Informational / mechanical: everything else.
+  'within-liquidity-ceiling',
+  'late-budget-surplus',
+  'below-minimum-bid',
+  'near-complete',
+  'similar-replacements',
+];
+
+function reasonPriorityIndex(code: LiquidityReasonCode): number {
+  const index = REASON_PRIORITY.indexOf(code);
+  return index === -1 ? REASON_PRIORITY.length : index;
+}
+
+/** Unknown codes (not yet added to REASON_PRIORITY) sort last; Array.prototype.sort's spec-guaranteed
+ * stability keeps ties (including any future/unclassified codes) in their original insertion order. */
+function compareReasonPriority(a: LiquidityReasonCode, b: LiquidityReasonCode): number {
+  return reasonPriorityIndex(a) - reasonPriorityIndex(b);
 }
 
 function sameScarcityClass(left: RosterSlotPlayer | undefined, right: RosterSlotPlayer | null): boolean {

@@ -363,11 +363,20 @@ function buildFarmStageLog(
   teamById: Map<string, Team>,
 ): LogItemVM[] {
   if (!session) return [];
-  return session.results.slice(-6).reverse().map((result) => ({
-    kind: result.disposition === "SOLD" ? "won" : result.disposition === "PASSED" ? "gone" : "rival",
-    text: resultText(result, prospectById, teamById),
-    amount: result.disposition === "SOLD" ? result.salary ?? undefined : undefined,
-  }));
+  return session.results.slice(-6).reverse().map((result) => {
+    const prospect = prospectById.get(result.playerId);
+    const player = prospect ? prospectToProfilePlayer(prospect) : null;
+    return {
+      kind: result.disposition === "SOLD" ? "won" : result.disposition === "PASSED" ? "gone" : "rival",
+      text: resultText(result, prospectById, teamById),
+      amount: result.disposition === "SOLD" ? result.salary ?? undefined : undefined,
+      // CALLFIX Item 3: the 4th popover surface -- fog-gated same as every other farm popover
+      // (AuctionStage passes revealFull={vm.tier !== "farm"}). namePrefix is the exact leading
+      // substring of `text` (resultText always starts with prospectDisplayName).
+      player,
+      ...(prospect ? { namePrefix: prospectDisplayName(prospect) } : {}),
+    };
+  });
 }
 
 export function LeagueBuilderFarmAuctionDraft() {
@@ -650,6 +659,8 @@ export function LeagueBuilderFarmAuctionDraft() {
       // COCKPIT W1d fork 3 (dark-first): wired but inert while FARM_CHEM_FIT_ENABLED is false.
       prospectChemistry: currentLotProspect?.chemistry ?? null,
       mlbRosterChemistryCounts: auction.mlbRosterChemistryByTeamId[whisperSeatTeamId],
+      // CALLFIX Item 1: THE LIVE CALL 'lead' rung -- same ladder as MLB.
+      seatIsHighBidder: session.currentLot.highBidder === whisperSeatTeamId,
     });
 
     return Object.assign(

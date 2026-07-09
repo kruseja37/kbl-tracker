@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { computeBoardAutoAdvanceLine } from "../../app/pages/LeagueBuilderAuctionDraft";
-import type { BoardEntry } from "../../../engines/rosterIntelligencePayload";
+import { applyLiveBoardRankOverlay, computeBoardAutoAdvanceLine } from "../../app/pages/LeagueBuilderAuctionDraft";
+import type { BoardEntry, RosterIntelligencePayload } from "../../../engines/rosterIntelligencePayload";
 import type { Team } from "../../hooks/useLeagueBuilderData";
 
 function entry(playerId: string, worth: number): BoardEntry {
@@ -172,5 +172,70 @@ describe("computeBoardAutoAdvanceLine (COCKPIT WAVE 2, B3/S3.4 auto-advance)", (
       }));
       expect(line).toBe("On the block now: Ramírez at SS.");
     });
+  });
+});
+
+describe("applyLiveBoardRankOverlay (CALLFIX 2026-07-08 Item 4)", () => {
+  const basePayload: RosterIntelligencePayload = {
+    seatTeamId: "team-a",
+    // Post-sale board: ss-1 (the departing player) is already gone, only ss-2 remains at SS.
+    board: [entry("ss-2", 80_000)],
+  };
+
+  test("recomputes nextUpLine from the LIVE pending overlay -- the exact fix: BEFORE this, whisperPayload's own nextUpLine was baked in against the (possibly stale, up to BOARD_RANK_SAVE_DEBOUNCE_MS old) persisted team.boardRankOverrides read, not this fresh in-memory edit", () => {
+    const overlaid = applyLiveBoardRankOverlay(
+      basePayload,
+      { overrides: overrides({ SS: ["ss-1", "ss-2"] }) },
+      {
+        latestResultPlayerId: "ss-1",
+        latestResultDisposition: "SOLD",
+        soldPosition: "SS",
+        currentLotPlayerId: undefined,
+      },
+    );
+    expect(overlaid.nextUpLine).toBe("Next up at SS: ss-2 — your #2.");
+  });
+
+  test("proves the bug this fixes: an EMPTY overlay (the stale-equivalent, pre-flush persisted read) produces NO line at all, even though a real override exists in-memory a moment later", () => {
+    const staleRead = applyLiveBoardRankOverlay(
+      basePayload,
+      { overrides: overrides({}) },
+      {
+        latestResultPlayerId: "ss-1",
+        latestResultDisposition: "SOLD",
+        soldPosition: "SS",
+        currentLotPlayerId: undefined,
+      },
+    );
+    expect(staleRead.nextUpLine).toBeNull();
+  });
+
+  test("applies the overlay's GLOBAL order to the returned board -- matching the visible board the GM just edited, not the payload's original order", () => {
+    const overlaid = applyLiveBoardRankOverlay(
+      { seatTeamId: "team-a", board: [entry("a", 10), entry("b", 20)] },
+      { overrides: { global: ["b", "a"] } },
+      {
+        latestResultPlayerId: undefined,
+        latestResultDisposition: undefined,
+        soldPosition: undefined,
+        currentLotPlayerId: undefined,
+      },
+    );
+    expect(overlaid.board?.map((row) => row.playerId)).toEqual(["b", "a"]);
+    expect(overlaid.boardRankOverrides).toEqual({ global: ["b", "a"] });
+  });
+
+  test("boardMeta omission is safe -- BoardEntry.note already carries the same display name computeBoardAutoAdvanceLine would otherwise have looked up there", () => {
+    const overlaid = applyLiveBoardRankOverlay(
+      { seatTeamId: "team-a", board: [{ ...entry("ss-2", 80_000), note: "Ramírez" }] },
+      { overrides: overrides({ SS: ["ss-1", "ss-2"] }) },
+      {
+        latestResultPlayerId: "ss-1",
+        latestResultDisposition: "SOLD",
+        soldPosition: "SS",
+        currentLotPlayerId: undefined,
+      },
+    );
+    expect(overlaid.nextUpLine).toBe("Next up at SS: Ramírez — your #2.");
   });
 });

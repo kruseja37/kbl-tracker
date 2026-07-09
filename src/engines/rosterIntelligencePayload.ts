@@ -112,17 +112,27 @@ export interface MarketRead {
   likelyPass: boolean;
 }
 
+/**
+ * CALLFIX (2026-07-08) Item 1: THE LIVE CALL -- the single ladder every live-bid-aware display
+ * (Tier-1 strip, headline, fine-print) reads from, so they can never disagree with each other.
+ * 'lead' = the seat already holds the high bid; 'push'/'stretch'/'out' otherwise, per the ladder
+ * in computeLiveCall below.
+ */
+export type LiveCallState = 'lead' | 'push' | 'stretch' | 'out';
+
 export interface WorthToYou {
   iv: number;
   ownValue: number;
   archetypeFitMultiplier: number;
   needMultiplier: number;
-  chemistry: ChemistryTipBreakdown;
   chemistryContribution: number;
   /** Absent when the seat has no chemistry-tier model for this read (e.g. the farm whisper
    * adapter, which does not model chemistry synergy) — omit the section rather than fake one. */
   chemistryReadout?: ChemistryReadout;
   verdict: 'push' | 'cap' | 'pass';
+  /** CALLFIX Item 1: the live-bid-aware call -- what the display should say RIGHT NOW, given the
+   * current live bid, not just the static reserve-price verdict above. */
+  liveCall: LiveCallState;
   recommendedNumber: number;
   capValue: number | null;
   suggestedMaxBid: number;
@@ -131,7 +141,6 @@ export interface WorthToYou {
   discretionaryBudget: number;
   minimumFutureFillReserve: number;
   replacementValueEstimate: number;
-  scarcityModifier: number;
   reasonCodes: readonly LiquidityReasonCode[];
 }
 
@@ -216,6 +225,10 @@ export interface WorthToYouInput {
   nextBid?: number | null;
   currentBid?: number | null;
   bidIncrement?: number | null;
+  /** CALLFIX Item 1: whether THIS seat already holds the current lot's high bid. Drives the
+   * 'lead' rung of the live-call ladder -- the floor page resolves this by comparing the current
+   * lot's high-bidder team id against this seat's team id. */
+  seatIsHighBidder?: boolean;
   ownBandPriorities: BandPriorities;
   archetypeWeights: Partial<Record<Band, number>> | undefined;
   needBreakdown: RosterNeedBreakdown | null;
@@ -342,10 +355,11 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   const chemistryContribution = Math.max(0, chemistry.premium);
   const worth = ownValue + chemistryContribution;
   const fallbackLegalMax = capValue ?? (input.rosterWithCandidate.length >= LEGAL_ROSTER.size ? input.budgetRemaining : 0);
+  const resolvedNextBid = input.nextBid ?? input.market?.band.low ?? 0;
   const liquidity = evaluateLiquidityAwareBid({
     playerId: input.candidate.id,
     iv: input.iv,
-    nextBid: input.nextBid ?? input.market?.band.low ?? 0,
+    nextBid: resolvedNextBid,
     currentBid: input.currentBid,
     bidIncrement: input.bidIncrement ?? undefined,
     legalMaxBid: fallbackLegalMax,
@@ -361,15 +375,23 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
   });
   const recommendedNumber = Math.max(0, Math.min(worth, liquidity.maxBid));
   const verdict = worthVerdict(worth, liquidity.maxBid, input.market ?? null);
+  const liveCall = computeLiveCall({
+    nextBid: resolvedNextBid,
+    recommendedNumber,
+    suggestedMaxBid: liquidity.maxBid,
+    nextBidAllowed: liquidity.nextBidAllowed,
+    strategicVerdict: verdict,
+    seatIsHighBidder: input.seatIsHighBidder ?? false,
+  });
   return {
     iv: input.iv,
     ownValue,
     archetypeFitMultiplier: factors.archetypeFitMultiplier,
     needMultiplier: factors.needMultiplier,
-    chemistry,
     chemistryContribution,
     chemistryReadout,
     verdict,
+    liveCall,
     recommendedNumber,
     capValue,
     suggestedMaxBid: liquidity.maxBid,
@@ -378,7 +400,6 @@ export function assembleWorthToYou(input: WorthToYouInput): WorthToYou {
     discretionaryBudget: liquidity.discretionaryBudget,
     minimumFutureFillReserve: liquidity.minimumFutureFillReserve,
     replacementValueEstimate: liquidity.replacementValueEstimate,
-    scarcityModifier: liquidity.scarcityModifier,
     reasonCodes: liquidity.reasonCodes,
   };
 }
@@ -556,6 +577,29 @@ function worthVerdict(
   if (maxBid >= comfortableCeiling && justified) return 'push';
 
   return 'cap';
+}
+
+/**
+ * CALLFIX (2026-07-08) Item 1: THE LIVE CALL -- ONE shared ladder for both the MLB and farm
+ * whisper assemblies, so the Tier-1 strip, the shared headline, and the fine print can never
+ * disagree with each other again (the exact bug JK caught live: the strip stayed frozen on a
+ * static reserve-price verdict while the CURRENT bid moved past it within the same lot). First
+ * match wins. Does NOT change worthVerdict itself -- 'pass' still forces 'out' here, same as
+ * before, just alongside the new live-bid-aware rungs.
+ */
+function computeLiveCall(input: {
+  nextBid: number;
+  recommendedNumber: number;
+  suggestedMaxBid: number;
+  nextBidAllowed: boolean;
+  strategicVerdict: WorthToYou['verdict'];
+  seatIsHighBidder: boolean;
+}): LiveCallState {
+  if (input.seatIsHighBidder) return 'lead';
+  if (input.strategicVerdict === 'pass' || !input.nextBidAllowed) return 'out';
+  if (input.nextBid <= input.recommendedNumber) return 'push';
+  if (input.nextBid <= input.suggestedMaxBid) return 'stretch';
+  return 'out';
 }
 
 function shapeLight(input: ShapeLightInput): Light {
@@ -861,6 +905,9 @@ export interface FarmWhisperInput {
   /** COCKPIT W1d fork 3 (dark-first): the MLB roster's chemistry-family counts — already
    * computed, never read until now (useFarmAuctionDraft.ts:206-230). */
   mlbRosterChemistryCounts?: Partial<Record<ChemistryCode, number>>;
+  /** CALLFIX Item 1: whether THIS seat already holds the current lot's high bid -- same 'lead'
+   * rung as the MLB ladder. */
+  seatIsHighBidder?: boolean;
 }
 
 export interface FarmWhisperAssembly {
@@ -871,18 +918,6 @@ export interface FarmWhisperAssembly {
    * ever non-null when FARM_CHEM_FIT_ENABLED is true AND the fit produces a positive bump. */
   chemFitLabel: string | null;
 }
-
-const FARM_NEUTRAL_CHEMISTRY: ChemistryTipBreakdown = {
-  premium: 0,
-  teamLift: 0,
-  ownContext: 0,
-  family: 'SCH',
-  crossing: null,
-  countsBefore: { SPI: 0, DIS: 0, CMP: 0, SCH: 0, CRA: 0 },
-  countsAfter: { SPI: 0, DIS: 0, CMP: 0, SCH: 0, CRA: 0 },
-  distanceToNextTier: null,
-  liftedTraitCount: 0,
-};
 
 const FARM_UNMODELED_LIGHT = (sentence: string): Light => ({ status: 'unknown', sentence });
 
@@ -974,15 +1009,23 @@ export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembl
 
   const verdict = worthVerdict(worth, liquidity.maxBid, market);
   const recommendedNumber = Math.max(0, Math.min(worth, liquidity.maxBid));
+  const liveCall = computeLiveCall({
+    nextBid: input.nextBid,
+    recommendedNumber,
+    suggestedMaxBid: liquidity.maxBid,
+    nextBidAllowed: liquidity.nextBidAllowed,
+    strategicVerdict: verdict,
+    seatIsHighBidder: input.seatIsHighBidder ?? false,
+  });
 
   const worthToYou: WorthToYou = {
     iv,
     ownValue,
     archetypeFitMultiplier: 1,
     needMultiplier,
-    chemistry: FARM_NEUTRAL_CHEMISTRY,
     chemistryContribution: 0,
     verdict,
+    liveCall,
     recommendedNumber,
     // "Total capacity" (F9 ruling): the farm has no verified completion-cost engine, so this is
     // honestly the raw remaining budget, not a completion-verified number — WhisperPanel labels
@@ -994,7 +1037,6 @@ export function assembleFarmWhisper(input: FarmWhisperInput): FarmWhisperAssembl
     discretionaryBudget: liquidity.discretionaryBudget,
     minimumFutureFillReserve: liquidity.minimumFutureFillReserve,
     replacementValueEstimate: liquidity.replacementValueEstimate,
-    scarcityModifier: liquidity.scarcityModifier,
     reasonCodes: liquidity.reasonCodes,
   };
 
