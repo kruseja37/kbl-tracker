@@ -329,16 +329,22 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(matchingOptions.pinnedIds).toHaveLength(0);
     const addedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
     const removedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
-    expect(addedIds.length - removedIds.length).toBe(22);
+    // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output after POOLFLOOR's position
+    // supply floors (CONTRACT_POOLFLOOR_2026-07-09.md) topped this pool up further -- the source
+    // universe (4 legal-roster prefixes: one/two/three/four/five/six) previously satisfied the
+    // count-only target (110) but was short on several hard positions, so extraction now pulls in
+    // 8 more bodies (118 actual vs 110 target) to clear derivePositionSupplyFloorTargets(4). Net
+    // add/remove delta moved from 22 to 30 (32 added, 2 removed) accordingly.
+    expect(addedIds.length - removedIds.length).toBe(30);
     // CONTRACT_FLAKEFIX_2026-07-09: widen past RTL's default 1000ms findBy budget -- this receipt
     // text settles from the same class of async pool-shape computation as the design-first
     // modeAReport, and can lag under batch-load CPU contention.
-    expect(await screen.findByText(/Sized to 110 \(1\.25×\)/i, undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Sized to 118 \(1\.34×\)/i, undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText((content) =>
       content.includes("Production shape: Balanced") &&
       content.includes("demand 88") &&
       content.includes("target 110") &&
-      content.includes("actual 110") &&
+      content.includes("actual 118") &&
       content.includes("source Team roster priority"),
     )).toBeInTheDocument();
   });
@@ -381,7 +387,10 @@ describe("LeagueBuilderDraftSetup", () => {
     };
     expect(options.poolBalancePreset).toBe("grounded");
     expect(options.poolSizeMultiplier).toBe(1.2);
-    expect(await screen.findByText(/Sized to 106 \(1\.20×\)/i)).toBeInTheDocument();
+    // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output -- POOLFLOOR's position
+    // supply floors (CONTRACT_POOLFLOOR_2026-07-09.md) top this pool up past the count-only target
+    // (106) to 115 to clear derivePositionSupplyFloorTargets(4).
+    expect(await screen.findByText(/Sized to 115 \(1\.31×\)/i)).toBeInTheDocument();
   });
 
   test("pool-first regeneration carries the selected pool quality center without saving salary cap", async () => {
@@ -503,7 +512,11 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     const firstAddedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
     const firstRemovedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
-    expect(firstAddedIds.length - firstRemovedIds.length).toBe(22);
+    // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output -- same fixture shape as
+    // the sibling "numeric-shaped slack target" test above (4 teams, poolSizeMultiplier 1.25, same
+    // one/two/three/four current + five/six candidate legal-roster prefixes), so POOLFLOOR's
+    // position supply floors move this delta from 22 to 30 the same way.
+    expect(firstAddedIds.length - firstRemovedIds.length).toBe(30);
 
     vi.mocked(addPlayersToLeaguePool).mockClear();
     vi.mocked(removePlayersFromLeaguePool).mockClear();
@@ -525,7 +538,10 @@ describe("LeagueBuilderDraftSetup", () => {
       pool: makePool({
         locked: false,
         players: firstFinalIds.map((id) => ({ id, iv: 10_000, salary: 10_000 })),
-        totalSlots: 110,
+        // CONTRACT_FIXTUREFIX_2026-07-09: was a hardcoded 110 (the pre-POOLFLOOR delta's target
+        // size); now derived from firstFinalIds itself so it always matches the actual regenerated
+        // pool regardless of exactly how many bodies the position-floor top-up added.
+        totalSlots: firstFinalIds.length,
       }),
     });
     rerender(<LeagueBuilderDraftSetup />);
@@ -535,6 +551,11 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalledTimes(2);
     });
+    // CONTRACT_FIXTUREFIX_2026-07-09: re-verified per contract instruction -- this idempotency
+    // assertion never actually executed pre-fix (the test aborted on the delta assertion above
+    // before reaching here). With the delta re-pinned to 30, this DOES now execute and DOES pass:
+    // regenerating again from the already-regenerated pool calls neither add nor remove, confirming
+    // the idempotency claim holds for real (not just a stale pin masking an untested path).
     expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
     expect(removePlayersFromLeaguePool).not.toHaveBeenCalled();
   });
@@ -891,7 +912,11 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     const balancedAddedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
     const balancedRemovedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
-    expect(balancedAddedIds.length - balancedRemovedIds.length).toBe(22);
+    // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output -- same fixture shape as
+    // the sibling "numeric-shaped slack target" / "idempotent" tests above (4 teams,
+    // poolSizeMultiplier 1.25, same one/two/three/four current + five/six candidate legal-roster
+    // prefixes), so POOLFLOOR's position supply floors move this delta from 22 to 30 the same way.
+    expect(balancedAddedIds.length - balancedRemovedIds.length).toBe(30);
 
     vi.mocked(addPlayersToLeaguePool).mockClear();
     vi.mocked(removePlayersFromLeaguePool).mockClear();
@@ -913,7 +938,10 @@ describe("LeagueBuilderDraftSetup", () => {
       pool: makePool({
         locked: false,
         players: balancedFinalIds.map((id) => ({ id, iv: 10_000, salary: 10_000 })),
-        totalSlots: 110,
+        // CONTRACT_FIXTUREFIX_2026-07-09: was a hardcoded 110 (the pre-POOLFLOOR delta's target
+        // size); now derived from balancedFinalIds itself so it always matches the actual
+        // regenerated pool regardless of exactly how many bodies the position-floor top-up added.
+        totalSlots: balancedFinalIds.length,
       }),
     });
     rerender(<LeagueBuilderDraftSetup />);

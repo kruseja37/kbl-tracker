@@ -790,7 +790,14 @@ describe("LeagueBuilderDraftSetup", () => {
       render(<LeagueBuilderDraftSetup />);
 
       const panel = await screen.findByTestId("draft-readiness-panel");
-      expect(await within(panel).findByText(/short of what the draft needs/i)).toBeInTheDocument();
+      // CONTRACT_FIXTUREFIX_2026-07-09: POOLFLOOR (CONTRACT_POOLFLOOR_2026-07-09.md) gave the
+      // sufficiency gate a structured per-position reason -- for this 8-player pool (one of each
+      // of the 8 field positions, no depth) the FIRST failing floor is the field-position catcher
+      // count (1 available for 2 clubs), so the specific "THE POOL IS SHORT ON CATCHERS..." line
+      // now legitimately displaces the old generic "short of what the draft needs" fallback (that
+      // fallback only renders when positionFloorReasons is empty -- see positionFloorReadinessLine
+      // in LeagueBuilderDraftSetup.tsx). This is real, observed copy, not a guess.
+      expect(await within(panel).findByText(/THE POOL IS SHORT ON CATCHERS — 1 FOR 2 CLUBS; RE-EXTRACT\./i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     });
 

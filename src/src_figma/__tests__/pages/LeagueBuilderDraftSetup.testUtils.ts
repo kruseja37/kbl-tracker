@@ -16,7 +16,7 @@ import { act, configure, fireEvent, screen, waitFor, within } from "@testing-lib
 import { expect, vi } from "vitest";
 
 import type { Best22Target } from "../../../engines/best22Target";
-import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
+import { derivePositionSupplyFloorTargets, extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { poolDemandModel } from "../../../engines/auctionPoolSizing";
 import {
   useLeagueBuilderData,
@@ -132,6 +132,93 @@ export function makePlayers(count: number): Player[] {
   return Array.from({ length: count }, (_, index) => makePlayer(index));
 }
 
+// CONTRACT_FIXTUREFIX_2026-07-09: PR #41 POOLFLOOR (CONTRACT_POOLFLOOR_2026-07-09.md) added hard
+// per-position supply floors -- derivePositionSupplyFloorTargets(teams) in
+// src/engines/poolFromDemand.ts -- to pool-lock/start-draft sufficiency. `makePlayer`/`makePlayers`
+// above default EVERY synthetic player to primaryPosition "CF" (zero C/1B/2B/3B/SS/LF/RF-as-primary,
+// zero SP/RP/CP), so a pool built purely from them satisfies zero of those floors. Rather than
+// change `makePlayer`/`makePlayers` themselves -- many currently-green tests call them directly and
+// rely on their exact ids/ratings/order/IV, and `makePlayers(N)` is also used standalone with no
+// floor exposure at all (pure-function inputs, count-only assertions) -- these two helpers APPEND
+// (never mutate) a small, explicitly position-diverse filler roster on top, so every existing pin
+// keeps holding and only the floor-gated tests change outcome.
+//
+// `makePositionDiversePlayers` computes exact quotas from the REAL `derivePositionSupplyFloorTargets`
+// for an arbitrary team count (used where a test needs an EXACT total headcount, e.g. "Pool N / N
+// draft slots", so the fixture can't just grow past N -- every category is generated at floor+margin
+// and the remainder is padded with harmless CF depth up to `count`).
+const POSITION_DIVERSE_FLOOR_MARGIN = 2;
+
+export function makePositionDiversePlayers(count: number, teams: number, idPrefix = "diverse"): Player[] {
+  type Quota = { primaryPosition: Player["primaryPosition"]; secondaryPosition?: Player["primaryPosition"]; n: number };
+  const quotas: Quota[] = [];
+  for (const target of derivePositionSupplyFloorTargets(teams)) {
+    const n = target.needed + POSITION_DIVERSE_FLOOR_MARGIN;
+    if (target.kind === "field-position") {
+      quotas.push({ primaryPosition: target.position as Player["primaryPosition"], n });
+    } else if (target.kind === "starter") {
+      quotas.push({ primaryPosition: "SP", n });
+    } else if (target.kind === "reliever") {
+      quotas.push({ primaryPosition: "RP", n });
+    } else if (target.kind === "closer") {
+      quotas.push({ primaryPosition: "CP", n });
+    } else if (target.kind === "catcher-depth") {
+      // Distinct C-coverers BEYOND the field-C primaries above: give this many extra players a
+      // secondary C on top of a non-C primary (1B) so they add fresh catcher-depth coverage
+      // without inflating the field-C primary count past its own quota.
+      quotas.push({ primaryPosition: "1B", secondaryPosition: "C", n });
+    }
+  }
+
+  const players: Player[] = [];
+  let index = 0;
+  for (const quota of quotas) {
+    for (let n = 0; n < quota.n && players.length < count; n += 1) {
+      players.push(makePlayer(index, {
+        id: `${idPrefix}-${index}`,
+        primaryPosition: quota.primaryPosition,
+        secondaryPosition: quota.secondaryPosition,
+      }));
+      index += 1;
+    }
+  }
+  // Pad any remainder (this is normally far larger than the floor-satisfying core above) with
+  // plain CF depth -- harmless bench bodies that never bind any floor.
+  while (players.length < count) {
+    players.push(makePlayer(index, { id: `${idPrefix}-${index}`, primaryPosition: "CF", secondaryPosition: "LF" }));
+    index += 1;
+  }
+  return players.slice(0, count);
+}
+
+// The fixed filler set every BARE `mockLeagueData()` call (teams=2, the shared default league)
+// appends on top of the original all-CF `makePlayers(DEFAULT_TEST_POOL_SIZE)` roster. Sized with
+// real margin over `derivePositionSupplyFloorTargets(2)` (field floor 4, catcher depth 6, startable
+// 10, relievable 10, closer 4): 6 catchers, 5 each of 1B/2B/3B/SS/LF/RF, 12 SP, 12 RP, 6 CP.
+export function makeDefaultPoolFillers(): Player[] {
+  const positions: Player["primaryPosition"][] = [
+    ...Array.from({ length: 6 }, (): Player["primaryPosition"] => "C"),
+    ...Array.from({ length: 5 }, (): Player["primaryPosition"] => "1B"),
+    ...Array.from({ length: 5 }, (): Player["primaryPosition"] => "2B"),
+    ...Array.from({ length: 5 }, (): Player["primaryPosition"] => "3B"),
+    ...Array.from({ length: 5 }, (): Player["primaryPosition"] => "SS"),
+    ...Array.from({ length: 5 }, (): Player["primaryPosition"] => "LF"),
+    ...Array.from({ length: 5 }, (): Player["primaryPosition"] => "RF"),
+    ...Array.from({ length: 12 }, (): Player["primaryPosition"] => "SP"),
+    ...Array.from({ length: 12 }, (): Player["primaryPosition"] => "RP"),
+    ...Array.from({ length: 6 }, (): Player["primaryPosition"] => "CP"),
+  ];
+  return positions.map((primaryPosition, index) =>
+    makePlayer(5000 + index, {
+      id: `pool-floor-filler-${index}`,
+      firstName: `Filler${index}`,
+      lastName: primaryPosition,
+      primaryPosition,
+      secondaryPosition: undefined,
+    }),
+  );
+}
+
 export const DEFAULT_TEST_POOL_SIZE = Math.max(80, poolDemandModel(2, 0).feasibilityFloor);
 
 export function makeLegalRosterPlayers(salary: number): Player[] {
@@ -166,14 +253,32 @@ export function makeLegalRosterPlayerSet(prefix: string, salary: number): Player
   }));
 }
 
+// CONTRACT_FIXTUREFIX_2026-07-09: two `makeLegalRosterPlayerSet` copies (44 players, teams=2) fall
+// short of `derivePositionSupplyFloorTargets(2)` by exactly 2 each of primary-C, LF, CF, RF, and CP
+// (each `makeLegalRosterPlayers()` call contributes only 1 of each; the field/closer floor needs 4,
+// catcher depth needs 6 -- two `makeLegalRosterPlayerSet`s give 2/2/2/2/2 against those). The old
+// `makePlayers(11)` tail (all-CF) closed none of that gap. This closes it exactly, with a spare
+// catcher for margin: 3xC (closes both the C field-floor AND catcher-depth deficits), 2xLF, 2xCF,
+// 2xRF, 2xCP -- 11 players total, so the well-known "(the drawn pool (55 players))" comment at
+// every call site below stays literally true.
+function makeFinalizedDesignFirstPoolFloorTail(): Player[] {
+  const positions: Player["primaryPosition"][] = ["C", "C", "C", "LF", "LF", "CF", "CF", "RF", "RF", "CP", "CP"];
+  return positions.map((primaryPosition, index) =>
+    makePlayer(900 + index, {
+      id: `extra-tail-${index}`,
+      firstName: `Tail${index}`,
+      lastName: primaryPosition,
+      primaryPosition,
+      secondaryPosition: undefined,
+    }),
+  );
+}
+
 export function makeFinalizedDesignFirstPlayers(): Player[] {
   return [
     ...makeLegalRosterPlayerSet("one", 10_000),
     ...makeLegalRosterPlayerSet("two", 10_000),
-    ...makePlayers(11).map((player) => ({
-      ...player,
-      id: `extra-${player.id}`,
-    })),
+    ...makeFinalizedDesignFirstPoolFloorTail(),
   ];
 }
 
@@ -309,7 +414,11 @@ export function mockLeagueData({
   league = makeLeague(),
   leagues,
   teams = [makeTeam("team-a"), makeTeam("team-b")],
-  players = makePlayers(DEFAULT_TEST_POOL_SIZE),
+  // CONTRACT_FIXTUREFIX_2026-07-09: appended, not substituted -- makeDefaultPoolFillers() gives the
+  // bare default enough position/role diversity to clear derivePositionSupplyFloorTargets(2) (the
+  // fixed 2-team default league every bare mockLeagueData() call uses) while every original
+  // `player-0..N-1` id/rating/order stays exactly as it was.
+  players = makePlayers(DEFAULT_TEST_POOL_SIZE).concat(makeDefaultPoolFillers()),
   pool = makePool(),
 }: {
   league?: LeagueTemplate;

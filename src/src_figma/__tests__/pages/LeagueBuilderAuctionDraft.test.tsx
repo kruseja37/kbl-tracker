@@ -147,14 +147,55 @@ function makePlayer(
 
 // FABLE-C3-FIX-2 F6: the default fixture clears the demand-model floor for 2 teams (class
 // feasibility 52) with room for the shill-count variations the route tests exercise.
+//
+// CONTRACT_FIXTUREFIX_2026-07-09: PR #41 POOLFLOOR (CONTRACT_POOLFLOOR_2026-07-09.md) added hard
+// per-position supply floors (derivePositionSupplyFloorTargets, src/engines/poolFromDemand.ts) on
+// top of the count-only class-feasibility floor this fixture was already sized to. The old %5
+// C/SS/RF/RP/SP cycle covers zero of 1B/2B/3B/CP, so it clears the count floor but not the
+// position floors. This keeps the exact same 52-body class shape (32 hitters : 20 pitchers --
+// matches poolDemandModel(2, 0).feasibilityFloor exactly) but spreads it across every hard
+// legal position/role at or above derivePositionSupplyFloorTargets(2): the fixed player-a (CF) and
+// player-b (SP) count toward their categories, then 31 new hitters split 4 each across
+// C/1B/2B/3B/SS/LF/RF and 3 more CF (player-a supplies the 4th), with two of the "4th" 1B/2B
+// hitters also carrying a secondary C for catcher depth (4 primary C + 2 secondary C = 6, the
+// exact catcher-depth floor for 2 teams); then 19 new pitchers split 9 SP (player-b supplies the
+// 10th) + 6 RP + 4 CP (10 startable, 10 relievable, 4 closers -- all exact). Any count beyond this
+// 52-body shape (the default is 80) is padded with harmless CF depth that never binds a floor.
+// player-a/player-b keep their original identity (Avery Anchor / Blake Bolt, first two positions)
+// so every existing seed/name-based assertion still holds.
+const CLASS_SHAPE_FIELD_ORDER: Array<Player["primaryPosition"]> = ["C", "1B", "2B", "3B", "SS", "LF", "RF", "CF"];
+
+function classShapeForPositionFloors(): Array<{ position: Player["primaryPosition"]; secondary?: Player["secondaryPosition"] }> {
+  const shape: Array<{ position: Player["primaryPosition"]; secondary?: Player["secondaryPosition"] }> = [];
+  CLASS_SHAPE_FIELD_ORDER.forEach((position) => {
+    // CF is last in cycle order and gets only 3 new bodies -- player-a's fixed CF supplies the 4th.
+    const occurrences = position === "CF" ? 3 : 4;
+    for (let n = 0; n < occurrences; n += 1) {
+      const secondary = (position === "1B" && n === 3) || (position === "2B" && n === 3) ? "C" : undefined;
+      shape.push({ position, secondary });
+    }
+  });
+  // 9 more SP (player-b supplies the 10th) + 6 RP + 4 CP: 10 startable / 10 relievable / 4 closers.
+  for (let n = 0; n < 9; n += 1) shape.push({ position: "SP" });
+  for (let n = 0; n < 6; n += 1) shape.push({ position: "RP" });
+  for (let n = 0; n < 4; n += 1) shape.push({ position: "CP" });
+  return shape;
+}
+
 function makePlayers(count = 80): Player[] {
   const players = [
     makePlayer("player-a", "CF", "LF"),
     makePlayer("player-b", "SP"),
   ];
-  for (let index = players.length; index < count; index += 1) {
-    const position = index % 5 === 0 ? "C" : index % 5 === 1 ? "SS" : index % 5 === 2 ? "RF" : index % 5 === 3 ? "RP" : "SP";
-    players.push(makePlayer(`depth-${index + 1}`, position as Player["primaryPosition"]));
+  let index = players.length;
+  for (const shape of classShapeForPositionFloors()) {
+    if (players.length >= count) break;
+    players.push(makePlayer(`depth-${index + 1}`, shape.position, shape.secondary));
+    index += 1;
+  }
+  while (players.length < count) {
+    players.push(makePlayer(`depth-${index + 1}`, "CF"));
+    index += 1;
   }
   return players;
 }
