@@ -8,6 +8,11 @@ into ONE consolidated walkthrough instead of being checked piecemeal. This is th
 cockpit work continues — nothing past it (the P9 wrong-fit penalty, the verification battery)
 starts until this pass is walked.
 
+**Update, later the same day:** three more small fixes landed after this checklist was first
+written — a self-explaining readiness panel, rank numbers that now land exactly where you type
+them, and tutorial text moving behind Help. **Section 6 below** covers those; everything above is
+unchanged and still needs your walk.
+
 **How to use it:** work top to bottom on a real league in the browser. Check each box as you go.
 Where a box asks a design question rather than a pass/fail, a recommendation is given — you can
 just say "yes" / "no" / "change it to X."
@@ -75,13 +80,42 @@ just say "yes" / "no" / "change it to X."
 
 ---
 
+## 6. TODAY'S FIXES — READINESS PANEL, RANK TYPING, AND HELP-GATED TEXT
+
+These landed later the same day as the wave above, fixing things you flagged on your third pass
+through the draft.
+
+- [ ] **The start screen now explains itself.** On the draft setup screen, before you can lock the
+      pool or start the draft, a panel is always visible listing every reason you can't do that
+      yet, in plain English (e.g., "pool isn't legal," "not enough clubs assigned"). Check that it
+      names your real blockers and updates as you fix them.
+- [ ] **Typing a rank number puts the player exactly there.** On every screen with a ranked player
+      board (setup, per-position, and the live draft room), type a number into a player's rank box
+      and confirm they land in EXACTLY that spot — not somewhere close to it.
+- [ ] **Board clicks and reorders feel instant.** Drag or click to reorder your board and confirm
+      it responds immediately, with no lag, even if you make several changes in a row.
+- [ ] **Tutorial text is now tucked behind Help.** On each draft screen (Draft Setup, the archetype
+      picker, the auction floor, and Staff Your Clubs), the instructional paragraphs are hidden by
+      default and only show up when you tap the "?" Help button in the top right. Check that
+      tapping Help opens/closes it cleanly and that the screen feels less cluttered with it closed.
+- [ ] **The auction phase label stays visible.** The small pill that tells you what phase of the
+      auction you're in (nominating, bidding, etc.) no longer disappears — confirm you can always
+      see it.
+- [ ] **THE SCOUT-BAND LABEL QUESTION** — the little heading above the scout price-range bar is
+      now hidden until you open Help (matching the tutorial-text rule above). *Recommendation:
+      leave it as-is, since the bar itself is still there — just tell us if this reads as
+      confusing rather than clean.* Your call.
+
+---
+
 ## What a PASS means
 
-A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin) is accepted as
-done. Any items you flag as "fix this" get ticketed and scheduled; anything you flag as "actually
-I want this different" gets treated as a new design fork, not a bug. Once you've walked it, work
-moves on to the wrong-fit penalty (P9) and a broader verification pass — those don't start before
-this checklist is walked.
+A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin) AND today's
+follow-on fixes (section 6 — the readiness panel, rank typing, and Help-gated text) are accepted
+as done. Any items you flag as "fix this" get ticketed and scheduled; anything you flag as
+"actually I want this different" gets treated as a new design fork, not a bug. Once you've walked
+it, work moves on to the wrong-fit penalty (P9) and a broader verification pass — those don't
+start before this checklist is walked.
 
 ## Two open JK rulings elsewhere (not part of this checklist)
 
