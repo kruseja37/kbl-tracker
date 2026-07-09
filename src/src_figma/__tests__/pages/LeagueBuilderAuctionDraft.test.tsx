@@ -779,7 +779,12 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(firstBidButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Page (Caps|Keys) — raise or pass/)).toBeInTheDocument();
+      // FLOORREFIT R1 relocation: the statusbar "Now: {team} — raise or pass" pill is retired --
+      // the ON THE CLOCK banner is the sole announcer of turn identity now, so the same
+      // information (a human team is on the clock to act after the bid) is asserted there.
+      expect(screen.getByTestId("on-the-clock-banner")).toHaveTextContent(
+        /YOU'RE UP — PAGE (CAPS|KEYS)/,
+      );
       expect(screen.getByRole("button", { name: "Let him go" })).toBeEnabled();
     });
 

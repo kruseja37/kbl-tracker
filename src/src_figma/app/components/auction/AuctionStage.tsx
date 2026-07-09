@@ -245,18 +245,13 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
           </button>
           {/* TEXTLAW-SWEEP A3 reverse fix: this is ALWAYS-class content (the phase itself, e.g.
               "MLB auction") -- it was wrongly gated behind Help; now permanently visible. */}
+          {/* FLOORREFIT R1 (design laws §1.2 say-it-once + §1.3 color-means-one-thing): the
+              team-colored "Now: {nowText}" pill that used to sit at the end of this bar is
+              DELETED -- the ON THE CLOCK banner is now the sole announcer of turn identity, and
+              team colors appear ONLY in the banner + the high-bid holder swatch. */}
           <span className="pill">{vm.status.phaseLabel}</span>
           <span className="pill num">{vm.status.lotLabel}</span>
           <span className="pill">{vm.status.rosterLabel}</span>
-          <span
-            className="now team-now"
-            style={{
-              "--team-primary": vm.status.teamPrimary ?? "var(--auc-gold)",
-              "--team-secondary": vm.status.teamSecondary ?? "var(--auc-text)",
-            } as React.CSSProperties}
-          >
-            <span className="live" /> Now: <span>{vm.status.nowText}</span>
-          </span>
         </div>
 
         <div className="stage">
