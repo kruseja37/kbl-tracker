@@ -1,0 +1,23 @@
+You are a builder lane on KBL Tracker. Work ONLY in your assigned worktree on its branch; commit there; do NOT push or merge. Independent audit follows. node_modules if missing: `cp -c -R /Users/johnkruse/Projects/kbl-tracker/node_modules ./node_modules`. Base: main @ 03f4e5d1.
+
+FIRST COMMIT: write this entire prompt verbatim to spec-docs/contracts/CONTRACT_FLAKEFIX_2026-07-09.md and commit before any change.
+
+═══ LANE: FLAKEFIX — kill the LeagueBuilderDraftSetup.test.tsx flake envelope ═══
+THE PROBLEM (three diagnosis cycles burned this week): src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.test.tsx (93 tests, ~98s solo, ~232s under full-suite load) blinks nondeterministically — a DIFFERENT 1-5 tests fail each batch run, ALL pass solo and on re-runs. Observed failing names across runs: "CUT2-2 30-club shill pressure does not inflate the pool-lock floor", "pool-first regeneration carries the selected pool quality center without saving salary cap", "names a locked pool that falls short of the required floor", "CUT2-2 persists selected shill count and reloads it without a URL carrier", "enables design-first draft start when all locked designs predate the extracted pool", "F20 design-first lock persists the displayed finalized pool without re-extracting". Known root-cause instance (from the STALEPARITY audit): a test used findByTestId("draft-readiness-panel") which resolved a TRANSIENT "Checking for a saved auction before allowing pool edits" loading panel, then a synchronous getByText fired before content settled — the retry-style findBy on the CONTENT (not just the container) is the cure pattern.
+
+═══ THE WORK (test-infra ONLY — zero production-code changes, zero assertion weakening) ═══
+1. SWEEP the whole file for the timing anti-patterns and fix each: (a) findByTestId/getByTestId on a container followed by SYNCHRONOUS getByText/getAllByText inside it → replace with retry-style findByText/findAllByText (or within(container).findByText) so the CONTENT is what's awaited; (b) waitFor blocks whose assertion depends on multiple async settles → ensure the FINAL fact is what's waited on; (c) fireEvent bursts followed by immediate assertions where a rerender debounce exists (the 500ms rank-persist debounce, the 0ms recompute timer) → advance timers/await the settled state explicitly; (d) any bare setTimeout-race patterns.
+2. SPLIT the mega-file into per-zone suites (this is the real fix for the 232s batch degradation): split by the file's existing describe/zone structure (e.g. setup/money/pool-lock/readiness/board/staleness — follow the actual describes) into 3-5 files under the same directory, e.g. LeagueBuilderDraftSetup.money.test.tsx etc., sharing the existing fixture/setup helpers via a local testUtils module (extract shared helpers ONCE — no duplication). EVERY test keeps its exact name and its exact assertions (relocation, not rewording — the D11-class characterization must survive byte-identical; the only permitted content changes are the timing-pattern cures from step 1). Keep the documented solo-judgment convention viable: note in a header comment that these suites descend from the known-flake file.
+3. ADD the missing unlock→relock staleness-clear cycle test (STALEPARITY audit note 3): lock pool-first → drift a basis input → assert staleness lines + gated start → unlock → relock → assert staleness cleared and start enabled. Use the cured timing patterns.
+
+═══ VERIFICATION (the gate IS the point of this lane) ═══
+1. npx tsc -b clean; npm run build exit 0 (should be untouched — prove it).
+2. THREE consecutive full runs of the split suites (all files together) — all green, paste all three outputs.
+3. ONE batch-load simulation: run the split suites CONCURRENTLY with 2-3 other heavy suites (e.g. WhisperPanel + LeagueBuilderAuctionDraft + the leagueBuilder folder) — green, paste output.
+4. Test-count conservation: total tests across the split files === 93 (+ the new cycle test = 94); paste the count proof. Any test lost = failure.
+
+═══ GUARDRAILS ═══
+Zero production files in the diff. Zero assertion deletions/weakenings — an auditor will diff every test body against the original; timing-cure changes must be provably equivalence-preserving (same facts asserted, retry-awaited instead of raced). If a test's flake turns out to be a REAL product race (not a test-timing artifact), STOP and report that test by name — do not paper over it.
+
+═══ DELIVERABLE ═══
+Contract-first; then the sweep/split commits; final contract update with the anti-pattern inventory (each cured site listed file:line old→new), the 3x green + batch-sim outputs, count conservation, and honestly-flagged judgment calls. Final message: summary + hashes + surprises.
