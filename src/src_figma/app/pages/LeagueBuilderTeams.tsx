@@ -37,6 +37,7 @@ import {
 } from "../../../utils/managerIdentityStorage";
 import { getDefaultManagerIdForTeam } from "../../../utils/managerWpaDerivation";
 import { getParkByName } from "../../../data/parkLookup";
+import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
   applyIdentitySelection,
   BANDS,
@@ -145,7 +146,11 @@ function normalizeIdentityMods(mods: string[] | undefined): string[] {
 }
 
 function normalizeCapIdentity(identity?: TeamCapIdentity): TeamCapIdentity {
+  // TEAMIDGUARD (2026-07-09): carry unknown fields (rawShift, etc.) through instead of
+  // reconstructing the object -- archetype-derived identities carry a precise rawShift that
+  // must survive being seeded into the edit form.
   return {
+    ...identity,
     bandPriorities: {
       ...createEmptyBandPriorities(),
       ...(identity?.bandPriorities ?? {}),
@@ -272,6 +277,10 @@ export function LeagueBuilderTeams() {
     heritageFacts: string[];
     rivalries: TeamRivalry[];
   } | null>(null);
+  // TEAMIDGUARD (2026-07-09): tracks whether the user touched the MLB cap-identity form
+  // fields (band priorities / increase / decrease) this modal session. Reset on open; only
+  // the non-archetype legacy path consults it (archetype-owned teams always preserve).
+  const capIdentityTouchedRef = useRef(false);
   const managerProfilesById = useMemo(
     () => new Map(managerProfiles.map((profile) => [profile.managerId, profile])),
     [managerProfiles],
@@ -382,6 +391,7 @@ export function LeagueBuilderTeams() {
     setIsHeritageFactsOpen(true);
     setIsRivalriesOpen(true);
     autosavedTeamMetadataRef.current = null;
+    capIdentityTouchedRef.current = false;
     setIsModalOpen(true);
   };
 
@@ -425,6 +435,7 @@ export function LeagueBuilderTeams() {
     setIsRivalriesOpen(true);
     setIsCapIdentityOpen(true);
     setIsFarmCapIdentityOpen(true);
+    capIdentityTouchedRef.current = false;
     setIsModalOpen(true);
   };
 
@@ -590,14 +601,25 @@ export function LeagueBuilderTeams() {
     try {
       const normalizedHeritageFacts = normalizeHeritageFacts(formData.heritageFacts);
       const normalizedRivalries = normalizeRivalries(formData.rivalries);
-      const capIdentity: TeamCapIdentity = {
-        bandPriorities: {
-          ...createEmptyBandPriorities(),
-          ...(formData.capIdentity.bandPriorities ?? {}),
-        },
-        increase: capIdentityValidation.identity.increase,
-        decrease: capIdentityValidation.identity.decrease,
-      };
+      // TEAMIDGUARD (2026-07-09): one writer for tax identity. Archetype-owned teams
+      // (team.mlbArchetypeKey set) never have capIdentity rebuilt here -- the archetype
+      // system (selectTeamArchetype / archetypeToCapIdentity) is the sole writer, so this
+      // legacy editor must preserve the stored value byte-identical no matter what else on
+      // the form changed. Non-archetype teams keep the legacy rebuild, but only when the
+      // MLB identity form fields were actually touched this session; an untouched section
+      // preserves the stored capIdentity verbatim (including rawShift).
+      const isArchetypeOwnedForSave = Boolean(editingTeam?.mlbArchetypeKey);
+      const capIdentity: TeamCapIdentity | undefined =
+        isArchetypeOwnedForSave || (editingTeam && !capIdentityTouchedRef.current)
+          ? editingTeam?.capIdentity
+          : {
+              bandPriorities: {
+                ...createEmptyBandPriorities(),
+                ...(formData.capIdentity.bandPriorities ?? {}),
+              },
+              increase: capIdentityValidation.identity.increase,
+              decrease: capIdentityValidation.identity.decrease,
+            };
       const farmCapIdentity: TeamCapIdentity = {
         bandPriorities: {
           ...createEmptyBandPriorities(),
@@ -781,7 +803,24 @@ export function LeagueBuilderTeams() {
       .slice(0, 2);
   }, [farmCapIdentityValidation.identity, previewTier]);
 
+  // TEAMIDGUARD (2026-07-09): archetype-owned teams render the MLB identity section
+  // read-only and display the actual archetype shift (via rawShift, not the coarse
+  // CAP_MODIFICATION_FRACTIONS table).
+  const isArchetypeOwned = Boolean(editingTeam?.mlbArchetypeKey);
+  const ownedArchetype = useMemo(
+    () =>
+      isArchetypeOwned
+        ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === editingTeam?.mlbArchetypeKey)
+        : undefined,
+    [isArchetypeOwned, editingTeam?.mlbArchetypeKey],
+  );
+  const archetypeCapShiftPreview = useMemo(() => {
+    if (!isArchetypeOwned) return null;
+    return identityCapShift(formData.capIdentity);
+  }, [isArchetypeOwned, formData.capIdentity]);
+
   const updateCapIdentityPriority = (band: Band, value: number) => {
+    capIdentityTouchedRef.current = true;
     const nextValue = Math.max(
       CAP_IDENTITY_PRIORITY_MIN,
       Math.min(CAP_IDENTITY_PRIORITY_MAX, Math.round(value)),
@@ -804,6 +843,7 @@ export function LeagueBuilderTeams() {
     index: number,
     value: string,
   ) => {
+    capIdentityTouchedRef.current = true;
     setFormData((prev) => {
       const slots = [
         prev.capIdentity[kind][0] ?? "",
@@ -860,6 +900,7 @@ export function LeagueBuilderTeams() {
   };
 
   const suggestCapIdentityFromPriorities = () => {
+    capIdentityTouchedRef.current = true;
     setFormData((prev) => {
       const bandPriorities = {
         ...createEmptyBandPriorities(),
@@ -1696,7 +1737,62 @@ export function LeagueBuilderTeams() {
                     )}
                   </button>
 
-                  {isCapIdentityOpen && (
+                  {isCapIdentityOpen && isArchetypeOwned && (
+                    // TEAMIDGUARD (2026-07-09): archetype is the sole writer of capIdentity for
+                    // archetype-owned teams -- this section is read-only, and the shift values
+                    // shown come from the actual stored rawShift, not the coarse mod table.
+                    <div
+                      data-testid="cap-identity-readonly"
+                      className="space-y-4 border-t-[3px] border-[#2d3d2f] px-4 py-4"
+                    >
+                      <div className="border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3">
+                        <h4 className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                          {ownedArchetype?.name ?? "Archetype"}
+                        </h4>
+                        <p className="text-xs text-[#E8E8D8]/60">
+                          Set by archetype — change it in Draft Setup.
+                        </p>
+                      </div>
+
+                      <div className="border-[3px] border-[#243124] bg-[#2d3d2f]/70 p-3">
+                        <h4 className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[#E8E8D8]/75">
+                          Cap Shift Preview
+                        </h4>
+                        {archetypeCapShiftPreview && CAP_IDENTITY_STAT_GROUPS.some((group) =>
+                          group.stats.some((stat) => Math.abs(archetypeCapShiftPreview[stat]) > 0.000001),
+                        ) ? (
+                          <div className="space-y-2">
+                            {CAP_IDENTITY_STAT_GROUPS.map((group) => {
+                              if (!archetypeCapShiftPreview) return null;
+                              const entries = group.stats.filter(
+                                (stat) => Math.abs(archetypeCapShiftPreview[stat]) > 0.000001,
+                              );
+                              if (entries.length === 0) return null;
+                              return (
+                                <div key={group.label} className="flex flex-wrap items-center gap-2">
+                                  <span className="w-20 text-[10px] font-bold uppercase tracking-[0.14em] text-[#D4A020]">
+                                    {group.label}
+                                  </span>
+                                  {entries.map((stat) => (
+                                    <span
+                                      key={stat}
+                                      className="border border-[#E8E8D8]/25 bg-[#3F5A3A] px-2 py-1 text-xs font-bold"
+                                    >
+                                      {CAP_IDENTITY_STAT_LABELS[stat]} {formatSignedPercent(archetypeCapShiftPreview[stat])}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#E8E8D8]/55">No cap shifts selected.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {isCapIdentityOpen && !isArchetypeOwned && (
                     <div className="space-y-4 border-t-[3px] border-[#2d3d2f] px-4 py-4">
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         {BANDS.map((band) => {
