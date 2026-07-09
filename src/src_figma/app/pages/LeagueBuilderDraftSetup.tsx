@@ -1008,6 +1008,10 @@ function rosterPositionMap(players: readonly Player[]): RosterPositionMap {
   ]));
 }
 
+function positionFloorReadinessLine(floor: { label: string; available: number; teams: number }): string {
+  return `THE POOL IS SHORT ON ${floor.label} — ${floor.available} FOR ${floor.teams} CLUBS; RE-EXTRACT.`;
+}
+
 export const BOARD_POSITION_DEPTH = 5;
 // BOARDFIX2 (Item C): trailing debounce for boardRankOverrides persistence -- see
 // pendingBoardRankOverrides in LeagueBuilderDraftSetup for the full rationale.
@@ -1840,9 +1844,19 @@ export function LeagueBuilderDraftSetup() {
       poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     });
   }, [league]);
+  const inPoolRosterShapes = useMemo(
+    () => Object.values(rosterPositionMap(inPoolPlayers)),
+    [inPoolPlayers],
+  );
   const sufficiency = useMemo(
-    () => evaluatePoolDemandSufficiency(inPoolPlayers.length, league?.teamIds.length ?? 0, 0, poolSizeTargetOverride),
-    [league?.teamIds.length, inPoolPlayers.length, poolSizeTargetOverride],
+    () => evaluatePoolDemandSufficiency(
+      inPoolPlayers.length,
+      league?.teamIds.length ?? 0,
+      0,
+      poolSizeTargetOverride,
+      inPoolRosterShapes,
+    ),
+    [league?.teamIds.length, inPoolPlayers.length, inPoolRosterShapes, poolSizeTargetOverride],
   );
   const [rosteredButUnassigned, setRosteredButUnassigned] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -3316,7 +3330,11 @@ export function LeagueBuilderDraftSetup() {
         } else if (!locked) {
           readinessReasons.push("The pool is extracted but not locked yet — LOCK POOL to freeze prices for the auction.");
         } else if (!sufficiency.meetsFloor) {
-          readinessReasons.push(`The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`);
+          readinessReasons.push(
+            sufficiency.positionFloorReasons[0]
+              ? positionFloorReadinessLine(sufficiency.positionFloorReasons[0])
+              : `The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`,
+          );
         }
         if (modeAStaleTeams.length > 0) {
           readinessReasons.push(
@@ -3340,7 +3358,11 @@ export function LeagueBuilderDraftSetup() {
             readinessReasons.push("The pool hasn't been locked yet — LOCK POOL to freeze prices for the auction.");
           }
         } else if (!sufficiency.meetsFloor) {
-          readinessReasons.push(`The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`);
+          readinessReasons.push(
+            sufficiency.positionFloorReasons[0]
+              ? positionFloorReadinessLine(sufficiency.positionFloorReasons[0])
+              : `The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`,
+          );
         }
         // CONTRACT_STALEPARITY_2026-07-09: pool-first gets the same basis-drift net design-first
         // has above -- reuses the exact same basisStaleLines array (poolBasisStaleLines is the one
@@ -3491,7 +3513,9 @@ export function LeagueBuilderDraftSetup() {
       Pool {sufficiency.poolSize} / {sufficiency.mlbSlots} draft slots
       {sufficiency.meetsFloor
         ? " · surplus " + (sufficiency.surplus >= 0 ? "+" : "") + sufficiency.surplus
-        : " · need " + -sufficiency.surplus + " more"}
+        : sufficiency.positionFloorReasons[0]
+          ? ` · short ${sufficiency.positionFloorReasons[0].label} ${sufficiency.positionFloorReasons[0].available}/${sufficiency.positionFloorReasons[0].needed}`
+          : " · need " + -sufficiency.surplus + " more"}
     </div>
   );
 
