@@ -3741,7 +3741,11 @@ describe("LeagueBuilderDraftSetup", () => {
       render(<LeagueBuilderDraftSetup />);
 
       const panel = await screen.findByTestId("draft-readiness-panel");
-      expect(within(panel).getByText("Keys CHANGED ITS IDENTITY — RE-EXTRACT TO RESTOCK FOR IT.")).toBeInTheDocument();
+      // Bulleted as "• {reason}" -- two sibling text nodes, so an exact-string match fails even
+      // though the text is right there (this panel's OWN convention across every other test in
+      // this describe block uses a regex for that reason -- see the "pool-first: names a pool..."
+      // tests above).
+      expect(within(panel).getByText(/Keys CHANGED ITS IDENTITY — RE-EXTRACT TO RESTOCK FOR IT\./)).toBeInTheDocument();
       expect(within(panel).getByText(/the pool is locked but the plan changed since/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     });
@@ -3778,8 +3782,8 @@ describe("LeagueBuilderDraftSetup", () => {
       render(<LeagueBuilderDraftSetup />);
 
       const panel = await screen.findByTestId("draft-readiness-panel");
-      expect(within(panel).getByText("THE POOL QUALITY DIAL MOVED — RE-EXTRACT TO REDRAW.")).toBeInTheDocument();
-      expect(within(panel).getByText("THE POOL BALANCE DIAL MOVED — RE-EXTRACT TO REDRAW.")).toBeInTheDocument();
+      expect(within(panel).getByText(/THE POOL QUALITY DIAL MOVED — RE-EXTRACT TO REDRAW\./)).toBeInTheDocument();
+      expect(within(panel).getByText(/THE POOL BALANCE DIAL MOVED — RE-EXTRACT TO REDRAW\./)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     });
 
@@ -3856,6 +3860,48 @@ describe("LeagueBuilderDraftSetup", () => {
           modeAExtractedIds: undefined,
         }));
       });
+    });
+
+    test("BACK-COMPAT: a basis saved before poolQualityCenter/poolBalancePreset existed never retro-nags even when the live dials sit off their defaults", async () => {
+      // Both fields are undefined-guarded in poolBasisStaleLines (same treatment as `shills`
+      // already gets) -- a pre-feature basis (design-first OR pool-first) must stay quiet even
+      // when the LIVE quality/balance dials genuinely differ from the hardcoded defaults the old
+      // basis implicitly assumed.
+      const extractedPlayers = makeFinalizedDesignFirstPlayers();
+      const extractedAt = "2026-01-05T00:00:00.000Z";
+      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "76");
+      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:pool-first", "juiced");
+      mockLeagueData({
+        league: makeLeague({
+          draftPoolMode: "pool-first",
+          salaryCap: 1_064_387,
+          poolExtractedAt: extractedAt,
+          poolExtractedBasis: {
+            // Legacy shape: no poolQualityCenter, no poolBalancePreset -- exactly what a
+            // pre-STALEPARITY pool-first basis (or an old design-first one) looked like.
+            cap: 1_064_387,
+            poolSizeMultiplier: 1.25,
+            shills: 0,
+            identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+          },
+        }),
+        teams: [makeTeam("team-a"), makeTeam("team-b")],
+        players: extractedPlayers,
+        pool: makePool({
+          locked: true,
+          players: extractedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: extractedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeEnabled();
+      });
+      expect(screen.queryByTestId("draft-readiness-panel")).not.toBeInTheDocument();
+      expect(screen.queryByText(/THE POOL QUALITY DIAL MOVED/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/THE POOL BALANCE DIAL MOVED/i)).not.toBeInTheDocument();
     });
   });
 });

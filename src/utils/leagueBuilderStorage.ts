@@ -157,6 +157,12 @@ export interface LeagueTemplate {
      * record or an untouched post-feature default — the two are equivalent, so legacy records
      * never retro-nag). */
     sourceLeagueIds?: string[];
+    /** CONTRACT_STALEPARITY_2026-07-09: the numeric quality-curve dial and the pool-first-only
+     * balance-shape dial at basis-capture time — a basis input like cap/dial/shills/identity, so a
+     * live move must trip the same staleness signal. Both optional and undefined-guarded on
+     * comparison so a pre-feature record never retro-nags. */
+    poolQualityCenter?: number;
+    poolBalancePreset?: string;
   };
   modeAExtractedIds?: string[];
   modeAHandAdds?: string[];
