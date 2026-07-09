@@ -6911,3 +6911,23 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 **Standing directive this session:** JK asked the captain role to stay an orchestrator — write the contracts, make the calls, keep the team moving — and push all actual building and auditing out to Codex/Opus/Sonnet, to conserve the captain's own budget for a next project already on deck.
 
 **Docs updated this pass:** `V1_BUILD_STATUS.md` §0 items 2i-2l, `CURRENT_STATE.md` LATEST banner, `SESSION_LOG.md` (this entry), `CONTINUITY_CHECKPOINT.md` full refresh, `MODE1_PUNCHLIST_2026-07-08.md` landing table, `JK_BROWSER_CHECKLIST_2026-07-08.md` (new browser-walk items), `NOW/README.md` (link/date check), `TEAM_ARCHETYPES_24.md` (stale maxDev headline fix). Shipped as a docs-only PR (`docs/booking-2026-07-09b` → `main`), not merged by this pass — merge is JK's click.
+
+## 2026-07-09 (Codex, attended) — TAXENGINE local build complete, pending independent audit
+
+- Built **TAXENGINE** on branch `codex/taxengine-2026-07-09` in `/private/tmp/kbl-taxengine`; no push/merge. Scope was the two whisper tax audit gaps READ-3 and READ-5.
+- Added a bounded completion-tax reserve to `liquidityAwareBidding`: the concrete post-win `cheapestLegalCompletion` set now contributes `luxuryTax(currentRoster + completionSet).charged - luxuryTax(currentRoster).charged` to `minimumFutureFillReserve`, using canonical tax helpers only.
+- Threaded the optional completion-tax context through `assembleWorthToYou` and the live auction page, using the current roster + current lot candidate + full player map + team cap identity + pool/tier caps. Missing/no-context paths remain inert.
+- Repro-first evidence: pre-fix correct-expectation tests failed with Fill Reserve `30000` instead of `133086.53196416498`, tax-squeezed posture `aggressive` instead of `constrained`, and F9 payload reserve `30000` instead of `133086.53196416498`. Under-cap zero-tax byte-identity passed before and after.
+- Final arithmetic: completion salary `30000`, incremental completion tax `103086.53196416498`, tax-net Fill Reserve `133086.53196416498`, Room on `200000` budget `66913.46803583502`, F9 max bid `36913` with `36913 + 30000 + 133086.53196416498 <= 200000`.
+- Gates: `NODE_ENV= npx tsc -b --pretty false` clean; `NODE_ENV= npm run build` pass with existing Vite warnings; required focused suites pass 11 files / 205 tests including the six-draft auction gauntlet; `git diff --check` clean.
+- Guardrails held: no settlement math, worth verdict, live-call ladder form, reason-code priority, bid-vs-pass projection, pool extraction, or UI copy changes. Farm/no-context paths are inert.
+- Commit blocker: local `git add` failed with `fatal: Unable to create '/Users/johnkruse/Projects/kbl-tracker/.git/worktrees/kbl-taxengine/index.lock': Operation not permitted`; this worktree's gitdir is outside the writable sandbox. No files were staged; working-tree changes are intact.
+- Next: commit from an environment with write access to the parent worktree git metadata, then independent audit of this local branch and PR/merge only if approved. Separate follow-ups remain for setup tax-blindness and any broader AI/whisper tax-awareness gaps outside READ-3/READ-5.
+
+### TAXENGINE rework addendum (audit NOTE-1/NOTE-2)
+
+- Restored `resolveLiquidityState` to its original classification form exactly: near-complete endgame aggressive is again top priority, and constrained again requires `openRatio > 0.45 && budgetRatio < 0.45`. The only posture change left is that the cash inputs are tax-net.
+- Rebased READ-5 on a high-open fixture. Under the restored original classifier, a consistent high-open salary-only read cannot be `aggressive`, so the reworked fixture proves the reachable original-form flip: salary-only `neutral` -> tax-net `constrained` with completion salary `450000`, incremental completion tax `103086.531964165`, and tax-net discretionary ratio `0.38545940892870556`.
+- Added two R1 regression locks and the union TAXWIRE priority test from main `4e6cfd33`. Pre-rework red run: `liquidityAwareBidding.test.ts` failed 2 / passed 12 on the rejected classifier rewrite. Post-rework: liquidity suite 14/14 green.
+- Rework gates: `NODE_ENV= npx tsc -b --pretty false` clean; `NODE_ENV= npm run build` pass with existing Vite warnings; required focused suites pass 11 files / 208 tests including the six-draft auction gauntlet; `git diff --check` clean.
+- R2 commit succeeded locally in this worktree after the rework; no push/merge. The first execution's git-metadata blocker is preserved above as historical evidence only.

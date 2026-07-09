@@ -802,6 +802,10 @@ export function LeagueBuilderAuctionDraft() {
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
+  const constructionPlayerById = useMemo(
+    () => new Map(leagueData.players.map((player) => [player.id, toConstructionPlayer(player)])),
+    [leagueData.players],
+  );
   const teamStateById = useMemo(() => new Map(session?.teams.map((team) => [team.teamId, team]) ?? []), [session]);
   const latestResult = session?.results.at(-1) ?? null;
   const shillTeamIdSet = useMemo(() => new Set(auction.shillTeamIds), [auction.shillTeamIds]);
@@ -1381,6 +1385,17 @@ export function LeagueBuilderAuctionDraft() {
           registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
         )
       : null;
+    const completionTaxContext = lotPlayer && rosterPlayersClean
+      ? {
+          currentRosterWithCandidate: [
+            ...rosterPlayers.map(toConstructionPlayer),
+            toConstructionPlayer(lotPlayer),
+          ],
+          playerById: constructionPlayerById,
+          capIdentity: team.capIdentity,
+          baseCaps: registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
+        }
+      : undefined;
 
     const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean && ownBandPriorities
       ? assembleWorthToYou({
@@ -1406,6 +1421,7 @@ export function LeagueBuilderAuctionDraft() {
           // fallbackLegalMax); null-coalesced since rosterPlayersClean can gate marginalTax off
           // independently of the sibling worthToYou gates.
           marginalTax: marginalTax ?? undefined,
+          completionTaxContext,
         })
       : undefined;
     const bidAmount = session.currentLot.highBid ?? session.currentLot.openingAsk;
@@ -1591,8 +1607,10 @@ export function LeagueBuilderAuctionDraft() {
     handleBoardReorderPosition,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
+    constructionPlayerById,
     playerById,
     publicMarket,
+    registeredPool?.luxuryCaps,
     registeredPool?.tier,
     session,
     shillTeamIdSet,

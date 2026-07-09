@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
+import { LUXURY_CAP_TABLES } from '../../data/tierParams';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import type { ChemistryTipBreakdown } from '../chemistryTierValue';
 import type { MarketBidderView, MarketLotView } from '../auctionMarketModel';
@@ -7,7 +8,7 @@ import type { CompletionCandidate } from '../auctionCompletionFloor';
 import type { Player } from '../../utils/leagueBuilderStorage';
 import type { SimPlayer } from '../archetypeBalanceSimulator';
 import type { RosterNeedBreakdown } from '../rosterNeed';
-import type { Band, BandPriorities } from '../leagueConstruction';
+import { luxuryTax, type Band, type BandPriorities, type ConstructionPlayer } from '../leagueConstruction';
 import {
   PAYLOAD_TUNING,
   assembleBoard,
@@ -35,6 +36,24 @@ const pitcher = (role: 'SP' | 'RP' | 'CP' | 'SP/RP'): RosterSlotPlayer => ({
   position: 'P',
   role,
 });
+
+const lowBat: ConstructionPlayer['bat'] = {
+  POW: 1,
+  CON: 1,
+  SPD: 1,
+  FLD: 1,
+  ARM: 1,
+};
+
+function taxPitcher(id: string, role: 'RP' | 'CP', velocity: number): ConstructionPlayer {
+  return {
+    id,
+    isPitcher: true,
+    role,
+    bat: lowBat,
+    pit: { VEL: velocity, JNK: 1, ACC: 1 },
+  };
+}
 
 const need = (overrides: Partial<RosterNeedBreakdown> = {}): RosterNeedBreakdown => ({
   missingPrimaries: [],
@@ -1133,6 +1152,62 @@ describe('roster intelligence payload assembly', () => {
       });
       expect(untaxed.suggestedMaxBid).toBe(budgetRemaining);
       expect(untaxed.suggestedMaxBid).toBeGreaterThan(worth.suggestedMaxBid);
+    });
+
+    test('TAXENGINE Item 1: suggestedMaxBid also reserves post-win completion tax', () => {
+      const candidate = player({
+        id: 'taxed-rp',
+        primaryPosition: 'RP',
+        velocity: 70,
+        junk: 1,
+        accuracy: 1,
+        power: 1,
+        contact: 1,
+        speed: 1,
+        fielding: 1,
+        arm: 1,
+        chemistry: 'Scholarly',
+      });
+      const completion = taxPitcher('completion-cp', 'CP', 88);
+      const currentRosterWithCandidate = [
+        taxPitcher('held-rp', 'RP', 70),
+        taxPitcher(candidate.id, 'RP', 70),
+      ];
+      const completionTax = luxuryTax(
+        [...currentRosterWithCandidate, completion],
+        LUXURY_CAP_TABLES.standard,
+        'taxed',
+      ).charged - luxuryTax(currentRosterWithCandidate, LUXURY_CAP_TABLES.standard, 'taxed').charged;
+      expect(completionTax).toBeGreaterThan(0);
+
+      const budgetRemaining = 200_000;
+      const marginalTax = 30_000;
+      const completionSalary = 30_000;
+      const worth = assembleWorthToYou({
+        candidate,
+        iv: 500_000,
+        rosterPlayers: [],
+        budgetRemaining,
+        rosterWithCandidate: [...GREEN_ROSTER.slice(0, 20), pitcher('RP')],
+        remainingPool: [{ id: completion.id, price: completionSalary, shape: pitcher('CP') }],
+        completionTaxContext: {
+          currentRosterWithCandidate,
+          playerById: new Map([[completion.id, completion]]),
+          baseCaps: LUXURY_CAP_TABLES.standard,
+        },
+        openSlotsAfterWin: 1,
+        ...neutralSeat({ candidateShape: pitcher('RP') }),
+        market: market({ band: { low: 10_000, median: 20_000, high: 30_000 } }),
+        marginalTax,
+      });
+
+      expect(worth.minimumFutureFillReserve).toBeCloseTo(completionSalary + completionTax, 8);
+      expect(worth.suggestedMaxBid).toBe(Math.floor(
+        budgetRemaining - completionSalary - marginalTax - completionTax,
+      ));
+      expect(budgetRemaining).toBeGreaterThanOrEqual(
+        worth.suggestedMaxBid + marginalTax + worth.minimumFutureFillReserve,
+      );
     });
   });
 
