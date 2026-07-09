@@ -1608,6 +1608,61 @@ function WhisperStyles() {
         opacity: 0.35;
         cursor: not-allowed;
       }
+      /* TEXTLAW-SWEEP Item B: these three shipped with THE BOARD tier (BOARDFIX1/2) but had no
+         rules yet -- rendered with bare browser defaults. Hard-edge treatments per
+         DRAFT_SKIN_STANDARD_2026-07-08 sec1/sec2, matching the sibling drag/arrow rules above. */
+      .auc-root .whisper-board-rank-badge {
+        appearance: none;
+        border: 2px solid var(--ballpark-panel-border);
+        border-radius: 0;
+        background: var(--ballpark-page-bg);
+        color: var(--ballpark-brass);
+        font-size: 10px;
+        font-weight: 800;
+        width: 22px;
+        padding: 2px 0;
+        text-align: center;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .auc-root .whisper-board-rank-badge:hover {
+        border-color: var(--ballpark-brass);
+      }
+      .auc-root .whisper-board-rank-badge:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .auc-root .whisper-board-rank-input {
+        border: 2px solid var(--ballpark-brass);
+        border-radius: 0;
+        background: var(--ballpark-page-bg);
+        color: var(--ballpark-chalk);
+        font-size: 10px;
+        font-weight: 800;
+        width: 30px;
+        padding: 2px 0;
+        text-align: center;
+        outline: none;
+        flex-shrink: 0;
+      }
+      .auc-root .whisper-board-send-top {
+        appearance: none;
+        border: 2px solid var(--ballpark-panel-border);
+        border-radius: 0;
+        background: transparent;
+        color: var(--ballpark-brass);
+        padding: 2px;
+        cursor: pointer;
+        flex-shrink: 0;
+        display: inline-flex;
+      }
+      .auc-root .whisper-board-send-top:hover {
+        border-color: var(--ballpark-brass);
+      }
+      .auc-root .whisper-board-send-top:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
       .auc-root .whisper-board-row.dragged { opacity: 0.5; }
       .auc-root .whisper-next-up {
         border-left: 4px solid var(--ballpark-brass);
