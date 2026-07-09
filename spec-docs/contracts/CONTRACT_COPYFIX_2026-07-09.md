@@ -31,3 +31,66 @@ File surface expectation: src/utils/leagueBuilderStorage.ts (+ its tests), src/s
 
 ## DELIVERABLE
 Commits in order: contract update (this file already committed by captain — extend, don't delete) → per-item failing-repro commit(s) BEFORE each fix → fixes → final contract update with per-item file:line evidence, repro red→green outputs, the Item 2 port provenance (cherry-pick vs manual + any adaptation), gate outputs, honestly-flagged deviations. Final message: summary + hashes + surprises.
+
+## AS-BUILT FINAL UPDATE (Codex, 2026-07-09)
+
+### Commits
+- `8e7b49c9` — `test(copyfix): reproduce league lifecycle integrity gaps`
+- `05235daa` — `fix(copyfix): repair league lifecycle integrity gaps`
+
+### Red repro evidence
+Command:
+`NODE_ENV= npx vitest run src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx src/src_figma/__tests__/leagueBuilder/LeagueBuilderTeams.test.tsx --reporter=verbose`
+
+Pre-fix result:
+- Exit 1.
+- `Test Files  3 failed (3)`
+- `Tests  6 failed | 73 passed (79)`
+- Failing COPYFIX assertions covered:
+  - `rankOverrides` dropped on duplicate: `expected undefined to deeply equal { CF: ... }`
+  - `removeTeam` left `['team-a', 'team-b']` in league membership instead of `['team-b']`
+  - load did not normalize ghost team ids
+  - post-draft pool-first duplicate did not start with empty rosters/source pool membership
+  - Duplicate League did not surface `Team not found: ghost-team`
+  - farm-session guard repro did not see a farm-session lookup/block
+
+### Green repro evidence
+Same command after fix:
+- Exit 0.
+- `Test Files  3 passed (3)`
+- `Tests  79 passed (79)`
+- Notes: pre-existing React `act(...)` warnings still print in Teams/Players page tests; no COPYFIX failures remain.
+
+### Per-item implementation evidence
+- ITEM 1 ghost team ids:
+  - Delete prune: `src/utils/leagueBuilderStorage.ts:1111-1143` spread-prunes deleted team ids from every league `teamIds` and division `teamIds`.
+  - Load heal: `src/src_figma/hooks/useLeagueBuilderData.ts:164-181` defines spread-based normalization, and `src/src_figma/hooks/useLeagueBuilderData.ts:230-243` filters loaded leagues against existing teams and persists healed rows.
+  - Visible duplicate error: `src/src_figma/app/pages/LeagueBuilderLeagues.tsx:321-328` now writes duplicate failures to the existing error banner instead of logging only.
+- ITEM 2 stranded post-draft copy fix:
+  - Provenance: manual port from audited commit `84a0a162`, not cherry-pick. Reason: the old commit also carried older docs/test bulk; this lane ported the audited runtime semantics onto current STALEPARITY-era `duplicateLeague`.
+  - Pool membership helper: `src/utils/leagueBuilderPoolBuilder.ts:241-267` copies source league assignment membership through the canonical pool writer and excludes source FARM minted prospects.
+  - Current duplicate adaptation: `src/src_figma/hooks/useLeagueBuilderData.ts:439-441` detects completed MLB auction state; `src/src_figma/hooks/useLeagueBuilderData.ts:488-499` creates empty copied rosters after a completed pool-first draft; `src/src_figma/hooks/useLeagueBuilderData.ts:549-550` seeds the copied pre-draft pool from source membership.
+  - Checked against the STALEPARITY basis clears: `poolExtractedAt`, `poolExtractedBasis`, `modeAExtractedIds`, `modeAHandAdds`, and `modeAHandRemoves` remain cleared in the duplicate seed/final copy path.
+- ITEM 3 rankOverrides:
+  - `src/src_figma/hooks/useLeagueBuilderData.ts:462-472` carries `rosterDesign.rankOverrides` via `structuredClone`, while intentionally dropping `lockedAt`; the comment documents that a copy starts editable.
+- ITEM 4 farm-session guard:
+  - `src/src_figma/app/utils/savedAuctionMutationGuard.ts:1-7` imports the farm session id/read path.
+  - `src/src_figma/app/utils/savedAuctionMutationGuard.ts:53-78` now checks both MLB and FARM saved sessions and treats any non-`AUCTION_COMPLETE` row as active with the same existing message/blocked behavior.
+
+### Gates
+- `npx tsc -b --clean && npx tsc -b --pretty false`
+  - Exit 0; no compiler output.
+- `npm run build`
+  - Exit 0.
+  - Output included existing Vite/Browserslist/chunk-size warnings; build completed with `✓ built in 16.28s` and PWA generated `183 entries`.
+- Focused League Builder sweep:
+  - Command: `NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx src/utils/tests/leagueBuilderFarmScoutingHandoff.test.ts src/utils/tests/leagueBuilderPoolUniverse.test.ts src/utils/tests/leagueBuilderPoolBuilder.handEditLedger.test.ts src/utils/tests/leagueBuilderPoolMembership.dj05.test.ts src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/leagueBuilderStorageV6Migration.test.ts --reporter=verbose`
+  - Exit 0.
+  - `Test Files  17 passed (17)`
+  - `Tests  275 passed (275)`
+  - Notes: pre-existing React `act(...)` warnings still print in Teams/Players page tests.
+
+### Registry and scope notes
+- No new IndexedDB stores, save-slot stores, backup registries, or DB version changes were added. This lane only mutates existing league/team/player/session rows through existing storage APIs.
+- Test harness mocks in `LeagueBuilderLeagues.test.tsx` and `LeagueBuilderPlayers.test.tsx` were extended to return `null` for the new farm-session lookup; this keeps existing no-saved-auction tests from failing closed by accident.
+- No auction engine, floor page, DraftSetup, or gauntlet files were touched.
