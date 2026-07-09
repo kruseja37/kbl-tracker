@@ -8,7 +8,9 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderTeams } from '../../app/pages/LeagueBuilderTeams';
-import { getAuctionSession } from '../../../utils/leagueBuilderStorage';
+import { getAuctionSession, type Team } from '../../../utils/leagueBuilderStorage';
+import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
+import { archetypeToCapIdentity } from '../../../engines/archetypeIdentity';
 
 // ============================================
 // MOCKS
@@ -277,18 +279,11 @@ describe('LeagueBuilderTeams Component', () => {
         expect(mockUpdateTeam).toHaveBeenCalledWith(
           expect.objectContaining({
             id: 'team-1',
-            capIdentity: {
-              bandPriorities: {
-                Power: 0,
-                Contact: 0,
-                Speed: 0,
-                Defense: 0,
-                Rotation: 0,
-                Bullpen: 0,
-              },
-              increase: [],
-              decrease: [],
-            },
+            // TEAMIDGUARD (2026-07-09): only the farm identity fields were touched this
+            // session, so the untouched MLB capIdentity is preserved verbatim -- team-1's
+            // fixture has no stored capIdentity, so "verbatim" is undefined, not a rebuilt
+            // default object.
+            capIdentity: undefined,
             farmCapIdentity: {
               bandPriorities: {
                 Power: 4,
@@ -507,6 +502,224 @@ describe('LeagueBuilderTeams Component', () => {
 
       render(<LeagueBuilderTeams />);
       expect(screen.getByText('No Teams Yet')).toBeInTheDocument();
+    });
+  });
+
+  // ============================================
+  // TEAMIDGUARD (2026-07-09): one writer for tax identity.
+  // ============================================
+  describe('Cap Identity Guard (archetype-owned teams)', () => {
+    const murderersRow = HISTORICAL_ARCHETYPES.find((a) => a.id === 'murderers-row')!;
+    const archetypeCapIdentity = archetypeToCapIdentity(murderersRow);
+
+    const basePlainTeam = {
+      abbreviation: 'PLN',
+      location: 'Plainville',
+      nickname: 'Plainers',
+      stadium: 'Plain Field',
+      colors: { primary: '#222222', secondary: '#FFFFFF' },
+      championships: 0,
+      leagueIds: [],
+    };
+
+    const buildArchetypeTeam = (): Team => ({
+      id: 'team-3',
+      name: 'Gotham Grays',
+      abbreviation: 'GG',
+      location: 'Gotham',
+      nickname: 'Grays',
+      stadium: 'Gray Field',
+      colors: { primary: '#111111', secondary: '#EEEEEE' },
+      championships: 0,
+      leagueIds: [],
+      mlbArchetypeKey: murderersRow.id,
+      capIdentity: archetypeCapIdentity,
+    });
+
+    const mockTeamsData = async (teams: Team[]) => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      vi.mocked(useLeagueBuilderData).mockReturnValue({
+        teams,
+        leagues: [],
+        players: [],
+        rulesPresets: [],
+        isLoading: false,
+        error: null,
+        createTeam: mockCreateTeam,
+        updateTeam: mockUpdateTeam,
+        removeTeam: mockRemoveTeam,
+        createLeague: vi.fn(),
+        updateLeague: vi.fn(),
+        removeLeague: vi.fn(),
+        duplicateLeague: vi.fn(),
+        createPlayer: vi.fn(),
+        updatePlayer: vi.fn(),
+        removePlayer: vi.fn(),
+        createRulesPreset: vi.fn(),
+        updateRulesPreset: vi.fn(),
+        removeRulesPreset: vi.fn(),
+        refresh: vi.fn(),
+      });
+    };
+
+    test('REPRO: name-only save on an archetype-owned team preserves capIdentity byte-identical (including rawShift)', async () => {
+      const team = buildArchetypeTeam();
+      await mockTeamsData([team]);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      const nameInput = await screen.findByDisplayValue('Gotham Grays');
+      fireEvent.change(nameInput, { target: { value: 'Gotham Grays Renamed' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-3',
+            name: 'Gotham Grays Renamed',
+            capIdentity: archetypeCapIdentity,
+          }),
+        );
+      });
+
+      // rawShift specifically must have survived (this is the field the legacy rebuild drops).
+      const call = mockUpdateTeam.mock.calls.find(
+        ([arg]) => arg && arg.id === 'team-3' && arg.name === 'Gotham Grays Renamed',
+      );
+      expect(call?.[0].capIdentity.rawShift).toEqual(archetypeCapIdentity.rawShift);
+    });
+
+    test('(a) archetype-owned team renders a read-only cap identity section with the actual archetype shift', async () => {
+      const team = buildArchetypeTeam();
+      await mockTeamsData([team]);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      const readonlySection = await screen.findByTestId('cap-identity-readonly');
+      expect(readonlySection).toHaveTextContent(murderersRow.name);
+      expect(readonlySection).toHaveTextContent('Set by archetype — change it in Draft Setup.');
+
+      // The actual archetype shift (POW +7.5%, CON +10.0%, SPD -18.0%) renders -- not the
+      // coarse CAP_MODIFICATION_FRACTIONS approximation.
+      expect(readonlySection).toHaveTextContent('POW');
+      expect(readonlySection).toHaveTextContent('+7.5%');
+      expect(readonlySection).toHaveTextContent('CON');
+      expect(readonlySection).toHaveTextContent('+10.0%');
+      expect(readonlySection).toHaveTextContent('SPD');
+      expect(readonlySection).toHaveTextContent('-18.0%');
+
+      // No editable controls -- attempted interaction is structurally impossible.
+      expect(readonlySection.querySelectorAll('input, select, button').length).toBe(0);
+      expect(screen.queryByRole('button', { name: /Suggest from priorities/i })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('increase cap modification 1')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('decrease cap modification 1')).not.toBeInTheDocument();
+
+      // Save (no edits at all) still preserves capIdentity byte-identical.
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'team-3', capIdentity: archetypeCapIdentity }),
+        );
+      });
+    });
+
+    test('(b) non-archetype team: name-only save preserves capIdentity verbatim (undefined stays undefined)', async () => {
+      const team: Team = { ...basePlainTeam, id: 'team-4', name: 'Plain Team' };
+      await mockTeamsData([team]);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      const nameInput = await screen.findByDisplayValue('Plain Team');
+      fireEvent.change(nameInput, { target: { value: 'Plain Team Renamed' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-4',
+            name: 'Plain Team Renamed',
+            capIdentity: undefined,
+          }),
+        );
+      });
+    });
+
+    test('(c) non-archetype team: a genuine MLB identity edit rebuilds capIdentity via the existing legacy math', async () => {
+      const team: Team = { ...basePlainTeam, id: 'team-5', name: 'Edited Team' };
+      await mockTeamsData([team]);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      await screen.findByDisplayValue('Edited Team');
+      fireEvent.change(screen.getByLabelText('increase cap modification 1'), {
+        target: { value: 'POW' },
+      });
+      fireEvent.change(screen.getByLabelText('decrease cap modification 1'), {
+        target: { value: 'ARM' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-5',
+            capIdentity: {
+              bandPriorities: {
+                Power: 0,
+                Contact: 0,
+                Speed: 0,
+                Defense: 0,
+                Rotation: 0,
+                Bullpen: 0,
+              },
+              increase: ['POW'],
+              decrease: ['ARM'],
+            },
+          }),
+        );
+      });
+    });
+
+    test('(d) non-archetype team: rawShift on a stored capIdentity survives an untouched load-save round trip', async () => {
+      const rawShiftIdentity = {
+        increase: ['POW'],
+        decrease: ['SPD'],
+        rawShift: {
+          POW: 0.033, CON: 0, SPD: -0.041, FLD: 0, ARM: 0,
+          RVEL: 0, RJNK: 0, RACC: 0, PVEL: 0, PJNK: 0, PACC: 0,
+        },
+      };
+      const team: Team = {
+        ...basePlainTeam,
+        id: 'team-6',
+        name: 'Legacy Team',
+        capIdentity: rawShiftIdentity,
+      };
+      await mockTeamsData([team]);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+
+      const nameInput = await screen.findByDisplayValue('Legacy Team');
+      fireEvent.change(nameInput, { target: { value: 'Legacy Team Renamed' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: 'team-6',
+            capIdentity: rawShiftIdentity,
+          }),
+        );
+      });
     });
   });
 
