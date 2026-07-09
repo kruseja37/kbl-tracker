@@ -3,9 +3,12 @@ import { afterEach, describe, expect, test } from "vitest";
 
 import {
   OnTheClockBanner,
+  TEXT_TONE_RGB,
+  contrastRatio,
   onTheClockCopy,
   onTheClockTextTone,
   parseHexColor,
+  relativeLuminance,
   type OnTheClockCopyInput,
 } from "../onTheClockBanner";
 
@@ -36,17 +39,61 @@ describe("parseHexColor", () => {
   });
 });
 
-describe("onTheClockTextTone -- both extremes", () => {
-  test("white background -> near-black (ink) text", () => {
+describe("relativeLuminance / contrastRatio -- WCAG anchors", () => {
+  test("white is 1.0, black is 0.0", () => {
+    expect(relativeLuminance([255, 255, 255])).toBeCloseTo(1.0, 5);
+    expect(relativeLuminance([0, 0, 0])).toBeCloseTo(0.0, 5);
+  });
+
+  test("white-on-black is the maximum 21:1, order-independent", () => {
+    expect(contrastRatio([255, 255, 255], [0, 0, 0])).toBeCloseTo(21, 3);
+    expect(contrastRatio([0, 0, 0], [255, 255, 255])).toBeCloseTo(21, 3);
+  });
+
+  test("a color against itself is 1:1", () => {
+    expect(contrastRatio([255, 102, 0], [255, 102, 0])).toBeCloseTo(1, 5);
+  });
+});
+
+describe("onTheClockTextTone -- FLOORREFIT R2: direct contrast comparison, never a threshold", () => {
+  // The R2 ruling's core law: for EVERY band color, the chosen tone must be the HIGHER-contrast
+  // one of the two candidates, and for this palette (which deliberately includes the app's default
+  // team orange #FF6600 and mid-green #4CAF50 -- the exact mid-luminance colors the old
+  // luminance>0.5 threshold got WRONG) the winning ratio must clear WCAG AA 4.5:1.
+  const palette: Array<{ hex: string; label: string }> = [
+    { hex: "#FF6600", label: "the app's default team orange" },
+    { hex: "#4CAF50", label: "mid-green" },
+    { hex: "#005A9C", label: "mid-blue" },
+    { hex: "#FFFFFF", label: "pure white (light extreme)" },
+    { hex: "#000000", label: "pure black (dark extreme)" },
+  ];
+
+  test.each(palette)("$hex ($label): picks the higher-contrast tone and its COMPUTED ratio is >= 4.5", ({ hex }) => {
+    const band = parseHexColor(hex)!;
+    const tone = onTheClockTextTone(hex)!;
+    const chosenRatio = contrastRatio(band, TEXT_TONE_RGB[tone]);
+    const otherTone = tone === "ink" ? "chalk" : "ink";
+    const otherRatio = contrastRatio(band, TEXT_TONE_RGB[otherTone]);
+
+    expect(chosenRatio).toBeGreaterThanOrEqual(otherRatio); // the direct-comparison law itself
+    expect(chosenRatio).toBeGreaterThanOrEqual(4.5); // WCAG AA -- "no unreadable band ever"
+  });
+
+  test("the default team orange #FF6600 now picks ink (the old >0.5 threshold picked chalk at ~2.4:1; ink gives ~5.9:1)", () => {
+    expect(onTheClockTextTone("#FF6600")).toBe("ink");
+  });
+
+  test("mid-green #4CAF50 picks ink (the other color the audit flagged)", () => {
+    expect(onTheClockTextTone("#4CAF50")).toBe("ink");
+  });
+
+  test("mid-blue #005A9C picks chalk (ink only reaches ~2.4:1 there; chalk gives ~5.8:1)", () => {
+    expect(onTheClockTextTone("#005A9C")).toBe("chalk");
+  });
+
+  test("white background -> ink text; black background -> chalk text (the extremes)", () => {
     expect(onTheClockTextTone("#FFFFFF")).toBe("ink");
-  });
-
-  test("black background -> chalk (light) text", () => {
     expect(onTheClockTextTone("#000000")).toBe("chalk");
-  });
-
-  test("a mid-bright team color (SMB4 orange, relative luminance ~0.31) -> chalk", () => {
-    expect(onTheClockTextTone("#FF6600")).toBe("chalk");
   });
 
   test("a dark navy team color -> chalk", () => {
@@ -59,17 +106,17 @@ describe("onTheClockTextTone -- both extremes", () => {
   });
 });
 
-describe("onTheClockCopy -- the ladder (design doc §2 bullet 1), first match wins", () => {
+describe("onTheClockCopy -- FLOORREFIT R3: the three-branch ladder, first match wins", () => {
   const base: OnTheClockCopyInput = {
     teamName: "Page Caps",
     turnKind: "bid",
     actingTeamIsCpu: false,
-    isViewerSeat: false,
     calmWaitText: "Page Caps — raise or pass",
   };
 
-  test("CPU/shill turn always renders the existing calm-wait copy, regardless of other flags", () => {
-    expect(onTheClockCopy({ ...base, actingTeamIsCpu: true, isViewerSeat: true })).toBe(
+  test("CPU/shill turn always renders the existing calm-wait copy, regardless of turnKind", () => {
+    expect(onTheClockCopy({ ...base, actingTeamIsCpu: true })).toBe("Page Caps — raise or pass");
+    expect(onTheClockCopy({ ...base, actingTeamIsCpu: true, turnKind: "nomination" })).toBe(
       "Page Caps — raise or pass",
     );
   });
@@ -79,35 +126,18 @@ describe("onTheClockCopy -- the ladder (design doc §2 bullet 1), first match wi
     expect(onTheClockCopy({ ...base, teamName: "   " })).toBe("Page Caps — raise or pass");
   });
 
-  test("the viewer's own seat gets the personal YOU'RE UP copy, regardless of turnKind", () => {
-    expect(onTheClockCopy({ ...base, isViewerSeat: true, turnKind: "bid" })).toBe("YOU'RE UP — PAGE CAPS");
-    expect(onTheClockCopy({ ...base, isViewerSeat: true, turnKind: "nomination" })).toBe(
-      "YOU'RE UP — PAGE CAPS",
+  test("a human bid turn reads YOU'RE UP — {TEAM}", () => {
+    expect(onTheClockCopy({ ...base, turnKind: "bid" })).toBe("YOU'RE UP — PAGE CAPS");
+  });
+
+  test("a human nomination turn reads YOU'RE UP — {TEAM} — NOMINATE (R3: reachable, not dead)", () => {
+    expect(onTheClockCopy({ ...base, turnKind: "nomination" })).toBe(
+      "YOU'RE UP — PAGE CAPS — NOMINATE",
     );
   });
 
-  // These two branches document the generic (non-viewer, non-CPU) copy the ladder defines --
-  // per the FLOORREFIT contract's honest finding, today's callers always pass
-  // isViewerSeat = !actingTeamIsCpu, so in practice every non-CPU turn takes the YOU'RE UP branch
-  // above and these two are unreached in production. Kept independently testable (isViewerSeat is
-  // a real, separate parameter) so the ladder is verifiably correct end to end, not just for the
-  // combinations the current human/CPU-only data model happens to produce.
-  test("a non-viewer bid turn reads TEAM IS ON THE CLOCK", () => {
-    expect(onTheClockCopy({ ...base, isViewerSeat: false, turnKind: "bid" })).toBe(
-      "PAGE CAPS IS ON THE CLOCK",
-    );
-  });
-
-  test("a non-viewer nomination turn reads TEAM TO NOMINATE", () => {
-    expect(onTheClockCopy({ ...base, isViewerSeat: false, turnKind: "nomination" })).toBe(
-      "PAGE CAPS TO NOMINATE",
-    );
-  });
-
-  test("a non-viewer turn with no turnKind (SOLD/PASSED transitional states) defaults to IS ON THE CLOCK", () => {
-    expect(onTheClockCopy({ ...base, isViewerSeat: false, turnKind: undefined })).toBe(
-      "PAGE CAPS IS ON THE CLOCK",
-    );
+  test("a human turn with no turnKind (SOLD/PASSED transitional states) reads the plain bid form", () => {
+    expect(onTheClockCopy({ ...base, turnKind: undefined })).toBe("YOU'RE UP — PAGE CAPS");
   });
 });
 
@@ -132,12 +162,12 @@ describe("OnTheClockBanner component", () => {
     expect(banner.className).not.toContain("otc-fallback");
   });
 
-  test("renders team-colored band with ink text tone on a light team color", () => {
+  test("renders ink text on the default team orange (R2: the color the old threshold got wrong)", () => {
     render(
       <OnTheClockBanner
         status={{
           teamName: "Sun Devils",
-          teamPrimary: "#FFFFFF",
+          teamPrimary: "#FF6600",
           teamSecondary: "#000000",
           turnKind: "bid",
           actingTeamIsCpu: false,
@@ -147,6 +177,24 @@ describe("OnTheClockBanner component", () => {
     );
     const banner = screen.getByTestId("on-the-clock-banner");
     expect(banner.className).toContain("otc-ink-text");
+  });
+
+  test("a human nomination turn renders the R3 NOMINATE variant", () => {
+    render(
+      <OnTheClockBanner
+        status={{
+          teamName: "Page Caps",
+          teamPrimary: "#001489",
+          teamSecondary: "#FFFFFF",
+          turnKind: "nomination",
+          actingTeamIsCpu: false,
+          nowText: "Page Caps — surface next lot",
+        }}
+      />,
+    );
+    expect(screen.getByTestId("on-the-clock-banner")).toHaveTextContent(
+      "YOU'RE UP — PAGE CAPS — NOMINATE",
+    );
   });
 
   test("falls back to the brass-on-ink band when team colors are missing/unpopulated", () => {

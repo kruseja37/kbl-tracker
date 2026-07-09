@@ -27,19 +27,46 @@ export function parseHexColor(value: string | undefined | null): [number, number
   return null;
 }
 
-/** WCAG relative luminance -> a two-way text tone choice. `"ink"` (near-black) reads on light
- * backgrounds, `"chalk"` (the ballpark light text) reads on dark backgrounds. Returns null when the
+/** The two candidate text tones, as the literal RGB values behind the CSS the banner applies:
+ * `chalk` = #E8E8D8 (`--ballpark-chalk`, the `.otc-team` default color) and `ink` = #1A1A1A (the
+ * `.otc-ink-text` override). Exported so tests can assert the COMPUTED contrast of the chosen tone,
+ * not merely which class was picked. If the CSS tones ever change, change these with them. */
+export const TEXT_TONE_RGB: Record<"ink" | "chalk", [number, number, number]> = {
+  ink: [26, 26, 26], // #1A1A1A
+  chalk: [232, 232, 216], // #E8E8D8
+};
+
+/** WCAG 2.x relative luminance of an sRGB color. */
+export function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const linear = [r, g, b].map((channel) => {
+    const s = channel / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+/** WCAG 2.x contrast ratio between two colors (order-independent, 1..21). */
+export function contrastRatio(a: [number, number, number], b: [number, number, number]): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Text-tone choice for the banner: computes the WCAG contrast ratio of BOTH candidate tones
+ * (chalk and near-black ink) against the band color and picks the higher -- a direct comparison,
+ * never a luminance threshold (FLOORREFIT R2: a 0.5 threshold picked the LOWER-contrast tone for
+ * the whole mid-luminance window, e.g. chalk at 2.4:1 on the default team orange #FF6600 when ink
+ * gives 5.9:1 -- a violation of the design's "no unreadable band ever" law). Returns null when the
  * input isn't a real hex color -- the banner falls back to the brass-on-ink band in that case
  * rather than guessing a tone for a CSS var it can't evaluate. */
 export function onTheClockTextTone(hex: string | undefined | null): "ink" | "chalk" | null {
   const rgb = parseHexColor(hex);
   if (!rgb) return null;
-  const linear = rgb.map((channel) => {
-    const s = channel / 255;
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-  });
-  const luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-  return luminance > 0.5 ? "ink" : "chalk";
+  return contrastRatio(rgb, TEXT_TONE_RGB.ink) >= contrastRatio(rgb, TEXT_TONE_RGB.chalk)
+    ? "ink"
+    : "chalk";
 }
 
 export interface OnTheClockCopyInput {
@@ -49,26 +76,22 @@ export interface OnTheClockCopyInput {
   turnKind?: "bid" | "nomination";
   /** Whether the acting team is CPU/shill-controlled. */
   actingTeamIsCpu: boolean;
-  /** Whether the acting team is the seat the local device/browser is currently playing --
-   * per the app's existing pass-the-device convention (see WhisperPanel's HELP_LINE: "the club on
-   * the clock" already means "you" whenever it's a human turn), the only signal available today is
-   * the human/CPU split, so call sites pass `!actingTeamIsCpu`. Kept as an explicit, independent
-   * parameter (rather than derived inside this function) so the full 4-branch ladder stays testable
-   * even though today's callers only ever exercise 2 of the 4 branches -- see the FLOORREFIT
-   * contract's honest finding on this. */
-  isViewerSeat: boolean;
   /** The existing calm-wait text (today's `status.nowText`) -- reused verbatim for CPU turns and as
    * the safe default when no acting team is resolvable. */
   calmWaitText: string;
 }
 
-/** COCKPIT-adjacent copy ladder, first match wins (design doc §2 bullet 1): */
+/** The copy ladder, first match wins (FLOORREFIT R3 ruling): every human turn is the viewer's turn
+ * under the app's pass-the-device convention (WhisperPanel's HELP_LINE: "the club on the clock"
+ * already means "you" for any human turn), so the ladder has exactly three live branches -- CPU/
+ * unresolvable -> calm-wait, human nomination -> "YOU'RE UP — {TEAM} — NOMINATE", human bid ->
+ * "YOU'RE UP — {TEAM}". The original 4-branch ladder's non-viewer branches ("{TEAM} IS ON THE
+ * CLOCK" / "{TEAM} TO NOMINATE") were unreachable for humans and are DELETED per the R3 ruling. */
 export function onTheClockCopy(input: OnTheClockCopyInput): string {
   const name = input.teamName?.trim();
   if (!name || input.actingTeamIsCpu) return input.calmWaitText;
-  if (input.isViewerSeat) return `YOU'RE UP — ${name.toUpperCase()}`;
-  if (input.turnKind === "nomination") return `${name.toUpperCase()} TO NOMINATE`;
-  return `${name.toUpperCase()} IS ON THE CLOCK`;
+  if (input.turnKind === "nomination") return `YOU'RE UP — ${name.toUpperCase()} — NOMINATE`;
+  return `YOU'RE UP — ${name.toUpperCase()}`;
 }
 
 export interface OnTheClockBannerStatus {
@@ -81,12 +104,10 @@ export interface OnTheClockBannerStatus {
 }
 
 export function OnTheClockBanner({ status }: { status: OnTheClockBannerStatus }) {
-  const actingTeamIsCpu = Boolean(status.actingTeamIsCpu);
   const copy = onTheClockCopy({
     teamName: status.teamName,
     turnKind: status.turnKind,
-    actingTeamIsCpu,
-    isViewerSeat: !actingTeamIsCpu,
+    actingTeamIsCpu: Boolean(status.actingTeamIsCpu),
     calmWaitText: status.nowText,
   });
 
