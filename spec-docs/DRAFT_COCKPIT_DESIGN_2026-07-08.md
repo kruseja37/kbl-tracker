@@ -99,3 +99,19 @@ SEQUENCING (as-executed at ratification): W1c dispatched first (WT-D lane, in fl
 3. **Farm chemistry-fit chip** — RESOLVED YES, build-dark first, JK feel-gates.
 
 *(SOT updates on ratification: V1_BUILD_STATUS §5 refresh — its S5 body is stale per the sweep — and UI_TRUTH_MAP rows for the whisper/stage. Scribe books.)*
+
+
+## §2.6 THE LIVE CALL (captain amendment 2026-07-08 — post-audit, BINDING)
+The Tier-1 verdict strip, the headline sentence, and the live-bid fine print become ONE computation — a live ladder evaluated in the ENGINE (shared MLB/farm) from numbers the payload already carries. No new math: pure comparisons.
+**Inputs (all existing):** nextBid (already passed in), worth.recommendedNumber (YOUR NUMBER), worth.suggestedMaxBid (THE one ceiling, F9), liquidity nextBidAllowed, strategic verdict (push/cap/pass — worthVerdict UNCHANGED), plus one new threaded boolean: seatIsHighBidder (current lot's high bidder === the advised seat).
+**Ladder (first match wins):**
+1. seatIsHighBidder -> `lead` — strip ON TOP · "You're on top at $X — sit tight."
+2. strategic verdict = pass OR nextBid unaffordable/not allowed -> `out` — strip WALK · existing walk copy.
+3. nextBid <= recommendedNumber -> `push` — strip PUSH · "Go get him — worth about $N to you." (+ bargain flavor when the existing priceRead = value — this is where the ratified VALUE word finally renders).
+4. nextBid <= suggestedMaxBid -> `stretch` — strip CAP $ceiling · "Past your number — only if you mean it."
+5. else -> `out` — strip WALK · "Past your ceiling — let him go."
+**Single-source law:** strip word, headline, and the live-bid line all derive from the ladder state. The component-local comparison that produced the old "past your number" line is DELETED — the panel can never contradict itself again. F9 (one ceiling) extends to the ladder: thresholds 3/4 must cite recommendedNumber/suggestedMaxBid verbatim, test-locked. Farm floor inherits via the shared engine + panel; all farm comparisons stay against fog-safe displayed numbers (fog law §2.5 unchanged).
+
+## §2.7 Reason priority + payload hygiene (captain amendment 2026-07-08 — post-audit, BINDING)
+**Reason priority:** the Tier-1 "one reason phrase" must be the top reason by RULED PRIORITY, not string order. Ladder: hard blockers (ceiling/budget violations) > liquidity emergencies (emergency-fill class) > scarcity (scarce-replacement) > fit/need (priority-fit, need class) > informational (within-ceiling, surplus, mechanical). The existing hand-ordered Set insertion in the engine encodes this intent — the comparator makes it explicit and a test locks it.
+**Payload hygiene (cockpit principle 4 — no dead freight):** drop worth.chemistry (raw breakdown) and scarcityModifier from the payload; delete the dead per-lot team.projectedTax compute (TRUE COST correctly uses the marginal path); surface replacementValueEstimate in the scarcity chip tap-through ("next-best replacement ~$X"); the stage market banner consumes the SAME per-seat market read the whisper payload carries when a human seat is active (one computation, no latent divergence). Lot log joins the popover law: LogItemVM gains playerId, names tappable on both floors, farm fog-gated.
