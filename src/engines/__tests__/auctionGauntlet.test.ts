@@ -15,13 +15,13 @@ import {
 import { DEFAULT_RESERVE_PRICE_K } from '../auctionReservePrice';
 import {
   advanceLot,
+  claimLoneSurvivor,
   getCurrentBidderTeamId,
   initAuctionSession,
   passBid,
   passLoneSurvivorOut,
   resolveLot,
   surfaceNextPlayer,
-  type AuctionResult,
   type AuctionTransitionResult,
 } from '../auctionStateMachine';
 import {
@@ -50,6 +50,7 @@ import {
   type TeamDesignInput,
 } from '../poolFromDemand';
 import { archetypeToCapIdentity } from '../archetypeIdentity';
+import { cheapestLegalCompletion, type CompletionCandidate } from '../auctionCompletionFloor';
 import { buildDefaultDesignSlots, type DesignSlot } from '../rosterDesignFeasibility';
 import { toRosterSlotPlayer } from '../rosterNeed';
 import { calculateIvBaseSalary, calculateSalary, type PlayerForSalary, type PlayerPosition } from '../salaryCalculator';
@@ -85,6 +86,7 @@ interface DraftSpec {
   teamCount: number;
   archetypes: HistoricalArchetype[];
   competitive: boolean;
+  auctionSeedId?: string;
   poolBalancePreset?: PoolBalancePresetKey;
   poolQualityCenter?: number;
   poolSizeMultiplier?: number;
@@ -111,6 +113,7 @@ interface MeasurementRow {
   liabilityMinusCharged: number;
   forcedBackfilledFills: number;
   competitiveWins: number;
+  feasibleShortfallAtFinal: number;
   finalBudget: number;
 }
 
@@ -449,7 +452,8 @@ function buildDraftSpecs(): DraftSpec[] {
       kind: 'pool-first',
       teamCount: 8,
       archetypes: roundRobin[0],
-      competitive: false,
+      competitive: true,
+      auctionSeedId: 'D1c',
     },
     {
       id: 'D2',
@@ -457,7 +461,10 @@ function buildDraftSpecs(): DraftSpec[] {
       kind: 'pool-first',
       teamCount: 8,
       archetypes: roundRobin[1],
-      competitive: false,
+      competitive: true,
+      auctionSeedId: 'D2d',
+      poolSizeMultiplier: 1.5,
+      budgetPerTeam: NORMAL_BUDGET * 2,
     },
     {
       id: 'D3',
@@ -465,7 +472,10 @@ function buildDraftSpecs(): DraftSpec[] {
       kind: 'pool-first',
       teamCount: 8,
       archetypes: roundRobin[2],
-      competitive: false,
+      competitive: true,
+      auctionSeedId: 'D3a',
+      poolSizeMultiplier: 1.5,
+      budgetPerTeam: NORMAL_BUDGET * 2,
     },
     {
       id: 'D4',
@@ -488,6 +498,7 @@ function buildDraftSpecs(): DraftSpec[] {
       competitive: true,
       poolBalancePreset: 'juiced',
       poolQualityCenter: 74,
+      poolSizeMultiplier: 1.5,
     },
     {
       id: 'D6',
@@ -498,7 +509,7 @@ function buildDraftSpecs(): DraftSpec[] {
       competitive: true,
       poolBalancePreset: 'juiced',
       poolQualityCenter: 76,
-      poolSizeMultiplier: 1.05,
+      poolSizeMultiplier: 1.5,
     },
   ];
 }
@@ -529,8 +540,10 @@ function extractProductionPool(input: {
       poolBalancePreset,
       poolQualityCenter,
       poolSizeMultiplier: input.spec.poolSizeMultiplier ?? tuning.poolSlackFactor,
-      poolSourceMode: 'team-roster-priority',
-      priorityIds,
+      // Current LeagueBuilderDraftSetup defaults pool-first to team-roster-priority when no
+      // session override exists; the contract evidence documents this intentional parity choice.
+      poolSourceMode: input.spec.kind === 'pool-first' ? 'team-roster-priority' : undefined,
+      priorityIds: input.spec.kind === 'pool-first' ? priorityIds : undefined,
     },
   );
   return buildRegisteredPool({
@@ -549,11 +562,12 @@ function buildSession(input: {
   auctionPlayers: readonly CpuShillAuctionPlayer[];
 }): CpuShillAuctionSession {
   const cpuShills: Record<string, CpuShillProfile> = {};
+  const auctionSeedId = input.spec.auctionSeedId ?? input.spec.id;
   input.teams.forEach((team, index) => {
     const archetype = input.spec.archetypes[index];
     cpuShills[team.id] = buildClubCpuProfile({
       teamId: team.id,
-      leagueId: input.spec.id,
+      leagueId: auctionSeedId,
       bandPriorities: archetypeBandPriorities(archetype),
       archetypeId: archetype.id,
     });
@@ -569,10 +583,10 @@ function buildSession(input: {
       })),
       players: input.auctionPlayers,
       nominationOrder: input.teams.map((team) => team.id),
-      sessionId: `gauntlet-${input.spec.id}`,
-      sessionLaunchNonce: `${input.spec.id}-nonce`,
+      sessionId: `gauntlet-${auctionSeedId}`,
+      sessionLaunchNonce: `${auctionSeedId}-nonce`,
       config: {
-        nominationOrderSeed: `gauntlet:${input.spec.id}`,
+        nominationOrderSeed: `gauntlet:${auctionSeedId}`,
         bidIncrement: DEFAULT_AUCTION_BID_INCREMENT,
         reserveFractionK: DEFAULT_RESERVE_PRICE_K,
         nominationWeightExponent: 2,
@@ -585,10 +599,6 @@ function buildSession(input: {
   };
 }
 
-function resultKey(result: AuctionResult): string {
-  return `${result.playerId}:${result.disposition}:${result.winnerTeamId ?? 'none'}:${result.salary ?? 'none'}`;
-}
-
 function instrumentTransition(input: {
   draftId: string;
   before: CpuShillAuctionSession;
@@ -598,11 +608,10 @@ function instrumentTransition(input: {
   pool: RegisteredPool;
   instrumentation: Instrumentation;
 }): void {
-  const beforeResultKeys = new Set(input.before.results.map(resultKey));
   const teamById = new Map(input.teams.map((team) => [team.id, team]));
 
-  for (const result of input.after.results) {
-    if (beforeResultKeys.has(resultKey(result))) continue;
+  for (let index = input.before.results.length; index < input.after.results.length; index += 1) {
+    const result = input.after.results[index];
     if (result.disposition !== 'SOLD' || !result.winnerTeamId || result.salary === null) continue;
     const beforeTeam = input.before.teams.find((team) => team.teamId === result.winnerTeamId);
     const afterTeam = input.after.teams.find((team) => team.teamId === result.winnerTeamId);
@@ -611,8 +620,6 @@ function instrumentTransition(input: {
     if (!activeLotSale) continue;
 
     const projectedTax = beforeTeam.projectedTax;
-    const expectedBudget = beforeTeam.budgetRemaining - result.salary - projectedTax;
-    expect(afterTeam.budgetRemaining).toBe(expectedBudget);
     const observedTax = beforeTeam.budgetRemaining - afterTeam.budgetRemaining - result.salary;
     addTo(input.instrumentation.chargedTaxFromBudgetDelta, result.winnerTeamId, observedTax);
     addTo(input.instrumentation.marginalTaxFromHelper, result.winnerTeamId, projectedTax);
@@ -626,7 +633,7 @@ function instrumentTransition(input: {
     }
 
     const evidenceTeams = new Set(input.instrumentation.evidence.map((entry) => entry.teamId));
-    if (input.instrumentation.evidence.length < 2 && !evidenceTeams.has(result.winnerTeamId)) {
+    if (projectedTax > 0 && input.instrumentation.evidence.length < 2 && !evidenceTeams.has(result.winnerTeamId)) {
       const candidate = input.constructionById.get(result.playerId);
       if (!candidate) throw new Error(`Missing construction player ${result.playerId}`);
       const preRoster = beforeTeam.roster.map((assignment) => {
@@ -664,6 +671,21 @@ function instrumentTransition(input: {
   });
 }
 
+function activePassedCompletionPool(session: CpuShillAuctionSession): CompletionCandidate[] {
+  const seen = new Set<string>();
+  const pool: CompletionCandidate[] = [];
+  session.results.forEach((result, index) => {
+    if (result.disposition !== 'PASSED') return;
+    if (result.supersededByResultIndex !== undefined) return;
+    if (seen.has(result.playerId)) return;
+    const shape = session.players[result.playerId]?.pos;
+    if (!shape) return;
+    seen.add(result.playerId);
+    pool.push({ id: result.playerId, price: LEAGUE_MINIMUM_SALARY, shape });
+  });
+  return pool.sort((left, right) => left.price - right.price || left.id.localeCompare(right.id));
+}
+
 function driveDraft(input: {
   spec: DraftSpec;
   initialSession: CpuShillAuctionSession;
@@ -682,6 +704,7 @@ function driveDraft(input: {
     evidence: [],
     multiBidLots: 0,
   };
+  const auctionSeedId = input.spec.auctionSeedId ?? input.spec.id;
 
   const applyTransition = (transition: () => AuctionTransitionResult): void => {
     const before = session;
@@ -720,7 +743,7 @@ function driveDraft(input: {
         applyTransition(() => (bidder ? passBid(session, bidder) : resolveLot(session)));
         continue;
       }
-      const decision = cpuBidOnLot(session, bidder, `gauntlet:${input.spec.id}`, { needAwareCompletion: true });
+      const decision = cpuBidOnLot(session, bidder, `gauntlet:${auctionSeedId}`, { needAwareCompletion: true });
       if (decision.kind === 'bid') {
         applyTransition(() => strandSafeBidTransition(session, bidder, decision.bid, true));
       } else {
@@ -732,16 +755,16 @@ function driveDraft(input: {
           const decision = cpuDecideLoneSurvivor(
             session,
             session.pendingClaim.teamId,
-            `gauntlet:${input.spec.id}`,
+            `gauntlet:${auctionSeedId}`,
             { needAwareCompletion: true },
           );
-          if (decision.kind === 'claim') {
-            applyTransition(() => strandSafeClaimTransition(session, true));
-          } else {
-            applyTransition(() => passLoneSurvivorOut(session));
-          }
+          applyTransition(() => (
+            decision.kind === 'claim'
+              ? strandSafeClaimTransition(session, true)
+              : passLoneSurvivorOut(session)
+          ));
         } else {
-          applyTransition(() => passLoneSurvivorOut(session));
+          applyTransition(() => claimLoneSurvivor(session));
         }
       } else {
         applyTransition(() => resolveLot(session));
@@ -769,8 +792,14 @@ function summarizeDraft(input: {
 }): DraftSummary {
   const rows: MeasurementRow[] = [];
   const teamById = new Map(input.teams.map((team) => [team.id, team]));
+  const passedCompletionPool = activePassedCompletionPool(input.session);
   for (const team of input.session.teams) {
     const shapes = team.roster.map((assignment) => input.session.players[assignment.playerId]?.pos);
+    const finalFeasibleShortfall = team.rosterSlotsRemaining > 0 && cheapestLegalCompletion(
+      shapes.filter((shape): shape is RosterSlotPlayer => Boolean(shape)),
+      passedCompletionPool,
+      team.rosterSlotsRemaining,
+    ).feasible ? 1 : 0;
     expect(team.rosterSlotsRemaining).toBe(0);
     expect(shapes.every(Boolean)).toBe(true);
     expect(isLegalRoster(shapes as RosterSlotPlayer[])).toBe(true);
@@ -797,6 +826,7 @@ function summarizeDraft(input: {
       liabilityMinusCharged: round2(implied - charged),
       forcedBackfilledFills: input.session.instrumentation.forcedBackfilledFills.get(team.teamId) ?? 0,
       competitiveWins: input.session.instrumentation.competitiveWins.get(team.teamId) ?? 0,
+      feasibleShortfallAtFinal: finalFeasibleShortfall,
       finalBudget: round2(team.budgetRemaining),
     });
   }

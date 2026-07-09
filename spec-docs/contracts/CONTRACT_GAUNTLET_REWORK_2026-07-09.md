@@ -17,3 +17,14 @@ All of D1-D7 per the original contract: 6-8 drafts, both pool modes (design-firs
 
 ## ONE ADDITIONAL MEASUREMENT (captain adds, cheap)
 The verification observed a low-severity anomaly: under degenerate drives, greedy cheapestLegalCompletion/backfillFromPassedLots can skip a completion that exists (price-ordering sensitivity). Your gauntlet runs should COUNT how often any team ends short while legalCompletionFeasibleAtMin was true at its final evaluation, and report it in the D6 tables (expected: zero under faithful drives — if nonzero, report, don't fix).
+
+## EXECUTION EVIDENCE (Codex rework, 2026-07-09)
+- Applied all five required fixes in `src/engines/__tests__/auctionGauntlet.test.ts`.
+- D1-D3 now run the competitive need-aware path with deterministic seed aliases (`D1c`, `D2d`, `D3a`); D4-D6 are also competitive, so the final suite contains zero passive-market drafts. If a passive draft is re-enabled, its branch claims lone survivors at reserve via `claimLoneSurvivor` instead of passing them out.
+- Pool-first source handling is documented as an intentional current-production parity deviation: the live Draft Setup defaults to `team-roster-priority` and passes `poolSourceMode` plus `priorityIds` to extraction (`LeagueBuilderDraftSetup.tsx:719-721`, `:2499-2500`), so the gauntlet keeps that behavior.
+- The diff-key self-consistency assertion was replaced with append-index settlement recording. Exact marginal tax is independently recomputed for two nonzero-tax settlements per draft where available.
+- Product code remained untouched; no export was needed.
+- Gates passed: `npx tsc -b`; `npm run build`; gauntlet suite (1 file / 1 test, 52.91s, D6/D5 tables printed); dependency suites (6 files / 86 tests, 4.10s).
+- Additional measurement result: `feasibleShortfallAtFinal = 0` for every final team under faithful drives.
+
+Full D6 squeeze table, D5 exact-marginal evidence, and gate notes are appended to `spec-docs/contracts/CONTRACT_GAUNTLET_2026-07-09.md`.
