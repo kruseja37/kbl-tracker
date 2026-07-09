@@ -22,3 +22,50 @@ Test migration (exact pins known from a 2026-07-09 inventory; re-locate by conte
 - Assertions move, never weaken: exact strings stay exact, no .skip, no regex widening.
 
 === END SPEC ===
+
+=== BUILD REPORT (2026-07-09) ===
+
+Branch: setuphelp/gate-pool-diagnostics-2026-07-09 (off main @ a4f61106)
+Commits:
+- 9ee60dcf — contract commit (this file, alone)
+- b21d4b90 — the change + test migration
+
+Disposition: BUILT AS SPECIFIED. Both diagnostic dumps now gate behind the
+existing `showHelp` state using the established inline-gate variant, at the
+single render site (src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx
+~4770-4774):
+
+    {showHelp ? numericShapeDiagnostics : null}
+    {showHelp ? manualShapeDiagnostics : null}
+
+No new toggle, no new pattern. `sizingSummaryLine` ("Sized to ...") and the
+engine-generated-count receipt were left untouched — confirmed still
+unconditional. Repo-wide grep confirmed the two diagnostic strings/consts
+have exactly one build site and one render site each, and appear in exactly
+one test file (poolLock.test.tsx) — no stray references elsewhere.
+
+Test migration: 3 assertions in
+src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx now
+click Help (`fireEvent.click(screen.getByRole("button", { name: "?" }))`)
+before reading the gated strings, mirroring money.test.tsx's established
+pattern. Two of the three migrations also added a `queryByText(...)
+.not.toBeInTheDocument()` assertion proving the string is absent before Help
+is opened — strictly stronger than the prior test, not weaker. No .skip, no
+regex widening, no string changes. The "Sized to" pins were left untouched
+(confirmed unaffected — that content stays visible without opening Help).
+
+GATE RESULTS:
+- `npx tsc -b` — clean, exit 0, no output.
+- `npm run build` — exit 0 (Vite build succeeded; only the pre-existing
+  >500kB chunk-size advisory warnings, unrelated to this change).
+- Targeted run, all 6 LeagueBuilderDraftSetup split suites (setup, money,
+  poolLock, universe, board, RankYourBoardZone): 6 files passed, 105/105
+  tests passed, including the 3 migrated assertions and the untouched
+  "manual pool diagnostics report illegal completion" test.
+- Full suite (`NODE_ENV= npx vitest run`): 614 test files passed, 7 skipped
+  (621 total) · 9451 tests passed, 11 skipped (9462 total) · 0 failed ·
+  205.63s. The two suites CLAUDE.md flags as solo-green batch flakes
+  (`LeagueBuilderDraftSetup*` and `franchiseManualSmokeFixture`) both passed
+  clean inside this same full batch run — no new red anywhere.
+
+STOP items: none. No scope deviation, no unresolved questions.
