@@ -327,6 +327,46 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(screen.getByText('1 team')).toBeInTheDocument();
     });
 
+    test('COPYFIX-1R team counts filter ghost ids without mutating league data', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      vi.mocked(useLeagueBuilderData).mockReturnValue({
+        leagues: [
+          {
+            id: 'league-ghost',
+            name: 'Ghost League',
+            teamIds: ['team-1', 'ghost-team', 'team-2'],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            draftFormat: 'auction',
+            color: '#5A8352',
+            createdDate: '2026-01-15T00:00:00.000Z',
+          },
+        ],
+        teams: [
+          { id: 'team-1', name: 'Sox', colors: { primary: '#FF0000', secondary: '#FFFFFF' } },
+          { id: 'team-2', name: 'Tigers', colors: { primary: '#FF6600', secondary: '#000000' } },
+        ],
+        rulesPresets: [{ id: 'preset-1', name: 'Standard', isDefault: true }],
+        isLoading: false,
+        error: null,
+        createLeague: mockCreateLeague,
+        updateLeague: mockUpdateLeague,
+        removeLeague: mockRemoveLeague,
+        duplicateLeague: mockDuplicateLeague,
+      });
+
+      render(<LeagueBuilderLeagues />);
+      await waitFor(() => {
+        expect(vi.mocked(getAuctionSession)).toHaveBeenCalledWith('league-ghost', expect.any(Number));
+      });
+
+      expect(screen.getByText('2 teams')).toBeInTheDocument();
+      fireEvent.click(screen.getAllByTitle('Edit league')[0]);
+      expect(await screen.findByLabelText('Sox')).toBeChecked();
+      expect(screen.queryByLabelText('ghost-team')).not.toBeInTheDocument();
+    });
+
     test('renders edit buttons for each league', async () => {
       await renderSettledLeagueBuilderLeagues();
       const editButtons = screen.getAllByTitle('Edit league');
@@ -542,13 +582,25 @@ describe('LeagueBuilderLeagues Component', () => {
       });
     });
 
-    test('COPYFIX-1 duplicate failure surfaces a visible error instead of a silent no-op', async () => {
-      mockDuplicateLeague.mockRejectedValueOnce(new Error('Team not found: ghost-team'));
+    test('COPYFIX-1R duplicate tolerance does not surface the old ghost-team hard error', async () => {
+      mockDuplicateLeague.mockResolvedValueOnce(undefined);
       await renderSettledLeagueBuilderLeagues();
 
       fireEvent.click(screen.getAllByTitle('Duplicate league')[0]);
 
-      expect(await screen.findByText('Team not found: ghost-team')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(mockDuplicateLeague).toHaveBeenCalledWith('league-1');
+      });
+      expect(screen.queryByText('Team not found: ghost-team')).not.toBeInTheDocument();
+    });
+
+    test('COPYFIX-1 duplicate genuine failure surfaces a visible error instead of a silent no-op', async () => {
+      mockDuplicateLeague.mockRejectedValueOnce(new Error('Storage unavailable'));
+      await renderSettledLeagueBuilderLeagues();
+
+      fireEvent.click(screen.getAllByTitle('Duplicate league')[0]);
+
+      expect(await screen.findByText('Storage unavailable')).toBeInTheDocument();
     });
   });
 

@@ -161,25 +161,6 @@ function toPitcherRole(position: Player['primaryPosition']): PlayerForSalary['pi
     : 'SP';
 }
 
-function normalizeLeagueTeamMembership(
-  league: LeagueTemplate,
-  existingTeamIds: ReadonlySet<string>,
-): { league: LeagueTemplate; changed: boolean } {
-  const teamIds = league.teamIds.filter((teamId) => existingTeamIds.has(teamId));
-  const divisions = league.divisions.map((division) => ({
-    ...division,
-    teamIds: division.teamIds.filter((teamId) => existingTeamIds.has(teamId)),
-  }));
-  const changed =
-    teamIds.length !== league.teamIds.length ||
-    divisions.some((division, index) => division.teamIds.length !== league.divisions[index]?.teamIds.length);
-
-  return {
-    league: changed ? { ...league, teamIds, divisions } : league,
-    changed,
-  };
-}
-
 export function toConstructionPlayer(player: Player): ConstructionPlayer {
   const isPitcher = player.primaryPosition === 'SP'
     || player.primaryPosition === 'RP'
@@ -227,20 +208,12 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       await initLeagueBuilderDatabase();
       await initializeDefaultPresets();
 
-      const [rawLeaguesData, teamsData, playersData, presetsData] = await Promise.all([
+      const [leaguesData, teamsData, playersData, presetsData] = await Promise.all([
         getAllLeagueTemplates(),
         getAllTeams(),
         getAllPlayers(),
         getAllRulesPresets(),
       ]);
-      const existingTeamIds = new Set(teamsData.map((team) => team.id));
-      const normalizedLeaguesData = rawLeaguesData.map((league) => normalizeLeagueTeamMembership(league, existingTeamIds));
-      const leaguesData = normalizedLeaguesData.map((entry) => entry.league);
-      for (const entry of normalizedLeaguesData) {
-        if (entry.changed) {
-          await saveLeagueTemplate(entry.league);
-        }
-      }
 
       setLeagues(leaguesData);
       setTeams(teamsData);
@@ -401,15 +374,22 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       const original = await getLeagueTemplate(id);
       if (!original) throw new Error('League not found');
 
-      const originalTeams = await Promise.all(original.teamIds.map(async (teamId) => {
+      const teamLookups = await Promise.all(original.teamIds.map(async (teamId) => {
         const team = await getTeam(teamId);
-        if (!team) throw new Error(`Team not found: ${teamId}`);
-        return team;
+        return { teamId, team };
       }));
-      const originalTeamIds = new Set(original.teamIds);
+      const originalTeams = teamLookups.flatMap(({ team }) => (team ? [team] : []));
+      const missingTeamIds = teamLookups.flatMap(({ teamId, team }) => (team ? [] : [teamId]));
+      if (missingTeamIds.length > 0) {
+        console.warn('[useLeagueBuilderData] duplicateLeague skipped missing teams', {
+          leagueId: original.id,
+          missingTeamIds,
+        });
+      }
+      const originalTeamIds = new Set(originalTeams.map((team) => team.id));
       for (const division of original.divisions) {
         for (const teamId of division.teamIds) {
-          if (!originalTeamIds.has(teamId)) {
+          if (!original.teamIds.includes(teamId)) {
             throw new Error(`Division ${division.id} references unknown team: ${teamId}`);
           }
         }
@@ -523,10 +503,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       // sessions are leagueId keyed. A duplicate starts with none of those rows.
       const duplicate = await saveLeagueTemplate({
         ...duplicateSeed,
-        teamIds: original.teamIds.map((teamId) => {
+        teamIds: original.teamIds.flatMap((teamId) => {
           const copiedTeamId = teamIdMap.get(teamId);
-          if (!copiedTeamId) throw new Error(`Team copy failed: ${teamId}`);
-          return copiedTeamId;
+          return copiedTeamId ? [copiedTeamId] : [];
         }),
         conferences: original.conferences.map((conference) => ({
           ...conference,
@@ -534,10 +513,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
         })),
         divisions: original.divisions.map((division) => ({
           ...division,
-          teamIds: division.teamIds.map((teamId) => {
+          teamIds: division.teamIds.flatMap((teamId) => {
             const copiedTeamId = teamIdMap.get(teamId);
-            if (!copiedTeamId) throw new Error(`Team copy failed: ${teamId}`);
-            return copiedTeamId;
+            return copiedTeamId ? [copiedTeamId] : [];
           }),
         })),
         poolExtractedAt: undefined,

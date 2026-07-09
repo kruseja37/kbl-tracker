@@ -17,3 +17,80 @@ The dead _suppressSync flag in syncEngine.ts — a latent product landmine beyon
 
 ## GATES (paste real outputs)
 tsc -b clean; npm run build exit 0; the 3 contract suites + full leagueBuilder folder sweep green; the new regression tests red-first where meaningful (the persist-suppression assertions must FAIL against the current heal-persisting code — commit that red run, then the fix). Final contract update with evidence. Final message: summary + hashes.
+
+## BUILDER RESULT (Codex, 2026-07-09)
+
+### Red-first evidence
+Commit: `e4944687` — `test(copyfix): lock rejected load-heal regressions`
+
+Command:
+`NODE_ENV= npx vitest run src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx --reporter=verbose`
+
+Pre-fix result against the rejected load-time heal:
+- Exit 1.
+- `Test Files  1 failed (1)`
+- `Tests  3 failed | 7 passed (10)`
+- Failures proved the rejected behavior:
+  - Empty teams table load returned persisted/in-memory `teamIds=[]` instead of `['team-a', 'team-b']`.
+  - Partial teams table load returned `['team-a']` instead of `['team-a', 'team-b']`.
+  - Ghosted duplicate mutated the source league by pruning `ghost-team` before copy.
+
+### Code changes
+- Removed the load-time membership normalizer and all load-path `saveLeagueTemplate()` calls from `src/src_figma/hooks/useLeagueBuilderData.ts`.
+- Changed `duplicateLeague()` to resolve teams at consumption time, skip missing team ids, and `console.warn` the skipped ids without mutating the source league.
+- Filtered League Builder list team counts against loaded in-memory teams in `src/src_figma/app/pages/LeagueBuilderLeagues.tsx`; no persistence.
+- Updated the duplicate-page tests so the old `Team not found: ghost-team` banner is no longer expected, while genuine duplicate failures still surface.
+- Left the approved delete-time prune in `src/utils/leagueBuilderStorage.ts` untouched.
+- Left approved COPYFIX Items 2/3/4 untouched.
+
+### Green evidence
+Command:
+`npx tsc -b --clean && npx tsc -b --pretty false`
+
+Result:
+- Exit 0.
+- No compiler output.
+
+Command:
+`npm run build`
+
+Result:
+- Exit 0.
+- `✓ built in 10.34s`
+- PWA generated `183 entries`.
+- Existing warnings only: Browserslist data age, one dynamic/static import chunking warning for `franchisePlayerStorage.ts`, and chunk-size warnings.
+
+Command:
+`NODE_ENV= npx vitest run src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx --reporter=verbose`
+
+Result:
+- Exit 0.
+- `Test Files  1 passed (1)`
+- `Tests  10 passed (10)`
+
+Command:
+`NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx --reporter=verbose`
+
+Result:
+- Exit 0.
+- `Test Files  1 passed (1)`
+- `Tests  40 passed (40)`
+- Expected stderr from the genuine-failure banner test: `Failed to duplicate league: Error: Storage unavailable`.
+
+Command:
+`NODE_ENV= npx vitest run src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx src/src_figma/__tests__/leagueBuilder/LeagueBuilderTeams.test.tsx --reporter=verbose`
+
+Result:
+- Exit 0.
+- `Test Files  3 passed (3)`
+- `Tests  83 passed (83)`
+- Existing React `act(...)` warnings still print in Teams page tests.
+
+Command:
+`NODE_ENV= npx vitest run src/src_figma/__tests__/leagueBuilder src/src_figma/hooks/__tests__/useLeagueBuilderData.test.tsx src/utils/tests/leagueBuilderFarmScoutingHandoff.test.ts src/utils/tests/leagueBuilderPoolUniverse.test.ts src/utils/tests/leagueBuilderPoolBuilder.handEditLedger.test.ts src/utils/tests/leagueBuilderPoolMembership.dj05.test.ts src/utils/tests/leagueBuilderStartupFarmDraft.test.ts src/utils/tests/leagueBuilderStorageV6Migration.test.ts --reporter=verbose`
+
+Result:
+- Exit 0.
+- `Test Files  17 passed (17)`
+- `Tests  279 passed (279)`
+- Existing React `act(...)` warnings still print in Teams/Players page tests.

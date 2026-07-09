@@ -23,6 +23,7 @@ import {
   getTeam,
   getTeamRoster,
   getPlayersByTeam,
+  initializeDefaultPresets,
   saveAuctionSession,
   saveAuctionSessionById,
   saveLeagueTemplate,
@@ -616,6 +617,7 @@ describe('useLeagueBuilderData', () => {
       ],
     });
     await saveLeagueTemplate(ghostedLeague);
+    await initializeDefaultPresets();
     syncEngineMock.upsert.mockClear();
     syncEngineMock.isSuppressed.mockReturnValue(false);
 
@@ -638,6 +640,7 @@ describe('useLeagueBuilderData', () => {
     });
     await saveLeagueTemplate(partialLeague);
     await saveTeam(makeTeam('team-a'));
+    await initializeDefaultPresets();
     syncEngineMock.upsert.mockClear();
     syncEngineMock.isSuppressed.mockReturnValue(false);
 
