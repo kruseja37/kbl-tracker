@@ -385,15 +385,22 @@ function buildStageLog(
   focusTeamId: string | null | undefined,
 ): LogItemVM[] {
   if (!session) return [];
-  return session.results.slice(-6).reverse().map((result) => ({
-    kind: result.disposition === "PASSED" || result.disposition === "SET_ASIDE"
-      ? "gone"
-      : result.winnerTeamId === focusTeamId
-        ? "won"
-        : "rival",
-    text: resultText(result, playerById, teamNameById),
-    amount: result.salary ?? undefined,
-  }));
+  return session.results.slice(-6).reverse().map((result) => {
+    const player = playerById.get(result.playerId) ?? null;
+    return {
+      kind: result.disposition === "PASSED" || result.disposition === "SET_ASIDE"
+        ? "gone"
+        : result.winnerTeamId === focusTeamId
+          ? "won"
+          : "rival",
+      text: resultText(result, playerById, teamNameById),
+      amount: result.salary ?? undefined,
+      // CALLFIX Item 3: the 4th popover surface -- namePrefix is the exact leading substring of
+      // `text` (resultText always starts with playerDisplayName), so the render wraps just that.
+      player,
+      ...(player ? { namePrefix: playerDisplayName(player) } : {}),
+    };
+  });
 }
 
 function draftAnalyzerEntryFromPlayer(player: Player, salary: number): DraftAnalyzerMlbEntry {

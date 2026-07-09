@@ -783,7 +783,15 @@ describe("LeagueBuilderAuctionDraft", () => {
     fireEvent.click(screen.getByRole("button", { name: "Let him go" }));
 
     await waitFor(() => {
-      expect(screen.getAllByText(/(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/).length).toBeGreaterThan(0);
+      // CALLFIX Item 3: the log row's headline name is now popover-wrapped (a separate element
+      // from the trailing "SOLD to ... for $X" text), so the sentence is split across sibling
+      // nodes -- match on full element.textContent (a custom function matcher) instead of the
+      // default direct-child-text-only matcher, per testing-library's own guidance for this case.
+      expect(
+        screen.getAllByText((_content, element) =>
+          /(Avery Anchor|Blake Bolt) SOLD to Page (Caps|Keys) for \$/.test(element?.textContent ?? ""),
+        ).length,
+      ).toBeGreaterThan(0);
     });
     expect(screen.getAllByText(/^Lot 1 of /)).not.toHaveLength(0);
     expect(screen.queryByText(/^Lot 2 of /)).not.toBeInTheDocument();
