@@ -844,6 +844,77 @@ describe("useAuctionDraft", () => {
     expect(offMaxBid!).toBe(onMaxBid! - offTax!);
   });
 
+  test("TAXTEETH Item 3 -- the coherence proof: TRUE COST at a given price is exactly what settling at that price drains", async () => {
+    // The honesty guarantee JK is buying: whatever the whisper's TRUE COST line would show for a
+    // price (bid + marginal tax) must be EXACTLY what happens to the team's real budget once that
+    // price actually wins. team.projectedTax, read here BEFORE the win, is computed by the same
+    // auctionMarginalTaxWithCaps call LeagueBuilderAuctionDraft.tsx's own TRUE COST line uses
+    // (same roster, same candidate, same capIdentity, same pool caps) -- so reading it off the
+    // session IS reading what the whisper would display, without re-deriving the formula here.
+    const teamIds = ["human", "other"];
+    const seed = seedWithFirst(teamIds, "human");
+    const caps: LuxuryCapRow[] = [
+      {
+        group: "hitters",
+        stat: "CON",
+        topN: 1,
+        cap: 95,
+        penaltyCurve: 1,
+        penaltyPer100: 1_000_000,
+        minAdder: 0,
+      },
+    ];
+    const humanTeam: Team = {
+      ...makeTeam("human"),
+      capIdentity: { increase: ["POW"], decrease: ["CON"] },
+    };
+    const pool: RegisteredPool = { ...makePool("league-coherence", ["off-fit"]), luxuryCaps: caps };
+    mockLeagueData({
+      leagues: [makeLeague("league-coherence", teamIds)],
+      teams: [humanTeam, makeTeam("other")],
+      pools: { "league-coherence": pool },
+      players: [makePlayer("off-fit", { power: 10, contact: 100 })],
+    });
+
+    const { result } = renderHook(() => useAuctionDraft());
+    await act(async () => {
+      await result.current.initAuction("league-coherence", {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const budgetBefore = result.current.session?.teams.find((team) => team.teamId === "human")?.budgetRemaining;
+    // THE TRUE COST tax component, as the whisper would compute and display it for this lot.
+    const trueCostTax = result.current.session?.teams.find((team) => team.teamId === "human")?.projectedTax;
+    expect(budgetBefore).toEqual(expect.any(Number));
+    expect(trueCostTax).toBeGreaterThan(0);
+
+    const bidPrice = result.current.session?.currentLot?.openingAsk ?? 0;
+    expect(bidPrice).toBeGreaterThan(0);
+    const trueCostShown = bidPrice + trueCostTax!; // what the whisper's TRUE COST line reads
+
+    await act(async () => {
+      await result.current.bid("human", bidPrice);
+    });
+    await act(async () => {
+      await result.current.pass("other");
+    });
+
+    expect(result.current.session?.state).toBe("SOLD");
+    expect(result.current.session?.results.at(-1)).toMatchObject({
+      winnerTeamId: "human",
+      salary: bidPrice,
+    });
+    const budgetAfter = result.current.session?.teams.find((team) => team.teamId === "human")?.budgetRemaining;
+
+    // THE COHERENCE GUARANTEE: the actual budget drop equals TRUE COST exactly -- not salary
+    // alone. toBeCloseTo(..., 8) absorbs only float subtraction-order noise (~1e-9), not any real
+    // discrepancy -- the same tolerance auctionLuxuryTax.test.ts uses for this identical formula.
+    expect(budgetBefore! - budgetAfter!).toBeCloseTo(trueCostShown, 8);
+  });
+
   test("TAXTEETH back-compat: a mid-lot session saved before this change self-heals its stale projectedTax on load", async () => {
     // A pre-TAXTEETH save could carry ANY stale number in team.projectedTax -- the old full-total
     // recompute, or (older still) whatever normalizeTeam defaulted it to. This proves loadAuction

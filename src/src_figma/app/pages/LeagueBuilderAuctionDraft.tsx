@@ -1342,6 +1342,30 @@ export function LeagueBuilderAuctionDraft() {
         }
       : undefined;
 
+    const identityTier = registeredPool?.tier ?? "standard";
+
+    // TAXTEETH (2026-07-08): TRUE COST's marginal tax, computed BEFORE worthToYou so it can be
+    // folded into the whisper's OWN ceiling (see the `marginalTax` field on WorthToYouInput below)
+    // -- not just displayed alongside it. Without this, worthToYou.suggestedMaxBid (assembled from
+    // capValue/completionBidCeiling, which knows nothing about tax) could show a number the now
+    // tax-aware engine ceiling (sessionBidCeiling) would reject -- reproducing the exact
+    // whisper-vs-floor disagreement the F9 one-ceiling law exists to prevent. Reuses the existing
+    // tested auctionMarginalTaxWithCaps engine; gated on the same roster-clean signal the sibling
+    // reads use so a truncated roster mapping never fabricates a tax figure. Reads the pool's own
+    // resolved luxuryCaps (falling back to the tier default before a pool is registered) -- the
+    // SAME baseCaps source useAuctionDraft.ts's applyAuctionLuxuryTaxForLot feeds the engine's real
+    // settlement/bid-ceiling math, so this can never structurally diverge from what actually drains
+    // the team's budget (byte-identical to a tier-only lookup for every real pool today, since
+    // registerPool always sets luxuryCaps: LUXURY_CAP_TABLES[tier]).
+    const marginalTax = lotPlayer && rosterPlayersClean
+      ? auctionMarginalTaxWithCaps(
+          rosterPlayers.map(toConstructionPlayer),
+          toConstructionPlayer(lotPlayer),
+          team.capIdentity,
+          registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
+        )
+      : null;
+
     const worthToYou = lotPlayer && lotAuction && lotShape && rosterShapeClean && remainingPoolClean && ownBandPriorities
       ? assembleWorthToYou({
           candidate: lotPlayer,
@@ -1362,6 +1386,10 @@ export function LeagueBuilderAuctionDraft() {
           needBreakdown,
           candidateShape: lotShape,
           market,
+          // TAXTEETH: fold the marginal tax into the ceiling this feeds (see assembleWorthToYou's
+          // fallbackLegalMax); null-coalesced since rosterPlayersClean can gate marginalTax off
+          // independently of the sibling worthToYou gates.
+          marginalTax: marginalTax ?? undefined,
         })
       : undefined;
     const bidAmount = session.currentLot.highBid ?? session.currentLot.openingAsk;
@@ -1400,26 +1428,6 @@ export function LeagueBuilderAuctionDraft() {
       identityRoster.push(playerToSimPlayer(lotPlayer, lotAuction.iv));
     }
     const identityArchetype = resolveAuctionWhisperIdentityArchetype(team);
-    const identityTier = registeredPool?.tier ?? "standard";
-
-    // COCKPIT W1a (RB-3): TRUE COST after tax -- the marginal tax this specific candidate adds to
-    // the team's total, over and above what the team already owes. Reuses the existing tested
-    // auctionMarginalTaxWithCaps engine; gated on the same roster-clean signal the sibling reads
-    // use so a truncated roster mapping never fabricates a tax figure.
-    // TAXTEETH (2026-07-08): reads the pool's own resolved luxuryCaps (falling back to the tier
-    // default before a pool is registered) rather than re-deriving from identityTier alone -- the
-    // SAME baseCaps source useAuctionDraft.ts's applyAuctionLuxuryTaxForLot now feeds the engine's
-    // real settlement/bid-ceiling math, so this displayed number can never structurally diverge
-    // from what actually drains the team's budget (byte-identical to the prior tier-based call for
-    // every real pool today, since registerPool always sets luxuryCaps: LUXURY_CAP_TABLES[tier]).
-    const marginalTax = worthToYou && lotPlayer && rosterPlayersClean
-      ? auctionMarginalTaxWithCaps(
-          rosterPlayers.map(toConstructionPlayer),
-          toConstructionPlayer(lotPlayer),
-          team.capIdentity,
-          registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
-        )
-      : null;
     const identityZByPlayerId = identityArchetype && comparisonPool.length > 0
       ? (() => {
           const scorer = archetypeFitScorer(identityArchetype, identityTier);
