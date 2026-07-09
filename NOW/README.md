@@ -2,7 +2,7 @@
 
 **This folder is the single entry point for picking up KBL Tracker work on any day.** Everything in it is either this index or a live link to a canonical file — there are NO copies here, so nothing in this folder can rot. If any document in the project disagrees with this index, this index gets fixed the same day (report it); if any document disagrees with `git log`, git wins.
 
-**Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09.
+**Pristineness contract:** the scribe updates the underlying files after every landing and verifies this index on every booking pass. Last verified: 2026-07-09 (this pass — all 14 links resolve; TAXPRECISION/FLOORREFIT/STALEPARITY/ARCHLOCK booked into the underlying docs; no new canonical doc needed adding or retiring this pass).
 
 ## Read order for any new agent (or future you)
 

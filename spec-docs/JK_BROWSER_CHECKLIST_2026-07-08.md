@@ -18,6 +18,11 @@ mid-bid — that's now fixed, along with the tax ruling you made and a sale-log 
 below** covers those three plus one heads-up (a floor-layout redesign is built but not yet in scope
 to walk). Everything above is still open and still needs your eye.
 
+**Update, 2026-07-09 (later the same day):** the floor-layout redesign flagged as "coming next" at
+the bottom of Section 7 has now landed and is ready to walk — **Section 8 below** covers it, plus
+two smaller items (a pool-first staleness warning, and one open feel-question on a team identity's
+exact numbers). Everything above (Sections 1-7) is still open and still needs your eye.
+
 **How to use it:** work top to bottom on a real league in the browser. Check each box as you go.
 Where a box asks a design question rather than a pass/fail, a recommendation is given — you can
 just say "yes" / "no" / "change it to X."
@@ -146,6 +151,43 @@ these on a real league, check each box.
       longer boxed into its own tiny scrolling window; a color banner announcing whose turn it is)
       is built and gated behind its own audit — not yet in this checklist's scope to walk, but
       flagging it's coming next so you know what to expect on your next pass.
+
+## 8. TODAY'S FIXES (2026-07-09, later) — THE UNCAGED ADVISOR, THE ON-THE-CLOCK BANNER, AND A STALENESS WARNING
+
+The floor-layout redesign flagged as "coming next" at the bottom of Section 7 has landed, after a
+round of fixes your captain ordered before it shipped. Walk it on a real league, same as before.
+
+- [ ] **The advisor panel is no longer boxed into its own tiny scrolling window.** On the auction
+      floor, the whole right-hand advisor panel should scroll as part of the normal page — you
+      should never see a second, separate scrollbar nested inside it.
+- [ ] **A colored banner now announces whose turn it is.** Above the player up for bid, a full-width
+      banner in the acting team's own color should say something like "YOU'RE UP — [TEAM]" (with
+      "— NOMINATE" added when it's that team's turn to pick the next player, not just bid). When
+      it's a CPU team's turn, the banner should read as a calm "waiting" state, not a demand aimed
+      at you.
+- [ ] **THE DEFAULT-ORANGE READABILITY CHECK** — if a team is still using the app's default orange
+      color (hasn't picked a custom one), confirm the text on that banner is easy to read, not
+      washed out. This was a real bug we found and fixed — the banner was picking a low-contrast
+      text color for that exact shade of orange — so please specifically look for a default-orange
+      team if your league has one.
+- [ ] **Nothing repeats itself.** Every number the advisor shows you (its verdict, your number, the
+      max bid, the odds, etc.) should appear exactly once on the screen — if you spot the same
+      number or message shown twice in two different spots, flag it.
+- [ ] **Your own team's color still shows as a thin stripe on your advisor panel** — that's on
+      purpose (it marks the panel as yours, it does NOT mean it's your turn to act). Confirm it
+      reads as "this is my panel," not as clutter or confusion with the turn banner above.
+- [ ] **STALENESS WARNING ON POOL-FIRST SETUP** — if you build a league using the "pick a pool
+      first" setup path (rather than designing rosters first), lock the pool, then go back and
+      change something — a team's identity, a quality/balance dial, or the salary cap — you should
+      now see a warning telling you the pool may be out of date and needs re-checking before you
+      can start the draft. This is a new safety net; confirm it shows up when it should and doesn't
+      nag you when nothing's actually changed.
+- [ ] **HDH ROYALS FEEL QUESTION** — we found and fixed a case where the written description of two
+      team identities (HDH Royals and Bash Brothers) didn't match what the app was actually doing —
+      the app's numbers were correct and deliberate, the write-up was just out of date, and we've
+      now corrected the write-up to match. The open question is purely a feel one: draft a team
+      using the HDH Royals identity and tell us if it feels right to you at its current strength —
+      this isn't a bug, just a "does this feel balanced" gut-check.
 
 ## What a PASS means
 
