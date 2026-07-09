@@ -2766,22 +2766,40 @@ export function LeagueBuilderDraftSetup() {
   );
 
   // BOARDFIX2 (Item C): keeps a ref in sync with the pending overlay so the unmount/tab-hide
-  // flush below always sees the LATEST pending edit, not a stale render's closure.
+  // flush below always sees the LATEST pending edit, not a stale render's closure. TEXTLAW-SWEEP
+  // Item C: assigned DIRECTLY in the render body (not inside a useEffect) so it is
+  // current-as-of-THIS-render by the time any effect CLEANUP runs in the same commit -- the
+  // cross-club guard in the debounce effect below depends on that ordering (mirrors
+  // RosterDesigner's renderedTeamIdRef.current = team.id pattern, RosterDesigner.tsx:339).
   const pendingBoardRankOverridesRef = useRef(pendingBoardRankOverrides);
-  useEffect(() => {
-    pendingBoardRankOverridesRef.current = pendingBoardRankOverrides;
-  });
+  pendingBoardRankOverridesRef.current = pendingBoardRankOverrides;
 
   // Trailing debounce: every new reorder resets this timer: only the FINAL state after a burst of
   // rapid moves settles actually reaches saveTeam (see the perf audit in the BOARDFIX2 contract).
+  // TEXTLAW-SWEEP Item C: pendingBoardRankOverrides is a SINGLE slot. If a different club's edit
+  // replaces an outgoing club's still-unflushed pending within the debounce window, the cleanup
+  // used to just clear the stale timer -- silently dropping the outgoing club's last edit forever
+  // (repro: LeagueBuilderDraftSetup.test.tsx "TEXTLAW-SWEEP Item C repro"). Fix mirrors
+  // RosterDesigner's captured-vs-current team compare: if the ref (already reflecting the NEW
+  // pending, assigned synchronously above during this render) points at a DIFFERENT club than the
+  // outgoing effect instance closed over, flush the outgoing club's edit immediately instead of
+  // discarding it. When the ref is null or matches the same club (the normal self-clear-after-save
+  // or unmount path), skip -- the existing single-flush paths already cover those.
   useEffect(() => {
     if (!pendingBoardRankOverrides) return undefined;
+    const outgoing = pendingBoardRankOverrides;
     const timer = window.setTimeout(() => {
-      void flushBoardRankOverrides(pendingBoardRankOverrides.team, pendingBoardRankOverrides.overrides).then(() => {
-        setPendingBoardRankOverrides((current) => (current === pendingBoardRankOverrides ? null : current));
+      void flushBoardRankOverrides(outgoing.team, outgoing.overrides).then(() => {
+        setPendingBoardRankOverrides((current) => (current === outgoing ? null : current));
       });
     }, BOARD_RANK_SAVE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      const latest = pendingBoardRankOverridesRef.current;
+      if (latest && latest.team.id !== outgoing.team.id) {
+        void flushBoardRankOverrides(outgoing.team, outgoing.overrides);
+      }
+    };
   }, [pendingBoardRankOverrides, flushBoardRankOverrides]);
 
   // Flush on unmount / tab-hide so a reorder made just before navigating away isn't dropped.

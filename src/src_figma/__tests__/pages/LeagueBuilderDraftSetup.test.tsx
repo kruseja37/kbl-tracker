@@ -3374,6 +3374,63 @@ describe("LeagueBuilderDraftSetup", () => {
         vi.useRealTimers();
       }
     });
+
+    // TEXTLAW-SWEEP Item C: pendingBoardRankOverrides is a SINGLE slot. Reordering club A's board,
+    // then switching to club B and reordering ITS board inside the same 500ms debounce window,
+    // must not silently drop club A's edit. Pre-fix, the debounce effect's cleanup only cleared
+    // the stale timer when a different club's pending replaced it -- club A's last edit was never
+    // flushed. This is the repro named in the contract; run it against unmodified code first to
+    // prove the failure, then again after the fix to prove it passes.
+    test("TEXTLAW-SWEEP Item C repro: an unflushed edit from an outgoing club must not be dropped when a different club's edit lands inside the same debounce window", async () => {
+      const players = fiveGradedSsPlayers();
+      mockLeagueData({
+        players,
+        pool: makePool({ players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })) }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      await screen.findByText("3 · THE CLUBS");
+      const boardButtons = await screen.findAllByRole("button", { name: "rank your board ›" });
+
+      fireEvent.click(boardButtons[0]);
+      const globalListA = await screen.findByTestId("rank-your-board-global");
+      expect(globalBoardOrder(globalListA)).toEqual(["Star Short", "High Short", "Mid Short", "Low Short", "Weak Short"]);
+
+      // Fake timers ONLY from here -- see the rationale on the sibling burst test above.
+      vi.useFakeTimers();
+      try {
+        // Club A: one edit starts A's debounce timer, unflushed.
+        fireEvent.click(within(globalListA).getByRole("button", { name: "Move Mid Short up" }));
+
+        // Switch to club B INSIDE the debounce window and edit there too -- the single
+        // pendingBoardRankOverrides slot now has to hand off from A to B before A ever saved.
+        fireEvent.click(boardButtons[1]);
+        const globalListB = screen.getByTestId("rank-your-board-global");
+        fireEvent.click(within(globalListB).getByRole("button", { name: "Move Low Short up" }));
+
+        // Let every debounce window fully settle.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(700);
+        });
+
+        // Both clubs' edits must reach saveTeam. Pre-fix, club A's is silently dropped because its
+        // timer was cancelled (by club B's edit replacing the pending slot) with no flush.
+        expect(saveTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: "team-a",
+            boardRankOverrides: { global: ["star-ss", "mid-ss", "high-ss", "low-ss", "weak-ss"] },
+          }),
+        );
+        expect(saveTeam).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: "team-b",
+            boardRankOverrides: { global: ["star-ss", "high-ss", "low-ss", "mid-ss", "weak-ss"] },
+          }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   // BOARDFIX2 (Item A): the readiness panel enumerates EVERY currently-true blocker across LOCK
