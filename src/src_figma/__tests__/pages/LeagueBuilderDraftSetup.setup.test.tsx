@@ -177,6 +177,7 @@ import {
   makePlayer,
   makePlayers,
   makePool,
+  makePositionDiversePlayers,
   makeQualityRosterPlayerSet,
   makeTeam,
   mockLeagueData,
@@ -516,7 +517,11 @@ describe("LeagueBuilderDraftSetup", () => {
     const teamIds = Array.from({ length: 30 }, (_, index) => `team-${index}`);
     const teams = teamIds.map((teamId) => makeTeam(teamId));
     const realClubFloor = poolDemandModel(30, 0).feasibilityFloor;
-    const players = makePlayers(realClubFloor);
+    // CONTRACT_FIXTUREFIX_2026-07-09: makePlayers(realClubFloor) was all-CF, satisfying zero of
+    // derivePositionSupplyFloorTargets(30); makePositionDiversePlayers keeps the SAME exact
+    // headcount (this test asserts poolSize === realClubFloor) but distributes it across every
+    // hard position/role at or above the 30-team floor.
+    const players = makePositionDiversePlayers(realClubFloor, 30);
     const pool = makePool({
       locked: true,
       players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
@@ -580,7 +585,11 @@ describe("LeagueBuilderDraftSetup", () => {
     const teamIds = Array.from({ length: 30 }, (_, index) => `team-${index}`);
     const teams = teamIds.map((teamId) => makeTeam(teamId));
     const realClubFloor = poolDemandModel(30, 0).feasibilityFloor;
-    const players = makePlayers(realClubFloor);
+    // CONTRACT_FIXTUREFIX_2026-07-09: makePlayers(realClubFloor) was all-CF, satisfying zero of
+    // derivePositionSupplyFloorTargets(30); makePositionDiversePlayers keeps the SAME exact
+    // headcount (this test asserts poolSize === realClubFloor) but distributes it across every
+    // hard position/role at or above the 30-team floor.
+    const players = makePositionDiversePlayers(realClubFloor, 30);
     const pool = makePool({
       locked: true,
       players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
