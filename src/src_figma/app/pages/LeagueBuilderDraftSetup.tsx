@@ -344,6 +344,10 @@ const SHARED_POOL_RECHECK_LABEL = "ALL CLUBS · ONE POOL";
 const POOL_PROVENANCE_SESSION_PREFIX = "kbl:draft-pool-provenance:";
 const POOL_SOURCE_MODE_SESSION_PREFIX = "kbl:draft-pool-source-mode:";
 const POOL_QUALITY_CENTER_SESSION_PREFIX = "kbl:draft-pool-quality-center:";
+// CONTRACT_STALEPARITY_2026-07-09 (Item 3): mirrors POOL_QUALITY_CENTER_SESSION_PREFIX -- without
+// this, poolBalancePreset silently resets to "balanced" on every remount, which is exactly the
+// staleness this contract exists to catch.
+const POOL_BALANCE_PRESET_SESSION_PREFIX = "kbl:draft-pool-balance-preset:";
 const RESERVE_PRICE_K_SESSION_PREFIX = "kbl:draft-reserve-price-k:";
 const IDENTITY_AUTO_FILL_NONCE_SESSION_PREFIX = "kbl:draft-identity-auto-fill-nonce:";
 const SHARED_POOL_RECHECK_TAG = "SHARED POOL";
@@ -748,6 +752,24 @@ function savePoolQualityCenterToSession(leagueId: string | null, poolMode: Draft
   window.sessionStorage.setItem(poolQualityCenterSessionKey(leagueId, poolMode), String(qualityCenter));
 }
 
+// CONTRACT_STALEPARITY_2026-07-09 (Item 3): same load/save-to-session shape as poolSourceMode
+// above -- an inline 3-way string-literal check, since PoolBalancePresetKey only ever has these
+// three values (mirrors poolSourceMode's own inline "full-pool" | "team-roster-priority" check).
+function poolBalancePresetSessionKey(leagueId: string, poolMode: DraftPoolMode): string {
+  return `${POOL_BALANCE_PRESET_SESSION_PREFIX}${leagueId}:${poolMode}`;
+}
+
+function loadPoolBalancePresetFromSession(leagueId: string | null, poolMode: DraftPoolMode): PoolBalancePresetKey {
+  if (!leagueId || typeof window === "undefined") return "balanced";
+  const raw = window.sessionStorage.getItem(poolBalancePresetSessionKey(leagueId, poolMode));
+  return raw === "grounded" || raw === "balanced" || raw === "juiced" ? raw : "balanced";
+}
+
+function savePoolBalancePresetToSession(leagueId: string | null, poolMode: DraftPoolMode, preset: PoolBalancePresetKey): void {
+  if (!leagueId || typeof window === "undefined") return;
+  window.sessionStorage.setItem(poolBalancePresetSessionKey(leagueId, poolMode), preset);
+}
+
 function reservePriceKSessionKey(leagueId: string, poolMode: DraftPoolMode): string {
   return `${RESERVE_PRICE_K_SESSION_PREFIX}${leagueId}:${poolMode}`;
 }
@@ -899,6 +921,10 @@ function buildPoolExtractedBasis(
   leagueTeams: readonly Team[],
   cap: number,
   shills: number,
+  // CONTRACT_STALEPARITY_2026-07-09: basis inputs shared by BOTH modes' capture points
+  // (design-first's handleExtractPool and pool-first's handleLock) — see poolBasisStaleLines.
+  poolQualityCenter: number,
+  poolBalancePreset: string,
 ): PoolExtractedBasis {
   const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
   const identityByTeamId: Record<string, string | null> = {};
@@ -911,6 +937,8 @@ function buildPoolExtractedBasis(
     poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
     shills: clampDraftShillCount(shills),
     identityByTeamId,
+    poolQualityCenter,
+    poolBalancePreset,
     // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: the draft pool sources are a basis input like cap/
     // dial/shills/identity — a change here must trip the same "re-extract" staleness signal.
     // Absent (unfiltered) stays absent here too, so a pre-feature record and an untouched
@@ -934,6 +962,15 @@ function poolBasisStaleLines(
   }
   if (extractedBasis.shills !== undefined && extractedBasis.shills !== liveBasis.shills) {
     lines.push("THE SHILL COUNT MOVED — RE-EXTRACT TO REDRAW.");
+  }
+  // CONTRACT_STALEPARITY_2026-07-09: same undefined-guarded treatment as shills above -- a basis
+  // captured before these two fields existed (or a design-first basis, which never varies its
+  // preset) simply never compares them, so no retro-nag on legacy records.
+  if (extractedBasis.poolQualityCenter !== undefined && extractedBasis.poolQualityCenter !== liveBasis.poolQualityCenter) {
+    lines.push("THE POOL QUALITY DIAL MOVED — RE-EXTRACT TO REDRAW.");
+  }
+  if (extractedBasis.poolBalancePreset !== undefined && extractedBasis.poolBalancePreset !== liveBasis.poolBalancePreset) {
+    lines.push("THE POOL BALANCE DIAL MOVED — RE-EXTRACT TO REDRAW.");
   }
   // Sources comparison is null-aware: absent = unfiltered (all leagues), which is both the
   // pre-feature meaning and the untouched-default meaning, so legacy records never retro-nag.
@@ -1458,7 +1495,9 @@ export function LeagueBuilderDraftSetup() {
   const [savedDraftLookupError, setSavedDraftLookupError] = useState<string | null>(null);
   const [modeAReport, setModeAReport] = useState<ModeAReport | null>(null);
   const [poolFirstShapeReport, setPoolFirstShapeReport] = useState<ModeAReport | null>(null);
-  const [poolBalancePreset, setPoolBalancePreset] = useState<PoolBalancePresetKey>("balanced");
+  const [poolBalancePreset, setPoolBalancePreset] = useState<PoolBalancePresetKey>(() =>
+    loadPoolBalancePresetFromSession(activeLeagueId, poolMode)
+  );
   const [poolQualityCenter, setPoolQualityCenter] = useState<PoolQualityCenter>(() =>
     loadPoolQualityCenterFromSession(activeLeagueId, poolMode)
   );
@@ -2043,14 +2082,17 @@ export function LeagueBuilderDraftSetup() {
   }, [poolBalancePreset, poolBalanceTuning, poolFirstManualShapeDiagnostics]);
 
   const livePoolExtractedBasis = useMemo(
-    () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills) : null),
-    [league, leagueTeams, shills, tierBudget],
+    () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills, poolQualityCenter, poolBalancePreset) : null),
+    [league, leagueTeams, shills, tierBudget, poolQualityCenter, poolBalancePreset],
   );
+  // CONTRACT_STALEPARITY_2026-07-09: this used to be design-first-only (poolMode === "design-first"
+  // && ...) -- pool-first now ALSO snapshots a basis at LOCK time (see handleLock), so the same
+  // detector runs for both modes off the same league.poolExtractedAt/poolExtractedBasis fields.
   const basisStaleLines = useMemo(
-    () => (poolMode === "design-first" && league?.poolExtractedAt
+    () => (league?.poolExtractedAt
       ? poolBasisStaleLines(league.poolExtractedBasis, livePoolExtractedBasis, leagueTeams)
       : []),
-    [league?.poolExtractedAt, league?.poolExtractedBasis, leagueTeams, livePoolExtractedBasis, poolMode],
+    [league?.poolExtractedAt, league?.poolExtractedBasis, leagueTeams, livePoolExtractedBasis],
   );
   const basisStale = basisStaleLines.length > 0;
   const designsLocked = useMemo(
@@ -2253,9 +2295,14 @@ export function LeagueBuilderDraftSetup() {
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey) && Boolean(team.farmArchetypeKey));
   const poolReady = locked && sufficiency.meetsFloor;
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
+  // CONTRACT_STALEPARITY_2026-07-09: poolTrailing used to be skipped entirely for pool-first
+  // (poolMode === "pool-first" short-circuited the whole term to true) -- now it's unconditional
+  // for both modes, and only the design-lock requirement stays design-first-specific. For
+  // pool-first, designsStale and modeAFinalizedDisplayMismatch are always false (both gated to
+  // design-first at their own definitions), so poolTrailing reduces to exactly basisStale there.
   const startReady =
     Boolean(league) &&
-    (hasSavedDraft || (poolReady && identitiesReady && (poolMode === "pool-first" || (allHumanDesignsLocked && !poolTrailing)))) &&
+    (hasSavedDraft || (poolReady && identitiesReady && !poolTrailing && (poolMode === "pool-first" || allHumanDesignsLocked))) &&
     savedDraftChecked &&
     !savedDraftLookupError;
   const startBlocker = !savedDraftChecked
@@ -2265,9 +2312,11 @@ export function LeagueBuilderDraftSetup() {
       : poolMode === "design-first" && !allHumanDesignsLocked
         ? "lock every club's design first"
         : poolTrailing
-          ? modeAFinalizedDisplayMismatch
-            ? "re-extract so the displayed pool matches the final pool"
-            : "finish the re-plan — lock the edits, then re-extract"
+          ? poolMode === "design-first"
+            ? modeAFinalizedDisplayMismatch
+              ? "re-extract so the displayed pool matches the final pool"
+              : "finish the re-plan — lock the edits, then re-extract"
+            : "the pool went stale since it was locked — unlock, then lock again to refresh it"
           : !poolReady
             ? "lock a sufficient player pool first"
             : !identitiesReady
@@ -2533,6 +2582,10 @@ export function LeagueBuilderDraftSetup() {
     setPoolProvenance(loadPoolProvenanceFromSession(activeLeagueId, poolMode));
     setPoolSourceMode(loadPoolSourceModeFromSession(activeLeagueId, poolMode));
     setPoolQualityCenter(loadPoolQualityCenterFromSession(activeLeagueId, poolMode));
+    // CONTRACT_STALEPARITY_2026-07-09 (Item 3): mirrors poolQualityCenter's own re-sync above --
+    // without this, poolBalancePreset only ever gets its session value at first mount, never on a
+    // later league/mode switch within the same session.
+    setPoolBalancePreset(loadPoolBalancePresetFromSession(activeLeagueId, poolMode));
     setReservePriceK(loadReservePriceKFromSession(activeLeagueId, poolMode, requestedReservePriceK));
     setPoolFirstShapeReport(null);
   }, [activeLeagueId, poolMode, requestedReservePriceK]);
@@ -2551,6 +2604,14 @@ export function LeagueBuilderDraftSetup() {
     if (poolMode !== "pool-first") return;
     savePoolQualityCenterToSession(activeLeagueId, poolMode, poolQualityCenter);
   }, [activeLeagueId, poolMode, poolQualityCenter]);
+
+  // CONTRACT_STALEPARITY_2026-07-09 (Item 3): mirrors savePoolQualityCenterToSession above --
+  // without this, poolBalancePreset never persists at all, so it silently resets to "balanced" on
+  // every remount even while a pool built with a different preset stays locked underneath it.
+  useEffect(() => {
+    if (poolMode !== "pool-first") return;
+    savePoolBalancePresetToSession(activeLeagueId, poolMode, poolBalancePreset);
+  }, [activeLeagueId, poolMode, poolBalancePreset]);
 
   useEffect(() => {
     if (poolMode !== "pool-first") return;
@@ -2582,15 +2643,22 @@ export function LeagueBuilderDraftSetup() {
       if (!league || nextMode === poolMode) return;
       if (locked) throw new Error("Pool mode is locked once the pool locks.");
       assertPoolCanMutate();
+      // CONTRACT_STALEPARITY_2026-07-09: this used to clear these fields ONLY when switching TO
+      // pool-first -- safe under the old regime because pool-first never wrote poolExtractedAt/
+      // poolExtractedBasis. Now that pool-first's handleLock also snapshots a basis (Item 1), an
+      // asymmetric clear would leak a pool-first-origin basis into design-first mode (unlock a
+      // once-locked pool-first pool, switch mode -- design-first would inherit a basis it never
+      // built). The `nextMode === poolMode` early return above already guarantees any call past
+      // this point IS a real mode change, so clearing unconditionally is correct for both directions.
       await saveLeagueDraftSetup({
         draftPoolMode: nextMode,
-        poolExtractedAt: nextMode === "pool-first" ? undefined : league.poolExtractedAt,
-        poolExtractedBasis: nextMode === "pool-first" ? undefined : league.poolExtractedBasis,
-        modeAExtractedIds: nextMode === "pool-first" ? undefined : league.modeAExtractedIds,
-        modeAHandAdds: nextMode === "pool-first" ? undefined : league.modeAHandAdds,
-        modeAHandRemoves: nextMode === "pool-first" ? undefined : league.modeAHandRemoves,
+        poolExtractedAt: undefined,
+        poolExtractedBasis: undefined,
+        modeAExtractedIds: undefined,
+        modeAHandAdds: undefined,
+        modeAHandRemoves: undefined,
       });
-      if (nextMode === "pool-first") setModeAReport(null);
+      setModeAReport(null);
     }, { refreshData: false, refreshPool: false });
 
   const handleSeatNameChange = (seatId: string, name: string) =>
@@ -3028,7 +3096,8 @@ export function LeagueBuilderDraftSetup() {
       const saved = await saveLeagueTemplate({
         ...league,
         poolExtractedAt: extractedAt,
-        poolExtractedBasis: livePoolExtractedBasis ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills),
+        poolExtractedBasis: livePoolExtractedBasis
+          ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills, poolQualityCenter, poolBalancePreset),
         modeAExtractedIds: sortedIds(result.players.map((player) => player.id)),
         modeAHandAdds: folded.handAdds,
         modeAHandRemoves: folded.handRemoves,
@@ -3044,6 +3113,19 @@ export function LeagueBuilderDraftSetup() {
       const lockedPool = await lockLeaguePool(activeLeagueId, { expectedPlayerIds: displayedPoolIds });
       setPoolRecord(lockedPool);
       setLockConfirm(false);
+      // CONTRACT_STALEPARITY_2026-07-09: pool-first has no separate "extract" step -- LOCK is its
+      // basis-snapshot point (design-first snapshots at EXTRACT time, in handleExtractPool above).
+      // This is what lets basisStaleLines/poolTrailing run for pool-first exactly like design-first.
+      if (poolMode === "pool-first" && league) {
+        const extractedAt = new Date().toISOString();
+        const saved = await saveLeagueTemplate({
+          ...league,
+          poolExtractedAt: extractedAt,
+          poolExtractedBasis: livePoolExtractedBasis
+            ?? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills, poolQualityCenter, poolBalancePreset),
+        });
+        replaceLeagueLocal(saved);
+      }
     }, { refreshPool: false });
 
   const handleUnlock = () =>
@@ -3259,6 +3341,13 @@ export function LeagueBuilderDraftSetup() {
           }
         } else if (!sufficiency.meetsFloor) {
           readinessReasons.push(`The locked pool is ${-sufficiency.surplus} player${-sufficiency.surplus === 1 ? "" : "s"} short of what the draft needs.`);
+        }
+        // CONTRACT_STALEPARITY_2026-07-09: pool-first gets the same basis-drift net design-first
+        // has above -- reuses the exact same basisStaleLines array (poolBasisStaleLines is the one
+        // detector, shared by both modes) and the same "locked but the plan changed" catch-all.
+        for (const line of basisStaleLines) readinessReasons.push(line);
+        if (locked && basisStaleLines.length > 0) {
+          readinessReasons.push("The pool is locked but the plan changed since — UNLOCK, re-extract, then re-lock.");
         }
       }
     }
