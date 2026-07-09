@@ -43,10 +43,15 @@ import {
   type ArchetypeCompletionOutlook,
   type PoolDemandModel,
 } from '../engines/auctionPoolSizing';
+import {
+  evaluatePositionSupplyFloors,
+  type PositionSupplyFloorResult,
+} from '../engines/poolFromDemand';
 import { analyzePoolFeasibility, type PoolFeasibilityReport } from '../engines/poolFeasibility';
 import { HISTORICAL_ARCHETYPES } from '../data/historicalArchetypes';
 import { toRosterSlotPlayer } from '../engines/rosterNeed';
 import type { SimPlayer } from '../engines/archetypeBalanceSimulator';
+import type { RosterSlotPlayer } from '../data/rosterConstruction';
 
 /** A player is IN the league pool iff it carries an assignment for that league. */
 export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean {
@@ -448,6 +453,8 @@ export interface PoolDemandSufficiency extends PoolSufficiency {
   expectedShillWins: number;
   /** The full sizing model's recommendation (identity-roomy), above the hard floor. */
   targetSize: number;
+  /** Hard legal-position floors that the actual extracted pool does not satisfy. */
+  positionFloorReasons: PositionSupplyFloorResult[];
 }
 
 /**
@@ -459,6 +466,7 @@ export function evaluatePoolDemandSufficiency(
   teamCount: number,
   shillCount: number,
   targetOverride?: number,
+  poolPlayers?: readonly RosterSlotPlayer[],
 ): PoolDemandSufficiency {
   const model = poolDemandModel(teamCount, shillCount);
   // CUT2-2: keep the class-feasibility floor for real clubs, but exclude shill wins from the
@@ -468,14 +476,19 @@ export function evaluatePoolDemandSufficiency(
     model.feasibilityFloor,
   );
   const targetSize = targetOverride ?? model.targetSize;
+  const positionFloorReasons = poolPlayers
+    ? evaluatePositionSupplyFloors(poolPlayers, teamCount).filter((floor) => floor.missing > 0)
+    : [];
+  const countMeetsFloor = poolSize >= hardFloor;
   return {
     poolSize,
     mlbSlots: hardFloor,
-    meetsFloor: poolSize >= hardFloor,
+    meetsFloor: countMeetsFloor && positionFloorReasons.length === 0,
     surplus: poolSize - hardFloor,
     overSupplyWarning: targetSize > 0 && poolSize > targetSize * POOL_SURPLUS_MAX,
     expectedShillWins: model.expectedShillWins,
     targetSize,
+    positionFloorReasons,
   };
 }
 

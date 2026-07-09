@@ -5,6 +5,8 @@ import {
   DEFAULT_POOL_SIZE_MULTIPLIER,
   DEFAULT_POOL_QUALITY_CENTER,
   derivePoolQualityTuning,
+  derivePositionSupplyFloorTargets,
+  enforcePositionSupplyFloors,
   extractPoolFromDemand,
   numericGradeForPoolShape,
   poolBalancePresetTuning,
@@ -26,7 +28,7 @@ import { buildDefaultDesignSlots } from '../rosterDesignFeasibility';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import { classifyPlayerArchetype } from '../playerArchetypeClassifier';
 import { demandPlayerFromLeaguePlayer } from '../../src_figma/app/pages/LeagueBuilderDraftSetup';
-import { canRelieve, canStart, isLegalRoster } from '../../data/rosterConstruction';
+import { canRelieve, canStart, isCloser, isLegalRoster } from '../../data/rosterConstruction';
 import { toRosterSlotPlayer } from '../rosterNeed';
 import type { Player } from '../../utils/leagueBuilderStorage';
 
@@ -238,6 +240,63 @@ function legalOneTeamPool(): DemandUniversePlayer[] {
   ];
 }
 
+function floorTarget(teamCount: number, position: string) {
+  const target = derivePositionSupplyFloorTargets(teamCount).find((candidate) => candidate.position === position);
+  if (!target) throw new Error(`Missing floor target ${position}`);
+  return target;
+}
+
+function hardFloorUniverse(teamCount: number, cpCount = floorTarget(teamCount, 'CP').needed): DemandUniversePlayer[] {
+  n = 0;
+  const players: DemandUniversePlayer[] = [];
+  for (const position of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']) {
+    for (let index = 0; index < floorTarget(teamCount, position).needed; index += 1) {
+      const player = hitter(position, MIDDLE_CORE, 1_000 + index);
+      player.id = `floor-${position}-${index.toString().padStart(2, '0')}`;
+      players.push(player);
+    }
+  }
+
+  const primaryCatchers = floorTarget(teamCount, 'C').needed;
+  const catcherDepth = floorTarget(teamCount, 'CATCHER_DEPTH').needed;
+  for (let index = 0; index < Math.max(0, catcherDepth - primaryCatchers); index += 1) {
+    players.push(hitter('1B', MIDDLE_CORE, 1_000 + index, {
+      id: `floor-backup-c-${index.toString().padStart(2, '0')}`,
+      secondaryPosition: 'C',
+      profile: {
+        isPitcher: false,
+        primaryPosition: '1B',
+        secondaryPosition: 'C',
+        bats: 'R',
+        throws: 'R',
+        age: 27,
+        ...MIDDLE_CORE,
+      },
+    } as Partial<DemandUniversePlayer>));
+  }
+
+  for (let index = 0; index < floorTarget(teamCount, 'SP').needed; index += 1) {
+    const player = arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000 + index);
+    player.id = `floor-sp-${index.toString().padStart(2, '0')}`;
+    players.push(player);
+  }
+
+  for (let index = 0; index < cpCount; index += 1) {
+    const player = arm('CP', { velocity: 62, junk: 60, accuracy: 60 }, 1_000 + index);
+    player.id = `floor-cp-${index.toString().padStart(2, '0')}`;
+    players.push(player);
+  }
+
+  const pureRelieversNeeded = Math.max(0, floorTarget(teamCount, 'RP').needed - cpCount);
+  for (let index = 0; index < pureRelieversNeeded; index += 1) {
+    const player = arm('RP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000 + index);
+    player.id = `floor-rp-${index.toString().padStart(2, '0')}`;
+    players.push(player);
+  }
+
+  return players.sort((left, right) => left.id.localeCompare(right.id));
+}
+
 describe('extractPoolFromDemand', () => {
   const archetypes = HISTORICAL_ARCHETYPES.slice(0, 2);
 
@@ -255,7 +314,7 @@ describe('extractPoolFromDemand', () => {
     expect(cell?.asks).toBe(2);
     expect(cell?.wanted).toBe(4);
     expect(cell?.reserved).toBe(4);
-    expect(result.shortfalls).toEqual([]);
+    expect(result.shortfalls.filter((shortfall) => !shortfall.position)).toEqual([]);
     expect(result.size).toBeGreaterThan(0);
     expect(result.floors.players.length).toBeGreaterThan(0);
     for (const verdict of result.designVerdicts) {
@@ -269,8 +328,9 @@ describe('extractPoolFromDemand', () => {
       teams: 4,
       budgetPerTeam: 5_000_000,
     });
-    expect(result.shortfalls.length).toBe(1);
-    expect(result.shortfalls[0].message).toContain('the uploaded universe holds 0');
+    const demandShortfalls = result.shortfalls.filter((shortfall) => !shortfall.position);
+    expect(demandShortfalls.length).toBe(1);
+    expect(demandShortfalls[0].message).toContain('the uploaded universe holds 0');
     // The pool still extracts (floors intact); the asking design reports its blocker.
     expect(result.size).toBeGreaterThan(0);
     const verdict = result.designVerdicts[0].result;
@@ -296,6 +356,61 @@ describe('extractPoolFromDemand', () => {
     expect(result.designVerdicts[0].result.feasible).toBe(false);
   });
 
+  it('tops up hard legal-position floors with CP hoarding slack at extraction', () => {
+    const teamCount = 3;
+    const source = hardFloorUniverse(teamCount);
+    const result = extractPoolFromDemand(source, [], [], 'standard', {
+      teams: teamCount,
+      budgetPerTeam: 5_000_000,
+    });
+
+    const cpFloor = result.positionSupplyFloors.find((floor) => floor.position === 'CP');
+    expect(cpFloor).toMatchObject({
+      minimumPerTeam: 1,
+      teams: teamCount,
+      slack: 2,
+      needed: 5,
+      available: 5,
+      missing: 0,
+    });
+    expect(result.players.filter(isCloser)).toHaveLength(cpFloor!.needed);
+    expect(result.shortfalls.filter((shortfall) => shortfall.position === 'CP')).toEqual([]);
+  });
+
+  it('reports a structured hard-position shortfall when the universe itself lacks CP slack', () => {
+    const teamCount = 3;
+    const cpNeeded = floorTarget(teamCount, 'CP').needed;
+    const result = extractPoolFromDemand(hardFloorUniverse(teamCount, cpNeeded - 1), [], [], 'standard', {
+      teams: teamCount,
+      budgetPerTeam: 5_000_000,
+    });
+
+    const cpShortfall = result.shortfalls.find((shortfall) => shortfall.position === 'CP');
+    expect(cpShortfall).toMatchObject({
+      key: 'position-floor:CP',
+      position: 'CP',
+      wanted: cpNeeded,
+      available: cpNeeded - 1,
+    });
+    expect(cpShortfall?.message).toContain('closers');
+    expect(result.positionSupplyFloors.find((floor) => floor.position === 'CP')?.missing).toBe(1);
+  });
+
+  it('leaves an already floor-sufficient selected pool byte-identical', () => {
+    const teamCount = 3;
+    const source = hardFloorUniverse(teamCount);
+    const beforeIds = source.map((player) => player.id);
+    const result = enforcePositionSupplyFloors({
+      universe: source,
+      players: source,
+      teams: teamCount,
+      fitOf: () => 0,
+    });
+
+    expect(result.injectedIds).toEqual([]);
+    expect(result.shortfalls).toEqual([]);
+    expect(result.players.map((player) => player.id)).toEqual(beforeIds);
+  });
 
   it('is deterministic: identical inputs produce the identical pool', () => {
     const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
@@ -1106,8 +1221,9 @@ describe('extractPoolFromDemand', () => {
       poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
       maxRepairRounds: 1,
     });
-    if (result.sizing?.injectedIds.includes('fallback-rf')) {
-      expect(result.sizing.messages.some((message) => message.includes('cheapest legal option'))).toBe(true);
+    const fallbackRepairMessage = result.sizing?.messages.find((message) => message.includes('fallback-rf'));
+    if (fallbackRepairMessage) {
+      expect(fallbackRepairMessage).toContain('cheapest legal option');
     }
   });
 
