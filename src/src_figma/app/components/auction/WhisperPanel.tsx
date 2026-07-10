@@ -802,11 +802,14 @@ function WhisperHeadline({
             moves its display out of this default row entirely -- it now lives only in
             AuctionStage's shared Help surface, honestly labeled "Before-tax ceiling". */}
       </div>
-      {/* COPY LAW 1.2: only when the liquidity-reserved ceiling actually sits below what this
-          player is worth to you -- tells the GM the two numbers mean different things. */}
-      {worth.suggestedMaxBid < worth.recommendedNumber && (
+      {/* COPY LAW 1.2 + captain ruling (audit F1, 2026-07-09): recommendedNumber is already
+          min(worth, suggestedMaxBid) at every payload producer, so gating on
+          suggestedMaxBid < recommendedNumber is engine-impossible dead code. The honest gate is
+          the PRE-clamp adjusted worth (worth.ownValue): render only when cash actually caps this
+          seat below what he's worth to it, and say both real dollar figures. */}
+      {worth.suggestedMaxBid < worth.ownValue && (
         <p className="whisper-ceiling-relation" data-testid="whisper-ceiling-relation">
-          Your number is what he's worth. Ceiling is what you can pay.
+          He's worth {money(worth.ownValue)} to you — your cash stops at {money(worth.suggestedMaxBid)}.
         </p>
       )}
       <div className="whisper-reason-row">

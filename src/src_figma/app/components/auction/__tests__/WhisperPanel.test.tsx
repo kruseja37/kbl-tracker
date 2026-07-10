@@ -618,18 +618,34 @@ describe("WhisperPanel", () => {
     expect(screen.getByText("No read yet -- still doing my homework on this club.")).toBeInTheDocument();
   });
 
-  test("COPY LAW 1.2 (CONTRACT_VOICE_2026-07-09.md): the ceiling-vs-number relationship line renders only when the ceiling sits below YOUR NUMBER", () => {
+  test("COPY LAW 1.2 + captain ruling (audit F1): the cash-cap relationship line renders only when the ceiling sits below the PRE-clamp adjusted worth (ownValue), with both real dollar figures", () => {
+    // ENGINE-POSSIBLE shape: every payload producer sets recommendedNumber = min(worth,
+    // suggestedMaxBid) -- so when cash caps the seat, ownValue sits ABOVE the ceiling and
+    // recommendedNumber equals the ceiling (the clamp). The original gate compared the ceiling
+    // against recommendedNumber, which that clamp makes impossible -- this fixture proves the
+    // ruled gate (ownValue) fires in the real capped state.
     const { rerender } = render(<WhisperPanel payload={payload("push", {
-      worthToYou: { ...payload("push").worthToYou!, recommendedNumber: 80_000, suggestedMaxBid: 60_000 },
+      worthToYou: {
+        ...payload("push").worthToYou!,
+        ownValue: 80_000,
+        recommendedNumber: 60_000,
+        suggestedMaxBid: 60_000,
+      },
     })} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
     expect(screen.getByTestId("whisper-ceiling-relation")).toHaveTextContent(
-      "Your number is what he's worth. Ceiling is what you can pay.",
+      "He's worth $80,000 to you — your cash stops at $60,000.",
     );
 
+    // Negative case: ownValue ≤ suggestedMaxBid (cash is NOT the cap) -> the line is absent.
     rerender(<WhisperPanel payload={payload("push", {
-      worthToYou: { ...payload("push").worthToYou!, recommendedNumber: 60_000, suggestedMaxBid: 80_000 },
+      worthToYou: {
+        ...payload("push").worthToYou!,
+        ownValue: 60_000,
+        recommendedNumber: 60_000,
+        suggestedMaxBid: 80_000,
+      },
     })} />);
     expect(screen.queryByTestId("whisper-ceiling-relation")).not.toBeInTheDocument();
   });
