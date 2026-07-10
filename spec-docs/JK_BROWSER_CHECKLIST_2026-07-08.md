@@ -269,17 +269,51 @@ reveal/hide behavior from both sides.
       standing rule, farm intel gets lighter privacy treatment than MLB. Confirm that still feels
       right now that MLB has the full covered/click-to-reveal/auto-hide treatment above.
 
+## 11. TODAY'S FIXES (2026-07-10) — THE TWO-TRACK DRAFT-VIABILITY EXPERIMENT: THE REBUILT AUCTION AND THE SNAKE-DRAFT PROOF OF CONCEPT
+
+Your live test found the auction "not viable as-is" — a mid-draft biddability collapse, a shill
+ending at −$400k that never bid again. Two things shipped in response: the auction is rebuilt to
+the design you described, and an isolated snake-draft room exists so you can compare it side by
+side. **This section is the walkthrough for both — play them back to back and rule which format(s)
+the league should use going forward.**
+
+- [ ] **Play a small-league auction end to end and see if it feels like an auction the whole
+      way.** Clubs nominate in turn; whoever opens a lot sets the opening bid at or above the
+      league minimum, and that opening bid is committed — the player WILL sell this lot, nothing
+      recirculates. Shill wins should leave the board for good (no redistribution). The draft
+      should end the moment every real roster is legally full, with no hidden rescue step at the
+      end. Does it feel back-and-forth early, alive in the middle, and finish clean?
+- [ ] **Spot-check the tax feel at different league sizes** — 4 clubs, 8 clubs, 20 clubs. Small
+      leagues should feel noticeably lighter on tax pressure than a 20-club league, which should
+      feel unchanged from before. If a small league still feels choked, flag it.
+- [ ] **Confirm the bigger pool feels right.** Pools now run about 1.5× the old seat count —
+      confirm regeneration feels snappy and the extra depth is actually useful, not just bloat.
+- [ ] **Enter the snake draft POC only through the Panel-5 button** ("START SNAKE DRAFT (POC)"
+      on Draft Setup, next to the normal auction start) — it should only appear once your pool
+      passes the normal readiness checks. Play a full 22-round snake draft: watch the running
+      SPENT / HEADROOM / TAX ledger per club, browse the board sorted by TRUE COST and STEAL,
+      check the availability odds (SAFE / LIKELY / COIN FLIP / GONE, plus a LAST REALISTIC PICK
+      call) against what actually happens, try a pick trade against a CPU club, and confirm the
+      whole room feels isolated — nothing about your normal auction league should be touched by
+      playing this.
+- [ ] **The verdict:** after playing both, which do you want as the league's draft format —
+      keep the rebuilt auction, adopt the snake draft, or offer both as a per-league choice? This
+      call decides whether the traditional-draft program's remaining lanes (a full non-POC snake
+      build) continue at all.
+
 ## What a PASS means
 
 A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin), the floor refit
-(Section 8), the tax-coherence program (Section 9), and the walkthrough wave (Section 10 — reveal
-privacy, plain-English money, the stakes panel, advisor color, and the setup Help gate) are ALL
+(Section 8), the tax-coherence program (Section 9), the walkthrough wave (Section 10 — reveal
+privacy, plain-English money, the stakes panel, advisor color, and the setup Help gate), and the
+draft-viability experiment (Section 11 — the rebuilt auction and the snake-draft POC) are ALL
 accepted as done. Any items you flag as "fix this" get ticketed and scheduled; anything you flag
 as "actually I want this different" gets treated as a new design fork, not a bug. **As of
-2026-07-09, this checklist is the ONLY remaining gate** — there is no more building queued behind
-it; a full walkthrough closes the walkthrough wave and clears the way for the next queued program
-(the traditional/snake draft, `TRADITIONAL_DRAFT_PROGRAM_2026-07-09.md`) plus the v1.1 follow-up
-batch tracked in `CONTINUITY_CHECKPOINT.md`.
+2026-07-10, Section 11's side-by-side verdict is the ONLY remaining gate** — there is no more
+building queued behind it; your ruling on auction / snake / both decides whether the
+traditional-draft program's remaining lanes (`TRADITIONAL_DRAFT_PROGRAM_2026-07-09.md`, currently
+SUSPENDED at D1 done) continue at all, plus the v1.1 follow-up batch tracked in
+`CONTINUITY_CHECKPOINT.md`.
 
 ## Two open JK rulings elsewhere (not part of this checklist)
 
