@@ -22,6 +22,13 @@ inventory — re-locate by content if drifted.
 - The parked page (823 lines) is the SKELETON, not the product. The inventory found it broken in
   five load-bearing ways (no settled salaries; franchise initializer blind to snake sessions; no
   roster legality; no supply-floor gate; unrouted). Every one is a plank in this design.
+- **JK rulings 2026-07-09, second pass (this amendment):** (a) settlement = the player's IV
+  (§3 rewritten — the slot-scale draft is WITHDRAWN); (b) farm prospects keep the
+  rookie-contract salary concept (farm-side, separate mini-spec after a ground-truth check);
+  (c) the snake pool is the FULL UNIVERSE of the selected source leagues with hand add/remove —
+  no extraction, no sizing (§7 rewritten); validity = position supply only; (d) the auction
+  Draft Setup is NOT assumed to cross over — a dedicated conversion ground-truth pass gates
+  D2's contract.
 
 ## §1 The dynamic (why this is not an auction with picks)
 An auction's drama is price discovery: everyone active on every lot, money as the action. A
@@ -48,29 +55,34 @@ reveal (§2), tax-marginal-cause honesty, no engine jargon rendered, ever.
 Builders: Codex 5.6 SOL, xhigh for D1/D3/D4/D6 (economics/math), medium for D2/D5/D7 shell/UI
 work. Audits: opus for D1/D3/D4/D6, sonnet acceptable for D7. Builder ≠ auditor, always.
 
-## §3 Salary settlement — the slot scale (new economics, the key design decision)
-A snake draft has no bids, but the economy needs every drafted player to settle a salary
-(auction parity: `saveMlbAssignment` stamps `salary`+`settledSalary`; the snake page stamps
-nothing — inventory finding #2). Ruling: **slot-scale settlement** (the rookie-contract analog):
+## §3 Salary settlement — IV is the price (JK-RULED 2026-07-09; supersedes this section's
+earlier slot-scale draft)
+JK ruling, verbatim intent: salary IS the player's IV — the IV engine was built to produce
+exactly this number. The auction STARTS bidding at a fraction of IV and discovers a price; the
+traditional draft has no discovery, so a drafted player settles AT his IV.
 
-- At draft start, derive `slotSalary(k)` for every overall pick k from the LOCKED pool:
-  `slotSalary(k) = salaryOf(kth-best pool player by IV) × κ`, floored at
-  `LEAGUE_MINIMUM_SALARY`, where κ is a single calibration constant.
-- `settledSalary = slotSalary(overallPick)` — full stop, regardless of who is taken.
-  - A falling star taken late = elite talent at a bargain cap number → the steal is REAL.
-  - A reach taken early pays the slot, not his market rate → the overpay is REAL.
-  - Trading down saves cap; trading up costs it → §6's math gets teeth for free.
-- **Calibration invariant (test-locked, gauntlet-style):** for every league tier and team count,
-  the sum of a team's 22 slot salaries must land in `[0.80, 1.00] × team budget`, and a legal
-  22 must be completable under the hard cap for every seat. κ is tuned once to satisfy this;
-  the test pins the invariant, not κ's value. A six-draft completion gauntlet (production
-  defaults) is D1's exit proof, mirroring the auction's.
+- `settledSalary = salary = the player's IV` at pick commit (auction-parity pipeline shape —
+  the same stamp `saveMlbAssignment` performs; inventory finding #2 stays the D1 plank).
 - Rating-based luxury tax is UNCHANGED and applies identically (tax binds on ratings, salary
-  binds on cap — two independent, coherent pressures). The marginal tax of a pick uses the
-  existing `auctionMarginalTaxWithCaps` verbatim.
-- JK-visible feel decision, defaulted here, flag at his walkthrough: slot scale (chosen) vs
-  market-salary settlement (rejected: no trade-down tension, no steal economics, double-counts
-  talent).
+  binds on cap — two independent, coherent pressures). The marginal tax of a pick uses
+  `auctionMarginalTaxWithCaps` verbatim.
+- Consequences the design embraces:
+  - **Cap pressure replaces price discovery as THE constraint.** Twenty-two IVs must fit under
+    the hard cap, so nobody drafts 22 stars. The in-draft solvency guardrail is load-bearing at
+    every pick, human and CPU: can you pay this IV and still fill every remaining seat from
+    what's left (existing `assessSolvency` + a `cheapestLegalCompletion`-based reserve, tax
+    included)? BLOCKED picks stay unpickable, with the reason in VOICE.
+  - **The steal is fit, not discount.** Every club pays the same IV for a player, but ownValue
+    (fit/need/identity) and marginal tax differ per club — so TRUE COST = IV + YOUR marginal
+    tax, and STEAL = your ownValue − TRUE COST (§5 uses these definitions).
+  - **Trading down is self-funding** (lesser players settle at lower IVs); trading up costs
+    pick capital AND takes on a bigger salary + tax commitment — the §6 advisor shows both.
+- **Completion gauntlet (D1 exit, test-locked):** six production-default full drafts (CPU
+  picker in every seat) complete a legal 22 under the hard cap for every team, zero stranding.
+  No calibration constant exists — IV needs none.
+- **Farm note (JK-ruled, out of this program's scope):** farm prospects follow the
+  rookie-contract salary concept instead. Before ANY farm-side build: ground-truth what farm
+  prospect salaries do today (do not assume), then a separate mini-spec.
 
 ## §4 The shared brain — CPU picker and availability forecast
 One model powers CPU picks AND the user's forecast, so the forecast is honest by construction.
@@ -107,12 +119,12 @@ fixture convenience (V1_CANON §6 discipline applies).
   animation frame — after commit only.
 
 ## §5 The advisor board (true cost, steals, runs)
-- **TRUE COST column:** `slotSalary(yourNextPick) + yourMarginalTax(P)` — sortable. The tax
-  term is per-YOUR-team (archetype caps), so the same player costs different clubs differently:
-  this is the auction's tax honesty carried into the draft.
-- **STEAL score:** `yourBoardValue(P) − trueCost(P)`, normalized; top-3 steals get a quiet
-  badge. Uses YOUR blend (rankOverrides + identity) — the Draft Setup ranking board is now
-  load-bearing exactly as JK intended.
+- **TRUE COST column:** `IV(P) + yourMarginalTax(P)` — sortable. Every club pays the same IV;
+  the tax term is per-YOUR-team (archetype caps), so the same player still costs different
+  clubs differently: the auction's tax honesty carried into the draft.
+- **STEAL score:** `yourOwnValue(P) − trueCost(P)` (fit/need/identity-adjusted worth minus
+  IV-plus-tax), normalized; top-3 steals get a quiet badge. Uses YOUR blend (rankOverrides +
+  identity) — the Draft Setup ranking board is now load-bearing exactly as JK intended.
 - **RUN detector:** when ≥3 players of one position bucket go within a 5-pick window, one
   banner line: "A run on closers — 2 left, next realistic exit pick #34." Derived from
   completed picks + survival; no new model.
@@ -143,13 +155,29 @@ pickOrder never changes). Ruling: real, minimal, draft-window pick-for-pick trad
   as an event.
 
 ## §7 The shell (D2): setup, gates, routing, handoff
-- **Pool:** the snake draft consumes ONLY a pool locked through Draft Setup — the same lock
-  path (axis regeneration, POOLFLOOR supply floors, staleness net, universe filter). The
-  parked page's "register directly if no pool exists" fallback is DELETED; no locked pool →
-  the readiness panel says so and START stays disabled (same law as auction).
-- **Readiness gates before START:** locked pool; supply floors met; every seat named; draft
-  order set (manual reorder stays; add a seeded SHUFFLE); slot-scale calibration computed and
-  shown ("Round-1 slot money: $X–$Y").
+- **Pool model (JK-RULED 2026-07-09 — NOT the auction's; supersedes this section's earlier
+  "locked pool" draft):** no extraction, no sizing, no quality targets, no design-first. The
+  user selects source LEAGUES (the universe checkboxes); **ALL players from those leagues
+  populate the draft pool**; the user may hand-add or hand-remove individual players freely.
+  **Validity = position supply only:** for every hard legal-roster position, pool supply ≥
+  teams × roster minimum (the POOLFLOOR arithmetic reused as a pass/fail VALIDITY CHECK — it
+  never tops anything up, because there is nothing to extract from). Any pool that can seat
+  every club's legal 22 by position is valid. An explicit CONFIRM POOL step replaces the lock
+  ceremony; staleness reduces to "a source league's roster changed since confirm." The parked
+  page's silent "register directly if no pool exists" fallback is DELETED either way.
+- **Setup conversion is design-gated (do not assume crossover — JK directive):** a dedicated
+  ground-truth pass (commissioned 2026-07-09) classifies every auction Draft Setup zone and
+  every setup-side logic path as APPLIES / NEEDS-REWORK / DOES-NOT-APPLY for the snake pool
+  model, and must answer at minimum: what pool membership means WITHOUT extraction
+  (leagueAssignments semantics for a full-universe pool; the fate of undrafted players at
+  completion); where personality/chemistry/hidden-modifier axis regeneration happens when
+  `lockLeaguePool` never runs; performance at full-universe scale (board rendering, forecast
+  rollouts, solvency sweeps over hundreds of candidates); and which readiness gates carry
+  over. The captain rules the setup surface (a snake mode inside Draft Setup vs a dedicated
+  leaner screen) from that evidence BEFORE D2's contract is written.
+- **Readiness gates before START:** valid pool confirmed (position supply); every seat named;
+  draft order set (manual reorder stays; add a seeded SHUFFLE); cap headroom advisory shown
+  ("Round-1 money: the top board IVs vs your cap").
 - **Routing unlock (MLB only):** re-add the route in `App.tsx` (+`routes.tsx` if live);
   `mlbDraftRouteForFormat` branches on `getLeagueDraftFormat` again (un-orphaning it); restore
   the Snake option in `DRAFT_FORMAT_OPTIONS`; remove the edit-form coercion that force-resets
@@ -163,6 +191,48 @@ pickOrder never changes). Ruling: real, minimal, draft-window pick-for-pick trad
   reveal → farm auction → franchise), not a dead badge. One completion screen: each club's
   legal-22 check, cap ledger, tax bill, and the advisor's draft grade hook (ADVISORCOLOR later).
 - **Rounds:** fixed 22 (= LEGAL_ROSTER.size), as built.
+
+## §7a Setup-conversion rulings (2026-07-09, from the ground-truth pass — BINDING for D2/D5)
+Evidence: the zone-by-zone conversion inventory run 2026-07-09 (session record; decisive facts
+restated inline).
+1. **Pool membership = session-scoped, never assignment writes.** Today "in a pool" means
+   writing a `leagueAssignments` row onto the SHARED player record (`addPlayersToLeaguePool`).
+   For a full-universe snake pool that would (a) permanently stamp hundreds of never-drafted
+   players with stray FREE_AGENT assignments to the snake league — nothing ever cleans these
+   up (verified: even the auction leaves its surplus assignments forever), and (b) fire
+   300–600 individual sync-tracked player writes at confirm time. RULING: the snake pool is a
+   persisted candidate-id list + iv/salary snapshot on the draft session/pool record;
+   `leagueAssignments` is written ONLY at pick commit (the parked page's per-pick commit
+   already does exactly this). Undrafted players are untouched by construction — JK's
+   invariant, satisfied structurally.
+2. **No pool-wide axis regeneration for snake — ever.** `lockLeaguePool` re-rolls
+   personality/chemistry/hidden-modifiers over every pool member; those are GLOBAL fields on
+   the shared player row, so running it over a full universe would silently rewrite
+   established players' personalities in their SOURCE leagues. RULING: snake performs no
+   lock-time axis processing. Gap-fill only: at pick commit, a drafted player still carrying
+   flat seed defaults (no `hiddenPersonalityModifiers`) gets seeded axes; players with real
+   axes are never touched.
+3. **Setup surface = a dedicated, leaner snake setup screen**, composed from the shared pieces
+   the inventory verified convert as-is: seat/owner zone, ArchetypePicker, the source-league
+   checkboxes (repurposed from extraction-filter to POPULATOR), the hand add/remove shuttle
+   (rebound to the session candidate list), `evaluatePositionSupplyFloors` as the validity
+   check, and RankYourBoardZone (whose new consumer is §5's advisor board). Basis: Draft Setup
+   is ~5,400 lines and two-thirds auction-specific by construction (extraction, sizing dials,
+   shills, reserve price, asks/gaps, lock-anchored readiness) — a snake mode inside it would
+   be conditional spaghetti. Share components, not the page.
+4. **CONFIRM POOL is the snake milestone** (replaces the auction's lock): snapshot the
+   candidate list + run the validity check; no price freeze, no axis regen. Readiness =
+   clubs exist · identities picked · pool confirmed (position floors + total ≥ teams × 22) ·
+   draft order set.
+5. **Scale planks (D2/D5 contracts must carry these):** the draft board renders
+   position-filtered, PAGINATED candidates — the parked page renders every undrafted candidate
+   as a card, unpaginated, at full-universe sizes of 440–1,300; its per-candidate solvency
+   memo is O(N²) per render (rule: compute the completion reserve once per pick from a sorted
+   salary index, not per candidate); RankYourBoard's global view needs the shuttle's
+   pagination pattern.
+6. **Franchise recognition re-confirmed:** the draft-derived morale/freeze payoff is
+   auction-session-gated in the franchise initializer — the §8 plank stands; ruling 2's
+   gap-fill feeds it the axes it expects.
 
 ## §8 Correctness planks (D1 — before anything user-visible)
 1. **Settlement:** pick commit stamps `salary`+`settledSalary` per §3 (auction parity via the
