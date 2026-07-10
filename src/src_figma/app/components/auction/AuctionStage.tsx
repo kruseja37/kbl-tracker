@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { RosterIntelligencePayload } from "../../../../engines/rosterIntelligencePayload";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
-import { HELP_LINE, WhisperPanel } from "./WhisperPanel";
+import { BEFORE_TAX_CEILING_HELP_LINE, HELD_BACK_HELP_LINE, HELP_LINE, NEED_FIT_HELP_LINE, WhisperPanel } from "./WhisperPanel";
 import { PressButton } from "../ballpark";
 import { PlayerProfilePopover } from "../shared/PlayerProfilePopover";
 import { OnTheClockBanner } from "./onTheClockBanner";
@@ -228,6 +228,10 @@ function fallbackSlotGroup(slot: RosterSlotVM): BoardGroupName {
 export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const isCpuTurn = Boolean(vm.move.cpuTurnName);
+  // COPY LAW 1.2 (CONTRACT_VOICE_2026-07-09.md): the unreserved completion ceiling (F9 ruling)
+  // renders ONLY inside the Help surface below, honestly labeled "Before-tax ceiling" -- never in
+  // WhisperPanel's default view, and never driving the verdict/room-relation/budget light.
+  const beforeTaxCeiling = whisperPayload?.worthToYou?.capValue ?? null;
   const boardSlots = vm.board.slots.map((slot, index) => ({
     ...slot,
     slotId: slot.slotId ?? `${slot.pos}-${index + 1}`,
@@ -273,7 +277,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                     <div className="stamp unsold">
                       <div>
                         <div className="s">UNSOLD</div>
-                        <div className="note">Nobody bid at that price. {vm.lot.objectPronoun === "her" ? "She'll" : "He'll"} get one more look later.</div>
+                        <div className="note">No takers at that price — {vm.lot.objectPronoun === "her" ? "she'll" : "he'll"} come around again.</div>
                       </div>
                     </div>
                   )}
@@ -281,7 +285,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                     <div className="stamp gone">
                       <div>
                         <div className="s">GONE</div>
-                        <div className="note">Nobody bid. {vm.lot.objectPronoun === "her" ? "She's" : "He's"} off the board for good.</div>
+                        <div className="note">No takers — {vm.lot.objectPronoun === "her" ? "she's" : "he's"} off the board for good.</div>
                       </div>
                     </div>
                   )}
@@ -290,7 +294,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                 <div className="move">
                   <div className="walletline">
                     <div><div className="lab">{vm.move.walletLabel}</div><div className="v gold num">{money(vm.move.wallet)}</div></div>
-                    <div><div className="lab">Most you can bid</div><div className="v num">{money(vm.move.maxBid)}</div></div>
+                    <div><div className="lab">Ceiling</div><div className="v num">{money(vm.move.maxBid)}</div></div>
                     <div><div className="lab">Slots left</div><div className="v num">{vm.move.slotsLeft}</div></div>
                   </div>
                   <div className="ceiling">{vm.move.ceilingNote}</div>
@@ -367,6 +371,14 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
               <div className="help-panel whisper-help">
                 <div className="help-mark">?</div>
                 <div className="txt">{HELP_LINE}</div>
+                <div className="txt">{HELD_BACK_HELP_LINE}</div>
+                <div className="txt">{NEED_FIT_HELP_LINE}</div>
+                {beforeTaxCeiling !== null && (
+                  <>
+                    <div className="txt" data-testid="whisper-total-capacity">Before-tax ceiling {money(beforeTaxCeiling)}</div>
+                    <div className="txt">{BEFORE_TAX_CEILING_HELP_LINE}</div>
+                  </>
+                )}
               </div>
             )}
 
@@ -478,7 +490,7 @@ function RosterBoardCard({ board, boardSlots, tier }: { board: BoardVM; boardSlo
       {board.overflow && board.overflow.length > 0 && (
         <div data-testid="auction-board-overflow" className="overflow-rail">
           <div className="overflow-title">OVERFLOW — {board.overflow.length} UNSEATED</div>
-          <div className="overflow-note">These players don't fit the legal 22 frame — resolve before launch.</div>
+          <div className="overflow-note">These players don't fit a legal 22 — resolve before launch.</div>
           <div className="overflow-list">
             {board.overflow.map((entry) => (
               <span key={entry.playerId} className="chip">
@@ -607,7 +619,7 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
             {complete.overrideArmed ? (
               <>
                 <div className="handoff-confirm">
-                  This hands off {complete.blockedCount} club{complete.blockedCount === 1 ? "" : "s"} that can't field a legal 22. The franchise wizard will refuse them until they're fixed. Proceed?
+                  This hands off {complete.blockedCount} club{complete.blockedCount === 1 ? "" : "s"} that can't field a legal 22. Franchise setup will refuse them until they're fixed. Proceed?
                 </div>
                 <div className="handoff-buttons">
                   <button type="button" className="handoff-yes" onClick={complete.onConfirmOverride}>
@@ -705,7 +717,7 @@ function Lot({ lot, tier, helpOpen }: { lot: LotVM; tier: AuctionTier; helpOpen:
             ) : (
               <>
                 <span>{lot.publicMarket.interestedTeams} LIVE</span>
-                <p>{lot.publicMarket.interestedTeams === 1 ? "One team" : "Teams"} can meet the ask.</p>
+                <p>{lot.publicMarket.interestedTeams === 1 ? "One team" : `${lot.publicMarket.interestedTeams} teams`} can meet the ask.</p>
               </>
             )}
           </div>

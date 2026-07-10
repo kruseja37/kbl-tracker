@@ -174,7 +174,7 @@ function depthCovererNote(
     if (!seated.has(entry.playerId) || entry.playerId === cSeatPlayerId) continue;
     const shape = positions[entry.playerId];
     if (!shape || (!canCover(shape, 'C') && shape.twoWayVariant !== 'C')) continue;
-    if (shape.isPitcher) return `depth via ${entry.name ?? entry.playerId} (Two Way C)`;
+    if (shape.isPitcher) return `depth via ${entry.name ?? entry.playerId} (two-way, covers C)`;
     return `depth via ${entry.name ?? entry.playerId} (${shape.position}, covers C)`;
   }
   return null;

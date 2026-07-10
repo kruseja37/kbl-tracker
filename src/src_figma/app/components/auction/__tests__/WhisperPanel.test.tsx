@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { WhisperPanel } from "../WhisperPanel";
+import { WhisperPanel, liquidityStateLabel, reasonCodeLabel } from "../WhisperPanel";
+import type { LiquidityReasonCode, LiquidityState } from "../../../../../engines/liquidityAwareBidding";
 import {
   applyAuctionWhisperRosterCleanGates,
   resolveAuctionWhisperIdentityArchetype,
@@ -477,10 +478,13 @@ describe("WhisperPanel", () => {
 
     expect(screen.getByTestId("whisper-your-number")).toHaveTextContent("$96,000");
     expect(screen.getByText("Go get him -- worth about $96,000 to you.")).toBeInTheDocument();
-    // F9 ruling: capValue may render ONLY under the separately-labeled Total Capacity line --
-    // never silently reused as the headline number.
+    // F9 ruling: capValue must never be silently reused as the headline number.
     expect(screen.getByTestId("whisper-your-number")).not.toHaveTextContent("$809,714");
-    expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Total Capacity $809,714");
+    // COPY LAW 1.2 (CONTRACT_VOICE_2026-07-09.md): capValue no longer renders anywhere inside
+    // WhisperPanel itself -- it moved to AuctionStage's shared Help surface, honestly labeled
+    // "Before-tax ceiling" (see AuctionStage.test.tsx's "COPY LAW 1.2" coverage).
+    expect(screen.queryByTestId("whisper-total-capacity")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("$809,714");
   });
 
   describe("F9: one ceiling drives verdict, room-relation, and budget light", () => {
@@ -504,8 +508,9 @@ describe("WhisperPanel", () => {
       // The fixture's scorecard.budget is always red (see payload() above) -- confirming no light
       // anywhere on the panel reads green while the verdict says pass.
       expect(screen.getByRole("button", { name: "BUDGET" })).toHaveAttribute("data-status", "red");
-      // capValue still surfaces, but ONLY under its own honestly-labeled line.
-      expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Total Capacity $70,000");
+      // COPY LAW 1.2: capValue never renders inside WhisperPanel at all (moved to AuctionStage's
+      // Help surface) -- confirm it stays fully absent, including from this pass-case fixture.
+      expect(screen.queryByTestId("whisper-total-capacity")).not.toBeInTheDocument();
     });
 
     test("room-relation and budget light stay green/consistent when nothing is reserved (maxBid === capValue)", () => {
@@ -524,7 +529,8 @@ describe("WhisperPanel", () => {
 
       expect(screen.getByText("That sits inside what the room expects.")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "BUDGET" })).toHaveAttribute("data-status", "green");
-      expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Total Capacity $75,000");
+      // COPY LAW 1.2: same absence check -- capValue never renders inside WhisperPanel.
+      expect(screen.queryByTestId("whisper-total-capacity")).not.toBeInTheDocument();
     });
   });
 
@@ -545,15 +551,15 @@ describe("WhisperPanel", () => {
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
     const liquidity = within(screen.getByTestId("whisper-liquidity"));
-    expect(liquidity.getByText("MAX BID")).toBeInTheDocument();
+    expect(liquidity.getByText("CEILING")).toBeInTheDocument();
     expect(liquidity.getByText("$88,000")).toBeInTheDocument();
     expect(liquidity.getByText("STRETCH")).toBeInTheDocument();
-    expect(liquidity.getByText("CONSTRAINED")).toBeInTheDocument();
-    expect(liquidity.getByText("Fill Reserve $58,000")).toBeInTheDocument();
-    expect(liquidity.getByText("Room $42,000")).toBeInTheDocument();
-    expect(screen.getByText("protect fill")).toBeInTheDocument();
+    expect(liquidity.getByText("TIGHT")).toBeInTheDocument();
+    expect(liquidity.getByText("HELD BACK $58,000")).toBeInTheDocument();
+    expect(liquidity.getByText("TO SPEND $42,000")).toBeInTheDocument();
+    expect(screen.getByText("saving for seats")).toBeInTheDocument();
     expect(screen.getByText("cash tight")).toBeInTheDocument();
-    expect(screen.getByText("priority need")).toBeInTheDocument();
+    expect(screen.getByText("fills a need")).toBeInTheDocument();
     expect(screen.getByText("NEED +12%")).toBeInTheDocument();
     expect(screen.getByText("FIT +8%")).toBeInTheDocument();
   });
@@ -565,7 +571,7 @@ describe("WhisperPanel", () => {
     const { rerender } = render(<WhisperPanel payload={under} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
-    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("PUSH");
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("STAY IN");
     expect(screen.getByText("Still under your number -- $5,000 to go")).toBeInTheDocument();
 
     // The live bid has now moved past this seat's ceiling -- liveCall flips to 'out' (as the
@@ -611,6 +617,38 @@ describe("WhisperPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "CHEMISTRY" }));
     expect(screen.getByText("No read yet -- still doing my homework on this club.")).toBeInTheDocument();
   });
+
+  test("COPY LAW 1.2 + captain ruling (audit F1): the cash-cap relationship line renders only when the ceiling sits below the PRE-clamp adjusted worth (ownValue), with both real dollar figures", () => {
+    // ENGINE-POSSIBLE shape: every payload producer sets recommendedNumber = min(worth,
+    // suggestedMaxBid) -- so when cash caps the seat, ownValue sits ABOVE the ceiling and
+    // recommendedNumber equals the ceiling (the clamp). The original gate compared the ceiling
+    // against recommendedNumber, which that clamp makes impossible -- this fixture proves the
+    // ruled gate (ownValue) fires in the real capped state.
+    const { rerender } = render(<WhisperPanel payload={payload("push", {
+      worthToYou: {
+        ...payload("push").worthToYou!,
+        ownValue: 80_000,
+        recommendedNumber: 60_000,
+        suggestedMaxBid: 60_000,
+      },
+    })} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.getByTestId("whisper-ceiling-relation")).toHaveTextContent(
+      "He's worth $80,000 to you — your cash stops at $60,000.",
+    );
+
+    // Negative case: ownValue ≤ suggestedMaxBid (cash is NOT the cap) -> the line is absent.
+    rerender(<WhisperPanel payload={payload("push", {
+      worthToYou: {
+        ...payload("push").worthToYou!,
+        ownValue: 60_000,
+        recommendedNumber: 60_000,
+        suggestedMaxBid: 80_000,
+      },
+    })} />);
+    expect(screen.queryByTestId("whisper-ceiling-relation")).not.toBeInTheDocument();
+  });
 });
 
 // CALLFIX 2026-07-08 Item 1: this describe block used to hold the FAILING repro proving the bug
@@ -630,7 +668,7 @@ describe("CALLFIX 2026-07-08 Item 1: THE LIVE CALL -- strip and headline follow 
 
     // Tier-1 strip: always visible, zero taps -- the exact surface JK caught frozen live.
     expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("WALK");
-    expect(screen.getByTestId("whisper-tier1-verdict")).not.toHaveTextContent("PUSH");
+    expect(screen.getByTestId("whisper-tier1-verdict")).not.toHaveTextContent("STAY IN");
 
     fireEvent.click(screen.getByTestId("whisper-strip"));
     expect(screen.queryByText(/^Go get him/)).not.toBeInTheDocument();
@@ -667,9 +705,9 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
   });
 
-  test("VERDICT word maps liveCall push/stretch/out to PUSH/CAP $X/WALK, and FIT chip promotes the archetype multiplier", () => {
+  test("VERDICT word maps liveCall push/stretch/out to STAY IN/STOP AT $X/WALK, and FIT chip promotes the archetype multiplier", () => {
     const { rerender } = render(<WhisperPanel payload={payload("push")} />);
-    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("PUSH");
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("STAY IN");
 
     rerender(<WhisperPanel payload={payload("pass")} />);
     expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("WALK");
@@ -680,7 +718,7 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
     rerender(<WhisperPanel payload={payload("cap", {
       worthToYou: { ...payload("cap").worthToYou!, recommendedNumber: 61_000, suggestedMaxBid: 61_000, archetypeFitMultiplier: 1.08 },
     })} />);
-    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("CAP $61,000");
+    expect(screen.getByTestId("whisper-tier1-verdict")).toHaveTextContent("STOP AT $61,000");
     expect(screen.getByTestId("whisper-tier1-fit")).toHaveTextContent("FIT +8%");
   });
 
@@ -692,15 +730,15 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
       },
     })} />);
 
-    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("protect fill");
+    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("saving for seats");
     // The remaining two reason codes are NOT duplicated in the always-visible Tier-1/2 area.
     expect(screen.queryByText("cash tight")).not.toBeInTheDocument();
-    expect(screen.queryByText("priority need")).not.toBeInTheDocument();
+    expect(screen.queryByText("fills a need")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("whisper-strip"));
     // ...but they DO surface in the Tier-3 tap-through, without repeating the promoted one.
     expect(screen.getByText("cash tight")).toBeInTheDocument();
-    expect(screen.getByText("priority need")).toBeInTheDocument();
+    expect(screen.getByText("fills a need")).toBeInTheDocument();
   });
 
   test("TRUE COST after tax renders only when the marginal tax is nonzero", () => {
@@ -894,7 +932,7 @@ describe("COCKPIT W1a/b: Tier-1 verdict strip + Tier-2 promoted read (MLB only)"
 });
 
 describe("CALLFIX 2026-07-08 Item 5(c): scarcity reason detail surfaces worth.replacementValueEstimate", () => {
-  test("renders 'Next-best replacement ~$X' when scarce-replacement or similar-replacements is present, absent otherwise", () => {
+  test("renders 'Fallback option ~$X' when scarce-replacement or similar-replacements is present, absent otherwise", () => {
     const { rerender } = render(<WhisperPanel payload={payload("push")} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
     expect(screen.queryByTestId("whisper-scarcity-detail")).not.toBeInTheDocument();
@@ -902,12 +940,12 @@ describe("CALLFIX 2026-07-08 Item 5(c): scarcity reason detail surfaces worth.re
     rerender(<WhisperPanel payload={payload("push", {
       worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["scarce-replacement"], replacementValueEstimate: 42_000 },
     })} />);
-    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$42,000");
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Fallback option ~$42,000");
 
     rerender(<WhisperPanel payload={payload("push", {
       worthToYou: { ...payload("push").worthToYou!, reasonCodes: ["similar-replacements"], replacementValueEstimate: 18_500 },
     })} />);
-    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$18,500");
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Fallback option ~$18,500");
   });
 
   test("surfaces even when scarce-replacement is the ONE code already promoted to the MLB Tier-1 strip (checks the full reasonCodes, not the trimmed remaining list)", () => {
@@ -916,8 +954,8 @@ describe("CALLFIX 2026-07-08 Item 5(c): scarcity reason detail surfaces worth.re
     })} />);
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
-    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("scarce repl.");
-    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Next-best replacement ~$55,000");
+    expect(screen.getByTestId("whisper-tier1-reason")).toHaveTextContent("scarce at position");
+    expect(screen.getByTestId("whisper-scarcity-detail")).toHaveTextContent("Fallback option ~$55,000");
   });
 });
 
@@ -1108,5 +1146,60 @@ describe("COCKPIT WAVE 2: THE BOARD (setup + live GM-sortable global/per-positio
       />,
     );
     expect(screen.queryByTestId("whisper-next-up")).not.toBeInTheDocument();
+  });
+});
+
+// COPY LAW 1.4 / 1.5 (CONTRACT_VOICE_2026-07-09.md): reasonCodeLabel and liquidityStateLabel are
+// exported specifically so this exhaustiveness coverage can call them directly, without going
+// through a full render for every one of the 12 + 4 union members. No raw engine slug may ever
+// reach the screen; an unrecognized value must fall back to a safe generic, never render verbatim.
+describe("COPY LAW 1.4/1.5: reason-chip and liquidity-state label exhaustiveness", () => {
+  const REASON_CODE_LABELS: Record<LiquidityReasonCode, string> = {
+    "above-remaining-budget": "past your cash",
+    "above-legal-ceiling": "can't legally pay",
+    "below-minimum-bid": "reserve price",
+    "emergency-fill": "must fill now",
+    "future-fill-protected": "saving for seats",
+    "late-budget-surplus": "late money edge",
+    "liquidity-constrained": "cash tight",
+    "near-complete": "roster nearly done",
+    "priority-fit": "fills a need",
+    "scarce-replacement": "scarce at position",
+    "similar-replacements": "cheaper options left",
+    "within-liquidity-ceiling": "inside your cash",
+  };
+
+  test("every LiquidityReasonCode member renders its plain-English label, never the raw slug", () => {
+    for (const code of Object.keys(REASON_CODE_LABELS) as LiquidityReasonCode[]) {
+      const label = reasonCodeLabel(code);
+      expect(label).toBe(REASON_CODE_LABELS[code]);
+      expect(label).not.toBe(code);
+    }
+  });
+
+  test("an unrecognized reason code falls back to the generic 'advisor note', never a raw slug", () => {
+    expect(reasonCodeLabel("some-future-code" as LiquidityReasonCode)).toBe("advisor note");
+  });
+
+  const LIQUIDITY_STATE_LABELS: Record<LiquidityState, string> = {
+    neutral: "STEADY",
+    constrained: "TIGHT",
+    aggressive: "PRESS",
+    "emergency-fill": "MUST FILL",
+  };
+
+  test("every LiquidityState member renders its plain-English label, never the raw slug", () => {
+    for (const state of Object.keys(LIQUIDITY_STATE_LABELS) as LiquidityState[]) {
+      const label = liquidityStateLabel(state);
+      expect(label).toBe(LIQUIDITY_STATE_LABELS[state]);
+      expect(label).not.toBe(state.toUpperCase());
+    }
+  });
+
+  test("an unrecognized liquidity state falls back to a safe generic label, never the raw slug uppercased", () => {
+    // Simulates the exact pre-fix bug (a LiquidityState-shaped value outside the real 4-member
+    // union rendering verbatim, e.g. "WITHIN-LIQUIDITY-CEILING") -- unreachable in a type-correct
+    // build (LiquidityState has exactly 4 members), but the runtime fallback must still be safe.
+    expect(liquidityStateLabel("within-liquidity-ceiling" as LiquidityState)).not.toBe("WITHIN-LIQUIDITY-CEILING");
   });
 });

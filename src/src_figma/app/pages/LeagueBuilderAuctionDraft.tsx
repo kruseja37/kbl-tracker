@@ -448,7 +448,7 @@ function cpuPassReason(reason: string): string {
   const labels: Record<string, string> = {
     "already-high-bidder": "already holds the high bid",
     "missing-lot": "there is no active lot",
-    "no-interest": "the price is not attractive enough for this profile",
+    "no-interest": "the price is not attractive enough for this club's plan",
     "not-open-bidding": "bidding is not open",
     "over-budget": "the bid would break the team's budget",
     "over-valuation": "the ask is above this team's comfort level",
@@ -1927,9 +1927,9 @@ export function LeagueBuilderAuctionDraft() {
       ceilingNote: session.pendingClaim
         ? `${teamNameById(session.pendingClaim.teamId)} can claim at reserve or let the player leave the board.`
         : stageMaxBid !== null && minBid !== null && minBid > stageMaxBid
-          ? `Can't afford ${playerPronouns(stageLotPlayer).object} and still fill the roster - ${formatMoney(minBid - stageMaxBid)} short.`
+          ? `Can't afford ${playerPronouns(stageLotPlayer).object} and still fill the roster — ${formatMoney(minBid - stageMaxBid)} short.`
           : stageMaxBid !== null
-          ? `Room up to ${formatMoney(stageMaxBid)} while keeping money for the empty slots.`
+          ? `You can go to ${formatMoney(stageMaxBid)} and still cover your empty seats.`
           : "Budget read pending.",
       presets: stageBidPresets,
       currentBid: stageBidAmount,

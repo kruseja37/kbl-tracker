@@ -129,6 +129,19 @@ const NO_READ_LINE = "No read yet -- still doing my homework on this club.";
 const EMPTY_BOARD_LINE = "The board's bare. Finish the roster with what's left on the floor.";
 export const HELP_LINE = "Your assistant GM's private read -- advice for this seat alone. Only the club on the clock can open it, and it covers itself when the turn moves on. He suggests; you decide.";
 
+/** COPY LAW 1.2 (CONTRACT_VOICE_2026-07-09.md): explains the HELD BACK figure in the shared Help
+ * surface (rendered by AuctionStage alongside HELP_LINE). */
+export const HELD_BACK_HELP_LINE = "Held back — what finishing your roster will cost, tax included.";
+
+/** COPY LAW 1.6 (CONTRACT_VOICE_2026-07-09.md): explains the NEED / FIT chips in the shared Help
+ * surface (rendered by AuctionStage alongside HELP_LINE). */
+export const NEED_FIT_HELP_LINE = "need / fit — how much this club's roster hole and team identity move the price for you.";
+
+/** COPY LAW 1.2 (F9 ruling still honored -- see the WhisperHeadline render below): the unreserved
+ * completion ceiling (capValue) now surfaces ONLY inside the shared Help surface, labeled
+ * "Before-tax ceiling" -- it must never drive the verdict/room-relation/budget light. */
+export const BEFORE_TAX_CEILING_HELP_LINE = "Ignores tax — never bid to this.";
+
 /** COCKPIT WAVE 2: default the PER-POSITION tab to the first canonical group that actually has
  * remaining candidates, rather than always "C" -- an empty first tab is dead-clutter (design §1.8). */
 function firstPopulatedBoardPosition(board: readonly BoardEntry[]): TaxonomyPosition {
@@ -772,7 +785,7 @@ function WhisperHeadline({
       </div>
       <div className="whisper-liquidity" data-testid="whisper-liquidity">
         <div className="whisper-liquidity-metric">
-          <span className="eyebrow">MAX BID</span>
+          <span className="eyebrow">CEILING</span>
           <span className="num whisper-liquidity-number">{worth.suggestedMaxBid === 0 ? "PASS" : money(worth.suggestedMaxBid)}</span>
         </div>
         <span className={`chip whisper-price-read ${worth.priceRead}`}>
@@ -782,16 +795,23 @@ function WhisperHeadline({
           {liquidityStateLabel(worth.liquidityState)}
         </span>
         <span className="spacer" />
-        <span className="whisper-liquidity-small">Fill Reserve {money(worth.minimumFutureFillReserve)}</span>
-        <span className="whisper-liquidity-small">Room {money(worth.discretionaryBudget)}</span>
-        {/* F9 RULING: capValue (the unreserved ceiling) may render ONLY under this distinct,
-            honestly-labeled line -- it must never drive the verdict/room-relation/budget light. */}
-        {worth.capValue !== null && (
-          <span className="whisper-liquidity-small" data-testid="whisper-total-capacity">
-            Total Capacity {money(worth.capValue)}
-          </span>
-        )}
+        <span className="whisper-liquidity-small">HELD BACK {money(worth.minimumFutureFillReserve)}</span>
+        <span className="whisper-liquidity-small">TO SPEND {money(worth.discretionaryBudget)}</span>
+        {/* F9 RULING (still honored): the unreserved completion ceiling (capValue) must never drive
+            the verdict/room-relation/budget light. COPY LAW 1.2 (CONTRACT_VOICE_2026-07-09.md)
+            moves its display out of this default row entirely -- it now lives only in
+            AuctionStage's shared Help surface, honestly labeled "Before-tax ceiling". */}
       </div>
+      {/* COPY LAW 1.2 + captain ruling (audit F1, 2026-07-09): recommendedNumber is already
+          min(worth, suggestedMaxBid) at every payload producer, so gating on
+          suggestedMaxBid < recommendedNumber is engine-impossible dead code. The honest gate is
+          the PRE-clamp adjusted worth (worth.ownValue): render only when cash actually caps this
+          seat below what he's worth to it, and say both real dollar figures. */}
+      {worth.suggestedMaxBid < worth.ownValue && (
+        <p className="whisper-ceiling-relation" data-testid="whisper-ceiling-relation">
+          He's worth {money(worth.ownValue)} to you — your cash stops at {money(worth.suggestedMaxBid)}.
+        </p>
+      )}
       <div className="whisper-reason-row">
         {liquidityReasonLabels(remainingReasonCodes).map((label) => (
           <span key={label} className="chip whisper-reason-chip">{label}</span>
@@ -806,7 +826,7 @@ function WhisperHeadline({
           Tier-1 strip. */}
       {(worth.reasonCodes.includes("scarce-replacement") || worth.reasonCodes.includes("similar-replacements")) && (
         <p className="whisper-scarcity-detail" data-testid="whisper-scarcity-detail">
-          Next-best replacement ~{money(worth.replacementValueEstimate)}
+          Fallback option ~{money(worth.replacementValueEstimate)}
         </p>
       )}
       {liveBidText && <p className="whisper-live-bid">{liveBidText}</p>}
@@ -1028,9 +1048,9 @@ function liveCallStripWord(worth: WorthToYou): string {
     case "lead":
       return "ON TOP";
     case "push":
-      return "PUSH";
+      return "STAY IN";
     case "stretch":
-      return `CAP ${money(worth.suggestedMaxBid)}`;
+      return `STOP AT ${money(worth.suggestedMaxBid)}`;
     case "out":
       return "WALK";
   }
@@ -1084,42 +1104,64 @@ function whyLine(worth: WorthToYou): string {
   const contribution = worth.chemistryContribution;
   if (contribution > 0) return `Chemistry moves your number up by ${money(contribution)}.`;
   if (Math.abs(worth.ownValue - worth.iv) >= 1) {
-    return `Fit and need move the raw IV to ${money(worth.ownValue)} before chemistry.`;
+    return `Talent alone says ${money(worth.iv)}. Your fit and need move him to ${money(worth.ownValue)}.`;
   }
-  return "Your fit and need sit right on the raw IV.";
+  return "Straight talent price — no fit or need bump.";
 }
 
-function liquidityStateLabel(state: WorthToYou["liquidityState"]): string {
-  if (state === "emergency-fill") return "EMERGENCY FILL";
-  return state.toUpperCase();
+/** COPY LAW 1.5 (CONTRACT_VOICE_2026-07-09.md): every LiquidityState member gets an explicit,
+ * plain-English label -- the raw enum (e.g. "within-liquidity-ceiling") must never render
+ * verbatim. `default` is defensive only: TypeScript's LiquidityState union has exactly these 4
+ * members (liquidityAwareBidding.ts), so the fallback is unreachable in a type-correct build; it
+ * exists so a stray/unexpected runtime value never leaks a raw slug onto the screen. Exported so
+ * WhisperPanel.test.tsx can assert exhaustiveness directly, without going through full render. */
+export function liquidityStateLabel(state: WorthToYou["liquidityState"]): string {
+  switch (state) {
+    case "neutral":
+      return "STEADY";
+    case "constrained":
+      return "TIGHT";
+    case "aggressive":
+      return "PRESS";
+    case "emergency-fill":
+      return "MUST FILL";
+    default:
+      return "STEADY";
+  }
 }
 
-function reasonCodeLabel(code: LiquidityReasonCode): string {
+/** COPY LAW 1.4 (CONTRACT_VOICE_2026-07-09.md): every LiquidityReasonCode member gets an
+ * explicit, plain-English label -- no raw slug can ever render. `default` is a defensive generic
+ * ("advisor note") for a value outside the current union; exported so WhisperPanel.test.tsx can
+ * assert exhaustiveness directly. */
+export function reasonCodeLabel(code: LiquidityReasonCode): string {
   switch (code) {
     case "above-remaining-budget":
-      return "over budget";
+      return "past your cash";
     case "above-legal-ceiling":
-      return "legal cap";
+      return "can't legally pay";
     case "below-minimum-bid":
-      return "bid floor";
+      return "reserve price";
     case "emergency-fill":
-      return "must fill";
+      return "must fill now";
     case "future-fill-protected":
-      return "protect fill";
+      return "saving for seats";
     case "late-budget-surplus":
-      return "late cash";
+      return "late money edge";
     case "liquidity-constrained":
       return "cash tight";
     case "near-complete":
-      return "near done";
+      return "roster nearly done";
     case "priority-fit":
-      return "priority need";
+      return "fills a need";
     case "scarce-replacement":
-      return "scarce repl.";
+      return "scarce at position";
     case "similar-replacements":
-      return "similar repl.";
+      return "cheaper options left";
     case "within-liquidity-ceiling":
-      return "under ceiling";
+      return "inside your cash";
+    default:
+      return "advisor note";
   }
 }
 

@@ -260,7 +260,7 @@ describe('buildAuctionBoardFrame', () => {
     const twoWayCorner = buildFixture(legal13And9TwoWayCStaff());
     const cornerFrame = buildAuctionBoardFrame(twoWayCorner.roster, twoWayCorner.positions);
     expect(cornerFrame.seats.find((seat) => seat.slotId === 'backupC')?.depthNote).toBe(
-      'depth via arm-5 (Two Way C)',
+      'depth via arm-5 (two-way, covers C)',
     );
   });
 
