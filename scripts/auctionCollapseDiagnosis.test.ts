@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { writeFileSync } from 'node:fs';
 
-import { AUCTION_REBUILD_TUNING, DEFAULT_AUCTION_BID_INCREMENT } from '../src/data/auctionEngineConstants';
+import {
+  AUCTION_REBUILD_TUNING,
+  AUCTION_SMALL_LEAGUE_CAP_SCALE_EXPONENT,
+  DEFAULT_AUCTION_BID_INCREMENT,
+} from '../src/data/auctionEngineConstants';
 import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../src/data/chemistryCanonical';
 import { HISTORICAL_ARCHETYPES, type HistoricalArchetype } from '../src/data/historicalArchetypes';
 import { getLeagueTeamIds } from '../src/data/leagueStructure';
@@ -11,7 +15,10 @@ import { isLegalRoster, LEGAL_ROSTER, type RosterSlotPlayer } from '../src/data/
 import { LEAGUE_MINIMUM_SALARY } from '../src/data/rosterEngineConstants';
 import { type LuxuryCapRow, TIER_CAPS, type TierKey } from '../src/data/tierParams';
 import { cheapestLegalCompletion, type CompletionCandidate } from '../src/engines/auctionCompletionFloor';
-import { auctionMarginalTaxWithCaps } from '../src/engines/auctionLuxuryTax';
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from '../src/engines/auctionLuxuryTax';
 import { SIZING_TUNING } from '../src/engines/auctionPoolSizing';
 import { DEFAULT_RESERVE_PRICE_K } from '../src/engines/auctionReservePrice';
 import {
@@ -81,6 +88,8 @@ const maybeTest = RUN_DIAG && SEARCH_COUNT === 0 ? test : test.skip;
 const maybeSearchTest = RUN_DIAG && SEARCH_COUNT > 0 ? test : test.skip;
 const RUN_REBUILD_VIABILITY = process.env.RUN_AUCTION_REBUILD_VIABILITY === '1';
 const maybeRebuildTest = RUN_REBUILD_VIABILITY ? test : test.skip;
+const RUN_CAPFIX_GUARD_REPRO = process.env.RUN_CAPFIX_GUARD_REPRO === '1';
+const maybeCapfixGuardRepro = RUN_CAPFIX_GUARD_REPRO ? test : test.skip;
 const DIAG_TIMEOUT_MS = Number.parseInt(process.env.AUCTION_COLLAPSE_TIMEOUT_MS ?? '600000', 10);
 const VERBOSE = process.env.AUCTION_COLLAPSE_VERBOSE === '1';
 const COMPACT = process.env.AUCTION_COLLAPSE_COMPACT === '1';
@@ -91,6 +100,9 @@ const ROSTER_SIZE = LEGAL_ROSTER.size;
 const BASE_BUDGET = TIER_CAPS[TIER].tierCap;
 const PHASE_SIZE = 20;
 const MAX_STEPS = 20_000;
+// SHILLTAX is a frozen lever experiment, not the rebuilt product viability loop. Keep its
+// accepted pool input stable while allowing the tax context itself to follow CAPFIX.
+const SHILLTAX_DIAG_POOL_MULTIPLIER = 1.25;
 
 type LeverId =
   | 'baseline'
@@ -614,7 +626,12 @@ function buildTaxContext(
     poolById: new Map(pool.players.map((player) => [player.id, player])),
     playerById: new Map(players.map((player) => [player.id, player])),
     identityByTeamId: new Map(teams.map((team) => [team.id, team.capIdentity])),
-    baseCaps: scaledCaps(pool.luxuryCaps, lever.capScale),
+    // Keep the legacy SHILLTAX lever matrix on the product path: each counterfactual is applied
+    // relative to the league-size-normalized base, not the retired raw 20-club thresholds.
+    baseCaps: scaledCaps(
+      normalizeAuctionLuxuryCapsForLeagueSize(pool.luxuryCaps, teams.length),
+      lever.capScale,
+    ),
   };
 }
 
@@ -948,7 +965,11 @@ function finalTeamRows(
 }
 
 function runOne(seedSpec: SeedSpec, lever: Lever): RunResult {
-  const { pool, players, constructionById } = buildPool(seedSpec);
+  const { pool, players, constructionById } = buildPool(
+    seedSpec,
+    REAL_TEAM_COUNT,
+    SHILLTAX_DIAG_POOL_MULTIPLIER,
+  );
   const teams = buildTeams(seedSpec);
   const playerById = new Map(players.map((player) => [player.id, player]));
   const auctionPlayers = toAuctionPlayers(pool, playerById);
@@ -1084,6 +1105,7 @@ function runOne(seedSpec: SeedSpec, lever: Lever): RunResult {
 
 interface AuctionRebuildKnobs {
   iteration: number;
+  capScaleExponent: number;
   shillCount4: number;
   shillCount8: number;
   shillAnchorFraction: number;
@@ -1160,6 +1182,10 @@ function integerEnv(name: string, fallback: number): number {
 function rebuildKnobsFromEnvironment(): AuctionRebuildKnobs {
   return {
     iteration: Math.max(1, integerEnv('AUCTION_REBUILD_ITERATION', 1)),
+    capScaleExponent: finiteEnv(
+      'AUCTION_REBUILD_CAP_EXPONENT',
+      AUCTION_SMALL_LEAGUE_CAP_SCALE_EXPONENT,
+    ),
     shillCount4: integerEnv('AUCTION_REBUILD_SHILLS_4', 1),
     shillCount8: integerEnv('AUCTION_REBUILD_SHILLS_8', 2),
     shillAnchorFraction: finiteEnv('AUCTION_REBUILD_SHILL_ANCHOR', AUCTION_REBUILD_TUNING.shillAnchorFraction),
@@ -1253,6 +1279,11 @@ function runAuctionRebuildOne(
   const playerById = new Map(players.map((player) => [player.id, player]));
   const auctionPlayers = toAuctionPlayers(pool, playerById);
   const taxContext = buildTaxContext(pool, realTeams, players, LEVERS[0]);
+  taxContext.baseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+    pool.luxuryCaps,
+    realTeamCount,
+    knobs.capScaleExponent,
+  );
   let session = buildRebuildSession({ seedSpec, realTeams, shillIds, pool, auctionPlayers, knobs });
   let stall: string | null = null;
   let stallDetail: AuctionRebuildRunResult['stallDetail'] = null;
@@ -1498,7 +1529,7 @@ export function runAuctionCollapseDiagnosis(): DiagnosisOutput {
       shills: 1,
       rosterSize: ROSTER_SIZE,
       baseBudget: BASE_BUDGET,
-      poolMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolMultiplier: SHILLTAX_DIAG_POOL_MULTIPLIER,
       poolQualityCenter: DEFAULT_POOL_QUALITY_CENTER,
       reserveK: DEFAULT_RESERVE_PRICE_K,
       shillMaxWins: SIZING_TUNING.winsPerShill,
@@ -1516,7 +1547,10 @@ describe('auction collapse diagnosis (measurement only)', () => {
     for (const run of baseline) {
       expect(run.shillMinBudget, `${run.seed} shill budget invariant`).toBeGreaterThanOrEqual(0);
       expect(run.pctTwoPlusWilling, `${run.seed} multi-willing competitiveness`).toBeGreaterThanOrEqual(70);
-      expect(run.finalTeams.filter((team) => team.role === 'club').every((team) => team.legal22 === true)).toBe(true);
+      expect(
+        run.finalTeams.filter((team) => team.role === 'club').every((team) => team.legal22 === true),
+        `${run.seed} legal-club invariant: ${JSON.stringify(run.finalTeams)}`,
+      ).toBe(true);
     }
     const capNormalizationResiduals = baseline.flatMap((run) => run.finalTeams
       .filter((team) => team.role === 'club' && team.longestPre60Lockout > 8)
@@ -1670,5 +1704,24 @@ describe('auction rebuild viability loop (production-default player universe)', 
       [8, 'rebuild-b'],
       [8, 'rebuild-c'],
     ]);
+  }, DIAG_TIMEOUT_MS);
+
+  maybeCapfixGuardRepro('CAPFIX repro: an 8-team nominator with one legal move is not vetoed by joint-demand politeness', () => {
+    const output = runAuctionRebuildViability({
+      ...rebuildKnobsFromEnvironment(),
+      // Exact reproduction of the accepted audit's 8-team capScale=6 counterfactual. Keep its
+      // pre-CAPFIX pool surplus fixed even though the final product default is tuned below.
+      capScaleExponent: Math.log(6) / Math.log(20 / 8),
+      poolSurplusMultiplier: 1.25,
+    });
+    const guardDeadlocks = output.runs
+      .filter((run) => run.realTeams === 8)
+      .filter((run) => (
+        run.stall === 'NOMINATION:no-legal-cpu-nomination'
+        && (run.stallDetail?.ceilingCandidateCount ?? 0) > 0
+        && (run.stallDetail?.jointStarveCandidateCount ?? 0) > 0
+      ));
+
+    expect(guardDeadlocks, JSON.stringify(guardDeadlocks, null, 2)).toEqual([]);
   }, DIAG_TIMEOUT_MS);
 });

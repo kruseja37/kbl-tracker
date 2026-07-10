@@ -61,6 +61,14 @@ export const AUCTION_REBUILD_TUNING = {
   cpuNominationOpenFraction: 0.35,
 } as const;
 
+/**
+ * CAPFIX (2026-07-10): one-parameter small-league normalization for auction luxury-cap
+ * thresholds. The power-law exponent is the only cap-family knob in the final viability loop;
+ * 20+ clubs stay exactly on the stock table. CAPFIX iteration 3 tuned this to 0.55: the complete
+ * six-run matrix met every unchanged viability dimension with the 1.50 pool-surplus default.
+ */
+export const AUCTION_SMALL_LEAGUE_CAP_SCALE_EXPONENT = 0.55;
+
 /** §6 Q3, §16 sim-tune: flat bid step scaled to the active tier cap by setup. */
 export const DEFAULT_AUCTION_BID_INCREMENT = 5000;
 

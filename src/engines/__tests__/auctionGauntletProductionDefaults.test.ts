@@ -11,6 +11,7 @@ import { LEAGUE_MINIMUM_SALARY } from '../../data/rosterEngineConstants';
 import { LUXURY_CAP_TABLES, TIER_CAPS, type TierKey } from '../../data/tierParams';
 import {
   auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
 } from '../auctionLuxuryTax';
 import { DEFAULT_RESERVE_PRICE_K } from '../auctionReservePrice';
 import {
@@ -412,7 +413,7 @@ function buildTaxContext(input: {
     poolById: new Map(input.pool.players.map((player) => [player.id, player])),
     playerById: new Map(input.players.map((player) => [player.id, player])),
     identityByTeamId: new Map(input.teams.map((team) => [team.id, team.capIdentity])),
-    baseCaps: input.pool.luxuryCaps,
+    baseCaps: normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length),
   };
 }
 
@@ -735,7 +736,7 @@ function instrumentTransition(input: {
         preRoster,
         candidate,
         teamById.get(result.winnerTeamId)?.capIdentity,
-        input.pool.luxuryCaps,
+        normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length),
       );
       expect(projectedTax).toBe(independent);
       input.instrumentation.evidence.push({
@@ -996,7 +997,8 @@ function summarizeDraft(input: {
       return player;
     });
     const identity = teamById.get(team.teamId)?.capIdentity;
-    const implied = luxuryTax(finalRoster, identity ? shiftLuxuryCaps(input.pool.luxuryCaps, identity) : input.pool.luxuryCaps, 'taxed').charged;
+    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length);
+    const implied = luxuryTax(finalRoster, identity ? shiftLuxuryCaps(normalizedCaps, identity) : normalizedCaps, 'taxed').charged;
     rows.push({
       draft: input.spec.id,
       team: team.teamId,
@@ -1015,7 +1017,8 @@ function summarizeDraft(input: {
     });
   }
 
-  expect(input.session.instrumentation.evidence.length).toBeGreaterThanOrEqual(2);
+  const taxedTeamCount = rows.filter((row) => row.chargedTax > 0).length;
+  expect(input.session.instrumentation.evidence).toHaveLength(Math.min(2, taxedTeamCount));
   const shillRows = input.session.teams
     .filter((team) => nonCompleting.has(team.teamId))
     .map((team) => ({

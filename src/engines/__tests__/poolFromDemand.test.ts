@@ -509,12 +509,13 @@ describe('extractPoolFromDemand', () => {
   it('maps dial targets from roster demand plus expected shill wins', () => {
     const eightTeams = resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
     expect(eightTeams.demandBase).toBe(176);
-    expect(eightTeams.requestedTarget).toBe(220);
+    expect(eightTeams.requestedTarget).toBe(264);
+    expect(resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: 1.25 }).requestedTarget).toBe(220);
     expect(resolvePoolSizingTarget({ teams: 8, shills: 0, poolSizeMultiplier: 1.5 }).requestedTarget).toBe(264);
 
     const withShills = resolvePoolSizingTarget({ teams: 8, shills: 3, poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER });
     expect(withShills.demandBase).toBe(206);
-    expect(withShills.requestedTarget).toBe(258);
+    expect(withShills.requestedTarget).toBe(309);
   });
 
   it('uses the canonical numeric analyzer grade instead of display letter labels', () => {
@@ -1497,16 +1498,19 @@ describe('extractPoolFromDemand', () => {
 
   it('force-includes pins, protects them from trim, and withholds excludes', () => {
     const source = universe();
+    // Keep source headroom in this pin/exclude fixture; the production 1.50 default deliberately
+    // consumes its entire tiny universe and would leave no outside player to pin.
+    const fixtureMultiplier = 1.25;
     const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
     });
     const excluded = baseline.players.find((candidate) => {
       const trial = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
         teams: 4,
         budgetPerTeam: 5_000_000,
-        poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+        poolSizeMultiplier: fixtureMultiplier,
         excludedIds: [candidate.id],
       });
       return !trial.players.some((player) => player.id === candidate.id);
@@ -1518,7 +1522,7 @@ describe('extractPoolFromDemand', () => {
     const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
       pinnedIds: [pinned!.id],
       excludedIds: [excluded!],
     });
@@ -1532,10 +1536,11 @@ describe('extractPoolFromDemand', () => {
 
   it('keeps explicit pins when a manual exclusion conflicts with them', () => {
     const source = universe();
+    const fixtureMultiplier = 1.25;
     const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
     });
     const pinned = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
     expect(pinned).toBeDefined();
@@ -1543,7 +1548,7 @@ describe('extractPoolFromDemand', () => {
     const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
       pinnedIds: [pinned!.id],
       excludedIds: [pinned!.id],
     });
@@ -1556,10 +1561,11 @@ describe('extractPoolFromDemand', () => {
 
   it('force-includes design-priority target players as curve-counted hard keeps', () => {
     const source = universe();
+    const fixtureMultiplier = 1.25;
     const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
     });
     const target = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
     expect(target).toBeDefined();
@@ -1567,7 +1573,7 @@ describe('extractPoolFromDemand', () => {
     const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
       designPriorityIds: [target!.id],
     });
 
@@ -1580,10 +1586,11 @@ describe('extractPoolFromDemand', () => {
 
   it('reports manual exclusions that block design-priority target players', () => {
     const source = universe();
+    const fixtureMultiplier = 1.25;
     const baseline = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
     });
     const target = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
     expect(target).toBeDefined();
@@ -1591,7 +1598,7 @@ describe('extractPoolFromDemand', () => {
     const result = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
       teams: 4,
       budgetPerTeam: 5_000_000,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: fixtureMultiplier,
       designPriorityIds: [target!.id],
       excludedIds: [target!.id],
     });

@@ -512,19 +512,12 @@ export function selectCpuNomination(
     0,
     1,
   );
-  let best: (CpuNominationDecision & { score: number }) | null = null;
+  let bestJointSafe: (CpuNominationDecision & { score: number }) | null = null;
+  let bestLegalMove: (CpuNominationDecision & { score: number }) | null = null;
 
   for (const playerId of session.availablePlayerIds) {
     const player = session.players[playerId] as CpuShillAuctionPlayer | undefined;
     if (!player) continue;
-    // A CPU nomination is a committed acquisition if nobody counters. It therefore obeys the
-    // same joint-supply politeness as a late CPU bid: do not nominate a scarce class another club
-    // needs unless it is tight for the nominator too.
-    const afterNominationSupply: CpuShillAuctionSession = {
-      ...session,
-      availablePlayerIds: session.availablePlayerIds.filter((candidateId) => candidateId !== playerId),
-    };
-    if (wouldStarveJointDemand(afterNominationSupply, teamId, playerId)) continue;
     const maxOpeningBid = options.openingCeiling?.(playerId)
       ?? nominationBidCeiling(session, teamId, playerId);
     if (maxOpeningBid === null || maxOpeningBid < team.minSalary) continue;
@@ -539,11 +532,34 @@ export function selectCpuNomination(
     const openingBid = Math.max(team.minSalary, Math.min(maxOpeningBid, steppedOpen));
     if (openingBid < team.minSalary) continue;
     const score = valuation * needMultiplier;
-    if (best === null || score > best.score || (score === best.score && playerId.localeCompare(best.playerId) < 0)) {
-      best = { teamId, playerId, openingBid, valuation, needMultiplier, maxOpeningBid, score };
+    const decision = { teamId, playerId, openingBid, valuation, needMultiplier, maxOpeningBid, score };
+    if (
+      bestLegalMove === null
+      || score > bestLegalMove.score
+      || (score === bestLegalMove.score && playerId.localeCompare(bestLegalMove.playerId) < 0)
+    ) {
+      bestLegalMove = decision;
+    }
+
+    // A CPU nomination is a committed acquisition if nobody counters. Prefer the same
+    // joint-supply politeness used by a late CPU bid, but never let that courtesy veto every
+    // otherwise legal nomination. Sequential nomination's must-move rule is load-bearing: when
+    // no joint-safe candidate exists, the club takes its best legal move instead of deadlocking.
+    const afterNominationSupply: CpuShillAuctionSession = {
+      ...session,
+      availablePlayerIds: session.availablePlayerIds.filter((candidateId) => candidateId !== playerId),
+    };
+    if (wouldStarveJointDemand(afterNominationSupply, teamId, playerId)) continue;
+    if (
+      bestJointSafe === null
+      || score > bestJointSafe.score
+      || (score === bestJointSafe.score && playerId.localeCompare(bestJointSafe.playerId) < 0)
+    ) {
+      bestJointSafe = decision;
     }
   }
 
+  const best = bestJointSafe ?? bestLegalMove;
   if (best === null) return null;
   const { score: _score, ...decision } = best;
   return decision;

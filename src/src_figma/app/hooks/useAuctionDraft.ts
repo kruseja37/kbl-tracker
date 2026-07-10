@@ -17,7 +17,10 @@ import {
   surfaceNextPlayer,
   type AuctionTransitionResult,
 } from "../../../engines/auctionStateMachine";
-import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from "../../../engines/auctionLuxuryTax";
 import type { BandPriorities, ConstructionPlayer, TeamCapIdentity } from "../../../engines/leagueConstruction";
 import {
   buildArchetypeShillProfile,
@@ -216,7 +219,10 @@ function buildAuctionLuxuryTaxContext(input: {
     poolById: new Map(input.pool.players.map((player) => [player.id, player])),
     playerById: new Map(input.players.map((player) => [player.id, player])),
     identityByTeamId: new Map(input.leagueTeams.map((team) => [team.id, team.capIdentity])),
-    baseCaps: input.pool.luxuryCaps,
+    baseCaps: normalizeAuctionLuxuryCapsForLeagueSize(
+      input.pool.luxuryCaps,
+      input.leagueTeams.length,
+    ),
   };
 }
 

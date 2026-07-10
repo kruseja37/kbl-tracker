@@ -6,6 +6,31 @@ import {
   type TeamCapIdentity,
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
+import { AUCTION_SMALL_LEAGUE_CAP_SCALE_EXPONENT } from '../data/auctionEngineConstants';
+
+const STOCK_LUXURY_CAP_TEAM_COUNT = 20;
+
+/**
+ * CAPFIX: the stock luxury-cap thresholds were derived from a 20-team environment. Auction
+ * leagues below that size relax the threshold basis with one smooth power-law parameter; the
+ * penalty formula, identities, budgets, IVs, and every other tax mechanic remain unchanged.
+ *
+ * Returning the original array at 20+ is intentional: the stock fixture is not merely close, but
+ * byte-for-byte and reference-identical to the pre-CAPFIX table.
+ */
+export function normalizeAuctionLuxuryCapsForLeagueSize(
+  baseCaps: LuxuryCapRow[],
+  realTeamCount: number,
+  exponent = AUCTION_SMALL_LEAGUE_CAP_SCALE_EXPONENT,
+): LuxuryCapRow[] {
+  const teams = Math.floor(realTeamCount);
+  if (!Number.isFinite(realTeamCount) || teams <= 0 || teams >= STOCK_LUXURY_CAP_TEAM_COUNT) {
+    return baseCaps;
+  }
+  const safeExponent = Number.isFinite(exponent) ? Math.max(0, exponent) : 0;
+  const scale = (STOCK_LUXURY_CAP_TEAM_COUNT / teams) ** safeExponent;
+  return baseCaps.map((row) => ({ ...row, cap: row.cap * scale }));
+}
 
 /**
  * Auction projectedTax is the would-be total team tax after winning the candidate.

@@ -872,7 +872,9 @@ describe("useAuctionDraft", () => {
         group: "hitters",
         stat: "CON",
         topN: 1,
-        cap: 95,
+        // CAPFIX scales a 2-club table by 10^0.55; 20 stays below the on-fit CON=10 after the
+        // identity shift while the off-fit CON=100 still binds, preserving this tax contrast.
+        cap: 20,
         penaltyCurve: 1,
         penaltyPer100: 1_000_000,
         minAdder: 0,
@@ -967,7 +969,7 @@ describe("useAuctionDraft", () => {
         group: "hitters",
         stat: "CON",
         topN: 1,
-        cap: 95,
+        cap: 20,
         penaltyCurve: 1,
         penaltyPer100: 1_000_000,
         minAdder: 0,
@@ -1047,7 +1049,7 @@ describe("useAuctionDraft", () => {
         group: "hitters",
         stat: "CON",
         topN: 1,
-        cap: 95,
+        cap: 20,
         penaltyCurve: 1,
         penaltyPer100: 1_000_000,
         minAdder: 0,
@@ -1102,7 +1104,7 @@ describe("useAuctionDraft", () => {
 
     const humanAfterLoad = result.current.session?.teams.find((team) => team.teamId === "human");
     // The stale 999,999 must be gone -- replaced by a fresh, finite, positive marginal tax read
-    // (a lone off-archetype player alone breaches the CON=95 cap), proving loadAuction always
+    // (a lone off-archetype player alone breaches the CAPFIX-normalized CON=20 cap), proving loadAuction always
     // overwrites whatever a pre-TAXTEETH save carried before any bid/ceiling logic can read it.
     expect(humanAfterLoad?.projectedTax).not.toBe(999_999);
     expect(Number.isFinite(humanAfterLoad?.projectedTax)).toBe(true);

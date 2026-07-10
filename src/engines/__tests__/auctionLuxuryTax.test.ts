@@ -18,6 +18,7 @@ import {
   auctionMarginalTax,
   auctionShiftedCaps,
   computeAuctionTeamProjectedTax,
+  normalizeAuctionLuxuryCapsForLeagueSize,
 } from '../auctionLuxuryTax';
 import { archetypeToCapIdentity } from '../archetypeIdentity';
 
@@ -59,6 +60,34 @@ function findCap(
 }
 
 describe('auctionLuxuryTax', () => {
+  test('CAPFIX keeps the complete 20-team stock tax table byte-identical', () => {
+    for (const tier of ['juiced', 'standard', 'nerfed'] as const) {
+      const before = LUXURY_CAP_TABLES[tier];
+      const serializedBefore = JSON.stringify(before);
+      const after = normalizeAuctionLuxuryCapsForLeagueSize(before, 20);
+
+      expect(after).toBe(before);
+      expect(after).toEqual(before);
+      expect(JSON.stringify(after)).toBe(serializedBefore);
+    }
+  });
+
+  test('CAPFIX relaxes sub-20 thresholds smoothly and monotonically from one parameter', () => {
+    const base = LUXURY_CAP_TABLES.standard;
+    const referenceCap = findCap(base, 'hitters', 'POW').cap;
+    const scales = Array.from({ length: 20 }, (_, index) => {
+      const teams = index + 1;
+      const caps = normalizeAuctionLuxuryCapsForLeagueSize(base, teams);
+      return findCap(caps, 'hitters', 'POW').cap / referenceCap;
+    });
+
+    expect(scales[19]).toBe(1);
+    for (let index = 1; index < scales.length; index += 1) {
+      expect(scales[index]).toBeLessThan(scales[index - 1]);
+    }
+    expect(scales[3]).toBeCloseTo(5 ** 0.55, 12);
+  });
+
   test('no identity uses base tier caps and matches ratified luxuryTax output', () => {
     const tier = 'standard';
     const roster = Array.from({ length: 8 }, (_, index) => hitter(`power-${index}`, { POW: 99 }));
