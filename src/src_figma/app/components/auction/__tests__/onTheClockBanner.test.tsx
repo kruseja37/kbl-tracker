@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, test } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   OnTheClockBanner,
@@ -142,6 +142,27 @@ describe("onTheClockCopy -- FLOORREFIT R3: the three-branch ladder, first match 
 });
 
 describe("OnTheClockBanner component", () => {
+  test("PRIVACY makes only an explicitly revealable acting-human banner interactive", () => {
+    const onReveal = vi.fn();
+    render(
+      <OnTheClockBanner
+        status={{
+          teamName: "Page Caps",
+          teamPrimary: "#001489",
+          teamSecondary: "#FFFFFF",
+          turnKind: "bid",
+          actingTeamIsCpu: false,
+          nowText: "Page Caps — raise or pass",
+        }}
+        onReveal={onReveal}
+      />,
+    );
+
+    const banner = screen.getByRole("button", { name: "Reveal Page Caps assistant GM read" });
+    fireEvent.click(banner);
+    expect(onReveal).toHaveBeenCalledTimes(1);
+  });
+
   test("renders team-colored band with computed contrast text tone (dark navy -> chalk)", () => {
     render(
       <OnTheClockBanner

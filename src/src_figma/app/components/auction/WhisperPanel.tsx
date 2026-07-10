@@ -32,6 +32,12 @@ interface WhisperPanelProps {
   payload: RosterIntelligencePayload | null;
   /** Defaults to "mlb" -- this file's own tests are all MLB-shaped fixtures. */
   tier?: WhisperTier;
+  /** PRIVACY (2026-07-09): AuctionStage controls the live hotseat reveal. Undefined preserves
+   * this component's standalone/test-fixture toggle behavior; a boolean makes the panel fully
+   * controlled so no Tier-1/Tier-2 advice can render behind the cover. */
+  revealed?: boolean;
+  onReveal?: () => void;
+  onCover?: () => void;
 }
 
 interface WhisperNominationChip {
@@ -150,8 +156,8 @@ function firstPopulatedBoardPosition(board: readonly BoardEntry[]): TaxonomyPosi
   return groups.find((position) => populated.has(position)) ?? groups[0];
 }
 
-export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
-  const [open, setOpen] = useState(false);
+export function WhisperPanel({ payload, tier = "mlb", revealed, onReveal, onCover }: WhisperPanelProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [selectedLight, setSelectedLight] = useState<LightKey>("shape");
   const [revealedLight, setRevealedLight] = useState<LightKey | null>(null);
@@ -172,6 +178,9 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   const scorecard = payload?.scorecard;
   const worth = payload?.worthToYou;
   const isMlb = tier === "mlb";
+  const revealIsControlled = revealed !== undefined;
+  const open = revealIsControlled ? revealed : internalOpen;
+  const privateSummaryVisible = !revealIsControlled || open;
 
   // COCKPIT WAVE 2: per-position counts (for the tab row) and the position-scoped, GM-blended
   // 5-deep view. MLB only -- board entries carry `position` from assembleBoard's candidate.shape;
@@ -215,7 +224,7 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
   }, [scorecard, tier]);
 
   useEffect(() => {
-    setOpen(false);
+    setInternalOpen(false);
     setExpanded(false);
     setRevealedLight(null);
     setBoardViewMode("global");
@@ -316,15 +325,15 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
     >
       <WhisperStyles />
 
-      {isMlb && worth && (
+      {privateSummaryVisible && isMlb && worth && (
         <WhisperVerdictStrip payload={payload} marginalTax={meta.marginalTax ?? null} />
       )}
 
-      {!isMlb && (meta.bridgeHeadline || meta.chemFitLabel) && (
+      {privateSummaryVisible && !isMlb && (meta.bridgeHeadline || meta.chemFitLabel) && (
         <FarmBridgeStrip headline={meta.bridgeHeadline ?? null} chemFitLabel={meta.chemFitLabel ?? null} />
       )}
 
-      {isMlb && (
+      {privateSummaryVisible && isMlb && (
         <section className="whisper-tier2" data-testid="whisper-tier2">
           {meta.bidVsPass && <CompactBidVsPass bidVsPass={meta.bidVsPass} />}
           {meta.nextUpLine && (
@@ -343,7 +352,14 @@ export function WhisperPanel({ payload, tier = "mlb" }: WhisperPanelProps) {
         className="whisper-strip"
         data-testid="whisper-strip"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (revealIsControlled) {
+            if (open) onCover?.();
+            else onReveal?.();
+            return;
+          }
+          setInternalOpen((current) => !current);
+        }}
       >
         <span className="eyebrow">ASST GM · {clubName}</span>
         <span className="whisper-affordance">{open ? "🔒 COVER IT" : "🔒 TAP FOR THE READ"}</span>

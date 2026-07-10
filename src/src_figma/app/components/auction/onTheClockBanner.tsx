@@ -103,7 +103,15 @@ export interface OnTheClockBannerStatus {
   nowText: string;
 }
 
-export function OnTheClockBanner({ status }: { status: OnTheClockBannerStatus }) {
+export interface OnTheClockBannerProps {
+  status: OnTheClockBannerStatus;
+  /** PRIVACY (2026-07-09): present only for the acting human seat. CPU/rival banners remain
+   * non-interactive, so a displayed rival name can never open another club's private read. */
+  onReveal?: () => void;
+  revealed?: boolean;
+}
+
+export function OnTheClockBanner({ status, onReveal, revealed = false }: OnTheClockBannerProps) {
   const copy = onTheClockCopy({
     teamName: status.teamName,
     turnKind: status.turnKind,
@@ -120,18 +128,36 @@ export function OnTheClockBanner({ status }: { status: OnTheClockBannerStatus })
   // "did the turn move" signal without inventing a new one.
   const remountKey = `${status.teamName ?? "cpu"}|${status.nowText}`;
 
+  const className = `otc-banner${hasTeamColors ? ` otc-team${primaryTone === "ink" ? " otc-ink-text" : ""}` : " otc-fallback"}`;
+  const style = hasTeamColors
+    ? ({
+        "--otc-bg": status.teamPrimary,
+        "--otc-border": status.teamSecondary,
+      } as CSSProperties)
+    : undefined;
+
+  if (onReveal) {
+    return (
+      <button
+        key={remountKey}
+        type="button"
+        className={className}
+        style={style}
+        data-testid="on-the-clock-banner"
+        aria-label={`Reveal ${status.teamName ?? "acting club"} assistant GM read`}
+        aria-pressed={revealed}
+        onClick={onReveal}
+      >
+        {copy}
+      </button>
+    );
+  }
+
   return (
     <div
       key={remountKey}
-      className={`otc-banner${hasTeamColors ? ` otc-team${primaryTone === "ink" ? " otc-ink-text" : ""}` : " otc-fallback"}`}
-      style={
-        hasTeamColors
-          ? ({
-              "--otc-bg": status.teamPrimary,
-              "--otc-border": status.teamSecondary,
-            } as CSSProperties)
-          : undefined
-      }
+      className={className}
+      style={style}
       data-testid="on-the-clock-banner"
     >
       {copy}

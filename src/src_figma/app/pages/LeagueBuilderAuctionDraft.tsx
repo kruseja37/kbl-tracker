@@ -952,6 +952,22 @@ export function LeagueBuilderAuctionDraft() {
   const latestWinnerTeamState = session?.state === "SOLD" && latestResult?.disposition === "SOLD" && latestResult.winnerTeamId
     ? teamStateById.get(latestResult.winnerTeamId) ?? null
     : null;
+  // PRIVACY (2026-07-09): the private board/advisor lens exists ONLY for the acting human seat.
+  // The public roster frame below may still fall back to the latest winner/first human so the
+  // table can see who each club has won; private gaps, budget warnings, and analysis never do.
+  const activeWhisperSeatTeamId = useMemo(() => {
+    if (!session) return null;
+    const seatTeamId =
+      session.state === "OPEN_BIDDING"
+        ? auction.currentBidderTeamId
+        : session.state === "RESOLVE"
+          ? session.pendingClaim?.teamId ?? null
+          : null;
+    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
+  }, [auction, session]);
+  const privateRosterBoardTeamState = activeWhisperSeatTeamId
+    ? teamStateById.get(activeWhisperSeatTeamId) ?? null
+    : null;
   const rosterBoardTeamState = useMemo(() => {
     if (currentBidderTeamState) return currentBidderTeamState;
     if (pendingClaimTeamState) return pendingClaimTeamState;
@@ -998,18 +1014,20 @@ export function LeagueBuilderAuctionDraft() {
     () => buildAuctionBoardFrame(rosterBoardFrameInput, rosterBoardPositionMap),
     [rosterBoardFrameInput, rosterBoardPositionMap],
   );
-  const rosterBoardPayroll = useMemo(
-    () => rosterBoardEntries.reduce((sum, entry) => sum + entry.salary, 0),
-    [rosterBoardEntries],
+  const privateRosterBoardPayroll = useMemo(
+    () => (privateRosterBoardTeamState?.roster ?? []).reduce((sum, entry) => sum + entry.salary, 0),
+    [privateRosterBoardTeamState],
   );
-  const rosterBoardWalletCap = useMemo(
-    () => rosterBoardTeamState ? rosterBoardTeamState.budgetRemaining + rosterBoardPayroll : null,
-    [rosterBoardPayroll, rosterBoardTeamState],
+  const privateRosterBoardWalletCap = useMemo(
+    () => privateRosterBoardTeamState
+      ? privateRosterBoardTeamState.budgetRemaining + privateRosterBoardPayroll
+      : null,
+    [privateRosterBoardPayroll, privateRosterBoardTeamState],
   );
   const rosterBoardReport = useMemo(() => {
-    if (!session || !rosterBoardTeamState) return null;
+    if (!session || !privateRosterBoardTeamState) return null;
 
-    const mlbWonPlayers: DraftAnalyzerMlbEntry[] = rosterBoardTeamState.roster.map((assignment) => {
+    const mlbWonPlayers: DraftAnalyzerMlbEntry[] = privateRosterBoardTeamState.roster.map((assignment) => {
       const player = playerById.get(assignment.playerId);
       return player
         ? draftAnalyzerEntryFromPlayer(player, assignment.salary)
@@ -1024,14 +1042,14 @@ export function LeagueBuilderAuctionDraft() {
     return analyzeDraftRoster({
       leagueId: activeLeague?.id,
       team: {
-        id: rosterBoardTeamState.teamId,
-        name: teamNameById(rosterBoardTeamState.teamId),
+        id: privateRosterBoardTeamState.teamId,
+        name: teamNameById(privateRosterBoardTeamState.teamId),
       },
       mlbWonPlayers,
       farmWonPlayers: [],
-      walletCap: rosterBoardWalletCap ?? undefined,
+      walletCap: privateRosterBoardWalletCap ?? undefined,
     });
-  }, [activeLeague?.id, playerById, rosterBoardTeamState, rosterBoardWalletCap, session, teamNameById]);
+  }, [activeLeague?.id, playerById, privateRosterBoardTeamState, privateRosterBoardWalletCap, session, teamNameById]);
   const rosterBoardPriorityGaps = useMemo<BoardPriorityGap[]>(() => {
     if (!rosterBoardReport) return [];
 
@@ -1039,7 +1057,7 @@ export function LeagueBuilderAuctionDraft() {
       DRAFT_BOARD_GAP_KINDS.has(finding.kind) && finding.severity !== "info"
     ));
 
-    const focusTeam = rosterBoardTeamState ? teamById.get(rosterBoardTeamState.teamId) : undefined;
+    const focusTeam = privateRosterBoardTeamState ? teamById.get(privateRosterBoardTeamState.teamId) : undefined;
     return sortByTiltedPriority(tiltAnalyzerFindings(gapFindings, focusTeam?.capIdentity))
       .slice(0, 5)
       .map((tilted) => ({
@@ -1047,28 +1065,17 @@ export function LeagueBuilderAuctionDraft() {
         severity: tilted.finding.severity,
         label: tilted.finding.title,
       }));
-  }, [rosterBoardReport, rosterBoardTeamState, teamById]);
+  }, [privateRosterBoardTeamState, rosterBoardReport, teamById]);
   const rosterBoardBudgetWarning = useMemo(() => {
-    if (!rosterBoardTeamState) return null;
-    return rosterBoardTeamState.budgetRemaining < rosterBoardTeamState.rosterSlotsRemaining * rosterBoardTeamState.minSalary
+    if (!privateRosterBoardTeamState) return null;
+    return privateRosterBoardTeamState.budgetRemaining < privateRosterBoardTeamState.rosterSlotsRemaining * privateRosterBoardTeamState.minSalary
       ? "Filling your remaining slots would exceed your budget"
       : null;
-  }, [rosterBoardTeamState]);
+  }, [privateRosterBoardTeamState]);
   // COCKPIT WAVE 2 (B3/Correction 5/7): mirrors the seatTeamId derivation inside whisperPayload
   // below, kept as its own memo so the board-reorder persistence callbacks (and now publicMarket)
   // can resolve "which team's perspective applies" without duplicating the whisperPayload memo
   // itself. Moved above publicMarket (CALLFIX Item 5(d)) so the market read below can consume it.
-  const activeWhisperSeatTeamId = useMemo(() => {
-    if (!session) return null;
-    const seatTeamId =
-      session.state === "OPEN_BIDDING"
-        ? auction.currentBidderTeamId
-        : session.state === "RESOLVE"
-          ? session.pendingClaim?.teamId ?? null
-          : null;
-    return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
-  }, [auction, session]);
-
   const publicMarket = useMemo<EstimatedMarket | null>(() => {
     if (!session) return null;
     const view = buildLotViewFromSession(session, {
@@ -1889,12 +1896,18 @@ export function LeagueBuilderAuctionDraft() {
         : session.state === "RESOLVE" && session.pendingClaim
           ? teamNameById(session.pendingClaim.teamId)
           : nowTeam ? teamDisplayName(nowTeam) : undefined,
+      teamId: session.state === "OPEN_BIDDING" && auction.currentBidderTeamId
+        ? auction.currentBidderTeamId
+        : session.state === "RESOLVE" && session.pendingClaim
+          ? session.pendingClaim.teamId
+          : nowTeam?.id,
       teamPrimary: nowTeam?.colors.primary ?? (stageFocusTeam?.colors.primary ?? "var(--ballpark-brass)"),
       teamSecondary: nowTeam?.colors.secondary ?? (stageFocusTeam?.colors.secondary ?? "var(--ballpark-chalk)"),
       turnKind: nowTurnKind,
       actingTeamIsCpu: nowTeamIsCpu,
     },
     lot: {
+      lotId: lot?.playerId ?? latestResult?.playerId ?? null,
       player: stageLotPlayer,
       name: stageLotPlayer ? playerDisplayName(stageLotPlayer) : session.state === "AUCTION_COMPLETE" ? "MLB auction complete" : "Next player surfacing",
       positions: lotPositions(stageLotPlayer),
@@ -2071,6 +2084,7 @@ export function LeagueBuilderAuctionDraft() {
       <AuctionStage
         vm={auctionStageVm}
         whisperPayload={displayedWhisperPayload}
+        activeSeatTeamId={activeWhisperSeatTeamId}
         toolbar={
           <div className="row" style={{ marginBottom: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <button

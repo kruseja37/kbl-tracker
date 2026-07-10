@@ -809,6 +809,12 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.getByText(/Page (Caps|Keys) budget/)).toBeInTheDocument();
     expect(screen.getByText("Ceiling")).toBeInTheDocument();
     expect(screen.getByText("Slots left")).toBeInTheDocument();
+    // PRIVACY: the acting human must claim the seat before any strategy/advisor content or
+    // action control opens. Public lot/market/roster facts above remain visible.
+    expect(screen.queryByText(/Priority need:/)).not.toBeInTheDocument();
+    const reveal = screen.getByRole("button", { name: /Reveal Page (Caps|Keys) assistant GM read/ });
+    const firstRevealLabel = reveal.getAttribute("aria-label");
+    fireEvent.click(reveal);
     expect(screen.getByText(/Priority need:/)).toBeInTheDocument();
     expect(screen.queryByText("player-a")).not.toBeInTheDocument();
     expect(screen.queryByText("team-a")).not.toBeInTheDocument();
@@ -823,11 +829,14 @@ describe("LeagueBuilderAuctionDraft", () => {
       // FLOORREFIT R1 relocation: the statusbar "Now: {team} — raise or pass" pill is retired --
       // the ON THE CLOCK banner is the sole announcer of turn identity now, so the same
       // information (a human team is on the clock to act after the bid) is asserted there.
-      expect(screen.getByTestId("on-the-clock-banner")).toHaveTextContent(
+      const nextReveal = screen.getByRole("button", { name: /Reveal Page (Caps|Keys) assistant GM read/ });
+      expect(nextReveal).toHaveTextContent(
         /YOU'RE UP — PAGE (CAPS|KEYS)/,
       );
-      expect(screen.getByRole("button", { name: "Let him go" })).toBeEnabled();
+      expect(nextReveal.getAttribute("aria-label")).not.toBe(firstRevealLabel);
     });
+    fireEvent.click(screen.getByRole("button", { name: /Reveal Page (Caps|Keys) assistant GM read/ }));
+    expect(screen.getByRole("button", { name: "Let him go" })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Let him go" }));
 
@@ -932,7 +941,17 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Advance decision" }));
 
+    let previousRevealLabel: string | null = null;
     for (let index = 0; index < 2; index += 1) {
+      await waitFor(() => {
+        const currentReveal = screen.getByRole("button", { name: /assistant GM read/i });
+        if (previousRevealLabel) {
+          expect(currentReveal.getAttribute("aria-label")).not.toBe(previousRevealLabel);
+        }
+      });
+      const reveal = screen.getByRole("button", { name: /assistant GM read/i });
+      previousRevealLabel = reveal.getAttribute("aria-label");
+      fireEvent.click(reveal);
       await waitFor(() => {
         expect(screen.getByRole("button", { name: /Let him go/i })).toBeEnabled();
       });

@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { AuctionStage, type AuctionStageVM, type RosterSlotVM } from "../AuctionStage";
 import { HELD_BACK_HELP_LINE, HELP_LINE, NEED_FIT_HELP_LINE } from "../WhisperPanel";
@@ -133,6 +133,249 @@ function whisperPayloadWithCapValue(capValue: number | null): RosterIntelligence
     },
   };
 }
+
+function activeHumanPrivacyVm(teamName: string): AuctionStageVM {
+  const stageVm = vm();
+  const teamId = teamName === "Brass Monkeys" ? "team-b" : "team-a";
+  stageVm.status = {
+    ...stageVm.status,
+    teamName,
+    teamId,
+    teamPrimary: "#001489",
+    teamSecondary: "#FFFFFF",
+    turnKind: "bid",
+    actingTeamIsCpu: false,
+    nowText: `${teamName} — raise or pass`,
+  };
+  stageVm.move = {
+    ...stageVm.move,
+    slotsLeft: 4,
+    canBid: true,
+    canPass: true,
+    primaryLabel: "BID $10,000",
+    secondaryLabel: "Let him go",
+  };
+  return stageVm;
+}
+
+function privacyWhisperPayload(teamId: string, clubName: string): RosterIntelligencePayload {
+  return Object.assign(whisperPayloadWithCapValue(100_000), {
+    seatTeamId: teamId,
+    seatClubName: clubName,
+  });
+}
+
+// PRIVACY repro-first (CONTRACT_PRIVACY_2026-07-09.md): these tests intentionally go RED
+// against the pre-fix stage. Today the private Tier-1/Tier-2 read, ceiling, and roster-seat count
+// render as soon as a human seat takes action; the next human receives the same leak without a
+// click. The farm scout report also stays open across a lot change.
+describe("AuctionStage PRIVACY repro — private reads must cover between hotseat turns", () => {
+  test("a newly acting human seat does not inherit an automatically visible assistant-GM read", () => {
+    const firstPayload = privacyWhisperPayload("team-a", "Page Caps");
+    const { rerender } = render(
+      <AuctionStage vm={activeHumanPrivacyVm("Page Caps")} whisperPayload={firstPayload} activeSeatTeamId="team-a" />,
+    );
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByTestId("whisper-body")).toBeInTheDocument();
+
+    const nextPayload = privacyWhisperPayload("team-b", "Brass Monkeys");
+    rerender(
+      <AuctionStage vm={activeHumanPrivacyVm("Brass Monkeys")} whisperPayload={nextPayload} activeSeatTeamId="team-b" />,
+    );
+
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-tier2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
+    expect(screen.getByTestId("whisper-strip")).toHaveTextContent("ASST GM · Brass Monkeys");
+    expect(screen.getByTestId("whisper-strip")).toHaveTextContent("TAP FOR THE READ");
+  });
+
+  test("the decision wallet and bid/pass controls start covered for an acting human", () => {
+    const { container } = render(
+      <AuctionStage
+        vm={activeHumanPrivacyVm("Page Caps")}
+        whisperPayload={privacyWhisperPayload("team-a", "Page Caps")}
+        activeSeatTeamId="team-a"
+      />,
+    );
+
+    const wallet = container.querySelector(".walletline");
+    expect(wallet).toHaveTextContent("Ceiling——");
+    expect(wallet).toHaveTextContent("Slots left——");
+    expect(screen.getByRole("button", { name: "BID $10,000" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Let him go" })).toBeDisabled();
+  });
+
+  test("Help cannot bypass the cover to expose the private before-tax ceiling", () => {
+    const privatePayload = privacyWhisperPayload("team-a", "Page Caps");
+    if (!privatePayload.worthToYou) throw new Error("privacy fixture requires worthToYou");
+    privatePayload.worthToYou.capValue = 987_654;
+    render(
+      <AuctionStage
+        vm={activeHumanPrivacyVm("Page Caps")}
+        whisperPayload={privatePayload}
+        activeSeatTeamId="team-a"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(screen.queryByTestId("whisper-total-capacity")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("987,654");
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Before-tax ceiling $987,654");
+  });
+
+  test("the farm scout report auto-covers when the lot changes", () => {
+    const firstVm = activeHumanPrivacyVm("Page Caps");
+    firstVm.tier = "farm";
+    firstVm.lot.name = "Prospect One";
+    firstVm.lot.scout = {
+      rangeLow: 90_000,
+      rangeHigh: 110_000,
+      mid: 100_000,
+      grade2080: 55,
+      confidence: "High",
+    };
+    const { container, rerender } = render(<AuctionStage vm={firstVm} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Scout report" }));
+    expect(container.querySelector(".scout.revealed")).not.toBeNull();
+
+    const nextVm = activeHumanPrivacyVm("Page Caps");
+    nextVm.tier = "farm";
+    nextVm.lot.name = "Prospect Two";
+    nextVm.lot.scout = firstVm.lot.scout;
+    rerender(<AuctionStage vm={nextVm} />);
+
+    expect(container.querySelector(".scout.revealed")).toBeNull();
+    expect(screen.getByRole("button", { name: "Scout report" })).toHaveTextContent("TAP FOR THE SCOUT REPORT");
+  });
+
+  test("both acting-team affordances reveal the same private read, and bid auto-covers it", () => {
+    const onBid = vi.fn();
+    const stageVm = activeHumanPrivacyVm("Page Caps");
+    stageVm.lot.lotId = "lot-a";
+    const props = {
+      vm: stageVm,
+      whisperPayload: privacyWhisperPayload("team-a", "Page Caps"),
+      activeSeatTeamId: "team-a",
+      onBid,
+    } as const;
+    const { rerender } = render(<AuctionStage {...props} />);
+
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reveal Page Caps assistant GM read" }));
+    expect(screen.getByTestId("whisper-tier1")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-body")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "BID $10,000" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "BID $10,000" }));
+    expect(onBid).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
+
+    // Same production state, fresh mount: the ASST GM strip is the second affordance.
+    rerender(<AuctionStage {...props} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByTestId("whisper-tier1")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-body")).toBeInTheDocument();
+  });
+
+  test("pass auto-covers the read and cannot fire before reveal", () => {
+    const onPass = vi.fn();
+    render(
+      <AuctionStage
+        vm={activeHumanPrivacyVm("Page Caps")}
+        whisperPayload={privacyWhisperPayload("team-a", "Page Caps")}
+        activeSeatTeamId="team-a"
+        onPass={onPass}
+      />,
+    );
+
+    const pass = screen.getByRole("button", { name: "Let him go" });
+    expect(pass).toBeDisabled();
+    fireEvent.click(pass);
+    expect(onPass).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(pass).toBeEnabled();
+    fireEvent.click(pass);
+    expect(onPass).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(pass).toBeDisabled();
+  });
+
+  test("a same-seat lot advance auto-covers before the next lot can render private advice", () => {
+    const firstVm = activeHumanPrivacyVm("Page Caps");
+    firstVm.lot.lotId = "lot-a";
+    const { rerender } = render(
+      <AuctionStage
+        vm={firstVm}
+        whisperPayload={privacyWhisperPayload("team-a", "Page Caps")}
+        activeSeatTeamId="team-a"
+      />,
+    );
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByTestId("whisper-tier1")).toBeInTheDocument();
+
+    const nextVm = activeHumanPrivacyVm("Page Caps");
+    nextVm.lot.lotId = "lot-b";
+    rerender(
+      <AuctionStage
+        vm={nextVm}
+        whisperPayload={privacyWhisperPayload("team-a", "Page Caps")}
+        activeSeatTeamId="team-a"
+      />,
+    );
+
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("whisper-strip")).toHaveTextContent("TAP FOR THE READ");
+  });
+
+  test("a non-acting banner cannot reveal another seat's read", () => {
+    const stageVm = activeHumanPrivacyVm("Brass Monkeys");
+    stageVm.status.teamId = "team-b";
+    render(
+      <AuctionStage
+        vm={stageVm}
+        whisperPayload={privacyWhisperPayload("team-a", "Page Caps")}
+        activeSeatTeamId="team-a"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /assistant GM read/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
+  });
+
+  test("public roster names remain visible while gap strategy stays covered until reveal", () => {
+    const stageVm = activeHumanPrivacyVm("Page Caps");
+    stageVm.board.slots = stageVm.board.slots.map((entry) => entry.slotId === "SS"
+      ? { ...entry, who: "Public Winner", isGap: true, gapLabel: "PRIVATE SS GAP", depthNote: "private depth note" }
+      : entry);
+    stageVm.board.needLine = <>PRIVATE PRIORITY GAPS</>;
+    render(
+      <AuctionStage
+        vm={stageVm}
+        whisperPayload={privacyWhisperPayload("team-a", "Page Caps")}
+        activeSeatTeamId="team-a"
+      />,
+    );
+
+    expect(screen.getByText("Public Winner")).toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE SS GAP")).not.toBeInTheDocument();
+    expect(screen.queryByText("private depth note")).not.toBeInTheDocument();
+    expect(screen.queryByText("PRIVATE PRIORITY GAPS")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(screen.getByText("PRIVATE SS GAP")).toBeInTheDocument();
+    expect(screen.getByText("private depth note")).toBeInTheDocument();
+    expect(screen.getByText("PRIVATE PRIORITY GAPS")).toBeInTheDocument();
+  });
+});
 
 // COPY LAW (CONTRACT_VOICE_2026-07-09.md): the auction copy law build lane -- display-layer-only
 // relabeling. This describe block covers the pieces that specifically live in AuctionStage.tsx.

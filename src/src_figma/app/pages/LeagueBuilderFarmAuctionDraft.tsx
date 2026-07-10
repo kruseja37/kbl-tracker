@@ -831,12 +831,14 @@ export function LeagueBuilderFarmAuctionDraft() {
           ? `${teamDisplayName(teamById.get(session.pendingClaim.teamId))} — ${nowAction}`
           : nowAction,
       teamName: stageFocusTeamName,
+      teamId: stageFocusTeam?.id,
       teamPrimary: stageFocusTeam?.colors.primary ?? "var(--ballpark-brass)",
       teamSecondary: stageFocusTeam?.colors.secondary ?? "var(--ballpark-chalk)",
       turnKind: nowTurnKind,
       actingTeamIsCpu: stageFocusTeamIsCpu,
     },
     lot: {
+      lotId: lot?.playerId ?? latestResult?.playerId ?? null,
       // WT-D: lets the on-the-block name open the profile popover -- the prospect's
       // ratingRevealState is always 'hidden' so buildDraftProfileModel always renders the
       // scout-band view (never true ratings/trait names) for a not-yet-revealed prospect.
