@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { buildSnakeOrder } from "../../../engines/leagueConstruction";
+import { LUXURY_CAP_TABLES } from "../../../data/tierParams";
 import { LeagueBuilderSnakeDraft } from "../../app/pages/LeagueBuilderSnakeDraft";
 import {
   useLeagueBuilderData,
@@ -155,10 +156,14 @@ function makeSession(players: Player[]): LeagueBuilderMlbDraftSession {
   };
 }
 
-function setupPageMocks() {
-  const players = makePlayers();
-  const pool = makePool(players);
-  const savedSession = makeSession(players);
+function setupPageMocks(overrides: {
+  players?: Player[];
+  pool?: RegisteredPool;
+  savedSession?: LeagueBuilderMlbDraftSession;
+} = {}) {
+  const players = overrides.players ?? makePlayers();
+  const pool = overrides.pool ?? makePool(players);
+  const savedSession = overrides.savedSession ?? makeSession(players);
   const saveMlbDraftSession = vi.fn(async (input: LeagueBuilderMlbDraftSession) => ({
     ...input,
     createdDate: input.createdDate ?? savedSession.createdDate,
@@ -197,6 +202,51 @@ describe("LeagueBuilderSnakeDraft POC page", () => {
     expect(screen.getByText(/PICK 5 · ROUND 3/i)).toBeInTheDocument();
     expect(screen.getByText("CAP LEDGER")).toBeInTheDocument();
     expect(value.getMlbDraftSession).toHaveBeenCalledWith("snake-league", 1);
+  });
+
+  test("SNAKEFIX repro: cap-ledger labels and values cannot collide in narrow team cards", async () => {
+    setupPageMocks();
+    render(<LeagueBuilderSnakeDraft />);
+
+    await screen.findByText("CAP LEDGER");
+    for (const label of screen.getAllByText("TAX SO FAR")) {
+      expect(label).toHaveClass("whitespace-nowrap");
+    }
+  });
+
+  test("SNAKEFIX: the visible two-team board uses the auction-equivalent normalized tax", async () => {
+    const players = makePlayers();
+    const fenomeno: Player = {
+      ...makePlayer("fenomeno", "SP/RP"),
+      lastName: "Fenomeno",
+      power: 77,
+      contact: 79,
+      speed: 23,
+      fielding: 78,
+      velocity: 54,
+      junk: 76,
+      accuracy: 67,
+      trait1: "Elite 4F",
+      trait2: "Two Way (IF)",
+    };
+    players.push(fenomeno);
+    const unpricedPool = makePool(players);
+    const pool: RegisteredPool = {
+      ...unpricedPool,
+      luxuryCaps: LUXURY_CAP_TABLES.standard,
+      players: unpricedPool.players.map((row) => row.id === fenomeno.id
+        ? { ...row, iv: 124_165 }
+        : row),
+    };
+    setupPageMocks({ players, pool });
+    render(<LeagueBuilderSnakeDraft />);
+
+    await screen.findByText(/COMPLETE-INFORMATION BOARD/i);
+    fireEvent.change(screen.getByRole("combobox", { name: "SORT" }), { target: { value: "IV" } });
+    const draftButton = await screen.findByRole("button", { name: "DRAFT FENOMENO" });
+    const card = draftButton.closest("article");
+    expect(card).not.toBeNull();
+    expect(within(card!).getAllByText("$124,165")).toHaveLength(2);
   });
 
   test("a human pick stamps IV in the persisted session without a roster or franchise write", async () => {

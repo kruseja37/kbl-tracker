@@ -4,7 +4,10 @@ import type {
   LeagueBuilderMlbDraftSession,
   SnakeDraftTradeRecord,
 } from '../utils/leagueBuilderStorage';
-import { auctionMarginalTaxWithCaps } from './auctionLuxuryTax';
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from './auctionLuxuryTax';
 import {
   cheapestLegalCompletion,
   type CompletionCandidate,
@@ -12,10 +15,12 @@ import {
 import {
   assessSolvency,
   luxuryTax,
+  shiftLuxuryCaps,
   validateTrade,
   type ConstructionPlayer,
   type PickValue,
   type SolvencyAssessment,
+  type TeamCapIdentity,
   type TradeVerdict,
 } from './leagueConstruction';
 import {
@@ -60,6 +65,9 @@ export interface SnakePickGuard {
   trueCost: number;
   mustFill: boolean;
   completionPickIds: readonly string[];
+  completionSalaryReserve: number;
+  completionTaxReserve: number;
+  completionReserve: number;
   completionHeadroom: number;
 }
 
@@ -69,7 +77,9 @@ export interface EvaluateSnakePickInput {
   remainingPool: readonly SnakeDraftPlayerModel[];
   committedSpent: number;
   tierCap: number;
-  shiftedCaps: readonly LuxuryCapRow[];
+  baseCaps: readonly LuxuryCapRow[];
+  capIdentity?: TeamCapIdentity;
+  realTeamCount: number;
 }
 
 function money(value: number): string {
@@ -96,6 +106,13 @@ function mustFillWords(need: ReturnType<typeof rosterNeedBreakdown>): string {
 export function evaluateSnakePick(input: EvaluateSnakePickInput): SnakePickGuard {
   const rosterShapes = input.roster.map((entry) => entry.shape);
   const rosterConstruction = input.roster.map((entry) => entry.construction);
+  const normalizedBaseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+    [...input.baseCaps],
+    input.realTeamCount,
+  );
+  const shiftedCaps = input.capIdentity
+    ? shiftLuxuryCaps(normalizedBaseCaps, input.capIdentity)
+    : normalizedBaseCaps;
   const remaining = input.remainingPool.filter((entry) => entry.playerId !== input.candidate.playerId);
   const remainingCompletion: CompletionCandidate[] = remaining.map((entry) => ({
     id: entry.playerId,
@@ -107,7 +124,7 @@ export function evaluateSnakePick(input: EvaluateSnakePickInput): SnakePickGuard
     committedSalaries: input.committedSpent,
     candidate: input.candidate.construction,
     candidateSalary: input.candidate.iv,
-    caps: [...input.shiftedCaps],
+    caps: shiftedCaps,
     mode: 'taxed',
     tierCap: input.tierCap,
     rosterSize: LEGAL_ROSTER.size,
@@ -116,8 +133,8 @@ export function evaluateSnakePick(input: EvaluateSnakePickInput): SnakePickGuard
   const marginalTax = auctionMarginalTaxWithCaps(
     rosterConstruction,
     input.candidate.construction,
-    undefined,
-    [...input.shiftedCaps],
+    input.capIdentity,
+    normalizedBaseCaps,
   );
   const trueCost = input.candidate.iv + marginalTax;
   const needBefore = rosterNeedBreakdown(rosterShapes);
@@ -138,15 +155,23 @@ export function evaluateSnakePick(input: EvaluateSnakePickInput): SnakePickGuard
         input.candidate.construction,
         ...completionModels.map((entry) => entry.construction),
       ],
-      [...input.shiftedCaps],
+      shiftedCaps,
       'taxed',
     ).charged
     : Number.POSITIVE_INFINITY;
-  const finalSalary = input.committedSpent
-    + input.candidate.iv
-    + completionModels.reduce((sum, entry) => sum + entry.iv, 0);
+  const currentTax = luxuryTax(rosterConstruction, shiftedCaps, 'taxed').charged;
+  const completionSalaryReserve = completionModels.reduce((sum, entry) => sum + entry.iv, 0);
+  const completionTaxReserve = completion.feasible
+    ? Math.max(0, finalTax - currentTax - marginalTax)
+    : Number.POSITIVE_INFINITY;
+  const completionReserve = completionSalaryReserve + completionTaxReserve;
   const completionHeadroom = completion.feasible
-    ? input.tierCap - finalSalary - finalTax
+    ? input.tierCap
+      - input.committedSpent
+      - currentTax
+      - input.candidate.iv
+      - marginalTax
+      - completionReserve
     : Number.NEGATIVE_INFINITY;
 
   let confirmable = true;
@@ -184,6 +209,9 @@ export function evaluateSnakePick(input: EvaluateSnakePickInput): SnakePickGuard
     trueCost,
     mustFill,
     completionPickIds: completion.pickIds,
+    completionSalaryReserve,
+    completionTaxReserve,
+    completionReserve,
     completionHeadroom,
   };
 }

@@ -1,7 +1,21 @@
 import { describe, expect, test } from 'vitest';
 
+import { getAllPlayers, type PlayerData } from '../../data/playerDatabase';
 import { isLegalRoster, type RosterSlotPlayer } from '../../data/rosterConstruction';
+import { LUXURY_CAP_TABLES, TIER_CAPS } from '../../data/tierParams';
 import type { LeagueBuilderMlbDraftSession } from '../../utils/leagueBuilderStorage';
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from '../auctionLuxuryTax';
+import { cheapestLegalCompletion } from '../auctionCompletionFloor';
+import { buildSnakeOrder, type ConstructionPlayer } from '../leagueConstruction';
+import { toRosterSlotPlayer } from '../rosterNeed';
+import {
+  calculateIvBaseSalary,
+  type PlayerForSalary,
+  type PlayerPosition,
+} from '../salaryCalculator';
 import {
   commitSnakeDraftPick,
   detectSnakePositionRun,
@@ -30,6 +44,84 @@ function player(id: string, shape: RosterSlotPlayer, iv = 1_000): SnakeDraftPlay
 
 function rosterEntry(model: SnakeDraftPlayerModel): SnakeDraftRosterEntry {
   return { ...model, settledSalary: model.iv };
+}
+
+function productionSalaryPosition(position: string | undefined): PlayerPosition {
+  const positions = new Set<string>(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'SP', 'RP', 'CP', 'SP/RP']);
+  return position && positions.has(position) ? position as PlayerPosition : 'UTIL';
+}
+
+function productionSalaryPlayer(playerRow: PlayerData): PlayerForSalary {
+  const primaryPosition = playerRow.isPitcher && playerRow.pitcherRole
+    ? playerRow.pitcherRole
+    : playerRow.primaryPosition;
+  return {
+    id: playerRow.id,
+    name: playerRow.name,
+    isPitcher: playerRow.isPitcher,
+    primaryPosition: productionSalaryPosition(primaryPosition),
+    secondaryPosition: playerRow.secondaryPosition
+      ? productionSalaryPosition(playerRow.secondaryPosition)
+      : undefined,
+    pitcherRole: playerRow.isPitcher ? playerRow.pitcherRole ?? 'SP' : undefined,
+    ratings: playerRow.isPitcher
+      ? playerRow.pitcherRatings ?? { velocity: 50, junk: 50, accuracy: 50 }
+      : playerRow.batterRatings ?? { power: 50, contact: 50, speed: 50, fielding: 50, arm: 50 },
+    battingRatings: playerRow.batterRatings,
+    age: playerRow.age,
+    bats: playerRow.bats,
+    fame: 0,
+    traits: [playerRow.traits.trait1, playerRow.traits.trait2].filter((trait): trait is string => Boolean(trait)),
+    arsenal: playerRow.arsenal ?? [],
+    armSlot: playerRow.armSlot ?? null,
+    personality: 'Competitive',
+  };
+}
+
+function productionSnakePlayer(playerRow: PlayerData): SnakeDraftPlayerModel {
+  const primaryPosition = playerRow.isPitcher && playerRow.pitcherRole
+    ? playerRow.pitcherRole
+    : playerRow.primaryPosition;
+  const traits = [playerRow.traits.trait1, playerRow.traits.trait2]
+    .filter((trait): trait is string => Boolean(trait));
+  const shape = toRosterSlotPlayer({
+    primaryPosition,
+    secondaryPosition: playerRow.secondaryPosition,
+    traits,
+  });
+  const constructionPlayer: ConstructionPlayer = {
+    id: playerRow.id,
+    isPitcher: shape.isPitcher,
+    role: shape.isPitcher ? (shape.role as ConstructionPlayer['role']) : undefined,
+    bat: {
+      POW: playerRow.batterRatings?.power ?? 50,
+      CON: playerRow.batterRatings?.contact ?? 50,
+      SPD: playerRow.batterRatings?.speed ?? 50,
+      FLD: playerRow.batterRatings?.fielding ?? 50,
+      ARM: playerRow.batterRatings?.arm ?? 50,
+    },
+    pit: shape.isPitcher
+      ? {
+          VEL: playerRow.pitcherRatings?.velocity ?? 50,
+          JNK: playerRow.pitcherRatings?.junk ?? 50,
+          ACC: playerRow.pitcherRatings?.accuracy ?? 50,
+        }
+      : undefined,
+  };
+  return {
+    playerId: playerRow.id,
+    iv: calculateIvBaseSalary(productionSalaryPlayer(playerRow)).ivBase,
+    position: shape.position,
+    shape,
+    construction: constructionPlayer,
+  };
+}
+
+let productionPoolCache: SnakeDraftPlayerModel[] | null = null;
+
+function productionPool(): SnakeDraftPlayerModel[] {
+  productionPoolCache ??= getAllPlayers().map(productionSnakePlayer);
+  return productionPoolCache;
 }
 
 function session(overrides: Partial<LeagueBuilderMlbDraftSession> = {}): LeagueBuilderMlbDraftSession {
@@ -80,6 +172,142 @@ function legalCoreWithoutCloser(): SnakeDraftPlayerModel[] {
 }
 
 describe('snake draft POC engine', () => {
+  test('SNAKEFIX repro: a two-team empty roster can draft Ryan and reserves the cheapest legal completion', () => {
+    const pool = productionPool();
+    expect(pool).toHaveLength(1_166);
+    const productionRyan = pool.find((candidate) => candidate.playerId === 'tex-ryan');
+    if (!productionRyan) throw new Error('Production fixture is missing Nolan Ryan');
+    const ryan = { ...productionRyan, iv: 184_356 };
+    const screenshotPool = pool.map((candidate) => candidate.playerId === ryan.playerId ? ryan : candidate);
+
+    const input = {
+      roster: [],
+      candidate: ryan,
+      remainingPool: screenshotPool,
+      committedSpent: 0,
+      tierCap: TIER_CAPS.standard.tierCap,
+      baseCaps: LUXURY_CAP_TABLES.standard,
+      realTeamCount: 2,
+    };
+    const guard = evaluateSnakePick(input);
+    const completionSalary = guard.completionPickIds.reduce((sum, playerId) => (
+      sum + (screenshotPool.find((candidate) => candidate.playerId === playerId)?.iv ?? Number.NaN)
+    ), 0);
+
+    expect({
+      confirmable: guard.confirmable,
+      reason: guard.reason,
+      ryanIv: ryan.iv,
+      completionPicks: guard.completionPickIds.length,
+      completionSalary,
+      completionTax: guard.completionTaxReserve,
+      completionReserve: guard.completionReserve,
+      completionHeadroom: guard.completionHeadroom,
+    }).toEqual({
+      confirmable: true,
+      reason: expect.stringContaining('It fits'),
+      ryanIv: 184_356,
+      completionPicks: 21,
+      completionSalary: 336_000,
+      completionTax: 0,
+      completionReserve: 336_000,
+      completionHeadroom: 544_031,
+    });
+  });
+
+  test('SNAKEFIX repro: empty-roster two-way and pure-pitcher tax matches the normalized auction path', () => {
+    const pool = productionPool();
+    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(LUXURY_CAP_TABLES.standard, 2);
+    const candidates = ['crc-fenomeno', 'tex-ryan'].map((playerId) => {
+      const candidate = pool.find((row) => row.playerId === playerId);
+      if (!candidate) throw new Error(`Production fixture is missing ${playerId}`);
+      return candidate;
+    });
+
+    for (const candidate of candidates) {
+      const guard = evaluateSnakePick({
+        roster: [],
+        candidate,
+        remainingPool: pool,
+        committedSpent: 0,
+        tierCap: TIER_CAPS.standard.tierCap,
+        baseCaps: LUXURY_CAP_TABLES.standard,
+        realTeamCount: 2,
+      });
+      const auctionEquivalent = auctionMarginalTaxWithCaps(
+        [],
+        candidate.construction,
+        undefined,
+        normalizedCaps,
+      );
+
+      expect({ playerId: candidate.playerId, snake: guard.marginalTax, auction: auctionEquivalent }).toEqual({
+        playerId: candidate.playerId,
+        snake: auctionEquivalent,
+        auction: 0,
+      });
+    }
+  });
+
+  test('SNAKEFIX production sanity: a scripted two-team draft completes all 44 legal picks', () => {
+    const teamIds = ['angels', 'astros'];
+    const pickOrder = buildSnakeOrder(teamIds, 22);
+    const rosters = new Map(teamIds.map((teamId) => [teamId, [] as SnakeDraftRosterEntry[]]));
+    let available = [...productionPool()];
+    let unassignedForPlans = [...available];
+    const plannedIdsByTeam = new Map<string, Set<string>>();
+    for (const teamId of teamIds) {
+      const quote = cheapestLegalCompletion(
+        [],
+        unassignedForPlans.map((candidate) => ({
+          id: candidate.playerId,
+          price: candidate.iv,
+          shape: candidate.shape,
+        })),
+        22,
+      );
+      expect(quote.feasible, `${teamId} initial production-pool plan`).toBe(true);
+      const plannedIds = new Set(quote.pickIds);
+      plannedIdsByTeam.set(teamId, plannedIds);
+      unassignedForPlans = unassignedForPlans.filter((candidate) => !plannedIds.has(candidate.playerId));
+    }
+
+    for (const slot of pickOrder) {
+      const roster = rosters.get(slot.teamId)!;
+      const plannedIds = plannedIdsByTeam.get(slot.teamId)!;
+      const candidates = available
+        .filter((candidate) => plannedIds.has(candidate.playerId))
+        .sort((left, right) => right.iv - left.iv || left.playerId.localeCompare(right.playerId));
+      let chosen: { candidate: SnakeDraftPlayerModel; guard: ReturnType<typeof evaluateSnakePick> } | null = null;
+      for (const candidate of candidates) {
+        const guard = evaluateSnakePick({
+          roster,
+          candidate,
+          remainingPool: available,
+          committedSpent: roster.reduce((sum, row) => sum + row.settledSalary, 0),
+          tierCap: TIER_CAPS.standard.tierCap,
+          baseCaps: LUXURY_CAP_TABLES.standard,
+          realTeamCount: teamIds.length,
+        });
+        if (guard.confirmable) {
+          chosen = { candidate, guard };
+          break;
+        }
+      }
+
+      expect(chosen, `pick ${slot.pick} for ${slot.teamId}`).not.toBeNull();
+      expect(chosen!.guard.confirmable).toBe(true);
+      roster.push(rosterEntry(chosen!.candidate));
+      available = available.filter((candidate) => candidate.playerId !== chosen!.candidate.playerId);
+    }
+
+    expect(pickOrder).toHaveLength(44);
+    for (const [teamId, roster] of rosters) {
+      expect(roster, teamId).toHaveLength(22);
+      expect(isLegalRoster(roster.map((row) => row.shape)), teamId).toBe(true);
+    }
+  }, 120_000);
+
   test('CPU picker and seeded shuffle are deterministic for the same seed', () => {
     const candidates = [
       { playerId: 'a', blendedBoardValue: 100, needMultiplier: 1, fitMultiplier: 1, marginalTax: 0, selectable: true },
@@ -114,7 +342,8 @@ describe('snake draft POC engine', () => {
       remainingPool: [wrong, closer],
       committedSpent: 21_000,
       tierCap: 1_000_000,
-      shiftedCaps: [],
+      baseCaps: [],
+      realTeamCount: 1,
     });
     expect(guard.mustFill).toBe(true);
     expect(guard.confirmable).toBe(false);
@@ -139,7 +368,8 @@ describe('snake draft POC engine', () => {
           remainingPool: available,
           committedSpent: roster.reduce((sum, row) => sum + row.settledSalary, 0),
           tierCap: 1_000_000,
-          shiftedCaps: [],
+          baseCaps: [],
+          realTeamCount: 1,
         }),
       }));
       const cpu = pickSnakeCpuCandidate({
