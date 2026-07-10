@@ -243,3 +243,34 @@ auditor and JK's browser acceptance remain the captain's next gates.
 - Residual gates: independent opus audit and JK browser acceptance. Live Supabase acceptance of
   `claude-haiku-4-5` is intentionally fail-soft per the captain ruling; rejection renders the
   template and does not block the auction.
+
+---
+
+## Captain rework ruling after audit REJECT (2026-07-09) — R2
+The audit proved the token-membership gate leaks four fabrication classes (number-words, prose
+verdicts, single-token invented names, mis-attached real numbers). Ruling: stop trying to
+validate facts in LLM prose — FORBID fact-shaped content entirely. The deterministic template
+line already carries every number; the LLM supplies personality only.
+1. **Zero numbers, any form:** reject LLM output containing ANY digit, ANY number-word
+   (zero…ninety, hundred, thousand, million, grand, dozen, k/M suffixes, ordinals like
+   "first/tenth" EXCEPT board-rank ordinals only when the exact ordinal appears in facts), or
+   currency symbols. This kills digit fabrications, word fabrications, AND mis-attachment (a
+   number that cannot be said cannot be mis-attached).
+2. **Names:** only names present in the facts payload — extend the invented-name check to
+   single-token capitalized candidates (whitelist: facts-payload tokens, sentence-initial
+   common words, and a small fixed list of baseball common nouns). When in doubt, reject.
+3. **Verdict language:** reject any grade/tier letter pattern (Grade X, X-tier, "an A") and a
+   curated evaluative-superlative list (best/worst/greatest/all-time/elite/steal-of-the-draft
+   class terms) UNLESS the term appears verbatim in the facts payload (the adapter includes
+   the deterministic grade's own descriptor words there).
+4. **Prompt side:** instruct the model explicitly: no numbers in any form, no names beyond
+   those provided, no grades or rankings — personality and color only. (Prompt is guidance;
+   the validator is the guarantee.)
+5. **Red-team tests FIRST, again:** before touching the validator, add failing tests for all
+   four audit-proven bypasses (the exact strings from the audit: "nearly ninety thousand…",
+   "an A-tier, all-time haul…", "…chase Rodriguez instead of…", "…for $100,000, a steal") —
+   prove they currently PASS the gate (red), then flip them to REJECTED (green). Keep every
+   existing test green; the four bypass strings must render the TEMPLATE fallback.
+6. Scope: all changes local to the validator + prompt text + tests (auctionAdvisorColor.ts,
+   the emission prompt, test files). No wiring changes. Gates unchanged (incl. one full
+   vitest).
