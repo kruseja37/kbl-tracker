@@ -158,3 +158,31 @@ unique IDs per team (W1).
   improvise scope.
 - Builder report: append to this file — what was built (file:line), gate outputs
   (real terminal text), STOPs hit, anything the auditor should attack first.
+
+---
+
+## AMENDMENT 1 (captain, 2026-07-10, JK-prompted) — W3 composes with existing supply layers; DO NOT DUPLICATE
+Prior art EXISTS and W3 must build on it, not beside it:
+- `poolDemandModel` class floors (`src/engines/auctionPoolSizing.ts:100`) — aggregate
+  per-class supply-vs-demand counting.
+- POOLFLOOR position floors (merged 2026-07-09): `POSITION_SUPPLY_FLOOR_TUNING` +
+  LEGAL_ROSTER-derived per-position minima in `src/engines/poolFromDemand.ts`, and
+  `evaluatePoolDemandSufficiency` → `positionFloorReasons` in
+  `src/utils/leagueBuilderPoolBuilder.ts` (structured shortfall reasons; Draft Setup
+  already renders "THE POOL IS SHORT ON CLOSERS — n FOR N CLUBS" copy).
+Binding consequences:
+1. W3's NEW contribution is exactly the part these layers lack: the JOINT ASSIGNMENT
+   (no card counted twice), AFFORDABILITY (each club's completion + its tax fits its
+   budget), and ONE-PER-HUMAN version dedupe. Do not re-derive position minima or
+   re-implement counting floors — derive minima the way POOLFLOOR does (from
+   LEGAL_ROSTER) or call its machinery.
+2. Failure output: emit structured reasons in the SAME shape as `positionFloorReasons`
+   (extend the shape additively if the joint proof needs richer reasons, e.g.
+   affordability shortfalls), so S1b's setup card renders through one pipeline.
+3. Cheap-first sequencing is encouraged: run the existing counting floors as a fast
+   pre-check (fail fast with their reasons), then the joint proof for what counting
+   cannot catch. A counting pass NEVER substitutes for the joint proof (the
+   false-pass test from W3 still stands).
+4. Do not modify poolFromDemand/auctionPoolSizing/leagueBuilderPoolBuilder behavior
+   for auction callers — consumption and additive extension only; POOLFLOOR's
+   byte-identity guarantee must survive (auction suites gate).
