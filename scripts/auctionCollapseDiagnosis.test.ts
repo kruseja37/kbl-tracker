@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
+import { writeFileSync } from 'node:fs';
 
-import { DEFAULT_AUCTION_BID_INCREMENT } from '../src/data/auctionEngineConstants';
+import { AUCTION_REBUILD_TUNING, DEFAULT_AUCTION_BID_INCREMENT } from '../src/data/auctionEngineConstants';
 import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../src/data/chemistryCanonical';
 import { HISTORICAL_ARCHETYPES, type HistoricalArchetype } from '../src/data/historicalArchetypes';
 import { getLeagueTeamIds } from '../src/data/leagueStructure';
@@ -16,13 +17,17 @@ import { DEFAULT_RESERVE_PRICE_K } from '../src/engines/auctionReservePrice';
 import {
   advanceLot,
   getCurrentBidderTeamId,
+  getCurrentNominatorTeamId,
   initAuctionSession,
   lotOpeningAsk,
+  nominatePlayer,
+  nominationBidCeiling,
   passBid,
   passLoneSurvivorOut,
   resolveLot,
   sessionBidCeiling,
   surfaceNextPlayer,
+  wouldStarveJointDemand,
   type AuctionResult,
   type AuctionTransitionResult,
 } from '../src/engines/auctionStateMachine';
@@ -32,6 +37,7 @@ import {
   buildClubCpuProfile,
   cpuBidOnLot,
   cpuDecideLoneSurvivor,
+  selectCpuNomination,
   type CpuShillAuctionPlayer,
   type CpuShillAuctionSession,
   type CpuShillProfile,
@@ -51,10 +57,11 @@ import {
   type DemandUniversePlayer,
 } from '../src/engines/poolFromDemand';
 import { archetypeToCapIdentity } from '../src/engines/archetypeIdentity';
-import { toRosterSlotPlayer } from '../src/engines/rosterNeed';
+import { rosterNeedBreakdown, toRosterSlotPlayer } from '../src/engines/rosterNeed';
 import { calculateIvBaseSalary, calculateSalary, type PlayerForSalary, type PlayerPosition } from '../src/engines/salaryCalculator';
 import {
   applyAuctionLuxuryTaxForLot,
+  applyAuctionLuxuryTaxForCandidate,
   strandSafeBidTransition,
   strandSafeClaimTransition,
 } from '../src/src_figma/app/hooks/useAuctionDraft';
@@ -72,6 +79,8 @@ const RUN_DIAG = process.env.RUN_AUCTION_COLLAPSE_DIAG === '1';
 const SEARCH_COUNT = Number.parseInt(process.env.AUCTION_COLLAPSE_SEARCH_COUNT ?? '0', 10);
 const maybeTest = RUN_DIAG && SEARCH_COUNT === 0 ? test : test.skip;
 const maybeSearchTest = RUN_DIAG && SEARCH_COUNT > 0 ? test : test.skip;
+const RUN_REBUILD_VIABILITY = process.env.RUN_AUCTION_REBUILD_VIABILITY === '1';
+const maybeRebuildTest = RUN_REBUILD_VIABILITY ? test : test.skip;
 const DIAG_TIMEOUT_MS = Number.parseInt(process.env.AUCTION_COLLAPSE_TIMEOUT_MS ?? '600000', 10);
 const VERBOSE = process.env.AUCTION_COLLAPSE_VERBOSE === '1';
 const COMPACT = process.env.AUCTION_COLLAPSE_COMPACT === '1';
@@ -449,13 +458,17 @@ function toConstructionPlayer(player: Player): ConstructionPlayer {
   };
 }
 
-function buildPool(seedSpec: SeedSpec): {
+function buildPool(
+  seedSpec: SeedSpec,
+  realTeamCount: number = REAL_TEAM_COUNT,
+  poolSizeMultiplier: number = DEFAULT_POOL_SIZE_MULTIPLIER,
+): {
   pool: RegisteredPool;
   players: Player[];
   constructionById: Map<string, ConstructionPlayer>;
 } {
   const universe = ALL_MLB_PLAYERS.map(toDemandPlayer);
-  const selectedTeamIds = getLeagueTeamIds('mlb').slice(0, REAL_TEAM_COUNT);
+  const selectedTeamIds = getLeagueTeamIds('mlb').slice(0, realTeamCount);
   const priorityIds = ALL_MLB_PLAYERS
     .filter((player) => selectedTeamIds.includes(player.teamId))
     .map((player) => player.id)
@@ -466,12 +479,12 @@ function buildPool(seedSpec: SeedSpec): {
     seedSpec.archetypes,
     TIER,
     {
-      teams: REAL_TEAM_COUNT,
+      teams: realTeamCount,
       shills: 0,
       budgetPerTeam: BASE_BUDGET,
       poolBalancePreset: 'balanced',
       poolQualityCenter: DEFAULT_POOL_QUALITY_CENTER,
-      poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier,
       poolSourceMode: 'team-roster-priority',
       priorityIds,
     },
@@ -480,7 +493,7 @@ function buildPool(seedSpec: SeedSpec): {
     leagueId: `auction-collapse-${seedSpec.seed}`,
     tier: TIER,
     balanceMode: 'taxed',
-    totalSlots: REAL_TEAM_COUNT * ROSTER_SIZE,
+    totalSlots: realTeamCount * ROSTER_SIZE,
     salaryCap: BASE_BUDGET,
     players: extracted.players.map((player) => ({ id: player.id, iv: player.iv, salary: player.salary })),
   });
@@ -492,8 +505,8 @@ function buildPool(seedSpec: SeedSpec): {
   };
 }
 
-function buildTeams(seedSpec: SeedSpec): Team[] {
-  return getLeagueTeamIds('mlb').slice(0, REAL_TEAM_COUNT).map((id, index) => ({
+function buildTeams(seedSpec: SeedSpec, realTeamCount: number = REAL_TEAM_COUNT): Team[] {
+  return getLeagueTeamIds('mlb').slice(0, realTeamCount).map((id, index) => ({
     id,
     name: `Collapse Club ${index + 1}`,
     abbreviation: `C${index + 1}`,
@@ -1069,6 +1082,402 @@ function runOne(seedSpec: SeedSpec, lever: Lever): RunResult {
   };
 }
 
+interface AuctionRebuildKnobs {
+  iteration: number;
+  shillCount4: number;
+  shillCount8: number;
+  shillAnchorFraction: number;
+  shillMaxWinsPerShill: number;
+  shillTotalWinCap: number;
+  cpuNominationOpenFraction: number;
+  poolSurplusMultiplier: number;
+}
+
+interface AuctionRebuildLotObservation {
+  lot: number;
+  playerId: string;
+  marketEstimate: number;
+  openingBid: number;
+  willingBidders: number;
+  willingClubIds: readonly string[];
+  clubRosterSizes: Readonly<Record<string, number>>;
+  winningPrice: number | null;
+  winnerTeamId: string | null;
+}
+
+interface AuctionRebuildRunResult {
+  seed: string;
+  realTeams: number;
+  shills: number;
+  poolSize: number;
+  completed: boolean;
+  stall: string | null;
+  stallDetail: {
+    nominator: string;
+    rosterSize: number;
+    openSlots: number;
+    budgetRemaining: number;
+    availablePlayers: number;
+    ceilingCandidateCount: number;
+    jointStarveCandidateCount: number;
+    need: ReturnType<typeof rosterNeedBreakdown>;
+  } | null;
+  lots: number;
+  pctTwoPlusWilling: number;
+  maxPre75PctLockout: number;
+  lockoutByClub: Readonly<Record<string, number>>;
+  legalClubCount: number;
+  shillMinBudget: number;
+  medianPriceToMarket: number | null;
+  safetyNetUses: number;
+  shillWins: number;
+  barFailures: readonly string[];
+  success: boolean;
+}
+
+interface AuctionRebuildViabilityOutput {
+  generatedBy: string;
+  knobs: AuctionRebuildKnobs;
+  runs: readonly AuctionRebuildRunResult[];
+  allRunsMeetBar: boolean;
+}
+
+const REBUILD_SEEDS: readonly SeedSpec[] = [
+  { seed: 'rebuild-a', archetypes: [0, 3, 6, 9, 12, 15, 18, 21].map((index) => HISTORICAL_ARCHETYPES[index]) },
+  { seed: 'rebuild-b', archetypes: [1, 4, 7, 10, 13, 16, 19, 22].map((index) => HISTORICAL_ARCHETYPES[index]) },
+  { seed: 'rebuild-c', archetypes: [2, 5, 8, 11, 14, 17, 20, 23].map((index) => HISTORICAL_ARCHETYPES[index]) },
+] as const;
+
+function finiteEnv(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function integerEnv(name: string, fallback: number): number {
+  return Math.max(0, Math.round(finiteEnv(name, fallback)));
+}
+
+function rebuildKnobsFromEnvironment(): AuctionRebuildKnobs {
+  return {
+    iteration: Math.max(1, integerEnv('AUCTION_REBUILD_ITERATION', 1)),
+    shillCount4: integerEnv('AUCTION_REBUILD_SHILLS_4', 1),
+    shillCount8: integerEnv('AUCTION_REBUILD_SHILLS_8', 2),
+    shillAnchorFraction: finiteEnv('AUCTION_REBUILD_SHILL_ANCHOR', AUCTION_REBUILD_TUNING.shillAnchorFraction),
+    shillMaxWinsPerShill: integerEnv('AUCTION_REBUILD_SHILL_PER_WIN_CAP', AUCTION_REBUILD_TUNING.shillMaxWinsPerShill),
+    shillTotalWinCap: integerEnv('AUCTION_REBUILD_SHILL_TOTAL_WIN_CAP', AUCTION_REBUILD_TUNING.shillTotalWinCap),
+    cpuNominationOpenFraction: finiteEnv('AUCTION_REBUILD_CPU_OPEN', AUCTION_REBUILD_TUNING.cpuNominationOpenFraction),
+    poolSurplusMultiplier: finiteEnv('AUCTION_REBUILD_POOL_MULTIPLIER', DEFAULT_POOL_SIZE_MULTIPLIER),
+  };
+}
+
+function rebuildShillTeamIds(seed: string, count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `__auction_shill__auction-rebuild-${seed}__${index + 1}`);
+}
+
+function buildRebuildSession(input: {
+  seedSpec: SeedSpec;
+  realTeams: readonly Team[];
+  shillIds: readonly string[];
+  pool: RegisteredPool;
+  auctionPlayers: readonly CpuShillAuctionPlayer[];
+  knobs: AuctionRebuildKnobs;
+}): CpuShillAuctionSession {
+  const profiles: Record<string, CpuShillProfile> = {};
+  input.realTeams.forEach((team, index) => {
+    profiles[team.id] = buildClubCpuProfile({
+      teamId: team.id,
+      leagueId: `auction-rebuild-${input.seedSpec.seed}`,
+      bandPriorities: archetypeBandPriorities(input.seedSpec.archetypes[index]),
+      archetypeId: input.seedSpec.archetypes[index].id,
+    });
+  });
+  input.shillIds.forEach((teamId) => {
+    profiles[teamId] = {
+      ...buildArchetypeShillProfile(teamId, `auction-rebuild-${input.seedSpec.seed}:shill-archetype`),
+      shillMaxWins: input.knobs.shillMaxWinsPerShill,
+    };
+  });
+  const allTeamIds = [...input.realTeams.map((team) => team.id), ...input.shillIds];
+  const teams = allTeamIds.map((teamId) => ({
+    teamId,
+    budgetRemaining: input.pool.tierCap,
+    rosterSlotsRemaining: ROSTER_SIZE,
+    minSalary: LEAGUE_MINIMUM_SALARY,
+    roster: [],
+  }));
+
+  return {
+    ...(initAuctionSession({
+      teams,
+      players: input.auctionPlayers,
+      nominationOrder: allTeamIds,
+      config: {
+        nominationOrderSeed: `auction-rebuild:${input.seedSpec.seed}`,
+        bidIncrement: DEFAULT_AUCTION_BID_INCREMENT,
+        reserveFractionK: DEFAULT_RESERVE_PRICE_K,
+        nominationWeightExponent: 2,
+        cpuShillCount: 0,
+        excludeFromLeague: true,
+        sequentialNomination: true,
+        nonCompletingTeamIds: [...input.shillIds],
+        cpuNominationOpenFraction: input.knobs.cpuNominationOpenFraction,
+        shillAnchorFraction: input.knobs.shillAnchorFraction,
+        shillTotalWinCap: input.knobs.shillTotalWinCap,
+      },
+    }) as CpuShillAuctionSession),
+    cpuShills: profiles,
+  };
+}
+
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const ordered = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(ordered.length / 2);
+  return ordered.length % 2 === 1
+    ? ordered[middle]
+    : (ordered[middle - 1] + ordered[middle]) / 2;
+}
+
+function runAuctionRebuildOne(
+  seedSpec: SeedSpec,
+  realTeamCount: 4 | 8,
+  knobs: AuctionRebuildKnobs,
+): AuctionRebuildRunResult {
+  const shillCount = realTeamCount === 4 ? knobs.shillCount4 : knobs.shillCount8;
+  const { pool, players } = buildPool(seedSpec, realTeamCount, knobs.poolSurplusMultiplier);
+  const realTeams = buildTeams(seedSpec, realTeamCount);
+  const shillIds = rebuildShillTeamIds(seedSpec.seed, shillCount);
+  const shillIdSet = new Set(shillIds);
+  const realTeamIds = realTeams.map((team) => team.id);
+  const realTeamIdSet = new Set(realTeamIds);
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const auctionPlayers = toAuctionPlayers(pool, playerById);
+  const taxContext = buildTaxContext(pool, realTeams, players, LEVERS[0]);
+  let session = buildRebuildSession({ seedSpec, realTeams, shillIds, pool, auctionPlayers, knobs });
+  let stall: string | null = null;
+  let stallDetail: AuctionRebuildRunResult['stallDetail'] = null;
+  let lotNumber = 0;
+  let activeLot: AuctionRebuildLotObservation | null = null;
+  const lots: AuctionRebuildLotObservation[] = [];
+  const currentLockout = new Map(realTeamIds.map((teamId) => [teamId, 0]));
+  const longestLockout = new Map(realTeamIds.map((teamId) => [teamId, 0]));
+  let shillMinBudget = inputMinimumBudget(session, shillIds);
+
+  const accept = (result: AuctionTransitionResult): boolean => {
+    if (!result.ok) {
+      stall = `${session.state}:${result.reason}`;
+      session = result.session as CpuShillAuctionSession;
+      return false;
+    }
+    session = result.session as CpuShillAuctionSession;
+    shillMinBudget = Math.min(shillMinBudget, inputMinimumBudget(session, shillIds));
+    return true;
+  };
+
+  for (let step = 0; step < MAX_STEPS && session.state !== 'AUCTION_COMPLETE' && stall === null; step += 1) {
+    if (session.state === 'NOMINATION') {
+      const nominator = getCurrentNominatorTeamId(session);
+      if (!nominator || !realTeamIdSet.has(nominator)) {
+        stall = 'NOMINATION:no-real-club-nominator';
+        break;
+      }
+      const decision = selectCpuNomination(
+        session,
+        nominator,
+        `${seedSpec.seed}:nomination:${session.results.length}`,
+        {
+          openingCeiling: (playerId) => nominationBidCeiling(
+            applyAuctionLuxuryTaxForCandidate(session, playerId, taxContext),
+            nominator,
+            playerId,
+          ),
+        },
+      );
+      if (!decision) {
+        stall = 'NOMINATION:no-legal-cpu-nomination';
+        const team = session.teams.find((candidate) => candidate.teamId === nominator)!;
+        const rosterShapes = team.roster
+          .map((assignment) => session.players[assignment.playerId]?.pos)
+          .filter((shape): shape is RosterSlotPlayer => Boolean(shape));
+        let ceilingCandidateCount = 0;
+        let jointStarveCandidateCount = 0;
+        for (const playerId of session.availablePlayerIds) {
+          const candidateSession = applyAuctionLuxuryTaxForCandidate(session, playerId, taxContext);
+          if (nominationBidCeiling(candidateSession, nominator, playerId) !== null) {
+            ceilingCandidateCount += 1;
+          }
+          const afterNominationSupply: CpuShillAuctionSession = {
+            ...session,
+            availablePlayerIds: session.availablePlayerIds.filter((candidateId) => candidateId !== playerId),
+          };
+          if (wouldStarveJointDemand(afterNominationSupply, nominator, playerId)) {
+            jointStarveCandidateCount += 1;
+          }
+        }
+        stallDetail = {
+          nominator,
+          rosterSize: team.roster.length,
+          openSlots: team.rosterSlotsRemaining,
+          budgetRemaining: round(team.budgetRemaining),
+          availablePlayers: session.availablePlayerIds.length,
+          ceilingCandidateCount,
+          jointStarveCandidateCount,
+          need: rosterNeedBreakdown(rosterShapes),
+        };
+        break;
+      }
+      const withCandidateTax = applyAuctionLuxuryTaxForCandidate(session, decision.playerId, taxContext);
+      if (!accept(nominatePlayer(withCandidateTax, nominator, decision.playerId, decision.openingBid))) break;
+      session = applyAuctionLuxuryTaxForLot(session, taxContext);
+      lotNumber += 1;
+
+      const willingClubIds: string[] = [];
+      let willingBidders = 0;
+      for (const team of session.teams) {
+        if (team.rosterSlotsRemaining <= 0 || !session.currentLot?.stillIn.includes(team.teamId)) continue;
+        const willing = team.teamId === session.currentLot.highBidder
+          || cpuBidOnLot(
+            session,
+            team.teamId,
+            `${seedSpec.seed}:willing:${lotNumber}:${team.teamId}`,
+            realTeamIdSet.has(team.teamId) ? { needAwareCompletion: true } : undefined,
+          ).kind === 'bid';
+        if (willing) {
+          willingBidders += 1;
+          if (realTeamIdSet.has(team.teamId)) willingClubIds.push(team.teamId);
+        }
+      }
+      const clubRosterSizes = Object.fromEntries(session.teams
+        .filter((team) => realTeamIdSet.has(team.teamId))
+        .map((team) => [team.teamId, team.roster.length]));
+      for (const teamId of realTeamIds) {
+        const rosterSize = clubRosterSizes[teamId] ?? 0;
+        if (rosterSize >= ROSTER_SIZE * 0.75) continue;
+        const nextLockout = willingClubIds.includes(teamId) ? 0 : (currentLockout.get(teamId) ?? 0) + 1;
+        currentLockout.set(teamId, nextLockout);
+        longestLockout.set(teamId, Math.max(longestLockout.get(teamId) ?? 0, nextLockout));
+      }
+      const player = session.players[decision.playerId];
+      activeLot = {
+        lot: lotNumber,
+        playerId: decision.playerId,
+        marketEstimate: player?.iv ?? 0,
+        openingBid: decision.openingBid,
+        willingBidders,
+        willingClubIds,
+        clubRosterSizes,
+        winningPrice: null,
+        winnerTeamId: null,
+      };
+    } else if (session.state === 'OPEN_BIDDING') {
+      const bidder = getCurrentBidderTeamId(session);
+      if (!bidder) {
+        if (!accept(resolveLot(session))) break;
+        continue;
+      }
+      const decision = cpuBidOnLot(
+        session,
+        bidder,
+        `${seedSpec.seed}:bid:${lotNumber}:${session.currentLot?.bidLog?.length ?? 0}:${bidder}`,
+        realTeamIdSet.has(bidder) ? { needAwareCompletion: true } : undefined,
+      );
+      if (decision.kind === 'bid') {
+        if (!accept(strandSafeBidTransition(session, bidder, decision.bid, true))) break;
+      } else if (!accept(passBid(session, bidder))) {
+        break;
+      }
+    } else if (session.state === 'RESOLVE') {
+      if (!accept(resolveLot(session))) break;
+    } else if (session.state === 'SOLD') {
+      const result = session.results.at(-1);
+      if (!result || result.disposition !== 'SOLD' || !activeLot) {
+        stall = 'SOLD:missing-result';
+        break;
+      }
+      lots.push({
+        ...activeLot,
+        winningPrice: result.salary,
+        winnerTeamId: result.winnerTeamId,
+      });
+      activeLot = null;
+      if (!accept(advanceLot(session))) break;
+    } else if (session.state === 'PASSED') {
+      stall = 'PASSED:forbidden-in-rebuilt-flow';
+    } else {
+      stall = `unexpected-state:${session.state}`;
+    }
+  }
+
+  if (stall === null && session.state !== 'AUCTION_COMPLETE') stall = `step-limit:${session.state}`;
+  const realRows = session.teams.filter((team) => realTeamIdSet.has(team.teamId));
+  const legalClubCount = realRows.filter((team) => {
+    const shapes = team.roster
+      .map((assignment) => session.players[assignment.playerId]?.pos)
+      .filter((shape): shape is RosterSlotPlayer => Boolean(shape));
+    return team.roster.length === ROSTER_SIZE && shapes.length === ROSTER_SIZE && isLegalRoster(shapes);
+  }).length;
+  const pctTwoPlusWilling = pct(lots.filter((lot) => lot.willingBidders >= 2).length, lots.length);
+  const lockoutByClub = Object.fromEntries(longestLockout);
+  const maxPre75PctLockout = Math.max(0, ...longestLockout.values());
+  const priceRatios = lots
+    .filter((lot) => lot.winningPrice !== null && lot.marketEstimate > 0)
+    .map((lot) => lot.winningPrice! / lot.marketEstimate);
+  const medianPriceToMarket = median(priceRatios);
+  const safetyNetUses = session.results.filter((result) => result.disposition !== 'SOLD' || result.settled === true).length;
+  const shillWins = session.results.filter((result) => result.winnerTeamId !== null && shillIdSet.has(result.winnerTeamId)).length;
+  const barFailures: string[] = [];
+  if (session.state !== 'AUCTION_COMPLETE' || stall !== null) barFailures.push(stall ?? `ended-${session.state}`);
+  if (pctTwoPlusWilling < 70) barFailures.push(`two-plus-willing-${pctTwoPlusWilling}`);
+  if (maxPre75PctLockout > 8) barFailures.push(`club-lockout-${maxPre75PctLockout}`);
+  if (legalClubCount !== realTeamCount) barFailures.push(`legal-clubs-${legalClubCount}-of-${realTeamCount}`);
+  if (safetyNetUses !== 0) barFailures.push(`safety-net-uses-${safetyNetUses}`);
+  if (shillMinBudget < 0) barFailures.push(`shill-min-budget-${round(shillMinBudget)}`);
+  if (medianPriceToMarket === null || medianPriceToMarket < 0.5 || medianPriceToMarket > 1.5) {
+    barFailures.push(`median-price-market-${medianPriceToMarket === null ? 'none' : round(medianPriceToMarket, 3)}`);
+  }
+
+  return {
+    seed: seedSpec.seed,
+    realTeams: realTeamCount,
+    shills: shillCount,
+    poolSize: pool.players.length,
+    completed: session.state === 'AUCTION_COMPLETE',
+    stall,
+    stallDetail,
+    lots: lots.length,
+    pctTwoPlusWilling,
+    maxPre75PctLockout,
+    lockoutByClub,
+    legalClubCount,
+    shillMinBudget: round(shillMinBudget),
+    medianPriceToMarket: medianPriceToMarket === null ? null : round(medianPriceToMarket, 3),
+    safetyNetUses,
+    shillWins,
+    barFailures,
+    success: barFailures.length === 0,
+  };
+}
+
+function inputMinimumBudget(session: CpuShillAuctionSession, teamIds: readonly string[]): number {
+  if (teamIds.length === 0) return Number.POSITIVE_INFINITY;
+  const teamIdSet = new Set(teamIds);
+  return Math.min(...session.teams.filter((team) => teamIdSet.has(team.teamId)).map((team) => team.budgetRemaining));
+}
+
+export function runAuctionRebuildViability(
+  knobs: AuctionRebuildKnobs = rebuildKnobsFromEnvironment(),
+): AuctionRebuildViabilityOutput {
+  const runs = ([4, 8] as const).flatMap((realTeamCount) => (
+    REBUILD_SEEDS.map((seedSpec) => runAuctionRebuildOne(seedSpec, realTeamCount, knobs))
+  ));
+  return {
+    generatedBy: 'scripts/auctionCollapseDiagnosis.test.ts#auction-rebuild-viability',
+    knobs,
+    runs,
+    allRunsMeetBar: runs.every((run) => run.success),
+  };
+}
+
 export function runAuctionCollapseDiagnosis(): DiagnosisOutput {
   const rawRuns = LEVERS.flatMap((lever) => SEEDS.map((seedSpec) => runOne(seedSpec, lever)));
   const runs = rawRuns.map((run): DiagnosisSummaryRun => {
@@ -1242,5 +1651,24 @@ describe('auction collapse diagnosis (measurement only)', () => {
     console.info('AUCTION_COLLAPSE_SEED_SEARCH');
     console.info(JSON.stringify(results, null, 2));
     expect(results).toHaveLength(SEARCH_COUNT);
+  }, DIAG_TIMEOUT_MS);
+});
+
+describe('auction rebuild viability loop (production-default player universe)', () => {
+  maybeRebuildTest('measures three seeds across 4-team and 8-team rebuilt auctions', () => {
+    const output = runAuctionRebuildViability();
+    const resultFile = process.env.AUCTION_REBUILD_RESULT_FILE;
+    if (resultFile) writeFileSync(resultFile, `${JSON.stringify(output, null, 2)}\n`, 'utf8');
+    console.info('AUCTION_REBUILD_VIABILITY_RESULT');
+    console.info(JSON.stringify(output, null, 2));
+    expect(output.runs).toHaveLength(6);
+    expect(output.runs.map((run) => [run.realTeams, run.seed])).toEqual([
+      [4, 'rebuild-a'],
+      [4, 'rebuild-b'],
+      [4, 'rebuild-c'],
+      [8, 'rebuild-a'],
+      [8, 'rebuild-b'],
+      [8, 'rebuild-c'],
+    ]);
   }, DIAG_TIMEOUT_MS);
 });

@@ -168,7 +168,23 @@ function emptyRoster(teamId: string): TeamRoster {
   };
 }
 
-function makePool(leagueId: string, playerIds = ["p1", "p2", "p3", "p4"]): RegisteredPool {
+const TEST_POOL_SHAPES: Array<Pick<Player, "primaryPosition" | "secondaryPosition">> = [
+  ...(["C", "1B", "2B", "3B", "SS", "LF", "RF", "CF"] as Player["primaryPosition"][])
+    .flatMap((primaryPosition) => Array.from({ length: 4 }, (_, index) => ({
+      primaryPosition,
+      ...((primaryPosition === "1B" || primaryPosition === "2B") && index === 3
+        ? { secondaryPosition: "C" as const }
+        : {}),
+    }))),
+  ...Array.from({ length: 10 }, () => ({ primaryPosition: "SP" as const })),
+  ...Array.from({ length: 6 }, () => ({ primaryPosition: "RP" as const })),
+  ...Array.from({ length: 4 }, () => ({ primaryPosition: "CP" as const })),
+];
+
+function makePool(
+  leagueId: string,
+  playerIds = Array.from({ length: 80 }, (_, index) => `p${index + 1}`),
+): RegisteredPool {
   return {
     leagueId,
     tier: "standard",
@@ -184,6 +200,16 @@ function makePool(leagueId: string, playerIds = ["p1", "p2", "p3", "p4"]): Regis
     totalSlots: 88,
     poolSurplusWarning: false,
   };
+}
+
+function makePlayersForPool(
+  pool: RegisteredPool,
+  overrides: Readonly<Record<string, Partial<Player>>> = {},
+): Player[] {
+  return pool.players.map((poolPlayer, index) => makePlayer(poolPlayer.id, {
+    ...TEST_POOL_SHAPES[index % TEST_POOL_SHAPES.length],
+    ...(overrides[poolPlayer.id] ?? {}),
+  }));
 }
 
 function seedWithFirst(teamIds: string[], firstTeamId: string): string {
@@ -202,7 +228,7 @@ function mockLeagueData(input: {
 }) {
   const players = input.players ?? Object.values(input.pools)
     .flatMap((pool) => pool.players)
-    .map((poolPlayer) => makePlayer(poolPlayer.id));
+    .map((poolPlayer, index) => makePlayer(poolPlayer.id, TEST_POOL_SHAPES[index % TEST_POOL_SHAPES.length]));
   const leagueData = {
     leagues: input.leagues,
     teams: input.teams,
@@ -233,7 +259,7 @@ describe("useAuctionDraft", () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test("initializes a locked league into an engine-surfaced open lot and persists the session", async () => {
+  test("initializes at the fixed nomination turn, then persists the club's committed opening bid", async () => {
     const teamIds = ["human", "other"];
     const seed = seedWithFirst(teamIds, "human");
     mockLeagueData({
@@ -255,9 +281,11 @@ describe("useAuctionDraft", () => {
       });
     });
 
-    expect(result.current.session?.state).toBe("OPEN_BIDDING");
-    expect(result.current.session?.availablePlayerIds).toHaveLength(3);
-    expect(result.current.session?.currentLot?.playerId).toEqual(expect.any(String));
+    expect(result.current.session?.state).toBe("NOMINATION");
+    expect(result.current.currentNominatorTeamId).toBe("human");
+    expect(result.current.session?.availablePlayerIds).toHaveLength(80);
+    expect(result.current.session?.currentLot).toBeNull();
+    expect(result.current.session?.config.sequentialNomination).toBe(true);
     expect(result.current.session?.config.nominationWeightExponent).toBe(2);
     expect(result.current.session?.players.p1.ivPercentile).toBe(100);
     expect(result.current.session?.players.p1.pos).toMatchObject({
@@ -265,6 +293,19 @@ describe("useAuctionDraft", () => {
       position: "CF",
     });
     expect(result.current.session?.teams.map((team) => team.projectedTax)).toEqual([0, 0]);
+
+    await act(async () => {
+      await result.current.nominate("human", "p1", 5_000);
+    });
+
+    expect(result.current.session?.state).toBe("OPEN_BIDDING");
+    expect(result.current.session?.availablePlayerIds).toHaveLength(79);
+    expect(result.current.session?.currentLot).toMatchObject({
+      playerId: "p1",
+      nominatorTeamId: "human",
+      highBid: 5_000,
+      highBidder: "human",
+    });
 
     const marketView = result.current.session
       ? buildLotViewFromSession(result.current.session, {
@@ -472,25 +513,27 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
+    const nominationPlayerId = result.current.session?.availablePlayerIds[0];
+    const nominator = result.current.currentNominatorTeamId!;
+    await act(async () => {
+      await result.current.nominate(nominator, nominationPlayerId!, 5_000);
+    });
     const openingAsk = result.current.session?.currentLot?.openingAsk;
     const playerId = result.current.session?.currentLot?.playerId;
     expect(openingAsk).toBeGreaterThan(0);
     expect(playerId).toEqual(expect.any(String));
 
-    await act(async () => {
-      await result.current.bid("human", openingAsk!);
-    });
-    const bidderAfterHuman = result.current.currentBidderTeamId;
-    expect(bidderAfterHuman === "other" || bidderAfterHuman === "cpu").toBe(true);
-    expect(result.current.session?.currentLot).toMatchObject({
-      highBidder: "human",
-      bidTurnTeamId: bidderAfterHuman,
-      stillIn: ["human", "cpu", "other"],
-    });
-
-    if (bidderAfterHuman === "other") {
+    if (nominator === "cpu") {
+      const challenger = result.current.currentBidderTeamId!;
       await act(async () => {
-        await result.current.pass("other");
+        await result.current.bid(challenger, openingAsk! + 1_000);
+      });
+    }
+
+    while (result.current.currentBidderTeamId && result.current.currentBidderTeamId !== "cpu") {
+      const bidder = result.current.currentBidderTeamId;
+      await act(async () => {
+        await result.current.pass(bidder!);
       });
     }
 
@@ -498,24 +541,18 @@ describe("useAuctionDraft", () => {
     expect(result.current.currentBidderTeamId).toBe("cpu");
     expect(result.current.controlledCpuTeamIds).toContain("cpu");
     expect(result.current.session?.currentLot).toMatchObject({
-      highBidder: "human",
       bidTurnTeamId: "cpu",
     });
-    expect(result.current.session?.currentLot?.stillIn).toContain("human");
     expect(result.current.session?.currentLot?.stillIn).toContain("cpu");
-    if (bidderAfterHuman === "other") {
-      expect(result.current.session?.currentLot?.stillIn).not.toContain("other");
-    } else {
-      expect(result.current.session?.currentLot?.stillIn).toContain("other");
-    }
 
     await act(async () => {
       await result.current.pass("cpu");
     });
 
-    if (bidderAfterHuman !== "other") {
+    while (result.current.session?.state === "OPEN_BIDDING" && result.current.currentBidderTeamId) {
+      const bidder = result.current.currentBidderTeamId;
       await act(async () => {
-        await result.current.pass("other");
+        await result.current.pass(bidder);
       });
     }
 
@@ -523,16 +560,16 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.results.at(-1)).toMatchObject({
       playerId,
       disposition: "SOLD",
-      winnerTeamId: "human",
-      salary: openingAsk,
+      winnerTeamId: expect.any(String),
+      salary: expect.any(Number),
     });
 
     await act(async () => {
       await result.current.advance();
     });
 
-    expect(result.current.session?.state).toBe("OPEN_BIDDING");
-    expect(result.current.session?.currentLot?.playerId).not.toBe(playerId);
+    expect(result.current.session?.state).toBe("NOMINATION");
+    expect(result.current.session?.currentLot).toBeNull();
     expect(result.current.session?.results).toHaveLength(1);
   });
 
@@ -585,6 +622,14 @@ describe("useAuctionDraft", () => {
     const marketMap = buildMarketBandPrioritiesByTeamId(leagueTeams);
     expect(marketMap.get("cpu")).toEqual(firstProfile?.bandPriorities);
     expect(marketMap.has("blank")).toBe(false);
+
+    const nominator = result.current.currentNominatorTeamId;
+    const nominationPlayer = result.current.session?.availablePlayerIds[0];
+    expect(nominator).toEqual(expect.any(String));
+    expect(nominationPlayer).toEqual(expect.any(String));
+    await act(async () => {
+      await result.current.nominate(nominator!, nominationPlayer!, 5_000);
+    });
 
     const marketView = result.current.session
       ? buildLotViewFromSession(result.current.session, {
@@ -686,8 +731,17 @@ describe("useAuctionDraft", () => {
       });
     });
     const persisted = await getAuctionSession("league-save");
-    expect(persisted?.session.state).toBe("OPEN_BIDDING");
-    expect(persisted?.session.currentLot?.playerId).toBe(result.current.session?.currentLot?.playerId);
+    expect(persisted?.session.state).toBe("NOMINATION");
+    expect(persisted?.session.currentLot).toBeNull();
+
+    const nominator = result.current.currentNominatorTeamId!;
+    const playerId = result.current.session?.availablePlayerIds[0]!;
+    await act(async () => {
+      await result.current.nominate(nominator, playerId, 5_000);
+    });
+    const afterNomination = await getAuctionSession("league-save");
+    expect(afterNomination?.session.state).toBe("OPEN_BIDDING");
+    expect(afterNomination?.session.currentLot?.playerId).toBe(playerId);
   });
 
   test("uses the same setup seed to produce new session-derived MLB nomination order seeds", async () => {
@@ -728,13 +782,13 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.config.nominationOrderSeed).toContain(createAuctionSessionId("league-seed-b", 1));
   });
 
-  test("lone survivor requires claimAtReserve and sells at reserve", async () => {
+  test("the committed opener wins when every rival lets the bid stand", async () => {
     const teamIds = ["human", "other"];
     const seed = seedWithFirst(teamIds, "human");
     mockLeagueData({
       leagues: [makeLeague("league-claim", teamIds)],
       teams: teamIds.map((id) => makeTeam(id)),
-      pools: { "league-claim": makePool("league-claim", ["p1"]) },
+      pools: { "league-claim": makePool("league-claim") },
     });
 
     const { result } = renderHook(() => useAuctionDraft());
@@ -746,35 +800,32 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    const reserve = result.current.session?.currentLot?.openingAsk;
-    const playerId = result.current.session?.currentLot?.playerId;
+    const nominator = result.current.currentNominatorTeamId!;
+    const rival = teamIds.find((teamId) => teamId !== nominator)!;
+    const playerId = result.current.session?.availablePlayerIds[0]!;
     await act(async () => {
-      await result.current.pass("other");
+      await result.current.nominate(nominator, playerId, 5_000);
     });
-
-    expect(result.current.session?.state).toBe("RESOLVE");
-    expect(result.current.session?.pendingClaim).toMatchObject({ teamId: "human", price: reserve });
-
     await act(async () => {
-      await result.current.claimAtReserve();
+      await result.current.pass(rival);
     });
 
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
       playerId,
       disposition: "SOLD",
-      winnerTeamId: "human",
-      salary: reserve,
+      winnerTeamId: nominator,
+      salary: 5_000,
     });
   });
 
-  test("pauses on CPU lone survivor claims until the decision is advanced", async () => {
-    const teamIds = ["human", "cpu"];
-    const seed = seedWithFirst(teamIds, "human");
+  test("pauses on a CPU club's nomination instead of auto-surfacing a player", async () => {
+    const teamIds = ["cpu-a", "cpu-b"];
+    const seed = seedWithFirst(teamIds, "cpu-a");
     mockLeagueData({
       leagues: [makeLeague("league-cpu-claim", teamIds)],
-      teams: [makeTeam("human"), makeTeam("cpu", "ai")],
-      pools: { "league-cpu-claim": makePool("league-cpu-claim", ["p1"]) },
+      teams: [makeTeam("cpu-a", "ai"), makeTeam("cpu-b", "ai")],
+      pools: { "league-cpu-claim": makePool("league-cpu-claim") },
     });
 
     const { result } = renderHook(() => useAuctionDraft());
@@ -786,31 +837,30 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
-    const reserve = result.current.session?.currentLot?.openingAsk;
-    const playerId = result.current.session?.currentLot?.playerId;
+    expect(result.current.session?.state).toBe("NOMINATION");
+    const nominator = result.current.currentNominatorTeamId!;
+    const rival = teamIds.find((teamId) => teamId !== nominator)!;
+    const playerId = result.current.session?.availablePlayerIds[0]!;
+    expect(result.current.controlledCpuTeamIds).toContain(nominator);
+    expect(result.current.session?.currentLot).toBeNull();
 
     await act(async () => {
-      await result.current.pass("human");
+      await result.current.nominate(nominator, playerId, 5_000);
     });
-
-    expect(result.current.session?.state).toBe("RESOLVE");
-    expect(result.current.session?.pendingClaim).toMatchObject({ teamId: "cpu", price: reserve });
-    expect(result.current.controlledCpuTeamIds).toContain("cpu");
-
     await act(async () => {
-      await result.current.claimAtReserve();
+      await result.current.pass(rival);
     });
 
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
       playerId,
       disposition: "SOLD",
-      winnerTeamId: "cpu",
-      salary: reserve,
+      winnerTeamId: nominator,
+      salary: 5_000,
     });
-    expect(result.current.session?.teams.find((team) => team.teamId === "cpu")).toMatchObject({
+    expect(result.current.session?.teams.find((team) => team.teamId === nominator)).toMatchObject({
       rosterSlotsRemaining: 21,
-      roster: [{ playerId, salary: reserve }],
+      roster: [{ playerId, salary: 5_000 }],
     });
   });
 
@@ -836,11 +886,11 @@ describe("useAuctionDraft", () => {
       },
     };
     const onPool: RegisteredPool = {
-      ...makePool("league-on", ["on-fit"]),
+      ...makePool("league-on", ["on-fit", ...Array.from({ length: 79 }, (_, index) => `on-depth-${index}`)]),
       luxuryCaps: caps,
     };
     const offPool: RegisteredPool = {
-      ...makePool("league-off", ["off-fit"]),
+      ...makePool("league-off", ["off-fit", ...Array.from({ length: 79 }, (_, index) => `off-depth-${index}`)]),
       luxuryCaps: caps,
     };
 
@@ -852,8 +902,8 @@ describe("useAuctionDraft", () => {
         "league-off": offPool,
       },
       players: [
-        makePlayer("on-fit", { power: 100, contact: 10 }),
-        makePlayer("off-fit", { power: 10, contact: 100 }),
+        ...makePlayersForPool(onPool, { "on-fit": { power: 100, contact: 10 } }),
+        ...makePlayersForPool(offPool, { "off-fit": { power: 10, contact: 100 } }),
       ],
     });
 
@@ -866,6 +916,9 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
+    await act(async () => {
+      await result.current.nominate(result.current.currentNominatorTeamId!, "on-fit", 5_000);
+    });
 
     const onTax = result.current.session?.teams.find((team) => team.teamId === "human")?.projectedTax;
     const onMaxBid = result.current.session ? getTeamAuctionMaxBid(result.current.session, "human") : null;
@@ -876,6 +929,9 @@ describe("useAuctionDraft", () => {
         cpuShillCount: 0,
         bidIncrement: 1_000,
       });
+    });
+    await act(async () => {
+      await result.current.nominate(result.current.currentNominatorTeamId!, "off-fit", 5_000);
     });
 
     const offTax = result.current.session?.teams.find((team) => team.teamId === "human")?.projectedTax;
@@ -921,12 +977,15 @@ describe("useAuctionDraft", () => {
       ...makeTeam("human"),
       capIdentity: { increase: ["POW"], decrease: ["CON"] },
     };
-    const pool: RegisteredPool = { ...makePool("league-coherence", ["off-fit"]), luxuryCaps: caps };
+    const pool: RegisteredPool = {
+      ...makePool("league-coherence", ["off-fit", ...Array.from({ length: 79 }, (_, index) => `coherence-depth-${index}`)]),
+      luxuryCaps: caps,
+    };
     mockLeagueData({
       leagues: [makeLeague("league-coherence", teamIds)],
       teams: [humanTeam, makeTeam("other")],
       pools: { "league-coherence": pool },
-      players: [makePlayer("off-fit", { power: 10, contact: 100 })],
+      players: makePlayersForPool(pool, { "off-fit": { power: 10, contact: 100 } }),
     });
 
     const { result } = renderHook(() => useAuctionDraft());
@@ -937,6 +996,10 @@ describe("useAuctionDraft", () => {
         bidIncrement: 1_000,
       });
     });
+    const nominator = result.current.currentNominatorTeamId!;
+    await act(async () => {
+      await result.current.nominate(nominator, "off-fit", 5_000);
+    });
 
     const budgetBefore = result.current.session?.teams.find((team) => team.teamId === "human")?.budgetRemaining;
     // THE TRUE COST tax component, as the whisper would compute and display it for this lot.
@@ -944,17 +1007,20 @@ describe("useAuctionDraft", () => {
     expect(budgetBefore).toEqual(expect.any(Number));
     expect(trueCostTax).toBeGreaterThan(0);
 
-    const bidPrice = result.current.session?.currentLot?.openingAsk ?? 0;
+    const bidPrice = nominator === "human"
+      ? result.current.session?.currentLot?.openingAsk ?? 0
+      : (result.current.session?.currentLot?.openingAsk ?? 0) + 1_000;
     expect(bidPrice).toBeGreaterThan(0);
     const trueCostShown = bidPrice + trueCostTax!; // what the whisper's TRUE COST line reads
 
-    await act(async () => {
-      await result.current.bid("human", bidPrice);
-    });
+    if (nominator !== "human") {
+      await act(async () => {
+        await result.current.bid("human", bidPrice);
+      });
+    }
     await act(async () => {
       await result.current.pass("other");
     });
-
     expect(result.current.session?.state).toBe("SOLD");
     expect(result.current.session?.results.at(-1)).toMatchObject({
       winnerTeamId: "human",

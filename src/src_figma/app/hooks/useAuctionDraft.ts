@@ -6,8 +6,11 @@ import {
   resolveLot,
   advanceLot,
   getCurrentBidderTeamId,
+  getCurrentNominatorTeamId,
   initAuctionSession,
   isActivePassedResult,
+  nominatePlayer,
+  nominationBidCeiling,
   passBid,
   passLoneSurvivorOut,
   recordBid,
@@ -19,25 +22,20 @@ import type { BandPriorities, ConstructionPlayer, TeamCapIdentity } from "../../
 import {
   buildArchetypeShillProfile,
   buildClubCpuProfile,
-  type CpuShillAuctionPlayer,
   type CpuShillAuctionSession,
   type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
-import { clubArchetypeFit } from "../../../engines/auctionMarketModel";
-import { SIZING_TUNING } from "../../../engines/auctionPoolSizing";
-import {
-  settleFromShills,
-  type SettleClubOutcome,
-  type SettleFromShillsInput,
-} from "../../../engines/auctionSettleFromShills";
 import {
   classifyCpuTeams,
   deriveControlledCpuTeamIds,
   deriveShillTeamIds,
 } from "../../../engines/cpuTeamRoles";
-import { toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
-import { DEFAULT_AUCTION_SETUP_CONFIG, type AuctionSetupConfig } from "../../../data/auctionEngineConstants";
+import {
+  AUCTION_REBUILD_TUNING,
+  DEFAULT_AUCTION_SETUP_CONFIG,
+  type AuctionSetupConfig,
+} from "../../../data/auctionEngineConstants";
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { LEGAL_ROSTER } from "../../../data/rosterConstruction";
 import type { LuxuryCapRow } from "../../../data/tierParams";
@@ -66,7 +64,7 @@ import {
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
 
-export { getCurrentBidderTeamId } from "../../../engines/auctionStateMachine";
+export { getCurrentBidderTeamId, getCurrentNominatorTeamId } from "../../../engines/auctionStateMachine";
 export {
   buildAuctionPlayers,
   buildAuctionTeams,
@@ -89,7 +87,7 @@ type AuctionDraftContext = {
   seasonNumber: number;
 };
 
-type AuctionLuxuryTaxContext = {
+export type AuctionLuxuryTaxContext = {
   poolById: Map<string, RegisteredPool["players"][number]>;
   playerById: Map<string, Player>;
   identityByTeamId: Map<string, TeamCapIdentity | undefined>;
@@ -119,14 +117,16 @@ export interface UseAuctionDraftReturn {
   seasonNumber: number;
   cpuTeamIds: string[];
   currentBidderTeamId: string | null;
+  currentNominatorTeamId: string | null;
   initAuction: (leagueId: string, partialConfig?: Partial<AuctionSetupConfig>) => Promise<CpuShillAuctionSession | null>;
   loadAuction: (leagueId: string, seasonNumber?: number) => Promise<CpuShillAuctionSession | null>;
   bid: (teamId: string, amount: number) => Promise<CpuShillAuctionSession | null>;
+  nominate: (teamId: string, playerId: string, openingBid: number) => Promise<CpuShillAuctionSession | null>;
+  nominationCeiling: (teamId: string, playerId: string) => number | null;
   pass: (teamId: string) => Promise<CpuShillAuctionSession | null>;
   claimAtReserve: () => Promise<CpuShillAuctionSession | null>;
   resolve: () => Promise<CpuShillAuctionSession | null>;
   advance: () => Promise<CpuShillAuctionSession | null>;
-  settleShortClubs: () => Promise<SettleClubOutcome[] | null>;
   isCpuTeam: (teamId: string | null | undefined) => boolean;
   shillTeamIds: string[];
   controlledCpuTeamIds: string[];
@@ -139,6 +139,10 @@ const AUCTION_TRANSITION_REASON_COPY: Record<string, string> = {
   "bid-below-minimum": "That bid is below the current asking price.",
   "bid-above-max": "That bid is above your room after reserving money for the empty slots.",
   "bidder-not-active": "It is not that club's turn to bid.",
+  "manual-nomination-required": "The club on the clock must choose a player and an opening bid.",
+  "not-current-nominator": "It is not that club's turn to nominate.",
+  "nomination-below-minimum": "The opening bid must be at least the league minimum salary.",
+  "nomination-above-solvency-cap": "That opening bid would leave the club unable to finish its roster.",
   "team-not-in-lot": "That club is no longer in this lot.",
   "no-current-lot": "There is no active lot right now.",
   "invalid-state": "The room is not ready for that move yet.",
@@ -284,6 +288,30 @@ export function applyAuctionLuxuryTaxForLot(
   };
 }
 
+/** Candidate form of the same tax projection, used before a committed nomination opens the lot. */
+export function applyAuctionLuxuryTaxForCandidate(
+  session: CpuShillAuctionSession,
+  playerId: string,
+  ctx: AuctionLuxuryTaxContext | null | undefined,
+): CpuShillAuctionSession {
+  if (!session.players[playerId]) return zeroProjectedTax(session);
+  const preview: CpuShillAuctionSession = {
+    ...session,
+    currentLot: {
+      playerId,
+      nominatorTeamId: getCurrentNominatorTeamId(session) ?? "",
+      openingAsk: LEAGUE_MINIMUM_SALARY,
+      highBid: null,
+      highBidder: null,
+      stillIn: [],
+      bidTurnTeamId: null,
+      bidLog: [],
+    },
+  };
+  const projected = applyAuctionLuxuryTaxForLot(preview, ctx);
+  return { ...projected, currentLot: session.currentLot };
+}
+
 export function deriveCpuTeamIds(session: CpuShillAuctionSession | null, leagueTeams: readonly Team[]): string[] {
   return classifyCpuTeams(session, leagueTeams).allCpuTeamIds;
 }
@@ -302,7 +330,7 @@ function buildPureShillProfiles(leagueId: string, count: number): Record<string,
     return [teamId, {
       ...buildArchetypeShillProfile(teamId, `${leagueId}:shill-archetype`),
       // FABLE-C3: cap shill appetite — uncapped end-checkpoint shills hoard ~a full roster.
-      shillMaxWins: SIZING_TUNING.winsPerShill,
+      shillMaxWins: AUCTION_REBUILD_TUNING.shillMaxWinsPerShill,
     }];
   }));
 }
@@ -376,65 +404,6 @@ function buildPureShillAuctionTeams(input: {
   }));
 }
 
-function addStoredPosition(
-  positions: Record<string, RosterPositionMap[string]>,
-  player: Player | undefined,
-): void {
-  if (!player || positions[player.id]) return;
-  positions[player.id] = toRosterSlotPlayer({
-    primaryPosition: player.primaryPosition,
-    secondaryPosition: player.secondaryPosition,
-    traits: [player.trait1, player.trait2],
-  });
-}
-
-export function buildSettleFromShillsInput(input: {
-  session: CpuShillAuctionSession;
-  leagueTeams: readonly Team[];
-  players: readonly Player[];
-}): SettleFromShillsInput {
-  const shillTeamIds = deriveShillTeamIds(input.session, input.leagueTeams);
-  const shillSet = new Set(shillTeamIds);
-  const playerById = new Map(input.players.map((player) => [player.id, player]));
-  const unionIds = new Set<string>();
-  const leftoverIds = new Set<string>();
-
-  for (const team of input.session.teams) {
-    for (const assignment of team.roster) {
-      if (!shillSet.has(team.teamId)) unionIds.add(assignment.playerId);
-      else leftoverIds.add(assignment.playerId);
-    }
-  }
-  for (const [index, result] of input.session.results.entries()) {
-    if (isActivePassedResult(input.session, result, index)) leftoverIds.add(result.playerId);
-  }
-  for (const playerId of leftoverIds) unionIds.add(playerId);
-
-  const positions: Record<string, RosterPositionMap[string]> = {};
-  for (const playerId of unionIds) {
-    addStoredPosition(positions, playerById.get(playerId));
-  }
-
-  const fitScores: Record<string, Record<string, number>> = {};
-  for (const team of input.leagueTeams) {
-    if (shillSet.has(team.id)) continue;
-    const priorities = resolveClubBandPriorities(team);
-    const row: Record<string, number> = {};
-    for (const playerId of leftoverIds) {
-      const weights = (input.session.players[playerId] as CpuShillAuctionPlayer | undefined)?.archetypeWeights;
-      row[playerId] = clubArchetypeFit(weights, priorities);
-    }
-    fitScores[team.id] = row;
-  }
-
-  return {
-    session: input.session,
-    positions,
-    shillTeamIds,
-    fitScores,
-  };
-}
-
 function stateProgressKey(session: CpuShillAuctionSession): string {
   const lot = session.currentLot;
   const permanentlyPassedIds = session.results
@@ -493,6 +462,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
   const controlledCpuTeamIds = cpuRoles.controlledCpuTeamIds;
   const cpuTeamIdSet = useMemo(() => new Set(cpuTeamIds), [cpuTeamIds]);
   const currentBidderTeamId = getCurrentBidderTeamId(session);
+  const currentNominatorTeamId = getCurrentNominatorTeamId(session);
 
   const persist = useCallback(async (nextSession: CpuShillAuctionSession, nextContext: AuctionDraftContext) => {
     await saveAuctionSession({
@@ -525,6 +495,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       if (next.state === "AUCTION_COMPLETE") return next;
 
       if (next.state === "NOMINATION") {
+        if (next.config.sequentialNomination) return next;
         next = transitionOrThrow(surfaceNextPlayer(next));
         next = applyAuctionLuxuryTaxForLot(next, taxContextRef.current);
         await persist(next, nextContext);
@@ -679,6 +650,10 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       turnTimerSeconds: partialConfig.turnTimerSeconds ?? null,
       excludeFromLeague: partialConfig.excludeFromLeague ?? true,
       nominationWeightExponent: 2,
+      sequentialNomination: true,
+      cpuNominationOpenFraction: AUCTION_REBUILD_TUNING.cpuNominationOpenFraction,
+      shillAnchorFraction: AUCTION_REBUILD_TUNING.shillAnchorFraction,
+      shillTotalWinCap: AUCTION_REBUILD_TUNING.shillTotalWinCap,
       // FABLE-C3 end-checkpoint (audit FS-3): pure-pressure shills never need to COMPLETE a
       // roster — the draft ends when every REAL team is full, shills can't be force-filled, and
       // the pool no longer has to carry 22 phantom seats per shill.
@@ -723,6 +698,19 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       runSessionTransition((current) => strandSafeBidTransition(current, teamId, amount, cpuTeamIdSet.has(teamId))),
     [cpuTeamIdSet, runSessionTransition],
   );
+  const nominate = useCallback(
+    (teamId: string, playerId: string, openingBid: number) =>
+      runSessionTransition((current) => {
+        const withTax = applyAuctionLuxuryTaxForCandidate(current, playerId, taxContextRef.current);
+        return nominatePlayer(withTax, teamId, playerId, openingBid);
+      }),
+    [runSessionTransition],
+  );
+  const nominationCeiling = useCallback((teamId: string, playerId: string): number | null => {
+    if (!session) return null;
+    const withTax = applyAuctionLuxuryTaxForCandidate(session, playerId, taxContextRef.current);
+    return nominationBidCeiling(withTax, teamId, playerId);
+  }, [session]);
   const pass = useCallback((teamId: string) => runSessionTransition((current) => {
     if (current.state === "RESOLVE" && current.pendingClaim?.teamId === teamId) {
       return passLoneSurvivorOut(current);
@@ -738,30 +726,6 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
   );
   const resolve = useCallback(() => runSessionTransition((current) => resolveLot(current)), [runSessionTransition]);
   const advance = useCallback(() => runSessionTransition((current) => advanceLot(current)), [runSessionTransition]);
-  const settleShortClubs = useCallback(async (): Promise<SettleClubOutcome[] | null> => {
-    if (!session || !context || session.state !== "AUCTION_COMPLETE") return null;
-    setIsWorking(true);
-    setError(null);
-    try {
-      const result = settleFromShills(buildSettleFromShillsInput({
-        session,
-        leagueTeams,
-        players: leagueData.players,
-      }));
-      if (result.ok) {
-        const next = await persist(result.session as CpuShillAuctionSession, context);
-        setSession(next);
-      }
-      return [...result.outcomes];
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setError(message);
-      return null;
-    } finally {
-      setIsWorking(false);
-    }
-  }, [context, leagueData.players, leagueTeams, persist, session]);
-
   return {
     session,
     seed: session?.config.nominationOrderSeed ?? DEFAULT_AUCTION_SETUP_CONFIG.nominationOrderSeed,
@@ -774,14 +738,16 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     shillTeamIds,
     controlledCpuTeamIds,
     currentBidderTeamId,
+    currentNominatorTeamId,
     initAuction,
     loadAuction,
     bid,
+    nominate,
+    nominationCeiling,
     pass,
     claimAtReserve,
     resolve,
     advance,
-    settleShortClubs,
     isCpuTeam: (teamId) => cpuTeamIdSet.has(teamId ?? ""),
   };
 }

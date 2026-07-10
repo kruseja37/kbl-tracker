@@ -4,7 +4,6 @@ import { ArrowLeft, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-reac
 
 import {
   auctionTransitionErrorCopy,
-  buildSettleFromShillsInput,
   playerDisplayName,
   teamDisplayName,
   useAuctionDraft,
@@ -35,15 +34,15 @@ import {
 import {
   cpuBidOnLot,
   cpuDecideLoneSurvivor,
+  selectCpuNomination,
   type CpuBidOnLotDecision,
   type CpuShillAuctionPlayer,
   type CpuLoneSurvivorDecision,
 } from "../../../engines/cpuShillBidding";
-import { reservePriceCurve } from "../../../data/rosterEngineConstants";
+import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { LEGAL_ROSTER, twoWayVariantFromTraits, type RosterSlotPlayer } from "../../../data/rosterConstruction";
 import {
   DEFAULT_AUCTION_SETUP_CONFIG,
-  DEFAULT_NOMINATION_WEIGHT_EXPONENT,
   scaledShillDefault,
 } from "../../../data/auctionEngineConstants";
 import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
@@ -51,7 +50,6 @@ import {
   buildArchetypeLiftTable,
   buildLotViewFromSession,
   estimateMarket,
-  nominationOdds,
   projectBidVsPass,
   type BoardProjection,
   type EstimatedMarket,
@@ -65,7 +63,6 @@ import {
   type KeepTargetPoolPlayer,
 } from "../../../engines/auctionKeepTargetAllIn";
 import { LUXURY_CAP_TABLES } from "../../../data/tierParams";
-import { settleFromShills } from "../../../engines/auctionSettleFromShills";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import {
   buildAuctionBoardFrame,
@@ -190,7 +187,6 @@ const HISTORICAL_ARCHETYPE_BY_ID = new Map(HISTORICAL_ARCHETYPES.map((archetype)
 
 // COCKPIT W1b Tier-2 WAIT/CHASE chip (nominationOdds, auctionMarketModel.ts:613): "within K lots"
 // horizon. K=3 per DRAFT_COCKPIT_DESIGN_2026-07-08.md §2 Tier 2 example ("within 3 lots").
-const NOMINATION_ODDS_WITHIN_LOTS = 3;
 
 const UNKNOWN_SHAPE_LIGHT: Light = {
   status: "unknown",
@@ -218,11 +214,6 @@ function minimumBid(session: AuctionSession): number | null {
   const lot = session.currentLot;
   if (!lot) return null;
   return lot.highBid === null ? lot.openingAsk : lot.highBid + session.config.bidIncrement;
-}
-
-function reserveAsk(player: AuctionPlayer | null | undefined): number | null {
-  if (!player) return null;
-  return reservePriceCurve(player.ivPercentile) * player.iv;
 }
 
 function playerPositions(player: Player | null | undefined): string[] {
@@ -385,22 +376,6 @@ function displayBidVsPassProjection(
     ),
     keepTargets,
   };
-}
-
-function auctionExitRepairGuidance(
-  report: ReturnType<typeof buildAuctionExitReport>,
-  hasSettleableClub = false,
-): string {
-  if (report.clubs.some((club) => !club.known)) {
-    return "Some player records are missing position data. Check THE POOL in Draft Setup.";
-  }
-  if (report.clubs.some((club) => !club.legal && club.rosterCount < club.target)) {
-    if (hasSettleableClub) {
-      return "The pool ran dry before this club reached 22. Settle the empty seats from Market Shills below, or add players in Draft Setup and re-run.";
-    }
-    return "The pool ran dry before this club reached 22. Add more players in Draft Setup and run the draft again.";
-  }
-  return "This roster can't take the field as drafted. Re-run the draft — positions now read correctly — or hand off anyway and fix it before the season.";
 }
 
 function buildStageNeedLine(
@@ -811,9 +786,8 @@ export function LeagueBuilderAuctionDraft() {
   const [registeredPool, setRegisteredPool] = useState<DraftPool>(null);
   const [poolLoading, setPoolLoading] = useState(false);
   const [poolError, setPoolError] = useState<string | null>(null);
-  const [exitOverrideArmed, setExitOverrideArmed] = useState(false);
-  const [exitOverrideConfirmed, setExitOverrideConfirmed] = useState(false);
-  const [settleArmed, setSettleArmed] = useState(false);
+  const [nominationPlayerId, setNominationPlayerId] = useState("");
+  const [nominationOpen, setNominationOpen] = useState(String(Math.ceil(LEAGUE_MINIMUM_SALARY)));
   const [advisorMomentsBySeat, setAdvisorMomentsBySeat] = useState<Record<string, AdvisorMomentVM[]>>({});
   const loadedKeyRef = useRef<string | null>(null);
   const cpuAdvanceInFlightRef = useRef(false);
@@ -1007,58 +981,7 @@ export function LeagueBuilderAuctionDraft() {
     if (session?.state !== "AUCTION_COMPLETE") return null;
     return buildAuctionExitReport(exitControlledClubs, exitPositionMap);
   }, [exitControlledClubs, exitPositionMap, session?.state]);
-  const settlePreview = useMemo(() => {
-    if (session?.state !== "AUCTION_COMPLETE") return null;
-    return settleFromShills(buildSettleFromShillsInput({
-      session,
-      leagueTeams,
-      players: leagueData.players,
-    }));
-  }, [leagueData.players, leagueTeams, session]);
-  const settledResultLine = useMemo(() => {
-    if (session?.state !== "AUCTION_COMPLETE") return null;
-    const count = session.results.filter((result) => result.settled).length;
-    if (count === 0) return null;
-    return `Settled ${count} seat${count === 1 ? "" : "s"} from Market Shills at league minimum.`;
-  }, [session]);
-
-  const canProceedToFarm = Boolean(exitReport && (exitReport.allLegal || exitOverrideConfirmed));
-
-  useEffect(() => {
-    if (session?.state !== "AUCTION_COMPLETE") {
-      setExitOverrideArmed(false);
-      setExitOverrideConfirmed(false);
-      setSettleArmed(false);
-      return;
-    }
-    if (exitReport?.allLegal) {
-      setExitOverrideArmed(false);
-      setExitOverrideConfirmed(false);
-      setSettleArmed(false);
-    }
-  }, [exitReport?.allLegal, session?.state]);
-
-  useEffect(() => {
-    if (!exitOverrideArmed) return undefined;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest("[data-auction-exit-override]")) return;
-      setExitOverrideArmed(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [exitOverrideArmed]);
-
-  useEffect(() => {
-    if (!settleArmed) return undefined;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest("[data-auction-settle]")) return;
-      setSettleArmed(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
-  }, [settleArmed]);
+  const canProceedToFarm = Boolean(exitReport?.allLegal);
 
   const focusExitPanel = useCallback(() => {
     const panel = document.querySelector<HTMLElement>('[data-testid="auction-complete-panel"]');
@@ -1106,7 +1029,9 @@ export function LeagueBuilderAuctionDraft() {
   const activeWhisperSeatTeamId = useMemo(() => {
     if (!session) return null;
     const seatTeamId =
-      session.state === "OPEN_BIDDING"
+      session.state === "NOMINATION"
+        ? auction.currentNominatorTeamId
+        : session.state === "OPEN_BIDDING"
         ? auction.currentBidderTeamId
         : session.state === "RESOLVE"
           ? session.pendingClaim?.teamId ?? null
@@ -1402,8 +1327,8 @@ export function LeagueBuilderAuctionDraft() {
   // the nomination rotation) -- previously only OPEN_BIDDING/RESOLVE-claim resolved a team here, so
   // the ON THE CLOCK banner had nobody to name during nomination. teamName/teamPrimary/teamSecondary
   // below already fall back through this same `nowTeam`, so this one change cascades correctly.
-  const nominatingTeam = session?.state === "NOMINATION"
-    ? teamById.get(session.nominationOrder[session.nominationIndex] ?? "") ?? null
+  const nominatingTeam = session?.state === "NOMINATION" && auction.currentNominatorTeamId
+    ? teamById.get(auction.currentNominatorTeamId) ?? null
     : null;
   const nowTeam =
     session?.state === "OPEN_BIDDING" ? currentBidder :
@@ -1419,14 +1344,33 @@ export function LeagueBuilderAuctionDraft() {
     session?.state === "OPEN_BIDDING" || (session?.state === "RESOLVE" && Boolean(session.pendingClaim)) ? "bid" :
     undefined;
   const nowAction =
-    session?.state === "NOMINATION" ? "surface next lot" :
+    session?.state === "NOMINATION" ? "choose a player and opening bid" :
     session?.state === "OPEN_BIDDING" ? "raise or pass" :
     session?.state === "RESOLVE" && session.pendingClaim ? "claim at reserve or pass" :
     (session?.state === "SOLD" || session?.state === "PASSED") ? "confirm next lot" :
     session?.state === "AUCTION_COMPLETE" ? "auction complete" :
     "setup";
+  const cpuNominationDecision = useMemo(() => {
+    if (!session || session.state !== "NOMINATION" || !auction.currentNominatorTeamId) return null;
+    if (!auction.isCpuTeam(auction.currentNominatorTeamId)) return null;
+    return selectCpuNomination(
+      session,
+      auction.currentNominatorTeamId,
+      `${session.config.nominationOrderSeed}:nomination:${session.results.length}`,
+      { openingCeiling: (playerId) => auction.nominationCeiling(auction.currentNominatorTeamId!, playerId) },
+    );
+  }, [auction, session]);
   const cpuDecisionVm = useMemo<AuctionStageVM["move"]["cpuDecision"]>(() => {
     if (!session) return null;
+    if (session.state === "NOMINATION" && cpuNominationDecision) {
+      return {
+        teamName: teamNameById(cpuNominationDecision.teamId),
+        roleLabel: "CPU team",
+        action: `${teamNameById(cpuNominationDecision.teamId)} nominates ${playerDisplayName(playerById.get(cpuNominationDecision.playerId))}`,
+        reason: `The club's board value, roster need, and fit point here. The opening bid is committed.`,
+        amount: formatMoney(cpuNominationDecision.openingBid),
+      };
+    }
     if (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId && currentBidderIsCpu) {
       const decision = cpuBidOnLot(
         session,
@@ -1454,12 +1398,15 @@ export function LeagueBuilderAuctionDraft() {
       });
     }
     return null;
-  }, [auction, currentBidderIsCpu, session, shillTeamIdSet, teamNameById]);
+  }, [auction, cpuNominationDecision, currentBidderIsCpu, playerById, session, shillTeamIdSet, teamNameById]);
 
   const handoffPrompt = useMemo(() => {
     if (!session) return "Host setup";
     if (session.state === "NOMINATION") {
-      return "Hold — up next.";
+      if (auction.currentNominatorTeamId && !auction.isCpuTeam(auction.currentNominatorTeamId)) {
+        return `Pass device to ${teamNameById(auction.currentNominatorTeamId)}`;
+      }
+      return "Review CPU nomination";
     }
     if (session.state === "OPEN_BIDDING") {
       if (auction.currentBidderTeamId && !auction.isCpuTeam(auction.currentBidderTeamId)) {
@@ -1481,6 +1428,7 @@ export function LeagueBuilderAuctionDraft() {
     currentBidder,
     pendingClaimTeam,
     session,
+    teamNameById,
   ]);
 
   const availablePoolCandidates = useMemo(() => {
@@ -1489,6 +1437,27 @@ export function LeagueBuilderAuctionDraft() {
       .map((playerId) => session.players[playerId])
       .filter(Boolean);
   }, [session]);
+  const nominationCandidateIds = useMemo(() => {
+    if (!session || session.state !== "NOMINATION") return [];
+    return [...session.availablePlayerIds].sort((left, right) => {
+      const leftPlayer = session.players[left];
+      const rightPlayer = session.players[right];
+      return (rightPlayer?.iv ?? 0) - (leftPlayer?.iv ?? 0) || left.localeCompare(right);
+    });
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || session.state !== "NOMINATION") return;
+    if (cpuNominationDecision) {
+      setNominationPlayerId(cpuNominationDecision.playerId);
+      setNominationOpen(String(Math.round(cpuNominationDecision.openingBid)));
+      return;
+    }
+    if (!nominationCandidateIds.includes(nominationPlayerId)) {
+      setNominationPlayerId(nominationCandidateIds[0] ?? "");
+      setNominationOpen(String(Math.ceil(LEAGUE_MINIMUM_SALARY)));
+    }
+  }, [cpuNominationDecision, nominationCandidateIds, nominationPlayerId, session]);
 
   // BOARDFIX2 (Item C, perf): reorders on the LIVE board update this local, in-memory overlay
   // INSTANTLY; the actual `saveTeam` write is debounced (trailing, see the effect below) so a
@@ -1595,30 +1564,6 @@ export function LeagueBuilderAuctionDraft() {
     const openSlotsAfterWin = Math.max(0, teamState.rosterSlotsRemaining - 1);
     const needBreakdown = rosterShapeClean ? rosterNeedBreakdown(rosterShapes) : null;
     const ownBandPriorities = marketBandPrioritiesByTeamId.get(team.id) ?? null;
-
-    // COCKPIT W1b: WAIT/CHASE chip -- odds the best remaining same-position player surfaces
-    // within NOMINATION_ODDS_WITHIN_LOTS lots. Honest surface: omitted when nothing comparable
-    // remains in the pool (excludes the current lot itself, which is already on the block).
-    const nominationChip = (() => {
-      if (!lotShape) return null;
-      const remainingForOdds = session.availablePlayerIds
-        .filter((id) => id !== lotPlayerId)
-        .map((id) => session.players[id])
-        .filter((candidate): candidate is AuctionPlayer => Boolean(candidate));
-      const comparable = remainingForOdds.filter((candidate) => candidate.pos?.position === lotShape.position);
-      if (comparable.length === 0) return null;
-      const bestComparable = [...comparable].sort((a, b) => b.ivPercentile - a.ivPercentile)[0];
-      const exponent = session.config.nominationWeightExponent ?? DEFAULT_NOMINATION_WEIGHT_EXPONENT;
-      const odds = nominationOdds(
-        [bestComparable.playerId],
-        remainingForOdds.map((candidate) => ({ playerId: candidate.playerId, ivPercentile: candidate.ivPercentile })),
-        exponent,
-        NOMINATION_ODDS_WITHIN_LOTS,
-      )[0];
-      return odds
-        ? { position: lotShape.position, pWithin: odds.pWithin, withinLots: NOMINATION_ODDS_WITHIN_LOTS }
-        : null;
-    })();
 
     const remainingPool: LiquidityCompletionCandidate[] = [];
     let remainingPoolClean = true;
@@ -1964,7 +1909,6 @@ export function LeagueBuilderAuctionDraft() {
         boardPlayers,
         bidVsPass,
         marginalTax,
-        nominationChip,
         // COCKPIT WAVE 2 (B3/Correction 5/7): the live Tier-3 board's GM order + write-back +
         // auto-advance line.
         boardRankOverrides: team.boardRankOverrides ?? null,
@@ -2095,7 +2039,17 @@ export function LeagueBuilderAuctionDraft() {
   };
 
   const stagePendingClaim = session?.pendingClaim ?? null;
+  const nominationTeamState = session?.state === "NOMINATION" && auction.currentNominatorTeamId
+    ? teamStateById.get(auction.currentNominatorTeamId) ?? null
+    : null;
+  const selectedNominationPlayer = session?.state === "NOMINATION" && nominationPlayerId
+    ? playerById.get(nominationPlayerId) ?? null
+    : null;
+  const selectedNominationAuctionPlayer = session?.state === "NOMINATION" && nominationPlayerId
+    ? session.players[nominationPlayerId] ?? null
+    : null;
   const stageFocusTeamState =
+    nominationTeamState ??
     currentBidderTeamState ??
     pendingClaimTeamState ??
     latestWinnerTeamState ??
@@ -2107,19 +2061,32 @@ export function LeagueBuilderAuctionDraft() {
       ? teamDisplayName(stageFocusTeam)
       : "Roster";
   const stageMaxBid = session && stageFocusTeamState
-    ? getTeamAuctionMaxBid(session, stageFocusTeamState.teamId)
+    ? session.state === "NOMINATION" && nominationPlayerId
+      ? auction.nominationCeiling(stageFocusTeamState.teamId, nominationPlayerId)
+      : getTeamAuctionMaxBid(session, stageFocusTeamState.teamId)
     : currentBidderMaxBid;
-  const stageBidAmount = clampBidAmount(Number(bidAmount)) ?? minBid ?? session?.pendingClaim?.price ?? 0;
+  const actionMinimumBid = session?.state === "NOMINATION" ? Math.ceil(LEAGUE_MINIMUM_SALARY) : minBid;
+  const rawStageAmount = session?.state === "NOMINATION" ? Number(nominationOpen) : Number(bidAmount);
+  const stageBidAmount = session?.state === "NOMINATION"
+    ? Math.max(Math.ceil(LEAGUE_MINIMUM_SALARY), Math.round(rawStageAmount))
+    : clampBidAmount(rawStageAmount) ?? minBid ?? session?.pendingClaim?.price ?? 0;
   const stageBidPresets = useMemo(() => {
-    if (!session || minBid === null) return [];
-    const values = [minBid, minBid + bidIncrement, minBid + bidIncrement * 2, minBid + bidIncrement * 5];
+    if (!session || actionMinimumBid === null) return [];
+    const values = [
+      actionMinimumBid,
+      actionMinimumBid + bidIncrement,
+      actionMinimumBid + bidIncrement * 2,
+      actionMinimumBid + bidIncrement * 5,
+    ];
     return values.map((amount) => ({
-      label: bidPresetLabel(amount, minBid, bidIncrement),
+      label: session.state === "NOMINATION"
+        ? (amount === actionMinimumBid ? "MINIMUM" : formatMoney(amount))
+        : bidPresetLabel(amount, actionMinimumBid, bidIncrement),
       amount,
-      enabled: stageMaxBid !== null && amount <= stageMaxBid && !auction.isWorking && !currentBidderIsCpu,
-      selected: clampBidAmount(Number(bidAmount)) === amount,
+      enabled: stageMaxBid !== null && amount <= stageMaxBid && !auction.isWorking && !nowTeamIsCpu,
+      selected: Math.round(rawStageAmount) === amount,
     }));
-  }, [auction.isWorking, bidAmount, bidIncrement, clampBidAmount, currentBidderIsCpu, minBid, session, stageMaxBid]);
+  }, [actionMinimumBid, auction.isWorking, bidIncrement, nowTeamIsCpu, rawStageAmount, session, stageMaxBid]);
   const stageRosterSlots = useMemo(
     () => buildStageRosterSlots(rosterBoardFrame, playerById),
     [rosterBoardFrame, playerById],
@@ -2132,10 +2099,12 @@ export function LeagueBuilderAuctionDraft() {
     () => buildStageLog(session, playerById, teamNameById, stageFocusTeamState?.teamId),
     [playerById, session, stageFocusTeamState?.teamId, teamNameById],
   );
-  const stageLotPlayer = currentLotPlayer ?? (latestResult ? playerById.get(latestResult.playerId) ?? null : null);
-  const stageLotAuctionPlayer = lotAuctionPlayer ?? (latestResult ? session?.players[latestResult.playerId] ?? null : null);
-  const stageIsCpuTurn = session?.state === "OPEN_BIDDING"
-    ? currentBidderIsCpu
+  const stageLotPlayer = selectedNominationPlayer ?? currentLotPlayer ?? (latestResult ? playerById.get(latestResult.playerId) ?? null : null);
+  const stageLotAuctionPlayer = selectedNominationAuctionPlayer ?? lotAuctionPlayer ?? (latestResult ? session?.players[latestResult.playerId] ?? null : null);
+  const stageIsCpuTurn = session?.state === "NOMINATION"
+    ? nowTeamIsCpu
+    : session?.state === "OPEN_BIDDING"
+      ? currentBidderIsCpu
     : session?.state === "RESOLVE" && session.pendingClaim
       ? auction.isCpuTeam(session.pendingClaim.teamId)
       : false;
@@ -2144,6 +2113,7 @@ export function LeagueBuilderAuctionDraft() {
     !auction.isWorking &&
     (
       (session?.state === "OPEN_BIDDING" && Boolean(auction.currentBidderTeamId) && !currentBidderIsCpu && clampBidAmount(stageBidAmount) !== null) ||
+      (session?.state === "NOMINATION" && Boolean(auction.currentNominatorTeamId) && !nowTeamIsCpu && Boolean(nominationPlayerId) && stageMaxBid !== null && stageBidAmount >= LEAGUE_MINIMUM_SALARY && stageBidAmount <= stageMaxBid) ||
       (session?.state === "RESOLVE" && (!session.pendingClaim || !auction.isCpuTeam(session.pendingClaim.teamId))) ||
       session?.state === "SOLD" ||
       session?.state === "PASSED" ||
@@ -2157,6 +2127,7 @@ export function LeagueBuilderAuctionDraft() {
       (session?.state === "RESOLVE" && Boolean(stagePendingClaim) && !auction.isCpuTeam(stagePendingClaim?.teamId))
     );
   const stagePrimaryLabel =
+    session?.state === "NOMINATION" ? `NOMINATE · ${formatMoney(stageBidAmount)}` :
     session?.state === "RESOLVE" && stagePendingClaim ? `CLAIM ${formatMoney(stagePendingClaim.price)}` :
     session?.state === "RESOLVE" ? "RESOLVE LOT" :
     session?.state === "SOLD" || session?.state === "PASSED" ? "NEXT LOT" :
@@ -2164,21 +2135,11 @@ export function LeagueBuilderAuctionDraft() {
     undefined;
   const stageSecondaryLabel =
     session?.state === "RESOLVE" && stagePendingClaim ? "Pass on reserve" :
-    session?.state === "OPEN_BIDDING" ? `Let ${playerPronouns(stageLotPlayer).object} go` :
+    session?.state === "OPEN_BIDDING" ? `Let the bid stand` :
     "No pass";
   const stageCompleteVm = useMemo<AuctionStageVM["complete"]>(() => {
     if (!session || !exitReport) return undefined;
     const order = new Map(session.nominationOrder.map((teamId, index) => [teamId, index]));
-    const settledOutcomes = settlePreview?.outcomes.filter((outcome) => outcome.status === "settled") ?? [];
-    const settleSeatTotal = settledOutcomes.reduce((sum, outcome) => sum + outcome.seatsFilled, 0);
-    const unsettledShort = (settlePreview?.outcomes ?? []).find((outcome) => {
-      if (outcome.status === "settled" || outcome.status === "already-complete") return false;
-      const verdict = exitReport.clubs.find((club) => club.teamId === outcome.teamId);
-      return Boolean(verdict && !verdict.legal && verdict.rosterCount < verdict.target);
-    });
-    const settlePartialLine = unsettledShort
-      ? `${teamNameById(unsettledShort.teamId)} still can't reach a legal 22 from what's left — settle the rest, then use the override or re-run.`
-      : undefined;
     const clubs = exitReport.clubs
       .map((club) => {
         const team = teamById.get(club.teamId);
@@ -2203,43 +2164,13 @@ export function LeagueBuilderAuctionDraft() {
       blockedCount: exitReport.blockedCount,
       summary: exitReport.allLegal
         ? "Every club fields a legal 22. Scout reveal is next."
-        : `${exitReport.blockedCount} of ${exitReport.clubs.length} clubs can't field a legal 22. ${auctionExitRepairGuidance(exitReport, settleSeatTotal > 0)}`,
+        : `${exitReport.blockedCount} of ${exitReport.clubs.length} clubs can't field a legal 22. The auction may not hand off this session.`,
       onProceed: requestFarmDraftExit,
       proceedLabel: "SCOUT REVEAL",
-      overrideArmed: exitOverrideArmed,
-      onArmOverride: () => setExitOverrideArmed(true),
-      onConfirmOverride: () => {
-        setExitOverrideConfirmed(true);
-        navigateToScoutReveal();
-      },
-      onStayOverride: () => setExitOverrideArmed(false),
-      settle: {
-        seatTotal: settleSeatTotal,
-        perClubLabel: settledOutcomes
-          .map((outcome) => `${teamNameById(outcome.teamId)} ${outcome.seatsFilled} seat${outcome.seatsFilled === 1 ? "" : "s"}`)
-          .join(" · "),
-        partial: Boolean(unsettledShort),
-        partialLine: settlePartialLine,
-        armed: settleArmed,
-        busy: auction.isWorking,
-        onArm: () => setSettleArmed(true),
-        onConfirm: () => {
-          setSettleArmed(false);
-          void auction.settleShortClubs();
-        },
-        onStay: () => setSettleArmed(false),
-        resultLine: settledResultLine,
-      },
     };
   }, [
-    auction,
-    exitOverrideArmed,
     exitReport,
-    navigateToScoutReveal,
     requestFarmDraftExit,
-    settleArmed,
-    settledResultLine,
-    settlePreview,
     session,
     teamById,
     teamNameById,
@@ -2273,9 +2204,15 @@ export function LeagueBuilderAuctionDraft() {
       actingTeamIsCpu: nowTeamIsCpu,
     },
     lot: {
-      lotId: lot?.playerId ?? latestResult?.playerId ?? null,
+      lotId: session.state === "NOMINATION" ? nominationPlayerId : lot?.playerId ?? latestResult?.playerId ?? null,
       player: stageLotPlayer,
-      name: stageLotPlayer ? playerDisplayName(stageLotPlayer) : session.state === "AUCTION_COMPLETE" ? "MLB auction complete" : "Next player surfacing",
+      name: stageLotPlayer
+        ? playerDisplayName(stageLotPlayer)
+        : session.state === "AUCTION_COMPLETE"
+          ? "MLB auction complete"
+          : session.state === "NOMINATION"
+            ? "Choose the nomination"
+            : "Next player",
       positions: lotPositions(stageLotPlayer),
       personality: readableTrait(stageLotPlayer?.personality, "Personality —"),
       chemistry: readableTrait(stageLotPlayer?.chemistry, "Chemistry —"),
@@ -2285,7 +2222,14 @@ export function LeagueBuilderAuctionDraft() {
       publicMarket: publicMarket?.playerId === stageLotAuctionPlayer?.playerId
         ? lotPublicMarket(publicMarket)
         : undefined,
-      reserveAsk: lot?.openingAsk ?? stagePendingClaim?.price ?? null,
+      reserveAsk: session.state === "NOMINATION"
+        ? (Number.isFinite(stageBidAmount) ? stageBidAmount : Math.ceil(LEAGUE_MINIMUM_SALARY))
+        : lot?.openingAsk ?? stagePendingClaim?.price ?? null,
+      reserveLabel: session.state === "NOMINATION"
+        ? "YOUR OPEN"
+        : session.config.sequentialNomination
+          ? "OPEN"
+          : undefined,
       highBid: lot?.highBid !== null && lot?.highBid !== undefined
         ? {
             amount: lot.highBid,
@@ -2305,6 +2249,8 @@ export function LeagueBuilderAuctionDraft() {
       slotsLeft: stageFocusTeamState?.rosterSlotsRemaining ?? 0,
       ceilingNote: session.pendingClaim
         ? `${teamNameById(session.pendingClaim.teamId)} can claim at reserve or let the player leave the board.`
+        : session.state === "NOMINATION" && stageMaxBid !== null
+          ? `Choose anyone still on the board. Your opening bid is live and committed; you can open up to ${formatMoney(stageMaxBid)}.`
         : stageMaxBid !== null && minBid !== null && minBid > stageMaxBid
           ? `Can't afford ${playerPronouns(stageLotPlayer).object} and still fill the roster — ${formatMoney(minBid - stageMaxBid)} short.`
           : stageMaxBid !== null
@@ -2317,7 +2263,9 @@ export function LeagueBuilderAuctionDraft() {
       primaryLabel: stagePrimaryLabel,
       secondaryLabel: stageSecondaryLabel,
       cpuTurnName: stageIsCpuTurn
-        ? (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId
+        ? (session.state === "NOMINATION" && auction.currentNominatorTeamId
+          ? teamNameById(auction.currentNominatorTeamId)
+          : session.state === "OPEN_BIDDING" && auction.currentBidderTeamId
           ? teamNameById(auction.currentBidderTeamId)
           : session.pendingClaim
             ? teamNameById(session.pendingClaim.teamId)
@@ -2340,21 +2288,20 @@ export function LeagueBuilderAuctionDraft() {
         CONTESTED means multiple clubs can push the room.
       </>
     ),
-    // TRUTH-1 (JK ruling 2026-07-08): since the reserve-price feature (2026-07-07), a PASSED lot
-    // with reserve pricing enabled is recycled back into availablePlayerIds for exactly one more
-    // pass (finalizePassedLot, auctionStateMachine.ts) at the same price -- "gone for good" is a
-    // lie on that first pass. availablePlayerIds.includes(...) IS the engine's own recycled/
-    // permanent predicate (see isActivePassedResult), so reading it here can't drift from the
-    // engine's actual behavior.
     overlay: session.state === "SOLD"
       ? "sold"
-      : session.state === "PASSED"
+      : !session.config.sequentialNomination && session.state === "PASSED"
         ? (session.currentLot && session.availablePlayerIds.includes(session.currentLot.playerId) ? "unsold" : "gone")
         : null,
   } : null;
 
   const handleStagePrimary = () => {
     if (!session) return;
+    if (session.state === "NOMINATION" && auction.currentNominatorTeamId && nominationPlayerId) {
+      if (!Number.isFinite(stageBidAmount)) return;
+      void auction.nominate(auction.currentNominatorTeamId, nominationPlayerId, stageBidAmount);
+      return;
+    }
     if (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId) {
       const clamped = clampBidAmount(Number(bidAmount)) ?? clampBidAmount(stageBidAmount);
       if (clamped === null) return;
@@ -2377,6 +2324,7 @@ export function LeagueBuilderAuctionDraft() {
 
   const handleStageSecondary = () => {
     if (!session) return;
+    if (session.state === "NOMINATION") return;
     if (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId) {
       void auction.pass(auction.currentBidderTeamId);
       return;
@@ -2397,6 +2345,15 @@ export function LeagueBuilderAuctionDraft() {
         setCpuAdvancePending(false);
       });
     };
+
+    if (session.state === "NOMINATION" && cpuNominationDecision) {
+      runCpuAction(auction.nominate(
+        cpuNominationDecision.teamId,
+        cpuNominationDecision.playerId,
+        cpuNominationDecision.openingBid,
+      ));
+      return;
+    }
 
     if (session.state === "OPEN_BIDDING" && auction.currentBidderTeamId && currentBidderIsCpu) {
       const decision = cpuBidOnLot(
@@ -2464,6 +2421,46 @@ export function LeagueBuilderAuctionDraft() {
               Back to League Builder
             </button>
             <span className="chip">{handoffPrompt}</span>
+            {session?.state === "NOMINATION" && auction.currentNominatorTeamId && !nowTeamIsCpu ? (
+              <div className="card" data-testid="auction-nomination-controls" style={{ width: "100%" }}>
+                <div className="eyebrow" style={{ marginBottom: 8 }}>Choose the nomination</div>
+                <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+                  <label style={{ flex: "1 1 320px" }}>
+                    <span className="faint">Player</span>
+                    <select
+                      aria-label="Nomination player"
+                      value={nominationPlayerId}
+                      onChange={(event) => {
+                        setNominationPlayerId(event.target.value);
+                        setNominationOpen(String(Math.ceil(LEAGUE_MINIMUM_SALARY)));
+                      }}
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                    >
+                      {nominationCandidateIds.map((playerId) => {
+                        const player = playerById.get(playerId);
+                        return (
+                          <option key={playerId} value={playerId}>
+                            {player ? `${playerDisplayName(player)} · ${lotPositions(player)}` : playerId}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  <label style={{ flex: "0 1 220px" }}>
+                    <span className="faint">Committed opening bid</span>
+                    <input
+                      aria-label="Nomination opening bid"
+                      type="number"
+                      min={Math.ceil(LEAGUE_MINIMUM_SALARY)}
+                      step={bidIncrement}
+                      value={nominationOpen}
+                      onChange={(event) => setNominationOpen(event.target.value)}
+                      style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : null}
             {auction.error ? (
               <div className="card" style={{ width: "100%", borderColor: "rgba(255,140,140,0.5)", color: "#FFD7D7" }}>
                 {auctionTransitionErrorCopy(auction.error)}
@@ -2471,7 +2468,10 @@ export function LeagueBuilderAuctionDraft() {
             ) : null}
           </div>
         }
-        onSelectPreset={(amount) => setBidAmount(String(amount))}
+        onSelectPreset={(amount) => {
+          if (session?.state === "NOMINATION") setNominationOpen(String(amount));
+          else setBidAmount(String(amount));
+        }}
         onBid={handleStagePrimary}
         onPass={handleStageSecondary}
         onAdvanceCpu={handleAdvanceCpuDecision}

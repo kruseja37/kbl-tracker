@@ -13,6 +13,8 @@ import {
   type BandPriorities,
 } from './leagueConstruction';
 import {
+  getCurrentNominatorTeamId,
+  nominationBidCeiling,
   servesOwnTightClass,
   sessionBidCeiling,
   lotOpeningAsk,
@@ -20,6 +22,7 @@ import {
   type AuctionPlayer,
   type AuctionSession,
 } from './auctionStateMachine';
+import { AUCTION_REBUILD_TUNING } from '../data/auctionEngineConstants';
 import { playerFillsHardRequirement, teamRosterNeed } from './rosterNeed';
 import {
   evaluateLiquidityAwareBid,
@@ -133,6 +136,22 @@ export type CpuLoneSurvivorDecision =
       liquidity?: LiquidityAwareBidRead;
     };
 type CpuLoneSurvivorPassReason = Extract<CpuLoneSurvivorDecision, { kind: 'pass' }>['reason'];
+
+export interface CpuNominationDecision {
+  teamId: string;
+  playerId: string;
+  openingBid: number;
+  valuation: number;
+  needMultiplier: number;
+  maxOpeningBid: number;
+}
+
+export interface CpuNominationOptions {
+  /** §3 tunable override; absent reads the persisted session/default policy. */
+  openFraction?: number;
+  /** Live callers provide the candidate-specific tax-aware ceiling. */
+  openingCeiling?: (playerId: string) => number | null;
+}
 
 interface ResolvedCpuShillProfile extends CpuShillProfile {
   personalityBias: number;
@@ -379,6 +398,46 @@ export function cpuBidOnLot(
   if (minimumBid > maxBid) {
     return passDecision(shillTeamId, playerId, 'over-budget', minimumBid, maxBid, valuation, shill.personality);
   }
+
+  // AUCTION REBUILD §1.4: pure shills are value-anchored market-makers, not probabilistic bargain
+  // hunters. While solvent and under both win caps they counter every price that remains below the
+  // configured fraction of the canonical market estimate (the player's IV). They stop exactly at
+  // the anchor; this cannot create a hidden runaway price.
+  const pureShill = session.config.sequentialNomination
+    && (session.config.nonCompletingTeamIds?.includes(shillTeamId) ?? false);
+  if (pureShill) {
+    // Completion invariant: a permanent shill win may consume surplus, never the last body a
+    // real club's legal completion depends on. Reuse the existing joint-demand guard that already
+    // protects completing CPU bidders; no shill-reclamation safety net exists in rebuilt mode.
+    if (wouldStarveJointDemand(session, shillTeamId, playerId)) {
+      return passDecision(shillTeamId, playerId, 'no-interest', minimumBid, maxBid, valuation, shill.personality);
+    }
+    const pureShillIds = new Set(session.config.nonCompletingTeamIds ?? []);
+    const totalShillWins = session.results.filter(
+      (result) => result.disposition === 'SOLD'
+        && result.winnerTeamId !== null
+        && pureShillIds.has(result.winnerTeamId),
+    ).length;
+    const totalWinCap = session.config.shillTotalWinCap ?? AUCTION_REBUILD_TUNING.shillTotalWinCap;
+    if (totalShillWins >= totalWinCap) {
+      return passDecision(shillTeamId, playerId, 'team-full', minimumBid, maxBid, valuation, shill.personality);
+    }
+    const anchorFraction = session.config.shillAnchorFraction ?? AUCTION_REBUILD_TUNING.shillAnchorFraction;
+    const anchor = Math.max(0, player.iv * anchorFraction);
+    if (minimumBid <= Math.min(maxBid, anchor)) {
+      return {
+        kind: 'bid',
+        teamId: shillTeamId,
+        playerId,
+        bid: minimumBid,
+        minimumBid,
+        maxBid: Math.min(maxBid, anchor),
+        valuation: anchor,
+        personality: shill.personality,
+      };
+    }
+    return passDecision(shillTeamId, playerId, 'over-valuation', minimumBid, Math.min(maxBid, anchor), anchor, shill.personality);
+  }
   const mustBuy = needOverrideApplies(session, team, playerId, minimumBid, maxBid, options);
   const liquidity = evaluateLiquidityAwareBid({
     playerId,
@@ -420,6 +479,74 @@ export function cpuBidOnLot(
     personality: shill.personality,
     liquidity,
   };
+}
+
+/**
+ * AUCTION REBUILD §1.2: a CPU club chooses its nomination from the existing IV + archetype-fit
+ * valuation, strengthened only by the same hard-need signal the live bidder already uses. The
+ * committed open is the sole §3 policy fraction; no parallel valuation model is introduced.
+ */
+export function selectCpuNomination(
+  session: CpuShillAuctionSession,
+  teamId: string,
+  seed: string,
+  options: CpuNominationOptions = {},
+): CpuNominationDecision | null {
+  if (!session.config.sequentialNomination || session.state !== 'NOMINATION') return null;
+  if (getCurrentNominatorTeamId(session) !== teamId) return null;
+  if (session.config.nonCompletingTeamIds?.includes(teamId)) return null;
+  const team = findTeam(session, teamId);
+  if (team === null || team.rosterSlotsRemaining <= 0) return null;
+
+  const profile = resolveSessionShill(session, teamId, seed);
+  const positions: Record<string, NonNullable<AuctionPlayer['pos']>> = {};
+  for (const assignment of team.roster) {
+    const shape = session.players[assignment.playerId]?.pos;
+    if (shape) positions[assignment.playerId] = shape;
+  }
+  const need = teamRosterNeed(team.roster.map((assignment) => assignment.playerId), positions);
+  const openFraction = clamp(
+    options.openFraction
+      ?? session.config.cpuNominationOpenFraction
+      ?? AUCTION_REBUILD_TUNING.cpuNominationOpenFraction,
+    0,
+    1,
+  );
+  let best: (CpuNominationDecision & { score: number }) | null = null;
+
+  for (const playerId of session.availablePlayerIds) {
+    const player = session.players[playerId] as CpuShillAuctionPlayer | undefined;
+    if (!player) continue;
+    // A CPU nomination is a committed acquisition if nobody counters. It therefore obeys the
+    // same joint-supply politeness as a late CPU bid: do not nominate a scarce class another club
+    // needs unless it is tight for the nominator too.
+    const afterNominationSupply: CpuShillAuctionSession = {
+      ...session,
+      availablePlayerIds: session.availablePlayerIds.filter((candidateId) => candidateId !== playerId),
+    };
+    if (wouldStarveJointDemand(afterNominationSupply, teamId, playerId)) continue;
+    const maxOpeningBid = options.openingCeiling?.(playerId)
+      ?? nominationBidCeiling(session, teamId, playerId);
+    if (maxOpeningBid === null || maxOpeningBid < team.minSalary) continue;
+
+    const fillsNeed = Boolean(player.pos && need && playerFillsHardRequirement(player.pos, need));
+    const tightNeed = fillsNeed && servesOwnTightClass(session, teamId, playerId);
+    const needMultiplier = tightNeed ? 1.25 : fillsNeed ? 1.1 : 1;
+    const valuation = evaluateCpuValuation(player, profile, `${seed}:nomination:${playerId}`);
+    const rawOpen = Math.min(maxOpeningBid, Math.max(team.minSalary, valuation * openFraction));
+    const step = Math.max(1, session.config.bidIncrement);
+    const steppedOpen = Math.floor(rawOpen / step) * step;
+    const openingBid = Math.max(team.minSalary, Math.min(maxOpeningBid, steppedOpen));
+    if (openingBid < team.minSalary) continue;
+    const score = valuation * needMultiplier;
+    if (best === null || score > best.score || (score === best.score && playerId.localeCompare(best.playerId) < 0)) {
+      best = { teamId, playerId, openingBid, valuation, needMultiplier, maxOpeningBid, score };
+    }
+  }
+
+  if (best === null) return null;
+  const { score: _score, ...decision } = best;
+  return decision;
 }
 
 export function cpuDecideLoneSurvivor(

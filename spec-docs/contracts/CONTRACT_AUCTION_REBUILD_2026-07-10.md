@@ -88,3 +88,147 @@ known solo flakes list applies); the harness runs committed + reproducible.
 ## §6 Report
 APPEND: per-item disposition; the deadlock-freedom argument; per-iteration loop table (knobs
 + metrics); the verdict; rough-edges list for JK's browser session if GO.
+
+---
+
+## BUILDER APPEND — PHASE A REPRO-FIRST RECORD (Codex, 2026-07-10)
+
+### Scope interpretation
+
+- The rebuilt flow is the live MLB auction: the contract's legal-22 end condition, shill market
+  makers, and 4-team/8-team viability bar all target that flow. The shared farm state machine stays
+  on its existing 10-player/no-shill contract; MLB sessions will carry an explicit persisted mode
+  bit so old/farm sessions cannot accidentally inherit half of the rebuild.
+- The untracked `dispatch-prompt.txt` existed before builder work and is left untouched. No git
+  write command was run.
+
+### Red proof before implementation
+
+Command:
+
+`NODE_ENV= npx vitest run src/engines/__tests__/auctionSequentialNomination.test.ts --reporter=verbose`
+
+Result: **RED as required — 1 file failed, 5/5 tests failed.** The current engine accepted the
+weighted auto-surface call, and the required `getCurrentNominatorTeamId` / `nominatePlayer` APIs did
+not exist. The five repros pin: auto-surface disabled; shill/full-club rotation skips; league-minimum
+committed opening bid; fixed rotation plus affordability rejection; and no reclaim/redistribution of
+a shill win.
+
+---
+
+## BUILDER APPEND — PHASE A/B/C FINAL RECORD (Codex, 2026-07-10)
+
+### Phase A disposition
+
+1. **Sequential manual nomination — BUILT for new MLB sessions.** `sequentialNomination` is an
+   explicit persisted session-mode bit. New MLB sessions use the supplied real-club order (not a
+   seed-shuffled order), and the nominator lookup skips pure shills and full clubs. Legacy and farm
+   sessions keep their prior state-machine contract.
+2. **Committed nominator open — BUILT.** `nominatePlayer` selects any remaining player, enforces an
+   opening at or above the league minimum and below the candidate-specific tax/solvency ceiling,
+   removes the player from available supply, and records the nominator as the standing high bidder.
+   CPU clubs use the existing IV/archetype/need valuation and the tunable opening fraction. The page
+   now exposes a player selector plus committed-open control; CPU nominations use the existing
+   read-only decision-preview beat.
+3. **One shot / always sold — BUILT in rebuilt mode.** `surfaceNextPlayer` rejects auto-surfacing,
+   and the sequential resolve path has no no-bid/PASSED/lone-survivor branch. The opener wins if all
+   rivals let the bid stand. Reserve-price storage remains readable for compatibility, but reserve
+   pricing no longer sets a rebuilt lot's open.
+4. **Shill wins stay gone — BUILT.** Rebuilt shills are fixed anchor defenders while below the
+   configured IV-based market estimate fraction and under both win caps. They are still tax-neutral,
+   never nominate, never receive a force-fill, and their wins remain on their own roster. The rebuilt
+   terminal branch bypasses passed-lot backfill and shill reclamation. The existing joint-supply guard
+   also prevents a permanent shill win from knowingly consuming a class already tight for a real
+   club.
+5. **Legal-22 end condition — BUILT.** The machine completes only when every completing real club is
+   full and legal. The exit screen has no settle-from-shills action and no proceed-anyway override;
+   an illegal terminal fixture renders `NO HANDOFF`.
+6. **VOICE/UI updates — BUILT.** The live action is `NOMINATE`, the rival action is `Let the bid
+   stand`, and rebuilt opening money is labeled `OPEN`/`YOUR OPEN`, not reserve. The nomination input
+   rounds the fractional league minimum upward; the resumed partial implementation had rounded it
+   down and silently rejected a visible nomination, which is now pinned by the page suite.
+
+Additional resumed-tree correction: rebuilt sessions had still inherited the session-seeded team
+shuffle even though §1 requires rotation over club order. The initializer now preserves club order;
+the seed remains available for deterministic CPU decision noise without owning the rotation.
+
+### Repro-first and focused evidence
+
+- Initial red proof (recorded above): 5/5 sequential-nomination repros failed before implementation.
+- Final sequential engine suite: **8/8 passed** (the seven implemented-mechanic cases plus the fixed
+  club-order case).
+- Engine + hook + live page/component slice: **93/93 passed**.
+- Full auction dependency gate (state machine, one-chance legacy compatibility, end checkpoint,
+  market, gauntlets, hook, MLB/farm pages, shared stage): **26 files / 299 tests passed**.
+
+### Deadlock-freedom proof obligation — NOT SATISFIED
+
+The rebuilt transition is strictly progressive only under this precondition: the current incomplete
+club has at least one remaining player whose tax-aware nomination ceiling is at least the league
+minimum and whose acquisition leaves a legal completion. Under that precondition, nomination removes
+one player, commits a high bid, the lot can only resolve SOLD, and either a real roster loses one open
+seat or a capped shill consumes one surplus player before rotation advances.
+
+The production-default gauntlet found reachable states where the precondition is false. Every one of
+the 36 measured runs stopped at `NOMINATION:no-legal-cpu-nomination` with real clubs incomplete. Two
+counterexample forms occurred:
+
+- legal-shape candidates remained, but every candidate's tax-aware opening ceiling was below the
+  league minimum after accumulated salary + marginal-tax drains; or
+- many bodies remained, but none preserved a verified legal completion for the current club's exact
+  position mix.
+
+Therefore the required statement — "every state with an incomplete club has a legal move" — is
+false for the rebuilt structure under the allowed knobs. No recirculation, redistribution,
+reclamation, forced fill, or settle path fired; `safetyNetUses` was exactly zero throughout. This is
+the binding Phase C failure, not a softened or inferred result.
+
+### Phase B — bounded six-iteration viability loop
+
+Harness: `scripts/auctionCollapseDiagnosis.test.ts#auction-rebuild-viability`. Each valid iteration
+runs the real MLB player universe and production pool extraction for three deterministic archetype
+seeds across both 4-club and 8-club leagues. Metrics count the committed opener plus CPU/shill actors
+whose live policy would take the next bid; lockout is tracked per real club only until it reaches 75%
+of 22. Price sanity is winning price / player IV, the same canonical estimate used by the anchor.
+
+| Iter | shills 4/8 | anchor | per/total shill wins | CPU open | pool | completed runs | 2+ willing range | worst pre-75% lockout | legal clubs / 36 | min shill cash | median price/market range | safety nets | Result |
+|---:|:---:|---:|:---:|---:|---:|:---:|:---:|---:|:---:|---:|:---:|---:|:---:|
+| 1 | 1 / 2 | 0.65 | 8 / 12 | 0.35 | 1.25 | 0 / 6 | 90.0–100% | 7 | 2 / 36 | $950,836 | 0.624–0.762 | 0 | FAIL — nomination deadlock |
+| 2 | 1 / 2 | 0.65 | 8 / 12 | 0.35 | 1.25 | 0 / 6 | 83.8–100% | 7 | 3 / 36 | $950,836 | 0.597–0.762 | 0 | FAIL — scarce-class guard did not clear deadlock |
+| 3 | 1 / 2 | 0.65 | 8 / 12 | 0.35 | 1.50 | 0 / 6 | 80.9–100% | 7 | 2 / 36 | $955,836 | 0.626–0.749 | 0 | FAIL — maximum-surplus direction alone insufficient |
+| 4 | 1 / 2 | 0.65 | 4 / 6 | 0.35 | 1.50 | 0 / 6 | 90.4–99.1% | 7 | 1 / 36 | $1,055,836 | 0.602–0.745 | 0 | FAIL — lower shill consumption still deadlocks |
+| 5 | 1 / 2 | 0.50 | 4 / 6 | 0.20 | 1.50 | 0 / 6 | 65.3–100% | 7 | 3 / 36 | $1,095,836 | 0.431–0.708 | 0 | FAIL — completion still fails; one seed also breaks bidder + price bars |
+| 6 | 1 / 1 | 0.55 | 2 / 2 | 0.25 | 1.50 | 0 / 6 | 67.9–96.4% | 7 | 4 / 36 | $1,135,836 | 0.431–0.712 | 0 | FAIL — best legal-club count, still no completed run and bar regressions |
+
+The pool extractor rejected a proposed 1.75 multiplier before iteration 6 because its contractually
+valid stops end at 1.50; that invalid preflight was not counted as an iteration, and iteration 6 was
+rerun at the valid maximum.
+
+Best non-completion profile was iteration 4: all six runs cleared willingness, lockout, shill
+solvency, price sanity, and zero-safety-net checks, but none completed and only 1 of 36 real clubs was
+already legal at the stopping point. Iteration 6 improved the cross-run legal-club count to 4/36 but
+lost the all-seed willingness and price bars and still completed 0/6.
+
+### Phase C verdict — **DEFER**
+
+The immutable bar was not met in any iteration. The binding constraint is legal/affordable
+completion after removing every safety net: pool surplus and shill consumption can delay the stop,
+but the remaining allowed price knobs cannot keep every club above the tax-aware minimum-open floor
+without pushing at least one seed below the competitiveness or price-sanity bars. Club tax math and
+cap normalization were explicitly out of bounds, so this lane does not alter them to manufacture a
+GO.
+
+The Phase A implementation and reproducible harness remain in the working tree for captain review,
+but **the rebuilt auction is not viable for v1 under this contract and must be deferred unless a new
+contract expands the economic/completion model.** No final tuned defaults are claimed.
+
+### Closing gates
+
+- `git diff --check` — exit 0.
+- app typecheck `NODE_ENV= npx tsc -b --pretty false` — exit 0.
+- harness strict typecheck — exit 0.
+- `NODE_ENV= npm run build` — exit 0 (2,648 modules transformed; existing chunk-size warnings only).
+- auction dependency gate — **26 files / 299 tests passed**.
+- full required Vitest — **619 files passed, 8 skipped; 9,527 tests passed, 14 skipped; zero failed**.
+- No git write command was run. `dispatch-prompt.txt` and `resume-prompt.txt` were pre-existing
+  untracked operator files and remain untouched.
