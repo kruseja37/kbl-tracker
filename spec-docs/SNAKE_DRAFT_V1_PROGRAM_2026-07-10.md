@@ -51,18 +51,21 @@
 18. Practice mode (solo vs POC CPU picker): correction and pause work identically;
     fast-forward pauses on tap.
 
-## CODE-TRUTH CHECKS (block their dependent contracts until answered with file evidence)
-CT1. LUXURY_CAP_TABLES category structure: exact taxed categories and top-N per category;
-     whether CP counts inside the reliever category (JK's preferred presentation: top-3 RP
-     + 1 CP if the table agrees). → blocks S3's tax-core view final copy.
-CT2. Farm scout variance: are scout bands per-club (scout hire quality) or league-shared?
-     Per-club → farm named-player SCOUT PRESSURE allowed; shared → public role pressure
-     only. → blocks S6's farm advisor scope.
-CT3. Player-version linkage: does any human-identity field exist yet (legends thread may
-     add one)? Determines the one-per-human implementation seam. → blocks S1a's versions
-     work item (build the seam to the field if present; else a versionGroupId shim).
-CT4. Team identity storage: where primary/secondary/alternate colors live; feasibility +
-     size discipline for a logo image field (client-resize, cap). → blocks S7's logo slot.
+## CODE-TRUTH CHECKS — ALL ANSWERED 2026-07-10 (evidence: spec-docs/contracts/CONTRACT_S0_TRANSFER_AUDIT_2026-07-10.md)
+CT1. ANSWERED — the cap table has NO CP category: three groups (hitters topN=8 per stat;
+     rotation topN=4; bullpen topN=4/3), bullpen = RP + CP + SP/RP together
+     (tierParams.ts:71-143, leagueConstruction.ts:255-256). JK's "top-3 RP + 1 CP"
+     presentation does NOT match the table → S3's tax-core copy says "top-N bullpen arms",
+     no CP line (advisory≡settlement law).
+CT2. ANSWERED — per-club scout variance exists (per-scout accuracyByPosition +
+     hiredScoutIdsByTeamId). → S6 farm SCOUT PRESSURE with named-player reads PERMITTED,
+     from each club's own scouting snapshot.
+CT3. ANSWERED — no human-identity field exists on stored Players; historical cards carry
+     the person key only inside sourceId. → S1a builds a versionGroupId shim (derived from
+     sourceId's person key; disambiguating chip for natural duplicates).
+CT4. ANSWERED — Team already has colors {primary, secondary, accent?} + a logoUrl? field.
+     → S7 logo slot = client-resize ≤128×128, re-encode, ~32 KB hard cap, reject over-cap
+     before write; no schema surgery.
 
 ## THE LANE MAP (contract bodies — dispatch-time contracts copy these verbatim)
 Common to every lane: contract-first commit · spec/repro-first tests · gates = tsc, build,
@@ -71,14 +74,24 @@ applies) · builder Codex 5.6-class at xhigh for engine/economics lanes, medium 
 UI-assembly lanes (probe for a higher 5.6 variant on CRITICAL lanes — S1a, S4 — per JK) ·
 independent opus audit · captain merges via JK-clicked PRs · UNKNOWN = STOP.
 
-### S0 — THE TRANSFER AUDIT (investigation; opus)
-For each candidate (cheapestLegalCompletion + seating math · auctionMarginalTaxWithCaps +
-normalize · assembleBoard/rankings storage · derivePickValueChart · scout fog components ·
-privacy reveal law · per-pick session persistence · D1 handoff · POC snake page/engine ·
-ADVISORCOLOR emission pattern): verdict TRANSFER (with the value it adds) / ADAPT (what
-changes) / STAYS BEHIND (auction-shaped). Output: the transfer manifest; every S-lane
-imports only manifest-approved modules. Also confirm the POC page's fate: rebuilt in place
-vs fresh page consuming its engine.
+### S0 — THE TRANSFER AUDIT — DONE 2026-07-10 (APPROVE-WITH-NOTES)
+The transfer manifest is booked in spec-docs/contracts/CONTRACT_S0_TRANSFER_AUDIT_2026-07-10.md;
+every S-lane imports ONLY manifest-approved modules. Headlines binding on lanes:
+- The SIMULTANEOUS seating proof does not exist anywhere — GREENFIELD in S1a.
+  cheapestLegalCompletion is a single-club sub-check ONLY (using it as the proof is the
+  named stop-ship defect class).
+- executeSnakePickTrade + evaluateSnakePick are partial implementations of the S4 guide
+  validator and the LEGAL-FINISH CUSHION — ADAPT them (strip CPU greed/jitter/rollout
+  coupling), do not rebuild.
+- POC page fate: FRESH pages for S1b/S2/S3 consuming the adapted engine; the POC page
+  survives only as PRACTICE MODE (appendix 18). forecastSnakeAvailability + all
+  rollout/jitter machinery is OBSOLETE (cut list).
+- Privacy reveal: EXTRACT a new pure useSeatReveal hook (copy, don't import); NEVER edit
+  AuctionStage.
+- Session model v2 = additive fields on the existing mlbDraftSessions store (already in
+  all sync/backup registries); D1 handoff stays compatible iff completedPicks/pickOrder/
+  currentPickIndex semantics are preserved and corrections resolve to 22 unique IDs
+  pre-handoff.
 
 ### S1a — FOUNDATIONS: ENGINE (critical lane)
 Session model v2 (board storage per seat · positional rankings · versions/one-per-human
