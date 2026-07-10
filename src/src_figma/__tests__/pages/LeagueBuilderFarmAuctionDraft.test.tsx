@@ -463,7 +463,7 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(targetRange.displayedEstimate).toBeGreaterThan(targetRange.low);
     expect(targetRange.displayedEstimate).toBeLessThan(targetRange.high);
     expect(screen.queryByText(/True grade|Ratings/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Most you can bid")).toBeInTheDocument();
+    expect(screen.getByText("Ceiling")).toBeInTheDocument();
     expect(screen.getByText("Slots left")).toBeInTheDocument();
     expect(screen.getByText("PRIORITY GAPS")).toBeInTheDocument();
     // COCKPIT W1d: the bridge headline (always-visible, zero taps) now ALSO promotes this same
@@ -486,8 +486,8 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     expect(verdictEl).not.toBeNull();
     expect((verdictEl?.textContent ?? "").length).toBeGreaterThan(0);
     expect(verdictEl?.className ?? "").toMatch(/\b(push|cap|pass)\b/);
-    // MAX BID (the liquidity-adjusted ceiling) renders, band-derived from the scout read.
-    expect(within(whisperBody).getByText("MAX BID")).toBeInTheDocument();
+    // CEILING (the liquidity-adjusted ceiling) renders, band-derived from the scout read.
+    expect(within(whisperBody).getByText("CEILING")).toBeInTheDocument();
     // COCKPIT W1d: Budget AND SHAPE are both real reads now (SHAPE un-stubs once the seat's MLB
     // roster resolves -- team-a's fixture roster here is missing SS/CF/RF and carries no
     // pitchers, so shapeLight correctly reads it as an incomplete/illegal roster, i.e. 'red', not

@@ -690,7 +690,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByLabelText("Position filter")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /IV SORT/i })).not.toBeInTheDocument();
     expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("Most you can bid")).toBeInTheDocument();
+    expect(screen.getByText("Ceiling")).toBeInTheDocument();
     // FLOORREFIT Move 5: the old "Public market" eyebrow is gone -- "MARKET" is the label now,
     // inline in the consolidated mono line (design §1.2, say-it-once). Same coverage (the
     // market-read block renders), same aria-label assertion right after it.
@@ -807,7 +807,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
     expect(screen.getByText("opening — be the first")).toBeInTheDocument();
     expect(screen.getByText(/Page (Caps|Keys) budget/)).toBeInTheDocument();
-    expect(screen.getByText("Most you can bid")).toBeInTheDocument();
+    expect(screen.getByText("Ceiling")).toBeInTheDocument();
     expect(screen.getByText("Slots left")).toBeInTheDocument();
     expect(screen.getByText(/Priority need:/)).toBeInTheDocument();
     expect(screen.queryByText("player-a")).not.toBeInTheDocument();
@@ -1095,7 +1095,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     render(<LeagueBuilderAuctionDraft />);
 
     expect(await screen.findByText("UNSOLD")).toBeInTheDocument();
-    expect(screen.getByText(/Nobody bid at that price\. He'll get one more look later\./)).toBeInTheDocument();
+    expect(screen.getByText(/No takers at that price — he'll come around again\./)).toBeInTheDocument();
     expect(screen.queryByText("GONE")).not.toBeInTheDocument();
     expect(screen.queryByText(/off the board for good/)).not.toBeInTheDocument();
   });
@@ -1107,7 +1107,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     render(<LeagueBuilderAuctionDraft />);
 
     expect(await screen.findByText("GONE")).toBeInTheDocument();
-    expect(screen.getByText(/Nobody bid\. He's off the board for good\./)).toBeInTheDocument();
+    expect(screen.getByText(/No takers — he's off the board for good\./)).toBeInTheDocument();
     expect(screen.queryByText("UNSOLD")).not.toBeInTheDocument();
   });
 

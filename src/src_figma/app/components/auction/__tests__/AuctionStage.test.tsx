@@ -2,8 +2,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { AuctionStage, type AuctionStageVM, type RosterSlotVM } from "../AuctionStage";
+import { HELD_BACK_HELP_LINE, HELP_LINE, NEED_FIT_HELP_LINE } from "../WhisperPanel";
 import { LEGAL_ROSTER } from "../../../../../data/rosterConstruction";
 import type { Player } from "../../../../../utils/leagueBuilderStorage";
+import type { RosterIntelligencePayload } from "../../../../../engines/rosterIntelligencePayload";
 
 afterEach(() => {
   cleanup();
@@ -104,6 +106,151 @@ function vm(): AuctionStageVM {
     log: [],
   };
 }
+
+/** Minimal RosterIntelligencePayload -- only `worthToYou.capValue` is read by AuctionStage itself
+ * (everything else just flows through, unread, to WhisperPanel, which isn't opened by these
+ * tests). seatTeamId is the interface's one required field. */
+function whisperPayloadWithCapValue(capValue: number | null): RosterIntelligencePayload {
+  return {
+    seatTeamId: "team-a",
+    worthToYou: {
+      iv: 500_000,
+      ownValue: 500_000,
+      archetypeFitMultiplier: 1,
+      needMultiplier: 1,
+      chemistryContribution: 0,
+      verdict: "push",
+      liveCall: "push",
+      recommendedNumber: 61_000,
+      capValue,
+      suggestedMaxBid: 61_000,
+      priceRead: "fair",
+      liquidityState: "neutral",
+      discretionaryBudget: 100_000,
+      minimumFutureFillReserve: 20_000,
+      replacementValueEstimate: 60_000,
+      reasonCodes: [],
+    },
+  };
+}
+
+// COPY LAW (CONTRACT_VOICE_2026-07-09.md): the auction copy law build lane -- display-layer-only
+// relabeling. This describe block covers the pieces that specifically live in AuctionStage.tsx.
+describe("AuctionStage COPY LAW 2026-07-09", () => {
+  test("1.2: the wallet row's ceiling label reads 'Ceiling', not 'Most you can bid'", () => {
+    render(<AuctionStage vm={vm()} />);
+
+    expect(screen.getByText("Ceiling")).toBeInTheDocument();
+    expect(screen.queryByText("Most you can bid")).not.toBeInTheDocument();
+  });
+
+  test("1.2: the Help surface always carries the HELD BACK and NEED/FIT explainer lines", () => {
+    render(<AuctionStage vm={vm()} />);
+    expect(screen.queryByText(HELD_BACK_HELP_LINE)).not.toBeInTheDocument();
+    expect(screen.queryByText(NEED_FIT_HELP_LINE)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+
+    expect(screen.getByText(HELP_LINE)).toBeInTheDocument();
+    expect(screen.getByText(HELD_BACK_HELP_LINE)).toBeInTheDocument();
+    expect(screen.getByText(NEED_FIT_HELP_LINE)).toBeInTheDocument();
+  });
+
+  test("1.2 (F9 ruling, relocated): the before-tax ceiling renders ONLY inside Help, honestly labeled -- never in the default view", () => {
+    const whisperPayload = whisperPayloadWithCapValue(809_714);
+    render(<AuctionStage vm={vm()} whisperPayload={whisperPayload} />);
+
+    // Absent before Help is opened.
+    expect(screen.queryByTestId("whisper-total-capacity")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("809,714");
+
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+
+    expect(screen.getByTestId("whisper-total-capacity")).toHaveTextContent("Before-tax ceiling $809,714");
+    expect(screen.getByText("Ignores tax — never bid to this.")).toBeInTheDocument();
+  });
+
+  test("1.2: the before-tax ceiling is absent from Help entirely when capValue is null", () => {
+    const whisperPayload = whisperPayloadWithCapValue(null);
+    render(<AuctionStage vm={vm()} whisperPayload={whisperPayload} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+
+    expect(screen.queryByTestId("whisper-total-capacity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ignores tax — never bid to this.")).not.toBeInTheDocument();
+    // The other two Help lines still render regardless of whisperPayload.
+    expect(screen.getByText(HELD_BACK_HELP_LINE)).toBeInTheDocument();
+  });
+
+  test("1.7: the overflow note reads 'don't fit a legal 22'", () => {
+    const stageVm = vm();
+    stageVm.board.overflow = [{ playerId: "over-1", name: "Over Flow", chip: "IF" }];
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("These players don't fit a legal 22 — resolve before launch.")).toBeInTheDocument();
+  });
+
+  test("1.7: the handoff override confirm reads 'Franchise setup will refuse them'", () => {
+    const stageVm = vm();
+    stageVm.complete = {
+      clubs: [{ teamId: "a", name: "A", primary: "#000", secondary: "#fff", countLabel: "20 of 22", legal: false, blockers: ["Missing a CP"] }],
+      allLegal: false,
+      blockedCount: 1,
+      summary: "1 club blocked.",
+      onProceed: () => {},
+      overrideArmed: true,
+      onArmOverride: () => {},
+      onConfirmOverride: () => {},
+    };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText(/Franchise setup will refuse them until they're fixed\. Proceed\?/)).toBeInTheDocument();
+    expect(screen.queryByText(/The franchise wizard will refuse them/)).not.toBeInTheDocument();
+  });
+
+  test("1.7: the public-market LIVE line names the actual number of interested teams", () => {
+    const stageVm = vm();
+    stageVm.lot.publicMarket = {
+      band: { low: 50_000, median: 70_000, high: 90_000 },
+      interestedTeams: 3,
+      contested: null,
+      likelyPass: false,
+    };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("3 teams can meet the ask.")).toBeInTheDocument();
+    expect(screen.queryByText("Teams can meet the ask.")).not.toBeInTheDocument();
+  });
+
+  test("1.7: the single-team case still reads 'One team can meet the ask.' (unchanged)", () => {
+    const stageVm = vm();
+    stageVm.lot.publicMarket = {
+      band: { low: 50_000, median: 70_000, high: 90_000 },
+      interestedTeams: 1,
+      contested: null,
+      likelyPass: false,
+    };
+
+    render(<AuctionStage vm={stageVm} />);
+
+    expect(screen.getByText("One team can meet the ask.")).toBeInTheDocument();
+  });
+
+  test("1.7: the UNSOLD/GONE overlays read 'No takers...'", () => {
+    const unsoldVm = vm();
+    unsoldVm.overlay = "unsold";
+    const { rerender } = render(<AuctionStage vm={unsoldVm} />);
+    expect(screen.getByText("No takers at that price — he'll come around again.")).toBeInTheDocument();
+
+    const goneVm = vm();
+    goneVm.overlay = "gone";
+    rerender(<AuctionStage vm={goneVm} />);
+    expect(screen.getByText("No takers — he's off the board for good.")).toBeInTheDocument();
+  });
+});
 
 describe("AuctionStage roster board", () => {
   test("renders the legal frame headers, backup catcher test id, and no gap test ids for a legal 22", () => {
