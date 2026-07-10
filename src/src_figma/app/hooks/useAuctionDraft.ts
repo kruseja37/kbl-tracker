@@ -253,10 +253,16 @@ export function applyAuctionLuxuryTaxForLot(
 
   const candidate = resolveConstructionPlayer(session.currentLot.playerId, ctx);
   if (!candidate) return zeroProjectedTax(session);
+  const nonCompletingTeamIds = new Set(session.config.nonCompletingTeamIds ?? []);
 
   return {
     ...session,
     teams: session.teams.map((team) => {
+      // SHILLTAX captain ruling (CONTRACT_AUCTION_COLLAPSE_DIAG_2026-07-09): explicit pure
+      // shills are non-completing price-pressure seats, so their raw-cash ceiling and settlement
+      // must stay tax-neutral end to end. Real roster-bearing clubs retain the exact tax path.
+      if (nonCompletingTeamIds.has(team.teamId)) return { ...team, projectedTax: 0 };
+
       const committedRoster: ConstructionPlayer[] = [];
 
       for (const assignment of team.roster) {
