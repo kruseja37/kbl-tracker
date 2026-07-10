@@ -340,6 +340,7 @@ function stubTraitPipeline(): void {
       bats: 'R',
       throws: 'R',
       primaryPosition: 'CF',
+      speed: 70,
       fielding: 72,
       arm: 83,
     } satisfies TraitGrantRosterEntry,
@@ -467,6 +468,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'R',
         throws: 'R',
         primaryPosition: 'CF',
+        speed: 70,
         fielding: 72,
         arm: 83,
       } satisfies TraitGrantRosterEntry,
@@ -539,6 +541,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'R',
         throws: 'R',
         primaryPosition: 'CF',
+        speed: 70,
         fielding: 72,
         arm: 83,
       },
@@ -552,6 +555,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'R',
         throws: 'R',
         primaryPosition: 'LF',
+        speed: 62,
         fielding: 68,
         arm: 70,
       },
@@ -617,6 +621,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'R',
         throws: 'R',
         primaryPosition: 'CF',
+        speed: 70,
         fielding: 72,
         arm: 83,
       } satisfies TraitGrantRosterEntry,
@@ -716,6 +721,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'L',
         throws: 'R',
         primaryPosition: '2B',
+        speed: 68,
         fielding: 64,
         arm: 76,
         // position players carry no grade
@@ -730,6 +736,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         bats: 'S',
         throws: 'L',
         primaryPosition: 'SP',
+        speed: 40,
         fielding: 51,
         arm: 90,
         grade: pitcherGrade,
@@ -770,6 +777,12 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(input.primaryPositionByPlayer?.get('player-batter')).toBe('2B');
     expect(input.primaryPositionByPlayer?.get('player-pitcher')).toBe('SP');
     expect(input.primaryPositionByPlayer?.size).toBe(2);
+
+    // speedByPlayer carries current SPD for TRAIT-REALITY-1's steal expectation.
+    expect(input.speedByPlayer).toBeInstanceOf(Map);
+    expect(input.speedByPlayer?.get('player-batter')).toBe(68);
+    expect(input.speedByPlayer?.get('player-pitcher')).toBe(40);
+    expect(input.speedByPlayer?.size).toBe(2);
 
     // fielderRatingsByPlayer carries every roster player's fielding/arm ratings for DT-C2's emission gate.
     expect(input.fielderRatingsByPlayer).toBeInstanceOf(Map);

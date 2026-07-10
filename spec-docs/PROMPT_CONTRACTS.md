@@ -30232,3 +30232,78 @@ verify SOLO if they appear, esp. LeagueBuilderDraftSetup). Report counts; any NE
 OUTPUT: files changed; the reorder handler + persistence diff; the buildBest22Target wiring diff; test output; build;
 full-suite counts; `git status`. DO NOT COMMIT.
 <!-- ===== END CONTRACT: CODEX-B2B-RANK-DRAG-UI ===== -->
+
+<!-- ===== CONTRACT: TRAIT-REALITY-1 ===== -->
+# CONTRACT TRAIT-REALITY-1 — trait signals measure the player's OWN reality, not his peers
+
+ROUTE: Codex 5.6 SOL | xhigh reasoning effort
+DATE: 2026-07-10 · Captain: Fable · Repo: `/Users/johnkruse/Projects/kbl-traitlane` (worktree, branch `codex/trait-reality-basis`)
+
+## Product ruling (JK, 2026-07-10 — verbatim intent)
+
+"Traits are supposed to reflect the reality of the player's performance, so they really shouldn't be compared against their peers for trait gain/loss. Ratings adjustments, yes, but traits should reflect reality — if a player enters the season with a set of traits and HIS PLAY doesn't justify keeping them at the first checkpoint, there's a probabilistic chance he will lose those traits and possibly replace them with others that better fit his performance."
+
+Scarcity is the job of the rarity tiers + likelihood rolls (`traitTierConfig` thresholds, `applyLikelihoodRoll`) — NOT the measurement. Today the measurement double-does scarcity: `traitCandidateBuilder` percentiles raw context rates CROSS-SECTIONALLY vs peers before feeding `traitAcquisition`. Verified failure mode: a genuinely clutch role player (elite RISP residual vs his own baseline, modest overall bat) loses RBI Hero to any plain great hitter whose raw RISP rate is higher with zero residual distinctiveness — the exact slop pattern the legends project's Law 1 was built to kill.
+
+## Scope — Phase 1 only
+
+A. **Clutch/SPLIT-class traits** — RBI Hero, RBI Zero, Rally Starter, Clutch, Choker, Rally Stopper, Surrounded, Pinch Perfect: reality score = RESIDUAL of the context success rate vs the player's OWN same-season overall baseline rate, mapped to 0-1 via fixed residual bands (named exported constants, e.g. `TRAIT_RESIDUAL_BANDS`), min-sample floors retained exactly as today. No cross-sectional percentile in the path for these traits.
+
+B. **Stealer / Bad Jumps**: SB success residual vs SPEED EXPECTATION — expected success curve from the player's SPD rating (named exported curve constant), residual → fixed bands. A modest-speed high-craft stealer scores high; a burner with poor jumps scores low.
+
+C. **Whiffer selectivity gate**: Whiffer signal requires high raw K% AND low BB% (unselective swinging). A high-K, high-BB count-worker produces NO Whiffer signal. Named exported BB% gate constant. Check Tough Out for symmetric coherence; adjust only if trivially parallel, otherwise report.
+
+D. **Threshold recalibration — mandatory.** The tier gain/loss thresholds (`traitTierConfig.ts` `TRAIT_TIERS_*`) were calibrated against percentile-space inputs and MUST NOT be edited. Instead tune the new band constants until trait-turnover dynamics are preserved: run the L-SIM season leg BEFORE the change (baseline) and AFTER; per-tier gain/loss event counts per checkpoint must land within ±25% of baseline. Read the L-SIM summary JSON, not the exit code. Do NOT regenerate/commit canonical L-SIM baselines; if a leg would rewrite them, run the default leg configuration and leave baseline artifacts untouched — compare in-memory/side files only. Paste the before/after event-rate table.
+
+E. **Tests**: (1) the founding case in-season: a great hitter with a NEUTRAL RISP residual does NOT gain RBI Hero; a positive-residual modest hitter DOES gain and DEFENDS it at the cap against the great hitter; (2) selective K-prone hitter → no Whiffer candidate; unselective → candidate; (3) modest-speed craft stealer keeps Stealer, fast zero-craft player does not earn it; (4) every existing trait test that intentionally changes semantics is updated and LISTED with one-line justification each — an unlisted test edit is an audit failure.
+
+F. **Out of scope**: all other trait signals stay percentile-based this phase (add a one-paragraph code comment at the percentile site documenting the phased state + JK ruling date); no UI changes; no `traitTierConfig` threshold edits; no changes to `applyLikelihoodRoll`/incumbency/opposite-pair/elite-cap machinery; FENCE — do not touch auction/draft-setup UI, whisper/Asst-GM surfaces, NOW/checkpoint docs.
+
+## Verification
+
+1. `NODE_ENV= npm run build` → exit 0 (tail).
+2. `NODE_ENV= npx vitest run` — FULL suite; the two known solo-green batch flakes (`LeagueBuilderDraftSetup`, `franchiseManualSmokeFixture`) are baseline; any OTHER red is ours.
+3. The L-SIM before/after trait-event-rate table.
+4. The listed test-edit ledger.
+5. Changed-files list.
+
+## Format
+
+1. Files changed
+2. Per-scope-item
+3. Verification pasted
+4. `TRAIT-REALITY-1 complete` OR `BLOCKED: <exact reason>`
+
+Commit on the branch if the sandbox permits; else clean tree + say so.
+
+## Failure protocol
+
+- Ambiguity → quote this contract + STOP.
+- A semantics question this contract doesn't answer → STOP and report (never improvise product behavior).
+- L-SIM turnover outside ±25% after 3 tuning iterations → STOP with the table.
+
+Use xhigh reasoning effort. Think step-by-step.
+
+**Authorization:** Captain confirmed state and explicitly authorized execution on 2026-07-10. Capture the pre-change L-SIM trait-event baseline before touching signals; do not regenerate or commit canonical L-SIM baselines; do not edit `traitTierConfig` thresholds; run the full-suite gate at the end.
+
+## Amendment 1 — opportunity-matched RBI baseline (captain ruling from REJECT audit, 2026-07-10)
+
+The audit confirmed that RBI Hero/RBI Zero cannot use an all-PA baseline because
+`rbiCount` is base-state-coupled: bases-empty plate appearances cannot produce
+non-home-run RBIs. Scope A is corrected for these two traits only:
+
+1. RBI Hero and RBI Zero compare their unchanged RISP context rate with the
+   player's own rate over runners-on plate appearances (any occupied base).
+   Every other migrated trait keeps its audited all-PA baseline.
+2. Rebuild the RBI Hero founding case with realistic bases-empty RBI production
+   near the hitter's home-run rate, so it fails under the rejected all-PA
+   baseline. Add the RBI Zero mirror proving a genuinely poor RISP performer can
+   earn RBI Zero.
+3. Re-run the isolated L-SIM before/after comparison and report RBI Hero and RBI
+   Zero gain counts in addition to the per-tier table.
+4. Add the itemized E4 test-edit ledger as a test comment block or session-log
+   section.
+
+All prior constraints and verification gates remain unchanged. Final status is
+`TRAIT-REALITY-1b complete` or `BLOCKED: <exact reason>`.
+<!-- ===== END CONTRACT: TRAIT-REALITY-1 ===== -->
