@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   getTeamAuctionMaxBid,
   initAuctionSession,
+  passBid,
+  recordBid,
+  resolveLot,
   seededNominationOrder,
   surfaceNextPlayer,
   type AuctionPlayer as EnginePlayer,
@@ -35,7 +38,7 @@ import {
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../../hooks/useLeagueBuilderData";
-import { useAuctionDraft } from "../useAuctionDraft";
+import { applyAuctionLuxuryTaxForLot, useAuctionDraft } from "../useAuctionDraft";
 import { buildMarketBandPrioritiesByTeamId } from "../../pages/LeagueBuilderAuctionDraft";
 
 vi.mock("../../../../utils/syncEngine", () => ({
@@ -360,6 +363,56 @@ describe("useAuctionDraft", () => {
     expect(result.current.shillTeamIds).toHaveLength(1);
     expect(result.current.session?.teams.find((team) => result.current.shillTeamIds.includes(team.teamId))?.budgetRemaining)
       .toBe(cap);
+  });
+
+  test("SHILLTAX repro: explicit non-completing shills are tax-neutral on every surfaced lot", () => {
+    const candidate = makePlayer("taxed-candidate", { contact: 100 });
+    const caps: LuxuryCapRow[] = [{
+      group: "hitters",
+      stat: "CON",
+      topN: 1,
+      cap: 50,
+      penaltyCurve: 1,
+      penaltyPer100: 1_000_000,
+      minAdder: 0,
+    }];
+    const shillId = "__auction_shill__shilltax__1";
+    const initialized = initAuctionSession({
+      teams: [
+        { teamId: "club", budgetRemaining: 1_000_000, rosterSlotsRemaining: 22 },
+        { teamId: shillId, budgetRemaining: 1_000_000, rosterSlotsRemaining: 22 },
+      ],
+      players: [{ playerId: candidate.id, iv: 90_000, ivPercentile: 100 }],
+      nominationOrder: ["club", shillId],
+      config: {
+        nominationOrderSeed: "shilltax-repro",
+        bidIncrement: 1_000,
+        nonCompletingTeamIds: [shillId],
+      },
+    }) as CpuShillAuctionSession;
+    const surfaced = surfaceNextPlayer(initialized);
+    if (!surfaced.ok) throw new Error("test setup: surfaceNextPlayer rejected");
+
+    const projected = applyAuctionLuxuryTaxForLot(surfaced.session as CpuShillAuctionSession, {
+      poolById: new Map([[candidate.id, { id: candidate.id, iv: 90_000, salary: 10_000 }]]),
+      playerById: new Map([[candidate.id, candidate]]),
+      identityByTeamId: new Map(),
+      baseCaps: caps,
+    });
+
+    expect(projected.teams.find((team) => team.teamId === "club")?.projectedTax).toBeGreaterThan(0);
+    expect(projected.teams.find((team) => team.teamId === shillId)?.projectedTax).toBe(0);
+
+    const openingAsk = projected.currentLot?.openingAsk ?? 0;
+    const shillBid = recordBid(projected, shillId, openingAsk);
+    if (!shillBid.ok) throw new Error(`test setup: shill bid rejected (${shillBid.reason})`);
+    const clubPass = passBid(shillBid.session, "club");
+    if (!clubPass.ok) throw new Error(`test setup: club pass rejected (${clubPass.reason})`);
+    const settled = resolveLot(clubPass.session);
+    if (!settled.ok) throw new Error(`test setup: lot resolution rejected (${settled.reason})`);
+
+    expect(settled.session.teams.find((team) => team.teamId === shillId)?.budgetRemaining)
+      .toBe(1_000_000 - openingAsk);
   });
 
   test("does not retro-edit an in-flight persisted auction session when the league cap changes", async () => {

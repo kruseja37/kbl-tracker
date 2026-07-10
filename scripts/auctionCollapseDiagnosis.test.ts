@@ -1104,6 +1104,16 @@ describe('auction collapse diagnosis (measurement only)', () => {
     const output = runAuctionCollapseDiagnosis();
     const baseline = output.runs.filter((run) => run.lever === 'baseline');
     expect(baseline).toHaveLength(3);
+    for (const run of baseline) {
+      expect(run.shillMinBudget, `${run.seed} shill budget invariant`).toBeGreaterThanOrEqual(0);
+      expect(run.pctTwoPlusWilling, `${run.seed} multi-willing competitiveness`).toBeGreaterThanOrEqual(70);
+      expect(run.finalTeams.filter((team) => team.role === 'club').every((team) => team.legal22 === true)).toBe(true);
+    }
+    const capNormalizationResiduals = baseline.flatMap((run) => run.finalTeams
+      .filter((team) => team.role === 'club' && team.longestPre60Lockout > 8)
+      .map((team) => ({ seed: run.seed, teamId: team.teamId, streak: team.longestPre60Lockout })));
+    console.info('AUCTION_COLLAPSE_CAP_NORMALIZATION_RESIDUALS');
+    console.info(JSON.stringify(capNormalizationResiduals, null, 2));
     expect(output.runs).toHaveLength(LEVERS.length * SEEDS.length);
     expect(output.runs.every((run) => run.phases.length > 0)).toBe(true);
     expect(output.runs.every((run) => run.finalTeams.filter((team) => team.role === 'club').length === 4)).toBe(true);
