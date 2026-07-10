@@ -19,12 +19,14 @@ import { BEST22_TUNING } from "../../../engines/best22Target";
 import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import { archetypeFitScorer, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
-import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from "../../../engines/auctionLuxuryTax";
 import { cheapestLegalCompletion } from "../../../engines/auctionCompletionFloor";
 import { ownNeedMultiplier } from "../../../engines/auctionMarketModel";
 import {
   buildSnakeOrder,
-  shiftLuxuryCaps,
   validateTrade,
   type ConstructionPlayer,
   type TradeVerdict,
@@ -188,6 +190,7 @@ function buildTeamState(input: {
   modelById: ReadonlyMap<string, SnakeDraftPlayerModel>;
   pool: RegisteredPool | null;
   tierCap: number;
+  realTeamCount: number;
 }): TeamDraftState {
   const picks = input.session?.completedPicks.filter((pick) => pick.teamId === input.team.id) ?? [];
   const roster: SnakeDraftRosterEntry[] = picks.flatMap((pick) => {
@@ -196,6 +199,9 @@ function buildTeamState(input: {
   });
   let tax = 0;
   const constructions: ConstructionPlayer[] = [];
+  const normalizedBaseCaps = input.pool
+    ? normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.realTeamCount)
+    : [];
   for (const pick of picks) {
     const model = input.modelById.get(pick.playerId);
     if (!model || !input.pool) continue;
@@ -203,7 +209,7 @@ function buildTeamState(input: {
       constructions,
       model.construction,
       input.team.capIdentity,
-      input.pool.luxuryCaps,
+      normalizedBaseCaps,
     );
     tax += marginal;
     constructions.push(model.construction);
@@ -225,6 +231,7 @@ function buildBoardModels(input: {
   tier: RegisteredPool["tier"];
   pool: RegisteredPool;
   useRankOverrides: boolean;
+  realTeamCount: number;
 }): BoardModel[] {
   const rosterPlayers = input.teamState.roster.flatMap((entry) => {
     const player = input.playerById.get(entry.playerId);
@@ -270,6 +277,10 @@ function buildBoardModels(input: {
   const worthById = new Map(board.map((entry) => [entry.playerId, entry.worth]));
   const bandPriorities = resolveClubBandPriorities(input.teamState.team);
   const openSlots = Math.max(1, LEGAL_ROSTER.size - input.teamState.roster.length);
+  const normalizedBaseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+    input.pool.luxuryCaps,
+    input.realTeamCount,
+  );
 
   return input.available.flatMap((model) => {
     const player = input.playerById.get(model.playerId);
@@ -288,7 +299,7 @@ function buildBoardModels(input: {
       input.teamState.roster.map((entry) => entry.construction),
       model.construction,
       input.teamState.team.capIdentity,
-      input.pool.luxuryCaps,
+      normalizedBaseCaps,
     );
     const trueCost = model.iv + marginalTax;
     return [{
@@ -392,7 +403,7 @@ export function LeagueBuilderSnakeDraft() {
 
   const teamStateById = useMemo(() => new Map(leagueTeams.map((team) => [
     team.id,
-    buildTeamState({ team, session, modelById, pool, tierCap }),
+    buildTeamState({ team, session, modelById, pool, tierCap, realTeamCount: leagueTeams.length }),
   ])), [leagueTeams, modelById, pool, session, tierCap]);
   const currentPick = session?.pickOrder[session.currentPickIndex] ?? null;
   const currentTeam = currentPick ? teamStateById.get(currentPick.teamId)?.team ?? null : null;
@@ -417,23 +428,23 @@ export function LeagueBuilderSnakeDraft() {
       tier: pool.tier,
       pool,
       useRankOverrides: currentTeamState.team.id === humanTeam?.id,
+      realTeamCount: leagueTeams.length,
     });
-  }, [availableModels, currentTeamState, humanTeam?.id, playerById, pool]);
+  }, [availableModels, currentTeamState, humanTeam?.id, leagueTeams.length, playerById, pool]);
 
   const guardForCandidate = useCallback((candidate: BoardModel): SnakePickGuard => {
     if (!currentTeamState || !pool) throw new Error("The draft is not ready.");
-    const shiftedCaps = currentTeamState.team.capIdentity
-      ? shiftLuxuryCaps(pool.luxuryCaps, currentTeamState.team.capIdentity)
-      : pool.luxuryCaps;
     return evaluateSnakePick({
       roster: currentTeamState.roster,
       candidate: candidate.model,
       remainingPool: availableModels,
       committedSpent: currentTeamState.spent,
       tierCap,
-      shiftedCaps,
+      baseCaps: pool.luxuryCaps,
+      capIdentity: currentTeamState.team.capIdentity,
+      realTeamCount: leagueTeams.length,
     });
-  }, [availableModels, currentTeamState, pool, tierCap]);
+  }, [availableModels, currentTeamState, leagueTeams.length, pool, tierCap]);
 
   const forecastByPlayerId = useMemo(
     () => new Map(forecast?.rows.map((row) => [row.playerId, row]) ?? []),
@@ -615,6 +626,7 @@ export function LeagueBuilderSnakeDraft() {
           tier: pool.tier,
           pool,
           useRankOverrides: team.id === humanTeam.id,
+          realTeamCount: leagueTeams.length,
         })] as const;
       }));
       const rowsByTeam = new Map([...boardByTeam.entries()].map(([teamId, rows]) => [
@@ -677,6 +689,7 @@ export function LeagueBuilderSnakeDraft() {
       tier: pool.tier,
       pool,
       useRankOverrides: false,
+      realTeamCount: leagueTeams.length,
     }).map((row) => ({
       row,
       value: Math.max(1, scoreSnakeCpuCandidate({
@@ -696,7 +709,7 @@ export function LeagueBuilderSnakeDraft() {
       );
       return [slot.pick, ranked[boardIndex]?.value ?? 1];
     }));
-  }, [availableModels, playerById, pool, session, teamStateById, tradeCpuTeamId]);
+  }, [availableModels, leagueTeams.length, playerById, pool, session, teamStateById, tradeCpuTeamId]);
   const tradeMustFillSurvives = useMemo(() => {
     if (!humanTeam || !tradeCpuTeamId) return false;
     const completionPool = availableModels.map((model) => ({
@@ -883,14 +896,14 @@ export function LeagueBuilderSnakeDraft() {
                   {currentTeam ? `ON THE CLOCK · ${teamDisplayName(currentTeam)}` : "POC COMPLETE"}
                 </div>
               </div>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
                 {[...teamStateById.values()].map((state) => (
                   <div key={state.team.id} className={`border-4 p-3 ${state.team.id === currentTeam?.id ? "border-[#C4A853] bg-[#354B39]" : "border-[#71806F] bg-[#28352C]"}`}>
                     <div className="truncate font-bold">{teamDisplayName(state.team)}</div>
-                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
-                      <div><span className="block text-[#E8E8D8]/55">SPENT</span>{formatMoney(state.spent)}</div>
-                      <div><span className="block text-[#E8E8D8]/55">HEADROOM</span>{formatMoney(state.headroom)}</div>
-                      <div><span className="block text-[#E8E8D8]/55">TAX SO FAR</span>{formatMoney(state.tax)}</div>
+                    <div className="mt-2 grid grid-cols-3 gap-3 text-[11px] tabular-nums">
+                      <div className="min-w-0"><span className="block whitespace-nowrap text-[#E8E8D8]/55">SPENT</span><span className="block whitespace-nowrap">{formatMoney(state.spent)}</span></div>
+                      <div className="min-w-0"><span className="block whitespace-nowrap text-[#E8E8D8]/55">HEADROOM</span><span className="block whitespace-nowrap">{formatMoney(state.headroom)}</span></div>
+                      <div className="min-w-0"><span className="block whitespace-nowrap text-[#E8E8D8]/55">TAX SO FAR</span><span className="block whitespace-nowrap">{formatMoney(state.tax)}</span></div>
                     </div>
                     <div className="mt-2 text-xs text-[#E8E8D8]/60">{state.roster.length}/22 players</div>
                   </div>
