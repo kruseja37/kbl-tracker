@@ -16,6 +16,7 @@ export const FRANCHISE_PHASE2_FLAG_KEYS = [
   'l14',
   'stadiumRecords',
   'auctionAdvisorColor',
+  'snakeDraftPoc',
 ] as const;
 
 export type FranchisePhase2FlagKey = (typeof FRANCHISE_PHASE2_FLAG_KEYS)[number];
@@ -24,6 +25,7 @@ export interface FranchisePhase2FlagDescriptor {
   key: FranchisePhase2FlagKey;
   label: string;
   detail: string;
+  compiledDefault?: boolean;
 }
 
 export const FRANCHISE_PHASE2_FLAG_DESCRIPTORS: FranchisePhase2FlagDescriptor[] = [
@@ -39,6 +41,12 @@ export const FRANCHISE_PHASE2_FLAG_DESCRIPTORS: FranchisePhase2FlagDescriptor[] 
   { key: 'l14', label: 'L14 Rebrand', detail: 'Rebrand offer and cascade circuit breaker.' },
   { key: 'stadiumRecords', label: 'Stadium Records', detail: 'Park records and home-park rivals.' },
   { key: 'auctionAdvisorColor', label: 'Auction Advisor Color', detail: 'Low-frequency assistant GM draft moments.' },
+  {
+    key: 'snakeDraftPoc',
+    label: 'Snake Draft POC',
+    detail: 'Isolated traditional-draft viability room; no farm or season handoff.',
+    compiledDefault: true,
+  },
 ];
 
 export type FranchisePhase2FlagOverrides = Partial<Record<FranchisePhase2FlagKey, boolean>>;

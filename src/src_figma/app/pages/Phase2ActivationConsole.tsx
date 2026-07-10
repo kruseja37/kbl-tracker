@@ -21,10 +21,14 @@ function cloneDraft(record: FranchisePhase2ActivationRecord | null): DraftState 
   };
 }
 
-function effectiveFlagValue(draft: DraftState, flagKey: FranchisePhase2FlagKey): boolean {
+function effectiveFlagValue(
+  draft: DraftState,
+  flagKey: FranchisePhase2FlagKey,
+  compiledDefault = false,
+): boolean {
   const override = draft.flagOverrides[flagKey];
   if (typeof override === "boolean") return override;
-  return draft.globalEnabled ?? false;
+  return draft.globalEnabled ?? compiledDefault;
 }
 
 function overrideLabel(value: boolean | undefined): string {
@@ -64,7 +68,9 @@ export function Phase2ActivationConsole() {
   }, []);
 
   const activeCount = useMemo(
-    () => FRANCHISE_PHASE2_FLAG_DESCRIPTORS.filter((flag) => effectiveFlagValue(draft, flag.key)).length,
+    () => FRANCHISE_PHASE2_FLAG_DESCRIPTORS.filter((flag) => (
+      effectiveFlagValue(draft, flag.key, flag.compiledDefault)
+    )).length,
     [draft],
   );
 
@@ -201,7 +207,7 @@ export function Phase2ActivationConsole() {
         <section className="grid gap-3 md:grid-cols-2">
           {FRANCHISE_PHASE2_FLAG_DESCRIPTORS.map((flag) => {
             const override = draft.flagOverrides[flag.key];
-            const effective = effectiveFlagValue(draft, flag.key);
+            const effective = effectiveFlagValue(draft, flag.key, flag.compiledDefault);
             return (
               <div key={flag.key} className="rounded border border-[#5e6f5d] bg-[#273229] p-4">
                 <div className="flex items-start justify-between gap-3">

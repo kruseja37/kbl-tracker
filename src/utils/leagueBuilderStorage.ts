@@ -349,10 +349,35 @@ export interface LeagueBuilderMlbDraftSession {
   balanceMode: BalanceMode;
   rounds: number;
   pickOrder: Array<{ round: number; pick: number; teamId: string }>;
-  completedPicks: Array<{ round: number; pick: number; teamId: string; playerId: string }>;
+  completedPicks: Array<{
+    round: number;
+    pick: number;
+    teamId: string;
+    playerId: string;
+    /** Snake POC settlement: the player's frozen IV at pick commit. Optional for old sessions. */
+    settledSalary?: number;
+    /** The pick's incremental rating tax, accumulated for the live POC ledger. */
+    marginalTax?: number;
+  }>;
+  /** Snake POC-only pick-ownership changes. Additive so pre-POC sessions remain readable. */
+  trades?: SnakeDraftTradeRecord[];
   currentPickIndex: number;
   createdDate: string;
   lastModified: string;
+}
+
+export interface SnakeDraftTradeRecord {
+  id: string;
+  atPickIndex: number;
+  humanTeamId: string;
+  cpuTeamId: string;
+  humanPickNumbers: number[];
+  cpuPickNumbers: number[];
+  humanValue: number;
+  cpuValue: number;
+  /** CPU's own §4.1 score gain for the picks it receives, minus the picks it gives. */
+  cpuDecisionGain?: number;
+  greedMargin: number;
 }
 
 export interface LeagueBuilderAuctionSession {

@@ -20,6 +20,7 @@ import {
   isFranchisePhase2MoraleEnabled,
   isFranchisePhase2StadiumRecordsEnabled,
   isFranchisePhase2TraitsEnabled,
+  isSnakeDraftPocEnabled,
   setFranchisePhase2CheckpointEnabledForTests,
   setFranchisePhase2FameEnabledForTests,
   setFranchisePhase2FlashpointEnabledForTests,
@@ -31,6 +32,7 @@ import {
   setFranchisePhase2MoraleEnabledForTests,
   setFranchisePhase2StadiumRecordsEnabledForTests,
   setFranchisePhase2TraitsEnabledForTests,
+  setSnakeDraftPocEnabledForTests,
 } from '../franchisePhase2Flags';
 
 function deleteDatabase(name: string): Promise<void> {
@@ -68,6 +70,7 @@ const resetTestSetters = () => {
   setFranchisePhase2L13EnabledForTests(null);
   setFranchisePhase2L14EnabledForTests(null);
   setFranchisePhase2StadiumRecordsEnabledForTests(null);
+  setSnakeDraftPocEnabledForTests(null);
 };
 
 describe('franchise Phase-2 activation', () => {
@@ -89,6 +92,19 @@ describe('franchise Phase-2 activation', () => {
 
   test('compiled defaults remain off without persisted activation', () => {
     expect(getters.map((getter) => getter())).toEqual(Array(getters.length).fill(false));
+  });
+
+  test('snake draft POC follows the house activation pattern but compiles on for viability testing', async () => {
+    expect(isSnakeDraftPocEnabled()).toBe(true);
+
+    await saveFranchisePhase2ActivationRecord({
+      globalEnabled: null,
+      flagOverrides: { snakeDraftPoc: false },
+    });
+    expect(isSnakeDraftPocEnabled()).toBe(false);
+
+    setSnakeDraftPocEnabledForTests(true);
+    expect(isSnakeDraftPocEnabled()).toBe(true);
   });
 
   test('a persisted global activation record flips getters after hydrate', async () => {

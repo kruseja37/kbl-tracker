@@ -1,50 +1,97 @@
-import { useNavigate } from "react-router";
-import { ArrowLeft, BarChart3, CheckCircle2, ClipboardList, GitCompare, RefreshCw, Scale, ShieldAlert, Shuffle, UserCheck, Users } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  RefreshCw,
+  Repeat2,
+  ShieldAlert,
+  Shuffle,
+  TrendingUp,
+} from "lucide-react";
+
+import { LEGAL_ROSTER, type RosterSlotPlayer } from "../../../data/rosterConstruction";
+import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
+import { BEST22_TUNING } from "../../../engines/best22Target";
+import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
+import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
+import { archetypeFitScorer, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
+import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import { cheapestLegalCompletion } from "../../../engines/auctionCompletionFloor";
+import { ownNeedMultiplier } from "../../../engines/auctionMarketModel";
+import {
+  buildSnakeOrder,
+  shiftLuxuryCaps,
+  validateTrade,
+  type ConstructionPlayer,
+  type TradeVerdict,
+} from "../../../engines/leagueConstruction";
+import { rosterNeedBreakdown, toRosterSlotPlayer } from "../../../engines/rosterNeed";
+import { assembleBoard } from "../../../engines/rosterIntelligencePayload";
+import {
+  SNAKE_POC_TUNING,
+  commitSnakeDraftPick,
+  detectSnakePositionRun,
+  evaluateSnakePick,
+  executeSnakePickTrade,
+  forecastSnakeAvailability,
+  pickSnakeCpuCandidate,
+  scoreSnakeCpuCandidate,
+  seededSnakeShuffle,
+  type SnakeAvailabilityForecast,
+  type SnakeDraftPlayerModel,
+  type SnakeDraftRosterEntry,
+  type SnakePickGuard,
+} from "../../../engines/snakeDraftPoc";
+import { isSnakeDraftPocEnabled } from "../../../utils/franchisePhase2Flags";
+import {
+  createMlbDraftSessionId,
+  resolveLeagueSalaryCap,
+} from "../../../utils/leagueBuilderStorage";
 import {
   toConstructionPlayer,
   useLeagueBuilderData,
-  type LeagueTemplate,
   type LeagueBuilderMlbDraftSession,
+  type LeagueTemplate,
   type Player,
   type RegisteredPool,
   type Team,
-  type TeamRoster,
 } from "../../hooks/useLeagueBuilderData";
-import {
-  assessSolvency,
-  buildSnakeOrder,
-  shiftLuxuryCaps,
-  type SolvencyAssessment,
-  type TradeVerdict,
-  validateTrade,
-} from "../../../engines/leagueConstruction";
-import { createMlbDraftSessionId, resolveLeagueSalaryCap } from "../../../utils/leagueBuilderStorage";
 
-const MLB_DRAFT_ROUNDS = 22;
+const MLB_DRAFT_ROUNDS = LEGAL_ROSTER.size;
 const MLB_DRAFT_SEASON = 1;
-const MLB_DRAFT_WORKFLOW_VERSION = "startup-mlb-draft-v1";
-const MLB_DRAFT_ENGINE_METHOD_VERSION = "leagueConstruction.t8d-1";
+const MLB_DRAFT_WORKFLOW_VERSION = "snake-draft-poc-v1";
+const MLB_DRAFT_ENGINE_METHOD_VERSION = "snakeDraftPoc.v1";
+const BOARD_PAGE_SIZE = 36;
+const CPU_TICK_MS = 350;
 
-type DraftCandidate = {
-  poolPlayer: RegisteredPool["players"][number];
-  player: Player;
-  assessment: SolvencyAssessment | null;
-};
+type BoardSort = "STEAL" | "TRUE COST" | "IV" | "POSITION";
 
-type TeamSolvencyComparison = {
+interface TeamDraftState {
   team: Team;
-  assessment: SolvencyAssessment | null;
-};
+  roster: SnakeDraftRosterEntry[];
+  spent: number;
+  tax: number;
+  headroom: number;
+}
 
-type CommitPayloadInput = {
-  leagueId: string;
-  teamId: string;
+interface BoardModel {
   player: Player;
-  roster: TeamRoster | null;
-  session: LeagueBuilderMlbDraftSession;
-  pick: { round: number; pick: number; teamId: string };
-};
+  model: SnakeDraftPlayerModel;
+  blendedBoardValue: number;
+  needMultiplier: number;
+  fitMultiplier: number;
+  marginalTax: number;
+  trueCost: number;
+  steal: number;
+}
+
+interface VisibleBoardModel extends BoardModel {
+  guard: SnakePickGuard;
+}
 
 function teamDisplayName(team: Team): string {
   return team.location ? `${team.location} ${team.name}` : team.name;
@@ -73,181 +120,222 @@ function formatMoney(value: number): string {
   return `$${Math.round(value).toLocaleString()}`;
 }
 
-function signalClass(signal: SolvencyAssessment["signal"]): string {
-  switch (signal) {
-    case "GREEN":
-      return "bg-[#2F7D46] text-[#E8E8D8]";
-    case "YELLOW":
-      return "bg-[#C4A853] text-[#1A1A1A]";
-    case "RED":
-      return "bg-[#9B2F2F] text-[#FFE8B0]";
-    case "BLOCKED":
-      return "bg-[#4A1F1F] text-[#FFD27A]";
-  }
+function standardDeviation(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
 }
 
-function assessmentMessage(assessment: SolvencyAssessment | null): string {
-  if (!assessment) return "Missing full player ratings; cannot assess.";
-  if (!assessment.confirmable) {
-    return `Blocked: ${formatMoney(Math.abs(assessment.slack))} short after reserving ${formatMoney(assessment.reserve)} for ${assessment.slotsRemaining} remaining slots.`;
-  }
-  if (assessment.signal === "RED") {
-    return `High risk: ${formatMoney(assessment.slack)} slack after pick; marginal tax ${formatMoney(assessment.wouldBePickMarginalTax)}.`;
-  }
-  if (assessment.signal === "YELLOW") {
-    return `Tax warning: marginal tax ${formatMoney(assessment.wouldBePickMarginalTax)}; slack ${formatMoney(assessment.slack)}.`;
-  }
-  return `Safe: ${formatMoney(assessment.slack)} slack after reserved fill.`;
+function playerToSimPlayer(player: Player, iv: number): SimPlayer {
+  const construction = toConstructionPlayer(player);
+  const shape = toRosterSlotPlayer({
+    primaryPosition: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? null,
+    traits: [player.trait1, player.trait2],
+  });
+  return {
+    ...construction,
+    iv,
+    salary: iv,
+    position: player.primaryPosition,
+    secondaryPosition: player.secondaryPosition ?? null,
+    twoWayVariant: shape.twoWayVariant,
+  };
 }
 
-export function parseTradePickList(value: string): { pick: number }[] {
-  return value
-    .split(/[,\s]+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .map((token) => Number(token))
-    .filter((pick) => Number.isFinite(pick))
-    .map((pick) => ({ pick }));
+function modelFromPlayer(player: Player, poolPlayer: RegisteredPool["players"][number]): SnakeDraftPlayerModel {
+  return {
+    playerId: player.id,
+    iv: poolPlayer.iv,
+    position: player.primaryPosition,
+    shape: toRosterSlotPlayer({
+      primaryPosition: player.primaryPosition,
+      secondaryPosition: player.secondaryPosition ?? null,
+      traits: [player.trait1, player.trait2],
+    }),
+    construction: toConstructionPlayer(player),
+  };
 }
 
-function buildTeamSolvencyComparison(input: {
-  candidate: DraftCandidate;
+function forecastBand(survival: number | null): { label: string; className: string } {
+  if (survival === null) return { label: "FORECAST BUILDING", className: "text-[var(--ballpark-chalk)]/55" };
+  if (survival >= 0.85) return { label: "SAFE", className: "text-[var(--ballpark-boost-green)]" };
+  if (survival >= 0.6) return { label: "LIKELY", className: "text-[#C4A853]" };
+  if (survival >= 0.35) return { label: "COIN FLIP", className: "text-[#E8A15A]" };
+  return { label: "GONE", className: "text-[#E67D6F]" };
+}
+
+function guardClass(guard: SnakePickGuard): string {
+  if (guard.tone === "blocked") return "bg-[#4A1F1F] text-[#FFD27A] border-[#9B2F2F]";
+  if (guard.tone === "tight") return "bg-[#4D4325] text-[#F3DB8E] border-[#C4A853]";
+  return "bg-[#223D28] text-[#BEE8C2] border-[#5E9B69]";
+}
+
+function guardLabel(guard: SnakePickGuard): string {
+  if (guard.tone === "blocked") return "NO ROOM";
+  if (guard.tone === "tight") return "TIGHT";
+  return "CLEAR";
+}
+
+function togglePick(current: readonly number[], pick: number, max = 3): number[] {
+  if (current.includes(pick)) return current.filter((value) => value !== pick);
+  return current.length >= max ? [...current] : [...current, pick].sort((a, b) => a - b);
+}
+
+function buildTeamState(input: {
   team: Team;
-  completedByTeam: Map<string, string[]>;
-  completedPlayerIds: Set<string>;
-  playerById: Map<string, Player>;
-  pool: RegisteredPool;
-  poolById: Map<string, RegisteredPool["players"][number]>;
-}): TeamSolvencyComparison {
-  const teamPickIds = input.completedByTeam.get(input.team.id) ?? [];
-  const committedRoster = teamPickIds
-    .map((playerId) => input.playerById.get(playerId))
-    .filter(Boolean)
-    .map((player) => toConstructionPlayer(player as Player));
-  const committedSalaries = teamPickIds.reduce((sum, playerId) => sum + (input.poolById.get(playerId)?.salary ?? 0), 0);
-  const caps = input.team.capIdentity
-    ? shiftLuxuryCaps(input.pool.luxuryCaps, input.team.capIdentity)
-    : input.pool.luxuryCaps;
-  const remainingPoolSalaries = input.pool.players
-    .filter((poolPlayer) => poolPlayer.id !== input.candidate.poolPlayer.id && !input.completedPlayerIds.has(poolPlayer.id))
-    .map((poolPlayer) => poolPlayer.salary);
-
-  try {
-    return {
-      team: input.team,
-      assessment: assessSolvency({
-        committedRoster,
-        committedSalaries,
-        candidate: toConstructionPlayer(input.candidate.player),
-        candidateSalary: input.candidate.poolPlayer.salary,
-        caps,
-        mode: input.pool.balanceMode,
-        tierCap: input.pool.tierCap,
-        rosterSize: MLB_DRAFT_ROUNDS,
-        remainingPoolSalaries,
-      }),
-    };
-  } catch {
-    return { team: input.team, assessment: null };
+  session: LeagueBuilderMlbDraftSession | null;
+  modelById: ReadonlyMap<string, SnakeDraftPlayerModel>;
+  pool: RegisteredPool | null;
+  tierCap: number;
+}): TeamDraftState {
+  const picks = input.session?.completedPicks.filter((pick) => pick.teamId === input.team.id) ?? [];
+  const roster: SnakeDraftRosterEntry[] = picks.flatMap((pick) => {
+    const model = input.modelById.get(pick.playerId);
+    return model ? [{ ...model, settledSalary: pick.settledSalary ?? model.iv }] : [];
+  });
+  let tax = 0;
+  const constructions: ConstructionPlayer[] = [];
+  for (const pick of picks) {
+    const model = input.modelById.get(pick.playerId);
+    if (!model || !input.pool) continue;
+    const marginal = pick.marginalTax ?? auctionMarginalTaxWithCaps(
+      constructions,
+      model.construction,
+      input.team.capIdentity,
+      input.pool.luxuryCaps,
+    );
+    tax += marginal;
+    constructions.push(model.construction);
   }
-}
-
-export function createEmptyMlbDraftRoster(teamId: string): TeamRoster {
+  const spent = roster.reduce((sum, entry) => sum + entry.settledSalary, 0);
   return {
-    teamId,
-    mlbRoster: [],
-    farmRoster: [],
-    lineupWithDH: [],
-    lineupWithoutDH: [],
-    startingRotation: [],
-    longRelievers: [],
-    closingPitcher: "",
-    setupPitchers: [],
-    depthChart: {
-      C: [],
-      "1B": [],
-      "2B": [],
-      SS: [],
-      "3B": [],
-      LF: [],
-      CF: [],
-      RF: [],
-      DH: [],
-      SP: [],
-      RP: [],
-      CP: [],
-    },
-    pinchHitOrder: [],
-    pinchRunOrder: [],
-    defensiveSubOrder: [],
-    lastModified: new Date().toISOString(),
+    team: input.team,
+    roster,
+    spent,
+    tax,
+    headroom: input.tierCap - spent - tax,
   };
 }
 
-export function buildMlbDraftCommitPayloads(input: CommitPayloadInput): {
-  roster: TeamRoster;
-  player: Player;
-  session: LeagueBuilderMlbDraftSession;
-} {
-  const baseRoster = input.roster ?? createEmptyMlbDraftRoster(input.teamId);
-  return {
-    roster: {
-      ...baseRoster,
-      mlbRoster: [...baseRoster.mlbRoster, input.player.id],
-    },
-    player: {
-      ...input.player,
-      leagueAssignments: [
-        ...(input.player.leagueAssignments ?? []).filter((assignment) => assignment.leagueId !== input.leagueId),
-        { leagueId: input.leagueId, teamId: input.teamId, rosterStatus: "MLB" },
-      ],
-    },
-    session: {
-      ...input.session,
-      completedPicks: [
-        ...input.session.completedPicks,
-        {
-          round: input.pick.round,
-          pick: input.pick.pick,
-          teamId: input.teamId,
-          playerId: input.player.id,
-        },
-      ],
-      currentPickIndex: input.session.currentPickIndex + 1,
-    },
-  };
+function buildBoardModels(input: {
+  teamState: TeamDraftState;
+  available: readonly SnakeDraftPlayerModel[];
+  playerById: ReadonlyMap<string, Player>;
+  tier: RegisteredPool["tier"];
+  pool: RegisteredPool;
+  useRankOverrides: boolean;
+}): BoardModel[] {
+  const rosterPlayers = input.teamState.roster.flatMap((entry) => {
+    const player = input.playerById.get(entry.playerId);
+    return player ? [player] : [];
+  });
+  const need = rosterNeedBreakdown(input.teamState.roster.map((entry) => entry.shape));
+  const historical = input.teamState.team.mlbArchetypeKey
+    ? HISTORICAL_ARCHETYPES.find((row) => row.id === input.teamState.team.mlbArchetypeKey)
+    : undefined;
+  const fitScorer = historical ? archetypeFitScorer(historicalToSimArchetype(historical), input.tier) : null;
+  const fitRows = input.available.map((model) => {
+    const player = input.playerById.get(model.playerId);
+    return {
+      playerId: model.playerId,
+      score: fitScorer && player ? fitScorer(playerToSimPlayer(player, model.iv)) : 0,
+    };
+  });
+  const fitMean = fitRows.length
+    ? fitRows.reduce((sum, row) => sum + row.score, 0) / fitRows.length
+    : 0;
+  const fitSigma = standardDeviation(fitRows.map((row) => row.score));
+  const fitZById = new Map(fitRows.map((row) => [
+    row.playerId,
+    fitSigma > 0 ? (row.score - fitMean) / fitSigma : 0,
+  ]));
+  const board = assembleBoard({
+    candidates: input.available.flatMap((model) => {
+      const player = input.playerById.get(model.playerId);
+      if (!player) return [];
+      return [{
+        playerId: model.playerId,
+        iv: model.iv,
+        candidate: player,
+        shape: model.shape,
+        identityZ: fitZById.get(model.playerId) ?? 0,
+      }];
+    }),
+    rosterPlayers,
+    need,
+    rankOverrides: input.useRankOverrides ? input.teamState.team.boardRankOverrides : undefined,
+  });
+  const worthScale = standardDeviation(board.map((entry) => entry.worth)) || 1;
+  const worthById = new Map(board.map((entry) => [entry.playerId, entry.worth]));
+  const bandPriorities = resolveClubBandPriorities(input.teamState.team);
+  const openSlots = Math.max(1, LEGAL_ROSTER.size - input.teamState.roster.length);
+
+  return input.available.flatMap((model) => {
+    const player = input.playerById.get(model.playerId);
+    if (!player) return [];
+    const rank = input.useRankOverrides
+      ? input.teamState.team.boardRankOverrides?.global?.indexOf(model.playerId) ?? -1
+      : -1;
+    const rankBonus = rank >= 0 ? (BEST22_TUNING.gmPreferenceWeight / (1 + rank)) * worthScale : 0;
+    const blendedBoardValue = (worthById.get(model.playerId) ?? model.iv) + rankBonus;
+    const fitZ = fitZById.get(model.playerId) ?? 0;
+    const fitMultiplier = bandPriorities
+      ? Math.max(0.88, Math.min(1.12, 1 + fitZ * 0.06))
+      : 1;
+    const needMultiplier = ownNeedMultiplier(need, model.shape, openSlots);
+    const marginalTax = auctionMarginalTaxWithCaps(
+      input.teamState.roster.map((entry) => entry.construction),
+      model.construction,
+      input.teamState.team.capIdentity,
+      input.pool.luxuryCaps,
+    );
+    const trueCost = model.iv + marginalTax;
+    return [{
+      player,
+      model,
+      blendedBoardValue,
+      needMultiplier,
+      fitMultiplier,
+      marginalTax,
+      trueCost,
+      steal: blendedBoardValue * needMultiplier * fitMultiplier - trueCost,
+    }];
+  });
 }
 
 export function LeagueBuilderSnakeDraft() {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     leagues,
     teams,
     players,
     isLoading,
     error,
-    refresh,
-    getRoster,
-    updateRoster,
-    updatePlayer,
-    registerLeaguePool,
     getRegisteredPool,
     getMlbDraftSession,
     saveMlbDraftSession,
   } = useLeagueBuilderData();
-  const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
+  const requestedLeagueId = useMemo(() => leagueIdFromSearch(location.search), [location.search]);
   const [activeLeagueId, setActiveLeagueId] = useState("");
-  const [seed, setSeed] = useState("startup-mlb-v1");
+  const [seed, setSeed] = useState("snake-poc-1");
   const [teamOrder, setTeamOrder] = useState<string[]>([]);
   const [pool, setPool] = useState<RegisteredPool | null>(null);
   const [session, setSession] = useState<LeagueBuilderMlbDraftSession | null>(null);
   const [isWorking, setIsWorking] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [tradeSideA, setTradeSideA] = useState("");
-  const [tradeSideB, setTradeSideB] = useState("");
-  const [tradeVerdict, setTradeVerdict] = useState<TradeVerdict | null>(null);
-  const [tradeError, setTradeError] = useState<string | null>(null);
-  const [comparisonPlayerId, setComparisonPlayerId] = useState<string | null>(null);
+  const [cpuTicker, setCpuTicker] = useState<string | null>(null);
+  const [positionFilter, setPositionFilter] = useState("ALL");
+  const [boardSort, setBoardSort] = useState<BoardSort>("STEAL");
+  const [boardPage, setBoardPage] = useState(0);
+  const [forecast, setForecast] = useState<SnakeAvailabilityForecast | null>(null);
+  const [forecastBusy, setForecastBusy] = useState(false);
+  const forecastCacheRef = useRef(new Map<string, SnakeAvailabilityForecast>());
+  const [tradeCpuTeamId, setTradeCpuTeamId] = useState("");
+  const [humanTradePicks, setHumanTradePicks] = useState<number[]>([]);
+  const [cpuTradePicks, setCpuTradePicks] = useState<number[]>([]);
+  const [tradeMessage, setTradeMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -259,132 +347,154 @@ export function LeagueBuilderSnakeDraft() {
     () => leagues.find((league) => league.id === activeLeagueId) ?? null,
     [activeLeagueId, leagues],
   );
-
   const leagueTeams = useMemo(() => {
-    if (!activeLeague?.teamIds?.length) return [];
-    return activeLeague.teamIds
-      .map((teamId) => teams.find((team) => team.id === teamId))
-      .filter(Boolean) as Team[];
+    if (!activeLeague?.teamIds.length) return [];
+    return activeLeague.teamIds.flatMap((teamId) => {
+      const team = teams.find((candidate) => candidate.id === teamId);
+      return team ? [team] : [];
+    });
   }, [activeLeague, teams]);
-
+  const humanTeam = useMemo(
+    () => leagueTeams.find((team) => team.controlledBy === "human")
+      ?? leagueTeams.find((team) => team.controlledBy !== "ai")
+      ?? null,
+    [leagueTeams],
+  );
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
-  const poolById = useMemo(() => new Map((pool?.players ?? []).map((player) => [player.id, player])), [pool]);
+  const poolById = useMemo(() => new Map((pool?.players ?? []).map((row) => [row.id, row])), [pool]);
+  const modelById = useMemo(() => new Map((pool?.players ?? []).flatMap((poolPlayer) => {
+    const player = playerById.get(poolPlayer.id);
+    return player ? [[poolPlayer.id, modelFromPlayer(player, poolPlayer)] as const] : [];
+  })), [playerById, pool]);
+  const tierCap = activeLeague ? resolveLeagueSalaryCap(activeLeague) : pool?.tierCap ?? 0;
 
   const loadDraftState = useCallback(async (leagueId: string) => {
     setActionError(null);
     try {
-      const league = leagues.find((candidate) => candidate.id === leagueId);
       const existingPool = await getRegisteredPool(leagueId);
-      const nextPool = existingPool ?? await registerLeaguePool(leagueId);
+      const nextPool = existingPool;
       const nextSession = await getMlbDraftSession(leagueId, MLB_DRAFT_SEASON);
-      setPool(league ? { ...nextPool, tierCap: resolveLeagueSalaryCap(league) } : nextPool);
+      setPool(nextPool ? {
+        ...nextPool,
+        tierCap: resolveLeagueSalaryCap(leagues.find((row) => row.id === leagueId) ?? null),
+      } : null);
       setSession(nextSession);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     }
-  }, [getMlbDraftSession, getRegisteredPool, leagues, registerLeaguePool]);
+  }, [getMlbDraftSession, getRegisteredPool, leagues]);
 
   useEffect(() => {
-    setSession(null);
-    setPool(null);
-    setActionError(null);
     setTeamOrder(leagueTeams.map((team) => team.id));
-    if (activeLeagueId) {
-      void loadDraftState(activeLeagueId);
-    }
+    setTradeCpuTeamId(leagueTeams.find((team) => team.controlledBy === "ai")?.id ?? "");
+    if (activeLeagueId) void loadDraftState(activeLeagueId);
   }, [activeLeagueId, leagueTeams.length, loadDraftState]);
 
+  const teamStateById = useMemo(() => new Map(leagueTeams.map((team) => [
+    team.id,
+    buildTeamState({ team, session, modelById, pool, tierCap }),
+  ])), [leagueTeams, modelById, pool, session, tierCap]);
   const currentPick = session?.pickOrder[session.currentPickIndex] ?? null;
-  const currentTeam = currentPick ? teams.find((team) => team.id === currentPick.teamId) ?? null : null;
-  const currentPickValue = currentPick && pool ? pool.pickValueChart[currentPick.pick - 1]?.value : undefined;
+  const currentTeam = currentPick ? teamStateById.get(currentPick.teamId)?.team ?? null : null;
+  const draftComplete = Boolean(session && session.currentPickIndex >= session.pickOrder.length);
   const completedPlayerIds = useMemo(
     () => new Set(session?.completedPicks.map((pick) => pick.playerId) ?? []),
     [session],
   );
+  const availableModels = useMemo(
+    () => [...modelById.values()].filter((model) => !completedPlayerIds.has(model.playerId)),
+    [completedPlayerIds, modelById],
+  );
+  const viewingTeamState = humanTeam ? teamStateById.get(humanTeam.id) ?? null : null;
+  const currentTeamState = currentTeam ? teamStateById.get(currentTeam.id) ?? null : null;
 
-  const completedByTeam = useMemo(() => {
-    const byTeam = new Map<string, string[]>();
-    for (const pick of session?.completedPicks ?? []) {
-      const list = byTeam.get(pick.teamId) ?? [];
-      list.push(pick.playerId);
-      byTeam.set(pick.teamId, list);
-    }
-    return byTeam;
-  }, [session]);
+  const boardModels = useMemo(() => {
+    if (!currentTeamState || !pool) return [];
+    return buildBoardModels({
+      teamState: currentTeamState,
+      available: availableModels,
+      playerById,
+      tier: pool.tier,
+      pool,
+      useRankOverrides: currentTeamState.team.id === humanTeam?.id,
+    });
+  }, [availableModels, currentTeamState, humanTeam?.id, playerById, pool]);
 
-  const teamSummaries = useMemo(() => {
-    return leagueTeams.map((team) => ({
-      teamId: team.id,
-      teamName: teamDisplayName(team),
-      mlbCount: completedByTeam.get(team.id)?.length ?? 0,
-    }));
-  }, [completedByTeam, leagueTeams]);
-
-  const draftComplete = Boolean(session && session.currentPickIndex >= session.pickOrder.length);
-
-  const candidates = useMemo<DraftCandidate[]>(() => {
-    if (!pool || !session || !currentPick || !currentTeam) return [];
-
-    const teamPickIds = completedByTeam.get(currentPick.teamId) ?? [];
-    const committedRoster = teamPickIds
-      .map((playerId) => playerById.get(playerId))
-      .filter(Boolean)
-      .map((player) => toConstructionPlayer(player as Player));
-    const committedSalaries = teamPickIds.reduce((sum, playerId) => sum + (poolById.get(playerId)?.salary ?? 0), 0);
-    const caps = currentTeam.capIdentity
-      ? shiftLuxuryCaps(pool.luxuryCaps, currentTeam.capIdentity)
+  const guardForCandidate = useCallback((candidate: BoardModel): SnakePickGuard => {
+    if (!currentTeamState || !pool) throw new Error("The draft is not ready.");
+    const shiftedCaps = currentTeamState.team.capIdentity
+      ? shiftLuxuryCaps(pool.luxuryCaps, currentTeamState.team.capIdentity)
       : pool.luxuryCaps;
+    return evaluateSnakePick({
+      roster: currentTeamState.roster,
+      candidate: candidate.model,
+      remainingPool: availableModels,
+      committedSpent: currentTeamState.spent,
+      tierCap,
+      shiftedCaps,
+    });
+  }, [availableModels, currentTeamState, pool, tierCap]);
 
-    return pool.players
-      .filter((poolPlayer) => !completedPlayerIds.has(poolPlayer.id))
-      .map((poolPlayer) => {
-        const player = playerById.get(poolPlayer.id);
-        if (!player) return null;
-        const remainingPoolSalaries = pool.players
-          .filter((candidate) => candidate.id !== poolPlayer.id && !completedPlayerIds.has(candidate.id))
-          .map((candidate) => candidate.salary);
-        const assessment = assessSolvency({
-          committedRoster,
-          committedSalaries,
-          candidate: toConstructionPlayer(player),
-          candidateSalary: poolPlayer.salary,
-          caps,
-          mode: pool.balanceMode,
-          tierCap: pool.tierCap,
-          rosterSize: MLB_DRAFT_ROUNDS,
-          remainingPoolSalaries,
-        });
-        return { poolPlayer, player, assessment };
-      })
-      .filter(Boolean)
-      .sort((left, right) => right!.poolPlayer.iv - left!.poolPlayer.iv) as DraftCandidate[];
-  }, [completedByTeam, completedPlayerIds, currentPick, currentTeam, playerById, pool, poolById, session]);
+  const forecastByPlayerId = useMemo(
+    () => new Map(forecast?.rows.map((row) => [row.playerId, row]) ?? []),
+    [forecast],
+  );
+  const stealLeaders = useMemo(
+    () => new Set([...boardModels].sort((a, b) => b.steal - a.steal).slice(0, 3).map((row) => row.model.playerId)),
+    [boardModels],
+  );
+  const filteredBoard = useMemo(() => {
+    const filtered = boardModels.filter((row) => positionFilter === "ALL" || row.model.position === positionFilter);
+    return [...filtered].sort((left, right) => {
+      if (boardSort === "TRUE COST") return left.trueCost - right.trueCost || left.model.playerId.localeCompare(right.model.playerId);
+      if (boardSort === "IV") return right.model.iv - left.model.iv || left.model.playerId.localeCompare(right.model.playerId);
+      if (boardSort === "POSITION") return left.model.position.localeCompare(right.model.position) || right.steal - left.steal;
+      return right.steal - left.steal || right.blendedBoardValue - left.blendedBoardValue || left.model.playerId.localeCompare(right.model.playerId);
+    });
+  }, [boardModels, boardSort, positionFilter]);
+  const pageCount = Math.max(1, Math.ceil(filteredBoard.length / BOARD_PAGE_SIZE));
+  const pageRows = useMemo(
+    () => filteredBoard.slice(boardPage * BOARD_PAGE_SIZE, (boardPage + 1) * BOARD_PAGE_SIZE),
+    [boardPage, filteredBoard],
+  );
+  const visibleRows = useMemo<VisibleBoardModel[]>(
+    () => pageRows.map((row) => ({ ...row, guard: guardForCandidate(row) })),
+    [guardForCandidate, pageRows],
+  );
 
-  const blockers = useMemo(() => {
-    const messages: string[] = [];
-    if (!activeLeagueId) messages.push("Select a league to load the MLB draft.");
-    if (activeLeagueId && leagueTeams.length === 0) messages.push("Selected league has no teams.");
-    if (pool && pool.players.length === 0) messages.push("RegisteredPool has no players for this league.");
-    if (session && !draftComplete && !currentPick) messages.push("Draft session has no current pick.");
-    if (session && !draftComplete && candidates.length === 0) messages.push("No draftable joined full Player records remain.");
-    return messages;
-  }, [activeLeagueId, candidates.length, currentPick, draftComplete, leagueTeams.length, pool, session]);
+  useEffect(() => {
+    setBoardPage(0);
+  }, [boardSort, positionFilter, session?.currentPickIndex]);
+  useEffect(() => {
+    if (boardPage >= pageCount) setBoardPage(pageCount - 1);
+  }, [boardPage, pageCount]);
 
-  const moveTeam = (teamId: string, direction: -1 | 1) => {
-    const index = teamOrder.indexOf(teamId);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= teamOrder.length) return;
-    const next = [...teamOrder];
-    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-    setTeamOrder(next);
-  };
-
-  const runAction = async (action: () => Promise<void>) => {
+  const startDraft = async () => {
+    if (!activeLeague || !pool) return;
+    if (!pool.locked) {
+      setActionError("Lock the pool on Draft Setup before entering the POC room.");
+      return;
+    }
+    if (teamOrder.length === 0) return;
     setIsWorking(true);
     setActionError(null);
     try {
-      await action();
-      await refresh();
+      const next = await saveMlbDraftSession({
+        id: createMlbDraftSessionId(activeLeague.id, MLB_DRAFT_SEASON),
+        leagueId: activeLeague.id,
+        seasonNumber: MLB_DRAFT_SEASON,
+        seed,
+        workflowVersion: MLB_DRAFT_WORKFLOW_VERSION,
+        engineMethodVersion: MLB_DRAFT_ENGINE_METHOD_VERSION,
+        tier: pool.tier,
+        balanceMode: pool.balanceMode,
+        rounds: MLB_DRAFT_ROUNDS,
+        pickOrder: buildSnakeOrder(teamOrder, MLB_DRAFT_ROUNDS),
+        completedPicks: [],
+        trades: [],
+        currentPickIndex: 0,
+      });
+      setSession(next);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -392,432 +502,562 @@ export function LeagueBuilderSnakeDraft() {
     }
   };
 
-  const handleStartDraft = () => runAction(async () => {
-    if (!activeLeague) throw new Error("League not found");
-    const registeredPool = pool ?? await registerLeaguePool(activeLeague.id);
-    const nextPool: RegisteredPool = { ...registeredPool, tierCap: resolveLeagueSalaryCap(activeLeague) };
-    const order = buildSnakeOrder(teamOrder.length ? teamOrder : activeLeague.teamIds, MLB_DRAFT_ROUNDS);
-    const saved = await saveMlbDraftSession({
-      id: createMlbDraftSessionId(activeLeague.id, MLB_DRAFT_SEASON),
-      leagueId: activeLeague.id,
-      seasonNumber: MLB_DRAFT_SEASON,
-      seed,
-      workflowVersion: MLB_DRAFT_WORKFLOW_VERSION,
-      engineMethodVersion: MLB_DRAFT_ENGINE_METHOD_VERSION,
-      tier: nextPool.tier,
-      balanceMode: nextPool.balanceMode,
-      rounds: MLB_DRAFT_ROUNDS,
-      pickOrder: order,
-      completedPicks: [],
-      currentPickIndex: 0,
-    });
-    setPool(nextPool);
-    setSession(saved);
-  });
-
-  const handleDraftPlayer = (playerId: string, assessment: SolvencyAssessment | null) => runAction(async () => {
-    if (!activeLeague || !session || !currentPick) throw new Error("Draft session is not ready.");
-    if (!assessment?.confirmable) throw new Error(assessmentMessage(assessment));
-    const player = playerById.get(playerId);
-    if (!player) throw new Error("Player record not found.");
-
-    const currentRoster = await getRoster(currentPick.teamId);
-    const payloads = buildMlbDraftCommitPayloads({
-      leagueId: activeLeague.id,
-      teamId: currentPick.teamId,
-      player,
-      roster: currentRoster,
-      session,
-      pick: currentPick,
-    });
-
-    await updateRoster(payloads.roster);
-    await updatePlayer(payloads.player);
-    const savedSession = await saveMlbDraftSession(payloads.session);
-    setSession(savedSession);
-  });
-
-  const handleEvaluateTrade = () => {
-    if (!pool) return;
-    setTradeError(null);
-    setTradeVerdict(null);
+  const commitPlayer = useCallback(async (candidate: BoardModel, guard: SnakePickGuard) => {
+    if (!session || !guard.confirmable) return;
+    setIsWorking(true);
+    setActionError(null);
     try {
-      setTradeVerdict(validateTrade(parseTradePickList(tradeSideA), parseTradePickList(tradeSideB), pool.pickValueChart));
+      const next = commitSnakeDraftPick({
+        session,
+        playerId: candidate.model.playerId,
+        settledSalary: candidate.model.iv,
+        marginalTax: guard.marginalTax,
+      });
+      const saved = await saveMlbDraftSession(next);
+      setSession(saved);
+      setTradeMessage(null);
+      setHumanTradePicks([]);
+      setCpuTradePicks([]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setTradeError(
-        message.includes("outside the pick value chart")
-          ? `One or more picks are outside this pool's chart. Use pick numbers 1-${pool.pickValueChart.length}.`
-          : message,
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsWorking(false);
+    }
+  }, [saveMlbDraftSession, session]);
+
+  const draftHumanPlayer = (candidate: BoardModel) => {
+    const guard = guardForCandidate(candidate);
+    if (!guard.confirmable) {
+      setActionError(guard.reason);
+      return;
+    }
+    void commitPlayer(candidate, guard);
+  };
+
+  const draftCpuPlayer = useCallback(async () => {
+    if (!session || !currentTeamState || currentTeamState.team.controlledBy !== "ai") return;
+    let candidates = boardModels.map((candidate) => ({
+      playerId: candidate.model.playerId,
+      blendedBoardValue: candidate.blendedBoardValue,
+      needMultiplier: candidate.needMultiplier,
+      fitMultiplier: candidate.fitMultiplier,
+      marginalTax: candidate.marginalTax,
+      selectable: true,
+    }));
+    while (candidates.length > 0) {
+      const picked = pickSnakeCpuCandidate({
+        seed: session.seed,
+        pickIndex: session.currentPickIndex,
+        teamId: currentTeamState.team.id,
+        candidates,
+      });
+      if (!picked) break;
+      const candidate = boardModels.find((row) => row.model.playerId === picked.playerId);
+      if (!candidate) break;
+      const guard = guardForCandidate(candidate);
+      if (guard.confirmable) {
+        await commitPlayer(candidate, guard);
+        return;
+      }
+      candidates = candidates.map((row) => row.playerId === picked.playerId ? { ...row, selectable: false } : row);
+    }
+    setActionError(`${teamDisplayName(currentTeamState.team)} has no pick that keeps a legal, affordable 22. The POC is stopped here.`);
+  }, [boardModels, commitPlayer, currentTeamState, guardForCandidate, session]);
+
+  useEffect(() => {
+    if (!session || !currentTeamState || currentTeamState.team.controlledBy !== "ai" || isWorking || draftComplete) {
+      if (!currentTeamState || currentTeamState.team.controlledBy !== "ai") setCpuTicker(null);
+      return undefined;
+    }
+    setCpuTicker(`${teamDisplayName(currentTeamState.team)} is weighing the board.`);
+    const timer = window.setTimeout(() => {
+      void draftCpuPlayer();
+    }, CPU_TICK_MS);
+    return () => window.clearTimeout(timer);
+  }, [currentTeamState, draftComplete, draftCpuPlayer, isWorking, session]);
+
+  useEffect(() => {
+    if (
+      !session
+      || !humanTeam
+      || currentTeam?.id !== humanTeam.id
+      || !pool
+      || availableModels.length === 0
+      || draftComplete
+    ) {
+      setForecast(null);
+      setForecastBusy(false);
+      return undefined;
+    }
+    const cacheKey = [
+      session.id,
+      session.currentPickIndex,
+      session.trades?.length ?? 0,
+      session.completedPicks.map((pick) => pick.playerId).join(","),
+      session.pickOrder.map((pick) => `${pick.pick}-${pick.teamId}`).join(","),
+    ].join("|");
+    const cached = forecastCacheRef.current.get(cacheKey);
+    if (cached) {
+      setForecast(cached);
+      setForecastBusy(false);
+      return undefined;
+    }
+    setForecastBusy(true);
+    setForecast(null);
+    // Deferred to the post-render task queue so card pagination and the human turn paint first.
+    const timer = window.setTimeout(() => {
+      const boardByTeam = new Map(leagueTeams.map((team) => {
+        const teamState = teamStateById.get(team.id)!;
+        return [team.id, buildBoardModels({
+          teamState,
+          available: availableModels,
+          playerById,
+          tier: pool.tier,
+          pool,
+          useRankOverrides: team.id === humanTeam.id,
+        })] as const;
+      }));
+      const rowsByTeam = new Map([...boardByTeam.entries()].map(([teamId, rows]) => [
+        teamId,
+        new Map(rows.map((row) => [row.model.playerId, row])),
+      ]));
+      const next = forecastSnakeAvailability({
+        seed: session.seed,
+        currentPickIndex: session.currentPickIndex,
+        pickOrder: session.pickOrder,
+        userTeamId: humanTeam.id,
+        candidates: availableModels.map((model) => ({
+          playerId: model.playerId,
+          byTeamId: Object.fromEntries(leagueTeams.flatMap((team) => {
+            const row = rowsByTeam.get(team.id)?.get(model.playerId);
+            return row ? [[team.id, {
+              blendedBoardValue: row.blendedBoardValue,
+              needMultiplier: row.needMultiplier,
+              fitMultiplier: row.fitMultiplier,
+              marginalTax: row.marginalTax,
+              selectable: true,
+            }]] : [];
+          })),
+        })),
+        rollouts: SNAKE_POC_TUNING.forecastRollouts,
+      });
+      forecastCacheRef.current.set(cacheKey, next);
+      setForecast(next);
+      setForecastBusy(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [availableModels, currentTeam?.id, draftComplete, humanTeam, leagueTeams, playerById, pool, session, teamStateById]);
+
+  const humanFuturePicks = useMemo(() => session && humanTeam
+    ? session.pickOrder.slice(session.currentPickIndex + 1).filter((slot) => slot.teamId === humanTeam.id)
+    : [], [humanTeam, session]);
+  const cpuFuturePicks = useMemo(() => session && tradeCpuTeamId
+    ? session.pickOrder.slice(session.currentPickIndex + 1).filter((slot) => slot.teamId === tradeCpuTeamId)
+    : [], [session, tradeCpuTeamId]);
+  const tradeVerdict = useMemo<TradeVerdict | null>(() => {
+    if (!pool || humanTradePicks.length === 0 || cpuTradePicks.length === 0) return null;
+    try {
+      return validateTrade(
+        humanTradePicks.map((pick) => ({ pick })),
+        cpuTradePicks.map((pick) => ({ pick })),
+        pool.pickValueChart,
       );
+    } catch {
+      return null;
+    }
+  }, [cpuTradePicks, humanTradePicks, pool]);
+  const cpuTradeDecisionValueByPick = useMemo<Record<number, number>>(() => {
+    if (!session || !pool || !tradeCpuTeamId) return {};
+    const teamState = teamStateById.get(tradeCpuTeamId);
+    if (!teamState) return {};
+    const ranked = buildBoardModels({
+      teamState,
+      available: availableModels,
+      playerById,
+      tier: pool.tier,
+      pool,
+      useRankOverrides: false,
+    }).map((row) => ({
+      row,
+      value: Math.max(1, scoreSnakeCpuCandidate({
+        playerId: row.model.playerId,
+        blendedBoardValue: row.blendedBoardValue,
+        needMultiplier: row.needMultiplier,
+        fitMultiplier: row.fitMultiplier,
+        marginalTax: row.marginalTax,
+        selectable: true,
+      })),
+    })).sort((left, right) => right.value - left.value || left.row.model.playerId.localeCompare(right.row.model.playerId));
+    const future = session.pickOrder.slice(session.currentPickIndex + 1);
+    return Object.fromEntries(future.map((slot, index) => {
+      const boardIndex = Math.min(
+        Math.max(0, ranked.length - 1),
+        Math.floor((index / Math.max(1, future.length - 1)) * Math.max(0, ranked.length - 1)),
+      );
+      return [slot.pick, ranked[boardIndex]?.value ?? 1];
+    }));
+  }, [availableModels, playerById, pool, session, teamStateById, tradeCpuTeamId]);
+  const tradeMustFillSurvives = useMemo(() => {
+    if (!humanTeam || !tradeCpuTeamId) return false;
+    const completionPool = availableModels.map((model) => ({
+      id: model.playerId,
+      price: model.iv,
+      shape: model.shape,
+    }));
+    return [humanTeam.id, tradeCpuTeamId].every((teamId) => {
+      const state = teamStateById.get(teamId);
+      if (!state) return false;
+      return cheapestLegalCompletion(
+        state.roster.map((entry) => entry.shape),
+        completionPool,
+        LEGAL_ROSTER.size - state.roster.length,
+      ).feasible;
+    });
+  }, [availableModels, humanTeam, teamStateById, tradeCpuTeamId]);
+
+  const executeTrade = async () => {
+    if (!session || !humanTeam || !pool || !tradeCpuTeamId) return;
+    const result = executeSnakePickTrade({
+      session,
+      humanTeamId: humanTeam.id,
+      cpuTeamId: tradeCpuTeamId,
+      humanPickNumbers: humanTradePicks,
+      cpuPickNumbers: cpuTradePicks,
+      pickValueChart: pool.pickValueChart,
+      cpuDecisionValueByPick: cpuTradeDecisionValueByPick,
+      mustFillSurvives: tradeMustFillSurvives,
+    });
+    setTradeMessage(result.reason);
+    if (!result.accepted) return;
+    setIsWorking(true);
+    try {
+      const saved = await saveMlbDraftSession(result.session);
+      setSession(saved);
+      setHumanTradePicks([]);
+      setCpuTradePicks([]);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsWorking(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-lg">Loading MLB draft...</div>
-      </div>
-    );
-  }
+  const run = useMemo(() => detectSnakePositionRun({
+    completedPlayerIds: session?.completedPicks.map((pick) => pick.playerId) ?? [],
+    positionByPlayerId: new Map([...modelById.values()].map((model) => [model.playerId, model.position])),
+    availablePlayerIds: availableModels.map((model) => model.playerId),
+  }), [availableModels, modelById, session]);
+  const blockers = useMemo(() => {
+    const rows: string[] = [];
+    if (!isSnakeDraftPocEnabled()) rows.push("The snake draft POC flag is off.");
+    if (!activeLeague) rows.push("Choose a league.");
+    if (leagueTeams.length === 0) rows.push("This league has no clubs.");
+    if (!pool) rows.push("No locked player pool is registered for this league yet. Return to Draft Setup first.");
+    if (pool && !pool.locked) rows.push("The player pool is not locked yet. Return to Draft Setup and lock it first.");
+    if (pool && pool.players.length < leagueTeams.length * MLB_DRAFT_ROUNDS) {
+      rows.push(`The pool needs at least ${leagueTeams.length * MLB_DRAFT_ROUNDS} players for 22 rounds.`);
+    }
+    if (modelById.size !== (pool?.players.length ?? 0)) rows.push("Some pool players are missing their full player card.");
+    return rows;
+  }, [activeLeague, leagueTeams.length, modelById.size, pool]);
 
+  if (isLoading) {
+    return <div className="min-h-screen bg-[#243028] text-[#E8E8D8] grid place-items-center">LOADING THE ROOM...</div>;
+  }
   if (error) {
-    return (
-      <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-xl text-red-400">Error: {error}</div>
-      </div>
-    );
+    return <div className="min-h-screen bg-[#243028] text-[#FFD27A] grid place-items-center">{error}</div>;
   }
 
   return (
-    <div className="min-h-screen bg-[#2d3d2f] text-[#E8E8D8] p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+    <main className="min-h-screen bg-[#243028] text-[#E8E8D8] p-4 md:p-8">
+      <div className="mx-auto max-w-[1500px] space-y-6">
+        <header className="flex flex-wrap items-center justify-between gap-4 border-[6px] border-[#E8E8D8] bg-[#3D4A42] p-4 shadow-[7px_7px_0_#111]">
+          <div className="flex items-center gap-3">
             <button
-              aria-label="Back to League Builder"
-              onClick={() => navigate("/league-builder")}
-              className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
+              type="button"
+              aria-label="Back to Draft Setup"
+              onClick={() => navigate(`/league-builder/draft-setup?leagueId=${encodeURIComponent(activeLeagueId)}`)}
+              className="border-4 border-[#E8E8D8] bg-[#2F3F32] p-2 active:translate-y-0.5"
             >
-              <ArrowLeft className="w-6 h-6 text-[#E8E8D8]" />
+              <ArrowLeft />
             </button>
-            <div className="flex items-center gap-3 bg-[#5A8352] border-[6px] border-[#E8E8D8] px-8 py-3 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]">
-              <Shuffle className="w-6 h-6" style={{ color: "#3B7DD8" }} />
-              <h1
-                className="text-2xl font-bold text-[#E8E8D8] tracking-wider"
-                style={{ textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}
+            <div>
+              <div className="text-[10px] font-bold tracking-[0.2em] text-[#C4A853]">ISOLATED VIABILITY TEST</div>
+              <h1 className="font-['Moms_Typewriter'] text-3xl">MLB SNAKE DRAFT POC</h1>
+            </div>
+          </div>
+          <div className="border-4 border-[#C4A853] bg-[#1F2922] px-4 py-2 text-sm font-bold">
+            {draftComplete ? "22 ROUNDS COMPLETE · NO SEASON HANDOFF" : currentPick ? `PICK ${currentPick.pick} · ROUND ${currentPick.round}` : "SET THE ORDER"}
+          </div>
+        </header>
+
+        {actionError ? (
+          <div className="border-4 border-[#9B2F2F] bg-[#4A1F1F] p-4 font-bold text-[#FFD27A]">{actionError}</div>
+        ) : null}
+        {run ? (
+          <div className="border-4 border-[#C4A853] bg-[#40381F] p-3 font-bold text-[#F3DB8E]">
+            A RUN ON {run.position} — {run.count} went in the last 5 picks, {run.remaining} left.
+          </div>
+        ) : null}
+        {cpuTicker ? (
+          <div data-testid="cpu-pick-ticker" className="border-4 border-[#6F8FAF] bg-[#24384A] p-3 font-bold text-[#D9EDFF]">
+            {cpuTicker}
+          </div>
+        ) : null}
+
+        {!session ? (
+          <section className="grid gap-6 lg:grid-cols-[360px_1fr]">
+            <div className="border-[6px] border-[#4A6844] bg-[#3D4A42] p-5 shadow-[7px_7px_0_#111]">
+              <label className="mb-1 block text-xs font-bold text-[#C4A853]" htmlFor="snake-league">LEAGUE</label>
+              <select
+                id="snake-league"
+                value={activeLeagueId}
+                onChange={(event) => setActiveLeagueId(event.target.value)}
+                className="mb-4 w-full border-4 border-[#8A9A86] bg-[#1F2922] p-2 font-bold"
               >
-                MLB SNAKE DRAFT
-              </h1>
+                {leagues.map((league) => <option key={league.id} value={league.id}>{league.name}</option>)}
+              </select>
+              <label className="mb-1 block text-xs font-bold text-[#C4A853]" htmlFor="snake-seed">SEED</label>
+              <input
+                id="snake-seed"
+                value={seed}
+                onChange={(event) => setSeed(event.target.value)}
+                className="mb-3 w-full border-4 border-[#8A9A86] bg-[#1F2922] p-2 font-bold"
+              />
+              <button
+                type="button"
+                onClick={() => setTeamOrder(seededSnakeShuffle(teamOrder, seed))}
+                className="mb-5 flex w-full items-center justify-center gap-2 border-4 border-[#E8E8D8] bg-[#31527A] px-3 py-2 font-bold"
+              >
+                <Shuffle className="h-4 w-4" /> SEEDED SHUFFLE
+              </button>
+              <button
+                type="button"
+                onClick={() => void startDraft()}
+                disabled={blockers.length > 0 || isWorking}
+                className="flex w-full items-center justify-center gap-2 border-4 border-[#E8E8D8] bg-[#C4A853] px-4 py-3 font-bold text-[#1A1A1A] disabled:opacity-40"
+              >
+                {isWorking ? <RefreshCw className="animate-spin" /> : <CheckCircle2 />} BEGIN 22 ROUNDS
+              </button>
+              {pool ? <div className="mt-4 text-xs text-[#E8E8D8]/70">{pool.players.length} PLAYERS · CAP {formatMoney(tierCap)}</div> : null}
             </div>
-          </div>
-          {draftComplete && (
-            <span className="flex items-center gap-2 bg-[#2F7D46] border-4 border-[#E8E8D8]/40 px-4 py-2 font-bold">
-              <CheckCircle2 className="w-5 h-5" />
-              DRAFT COMPLETE
-            </span>
-          )}
-        </div>
-
-        {actionError && (
-          <div className="mb-6 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
-            {actionError}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
-          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <h2 className="font-bold mb-4 text-lg">LEAGUE BUILDER SETUP</h2>
-
-            <label htmlFor="startup-mlb-draft-league" className="block text-xs text-[#E8E8D8]/70 mb-1">LEAGUE</label>
-            <select
-              id="startup-mlb-draft-league"
-              value={activeLeagueId}
-              onChange={(event) => setActiveLeagueId(event.target.value)}
-              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4"
-            >
-              {leagues.map((league) => (
-                <option key={league.id} value={league.id}>
-                  {league.name}
-                </option>
-              ))}
-            </select>
-
-            <label htmlFor="startup-mlb-draft-seed" className="block text-xs text-[#E8E8D8]/70 mb-1">DETERMINISTIC SEED</label>
-            <input
-              id="startup-mlb-draft-seed"
-              value={seed}
-              onChange={(event) => setSeed(event.target.value)}
-              disabled={Boolean(session)}
-              className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none mb-4 disabled:opacity-60"
-            />
-
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">TEAMS</div>
-                <div className="font-bold text-xl">{leagueTeams.length}</div>
-              </div>
-              <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                <div className="text-xs text-[#E8E8D8]/60">ROUNDS</div>
-                <div className="font-bold text-xl">{MLB_DRAFT_ROUNDS}</div>
-              </div>
-            </div>
-
-            {!session && (
-              <>
-                <h3 className="text-sm font-bold mb-2">MLB DRAFT ORDER</h3>
-                <div className="space-y-2 mb-4">
-                  {teamOrder.map((teamId, index) => {
-                    const team = leagueTeams.find((candidateTeam) => candidateTeam.id === teamId);
-                    return (
-                      <div key={teamId} className="bg-[#4A6844] border-2 border-[#E8E8D8]/30 p-2 flex items-center justify-between gap-2">
-                        <span className="text-sm font-bold truncate">#{index + 1} {team ? teamDisplayName(team) : teamId}</span>
-                        <span className="flex gap-1">
-                          <button className="px-2 bg-[#2d3d2f] border border-[#E8E8D8]/30" onClick={() => moveTeam(teamId, -1)}>UP</button>
-                          <button className="px-2 bg-[#2d3d2f] border border-[#E8E8D8]/30" onClick={() => moveTeam(teamId, 1)}>DOWN</button>
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={handleStartDraft}
-                  disabled={!activeLeagueId || leagueTeams.length === 0 || isWorking}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B7DD8] hover:bg-[#4B8DE8] disabled:opacity-50 disabled:hover:bg-[#3B7DD8] border-4 border-[#E8E8D8] transition font-bold"
-                >
-                  {isWorking ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UserCheck className="w-5 h-5" />}
-                  <span>{isWorking ? "STARTING" : "BEGIN MLB DRAFT"}</span>
-                </button>
-              </>
-            )}
-
-            {pool && (
-              <div className="mt-5 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-sm text-[#E8E8D8]/80">
-                <div className="font-bold text-[#FFD27A] mb-1">REGISTERED POOL</div>
-                <div>Tier {pool.tier.toUpperCase()} · {pool.balanceMode.toUpperCase()}</div>
-                <div>{pool.players.length.toLocaleString()} players · Cap {formatMoney(pool.tierCap)}</div>
-              </div>
-            )}
-          </section>
-
-          <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-lg">TEAM MLB READINESS</h2>
-              <div className="text-sm text-[#E8E8D8]/60">{MLB_DRAFT_ROUNDS} MLB TARGET</div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {teamSummaries.map((team) => (
-                <div key={team.teamId} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-bold truncate">{team.teamName}</div>
-                    <div className="text-sm font-bold">{team.mlbCount}/{MLB_DRAFT_ROUNDS} MLB</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {blockers.length ? (
-              <div className="mt-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4">
-                <div className="flex items-center gap-2 font-bold mb-2">
-                  <ShieldAlert className="w-5 h-5" />
-                  BLOCKED
-                </div>
-                <ul className="space-y-1 text-sm text-[#FFE8B0]">
-                  {blockers.map((blocker) => (
-                    <li key={blocker}>{blocker}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
-        </div>
-
-        {pool && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-            <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-              <div className="flex items-center gap-2 mb-2">
-                <BarChart3 className="w-5 h-5 text-[#FFD27A]" />
-                <h2 className="font-bold text-lg">PICK VALUE CHART</h2>
-              </div>
-              <div className="text-xs text-[#E8E8D8]/65 mb-4">Registration-time snapshot from this pool.</div>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {pool.pickValueChart.map((row) => {
-                  const maxValue = pool.pickValueChart[0]?.value || row.value || 1;
-                  const width = `${Math.max(4, Math.min(100, (row.value / maxValue) * 100))}%`;
+            <div className="border-[6px] border-[#4A6844] bg-[#3D4A42] p-5 shadow-[7px_7px_0_#111]">
+              <h2 className="mb-3 text-lg font-bold text-[#C4A853]">DRAFT ORDER</h2>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {teamOrder.map((teamId, index) => {
+                  const team = leagueTeams.find((row) => row.id === teamId);
                   return (
-                    <div key={row.pick} className="grid grid-cols-[72px_1fr_96px] items-center gap-3 text-sm">
-                      <div className="font-bold">Pick {row.pick}</div>
-                      <div className="h-3 bg-[#2d3d2f] border border-[#E8E8D8]/20">
-                        <div className="h-full bg-[#3B7DD8]" style={{ width }} />
-                      </div>
-                      <div className="text-right text-[#FFD27A] font-bold">{formatMoney(row.value)}</div>
+                    <div key={teamId} className="flex items-center justify-between border-4 border-[#71806F] bg-[#28352C] p-2">
+                      <span className="truncate text-sm font-bold">#{index + 1} {team ? teamDisplayName(team) : teamId}</span>
+                      <span className="flex gap-1">
+                        <button type="button" aria-label={`Move ${teamId} up`} onClick={() => setTeamOrder((rows) => {
+                          if (index === 0) return rows;
+                          const next = [...rows];
+                          [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                          return next;
+                        })} className="border-2 border-[#71806F] px-2">↑</button>
+                        <button type="button" aria-label={`Move ${teamId} down`} onClick={() => setTeamOrder((rows) => {
+                          if (index >= rows.length - 1) return rows;
+                          const next = [...rows];
+                          [next[index + 1], next[index]] = [next[index], next[index + 1]];
+                          return next;
+                        })} className="border-2 border-[#71806F] px-2">↓</button>
+                      </span>
                     </div>
                   );
                 })}
               </div>
-            </section>
-
-            <section className="bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-              <div className="flex items-center gap-2 mb-2">
-                <Scale className="w-5 h-5 text-[#FFD27A]" />
-                <h2 className="font-bold text-lg">TRADE VALIDATOR</h2>
-              </div>
-              <div className="text-xs text-[#E8E8D8]/65 mb-4">Advisory only — overridable. Enter raw pick numbers.</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                <label className="block">
-                  <span className="block text-xs text-[#E8E8D8]/70 mb-1">SIDE A</span>
-                  <input
-                    value={tradeSideA}
-                    onChange={(event) => setTradeSideA(event.target.value)}
-                    placeholder="1, 24 25"
-                    className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-xs text-[#E8E8D8]/70 mb-1">SIDE B</span>
-                  <input
-                    value={tradeSideB}
-                    onChange={(event) => setTradeSideB(event.target.value)}
-                    placeholder="2 23"
-                    className="w-full bg-[#4A6844] border-4 border-[#E8E8D8]/30 px-3 py-2 text-[#E8E8D8] font-bold focus:border-[#E8E8D8]/60 outline-none"
-                  />
-                </label>
-              </div>
-              <button
-                onClick={handleEvaluateTrade}
-                className="px-4 py-2 bg-[#3B7DD8] hover:bg-[#4B8DE8] border-4 border-[#E8E8D8] transition font-bold mb-4"
-              >
-                EVALUATE
-              </button>
-              {tradeError ? (
-                <div className="bg-[#6B3A3A] border-4 border-[#FFD27A] p-3 text-sm text-[#FFE8B0] font-bold">{tradeError}</div>
-              ) : null}
-              {tradeVerdict ? (
-                <div className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4 text-sm">
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className={`px-2 py-0.5 font-bold ${tradeVerdict.balanced ? "bg-[#2F7D46] text-[#E8E8D8]" : "bg-[#9B2F2F] text-[#FFE8B0]"}`}>
-                      {tradeVerdict.balanced ? "BALANCED" : "IMBALANCED"}
-                    </span>
-                    <span>Imbalance {(tradeVerdict.imbalancePct * 100).toFixed(1)}% vs 15% band</span>
-                    <span>Favored {tradeVerdict.favored === "none" ? "none" : `Side ${tradeVerdict.favored}`}</span>
-                  </div>
-                  <div className="text-[#FFD27A] font-bold">
-                    Advisory — overridable: {tradeVerdict.overridable ? "yes" : "no"}
-                  </div>
+              {blockers.length > 0 ? (
+                <div className="mt-4 border-4 border-[#9B2F2F] bg-[#4A1F1F] p-3 text-sm text-[#FFD27A]">
+                  {blockers.map((row) => <div key={row}>• {row}</div>)}
                 </div>
               ) : null}
-            </section>
-          </div>
-        )}
-
-        {session && (
-          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-lg">MLB DRAFT BOARD</h2>
-              {currentPick && currentTeam ? (
-                <div className="font-bold text-[#FFD27A]">
-                  ON THE CLOCK: {teamDisplayName(currentTeam)} · Round {currentPick.round}, Pick {currentPick.pick}
-                  {currentPickValue !== undefined ? ` · Chart ${formatMoney(currentPickValue)}` : ""}
-                </div>
-              ) : (
-                <div className="font-bold text-[#9DFFB0]">DRAFT COMPLETE</div>
-              )}
             </div>
-
-            {currentPick && (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[620px] overflow-y-auto">
-                {candidates.map((candidate) => (
-                  <div key={candidate.player.id} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-                    <div className="flex items-center justify-between gap-3 mb-2">
-                      <div className="font-bold truncate">{playerDisplayName(candidate.player)}</div>
-                      <span className="bg-[#3B7DD8] px-2 py-0.5 text-xs font-bold">{candidate.player.primaryPosition}</span>
+          </section>
+        ) : (
+          <>
+            <section className="border-[6px] border-[#4A6844] bg-[#3D4A42] p-4 shadow-[7px_7px_0_#111]">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-bold text-[#C4A853]">CAP LEDGER</h2>
+                <div className="font-bold text-[#F3DB8E]">
+                  {currentTeam ? `ON THE CLOCK · ${teamDisplayName(currentTeam)}` : "POC COMPLETE"}
+                </div>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {[...teamStateById.values()].map((state) => (
+                  <div key={state.team.id} className={`border-4 p-3 ${state.team.id === currentTeam?.id ? "border-[#C4A853] bg-[#354B39]" : "border-[#71806F] bg-[#28352C]"}`}>
+                    <div className="truncate font-bold">{teamDisplayName(state.team)}</div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                      <div><span className="block text-[#E8E8D8]/55">SPENT</span>{formatMoney(state.spent)}</div>
+                      <div><span className="block text-[#E8E8D8]/55">HEADROOM</span>{formatMoney(state.headroom)}</div>
+                      <div><span className="block text-[#E8E8D8]/55">TAX SO FAR</span>{formatMoney(state.tax)}</div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs text-[#E8E8D8]/75 mb-3">
-                      <div>IV {formatMoney(candidate.poolPlayer.iv)}</div>
-                      <div>Salary {formatMoney(candidate.poolPlayer.salary)}</div>
-                      <div>Age {candidate.player.age}</div>
-                      <div>Chemistry {candidate.player.chemistry}</div>
-                      <div>POW {candidate.player.power}</div>
-                      <div>CON {candidate.player.contact}</div>
-                      <div>VEL {candidate.player.velocity}</div>
-                      <div>ACC {candidate.player.accuracy}</div>
-                    </div>
-                    <div className="mb-3 bg-[#2d3d2f] border-2 border-[#E8E8D8]/20 p-2 text-xs">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className={`px-2 py-0.5 font-bold ${signalClass(candidate.assessment?.signal ?? "BLOCKED")}`}>
-                          {candidate.assessment?.signal ?? "BLOCKED"}
-                        </span>
-                        <span className="text-[#E8E8D8]/70">
-                          Slack {formatMoney(candidate.assessment?.slack ?? Number.NaN)}
-                        </span>
-                      </div>
-                      <div className="text-[#E8E8D8]/75">{assessmentMessage(candidate.assessment)}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setComparisonPlayerId((openId) => openId === candidate.player.id ? null : candidate.player.id)}
-                      className="w-full mb-3 px-3 py-2 bg-[#2d3d2f] border-2 border-[#E8E8D8]/30 font-bold flex items-center justify-center gap-2"
-                    >
-                      <GitCompare className="w-4 h-4 text-[#FFD27A]" />
-                      COMPARE TEAMS
-                    </button>
-                    {comparisonPlayerId === candidate.player.id && pool ? (
-                      <div className="mb-3 bg-[#2d3d2f] border-2 border-[#E8E8D8]/20 p-2">
-                        <div className="text-xs font-bold text-[#FFD27A] mb-2">CROSS-TEAM SOLVENCY</div>
-                        <div className="grid grid-cols-1 gap-2">
-                          {leagueTeams.map((team) => {
-                            const comparison = buildTeamSolvencyComparison({
-                              candidate,
-                              team,
-                              completedByTeam,
-                              completedPlayerIds,
-                              playerById,
-                              pool,
-                              poolById,
-                            });
-                            return (
-                              <div key={team.id} className="flex items-center justify-between gap-2 text-xs">
-                                <span className="truncate">{teamDisplayName(comparison.team)}</span>
-                                <span className={`px-2 py-0.5 font-bold ${signalClass(comparison.assessment?.signal ?? "BLOCKED")}`}>
-                                  {comparison.assessment?.signal ?? "BLOCKED"}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-                    <button
-                      onClick={() => handleDraftPlayer(candidate.player.id, candidate.assessment)}
-                      disabled={isWorking || !candidate.assessment?.confirmable}
-                      className="w-full px-3 py-2 bg-[#2F7D46] border-4 border-[#E8E8D8] font-bold disabled:opacity-50"
-                    >
-                      DRAFT TO MLB
-                    </button>
+                    <div className="mt-2 text-xs text-[#E8E8D8]/60">{state.roster.length}/22 players</div>
                   </div>
                 ))}
               </div>
-            )}
-          </section>
+            </section>
+
+            {draftComplete ? (
+              <section className="border-[6px] border-[#5E9B69] bg-[#223D28] p-8 text-center shadow-[7px_7px_0_#111]">
+                <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-[#BEE8C2]" />
+                <h2 className="text-2xl font-bold">POC COMPLETE</h2>
+                <p className="mt-2 text-[#E8E8D8]/70">The result stays in this draft session. Nothing moves to farm or the season.</p>
+              </section>
+            ) : null}
+
+            {!draftComplete && currentTeam?.controlledBy !== "ai" ? (
+              <section className="border-[6px] border-[#4A6844] bg-[#3D4A42] p-5 shadow-[7px_7px_0_#111]">
+                <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-[#C4A853]">COMPLETE-INFORMATION BOARD</h2>
+                    <div className="text-xs text-[#E8E8D8]/60">
+                      Forecast {forecastBusy ? "running" : `uses ${forecast?.rollouts ?? SNAKE_POC_TUNING.forecastRollouts} seeded rollouts`} · {filteredBoard.length} available here
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <label className="text-xs font-bold">POSITION
+                      <select value={positionFilter} onChange={(event) => setPositionFilter(event.target.value)} className="ml-2 border-2 border-[#8A9A86] bg-[#1F2922] p-2">
+                        <option value="ALL">ALL</option>
+                        {[...new Set(boardModels.map((row) => row.model.position))].sort().map((position) => <option key={position} value={position}>{position}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-bold">SORT
+                      <select value={boardSort} onChange={(event) => setBoardSort(event.target.value as BoardSort)} className="ml-2 border-2 border-[#8A9A86] bg-[#1F2922] p-2">
+                        <option value="STEAL">STEAL</option>
+                        <option value="TRUE COST">TRUE COST</option>
+                        <option value="IV">IV</option>
+                        <option value="POSITION">POSITION</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+                <div data-testid="snake-board-page" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {visibleRows.map((row) => {
+                    const forecastRow = forecastByPlayerId.get(row.model.playerId);
+                    const survival = forecastRow?.survivalPct ?? null;
+                    const band = forecastBand(survival);
+                    return (
+                      <article key={row.model.playerId} className="border-4 border-[#71806F] bg-[#28352C] p-4">
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-bold">{playerDisplayName(row.player)}</div>
+                            <div className="text-xs text-[#E8E8D8]/55">{row.model.position} · AGE {row.player.age}</div>
+                          </div>
+                          {stealLeaders.has(row.model.playerId) ? <span className="border-2 border-[#C4A853] px-2 py-1 text-[10px] font-bold text-[#F3DB8E]">TOP-3 STEAL</span> : null}
+                        </div>
+                        <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
+                          <div><span className="block text-[#E8E8D8]/50">TRUE COST</span>{formatMoney(row.trueCost)}</div>
+                          <div><span className="block text-[#E8E8D8]/50">STEAL</span>{formatMoney(row.steal)}</div>
+                          <div><span className="block text-[#E8E8D8]/50">IV</span>{formatMoney(row.model.iv)}</div>
+                        </div>
+                        <div className="mb-3 grid grid-cols-5 gap-1 text-center text-[10px]">
+                          {row.model.shape.isPitcher ? (
+                            <>
+                              <span>VEL {row.player.velocity}</span><span>JNK {row.player.junk}</span><span>ACC {row.player.accuracy}</span><span>POW {row.player.power}</span><span>CON {row.player.contact}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>POW {row.player.power}</span><span>CON {row.player.contact}</span><span>SPD {row.player.speed}</span><span>FLD {row.player.fielding}</span><span>ARM {row.player.arm}</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="mb-3 border-2 border-[#627362] bg-[#1F2922] p-2 text-xs">
+                          <div className={`font-bold ${band.className}`}>
+                            {band.label}{survival === null ? "" : ` · ${Math.round(survival * 100)}% TO PICK ${forecastRow?.nextPick ?? "—"}`}
+                          </div>
+                          <div className="mt-1 text-[#E8E8D8]/65">LAST REALISTIC PICK · {forecastRow?.lastRealisticPick ?? "NONE"}</div>
+                        </div>
+                        <div className={`mb-3 border-2 p-2 text-xs ${guardClass(row.guard)}`}>
+                          <div className="font-bold">{guardLabel(row.guard)}{row.guard.mustFill ? " · MUST FILL" : ""}</div>
+                          <div className="mt-1">{row.guard.reason}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => draftHumanPlayer(row)}
+                          disabled={isWorking || !row.guard.confirmable}
+                          className="w-full border-4 border-[#E8E8D8] bg-[#C4A853] px-3 py-2 font-bold text-[#1A1A1A] disabled:opacity-35"
+                        >
+                          DRAFT {row.player.lastName.toUpperCase()}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <button type="button" aria-label="Previous board page" disabled={boardPage === 0} onClick={() => setBoardPage((page) => page - 1)} className="border-4 border-[#E8E8D8] bg-[#31527A] p-2 disabled:opacity-30"><ChevronLeft /></button>
+                  <span className="font-bold">PAGE {boardPage + 1} OF {pageCount}</span>
+                  <button type="button" aria-label="Next board page" disabled={boardPage >= pageCount - 1} onClick={() => setBoardPage((page) => page + 1)} className="border-4 border-[#E8E8D8] bg-[#31527A] p-2 disabled:opacity-30"><ChevronRight /></button>
+                </div>
+              </section>
+            ) : null}
+
+            {!draftComplete && currentTeam?.id === humanTeam?.id && pool ? (
+              <section className="border-[6px] border-[#4A6844] bg-[#3D4A42] p-5 shadow-[7px_7px_0_#111]">
+                <div className="mb-3 flex items-center gap-2"><Repeat2 className="text-[#C4A853]" /><h2 className="text-lg font-bold">TRADE FUTURE PICKS</h2></div>
+                <p className="mb-4 text-sm text-[#E8E8D8]/65">Swap one owned future turn with another club. Add up to two picks on each side; roster spots must stay even.</p>
+                <label className="mb-3 block text-xs font-bold">OTHER CLUB
+                  <select value={tradeCpuTeamId} onChange={(event) => { setTradeCpuTeamId(event.target.value); setCpuTradePicks([]); setTradeMessage(null); }} className="ml-2 border-2 border-[#8A9A86] bg-[#1F2922] p-2">
+                    {leagueTeams.filter((team) => team.controlledBy === "ai").map((team) => <option key={team.id} value={team.id}>{teamDisplayName(team)}</option>)}
+                  </select>
+                </label>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div>
+                    <div className="mb-2 text-xs font-bold text-[#C4A853]">YOUR FUTURE PICKS</div>
+                    <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                      {humanFuturePicks.map((slot) => <button key={slot.pick} type="button" onClick={() => setHumanTradePicks((rows) => togglePick(rows, slot.pick))} className={`border-2 px-2 py-1 text-xs font-bold ${humanTradePicks.includes(slot.pick) ? "border-[#C4A853] bg-[#5A4D25]" : "border-[#71806F] bg-[#28352C]"}`}>#{slot.pick}</button>)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-bold text-[#C4A853]">THEIR FUTURE PICKS</div>
+                    <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                      {cpuFuturePicks.map((slot) => <button key={slot.pick} type="button" onClick={() => setCpuTradePicks((rows) => togglePick(rows, slot.pick))} className={`border-2 px-2 py-1 text-xs font-bold ${cpuTradePicks.includes(slot.pick) ? "border-[#C4A853] bg-[#5A4D25]" : "border-[#71806F] bg-[#28352C]"}`}>#{slot.pick}</button>)}
+                    </div>
+                  </div>
+                </div>
+                {tradeVerdict ? (
+                  <div className="mt-4 border-4 border-[#71806F] bg-[#28352C] p-3 text-sm">
+                    <span className="font-bold">FAIRNESS · {tradeVerdict.balanced ? "IN RANGE" : `${Math.round(tradeVerdict.imbalancePct * 100)}% APART`}</span>
+                    <span className="ml-3 text-[#E8E8D8]/60">The other club still asks for 5% in its favor.</span>
+                  </div>
+                ) : null}
+                {tradeMessage ? <div className="mt-3 border-2 border-[#C4A853] bg-[#40381F] p-3 text-sm text-[#F3DB8E]">{tradeMessage}</div> : null}
+                <button type="button" onClick={() => void executeTrade()} disabled={isWorking || !tradeVerdict} className="mt-4 border-4 border-[#E8E8D8] bg-[#31527A] px-4 py-2 font-bold disabled:opacity-35">MAKE THE OFFER</button>
+                {session.trades?.length ? (
+                  <div className="mt-4 text-xs text-[#E8E8D8]/60">{session.trades.length} accepted trade{session.trades.length === 1 ? "" : "s"} recorded in this POC session.</div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {session.completedPicks.length > 0 ? (
+              <section className="border-[6px] border-[#4A6844] bg-[#3D4A42] p-5 shadow-[7px_7px_0_#111]">
+                <div className="mb-3 flex items-center gap-2"><ClipboardList className="text-[#C4A853]" /><h2 className="text-lg font-bold">PICK TICKER</h2></div>
+                <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  {session.completedPicks.slice(-16).reverse().map((pick) => {
+                    const player = playerById.get(pick.playerId);
+                    const team = leagueTeams.find((row) => row.id === pick.teamId);
+                    return (
+                      <div key={`${pick.pick}-${pick.playerId}`} className="border-4 border-[#71806F] bg-[#28352C] p-3 text-sm">
+                        <div className="font-bold">#{pick.pick} · {player ? playerDisplayName(player) : pick.playerId}</div>
+                        <div className="text-[#E8E8D8]/60">{team ? teamDisplayName(team) : pick.teamId}</div>
+                        <div className="mt-1 text-[#BEE8C2]">SETTLED {formatMoney(pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? 0)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </>
         )}
 
-        {session?.completedPicks.length ? (
-          <section className="mt-6 bg-[#556B55] border-[6px] border-[#4A6844] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
-            <div className="flex items-center gap-2 mb-4">
-              <ClipboardList className="w-5 h-5 text-[#FFD27A]" />
-              <h2 className="font-bold text-lg">RECENT PICKS</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {session.completedPicks.slice(-12).reverse().map((pick) => {
-                const pickedPlayer = playerById.get(pick.playerId);
-                const pickedTeam = teams.find((team) => team.id === pick.teamId);
-                return (
-                  <div key={`${pick.pick}-${pick.playerId}`} className="bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-3 text-sm">
-                    <div className="font-bold">{pickedPlayer ? playerDisplayName(pickedPlayer) : pick.playerId}</div>
-                    <div className="text-[#E8E8D8]/70">
-                      Round {pick.round}, Pick {pick.pick} · {pickedPlayer?.primaryPosition ?? "UNK"}
-                    </div>
-                    <div className="text-[#9DFFB0] mt-1">→ {pickedTeam ? teamDisplayName(pickedTeam) : pick.teamId} MLB</div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <div className="mt-6 bg-[#4A6844] border-4 border-[#E8E8D8]/30 p-4">
-          <div className="flex items-start gap-3">
-            <Users className="w-5 h-5 text-[#3B7DD8] flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-sm mb-1">League Builder MLB Draft</h4>
-              <p className="text-xs text-[#E8E8D8]/70">
-                Draft 22 MLB players per team from the registered pool. Each confirmed pick immediately writes the team roster, the player league assignment, and the draft session cursor.
-              </p>
-            </div>
-          </div>
-        </div>
+        <footer className="border-4 border-[#71806F] bg-[#1F2922] p-4 text-xs text-[#E8E8D8]/60">
+          <div className="mb-1 flex items-center gap-2 font-bold text-[#C4A853]"><TrendingUp className="h-4 w-4" /> POC BOUNDARY</div>
+          Complete ratings, IV settlement, tax, legal rosters, CPU picks, forecasts, runs, and pick trades live here. Farm, privacy ceremony, LLM color, and season handoff do not.
+          {viewingTeamState ? ` Your club currently has ${viewingTeamState.roster.length} of 22 players.` : ""}
+        </footer>
       </div>
-    </div>
+    </main>
   );
 }
+
+export default LeagueBuilderSnakeDraft;
