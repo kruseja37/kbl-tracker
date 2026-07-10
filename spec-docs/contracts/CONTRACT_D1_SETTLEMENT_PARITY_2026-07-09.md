@@ -94,3 +94,61 @@ is untouched.
 ## Report
 APPEND here: per-item disposition, repro red proof, the item-8 verify-read evidence, gate
 outputs, STOP items. Working tree stays dirty for the captain.
+
+---
+
+## Builder report — BLOCKED at contract STOP (2026-07-09)
+
+**Disposition:** STOPPED before repro-test or implementation edits. No git write command was
+run. No product or test file was changed.
+
+**STOP item — item 4 payClass override requires a freeze-engine seam change:**
+
+- `src/engines/draftFreeze.ts:20-30` defines `DraftFreezePlayerInput` with IV, settled salary,
+  and scout range, but no pay-class override.
+- `src/engines/draftFreeze.ts:85-97` computes morale inside `computeDraftFreeze` by calling
+  `computeDraftMoraleFromRaw(...)` with settled salary and scout range.
+- `src/engines/draftMorale.ts:80-93` derives `payClass` internally through
+  `classifyDraftPay(winningBid, range)`; the adapter cannot supply the captain-ruled
+  slot-vs-IV-rank class.
+- `src/utils/draftFreezeInputs.ts:24-49,81-98` can only construct auction inputs with a
+  perceived-value scout range. Encoding the snake class by falsifying that scout range would
+  conflate two different meanings and was not attempted.
+
+The smallest honest seam appears to be an optional explicit pay-class override on
+`DraftFreezePlayerInput`, consumed by `computeDraftFreeze` while preserving the existing
+auction default. That is still an engine input/behavior change. The contract says that when
+the current pay-class computation is inlined such that an override needs an engine-signature
+change, and when item 4 requires an engine change, the builder must STOP first. Captain must
+approve/amend the exact seam before D1 continues.
+
+**Repro red proof:** NOT RUN — the STOP was discovered during mandatory pre-build seam
+inspection, before the contract's repro-first edit/run sequence.
+
+**Items 1-8:** NOT STARTED due to the item-4 STOP.
+
+**Item 8 verify-read:** NOT REACHED due to the item-4 STOP.
+
+**Gates / exit gauntlet / full Vitest:** NOT RUN due to the item-4 STOP.
+
+**Working tree:** pre-existing untracked `dispatch-prompt.txt` remains untouched; this appended
+report is the only builder-created change.
+
+---
+
+## Captain ruling on the item-4 STOP (2026-07-09) — seam authorized, build resumes
+The STOP was correct: falsifying the scout range to smuggle the class in would conflate two
+meanings and is forbidden. The minimal honest seam is AUTHORIZED, with guards:
+1. `DraftFreezePlayerInput` gains OPTIONAL `payClassOverride?: 'above' | 'within' | 'below'`.
+   `computeDraftFreeze`/`computeDraftMoraleFromRaw` consume it: when present, it replaces the
+   internal `classifyDraftPay` result; when absent, behavior is EXACTLY today's — same code
+   path, no reordering.
+2. ONLY the snake adapter branch ever sets it (with the ruled slot-vs-IV-rank mapping). The
+   auction input builder never sets it.
+3. **Tripwire test (mandatory):** an auction fixture's complete freeze output (morale
+   baselines, payroll, fan morale, per-player classes) asserted DEEP-EQUAL before/after this
+   change — pin the pre-change output as the expected value, computed from the unmodified
+   engine (you may generate it by temporarily checking the engine behavior in the test itself
+   against a hand-derived expectation — record how you derived it in the report).
+4. This is the ONLY engine-signature change authorized in this lane. Everything else in the
+   contract binds unchanged. Resume from the repro tests.
