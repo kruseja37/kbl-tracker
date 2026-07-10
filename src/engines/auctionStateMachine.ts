@@ -165,7 +165,11 @@ export type AuctionRejectionReason =
   | 'expected-open-bidding'
   | 'expected-passed-or-sold'
   | 'expected-resolve'
+  | 'manual-nomination-required'
+  | 'nomination-above-solvency-cap'
+  | 'nomination-below-minimum'
   | 'nominator-full'
+  | 'not-current-nominator'
   | 'no-current-lot'
   | 'no-open-nominator'
   | 'no-pending-claim'
@@ -221,10 +225,16 @@ export function initAuctionSession(input: InitAuctionSessionInput): AuctionSessi
   const teams = input.teams.map(normalizeTeam);
   const teamIds = teams.map((team) => team.teamId);
   const nominationOrder = sanitizeNominationOrder(
-    input.nominationOrder ?? seededNominationOrder(teamIds, config.nominationOrderSeed),
+    input.nominationOrder
+      ?? (config.sequentialNomination ? teamIds : seededNominationOrder(teamIds, config.nominationOrderSeed)),
     teamIds,
   );
-  const nominationIndex = findNextOpenNominationIndex(teams, nominationOrder, 0);
+  const nominationIndex = findNextOpenNominationIndex(
+    teams,
+    nominationOrder,
+    0,
+    config.sequentialNomination ? config.nonCompletingTeamIds : undefined,
+  );
   const players = Object.fromEntries(input.players.map((player) => [player.playerId, { ...player }]));
   const playerOrder = input.players.map((player) => player.playerId);
   // END-CHECKPOINT (FABLE-C3): a session whose COMPLETING teams are already full is born
@@ -284,6 +294,20 @@ export function getCurrentBidderTeamId(session: AuctionSession | null): string |
   );
 }
 
+/** The current real-club nominator in the rebuilt fixed rotation. Shills and full clubs skip. */
+export function getCurrentNominatorTeamId(session: AuctionSession | null): string | null {
+  if (session === null || session.state !== 'NOMINATION' || !session.config.sequentialNomination) {
+    return null;
+  }
+  const index = findNextOpenNominationIndex(
+    session.teams,
+    session.nominationOrder,
+    session.nominationIndex,
+    session.config.nonCompletingTeamIds,
+  );
+  return index === -1 ? null : session.nominationOrder[index] ?? null;
+}
+
 export function nextBidTurn(
   nominationOrder: readonly string[],
   stillIn: readonly string[],
@@ -335,6 +359,11 @@ export function selectNextNominee(session: AuctionSession): string | null {
 
 /** The opening ask a lot for `player` would carry — single-math with `surfaceNextPlayer`. */
 export function lotOpeningAsk(player: AuctionPlayer, config: AuctionSetupConfig): number {
+  // AUCTION REBUILD §1/§2: reserve prices no longer open rebuilt lots. Before a club chooses the
+  // actual committed open, the completion machinery prices remaining supply at league minimum —
+  // the exact amount the completion reserve already protects. The persisted reserve field stays
+  // readable for legacy/farm sessions but has no effect on rebuilt MLB sessions.
+  if (config.sequentialNomination) return LEAGUE_MINIMUM_SALARY;
   const legacyOpeningAsk = config.flatReserveFloor != null
     ? config.flatReserveFloor
     : reservePriceCurve(player.ivPercentile) * player.iv;
@@ -441,10 +470,97 @@ export function getTeamAuctionMaxBid(session: AuctionSession, teamId: string): n
   return sessionBidCeiling(session, teamId);
 }
 
+function nominationPreviewSession(
+  session: AuctionSession,
+  teamId: string,
+  playerId: string,
+  openingBid: number,
+): AuctionSession {
+  const stillIn = session.teams
+    .filter((team) => team.rosterSlotsRemaining > 0)
+    .map((team) => team.teamId);
+  return {
+    ...session,
+    state: 'OPEN_BIDDING',
+    currentLot: {
+      playerId,
+      nominatorTeamId: teamId,
+      openingAsk: openingBid,
+      highBid: openingBid,
+      highBidder: teamId,
+      stillIn,
+      bidTurnTeamId: nextBidTurn(session.nominationOrder, stillIn, teamId, teamId),
+      bidLog: [{ teamId, action: 'bid', amount: openingBid }],
+    },
+    pendingClaim: null,
+    availablePlayerIds: session.availablePlayerIds.filter((id) => id !== playerId),
+  };
+}
+
+/** Tax-aware ceiling for a club's contemplated committed nomination opening. */
+export function nominationBidCeiling(
+  session: AuctionSession,
+  teamId: string,
+  playerId: string,
+): number | null {
+  if (!session.config.sequentialNomination || !session.availablePlayerIds.includes(playerId)) return null;
+  if (session.players[playerId] === undefined) return null;
+  const preview = nominationPreviewSession(session, teamId, playerId, LEAGUE_MINIMUM_SALARY);
+  const team = findTeam(preview, teamId);
+  if (team === null || team.rosterSlotsRemaining <= 0) return null;
+  if (bidWouldStrand(preview, team, playerId)) return null;
+  return sessionBidCeiling(preview, teamId);
+}
+
+/**
+ * AUCTION REBUILD §1: the current real club chooses the player and commits its opening bid. The
+ * player leaves available supply immediately and can only finish SOLD; there is no pass/return
+ * branch in rebuilt mode.
+ */
+export function nominatePlayer(
+  session: AuctionSession,
+  teamId: string,
+  playerId: string,
+  openingBid: number,
+): AuctionTransitionResult {
+  if (session.state === 'AUCTION_COMPLETE') return rejected(session, 'auction-complete');
+  if (session.state !== 'NOMINATION') return rejected(session, 'expected-nomination');
+  if (!session.config.sequentialNomination) return rejected(session, 'manual-nomination-required');
+  if (session.currentLot !== null) return rejected(session, 'current-lot-open');
+
+  const currentNominator = getCurrentNominatorTeamId(session);
+  if (currentNominator === null) return finalizeTerminalAuction(session, false);
+  if (teamId !== currentNominator) return rejected(session, 'not-current-nominator');
+  if (isNonCompletingTeam(session, teamId)) return rejected(session, 'not-current-nominator');
+  const team = findTeam(session, teamId);
+  if (team === null) return rejected(session, 'team-not-found');
+  if (team.rosterSlotsRemaining <= 0) return rejected(session, 'nominator-full');
+  if (session.players[playerId] === undefined) return rejected(session, 'unknown-player');
+  if (!session.availablePlayerIds.includes(playerId)) {
+    return rejected(session, 'player-already-sold-or-unavailable');
+  }
+  if (!Number.isFinite(openingBid) || openingBid < LEAGUE_MINIMUM_SALARY) {
+    return rejected(session, 'nomination-below-minimum');
+  }
+
+  const preview = nominationPreviewSession(session, teamId, playerId, openingBid);
+  const maxBid = nominationBidCeiling(session, teamId, playerId);
+  if (maxBid === null || openingBid > maxBid) {
+    return rejected(session, 'nomination-above-solvency-cap');
+  }
+  if (bidWouldStrand(preview, team, playerId)) return rejected(session, 'bid-strands-roster');
+
+  return accepted({
+    ...preview,
+    state: preview.currentLot?.stillIn.length === 1 ? 'RESOLVE' : 'OPEN_BIDDING',
+  });
+}
+
 export function surfaceNextPlayer(session: AuctionSession): AuctionTransitionResult {
   if (session.state === 'AUCTION_COMPLETE') return rejected(session, 'auction-complete');
   if (session.state !== 'NOMINATION') return rejected(session, 'expected-nomination');
   if (session.currentLot !== null) return rejected(session, 'current-lot-open');
+  if (session.config.sequentialNomination) return rejected(session, 'manual-nomination-required');
 
   const playerId = selectNextNominee(session);
   if (playerId === null) {
@@ -606,6 +722,7 @@ export function resolveLot(session: AuctionSession): AuctionTransitionResult {
   if (lot.highBid !== null && lot.highBidder !== null) {
     return acceptedAfterLotFinalization(finalizeSoldLot(session, lot.highBidder, lot.highBid));
   }
+  if (session.config.sequentialNomination) return rejected(session, 'expected-resolve');
   if (lot.stillIn.length === 1) {
     return accepted({
       ...session,
@@ -622,6 +739,7 @@ export function resolveLot(session: AuctionSession): AuctionTransitionResult {
 }
 
 export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionResult {
+  if (session.config.sequentialNomination) return rejected(session, 'expected-resolve');
   if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
   const claim = session.pendingClaim;
   if (claim === null) return rejected(session, 'no-pending-claim');
@@ -642,6 +760,7 @@ export function claimLoneSurvivor(session: AuctionSession): AuctionTransitionRes
 }
 
 export function passLoneSurvivorOut(session: AuctionSession): AuctionTransitionResult {
+  if (session.config.sequentialNomination) return rejected(session, 'expected-resolve');
   if (session.state !== 'RESOLVE') return rejected(session, 'expected-resolve');
   if (session.pendingClaim === null) return rejected(session, 'no-pending-claim');
 
@@ -653,11 +772,19 @@ export function advanceLot(session: AuctionSession): AuctionTransitionResult {
   if (session.state !== 'SOLD' && session.state !== 'PASSED') {
     return rejected(session, 'expected-passed-or-sold');
   }
+  if (session.config.sequentialNomination && session.state !== 'SOLD') {
+    return rejected(session, 'expected-passed-or-sold');
+  }
   if (isAuctionComplete(session) || session.availablePlayerIds.length === 0) {
     return finalizeTerminalAuction(session, session.availablePlayerIds.length === 0);
   }
 
-  const next = findNextOpenNominationIndex(session.teams, session.nominationOrder, session.nominationIndex + 1);
+  const next = findNextOpenNominationIndex(
+    session.teams,
+    session.nominationOrder,
+    session.nominationIndex + 1,
+    session.config.sequentialNomination ? session.config.nonCompletingTeamIds : undefined,
+  );
   const nominationIndex = next === -1 ? session.nominationIndex : next;
   const nominationRound = next === -1
     ? session.nominationRound
@@ -674,6 +801,28 @@ export function advanceLot(session: AuctionSession): AuctionTransitionResult {
 }
 
 function finalizeTerminalAuction(session: AuctionSession, mayBackfill: boolean): AuctionTransitionResult {
+  if (session.config.sequentialNomination) {
+    const shortfallTeamIds = enrichedCompletingShortfallTeamIds(session);
+    if (!isAuctionComplete(session) || shortfallTeamIds.length > 0) {
+      const incompleteTeamIds = session.teams
+        .filter((team) => !isNonCompletingTeam(session, team.teamId) && team.rosterSlotsRemaining > 0)
+        .map((team) => team.teamId);
+      const teamIds = [...new Set([...incompleteTeamIds, ...shortfallTeamIds])];
+      return rejected({
+        ...session,
+        currentLot: null,
+        pendingClaim: null,
+        terminalShortfall: { status: 'uncompletable', teamIds },
+      }, 'auction-uncompletable');
+    }
+    return accepted({
+      ...session,
+      state: 'AUCTION_COMPLETE',
+      currentLot: null,
+      pendingClaim: null,
+      terminalShortfall: undefined,
+    });
+  }
   // CLEANUP BACKFILL (FABLE-C3 + M1J): every terminal path, including nomination exhaustion,
   // must flow through the same passed-lot completion cascade before AUCTION_COMPLETE is allowed.
   const passBackfilled = mayBackfill && !isAuctionComplete(session)
@@ -1339,13 +1488,15 @@ function findNextOpenNominationIndex(
   teams: readonly AuctionTeamState[],
   nominationOrder: readonly string[],
   startIndex: number,
+  nonCompletingTeamIds: readonly string[] | undefined = undefined,
 ): number {
   if (nominationOrder.length === 0) return -1;
+  const nonCompleting = new Set(nonCompletingTeamIds ?? []);
   for (let offset = 0; offset < nominationOrder.length; offset += 1) {
     const index = (startIndex + offset) % nominationOrder.length;
     const teamId = nominationOrder[index];
     const team = teams.find((candidate) => candidate.teamId === teamId);
-    if (team !== undefined && team.rosterSlotsRemaining > 0) return index;
+    if (team !== undefined && team.rosterSlotsRemaining > 0 && !nonCompleting.has(teamId)) return index;
   }
   return -1;
 }

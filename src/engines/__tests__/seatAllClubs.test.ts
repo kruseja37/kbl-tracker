@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_POOL_SIZE_MULTIPLIER,
   extractPoolFromDemand,
   type TeamDesignInput,
 } from '../poolFromDemand';
@@ -233,7 +232,9 @@ describe('seatAllClubs', () => {
         teams: clubs,
         shills: 0,
         budgetPerTeam: cap,
-        poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+        // This fixture proves persisted-set parity for a known G1-holding extraction, not the
+        // CAPFIX production-surplus tune (covered by the rebuild viability matrix).
+        poolSizeMultiplier: 1.25,
       },
     );
 

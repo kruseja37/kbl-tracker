@@ -156,22 +156,6 @@ export interface AuctionCompleteVM {
   summary: string;
   onProceed: () => void;
   proceedLabel?: string;
-  overrideArmed: boolean;
-  onArmOverride: () => void;
-  onConfirmOverride: () => void;
-  onStayOverride?: () => void;
-  settle?: {
-    seatTotal: number;
-    perClubLabel: string;
-    partial: boolean;
-    partialLine?: string;
-    armed: boolean;
-    busy?: boolean;
-    onArm: () => void;
-    onConfirm: () => void;
-    onStay: () => void;
-    resultLine: string | null;
-  };
 }
 
 export interface AuctionStageVM {
@@ -697,81 +681,12 @@ function HandoffCheckPanel({
 
       <div className={`handoff-footer${complete.allLegal ? " legal" : " blocked"}`}>
         <div className="handoff-summary">{complete.summary}</div>
-        {complete.settle?.resultLine && (
-          <div className="handoff-result-line">{complete.settle.resultLine}</div>
-        )}
         {complete.allLegal ? (
           <PressButton variant="gold" size="lg" onClick={complete.onProceed}>
             {complete.proceedLabel ?? "FARM DRAFT"} →
           </PressButton>
         ) : (
-          <>
-          {complete.settle && complete.settle.seatTotal > 0 && (
-            <div className="handoff-settle" data-auction-settle>
-              {complete.settle.armed ? (
-                <>
-                  <div className="handoff-confirm">
-                    Settle {complete.settle.seatTotal} empty seat{complete.settle.seatTotal === 1 ? "" : "s"} from the leftovers at league minimum — {complete.settle.perClubLabel}. Best fit first; money only breaks ties.
-                  </div>
-                  {complete.settle.partial && complete.settle.partialLine && (
-                    <div className="handoff-partial">{complete.settle.partialLine}</div>
-                  )}
-                  <div className="handoff-buttons">
-                    <button
-                      type="button"
-                      className="handoff-settle-confirm"
-                      onClick={complete.settle.onConfirm}
-                      disabled={complete.settle.busy}
-                    >
-                      SETTLE {complete.settle.seatTotal} SEAT{complete.settle.seatTotal === 1 ? "" : "S"}
-                    </button>
-                    <button
-                      type="button"
-                      className="handoff-stay"
-                      onClick={complete.settle.onStay}
-                      disabled={complete.settle.busy}
-                    >
-                      STAY
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <PressButton
-                  variant="default"
-                  size="md"
-                  onClick={complete.settle.onArm}
-                  disabled={complete.settle.busy}
-                >
-                  SETTLE FROM THE SHILLS
-                </PressButton>
-              )}
-            </div>
-          )}
-          <div className="handoff-override" data-auction-exit-override>
-            <button type="button" className="handoff-review" onClick={complete.onProceed}>
-              REVIEW ROSTERS
-            </button>
-            {complete.overrideArmed ? (
-              <>
-                <div className="handoff-confirm">
-                  This hands off {complete.blockedCount} club{complete.blockedCount === 1 ? "" : "s"} that can't field a legal 22. Franchise setup will refuse them until they're fixed. Proceed?
-                </div>
-                <div className="handoff-buttons">
-                  <button type="button" className="handoff-yes" onClick={complete.onConfirmOverride}>
-                    YES — HAND OFF AS-IS
-                  </button>
-                  <button type="button" className="handoff-stay" onClick={complete.onStayOverride ?? complete.onArmOverride}>
-                    STAY
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button type="button" className="handoff-anyway" onClick={complete.onArmOverride}>
-                PROCEED ANYWAY
-              </button>
-            )}
-          </div>
-          </>
+          <div className="handoff-blocked">NO HANDOFF — this auction did not reach its legal end condition.</div>
         )}
       </div>
     </section>

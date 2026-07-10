@@ -11,6 +11,7 @@ import { LEAGUE_MINIMUM_SALARY } from '../../data/rosterEngineConstants';
 import { LUXURY_CAP_TABLES, TIER_CAPS, type TierKey } from '../../data/tierParams';
 import {
   auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
 } from '../auctionLuxuryTax';
 import { DEFAULT_RESERVE_PRICE_K } from '../auctionReservePrice';
 import {
@@ -380,7 +381,7 @@ function buildTaxContext(input: {
     poolById: new Map(input.pool.players.map((player) => [player.id, player])),
     playerById: new Map(input.players.map((player) => [player.id, player])),
     identityByTeamId: new Map(input.teams.map((team) => [team.id, team.capIdentity])),
-    baseCaps: input.pool.luxuryCaps,
+    baseCaps: normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length),
   };
 }
 
@@ -645,7 +646,7 @@ function instrumentTransition(input: {
         preRoster,
         candidate,
         teamById.get(result.winnerTeamId)?.capIdentity,
-        input.pool.luxuryCaps,
+        normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length),
       );
       expect(projectedTax).toBe(independent);
       input.instrumentation.evidence.push({
@@ -821,7 +822,8 @@ function summarizeDraft(input: {
       return player;
     });
     const identity = teamById.get(team.teamId)?.capIdentity;
-    const implied = luxuryTax(finalRoster, identity ? shiftLuxuryCaps(input.pool.luxuryCaps, identity) : input.pool.luxuryCaps, 'taxed').charged;
+    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length);
+    const implied = luxuryTax(finalRoster, identity ? shiftLuxuryCaps(normalizedCaps, identity) : normalizedCaps, 'taxed').charged;
     rows.push({
       draft: input.spec.id,
       team: team.teamId,
@@ -837,7 +839,8 @@ function summarizeDraft(input: {
     });
   }
 
-  expect(input.session.instrumentation.evidence.length).toBeGreaterThanOrEqual(2);
+  const taxedTeamCount = rows.filter((row) => row.chargedTax > 0).length;
+  expect(input.session.instrumentation.evidence).toHaveLength(Math.min(2, taxedTeamCount));
   return {
     draftId: input.spec.id,
     label: input.spec.label,
@@ -891,10 +894,17 @@ describe('auction gauntlet -- real luxury tax completion proof', () => {
       .reduce((sum, summary) => sum + summary.multiBidLots, 0);
     expect(competitiveMultiBidLots).toBeGreaterThanOrEqual(COMPETITIVE_MULTI_BID_FLOOR);
 
-    for (const draftId of ['D5', 'D6']) {
-      const draftRows = allRows.filter((row) => row.draft === draftId);
-      expect(draftRows.some((row) => row.chargedTax > 0)).toBe(true);
-    }
+    // CAPFIX collateral honesty: the normalized 8-club D5 still crosses a cap, while the normalized
+    // 6-club D6 no longer does. summarizeDraft independently pins every observed budget drain to the
+    // product marginal helper above; the 20-team byte tripwire separately proves that normalization
+    // cannot move the established 20-club contract.
+    const d5Rows = allRows.filter((row) => row.draft === 'D5');
+    expect(d5Rows.some((row) => row.chargedTax > 0)).toBe(true);
+
+    const d6Rows = allRows.filter((row) => row.draft === 'D6');
+    expect(d6Rows.length).toBeGreaterThan(0);
+    expect(d6Rows.every((row) => row.chargedTax === 0)).toBe(true);
+    expect(d6Rows.every((row) => row.impliedFinalLiability === 0)).toBe(true);
 
     console.log('\nAUCTION GAUNTLET D6 SQUEEZE TABLE');
     console.table(allRows);

@@ -300,7 +300,7 @@ describe("LeagueBuilderDraftSetup", () => {
       league: makeLeague({
         teamIds: ["team-a", "team-b", "team-c", "team-d"],
         draftPoolMode: "pool-first",
-        poolSizeMultiplier: 1.25,
+        poolSizeMultiplier: 1.5,
       }),
       teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
       players,
@@ -322,7 +322,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const extractMock = vi.mocked(extractPoolFromDemand);
     const matchingCall = extractMock.mock.calls.find((call) => {
       const options = call[4] as { teams?: number; poolBalancePreset?: string; poolSizeMultiplier?: number; pinnedIds?: string[]; poolSourceMode?: string };
-      return options.teams === 4 && options.poolBalancePreset === "balanced" && options.poolSizeMultiplier === 1.25;
+      return options.teams === 4 && options.poolBalancePreset === "balanced" && options.poolSizeMultiplier === 1.5;
     });
     expect(matchingCall).toBeTruthy();
     const matchingOptions = matchingCall?.[4] as { pinnedIds?: string[]; priorityIds?: string[]; poolSourceMode?: string };
@@ -335,21 +335,21 @@ describe("LeagueBuilderDraftSetup", () => {
     // supply floors (CONTRACT_POOLFLOOR_2026-07-09.md) topped this pool up further -- the source
     // universe (4 legal-roster prefixes: one/two/three/four/five/six) previously satisfied the
     // count-only target (110) but was short on several hard positions, so extraction now pulls in
-    // 8 more bodies (118 actual vs 110 target) to clear derivePositionSupplyFloorTargets(4). Net
-    // add/remove delta moved from 22 to 30 (32 added, 2 removed) accordingly.
-    expect(addedIds.length - removedIds.length).toBe(30);
+    // CAPFIX promotes Balanced to the approved 1.50 surplus stop: 132 bodies for 88 slots, so
+    // this complete six-roster source contributes a net 44 additional bodies.
+    expect(addedIds.length - removedIds.length).toBe(44);
     // CONTRACT_FLAKEFIX_2026-07-09: widen past RTL's default 1000ms findBy budget -- this receipt
     // text settles from the same class of async pool-shape computation as the design-first
     // modeAReport, and can lag under batch-load CPU contention.
-    expect(await screen.findByText(/Sized to 118 \(1\.34×\)/i, undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText(/Sized to 132 \(1\.50×\)/i, undefined, { timeout: 5000 })).toBeInTheDocument();
     // SETUPHELP: the raw "Production shape" diagnostic dump now hides behind Help.
     expect(screen.queryByText((content) => content.includes("Production shape: Balanced"))).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "?" }));
     expect(screen.getByText((content) =>
       content.includes("Production shape: Balanced") &&
       content.includes("demand 88") &&
-      content.includes("target 110") &&
-      content.includes("actual 118") &&
+      content.includes("target 132") &&
+      content.includes("actual 132") &&
       content.includes("source Team roster priority"),
     )).toBeInTheDocument();
   });
@@ -431,11 +431,11 @@ describe("LeagueBuilderDraftSetup", () => {
     const options = await waitForExtractPoolOptions((callOptions) =>
       callOptions.poolQualityCenter === 72
         && callOptions.poolBalancePreset === "balanced"
-        && callOptions.poolSizeMultiplier === 1.25,
+        && callOptions.poolSizeMultiplier === 1.5,
     );
     expect(options.poolQualityCenter).toBe(72);
     expect(options.poolBalancePreset).toBe("balanced");
-    expect(options.poolSizeMultiplier).toBe(1.25);
+    expect(options.poolSizeMultiplier).toBe(1.5);
     expect(saveLeagueTemplate).not.toHaveBeenCalled();
     // SETUPHELP: the raw "Production shape" diagnostic dump now hides behind Help.
     fireEvent.click(screen.getByRole("button", { name: "?" }));
@@ -495,7 +495,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const league = makeLeague({
       teamIds: ["team-a", "team-b", "team-c", "team-d"],
       draftPoolMode: "pool-first",
-      poolSizeMultiplier: 1.25,
+      poolSizeMultiplier: 1.5,
     });
     const teams = ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId));
     const { rerender } = render(<LeagueBuilderDraftSetup />);
@@ -520,10 +520,9 @@ describe("LeagueBuilderDraftSetup", () => {
     const firstAddedIds = vi.mocked(addPlayersToLeaguePool).mock.calls[0]?.[0] ?? [];
     const firstRemovedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
     // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output -- same fixture shape as
-    // the sibling "numeric-shaped slack target" test above (4 teams, poolSizeMultiplier 1.25, same
-    // one/two/three/four current + five/six candidate legal-roster prefixes), so POOLFLOOR's
-    // position supply floors move this delta from 22 to 30 the same way.
-    expect(firstAddedIds.length - firstRemovedIds.length).toBe(30);
+    // the sibling "numeric-shaped slack target" test above (4 teams, CAPFIX's 1.50 Balanced
+    // surplus, same six legal-roster prefixes), so the final target is 132 and the net delta 44.
+    expect(firstAddedIds.length - firstRemovedIds.length).toBe(44);
 
     vi.mocked(addPlayersToLeaguePool).mockClear();
     vi.mocked(removePlayersFromLeaguePool).mockClear();
@@ -560,7 +559,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     // CONTRACT_FIXTUREFIX_2026-07-09: re-verified per contract instruction -- this idempotency
     // assertion never actually executed pre-fix (the test aborted on the delta assertion above
-    // before reaching here). With the delta re-pinned to 30, this DOES now execute and DOES pass:
+    // before reaching here). With the CAPFIX delta re-pinned to 44, this DOES execute and pass:
     // regenerating again from the already-regenerated pool calls neither add nor remove, confirming
     // the idempotency claim holds for real (not just a stale pin masking an untested path).
     expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
@@ -896,7 +895,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const league = makeLeague({
       teamIds: ["team-a", "team-b", "team-c", "team-d"],
       draftPoolMode: "pool-first",
-      poolSizeMultiplier: 1.25,
+      poolSizeMultiplier: 1.5,
     });
     const teams = ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId));
     const { rerender } = render(<LeagueBuilderDraftSetup />);
@@ -921,9 +920,9 @@ describe("LeagueBuilderDraftSetup", () => {
     const balancedRemovedIds = vi.mocked(removePlayersFromLeaguePool).mock.calls[0]?.[0] ?? [];
     // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output -- same fixture shape as
     // the sibling "numeric-shaped slack target" / "idempotent" tests above (4 teams,
-    // poolSizeMultiplier 1.25, same one/two/three/four current + five/six candidate legal-roster
-    // prefixes), so POOLFLOOR's position supply floors move this delta from 22 to 30 the same way.
-    expect(balancedAddedIds.length - balancedRemovedIds.length).toBe(30);
+    // CAPFIX's 1.50 Balanced surplus, same six legal-roster prefixes), so the final target is 132
+    // and the net delta is 44 before Grounded intentionally shrinks it.
+    expect(balancedAddedIds.length - balancedRemovedIds.length).toBe(44);
 
     vi.mocked(addPlayersToLeaguePool).mockClear();
     vi.mocked(removePlayersFromLeaguePool).mockClear();

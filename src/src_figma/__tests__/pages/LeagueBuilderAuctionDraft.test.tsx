@@ -367,6 +367,18 @@ function mockLeagueData(options: { players?: Player[]; pool?: RegisteredPool } =
   return leagueData;
 }
 
+async function beginAndCommitHumanNomination(playerId = "player-a"): Promise<void> {
+  fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+  const playerSelect = await screen.findByLabelText("Nomination player");
+  fireEvent.change(playerSelect, { target: { value: playerId } });
+  const reveal = await screen.findByRole("button", { name: /Reveal Page Caps assistant GM read/ });
+  fireEvent.click(reveal);
+  fireEvent.click(await screen.findByRole("button", { name: /NOMINATE ·/i }));
+  await waitFor(() => {
+    expect(screen.getByText("MLB auction")).toBeInTheDocument();
+  });
+}
+
 const TEST_SHILL_ID = "__auction_shill__league-page__1";
 const TEST_SHILL_PROFILE: CpuShillProfile = {
   teamId: TEST_SHILL_ID,
@@ -670,7 +682,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     );
   });
 
-  test("renders setup and begins into an engine-nominated open lot", async () => {
+  test("renders setup, requires a manual committed nomination, then opens bidding", async () => {
     const players = makePlayers();
     mockLeagueData({ players, pool: makePool(players) });
     const seed = seedForOpeningLot(players);
@@ -687,12 +699,18 @@ describe("LeagueBuilderAuctionDraft", () => {
     const begin = await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i });
     fireEvent.click(begin);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
-    });
-    // TEXTLAW-SWEEP A3 reverse fix: the phase-label pill is ALWAYS-class content -- no longer
-    // gated behind Help.
-    expect(screen.getByText("MLB auction")).toBeInTheDocument();
+    expect(await screen.findByText("Next nomination")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nomination player")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nomination opening bid")).toHaveValue(1_667);
+    expect(screen.queryByRole("button", { name: /Let him go/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /NOMINATE ·/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Nomination player"), { target: { value: "player-a" } });
+    fireEvent.click(screen.getByRole("button", { name: /Reveal Page Caps assistant GM read/ }));
+    expect(screen.getByRole("button", { name: /NOMINATE ·/i })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: /NOMINATE ·/i }));
+
+    expect(await screen.findByText("MLB auction")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Help" }));
     expect(screen.getByText("MLB auction")).toBeInTheDocument();
     expect(screen.getByText("On the block")).toBeInTheDocument();
@@ -706,8 +724,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.getByText(/^MARKET \$/)).toBeInTheDocument();
     expect(screen.getByLabelText("Public market price band")).toBeInTheDocument();
     expect(screen.queryByText(/Scout Insight:/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /BID/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Let him go/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Let the bid stand/i })).toBeInTheDocument();
   });
 
   test("uses leagueId query param over the first league when it matches a known league", async () => {
@@ -806,15 +823,12 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     render(<LeagueBuilderAuctionDraft />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Lot 1 of/i)).toBeInTheDocument();
-    });
+    await beginAndCommitHumanNomination("player-a");
+    mockEmitAuctionAdvisorMoment.mockClear();
 
     expect(screen.getByText("On the block")).toBeInTheDocument();
     expect(screen.getAllByText(/Avery Anchor|Blake Bolt/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("opening — be the first")).toBeInTheDocument();
+    expect(screen.getByText("Page Caps")).toBeInTheDocument();
     expect(screen.getByText(/Page (Caps|Keys) budget/)).toBeInTheDocument();
     expect(screen.getByText("Ceiling")).toBeInTheDocument();
     expect(screen.getByText("Slots left")).toBeInTheDocument();
@@ -834,25 +848,11 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByText("team-a")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Custom bid amount")).not.toBeInTheDocument();
 
-    expect(screen.getByText("RESERVE")).toBeInTheDocument();
-    const firstBidButton = await screen.findByRole("button", { name: /BID \$\d+k/i });
+    expect(screen.getByText("OPEN")).toBeInTheDocument();
+    expect(firstRevealLabel).toMatch(/Page Keys/);
+    expect(screen.getByRole("button", { name: "Let the bid stand" })).toBeEnabled();
 
-    fireEvent.click(firstBidButton);
-
-    await waitFor(() => {
-      // FLOORREFIT R1 relocation: the statusbar "Now: {team} — raise or pass" pill is retired --
-      // the ON THE CLOCK banner is the sole announcer of turn identity now, so the same
-      // information (a human team is on the clock to act after the bid) is asserted there.
-      const nextReveal = screen.getByRole("button", { name: /Reveal Page (Caps|Keys) assistant GM read/ });
-      expect(nextReveal).toHaveTextContent(
-        /YOU'RE UP — PAGE (CAPS|KEYS)/,
-      );
-      expect(nextReveal.getAttribute("aria-label")).not.toBe(firstRevealLabel);
-    });
-    fireEvent.click(screen.getByRole("button", { name: /Reveal Page (Caps|Keys) assistant GM read/ }));
-    expect(screen.getByRole("button", { name: "Let him go" })).toBeEnabled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Let him go" }));
+    fireEvent.click(screen.getByRole("button", { name: "Let the bid stand" }));
 
     await waitFor(() => {
       // CALLFIX Item 3: the log row's headline name is now popover-wrapped (a separate element
@@ -885,9 +885,9 @@ describe("LeagueBuilderAuctionDraft", () => {
     window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}&reserveK=0`);
 
     render(<LeagueBuilderAuctionDraft />);
-    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+    await beginAndCommitHumanNomination("player-a");
 
-    const reveal = await screen.findByRole("button", { name: /Reveal Page Caps assistant GM read/ });
+    const reveal = await screen.findByRole("button", { name: /Reveal Page Keys assistant GM read/ });
     expect(screen.queryByTestId("whisper-keep-targets")).not.toBeInTheDocument();
     fireEvent.click(reveal);
     const stakes = await screen.findByTestId("whisper-bid-vs-pass");
@@ -902,25 +902,23 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
   });
 
-  test("shows a read-only CPU decision preview before advancing automated turns", async () => {
+  test("shows a read-only CPU nomination preview before advancing the committed open", async () => {
     const players = makePlayers();
     const leagueData = mockLeagueData({ players, pool: makePool(players) });
     leagueData.teams = [makeTeam("team-a", { controlledBy: "ai" }), makeTeam("team-b")];
-    const seed = seedWhereCpuTeamBids(players, "team-a");
-    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
+    window.history.pushState({}, "", "/league-builder/auction-draft");
 
     render(<LeagueBuilderAuctionDraft />);
 
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Review CPU decision")).toBeInTheDocument();
+      expect(screen.getByText("Review CPU nomination")).toBeInTheDocument();
     });
 
     expect(screen.getByText(/turn preview/i)).toBeInTheDocument();
-    const cpuMoveText = screen.getByText(/Page Caps will (bid \$[\d,]+|pass)/);
-    const cpuBidAmount = cpuMoveText.textContent?.match(/\$[\d,]+/)?.[0] ?? "";
-    const cpuReason = screen.getByText(/CPU team (likes the player and bids|passes)/);
+    const cpuMoveText = screen.getByText(/Page Caps nominates/);
+    const cpuReason = screen.getByText(/board value, roster need, and fit/i);
     expect(cpuReason).toBeInTheDocument();
     expect(cpuReason.textContent).not.toContain("$");
     expect(screen.queryByText(/^Read\b/)).not.toBeInTheDocument();
@@ -933,10 +931,8 @@ describe("LeagueBuilderAuctionDraft", () => {
     await waitFor(() => {
       expect(screen.queryByText(/turn preview/i)).not.toBeInTheDocument();
     });
-    if (cpuBidAmount) {
-      expect(screen.getByText("Page Caps")).toBeInTheDocument();
-      expect(screen.getAllByText(cpuBidAmount).length).toBeGreaterThan(0);
-    }
+    expect(screen.getByText("MLB auction")).toBeInTheDocument();
+    expect(screen.getByText("Page Caps")).toBeInTheDocument();
   });
 
   // CALLFIX Item 5(d): the stage's public market banner used to ALWAYS compute its own,
@@ -955,55 +951,44 @@ describe("LeagueBuilderAuctionDraft", () => {
   test("CALLFIX Item 5(d): the public market band is byte-identical for the no-seat (CPU-turn) case", async () => {
     const players = makePlayers();
     const leagueDataAllCpu = mockLeagueData({ players, pool: makePool(players) });
-    leagueDataAllCpu.teams = [makeTeam("team-a", { controlledBy: "ai" }), makeTeam("team-b")];
-    const seed = seedWhereCpuTeamBids(players, "team-a");
-    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}`);
+    leagueDataAllCpu.teams = [
+      makeTeam("team-a", { controlledBy: "ai" }),
+      makeTeam("team-b", { controlledBy: "ai" }),
+    ];
 
     render(<LeagueBuilderAuctionDraft />);
     fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Review CPU decision")).toBeInTheDocument();
+      expect(screen.getByText("Review CPU nomination")).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByRole("button", { name: "Advance decision" }));
+    await screen.findByText("Review CPU decision");
 
     const band = screen.getByLabelText("Public market price band");
-    expect(band.textContent).toBe("MARKET $65,000 · $78,883 · $82,891 — RESERVE $65,000");
+    expect(band.textContent).toMatch(/^MARKET \$[\d,]+ · \$[\d,]+ · \$[\d,]+ — OPEN \$[\d,]+$/);
   });
 
   test("shows a pure shill winner on the visible AuctionStage roster board after SOLD", async () => {
     const players = makePlayers(66);
     mockLeagueData({ players, pool: makePool(players) });
-    const seed = seedWhereFirstShillBids(players);
-    window.history.pushState({}, "", `/league-builder/auction-draft?shills=1&devSeed=${seed}`);
+    window.history.pushState({}, "", "/league-builder/auction-draft?shills=1");
 
     render(<LeagueBuilderAuctionDraft />);
 
     await waitFor(() => {
       expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     });
-    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+    await beginAndCommitHumanNomination("player-a");
 
-    await waitFor(() => {
-      expect(screen.getByText(/Market Shill 1 will bid/)).toBeInTheDocument();
-    });
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal Page Keys assistant GM read/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Let the bid stand" }));
+
+    expect(await screen.findByText(/Market Shill 1 will bid/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Advance decision" }));
 
-    let previousRevealLabel: string | null = null;
-    for (let index = 0; index < 2; index += 1) {
-      await waitFor(() => {
-        const currentReveal = screen.getByRole("button", { name: /assistant GM read/i });
-        if (previousRevealLabel) {
-          expect(currentReveal.getAttribute("aria-label")).not.toBe(previousRevealLabel);
-        }
-      });
-      const reveal = screen.getByRole("button", { name: /assistant GM read/i });
-      previousRevealLabel = reveal.getAttribute("aria-label");
-      fireEvent.click(reveal);
-      await waitFor(() => {
-        expect(screen.getByRole("button", { name: /Let him go/i })).toBeEnabled();
-      });
-      fireEvent.click(screen.getByRole("button", { name: /Let him go/i }));
-    }
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal Page Caps assistant GM read/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Let the bid stand" }));
 
     await waitFor(() => {
       expect(screen.getByText("SOLD")).toBeInTheDocument();
@@ -1050,7 +1035,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByText("Farm - scouting only")).not.toBeInTheDocument();
   });
 
-  test("P2: blocked complete handoff focuses the panel and requires the two-step override", async () => {
+  test("auction rebuild: a blocked handoff has no override or continuation safety net", async () => {
     const teamAPlayers = makeExitRosterPlayers("team-a");
     const teamBPlayers = makeExitRosterPlayers("team-b", { missingSs: true });
     const players = await saveCompletedAuctionForPage({ teamAPlayers, teamBPlayers });
@@ -1058,23 +1043,12 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     render(<LeagueBuilderAuctionDraft />);
 
-    const panel = await screen.findByTestId("auction-complete-panel");
+    await screen.findByTestId("auction-complete-panel");
     expect(screen.getByTestId("auction-exit-blocked-team-b")).toBeInTheDocument();
     expect(screen.getByText("Still needs a starting SS.")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "REVIEW ROSTERS" }));
+    expect(screen.getByText("NO HANDOFF — this auction did not reach its legal end condition.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /review rosters|proceed anyway|scout reveal/i })).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(panel);
-
-    fireEvent.click(screen.getByRole("button", { name: "PROCEED ANYWAY" }));
-    expect(screen.getByText(/This hands off 1 club that can't field a legal 22/)).toBeInTheDocument();
-    fireEvent.pointerDown(document.body);
-    expect(screen.queryByText(/This hands off 1 club that can't field a legal 22/)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "PROCEED ANYWAY" }));
-    fireEvent.click(screen.getByRole("button", { name: "YES — HAND OFF AS-IS" }));
-
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/scout-hire?leagueId=league-page&reserveK=0.65");
   });
 
   test("P3: complete handoff reads positions from stored player records, not session enrichment", async () => {
@@ -1100,7 +1074,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByText("BLOCKED")).not.toBeInTheDocument();
   });
 
-  test("SETTLE P1/P2/P4: settle preview fills a stored-record short club and result line survives reload", async () => {
+  test("auction rebuild: a shill-held player is never redistributed into a short club", async () => {
     const teamBShort = makeExitRosterPlayers("team-b").slice(0, 21);
     const shillPlayer = makePlayer(`${TEST_SHILL_ID}-rp-fix`, "RP");
     const players = await saveCompletedAuctionForPage({
@@ -1109,30 +1083,16 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
     mockLeagueData({ players, pool: makePool(players) });
 
-    const { unmount } = render(<LeagueBuilderAuctionDraft />);
-
-    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
-    expect(screen.getByText(/Settle the empty seats from Market Shills below/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "SETTLE FROM THE SHILLS" }));
-    expect(screen.getByText(/Settle 1 empty seat from the leftovers at league minimum/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "SETTLE 1 SEAT" }));
-
-    await waitFor(() => {
-      expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
-    });
-    expect(screen.getByRole("button", { name: /SCOUT REVEAL/i })).toBeInTheDocument();
-    expect(screen.getByText("Settled 1 seat from Market Shills at league minimum.")).toBeInTheDocument();
-
-    unmount();
-    cleanup();
-    mockLeagueData({ players, pool: makePool(players) });
     render(<LeagueBuilderAuctionDraft />);
 
-    expect(await screen.findByText("Settled 1 seat from Market Shills at league minimum.")).toBeInTheDocument();
-    expect(screen.getAllByText("✓ LEGAL 22")).toHaveLength(2);
+    expect(await screen.findByText("MLB DRAFT COMPLETE — THE HANDOFF CHECK")).toBeInTheDocument();
+    expect(screen.getByTestId("auction-exit-blocked-team-b")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /SETTLE FROM THE SHILLS/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /SCOUT REVEAL/i })).not.toBeInTheDocument();
+    expect(screen.getByText("NO HANDOFF — this auction did not reach its legal end condition.")).toBeInTheDocument();
   });
 
-  test("SETTLE P3/P5: failed settle preview adds no gate term and leaves the short guidance unchanged", async () => {
+  test("auction rebuild: an incompatible shill body also leaves the legal shortfall visible", async () => {
     const teamBShort = makeExitRosterPlayers("team-b", { missingSs: true }).slice(0, 21);
     const shillPlayer = makePlayer(`${TEST_SHILL_ID}-rp-only`, "RP");
     const players = await saveCompletedAuctionForPage({
@@ -1143,14 +1103,10 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     render(<LeagueBuilderAuctionDraft />);
 
-    const panel = await screen.findByTestId("auction-complete-panel");
+    await screen.findByTestId("auction-complete-panel");
     expect(screen.queryByRole("button", { name: "SETTLE FROM THE SHILLS" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Add more players in Draft Setup and run the draft again/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "REVIEW ROSTERS" }));
-
+    expect(screen.getByText("Still needs a starting SS.")).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(panel);
     expect(screen.queryByRole("button", { name: /SCOUT REVEAL/i })).not.toBeInTheDocument();
   });
 

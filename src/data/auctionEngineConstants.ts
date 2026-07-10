@@ -34,7 +34,40 @@ export interface AuctionSetupConfig {
    * shill-less setups) keeps the historical everyone-must-fill semantics.
    */
   nonCompletingTeamIds?: readonly string[];
+  /**
+   * 2026-07-10 auction rebuild mode. Rebuilt MLB sessions use fixed club-by-club nominations
+   * with a committed opening bid. Optional so farm and already-saved legacy sessions retain
+   * their original state-machine contract instead of being silently migrated mid-draft.
+   */
+  sequentialNomination?: boolean;
+  /** §3 tunable: a CPU club's committed open as a fraction of its own valuation. */
+  cpuNominationOpenFraction?: number;
+  /** §3 tunable: pure shills defend bids below this fraction of the player's market estimate. */
+  shillAnchorFraction?: number;
+  /** §3 tunable: aggregate win ceiling across every pure shill in the room. */
+  shillTotalWinCap?: number;
 }
+
+/**
+ * AUCTION REBUILD §3 — the only defaults the bounded viability loop may tune. Pool surplus lives
+ * in `poolFromDemand.DEFAULT_POOL_SIZE_MULTIPLIER`; shill-count recommendations live in
+ * `auctionPoolSizing.SIZING_TUNING`. Keeping the live mechanics' three remaining knobs together
+ * makes any out-of-contract economics change obvious in review.
+ */
+export const AUCTION_REBUILD_TUNING = {
+  shillAnchorFraction: 0.65,
+  shillMaxWinsPerShill: 8,
+  shillTotalWinCap: 12,
+  cpuNominationOpenFraction: 0.35,
+} as const;
+
+/**
+ * CAPFIX (2026-07-10): one-parameter small-league normalization for auction luxury-cap
+ * thresholds. The power-law exponent is the only cap-family knob in the final viability loop;
+ * 20+ clubs stay exactly on the stock table. CAPFIX iteration 3 tuned this to 0.55: the complete
+ * six-run matrix met every unchanged viability dimension with the 1.50 pool-surplus default.
+ */
+export const AUCTION_SMALL_LEAGUE_CAP_SCALE_EXPONENT = 0.55;
 
 /** §6 Q3, §16 sim-tune: flat bid step scaled to the active tier cap by setup. */
 export const DEFAULT_AUCTION_BID_INCREMENT = 5000;

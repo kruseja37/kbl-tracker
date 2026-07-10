@@ -1639,6 +1639,12 @@ export function LeagueBuilderDraftSetup() {
   }, [activeLeagueId]);
 
   const locked = Boolean(poolRecord?.locked);
+  // CAPFIX collateral: a pre-CAPFIX locked pool with no explicit dial keeps the multiplier that
+  // was captured in its basis. New/unlocked leagues take the new 1.50 default; unlocking is the
+  // explicit seam where a legacy pool can adopt and re-snapshot that default without a migration.
+  const effectivePoolSizeMultiplier = league?.poolSizeMultiplier
+    ?? (locked ? league?.poolExtractedBasis?.poolSizeMultiplier : undefined)
+    ?? DEFAULT_POOL_SIZE_MULTIPLIER;
   const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft;
   const poolEditingBlocked = locked || savedDraftMutationBlocked;
   const poolEditingBlockMessage = hasSavedDraft
@@ -1842,17 +1848,17 @@ export function LeagueBuilderDraftSetup() {
     return resolvePoolSizingTarget({
       teams: league.teamIds.length,
       shills: 0,
-      poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: effectivePoolSizeMultiplier,
     }).effectiveTarget;
-  }, [league]);
+  }, [effectivePoolSizeMultiplier, league]);
   const poolSizeTarget = useMemo(() => {
     if (!league) return null;
     return resolvePoolSizingTarget({
       teams: league.teamIds.length,
       shills: 0,
-      poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+      poolSizeMultiplier: effectivePoolSizeMultiplier,
     });
-  }, [league]);
+  }, [effectivePoolSizeMultiplier, league]);
   const inPoolRosterShapes = useMemo(
     () => Object.values(rosterPositionMap(inPoolPlayers)),
     [inPoolPlayers],
@@ -2105,8 +2111,15 @@ export function LeagueBuilderDraftSetup() {
   }, [poolBalancePreset, poolBalanceTuning, poolFirstManualShapeDiagnostics]);
 
   const livePoolExtractedBasis = useMemo(
-    () => (league ? buildPoolExtractedBasis(league, leagueTeams, tierBudget, shills, poolQualityCenter, poolBalancePreset) : null),
-    [league, leagueTeams, shills, tierBudget, poolQualityCenter, poolBalancePreset],
+    () => (league ? buildPoolExtractedBasis(
+      { ...league, poolSizeMultiplier: effectivePoolSizeMultiplier },
+      leagueTeams,
+      tierBudget,
+      shills,
+      poolQualityCenter,
+      poolBalancePreset,
+    ) : null),
+    [effectivePoolSizeMultiplier, league, leagueTeams, shills, tierBudget, poolQualityCenter, poolBalancePreset],
   );
   // CONTRACT_STALEPARITY_2026-07-09: this used to be design-first-only (poolMode === "design-first"
   // && ...) -- pool-first now ALSO snapshots a basis at LOCK time (see handleLock), so the same
@@ -2543,14 +2556,14 @@ export function LeagueBuilderDraftSetup() {
         teams: league.teamIds.length,
         shills,
         budgetPerTeam: tierBudget,
-        poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+        poolSizeMultiplier: effectivePoolSizeMultiplier,
         poolQualityCenter,
         pinnedIds: sortedIds([...ledger.handAdds, ...lockedDesignPinPlayerIds]),
         excludedIds: ledger.handRemoves.filter((id) => !designPinIdSet.has(id)),
         designPriorityIds: designFirstIdentityCriticalIds,
       },
     );
-  }, [designFirstIdentityCriticalIds, humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, universePlayers, poolQualityCenter, shills, tierBudget]);
+  }, [designFirstIdentityCriticalIds, effectivePoolSizeMultiplier, humanTeams, league, leagueTeams, lockedDesignPinPlayerIds, universePlayers, poolQualityCenter, shills, tierBudget]);
 
   const buildPoolFirstShapeResult = useCallback((provenance: PoolProvenanceState): PoolFromDemandResult => {
     if (!league) throw new Error("League not found.");
@@ -3265,7 +3278,7 @@ export function LeagueBuilderDraftSetup() {
     pool: sortedIds(inPoolPlayers.map((player) => player.id)),
     cap: tierBudget,
     teamIds: league?.teamIds ?? [],
-    dial: league?.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
+    dial: effectivePoolSizeMultiplier,
     shills,
     // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: source-league selection is a basis input like the
     // cap/dial/shills above — a change here must trip the same recheck-staleness signal.
@@ -3276,7 +3289,7 @@ export function LeagueBuilderDraftSetup() {
       lockedAt: team.rosterDesign?.lockedAt ?? null,
       slots: team.rosterDesign?.slots ?? null,
     })),
-  }), [explicitSourceLeagueIds, humanTeams, inPoolPlayers, league?.poolSizeMultiplier, league?.teamIds, shills, tierBudget]);
+  }), [effectivePoolSizeMultiplier, explicitSourceLeagueIds, humanTeams, inPoolPlayers, league?.teamIds, shills, tierBudget]);
   const runRecheck = useCallback(() => {
     if (!recheckVisible) return;
     const report = buildRecheckReport({
@@ -3561,7 +3574,7 @@ export function LeagueBuilderDraftSetup() {
       </div>
       <div className="flex flex-wrap items-center gap-1">
         {POOL_SIZE_MULTIPLIER_STOPS.map((stop) => {
-          const active = Math.abs((league?.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER) - stop) < 1e-9;
+          const active = Math.abs(effectivePoolSizeMultiplier - stop) < 1e-9;
           return (
             <button
               key={stop}

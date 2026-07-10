@@ -142,7 +142,11 @@ export interface ClassifiedDemandPlayer {
 }
 
 export const POOL_SIZE_MULTIPLIER_STOPS = [1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const;
-export const DEFAULT_POOL_SIZE_MULTIPLIER = 1.25;
+/**
+ * CAPFIX iteration 3 final tune: one-shot sequential nomination needs the maximum approved
+ * surplus stop so an 8-club room retains legal late-draft shape coverage without a safety net.
+ */
+export const DEFAULT_POOL_SIZE_MULTIPLIER = 1.5;
 export const POOL_QUALITY_CENTER_STOPS = [64, 66, 68, 70, 72, 74, 76] as const;
 export type PoolQualityCenter = typeof POOL_QUALITY_CENTER_STOPS[number];
 export const DEFAULT_POOL_QUALITY_CENTER: PoolQualityCenter = 68;

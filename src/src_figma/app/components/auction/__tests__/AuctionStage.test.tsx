@@ -434,7 +434,7 @@ describe("AuctionStage COPY LAW 2026-07-09", () => {
     expect(screen.getByText("These players don't fit a legal 22 — resolve before launch.")).toBeInTheDocument();
   });
 
-  test("1.7: the handoff override confirm reads 'Franchise setup will refuse them'", () => {
+  test("auction rebuild: an illegal complete screen has no override or settle safety net", () => {
     const stageVm = vm();
     stageVm.complete = {
       clubs: [{ teamId: "a", name: "A", primary: "#000", secondary: "#fff", countLabel: "20 of 22", legal: false, blockers: ["Missing a CP"] }],
@@ -442,15 +442,13 @@ describe("AuctionStage COPY LAW 2026-07-09", () => {
       blockedCount: 1,
       summary: "1 club blocked.",
       onProceed: () => {},
-      overrideArmed: true,
-      onArmOverride: () => {},
-      onConfirmOverride: () => {},
     };
 
     render(<AuctionStage vm={stageVm} />);
 
-    expect(screen.getByText(/Franchise setup will refuse them until they're fixed\. Proceed\?/)).toBeInTheDocument();
-    expect(screen.queryByText(/The franchise wizard will refuse them/)).not.toBeInTheDocument();
+    expect(screen.getByText("NO HANDOFF — this auction did not reach its legal end condition.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /proceed anyway/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /settle from the shills/i })).not.toBeInTheDocument();
   });
 
   test("1.7: the public-market LIVE line names the actual number of interested teams", () => {
@@ -802,9 +800,6 @@ describe("AuctionStage FLOORREFIT Move 1 -- ON THE CLOCK banner", () => {
       blockedCount: 0,
       summary: "Every club fields a legal 22. Scout reveal is next.",
       onProceed: () => {},
-      overrideArmed: false,
-      onArmOverride: () => {},
-      onConfirmOverride: () => {},
     };
 
     render(<AuctionStage vm={stageVm} />);
@@ -855,9 +850,6 @@ describe("AuctionStage FLOORREFIT Move 6 -- roster board placement", () => {
       blockedCount: 0,
       summary: "Every club fields a legal 22. Scout reveal is next.",
       onProceed: () => {},
-      overrideArmed: false,
-      onArmOverride: () => {},
-      onConfirmOverride: () => {},
     };
     render(<AuctionStage vm={stageVm} />);
     expect(screen.getByTestId("auction-complete-panel")).toBeInTheDocument();
@@ -976,9 +968,6 @@ describe('AuctionStage advisor-color privacy', () => {
       blockedCount: 0,
       summary: 'Every club fields a legal 22. Scout reveal is next.',
       onProceed: () => {},
-      overrideArmed: false,
-      onArmOverride: () => {},
-      onConfirmOverride: () => {},
     };
     render(
       <AuctionStage
