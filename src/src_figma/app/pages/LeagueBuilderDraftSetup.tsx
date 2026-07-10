@@ -19,6 +19,7 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  Shuffle,
 } from "lucide-react";
 import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
 import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
@@ -105,6 +106,7 @@ import {
 } from "../../../utils/leagueBuilderStorage";
 import { readMlbDraftCompletion } from "../../../utils/mlbDraftCompletion";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
+import { isSnakeDraftPocEnabled } from "../../../utils/franchisePhase2Flags";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { TRAIT_PRICING } from "../../../data/traitPricing";
@@ -3181,6 +3183,11 @@ export function LeagueBuilderDraftSetup() {
     navigate(draftRouteForLeague(league, { shillCount: shills, reservePriceK }));
   };
 
+  const handleStartSnakeDraftPoc = () => {
+    if (!league || !startReady || !isSnakeDraftPocEnabled()) return;
+    navigate(`/league-builder/snake-draft?leagueId=${encodeURIComponent(league.id)}`);
+  };
+
   const handleSaveEditedPlayer = useCallback(
     async (updatedPlayer: Player) => {
       if (poolEditingBlocked) {
@@ -4838,15 +4845,28 @@ export function LeagueBuilderDraftSetup() {
                 {leagueTeams.length} clubs{shills > 0 ? ` + ${shills} CPU shills` : ""} · {humanTeams.length} human · {leagueTeams.length - humanTeams.length} CPU · reserve {RESERVE_PRICE_K_LABELS[reservePriceK]} · {poolReady ? "pool locked" : "pool open"} · {identitiesReady ? "identities set" : "identity needed"}
               </div>
               <div className="flex flex-col items-start lg:items-end gap-2">
-                <PressButton
-                  onClick={handleStartDraft}
-                  disabled={busy || !startReady}
-                  variant="gold"
-                  size="lg"
-                  shadow={4}
-                >
-                  <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START THE DRAFT"}
-                </PressButton>
+                <div className="flex flex-wrap justify-start lg:justify-end gap-2">
+                  <PressButton
+                    onClick={handleStartDraft}
+                    disabled={busy || !startReady}
+                    variant="gold"
+                    size="lg"
+                    shadow={4}
+                  >
+                    <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START THE DRAFT"}
+                  </PressButton>
+                  {isSnakeDraftPocEnabled() ? (
+                    <PressButton
+                      onClick={handleStartSnakeDraftPoc}
+                      disabled={busy || !startReady}
+                      variant="affirm"
+                      size="lg"
+                      shadow={4}
+                    >
+                      <Shuffle className="w-5 h-5" /> START SNAKE DRAFT (POC)
+                    </PressButton>
+                  ) : null}
+                </div>
                 {!startReady && startBlocker ? (
                   <span className="text-[11px] text-[var(--ballpark-chalk)]/55">{startBlocker}</span>
                 ) : null}

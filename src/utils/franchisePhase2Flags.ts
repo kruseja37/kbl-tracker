@@ -143,6 +143,20 @@ export function setFranchisePhase2StadiumRecordsEnabledForTests(enabled: boolean
   franchisePhase2StadiumRecordsEnabledOverride = enabled;
 }
 
+// CONTRACT_SNAKE_POC_2026-07-09: house Phase-2 activation pattern, deliberately default ON for
+// JK's isolated viability test. Persisted/global activation and the test override still win.
+export const SNAKE_DRAFT_POC_ENABLED_DEFAULT = true;
+
+let snakeDraftPocEnabledOverride: boolean | null = null;
+
+export function isSnakeDraftPocEnabled(): boolean {
+  return resolvePhase2Flag('snakeDraftPoc', snakeDraftPocEnabledOverride, SNAKE_DRAFT_POC_ENABLED_DEFAULT);
+}
+
+export function setSnakeDraftPocEnabledForTests(enabled: boolean | null): void {
+  snakeDraftPocEnabledOverride = enabled;
+}
+
 export const AUCTION_ADVISOR_COLOR_ENABLED_DEFAULT = true;
 
 let auctionAdvisorColorEnabledOverride: boolean | null = null;

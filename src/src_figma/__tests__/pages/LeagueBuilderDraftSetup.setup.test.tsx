@@ -245,6 +245,16 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
+  test("offers the isolated snake POC beside the existing start button when the same readiness gate passes", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    const snakeStart = await screen.findByRole("button", { name: /START SNAKE DRAFT \(POC\)/i });
+    await waitFor(() => expect(snakeStart).toBeEnabled(), { timeout: 5000 });
+    fireEvent.click(snakeStart);
+
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/snake-draft?leagueId=league-page");
+  });
+
   test("CUT2-1 flips THE FLOOR status in-session after locking the pool", async () => {
     const players = ["one", "two", "three", "four"].flatMap((prefix) =>
       makeLegalRosterPlayerSet(prefix, 10_000),
