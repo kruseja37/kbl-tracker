@@ -213,10 +213,51 @@ export function buildDraftRecapAdvisorFacts(input: DraftRecapAdvisorFactsInput):
   };
 }
 
-function normalizedNumbers(text: string): string[] {
-  return (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map((value) => {
-    const numeric = Number(value.replaceAll(',', ''));
-    return Number.isFinite(numeric) ? String(numeric) : value.replaceAll(',', '');
+const CARDINAL_NUMBER_WORDS = new Set([
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+  'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen',
+  'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety',
+  'hundred', 'thousand', 'million', 'billion', 'trillion', 'grand', 'dozen',
+]);
+
+const ORDINAL_NUMBER_WORDS = new Set([
+  'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth',
+  'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth',
+  'eighteenth', 'nineteenth', 'twentieth', 'thirtieth', 'fortieth', 'fiftieth', 'sixtieth',
+  'seventieth', 'eightieth', 'ninetieth', 'hundredth', 'thousandth', 'millionth',
+  'billionth', 'trillionth',
+]);
+
+const SENTENCE_INITIAL_COMMON_WORDS = new Set([
+  'a', 'an', 'the', 'this', 'that', 'these', 'those', 'we', 'you', 'your', 'our', 'it', 'there',
+  'keep', 'stay', 'trust', 'let', 'watch', 'remember', 'expect', 'take', 'give', 'work', 'hold',
+  'be', 'do', 'never',
+]);
+
+const BASEBALL_COMMON_NOUNS = new Set([
+  'ace', 'baseball', 'board', 'bullpen', 'catcher', 'club', 'draft', 'infield', 'lineup',
+  'outfield', 'pitcher', 'player', 'pool', 'roster', 'rotation', 'shortstop', 'slugger', 'target',
+  'team',
+]);
+
+const EVALUATIVE_TERMS = [
+  'steal-of-the-draft', 'all-time', 'best', 'worst', 'greatest', 'elite', 'steal', 'bargain',
+  'robbery', 'fleeced', 'flawless', 'perfect', 'historic', 'legendary', 'generational',
+  'dominant', 'exceptional', 'outstanding', 'phenomenal', 'incredible', 'amazing', 'terrible',
+  'disastrous',
+] as const;
+
+function words(text: string): string[] {
+  return text.toLocaleLowerCase().match(/[a-z]+/g) ?? [];
+}
+
+function containsForbiddenNumber(text: string, payload: AuctionAdvisorFactPayload): boolean {
+  if (/\d/u.test(text) || /\p{Sc}/u.test(text)) return true;
+
+  const factWords = new Set(words(payload.facts.join('\n')));
+  return words(text).some((word) => {
+    if (CARDINAL_NUMBER_WORDS.has(word)) return true;
+    return ORDINAL_NUMBER_WORDS.has(word) && !factWords.has(word);
   });
 }
 
@@ -229,27 +270,44 @@ function containsUnknownKnownEntity(text: string, payload: AuctionAdvisorFactPay
   });
 }
 
-function containsInventedTitleCaseName(text: string, payload: AuctionAdvisorFactPayload): boolean {
-  const allowedText = payload.allowedNames.join('\n').toLocaleLowerCase();
-  const candidates = text.match(/\b[A-Z][a-z]+(?:[ '-][A-Z][a-z]+)+\b/g) ?? [];
-  return candidates.some((candidate) => !allowedText.includes(candidate.toLocaleLowerCase()));
+function containsInventedCapitalizedName(text: string, payload: AuctionAdvisorFactPayload): boolean {
+  const factTokens = new Set(words(payload.facts.join('\n')));
+  const candidatePattern = /\b[A-Z][A-Za-z'’-]*\b/g;
+
+  for (const match of text.matchAll(candidatePattern)) {
+    const candidate = match[0].toLocaleLowerCase();
+    if (factTokens.has(candidate) || BASEBALL_COMMON_NOUNS.has(candidate)) continue;
+
+    const index = match.index ?? 0;
+    const sentenceInitial = index === 0 || /[.!?]\s*$/.test(text.slice(0, index));
+    if (sentenceInitial && SENTENCE_INITIAL_COMMON_WORDS.has(candidate)) continue;
+    return true;
+  }
+  return false;
+}
+
+function containsForbiddenVerdictLanguage(text: string, payload: AuctionAdvisorFactPayload): boolean {
+  if (/\bgrade\s+[A-F](?:[+-])?\b/iu.test(text)) return true;
+  if (/\b[A-F](?:[+-])?[-\s]?tier\b/iu.test(text)) return true;
+  if (/\b(?:an?|the)\s+[A-F](?:[+-])?\b/iu.test(text)) return true;
+
+  const lowerText = text.toLocaleLowerCase();
+  const lowerFacts = payload.facts.join('\n').toLocaleLowerCase();
+  return EVALUATIVE_TERMS.some((term) => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`(^|[^a-z])${escaped}([^a-z]|$)`, 'u');
+    return pattern.test(lowerText) && !pattern.test(lowerFacts);
+  });
 }
 
 export function validateAuctionAdvisorText(text: string, payload: AuctionAdvisorFactPayload): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
 
-  const allowedNumbers = new Set(normalizedNumbers(payload.facts.join('\n')));
-  if (normalizedNumbers(trimmed).some((number) => !allowedNumbers.has(number))) return false;
+  if (containsForbiddenNumber(trimmed, payload)) return false;
   if (containsUnknownKnownEntity(trimmed, payload)) return false;
-  if (containsInventedTitleCaseName(trimmed, payload)) return false;
-
-  if (payload.verdict) {
-    const gradeMentions = trimmed.match(/\bGrade\s+[A-F][+-]?\b/gi) ?? [];
-    if (gradeMentions.some((grade) => grade.toLocaleLowerCase() !== payload.verdict?.toLocaleLowerCase())) {
-      return false;
-    }
-  }
+  if (containsInventedCapitalizedName(trimmed, payload)) return false;
+  if (containsForbiddenVerdictLanguage(trimmed, payload)) return false;
   return true;
 }
 

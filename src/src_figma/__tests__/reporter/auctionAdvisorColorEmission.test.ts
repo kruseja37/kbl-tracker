@@ -45,9 +45,9 @@ describe('auction advisor color emission seam', () => {
     expect(callClaude).toHaveBeenCalledTimes(1);
   });
 
-  test('uses the ruled Haiku model and accepts clean verbatim output', async () => {
+  test('uses the ruled Haiku model, sends the zero-facts prompt, and accepts clean color output', async () => {
     const callClaude = vi.fn().mockResolvedValue({
-      text: 'Page Caps should move early on Avery Anchor with C at 7 for 6.',
+      text: 'Page Caps should move early on Avery Anchor.',
       inputTokens: 10,
       outputTokens: 10,
       raw: {},
@@ -55,6 +55,15 @@ describe('auction advisor color emission seam', () => {
     const result = await emitAuctionAdvisorMoment(payload, { enabled: () => true, callClaude });
     expect(result.source).toBe('llm');
     expect(callClaude).toHaveBeenCalledWith(expect.objectContaining({ model: AUCTION_ADVISOR_MODEL }));
+    expect(callClaude).toHaveBeenCalledWith(expect.objectContaining({
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringMatching(/no numbers in any form.*no player.*no grades.*personality and baseball color only/i),
+        }),
+      ]),
+    }));
+    expect(callClaude.mock.calls[0]?.[0].messages[0]?.content).not.toContain('one or two');
     expect(AUCTION_ADVISOR_MODEL).toBe('claude-haiku-4-5');
   });
 });

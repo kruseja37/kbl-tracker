@@ -43,6 +43,77 @@ describe('auction advisor color validation red team', () => {
 
     expect(rendered).toEqual({ text: payload.fallback, source: 'template', rejected: true });
   });
+
+  test.each([
+    'Page Caps can spend nearly ninety thousand and still control the room.',
+    'Page Caps assembled an A-tier, all-time haul around Avery Anchor.',
+    'Page Caps should chase Rodriguez instead of Avery Anchor.',
+  ])('rejects the audit-proven bypass and renders the deterministic fallback: %s', (text) => {
+    expect(renderValidatedAuctionAdvisorText(text, payload)).toEqual({
+      text: payload.fallback,
+      source: 'template',
+      rejected: true,
+    });
+  });
+
+  test('rejects an allowed number attached to a fabricated claim and renders the deterministic fallback', () => {
+    const recapPayload = buildDraftRecapAdvisorFacts({
+      draftId: 'draft-1',
+      seatTeamId: 'team-a',
+      seatTeamName: 'Page Caps',
+      seatsFilled: 22,
+      seatTarget: 22,
+      spend: 88_000,
+      startingBudget: 100_000,
+      taxBill: 2_000,
+      landedTargets: ['Avery Anchor'],
+      lostTargets: ['Blake Bolt'],
+    });
+
+    expect(renderValidatedAuctionAdvisorText(
+      'Avery Anchor landed for $100,000, a steal.',
+      recapPayload,
+    )).toEqual({
+      text: recapPayload.fallback,
+      source: 'template',
+      rejected: true,
+    });
+  });
+
+  test('rejects digits even when the exact digit appears in facts', () => {
+    expect(renderValidatedAuctionAdvisorText(
+      'Page Caps should work from target #1 Avery Anchor.',
+      payload,
+    ).source).toBe('template');
+  });
+
+  test('allows a board-rank ordinal only when that exact ordinal appears in facts', () => {
+    const ordinalPayload = {
+      ...payload,
+      facts: [...payload.facts, 'Board-rank ordinal: first.'],
+    };
+
+    expect(renderValidatedAuctionAdvisorText(
+      'First, Page Caps should stay ready for Avery Anchor.',
+      ordinalPayload,
+    ).source).toBe('llm');
+    expect(renderValidatedAuctionAdvisorText(
+      'Second, Page Caps should stay ready for Avery Anchor.',
+      ordinalPayload,
+    ).source).toBe('template');
+  });
+
+  test('allows a curated descriptor only when it appears verbatim in facts', () => {
+    const descriptorPayload = {
+      ...payload,
+      facts: [...payload.facts, 'Deterministic descriptor: elite.'],
+    };
+
+    expect(renderValidatedAuctionAdvisorText(
+      'Page Caps can stay elite around Avery Anchor.',
+      descriptorPayload,
+    ).source).toBe('llm');
+  });
 });
 
 describe('auction advisor color pure adapters', () => {
