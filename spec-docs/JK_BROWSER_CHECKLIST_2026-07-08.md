@@ -233,16 +233,53 @@ salary. Walk it on a real league that has at least one club running hot on tax.
       should no longer silently fail — it should either work (skipping the stale reference) or show
       you a clear error, never nothing.
 
+## 10. TODAY'S FIXES (2026-07-09, wave close) — REVEAL PRIVACY, PLAIN-ENGLISH MONEY, "IF YOU WIN AT $X," AND THE ADVISOR'S VOICE
+
+This closes the five-lane walkthrough wave you kicked off earlier today (the fill-reserve
+question, the privacy ruling, the copy cleanup, the "what's at stake" design, and the setup
+Help gate). Walk a real auction with at least two human seats if you can, so you can see the
+reveal/hide behavior from both sides.
+
+- [ ] **Advisor intel is covered by default.** On someone else's turn, you should NOT be able to
+      read their Assistant-GM panel — it should show as covered/hidden. Click that team's own
+      name (in the banner or their strip) to reveal it; it should re-cover itself automatically
+      the moment the next bid, pass, claim, or lot changes, or if you switch seats. Their wallet's
+      Ceiling and Slots numbers should stay masked while covered too.
+- [ ] **The money language reads in plain English, not engine jargon.** Look for a STAY IN /
+      STOP AT ladder instead of raw thresholds, CEILING / HELD BACK / TO SPEND instead of
+      internal field names, and a plain-English "why" line explaining a verdict. "Total Capacity"
+      should be off the main screen — it only shows up if you open Help.
+- [ ] **Bidding shows you what's at stake before you commit.** Contemplating a bid should show an
+      "IF YOU WIN AT $X" read that updates live as you move the slider/type a number, plus a
+      "drops out at $X" chip showing when a rival would fold. If winning this lot would knock one
+      of your own top-3 board targets out of reach later, that should say so plainly, tax included.
+- [ ] **The Assistant-GM has a little color to it now — but never any numbers.** You should see a
+      short colorful read at three moments: right before the draft starts (a pre-draft brief),
+      occasionally after a notable pick (not every single lot), and in the end-of-draft recap
+      (paired with a real, computed grade). None of these should ever contain a dollar figure, a
+      percentage, or a spelled-out number ("twice," "double," etc.) — if you see one, that's a bug,
+      flag it.
+- [ ] **Draft Setup's raw pool diagnostics are behind Help, not on the main screen.** The main
+      screen should show you the readiness panel's plain-language verdict; the underlying raw
+      numbers should only appear if you open Help. If a legality warning also seems to be gated
+      behind Help and you feel like you're missing something, check whether the readiness panel
+      already told you the same thing in plain language elsewhere on the screen — that redundancy
+      is expected, but tell us if it doesn't feel that way.
+- [ ] **The farm floor's privacy feels asymmetric to the MLB floor — is that OK?** Per your
+      standing rule, farm intel gets lighter privacy treatment than MLB. Confirm that still feels
+      right now that MLB has the full covered/click-to-reveal/auto-hide treatment above.
+
 ## What a PASS means
 
 A pass on this checklist means: the cockpit wave (Wave 1 + Wave 2 + the reskin), the floor refit
-(Section 8), and the tax-coherence program (Section 9 — setup screens, the whisper, CPU behavior,
-and full-draft completion all honest about the real luxury tax) are ALL accepted as done. Any items
-you flag as "fix this" get ticketed and scheduled; anything you flag as "actually I want this
-different" gets treated as a new design fork, not a bug. **As of 2026-07-09, this checklist is the
-ONLY remaining gate** — there is no more building queued behind it; a full walkthrough closes the
-tax-coherence program and clears the way for the next queued work (the wrong-fit penalty P9, a
-broader verification pass, and the v1.1 follow-up batch tracked in `CONTINUITY_CHECKPOINT.md`).
+(Section 8), the tax-coherence program (Section 9), and the walkthrough wave (Section 10 — reveal
+privacy, plain-English money, the stakes panel, advisor color, and the setup Help gate) are ALL
+accepted as done. Any items you flag as "fix this" get ticketed and scheduled; anything you flag
+as "actually I want this different" gets treated as a new design fork, not a bug. **As of
+2026-07-09, this checklist is the ONLY remaining gate** — there is no more building queued behind
+it; a full walkthrough closes the walkthrough wave and clears the way for the next queued program
+(the traditional/snake draft, `TRADITIONAL_DRAFT_PROGRAM_2026-07-09.md`) plus the v1.1 follow-up
+batch tracked in `CONTINUITY_CHECKPOINT.md`.
 
 ## Two open JK rulings elsewhere (not part of this checklist)
 
