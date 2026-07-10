@@ -148,3 +148,98 @@ Both STOP items are ruled; the Step-0 ground truth above is accepted as the bind
    The reporter's own hardcoded model and behavior stay untouched. If the connector rejects
    the model string at runtime, that is a call failure → template fallback (no STOP needed).
 Everything else in the contract binds unchanged. Resume at the red-team validation step.
+
+---
+
+## Builder report — 2026-07-09 (completed after captain rulings)
+
+**Disposition:** COMPLETE in the working tree. No git write command was run. The independent
+auditor and JK's browser acceptance remain the captain's next gates.
+
+### Step-0 connector ground truth used
+
+- Reused `callClaudeMessages` from
+  `src/src_figma/app/engines/reporter/claudeClient.ts:90-127`; it invokes the existing
+  `claude-column` Edge Function at `claudeClient.ts:101-112`.
+- Reused the pure-adapter / injected-emission split already documented in the Step-0 report above.
+  The new pure adapter is `src/engines/auctionAdvisorColor.ts:82-230`; the optional emission seam is
+  `src/src_figma/app/engines/reporter/auctionAdvisorColorEmission.ts:28-56`.
+- Added the single ruled per-feature gate `isAuctionAdvisorColorEnabled`, default ON, through the
+  existing Phase-2 activation pattern at `src/utils/franchisePhase2Flags.ts:146-161` and
+  `src/utils/franchisePhase2Activation.ts:7-39`. Existing L12/L13 gates and
+  `SeasonEmissionConfig` are untouched.
+- The advisor emission seam passes model `claude-haiku-4-5` at
+  `auctionAdvisorColorEmission.ts:9,38`. The reporter's `claude-sonnet-4-6` call is untouched.
+
+### Per-item disposition
+
+1. **PRE-DRAFT BRIEF — complete.** Each human seat's first pre-lot privacy reveal queues exactly
+   one session-cached brief. Facts use the seat's saved top-five board order, identity name,
+   current pool position counts, and the existing legal position-supply-floor arithmetic. A
+   deterministic template appears immediately and may be replaced only by validated connector
+   output (`LeagueBuilderAuctionDraft.tsx:1109-1158,1195-1203`).
+2. **POST-LOT REACTION — complete.** Each seat gets at most one cached reaction per result/lot when
+   it won a top-five target, a rival won its top-five target, or a top-three target otherwise left
+   the board. Calls start asynchronously after the result and never add a loading state or delay a
+   bid/advance path (`auctionAdvisorColor.ts:119-177`;
+   `LeagueBuilderAuctionDraft.tsx:1159-1193`).
+3. **DRAFT RECAP — complete.** The handoff check provides separately covered reveal buttons for
+   every human seat. The deterministic adapter supplies seats filled, spend versus starting
+   budget, tax bill, targets landed/lost, and the locked grade. With no saved targets, a legal
+   roster receives a neutral C instead of a fabricated board judgment
+   (`auctionAdvisorColor.ts:170-230`; `AuctionStage.tsx:619-696`).
+4. **Privacy/cache/fallback — complete.** Regular moments render only after the acting seat's
+   existing privacy reveal; handoff recaps are independently covered per seat. Switching seats
+   removes the prior seat's content before paint. Cache keys include draft, seat, moment, and lot
+   where applicable; there are no retries or persistence writes. Old in-flight responses are
+   discarded after a draft reset (`LeagueBuilderAuctionDraft.tsx:931-968`). Gate-off, missing
+   connector, call error, or validation rejection all render the deterministic template.
+
+### Red-team validation proof
+
+- RED first: `NODE_ENV= npx vitest run src/engines/__tests__/auctionAdvisorColor.test.ts` failed
+  before implementation because `../auctionAdvisorColor` did not exist (1 failed suite, 0 tests).
+- GREEN after implementation: the adapter/validator file passes 8/8 tests. The invented
+  `$987,654` case and invented `Mystery Slugger` case both reject to the deterministic fallback;
+  normalized numeric comparison, known-entity checks, title-case invented-name rejection, and
+  locked recap-grade validation are covered.
+- Emission tests pass 4/4: default-ON/override gate behavior, gate-off fallback, one failed call
+  with no retry, and the exact Haiku model string with clean verbatim output.
+- UI tests prove covered-by-default behavior, no different-seat fetch-result flash, independent
+  handoff recap reveals, and one connector call when the same moment is revealed repeatedly.
+
+### Gate outputs on the final tree
+
+1. `npx tsc -b --pretty false` — PASS, exit 0, no diagnostics.
+2. `npm run build` — PASS, exit 0; 2,647 modules transformed; Vite built in 9.93s. Existing chunk
+   size/dynamic-import and stale Browserslist warnings only.
+3. Focused contract gate — PASS, 6 files / 132 tests:
+   `auctionAdvisorColor`, `auctionAdvisorColorEmission`, `franchisePhase2Activation`,
+   `WhisperPanel`, `AuctionStage`, and `LeagueBuilderAuctionDraft`.
+4. Final `NODE_ENV= npx vitest run` — PASS, exit 0: 617 files passed / 7 skipped;
+   9,497 tests passed / 11 skipped; zero red; duration 215.70s.
+5. `git diff --check` — PASS, no whitespace errors.
+
+### Changed paths and scope check
+
+- Product: `src/engines/auctionAdvisorColor.ts`;
+  `src/src_figma/app/engines/reporter/auctionAdvisorColorEmission.ts`;
+  `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`;
+  `src/src_figma/app/components/auction/AuctionStage.tsx`;
+  `src/utils/franchisePhase2Activation.ts`; `src/utils/franchisePhase2Flags.ts`.
+- Tests: `src/engines/__tests__/auctionAdvisorColor.test.ts`;
+  `src/src_figma/__tests__/reporter/auctionAdvisorColorEmission.test.ts`;
+  `src/src_figma/app/components/auction/__tests__/AuctionStage.test.tsx`;
+  `src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx`.
+- Report: this contract only. No roadmap update needed; this isolated auction lane does not change
+  the Mode-2 roadmap state.
+- Pre-existing untracked `dispatch-prompt.txt` remains untouched. No whisper decision math/copy,
+  CPU behavior, VOICE behavior, existing PRIVACY rules, reporter behavior, persistence store, or
+  other spec-doc was changed.
+
+### STOP items / residual gates
+
+- STOP items: none.
+- Residual gates: independent opus audit and JK browser acceptance. Live Supabase acceptance of
+  `claude-haiku-4-5` is intentionally fail-soft per the captain ruling; rejection renders the
+  template and does not block the auction.
