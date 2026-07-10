@@ -53,7 +53,7 @@ describe('archetype balance simulator — workbook baseline (provenance)', () =>
   it('runs the EV-flatness check on the workbook archetypes (standard tier) and prints the parity table', () => {
     const pool = loadPool();
     const archetypes = workbookArchetypes();
-    const report = runBalanceSim(pool, archetypes, 'standard', 0.1);
+    const report = runBalanceSim(pool, archetypes, 'standard', 20, 0.1);
 
     const fmt = (n: number) => Math.round(n).toLocaleString();
     const rows = [...report.results]

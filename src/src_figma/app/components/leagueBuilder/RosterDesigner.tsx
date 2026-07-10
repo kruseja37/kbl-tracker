@@ -81,6 +81,8 @@ type RosterDesignerProps = {
   lockedPool: boolean;
   budget: number;
   tier: TierKey;
+  /** Real non-shill league clubs, for settlement-parity advisory tax. */
+  realTeamCount: number;
   showHelp: boolean;
   disabled?: boolean;
   disabledReason?: string | null;
@@ -305,6 +307,7 @@ export function RosterDesigner({
   lockedPool,
   budget,
   tier,
+  realTeamCount,
   showHelp,
   disabled = false,
   disabledReason,
@@ -428,7 +431,17 @@ export function RosterDesigner({
     const timer = window.setTimeout(() => {
       const nextResult = designPool.length > 0 ? evaluateRosterDesign(slots, designPool, budget) : null;
       const nextTarget = designPool.length > 0 && targetArchetype
-        ? buildBest22Target(rankedSlots, simPool, targetClassifiedById, targetArchetype, tier, budget, pinMap, rankOverrideMap)
+        ? buildBest22Target(
+            rankedSlots,
+            simPool,
+            targetClassifiedById,
+            targetArchetype,
+            tier,
+            budget,
+            realTeamCount,
+            pinMap,
+            rankOverrideMap,
+          )
         : null;
       setResult(nextResult);
       setTarget(nextTarget);
@@ -445,7 +458,7 @@ export function RosterDesigner({
         persistDirtySave(effectTeamId, onSave, slots, lockedAt, pins, rankOverrides);
       }
     };
-  }, [budget, designPool, lockedAt, onSave, pinMap, pins, persistDirtySave, rankOverrideMap, rankOverrides, rankedSlots, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
+  }, [budget, designPool, lockedAt, onSave, pinMap, pins, persistDirtySave, rankOverrideMap, rankOverrides, rankedSlots, realTeamCount, simPool, slots, targetArchetype, targetClassifiedById, team.id, tier]);
 
   useEffect(() => {
     if (!resetConfirm) return undefined;

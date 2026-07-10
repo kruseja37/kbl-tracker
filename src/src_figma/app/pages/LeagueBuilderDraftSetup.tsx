@@ -641,6 +641,7 @@ function designFirstIdentityCriticalPlayerIds(
   players: readonly Player[],
   tier: LeagueTemplate["tier"],
   budget: number,
+  realTeamCount: number,
 ): string[] {
   const lockedDesignTeams = teams.filter((team) => Boolean(team.rosterDesign?.lockedAt));
   if (lockedDesignTeams.length === 0 || players.length === 0) return [];
@@ -661,6 +662,7 @@ function designFirstIdentityCriticalPlayerIds(
       archetype,
       tier ?? "juiced",
       budget,
+      realTeamCount,
       new Map(Object.entries(design?.pins ?? {})),
       new Map(Object.entries(design?.rankOverrides ?? {})),
     );
@@ -2018,8 +2020,14 @@ export function LeagueBuilderDraftSetup() {
   // to compute extraction priority hints — must draw from universePlayers, not raw players, or
   // it recommends/prioritizes players the checked source leagues never actually offered.
   const designFirstIdentityCriticalIds = useMemo(
-    () => designFirstIdentityCriticalPlayerIds(humanTeams, universePlayers, league?.tier, tierBudget),
-    [humanTeams, league?.tier, universePlayers, tierBudget],
+    () => designFirstIdentityCriticalPlayerIds(
+      humanTeams,
+      universePlayers,
+      league?.tier,
+      tierBudget,
+      leagueTeams.length,
+    ),
+    [humanTeams, league?.tier, leagueTeams.length, universePlayers, tierBudget],
   );
   const tierReferenceCap = TIER_CAPS[league?.tier ?? "juiced"].tierCap;
   const parsedSalaryCapInput = parseSalaryCapInput(salaryCapInput);
@@ -2234,6 +2242,7 @@ export function LeagueBuilderDraftSetup() {
                 archetype,
                 league?.tier ?? "juiced",
                 tierBudget,
+                leagueTeams.length,
                 new Map(Object.entries(team.rosterDesign.pins ?? {})),
                 new Map(Object.entries(team.rosterDesign.rankOverrides ?? {})),
               ),
@@ -2247,7 +2256,7 @@ export function LeagueBuilderDraftSetup() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [clubTargetDesignKey, inPoolDesignPool, inPoolPlayerIdsKey, league?.tier, tierBudget]);
+  }, [clubTargetDesignKey, inPoolDesignPool, inPoolPlayerIdsKey, league?.tier, leagueTeams.length, tierBudget]);
   useEffect(() => {
     if (rosterDesignerPlayers.length === 0) {
       setDraftability(undefined);
@@ -2285,7 +2294,7 @@ export function LeagueBuilderDraftSetup() {
           simPool,
           [archetype],
           league?.tier ?? "juiced",
-          { budgetOverride: tierBudget },
+          { realTeamCount: leagueTeams.length, budgetOverride: tierBudget },
         );
         rows.push(row);
         archetypeIndex += 1;
@@ -2309,7 +2318,7 @@ export function LeagueBuilderDraftSetup() {
         const rows = rankAllArchetypesForPool(
           demandUniverseFromPlayers(rosterDesignerPlayers),
           league?.tier ?? "juiced",
-          { budgetOverride: tierBudget },
+          { realTeamCount: leagueTeams.length, budgetOverride: tierBudget },
         );
         if (!cancelled) setDraftability(draftabilityRecordFromRows(rows));
       })();
@@ -2318,17 +2327,17 @@ export function LeagueBuilderDraftSetup() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [league?.tier, rosterDesignerPoolKey, tierBudget]);
+  }, [league?.tier, leagueTeams.length, rosterDesignerPoolKey, tierBudget]);
   const resolveIdentityDraftability = useCallback(() => {
     if (draftability && Object.keys(draftability).length > 0) return draftability;
     if (rosterDesignerPlayers.length === 0) return draftability;
     const rows = rankAllArchetypesForPool(
       demandUniverseFromPlayers(rosterDesignerPlayers),
       league?.tier ?? "juiced",
-      { budgetOverride: tierBudget },
+      { realTeamCount: leagueTeams.length, budgetOverride: tierBudget },
     );
     return draftabilityRecordFromRows(rows);
-  }, [draftability, league?.tier, rosterDesignerPlayers, tierBudget]);
+  }, [draftability, league?.tier, leagueTeams.length, rosterDesignerPlayers, tierBudget]);
   const identityAutoFillRemaining = useMemo(() => {
     const scopedTeams = leagueTeams.filter((team) =>
       includeHumanIdentityAutoFill || teamOwnerId(team, seats) === "cpu"
@@ -4346,6 +4355,7 @@ export function LeagueBuilderDraftSetup() {
                     lockedPool={locked}
                     budget={tierBudget}
                     tier={league.tier ?? "juiced"}
+                    realTeamCount={leagueTeams.length}
                     showHelp={showHelp}
                     poolDrawn={Boolean(league.poolExtractedAt)}
                     disabled={Boolean(setupMutationBlockMessage) || busy}

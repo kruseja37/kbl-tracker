@@ -11,7 +11,10 @@
 import { LEGAL_ROSTER, type RosterSlotPlayer } from '../data/rosterConstruction';
 import type { LuxuryCapRow } from '../data/tierParams';
 import { cheapestLegalCompletion } from './auctionCompletionFloor';
-import { auctionMarginalTaxWithCaps } from './auctionLuxuryTax';
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from './auctionLuxuryTax';
 import {
   luxuryTax,
   shiftLuxuryCaps,
@@ -73,14 +76,16 @@ export function keepTargetAllIn(
   targetY: KeepTargetMarketPlayer,
   remainingPool: readonly KeepTargetPoolPlayer[],
   caps: readonly LuxuryCapRow[],
+  realTeamCount: number,
 ): KeepTargetAllInResult {
+  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize([...caps], realTeamCount);
   const rosterConstruction = team.roster.map((player) => player.construction);
   const rosterShapes = team.roster.map((player) => player.shape);
   const taxLot = auctionMarginalTaxWithCaps(
     rosterConstruction,
     lotPlayer.construction,
     team.capIdentity,
-    [...caps],
+    normalizedCaps,
   );
 
   const rosterAfterLotConstruction = [...rosterConstruction, lotPlayer.construction];
@@ -89,7 +94,7 @@ export function keepTargetAllIn(
     rosterAfterLotConstruction,
     targetY.construction,
     team.capIdentity,
-    [...caps],
+    normalizedCaps,
   );
 
   const rosterAfterYConstruction = [...rosterAfterLotConstruction, targetY.construction];
@@ -136,7 +141,7 @@ export function keepTargetAllIn(
     completionConstruction.push(player.construction);
   }
 
-  const concreteCaps = shiftedCaps(caps, team.capIdentity);
+  const concreteCaps = shiftedCaps(normalizedCaps, team.capIdentity);
   const taxBeforeFill = luxuryTax(rosterAfterYConstruction, concreteCaps, 'taxed').charged;
   const taxAfterFill = luxuryTax(
     [...rosterAfterYConstruction, ...completionConstruction],

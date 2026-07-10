@@ -319,7 +319,10 @@ export function extractDraftPool(
   /** Ids any archetype's seed build claimed — protected from cap eviction. */
   const claimed = new Set<string>();
   for (const arch of selected) {
-    const build = buildIdentityRoster(canonicalSource, simArchetypes.get(arch.id)!, tier, sourceBudget, { posture });
+    const build = buildIdentityRoster(canonicalSource, simArchetypes.get(arch.id)!, tier, sourceBudget, {
+      realTeamCount: teams,
+      posture,
+    });
     for (const p of build.players) {
       pool.set(p.id, p);
       claimed.add(p.id);
@@ -375,6 +378,7 @@ export function extractDraftPool(
   let round = 0;
   const rankNow = () =>
     rankArchetypeDraftability([...pool.values()], selected, tier, {
+      realTeamCount: teams,
       posture,
       budgetOverride: sourceBudget,
       // Identity is judged against the fixed SOURCE universe, not the moving candidate pool —
@@ -394,7 +398,10 @@ export function extractDraftPool(
     round += 1;
     const worst = verdicts[verdicts.length - 1];
     const worstArch = simArchetypes.get(worst.archetypeId)!;
-    const rebuild = buildIdentityRoster(canonicalSource, worstArch, tier, sourceBudget, { posture });
+    const rebuild = buildIdentityRoster(canonicalSource, worstArch, tier, sourceBudget, {
+      realTeamCount: teams,
+      posture,
+    });
     const missing = rebuild.players
       .filter((p) => !pool.has(p.id))
       .sort(byIvDescIdAsc)

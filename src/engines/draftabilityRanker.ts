@@ -127,6 +127,8 @@ function poolDepthReasons(pool: SimPlayer[]): string[] {
 }
 
 export interface RankDraftabilityOptions {
+  /** Real non-shill league clubs; required by the advisory tax build. */
+  realTeamCount: number;
   posture?: RosterPosture;
   /** Override the tier budget (defaults to computePoolTierCap on the pool). */
   budgetOverride?: number;
@@ -147,7 +149,7 @@ export function rankArchetypeDraftability(
   pool: SimPlayer[],
   archetypes: readonly HistoricalArchetype[],
   tier: TierKey,
-  options: RankDraftabilityOptions = {},
+  options: RankDraftabilityOptions,
 ): ArchetypeDraftability[] {
   const posture = options.posture ?? 'optimal';
   const budget = options.budgetOverride ?? computePoolTierCap(pool.map((p) => p.iv), tier);
@@ -163,6 +165,7 @@ export function rankArchetypeDraftability(
 
     for (let round = 0; round < DRAFTABILITY_TUNING.maxRebuilds; round += 1) {
       const build = buildIdentityRoster(pool, simArch, tier, budget, {
+        realTeamCount: options.realTeamCount,
         posture,
         banned,
         ...(options.embodimentReference ? { embodimentReference: options.embodimentReference } : {}),
@@ -240,7 +243,7 @@ export function rankArchetypeDraftability(
 export function rankAllArchetypesForPool(
   pool: SimPlayer[],
   tier: TierKey,
-  options: RankDraftabilityOptions = {},
+  options: RankDraftabilityOptions,
 ): ArchetypeDraftability[] {
   return rankArchetypeDraftability(pool, HISTORICAL_ARCHETYPES, tier, options);
 }
@@ -284,7 +287,7 @@ export function fieldingRobustnessSweep(
   archetypes: readonly HistoricalArchetype[],
   tier: TierKey,
   multipliers: readonly number[] = [1.15, 1.3],
-  options: RankDraftabilityOptions = {},
+  options: RankDraftabilityOptions,
 ): FieldingRobustnessReport {
   const base = rankArchetypeDraftability(pool, archetypes, tier, options);
   const baseRank = new Map(base.map((r) => [r.archetypeId, r.rank]));

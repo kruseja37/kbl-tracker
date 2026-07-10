@@ -164,6 +164,7 @@ export function buildBest22Target(
   archetype: SimArchetype,
   tier: TierKey,
   budget: number,
+  realTeamCount: number,
   pins?: ReadonlyMap<string, string>,
   rankOverrides?: ReadonlyMap<string, readonly string[]>,
 ): Best22Target {
@@ -213,6 +214,7 @@ export function buildBest22Target(
   };
 
   const build = buildIdentityRoster([...simPool], archetype, tier, budget, {
+    realTeamCount,
     posture: 'optimal',
     slotPreferenceBonus,
     pinned: buildPins,

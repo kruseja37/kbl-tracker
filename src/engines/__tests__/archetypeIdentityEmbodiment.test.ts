@@ -67,8 +67,8 @@ describe('identity-first builder — embodiment across the locked 24 (standard t
   it('builds a LEGAL, SOLVENT, floor-respecting roster with boostZ > 0 for all 24', () => {
     const rows: { name: string; boostZ: number; beforeZ: number; ivShare: number }[] = [];
     for (const arch of SIM_SET) {
-      const after = buildIdentityRoster(pool, arch, 'standard', budget, { posture: 'optimal' });
-      const before = buildIdentityRoster(pool, arch, 'standard', budget, { valueFloorOverride: 1 });
+      const after = buildIdentityRoster(pool, arch, 'standard', budget, { realTeamCount: 20, posture: 'optimal' });
+      const before = buildIdentityRoster(pool, arch, 'standard', budget, { realTeamCount: 20, valueFloorOverride: 1 });
       rows.push({
         name: arch.name,
         boostZ: after.embodiment.boostZ,
@@ -99,7 +99,7 @@ describe('identity-first builder — embodiment across the locked 24 (standard t
     expect(sample).toHaveLength(3);
     for (const arch of sample) {
       const builds = (['conservative', 'optimal', 'aggressive'] as RosterPosture[]).map((posture) =>
-        buildIdentityRoster(pool, arch, 'standard', budget, { posture }),
+        buildIdentityRoster(pool, arch, 'standard', budget, { realTeamCount: 20, posture }),
       );
       for (const b of builds) {
         expect(b.legalRoster, `${arch.id} ${b.posture} legal`).toBe(true);

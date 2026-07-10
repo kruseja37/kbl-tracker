@@ -104,7 +104,7 @@ function richPool(teams: number): SimPlayer[] {
 describe('archetypeCompletionOutlook', () => {
   const teams = 4;
   const pool = richPool(teams);
-  const report = analyzePoolFeasibility(pool, [...HISTORICAL_ARCHETYPES], 'standard');
+  const report = analyzePoolFeasibility(pool, [...HISTORICAL_ARCHETYPES], 'standard', teams);
 
   test('a generously stocked pool clears legal completion for every archetype', () => {
     const outlooks = poolCompletionOutlook(pool, report, teams, 0);
@@ -118,7 +118,7 @@ describe('archetypeCompletionOutlook', () => {
 
   test('a catcher-starved pool collapses legal completion and names the binding class', () => {
     const starved = pool.filter((p) => p.position !== 'C');
-    const starvedReport = analyzePoolFeasibility(starved, [...HISTORICAL_ARCHETYPES], 'standard');
+    const starvedReport = analyzePoolFeasibility(starved, [...HISTORICAL_ARCHETYPES], 'standard', teams);
     const outlook = archetypeCompletionOutlook(starved, starvedReport.results[0], teams, 0);
     expect(outlook.pLegalCompletion).toBeLessThan(0.05);
     expect(outlook.bindingClass).toMatch(/C|catcher/);

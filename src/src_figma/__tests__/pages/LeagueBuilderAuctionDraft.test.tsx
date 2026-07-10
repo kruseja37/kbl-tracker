@@ -25,6 +25,7 @@ import {
 } from "../../../engines/cpuShillBidding";
 import { LeagueBuilderAuctionDraft } from "../../app/pages/LeagueBuilderAuctionDraft";
 import {
+  toConstructionPlayer,
   useLeagueBuilderData,
   type LeagueTemplate,
   type Player,
@@ -35,6 +36,9 @@ import {
 } from "../../hooks/useLeagueBuilderData";
 import { auctionTransitionErrorCopy, buildAuctionPlayers, MLB_AUCTION_SEASON } from "../../app/hooks/useAuctionDraft";
 import { DEFAULT_AUCTION_SETUP_CONFIG } from "../../../data/auctionEngineConstants";
+import { LUXURY_CAP_TABLES } from "../../../data/tierParams";
+import * as auctionLuxuryTax from "../../../engines/auctionLuxuryTax";
+import { buildAuctionPlayersWithPositions } from "../../../utils/leagueBuilderAuctionPipeline";
 
 const mockNavigate = vi.fn();
 const mockEmitAuctionAdvisorMoment = vi.hoisted(() => vi.fn(async (payload: { fallback: string }) => ({
@@ -346,12 +350,12 @@ function seedForOpeningLot(
   throw new Error("No deterministic opening-lot seed found.");
 }
 
-function mockLeagueData(options: { players?: Player[]; pool?: RegisteredPool } = {}) {
+function mockLeagueData(options: { players?: Player[]; pool?: RegisteredPool; teams?: Team[] } = {}) {
   const players = options.players ?? makePlayers();
   const pool = options.pool ?? makePool(players);
   const leagueData = {
     leagues: [makeLeague()],
-    teams: [makeTeam("team-a"), makeTeam("team-b")],
+    teams: options.teams ?? [makeTeam("team-a"), makeTeam("team-b")],
     players,
     rulesPresets: [],
     isLoading: false,
@@ -567,6 +571,111 @@ async function savePassedLotSessionForPage(options: {
     session,
   });
   return players;
+}
+
+async function saveNormwireTaxHeavyOpenLotForPage(): Promise<{
+  players: Player[];
+  pool: RegisteredPool;
+  candidate: Player;
+  rosterPlayers: Player[];
+}> {
+  const candidateId = "player-b";
+  const basePlayers = makePlayers();
+  const rosterIds = basePlayers
+    .filter((player) => player.primaryPosition === "SP" && player.id !== candidateId)
+    .slice(0, 3)
+    .map((player) => player.id);
+  const taxCoreIds = new Set([candidateId, ...rosterIds]);
+  const players = basePlayers.map((player) => taxCoreIds.has(player.id)
+    ? {
+        ...player,
+        power: 99,
+        contact: 99,
+        speed: 99,
+        fielding: 99,
+        arm: 99,
+        velocity: 99,
+        junk: 99,
+        accuracy: 99,
+      }
+    : player);
+  const pool: RegisteredPool = {
+    ...makePool(players),
+    luxuryCaps: LUXURY_CAP_TABLES.standard,
+  };
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const auctionPlayers = await buildAuctionPlayersWithPositions(
+    pool,
+    async (playerId) => playerById.get(playerId) ?? null,
+  );
+  const availablePlayerIds = players
+    .map((player) => player.id)
+    .filter((playerId) => playerId !== candidateId && !rosterIds.includes(playerId));
+  const session: CpuShillAuctionSession = {
+    state: "OPEN_BIDDING",
+    config: {
+      ...DEFAULT_AUCTION_SETUP_CONFIG,
+      nominationOrderSeed: "normwire-tax-heavy-open-lot",
+      excludeFromLeague: true,
+      cpuShillCount: 0,
+    },
+    teams: [
+      {
+        teamId: "team-a",
+        budgetRemaining: 970_000,
+        rosterSlotsRemaining: 19,
+        minSalary: 3_000,
+        projectedTax: 0,
+        roster: rosterIds.map((playerId) => ({ playerId, salary: 10_000 })),
+      },
+      {
+        teamId: "team-b",
+        budgetRemaining: 1_000_000,
+        rosterSlotsRemaining: 22,
+        minSalary: 3_000,
+        projectedTax: 0,
+        roster: [],
+      },
+    ],
+    nominationOrder: ["team-b", "team-a"],
+    nominationIndex: 0,
+    nominationRound: 1,
+    players: Object.fromEntries(auctionPlayers.map((player) => [player.playerId, player])),
+    playerOrder: auctionPlayers.map((player) => player.playerId),
+    availablePlayerIds,
+    currentLot: {
+      playerId: candidateId,
+      nominatorTeamId: "team-b",
+      openingAsk: 10_000,
+      highBid: 10_000,
+      highBidder: "team-b",
+      stillIn: ["team-a", "team-b"],
+      bidTurnTeamId: "team-a",
+      bidLog: [],
+    },
+    pendingClaim: null,
+    results: [],
+    saleCount: 0,
+    cpuShills: {},
+  };
+
+  await saveTeamRoster(emptyRoster("team-a"));
+  await saveTeamRoster(emptyRoster("team-b"));
+  for (const player of players) await savePlayer(player);
+  await saveAuctionSession({
+    id: createAuctionSessionId("league-page", MLB_AUCTION_SEASON),
+    leagueId: "league-page",
+    seasonNumber: MLB_AUCTION_SEASON,
+    seed: session.config.nominationOrderSeed,
+    session,
+  });
+
+  return {
+    players,
+    pool,
+    candidate: playerById.get(candidateId)!,
+    rosterPlayers: rosterIds.map((playerId) => playerById.get(playerId)!),
+  };
 }
 
 function cpuDecisionSeedForTest(session: AuctionSession, kind: "bid" | "claim", teamId: string): string {
@@ -967,6 +1076,80 @@ describe("LeagueBuilderAuctionDraft", () => {
 
     const band = screen.getByLabelText("Public market price band");
     expect(band.textContent).toMatch(/^MARKET \$[\d,]+ · \$[\d,]+ · \$[\d,]+ — OPEN \$[\d,]+$/);
+  });
+
+  test("NORMWIRE: 2-team TRUE COST uses the exact settlement marginal tax for the same lot and club", async () => {
+    const fixture = await saveNormwireTaxHeavyOpenLotForPage();
+    const bandPriorities = {
+      Power: 1,
+      Contact: 1,
+      Speed: 1,
+      Defense: 1,
+      Rotation: 1,
+      Bullpen: 1,
+    };
+    const capIdentity = { bandPriorities, increase: [], decrease: [] };
+    mockLeagueData({
+      players: fixture.players,
+      pool: fixture.pool,
+      teams: [
+        makeTeam("team-a", { capIdentity }),
+        makeTeam("team-b", { capIdentity }),
+      ],
+    });
+    const roster = fixture.rosterPlayers.map(toConstructionPlayer);
+    const candidate = toConstructionPlayer(fixture.candidate);
+    const normalizedCaps = auctionLuxuryTax.normalizeAuctionLuxuryCapsForLeagueSize(
+      fixture.pool.luxuryCaps,
+      2,
+    );
+    const settlementMarginal = auctionLuxuryTax.auctionMarginalTaxWithCaps(
+      roster,
+      candidate,
+      capIdentity,
+      normalizedCaps,
+    );
+    const legacyRawMarginal = auctionLuxuryTax.auctionMarginalTaxWithCaps(
+      roster,
+      candidate,
+      capIdentity,
+      fixture.pool.luxuryCaps,
+    );
+    expect(settlementMarginal).toBeGreaterThan(0);
+    expect(legacyRawMarginal).toBeGreaterThan(settlementMarginal);
+    const marginalSpy = vi.spyOn(auctionLuxuryTax, "auctionMarginalTaxWithCaps");
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal Page Caps assistant GM read/ }));
+    const number = await screen.findByTestId("whisper-tier1-number");
+    const trueCost = await screen.findByTestId("whisper-tier1-truecost");
+    const numberMatch = /YOUR NUMBER \$([\d,]+)/.exec(number.textContent ?? "");
+    const trueCostMatch = /TRUE COST \$([\d,]+)/.exec(trueCost.textContent ?? "");
+    const displayedNumber = (number.textContent ?? "").includes("YOUR NUMBER PASS")
+      ? 0
+      : Number(numberMatch?.[1].replace(/,/g, ""));
+    expect(Number.isFinite(displayedNumber)).toBe(true);
+    expect(trueCostMatch).not.toBeNull();
+    const displayedSurcharge = Number(trueCostMatch![1].replace(/,/g, ""))
+      - displayedNumber;
+    expect(Math.abs(displayedSurcharge - settlementMarginal)).toBeLessThanOrEqual(1);
+
+    const rosterIds = fixture.rosterPlayers.map((player) => player.id).sort().join("|");
+    const matchingCallIndexes = marginalSpy.mock.calls.flatMap((call, index) => {
+      const [calledRoster, calledCandidate, calledIdentity, calledCaps] = call;
+      const calledRosterIds = calledRoster.map((player) => player.id).sort().join("|");
+      return calledCandidate.id === fixture.candidate.id
+        && calledRosterIds === rosterIds
+        && calledIdentity === capIdentity
+        && JSON.stringify(calledCaps) === JSON.stringify(normalizedCaps)
+        ? [index]
+        : [];
+    });
+    // One call is settlement's projectedTax recompute; another is the whisper's TRUE COST read.
+    expect(matchingCallIndexes.length).toBeGreaterThanOrEqual(2);
+    expect(matchingCallIndexes.map((index) => marginalSpy.mock.results[index].value))
+      .toEqual(matchingCallIndexes.map(() => settlementMarginal));
   });
 
   test("shows a pure shill winner on the visible AuctionStage roster board after SOLD", async () => {

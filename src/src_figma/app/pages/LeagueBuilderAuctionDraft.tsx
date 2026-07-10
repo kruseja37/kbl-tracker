@@ -55,7 +55,10 @@ import {
   type EstimatedMarket,
   type SessionMarketOptions,
 } from "../../../engines/auctionMarketModel";
-import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import {
+  auctionMarginalTaxWithCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from "../../../engines/auctionLuxuryTax";
 import {
   keepTargetAllIn,
   type KeepTargetAllInResult,
@@ -1612,17 +1615,19 @@ export function LeagueBuilderAuctionDraft() {
     // whisper-vs-floor disagreement the F9 one-ceiling law exists to prevent. Reuses the existing
     // tested auctionMarginalTaxWithCaps engine; gated on the same roster-clean signal the sibling
     // reads use so a truncated roster mapping never fabricates a tax figure. Reads the pool's own
-    // resolved luxuryCaps (falling back to the tier default before a pool is registered) -- the
-    // SAME baseCaps source useAuctionDraft.ts's applyAuctionLuxuryTaxForLot feeds the engine's real
-    // settlement/bid-ceiling math, so this can never structurally diverge from what actually drains
-    // the team's budget (byte-identical to a tier-only lookup for every real pool today, since
-    // registerPool always sets luxuryCaps: LUXURY_CAP_TABLES[tier]).
+    // resolved luxuryCaps (falling back to the tier default before a pool is registered), normalized
+    // with the same real-club count as settlement before any shifted-cap tax math runs.
+    const rawAdvisoryBaseCaps = registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier];
+    const normalizedAdvisoryBaseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+      rawAdvisoryBaseCaps,
+      leagueTeams.length,
+    );
     const marginalTax = lotPlayer && rosterPlayersClean
       ? auctionMarginalTaxWithCaps(
           rosterPlayers.map(toConstructionPlayer),
           toConstructionPlayer(lotPlayer),
           team.capIdentity,
-          registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
+          normalizedAdvisoryBaseCaps,
         )
       : null;
     const completionTaxContext = lotPlayer && rosterPlayersClean
@@ -1633,7 +1638,8 @@ export function LeagueBuilderAuctionDraft() {
           ],
           playerById: constructionPlayerById,
           capIdentity: team.capIdentity,
-          baseCaps: registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
+          baseCaps: rawAdvisoryBaseCaps,
+          realTeamCount: leagueTeams.length,
         }
       : undefined;
 
@@ -1805,7 +1811,8 @@ export function LeagueBuilderAuctionDraft() {
               predictedMedian: projected.predictedMedian,
             },
             keepPool,
-            registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
+            rawAdvisoryBaseCaps,
+            leagueTeams.length,
           );
           keepTargets.push({
             playerId: entry.playerId,

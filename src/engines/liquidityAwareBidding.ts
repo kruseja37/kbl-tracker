@@ -12,6 +12,7 @@ import {
   conservativePoolReserve,
   type CompletionCandidate,
 } from './auctionCompletionFloor';
+import { normalizeAuctionLuxuryCapsForLeagueSize } from './auctionLuxuryTax';
 
 export type LiquidityBidRecommendation = 'bid' | 'push' | 'claim' | 'pass';
 export type LiquidityState = 'aggressive' | 'neutral' | 'constrained' | 'emergency-fill';
@@ -60,6 +61,8 @@ export interface LiquidityCompletionTaxContext {
   playerById: ReadonlyMap<string, ConstructionPlayer>;
   capIdentity?: TeamCapIdentity;
   baseCaps: readonly LuxuryCapRow[];
+  /** Real non-shill league clubs; required so completion tax matches settlement. */
+  realTeamCount: number;
 }
 
 export interface LiquidityAwareBidRead {
@@ -191,9 +194,13 @@ function completionTaxForQuote(
     if (!player) return 0;
     completionPlayers.push(player);
   }
+  const normalizedBaseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+    [...context.baseCaps],
+    context.realTeamCount,
+  );
   const caps = context.capIdentity
-    ? shiftLuxuryCaps([...context.baseCaps], context.capIdentity)
-    : [...context.baseCaps];
+    ? shiftLuxuryCaps(normalizedBaseCaps, context.capIdentity)
+    : normalizedBaseCaps;
   const currentTax = luxuryTax([...context.currentRosterWithCandidate], caps, 'taxed').charged;
   const completedTax = luxuryTax(
     [...context.currentRosterWithCandidate, ...completionPlayers],

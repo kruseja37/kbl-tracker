@@ -1194,6 +1194,7 @@ describe('roster intelligence payload assembly', () => {
           currentRosterWithCandidate,
           playerById: new Map([[completion.id, completion]]),
           baseCaps: LUXURY_CAP_TABLES.standard,
+          realTeamCount: 20,
         },
         openSlotsAfterWin: 1,
         ...neutralSeat({ candidateShape: pitcher('RP') }),

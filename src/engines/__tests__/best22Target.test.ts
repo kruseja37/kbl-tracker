@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildIdentityRoster, type SimArchetype, type SimPlayer } from '../archetypeBalanceSimulator';
 import { BEST22_TUNING, buildBest22Target } from '../best22Target';
+import { normalizeAuctionLuxuryCapsForLeagueSize } from '../auctionLuxuryTax';
+import { luxuryTax } from '../leagueConstruction';
+import { LUXURY_CAP_TABLES } from '../../data/tierParams';
 import { canCover, canRelieve, canStart, isCloser, type FieldPosition } from '../../data/rosterConstruction';
 import { archetypeCapShift, HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import {
@@ -233,11 +236,28 @@ function randomizedLegalPool(seed: number): SimPlayer[] {
 }
 
 describe('buildBest22Target', () => {
+  it('NORMWIRE repro: a 2-team identity target charges the same tax as normalized settlement', () => {
+    const pool = legalPool();
+    const build = buildIdentityRoster(
+      pool,
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      { posture: 'optimal', realTeamCount: 2 },
+    );
+    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(LUXURY_CAP_TABLES[TIER], 2);
+    const settlementTax = luxuryTax(build.players, normalizedCaps, 'taxed').charged;
+    const stockCapTax = luxuryTax(build.players, LUXURY_CAP_TABLES[TIER], 'taxed').charged;
+
+    expect(stockCapTax).toBeGreaterThan(settlementTax);
+    expect(build.totalTax).toBe(settlementTax);
+  });
+
   it('A1: all-ANY asks are byte-identical to plain buildIdentityRoster picks', () => {
     const pool = legalPool();
     const slots = buildDefaultDesignSlots();
-    const plain = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, { posture: 'optimal' });
-    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const plain = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, { realTeamCount: 20, posture: 'optimal' });
+    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20);
 
     expect(BEST22_TUNING.bonusCap).toBe(3);
     expect(target.picks.map((pick) => pick.playerId)).toEqual(plain.players.map((player) => player.id));
@@ -251,12 +271,13 @@ describe('buildBest22Target', () => {
   it('P1: absent and empty pins are byte-identical for identity roster and BEST-22 target picks', () => {
     const pool = legalPool();
     const slots = buildDefaultDesignSlots();
-    const plainIdentity = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, { posture: 'optimal' });
+    const plainIdentity = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, { realTeamCount: 20, posture: 'optimal' });
     const emptyPinnedIdentity = buildIdentityRoster(pool, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, {
+      realTeamCount: 20,
       posture: 'optimal',
       pinned: [],
     });
-    const noPinsTarget = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const noPinsTarget = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20);
     const emptyPinsTarget = buildBest22Target(
       slots,
       pool,
@@ -264,6 +285,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map(),
     );
 
@@ -286,6 +308,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
     );
 
     const ssPick = target.picks[4];
@@ -299,7 +322,7 @@ describe('buildBest22Target', () => {
   it('A2b: forwards present sim player names to target picks', () => {
     const pool = legalPool([], { ss: 'Simone Short', 'sp-0': 'Avery Ace' });
     const slots = buildDefaultDesignSlots();
-    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20);
 
     expect(target.picks.find((pick) => pick.playerId === 'ss')?.playerName).toBe('Simone Short');
     expect(target.picks.find((pick) => pick.playerId === 'sp-0')?.playerName).toBe('Avery Ace');
@@ -309,7 +332,7 @@ describe('buildBest22Target', () => {
     const gmPreferred = simPlayer('gm-preferred-ss', { position: 'SS', isPitcher: false });
     const pool = legalPool([gmPreferred]);
     const slots = buildDefaultDesignSlots();
-    const baseline = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const baseline = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20);
     const nudged = buildBest22Target(
       slots,
       pool,
@@ -317,6 +340,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       undefined,
       new Map([['SS', ['gm-preferred-ss', 'ss']]]),
     );
@@ -349,6 +373,7 @@ describe('buildBest22Target', () => {
       fitArchetype,
       TIER,
       SOLVENT_BUDGET,
+      20,
       undefined,
       new Map([['SS', ['ss', 'superior-fit-ss']]]),
     );
@@ -371,6 +396,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['FLEX1', 'bench-4']]),
     );
     const emptyRankOverrides = buildBest22Target(
@@ -380,6 +406,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['FLEX1', 'bench-4']]),
       new Map(),
     );
@@ -403,6 +430,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
     );
     const afterFloor = evaluateRosterDesign(slots, floorPool, SOLVENT_BUDGET);
 
@@ -450,6 +478,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['FLEX1', 'bench-4']]),
     );
 
@@ -463,7 +492,7 @@ describe('buildBest22Target', () => {
     const expensive = { ...simPlayer('expensive-flex', { position: 'LF', isPitcher: false }), salary: 500_000 };
     const pool = legalPool([expensive]);
     const slots = buildDefaultDesignSlots();
-    const unpinned = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, 600_000);
+    const unpinned = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, 600_000, 20);
     const pinned = buildBest22Target(
       slots,
       pool,
@@ -471,6 +500,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       600_000,
+      20,
       new Map([['FLEX1', 'expensive-flex']]),
     );
 
@@ -492,6 +522,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([
         ['SS', 'missing-player'],
         ['SP1', 'ss'],
@@ -522,6 +553,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['SP1', 'roleless-starter']]),
     );
     const normalPin = buildBest22Target(
@@ -531,6 +563,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['SP1', 'sp-0']]),
     );
 
@@ -556,6 +589,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['SS', 'ss']]),
     );
     const after = evaluateRosterDesign(slots, floorPool, SOLVENT_BUDGET);
@@ -575,6 +609,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['SS', 'ss']]),
     );
     const match = buildBest22Target(
@@ -584,6 +619,7 @@ describe('buildBest22Target', () => {
       NEUTRAL_ARCHETYPE,
       TIER,
       SOLVENT_BUDGET,
+      20,
       new Map([['SS', 'ss']]),
     );
 
@@ -620,6 +656,7 @@ describe('buildBest22Target', () => {
     });
     const pinMap = new Map([['SP2', 'sp-3']]);
     const rawBuild = buildIdentityRoster(pool, armFitArchetype, TIER, SOLVENT_BUDGET, {
+      realTeamCount: 20,
       posture: 'optimal',
       pinned: [{ slotIndex: 10, playerId: 'sp-3' }],
     });
@@ -641,6 +678,7 @@ describe('buildBest22Target', () => {
       armFitArchetype,
       TIER,
       SOLVENT_BUDGET,
+      20,
       pinMap,
     );
 
@@ -691,6 +729,7 @@ describe('buildBest22Target', () => {
         historicalSimArchetype(seed),
         TIER,
         SOLVENT_BUDGET,
+        20,
       );
 
       if (target.feasible) feasibleBuilds += 1;
@@ -703,7 +742,7 @@ describe('buildBest22Target', () => {
   it('B2: starved catcher pools keep the C slot unfilled instead of index-shifting another player into it', () => {
     const pool = legalPool().filter((player) => player.position !== 'C' && player.secondaryPosition !== 'C');
     const slots = buildDefaultDesignSlots();
-    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET);
+    const target = buildBest22Target(slots, pool, classifiedById(pool), NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20);
     const catcherPick = target.picks[0];
     const catcherPlayer = pool.find((player) => player.id === catcherPick.playerId);
 

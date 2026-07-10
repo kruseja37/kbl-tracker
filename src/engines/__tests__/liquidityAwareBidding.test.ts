@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { LUXURY_CAP_TABLES } from '../../data/tierParams';
+import { normalizeAuctionLuxuryCapsForLeagueSize } from '../auctionLuxuryTax';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import { luxuryTax, type ConstructionPlayer } from '../leagueConstruction';
 import { evaluateLiquidityAwareBid, type LiquidityCompletionCandidate } from '../liquidityAwareBidding';
@@ -259,12 +260,55 @@ describe('evaluateLiquidityAwareBid', () => {
         currentRosterWithCandidate,
         playerById: new Map([[completion.id, completion]]),
         baseCaps: LUXURY_CAP_TABLES.standard,
+        realTeamCount: 20,
       },
       baseValuation: 500_000,
     });
 
     expect(read.minimumFutureFillReserve).toBeCloseTo(30_000 + completionTax, 8);
     expect(read.discretionaryBudget).toBeCloseTo(200_000 - 30_000 - completionTax, 8);
+  });
+
+  test('NORMWIRE repro: a 2-team completion reserve uses normalized settlement caps', () => {
+    const currentRosterWithCandidate = [
+      taxPitcher('held-rp', 'RP', 70),
+      taxPitcher('target-rp', 'RP', 70),
+    ];
+    const completion = taxPitcher('completion-cp', 'CP', 88);
+    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(LUXURY_CAP_TABLES.standard, 2);
+    const settlementCompletionTax = luxuryTax(
+      [...currentRosterWithCandidate, completion],
+      normalizedCaps,
+      'taxed',
+    ).charged - luxuryTax(currentRosterWithCandidate, normalizedCaps, 'taxed').charged;
+    const stockCapCompletionTax = luxuryTax(
+      [...currentRosterWithCandidate, completion],
+      LUXURY_CAP_TABLES.standard,
+      'taxed',
+    ).charged - luxuryTax(currentRosterWithCandidate, LUXURY_CAP_TABLES.standard, 'taxed').charged;
+    expect(stockCapCompletionTax).toBeGreaterThan(settlementCompletionTax);
+
+    const read = evaluateLiquidityAwareBid({
+      playerId: 'target-rp',
+      iv: 500_000,
+      nextBid: 40_000,
+      legalMaxBid: 200_000,
+      budgetRemaining: 200_000,
+      rosterSlotsRemaining: 2,
+      minSalary: 5_000,
+      rosterShapes: nearlyCompleteRoster,
+      candidateShape: pitcher('RP'),
+      remainingPool: pool([{ id: 'completion-cp', value: 40_000, price: 30_000, shape: pitcher('CP') }]),
+      completionTaxContext: {
+        currentRosterWithCandidate,
+        playerById: new Map([[completion.id, completion]]),
+        baseCaps: LUXURY_CAP_TABLES.standard,
+        realTeamCount: 2,
+      },
+      baseValuation: 500_000,
+    });
+
+    expect(read.minimumFutureFillReserve).toBeCloseTo(30_000 + settlementCompletionTax, 8);
   });
 
   test('TAXENGINE R1: near-complete endgame keeps the original top-priority aggressive posture', () => {
@@ -339,6 +383,7 @@ describe('evaluateLiquidityAwareBid', () => {
         currentRosterWithCandidate,
         playerById: new Map(highOpenCompletion.map((candidate) => [candidate.id, candidate.player])),
         baseCaps: LUXURY_CAP_TABLES.standard,
+        realTeamCount: 20,
       },
     });
     const openRatio = baseInput.rosterSlotsRemaining /
@@ -384,6 +429,7 @@ describe('evaluateLiquidityAwareBid', () => {
         currentRosterWithCandidate,
         playerById: new Map([[completion.id, completion]]),
         baseCaps: LUXURY_CAP_TABLES.standard,
+        realTeamCount: 20,
       },
     })).toEqual(evaluateLiquidityAwareBid(input));
   });

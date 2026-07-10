@@ -48,6 +48,7 @@ import {
   type BandPriorities,
   type TeamCapIdentity,
 } from "../../../engines/leagueConstruction";
+import { normalizeAuctionLuxuryCapsForLeagueSize } from "../../../engines/auctionLuxuryTax";
 import {
   CAP_MODIFICATION_FRACTIONS,
   LUXURY_CAP_TABLES,
@@ -771,37 +772,46 @@ export function LeagueBuilderTeams() {
       };
     }
   }, [formData.farmCapIdentity.decrease, formData.farmCapIdentity.increase]);
-  const previewTier = useMemo<TierKey>(() => {
+  const previewLeague = useMemo(() => {
     const leagueId = editingTeam?.leagueIds?.[0];
-    if (!leagueId) return "juiced";
-    return leagues.find((league) => league.id === leagueId)?.tier ?? "juiced";
+    return leagues.find((league) => league.id === leagueId)
+      ?? leagues.find((league) => Boolean(editingTeam && league.teamIds.includes(editingTeam.id)))
+      ?? null;
   }, [editingTeam?.leagueIds, leagues]);
+  const previewTier = (previewLeague?.tier ?? "juiced") as TierKey;
+  const previewRealTeamCount = previewLeague?.teamIds.length ?? null;
   const capShiftPreview = useMemo(() => {
     if (!capIdentityValidation.identity) return null;
     return identityCapShift(capIdentityValidation.identity);
   }, [capIdentityValidation.identity]);
   const shiftedCapPreviewRows = useMemo(() => {
-    if (!capIdentityValidation.identity) return [];
-    const baseCaps = LUXURY_CAP_TABLES[previewTier];
+    if (!capIdentityValidation.identity || previewRealTeamCount === null) return [];
+    const baseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+      LUXURY_CAP_TABLES[previewTier],
+      previewRealTeamCount,
+    );
     const shiftedCaps = shiftLuxuryCaps(baseCaps, capIdentityValidation.identity);
     return shiftedCaps
       .map((row, index) => ({ base: baseCaps[index], shifted: row }))
       .filter(({ base, shifted }) => base && Math.abs(shifted.cap - base.cap) >= 0.01)
       .slice(0, 2);
-  }, [capIdentityValidation.identity, previewTier]);
+  }, [capIdentityValidation.identity, previewRealTeamCount, previewTier]);
   const farmCapShiftPreview = useMemo(() => {
     if (!farmCapIdentityValidation.identity) return null;
     return identityCapShift(farmCapIdentityValidation.identity);
   }, [farmCapIdentityValidation.identity]);
   const farmShiftedCapPreviewRows = useMemo(() => {
-    if (!farmCapIdentityValidation.identity) return [];
-    const baseCaps = LUXURY_CAP_TABLES[previewTier];
+    if (!farmCapIdentityValidation.identity || previewRealTeamCount === null) return [];
+    const baseCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+      LUXURY_CAP_TABLES[previewTier],
+      previewRealTeamCount,
+    );
     const shiftedCaps = shiftLuxuryCaps(baseCaps, farmCapIdentityValidation.identity);
     return shiftedCaps
       .map((row, index) => ({ base: baseCaps[index], shifted: row }))
       .filter(({ base, shifted }) => base && Math.abs(shifted.cap - base.cap) >= 0.01)
       .slice(0, 2);
-  }, [farmCapIdentityValidation.identity, previewTier]);
+  }, [farmCapIdentityValidation.identity, previewRealTeamCount, previewTier]);
 
   // TEAMIDGUARD (2026-07-09): archetype-owned teams render the MLB identity section
   // read-only and display the actual archetype shift (via rawShift, not the coarse

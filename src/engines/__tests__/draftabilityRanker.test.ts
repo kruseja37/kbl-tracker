@@ -119,7 +119,7 @@ function deepPool(): SimPlayer[] {
 
 describe('rankArchetypeDraftability — snipe-test verdicts', () => {
   it('a buildable pool ranks without LOCKED verdicts and orders bands best-first', () => {
-    const rows = rankArchetypeDraftability(syntheticPool(8), SUBSET, 'standard', { minEmbodimentZ: -1 });
+    const rows = rankArchetypeDraftability(syntheticPool(8), SUBSET, 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
     expect(rows).toHaveLength(SUBSET.length);
     expect(rows.every((r) => r.band !== 'LOCKED')).toBe(true);
     expect(rows.every((r) => r.resilience >= 1)).toBe(true);
@@ -132,7 +132,7 @@ describe('rankArchetypeDraftability — snipe-test verdicts', () => {
   }, 30_000);
 
   it('a DEEP pool survives repeated snipes without tax → GREEN', () => {
-    const rows = rankArchetypeDraftability(deepPool(), SUBSET, 'standard', { minEmbodimentZ: -1 });
+    const rows = rankArchetypeDraftability(deepPool(), SUBSET, 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
     const greens = rows.filter((r) => r.band === 'GREEN');
     expect(greens.length, rows.map((r) => `${r.archetypeId}:${r.band}(res=${r.resilience})`).join(' ')).toBeGreaterThan(0);
     for (const g of greens) {
@@ -143,7 +143,7 @@ describe('rankArchetypeDraftability — snipe-test verdicts', () => {
   }, 30_000);
 
   it('exactly two primary catchers → the snipe kills the rebuild: fragile YELLOW with the reason', () => {
-    const rows = rankArchetypeDraftability(syntheticPool(2), SUBSET, 'standard', { minEmbodimentZ: -1 });
+    const rows = rankArchetypeDraftability(syntheticPool(2), SUBSET, 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
     for (const row of rows) {
       expect(row.band, row.name).toBe('YELLOW');
       expect(row.resilience, row.name).toBe(1);
@@ -152,7 +152,7 @@ describe('rankArchetypeDraftability — snipe-test verdicts', () => {
   }, 30_000);
 
   it('a single primary catcher → LOCKED with the catcher named', () => {
-    const rows = rankArchetypeDraftability(syntheticPool(1), SUBSET, 'standard', { minEmbodimentZ: -1 });
+    const rows = rankArchetypeDraftability(syntheticPool(1), SUBSET, 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
     for (const row of rows) {
       expect(row.band, row.name).toBe('LOCKED');
       expect(row.resilience, row.name).toBe(0);
@@ -174,20 +174,20 @@ describe('audit-fix regressions — F3 (Ruling-A backup-C), F4 (SP/RP matching),
   it('F3a: the ONLY backup catcher is a secondary-C hitter → identity build is LEGAL, not LOCKED', () => {
     const pool = syntheticPool(1); // one primary-C
     pool.push({ ...mkHitter('sec-c', '1B', 2), id: 'sec-c', secondaryPosition: 'C' });
-    const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { posture: 'optimal' });
+    const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { realTeamCount: 20, posture: 'optimal' });
     expect(build.rosterSize).toBe(22);
     expect(build.legalRoster).toBe(true);
     expect(build.players.filter((p) => !p.isPitcher && p.position === 'C')).toHaveLength(1);
     expect(build.players.some((p) => p.id === 'sec-c')).toBe(true);
 
-    const rows = rankArchetypeDraftability(pool, [MURDERERS], 'standard', { minEmbodimentZ: -1 });
+    const rows = rankArchetypeDraftability(pool, [MURDERERS], 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
     expect(rows[0].band).not.toBe('LOCKED');
   }, 30_000);
 
   it('F3b: the ONLY backup catcher is a Two Way (C) pitcher → 13/9 shape, LEGAL', () => {
     const pool = syntheticPool(1);
     pool.push(mkPitcher('twc', 'RP', 3, 'C'));
-    const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { posture: 'optimal' });
+    const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { realTeamCount: 20, posture: 'optimal' });
     expect(build.rosterSize).toBe(22);
     expect(build.legalRoster).toBe(true);
     expect(build.players.some((p) => p.id === 'twc')).toBe(true);
@@ -204,7 +204,7 @@ describe('audit-fix regressions — F3 (Ruling-A backup-C), F4 (SP/RP matching),
     for (let i = 0; i < 4; i += 1) pool.push(mkPitcher(`sp${i}`, 'SP', n++));
     for (let i = 0; i < 3; i += 1) pool.push(mkPitcher(`sw${i}`, 'SP/RP', n++));
     pool.push(mkPitcher('cp0', 'CP', n++));
-    const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { posture: 'optimal' });
+    const build = buildIdentityRoster(pool, simOf(MURDERERS), 'standard', budgetFor(pool), { realTeamCount: 20, posture: 'optimal' });
     expect(build.rosterSize).toBe(22);
     expect(build.legalRoster).toBe(true); // pure SPs start, swings relieve, CP closes — the F4 counterexample
   }, 30_000);
@@ -224,8 +224,8 @@ describe('audit-fix regressions — F3 (Ruling-A backup-C), F4 (SP/RP matching),
     for (let i = 0; i < 20; i += 1) pool.push(mkPitcher(`sp${i}`, 'SP', n++));
     for (let i = 0; i < 8; i += 1) pool.push(mkPitcher(`rp${i}`, i % 4 === 3 ? 'CP' : 'RP', n++));
 
-    const [opener] = rankArchetypeDraftability(pool, [OPENER], 'standard', { minEmbodimentZ: -1 });
-    const [hitterArch] = rankArchetypeDraftability(pool, [MURDERERS], 'standard', { minEmbodimentZ: -1 });
+    const [opener] = rankArchetypeDraftability(pool, [OPENER], 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
+    const [hitterArch] = rankArchetypeDraftability(pool, [MURDERERS], 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
     expect(hitterArch.band).not.toBe('LOCKED');
     expect(opener.resilience).toBeLessThan(hitterArch.resilience);
     expect(opener.resilience).toBeGreaterThanOrEqual(1);
@@ -235,7 +235,7 @@ describe('audit-fix regressions — F3 (Ruling-A backup-C), F4 (SP/RP matching),
 
 describe('fieldingRobustnessSweep — yardstick sensitivity', () => {
   it('re-ranks under scaled fielding value and reports rank stability', () => {
-    const report = fieldingRobustnessSweep(syntheticPool(8), SUBSET, 'standard', [1.3]);
+    const report = fieldingRobustnessSweep(syntheticPool(8), SUBSET, 'standard', [1.3], { realTeamCount: 20 });
     expect(report.base).toHaveLength(SUBSET.length);
     expect(report.sweeps).toHaveLength(1);
     expect(report.sweeps[0].multiplier).toBe(1.3);

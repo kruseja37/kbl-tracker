@@ -47,7 +47,7 @@ describe('historical team archetypes — locked set, all tiers', () => {
   it('stays within the ±10% parity band across juiced / standard / nerfed, and prints the landscape', { timeout: 30000 }, () => {
     const pool = loadPool();
     for (const tier of ['juiced', 'standard', 'nerfed'] as const satisfies readonly TierKey[]) {
-      const report = runBalanceSim(pool, SIM_SET, tier, 0.1);
+      const report = runBalanceSim(pool, SIM_SET, tier, 20, 0.1);
       const inBand = report.results.length - report.outliers.length;
       const rows = report.results
         .map((r) => ({ name: r.name, dev: (r.totalIv - report.meanIv) / report.meanIv }))

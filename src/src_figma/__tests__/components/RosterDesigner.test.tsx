@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
-  RosterDesigner,
+  RosterDesigner as RosterDesignerImpl,
   seedRosterDesignSlots,
 } from "../../app/components/leagueBuilder/RosterDesigner";
 import {
@@ -12,6 +13,11 @@ import {
 import { classifyPlayerArchetype } from "../../../engines/playerArchetypeClassifier";
 import { buildRosterDesignPool } from "../../app/engines/leaguePlayerAdapter";
 import type { Player, Team } from "../../../utils/leagueBuilderStorage";
+
+// This legacy fixture models the canonical 20-club league unless a test explicitly says otherwise.
+function RosterDesigner(props: Omit<ComponentProps<typeof RosterDesignerImpl>, "realTeamCount">) {
+  return <RosterDesignerImpl {...props} realTeamCount={20} />;
+}
 
 function makeTeam(id: string, name: string, overrides: Partial<Team> = {}): Team {
   return {

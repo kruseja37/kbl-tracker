@@ -159,13 +159,20 @@ export function analyzePoolFeasibility(
   lockedPool: SimPlayer[],
   archetypes: HistoricalArchetype[],
   tier: TierKey,
+  realTeamCount: number,
   referencePool?: SimPlayer[],
   budgetOverride?: number,
 ): PoolFeasibilityReport {
   const budget = budgetOverride ?? computePoolTierCap(lockedPool.map((player) => player.iv), tier);
   const thresholdPool = referencePool ?? lockedPool;
   const results = archetypes.map((arch) => {
-    const built = buildBestRoster(lockedPool, { name: arch.name, rawShift: archetypeCapShift(arch) }, tier, budget);
+    const built = buildBestRoster(
+      lockedPool,
+      { name: arch.name, rawShift: archetypeCapShift(arch) },
+      tier,
+      budget,
+      realTeamCount,
+    );
     const shortfalls = boostedStats(arch)
       .map((stat) => buildShortfall(lockedPool, thresholdPool, stat))
       .sort(sortShortfalls);
