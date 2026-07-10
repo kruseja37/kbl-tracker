@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import type { RosterIntelligencePayload } from "../../../../engines/rosterIntelligencePayload";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
 import { BEFORE_TAX_CEILING_HELP_LINE, HELD_BACK_HELP_LINE, HELP_LINE, NEED_FIT_HELP_LINE, WhisperPanel } from "./WhisperPanel";
@@ -37,6 +37,8 @@ export interface ScoutReadVM {
 }
 
 export interface LotVM {
+  /** Stable production lot identity (the auction player id). Privacy covers reset when this moves. */
+  lotId?: string | null;
   player?: Player | null;
   name: string;
   positions: string;
@@ -180,6 +182,8 @@ export interface AuctionStageVM {
     rosterLabel: string;
     nowText: string;
     teamName?: string;
+    /** Stable identity for teamName. Required before the banner can reveal private seat intel. */
+    teamId?: string;
     teamPrimary?: string;
     teamSecondary?: string;
     /** FLOORREFIT Move 1: which kind of turn is live -- drives the ON THE CLOCK banner's generic
@@ -203,6 +207,8 @@ export interface AuctionStageVM {
 export interface AuctionStageProps {
   vm: AuctionStageVM;
   whisperPayload?: RosterIntelligencePayload | null;
+  /** Human seat currently holding bid/claim action. MLB privacy is fail-closed when this is set. */
+  activeSeatTeamId?: string | null;
   toolbar?: React.ReactNode;
   supplemental?: React.ReactNode;
   onSelectPreset?: (amount: number) => void;
@@ -225,9 +231,41 @@ function fallbackSlotGroup(slot: RosterSlotVM): BoardGroupName {
   return "THE BENCH";
 }
 
-export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
+export function AuctionStage({ vm, whisperPayload = null, activeSeatTeamId = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
   const [helpOpen, setHelpOpen] = useState(false);
+  const [revealedSeatTeamId, setRevealedSeatTeamId] = useState<string | null>(null);
   const isCpuTurn = Boolean(vm.move.cpuTurnName);
+  const currentLotId = vm.lot.lotId ?? vm.lot.player?.id ?? vm.lot.name;
+  const privacyControlled = vm.tier === "mlb" && activeSeatTeamId !== null;
+  const revealAllowed = privacyControlled
+    && vm.status.teamId === activeSeatTeamId
+    && !Boolean(vm.status.actingTeamIsCpu);
+  const advisorRevealed = revealAllowed && revealedSeatTeamId === activeSeatTeamId;
+  const privateMoveEnabled = !privacyControlled || advisorRevealed;
+  const privateBoardRevealed = vm.tier !== "mlb" || advisorRevealed;
+
+  // PRIVACY (2026-07-09): use a layout effect so a same-seat lot change is covered before the
+  // browser can paint the next player's read. A seat change is additionally fail-closed during
+  // render because the old revealed id no longer equals activeSeatTeamId.
+  useLayoutEffect(() => {
+    setRevealedSeatTeamId(null);
+  }, [activeSeatTeamId, currentLotId]);
+
+  const revealActiveSeat = () => {
+    if (!revealAllowed || !activeSeatTeamId) return;
+    setRevealedSeatTeamId(activeSeatTeamId);
+  };
+  const coverPrivateRead = () => setRevealedSeatTeamId(null);
+  const handleBid = () => {
+    if (privacyControlled && !advisorRevealed) return;
+    coverPrivateRead();
+    onBid?.();
+  };
+  const handlePass = () => {
+    if (privacyControlled && !advisorRevealed) return;
+    coverPrivateRead();
+    onPass?.();
+  };
   // COPY LAW 1.2 (CONTRACT_VOICE_2026-07-09.md): the unreserved completion ceiling (F9 ruling)
   // renders ONLY inside the Help surface below, honestly labeled "Before-tax ceiling" -- never in
   // WhisperPanel's default view, and never driving the verdict/room-relation/budget light.
@@ -265,10 +303,19 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
               <HandoffCheckPanel complete={vm.complete} />
             ) : (
               <>
-                <OnTheClockBanner status={vm.status} />
+                <OnTheClockBanner
+                  status={vm.status}
+                  onReveal={revealAllowed ? revealActiveSeat : undefined}
+                  revealed={advisorRevealed}
+                />
                 <div className="gonewrap">
                   <div className="lot">
-                    <Lot lot={vm.lot} tier={vm.tier} helpOpen={helpOpen} />
+                    <Lot
+                      lot={vm.lot}
+                      tier={vm.tier}
+                      helpOpen={helpOpen}
+                      privacyResetKey={`${currentLotId}|${activeSeatTeamId ?? whisperPayload?.seatTeamId ?? "no-seat"}`}
+                    />
                   </div>
                   {vm.overlay === "sold" && (
                     <div className="stamp sold"><div><div className="s">SOLD</div></div></div>
@@ -294,10 +341,10 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                 <div className="move">
                   <div className="walletline">
                     <div><div className="lab">{vm.move.walletLabel}</div><div className="v gold num">{money(vm.move.wallet)}</div></div>
-                    <div><div className="lab">Ceiling</div><div className="v num">{money(vm.move.maxBid)}</div></div>
-                    <div><div className="lab">Slots left</div><div className="v num">{vm.move.slotsLeft}</div></div>
+                    <div><div className="lab">Ceiling</div><div className="v num">{privateMoveEnabled ? money(vm.move.maxBid) : "——"}</div></div>
+                    <div><div className="lab">Slots left</div><div className="v num">{privateMoveEnabled ? vm.move.slotsLeft : "——"}</div></div>
                   </div>
-                  <div className="ceiling">{vm.move.ceilingNote}</div>
+                  {privateMoveEnabled && <div className="ceiling">{vm.move.ceilingNote}</div>}
 
                   {isCpuTurn ? (
                     <div className="cpu-panel">
@@ -321,9 +368,9 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                             key={p.label}
                             type="button"
                             className={`preset${!p.enabled ? " dim" : ""}${p.selected ? " sel" : ""}`}
-                            disabled={!p.enabled}
-                            title={p.enabled ? undefined : "above your cap"}
-                            onClick={() => p.enabled && onSelectPreset?.(p.amount)}
+                            disabled={!p.enabled || !privateMoveEnabled}
+                            title={!privateMoveEnabled ? "Open your assistant GM read first" : p.enabled ? undefined : "above your cap"}
+                            onClick={() => p.enabled && privateMoveEnabled && onSelectPreset?.(p.amount)}
                           >
                             {p.label}
                           </button>
@@ -333,14 +380,14 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                         </span>
                       </div>
                       <div className="actions">
-                        <button type="button" className="bid" disabled={!vm.move.canBid} onClick={() => onBid?.()}>
+                        <button type="button" className="bid" disabled={!vm.move.canBid || !privateMoveEnabled} onClick={handleBid}>
                           {vm.move.primaryLabel ?? `BID ${moneyK(vm.move.currentBid)}`}
                         </button>
                         <button
                           type="button"
                           className="letgo"
-                          disabled={vm.move.canPass === false}
-                          onClick={() => onPass?.()}
+                          disabled={vm.move.canPass === false || !privateMoveEnabled}
+                          onClick={handlePass}
                         >
                           {vm.move.secondaryLabel ?? `Let ${vm.lot.objectPronoun ?? "him"} go`}
                         </button>
@@ -352,7 +399,7 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
 
                 {/* FLOORREFIT Move 6: the roster fill board moves here (left column, under the bid
                     controls -- today's dead space) from the right column's bottom. */}
-                <RosterBoardCard board={vm.board} boardSlots={boardSlots} tier={vm.tier} />
+                <RosterBoardCard board={vm.board} boardSlots={boardSlots} tier={vm.tier} privateRevealed={privateBoardRevealed} />
               </>
             )}
 
@@ -361,19 +408,26 @@ export function AuctionStage({ vm, whisperPayload = null, toolbar, supplemental,
                 rostered player's popover on the complete-screen board) -- kept independent here too,
                 so it now sits below the handoff-check panel on the complete screen instead of
                 nested inside the bid-controls fragment above (which only exists pre-complete). */}
-            {vm.complete && <RosterBoardCard board={vm.board} boardSlots={boardSlots} tier={vm.tier} />}
+            {vm.complete && <RosterBoardCard board={vm.board} boardSlots={boardSlots} tier={vm.tier} privateRevealed={privateBoardRevealed} />}
           </div>
 
           {/* RIGHT — the advisor, uncaged (FLOORREFIT §2) + lot log */}
           <div>
-            <WhisperPanel key={whisperPayload?.seatTeamId ?? "dormant"} payload={whisperPayload} tier={vm.tier} />
+            <WhisperPanel
+              key={whisperPayload?.seatTeamId ?? "dormant"}
+              payload={whisperPayload}
+              tier={vm.tier}
+              revealed={privacyControlled ? advisorRevealed : undefined}
+              onReveal={revealActiveSeat}
+              onCover={coverPrivateRead}
+            />
             {helpOpen && (
               <div className="help-panel whisper-help">
                 <div className="help-mark">?</div>
                 <div className="txt">{HELP_LINE}</div>
                 <div className="txt">{HELD_BACK_HELP_LINE}</div>
                 <div className="txt">{NEED_FIT_HELP_LINE}</div>
-                {beforeTaxCeiling !== null && (
+                {privateMoveEnabled && beforeTaxCeiling !== null && (
                   <>
                     <div className="txt" data-testid="whisper-total-capacity">Before-tax ceiling {money(beforeTaxCeiling)}</div>
                     <div className="txt">{BEFORE_TAX_CEILING_HELP_LINE}</div>
@@ -430,13 +484,23 @@ type ResolvedRosterSlotVM = RosterSlotVM & { slotId: string; group: BoardGroupNa
  * normal left-column-under-bid-controls placement, and the complete-screen carve-out that keeps it
  * visible alongside the handoff-check panel, matching pre-refit behavior). Same JSX, testids, and
  * classes the original single copy had -- only lifted into its own component to avoid tripling it. */
-function RosterBoardCard({ board, boardSlots, tier }: { board: BoardVM; boardSlots: readonly ResolvedRosterSlotVM[]; tier: AuctionTier }) {
+function RosterBoardCard({
+  board,
+  boardSlots,
+  tier,
+  privateRevealed,
+}: {
+  board: BoardVM;
+  boardSlots: readonly ResolvedRosterSlotVM[];
+  tier: AuctionTier;
+  privateRevealed: boolean;
+}) {
   return (
     <div className="card board">
       <div className="row">
         <div className="eyebrow">{board.title}</div>
         <div className="spacer" />
-        <span className="chip">{board.hint}</span>
+        {privateRevealed && <span className="chip">{board.hint}</span>}
       </div>
       <div className="board-groups">
         {(["THE EIGHT", "ROTATION", "BULLPEN", "THE BENCH"] as const).map((group) => {
@@ -454,7 +518,7 @@ function RosterBoardCard({ board, boardSlots, tier }: { board: BoardVM; boardSlo
                   <div
                     key={s.slotId}
                     data-testid={`auction-board-slot-${s.slotId}`}
-                    className={`slot${s.filled ? " filled" : ""}${s.isGap ? " gap" : ""}`}
+                    className={`slot${s.filled ? " filled" : ""}${privateRevealed && s.isGap ? " gap" : ""}`}
                   >
                     <div className="p">{s.pos}</div>
                     {s.chip && <div className="slot-chip">{s.chip}</div>}
@@ -474,8 +538,8 @@ function RosterBoardCard({ board, boardSlots, tier }: { board: BoardVM; boardSlo
                         )}
                       </div>
                     )}
-                    {s.depthNote && <div className="depth-note">{s.depthNote}</div>}
-                    {s.gapLabel && (
+                    {privateRevealed && s.depthNote && <div className="depth-note">{s.depthNote}</div>}
+                    {privateRevealed && s.gapLabel && (
                       <div data-testid={`auction-board-gap-${s.slotId}`} className="gap-label">
                         {s.gapLabel}
                       </div>
@@ -509,7 +573,7 @@ function RosterBoardCard({ board, boardSlots, tier }: { board: BoardVM; boardSlo
           </div>
         </div>
       )}
-      <div className="needline">{board.needLine}</div>
+      {privateRevealed && <div className="needline">{board.needLine}</div>}
     </div>
   );
 }
@@ -643,10 +707,13 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
   );
 }
 
-function Lot({ lot, tier, helpOpen }: { lot: LotVM; tier: AuctionTier; helpOpen: boolean }) {
+function Lot({ lot, tier, helpOpen, privacyResetKey }: { lot: LotVM; tier: AuctionTier; helpOpen: boolean; privacyResetKey: string }) {
   const [revealed, setRevealed] = useState(false);
   const name = <span className="name">{lot.name.toUpperCase()}</span>;
   const isFarmLot = tier === "farm";
+  useLayoutEffect(() => {
+    setRevealed(false);
+  }, [privacyResetKey]);
   return (
     <div className="lotinner">
       <div className="eyebrow">{lot.scout ? "On the block · prospect" : "On the block"}</div>

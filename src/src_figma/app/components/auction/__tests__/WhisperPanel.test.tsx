@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { WhisperPanel, liquidityStateLabel, reasonCodeLabel } from "../WhisperPanel";
 import type { LiquidityReasonCode, LiquidityState } from "../../../../../engines/liquidityAwareBidding";
@@ -200,6 +200,27 @@ function payload(
 }
 
 describe("WhisperPanel", () => {
+  test("PRIVACY controlled cover hides every advice tier until the stage reveals it", () => {
+    const onReveal = vi.fn();
+    const onCover = vi.fn();
+    const { rerender } = render(
+      <WhisperPanel payload={payload()} revealed={false} onReveal={onReveal} onCover={onCover} />,
+    );
+
+    expect(screen.queryByTestId("whisper-tier1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-tier2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("whisper-body")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(onReveal).toHaveBeenCalledTimes(1);
+
+    rerender(<WhisperPanel payload={payload()} revealed onReveal={onReveal} onCover={onCover} />);
+    expect(screen.getByTestId("whisper-tier1")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-tier2")).toBeInTheDocument();
+    expect(screen.getByTestId("whisper-body")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    expect(onCover).toHaveBeenCalledTimes(1);
+  });
+
   test("SECRECY: only the active seat payload renders and closed removes body nodes", () => {
     render(<WhisperPanel payload={payload()} />);
 
