@@ -274,3 +274,70 @@ line already carries every number; the LLM supplies personality only.
 6. Scope: all changes local to the validator + prompt text + tests (auctionAdvisorColor.ts,
    the emission prompt, test files). No wiring changes. Gates unchanged (incl. one full
    vitest).
+
+---
+
+## Builder report — 2026-07-09 (R2 audit rework)
+
+**Disposition:** COMPLETE in the working tree. No git write command was run. Changes are limited
+to the validator, advisor emission prompt, their two test files, and this appended report. No
+wiring, privacy, cache, connector, model, fallback-template, or auction behavior changed.
+
+### Red-team-first proof
+
+Before changing validator or prompt behavior, the four audit-proven bypass regressions were added
+to `src/engines/__tests__/auctionAdvisorColor.test.ts` and run with:
+
+`NODE_ENV= npx vitest run src/engines/__tests__/auctionAdvisorColor.test.ts`
+
+The required RED was reproduced: 1 failed file; 4 failed / 8 passed tests. Each new assertion
+received `{ source: 'llm', rejected: false }`, proving the old gate accepted all four bypasses:
+
+1. `Page Caps can spend nearly ninety thousand and still control the room.`
+2. `Page Caps assembled an A-tier, all-time haul around Avery Anchor.`
+3. `Page Caps should chase Rodriguez instead of Avery Anchor.`
+4. `Avery Anchor landed for $100,000, a steal.` — the recap facts contained `$100,000` as the
+   starting budget, proving a real fact number could be attached to a fabricated claim.
+
+### R2 implementation
+
+- **Zero numbers:** LLM text now rejects any digit, Unicode currency symbol, cardinal number-word
+  from zero through ninety plus magnitude/colloquial terms, and ordinal number-word. Hyphenated
+  number-words are split and checked. The sole ordinal exception requires that exact ordinal to
+  occur in the facts payload; direct tests prove exact `first` passes while absent `second` fails.
+- **Hardened names:** capitalized-token validation now includes single-token candidates. Allowed
+  tokens come from the facts payload, plus a small fixed baseball-common-noun set and a small
+  sentence-initial common-word set. The single-token `Rodriguez` bypass now rejects.
+- **Verdict language:** grade-letter, tier-letter, and article-plus-grade patterns always reject.
+  Curated evaluative/superlative terms (including `all-time`, `elite`, and `steal`) reject unless
+  the exact term appears in facts. The exception has a direct positive test.
+- **Prompt:** the system prompt now explicitly forbids digits, number-words, ordinals, currency,
+  unprovided names, grades, tiers, rankings, verdicts, and evaluative superlatives; it requests
+  personality/baseball color only. The inherited numeric response-length phrase was removed so the
+  guidance does not contradict itself. The emission test inspects the sent system prompt.
+- Every rejected output continues to render the deterministic template fallback.
+
+### Green proof and gates
+
+1. Hardened validator + emission seam: PASS — 2 files / 19 tests.
+2. `npx tsc -b --pretty false`: PASS, exit 0, no diagnostics. The first attempt was blocked before
+   code validation by `ENOSPC` while writing temporary build info; disposable build/test caches
+   were cleared and the unchanged command then passed.
+3. `npm run build`: PASS, exit 0; 2,647 modules transformed; Vite built in 9.99s. Existing stale
+   Browserslist, dynamic/static import, and chunk-size warnings only.
+4. Focused contract gate: PASS — 6 files / 139 tests (`auctionAdvisorColor`,
+   `auctionAdvisorColorEmission`, `franchisePhase2Activation`, `WhisperPanel`, `AuctionStage`, and
+   `LeagueBuilderAuctionDraft`).
+5. Full `NODE_ENV= npx vitest run`: PASS, exit 0 — 617 files passed / 7 skipped; 9,504 tests passed /
+   11 skipped; zero failed files; duration 216.42s.
+6. `git diff --check`: PASS, no whitespace errors.
+
+### Changed paths / scope check
+
+- `src/engines/auctionAdvisorColor.ts`
+- `src/engines/__tests__/auctionAdvisorColor.test.ts`
+- `src/src_figma/app/engines/reporter/auctionAdvisorColorEmission.ts`
+- `src/src_figma/__tests__/reporter/auctionAdvisorColorEmission.test.ts`
+- `spec-docs/contracts/CONTRACT_ADVISORCOLOR_2026-07-09.md` (this report only)
+
+STOP items: none. Independent re-audit and JK acceptance remain external gates.
