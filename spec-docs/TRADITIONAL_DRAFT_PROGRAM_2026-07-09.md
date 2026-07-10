@@ -249,6 +249,67 @@ restated inline).
    shows settled salary in franchise" red → green). D1's exit gate is the §3 calibration
    gauntlet plus franchise-recognition round-trip tests.
 
+## §8a The handoff interface — draft → living season (2026-07-09, from the after-chain sweep;
+BINDING; grows D1's scope)
+JK's question — "are we certain we've vetted before, during, AND after, and freeze the right
+snapshot into the living season?" — triggered an exhaustive sweep of everything downstream of a
+completed draft. Findings + captain rulings, all now part of D1/D2:
+
+### The freeze adapter (spec, evidence-grounded)
+`computeDraftFreeze` consumes exactly: won-order (result array position → slot class),
+winnerTeamId, settledSalary, iv, and a shill/CPU exclusion set — nothing else from the session
+(no bids, no nominations, no passed lots, no timing). Snake mapping:
+- **Won order** = `completedPicks` array order (already append-ordered — direct substitute).
+- **winnerTeamId** = `completedPicks[i].teamId` (final drafter — trades-safe by construction;
+  the sweep confirmed NOTHING downstream reads original pick ownership).
+- **settledSalary** = IV, stamped at pick commit (§3). `completedPicks` gains a settledSalary
+  field; the new commit function is the single write-point.
+- **iv** = RegisteredPool lookup at commit (the pattern the page already uses).
+- **payClass (CAPTAIN RULING — keeps draft-day morale alive):** under IV settlement, salary
+  always equals perceived value, so the auction's over/underpaid morale axis would flatten to
+  a constant. Snake's honest equivalent is slot-vs-talent: let `ivRank` = the player's rank in
+  the confirmed pool by IV and `slot` = his overall pick. `delta = slot − ivRank`;
+  `threshold = max(3, round(0.05 × totalPicks))`. `delta ≤ −threshold` (reached-for early) →
+  the "above" class (validated, the overpaid-analog); `|delta| < threshold` → "within";
+  `delta ≥ threshold` (fell past his talent) → the "below" class (slighted, the
+  underpaid-analog). Same downstream morale machinery, draft-native signal. D1 pins the
+  mapping with tests at the threshold boundary.
+- **Exclusion set (CAPTAIN RULING):** empty for snake — there are no shills; every team,
+  CPU-controlled or human, is a real franchise whose players seed morale. `deriveShillTeamIds`
+  is never called on the snake path.
+
+### The format-aware gates (the "did this league draft yet" sweep — six sites + routing)
+One shared helper (e.g., `isMlbDraftComplete(leagueId)`: auction session AUCTION_COMPLETE OR
+mlbDraftSessions `currentPickIndex >= pickOrder.length`) replaces the hardcoded auction checks
+at: franchiseInitializer freeze gate; the copy-league drafted guard (today accidentally
+harmless for snake — fixed explicitly, not left to luck); the Draft Setup resume/Run-It-Back
+button state; the Franchise Setup "already drafted" badge; the farm-auction MLB-completion
+gate; and the roster-commit guard (a parallel `commitCompletedSnakeSessionToLeagueRosters`
+reading `completedPicks`). Run-It-Back also calls `deleteMlbDraftSession` (exists today,
+called from nowhere) alongside its auction deletes.
+
+### Farm carryover (CAPTAIN RULING — resolves the "unspent" question)
+The farm draft budget formula (50% of MLB unspent) is unchanged. For snake leagues, "unspent"
+= **cap headroom**: `max(0, leagueSalaryCap − Σ settledSalary of the team's MLB picks)` — the
+same `resolveLeagueSalaryCap` the snake page already uses. A team that drafts cheap has farm
+money, exactly mirroring the auction economy. No nominal constructs.
+
+### Verified format-agnostic already (no work): scout hire (reads only leagueId + teams —
+grep-proven), farm roster-membership seeding (reads TeamRoster generically), storage/backup/
+sync registration for mlbDraftSessions (fully built in the v6/v7 migration), season/schedule
+init (no draft reads downstream of franchise init), pick trading (nothing reads original
+ownership — the trades[] audit log is purely additive).
+
+### Carried into lanes
+D1 grows to: settlement stamp + commit function + freeze adapter (incl. the payClass ruling) +
+the shared completion helper + all six gate sites + Run-It-Back + farm-carryover definition +
+a verify-read of `deepCopyLeagueToFranchise` internals (flagged unverified by the sweep — the
+D1 auditor confirms it reads TeamRoster only). D2 gains the scout-reveal step on the snake
+completion screen (the arc's one missing feature — the rest of the continuation chain is
+proven format-agnostic). D1's exit gauntlet extends through the handoff: six full CPU drafts →
+franchise init → assert morale baselines seeded, salaries stamped, draft-baseline rows
+written, farm budgets carried — the freeze-snapshot proof JK asked for.
+
 ## §9 Protocol
 Contract-first (verbatim contracts in `spec-docs/contracts/CONTRACT_D<N>_*.md`); repro-first
 for every behavior change; gates per lane = typecheck, build, owned suites, consuming-page
