@@ -7,6 +7,9 @@ import type {
   AuctionSession,
 } from '../../engines/auctionStateMachine';
 import {
+  computeDraftFreeze,
+} from '../../engines/draftFreeze';
+import {
   DEFAULT_FREEZE_SCOUT_ACCURACY,
   buildDraftFreezeInputs,
 } from '../draftFreezeInputs';
@@ -161,6 +164,7 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       personality: 'Relaxed',
       modifiers,
     });
+    expect(inputs.every((input) => !Object.prototype.hasOwnProperty.call(input, 'payClassOverride'))).toBe(true);
   });
 
   test('reconstructs deterministic IV-centered scout ranges with the freeze default accuracy', () => {
@@ -251,5 +255,64 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       farmSession: null,
       metaByPlayerId: new Map(),
     })).toEqual([]);
+  });
+
+  test('D1 snake adapter maps IV-rank threshold boundaries without setting auction exclusions', () => {
+    const rankedIds = ['rank-1', 'rank-2', 'rank-3', 'rank-4', 'rank-5', 'rank-6'];
+    const pickIds = ['rank-4', 'rank-2', 'rank-3', 'rank-1', 'rank-5', 'rank-6'];
+    const pickOrder = pickIds.map((_, index) => ({
+      round: index + 1,
+      pick: index + 1,
+      teamId: index % 2 === 0 ? 'team-a' : 'team-b',
+    }));
+    const snakeSession = {
+      id: 'snake-threshold::startup-mlb-draft::1',
+      leagueId: 'snake-threshold',
+      seasonNumber: 1,
+      seed: 'snake-threshold',
+      workflowVersion: 'startup-mlb-draft-v1',
+      engineMethodVersion: 'leagueConstruction.t8d-1',
+      tier: 'standard' as const,
+      balanceMode: 'taxed' as const,
+      rounds: 6,
+      pickOrder,
+      completedPicks: pickOrder.map((pick, index) => ({ ...pick, playerId: pickIds[index] })),
+      currentPickIndex: pickOrder.length,
+      createdDate: '2026-01-01',
+      lastModified: '2026-01-01',
+    };
+    const pool = {
+      leagueId: 'snake-threshold',
+      tier: 'standard' as const,
+      balanceMode: 'taxed' as const,
+      players: rankedIds.map((id, index) => ({ id, iv: 600 - (index * 100), salary: 1 })),
+      tierCap: 10_000,
+      luxuryCaps: [],
+      pickValueChart: [],
+      totalSlots: 6,
+      poolSurplusWarning: false,
+    };
+
+    const inputs = buildDraftFreezeInputs({
+      mlbSession: null,
+      mlbSnakeSession: snakeSession,
+      mlbRegisteredPool: pool,
+      farmSession: null,
+      metaByPlayerId: new Map(),
+      mlbExcludedTeamIds: new Set(['team-a', 'team-b']),
+    });
+
+    expect(inputs.map((input) => [input.playerId, input.payClassOverride])).toEqual([
+      ['rank-4', 'above'],
+      ['rank-2', 'within'],
+      ['rank-3', 'within'],
+      ['rank-1', 'below'],
+      ['rank-5', 'within'],
+      ['rank-6', 'within'],
+    ]);
+    expect(inputs.map((input) => input.settledSalary)).toEqual([300, 500, 400, 600, 200, 100]);
+    const freeze = computeDraftFreeze(inputs);
+    expect(freeze.players.find((player) => player.playerId === 'rank-4')?.morale.payBase).toBe(10);
+    expect(freeze.players.find((player) => player.playerId === 'rank-1')?.morale.payBase).toBe(-10);
   });
 });

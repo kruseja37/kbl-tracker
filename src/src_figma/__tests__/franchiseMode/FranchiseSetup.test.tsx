@@ -18,6 +18,7 @@ const mockInitializeFranchise = vi.fn();
 const mockLoadFranchiseFreezeSummary = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
 const mockGetAuctionSession = vi.fn();
+const mockGetMlbDraftSession = vi.fn();
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
@@ -38,6 +39,7 @@ vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getAuctionSession: (...args: unknown[]) => mockGetAuctionSession(...args),
+  getMlbDraftSession: (...args: unknown[]) => mockGetMlbDraftSession(...args),
 }));
 
 // Mock league data — FranchiseSetup uses { leagues, teams, isLoading, error } from this hook
@@ -181,6 +183,7 @@ describe('FranchiseSetup Component', () => {
       ],
     });
     mockGetAuctionSession.mockResolvedValue(null);
+    mockGetMlbDraftSession.mockResolvedValue(null);
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
       ownership: 'league-builder-mode-1',
@@ -294,6 +297,24 @@ describe('FranchiseSetup Component', () => {
       expect(
         within(screen.getByText('KRUSE BASEBALL LEAGUE').parentElement as HTMLElement).queryByText('Draft complete'),
       ).not.toBeInTheDocument();
+    });
+
+    test('D1 repro: badges a league with a completed snake session', async () => {
+      mockGetMlbDraftSession.mockImplementation(async (leagueId: string) => {
+        if (leagueId !== 'kbl') return null;
+        return {
+          pickOrder: [{ round: 1, pick: 1, teamId: 'team-1' }],
+          completedPicks: [{ round: 1, pick: 1, teamId: 'team-1', playerId: 'player-1' }],
+          currentPickIndex: 1,
+        };
+      });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('Draft complete')).toBeInTheDocument();
+      expect(
+        within(screen.getByText('KRUSE BASEBALL LEAGUE').parentElement as HTMLElement).getByText('Draft complete'),
+      ).toBeInTheDocument();
     });
   });
 

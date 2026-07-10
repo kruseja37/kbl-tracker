@@ -25,7 +25,7 @@ import {
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
-import { getAuctionSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
+import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
 import {
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
   resetCompletedDraftArc,
@@ -114,6 +114,7 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    getMlbDraftSession: vi.fn(async () => null),
     saveLeagueTemplate: vi.fn(async (league) => league),
     saveTeam: vi.fn(async (team) => team),
   };
@@ -197,6 +198,7 @@ describe("LeagueBuilderDraftSetup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(getMlbDraftSession).mockResolvedValue(null);
     vi.mocked(leagueHasLinkedFranchise).mockResolvedValue(false);
     vi.mocked(resetCompletedDraftArc).mockResolvedValue(undefined);
     vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());

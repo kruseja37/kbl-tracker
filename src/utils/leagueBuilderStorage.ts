@@ -349,7 +349,13 @@ export interface LeagueBuilderMlbDraftSession {
   balanceMode: BalanceMode;
   rounds: number;
   pickOrder: Array<{ round: number; pick: number; teamId: string }>;
-  completedPicks: Array<{ round: number; pick: number; teamId: string; playerId: string }>;
+  completedPicks: Array<{
+    round: number;
+    pick: number;
+    teamId: string;
+    playerId: string;
+    settledSalary?: number;
+  }>;
   currentPickIndex: number;
   createdDate: string;
   lastModified: string;

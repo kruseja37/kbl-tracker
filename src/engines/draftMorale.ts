@@ -84,10 +84,11 @@ export function computeDraftMoraleFromRaw(
   range: { low: number; high: number },
   personality: string | undefined,
   modifiers: HiddenModifiers,
+  payClassOverride?: DraftPayClass,
 ): DraftMoraleResult {
   return computeDraftMorale({
     slotClass: classifyDraftSlot(orderIndex, totalWon),
-    payClass: classifyDraftPay(winningBid, range),
+    payClass: payClassOverride ?? classifyDraftPay(winningBid, range),
     personality,
     modifiers,
   });
