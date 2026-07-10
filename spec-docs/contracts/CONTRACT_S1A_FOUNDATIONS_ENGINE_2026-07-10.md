@@ -186,3 +186,193 @@ Binding consequences:
 4. Do not modify poolFromDemand/auctionPoolSizing/leagueBuilderPoolBuilder behavior
    for auction callers — consumption and additive extension only; POOLFLOOR's
    byte-identity guarantee must survive (auction suites gate).
+
+---
+
+## BUILDER REPORT — Codex S1A (2026-07-10)
+
+### Outcome
+
+Built the six engine/storage foundation items on `codex/snake-s1a-foundations` at
+captain HEAD `ed6c3a50`. The tree is intentionally dirty for the captain. No git write
+command was run. No UI/page/component, auction-flow, shared-auction-engine, POOLFLOOR,
+pool-sizing, or database-version code was edited.
+
+The mandatory tests were written before their engines existed. The initial red run
+failed at module resolution for the new `snake*` imports; implementation followed only
+after that red proof.
+
+### What was built
+
+- W1 session v2: additive optional storage fields, canonical 22-slot board taxonomy,
+  per-seat LWW revision, version state, pause, one-action correction snapshot, and
+  session revision in `src/utils/leagueBuilderStorage.ts:341-402`. Board validation,
+  one-window byte-identical correction, and version-aware pick mutation live in
+  `src/engines/snakeSession.ts:19-89`. Existing `completedPicks`, `pickOrder`, and
+  `currentPickIndex` semantics are unchanged; there is no store or DB-version change.
+- W2 version identity: source-person-key derivation, card-id fallback, one-human dedupe,
+  retirement, and unavailable-card projection in `src/engines/snakeVersioning.ts:3-75`.
+  Names are never identity inputs. Because the stored `Player` interface has no
+  `sourceId`, this remains a pure adapter seam accepting historical-source identity from
+  its future caller; the storage schema was not improvised or widened.
+- W3 simultaneous seating: POOLFLOOR-derived target/matcher consumption, `poolDemandModel`
+  body precheck, version-deduped fast floors, shared-pool constructive reservations,
+  canonical roster verification, and settlement-tax affordability in
+  `src/engines/snakeSeatingProof.ts:37-332`. Its structured shortfall contains the full
+  `PositionSupplyFloorResult` shape and adds only joint/affordability detail. Counting is
+  a precheck only; a counting pass still proceeds into the joint proof.
+- W4 rational room: deterministic public-input playout, locked-archetype fit/need,
+  settlement marginal tax with named lambda `1.15`, W3 legality/money rails, version-human
+  scarcity, and categorical reads only in `src/engines/snakeRationalRoom.ts:16-218`.
+  It contains no sampling, jitter, probability field, private board input, recommendation,
+  or board mutation.
+- W5 two bills: membership-only plan cost/tax/cushion, separately typed cheapest legal
+  finish cost/tax/cushion, and a consequence-only what-if entrypoint in
+  `src/engines/snakeEconomics.ts:15-157`. Both use real-team normalized settlement caps.
+- W6 guide core: posted-chart package search over 1-3 equal-count pick combinations,
+  balancing return picks, direct W3 validation, stale-revision/ownership revalidation,
+  ownership-only execution, and one-action trade correction in
+  `src/engines/snakeGuideTrade.ts:12-218`. CPU greed and display percentages are absent.
+
+### Test evidence
+
+- W1/W2 storage, exact-22 boards, retirement, byte-identical correction, and the actual
+  existing D1 commit path: `src/engines/__tests__/snakeVersioningSession.test.ts:49-193`.
+- W3 adversarial counting-pass/joint-fail, position supply version dedupe, and disjoint
+  legal success: `src/engines/__tests__/snakeSeatingProof.test.ts:75-138`.
+- W4 risk/playout agreement, rational-room version dedupe, and the scripted 8-club
+  position/scarcity/tax scenario: `src/engines/__tests__/snakeRationalRoom.test.ts:61-166`.
+- W5 opposite-pressure two-bill cases and membership-tax invariance; W6 documented
+  `14+41` for `9+62`, stranding refusal, correction, and stale revision:
+  `src/engines/__tests__/snakeEconomicsGuide.test.ts:51-176`.
+
+### Amendment 1 handling
+
+Amendment 1 landed at HEAD while the initial implementation was in progress. Work on the
+report stopped, W3 was refactored to consume `poolDemandModel`,
+`derivePositionSupplyFloorTargets`, and `matchesPositionSupplyFloor`, the shared-scarcity
+fixture was strengthened so aggregate counting passes before joint assignment fails, and
+the entire binding gate sequence below was restarted. No shared supply behavior changed.
+
+### Gate outputs (real terminal text)
+
+The first Gate 2 attempt exposed a project-build-only type narrow not reported by the bare
+Gate 1 command. It was fixed, and the sequence restarted from Gate 1:
+
+```text
+> kbl-tracker@0.0.0 build
+> tsc -b && vite build
+
+src/engines/snakeSeatingProof.ts(151,47): error TS2345: Argument of type 'string' is not assignable to parameter of type '"C" | "1B" | "2B" | "3B" | "SS" | "LF" | "CF" | "RF"'.
+```
+
+Final Gate 1 — `npx tsc --noEmit`:
+
+```text
+(exit 0; no output)
+```
+
+Final Gate 2 — `npm run build` (existing warnings retained):
+
+```text
+> kbl-tracker@0.0.0 build
+> tsc -b && vite build
+
+vite v7.3.1 building client environment for production...
+transforming...
+Browserslist: browsers data (caniuse-lite) is 6 months old.
+✓ 2650 modules transformed.
+rendering chunks...
+(!) franchisePlayerStorage.ts is dynamically imported and also statically imported; dynamic import will not move module into another chunk.
+(!) Some chunks are larger than 500 kB after minification.
+✓ built in 9.96s
+
+PWA v1.2.0
+mode      generateSW
+precache  189 entries (5403.49 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1d305bb8.js
+(exit 0)
+```
+
+Final Gate 3 — all owned suites:
+
+```text
+ RUN  v4.0.18 /private/tmp/kbl-s1a
+
+ ✓ src/engines/__tests__/snakeSeatingProof.test.ts (3 tests) 17ms
+ ✓ src/engines/__tests__/snakeRationalRoom.test.ts (3 tests) 27ms
+ ✓ src/engines/__tests__/snakeEconomicsGuide.test.ts (3 tests) 20ms
+ ✓ src/engines/__tests__/snakeVersioningSession.test.ts (5 tests) 31ms
+
+ Test Files  4 passed (4)
+      Tests  14 passed (14)
+   Start at  17:22:46
+   Duration  1.59s (transform 1.98s, setup 235ms, import 2.39s, tests 95ms, environment 1.86s)
+```
+
+Final Gate 4 — frozen auction preservation set:
+
+```text
+      28 /tmp/s1a-auction-tests-final.txt
+
+ Test Files  28 passed (28)
+      Tests  327 passed (327)
+   Start at  17:22:53
+   Duration  39.54s (transform 6.21s, setup 1.68s, import 12.24s, tests 66.47s, environment 12.35s)
+```
+
+Final Gate 5 — the one full `npx vitest run` invocation:
+
+```text
+ FAIL  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx > LeagueBuilderDraftSetup > manual exclusion does not beat a roster-design pin during regeneration
+Error: Test timed out in 15000ms.
+ ❯ src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx:676:3
+
+ Test Files  1 failed | 624 passed | 8 skipped (633)
+      Tests  1 failed | 9569 passed | 15 skipped (9585)
+   Start at  17:23:41
+   Duration  227.75s (transform 31.19s, setup 38.44s, import 144.56s, tests 969.69s, environment 323.43s)
+```
+
+This is in the contract's named `LeagueBuilderDraftSetup` solo-flake group. Exact solo
+verification passed:
+
+```text
+ RUN  v4.0.18 /private/tmp/kbl-s1a
+
+ ✓ src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx (21 tests | 20 skipped) 2046ms
+     ✓ manual exclusion does not beat a roster-design pin during regeneration  2045ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 20 skipped (21)
+   Start at  17:27:35
+   Duration  3.93s (transform 1.14s, setup 44ms, import 1.48s, tests 2.05s, environment 271ms)
+```
+
+### STOPs / surprises
+
+- No unresolved UNKNOWN and no scope-expansion STOP remains.
+- Amendment 1 was the only mid-build authority change; implementation/report work stopped
+  long enough to compose W3 with the existing supply layers and rerun every gate.
+- The source-person key is not present on stored `Player`; the engine exposes the required
+  pure seam and deliberately does not invent a storage field. S1b must supply the historical
+  adapter's source identity when it wires this engine.
+- The first build-only type failure is recorded above; after the narrow fix, the full gate
+  sequence restarted and produced the final evidence above.
+- Pre-existing untracked captain artifacts `DISPATCH_PROMPT_S1A.txt`, `run_s1a.sh`, and
+  `sentinel_s1a.sh` were not read as implementation authority and were not modified.
+
+### Auditor: attack these first
+
+1. Try adversarial club orderings against W3's documented conservative scarcest-first
+   constructive certificate; success is sound, but the algorithm may reject feasible rooms.
+2. Verify W3's additive failure shape remains directly consumable beside
+   `positionFloorReasons`, especially joint C-depth and affordability copy.
+3. Attack W4's all-in budget accounting across repeated playout picks and identity-shifted,
+   real-team-normalized tax caps; confirm every categorical read is traceable to its playout.
+4. Attack correction-window replacement and restoration after both picks and trades, including
+   version retirement and current-live-pick ownership.
+5. Verify S1b wires a stable historical `sourceId` into W2; absent source identity intentionally
+   falls back to card identity and therefore cannot dedupe historical versions.
