@@ -25,9 +25,11 @@ import type { FarmAuctionPool } from "../../../utils/farmAuctionPool";
 import { computeFarmTierCap, computeMlbToFarmCarryover } from "../../../utils/farmAuctionWallet";
 import {
   createFarmAuctionSessionId,
-  getAuctionSession,
   getAuctionSessionById,
+  getLeagueDraftFormat,
+  getRegisteredPool,
   getScoutProfilesForLeague,
+  resolveLeagueSalaryCap,
   saveAuctionSessionById,
   type LeagueBuilderScoutProfile,
 } from "../../../utils/leagueBuilderStorage";
@@ -37,12 +39,17 @@ import {
 import type { ProspectScoutDescriptor } from "../../../utils/prospectScoutingDraftEngine";
 import {
   useLeagueBuilderData,
+  type LeagueTemplate,
   type Player,
   type Team,
   type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
 import { buildLiveScoutPool } from "../utils/draftStaffingPersistence";
+import {
+  deriveSnakeMlbUnspentByTeamId,
+  readMlbDraftCompletion,
+} from "../../../utils/mlbDraftCompletion";
 
 export { getCurrentBidderTeamId } from "../../../engines/auctionStateMachine";
 
@@ -192,6 +199,7 @@ function archetypeScoutsByTeamId(
 
 async function buildFarmAuctionTeams(input: {
   leagueId: string;
+  league: LeagueTemplate;
   leagueTeams: readonly Team[];
   getRoster: UseLeagueBuilderDataReturn["getRoster"];
   leaguePlayers: readonly Player[];
@@ -211,11 +219,26 @@ async function buildFarmAuctionTeams(input: {
   );
   const mlbRosterChemistryByTeamId: Record<string, Partial<Record<ChemistryCode, number>>> = {};
   const mlbRosterPlayerIdsByTeamId: Record<string, readonly string[]> = {};
-  const mlbSession = await getAuctionSession(input.leagueId);
-  const mlbUnspentByTeamId = new Map(
-    (mlbSession?.session.state === "AUCTION_COMPLETE" ? mlbSession.session.teams : [])
-      .map((team) => [team.teamId, team.budgetRemaining]),
-  );
+  const completion = await readMlbDraftCompletion(input.leagueId);
+  const useSnake = completion.snakeComplete
+    && (getLeagueDraftFormat(input.league) === "snake" || !completion.auctionComplete);
+  let mlbUnspentByTeamId: Map<string, number>;
+  if (useSnake && completion.snakeSession) {
+    const registeredPool = await getRegisteredPool(input.leagueId);
+    if (!registeredPool) {
+      throw new Error(`Completed snake draft for league "${input.leagueId}" is missing its RegisteredPool.`);
+    }
+    mlbUnspentByTeamId = deriveSnakeMlbUnspentByTeamId({
+      session: completion.snakeSession,
+      pool: registeredPool,
+      salaryCap: resolveLeagueSalaryCap(input.league),
+    });
+  } else {
+    mlbUnspentByTeamId = new Map(
+      (completion.auctionComplete ? completion.auctionSession?.session.teams ?? [] : [])
+        .map((team) => [team.teamId, team.budgetRemaining]),
+    );
+  }
   const teams = await Promise.all(
     input.leagueTeams.map(async (team) => {
       const roster: TeamRoster | null = await input.getRoster(team.id);
@@ -431,6 +454,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       mlbRosterPlayerIdsByTeamId: nextMlbRosterPlayerIdsByTeamId,
     } = await buildFarmAuctionTeams({
       leagueId,
+      league: nextLeague!,
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
       leaguePlayers: leagueData.players,
@@ -527,6 +551,7 @@ export function useFarmAuctionDraft(options: UseFarmAuctionDraftOptions = {}): U
       mlbRosterPlayerIdsByTeamId: nextMlbRosterPlayerIdsByTeamId,
     } = await buildFarmAuctionTeams({
       leagueId,
+      league,
       leagueTeams: nextLeagueTeams,
       getRoster: leagueData.getRoster,
       leaguePlayers: leagueData.players,

@@ -171,7 +171,7 @@ function assignmentRows(player: Player | null) {
   }));
 }
 
-async function seedPostDraftPoolFirstLeague() {
+async function seedPostDraftPoolFirstLeague(draftFormat: 'auction' | 'snake' = 'auction') {
   const leagueId = 'postdraft-league';
   const teamAId = 'team-a';
   const teamBId = 'team-b';
@@ -184,6 +184,7 @@ async function seedPostDraftPoolFirstLeague() {
   await saveLeagueTemplate(makeLeague({
     id: leagueId,
     draftPoolMode: 'pool-first',
+    draftFormat,
   }));
   await saveTeam(makeTeam(teamAId, { leagueIds: [leagueId] }));
   await saveTeam(makeTeam(teamBId, { leagueIds: [leagueId] }));
@@ -222,13 +223,36 @@ async function seedPostDraftPoolFirstLeague() {
     locked: true,
     lockedAt: 1,
   });
-  await saveAuctionSession({
-    id: createAuctionSessionId(leagueId, MLB_AUCTION_SEASON),
-    leagueId,
-    seasonNumber: MLB_AUCTION_SEASON,
-    seed: 'auction-postdraft',
-    session: makeAuctionSession('auction-postdraft'),
-  });
+  if (draftFormat === 'auction') {
+    await saveAuctionSession({
+      id: createAuctionSessionId(leagueId, MLB_AUCTION_SEASON),
+      leagueId,
+      seasonNumber: MLB_AUCTION_SEASON,
+      seed: 'auction-postdraft',
+      session: makeAuctionSession('auction-postdraft'),
+    });
+  } else {
+    await saveMlbDraftSession({
+      id: createMlbDraftSessionId(leagueId, 1),
+      leagueId,
+      seasonNumber: 1,
+      seed: 'snake-postdraft',
+      workflowVersion: 'startup-mlb-draft-v1',
+      engineMethodVersion: 'leagueConstruction.t8d-1',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      rounds: 1,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: teamAId },
+        { round: 1, pick: 2, teamId: teamBId },
+      ],
+      completedPicks: [
+        { round: 1, pick: 1, teamId: teamAId, playerId: wonAId },
+        { round: 1, pick: 2, teamId: teamBId, playerId: wonBId },
+      ],
+      currentPickIndex: 2,
+    });
+  }
 
   return {
     leagueId,
@@ -684,8 +708,10 @@ describe('useLeagueBuilderData', () => {
     warnSpy.mockRestore();
   });
 
-  test('COPYFIX-2 drafted pool-first duplicate starts with source pool members, empty rosters, and no minted farm leak', async () => {
-    const fixture = await seedPostDraftPoolFirstLeague();
+  test.each(['auction', 'snake'] as const)(
+    'COPYFIX-2 %s-drafted pool-first duplicate starts with source pool members, empty rosters, and no minted farm leak',
+    async (draftFormat) => {
+    const fixture = await seedPostDraftPoolFirstLeague(draftFormat);
     const playerCountBefore = (await getAllPlayers()).length;
 
     const { result } = await renderLoadedLeagueBuilderHook();
@@ -714,5 +740,6 @@ describe('useLeagueBuilderData', () => {
     expect(await getAllPlayers()).toHaveLength(playerCountBefore);
 
     await expect(importRosteredPlayersToLeaguePool(copyId)).resolves.toBe(0);
-  });
+    },
+  );
 });

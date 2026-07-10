@@ -4,6 +4,7 @@ import {
   classifyDraftSlot,
   computeDraftMoraleFromRaw,
   type DraftMoraleResult,
+  type DraftPayClass,
   type DraftSlotClass,
 } from './draftMorale';
 import { computeDraftFanMorale, type DraftFanMoraleResult } from './draftFanMorale';
@@ -27,6 +28,8 @@ export interface DraftFreezePlayerInput {
   scoutRange: { low: number; high: number };
   personality: string | undefined;
   modifiers: HiddenModifiers;
+  /** D1 snake-only seam. Auction inputs omit this and retain classifyDraftPay unchanged. */
+  payClassOverride?: DraftPayClass;
 }
 
 export interface DraftFreezePlayerResult {
@@ -94,6 +97,7 @@ export function computeDraftFreeze(
       player.scoutRange,
       player.personality,
       player.modifiers,
+      player.payClassOverride,
     );
 
     return {

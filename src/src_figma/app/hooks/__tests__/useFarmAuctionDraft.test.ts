@@ -10,16 +10,20 @@ import {
   surfaceNextPlayer,
 } from "../../../../engines/auctionStateMachine";
 import { LEAGUE_MINIMUM_SALARY } from "../../../../data/rosterEngineConstants";
+import { LUXURY_CAP_TABLES } from "../../../../data/tierParams";
 import type { CpuShillAuctionSession } from "../../../../engines/cpuShillBidding";
 import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM } from "../../../../utils/farmAuctionPool";
 import {
   __resetLeagueBuilderDatabaseForTests,
   createAuctionSessionId,
   createFarmAuctionSessionId,
+  createMlbDraftSessionId,
   getAuctionSession,
   getAuctionSessionById,
   saveScoutProfile,
   saveAuctionSession,
+  saveMlbDraftSession,
+  saveRegisteredPool,
 } from "../../../../utils/leagueBuilderStorage";
 import {
   useLeagueBuilderData,
@@ -402,6 +406,74 @@ describe("useFarmAuctionDraft", () => {
       .toBe(farmTierCap + 60_000);
     expect(persisted?.session.teams.find((team) => team.teamId === "cpu")?.budgetRemaining)
       .toBe(farmTierCap + 20_000);
+  });
+
+  test("D1 repro: completed snake draft carries cap headroom into each farm wallet", async () => {
+    const teamIds = ["human", "cpu"];
+    const leagueId = "farm-carryover-snake";
+    const seed = seedWithOrder(leagueId, teamIds, ["human", "cpu"]);
+    mockLeagueData({
+      leagues: [{
+        ...makeLeague(leagueId, teamIds),
+        draftFormat: "snake",
+        salaryCap: 1_000_000,
+      }],
+      teams: [makeTeam("human"), makeTeam("cpu", "ai")],
+      rosters: {
+        human: makeRosterWithMlb("human", ["human-mlb"]),
+        cpu: makeRosterWithMlb("cpu", ["cpu-mlb"]),
+      },
+    });
+    await saveRegisteredPool({
+      leagueId,
+      tier: "standard",
+      balanceMode: "taxed",
+      players: [
+        { id: "human-mlb", iv: 200_000, salary: 100_000 },
+        { id: "cpu-mlb", iv: 500_000, salary: 100_000 },
+      ],
+      tierCap: 1_000_000,
+      luxuryCaps: LUXURY_CAP_TABLES.standard,
+      pickValueChart: [],
+      totalSlots: 2,
+      poolSurplusWarning: false,
+    });
+    await saveMlbDraftSession({
+      id: createMlbDraftSessionId(leagueId, 1),
+      leagueId,
+      seasonNumber: 1,
+      seed: "completed-snake-carryover",
+      workflowVersion: "startup-mlb-draft-v1",
+      engineMethodVersion: "leagueConstruction.t8d-1",
+      tier: "standard",
+      balanceMode: "taxed",
+      rounds: 1,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "human" },
+        { round: 1, pick: 2, teamId: "cpu" },
+      ],
+      completedPicks: [
+        { round: 1, pick: 1, teamId: "human", playerId: "human-mlb" },
+        { round: 1, pick: 2, teamId: "cpu", playerId: "cpu-mlb" },
+      ],
+      currentPickIndex: 2,
+    });
+
+    const { result } = renderHook(() => useFarmAuctionDraft());
+
+    await act(async () => {
+      await result.current.initFarmAuction(leagueId, {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1_000,
+      });
+    });
+
+    const farmTierCap = result.current.farmTierCap!;
+    expect(result.current.session?.teams.find((team) => team.teamId === "human")?.budgetRemaining)
+      .toBe(farmTierCap + 400_000);
+    expect(result.current.session?.teams.find((team) => team.teamId === "cpu")?.budgetRemaining)
+      .toBe(farmTierCap + 250_000);
   });
 
   test("does not carry MLB leftovers when the MLB auction row is missing or incomplete", async () => {

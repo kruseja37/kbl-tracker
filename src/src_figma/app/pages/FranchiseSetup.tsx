@@ -9,10 +9,7 @@ import {
   type FranchiseFreezeSummary,
   type FranchiseFreezeTeamSummary,
 } from "../../../utils/franchiseFreezeSummary";
-import {
-  getAuctionSession,
-  type LeagueBuilderAuctionSession,
-} from "../../../utils/leagueBuilderStorage";
+import { isMlbDraftComplete } from "../../../utils/mlbDraftCompletion";
 import {
   validatePreparedLeagueBuilderFarmScoutingState,
   type LeagueBuilderFarmScoutingValidationReport,
@@ -95,10 +92,6 @@ function setContentsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boole
     if (!b.has(value)) return false;
   }
   return true;
-}
-
-function isDraftSessionComplete(session: LeagueBuilderAuctionSession | null): boolean {
-  return session?.session.state === "AUCTION_COMPLETE";
 }
 
 function formatNumber(value: number | null | undefined): string {
@@ -206,8 +199,8 @@ export function FranchiseSetup() {
     let cancelled = false;
     Promise.all(
       leagues.map(async (league) => {
-        const session = await getAuctionSession(league.id, 1).catch(() => null);
-        return isDraftSessionComplete(session) ? league.id : null;
+        const complete = await isMlbDraftComplete(league.id, 1).catch(() => false);
+        return complete ? league.id : null;
       }),
     ).then((ids) => {
       if (cancelled) return;

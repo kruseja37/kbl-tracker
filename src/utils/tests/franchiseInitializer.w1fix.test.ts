@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   getLeagueTemplate: vi.fn(),
   getTeam: vi.fn(),
   getAuctionSession: vi.fn(),
+  getMlbDraftSession: vi.fn(),
+  getRegisteredPool: vi.fn(),
   getAuctionSessionById: vi.fn(),
   createFarmAuctionSessionId: vi.fn(),
   getPlayer: vi.fn(),
@@ -44,6 +46,8 @@ vi.mock('../leagueBuilderStorage', () => ({
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
   getAuctionSession: mocks.getAuctionSession,
+  getMlbDraftSession: mocks.getMlbDraftSession,
+  getRegisteredPool: mocks.getRegisteredPool,
   getAuctionSessionById: mocks.getAuctionSessionById,
   createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
   getPlayer: mocks.getPlayer,
@@ -121,6 +125,8 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       name: teamId === 'team-a' ? 'Team A' : 'Team B',
     }));
     mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getMlbDraftSession.mockResolvedValue(null);
+    mocks.getRegisteredPool.mockResolvedValue(null);
     mocks.getAuctionSessionById.mockResolvedValue(null);
     mocks.getPlayer.mockResolvedValue(null);
     mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>

@@ -1,8 +1,11 @@
 import type { AuctionSession } from '../engines/auctionStateMachine';
+import type { RegisteredPool } from '../engines/leagueConstruction';
 import type { DraftFreezePlayerInput, DraftFreezeTier } from '../engines/draftFreeze';
+import type { DraftPayClass } from '../engines/draftMorale';
 import { perceivedValueRange } from '../engines/scoutValueRange';
 import type { PlayerPosition } from '../engines/salaryCalculator';
 import type { HiddenModifiers } from '../types/game';
+import type { LeagueBuilderMlbDraftSession } from './leagueBuilderStorage';
 
 export interface DraftFreezePlayerMeta {
   personality: string | undefined;
@@ -23,6 +26,8 @@ const NEUTRAL_FREEZE_MODIFIERS: HiddenModifiers = {
 
 export function buildDraftFreezeInputs(args: {
   mlbSession: AuctionSession | null;
+  mlbSnakeSession?: LeagueBuilderMlbDraftSession | null;
+  mlbRegisteredPool?: RegisteredPool | null;
   farmSession: AuctionSession | null;
   metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>;
   defaultScoutAccuracy?: number;
@@ -31,14 +36,18 @@ export function buildDraftFreezeInputs(args: {
 }): DraftFreezePlayerInput[] {
   const defaultScoutAccuracy = args.defaultScoutAccuracy ?? DEFAULT_FREEZE_SCOUT_ACCURACY;
 
+  const mlbInputs = args.mlbSnakeSession
+    ? buildSnakeSessionInputs(args.mlbSnakeSession, args.mlbRegisteredPool ?? null, args.metaByPlayerId)
+    : buildSessionInputs(
+        args.mlbSession,
+        'MLB',
+        args.metaByPlayerId,
+        defaultScoutAccuracy,
+        args.mlbExcludedTeamIds,
+      );
+
   return [
-    ...buildSessionInputs(
-      args.mlbSession,
-      'MLB',
-      args.metaByPlayerId,
-      defaultScoutAccuracy,
-      args.mlbExcludedTeamIds,
-    ),
+    ...mlbInputs,
     ...buildSessionInputs(
       args.farmSession,
       'FARM',
@@ -47,6 +56,53 @@ export function buildDraftFreezeInputs(args: {
       args.farmExcludedTeamIds,
     ),
   ];
+}
+
+function buildSnakeSessionInputs(
+  session: LeagueBuilderMlbDraftSession,
+  pool: RegisteredPool | null,
+  metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>,
+): DraftFreezePlayerInput[] {
+  if (session.currentPickIndex < session.pickOrder.length) return [];
+  if (!pool) {
+    throw new Error(`Completed snake draft for league "${session.leagueId}" is missing its RegisteredPool.`);
+  }
+
+  const rankedPool = [...pool.players]
+    .filter((player) => Number.isFinite(player.iv) && player.iv > 0)
+    .sort((left, right) => right.iv - left.iv || left.id.localeCompare(right.id));
+  const ivRankByPlayerId = new Map(rankedPool.map((player, index) => [player.id, index + 1]));
+  const poolById = new Map(pool.players.map((player) => [player.id, player]));
+  const totalPicks = session.pickOrder.length;
+  const threshold = Math.max(3, Math.round(0.05 * totalPicks));
+
+  return session.completedPicks.map((pick) => {
+    const poolPlayer = poolById.get(pick.playerId);
+    const ivRank = ivRankByPlayerId.get(pick.playerId);
+    if (!poolPlayer || !Number.isFinite(poolPlayer.iv) || poolPlayer.iv <= 0 || !ivRank) {
+      throw new Error(`Completed snake pick ${pick.pick} player "${pick.playerId}" is missing a finite RegisteredPool IV.`);
+    }
+    const delta = pick.pick - ivRank;
+    const payClassOverride: DraftPayClass = delta <= -threshold
+      ? 'above'
+      : delta >= threshold
+        ? 'below'
+        : 'within';
+    const meta = metaByPlayerId.get(pick.playerId);
+
+    return {
+      playerId: pick.playerId,
+      teamId: pick.teamId,
+      tier: 'MLB',
+      iv: poolPlayer.iv,
+      settledSalary: poolPlayer.iv,
+      position: meta?.position ?? null,
+      scoutRange: { low: poolPlayer.iv, high: poolPlayer.iv },
+      personality: meta?.personality,
+      modifiers: meta?.modifiers ?? { ...NEUTRAL_FREEZE_MODIFIERS },
+      payClassOverride,
+    };
+  });
 }
 
 function buildSessionInputs(

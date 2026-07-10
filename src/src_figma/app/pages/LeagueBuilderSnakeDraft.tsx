@@ -19,7 +19,7 @@ import {
   type TradeVerdict,
   validateTrade,
 } from "../../../engines/leagueConstruction";
-import { createMlbDraftSessionId, resolveLeagueSalaryCap } from "../../../utils/leagueBuilderStorage";
+import { createEmptyTeamRoster, createMlbDraftSessionId, resolveLeagueSalaryCap } from "../../../utils/leagueBuilderStorage";
 
 const MLB_DRAFT_ROUNDS = 22;
 const MLB_DRAFT_SEASON = 1;
@@ -152,44 +152,12 @@ function buildTeamSolvencyComparison(input: {
   }
 }
 
-export function createEmptyMlbDraftRoster(teamId: string): TeamRoster {
-  return {
-    teamId,
-    mlbRoster: [],
-    farmRoster: [],
-    lineupWithDH: [],
-    lineupWithoutDH: [],
-    startingRotation: [],
-    longRelievers: [],
-    closingPitcher: "",
-    setupPitchers: [],
-    depthChart: {
-      C: [],
-      "1B": [],
-      "2B": [],
-      SS: [],
-      "3B": [],
-      LF: [],
-      CF: [],
-      RF: [],
-      DH: [],
-      SP: [],
-      RP: [],
-      CP: [],
-    },
-    pinchHitOrder: [],
-    pinchRunOrder: [],
-    defensiveSubOrder: [],
-    lastModified: new Date().toISOString(),
-  };
-}
-
 export function buildMlbDraftCommitPayloads(input: CommitPayloadInput): {
   roster: TeamRoster;
   player: Player;
   session: LeagueBuilderMlbDraftSession;
 } {
-  const baseRoster = input.roster ?? createEmptyMlbDraftRoster(input.teamId);
+  const baseRoster = input.roster ?? createEmptyTeamRoster(input.teamId);
   return {
     roster: {
       ...baseRoster,

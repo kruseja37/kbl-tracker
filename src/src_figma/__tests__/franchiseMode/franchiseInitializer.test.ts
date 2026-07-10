@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   getTeam: vi.fn(),
   getAuctionSession: vi.fn(),
   getAuctionSessionById: vi.fn(),
+  getMlbDraftSession: vi.fn(),
+  getRegisteredPool: vi.fn(),
   createFarmAuctionSessionId: vi.fn(),
   getPlayer: vi.fn(),
   savePlayer: vi.fn(),
@@ -54,6 +56,8 @@ vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getTeam: mocks.getTeam,
   getAuctionSession: mocks.getAuctionSession,
   getAuctionSessionById: mocks.getAuctionSessionById,
+  getMlbDraftSession: mocks.getMlbDraftSession,
+  getRegisteredPool: mocks.getRegisteredPool,
   createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
   getPlayer: mocks.getPlayer,
   savePlayer: mocks.savePlayer,
@@ -236,6 +240,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     );
     mocks.getAuctionSession.mockResolvedValue(null);
     mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.getMlbDraftSession.mockResolvedValue(null);
+    mocks.getRegisteredPool.mockResolvedValue(null);
     mocks.getPlayer.mockResolvedValue(null);
     mocks.savePlayer.mockImplementation(async (player: unknown) => player);
     mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
@@ -538,6 +544,74 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         peerPoolSize: 0,
         calculationVersion: TRUE_VALUE_CALCULATION_VERSION,
         computedAt: expect.any(String),
+      }),
+    ]);
+  });
+
+  test('D1 repro: completed snake draft seeds settled salary, morale, and draft-baseline rows', async () => {
+    const snakePlayer = {
+      id: 'snake-drafted',
+      primaryPosition: 'CF',
+      personality: 'Competitive',
+      hiddenPersonalityModifiers: {
+        loyalty: 60,
+        ambition: 50,
+        resilience: 55,
+        charisma: 65,
+      },
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-away', rosterStatus: 'MLB' }],
+    };
+    mocks.getLeagueTemplate.mockResolvedValue({
+      id: 'league-1',
+      name: 'League One',
+      teamIds: ['team-away', 'team-home'],
+      draftFormat: 'snake',
+    });
+    mocks.getAllFranchisePlayers.mockResolvedValueOnce([snakePlayer]);
+    mocks.getFranchisePlayer.mockResolvedValue({ ...snakePlayer });
+    mocks.getMlbDraftSession.mockResolvedValue({
+      id: 'league-1::startup-mlb-draft::1',
+      leagueId: 'league-1',
+      seasonNumber: 1,
+      seed: 'd1-repro',
+      workflowVersion: 'startup-mlb-draft-v1',
+      engineMethodVersion: 'leagueConstruction.t8d-1',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      rounds: 1,
+      pickOrder: [{ round: 1, pick: 1, teamId: 'team-away' }],
+      completedPicks: [{ round: 1, pick: 1, teamId: 'team-away', playerId: 'snake-drafted' }],
+      currentPickIndex: 1,
+      createdDate: '2026-01-01',
+      lastModified: '2026-01-01',
+    });
+    mocks.getRegisteredPool.mockResolvedValue({
+      leagueId: 'league-1',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      players: [{ id: 'snake-drafted', iv: 125, salary: 90 }],
+      tierCap: 1_000,
+      luxuryCaps: [],
+      pickValueChart: [],
+      totalSlots: 1,
+      poolSurplusWarning: false,
+    });
+
+    await initializeFranchise(franchiseConfig);
+
+    expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
+      'franchise-1',
+      expect.objectContaining({ id: 'snake-drafted', settledSalary: 125 }),
+    );
+    expect(mocks.seedFranchiseMoraleBaseline).toHaveBeenCalledWith(
+      expect.objectContaining({ targetType: 'player', playerId: 'snake-drafted' }),
+    );
+    expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledWith([
+      expect.objectContaining({
+        playerId: 'snake-drafted',
+        trueValue: 125,
+        contractValue: 125,
+        valueDelta: 0,
       }),
     ]);
   });
