@@ -15,6 +15,7 @@ export const FRANCHISE_PHASE2_FLAG_KEYS = [
   'l13',
   'l14',
   'stadiumRecords',
+  'auctionAdvisorColor',
 ] as const;
 
 export type FranchisePhase2FlagKey = (typeof FRANCHISE_PHASE2_FLAG_KEYS)[number];
@@ -37,6 +38,7 @@ export const FRANCHISE_PHASE2_FLAG_DESCRIPTORS: FranchisePhase2FlagDescriptor[] 
   { key: 'l13', label: 'L13 Relationships', detail: 'Relationship edges, rivalry morale, and matchup ties.' },
   { key: 'l14', label: 'L14 Rebrand', detail: 'Rebrand offer and cascade circuit breaker.' },
   { key: 'stadiumRecords', label: 'Stadium Records', detail: 'Park records and home-park rivals.' },
+  { key: 'auctionAdvisorColor', label: 'Auction Advisor Color', detail: 'Low-frequency assistant GM draft moments.' },
 ];
 
 export type FranchisePhase2FlagOverrides = Partial<Record<FranchisePhase2FlagKey, boolean>>;

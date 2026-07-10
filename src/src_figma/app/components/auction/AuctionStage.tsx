@@ -215,6 +215,16 @@ export interface AuctionStageProps {
   onBid?: () => void;
   onPass?: () => void;
   onAdvanceCpu?: () => void;
+  advisorMomentsBySeat?: Readonly<Record<string, readonly AdvisorMomentVM[]>>;
+  completeAdvisorSeats?: readonly { teamId: string; teamName: string }[];
+  onRevealAdvisorSeat?: (teamId: string) => void;
+}
+
+export interface AdvisorMomentVM {
+  key: string;
+  title: string;
+  text: string;
+  source: 'llm' | 'template';
 }
 
 const money = (n: number) => "$" + Math.round(n).toLocaleString();
@@ -231,7 +241,7 @@ function fallbackSlotGroup(slot: RosterSlotVM): BoardGroupName {
   return "THE BENCH";
 }
 
-export function AuctionStage({ vm, whisperPayload = null, activeSeatTeamId = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu }: AuctionStageProps) {
+export function AuctionStage({ vm, whisperPayload = null, activeSeatTeamId = null, toolbar, supplemental, onSelectPreset, onBid, onPass, onAdvanceCpu, advisorMomentsBySeat = {}, completeAdvisorSeats = [], onRevealAdvisorSeat }: AuctionStageProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [revealedSeatTeamId, setRevealedSeatTeamId] = useState<string | null>(null);
   const isCpuTurn = Boolean(vm.move.cpuTurnName);
@@ -254,6 +264,11 @@ export function AuctionStage({ vm, whisperPayload = null, activeSeatTeamId = nul
   const revealActiveSeat = () => {
     if (!revealAllowed || !activeSeatTeamId) return;
     setRevealedSeatTeamId(activeSeatTeamId);
+    onRevealAdvisorSeat?.(activeSeatTeamId);
+  };
+  const revealCompleteAdvisorSeat = (teamId: string) => {
+    setRevealedSeatTeamId(teamId);
+    onRevealAdvisorSeat?.(teamId);
   };
   const coverPrivateRead = () => setRevealedSeatTeamId(null);
   const handleBid = () => {
@@ -300,7 +315,13 @@ export function AuctionStage({ vm, whisperPayload = null, activeSeatTeamId = nul
           {/* LEFT — the lot + your move, or the complete-screen handoff check */}
           <div>
             {vm.complete ? (
-              <HandoffCheckPanel complete={vm.complete} />
+              <HandoffCheckPanel
+                complete={vm.complete}
+                advisorSeats={completeAdvisorSeats}
+                revealedSeatTeamId={revealedSeatTeamId}
+                advisorMomentsBySeat={advisorMomentsBySeat}
+                onRevealAdvisorSeat={revealCompleteAdvisorSeat}
+              />
             ) : (
               <>
                 <OnTheClockBanner
@@ -421,6 +442,9 @@ export function AuctionStage({ vm, whisperPayload = null, activeSeatTeamId = nul
               onReveal={revealActiveSeat}
               onCover={coverPrivateRead}
             />
+            {advisorRevealed && activeSeatTeamId && (
+              <AdvisorMoments moments={advisorMomentsBySeat[activeSeatTeamId] ?? []} />
+            )}
             {helpOpen && (
               <div className="help-panel whisper-help">
                 <div className="help-mark">?</div>
@@ -578,7 +602,33 @@ function RosterBoardCard({
   );
 }
 
-function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
+function AdvisorMoments({ moments }: { moments: readonly AdvisorMomentVM[] }) {
+  if (moments.length === 0) return null;
+  return (
+    <div className="card" data-testid="auction-advisor-moments" style={{ marginTop: 10 }}>
+      {moments.map((moment) => (
+        <div key={moment.key} style={{ marginBottom: 8 }}>
+          <div className="eyebrow">{moment.title}</div>
+          <div>{moment.text}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HandoffCheckPanel({
+  complete,
+  advisorSeats,
+  revealedSeatTeamId,
+  advisorMomentsBySeat,
+  onRevealAdvisorSeat,
+}: {
+  complete: AuctionCompleteVM;
+  advisorSeats: readonly { teamId: string; teamName: string }[];
+  revealedSeatTeamId: string | null;
+  advisorMomentsBySeat: Readonly<Record<string, readonly AdvisorMomentVM[]>>;
+  onRevealAdvisorSeat: (teamId: string) => void;
+}) {
   return (
     <section
       className="handoff-check"
@@ -623,6 +673,27 @@ function HandoffCheckPanel({ complete }: { complete: AuctionCompleteVM }) {
           </div>
         ))}
       </div>
+      {advisorSeats.length > 0 && (
+        <div className="card" data-testid="auction-recap-privacy" style={{ marginTop: 12 }}>
+          <div className="eyebrow">Private assistant GM recaps</div>
+          <div className="handoff-buttons" style={{ marginTop: 8 }}>
+            {advisorSeats.map((seat) => (
+              <button
+                key={seat.teamId}
+                type="button"
+                className="handoff-review"
+                aria-pressed={revealedSeatTeamId === seat.teamId}
+                onClick={() => onRevealAdvisorSeat(seat.teamId)}
+              >
+                Reveal {seat.teamName} recap
+              </button>
+            ))}
+          </div>
+          {revealedSeatTeamId && (
+            <AdvisorMoments moments={advisorMomentsBySeat[revealedSeatTeamId] ?? []} />
+          )}
+        </div>
+      )}
 
       <div className={`handoff-footer${complete.allLegal ? " legal" : " blocked"}`}>
         <div className="handoff-summary">{complete.summary}</div>

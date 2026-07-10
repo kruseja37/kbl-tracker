@@ -15,6 +15,7 @@ import {
 } from "../components/DraftRosterBoard";
 import {
   AuctionStage,
+  type AdvisorMomentVM,
   type AuctionStageVM,
   type LogItemVM,
   type RosterSlotVM,
@@ -86,6 +87,10 @@ import {
 import { DEFAULT_RESERVE_PRICE_K } from "../../../engines/auctionReservePrice";
 import { evaluatePoolDemandSufficiency } from "../../../utils/leagueBuilderPoolBuilder";
 import {
+  derivePositionSupplyFloorTargets,
+  matchesPositionSupplyFloor,
+} from "../../../engines/poolFromDemand";
+import {
   getTeamAuctionMaxBid,
   lotOpeningAsk,
   type AuctionPlayer,
@@ -109,6 +114,14 @@ import { materializeRankOrder } from "../components/shared/RankReorderList";
 import type { TaxonomyPosition } from "../../../data/playerArchetypeTaxonomy";
 import { saveTeam } from "../../../utils/leagueBuilderStorage";
 import type { LiquidityCompletionCandidate } from "../../../engines/liquidityAwareBidding";
+import {
+  buildDraftRecapAdvisorFacts,
+  buildPostLotAdvisorFacts,
+  buildPreDraftAdvisorFacts,
+  type AdvisorTargetFact,
+  type AuctionAdvisorFactPayload,
+} from "../../../engines/auctionAdvisorColor";
+import { emitAuctionAdvisorMoment } from "../engines/reporter/auctionAdvisorColorEmission";
 import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
 import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
 import {
@@ -801,8 +814,11 @@ export function LeagueBuilderAuctionDraft() {
   const [exitOverrideArmed, setExitOverrideArmed] = useState(false);
   const [exitOverrideConfirmed, setExitOverrideConfirmed] = useState(false);
   const [settleArmed, setSettleArmed] = useState(false);
+  const [advisorMomentsBySeat, setAdvisorMomentsBySeat] = useState<Record<string, AdvisorMomentVM[]>>({});
   const loadedKeyRef = useRef<string | null>(null);
   const cpuAdvanceInFlightRef = useRef(false);
+  const advisorRequestedKeysRef = useRef(new Set<string>());
+  const advisorDraftIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!activeLeagueId && leagueData.leagues.length > 0) {
@@ -878,6 +894,78 @@ export function LeagueBuilderAuctionDraft() {
     () => new Set(leagueTeams.filter((team) => team.controlledBy !== "ai").map((team) => team.id)),
     [leagueTeams],
   );
+  const humanAdvisorSeats = useMemo(
+    () => leagueTeams
+      .filter((team) => team.controlledBy !== "ai")
+      .map((team) => ({ teamId: team.id, teamName: teamDisplayName(team) })),
+    [leagueTeams],
+  );
+  const advisorDraftId = useMemo(() => {
+    if (!session || !activeLeagueId) return null;
+    return `${activeLeagueId}:${session.sessionLaunchNonce ?? session.sessionBaseSeed ?? "session"}`;
+  }, [activeLeagueId, session]);
+  const advisorKnownEntityNames = useMemo(
+    () => [
+      ...leagueTeams.map((team) => teamDisplayName(team)),
+      ...leagueData.players.map((player) => playerDisplayName(player)),
+    ],
+    [leagueData.players, leagueTeams],
+  );
+  const advisorTargetsByTeamId = useMemo(() => {
+    const map = new Map<string, AdvisorTargetFact[]>();
+    for (const team of leagueTeams) {
+      const targets = (team.boardRankOverrides?.global ?? [])
+        .slice(0, 5)
+        .map((playerId, index) => {
+          const player = playerById.get(playerId);
+          return player
+            ? { rank: index + 1, playerId, playerName: playerDisplayName(player) }
+            : null;
+        })
+        .filter((target): target is AdvisorTargetFact => Boolean(target));
+      map.set(team.id, targets);
+    }
+    return map;
+  }, [leagueTeams, playerById]);
+
+  const queueAdvisorPayload = useCallback((payload: AuctionAdvisorFactPayload) => {
+    if (advisorRequestedKeysRef.current.has(payload.cacheKey)) return;
+    advisorRequestedKeysRef.current.add(payload.cacheKey);
+
+    const putMoment = (moment: AdvisorMomentVM) => {
+      if (advisorDraftIdRef.current !== payload.draftId) return;
+      setAdvisorMomentsBySeat((current) => {
+        const existing = current[payload.seatTeamId] ?? [];
+        const withoutCurrent = existing.filter((item) => item.key !== moment.key);
+        return {
+          ...current,
+          [payload.seatTeamId]: [...withoutCurrent, moment],
+        };
+      });
+    };
+
+    putMoment({
+      key: payload.cacheKey,
+      title: payload.title,
+      text: payload.fallback,
+      source: "template",
+    });
+    void emitAuctionAdvisorMoment(payload).then((result) => {
+      putMoment({
+        key: payload.cacheKey,
+        title: payload.title,
+        text: result.text,
+        source: result.source,
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (advisorDraftIdRef.current === advisorDraftId) return;
+    advisorDraftIdRef.current = advisorDraftId;
+    advisorRequestedKeysRef.current.clear();
+    setAdvisorMomentsBySeat({});
+  }, [advisorDraftId]);
   const teamNameById = useCallback((teamId: string | null | undefined): string => {
     if (!teamId) return "Unknown Team";
     if (shillTeamIdSet.has(teamId)) {
@@ -1025,6 +1113,127 @@ export function LeagueBuilderAuctionDraft() {
           : null;
     return seatTeamId && !auction.isCpuTeam(seatTeamId) ? seatTeamId : null;
   }, [auction, session]);
+
+  const preDraftAdvisorPayloadByTeamId = useMemo(() => {
+    const map = new Map<string, AuctionAdvisorFactPayload>();
+    if (!session || !advisorDraftId) return map;
+    const poolIds = [...new Set([
+      ...session.availablePlayerIds,
+      ...(session.currentLot ? [session.currentLot.playerId] : []),
+    ])];
+    const poolShapes = poolIds
+      .map((playerId) => session.players[playerId]?.pos)
+      .filter((shape): shape is RosterSlotPlayer => Boolean(shape));
+    const floorRows = derivePositionSupplyFloorTargets(leagueTeams.length).map((target) => ({
+      position: target.label,
+      available: poolShapes.filter((shape) => matchesPositionSupplyFloor(shape, target)).length,
+      required: target.needed,
+    }));
+
+    for (const seat of humanAdvisorSeats) {
+      const team = teamById.get(seat.teamId);
+      if (!team) continue;
+      const archetype = team.mlbArchetypeKey
+        ? HISTORICAL_ARCHETYPE_BY_ID.get(team.mlbArchetypeKey)?.name
+        : null;
+      map.set(seat.teamId, buildPreDraftAdvisorFacts({
+        draftId: advisorDraftId,
+        seatTeamId: seat.teamId,
+        seatTeamName: seat.teamName,
+        identityName: archetype ?? (team.capIdentity ? "Custom club identity" : "Balanced"),
+        poolPositionCounts: floorRows.map((row) => ({ position: row.position, count: row.available })),
+        topTargets: advisorTargetsByTeamId.get(seat.teamId) ?? [],
+        scarcePositions: floorRows.filter((row) => row.available <= row.required),
+        knownEntityNames: advisorKnownEntityNames,
+      }));
+    }
+    return map;
+  }, [
+    advisorDraftId,
+    advisorKnownEntityNames,
+    advisorTargetsByTeamId,
+    humanAdvisorSeats,
+    leagueTeams.length,
+    session,
+    teamById,
+  ]);
+
+  useEffect(() => {
+    if (!session || !advisorDraftId || session.results.length === 0) return;
+    const resultIndex = session.results.length - 1;
+    const result = session.results[resultIndex];
+    const leftBoard = result.disposition === "SOLD" || !session.availablePlayerIds.includes(result.playerId);
+    for (const seat of humanAdvisorSeats) {
+      const target = (advisorTargetsByTeamId.get(seat.teamId) ?? [])
+        .find((candidate) => candidate.playerId === result.playerId);
+      if (!target) continue;
+      const payload = buildPostLotAdvisorFacts({
+        draftId: advisorDraftId,
+        lotId: `${resultIndex}:${result.playerId}`,
+        seatTeamId: seat.teamId,
+        seatTeamName: seat.teamName,
+        target,
+        disposition: result.disposition,
+        winnerTeamId: result.winnerTeamId,
+        winnerTeamName: result.winnerTeamId ? teamNameById(result.winnerTeamId) : null,
+        salary: result.salary,
+        leftBoard,
+        knownEntityNames: advisorKnownEntityNames,
+      });
+      if (payload) queueAdvisorPayload(payload);
+    }
+  }, [
+    advisorDraftId,
+    advisorKnownEntityNames,
+    advisorTargetsByTeamId,
+    humanAdvisorSeats,
+    queueAdvisorPayload,
+    session,
+    teamNameById,
+  ]);
+
+  const handleRevealAdvisorSeat = useCallback((teamId: string) => {
+    if (!session || !advisorDraftId) return;
+    if (session.state !== "AUCTION_COMPLETE") {
+      if (session.results.length === 0) {
+        const preDraft = preDraftAdvisorPayloadByTeamId.get(teamId);
+        if (preDraft) queueAdvisorPayload(preDraft);
+      }
+      return;
+    }
+
+    const seat = humanAdvisorSeats.find((candidate) => candidate.teamId === teamId);
+    const teamState = teamStateById.get(teamId);
+    if (!seat || !teamState) return;
+    const targets = advisorTargetsByTeamId.get(teamId) ?? [];
+    const rosterIds = new Set(teamState.roster.map((assignment) => assignment.playerId));
+    const landedTargets = targets.filter((target) => rosterIds.has(target.playerId)).map((target) => target.playerName);
+    const lostTargets = targets.filter((target) => !rosterIds.has(target.playerId)).map((target) => target.playerName);
+    const spend = teamState.roster.reduce((sum, assignment) => sum + assignment.salary, 0);
+    queueAdvisorPayload(buildDraftRecapAdvisorFacts({
+      draftId: advisorDraftId,
+      seatTeamId: teamId,
+      seatTeamName: seat.teamName,
+      seatsFilled: teamState.roster.length,
+      seatTarget: LEGAL_ROSTER.size,
+      spend,
+      startingBudget: registeredPool?.tierCap ?? spend + teamState.budgetRemaining + teamState.projectedTax,
+      taxBill: teamState.projectedTax,
+      landedTargets,
+      lostTargets,
+      knownEntityNames: advisorKnownEntityNames,
+    }));
+  }, [
+    advisorDraftId,
+    advisorKnownEntityNames,
+    advisorTargetsByTeamId,
+    humanAdvisorSeats,
+    preDraftAdvisorPayloadByTeamId,
+    queueAdvisorPayload,
+    registeredPool?.tierCap,
+    session,
+    teamStateById,
+  ]);
   const privateRosterBoardTeamState = activeWhisperSeatTeamId
     ? teamStateById.get(activeWhisperSeatTeamId) ?? null
     : null;
@@ -2242,6 +2451,9 @@ export function LeagueBuilderAuctionDraft() {
         vm={auctionStageVm}
         whisperPayload={displayedWhisperPayload}
         activeSeatTeamId={activeWhisperSeatTeamId}
+        advisorMomentsBySeat={advisorMomentsBySeat}
+        completeAdvisorSeats={session?.state === "AUCTION_COMPLETE" ? humanAdvisorSeats : []}
+        onRevealAdvisorSeat={handleRevealAdvisorSeat}
         toolbar={
           <div className="row" style={{ marginBottom: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             <button

@@ -37,10 +37,19 @@ import { auctionTransitionErrorCopy, buildAuctionPlayers, MLB_AUCTION_SEASON } f
 import { DEFAULT_AUCTION_SETUP_CONFIG } from "../../../data/auctionEngineConstants";
 
 const mockNavigate = vi.fn();
+const mockEmitAuctionAdvisorMoment = vi.hoisted(() => vi.fn(async (payload: { fallback: string }) => ({
+  text: payload.fallback,
+  source: "template" as const,
+  rejected: false,
+})));
 const TEST_SESSION_LAUNCH_NONCE = "00000000-0000-4000-8000-000000000001";
 
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
+}));
+
+vi.mock("../../app/engines/reporter/auctionAdvisorColorEmission", () => ({
+  emitAuctionAdvisorMoment: mockEmitAuctionAdvisorMoment,
 }));
 
 vi.mock("../../../utils/syncEngine", () => ({
@@ -816,6 +825,11 @@ describe("LeagueBuilderAuctionDraft", () => {
     const firstRevealLabel = reveal.getAttribute("aria-label");
     fireEvent.click(reveal);
     expect(screen.getByText(/Priority need:/)).toBeInTheDocument();
+    expect(await screen.findByText("PRE-DRAFT BRIEF")).toBeInTheDocument();
+    expect(mockEmitAuctionAdvisorMoment).toHaveBeenCalledTimes(1);
+    fireEvent.click(reveal);
+    expect(screen.getAllByText("PRE-DRAFT BRIEF")).toHaveLength(1);
+    expect(mockEmitAuctionAdvisorMoment).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("player-a")).not.toBeInTheDocument();
     expect(screen.queryByText("team-a")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Custom bid amount")).not.toBeInTheDocument();
