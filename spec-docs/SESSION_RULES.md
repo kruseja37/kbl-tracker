@@ -313,6 +313,18 @@ per-zone suites sharing one helper module. A new RED that is NOT in the
 characterized set is a real regression — never silently relabel it as
 baseline.
 
+**2026-07-09-evening observations (auction walkthrough wave closing
+certification, post-PR #53 ADVISORCOLOR, HEAD `68fa54dc`):** two more
+conditional-solo order-flakes joined the list above — `RosterDesigner.test.tsx`
+("D1: TWO-WAY toggle only renders where a two-way player is eligible") and
+`LeagueBuilderDraftSetup.money.test.tsx` ("M3 resets THE MONEY to tier par").
+Both surfaced only under full-suite batch pressure (two consecutive closing
+runs each failed, but on 2 DIFFERENT tests — the classic batch-pressure flake
+signature, not a deterministic regression) and both passed clean solo, twice
+(22/22 and 15/15 respectively). Same solo-rerun protocol applies: if either is
+red in a full-suite run, rerun it solo before flagging a regression. Full
+detail: `CONTINUITY_CHECKPOINT.md` §6.
+
 ---
 
 ## Builder Reporting Completeness (Non-Negotiable — MINOR #3, 4 instances TV2→EP1)
