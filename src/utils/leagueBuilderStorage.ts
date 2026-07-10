@@ -338,6 +338,38 @@ export interface LeagueBuilderStartupDraftSession {
   lastModified: string;
 }
 
+export const SNAKE_BOARD_SLOT_IDS = [
+  'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'BACKUP_C',
+  'SP1', 'SP2', 'SP3', 'SP4', 'RP1', 'RP2', 'RP3', 'CP',
+  'FLEX1', 'FLEX2', 'FLEX3', 'FLEX4', 'SWING',
+] as const;
+
+export type SnakeBoardSlotId = (typeof SNAKE_BOARD_SLOT_IDS)[number];
+
+export interface SnakeSeatBoardRecord {
+  /** Exactly one unique player id per canonical 22-man board slot. */
+  slots: Record<SnakeBoardSlotId, string>;
+  /** The GM's own order. A hand-touched id remains frozen in this record forever. */
+  rankings: {
+    global?: string[];
+    byPosition?: Partial<Record<TaxonomyPosition, string[]>>;
+    frozenPlayerIds?: string[];
+  };
+  /** Last-write-wins revision scoped to this seat record. */
+  revision: number;
+}
+
+export interface SnakeVersionState {
+  draftedPlayerIdByGroupId: Record<string, string>;
+  retiredPlayerIdsByGroupId: Record<string, string[]>;
+}
+
+export interface SnakeDraftCorrectionSnapshot {
+  action: 'pick' | 'trade';
+  /** Full pre-action value, excluding an older correction window by construction. */
+  priorSession: Omit<LeagueBuilderMlbDraftSession, 'correctionSnapshots'>;
+}
+
 export interface LeagueBuilderMlbDraftSession {
   id: string;
   leagueId: string;
@@ -361,6 +393,13 @@ export interface LeagueBuilderMlbDraftSession {
   }>;
   /** Snake POC-only pick-ownership changes. Additive so pre-POC sessions remain readable. */
   trades?: SnakeDraftTradeRecord[];
+  /** S1A session-v2 additions. All are optional so old sessions remain readable in-place. */
+  seatBoards?: Record<string, SnakeSeatBoardRecord>;
+  versionState?: SnakeVersionState;
+  paused?: boolean;
+  correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
+  /** Monotonic session revision used to reject stale guide packages at execution. */
+  revision?: number;
   currentPickIndex: number;
   createdDate: string;
   lastModified: string;
