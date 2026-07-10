@@ -15,10 +15,12 @@ import {
   deletePlayer,
   deleteScoutProfilesForLeague,
   deleteStartupDraftSession,
+  deleteMlbDraftSession,
   getAllPlayers,
   getAuctionSession,
   getAuctionSessionById,
   getLeagueTemplate,
+  getMlbDraftSession,
   getPlayer,
   getRegisteredPool,
   getStartupDraftSession,
@@ -32,6 +34,7 @@ import {
   type Position,
   type Team,
   type TeamRoster,
+  type LeagueBuilderMlbDraftSession,
 } from './leagueBuilderStorage';
 import { leagueHasLinkedFranchise } from './franchiseManager';
 
@@ -188,14 +191,15 @@ function completedSessionOrThrow(session: AuctionSession): void {
 }
 
 async function readCompletedDraftArc(leagueId: string) {
-  const [mlbSession, farmSession, startupDraftSession, registeredPool] = await Promise.all([
+  const [mlbSession, snakeSession, farmSession, startupDraftSession, registeredPool] = await Promise.all([
     getAuctionSession(leagueId, MLB_AUCTION_SEASON),
+    getMlbDraftSession(leagueId, MLB_AUCTION_SEASON),
     getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
     getStartupDraftSession(leagueId, 1),
     getRegisteredPool(leagueId),
   ]);
 
-  return { mlbSession, farmSession, startupDraftSession, registeredPool };
+  return { mlbSession, snakeSession, farmSession, startupDraftSession, registeredPool };
 }
 
 function committedSoldPlayerIds(session: AuctionSession | null | undefined): Set<string> {
@@ -378,6 +382,71 @@ export async function commitCompletedMlbAuctionSessionToLeagueRosters(input: {
   };
 }
 
+export async function commitCompletedSnakeSessionToLeagueRosters(input: {
+  leagueId: string;
+  session: LeagueBuilderMlbDraftSession;
+  pool: RegisteredPool;
+}): Promise<AuctionRosterCommitReport> {
+  if (input.session.currentPickIndex < input.session.pickOrder.length) {
+    throw new Error(
+      `Cannot commit snake roster before completion; current pick ${input.session.currentPickIndex} of ${input.session.pickOrder.length}.`,
+    );
+  }
+
+  const poolById = new Map(input.pool.players.map((player) => [player.id, player]));
+  const settlementByPlayerId = new Map<string, number>();
+  const seenPlayerIds = new Set<string>();
+  for (const pick of input.session.completedPicks) {
+    if (seenPlayerIds.has(pick.playerId)) {
+      throw new Error(`Snake draft player "${pick.playerId}" appears in more than one completed pick.`);
+    }
+    seenPlayerIds.add(pick.playerId);
+    const poolPlayer = poolById.get(pick.playerId);
+    if (!poolPlayer || !Number.isFinite(poolPlayer.iv) || poolPlayer.iv < 0) {
+      throw new Error(`Snake draft player "${pick.playerId}" was not found with a finite RegisteredPool IV.`);
+    }
+    settlementByPlayerId.set(pick.playerId, poolPlayer.iv);
+  }
+
+  const picksByTeamId = new Map<string, typeof input.session.completedPicks>();
+  for (const pick of input.session.completedPicks) {
+    picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
+  }
+
+  const teamRosterCounts: Record<string, number> = {};
+  const committedPlayerIds: string[] = [];
+  const teamIds = [...new Set(input.session.pickOrder.map((pick) => pick.teamId))];
+
+  for (const teamId of teamIds) {
+    const picks = picksByTeamId.get(teamId) ?? [];
+    const playerIds = picks.map((pick) => pick.playerId);
+    await commitTeamRoster({
+      leagueId: input.leagueId,
+      teamId,
+      rosterStatus: 'MLB',
+      playerIds,
+    });
+    teamRosterCounts[teamId] = playerIds.length;
+
+    for (const pick of picks) {
+      await saveMlbAssignment({
+        leagueId: input.leagueId,
+        teamId,
+        playerId: pick.playerId,
+        salary: settlementByPlayerId.get(pick.playerId)!,
+      });
+      committedPlayerIds.push(pick.playerId);
+    }
+  }
+
+  return {
+    leagueId: input.leagueId,
+    rosterStatus: 'MLB',
+    committedPlayerIds,
+    teamRosterCounts,
+  };
+}
+
 export async function commitCompletedFarmAuctionSessionToLeagueRosters(input: {
   leagueId: string;
   session: AuctionSession;
@@ -422,6 +491,7 @@ export async function resetCompletedDraftArc(leagueId: string): Promise<void> {
 
   const draftArc = await readCompletedDraftArc(leagueId);
   void draftArc.mlbSession;
+  void draftArc.snakeSession;
   void draftArc.startupDraftSession;
 
   const teamIds = await leagueTeamIds(leagueId);
@@ -437,6 +507,7 @@ export async function resetCompletedDraftArc(leagueId: string): Promise<void> {
 
   await deleteAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
   await deleteAuctionSession(leagueId, MLB_AUCTION_SEASON);
+  await deleteMlbDraftSession(leagueId, MLB_AUCTION_SEASON);
   await deleteStartupDraftSession(leagueId, 1);
   await deleteScoutProfilesForLeague(leagueId);
 }

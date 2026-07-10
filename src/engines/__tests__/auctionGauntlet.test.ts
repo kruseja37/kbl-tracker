@@ -720,6 +720,12 @@ function driveDraft(input: {
       );
     }
     const after = result.session as CpuShillAuctionSession;
+    for (const team of after.teams) {
+      expect(
+        team.budgetRemaining,
+        `${input.spec.id} ${team.teamId} budget went negative after ${before.state} transition`,
+      ).toBeGreaterThanOrEqual(0);
+    }
     instrumentTransition({
       draftId: input.spec.id,
       before,

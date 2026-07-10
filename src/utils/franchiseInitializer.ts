@@ -39,10 +39,10 @@ import {
 import { buildGmProfile } from './gmIdentity';
 import {
   createFarmAuctionSessionId,
-  getAuctionSession,
   getAuctionSessionById,
   getLeagueTemplate,
   getPlayer,
+  getRegisteredPool,
   savePlayer,
   getTeam,
   type LeagueTemplate,
@@ -97,30 +97,32 @@ import {
   saveFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
+import { readMlbDraftCompletion } from './mlbDraftCompletion';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
   teams: ScheduleTeam[];
 }
 
-const INCOMPLETE_AUCTION_FRANCHISE_MESSAGE =
-  "Your draft isn't finished yet - finish the auction before starting the season.";
+const INCOMPLETE_DRAFT_FRANCHISE_MESSAGE =
+  "Your draft isn't finished yet - finish the MLB draft before starting the season.";
 
 function isAuctionComplete(session: { state?: string } | null | undefined): boolean {
   return session?.state === 'AUCTION_COMPLETE';
 }
 
-async function assertAuctionDraftReadyForFranchise(leagueId: string): Promise<void> {
-  const mlbSession = await getAuctionSession(leagueId, 1);
-  if (!mlbSession?.session) return;
+async function assertMlbDraftReadyForFranchise(leagueId: string): Promise<void> {
+  const completion = await readMlbDraftCompletion(leagueId, 1);
+  const hasMlbDraft = Boolean(completion.auctionSession?.session || completion.snakeSession);
+  if (!hasMlbDraft) return;
 
-  if (!isAuctionComplete(mlbSession.session)) {
-    throw new Error(INCOMPLETE_AUCTION_FRANCHISE_MESSAGE);
+  if (!completion.complete) {
+    throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }
 
   const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
   if (farmSession?.session && !isAuctionComplete(farmSession.session)) {
-    throw new Error(INCOMPLETE_AUCTION_FRANCHISE_MESSAGE);
+    throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }
 }
 
@@ -685,7 +687,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     },
   };
 
-  await assertAuctionDraftReadyForFranchise(franchiseLeagueId);
+  await assertMlbDraftReadyForFranchise(franchiseLeagueId);
 
   // 1. Create franchise metadata record in kbl-app-meta
   const franchiseId = await createFranchise(franchiseConfig.franchiseName);
@@ -779,8 +781,8 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
     await assignTeamFanHopefuls(franchiseId, initialSeasonId, undefined, hiddenModifierBackfill.players);
 
     // RB-7b §10 payoff: draft-derived morale baselines override neutral-50 defaults.
-    const mlbSession = await getAuctionSession(config.league, 1);
-    if (mlbSession?.session?.state === 'AUCTION_COMPLETE') {
+    const mlbCompletion = await readMlbDraftCompletion(config.league, 1);
+    if (mlbCompletion.complete) {
       const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(config.league, 1));
       const neutralModifiers = {
         loyalty: 50,
@@ -796,29 +798,44 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
           position: normalizeTrueValuePosition(player.primaryPosition),
         },
       ]));
-      const auctionLeagueTemplate = await getLeagueTemplate(config.league);
-      const leagueTeams: { id: string; controlledBy?: 'human' | 'ai' }[] = [];
-      for (const teamId of auctionLeagueTemplate?.teamIds ?? []) {
-        const team = await getTeam(teamId);
-        if (team) {
-          leagueTeams.push({ id: team.id, controlledBy: team.controlledBy });
+      const useSnake = mlbCompletion.snakeComplete
+        && (leagueTemplate.draftFormat === 'snake' || !mlbCompletion.auctionComplete);
+      let inputs;
+      if (useSnake && mlbCompletion.snakeSession) {
+        const registeredPool = await getRegisteredPool(config.league);
+        inputs = buildDraftFreezeInputs({
+          mlbSession: null,
+          mlbSnakeSession: mlbCompletion.snakeSession,
+          mlbRegisteredPool: registeredPool,
+          farmSession: farmSession?.session ?? null,
+          metaByPlayerId,
+          mlbExcludedTeamIds: new Set(),
+          farmExcludedTeamIds: new Set(),
+        });
+      } else {
+        const leagueTeams: { id: string; controlledBy?: 'human' | 'ai' }[] = [];
+        for (const teamId of leagueTemplate.teamIds ?? []) {
+          const team = await getTeam(teamId);
+          if (team) {
+            leagueTeams.push({ id: team.id, controlledBy: team.controlledBy });
+          }
         }
+        const mlbShillIds = new Set(deriveShillTeamIds(
+          mlbCompletion.auctionSession!.session as CpuShillAuctionSession,
+          leagueTeams,
+        ));
+        const farmShillIds = new Set(deriveShillTeamIds(
+          (farmSession?.session ?? null) as CpuShillAuctionSession | null,
+          leagueTeams,
+        ));
+        inputs = buildDraftFreezeInputs({
+          mlbSession: mlbCompletion.auctionSession!.session,
+          farmSession: farmSession?.session ?? null,
+          metaByPlayerId,
+          mlbExcludedTeamIds: mlbShillIds,
+          farmExcludedTeamIds: farmShillIds,
+        });
       }
-      const mlbShillIds = new Set(deriveShillTeamIds(
-        mlbSession.session as CpuShillAuctionSession,
-        leagueTeams,
-      ));
-      const farmShillIds = new Set(deriveShillTeamIds(
-        (farmSession?.session ?? null) as CpuShillAuctionSession | null,
-        leagueTeams,
-      ));
-      const inputs = buildDraftFreezeInputs({
-        mlbSession: mlbSession.session,
-        farmSession: farmSession?.session ?? null,
-        metaByPlayerId,
-        mlbExcludedTeamIds: mlbShillIds,
-        farmExcludedTeamIds: farmShillIds,
-      });
       const freeze = computeDraftFreeze(inputs);
       const scope = {
         franchiseId,

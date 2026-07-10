@@ -76,7 +76,6 @@ import { TIER_CAPS } from "../../../data/tierParams";
 import { LEGAL_ROSTER } from "../../../data/rosterConstruction";
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import {
-  MLB_AUCTION_SEASON,
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
   resetCompletedDraftArc,
 } from "../../../utils/leagueBuilderAuctionPipeline";
@@ -98,7 +97,6 @@ import {
   type PoolCompositionReport,
 } from "../../../utils/leagueBuilderPoolBuilder";
 import {
-  getAuctionSession,
   resolveLeagueSalaryCap,
   saveLeagueTemplate,
   saveTeam,
@@ -106,6 +104,7 @@ import {
   type Player,
   type Position,
 } from "../../../utils/leagueBuilderStorage";
+import { readMlbDraftCompletion } from "../../../utils/mlbDraftCompletion";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 import { isSnakeDraftPocEnabled } from "../../../utils/franchisePhase2Flags";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
@@ -267,13 +266,13 @@ const PITCHER_POSITION_SET = new Set<string>(["SP", "SP/RP", "RP", "CP"]);
 const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB", "SC", "KN"];
 const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", "Sub"];
 const SAVED_DRAFT_POOL_LOCK_MESSAGE =
-  "A saved auction is in progress. Resume that draft before changing this player pool.";
-const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved auction before allowing pool edits.";
+  "A saved draft is in progress. Resume it before changing this player pool.";
+const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved draft before allowing pool edits.";
 const SAVED_DRAFT_LOOKUP_ERROR_MESSAGE =
-  "Could not confirm whether a saved auction exists. Refresh before changing this player pool.";
+  "Could not confirm whether a saved draft exists. Refresh before changing this player pool.";
 const LOCKED_POOL_EDIT_MESSAGE = "Unlock the player pool before editing. Locked pools freeze the auction values.";
 const SAVED_DRAFT_SETUP_LOCK_MESSAGE =
-  "A saved auction is in progress. Resume that draft before changing setup.";
+  "A saved draft is in progress. Resume it before changing setup.";
 const DEFAULT_DRAFT_SEATS: DraftSetupSeat[] = [
   { id: "seat-you", name: "You" },
   { id: "seat-player-2", name: "Player 2" },
@@ -1593,11 +1592,14 @@ export function LeagueBuilderDraftSetup() {
     let cancelled = false;
     setSavedDraftChecked(false);
     setSavedDraftLookupError(null);
-    void getAuctionSession(activeLeagueId, MLB_AUCTION_SEASON).then((row) => {
+    void readMlbDraftCompletion(activeLeagueId).then((state) => {
       if (cancelled) return;
-      const completed = row?.session.state === "AUCTION_COMPLETE";
-      setHasSavedDraft(Boolean(row && !completed));
-      setHasCompletedDraft(Boolean(completed));
+      const saved = Boolean(
+        (state.auctionSession && !state.auctionComplete)
+        || (state.snakeSession && !state.snakeComplete),
+      );
+      setHasSavedDraft(saved);
+      setHasCompletedDraft(state.complete);
       setSavedDraftLookupError(null);
       setSavedDraftChecked(true);
     }).catch(() => {

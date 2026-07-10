@@ -24,7 +24,7 @@ import {
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
-import { getAuctionSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
+import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
 import {
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
   resetCompletedDraftArc,
@@ -111,6 +111,7 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
   return {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
+    getMlbDraftSession: vi.fn(async () => null),
     saveLeagueTemplate: vi.fn(async (league) => league),
     saveTeam: vi.fn(async (team) => team),
   };
@@ -191,6 +192,7 @@ describe("LeagueBuilderDraftSetup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
+    vi.mocked(getMlbDraftSession).mockResolvedValue(null);
     vi.mocked(leagueHasLinkedFranchise).mockResolvedValue(false);
     vi.mocked(resetCompletedDraftArc).mockResolvedValue(undefined);
     vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());
@@ -730,7 +732,7 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Checking for a saved auction before allowing pool edits/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Checking for a saved draft before allowing pool edits/i)).not.toBeInTheDocument();
     });
     const youInput = (await screen.findAllByDisplayValue("You")).find(
       (element): element is HTMLInputElement => element.tagName === "INPUT",
@@ -781,6 +783,41 @@ describe("LeagueBuilderDraftSetup", () => {
     });
   });
 
+  test("D1 freezes setup changes while a saved snake session is in progress and exposes RESUME DRAFT", async () => {
+    mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
+    vi.mocked(getMlbDraftSession).mockResolvedValue({
+      id: "league-page:1:mlb-draft",
+      leagueId: "league-page",
+      seasonNumber: 1,
+      seed: "incomplete-snake",
+      workflowVersion: "startup-mlb-draft-v1",
+      engineMethodVersion: "leagueConstruction.t8d-1",
+      tier: "standard",
+      balanceMode: "taxed",
+      rounds: 1,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-a" },
+        { round: 1, pick: 2, teamId: "team-b" },
+      ],
+      completedPicks: [{ round: 1, pick: 1, teamId: "team-a", playerId: "player-0" }],
+      currentPickIndex: 1,
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /RESUME DRAFT/i })).toBeEnabled();
+    }, { timeout: 5000 });
+    expect(screen.getByRole("button", { name: /UNLOCK/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /RESUME DRAFT/i }));
+    await waitFor(() => {
+      // D1 repairs shared completion/resume detection; the current route contract remains the
+      // established auction fallback until the live traditional-draft lane replaces it.
+      expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
+    });
+  });
+
   test("R5 completed draft renders RUN IT BACK and resets to a fresh MLB auction start", async () => {
     vi.mocked(getAuctionSession).mockResolvedValue({
       leagueId: "league-page",
@@ -818,6 +855,30 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
+  test("D1 repro: completed snake draft renders RUN IT BACK", async () => {
+    vi.mocked(getMlbDraftSession).mockResolvedValue({
+      id: "league-page::startup-mlb-draft::1",
+      leagueId: "league-page",
+      seasonNumber: 1,
+      seed: "completed-snake",
+      workflowVersion: "startup-mlb-draft-v1",
+      engineMethodVersion: "leagueConstruction.t8d-1",
+      tier: "standard",
+      balanceMode: "taxed",
+      rounds: 1,
+      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      completedPicks: [{ round: 1, pick: 1, teamId: "team-a", playerId: "player-1" }],
+      currentPickIndex: 1,
+      createdDate: "2026-01-01T00:00:00.000Z",
+      lastModified: "2026-01-01T00:00:00.000Z",
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("Drafted ✓")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "RUN IT BACK" })).toBeEnabled();
+  });
+
   test("R4 disables RUN IT BACK when a franchise already references the league", async () => {
     vi.mocked(getAuctionSession).mockResolvedValue({
       leagueId: "league-page",
@@ -845,7 +906,7 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       // BOARDFIX2: the new readiness panel (Item A) surfaces this SAME message a second time near
       // START THE DRAFT, so this now legitimately renders twice -- assert presence, not uniqueness.
-      expect(screen.getAllByText(/Could not confirm whether a saved auction exists/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Could not confirm whether a saved draft exists/i).length).toBeGreaterThan(0);
     });
 
     expect(screen.getByRole("button", { name: /UNLOCK/i })).toBeDisabled();

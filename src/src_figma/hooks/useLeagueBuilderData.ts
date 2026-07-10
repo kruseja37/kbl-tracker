@@ -29,7 +29,6 @@ import {
   saveRulesPreset,
   deleteRulesPreset,
   getTeamRoster,
-  getAuctionSession,
   saveTeamRoster,
   createEmptyTeamRoster,
   clearTeamRoster,
@@ -53,7 +52,7 @@ import {
 import type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
 import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegistration';
 import { copyLeaguePoolMembership } from '../../utils/leagueBuilderPoolBuilder';
-import { MLB_AUCTION_SEASON } from '../../utils/leagueBuilderAuctionPipeline';
+import { isMlbDraftComplete } from '../../utils/mlbDraftCompletion';
 import type { PlayerForSalary } from '../../engines/salaryCalculator';
 
 // Re-export types for convenience
@@ -417,8 +416,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       const teamIdMap = new Map<string, string>();
       const copiedTeamsByOriginalId = new Map<string, Team>();
       const copyUsesPoolFirst = (original.draftPoolMode ?? 'pool-first') === 'pool-first';
-      const originalMlbAuctionSession = await getAuctionSession(original.id, MLB_AUCTION_SEASON);
-      const originalDrafted = originalMlbAuctionSession?.session.state === 'AUCTION_COMPLETE';
+      const originalDrafted = await isMlbDraftComplete(original.id);
 
       for (const originalTeam of originalTeams) {
         const {

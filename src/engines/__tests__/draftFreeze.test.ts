@@ -162,6 +162,137 @@ describe('draftFreeze RB-7a pure freeze bridge', () => {
     expect(row.morale).toEqual(direct);
   });
 
+  test('D1 snake pay-class override replaces only the pay classification', () => {
+    const withoutOverride = computeDraftFreeze([
+      player({
+        playerId: 'snake-override',
+        teamId: 'alpha',
+        tier: 'MLB',
+        settledSalary: 100,
+        scoutRange: { low: 90, high: 110 },
+        personality: undefined,
+      }),
+    ]);
+    const withOverride = computeDraftFreeze([
+      player({
+        playerId: 'snake-override',
+        teamId: 'alpha',
+        tier: 'MLB',
+        settledSalary: 100,
+        scoutRange: { low: 90, high: 110 },
+        personality: undefined,
+        payClassOverride: 'above',
+      }),
+    ]);
+
+    expect(withoutOverride.players[0].morale.payBase).toBe(0);
+    expect(withOverride.players[0]).toMatchObject({
+      wonOrderIndex: withoutOverride.players[0].wonOrderIndex,
+      totalWonInTier: withoutOverride.players[0].totalWonInTier,
+      slotClass: withoutOverride.players[0].slotClass,
+      morale: { payBase: 10 },
+    });
+  });
+
+  test('D1 auction tripwire: complete freeze output stays deep-equal across the optional override seam', () => {
+    const auctionFixture = [
+      player({
+        playerId: 'auction-above',
+        teamId: 'team-high',
+        tier: 'MLB',
+        iv: 120,
+        settledSalary: 130,
+        scoutRange: { low: 90, high: 110 },
+        personality: undefined,
+      }),
+      player({
+        playerId: 'auction-within',
+        teamId: 'team-middle',
+        tier: 'MLB',
+        iv: 100,
+        settledSalary: 100,
+        scoutRange: { low: 90, high: 110 },
+        personality: undefined,
+      }),
+      player({
+        playerId: 'auction-below',
+        teamId: 'team-low',
+        tier: 'MLB',
+        iv: 80,
+        settledSalary: 80,
+        scoutRange: { low: 90, high: 110 },
+        personality: undefined,
+      }),
+    ];
+
+    // Hand-derived from the unmodified engine: slot classes are early/middle/late;
+    // pay bases are above/within/below (+10/0/-10); undefined personality normalizes
+    // to RELAXED (positive x0.85, negative x0.75); payroll ranks 1/.5/0 yield 20/50/35.
+    expect(computeDraftFreeze(auctionFixture)).toEqual({
+      players: [
+        {
+          playerId: 'auction-above',
+          teamId: 'team-high',
+          tier: 'MLB',
+          iv: 120,
+          settledSalary: 130,
+          position: null,
+          wonOrderIndex: 0,
+          totalWonInTier: 3,
+          slotClass: 'early',
+          startingMorale: 71.25,
+          morale: { startingMorale: 71.25, slotBase: 15, payBase: 10, totalDelta: 21.25 },
+        },
+        {
+          playerId: 'auction-within',
+          teamId: 'team-middle',
+          tier: 'MLB',
+          iv: 100,
+          settledSalary: 100,
+          position: null,
+          wonOrderIndex: 1,
+          totalWonInTier: 3,
+          slotClass: 'middle',
+          startingMorale: 50,
+          morale: { startingMorale: 50, slotBase: 0, payBase: 0, totalDelta: 0 },
+        },
+        {
+          playerId: 'auction-below',
+          teamId: 'team-low',
+          tier: 'MLB',
+          iv: 80,
+          settledSalary: 80,
+          position: null,
+          wonOrderIndex: 2,
+          totalWonInTier: 3,
+          slotClass: 'late',
+          startingMorale: 31.25,
+          morale: { startingMorale: 31.25, slotBase: -15, payBase: -10, totalDelta: -18.75 },
+        },
+      ],
+      teams: [
+        {
+          teamId: 'team-high',
+          payroll: 130,
+          startingFanMorale: 20,
+          fanMorale: { teamId: 'team-high', startingFanMorale: 20, normalizedRank: 1, penalty: 30 },
+        },
+        {
+          teamId: 'team-middle',
+          payroll: 100,
+          startingFanMorale: 50,
+          fanMorale: { teamId: 'team-middle', startingFanMorale: 50, normalizedRank: 0.5, penalty: 0 },
+        },
+        {
+          teamId: 'team-low',
+          payroll: 80,
+          startingFanMorale: 35,
+          fanMorale: { teamId: 'team-low', startingFanMorale: 35, normalizedRank: 0, penalty: 15 },
+        },
+      ],
+    });
+  });
+
   test('empty input returns empty player and team result arrays', () => {
     expect(computeDraftFreeze([])).toEqual({ players: [], teams: [] });
   });
