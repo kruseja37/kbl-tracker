@@ -142,3 +142,19 @@ export function isFranchisePhase2StadiumRecordsEnabled(): boolean {
 export function setFranchisePhase2StadiumRecordsEnabledForTests(enabled: boolean | null): void {
   franchisePhase2StadiumRecordsEnabledOverride = enabled;
 }
+
+export const AUCTION_ADVISOR_COLOR_ENABLED_DEFAULT = true;
+
+let auctionAdvisorColorEnabledOverride: boolean | null = null;
+
+export function isAuctionAdvisorColorEnabled(): boolean {
+  return resolvePhase2Flag(
+    'auctionAdvisorColor',
+    auctionAdvisorColorEnabledOverride,
+    AUCTION_ADVISOR_COLOR_ENABLED_DEFAULT,
+  );
+}
+
+export function setAuctionAdvisorColorEnabledForTests(enabled: boolean | null): void {
+  auctionAdvisorColorEnabledOverride = enabled;
+}

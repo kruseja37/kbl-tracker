@@ -931,3 +931,73 @@ describe("AuctionStage lot log player popover (CALLFIX Item 3, the 4th popover s
     expect(container.querySelector('.logitem [role="button"]')).toBeNull();
   });
 });
+
+describe('AuctionStage advisor-color privacy', () => {
+  const moments = {
+    'team-a': [{ key: 'a', title: 'PRE-DRAFT BRIEF', text: 'Page Caps private brief.', source: 'template' as const }],
+    'team-b': [{ key: 'b', title: 'POST-LOT REACTION', text: 'Brass Monkeys private reaction.', source: 'llm' as const }],
+  };
+
+  test('keeps advisor moments covered until reveal and never flashes the prior seat after a seat change', () => {
+    const onRevealAdvisorSeat = vi.fn();
+    const { rerender } = render(
+      <AuctionStage
+        vm={activeHumanPrivacyVm('Page Caps')}
+        whisperPayload={privacyWhisperPayload('team-a', 'Page Caps')}
+        activeSeatTeamId="team-a"
+        advisorMomentsBySeat={moments}
+        onRevealAdvisorSeat={onRevealAdvisorSeat}
+      />,
+    );
+
+    expect(screen.queryByText('Page Caps private brief.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Reveal Page Caps assistant GM read/ }));
+    expect(screen.getByText('Page Caps private brief.')).toBeInTheDocument();
+    expect(onRevealAdvisorSeat).toHaveBeenCalledWith('team-a');
+
+    rerender(
+      <AuctionStage
+        vm={activeHumanPrivacyVm('Brass Monkeys')}
+        whisperPayload={privacyWhisperPayload('team-b', 'Brass Monkeys')}
+        activeSeatTeamId="team-b"
+        advisorMomentsBySeat={moments}
+        onRevealAdvisorSeat={onRevealAdvisorSeat}
+      />,
+    );
+    expect(screen.queryByText('Page Caps private brief.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Brass Monkeys private reaction.')).not.toBeInTheDocument();
+  });
+
+  test('covers every handoff recap independently and reveals only the selected human seat', () => {
+    const stageVm = vm();
+    stageVm.complete = {
+      clubs: [],
+      allLegal: true,
+      blockedCount: 0,
+      summary: 'Every club fields a legal 22. Scout reveal is next.',
+      onProceed: () => {},
+      overrideArmed: false,
+      onArmOverride: () => {},
+      onConfirmOverride: () => {},
+    };
+    render(
+      <AuctionStage
+        vm={stageVm}
+        advisorMomentsBySeat={moments}
+        completeAdvisorSeats={[
+          { teamId: 'team-a', teamName: 'Page Caps' },
+          { teamId: 'team-b', teamName: 'Brass Monkeys' },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('Page Caps private brief.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Brass Monkeys private reaction.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Page Caps recap' }));
+    expect(screen.getByText('Page Caps private brief.')).toBeInTheDocument();
+    expect(screen.queryByText('Brass Monkeys private reaction.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal Brass Monkeys recap' }));
+    expect(screen.queryByText('Page Caps private brief.')).not.toBeInTheDocument();
+    expect(screen.getByText('Brass Monkeys private reaction.')).toBeInTheDocument();
+  });
+});
