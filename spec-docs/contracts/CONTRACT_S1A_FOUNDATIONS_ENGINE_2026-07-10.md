@@ -376,3 +376,32 @@ verification passed:
    version retirement and current-live-pick ownership.
 5. Verify S1b wires a stable historical `sourceId` into W2; absent source identity intentionally
    falls back to card identity and therefore cannot dedupe historical versions.
+
+---
+
+## AUDIT — opus, independent, 2026-07-10 — VERDICT: APPROVE-WITH-NOTES
+Auditor re-ran gates itself: tsc clean · 4 snake suites 14/14 · 8 consumed shared-engine
+auction suites 105/105 · diff touches ONLY src/engines/snake* + additive
+leagueBuilderStorage.ts (POOLFLOOR byte-identity survives by construction).
+Attacks run with auditor-authored tests (then removed):
+1. W3 FALSE-PASS IMPOSSIBLE — feasible:true is a constructed, verified certificate
+   (per-club cheapestLegalCompletion over one-card-per-human representatives, isLegalRoster
+   re-check :269, version-groups removed from shared pool :328). Infeasible pool correctly
+   rejected; feasible room produced 44 disjoint IDs.
+2. Affordability INCLUDES completion tax (empirical: salary-affordable/tax-unaffordable
+   room rejected with reason 'affordability'; same room with empty caps feasible).
+3. ADVISORY≡SETTLEMENT confirmed — luxuryTax/auctionMarginalTaxWithCaps + normalized caps
+   with real club count everywhere; no parallel tax math.
+4. One-per-human confirmed in all four counting surfaces.
+5. Determinism / no percentages / public-inputs-only / First Law — all confirmed.
+6. W1 correction byte-identical (JSON equality); D1 compat proven against the REAL
+   commitCompletedSnakeSessionToLeagueRosters.
+NOTES (non-blocking, carried forward):
+- N1 → S1b MUST thread stable historical sourceId into every W2 consumer + a LOUD
+  presence check (silent card-id fallback defeats one-per-human dedupe).
+- N2 → S2/S4: guide-trade legal-finish guard doesn't model pick TIMING; decide whether
+  timing-strand protection is needed before shipping guide trades.
+- N3 (low): W4 back-to-back snake-turn edge mildly distorts AT_RISK margin.
+- N4 (low): min-salary completion can over-reject on tax cliffs — safe direction only.
+- N5: setup-floor conservatism is the intended POOLFLOOR precheck per Amendment 1 §3;
+  mid-draft path uses exact hard demand (not over-conservative).
