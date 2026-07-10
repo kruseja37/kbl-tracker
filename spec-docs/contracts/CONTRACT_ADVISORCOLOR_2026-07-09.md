@@ -76,3 +76,75 @@ does not); template fallbacks render gate-off. NEVER snapshot LLM text.
 ## Report
 APPEND to this file: Step-0 connector ground truth (file:line), per-item disposition, the
 red-team validation proof, gate outputs, STOP items. Working tree stays dirty for the captain.
+
+---
+
+## Builder report — 2026-07-09 (Step 0 STOP)
+
+**Disposition:** STOPPED at Step 0 before tests or implementation. The live reporter pattern
+materially differs from the contract assumptions, so no adaptation was attempted.
+
+### Step-0 connector ground truth
+
+- The adapter/emission reporter seam calls `callClaudeMessages` from
+  `src/src_figma/app/engines/reporter/claudeClient.ts` through
+  `src/src_figma/app/engines/reporter/seasonNewsGenerator.ts:147-170`. The generator hardcodes
+  model `claude-sonnet-4-6` at `seasonNewsGenerator.ts:161-170`.
+- `callClaudeMessages` invokes the Supabase Edge Function `claude-column` at
+  `src/src_figma/app/engines/reporter/claudeClient.ts:90-112`. This is the callable connector
+  used by the season-news reporter seam. The code does not identify it as a lowest-cost model.
+- LLM emission does not have one reusable global reporter gate. Honor emission is gated first
+  by the feature-specific `isFranchisePhase2L12Enabled()` and then by the per-event season
+  emission configuration at
+  `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts:20-35`. Relationship-flare
+  emission independently uses `isFranchisePhase2L13Enabled()` and the same per-event config
+  pattern at
+  `src/src_figma/app/engines/reporter/franchiseRelationshipFlareEmission.ts:66-75`.
+  The persisted setting is `SeasonEmissionConfig.marqueeOnly/perEventRate`, with conservative
+  defaults at `src/utils/seasonEmissionConfigStorage.ts:5-16` and loading at
+  `seasonEmissionConfigStorage.ts:44-58`.
+- The adapter/emission split itself matches the expected shape: the pure award adapter builds a
+  deterministic `SeasonNewsEvent` at
+  `src/src_figma/app/engines/reporter/franchiseL12AwardNewsAdapter.ts:33-68`; the honor emission
+  seam injects config/storage/reporter/generation dependencies at
+  `src/src_figma/app/engines/reporter/franchiseHonorEmission.ts:8-15`, performs gates and dedupe,
+  calls the generator, then persists at `franchiseHonorEmission.ts:20-52`.
+
+### STOP items
+
+1. The contract requires reuse of "the gate flag/setting" and explicitly names a per-feature
+   rather than global gate as a material-divergence example. Live code has both per-feature
+   Phase-2 gates and per-event emission settings; there is no single global gate to reuse
+   verbatim for all three draft moments.
+2. The binding ruling says to use the beat-reporter connector's "lowest-cost model," while the
+   matching adapter/emission seam hardcodes `claude-sonnet-4-6`. The repository provides no
+   grounded instruction authorizing a different model or declaring this model the intended
+   lowest-cost choice.
+
+### Per-item disposition and verification
+
+- PRE-DRAFT BRIEF: not started (Step-0 STOP).
+- POST-LOT REACTION: not started (Step-0 STOP).
+- DRAFT RECAP: not started (Step-0 STOP).
+- Red-team validation proof: not run; contract requires Step 0 to stop before building when the
+  connector/gate assumptions diverge.
+- Typecheck/build/named suites/full Vitest: not run; no implementation was made.
+- Changed paths from this builder: 1 — this contract report only. Pre-existing untracked
+  `dispatch-prompt.txt` was observed and left untouched.
+
+---
+
+## Captain rulings on the Step-0 STOP (2026-07-09) — contract amended, build authorized
+Both STOP items are ruled; the Step-0 ground truth above is accepted as the binding reality.
+1. **Gate (supersedes "no new flag"):** there is no global reporter gate to reuse — so create
+   ONE new per-feature gate for this lane, `isAuctionAdvisorColorEnabled`, following the exact
+   pattern of the existing per-feature emission gates (the Phase-2 flag pattern found in
+   Step 0). Default **ON** (JK ordered the feature; the template fallback makes gate-on safe
+   even with no connector reachable). All three moments share this single gate. Do NOT touch
+   the existing L12/L13 gates or the per-event SeasonEmissionConfig (out of scope — the
+   moments are already frequency-capped by design).
+2. **Model:** reuse `callClaudeMessages` / the `claude-column` connector VERBATIM, but pass
+   model `claude-haiku-4-5` for the advisor moments (JK's lowest-cost ruling, now grounded).
+   The reporter's own hardcoded model and behavior stay untouched. If the connector rejects
+   the model string at runtime, that is a call failure → template fallback (no STOP needed).
+Everything else in the contract binds unchanged. Resume at the red-team validation step.
