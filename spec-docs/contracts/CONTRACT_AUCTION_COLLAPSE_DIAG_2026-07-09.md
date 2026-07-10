@@ -442,3 +442,114 @@ reusing the committed harness as the exit gate:
    it with additional changes.
 5. Gates: tsc, build, auction suites (state machine, gauntlets, useAuctionDraft), ONE full
    vitest. APPEND your fix report here.
+
+---
+
+## SHILLTAX FIX REPORT — Codex (2026-07-09)
+
+### Status
+
+**COMPLETE — the ruled structural fix is built and locally verified.** Explicit
+`nonCompletingTeamIds` now receive zero per-lot projected tax at the live MLB auction projection
+seam. Because the unchanged state machine already gives those seats a raw-cash ceiling, shill
+settlement now subtracts salary only by construction. Real roster-bearing club tax projection,
+ceiling, and settlement behavior are untouched.
+
+This was one Tier-1 critical economics batch under the accepted diagnosis. No cap normalization,
+budget tuning, tax-rate tuning, reserve change, UI change, schema change, or settlement clamp was
+included.
+
+### Repro-first evidence
+
+The regression was added before the product edit and run alone:
+
+```sh
+NODE_ENV= npx vitest run src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts \
+  -t "SHILLTAX repro" --reporter=verbose
+```
+
+Pre-fix result: **RED, 1 failed**. The real club and explicit non-completing shill both received a
+`$500,000` projected tax on the same surfaced lot; the shill assertion expected `$0` and received
+`$500,000`. After the product edit the same test is **GREEN** and also settles a shill win through
+the unchanged state machine, proving its wallet falls by opening salary only while the real club's
+projected tax remains positive.
+
+### Changes made
+
+1. `src/src_figma/app/hooks/useAuctionDraft.ts`
+   - `applyAuctionLuxuryTaxForLot` now builds the authoritative non-completing-seat set from
+     `session.config.nonCompletingTeamIds` and assigns those seats `projectedTax: 0` before any
+     roster/candidate tax computation.
+   - Real clubs continue through the existing `auctionMarginalTaxWithCaps` call unchanged.
+   - `auctionStateMachine.ts` is byte-untouched. In particular, settlement remains
+     `budgetRemaining - salary - projectedTax`; no `Math.max(0, ...)` or other silent heal was
+     added.
+2. `src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts`
+   - Adds the red-first per-lot projection regression and salary-only end-to-end shill settlement
+     assertion, with a same-lot positive-tax assertion protecting real-club behavior.
+3. `src/engines/__tests__/auctionGauntlet.test.ts`
+   - Adds a permanent every-seat, after-every-transition `budgetRemaining >= 0` invariant across
+     the six pool-first/design-first/tax-shape gauntlet formats.
+4. `src/engines/__tests__/auctionGauntletProductionDefaults.test.ts`
+   - Adds the same transition-level invariant to the production-default shill gauntlet, including
+     all explicit shill seats rather than skipping non-completing teams at final summary time.
+5. `scripts/auctionCollapseDiagnosis.test.ts`
+   - Promotes the captain's exit criteria into assertions for the three baseline seeds: non-negative
+     shill budget, at least 70% multi-willing lots, and legal 22-player real-club completion.
+   - Emits any remaining pre-lot-60 lockout failures as the next-loop cap-normalization residual.
+6. This contract report.
+
+### Diagnosis-harness exit gate
+
+Command (same three deterministic seeds and the original one-at-a-time lever matrix):
+
+```sh
+NODE_ENV= RUN_AUCTION_COLLAPSE_DIAG=1 AUCTION_COLLAPSE_COMPACT=1 \
+  AUCTION_COLLAPSE_TIMEOUT_MS=600000 \
+  npx vitest run scripts/auctionCollapseDiagnosis.test.ts --reporter=dot
+```
+
+Result: **PASS, 1/1** (one opt-in search test skipped), 79.17 seconds.
+
+| Seed | Completed | Legal real clubs | Shill min budget | Lots with 2+ willing | Pre-60 lockout residual |
+|---|---:|---:|---:|---:|---|
+| `collapse-a` | yes | 4/4 | **+$892,175** | **81.3%** | Blue Jays, 20 lots |
+| `collapse-b` | yes | 4/4 | **+$817,453** | **84.6%** | none |
+| `collapse-c` | yes | 4/4 | **+$817,784** | **92.3%** | Blue Jays, 27 lots |
+
+The former `collapse-c` failure is gone: all ten shill wins now charge `$0` tax, including lot 44,
+which previously charged `$950,985` and drove the wallet to `-$287,170`. The shill-tax-exempt
+counterfactual is now byte-identical to product baseline, as expected after making that lever the
+real rule.
+
+The two remaining composite-metric failures are **only** the allowed lockout criterion. Shill
+solvency, the 70% competitiveness threshold, auction completion, and legal real-club rosters all
+pass. Per the ruling, the 20-lot and 27-lot Blue Jays streaks are recorded as the small-league
+cap-normalization residual and were not forced green with an additional economy change.
+
+### Verification
+
+- Pre-change baseline build: **PASS**.
+- Pre-change full Vitest: **9,504 passed / 13 skipped / 0 failed** across 625 files.
+- Red-first SHILLTAX repro: **RED as intended**, received `$500,000` shill projected tax.
+- Fixed SHILLTAX repro: **1/1 PASS**.
+- State machine + both gauntlets + full `useAuctionDraft`: **45/45 PASS**.
+- Diagnosis exit gate: **1/1 PASS**, metrics in the table above.
+- `npx tsc -b --pretty false`: **PASS**.
+- `npm run build`: **PASS** (`vite` built 2,647 modules; existing chunk-size/dynamic-import
+  warnings only).
+- Dev-server startup: **PASS**, Vite ready at `127.0.0.1:5173` with no startup error; stopped
+  immediately after the smoke.
+- Closing full Vitest: **9,505 passed / 13 skipped / 0 failed** across 625 files (one new test,
+  no regression), 229.88 seconds.
+- `git diff --check`: **PASS**.
+
+No browser behavior changed, so no browser walk was required for this engine/hook semantics fix.
+JK's broader auction walkthrough remains a separate acceptance gate.
+
+### File and git discipline
+
+Six task files are modified after this report: the live hook, its test, both permanent gauntlets,
+the diagnosis harness, and this contract. Pre-existing untracked `dispatch-prompt.txt` was not
+read, edited, staged, or removed. No git write command was run; all files are left in the working
+tree for the captain.
