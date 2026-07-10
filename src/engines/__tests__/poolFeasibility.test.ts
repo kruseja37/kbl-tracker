@@ -143,7 +143,7 @@ function archetype(id: string, name: string, stat: ArchetypeStat): HistoricalArc
 describe('pool feasibility analyzer', () => {
   it('classifies every archetype as supported on the full canonical pool', () => {
     const pool = loadPool();
-    const report = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES, 'standard', pool);
+    const report = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES, 'standard', 20, pool);
 
     expect(pool).toHaveLength(440);
     expect(report.poolSize).toBe(440);
@@ -157,7 +157,7 @@ describe('pool feasibility analyzer', () => {
     const fullPool = loadPool();
     const fldThreshold = p67(fullPool, 'FLD', 'hitters');
     const strippedPool = fullPool.filter((player) => player.isPitcher || player.bat.FLD < fldThreshold);
-    const report = analyzePoolFeasibility(strippedPool, HISTORICAL_ARCHETYPES, 'standard', fullPool);
+    const report = analyzePoolFeasibility(strippedPool, HISTORICAL_ARCHETYPES, 'standard', 20, fullPool);
 
     for (const archetypeId of ['whiteyball', 'go-go-small-ball', 'the-oriole-way']) {
       const result = getResult(report, archetypeId);
@@ -174,7 +174,7 @@ describe('pool feasibility analyzer', () => {
     const strippedPool = fullPool.filter((player) => (
       !isGroupMember(player, 'rotation') || ratingForStat(player, 'ROT_ACC') < accThreshold
     ));
-    const report = analyzePoolFeasibility(strippedPool, HISTORICAL_ARCHETYPES, 'standard', fullPool);
+    const report = analyzePoolFeasibility(strippedPool, HISTORICAL_ARCHETYPES, 'standard', 20, fullPool);
 
     for (const archetypeId of ['junkball-surgeons', 'the-oriole-way']) {
       const result = getResult(report, archetypeId);
@@ -186,7 +186,7 @@ describe('pool feasibility analyzer', () => {
 
   it('marks a too-thin pool starved and emits the fieldability prompt', () => {
     const thinPool = loadPool().filter((player) => !player.isPitcher).slice(0, 18);
-    const report = analyzePoolFeasibility(thinPool, HISTORICAL_ARCHETYPES, 'standard');
+    const report = analyzePoolFeasibility(thinPool, HISTORICAL_ARCHETYPES, 'standard', 20);
     const tooThin = report.results.find((result) => (
       result.built.rosterSize < 22 &&
       result.activationPrompt === `This pool is too thin to field a full ${result.archetypeName} roster — add more players.`
@@ -198,15 +198,15 @@ describe('pool feasibility analyzer', () => {
 
   it('is deterministic for identical inputs', () => {
     const pool = loadPool();
-    const first = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES, 'standard', pool);
-    const second = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES, 'standard', pool);
+    const first = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES, 'standard', 20, pool);
+    const second = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES, 'standard', 20, pool);
 
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
 
   it('uses an explicit budget override for the surfaced feasibility budget', () => {
     const pool = loadPool();
-    const report = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES.slice(0, 2), 'standard', pool, 777_777);
+    const report = analyzePoolFeasibility(pool, HISTORICAL_ARCHETYPES.slice(0, 2), 'standard', 20, pool, 777_777);
 
     expect(report.budget).toBe(777_777);
   });
@@ -215,7 +215,7 @@ describe('pool feasibility analyzer', () => {
     const pool = buildSyntheticPool();
     const flavor = archetype('flavor-gloves', 'Flavor Gloves', 'FLD');
     const binding = archetype('binding-power', 'Binding Power', 'POW');
-    const report = analyzePoolFeasibility(pool, [flavor, binding], 'standard');
+    const report = analyzePoolFeasibility(pool, [flavor, binding], 'standard', 20);
     const flavorResult = getResult(report, 'flavor-gloves');
     const bindingResult = getResult(report, 'binding-power');
     const fld = getShortfall(flavorResult.shortfalls, 'FLD');

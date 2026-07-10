@@ -8,9 +8,12 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilderTeams } from '../../app/pages/LeagueBuilderTeams';
-import { getAuctionSession, getAuctionSessionById, type Team } from '../../../utils/leagueBuilderStorage';
+import { getAuctionSession, getAuctionSessionById, type LeagueTemplate, type Team } from '../../../utils/leagueBuilderStorage';
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
 import { archetypeToCapIdentity } from '../../../engines/archetypeIdentity';
+import { LUXURY_CAP_TABLES } from '../../../data/tierParams';
+import { normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
+import { applyIdentitySelection, shiftLuxuryCaps } from '../../../engines/leagueConstruction';
 
 // ============================================
 // MOCKS
@@ -580,11 +583,11 @@ describe('LeagueBuilderTeams Component', () => {
       capIdentity: archetypeCapIdentity,
     });
 
-    const mockTeamsData = async (teams: Team[]) => {
+    const mockTeamsData = async (teams: Team[], leagues: LeagueTemplate[] = []) => {
       const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
       vi.mocked(useLeagueBuilderData).mockReturnValue({
         teams,
-        leagues: [],
+        leagues,
         players: [],
         rulesPresets: [],
         isLoading: false,
@@ -729,6 +732,52 @@ describe('LeagueBuilderTeams Component', () => {
           }),
         );
       });
+    });
+
+    test('NORMWIRE: a 2-team identity cap preview starts from the normalized settlement table', async () => {
+      const team: Team = {
+        ...basePlainTeam,
+        id: 'team-normwire',
+        name: 'Normalized Team',
+        leagueIds: ['league-normwire'],
+      };
+      const league: LeagueTemplate = {
+        id: 'league-normwire',
+        name: 'Normalized League',
+        teamIds: ['team-normwire', 'team-other'],
+        conferences: [],
+        divisions: [],
+        defaultRulesPreset: 'rules',
+        tier: 'standard',
+        balanceMode: 'taxed',
+        createdDate: '2026-01-01',
+        lastModified: '2026-01-01',
+      };
+      await mockTeamsData([team], [league]);
+
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+      await screen.findByDisplayValue('Normalized Team');
+      fireEvent.change(screen.getByLabelText('increase cap modification 1'), {
+        target: { value: 'POW' },
+      });
+      fireEvent.change(screen.getByLabelText('decrease cap modification 1'), {
+        target: { value: 'ARM' },
+      });
+
+      const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(LUXURY_CAP_TABLES.standard, 2);
+      const shiftedCaps = shiftLuxuryCaps(
+        normalizedCaps,
+        applyIdentitySelection({ increase: ['POW'], decrease: ['ARM'] }),
+      );
+      const expected = `${normalizedCaps[0].cap.toFixed(1)} → ${shiftedCaps[0].cap.toFixed(1)}`;
+      const legacy = `${LUXURY_CAP_TABLES.standard[0].cap.toFixed(1)} → ${shiftLuxuryCaps(
+        LUXURY_CAP_TABLES.standard,
+        applyIdentitySelection({ increase: ['POW'], decrease: ['ARM'] }),
+      )[0].cap.toFixed(1)}`;
+
+      expect(await screen.findByText(expected)).toBeInTheDocument();
+      expect(screen.queryByText(legacy)).not.toBeInTheDocument();
     });
 
     test('(d) non-archetype team: rawShift on a stored capIdentity survives an untouched load-save round trip', async () => {

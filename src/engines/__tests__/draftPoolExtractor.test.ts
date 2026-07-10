@@ -70,7 +70,7 @@ describe('extractDraftPool — oracle source (real players)', () => {
   const source = loadOracleSource();
   const SELECTED = pick('murderers-row', 'whiteyball', 'bomba-squad', 'the-opener');
 
-  it('carves a draftable pool for four disparate identities at an identity-roomy dial, deterministically', () => {
+  it('reports normalized 8-team identity feasibility honestly at an identity-roomy dial, deterministically', () => {
     // 1.5× oversupply: the league-feasibility BODY floors (8×13 hitters + 8×8 pitchers ≈ 202 at
     // 1.2×) stop dominating the target, so identity selection has room. The 1.2×-is-tight reality
     // is asserted separately below — surfaced, never hidden (audit C1B-1).
@@ -79,7 +79,15 @@ describe('extractDraftPool — oracle source (real players)', () => {
     const first = run();
 
     expect(first.verdicts).toHaveLength(SELECTED.length);
-    expect(first.verdicts.every((v) => v.band !== 'LOCKED'), first.notes.join(' | ')).toBe(true);
+    // NORMWIRE: the old stock-20 cap basis overtaxed this 8-team build and accidentally forced
+    // different roster choices. Under the real normalized settlement basis, the full oracle source
+    // cannot clear the positive-embodiment floor for these two identities. The extractor must say
+    // that plainly and deterministically rather than preserving the obsolete optimistic verdict.
+    const locked = first.verdicts.filter((verdict) => verdict.band === 'LOCKED');
+    expect(locked.map((verdict) => verdict.archetypeId).sort()).toEqual(['bomba-squad', 'murderers-row']);
+    expect(locked.every((verdict) => verdict.reasons.some((reason) => reason.includes('embodiment below the floor'))))
+      .toBe(true);
+    expect(first.notes.join(' ')).toContain('source has nothing further to offer');
     // The size cap holds unless identity builds/floors genuinely claim more (then it is NAMED).
     if (first.size > first.targetSize) {
       expect(first.notes.join(' ')).toContain('exceeds');

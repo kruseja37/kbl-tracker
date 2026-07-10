@@ -25,6 +25,7 @@ import {
   type ConstructionPlayer,
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
+import { normalizeAuctionLuxuryCapsForLeagueSize } from './auctionLuxuryTax';
 import {
   LEGAL_ROSTER,
   canCover,
@@ -68,8 +69,7 @@ export interface SimArchetype {
   scale?: number;
 }
 
-function archetypeCaps(archetype: SimArchetype, tier: TierKey): LuxuryCapRow[] {
-  const base = LUXURY_CAP_TABLES[tier];
+function archetypeCapsFromBase(archetype: SimArchetype, base: LuxuryCapRow[]): LuxuryCapRow[] {
   const s = archetype.scale ?? 1;
   if (archetype.rawShift) {
     return base.map((row) => {
@@ -81,6 +81,22 @@ function archetypeCaps(archetype: SimArchetype, tier: TierKey): LuxuryCapRow[] {
   if (s === 1) return shifted;
   // Scale the shift magnitude uniformly: base.cap * (1 + s*(shifted/base - 1)).
   return shifted.map((row, i) => ({ ...row, cap: Math.max(0, base[i].cap * (1 + s * (row.cap / base[i].cap - 1))) }));
+}
+
+function archetypeCaps(archetype: SimArchetype, tier: TierKey): LuxuryCapRow[] {
+  return archetypeCapsFromBase(archetype, LUXURY_CAP_TABLES[tier]);
+}
+
+/** NORMWIRE: tax caps use the same normalized base seam as live auction settlement. */
+function archetypeTaxCaps(
+  archetype: SimArchetype,
+  tier: TierKey,
+  realTeamCount: number,
+): LuxuryCapRow[] {
+  return archetypeCapsFromBase(
+    archetype,
+    normalizeAuctionLuxuryCapsForLeagueSize(LUXURY_CAP_TABLES[tier], realTeamCount),
+  );
 }
 
 export interface ArchetypeSimResult {
@@ -307,9 +323,10 @@ export function buildBestRoster(
   archetype: SimArchetype,
   tier: TierKey,
   budget: number,
+  realTeamCount: number,
 ): ArchetypeSimResult {
-  const caps = archetypeCaps(archetype, tier);
-  const fitScore = makeFitScore(caps, tier);
+  const caps = archetypeTaxCaps(archetype, tier, realTeamCount);
+  const fitScore = makeFitScore(archetypeCaps(archetype, tier), tier);
   const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
 
   const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, fitScore);
@@ -340,11 +357,12 @@ export function runBalanceSim(
   pool: SimPlayer[],
   archetypes: SimArchetype[],
   tier: TierKey,
+  realTeamCount: number,
   band = 0.1,
 ): BalanceReport {
   // Intentionally pool-relative: this offline balance harness is a calibration frame, not a live league budget.
   const budget = computePoolTierCap(pool.map((p) => p.iv), tier);
-  const results = archetypes.map((a) => buildBestRoster(pool, a, tier, budget));
+  const results = archetypes.map((a) => buildBestRoster(pool, a, tier, budget, realTeamCount));
   const meanIv = results.reduce((s, r) => s + r.totalIv, 0) / results.length;
   const withDev = results.map((r) => ({ name: r.name, deviation: (r.totalIv - meanIv) / meanIv }));
   const maxDeviation = Math.max(...withDev.map((d) => Math.abs(d.deviation)));
@@ -732,6 +750,8 @@ function constrainedIdentityClimb(
 }
 
 export interface BuildIdentityOptions {
+  /** Real non-shill league clubs. Required so advisory tax can never silently fall back to 20. */
+  realTeamCount: number;
   posture?: RosterPosture;
   /** Override the posture's value floor (fraction of the value-max baseline). */
   valueFloorOverride?: number;
@@ -774,14 +794,14 @@ export function buildIdentityRoster(
   archetype: SimArchetype,
   tier: TierKey,
   budget: number,
-  options: BuildIdentityOptions = {},
+  options: BuildIdentityOptions,
 ): IdentityRosterResult {
   const posture = options.posture ?? 'optimal';
   const params = POSTURE_PARAMS[posture];
   const pool = options.banned?.size ? fullPool.filter((p) => !options.banned!.has(p.id)) : fullPool;
 
-  const caps = archetypeCaps(archetype, tier);
-  const valueFit = makeFitScore(caps, tier);
+  const caps = archetypeTaxCaps(archetype, tier, options.realTeamCount);
+  const valueFit = makeFitScore(archetypeCaps(archetype, tier), tier);
 
   // The pure value-max baseline on the SAME pool anchors the floor (identical two-start procedure
   // to buildBestRoster, kept inline so that function stays byte-compatible for the frozen gate).
@@ -793,7 +813,10 @@ export function buildIdentityRoster(
 
   const valueFloor = options.valueFloorOverride ?? params.valueFloor;
   const floorIv = baselineIv * valueFloor;
-  const fitScore = makeFitScore(weightedCaps(caps, tier, params.boostFitWeight), tier);
+  const fitScore = makeFitScore(
+    weightedCaps(archetypeCaps(archetype, tier), tier, params.boostFitWeight),
+    tier,
+  );
 
   const slotBonus = options.slotPreferenceBonus;
   const pinnedBySlot = normalizeIdentityPins(pool, options.pinned);

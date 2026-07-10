@@ -56,8 +56,9 @@ describe('buildIdentityRoster slotPreferenceBonus', () => {
   const budget = 400_000;
 
   it('is EXACTLY inert when the bonus is a constant zero (byte-identical builds)', () => {
-    const without = buildIdentityRoster(pool, archetype, tier, budget);
+    const without = buildIdentityRoster(pool, archetype, tier, budget, { realTeamCount: 20 });
     const withZero = buildIdentityRoster(pool, archetype, tier, budget, {
+      realTeamCount: 20,
       slotPreferenceBonus: () => 0,
     });
     expect(withZero.players.map((p) => p.id)).toEqual(without.players.map((p) => p.id));
@@ -67,13 +68,14 @@ describe('buildIdentityRoster slotPreferenceBonus', () => {
   });
 
   it('steers the asked slot toward the preferred player without breaking feasibility', () => {
-    const baseline = buildIdentityRoster(pool, archetype, tier, budget);
+    const baseline = buildIdentityRoster(pool, archetype, tier, budget, { realTeamCount: 20 });
     // Prefer a specific SS the baseline did NOT choose at the SS slot.
     const baselineIds = new Set(baseline.players.map((p) => p.id));
     const altSS = pool.find((p) => !p.isPitcher && p.position === 'SS' && !baselineIds.has(p.id));
     expect(altSS).toBeDefined();
 
     const preferred = buildIdentityRoster(pool, archetype, tier, budget, {
+      realTeamCount: 20,
       slotPreferenceBonus: (playerId, slotIndex) =>
         slotIndex === SS_SLOT_INDEX && playerId === altSS!.id ? 10_000 : 0,
     });

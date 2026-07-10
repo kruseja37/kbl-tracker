@@ -525,6 +525,54 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText("TAX WATCH: Caps — You — identity targets overshoot the cap after tax.")).toBeInTheDocument();
   });
 
+  test("NORMWIRE repro: 2-team CLUB CHECK and TAX WATCH use the normalized target values", async () => {
+    vi.mocked(buildBest22Target).mockImplementation((...args) => {
+      const realTeamCount = args[6];
+      return realTeamCount === 2
+        ? makeBest22Target({
+            totalSalary: 970_000,
+            totalTax: 0,
+            allIn: 970_000,
+            budget: 1_000_000,
+            feasible: true,
+          })
+        : makeBest22Target({
+            totalSalary: 970_000,
+            totalTax: 330_000,
+            allIn: 1_300_000,
+            budget: 1_000_000,
+            feasible: false,
+          });
+    });
+    const lockedDesign = makeLockedRosterDesign("2026-01-01T00:00:00.000Z");
+    mockLeagueData({
+      league: makeLeague({
+        teamIds: ["team-a", "team-b"],
+        draftPoolMode: "design-first",
+        poolExtractedAt: "2026-01-02T00:00:00.000Z",
+      }),
+      teams: [
+        makeTeam("team-a", { rosterDesign: lockedDesign }),
+        makeTeam("team-b", { rosterDesign: lockedDesign }),
+      ],
+      pool: makePool({ locked: false }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(vi.mocked(buildBest22Target).mock.calls.length).toBeGreaterThanOrEqual(4);
+    });
+    expect(new Set(vi.mocked(buildBest22Target).mock.calls.map((call) => call[6]))).toEqual(new Set([2]));
+    const clubCheck = screen.getByText("THE CLUB CHECK").parentElement;
+    await waitFor(() => {
+      expect(clubCheck).toHaveTextContent("TARGET $970,000");
+    });
+    expect(within(clubCheck!).getAllByText("TARGET $970,000")).toHaveLength(2);
+    expect(screen.queryByText(/TAX WATCH:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/TARGET OVERSHOOTS WITH TAX/)).not.toBeInTheDocument();
+  });
+
   // SETUPTAX Item 4: analyzePoolFeasibility (poolFeasibility.ts) already builds each archetype's
   // roster and keeps `built.totalTax` on the feasibility result -- a SIBLING array on the same
   // PoolCompositionReport the outlook panel already reads -- it just never reached this line.

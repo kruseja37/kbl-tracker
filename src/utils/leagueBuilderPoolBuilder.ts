@@ -555,6 +555,7 @@ export async function evaluatePoolComposition(
     sims,
     [...HISTORICAL_ARCHETYPES],
     pool.tier,
+    teamCount,
     undefined,
     resolveLeagueSalaryCap(leagueTemplate),
   );
