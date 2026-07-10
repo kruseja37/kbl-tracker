@@ -192,6 +192,48 @@ pickOrder never changes). Ruling: real, minimal, draft-window pick-for-pick trad
   legal-22 check, cap ledger, tax bill, and the advisor's draft grade hook (ADVISORCOLOR later).
 - **Rounds:** fixed 22 (= LEGAL_ROSTER.size), as built.
 
+## §7a Setup-conversion rulings (2026-07-09, from the ground-truth pass — BINDING for D2/D5)
+Evidence: the zone-by-zone conversion inventory run 2026-07-09 (session record; decisive facts
+restated inline).
+1. **Pool membership = session-scoped, never assignment writes.** Today "in a pool" means
+   writing a `leagueAssignments` row onto the SHARED player record (`addPlayersToLeaguePool`).
+   For a full-universe snake pool that would (a) permanently stamp hundreds of never-drafted
+   players with stray FREE_AGENT assignments to the snake league — nothing ever cleans these
+   up (verified: even the auction leaves its surplus assignments forever), and (b) fire
+   300–600 individual sync-tracked player writes at confirm time. RULING: the snake pool is a
+   persisted candidate-id list + iv/salary snapshot on the draft session/pool record;
+   `leagueAssignments` is written ONLY at pick commit (the parked page's per-pick commit
+   already does exactly this). Undrafted players are untouched by construction — JK's
+   invariant, satisfied structurally.
+2. **No pool-wide axis regeneration for snake — ever.** `lockLeaguePool` re-rolls
+   personality/chemistry/hidden-modifiers over every pool member; those are GLOBAL fields on
+   the shared player row, so running it over a full universe would silently rewrite
+   established players' personalities in their SOURCE leagues. RULING: snake performs no
+   lock-time axis processing. Gap-fill only: at pick commit, a drafted player still carrying
+   flat seed defaults (no `hiddenPersonalityModifiers`) gets seeded axes; players with real
+   axes are never touched.
+3. **Setup surface = a dedicated, leaner snake setup screen**, composed from the shared pieces
+   the inventory verified convert as-is: seat/owner zone, ArchetypePicker, the source-league
+   checkboxes (repurposed from extraction-filter to POPULATOR), the hand add/remove shuttle
+   (rebound to the session candidate list), `evaluatePositionSupplyFloors` as the validity
+   check, and RankYourBoardZone (whose new consumer is §5's advisor board). Basis: Draft Setup
+   is ~5,400 lines and two-thirds auction-specific by construction (extraction, sizing dials,
+   shills, reserve price, asks/gaps, lock-anchored readiness) — a snake mode inside it would
+   be conditional spaghetti. Share components, not the page.
+4. **CONFIRM POOL is the snake milestone** (replaces the auction's lock): snapshot the
+   candidate list + run the validity check; no price freeze, no axis regen. Readiness =
+   clubs exist · identities picked · pool confirmed (position floors + total ≥ teams × 22) ·
+   draft order set.
+5. **Scale planks (D2/D5 contracts must carry these):** the draft board renders
+   position-filtered, PAGINATED candidates — the parked page renders every undrafted candidate
+   as a card, unpaginated, at full-universe sizes of 440–1,300; its per-candidate solvency
+   memo is O(N²) per render (rule: compute the completion reserve once per pick from a sorted
+   salary index, not per candidate); RankYourBoard's global view needs the shuttle's
+   pagination pattern.
+6. **Franchise recognition re-confirmed:** the draft-derived morale/freeze payoff is
+   auction-session-gated in the franchise initializer — the §8 plank stands; ruling 2's
+   gap-fill feeds it the axes it expects.
+
 ## §8 Correctness planks (D1 — before anything user-visible)
 1. **Settlement:** pick commit stamps `salary`+`settledSalary` per §3 (auction parity via the
    same pipeline shape as `saveMlbAssignment`).
