@@ -57,6 +57,12 @@ import {
   type SessionMarketOptions,
 } from "../../../engines/auctionMarketModel";
 import { auctionMarginalTaxWithCaps } from "../../../engines/auctionLuxuryTax";
+import {
+  keepTargetAllIn,
+  type KeepTargetAllInResult,
+  type KeepTargetPlayer,
+  type KeepTargetPoolPlayer,
+} from "../../../engines/auctionKeepTargetAllIn";
 import { LUXURY_CAP_TABLES } from "../../../data/tierParams";
 import { settleFromShills } from "../../../engines/auctionSettleFromShills";
 import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
@@ -123,6 +129,17 @@ interface DisplayBidVsPassTarget {
   ownValue: number;
   predictedMedian: number;
   affordable: boolean;
+  dropsOutAtBidAmount: number | null;
+}
+
+interface DisplayKeepTarget {
+  playerId: string;
+  name: string;
+  rank: number;
+  verdict: KeepTargetAllInResult["verdict"];
+  allIn: number | null;
+  shortfall: number | null;
+  taxTotal: number | null;
 }
 
 interface DisplayBidVsPassNeed {
@@ -141,7 +158,10 @@ interface DisplayBidVsPass {
   bidAmount: number;
   bid: DisplayBidVsPassBranch;
   pass: DisplayBidVsPassBranch;
+  keepTargets: readonly DisplayKeepTarget[];
 }
+
+const STAKES_BID_DEBOUNCE_MS = 150;
 
 const CPU_BID_OPTIONS = { needAwareCompletion: true } as const;
 
@@ -284,24 +304,39 @@ function displayBidVsPassBranch(
   branch: BoardProjection,
   baseRosterCount: number,
   playerById: Map<string, Player>,
+  boardIndexByPlayerId: ReadonlyMap<string, number>,
+  passAffordableByPlayerId: ReadonlyMap<string, boolean>,
+  bidAmount: number,
 ): DisplayBidVsPassBranch {
   const rosterCount = baseRosterCount + (branch.branch === "bid" ? 1 : 0);
   return {
     branch: branch.branch,
     budgetAfter: branch.budgetAfter,
     needAfter: displayBidVsPassNeed(branch.needAfter, rosterCount),
-    targets: branch.targets.map((target) => {
-      const player = playerById.get(target.playerId) ?? null;
-      return {
-        playerId: target.playerId,
-        name: player ? playerDisplayName(player) : target.playerId,
-        player,
-        surplus: target.surplus,
-        ownValue: target.ownValue,
-        predictedMedian: target.predictedMedian,
-        affordable: target.affordable,
-      };
-    }),
+    targets: [...branch.targets]
+      .sort((left, right) => (
+        (boardIndexByPlayerId.get(left.playerId) ?? Number.MAX_SAFE_INTEGER)
+        - (boardIndexByPlayerId.get(right.playerId) ?? Number.MAX_SAFE_INTEGER)
+        || left.playerId.localeCompare(right.playerId)
+      ))
+      .slice(0, 5)
+      .map((target) => {
+        const player = playerById.get(target.playerId) ?? null;
+        return {
+          playerId: target.playerId,
+          name: player ? playerDisplayName(player) : target.playerId,
+          player,
+          surplus: target.surplus,
+          ownValue: target.ownValue,
+          predictedMedian: target.predictedMedian,
+          affordable: target.affordable,
+          dropsOutAtBidAmount: branch.branch === "bid"
+            && passAffordableByPlayerId.get(target.playerId) === true
+            && !target.affordable
+            ? bidAmount
+            : null,
+        };
+      }),
   };
 }
 
@@ -310,11 +345,32 @@ function displayBidVsPassProjection(
   bidAmount: number,
   baseRosterCount: number,
   playerById: Map<string, Player>,
+  board: readonly BoardEntry[],
+  keepTargets: readonly DisplayKeepTarget[],
 ): DisplayBidVsPass {
+  const boardIndexByPlayerId = new Map(board.map((entry, index) => [entry.playerId, index]));
+  const passAffordableByPlayerId = new Map(
+    projection.pass.targets.map((target) => [target.playerId, target.affordable]),
+  );
   return {
     bidAmount,
-    bid: displayBidVsPassBranch(projection.bid, baseRosterCount, playerById),
-    pass: displayBidVsPassBranch(projection.pass, baseRosterCount, playerById),
+    bid: displayBidVsPassBranch(
+      projection.bid,
+      baseRosterCount,
+      playerById,
+      boardIndexByPlayerId,
+      passAffordableByPlayerId,
+      bidAmount,
+    ),
+    pass: displayBidVsPassBranch(
+      projection.pass,
+      baseRosterCount,
+      playerById,
+      boardIndexByPlayerId,
+      passAffordableByPlayerId,
+      bidAmount,
+    ),
+    keepTargets,
   };
 }
 
@@ -735,6 +791,10 @@ export function LeagueBuilderAuctionDraft() {
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [cpuAdvancePending, setCpuAdvancePending] = useState(false);
   const [bidAmount, setBidAmount] = useState("");
+  const [debouncedContemplatedBid, setDebouncedContemplatedBid] = useState<{
+    lotPlayerId: string;
+    amount: number;
+  } | null>(null);
   const [registeredPool, setRegisteredPool] = useState<DraftPool>(null);
   const [poolLoading, setPoolLoading] = useState(false);
   const [poolError, setPoolError] = useState<string | null>(null);
@@ -1102,6 +1162,25 @@ export function LeagueBuilderAuctionDraft() {
     if (minBid !== null) setBidAmount(String(Math.ceil(minBid)));
   }, [minBid]);
 
+  // STAKES Tier 1: the expensive board re-projection follows settled bid-step intent, not every
+  // render. The lot id travels with the value so a next-lot paint can never reuse the prior lot's
+  // contemplated amount while this trailing debounce settles.
+  useEffect(() => {
+    const lotPlayerId = session?.currentLot?.playerId;
+    const amount = Number(bidAmount);
+    if (!lotPlayerId || !Number.isFinite(amount) || amount < 0) return undefined;
+    const timer = window.setTimeout(() => {
+      setDebouncedContemplatedBid({ lotPlayerId, amount });
+    }, STAKES_BID_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [bidAmount, session?.currentLot?.playerId]);
+
+  const contemplatedBidAmount = session?.currentLot
+    ? debouncedContemplatedBid?.lotPlayerId === session.currentLot.playerId
+      ? debouncedContemplatedBid.amount
+      : session.currentLot.highBid ?? session.currentLot.openingAsk
+    : 0;
+
   const clampBidAmount = (amount: number): number | null => {
     if (minBid === null || currentBidderMaxBid === null || !Number.isFinite(amount)) return null;
     const lower = Math.ceil(minBid);
@@ -1431,21 +1510,17 @@ export function LeagueBuilderAuctionDraft() {
           completionTaxContext,
         })
       : undefined;
-    const bidAmount = session.currentLot.highBid ?? session.currentLot.openingAsk;
-    const bidVsPass = ownBandPriorities
-      ? (() => {
-          const projection = projectBidVsPass({
-            session,
-            options: marketOptions,
-            teamId: team.id,
-            bidAmount,
-            ownBandPriorities,
-            topN: 5,
-          });
-          return projection
-            ? displayBidVsPassProjection(projection, bidAmount, teamState.roster.length, playerById)
-            : null;
-        })()
+    const bidVsPassProjection = ownBandPriorities
+      ? projectBidVsPass({
+          session,
+          options: marketOptions,
+          teamId: team.id,
+          bidAmount: contemplatedBidAmount,
+          ownBandPriorities,
+          // projectBidVsPass already sweeps the whole pool. Keep its complete result long enough
+          // for the page to apply the GM's literal board order, then render the same top five.
+          topN: session.availablePlayerIds.length,
+        })
       : null;
 
     const boardIds = Array.from(new Set([lotPlayerId, ...session.availablePlayerIds]));
@@ -1519,6 +1594,87 @@ export function LeagueBuilderAuctionDraft() {
       need: needBreakdown ?? undefined,
     });
     const board = materializeRankOrder(naturalBoard, (entry) => entry.playerId, team.boardRankOverrides?.global);
+
+    const keepTargets: DisplayKeepTarget[] = [];
+    if (
+      bidVsPassProjection
+      && lotPlayer
+      && lotShape
+      && rosterPlayersClean
+      && rosterShapeClean
+      && remainingPoolClean
+    ) {
+      const projectedTargetById = new Map(
+        [...bidVsPassProjection.pass.targets, ...bidVsPassProjection.bid.targets]
+          .map((target) => [target.playerId, target] as const),
+      );
+      const keepRoster: KeepTargetPlayer[] = teamState.roster.flatMap((assignment) => {
+        const player = playerById.get(assignment.playerId);
+        const construction = constructionPlayerById.get(assignment.playerId);
+        const shape = session.players[assignment.playerId]?.pos;
+        return player && construction && shape
+          ? [{ id: assignment.playerId, construction, shape }]
+          : [];
+      });
+      const keepPool: KeepTargetPoolPlayer[] = remainingPool.flatMap((candidate) => {
+        const construction = constructionPlayerById.get(candidate.id);
+        return construction
+          ? [{ id: candidate.id, construction, shape: candidate.shape, price: candidate.price }]
+          : [];
+      });
+      const lotConstruction = constructionPlayerById.get(lotPlayerId);
+      const inputsClean = keepRoster.length === teamState.roster.length
+        && keepPool.length === remainingPool.length
+        && Boolean(lotConstruction);
+
+      if (inputsClean && lotConstruction) {
+        const lotInput: KeepTargetPlayer = { id: lotPlayerId, construction: lotConstruction, shape: lotShape };
+        for (let boardIndex = 0; boardIndex < board.length && keepTargets.length < 3; boardIndex += 1) {
+          const entry = board[boardIndex];
+          if (entry.playerId === lotPlayerId) continue;
+          const projected = projectedTargetById.get(entry.playerId);
+          const construction = constructionPlayerById.get(entry.playerId);
+          const shape = session.players[entry.playerId]?.pos;
+          if (!projected || !construction || !shape) continue;
+          const quote = keepTargetAllIn(
+            {
+              budgetRemaining: teamState.budgetRemaining,
+              roster: keepRoster,
+              capIdentity: team.capIdentity,
+            },
+            lotInput,
+            contemplatedBidAmount,
+            {
+              id: entry.playerId,
+              construction,
+              shape,
+              predictedMedian: projected.predictedMedian,
+            },
+            keepPool,
+            registeredPool?.luxuryCaps ?? LUXURY_CAP_TABLES[identityTier],
+          );
+          keepTargets.push({
+            playerId: entry.playerId,
+            name: boardMeta[entry.playerId]?.name ?? entry.note ?? entry.playerId,
+            rank: boardIndex + 1,
+            verdict: quote.verdict,
+            allIn: quote.allIn,
+            shortfall: quote.shortfall,
+            taxTotal: quote.taxTotal,
+          });
+        }
+      }
+    }
+    const bidVsPass = bidVsPassProjection
+      ? displayBidVsPassProjection(
+          bidVsPassProjection,
+          contemplatedBidAmount,
+          teamState.roster.length,
+          playerById,
+          board,
+          keepTargets,
+        )
+      : null;
 
     // COCKPIT WAVE 2 (B3/S3.4 auto-advance): see computeBoardAutoAdvanceLine's doc comment.
     const latestResult = session.results[session.results.length - 1];
@@ -1619,6 +1775,7 @@ export function LeagueBuilderAuctionDraft() {
     publicMarket,
     registeredPool?.luxuryCaps,
     registeredPool?.tier,
+    contemplatedBidAmount,
     session,
     shillTeamIdSet,
     teamById,

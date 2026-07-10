@@ -855,6 +855,39 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.queryByText(/^Lot 2 of /)).not.toBeInTheDocument();
   });
 
+  // STAKES repro-first (CONTRACT_STAKES_2026-07-09.md Tier 1): the live bid controls already
+  // hold the GM's contemplated amount, but the pre-fix page pins projectBidVsPass to the lot's
+  // standing high bid/opening ask. Selecting a higher bid step must therefore move the revealed
+  // stakes header after the page's debounce without submitting a bid.
+  test("STAKES: the revealed bid-vs-pass read follows the contemplated bid step", async () => {
+    const players = makePlayers();
+    const leagueData = mockLeagueData({ players, pool: makePool(players) });
+    leagueData.teams = [
+      makeTeam("team-a", { mlbArchetypeKey: "murderers-row" }),
+      makeTeam("team-b", { mlbArchetypeKey: "murderers-row" }),
+    ];
+    for (const player of players) await savePlayer(player);
+    const seed = seedForOpeningLot(players, { bidderTeamId: "team-a" });
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}&reserveK=0`);
+
+    render(<LeagueBuilderAuctionDraft />);
+    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+
+    const reveal = await screen.findByRole("button", { name: /Reveal Page Caps assistant GM read/ });
+    expect(screen.queryByTestId("whisper-keep-targets")).not.toBeInTheDocument();
+    fireEvent.click(reveal);
+    const stakes = await screen.findByTestId("whisper-bid-vs-pass");
+    expect(within(stakes).getAllByText(/^Your #\d+ — /)).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole("button", { name: "+2x" }));
+    const contemplated = screen.getByText(/your bid · \$[\d,]+/).textContent?.split("·")[1]?.trim();
+    if (!contemplated) throw new Error("expected the selected contemplated bid to render");
+
+    await waitFor(() => {
+      expect(screen.getByText(`IF YOU WIN AT ${contemplated}`)).toBeInTheDocument();
+    });
+  });
+
   test("shows a read-only CPU decision preview before advancing automated turns", async () => {
     const players = makePlayers();
     const leagueData = mockLeagueData({ players, pool: makePool(players) });

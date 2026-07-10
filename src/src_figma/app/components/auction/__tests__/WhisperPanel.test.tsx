@@ -337,7 +337,7 @@ describe("WhisperPanel", () => {
     fireEvent.click(screen.getByTestId("whisper-strip"));
 
     const bidVsPass = within(screen.getByTestId("whisper-bid-vs-pass"));
-    expect(bidVsPass.getByText("BID vs PASS")).toBeInTheDocument();
+    expect(bidVsPass.getByText("IF YOU WIN AT $55,000")).toBeInTheDocument();
     expect(bidVsPass.getByText("BID $55,000")).toBeInTheDocument();
     expect(bidVsPass.getByText("PASS")).toBeInTheDocument();
     expect(bidVsPass.getByText("$145,000")).toBeInTheDocument();
@@ -347,6 +347,72 @@ describe("WhisperPanel", () => {
     expect(bidVsPass.getByText("+$12,000")).toBeInTheDocument();
     expect(bidVsPass.getByText("-$5,000")).toBeInTheDocument();
     expect(bidVsPass.getByText("can't afford")).toBeInTheDocument();
+  });
+
+  test("STAKES renders keep-target costs and flips a pass-affordable target at a one-dollar boundary", () => {
+    const stakesPayload = (overBoundary: boolean): RosterIntelligencePayload => Object.assign(payload(), {
+      bidVsPass: {
+        bidAmount: overBoundary ? 55_001 : 55_000,
+        bid: {
+          branch: "bid" as const,
+          budgetAfter: overBoundary ? 99_999 : 100_000,
+          needAfter: null,
+          targets: [{
+            playerId: "target-y",
+            name: "Target Y",
+            player: null,
+            surplus: 10_000,
+            ownValue: 70_000,
+            predictedMedian: 60_000,
+            affordable: !overBoundary,
+            dropsOutAtBidAmount: overBoundary ? 55_001 : null,
+          }],
+        },
+        pass: {
+          branch: "pass" as const,
+          budgetAfter: 155_000,
+          needAfter: null,
+          targets: [{
+            playerId: "target-y",
+            name: "Target Y",
+            player: null,
+            surplus: 10_000,
+            ownValue: 70_000,
+            predictedMedian: 60_000,
+            affordable: true,
+            dropsOutAtBidAmount: null,
+          }],
+        },
+        keepTargets: overBoundary
+          ? [
+              { playerId: "target-y", name: "Target Y", rank: 2, verdict: "gone" as const, allIn: 155_001, shortfall: 1, taxTotal: 20_000 },
+              { playerId: "target-z", name: "Target Z", rank: 3, verdict: "still-lands" as const, allIn: 140_000, shortfall: 0, taxTotal: 15_000 },
+              { playerId: "target-q", name: "Target Q", rank: 4, verdict: "cant-finish-roster" as const, allIn: null, shortfall: null, taxTotal: null },
+            ]
+          : [
+              { playerId: "target-y", name: "Target Y", rank: 2, verdict: "still-lands" as const, allIn: 155_000, shortfall: 0, taxTotal: 20_000 },
+              { playerId: "target-z", name: "Target Z", rank: 3, verdict: "still-lands" as const, allIn: 140_000, shortfall: 0, taxTotal: 15_000 },
+              { playerId: "target-q", name: "Target Q", rank: 4, verdict: "still-lands" as const, allIn: 130_000, shortfall: 0, taxTotal: 10_000 },
+            ],
+      },
+    });
+
+    const { rerender } = render(<WhisperPanel payload={stakesPayload(false)} />);
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+
+    expect(screen.getByText("IF YOU WIN AT $55,000")).toBeInTheDocument();
+    expect(screen.getByText("Your #2 — Target Y: still lands · all-in ~$155,000, tax in")).toBeInTheDocument();
+    expect(screen.getByText("Your #3 — Target Z: still lands · all-in ~$140,000, tax in")).toBeInTheDocument();
+    expect(screen.getByText("Your top three still land after this.")).toBeInTheDocument();
+    expect(screen.queryByText(/drops out at/)).not.toBeInTheDocument();
+
+    rerender(<WhisperPanel payload={stakesPayload(true)} />);
+
+    expect(screen.getByText("IF YOU WIN AT $55,001")).toBeInTheDocument();
+    expect(screen.getByText("drops out at $55,001")).toBeInTheDocument();
+    expect(screen.getByText("Your #2 — Target Y: gone at this price — $1 short")).toBeInTheDocument();
+    expect(screen.getByText("Your #4 — Target Q: can't finish the roster")).toBeInTheDocument();
+    expect(screen.queryByText("Your top three still land after this.")).not.toBeInTheDocument();
   });
 
   test("BID vs PASS is absent when the projection is absent or null", () => {

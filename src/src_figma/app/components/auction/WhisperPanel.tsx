@@ -90,6 +90,17 @@ interface WhisperBidVsPassTarget {
   ownValue: number;
   predictedMedian: number;
   affordable: boolean;
+  dropsOutAtBidAmount?: number | null;
+}
+
+interface WhisperKeepTarget {
+  playerId: string;
+  name: string;
+  rank: number;
+  verdict: "still-lands" | "gone" | "cant-finish-roster";
+  allIn: number | null;
+  shortfall: number | null;
+  taxTotal: number | null;
 }
 
 interface WhisperBidVsPassNeed {
@@ -108,6 +119,7 @@ interface WhisperBidVsPass {
   bidAmount: number;
   bid: WhisperBidVsPassBranch;
   pass: WhisperBidVsPassBranch;
+  keepTargets?: readonly WhisperKeepTarget[];
 }
 
 // COCKPIT W1a/b: BALANCE is deleted from this order (rosterIntelligencePayload.ts FiveLights.balance
@@ -683,13 +695,32 @@ function ChemistryReadoutSection({ readout }: { readout: ChemistryReadout }) {
 function BidVsPassSection({ bidVsPass }: { bidVsPass: WhisperBidVsPass }) {
   return (
     <section className="whisper-section whisper-bid-pass" data-testid="whisper-bid-vs-pass">
-      <div className="eyebrow">BID vs PASS</div>
+      <div className="eyebrow">IF YOU WIN AT {money(bidVsPass.bidAmount)}</div>
       <div className="whisper-branch-grid">
         <BidVsPassBranchCard branch={bidVsPass.bid} title={`BID ${money(bidVsPass.bidAmount)}`} />
         <BidVsPassBranchCard branch={bidVsPass.pass} title="PASS" />
       </div>
+      {bidVsPass.keepTargets && bidVsPass.keepTargets.length > 0 && (
+        <div className="whisper-keep-targets" data-testid="whisper-keep-targets">
+          {bidVsPass.keepTargets.map((target) => (
+            <p key={target.playerId} className="whisper-keep-target-line">
+              {keepTargetLine(target)}
+            </p>
+          ))}
+          {bidVsPass.keepTargets.length === 3
+            && bidVsPass.keepTargets.every((target) => target.verdict === "still-lands")
+            && <p className="whisper-keep-target-summary">Your top three still land after this.</p>}
+        </div>
+      )}
     </section>
   );
+}
+
+function keepTargetLine(target: WhisperKeepTarget): string {
+  const prefix = `Your #${target.rank} — ${target.name}:`;
+  if (target.verdict === "cant-finish-roster") return `${prefix} can't finish the roster`;
+  if (target.verdict === "gone") return `${prefix} gone at this price — ${money(target.shortfall ?? 0)} short`;
+  return `${prefix} still lands · all-in ~${money(target.allIn ?? 0)}, tax in`;
 }
 
 function BidVsPassBranchCard({
@@ -734,7 +765,11 @@ function BidVsPassTargetRow({ target }: { target: WhisperBidVsPassTarget }) {
       <span className={`num whisper-surplus ${target.surplus >= 0 ? "positive" : "negative"}`}>
         {signedMoney(target.surplus)}
       </span>
-      {!target.affordable && <span className="chip whisper-cant-afford">can't afford</span>}
+      {target.dropsOutAtBidAmount !== null && target.dropsOutAtBidAmount !== undefined ? (
+        <span className="chip whisper-cant-afford">drops out at {money(target.dropsOutAtBidAmount)}</span>
+      ) : (
+        !target.affordable && <span className="chip whisper-cant-afford">can't afford</span>
+      )}
     </div>
   );
 }
@@ -1598,6 +1633,25 @@ function WhisperStyles() {
         margin: 0;
         color: var(--auc-muted);
         font-size: 12px;
+      }
+      .auc-root .whisper-keep-targets {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        border: 2px solid rgba(247, 216, 131, 0.24);
+        background: rgba(0, 0, 0, 0.14);
+        padding: 9px;
+      }
+      .auc-root .whisper-keep-target-line,
+      .auc-root .whisper-keep-target-summary {
+        margin: 0;
+        color: var(--auc-text);
+        font-size: 12.5px;
+        line-height: 1.35;
+      }
+      .auc-root .whisper-keep-target-summary {
+        color: var(--ballpark-brass);
+        font-weight: 900;
       }
       .auc-root .whisper-lights-wrap { border-top: 0; padding-top: 0; }
       .auc-root .whisper-lights-row {
