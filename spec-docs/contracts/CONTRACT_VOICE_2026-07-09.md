@@ -183,3 +183,37 @@ None. Two near-misses resolved without stopping, both documented above:
 - `npm run build` → exit 0 — "✓ built in 9.76s", PWA precache 183 entries (only the pre-existing chunk-size warnings)
 - Auction suites (`WhisperPanel.test.tsx` + `AuctionStage.test.tsx` + `LeagueBuilderAuctionDraft.test.tsx` + `LeagueBuilderFarmAuctionDraft.test.tsx` + `auctionBoardFrame.test.ts`): **5 files / 111 tests — all passed**
 - Full `NODE_ENV= npx vitest run`: **Test Files 614 passed | 7 skipped (621); Tests 9465 passed | 11 skipped (9476); Duration 215.61s** — zero failures, zero new reds (both known solo-flakes passed in-batch this run)
+
+---
+
+# ADDENDUM — Audit F1 captain ruling + fix (2026-07-09, post-audit)
+
+Audit verdict: APPROVE-WITH-NOTES. FINDING 1: the 1.2 relationship line as
+first built gated on `worth.suggestedMaxBid < worth.recommendedNumber` —
+engine-impossible dead code, because every payload producer sets
+`recommendedNumber = min(worth, suggestedMaxBid)` (the clamp). Contract
+defect (captain-acknowledged), builder's to fix.
+
+## Captain ruling (binding, applied verbatim)
+1. Gate becomes `worth.suggestedMaxBid < worth.ownValue` (strictly less) —
+   "cash caps you below his adjusted worth." ownValue = the pre-clamp
+   adjusted worth already on the payload (WorthToYou.ownValue).
+2. Copy becomes: `He's worth ${money(worth.ownValue)} to you — your cash
+   stops at ${money(worth.suggestedMaxBid)}.` Old sentence replaced
+   entirely.
+3. Test rewritten with an ENGINE-POSSIBLE payload: ownValue 80,000 >
+   suggestedMaxBid 60,000, recommendedNumber 60,000 (= the clamp); asserts
+   the line renders with both correct dollar figures. Negative case added:
+   ownValue ≤ suggestedMaxBid → line absent.
+4. NOTE 2 ruled: "Chemistry moves your number up by $X." KEPT as-is
+   (chemistry = product vocabulary, not engine jargon). No change made.
+5. Nothing else changed.
+
+## Fix commit
+- `00243d5b` — WhisperPanel.tsx (gate + copy) and WhisperPanel.test.tsx
+  (engine-possible fixture + negative case) only.
+
+## Re-run gates (per ruling; full suite certified at wave close by captain)
+- `npx tsc -b` → exit 0
+- WhisperPanel + AuctionStage + LeagueBuilderAuctionDraft +
+  LeagueBuilderFarmAuctionDraft suites: **4 files / 104 tests — all passed**
