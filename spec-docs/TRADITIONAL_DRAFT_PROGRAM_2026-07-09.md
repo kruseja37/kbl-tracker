@@ -2,6 +2,20 @@
 
 **Author:** Fable (captain; design + math authority — JK directed the design refresh be mine).
 **Status:** BINDING for lanes D1–D7. Builders do not re-litigate design; UNKNOWN = STOP-and-report.
+**Status update (2026-07-10, scribe booking pass):** **D1 SHIPPED** (PR #55, merge `605f191b`,
+2026-07-10) — settlement + franchise parity, per §3/§8 below, APPROVE unqualified. Separately, JK's
+own live auction test found the rebuilt-to-date auction "not viable as-is" (mid-draft biddability
+collapse), which produced a parallel two-track experiment outside this doc's own D-lane numbering:
+**SHILLTAX** (PR #56, the collapse fix) and **SNAKE POC** (PR #57, an isolated dev-flagged viability
+room — NOT this doc's D2 shell rebuild, a narrower proof-of-concept built to let JK judge the
+traditional draft against a rebuilt auction) both shipped, alongside **AUCTION REBUILD + CAPFIX**
+(PR #58, JK's redesigned sequential-nomination auction + a small-league cap fix, verified GO 6/6).
+Full detail: `CONTINUITY_CHECKPOINT.md`'s top banner. **D2–D7 of THIS document's own program (the
+full non-POC snake shell/CPU-picker/advisor-board/trade/voice build) are SUSPENDED, not
+dispatched, pending JK's side-by-side browser verdict** on the rebuilt auction vs. the snake POC
+(`JK_BROWSER_CHECKLIST_2026-07-08.md` §11) — his ruling decides whether this program continues at
+all, and in what shape. Do not dispatch D2 from this doc's own sequencing table (§2) until that
+verdict lands.
 **Ground truth:** the 2026-07-09 deep inventory of `LeagueBuilderSnakeDraft.tsx` + drift ledger
 (session record; key facts restated inline so this doc stands alone). Line numbers are from that
 inventory — re-locate by content if drifted.
