@@ -275,6 +275,8 @@ Team B: Has future SS solution
 
 ### 5.3 Draft Swaps
 
+> **SUPERSEDED for draft-pick trading (JK ruling 2026-07-09, `TRADITIONAL_DRAFT_PROGRAM_2026-07-09.md` §0/§7a):** the prose swap model below was never implemented. The traditional-draft program blesses the already-built `validateTrade` + `derivePickValueChart` machinery (`leagueConstruction.ts`) as the real trade model instead — see that doc's §6 for the live design (pick-for-pick swaps of actual owned picks, persisted per-trade, 15%-band fairness verdict). This section is left below for history, not deleted.
+
 Teams can trade draft position swaps for the **upcoming draft only**.
 
 ```typescript
