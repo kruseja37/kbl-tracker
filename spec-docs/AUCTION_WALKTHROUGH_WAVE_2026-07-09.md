@@ -261,7 +261,48 @@ Assertions move, never weaken.
 
 ---
 
-## Standing rules restated for all four lanes
+## §5 ADVISOR COLOR — LLM-dressed advisor moments (lane ADVISORCOLOR) — JK-ruled 2026-07-09
+
+Sequenced LAST (after STAKES); touches the auction files → never concurrent with
+VOICE/PRIVACY/STAKES.
+
+### Principle
+The decision surfaces stay deterministic (§1) — instant, honest, test-locked. The LLM adds
+personality ONLY at low-frequency, latency-tolerant seams, reusing the beat-reporter pattern
+exactly: a PURE build-dark adapter assembles the facts; the LLM-gated emission seam optionally
+dresses them; a template fallback renders when the connector/gate is off. Cheapest model tier.
+
+### The three moments
+1. **PRE-DRAFT BRIEF** — once per human seat, on that seat's first reveal (§2) before lot one:
+   the advisor's read of the pool against this seat's board and identity ("thin at catcher this
+   year — I'd move early").
+2. **POST-LOT REACTION** — async, ≤1 per lot, significant lots only: you won a board target; a
+   rival paid past the market high for one of your targets; one of your top-3 targets left the
+   board. Renders when ready or not at all — never blocks bidding.
+3. **DRAFT RECAP** — at the handoff check: the advisor's honest grade of your draft (facts:
+   seats filled, spend vs budget, tax bill, targets landed/lost).
+
+### Hard rules
+- **The LLM never generates or transforms a number, a name, or a verdict.** The adapter passes
+  display-ready fact strings; the prompt requires verbatim use; a post-validation gate rejects
+  any output containing a dollar figure or player name not present in the fact payload →
+  template fallback renders instead.
+- All three moments are advisor content → behind the §2 privacy reveal.
+- Respect the existing reporter LLM gate/settings — no second connector, no new flag. Gate off
+  → the template fallback renders (still useful standalone).
+- One call per (moment, lot/draft id), cached; no retries in the render path.
+
+### Tests
+Adapter pure-unit tests; validation-gate unit test (hallucinated number → fallback); LLM text
+is never snapshotted.
+
+### UNKNOWN to resolve at contract time
+The exact connector module/API and gate-flag name — the builder reads them from the reporter
+emission seam and reuses them verbatim; any divergence = STOP-and-report.
+
+---
+
+## Standing rules restated for all five lanes
 - Display-layer lanes never alter engine enums, thresholds, posture rules, or CPU behavior.
 - A TAX word in copy only where tax is the marginal cause (V1_CANON §6).
 - Repro-first where a behavior changes; byte-identical where only location changes.
