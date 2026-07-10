@@ -382,6 +382,7 @@ When your context is approaching its limit (compaction near or imminent):
 - When monitoring long background dispatches, always use a token-free bash sentinel that wakes the captain only on stall/completion, never a timed captain heartbeat, because each timed wake-up costs a full expensive-context turn with usually nothing to do.
 - When a lane changes extraction/engine behavior that page-level test fixtures consume, always include the consuming pages' test suites in the lane's contract gates because POOLFLOOR was green by its own engine gates yet invalidated 26 tests across 4 page suites that only the closing full-suite run caught.
 - When SESSION_RULES prescribes rewrite-in-place for CURRENT_STATE.md's LIVE HEADER but practice is append-only banner stacking, always resolve the contradiction by JK ruling (pick one convention) because a 1,899-line append-only "live header" defeats its 30-second-answer purpose.
+- When a performance outcome is structurally gated by its opportunity state, always match the player's comparison baseline to plate appearances where that outcome was actually available because an all-event baseline can manufacture residual distinctiveness from impossible opportunities rather than player performance (TRAIT-REALITY-1 REJECT audit: bases-empty PAs structurally inflated RBI Hero and suppressed RBI Zero).
 
 Auto-capture pen for the Self-Improvement Loop (see CLAUDE.md). Rules here are
 PROPOSALS, written the moment a JK correction happens (Write-First), in the form

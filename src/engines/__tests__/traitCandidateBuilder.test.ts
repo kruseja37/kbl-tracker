@@ -10,6 +10,7 @@ import {
   buildRawSignals,
   classifyPitchOutcome,
   computeSeasonTraitCandidates,
+  expectedStealSuccessRate,
   reconstructAtBatContext,
   type AtBatContextRunningState,
   type SeasonTraitCandidate,
@@ -523,8 +524,36 @@ describe('matrix opportunity probe', () => {
   });
 });
 
+/**
+ * TRAIT-REALITY-1 / 1b — contract E4 test-edit ledger.
+ *
+ * Existing assertion edits made for Phase 1:
+ * - Batter Clutch signal: raw .70 -> own-baseline residual 0.
+ * - Batter Choker signal: raw .30 -> own-baseline residual 0.
+ * - Batter Clutch/Choker reality scores: added neutral .50 assertions.
+ * - Pitcher Clutch signal: raw .60 -> own-baseline residual 0.
+ * - Pitcher Choker signal: raw .40 -> own-baseline residual 0.
+ * - RBI Hero signal: raw .40 -> matched-context residual 0.
+ * - RBI Zero signal: raw .60 -> matched-context residual 0.
+ * - Rally Starter signal: raw .30 -> own-baseline residual 0.
+ * - Pinch Perfect signal: raw .50 -> own-baseline residual 0.
+ * - Rally Stopper signal: raw .40 -> own-baseline residual 0.
+ * - Surrounded signal: raw .60 -> own-baseline residual 0.
+ * - Stealer signal: raw 2/3 -> SB% minus SPD expectation.
+ * - Bad Jumps signal: raw 1/3 -> inverse SB%-versus-SPD residual.
+ * - Universal Clutch peer-pool sizes: position 1 / pitcher 3 -> fixed 0.
+ * - Universal Clutch reality scores: added neutral .50 assertions.
+ *
+ * Amendment 1 edit:
+ * - RBI Hero founding-case modest residual/score: all-PA .30/1.00 ->
+ *   runners-on .15/.8667; bases-empty RBI fixtures now use a realistic 5%
+ *   home-run-like rate.
+ *
+ * The RBI Zero mirror and acquisition/defense cases are new coverage, not
+ * edits to pre-existing assertions.
+ */
 describe('at-bat outcome signals', () => {
-  it('splits batter Clutch and Choker rates from batting-team WPA direction', () => {
+  it('maps batter Clutch and Choker to neutral when context matches his season baseline', () => {
     const events = [
       ...repeat(7, () => atBat({ batterId: 'b1', isClutch: true, battingTeamDelta: 0.1, wpa: 0.1 })),
       ...repeat(3, () => atBat({ batterId: 'b1', isClutch: true, battingTeamDelta: -0.1, wpa: -0.1 })),
@@ -533,11 +562,13 @@ describe('at-bat outcome signals', () => {
       players: players(['b1'], 'position'),
       atBatEvents: events,
     }));
-    expect(candidate(result, 'b1', 'Clutch')?.signalValue).toBeCloseTo(0.7, 10);
-    expect(candidate(result, 'b1', 'Choker')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'b1', 'Clutch')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'b1', 'Choker')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'b1', 'Clutch')?.score.realityPercentile).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Choker')?.score.realityPercentile).toBeCloseTo(0.5, 10);
   });
 
-  it('uses fielding-team delta for pitcher Clutch and Choker', () => {
+  it('maps pitcher Clutch and Choker to neutral when context matches his season baseline', () => {
     const events = [
       ...repeat(6, () => atBat({ pitcherId: 'p1', isClutch: true, fieldingTeamDelta: 0.2, wpa: -0.2 })),
       ...repeat(4, () => atBat({ pitcherId: 'p1', isClutch: true, fieldingTeamDelta: -0.2, wpa: 0.2 })),
@@ -546,11 +577,11 @@ describe('at-bat outcome signals', () => {
       players: players(['p1'], 'pitcher'),
       atBatEvents: events,
     }));
-    expect(candidate(result, 'p1', 'Clutch')?.signalValue).toBeCloseTo(0.6, 10);
-    expect(candidate(result, 'p1', 'Choker')?.signalValue).toBeCloseTo(0.4, 10);
+    expect(candidate(result, 'p1', 'Clutch')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'p1', 'Choker')?.signalValue).toBeCloseTo(0, 10);
   });
 
-  it('computes RBI Hero and RBI Zero rates from rbiCount', () => {
+  it('computes RBI Hero and RBI Zero as context residuals, not raw RISP rates', () => {
     const risp = runners(['second']);
     const events = [
       ...repeat(4, () => atBat({ batterId: 'b1', runners: risp, rbiCount: 1 })),
@@ -560,11 +591,11 @@ describe('at-bat outcome signals', () => {
       players: players(['b1'], 'position'),
       atBatEvents: events,
     }));
-    expect(candidate(result, 'b1', 'RBI Hero')?.signalValue).toBeCloseTo(0.4, 10);
-    expect(candidate(result, 'b1', 'RBI Zero')?.signalValue).toBeCloseTo(0.6, 10);
+    expect(candidate(result, 'b1', 'RBI Hero')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'b1', 'RBI Zero')?.signalValue).toBeCloseTo(0, 10);
   });
 
-  it('computes Rally Starter reach rate', () => {
+  it('computes Rally Starter as losing-empty reach residual', () => {
     const events = [
       ...repeat(3, () => atBat({ batterId: 'b1', halfInning: 'TOP', awayScore: 0, homeScore: 1, result: '1B', outsAfter: 0 })),
       ...repeat(7, () => atBat({ batterId: 'b1', halfInning: 'TOP', awayScore: 0, homeScore: 1, result: 'GO', outsAfter: 1 })),
@@ -573,10 +604,10 @@ describe('at-bat outcome signals', () => {
       players: players(['b1'], 'position'),
       atBatEvents: events,
     }));
-    expect(candidate(result, 'b1', 'Rally Starter')?.signalValue).toBeCloseTo(0.3, 10);
+    expect(candidate(result, 'b1', 'Rally Starter')?.signalValue).toBeCloseTo(0, 10);
   });
 
-  it('computes Pinch Perfect from reach or favorable WPA', () => {
+  it('computes Pinch Perfect as pinch success residual', () => {
     const events = [
       ...repeat(2, () => atBat({ batterId: 'b1', batterContext: { playerId: 'b1', playerName: 'B1', enteredAs: 'pinch_hit' }, result: '1B', outsAfter: 0 })),
       ...repeat(3, () => atBat({ batterId: 'b1', batterContext: { playerId: 'b1', playerName: 'B1', enteredAs: 'pinch_hit' }, result: 'GO', outsAfter: 1, battingTeamDelta: 0.2 })),
@@ -586,10 +617,10 @@ describe('at-bat outcome signals', () => {
       players: players(['b1'], 'position'),
       atBatEvents: events,
     }));
-    expect(candidate(result, 'b1', 'Pinch Perfect')?.signalValue).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Pinch Perfect')?.signalValue).toBeCloseTo(0, 10);
   });
 
-  it('computes Rally Stopper and Surrounded from two-on pitcher outcomes', () => {
+  it('computes Rally Stopper and Surrounded as two-on residuals', () => {
     const twoOn = runners(['first', 'second']);
     const events = [
       ...repeat(4, () => atBat({ pitcherId: 'p1', runners: twoOn, result: 'GO', outsAfter: 1, rbiCount: 0, runsScored: [] })),
@@ -599,8 +630,168 @@ describe('at-bat outcome signals', () => {
       players: players(['p1'], 'pitcher'),
       atBatEvents: events,
     }));
-    expect(candidate(result, 'p1', 'Rally Stopper')?.signalValue).toBeCloseTo(0.4, 10);
-    expect(candidate(result, 'p1', 'Surrounded')?.signalValue).toBeCloseTo(0.6, 10);
+    expect(candidate(result, 'p1', 'Rally Stopper')?.signalValue).toBeCloseTo(0, 10);
+    expect(candidate(result, 'p1', 'Surrounded')?.signalValue).toBeCloseTo(0, 10);
+  });
+
+  it('lets distinctive RBI reality beat raw peer production and defend RBI Hero at the cap', () => {
+    const risp = runners(['second']);
+    const runnerOnFirst = runners(['first']);
+    const greatEvents = [
+      ...repeat(10, (index) => atBat({
+        batterId: 'great',
+        pitcherId: `great-risp-p-${index}`,
+        runners: risp,
+        result: index < 8 ? '1B' : 'GO',
+        rbiCount: index < 8 ? 1 : 0,
+        runsScored: index < 8 ? ['r2'] : [],
+        outsAfter: index < 8 ? 0 : 1,
+      })),
+      ...repeat(10, (index) => atBat({
+        batterId: 'great',
+        pitcherId: `great-first-p-${index}`,
+        runners: runnerOnFirst,
+        result: index < 8 ? '2B' : 'GO',
+        rbiCount: index < 8 ? 1 : 0,
+        runsScored: index < 8 ? ['r1'] : [],
+        outsAfter: index < 8 ? 0 : 1,
+      })),
+      ...repeat(80, (index) => atBat({
+        batterId: 'great',
+        pitcherId: `great-empty-p-${index}`,
+        runners: noRunners,
+        // Bases-empty RBIs approximate a realistic 5% HR rate.
+        result: index < 4 ? 'HR' : 'GO',
+        rbiCount: index < 4 ? 1 : 0,
+        runsScored: index < 4 ? ['great'] : [],
+        outsAfter: index < 4 ? 0 : 1,
+      })),
+    ];
+    const modestEvents = [
+      ...repeat(10, (index) => atBat({
+        batterId: 'modest',
+        pitcherId: `modest-risp-p-${index}`,
+        runners: risp,
+        result: index < 4 ? '1B' : 'GO',
+        rbiCount: index < 4 ? 1 : 0,
+        runsScored: index < 4 ? ['r2'] : [],
+        outsAfter: index < 4 ? 0 : 1,
+      })),
+      ...repeat(10, (index) => atBat({
+        batterId: 'modest',
+        pitcherId: `modest-first-p-${index}`,
+        runners: runnerOnFirst,
+        result: index < 1 ? '2B' : 'GO',
+        rbiCount: index < 1 ? 1 : 0,
+        runsScored: index < 1 ? ['r1'] : [],
+        outsAfter: index < 1 ? 0 : 1,
+      })),
+      ...repeat(80, (index) => atBat({
+        batterId: 'modest',
+        pitcherId: `modest-empty-p-${index}`,
+        runners: noRunners,
+        result: index < 4 ? 'HR' : 'GO',
+        rbiCount: index < 4 ? 1 : 0,
+        runsScored: index < 4 ? ['modest'] : [],
+        outsAfter: index < 4 ? 0 : 1,
+      })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['great', 'modest'], 'position'),
+      atBatEvents: [...greatEvents, ...modestEvents],
+    }));
+    const great = candidate(result, 'great', 'RBI Hero');
+    const modest = candidate(result, 'modest', 'RBI Hero');
+
+    // Great: RISP .800, runners-on .800 => neutral despite a realistic .050
+    // bases-empty RBI rate. Modest: RISP .400, runners-on .250 => +.150.
+    expect(great?.signalValue).toBeCloseTo(0, 10);
+    expect(great?.score.realityPercentile).toBeCloseTo(0.5, 10);
+    expect(modest?.signalValue).toBeCloseTo(0.15, 10);
+    expect(modest?.score.realityPercentile).toBeCloseTo(0.8666666667, 10);
+
+    const greatAcquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      heldTraits: [],
+      candidates: great ? [great] : [],
+    });
+    expect(greatAcquisition.proposals).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ traitName: 'RBI Hero', valence: 'gain' }),
+    ]));
+
+    const modestGain = computeTraitAcquisition({
+      playerRole: 'position',
+      heldTraits: [],
+      candidates: modest ? [modest] : [],
+    });
+    expect(modestGain.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ traitName: 'RBI Hero', valence: 'gain' }),
+    ]));
+
+    const modestDefense = computeTraitAcquisition({
+      playerRole: 'position',
+      heldTraits: [
+        { traitName: 'RBI Hero', strength: 0.5 },
+        { traitName: 'Tough Out', strength: 0.8 },
+      ],
+      candidates: modest ? [modest] : [],
+    });
+    expect(modestDefense.proposals).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ traitName: 'RBI Hero', valence: 'lose' }),
+    ]));
+  });
+
+  it('lets a genuinely poor RISP performer earn RBI Zero against his runners-on baseline', () => {
+    const risp = runners(['second']);
+    const runnerOnFirst = runners(['first']);
+    const events = [
+      ...repeat(10, (index) => atBat({
+        batterId: 'poor-risp',
+        pitcherId: `poor-risp-context-p-${index}`,
+        runners: risp,
+        result: index < 1 ? '1B' : 'GO',
+        rbiCount: index < 1 ? 1 : 0,
+        runsScored: index < 1 ? ['r2'] : [],
+        outsAfter: index < 1 ? 0 : 1,
+      })),
+      ...repeat(10, (index) => atBat({
+        batterId: 'poor-risp',
+        pitcherId: `poor-risp-first-p-${index}`,
+        runners: runnerOnFirst,
+        result: index < 6 ? '2B' : 'GO',
+        rbiCount: index < 6 ? 1 : 0,
+        runsScored: index < 6 ? ['r1'] : [],
+        outsAfter: index < 6 ? 0 : 1,
+      })),
+      ...repeat(80, (index) => atBat({
+        batterId: 'poor-risp',
+        pitcherId: `poor-risp-empty-p-${index}`,
+        runners: noRunners,
+        result: index < 4 ? 'HR' : 'GO',
+        rbiCount: index < 4 ? 1 : 0,
+        runsScored: index < 4 ? ['poor-risp'] : [],
+        outsAfter: index < 4 ? 0 : 1,
+      })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['poor-risp'], 'position'),
+      atBatEvents: events,
+    }));
+    const poorRisp = candidate(result, 'poor-risp', 'RBI Zero');
+
+    // RISP zero-RBI rate .900 vs runners-on .650 => +.250. Under the rejected
+    // all-PA baseline (.890), this was only +.010 and could not be earned.
+    expect(poorRisp?.signalValue).toBeCloseTo(0.25, 10);
+    expect(poorRisp?.score.realityPercentile).toBe(1);
+
+    const acquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      heldTraits: [],
+      candidates: poorRisp ? [poorRisp] : [],
+    });
+    expect(acquisition.proposals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ traitName: 'RBI Zero', valence: 'gain' }),
+    ]));
   });
 
   it('computes Meltdown frequency per distinct game/inning/half unit pitched', () => {
@@ -629,13 +820,55 @@ describe('at-bat outcome signals', () => {
 });
 
 describe('direct-source signals', () => {
-  it('computes Stealer and Bad Jumps from stolenBase attempts by runnerId', () => {
+  it('computes Stealer and Bad Jumps as opposite residuals from speed expectation', () => {
     const result = computeSeasonTraitCandidates(baseInput({
       players: players(['b1'], 'position'),
       betweenPlayEvents: [steal('b1', true), steal('b1', true), steal('b1', false), steal('other', false)],
+      speedByPlayer: new Map([['b1', 50]]),
     }));
-    expect(candidate(result, 'b1', 'Stealer')?.signalValue).toBeCloseTo(2 / 3, 10);
-    expect(candidate(result, 'b1', 'Bad Jumps')?.signalValue).toBeCloseTo(1 / 3, 10);
+    const residual = (2 / 3) - expectedStealSuccessRate(50);
+    expect(candidate(result, 'b1', 'Stealer')?.signalValue).toBeCloseTo(residual, 10);
+    expect(candidate(result, 'b1', 'Bad Jumps')?.signalValue).toBeCloseTo(-residual, 10);
+  });
+
+  it('keeps a modest-speed craft Stealer and denies a fast zero-craft runner', () => {
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['craft', 'burner'], 'position'),
+      betweenPlayEvents: [
+        ...repeat(10, (index) => steal('craft', index < 9)),
+        ...repeat(10, (index) => steal('burner', index < 5)),
+      ],
+      speedByPlayer: new Map([
+        ['craft', 40],
+        ['burner', 99],
+      ]),
+    }));
+    const craft = candidate(result, 'craft', 'Stealer');
+    const burner = candidate(result, 'burner', 'Stealer');
+
+    expect(craft?.score.realityPercentile).toBeGreaterThan(0.9);
+    expect(burner?.score.realityPercentile).toBe(0);
+
+    const craftDefense = computeTraitAcquisition({
+      playerRole: 'position',
+      heldTraits: [
+        { traitName: 'Stealer', strength: 0.5 },
+        { traitName: 'Tough Out', strength: 0.8 },
+      ],
+      candidates: craft ? [craft] : [],
+    });
+    expect(craftDefense.proposals).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ traitName: 'Stealer', valence: 'lose' }),
+    ]));
+
+    const burnerAcquisition = computeTraitAcquisition({
+      playerRole: 'position',
+      heldTraits: [],
+      candidates: burner ? [burner] : [],
+    });
+    expect(burnerAcquisition.proposals).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ traitName: 'Stealer', valence: 'gain' }),
+    ]));
   });
 
   it('computes Butter Fingers from missed gems plus fielding errors over the shared hands denominator', () => {
@@ -1105,6 +1338,34 @@ describe('R1-a outcome-rate signals (per-PA proxies)', () => {
     expect(candidate(result, 'b1', 'Whiffer')?.signalValue).toBeCloseTo(0.1, 10);
     expect(candidate(result, 'b1', 'Easy Target')?.signalValue).toBeCloseTo(0.1, 10);
     expect(candidate(result, 'b1', 'Tough Out')?.signalValue).toBeCloseTo(0.9, 10);
+  });
+
+  it('gates selective high-K hitters out of Whiffer while retaining unselective hitters', () => {
+    const events = [
+      ...repeat(20, (index) => atBat({
+        batterId: 'selective',
+        pitcherId: `selective-p-${index}`,
+        result: index < 8 ? 'K' : index < 12 ? 'BB' : 'GO',
+        outsAfter: index < 8 || index >= 12 ? 1 : 0,
+      })),
+      ...repeat(20, (index) => atBat({
+        batterId: 'unselective',
+        pitcherId: `unselective-p-${index}`,
+        result: index < 8 ? 'K' : index === 8 ? 'BB' : 'GO',
+        outsAfter: index < 8 || index > 8 ? 1 : 0,
+      })),
+    ];
+    const result = computeSeasonTraitCandidates(baseInput({
+      players: players(['selective', 'unselective'], 'position'),
+      atBatEvents: events,
+    }));
+
+    expect(candidate(result, 'selective', 'Whiffer')).toBeUndefined();
+    expect(candidate(result, 'unselective', 'Whiffer')).toBeDefined();
+    // Tough Out stays the direct inverse-K signal for both profiles; the BB gate
+    // is specific to identifying free-swinging Whiffer behavior.
+    expect(candidate(result, 'selective', 'Tough Out')).toBeDefined();
+    expect(candidate(result, 'unselective', 'Tough Out')).toBeDefined();
   });
 
   it('computes Slow Poke from DP-rate per PA', () => {
@@ -3739,7 +4000,7 @@ describe('role eligibility, peer pools, valve, and determinism', () => {
     expect(candidate(result, 'b1', 'Meltdown')).toBeUndefined();
   });
 
-  it('keeps pitcher and position peer pools separate for universal traits', () => {
+  it('removes fixed-reality universal traits from pitcher and position peer pools', () => {
     const pitcherEvents = ['p1', 'p2', 'p3'].flatMap((pitcherId, pIndex) => (
       repeat(10, (index) => atBat({
         pitcherId,
@@ -3758,8 +4019,10 @@ describe('role eligibility, peer pools, valve, and determinism', () => {
       players: [...players(['p1', 'p2', 'p3'], 'pitcher'), ...players(['b1'], 'position')],
       atBatEvents: [...pitcherEvents, ...positionEvents],
     }));
-    expect(candidate(result, 'p1', 'Clutch')?.score.peerPoolSize).toBe(3);
-    expect(candidate(result, 'b1', 'Clutch')?.score.peerPoolSize).toBe(1);
+    expect(candidate(result, 'p1', 'Clutch')?.score.peerPoolSize).toBe(0);
+    expect(candidate(result, 'b1', 'Clutch')?.score.peerPoolSize).toBe(0);
+    expect(candidate(result, 'p1', 'Clutch')?.score.realityPercentile).toBeCloseTo(0.5, 10);
+    expect(candidate(result, 'b1', 'Clutch')?.score.realityPercentile).toBeCloseTo(0.5, 10);
   });
 
   it('lets the scorer valve mark thin samples dormant', () => {

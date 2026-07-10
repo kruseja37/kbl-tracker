@@ -42,6 +42,46 @@ import { calculateWOBA } from './bwarCalculator';
 import type { BattingStatsForWAR } from '../types/war';
 import { SMB4_GRADE_TO_INDEX, type Smb4Grade } from './smb4GradeEmulator';
 
+/**
+ * TRAIT-REALITY-1 (JK ruling 2026-07-10): context traits measure whether the
+ * player is materially better or worse in that context than he is everywhere
+ * else in the same season. These fixed bands turn that signed residual into the
+ * 0..1 strength consumed by trait acquisition. Rarity remains exclusively in
+ * traitTierConfig + the downstream likelihood roll.
+ */
+export const TRAIT_RESIDUAL_BANDS = [
+  { residual: -0.25, realityScore: 0.00 },
+  { residual: -0.10, realityScore: 0.20 },
+  { residual: 0.00, realityScore: 0.50 },
+  { residual: 0.10, realityScore: 0.80 },
+  { residual: 0.25, realityScore: 1.00 },
+] as const;
+
+/** Expected stolen-base success by the runner's current SMB4 SPD rating. */
+export const STEAL_SUCCESS_SPEED_EXPECTATION_CURVE = [
+  { speed: 0, expectedSuccessRate: 0.45 },
+  { speed: 25, expectedSuccessRate: 0.55 },
+  { speed: 50, expectedSuccessRate: 0.65 },
+  { speed: 75, expectedSuccessRate: 0.76 },
+  { speed: 99, expectedSuccessRate: 0.84 },
+] as const;
+
+/** Whiffer is a free-swinging flaw, not a patient high-K/high-BB profile. */
+export const WHIFFER_MAX_BB_RATE = 0.15;
+
+const FIXED_REALITY_TRAITS: ReadonlySet<string> = new Set([
+  'RBI Hero',
+  'RBI Zero',
+  'Rally Starter',
+  'Clutch',
+  'Choker',
+  'Rally Stopper',
+  'Surrounded',
+  'Pinch Perfect',
+  'Stealer',
+  'Bad Jumps',
+]);
+
 export const BUILDABLE_TRAITS: readonly string[] = [
   'Clutch',
   'Choker',
@@ -224,6 +264,12 @@ export interface SeasonTraitCandidateInput {
    * dormant for that fielder.
    */
   fielderRatingsByPlayer?: ReadonlyMap<string, { fielding: number; arm: number }>;
+  /**
+   * TRAIT-REALITY-1 — current SMB4 SPD by player. Required to measure Stealer /
+   * Bad Jumps against the runner's own speed expectation; a missing rating keeps
+   * those two signals dormant rather than inventing an expectation.
+   */
+  speedByPlayer?: ReadonlyMap<string, number>;
   /**
    * R2 (handedness splits) — OPTIONAL. The throwing hand ('L'|'R') of each pitcher
    * keyed by pitcherId, used to bucket the position batter's CON/POW splits and to
@@ -660,13 +706,104 @@ function addAccumulatorSignals(raw: RawSignalMap, accumulators: Map<string, Map<
   }
 }
 
+export function mapTraitResidualToRealityScore(residual: number): number {
+  if (!Number.isFinite(residual)) return 0.5;
+  const first = TRAIT_RESIDUAL_BANDS[0];
+  const last = TRAIT_RESIDUAL_BANDS[TRAIT_RESIDUAL_BANDS.length - 1];
+  if (residual <= first.residual) return first.realityScore;
+  if (residual >= last.residual) return last.realityScore;
+
+  for (let index = 1; index < TRAIT_RESIDUAL_BANDS.length; index += 1) {
+    const upper = TRAIT_RESIDUAL_BANDS[index];
+    const lower = TRAIT_RESIDUAL_BANDS[index - 1];
+    if (residual > upper.residual) continue;
+    const share = (residual - lower.residual) / (upper.residual - lower.residual);
+    return lower.realityScore + share * (upper.realityScore - lower.realityScore);
+  }
+  return last.realityScore;
+}
+
+export function expectedStealSuccessRate(speed: number): number {
+  const normalizedSpeed = Math.min(99, Math.max(0, Number.isFinite(speed) ? speed : 0));
+  const first = STEAL_SUCCESS_SPEED_EXPECTATION_CURVE[0];
+  const last = STEAL_SUCCESS_SPEED_EXPECTATION_CURVE[STEAL_SUCCESS_SPEED_EXPECTATION_CURVE.length - 1];
+  if (normalizedSpeed <= first.speed) return first.expectedSuccessRate;
+  if (normalizedSpeed >= last.speed) return last.expectedSuccessRate;
+
+  for (let index = 1; index < STEAL_SUCCESS_SPEED_EXPECTATION_CURVE.length; index += 1) {
+    const upper = STEAL_SUCCESS_SPEED_EXPECTATION_CURVE[index];
+    const lower = STEAL_SUCCESS_SPEED_EXPECTATION_CURVE[index - 1];
+    if (normalizedSpeed > upper.speed) continue;
+    const share = (normalizedSpeed - lower.speed) / (upper.speed - lower.speed);
+    return lower.expectedSuccessRate
+      + share * (upper.expectedSuccessRate - lower.expectedSuccessRate);
+  }
+  return last.expectedSuccessRate;
+}
+
+function addOverallAtBatBaselines(
+  accumulators: Map<string, Map<string, Accumulator>>,
+  atBat: AtBatEvent,
+): void {
+  addOpportunity(accumulators, atBat.batterId, 'Clutch', favorableToBattingTeam(atBat));
+  addOpportunity(accumulators, atBat.batterId, 'Choker', unfavorableToBattingTeam(atBat));
+  // TRAIT-REALITY-1 Amendment 1 (2026-07-10): RBI production is structurally
+  // base-state-coupled, so its comparison baseline includes only PAs where a
+  // runner was actually on base. The RISP context remains the narrower slice.
+  if (runnerCount(atBat.runners) > 0) {
+    addOpportunity(accumulators, atBat.batterId, 'RBI Hero', atBat.rbiCount > 0);
+    addOpportunity(accumulators, atBat.batterId, 'RBI Zero', atBat.rbiCount === 0);
+  }
+  addOpportunity(accumulators, atBat.batterId, 'Rally Starter', reachedBase(atBat.result));
+  addOpportunity(
+    accumulators,
+    atBat.batterId,
+    'Pinch Perfect',
+    reachedBase(atBat.result) || favorableToBattingTeam(atBat),
+  );
+
+  addOpportunity(accumulators, atBat.pitcherId, 'Clutch', favorableToPitchingTeam(atBat));
+  addOpportunity(accumulators, atBat.pitcherId, 'Choker', unfavorableToPitchingTeam(atBat));
+  addOpportunity(accumulators, atBat.pitcherId, 'Rally Stopper', pitcherFavorable(atBat));
+  addOpportunity(accumulators, atBat.pitcherId, 'Surrounded', pitcherUnfavorable(atBat));
+}
+
+function addContextResidualSignals(
+  raw: RawSignalMap,
+  contextAccumulators: Map<string, Map<string, Accumulator>>,
+  overallAccumulators: Map<string, Map<string, Accumulator>>,
+): void {
+  for (const [playerId, byTrait] of contextAccumulators) {
+    for (const [traitName, context] of byTrait) {
+      if (context.sampleSize <= 0) continue;
+      if (!FIXED_REALITY_TRAITS.has(traitName)) {
+        addRawSignal(raw, playerId, traitName, {
+          signalValue: context.successes / context.sampleSize,
+          sampleSize: context.sampleSize,
+        });
+        continue;
+      }
+      const overall = overallAccumulators.get(playerId)?.get(traitName);
+      if (!overall || overall.sampleSize <= 0) continue;
+      addRawSignal(raw, playerId, traitName, {
+        signalValue:
+          (context.successes / context.sampleSize)
+          - (overall.successes / overall.sampleSize),
+        sampleSize: context.sampleSize,
+      });
+    }
+  }
+}
+
 function addAtBatSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): void {
   const runningState = emptyRunningState();
   const rateAccumulators = new Map<string, Map<string, Accumulator>>();
+  const overallAccumulators = new Map<string, Map<string, Accumulator>>();
   const meltdownCounts = new Map<string, number>();
   const pitcherUnits = new Map<string, Set<string>>();
 
   for (const atBat of sortAtBats(input.atBatEvents).filter((event) => !undoneAt(event))) {
+    addOverallAtBatBaselines(overallAccumulators, atBat);
     pitcherUnits.set(atBat.pitcherId, pitcherUnits.get(atBat.pitcherId) ?? new Set());
     pitcherUnits.get(atBat.pitcherId)?.add(`${atBat.gameId}|${atBat.inning}|${atBat.halfInning}`);
 
@@ -702,7 +839,7 @@ function addAtBatSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
     }
   }
 
-  addAccumulatorSignals(raw, rateAccumulators);
+  addContextResidualSignals(raw, rateAccumulators, overallAccumulators);
 
   for (const [pitcherId, count] of meltdownCounts) {
     const sampleSize = pitcherUnits.get(pitcherId)?.size ?? 0;
@@ -752,12 +889,15 @@ function addOutcomeRateSignals(input: SeasonTraitCandidateInput, raw: RawSignalM
   for (const [batterId, counts] of batterCounts) {
     if (counts.pa <= 0) continue;
     const kRate = counts.k / counts.pa;
-    addRawSignal(raw, batterId, 'Whiffer', { signalValue: kRate, sampleSize: counts.pa });
+    const walkRate = counts.walk / counts.pa;
+    if (walkRate <= WHIFFER_MAX_BB_RATE) {
+      addRawSignal(raw, batterId, 'Whiffer', { signalValue: kRate, sampleSize: counts.pa });
+    }
     addRawSignal(raw, batterId, 'Tough Out', { signalValue: 1 - kRate, sampleSize: counts.pa });
     addRawSignal(raw, batterId, 'Easy Target', { signalValue: kRate, sampleSize: counts.pa });
     addRawSignal(raw, batterId, 'Slow Poke', { signalValue: counts.dp / counts.pa, sampleSize: counts.pa });
     addRawSignal(raw, batterId, 'Sprinter', { signalValue: counts.fc / counts.pa, sampleSize: counts.pa });
-    addRawSignal(raw, batterId, 'Mind Gamer', { signalValue: counts.walk / counts.pa, sampleSize: counts.pa });
+    addRawSignal(raw, batterId, 'Mind Gamer', { signalValue: walkRate, sampleSize: counts.pa });
   }
 
   for (const [pitcherId, counts] of pitcherCounts) {
@@ -1423,9 +1563,12 @@ function addStealSignals(input: SeasonTraitCandidateInput, raw: RawSignalMap): v
   }
   for (const [runnerId, acc] of attempts) {
     if (acc.sampleSize <= 0) continue;
+    const speed = input.speedByPlayer?.get(runnerId);
+    if (speed == null || !Number.isFinite(speed)) continue;
     const successRate = acc.successes / acc.sampleSize;
-    addRawSignal(raw, runnerId, 'Stealer', { signalValue: successRate, sampleSize: acc.sampleSize });
-    addRawSignal(raw, runnerId, 'Bad Jumps', { signalValue: 1 - successRate, sampleSize: acc.sampleSize });
+    const residual = successRate - expectedStealSuccessRate(speed);
+    addRawSignal(raw, runnerId, 'Stealer', { signalValue: residual, sampleSize: acc.sampleSize });
+    addRawSignal(raw, runnerId, 'Bad Jumps', { signalValue: -residual, sampleSize: acc.sampleSize });
   }
   for (const [pitcherId, acc] of pitcherAttempts) {
     if (acc.sampleSize <= 0) continue;
@@ -2074,6 +2217,7 @@ function buildPeerPools(input: SeasonTraitCandidateInput, raw: RawSignalMap): Ma
       if (!isTraitEligibleForRole(traitName, player.role)) continue;
       const signal = byTrait.get(traitName);
       if (!signal || signal.sampleSize <= 0) continue;
+      if (FIXED_REALITY_TRAITS.has(traitName)) continue;
       const key = roleKey(player.role, poolTraitKey(traitName, player.playerId, input));
       pools.set(key, pools.get(key) ?? []);
       pools.get(key)?.push(signal.signalValue);
@@ -2114,14 +2258,35 @@ export function computeSeasonTraitCandidates(
         if (SP_RP_SPLIT_TRAITS.has(traitName) && peerValues.length < TRAIT_REALITY_SCORER_TUNING.minPeerPool) {
           peerValues = peerPools.get(roleKey(player.role, traitName)) ?? peerValues;
         }
-        const score = computeTraitRealityScore({
-          traitName,
-          playerRole: player.role,
-          signalValue: signal.signalValue,
-          sampleSize: signal.sampleSize,
-          peerValues,
-          basis: 'none',
-        }, config);
+        const score = FIXED_REALITY_TRAITS.has(traitName)
+          ? {
+              traitName,
+              realityPercentile:
+                signal.sampleSize >= TRAIT_REALITY_SCORER_TUNING.minSampleRate
+                  ? mapTraitResidualToRealityScore(signal.signalValue)
+                  : null,
+              sufficient: signal.sampleSize >= TRAIT_REALITY_SCORER_TUNING.minSampleRate,
+              sufficiency:
+                signal.sampleSize >= TRAIT_REALITY_SCORER_TUNING.minSampleRate
+                  ? 'sufficient' as const
+                  : 'thin_sample' as const,
+              scaledMinSample: TRAIT_REALITY_SCORER_TUNING.minSampleRate,
+              peerPoolSize: 0,
+            }
+          : computeTraitRealityScore({
+              traitName,
+              playerRole: player.role,
+              signalValue: signal.signalValue,
+              sampleSize: signal.sampleSize,
+              peerValues,
+              basis: 'none',
+            }, config);
+        // TRAIT-REALITY-1 is intentionally phased: the ten traits above use a
+        // fixed own-performance residual (or speed expectation), while every
+        // other trait remains cross-sectionally percentiled here. JK ruled on
+        // 2026-07-10 that trait measurement ultimately reflects the player's
+        // own reality; later phases will migrate the remaining families without
+        // changing rarity thresholds or likelihood machinery.
         // Emit the L9b-2 seam shape ({ traitName, score }) + raw debug fields.
         candidates.push({
           traitName,
