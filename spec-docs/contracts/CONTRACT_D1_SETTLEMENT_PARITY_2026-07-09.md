@@ -152,3 +152,128 @@ meanings and is forbidden. The minimal honest seam is AUTHORIZED, with guards:
    against a hand-derived expectation — record how you derived it in the report).
 4. This is the ONLY engine-signature change authorized in this lane. Everything else in the
    contract binds unchanged. Resume from the repro tests.
+
+---
+
+## Builder report — COMPLETE after captain ruling (2026-07-09)
+
+**Disposition:** Items 1–8 and the permanent exit gauntlet are implemented. No git write
+command was run. The pre-existing untracked `dispatch-prompt.txt` was not read, edited, or
+removed. Product files, tests, and this appended report remain in the working tree for the
+captain.
+
+### Repro-first red proof
+
+Before production edits, the five contract repro files were run together with
+`NODE_ENV= npx vitest run ... --reporter=verbose`: **5 failed, 82 passed**. The five intended
+failures were: completed-snake franchise initialization seeded no freeze baseline; the farm
+wallet omitted snake cap headroom; Franchise Setup showed no draft-complete badge; Draft
+Setup showed no `Drafted ✓`; and Run-It-Back left the snake session behind. The same repros
+are now green in the focused gates below.
+
+### Item dispositions
+
+1. **COMPLETE — settlement stamp and roster commit.**
+   `commitCompletedSnakeSessionToLeagueRosters` is at
+   `src/utils/leagueBuilderAuctionPipeline.ts:385-449`. It rejects an incomplete cursor,
+   prevalidates every unique winner against RegisteredPool before any roster write, commits
+   the completed picks by team, and stamps source `salary` plus `settledSalary` at IV through
+   the canonical assignment writer. The persisted pick shape now tolerates optional
+   `settledSalary` at `src/utils/leagueBuilderStorage.ts:349-358`; legacy rows without it are
+   covered. Focused commit coverage is at
+   `src/utils/tests/draftPipeline.integration.test.ts:2059-2156`.
+2. **COMPLETE — shared completion truth.**
+   `src/utils/mlbDraftCompletion.ts:7-51` defines the auction and snake predicates plus the
+   single combined read/API. Snake completion is exactly
+   `currentPickIndex >= pickOrder.length`.
+3. **COMPLETE — all six gate sites are format-aware.**
+   Franchise readiness/freeze uses the combined read at
+   `src/utils/franchiseInitializer.ts:110-127,784-844`; duplicate-league protection uses it at
+   `src/src_figma/hooks/useLeagueBuilderData.ts:419`; Draft Setup resume/Run-It-Back uses it at
+   `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:1593-1615`; Franchise Setup badges use
+   it at `src/src_figma/app/pages/FranchiseSetup.tsx:199-210`; farm initialization uses it at
+   `src/src_figma/app/hooks/useFarmAuctionDraft.ts:222-248`; and item 1 carries the completed-
+   or-throw roster guard. The split Draft Setup harnesses also mock both storage reads so the
+   shared fail-closed lookup is exercised without accidental IndexedDB fallthrough.
+4. **COMPLETE — authorized optional pay-class seam and snake freeze adapter.**
+   The sole engine-signature change is the optional field at
+   `src/engines/draftFreeze.ts:28-33`, passed at `:97-101`, and consumed with the old auction
+   classifier as the unchanged fallback at `src/engines/draftMorale.ts:80-92`. The snake-only
+   adapter is `src/utils/draftFreezeInputs.ts:61-105`: completed-pick order, RegisteredPool IV
+   settlement, deterministic IV rank, `max(3, round(.05 * totalPicks))`, exact reach/within/
+   fall boundaries, and no shill exclusion. The auction builder never owns or sets
+   `payClassOverride`.
+
+   The mandatory pre-change auction tripwire is pinned at
+   `src/engines/__tests__/draftFreeze.test.ts:197-292` and asserts the complete freeze object
+   deep-equal. Its hand derivation was: three won players become early/middle/late; scout
+   ranges classify above/within/below for pay bases +10/0/-10; undefined personality follows
+   the existing RELAXED matrix multipliers (positive ×0.85, negative ×0.75); payroll ranks
+   1/.5/0 produce fan morale 20/50/35. It was green against the unmodified engine before the
+   optional seam (**12/12** across freeze engine + adapter), and is green after it. Adapter
+   coverage also asserts auction inputs have no own override property.
+5. **COMPLETE — Run-It-Back.** Snake storage is read with the reset arc and deleted at
+   `src/utils/leagueBuilderAuctionPipeline.ts:491-511`; the persistent integration test proves
+   the row is gone.
+6. **COMPLETE — snake farm carryover.** Per-team cap headroom is derived from completed-pick
+   settlement/IV at `src/utils/mlbDraftCompletion.ts:53-86`, selected only for the snake path
+   at `src/src_figma/app/hooks/useFarmAuctionDraft.ts:222-241`, and fed to the unchanged
+   `computeMlbToFarmCarryover`. The auction branch still reads its persisted team
+   `budgetRemaining`. The live hook repro is at
+   `src/src_figma/app/hooks/__tests__/useFarmAuctionDraft.test.ts:411-478`.
+7. **COMPLETE — canonical roster shape.** The page-local roster factory is deleted;
+   `src/src_figma/app/pages/LeagueBuilderSnakeDraft.tsx:160` now uses
+   `createEmptyTeamRoster`. No routing or other page UI was changed.
+8. **COMPLETE — verify-read, no change required.** `deepCopyLeagueToFranchise` begins at
+   `src/utils/franchisePlayerStorage.ts:538`. It loads the league/all players/all teams/scouts
+   at `:543-553`, reads each generic TeamRoster with `getTeamRoster` at `:563-566`, merges the
+   generic roster at `:567-573`, applies those roster assignments to the copied players at
+   `:575-595`, and validates that same handoff at `:598-625`. There is no auction-session read,
+   auction result dependency, or auction-specific roster branch.
+
+### Exit gauntlet and auction parity
+
+The permanent six-case test is
+`src/utils/tests/draftPipeline.integration.test.ts:1344-1545`. Each deterministic case runs
+four teams through 22 snake rounds (88 picks) with need-aware positional selection, commits,
+adds the required farm/scout handoff, and initializes a franchise. Every case asserts legal
+22/10 counts, source `salary = settledSalary = IV`, franchise `settledSalary = IV`, per-team
+cap-headroom carryover, 88 player plus four team-fan morale baselines, and 88 draft-baseline
+TrueValue rows with `contractValue = trueValue = IV`. For 88 picks the threshold is four:
+pick 1 taking IV-rank 5 asserts the exact reach boundary (`above`, +10), and pick 5 taking
+IV-rank 1 asserts the exact fall boundary (`below`, -10). Isolated result: **1 passed** (all
+six cases) in 4.28s; complete pipeline file: **16/16 passed** in 14.47s.
+
+Auction parity is covered in the same integration file by the existing deterministic full
+MLB-auction → farm-auction → franchise pipeline, which ran twice and deep-equaled both end
+states before the snake gauntlet assertions. The mandatory full-output freeze tripwire above
+separately pins auction morale, payroll, fan morale, ordering, and pay classification. The
+auction adapter continues to omit the override property.
+
+### Gates
+
+- `npx tsc -b --pretty false`: **exit 0**, including a final run after split-test harness
+  integration.
+- `npm run build`: **exit 0**; Vite built 2,648 modules in 11.59s. Only the repository's
+  existing Browserslist, mixed dynamic/static import, and chunk-size warnings were emitted.
+- Engine/storage/freeze/farm/initializer focused batch: **8 files, 60/60 passed**.
+- Full draft-pipeline integration file: **1 file, 16/16 passed**.
+- Franchise Setup variants plus duplicate-league guard: **4 files, 55/55 passed** (existing
+  React `act(...)` warnings only).
+- Draft Setup six-file split gate after adding the required snake-read mocks: **106/107
+  passed** in the combined contention run; the contract-characterized two-way-toggle test was
+  the lone timeout and passed immediately solo (**1/1**, 0.994s). An earlier combined attempt
+  exposed and led to fixing the missing snake-read mocks rather than weakening the fail-closed
+  product guard.
+- Required single full `NODE_ENV= npx vitest run --reporter=dot`: **617 files passed, 1 file
+  failed, 7 files skipped; 9,516 tests passed, 2 failed, 11 skipped** in 245.63s. Both failures
+  were full-suite-contention timeouts in pre-existing Draft Setup numeric-pool tests
+  (`quality-center changes preserve user-added hard keeps and manual exclusions` and
+  `switching from balanced to grounded can shrink engine-generated slack`); no D1 test was
+  red. Those two tests had already passed in the focused split run and passed together on the
+  immediate prescribed solo rerun (**2/2**, 6.60s). Per the contract's one-full-run rule, the
+  full suite was not rerun a second time.
+
+**STOP items:** none after the captain authorized the exact optional seam. No new product
+failure reproduced in focused or solo verification. The two full-suite timeouts and their
+green solo characterization are recorded above for the auditor rather than hidden.
