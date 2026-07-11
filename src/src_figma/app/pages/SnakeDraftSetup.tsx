@@ -15,6 +15,7 @@ import {
   getAllLeagueTemplates,
   getAllPlayers,
   getAllTeams,
+  getRegisteredPool,
   getPlayerLeagueAssignment,
   resolveLeagueSalaryCap,
   saveMlbDraftSession,
@@ -24,6 +25,13 @@ import {
   type Player,
   type Team,
 } from '../../../utils/leagueBuilderStorage';
+import { registerLeaguePoolForLeague } from '../../../utils/leagueBuilderPoolRegistration';
+import {
+  addPlayersToLeaguePool,
+  lockLeaguePool,
+  removePlayersFromLeaguePool,
+  unlockLeaguePool,
+} from '../../../utils/leagueBuilderPoolBuilder';
 import { demandPlayerFromLeaguePlayer } from '../engines/leaguePlayerAdapter';
 
 export interface SnakeSetupPlayer extends SnakeSeatingPlayer {
@@ -119,6 +127,29 @@ function duplicateIdentityWarnings(players: readonly SnakeSetupPlayer[]): string
     if (cards.length < 2 || cards.every((card) => Boolean(card.sourceId?.trim() || card.versionGroupId?.trim()))) return [];
     return [`TWO CARDS NAMED ${name} — TREATED AS DIFFERENT PEOPLE. REBUILD THE POOL FROM THE LEGENDS LIBRARY TO LINK THEM.`];
   });
+}
+
+function samePlayerIds(left: readonly string[], right: readonly string[]): boolean {
+  const sortedLeft = [...new Set(left)].sort((a, b) => a.localeCompare(b));
+  const sortedRight = [...new Set(right)].sort((a, b) => a.localeCompare(b));
+  return sortedLeft.length === sortedRight.length
+    && sortedLeft.every((id, index) => id === sortedRight[index]);
+}
+
+async function registerPickedSnakePool(leagueId: string, pickedPlayerIds: readonly string[]): Promise<void> {
+  const picked = [...new Set(pickedPlayerIds)];
+  const existing = await getRegisteredPool(leagueId);
+  if (existing?.locked && samePlayerIds(existing.players.map((row) => row.id), picked)) return;
+  if (existing?.locked) await unlockLeaguePool(leagueId);
+
+  const defaultPool = await registerLeaguePoolForLeague(leagueId);
+  const defaultIds = new Set(defaultPool.players.map((row) => row.id));
+  const pickedIds = new Set(picked);
+  const toAdd = picked.filter((id) => !defaultIds.has(id));
+  const toRemove = [...defaultIds].filter((id) => !pickedIds.has(id));
+  if (toAdd.length > 0) await addPlayersToLeaguePool(toAdd, leagueId);
+  if (toRemove.length > 0) await removePlayersFromLeaguePool(toRemove, leagueId);
+  await lockLeaguePool(leagueId, { expectedPlayerIds: picked });
 }
 
 function setupCard(title: string, children: React.ReactNode) {
@@ -283,6 +314,11 @@ export function SnakeDraftSetup({
   async function startDraft() {
     if (!proof?.feasible || checking || order.length === 0) return;
     const targetLeagueId = leagueIdProp ?? league?.id ?? params.get('leagueId') ?? 'snake-draft';
+    const pickedPlayerIds = proofPool.map((player) => player.playerId);
+    // ROOMFIX: the room reads a league-keyed registered pool with no fallback. Seed and lock the
+    // exact version-picked membership before the session exists; registering the league's default
+    // assignment membership alone can produce a technically-present but empty room.
+    if (league) await registerPickedSnakePool(targetLeagueId, pickedPlayerIds);
     const now = new Date().toISOString();
     const session: LeagueBuilderMlbDraftSession = {
       id: createMlbDraftSessionId(targetLeagueId, 1),
@@ -297,7 +333,7 @@ export function SnakeDraftSetup({
       pickOrder: buildSnakeOrder(order, 22),
       completedPicks: [],
       snakeSetup: {
-        poolPlayerIds: proofPool.map((player) => player.playerId),
+        poolPlayerIds: pickedPlayerIds,
         versionSelections: Object.fromEntries(groups
           .filter(({ cards }) => cards.length > 1)
           .map(({ groupId, cards }) => [
