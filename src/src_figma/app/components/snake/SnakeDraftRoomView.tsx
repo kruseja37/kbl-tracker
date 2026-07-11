@@ -53,11 +53,14 @@ export interface SnakeDraftRoomViewProps {
   soundsEnabled: boolean;
   correctionAvailable: boolean;
   tradeRevision?: number;
+  livePickMoveRevision?: number;
   hotseatNextName?: string | null;
   practiceMode?: boolean;
   privateSnipeKey?: string | null;
   dangerKey?: string | null;
   privateDesk?: ReactNode;
+  tradeGuide?: ReactNode;
+  commissionerTrade?: ReactNode;
   onPauseChange: (paused: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
@@ -72,10 +75,11 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const [state, dispatch] = useReducer(snakeRoomReducer, props.paused, createSnakeRoomState);
   const [lensId, setLensId] = useState(props.activeSeatId ?? props.teams[0]?.id ?? null);
   const [passCoverOpen, setPassCoverOpen] = useState(Boolean(props.hotseatNextName));
+  const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedHold = useRef(false);
   const stateRef = useRef(state);
-  const priorTradeRevision = useRef(props.tradeRevision ?? 0);
+  const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
   const soundPlayer = useMemo(() => createSnakeSoundPlayer(props.soundsEnabled), [props.soundsEnabled]);
   const currentOrder = props.order[props.currentPickIndex];
   const currentTeam = props.teams.find((team) => team.id === currentOrder?.teamId);
@@ -106,13 +110,13 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   }, [props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName]);
 
   useEffect(() => {
-    const nextRevision = props.tradeRevision ?? 0;
-    if (nextRevision !== priorTradeRevision.current) {
+    const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;
+    if (nextRevision !== priorLivePickMoveRevision.current) {
       cancelHold();
       dispatch({ type: 'LIVE_PICK_MOVED' });
     }
-    priorTradeRevision.current = nextRevision;
-  }, [props.tradeRevision]);
+    priorLivePickMoveRevision.current = nextRevision;
+  }, [props.livePickMoveRevision, props.tradeRevision]);
 
   useEffect(() => {
     if (reveal.revealed && props.privateSnipeKey) soundPlayer.play('snipe');
@@ -207,9 +211,20 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           >
             <RotateCcw size={15} /> CORRECT LAST ACTION
           </button>
-          <span className="ballpark-press-button ballpark-press-sm ballpark-press-default opacity-60">TRADE APPROVAL — S4</span>
+          {props.tradeGuide && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'GUIDE' ? null : 'GUIDE')}>THE GUIDE</button>}
+          {props.commissionerTrade && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'TRADE' ? null : 'TRADE')}>TRADE</button>}
         </div>
       </header>
+
+      {openRoomTool && (
+        <section className="ballpark-panel mb-5" aria-label={openRoomTool === 'GUIDE' ? 'Shared trade guide' : 'Commissioner trade flow'}>
+          <div className="ballpark-panel-strip mb-4 flex items-center justify-between">
+            <span className="font-bold">{openRoomTool === 'GUIDE' ? 'THE GUIDE' : 'COMMISSIONER TRADE'}</span>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool(null)}>CLOSE</button>
+          </div>
+          {openRoomTool === 'GUIDE' ? props.tradeGuide : props.commissionerTrade}
+        </section>
+      )}
 
       {props.practiceMode && <p className="mb-3 border-2 border-[var(--ballpark-brass)] p-2 text-sm font-bold">PRACTICE MODE — PAUSE AND CORRECTION WORK THE SAME.</p>}
       {props.paused && <p className="mb-3 bg-[var(--ballpark-warn-panel)] p-3 font-bold text-[var(--ballpark-warn-text)]">THE DRAFT IS PAUSED</p>}

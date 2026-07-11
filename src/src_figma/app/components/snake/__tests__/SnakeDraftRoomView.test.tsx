@@ -36,6 +36,19 @@ describe('SnakeDraftRoomView', () => {
     fireEvent.click(screen.getByRole('button', { name: /REVEAL .* SEAT/ }));
     expect(screen.getByText('SECRET BOARD CONTENT')).toBeInTheDocument();
   });
+  it('opens the public guide and commissioner trade from separate shared-main buttons', () => {
+    render(<SnakeDraftRoomView {...props({
+      tradeGuide: <div>PUBLIC POSTED PRICE CHART</div>,
+      commissionerTrade: <div>COMMISSIONER EXECUTE OR DECLINE</div>,
+    })} />);
+    expect(screen.queryByText('PUBLIC POSTED PRICE CHART')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'THE GUIDE' }));
+    expect(screen.getByText('PUBLIC POSTED PRICE CHART')).toBeInTheDocument();
+    expect(screen.queryByText('COMMISSIONER EXECUTE OR DECLINE')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
+    expect(screen.queryByText('PUBLIC POSTED PRICE CHART')).not.toBeInTheDocument();
+    expect(screen.getByText('COMMISSIONER EXECUTE OR DECLINE')).toBeInTheDocument();
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

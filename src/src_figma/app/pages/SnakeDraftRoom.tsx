@@ -6,8 +6,10 @@ import {
   normalizeAuctionLuxuryCapsForLeagueSize,
 } from '../../../engines/auctionLuxuryTax';
 import { computeOwnValue } from '../../../engines/auctionMarketModel';
+import { derivePickValueChart } from '../../../engines/leagueConstruction';
 import { evaluateSnakeLegalFinish, evaluateSnakePlan, evaluateSnakePlanWhatIf } from '../../../engines/snakeEconomics';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../../engines/snakeSession';
+import type { SimultaneousSnakeSeatingInput } from '../../../engines/snakeSeatingProof';
 import { unavailableVersionPlayerIds } from '../../../engines/snakeVersioning';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../engines/rosterNeed';
 import { assembleBoard } from '../../../engines/rosterIntelligencePayload';
@@ -36,6 +38,13 @@ import {
 } from '../components/snake/desk/deskRoomModel';
 import type { DeskWhatIf } from '../components/snake/desk/WhatIfSandbox';
 import type { SnakeBoardSlotId, SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
+import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
+import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
+import {
+  executeAskedPickTrade,
+  guideForAskedPick,
+  type ExecutedAskedPickTrade,
+} from '../components/snake/trade/tradeGuideModel';
 
 const SEASON_NUMBER = 1;
 
@@ -75,7 +84,9 @@ export default function SnakeDraftRoom() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [advisorLogBySeat, setAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
+  const [tradeReceiptsBySeat, setTradeReceiptsBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
+  const [livePickMoveRevision, setLivePickMoveRevision] = useState(0);
 
   const loadSession = useCallback(async () => {
     if (!league) return;
@@ -140,6 +151,34 @@ export default function SnakeDraftRoom() {
     }];
   }), [activePoolRows, playerById]);
   const seatingById = useMemo(() => new Map(seatingPlayers.map((player) => [player.playerId, player])), [seatingPlayers]);
+  const pickValueChart = useMemo(() => derivePickValueChart(activePoolRows.map((row) => row.iv))
+    .slice(0, session?.pickOrder.length ?? 0), [activePoolRows, session?.pickOrder.length]);
+  const seatingProofInput = useMemo<SimultaneousSnakeSeatingInput | null>(() => {
+    if (!session || !pool) return null;
+    return {
+      clubs: leagueTeams.map((team) => {
+        const completed = session.completedPicks.filter((pick) => pick.teamId === team.id);
+        const roster = completed.flatMap((pick) => {
+          const row = seatingById.get(pick.playerId);
+          return row ? [row] : [];
+        });
+        const committedSpent = completed.reduce((sum, pick) => (
+          sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? 0) + (pick.marginalTax ?? 0)
+        ), 0);
+        return {
+          teamId: team.id,
+          roster,
+          budgetRemaining: pool.tierCap - committedSpent,
+          committedConstruction: roster.map((player) => player.construction),
+          capIdentity: resolveLockedSeat({ team, session }).capIdentity,
+        };
+      }),
+      pool: seatingPlayers.filter((player) => !unavailable.has(player.playerId)),
+      baseCaps: pool.luxuryCaps,
+      realTeamCount: leagueTeams.length,
+      versionState: session.versionState,
+    };
+  }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
   const deskRoomPlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);
@@ -487,8 +526,54 @@ export default function SnakeDraftRoom() {
   }, [persist, session]);
   const correctLatest = useCallback(async () => {
     if (!session?.correctionSnapshots?.[0]) return;
-    await persist(restoreLatestSnakeCorrection(session));
+    const correctedTradeId = session.correctionSnapshots[0].action === 'trade' ? session.trades?.at(-1)?.id : null;
+    const restored = restoreLatestSnakeCorrection(session);
+    const liveOwnerBefore = session.pickOrder[session.currentPickIndex]?.teamId ?? null;
+    const liveOwnerAfter = restored.pickOrder[restored.currentPickIndex]?.teamId ?? null;
+    await persist(restored);
+    if (correctedTradeId) {
+      setTradeReceiptsBySeat((current) => Object.fromEntries(Object.entries(current).map(([teamId, entries]) => [
+        teamId,
+        entries.filter((entry) => !entry.key.startsWith(`trade:${correctedTradeId}:`)),
+      ])));
+      if (liveOwnerBefore !== liveOwnerAfter) setLivePickMoveRevision((revision) => revision + 1);
+    }
   }, [persist, session]);
+
+  const askTradeGuide = useCallback((buyerTeamId: string, targetPick: number) => {
+    if (!session || !seatingProofInput) {
+      return { message: `No legal guide trade reaches pick ${targetPick}.`, proposal: null, nextPickMoves: [] };
+    }
+    return guideForAskedPick({ session, pickValueChart, seatingProofInput, buyerTeamId, targetPick });
+  }, [pickValueChart, seatingProofInput, session]);
+
+  const executeTrade = useCallback(async (proposal: Parameters<typeof executeAskedPickTrade>[0]['proposal']): Promise<ExecutedAskedPickTrade> => {
+    if (!session || !seatingProofInput) {
+      return { valid: false, message: 'The draft moved on — refresh.', session: null, livePickMoved: false, receipts: [] };
+    }
+    const result = executeAskedPickTrade({ session, pickValueChart, seatingProofInput, proposal });
+    if (!result.valid || !result.session) return result;
+    try {
+      await persist(result.session);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      setActionError(message);
+      return { valid: false, message: 'THE TRADE WAS NOT SAVED. TRY AGAIN.', session: null, livePickMoved: false, receipts: [] };
+    }
+    const tradeId = result.session.trades?.at(-1)?.id ?? `revision-${result.session.revision ?? 0}`;
+    setTradeReceiptsBySeat((current) => {
+      const next = { ...current };
+      for (const receipt of result.receipts) {
+        next[receipt.teamId] = [
+          ...(next[receipt.teamId] ?? []),
+          { key: `trade:${tradeId}:${receipt.teamId}`, text: receipt.text, actionable: true },
+        ];
+      }
+      return next;
+    });
+    if (result.livePickMoved) setLivePickMoveRevision((revision) => revision + 1);
+    return result;
+  }, [persist, pickValueChart, seatingProofInput, session]);
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
@@ -513,6 +598,7 @@ export default function SnakeDraftRoom() {
       soundsEnabled={soundsEnabled}
       correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
       tradeRevision={session.trades?.length ?? 0}
+      livePickMoveRevision={livePickMoveRevision}
       practiceMode={session.workflowVersion.toLowerCase().includes('practice')}
       privateSnipeKey={privateSnipeKey}
       dangerKey={candidate?.blockReason ? `${candidate.id}:${candidate.blockReason}` : null}
@@ -523,7 +609,10 @@ export default function SnakeDraftRoom() {
           boardSlots={deskState.board.slots}
           brokenSlots={deskState.brokenSlots}
           planBill={deskState.planBill}
-          advisorLog={advisorLogBySeat[currentTeam?.id ?? ''] ?? []}
+          advisorLog={[
+            ...(tradeReceiptsBySeat[currentTeam?.id ?? ''] ?? []),
+            ...(advisorLogBySeat[currentTeam?.id ?? ''] ?? []),
+          ]}
           taxCoreRows={deskState.taxCoreRows}
           slotDepth={deskState.slotDepth}
           whatIf={whatIf?.view ?? null}
@@ -531,8 +620,28 @@ export default function SnakeDraftRoom() {
           onStartWhatIf={startWhatIf}
           onKeepWhatIf={() => { void keepWhatIf(); }}
           onRevertWhatIf={() => setWhatIf(null)}
+          tradeGuide={<SnakeTradeGuide
+            teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+            fixedBuyerTeamId={currentTeam?.id ?? null}
+            pickValueChart={pickValueChart}
+            sessionRevision={session.revision ?? 0}
+            onAsk={askTradeGuide}
+          />}
         />
       ) : null}
+      tradeGuide={<SnakeTradeGuide
+        teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+        pickValueChart={pickValueChart}
+        sessionRevision={session.revision ?? 0}
+        onAsk={askTradeGuide}
+      />}
+      commissionerTrade={<SnakeCommissionerTrade
+        teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+        ownedPicksByTeamId={ownedPicksByTeamId}
+        sessionRevision={session.revision ?? 0}
+        onAsk={askTradeGuide}
+        onExecute={executeTrade}
+      />}
       onPauseChange={(paused) => void setPaused(paused)}
       onRecordPick={recordPick}
       onCorrectLatest={correctLatest}
