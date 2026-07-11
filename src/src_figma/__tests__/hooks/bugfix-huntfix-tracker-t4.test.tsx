@@ -1,5 +1,8 @@
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { appendDetectedFameEvents } from '../../app/hooks/useFameTracking';
+import { detectWalkOffHREvent } from '../../app/engines/fameAutoDetections';
+import type { AtBatEvent } from '../../../utils/eventLog';
 import {
   initializeGame,
   getHarnessMocks,
@@ -211,5 +214,117 @@ describe('HUNTFIX-TRACKER-1 T4 fame undo linkage', () => {
     expect(archivedFame).toHaveLength(1);
     expect(archivedFame[0].eventType).toBe('IMMACULATE_INNING');
     expect(processedFameEvents()).toHaveLength(1);
+  });
+
+  test('auto-detected walk-off reaches the archive exactly once', async () => {
+    const { result } = renderGameStateHook();
+    await initializeGame(result, 'fame-cleanup-walkoff');
+    const sourceAtBat = {
+      eventId: 'fame-cleanup-walkoff_27',
+      result: 'HR',
+      isWalkOff: true,
+      halfInning: 'BOTTOM',
+      inning: 9,
+      batterId: 'home-batter-1',
+      batterName: 'Home Batter 1',
+      leverageIndex: 4.2,
+    } as AtBatEvent;
+    const detections = detectWalkOffHREvent(sourceAtBat, 9);
+    const recordedDetectionKeys = new Set<string>();
+
+    act(() => {
+      appendDetectedFameEvents({
+        events: detections,
+        recordedDetectionKeys,
+        appendFameEvent: result.current.appendFameEvent,
+        sourceEventIds: [sourceAtBat.eventId],
+      });
+      appendDetectedFameEvents({
+        events: detections,
+        recordedDetectionKeys,
+        appendFameEvent: result.current.appendFameEvent,
+        sourceEventIds: [sourceAtBat.eventId],
+      });
+    });
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    expect(processedFameEvents()).toHaveLength(1);
+    expect(processedFameEvents()[0]).toMatchObject({
+      eventType: 'WALK_OFF_HR',
+      playerId: 'home-batter-1',
+      sourceEventIds: [sourceAtBat.eventId],
+    });
+  });
+
+  test('game-end detection is archived unlinked before final persistence', async () => {
+    const { result } = renderGameStateHook();
+    await initializeGame(result, 'fame-cleanup-game-end');
+
+    act(() => {
+      appendDetectedFameEvents({
+        events: [{
+          detectionKey: 'game-end:fame-cleanup-game-end:PERFECT_GAME:home-sp',
+          eventType: 'PERFECT_GAME',
+          playerId: 'home-sp',
+          playerName: 'Home Starter',
+          inning: 9,
+          halfInning: 'BOTTOM',
+          leverageIndex: 1,
+        }],
+        recordedDetectionKeys: new Set<string>(),
+        appendFameEvent: result.current.appendFameEvent,
+      });
+    });
+
+    await act(async () => {
+      await result.current.endGame();
+    });
+
+    expect(processedFameEvents()).toHaveLength(1);
+    expect(processedFameEvents()[0]).toMatchObject({
+      eventType: 'PERFECT_GAME',
+      playerId: 'home-sp',
+    });
+    expect(processedFameEvents()[0]).not.toHaveProperty('sourceEventIds');
+  });
+
+  test('web-gem provenance makes undo remove its fame from the archive', async () => {
+    const { result } = renderGameStateHook();
+    await initializeGame(result, 'fame-cleanup-web-gem');
+    const sourceEventId = 'fame-cleanup-web-gem_1';
+
+    act(() => {
+      result.current.startGame();
+    });
+
+    await act(async () => {
+      await result.current.recordEvent('WEB_GEM', 'home-batter-2', {
+        actorId: 'home-batter-2',
+        actorName: 'Home Batter 2',
+        sourceEventIds: [sourceEventId],
+      });
+    });
+
+    mocks.getGameEvents
+      .mockResolvedValueOnce([{ eventId: sourceEventId }])
+      .mockResolvedValueOnce([{ eventId: sourceEventId, undoneAt: 1 }]);
+    mocks.getBetweenPlayEvents
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    mocks.undoMostRecentGameAction.mockResolvedValueOnce({
+      kind: 'atBat',
+      eventId: sourceEventId,
+      eventIndex: 1,
+    });
+
+    await act(async () => {
+      await result.current.undoLastAction({ skipReload: true });
+      await result.current.endGame();
+    });
+
+    expect(processedFameEvents()).toEqual([]);
   });
 });

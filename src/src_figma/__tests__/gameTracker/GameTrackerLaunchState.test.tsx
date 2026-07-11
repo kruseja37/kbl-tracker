@@ -59,6 +59,7 @@ const mocks = vi.hoisted(() => {
       playerStats: new Map(),
       pitcherStats: new Map(),
       commitPlateAppearance: vi.fn(),
+      appendFameEvent: vi.fn(),
       recordEvent: vi.fn(),
       recordPlayerStateChange: vi.fn(),
       reassignRunnerEventAttribution: vi.fn(),
@@ -159,20 +160,6 @@ vi.mock("@/app/hooks/usePlayerState", () => ({
   formatMultiplier: vi.fn((value: number) => `${value}`),
 }));
 
-vi.mock("@/app/hooks/useFameTracking", () => ({
-  useFameTracking: () => ({
-    showEventPopup: false,
-    lastEvent: null,
-    recordFameEvent: vi.fn(),
-    dismissEventPopup: vi.fn(),
-    getPlayerFame: vi.fn(() => 0),
-    fameEvents: [],
-  }),
-  formatFameValue: vi.fn((value: number) => `${value}`),
-  getFameColor: vi.fn(() => "#ffffff"),
-  getLITier: vi.fn(() => ({ label: "Low" })),
-}));
-
 vi.mock("@/app/hooks/useCommentaryFeed", () => ({
   useCommentaryFeed: () => ({
     commentaryEntries: [],
@@ -218,7 +205,8 @@ vi.mock("../../../utils/careerStorage", () => ({
   getCareerStats: mocks.mockGetCareerStats,
 }));
 
-vi.mock("../../../utils/milestoneDetector", () => ({
+vi.mock("../../../utils/milestoneDetector", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../utils/milestoneDetector")>()),
   getApproachingMilestones: vi.fn(() => []),
 }));
 
