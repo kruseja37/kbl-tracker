@@ -36,7 +36,7 @@ export function SnakeTradeGuide(props: {
     <section aria-label="The trade guide">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">POSTED PICK PRICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">THE GUIDE</h2>
-      <p className="mt-2 text-sm">Choose the pick. The guide checks the posted prices and whether both clubs can still finish their teams.</p>
+      <p className="mt-2 text-sm">CHOOSE A PICK. THE GUIDE CHECKS THE PRICE AND MAKES SURE BOTH CLUBS CAN STILL FINISH THEIR TEAMS.</p>
 
       {!props.fixedBuyerTeamId && (
         <label className="mt-4 block text-sm font-bold">
@@ -49,6 +49,7 @@ export function SnakeTradeGuide(props: {
 
       <label className="mt-4 block text-sm font-bold">
         WHAT WOULD IT COST TO REACH PICK N?
+        <span className="mt-1 block text-xs">ENTER THE PICK NUMBER YOU WANT.</span>
         <input
           aria-label="WHAT WOULD IT COST TO REACH PICK N?"
           className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2"

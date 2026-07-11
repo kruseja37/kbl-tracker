@@ -28,7 +28,7 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
     <section className="ballpark-panel" aria-label="Companion approvals">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
-      <p className="mt-2 text-sm">Use this code only on the league owner's signed-in devices at the table.</p>
+      <p className="mt-2 text-sm">USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
       <div className="mt-4 grid gap-3">
         {companions.claims.filter((claim) => claim.status === 'pending').map((claim) => (
           <div key={claim.deviceId} className="border-4 border-[var(--ballpark-panel-border)] p-3">

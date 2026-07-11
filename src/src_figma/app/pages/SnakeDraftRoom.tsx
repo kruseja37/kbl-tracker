@@ -47,6 +47,7 @@ import {
 import type { DeskWhatIf } from '../components/snake/desk/WhatIfSandbox';
 import type { SnakeBoardSlotId, SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
+import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
 import {
   executeAskedPickTrade,
@@ -66,6 +67,7 @@ import type { ProspectScoutDescriptor } from '../../../utils/prospectScoutingDra
 import { buildLiveScoutPool } from '../utils/draftStaffingPersistence';
 import { commitCompletedSnakeFarmSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
 import { staffHireRouteForLeague } from '../utils/draftRouting';
+import { loadSnakeSoundsEnabled, saveSnakeSoundsEnabled } from '../../utils/snakeSounds';
 
 const SEASON_NUMBER = 1;
 
@@ -106,7 +108,7 @@ function FarmSnakeRoom() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadDone, setLoadDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [soundsEnabled, setSoundsEnabled] = useState(true);
+  const [soundsEnabled, setSoundsEnabled] = useState(loadSnakeSoundsEnabled);
   const [farmAdvisorLogBySeat, setFarmAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
 
   const loadFarm = useCallback(async () => {
@@ -267,7 +269,7 @@ function FarmSnakeRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><p>THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE FARM ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p>{actionError ?? error}</p></main>;
+  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p></main>;
   if (!league || !session || !farmPool || !currentSlot) return <main className="ballpark-page"><p>THE FARM ROOM IS NOT READY.</p></main>;
   return <SnakeDraftRoomView
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
@@ -286,7 +288,7 @@ function FarmSnakeRoom() {
     onPauseChange={(paused) => { void persist({ ...session, paused, revision: (session.revision ?? 0) + 1 }); }}
     onRecordPick={recordPick}
     onCorrectLatest={() => { void persist(restoreLatestSnakeCorrection(session)); }}
-    onSoundsEnabledChange={setSoundsEnabled}
+    onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
     onDraftComplete={finishFarm}
   />;
 }
@@ -316,7 +318,7 @@ function MlbSnakeDraftRoom() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof getMlbDraftSession>>>(null);
   const [loadDone, setLoadDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [soundsEnabled, setSoundsEnabled] = useState(true);
+  const [soundsEnabled, setSoundsEnabled] = useState(loadSnakeSoundsEnabled);
   const [advisorLogBySeat, setAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [tradeReceiptsBySeat, setTradeReceiptsBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
@@ -549,8 +551,8 @@ function MlbSnakeDraftRoom() {
       const legalFinishLine = !finish.feasible
         ? 'THIS PICK LEAVES NO LEGAL 22.'
         : finish.legalFinishCushion < 0
-          ? `LEGAL-FINISH CUSHION: SHORT $${Math.abs(Math.round(finish.legalFinishCushion)).toLocaleString()}.`
-          : `LEGAL-FINISH CUSHION: $${Math.round(finish.legalFinishCushion).toLocaleString()} LEFT.`;
+        ? `YOU ARE $${Math.abs(Math.round(finish.legalFinishCushion)).toLocaleString()} SHORT AFTER SAVING ENOUGH TO FINISH YOUR TEAM.`
+        : `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM: $${Math.round(finish.legalFinishCushion).toLocaleString()}.`;
       return {
         id: player.playerId,
         name: fullName(player.stored.firstName, player.stored.lastName).toUpperCase(),
@@ -563,8 +565,8 @@ function MlbSnakeDraftRoom() {
         fitWord: fitWord({ player, priorities: locked.priorities, need, openSlots }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
         riskReason: risk
-          ? `${risk.rationalBuyersBeforeTurn} RATIONAL ${risk.rationalBuyersBeforeTurn === 1 ? 'BUYER' : 'BUYERS'} BEFORE YOUR TURN.`
-          : 'NO RATIONAL BUYER BEFORE YOUR TURN.',
+          ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.`
+          : 'NO CLUB IS LIKELY TO TAKE HIM BEFORE YOUR TURN.',
         legalFinishLine,
         construction: player.construction,
         drafted: unavailable.has(player.playerId),
@@ -599,8 +601,8 @@ function MlbSnakeDraftRoom() {
         boardFallout: boardSlot
           ? `FITS YOUR BOARD — ${boardSlot} SLOT`
           : targetSlot
-            ? `OFF-BOARD: TAKING HIM BUMPS YOUR ${targetSlot} PLAN TO DEPTH.`
-            : `OFF-BOARD: CHOOSE A SLOT TO PRICE THE CHANGE.`,
+            ? `NOT ON YOUR BOARD: TAKING HIM PUSHES YOUR ${targetSlot} PLAN DOWN TO A BACKUP.`
+            : `NOT ON YOUR BOARD: CHOOSE A SLOT TO PRICE THE CHANGE.`,
       };
     });
     const candidateById = new Map(displayCandidates.map((candidate) => [candidate.id, candidate]));
@@ -635,7 +637,7 @@ function MlbSnakeDraftRoom() {
           ? [{
               key: `risk:${playerId}`,
               playerId,
-              text: `${player.name} → LIKELY GONE — ${risk.rationalBuyersBeforeTurn} RATIONAL ${risk.rationalBuyersBeforeTurn === 1 ? 'BUYER' : 'BUYERS'} BEFORE YOUR TURN.`,
+              text: `${player.name} → LIKELY GONE — ${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.`,
               actionable: true,
             }]
           : [];
@@ -811,7 +813,7 @@ function MlbSnakeDraftRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4">{actionError ?? error}</p></div></main>;
+  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p></div></main>;
   if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">FINISH SNAKE DRAFT SETUP FIRST.</p></div></main>;
 
   return (
@@ -876,10 +878,15 @@ function MlbSnakeDraftRoom() {
         onAsk={askTradeGuide}
         onExecute={executeTrade}
       />}
+      companionApproval={<CompanionApprovalCard
+        session={session}
+        teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+        onChange={(next) => void persist(next)}
+      />}
       onPauseChange={(paused) => void setPaused(paused)}
       onRecordPick={recordPick}
       onCorrectLatest={correctLatest}
-      onSoundsEnabledChange={setSoundsEnabled}
+      onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
     />
   );
 }

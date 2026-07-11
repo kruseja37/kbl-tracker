@@ -331,8 +331,8 @@ export function SnakeDraftSetup({
           <h1 className="ballpark-title text-3xl">BUILD THE ROOM</h1>
         </header>
 
-        {loadMessage ? <div className="border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-4 font-bold">{loadMessage}</div> : null}
-        {warnings.map((warning) => <div key={warning} className="border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-4 font-bold text-[var(--ballpark-warn-text)]">{warning}</div>)}
+        {loadMessage ? <div className="border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-4 font-bold uppercase">{loadMessage}</div> : null}
+        {warnings.map((warning) => <div key={warning} className="border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-4 font-bold uppercase text-[var(--ballpark-warn-text)]">{warning}</div>)}
 
         {setupCard('POOL', <>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -356,7 +356,7 @@ export function SnakeDraftSetup({
                       onChange={(event) => setPickedVersionByGroup((current) => ({ ...current, [groupId]: event.target.value }))}
                       className="border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2 font-bold"
                     >
-                      {cards.map((card) => <option key={card.playerId} value={card.playerId}>{card.versionLabel}</option>)}
+                      {cards.map((card) => <option key={card.playerId} value={card.playerId}>{card.versionLabel.toUpperCase()}</option>)}
                     </select>
                   ) : <span className="text-sm text-[var(--ballpark-brass)]">{cards[0].versionLabel}</span>}
                   <button type="button" onClick={() => setRemovedPlayerIds((current) => new Set(current).add(
@@ -369,6 +369,7 @@ export function SnakeDraftSetup({
           {removedPlayerIds.size > 0 ? (
             <div className="space-y-2 border-4 border-[var(--ballpark-panel-border)] p-3">
               <strong>HAND ADD</strong>
+              <p className="text-sm font-bold">THESE ARE PLAYERS YOU REMOVED. ADD BACK ANYONE YOU STILL WANT.</p>
               {[...removedPlayerIds].map((playerId) => {
                 const removed = players.find((player) => player.playerId === playerId);
                 if (!removed) return null;
@@ -405,13 +406,14 @@ export function SnakeDraftSetup({
 
         {setupCard('ORDER', <>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="text-xs font-bold">DRAFT SEED<input aria-label="DRAFT SEED" value={seed} onChange={(event) => setSeed(event.target.value)} className="mt-1 block border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2" /></label>
+            <label className="text-xs font-bold">DRAFT SEED<input aria-label="DRAFT SEED" value={seed} onChange={(event) => setSeed(event.target.value)} className="mt-1 block border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2" /><span className="mt-1 block">THIS CODE MAKES THE SAME SHUFFLE AGAIN.</span></label>
             <button type="button" onClick={shuffleOrder} className="border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-brass)] px-4 py-2 font-bold text-black">SHUFFLE</button>
           </div>
           <div className="grid gap-2 sm:grid-cols-4">
             {order.map((teamId, index) => <button key={teamId} type="button" onClick={() => tapOrder(teamId)} aria-pressed={swapFirst === teamId} className="border-4 border-[var(--ballpark-panel-border)] p-3 text-left font-bold">{index + 1}. {clubById.get(teamId)?.teamName.toUpperCase() ?? teamId}</button>)}
           </div>
           <p className="font-bold text-[var(--ballpark-brass)]">R1: 1→8 · R2: 8→1</p>
+          <p className="text-sm font-bold">THE ORDER REVERSES EACH ROUND.</p>
           {order.length > 1 ? <p className="text-sm font-bold">{clubById.get(order.at(-1)!)?.teamName.toUpperCase()} PICKS TWICE AT THE TURN. {clubById.get(order[0])?.teamName.toUpperCase()} PICKS TWICE AT THE NEXT TURN.</p> : null}
         </>)}
 

@@ -79,6 +79,8 @@ describe('SnakeDraftRoomView', () => {
 
   it('renders team colors and logo through the ritual card', () => {
     render(<SnakeDraftRoomView {...props()} />);
+    expect(screen.getByAltText('Kodiaks logo in draft order')).toBeInTheDocument();
+    expect(screen.getByAltText('Kodiaks logo in club lens')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
     fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
     const card = screen.getByTestId('ritual-card');
@@ -186,5 +188,16 @@ describe('SnakeDraftRoomView', () => {
     expect(oscillator.start).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
     expect(oscillator.start).toHaveBeenCalledTimes(8);
+  });
+});
+
+describe('companion approval room tool (S5 mount stitch)', () => {
+  it('opens the companion approval surface from the COMPANIONS button and never renders it unbidden', () => {
+    const { unmount } = render(<SnakeDraftRoomView {...props({ companionApproval: <div>APPROVAL-SURFACE</div> })} />);
+    expect(screen.queryByText('APPROVAL-SURFACE')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANIONS' }));
+    expect(screen.getByText('APPROVAL-SURFACE')).toBeInTheDocument();
+    expect(screen.getByText('COMPANION DEVICES')).toBeInTheDocument();
+    unmount();
   });
 });

@@ -61,6 +61,7 @@ export interface SnakeDraftRoomViewProps {
   privateDesk?: ReactNode;
   tradeGuide?: ReactNode;
   commissionerTrade?: ReactNode;
+  companionApproval?: ReactNode;
   onPauseChange: (paused: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
@@ -76,7 +77,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const [state, dispatch] = useReducer(snakeRoomReducer, props.paused, createSnakeRoomState);
   const [lensId, setLensId] = useState(props.activeSeatId ?? props.teams[0]?.id ?? null);
   const [passCoverOpen, setPassCoverOpen] = useState(Boolean(props.hotseatNextName));
-  const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | null>(null);
+  const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | 'COMPANIONS' | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedHold = useRef(false);
   const stateRef = useRef(state);
@@ -214,16 +215,17 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           </button>
           {props.tradeGuide && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'GUIDE' ? null : 'GUIDE')}>THE GUIDE</button>}
           {props.commissionerTrade && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'TRADE' ? null : 'TRADE')}>TRADE</button>}
+          {props.companionApproval && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'COMPANIONS' ? null : 'COMPANIONS')}>COMPANIONS</button>}
         </div>
       </header>
 
       {openRoomTool && (
-        <section className="ballpark-panel mb-5" aria-label={openRoomTool === 'GUIDE' ? 'Shared trade guide' : 'Commissioner trade flow'}>
+        <section className="ballpark-panel mb-5" aria-label={openRoomTool === 'GUIDE' ? 'Shared trade guide' : openRoomTool === 'TRADE' ? 'Commissioner trade flow' : 'Companion device approval'}>
           <div className="ballpark-panel-strip mb-4 flex items-center justify-between">
-            <span className="font-bold">{openRoomTool === 'GUIDE' ? 'THE GUIDE' : 'COMMISSIONER TRADE'}</span>
+            <span className="font-bold">{openRoomTool === 'GUIDE' ? 'THE GUIDE' : openRoomTool === 'TRADE' ? 'COMMISSIONER TRADE' : 'COMPANION DEVICES'}</span>
             <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool(null)}>CLOSE</button>
           </div>
-          {openRoomTool === 'GUIDE' ? props.tradeGuide : props.commissionerTrade}
+          {openRoomTool === 'GUIDE' ? props.tradeGuide : openRoomTool === 'TRADE' ? props.commissionerTrade : props.companionApproval}
         </section>
       )}
 
@@ -244,7 +246,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                 onClick={() => selectLens(slot.teamId)}
               >
                 <span className="block text-[10px]">PICK {slot.pick}{slot.endpoint ? ' · BACK-TO-BACK' : ''}</span>
-                <span>{team?.abbreviation ?? slot.teamId}</span>
+                <span className="flex items-center gap-2">
+                  {team?.logoUrl && <img className="h-7 w-7 object-contain" src={team.logoUrl} alt={`${team.name} logo in draft order`} />}
+                  {team?.abbreviation ?? slot.teamId}
+                </span>
               </button>
             );
           })}
@@ -262,7 +267,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             <div className="flex min-h-64 flex-col items-center justify-center text-center">
               <p className="mb-2 text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">REVIEW</p>
               <h2 className="text-3xl font-bold">{teamName(currentTeam).toUpperCase()} IS REVIEWING THE BOARD</h2>
-              <p className="mt-3">The shared room stays covered until the club arms its pick.</p>
+              <p className="mt-3">THE SHARED ROOM STAYS COVERED UNTIL THE CLUB ARMS ITS PICK.</p>
             </div>
           )}
 
@@ -305,7 +310,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           {state.phase === 'CORRECTION' && (
             <div className="py-8 text-center">
               <h2 className="mb-3 text-2xl font-bold">UNDO THE MOST RECENT ACTION?</h2>
-              <p className="mb-5">Only the latest completed pick or trade can be restored.</p>
+              <p className="mb-5">ONLY THE LATEST PICK OR TRADE CAN BE UNDONE.</p>
               <button className="ballpark-press-button ballpark-press-lg ballpark-press-destruct" onClick={() => void correctLatest()}>UNDO LAST ACTION</button>
             </div>
           )}
@@ -350,7 +355,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             <div className="mb-4 flex flex-wrap gap-2">
               {props.teams.map((team) => <button key={team.id} className="border-2 px-2 py-1 text-xs font-bold" style={{ borderColor: team.colors.primary }} onClick={() => selectLens(team.id)}>{team.name.toUpperCase()}</button>)}
             </div>
-            <h3 className="mb-2 text-xl font-bold" style={{ color: lensTeam?.colors.secondary }}>{teamName(lensTeam)}</h3>
+            <div className="mb-2 flex items-center gap-3">
+              {lensTeam?.logoUrl && <img className="h-14 w-14 object-contain" src={lensTeam.logoUrl} alt={`${lensTeam.name} logo in club lens`} />}
+              <h3 className="text-xl font-bold" style={{ color: lensTeam?.colors.secondary }}>{teamName(lensTeam)}</h3>
+            </div>
             <p className="mb-2 text-xs font-bold text-[var(--ballpark-brass)]">PUBLIC ROSTER</p>
             <ul className="mb-4 space-y-1 text-sm">
               {(lensId ? props.rostersByTeamId[lensId] : [])?.map((player) => <li key={player.id}>{player.position} · {player.name}</li>)}
@@ -374,7 +382,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ballpark-page-bg)] p-6" role="dialog" aria-modal="true">
           <div className="ballpark-panel max-w-lg text-center">
             <h2 className="mb-4 text-3xl font-black">PASS TO {props.hotseatNextName.toUpperCase()}</h2>
-            <p className="mb-5">The private seat is covered.</p>
+            <p className="mb-5">THE PRIVATE SEAT IS COVERED.</p>
             <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold" onClick={() => setPassCoverOpen(false)}>I HAVE THE ROOM</button>
           </div>
         </div>

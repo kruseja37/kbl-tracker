@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSnakeSoundPlayer, snakeSoundForRoomEvent } from '../snakeSounds';
+import {
+  SNAKE_SOUND_STORAGE_KEY,
+  createSnakeSoundPlayer,
+  loadSnakeSoundsEnabled,
+  saveSnakeSoundsEnabled,
+  snakeSoundForRoomEvent,
+} from '../snakeSounds';
 
 describe('snake sounds', () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -26,5 +32,14 @@ describe('snake sounds', () => {
     expect(oscillator.stop).toHaveBeenCalled();
     createSnakeSoundPlayer(false).play('danger');
     expect(AudioContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the sound toggle choice across a room reload', () => {
+    localStorage.removeItem(SNAKE_SOUND_STORAGE_KEY);
+    expect(loadSnakeSoundsEnabled()).toBe(true);
+    saveSnakeSoundsEnabled(false);
+    expect(loadSnakeSoundsEnabled()).toBe(false);
+    saveSnakeSoundsEnabled(true);
+    expect(loadSnakeSoundsEnabled()).toBe(true);
   });
 });

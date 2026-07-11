@@ -31,7 +31,7 @@ export function FarmPrivateDesk(props: {
             className={`block w-full border-4 p-3 text-left ${card.id === props.selectedId ? 'border-[var(--ballpark-brass)]' : 'border-[var(--ballpark-panel-border)]'}`}
             onClick={() => props.onChoose(card.id)}
           >
-            <span className="block text-lg font-bold">{card.name}</span>
+            <span className="block text-lg font-bold uppercase">{card.name}</span>
             <span className="block text-sm">{card.position} · YOUR SCOUT: {card.scoutedGrade} · RANGE {card.gradeRange} · {card.confidence.toUpperCase()} CONFIDENCE</span>
             <span className="mt-1 block text-sm font-bold">{card.scoutsCall}</span>
           </button>

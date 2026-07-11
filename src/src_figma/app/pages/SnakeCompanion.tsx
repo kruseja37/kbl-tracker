@@ -198,11 +198,11 @@ export default function SnakeCompanion() {
         archetypeChip: locked.archetypeName,
         fitWord: fitWord({ player: entry, priorities: locked.priorities, need, openSlots }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
-        riskReason: risk ? `${risk.rationalBuyersBeforeTurn} RATIONAL ${risk.rationalBuyersBeforeTurn === 1 ? 'BUYER' : 'BUYERS'} BEFORE YOUR TURN.` : 'NO RATIONAL BUYER BEFORE YOUR TURN.',
-        legalFinishLine: !finish.feasible ? 'THIS PICK LEAVES NO LEGAL 22.' : `LEGAL-FINISH CUSHION: $${Math.round(finish.legalFinishCushion).toLocaleString()} LEFT.`,
+        riskReason: risk ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.` : 'NO CLUB IS LIKELY TO TAKE HIM BEFORE YOUR TURN.',
+        legalFinishLine: !finish.feasible ? 'THIS PICK LEAVES NO LEGAL 22.' : `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM: $${Math.round(finish.legalFinishCushion).toLocaleString()}.`,
         boardFallout: Object.entries(board.slots).find(([, id]) => id === entry.playerId)?.[0]
           ? `FITS YOUR BOARD — ${Object.entries(board.slots).find(([, id]) => id === entry.playerId)?.[0]} SLOT`
-          : 'OFF-BOARD: CHOOSE A SLOT TO PRICE THE CHANGE.',
+          : 'NOT ON YOUR BOARD: CHOOSE A SLOT TO PRICE THE CHANGE.',
         construction: entry.construction,
         drafted: unavailable.has(entry.playerId),
       };
@@ -301,7 +301,7 @@ export default function SnakeCompanion() {
 
   if (!snakeEnabled()) return <main className="ballpark-page"><h1 className="ballpark-title">PAGE NOT FOUND</h1></main>;
   if (isLoading) return <main className="ballpark-page"><p>OPENING THE COMPANION…</p></main>;
-  if (error) return <main className="ballpark-page"><p>{error}</p></main>;
+  if (error) return <main className="ballpark-page"><p className="uppercase">{error}</p></main>;
   if (!approved || !team || !session) {
     return <CompanionClaimScreen pending={activeClaim?.status === 'pending'} message={message} onClaim={claimDesk} />;
   }
