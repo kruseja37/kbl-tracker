@@ -196,12 +196,12 @@ function confidenceBasisForRating(ratingKey: ExpectedStatsRatingKey): AdaptiveTh
 export function ratingConfidence(
   ratingKey: ExpectedStatsRatingKey,
   sample: number,
-  totalGames: number,
+  gamesPerTeam: number,
 ): number {
   const basis = confidenceBasisForRating(ratingKey);
   const denom = scaledThreshold(
     CHECKPOINT_FULL_SEASON_SAMPLE[ratingKey],
-    { ...DEFAULT_ADAPTIVE_STANDARDS_CONFIG, gamesPerSeason: totalGames },
+    { ...DEFAULT_ADAPTIVE_STANDARDS_CONFIG, gamesPerSeason: gamesPerTeam },
     basis,
   );
   if (denom <= 0) return 1;
@@ -493,6 +493,14 @@ export async function persistDarkCheckpointSweepForCompletedGame(
       reason: 'No season totalGames; cannot place a checkpoint.',
     };
   }
+  const gamesPerTeam = seasonMetadata?.gamesPerTeam;
+  if (!gamesPerTeam || gamesPerTeam <= 0) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'No frozen season gamesPerTeam; cannot scale ratings confidence.',
+    };
+  }
 
   const checkpointCount = checkpointCountForCadence(seasonMetadata?.checkpointCadence);
   if (!isCheckpointBoundary(gameNumber, totalGames, checkpointCount)) {
@@ -551,7 +559,7 @@ export async function persistDarkCheckpointSweepForCompletedGame(
           teamFanMorale: entry.teamFanMorale,
           personality: entry.personality,
           modifiers: entry.modifiers,
-          confidence: ratingConfidence(ratingKey, entry.sampleByRatingKey[ratingKey] ?? 0, totalGames),
+          confidence: ratingConfidence(ratingKey, entry.sampleByRatingKey[ratingKey] ?? 0, gamesPerTeam),
           recentSignal: entry.recentSignalByRatingKey[ratingKey],
         },
         CHECKPOINT_DEV_TUNING,

@@ -82,6 +82,7 @@ vi.mock('../../../utils/franchisePlayerStorage', () => ({
 
 vi.mock('../../../utils/managerIdentityStorage', () => ({
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID: 'league-builder',
+  getManagerAssignment: vi.fn().mockResolvedValue(null),
   resolveManagerForTeam: mocks.mockResolveManagerForTeam,
 }));
 

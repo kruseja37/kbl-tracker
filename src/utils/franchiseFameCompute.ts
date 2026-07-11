@@ -38,6 +38,7 @@ export type PersistDarkFameRecordsResult = {
   status: 'dark-noop' | 'written';
   written: number;
   playerHeatDeltas: Array<{ playerId: string; heatDelta: number }>;
+  moraleRelevantPlayerHeatDeltas: Array<{ playerId: string; heatDelta: number }>;
   reason?: string;
 };
 
@@ -87,6 +88,7 @@ export async function persistDarkFameRecordsForCompletedGame(
       status: 'dark-noop',
       written: 0,
       playerHeatDeltas: [],
+      moraleRelevantPlayerHeatDeltas: [],
       reason: 'Phase-2 fame disabled; per-game fame compute not written.',
     };
   }
@@ -97,6 +99,7 @@ export async function persistDarkFameRecordsForCompletedGame(
   const playerIds = activeFamePlayerIds(playerTotals, fameEvents);
   const rows: FranchiseFameRecordRow[] = [];
   const playerHeatDeltas: Array<{ playerId: string; heatDelta: number }> = [];
+  const moraleRelevantPlayerHeatDeltas: Array<{ playerId: string; heatDelta: number }> = [];
   const bumpByPlayer = new Map<string, number>(
     buildStadiumRecordFameHeatBumps(stadiumChanges).map((bump) => [bump.playerId, bump.heatDelta]),
   );
@@ -116,6 +119,7 @@ export async function persistDarkFameRecordsForCompletedGame(
   for (const playerId of playerIds) {
     const storedRow = await getFranchiseFameRecord(fameScope, playerId);
     if (storedRow?.updatedAtCheckpoint === checkpoint) {
+      bumpByPlayer.delete(playerId);
       continue;
     }
 
@@ -138,8 +142,12 @@ export async function persistDarkFameRecordsForCompletedGame(
     }
     const reachFloor = updateReachFloor(stored.reachFloor, heat);
     const heatDelta = heat - stored.heat;
+    const moraleRelevantHeatDelta = roundHeatDelta(
+      heat - (stored.heat * FAME_TUNING.heat.decayPerUpdate),
+    );
     const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
     playerHeatDeltas.push({ playerId, heatDelta });
+    moraleRelevantPlayerHeatDeltas.push({ playerId, heatDelta: moraleRelevantHeatDelta });
 
     rows.push({
       franchiseId: fameScope.franchiseId,
@@ -159,13 +167,16 @@ export async function persistDarkFameRecordsForCompletedGame(
 
   for (const [playerId, bump] of bumpByPlayer.entries()) {
     const storedRow = await getFranchiseFameRecord(fameScope, playerId);
+    if (storedRow?.updatedAtCheckpoint === checkpoint) {
+      continue;
+    }
     const stored = storedRow ?? { heat: 0, reachFloor: 0, wasNegative: false };
     const heat = applyHonorHeatBump(stored.heat, bump);
     const heatDelta = heat - stored.heat;
-    if (heatDelta === 0) continue;
 
     const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
     playerHeatDeltas.push({ playerId, heatDelta });
+    moraleRelevantPlayerHeatDeltas.push({ playerId, heatDelta });
 
     if (storedRow) {
       rows.push({
@@ -173,6 +184,7 @@ export async function persistDarkFameRecordsForCompletedGame(
         heat,
         reachFloor: updateReachFloor(stored.reachFloor, heat),
         wasNegative,
+        updatedAtCheckpoint: checkpoint,
       });
       continue;
     }
@@ -194,7 +206,16 @@ export async function persistDarkFameRecordsForCompletedGame(
   }
 
   await saveFranchiseFameRecordRows(rows);
-  return { status: 'written', written: rows.length, playerHeatDeltas };
+  return {
+    status: 'written',
+    written: rows.length,
+    playerHeatDeltas,
+    moraleRelevantPlayerHeatDeltas,
+  };
+}
+
+function roundHeatDelta(value: number): number {
+  return Math.round(value * FAME_TUNING.heat.precision) / FAME_TUNING.heat.precision;
 }
 
 async function resolveFameCheckpoint(

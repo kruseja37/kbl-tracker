@@ -28,6 +28,10 @@ export interface KblWpaCredit {
   isOverlay?: boolean;
 }
 
+export type KblWpaAttributionResult = KblWpaCredit[] & {
+  readonly unattributedDefensiveWpa: number;
+};
+
 export interface KblWpaDerivationInput {
   atBatEvents: AtBatEvent[];
   fieldingEvents?: FieldingEvent[];
@@ -152,7 +156,7 @@ const MADE_OUT_RESULTS = new Set<AtBatResult>([
 ]);
 const STRIKEOUT_RESULTS = new Set<string>(["K", "Kc", "\uA740"]);
 
-export function deriveKblWpaCredits(input: KblWpaDerivationInput): KblWpaCredit[] {
+export function deriveKblWpaCredits(input: KblWpaDerivationInput): KblWpaAttributionResult {
   const fieldingByAtBat = new Map<string, FieldingEvent[]>();
 
   for (const fieldingEvent of input.fieldingEvents ?? []) {
@@ -166,6 +170,8 @@ export function deriveKblWpaCredits(input: KblWpaDerivationInput): KblWpaCredit[
   }
 
   const credits: KblWpaCredit[] = [];
+  let unattributedDefensiveWpa = 0;
+  const pitcherByBetweenPlayEventId = reconstructPitchersForBetweenPlayEvents(input);
 
   for (const event of input.atBatEvents) {
     if (event.undoneAt) continue;
@@ -188,19 +194,125 @@ export function deriveKblWpaCredits(input: KblWpaDerivationInput): KblWpaCredit[
 
   for (const event of input.betweenPlayEvents ?? []) {
     if (event.undoneAt) continue;
-    credits.push(
-      ...deriveBetweenPlayCredits(event, {
+    const betweenPlayResult = deriveBetweenPlayCredits(event, {
         totalInnings: input.totalInnings,
         useGhostRunner: input.useGhostRunner,
         extraInningRunner: input.extraInningRunner,
         extraInningRunnerDelay: input.extraInningRunnerDelay,
         awayTeamId: input.awayTeamId,
         homeTeamId: input.homeTeamId,
-      }),
+        resolvedPitcher: pitcherByBetweenPlayEventId.get(event.eventId),
+      });
+    credits.push(...betweenPlayResult.credits);
+    unattributedDefensiveWpa += betweenPlayResult.unattributedDefensiveWpa;
+  }
+
+  return attachUnattributedDefensiveWpa(credits, unattributedDefensiveWpa);
+}
+
+function attachUnattributedDefensiveWpa(
+  credits: KblWpaCredit[],
+  unattributedDefensiveWpa: number,
+): KblWpaAttributionResult {
+  Object.defineProperty(credits, 'unattributedDefensiveWpa', {
+    value: roundWpa(unattributedDefensiveWpa),
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  return credits as KblWpaAttributionResult;
+}
+
+function reconstructPitchersForBetweenPlayEvents(
+  input: KblWpaDerivationInput,
+): Map<string, PlayerRef | undefined> {
+  const currentByTeam = new Map<string, PlayerRef>();
+  const firstAtBatByTeam = [...input.atBatEvents]
+    .filter((event) => !event.undoneAt && event.pitcherId && event.pitcherTeamId)
+    .sort(compareLedgerEvents);
+  for (const event of firstAtBatByTeam) {
+    if (!currentByTeam.has(event.pitcherTeamId)) {
+      currentByTeam.set(event.pitcherTeamId, {
+        playerId: event.pitcherId,
+        playerName: event.pitcherName || event.pitcherId,
+        teamId: event.pitcherTeamId,
+      });
+    }
+  }
+
+  const pitcherByEventId = new Map<string, PlayerRef | undefined>();
+  const ordered: Array<
+    | { kind: 'at_bat'; event: AtBatEvent }
+    | { kind: 'between_play'; event: BetweenPlayEvent }
+  > = [
+    ...input.atBatEvents
+      .filter((event) => !event.undoneAt)
+      .map((event) => ({ kind: 'at_bat' as const, event })),
+    ...(input.betweenPlayEvents ?? [])
+      .filter((event) => !event.undoneAt)
+      .map((event) => ({ kind: 'between_play' as const, event })),
+  ].sort((left, right) => compareLedgerEvents(left.event, right.event));
+
+  for (const row of ordered) {
+    if (row.kind === 'at_bat') {
+      if (row.event.pitcherId && row.event.pitcherTeamId) {
+        currentByTeam.set(row.event.pitcherTeamId, {
+          playerId: row.event.pitcherId,
+          playerName: row.event.pitcherName || row.event.pitcherId,
+          teamId: row.event.pitcherTeamId,
+        });
+      }
+      continue;
+    }
+
+    const event = row.event;
+    const defensiveTeamId = defensiveTeamIdForBetweenPlayEvent(event, input);
+    if (event.type === 'pitcher_change' && event.pitcherChange) {
+      const teamId = defensiveTeamId ?? findTeamForPitcher(currentByTeam, event.pitcherChange.outgoingPitcherId);
+      if (teamId) {
+        currentByTeam.set(teamId, {
+          playerId: event.pitcherChange.incomingPitcherId,
+          playerName: event.pitcherChange.incomingPitcherName ?? event.pitcherChange.incomingPitcherId,
+          teamId,
+        });
+      }
+      continue;
+    }
+
+    pitcherByEventId.set(
+      event.eventId,
+      defensiveTeamId ? currentByTeam.get(defensiveTeamId) : undefined,
     );
   }
 
-  return credits;
+  return pitcherByEventId;
+}
+
+function compareLedgerEvents(
+  left: Pick<AtBatEvent | BetweenPlayEvent, 'eventIndex' | 'timestamp' | 'eventId'>,
+  right: Pick<AtBatEvent | BetweenPlayEvent, 'eventIndex' | 'timestamp' | 'eventId'>,
+): number {
+  const leftIndex = Number.isFinite(left.eventIndex) ? left.eventIndex : Number.MAX_SAFE_INTEGER;
+  const rightIndex = Number.isFinite(right.eventIndex) ? right.eventIndex : Number.MAX_SAFE_INTEGER;
+  const leftTimestamp = Number.isFinite(left.timestamp) ? left.timestamp : Number.MAX_SAFE_INTEGER;
+  const rightTimestamp = Number.isFinite(right.timestamp) ? right.timestamp : Number.MAX_SAFE_INTEGER;
+  return leftIndex - rightIndex || leftTimestamp - rightTimestamp || String(left.eventId ?? '').localeCompare(String(right.eventId ?? ''));
+}
+
+function defensiveTeamIdForBetweenPlayEvent(
+  event: BetweenPlayEvent,
+  context: Pick<KblWpaDerivationInput, 'awayTeamId' | 'homeTeamId'>,
+): string | undefined {
+  if (event.gameState?.halfInning === 'TOP') return context.homeTeamId;
+  if (event.gameState?.halfInning === 'BOTTOM') return context.awayTeamId;
+  return undefined;
+}
+
+function findTeamForPitcher(currentByTeam: Map<string, PlayerRef>, pitcherId: string): string | undefined {
+  for (const [teamId, pitcher] of currentByTeam.entries()) {
+    if (pitcher.playerId === pitcherId) return teamId;
+  }
+  return undefined;
 }
 
 function isSparseArchivedAtBatEvent(event: AtBatEvent): boolean {
@@ -1245,9 +1357,12 @@ function deriveBetweenPlayCredits(
     extraInningRunnerDelay?: 1 | 2;
     awayTeamId?: string;
     homeTeamId?: string;
+    resolvedPitcher?: PlayerRef;
   },
-): KblWpaCredit[] {
-  if (!event.gameState || !event.runnerAction) return [];
+): { credits: KblWpaCredit[]; unattributedDefensiveWpa: number } {
+  if (!event.gameState || !event.runnerAction) {
+    return { credits: [], unattributedDefensiveWpa: 0 };
+  }
 
   const isTop = event.gameState.halfInning === "TOP";
   const battingTeamId = isTop ? context.awayTeamId ?? "" : context.homeTeamId ?? "";
@@ -1350,7 +1465,7 @@ function deriveBetweenPlayCredits(
         playerName: event.runnerAttribution.pitcherName ?? event.runnerAttribution.pitcherId,
         teamId: defensiveTeamId,
       }
-    : undefined;
+    : context.resolvedPitcher;
   const catcher = event.runnerAttribution?.catcherId || event.wildPitchOrPassedBall?.catcherId
     ? {
         playerId: event.runnerAttribution?.catcherId ?? event.wildPitchOrPassedBall?.catcherId ?? "",
@@ -1380,16 +1495,23 @@ function deriveBetweenPlayCredits(
     if (pitcher) credits.push(makeCredit(event.eventId, "between_play", pitcher, "pitching", defensiveWpa, "high", `${event.type} pitcher share`));
   } else if (event.type === "passed_ball") {
     if (catcher) credits.push(makeCredit(event.eventId, "between_play", catcher, "catching", defensiveWpa, "high", "Passed ball catcher share"));
+    else if (pitcher) credits.push(makeCredit(event.eventId, "between_play", pitcher, "pitching", defensiveWpa, "low", "Passed ball fallback pitcher share"));
   } else if (event.type === "pickoff") {
     if (pitcher) credits.push(makeCredit(event.eventId, "between_play", pitcher, "pitching", defensiveWpa * 0.8, "medium", "Pickoff pitcher share"));
     if (fielder) credits.push(makeCredit(event.eventId, "between_play", fielder, "fielding", defensiveWpa * (pitcher ? 0.2 : 1), "medium", "Pickoff tag fielder share"));
   } else if (fielder) {
     credits.push(makeCredit(event.eventId, "between_play", fielder, "fielding", defensiveWpa, "medium", "Runner advance fielder attribution"));
+  } else if (pitcher) {
+    credits.push(makeCredit(event.eventId, "between_play", pitcher, "pitching", defensiveWpa, "low", "Runner advance fallback pitcher share"));
   }
 
   const offensive = normalizeCreditsToBudget(credits.filter((credit) => credit.teamId === battingTeamId), battingWpa);
   const defensive = normalizeCreditsToBudget(credits.filter((credit) => credit.teamId !== battingTeamId), defensiveWpa);
-  return [...offensive, ...defensive];
+  return {
+    credits: [...offensive, ...defensive],
+    unattributedDefensiveWpa:
+      defensive.length === 0 && Math.abs(defensiveWpa) >= EPSILON ? defensiveWpa : 0,
+  };
 }
 
 function normalizeRawUnitsToCredits(

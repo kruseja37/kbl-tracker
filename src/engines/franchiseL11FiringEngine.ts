@@ -63,17 +63,33 @@ export const FRANCHISE_L11_FIRING_TUNING: FranchiseL11FiringTuning = {
   },
 };
 
+// TUNE-0: beloved-manager firings turn relief into a continuous backlash
+// beginning at neutral fan morale and reaching this magnitude at 100.
+export const FRANCHISE_L11_FIRING_BACKLASH_TUNING = {
+  maxFanMorale: 100,
+  maxBacklashMagnitude: 4,
+} as const;
+
 export function computeFranchiseL11Firing(
   input: FranchiseL11FiringInput,
   tuning: FranchiseL11FiringTuning = FRANCHISE_L11_FIRING_TUNING,
 ): FranchiseL11FiringReport {
   const fan = clamp(input.teamFanMorale, 0, 100);
   const struggle = Math.max(0, (tuning.neutralMorale - fan) / tuning.neutralMorale);
-  const reliefBumpDelta = clamp(
-    tuning.reliefBase * (1 + tuning.reliefStruggleScale * struggle),
-    0,
-    tuning.reliefMax,
-  );
+  const reliefBumpDelta = fan < tuning.neutralMorale
+    ? clamp(
+        tuning.reliefBase * (1 + tuning.reliefStruggleScale * struggle),
+        0,
+        tuning.reliefMax,
+      )
+    : fan === tuning.neutralMorale
+      ? 0
+      : -FRANCHISE_L11_FIRING_BACKLASH_TUNING.maxBacklashMagnitude * clamp(
+        (fan - tuning.neutralMorale) /
+          (FRANCHISE_L11_FIRING_BACKLASH_TUNING.maxFanMorale - tuning.neutralMorale),
+        0,
+        1,
+        );
 
   const playerRipples = input.players
     .map((player): FranchiseL11PlayerRipple => {

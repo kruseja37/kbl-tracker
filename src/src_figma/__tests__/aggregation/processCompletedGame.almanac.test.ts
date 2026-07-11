@@ -35,6 +35,9 @@ const {
 
 vi.mock('../../../utils/seasonAggregator', () => ({
   aggregateGameToSeason: mockAggregateGameToSeason,
+  isCompleteGameByContext: vi.fn((stats, context = {}) =>
+    stats.isStarter && stats.outsRecorded >= (context.scheduledInnings ?? 9) * 3,
+  ),
 }));
 
 vi.mock('../../../utils/gameStorage', () => ({

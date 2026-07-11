@@ -40,6 +40,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../seasonAggregator', () => ({
   aggregateGameToSeason: mocks.aggregateGameToSeason,
+  isCompleteGameByContext: vi.fn((stats, context = {}) =>
+    stats.isStarter && stats.outsRecorded >= (context.scheduledInnings ?? 9) * 3,
+  ),
 }));
 
 vi.mock('../gameStorage', () => ({
@@ -341,7 +344,11 @@ describe('processCompletedGame True Value persistence gate', () => {
     mocks.saveFranchiseTrueValueSnapshotRows.mockResolvedValue([]);
     mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason.mockResolvedValue({ rows: [], skippedRows: [], persisted: true, blockers: [] });
     mocks.getScheduledGame.mockResolvedValue(null);
-    mocks.persistDarkFameRecordsForCompletedGame.mockResolvedValue({ written: 0, playerHeatDeltas: [] });
+    mocks.persistDarkFameRecordsForCompletedGame.mockResolvedValue({
+      written: 0,
+      playerHeatDeltas: [],
+      moraleRelevantPlayerHeatDeltas: [],
+    });
     mocks.persistDarkFlashpointDecayForCompletedGame.mockResolvedValue({ changes: 0 });
     mocks.persistDarkCheckpointSweepForCompletedGame.mockResolvedValue({ changes: 0 });
     mocks.persistDarkTraitGrantForCompletedGame.mockResolvedValue({ changes: 0 });

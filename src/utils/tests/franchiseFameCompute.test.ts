@@ -164,6 +164,7 @@ describe('franchise dark fame compute', () => {
       status: 'dark-noop',
       written: 0,
       playerHeatDeltas: [],
+      moraleRelevantPlayerHeatDeltas: [],
       reason: 'Phase-2 fame disabled; per-game fame compute not written.',
     });
     await expect(getFranchiseFameRecord(scope, 'player-wpa-only')).resolves.toBeNull();
@@ -191,6 +192,7 @@ describe('franchise dark fame compute', () => {
       status: 'written',
       written: 1,
       playerHeatDeltas: [{ playerId: 'player-1', heatDelta: 10 }],
+      moraleRelevantPlayerHeatDeltas: [{ playerId: 'player-1', heatDelta: 10 }],
     });
     expect(firstRow).toMatchObject({
       heat: 10,
@@ -214,6 +216,7 @@ describe('franchise dark fame compute', () => {
       status: 'written',
       written: 1,
       playerHeatDeltas: [{ playerId: 'player-1', heatDelta: -13.5 }],
+      moraleRelevantPlayerHeatDeltas: [{ playerId: 'player-1', heatDelta: -12 }],
     });
     expect(secondRow).toMatchObject({
       heat: -3.5,
@@ -229,7 +232,12 @@ describe('franchise dark fame compute', () => {
     const duplicateResult = await persistDarkFameRecordsForCompletedGame(secondGame, scope);
     const duplicateRow = await getFranchiseFameRecord(scope, 'player-1');
 
-    expect(duplicateResult).toEqual({ status: 'written', written: 0, playerHeatDeltas: [] });
+    expect(duplicateResult).toEqual({
+      status: 'written',
+      written: 0,
+      playerHeatDeltas: [],
+      moraleRelevantPlayerHeatDeltas: [],
+    });
     expect(duplicateRow).toEqual(secondRow);
   });
 
@@ -291,6 +299,7 @@ describe('franchise dark fame compute', () => {
       status: 'written',
       written: 1,
       playerHeatDeltas: [{ playerId: 'player-park-hero', heatDelta: 7 }],
+      moraleRelevantPlayerHeatDeltas: [{ playerId: 'player-park-hero', heatDelta: 7 }],
     });
     expect(row).toMatchObject({
       heat: 7,
@@ -328,6 +337,10 @@ describe('franchise dark fame compute', () => {
         { playerId: 'new-park-holder', heatDelta: 2.25 },
         { playerId: 'dethroned-holder', heatDelta: -1.5 },
       ],
+      moraleRelevantPlayerHeatDeltas: [
+        { playerId: 'new-park-holder', heatDelta: 2.25 },
+        { playerId: 'dethroned-holder', heatDelta: -1.5 },
+      ],
     });
     expect(dethronedRow).toMatchObject({
       heat: -1.5,
@@ -343,6 +356,22 @@ describe('franchise dark fame compute', () => {
       defensive: 0,
       role_player: 0,
     });
+
+    const replay = await persistDarkFameRecordsForCompletedGame(
+      completedGame,
+      scope,
+      undefined,
+      [
+        stadiumChange({
+          recordType: 'farthest-hr-rhb',
+          changeKind: 'overtake',
+          priorLeaderPlayerIds: ['dethroned-holder'],
+          newLeaderPlayerIds: ['new-park-holder'],
+        }),
+      ],
+    );
+    expect(replay).toMatchObject({ status: 'written', written: 0, playerHeatDeltas: [] });
+    await expect(getFranchiseFameRecord(scope, 'dethroned-holder')).resolves.toEqual(dethronedRow);
   });
 
   test('compute module source stays firewalled from reporter LLM and narrative imports', async () => {

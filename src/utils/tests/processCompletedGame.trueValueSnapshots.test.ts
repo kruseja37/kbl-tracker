@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../seasonAggregator', () => ({
   aggregateGameToSeason: mocks.aggregateGameToSeason,
+  isCompleteGameByContext: vi.fn((stats, context = {}) =>
+    stats.isStarter && stats.outsRecorded >= (context.scheduledInnings ?? 9) * 3,
+  ),
 }));
 
 vi.mock('../gameStorage', async (importOriginal) => {
