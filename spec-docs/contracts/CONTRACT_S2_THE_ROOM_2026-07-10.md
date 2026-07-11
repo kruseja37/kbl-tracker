@@ -286,3 +286,128 @@ paused); RECORDED still requires the save promise resolved (keep that law). Add 
 the session save mock), RECORDED shows the latched name until ADVANCE, trade-mid-hold
 cancels cleanly, and the snipe/danger reveal gate. Then re-run Gates 1→5 (full vitest
 included) and append a FIX PASS report. No scope beyond the audit findings.
+
+---
+
+## FIX PASS REPORT — Codex S2 (2026-07-10)
+
+### Outcome
+
+Implemented only the binding audit fix pass. No git write command was run. The S2
+partition remains clean: no auction file, `src/App.tsx`, flag file, snake-setup file,
+storage file, or `src/engines/*` file was changed.
+
+### Root-cause fix
+
+- `src/src_figma/app/components/snake/snakeRoomReducer.ts:3-89` now owns a structural
+  recorded-pick latch (player + club), rejects late `GAVEL_HOME` outside a live,
+  unpaused ANNOUNCE, ignores ANNOUNCE/RECORDED next-turn rekeys, and releases the payoff
+  frame only through explicit `ADVANCE`. The orphaned `NEXT_ACTION`/local correction-law
+  state was removed; correction availability now comes only from the persisted S1a
+  engine surface.
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx:74-184` cancels the live
+  hold timer immediately on local PAUSE and on live-pick movement, checks the current
+  reducer state before starting persistence and again before `GAVEL_HOME`, and creates
+  the player/team latch before the save. `RECORDED` still occurs only after
+  `onRecordPick` resolves.
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx:239-287` renders the latched
+  club identity and player name structurally, even after the persisted session advances,
+  and supplies the explicit `ADVANCE TO NEXT PICK` action.
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx:116-122` gates snipe and
+  danger sounds behind the private seat's actual reveal state.
+- Regression coverage is in
+  `src/src_figma/app/components/snake/__tests__/snakeRoomReducer.test.ts:67-94` and
+  `src/src_figma/app/components/snake/__tests__/SnakeDraftRoomView.test.tsx:95-154`:
+  pause at 500ms calls the session-save mock zero times; the old player/team remain on
+  RECORDED through a next-pick rerender until ADVANCE; a trade at 500ms records nothing;
+  and snipe/danger notes do not fire while covered.
+
+### Gate outputs (real terminal text, final code)
+
+Gate 1 — `NODE_ENV= npx tsc --noEmit`:
+
+```text
+GATE1_EXIT=0
+(no compiler output)
+```
+
+Gate 2 — `NODE_ENV= npm run build`:
+
+```text
+> kbl-tracker@0.0.0 build
+> tsc -b && vite build
+
+vite v7.3.1 building client environment for production...
+✓ 2650 modules transformed.
+rendering chunks...
+(!) franchisePlayerStorage.ts is dynamically imported and also statically imported; dynamic import will not move module into another chunk.
+(!) Some chunks are larger than 500 kB after minification.
+✓ built in 9.90s
+
+PWA v1.2.0
+mode      generateSW
+precache  189 entries (5404.00 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1d305bb8.js
+(exit 0)
+```
+
+Gate 3 — four owned suites:
+
+```text
+Test Files  4 passed (4)
+     Tests  22 passed (22)
+  Start at  18:56:08
+  Duration  1.49s (transform 159ms, setup 223ms, import 376ms, tests 669ms, environment 1.81s)
+```
+
+Gate 4 — exact frozen 28-file auction list from
+`/tmp/s1a-auction-tests-final.txt`:
+
+```text
+Test Files  28 passed (28)
+     Tests  327 passed (327)
+  Start at  18:56:14
+  Duration  37.87s (transform 6.37s, setup 1.62s, import 11.96s, tests 62.73s, environment 12.20s)
+(exit 0)
+```
+
+Gate 5 — one full `NODE_ENV= npx vitest run`:
+
+```text
+Test Files  629 passed | 8 skipped (637)
+     Tests  9592 passed | 15 skipped (9607)
+  Start at  18:56:59
+  Duration  193.19s (transform 30.46s, setup 35.84s, import 133.47s, tests 794.31s, environment 275.77s)
+(exit 0)
+```
+
+### STOPs / surprises
+
+- No unresolved UNKNOWN and no scope-expansion STOP.
+- The first Gate 1 shell wrapper used zsh's reserved `status` variable and exited before
+  reporting the already-clean compiler result. It changed no file; the final Gate 1 was
+  rerun with a safe variable and exited 0 as pasted above.
+- The full suite was green outright; no solo-flake characterization or rerun was needed.
+
+### Auditor: attack these first
+
+1. Reproduce pause and live-pick movement at 999ms and while the save promise is pending;
+   neither may produce a late RECORDED transition or thock, and a pre-save cancellation
+   must call storage zero times.
+2. Resolve a pick while the parent immediately supplies the next index/candidate and prove
+   the old player/team payoff remains until the explicit ADVANCE click.
+3. Verify the private snipe/danger effects never fire on covered initial render or after an
+   auto-cover key change, but do fire once the matching seat is revealed.
+
+---
+
+## RE-AUDIT (verify pass) — opus, 2026-07-10 — FINAL VERDICT: APPROVE
+Auditor re-ran its own repros against the fixed code: B1 latch holds the payoff frame
+through parent advance until explicit ADVANCE (no next-team leak); B2 pause at 500ms/
+999ms/trade-mid-hold = ZERO storage calls, pause-during-save = no late RECORDED/thock.
+Notes cleared (snipe/danger reveal-gated structurally, latch render structural,
+orphaned NEXT_ACTION removed). tsc clean; owned suites 22/22; partition clean.
+Carry-forwards: S4 wires the live trade path onto the timer-cancel seam; S5 routes
+snipe/danger to the private companion.
