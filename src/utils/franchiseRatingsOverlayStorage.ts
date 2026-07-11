@@ -22,7 +22,26 @@ export interface FranchiseRatingsOverlayRow extends FranchiseRatingsOverlayScope
   kind: 'permanent' | 'temporary';
   /** Absolute game-number expiry for temporary overlays; null for permanent rows. */
   expiresAtGameNumber: number | null;
-  confirmationStatus: 'pending' | 'confirmed';
+  confirmationStatus:
+    | 'pending'
+    | 'confirmed'
+    | 'confirmed-applied'
+    | 'rejected'
+    | 'conflict'
+    | 'apply-failed';
+  /** Missing on legacy rows; only `true` means the franchise player record already carries the change. */
+  applied?: boolean;
+  expectedPriorValue?: number;
+  proposedValue?: number;
+  actualEnteredValue?: number;
+  resolvedAt?: number;
+  resolvedCivilDate?: string;
+  resolvedBy?: string;
+  rejectReason?: string;
+  playerRecordRevision?: string;
+  applyError?: string;
+  boundaryGameNumber?: number;
+  ordinal?: number;
   source: string;
   sourceEventId: string;
   createdAtGameNumber: number;
@@ -138,6 +157,48 @@ export async function getFranchiseRatingsOverlaysByScope(
       row.franchiseId === scope.franchiseId &&
       row.seasonId === scope.seasonId &&
       row.statsScopeId === scope.statsScopeId,
+    ),
+  );
+}
+
+export async function getFranchiseRatingsOverlayById(
+  id: string,
+): Promise<FranchiseRatingsOverlayRow | null> {
+  if (!id) return null;
+  const db = await initFranchiseRatingsOverlayDatabase();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const row = await requestToPromise<FranchiseRatingsOverlayRow | undefined>(
+    tx.objectStore(STORE_NAME).get(id),
+  );
+  return row ?? null;
+}
+
+async function getAllFranchiseRatingsOverlays(): Promise<FranchiseRatingsOverlayRow[]> {
+  const db = await initFranchiseRatingsOverlayDatabase();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  return requestToPromise<FranchiseRatingsOverlayRow[]>(tx.objectStore(STORE_NAME).getAll());
+}
+
+export async function getFranchiseRatingsOverlaysByFranchiseSeason(
+  franchiseId: string,
+  seasonId: string,
+): Promise<FranchiseRatingsOverlayRow[]> {
+  if (!franchiseId || !seasonId) return [];
+  return sortRatingsOverlays(
+    (await getAllFranchiseRatingsOverlays()).filter(
+      (row) => row.franchiseId === franchiseId && row.seasonId === seasonId,
+    ),
+  );
+}
+
+export async function getFranchiseRatingsOverlaysByFranchisePlayer(
+  franchiseId: string,
+  playerId: string,
+): Promise<FranchiseRatingsOverlayRow[]> {
+  if (!franchiseId || !playerId) return [];
+  return sortRatingsOverlays(
+    (await getAllFranchiseRatingsOverlays()).filter(
+      (row) => row.franchiseId === franchiseId && row.playerId === playerId,
     ),
   );
 }

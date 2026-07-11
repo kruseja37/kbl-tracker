@@ -5,8 +5,9 @@ import type { FranchiseRatingsOverlayRow } from '../utils/franchiseRatingsOverla
  *
  * Ratings changes require user confirmation in BOTH places: the user's SMB4
  * console (the manual edit; this engine produces the instruction text) and the
- * app database (the `confirmOverlay` transform flips `pending` to `confirmed`;
- * deferred wiring persists it). Morale is NOT here: morale is automatic/logged
+ * app database. `confirmOverlay` remains the legacy unapplied transform; the
+ * console-mirror service owns the new applied/rejected/conflict state machine.
+ * Morale is NOT here: morale is automatic/logged
  * with no confirmation (§11 line 202). Trait confirmation (L9b) reuses this
  * pattern later.
  *
@@ -15,12 +16,8 @@ import type { FranchiseRatingsOverlayRow } from '../utils/franchiseRatingsOverla
  * text is delta-based, with the resulting rating shown when a base value is
  * supplied; temporary overlays carry a console revert reminder.
  *
- * WIRING is a DEFERRED seam, NOT built here: the live confirmation flow (a
- * modal that shows `buildOverlayConfirmationRequest`, on confirm calls
- * `putFranchiseRatingsOverlay(confirmOverlay(overlay))` and surfaces the
- * console instruction; on temporary expiry surfaces `buildExpiryRevertReminder`)
- * is user-visible, post-D13, and needs the L8/L9b writers to exist first.
- * Build-dark.
+ * Live UI wiring remains deferred; new callers resolve through
+ * `franchiseConsoleMirror` rather than persisting this legacy transform.
  */
 
 export interface OverlayConfirmationRequest {
@@ -71,6 +68,7 @@ export function buildOverlayConfirmationRequest(
 export function confirmOverlay(
   overlay: FranchiseRatingsOverlayRow,
 ): FranchiseRatingsOverlayRow {
+  if (overlay.confirmationStatus !== 'pending') return { ...overlay };
   return {
     ...overlay,
     confirmationStatus: 'confirmed',
@@ -96,7 +94,7 @@ export function summarizeOverlayChangeLog(
   ratingKey: string;
   delta: number;
   kind: 'permanent' | 'temporary';
-  confirmationStatus: 'pending' | 'confirmed';
+  confirmationStatus: FranchiseRatingsOverlayRow['confirmationStatus'];
   summary: string;
 }> {
   return overlays

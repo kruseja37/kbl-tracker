@@ -12,6 +12,11 @@ export interface FranchiseTraitOverlayScopeInput {
   statsScopeId: string;
 }
 
+export interface FranchiseTraitSlotValue {
+  trait1: string | null;
+  trait2: string | null;
+}
+
 export interface FranchiseTraitOverlayRow extends FranchiseTraitOverlayScopeInput {
   id: string;
   playerId: string;
@@ -25,9 +30,26 @@ export interface FranchiseTraitOverlayRow extends FranchiseTraitOverlayScopeInpu
   realityPercentile: number;
   probability: number;
   /** Section 11 two-tier confirmation lifecycle (mirrors the ratings overlay). */
-  confirmationStatus: 'pending' | 'confirmed';
+  confirmationStatus:
+    | 'pending'
+    | 'confirmed'
+    | 'confirmed-applied'
+    | 'rejected'
+    | 'conflict'
+    | 'apply-failed';
   /** Whether the categorical trait1/trait2 write to the player record has been applied (L9b-3c sets it). */
   applied: boolean;
+  expectedPriorValue?: FranchiseTraitSlotValue;
+  proposedValue?: FranchiseTraitSlotValue;
+  actualEnteredValue?: FranchiseTraitSlotValue;
+  resolvedAt?: number;
+  resolvedCivilDate?: string;
+  resolvedBy?: string;
+  rejectReason?: string;
+  playerRecordRevision?: string;
+  applyError?: string;
+  boundaryGameNumber?: number;
+  ordinal?: number;
   source: string;
   sourceEventId: string;
   createdAtGameNumber: number;
@@ -143,6 +165,48 @@ export async function getFranchiseTraitOverlaysByScope(
       row.franchiseId === scope.franchiseId &&
       row.seasonId === scope.seasonId &&
       row.statsScopeId === scope.statsScopeId,
+    ),
+  );
+}
+
+export async function getFranchiseTraitOverlayById(
+  id: string,
+): Promise<FranchiseTraitOverlayRow | null> {
+  if (!id) return null;
+  const db = await initFranchiseTraitOverlayDatabase();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const row = await requestToPromise<FranchiseTraitOverlayRow | undefined>(
+    tx.objectStore(STORE_NAME).get(id),
+  );
+  return row ?? null;
+}
+
+async function getAllFranchiseTraitOverlays(): Promise<FranchiseTraitOverlayRow[]> {
+  const db = await initFranchiseTraitOverlayDatabase();
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  return requestToPromise<FranchiseTraitOverlayRow[]>(tx.objectStore(STORE_NAME).getAll());
+}
+
+export async function getFranchiseTraitOverlaysByFranchiseSeason(
+  franchiseId: string,
+  seasonId: string,
+): Promise<FranchiseTraitOverlayRow[]> {
+  if (!franchiseId || !seasonId) return [];
+  return sortTraitOverlays(
+    (await getAllFranchiseTraitOverlays()).filter(
+      (row) => row.franchiseId === franchiseId && row.seasonId === seasonId,
+    ),
+  );
+}
+
+export async function getFranchiseTraitOverlaysByFranchisePlayer(
+  franchiseId: string,
+  playerId: string,
+): Promise<FranchiseTraitOverlayRow[]> {
+  if (!franchiseId || !playerId) return [];
+  return sortTraitOverlays(
+    (await getAllFranchiseTraitOverlays()).filter(
+      (row) => row.franchiseId === franchiseId && row.playerId === playerId,
     ),
   );
 }
