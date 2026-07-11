@@ -221,3 +221,146 @@ The STOP is upheld: the session must durably carry all four setup decisions. Rul
    thread (do not widen Player storage here). Note it in your report.
 6. Then: finish REMOVE/hand-ADD per the report's own note 3, and run Gates 1→5 in
    order, replacing the BLOCKED report with final evidence.
+
+---
+
+## BUILDER REPORT — Codex S1B FINAL (2026-07-10)
+
+### Outcome
+
+**COMPLETE for builder handoff.** Amendment 2 is implemented, the partial four-card setup
+was finished in place, and Gates 1→5 were run in order. No git write command was run. The
+earlier BLOCKED report remains above for the audit trail.
+
+No auction page/flow/component, `src/engines/*`, S2-owned component, sound, or room file was
+edited. The only storage edit is Amendment 2's additive optional field. Pre-existing operator
+files `DISPATCH_PROMPT.txt`, `run_lane.sh`, and `sentinel.sh` remain untracked and untouched.
+
+### What was built
+
+- `src/utils/leagueBuilderStorage.ts:399-413` adds the exact optional `snakeSetup` record:
+  final player IDs, multi-card version choices, locked per-seat GM/hotseat/archetype values,
+  and the visible order seed. There is no store rename, DB version change, or existing-field
+  semantic change.
+- `src/src_figma/app/pages/SnakeDraftSetup.tsx:283-321` creates the canonical readable MLB
+  draft-session ID and writes `snakeSetup` in the same `saveMlbDraftSession` object/transaction
+  as the S1a fields before room navigation.
+- `src/src_figma/app/pages/SnakeDraftSetup.tsx:199-245` keeps historical `sourceId` threaded
+  through `deriveVersionGroupId`, proof selection, and the loud missing-identity warning.
+  Amendment 2's durable Player/source adapter expansion remains explicitly deferred to the
+  legends-library thread.
+- `src/src_figma/app/pages/SnakeDraftSetup.tsx:347-390` removes the currently chosen version
+  card rather than the first card in its group and exposes `HAND ADD` / `ADD BACK` for the exact
+  removed card.
+- `src/src_figma/__tests__/pages/SnakeDraftSetup.test.tsx:120-185` pins exact-card remove/add
+  and the required real-storage GO round trip. The reader sees the full `snakeSetup` record plus
+  S1a workflow/method/round/pick-order/current-index/revision fields.
+- The original four-card, proof/shortfall, version dedupe, stale-GO, N1 warning, and flag-OFF
+  route coverage remains in the two owned setup suites.
+
+### Ordered gate evidence
+
+**Gate 1 — `npx tsc --noEmit`**
+
+```text
+exit 0
+(no output)
+```
+
+**Gate 2 — `npm run build`**
+
+```text
+> tsc -b && vite build
+✓ 2653 modules transformed.
+✓ built in 11.09s
+PWA v1.2.0
+files generated
+exit 0
+```
+
+Only the existing Browserslist-age, mixed static/dynamic import, and large-chunk warnings
+were printed.
+
+**Gate 3 — owned suites**
+
+```text
+✓ SnakeDraftSetup.route.test.tsx (1 test)
+✓ SnakeDraftSetup.test.tsx (7 tests)
+Test Files  2 passed (2)
+Tests       8 passed (8)
+Duration    2.23s
+exit 0
+```
+
+The remove/add test prints two existing-style React `act(...)` warnings after its asynchronous
+proof rerun; assertions and the suite are green.
+
+**Gate 4 — auction preservation**
+
+The repo currently has 36 auction-named test files, so the run used all 36 as a strict superset
+of the contract's 28-file gate.
+
+```text
+Test Files  36 passed (36)
+Tests       452 passed (452)
+Duration    109.10s
+exit 0
+```
+
+**Gate 5 — one full `npx vitest run`, then unchanged solo verification of every red file**
+
+```text
+Test Files  6 failed | 621 passed | 8 skipped (635)
+Tests       6 failed | 9572 passed | 15 skipped (9593)
+Duration    373.69s
+exit 1
+```
+
+All six reds were timeouts under full-suite contention; there were zero assertion failures.
+They were `auctionGauntlet`, `poolFromDemand`, `draftPipeline.integration`,
+`prospectScoutingDraftEngine`, `RosterDesigner`, and `LeagueBuilderDraftSetup.money`.
+The unchanged six-file verification immediately afterward produced:
+
+```text
+Test Files  6 passed (6)
+Tests       160 passed (160)
+Duration    73.49s
+exit 0
+```
+
+This is zero reproducible new red: every full-run timeout passed unchanged in the required
+follow-up. The full run's already-characterized `LeagueBuilderDraftSetup` and
+`franchiseManualSmokeFixture` files were green in that run.
+
+**Final hygiene**
+
+```text
+git diff --check
+exit 0
+```
+
+### Auditor attack-first list
+
+1. Read the stored record back through `getMlbDraftSession`; confirm the canonical session ID
+   and one-transaction object make Card 1/2/3 choices visible to S2.
+2. Attack version-choice behavior after removing and adding back one sibling, including whether
+   the final `versionSelections` definition matches the downstream room consumer.
+3. Verify no setup change can race an older seating proof into enabling GO.
+4. Confirm the additive storage interface is the only granted persistence change and auction
+   surfaces are byte-untouched.
+
+---
+
+## AUDIT — opus, independent, 2026-07-10 — VERDICT: APPROVE-WITH-NOTES
+Auditor re-ran gates itself (tsc clean · owned 8/8 · 7 chosen auction suites 118/118 ·
+build exit 0 · poolFromDemand solo-green confirming timeout-only reds). All attack
+vectors PASS: setup→room record persists all four decisions atomically in one put and
+round-trips through the real storage path · seating proof consumes the post-selection
+one-card-per-human pool · N1 loud seam fires visibly + console.warn (incl. mixed case) ·
+GO staleness race closed by monotonic revision guard · partition/frozen sweep exact ·
+copy law + First Law clean · flag default OFF.
+NOTES (non-blocking): (1) raw person-key version label needs a human descriptor when
+the legends path lights up; (2) cross-namespace same-person ids (lahman: vs bbref:)
+split silently — legends-library normalization carry-forward; (3) S2 MUST land the
+/snake-room route or an enabled flag dead-ends; (4) operator scaffolding stays out of
+the PR; (5) full-suite reds characterized as contention timeouts, spot-verified.
