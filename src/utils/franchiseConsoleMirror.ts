@@ -71,8 +71,18 @@ export class FranchiseConsoleMirrorValidationError extends Error {
 }
 
 export type DevelopmentProposal =
-  | { kind: 'rating'; overlay: FranchiseRatingsOverlayRow }
-  | { kind: 'trait'; overlay: FranchiseTraitOverlayRow };
+  | {
+      kind: 'rating';
+      overlay: FranchiseRatingsOverlayRow;
+      /** Present only when a prior player write failed and the proposal can be retried safely. */
+      retry?: true;
+    }
+  | {
+      kind: 'trait';
+      overlay: FranchiseTraitOverlayRow;
+      /** Present only when a prior player write failed and the proposal can be retried safely. */
+      retry?: true;
+    };
 
 export interface UnresolvedDevelopmentCheckpoint {
   /**
@@ -226,7 +236,12 @@ async function resolveBoundary(
 function isTerminalStatus(
   status: FranchiseRatingsOverlayRow['confirmationStatus'] | FranchiseTraitOverlayRow['confirmationStatus'],
 ): boolean {
-  return status !== 'pending';
+  return (
+    status === 'confirmed' ||
+    status === 'confirmed-applied' ||
+    status === 'rejected' ||
+    status === 'conflict'
+  );
 }
 
 function isHistoryStatus(
@@ -252,7 +267,7 @@ function hasPendingApplyIntent(
   overlay: FranchiseRatingsOverlayRow | FranchiseTraitOverlayRow,
 ): boolean {
   return (
-    overlay.confirmationStatus === 'pending' &&
+    (overlay.confirmationStatus === 'pending' || overlay.confirmationStatus === 'apply-failed') &&
     overlay.resolvedAt !== undefined &&
     overlay.actualEnteredValue !== undefined
   );
@@ -287,11 +302,21 @@ export async function listUnresolvedDevelopment(
   ]);
   const proposals: DevelopmentProposal[] = [
     ...ratings
-      .filter((overlay) => overlay.confirmationStatus === 'pending')
-      .map((overlay): DevelopmentProposal => ({ kind: 'rating', overlay })),
+      .filter((overlay) =>
+        overlay.confirmationStatus === 'pending' || overlay.confirmationStatus === 'apply-failed')
+      .map((overlay): DevelopmentProposal => ({
+        kind: 'rating',
+        overlay,
+        ...(overlay.confirmationStatus === 'apply-failed' ? { retry: true as const } : {}),
+      })),
     ...traits
-      .filter((overlay) => overlay.confirmationStatus === 'pending')
-      .map((overlay): DevelopmentProposal => ({ kind: 'trait', overlay })),
+      .filter((overlay) =>
+        overlay.confirmationStatus === 'pending' || overlay.confirmationStatus === 'apply-failed')
+      .map((overlay): DevelopmentProposal => ({
+        kind: 'trait',
+        overlay,
+        ...(overlay.confirmationStatus === 'apply-failed' ? { retry: true as const } : {}),
+      })),
   ];
   if (proposals.length === 0) return [];
 
