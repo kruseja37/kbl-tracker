@@ -1,6 +1,8 @@
 export type SnakeSound = 'nav' | 'gavel' | 'turn' | 'snipe' | 'danger';
 export type SnakeSoundEvent = 'NAVIGATE' | 'PICK_RECORDED' | 'YOUR_TURN' | 'PRIVATE_SNIPE' | 'DANGER';
 
+export const SNAKE_SOUND_STORAGE_KEY = 'kbl-snake-sounds-enabled';
+
 const SOUND_BY_EVENT: Record<SnakeSoundEvent, SnakeSound> = {
   NAVIGATE: 'nav',
   PICK_RECORDED: 'gavel',
@@ -19,6 +21,24 @@ const NOTES: Record<SnakeSound, readonly number[]> = {
 
 export function snakeSoundForRoomEvent(event: SnakeSoundEvent): SnakeSound {
   return SOUND_BY_EVENT[event];
+}
+
+export function loadSnakeSoundsEnabled(storage?: Pick<Storage, 'getItem'> | null): boolean {
+  try {
+    const source = storage ?? (typeof window === 'undefined' ? null : window.localStorage);
+    return source?.getItem(SNAKE_SOUND_STORAGE_KEY) !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+export function saveSnakeSoundsEnabled(enabled: boolean, storage?: Pick<Storage, 'setItem'> | null): void {
+  try {
+    const target = storage ?? (typeof window === 'undefined' ? null : window.localStorage);
+    target?.setItem(SNAKE_SOUND_STORAGE_KEY, String(enabled));
+  } catch {
+    // Sound preference is optional; a blocked browser store must not block the room.
+  }
 }
 
 export function createSnakeSoundPlayer(enabled: boolean) {

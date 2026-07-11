@@ -19,8 +19,8 @@ export function SnakeCompanionFrame(props: {
         <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={props.onSignOut}>COVER THIS DEVICE</button>
       </header>
       <section className="ballpark-panel mb-4" aria-label="Draft order">
-        <p className="font-bold">ON PICK {props.currentPick}</p>
-        <div className="mt-2 flex gap-2 overflow-x-auto">{props.order.map((slot) => <span key={slot.pick} className="whitespace-nowrap border-2 border-[var(--ballpark-panel-border)] px-2 py-1 text-sm">#{slot.pick} {slot.teamName}</span>)}</div>
+        <p className="font-bold">CURRENT PICK {props.currentPick}</p>
+        <div className="mt-2 flex gap-2 overflow-x-auto">{props.order.map((slot) => <span key={slot.pick} className="whitespace-nowrap border-2 border-[var(--ballpark-panel-border)] px-2 py-1 text-sm">#{slot.pick} {slot.teamName.toUpperCase()}</span>)}</div>
       </section>
       <section className="ballpark-panel mb-4" aria-label="Draft ticker">
         <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">ROOM TICKER</p>

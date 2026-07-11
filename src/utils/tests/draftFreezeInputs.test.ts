@@ -315,4 +315,75 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     expect(freeze.players.find((player) => player.playerId === 'rank-4')?.morale.payBase).toBe(10);
     expect(freeze.players.find((player) => player.playerId === 'rank-1')?.morale.payBase).toBe(-10);
   });
+
+  test('S7 farm snake adapter uses absolute slot salary and slot-vs-talent rank after a pick trade', () => {
+    const pickOrder = Array.from({ length: 6 }, (_, index) => ({
+      round: index + 1,
+      pick: index + 1,
+      teamId: index % 2 === 0 ? 'team-a' : 'team-b',
+    }));
+    const farmSnakeSession = {
+      id: 'snake-threshold::startup-mlb-draft::2',
+      leagueId: 'snake-threshold',
+      seasonNumber: 2,
+      seed: 'snake-threshold:farm',
+      workflowVersion: 'snake-v1-farm',
+      engineMethodVersion: 'snake-s6',
+      tier: 'standard' as const,
+      balanceMode: 'taxed' as const,
+      rounds: 6,
+      draftPhase: 'FARM' as const,
+      farmSlotSalaries: [600, 500, 400, 300, 200, 100],
+      pickOrder,
+      completedPicks: [
+        { ...pickOrder[3], teamId: 'team-a', playerId: 'talent-1' },
+        { ...pickOrder[0], teamId: 'team-b', playerId: 'talent-4' },
+        { ...pickOrder[1], playerId: 'talent-2' },
+        { ...pickOrder[2], playerId: 'talent-3' },
+        { ...pickOrder[4], playerId: 'talent-5' },
+        { ...pickOrder[5], playerId: 'talent-6' },
+      ],
+      currentPickIndex: pickOrder.length,
+      createdDate: '2026-01-01',
+      lastModified: '2026-01-01',
+    };
+    const talentIvById = new Map([
+      ['talent-1', 600],
+      ['talent-2', 500],
+      ['talent-3', 400],
+      ['talent-4', 300],
+      ['talent-5', 200],
+      ['talent-6', 100],
+    ]);
+    const metaByPlayerId = new Map([...talentIvById].map(([playerId, iv]) => [playerId, {
+      personality: 'Competitive',
+      modifiers: neutralModifiers,
+      iv,
+    }]));
+
+    const inputs = buildDraftFreezeInputs({
+      mlbSession: null,
+      farmSession: null,
+      farmSnakeSession,
+      metaByPlayerId,
+    });
+
+    expect(inputs.map((input) => [input.playerId, input.teamId, input.settledSalary])).toEqual([
+      ['talent-1', 'team-a', 300],
+      ['talent-4', 'team-b', 600],
+      ['talent-2', 'team-b', 500],
+      ['talent-3', 'team-a', 400],
+      ['talent-5', 'team-a', 200],
+      ['talent-6', 'team-b', 100],
+    ]);
+    expect(inputs.map((input) => input.payClassOverride)).toEqual([
+      'below',
+      'above',
+      'within',
+      'within',
+      'within',
+      'within',
+    ]);
+    expect(inputs.every((input) => input.tier === 'FARM')).toBe(true);
+  });
 });

@@ -41,6 +41,7 @@ import {
   createFarmAuctionSessionId,
   getAuctionSessionById,
   getLeagueTemplate,
+  getMlbDraftSession,
   getPlayer,
   getRegisteredPool,
   savePlayer,
@@ -84,7 +85,9 @@ import {
   getFranchiseSeasonId,
   getFranchiseSeasonName,
 } from './franchisePersistenceContract';
-import { buildDraftFreezeInputs } from './draftFreezeInputs';
+import { buildDraftFreezeInputs, type DraftFreezePlayerMeta } from './draftFreezeInputs';
+import { FARM_SNAKE_SESSION_NUMBER } from '../engines/snakeFarmSlots';
+import { priceFarmAuctionProspect } from './farmAuctionPool';
 import { deriveShillTeamIds } from '../engines/cpuTeamRoles';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import {
@@ -790,7 +793,8 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
         resilience: 50,
         charisma: 50,
       };
-      const metaByPlayerId = new Map(hiddenModifierBackfill.players.map((player) => [
+      const playerById = new Map(hiddenModifierBackfill.players.map((player) => [player.id, player]));
+      const metaByPlayerId = new Map<string, DraftFreezePlayerMeta>(hiddenModifierBackfill.players.map((player) => [
         player.id,
         {
           personality: player.personality,
@@ -802,12 +806,28 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
         && (leagueTemplate.draftFormat === 'snake' || !mlbCompletion.auctionComplete);
       let inputs;
       if (useSnake && mlbCompletion.snakeSession) {
-        const registeredPool = await getRegisteredPool(config.league);
+        const [registeredPool, storedFarmSnakeSession] = await Promise.all([
+          getRegisteredPool(config.league),
+          getMlbDraftSession(config.league, FARM_SNAKE_SESSION_NUMBER),
+        ]);
+        const farmSnakeSession = storedFarmSnakeSession?.draftPhase === 'FARM'
+          ? storedFarmSnakeSession
+          : null;
+        for (const pick of farmSnakeSession?.completedPicks ?? []) {
+          const player = playerById.get(pick.playerId);
+          const meta = metaByPlayerId.get(pick.playerId);
+          if (!player || !meta) continue;
+          metaByPlayerId.set(pick.playerId, {
+            ...meta,
+            iv: priceFarmAuctionProspect(player as Parameters<typeof priceFarmAuctionProspect>[0]),
+          });
+        }
         inputs = buildDraftFreezeInputs({
           mlbSession: null,
           mlbSnakeSession: mlbCompletion.snakeSession,
           mlbRegisteredPool: registeredPool,
           farmSession: farmSession?.session ?? null,
+          farmSnakeSession,
           metaByPlayerId,
           mlbExcludedTeamIds: new Set(),
           farmExcludedTeamIds: new Set(),
@@ -888,7 +908,13 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
 
       const computedAt = new Date().toISOString();
       const draftBaselineRows: FranchiseTrueValueRow[] = [];
-      for (const player of freeze.players) {
+      // Snake FARM picks join the morale freeze only. Keep the existing auction
+      // baseline branch byte-for-byte and do not promote hidden FARM talent into
+      // draft-baseline True Value rows.
+      const draftBaselinePlayers = useSnake
+        ? freeze.players.filter((player) => player.tier === 'MLB')
+        : freeze.players;
+      for (const player of draftBaselinePlayers) {
         const position = await resolveDraftBaselinePosition(
           player.playerId,
           player.position,

@@ -251,3 +251,233 @@ lane (repro-first is already in place — the red G1 is the proof). The canonica
    (copy+sound sweep); then Gates 1→5.
 FILE SURFACE ADDITION: draftFreezeInputs.ts + franchiseInitializer.ts (+ their test
 files), exactly as scoped above. An unexplainable morale-row shift elsewhere = STOP.
+
+---
+
+## FINAL BUILDER REPORT — Codex S7 (2026-07-10) — COMPLETE AFTER AMENDMENT 1
+
+### Outcome
+
+Amendment 1, G2, G3, and Gates 1-5 are complete. The original G1 repro file was not
+changed: its SHA-256 remained
+`aed03ac422752a608978d0fd4f56a5abd3d8a364803c6df9e65f0a0256a85ab7` before and after
+the fix. It now passes through the real storage pipeline with 256 player-morale rows
+(176 MLB + 80 FARM), eight fan-morale rows, 176 MLB draft-baseline rows, 80 hidden FARM
+records, and both completed snake session records intact.
+
+The auction flow, auction files, reducer ritual states, storage schema, and feature flags
+were not edited. No git write command was run. The pre-existing untracked captain files
+`DISPATCH_PROMPT.txt`, `run_lane.sh`, and `sentinel.sh` remain untouched.
+
+Mode 2 roadmap update: **no roadmap update needed**. S7 is tracked by the signed snake
+program and this contract; it does not change the separate active Mode 2 slice.
+
+### Files changed
+
+Amendment 1 / G1:
+
+1. `src/utils/draftFreezeInputs.ts`
+2. `src/utils/franchiseInitializer.ts`
+3. `src/utils/tests/draftFreezeInputs.test.ts`
+4. `src/utils/tests/snakeSeasonGauntlet.integration.test.ts` (original untracked repro,
+   byte-unchanged during this resume)
+
+G2:
+
+5. `src/src_figma/utils/logoImage.ts`
+6. `src/src_figma/utils/__tests__/logoImage.test.ts`
+7. `src/src_figma/app/pages/LeagueBuilderTeams.tsx`
+8. `src/src_figma/__tests__/leagueBuilder/LeagueBuilderTeams.test.tsx`
+9. `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`
+10. `src/src_figma/app/components/snake/__tests__/SnakeDraftRoomView.test.tsx`
+
+G3:
+
+11. `src/src_figma/utils/snakeSounds.ts`
+12. `src/src_figma/utils/__tests__/snakeSounds.test.ts`
+13. `src/src_figma/app/pages/SnakeDraftSetup.tsx`
+14. `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+15. `src/src_figma/app/pages/SnakeCompanion.tsx`
+16. `src/src_figma/app/components/snake/desk/AdvisorLog.tsx`
+17. `src/src_figma/app/components/snake/desk/BoardView.tsx`
+18. `src/src_figma/app/components/snake/desk/DeskCandidateCard.tsx`
+19. `src/src_figma/app/components/snake/desk/WhatIfSandbox.tsx`
+20. `src/src_figma/app/components/snake/farm/FarmPrivateDesk.tsx`
+21. `src/src_figma/app/components/snake/trade/SnakeTradeGuide.tsx`
+22. `src/src_figma/app/components/snake/trade/SnakeCommissionerTrade.tsx`
+23. `src/src_figma/app/components/snake/trade/TradePackageCard.tsx`
+24. `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx`
+25. `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`
+26. `src/src_figma/app/components/snake/companion/SnakeCompanionFrame.tsx`
+
+Report:
+
+27. `spec-docs/contracts/CONTRACT_S7_GAUNTLET_2026-07-10.md`
+
+### Amendment 1 implementation
+
+- `buildDraftFreezeInputs` now accepts the ruled optional
+  `farmSnakeSession?: LeagueBuilderMlbDraftSession` input.
+- Completed FARM snake picks use the frozen salary at
+  `farmSlotSalaries[pick.pick - 1]`; the salary follows the absolute pick after a trade,
+  never array order or the acquiring club.
+- FARM talent IV is computed through the same `priceFarmAuctionProspect` seam used to
+  populate auction-farm players. It stays inside freeze metadata and is not exposed to a
+  UI or a new storage field.
+- FARM pay class mirrors the MLB snake slot-rank-versus-talent-rank threshold.
+- The SNAKE initializer branch alone reads session 2 and accepts it only when
+  `draftPhase === 'FARM'`. A non-FARM record returned for that key is ignored fail-closed.
+- Snake FARM players join salary/morale freeze output but are excluded from MLB
+  draft-baseline True Value rows. The AUCTION branch retains its prior input and baseline
+  behavior.
+
+### Final G1 assertion inventory
+
+1. Creates and reloads the production-default eight-club snake league, registered pool,
+   full setup record, and 22-round/176-pick MLB order.
+2. Runs the simultaneous one-per-human seating proof before GO.
+3. Includes two Babe Ruth versions, selects the 1927 card, and proves the drafted version
+   appears once league-wide while the sibling never reaches a roster.
+4. Executes and persists a posted-guide MLB pick trade before pick one.
+5. Records and reloads all 176 MLB picks through the real pick mutation/session store.
+6. Executes a commissioner correction at pick 48, proves the persisted pick is removed,
+   and records it again through the same path.
+7. Commits the completed MLB session, then reloads eight legal 22-player rosters and
+   proves `salary === settledSalary === RegisteredPool IV` for every drafted player.
+8. Persists and reloads one scout per club through the live scout-hire helper.
+9. Derives each FARM budget from the farm tier cap plus half that club's stored MLB cap
+   headroom.
+10. Creates/reloads the separate session-2 FARM snake record and frozen 80-slot salary
+    table, then executes/persists a real FARM pick trade.
+11. Records all 80 FARM picks and commits them through the real FARM roster path; reloads
+    10 per club with frozen slot salary, matching settled salary, and hidden reveal state.
+12. Proves staff hire is the next route; persists and reloads a manager and reporter for
+    every club.
+13. Reloads the MLB pool/session and proves 176 IV-settled MLB freeze inputs include both
+    above-slot and below-slot cases before calling the real initializer.
+14. Proves franchise/season readiness: legal 22/10 rosters for all eight clubs, empty
+    manual schedule policy, all 256 roster players copied, 80 hidden FARM records, and
+    176 MLB draft-baseline rows.
+15. Proves draft-day morale baselines exist for every one of the 176 MLB and 80 FARM
+    picks, with eight team-fan baselines.
+
+### G2 result
+
+- League Builder team create/edit now offers one LOGO file input using the existing
+  `Team.logoUrl` field.
+- PNG, WebP, and JPEG inputs are decoded, fit inside 128x128 without upscaling, drawn to a
+  canvas, and re-encoded as WebP or PNG.
+- Encoded output above 32 KiB is rejected before form state or team storage changes with
+  exact copy: `THAT PICTURE IS TOO BIG — TRY A SMALLER ONE`.
+- A saved logo renders in all three ruled room positions: order strip, club lens, and
+  ritual card.
+
+### G3 copy changes
+
+No visible percentage remains on a snake surface. Test-characterized/D11-locked labels
+were preserved; plain explanations were added beside them instead of changing fixtures.
+Every copy change made in this pass:
+
+1. Version-picker options now render in the room's all-caps chrome.
+2. `HAND ADD` now explains that the list contains removed players who can be added back.
+3. `DRAFT SEED` now explains that the code reproduces the same shuffle.
+4. The locked `R1: 1→8 · R2: 8→1` line now adds `THE ORDER REVERSES EACH ROUND.`
+5. `PLAN CUSHION` now explains: `THE MONEY LEFT IF THESE 22 ARE STILL THERE.`
+6. `YOUR TAX CORE` now explains that these are the players who count toward the tax.
+7. Default `OFF-BOARD` wording became `NOT ON YOUR BOARD`; the MLB fallout line now says
+   the displaced target falls to a backup.
+8. The WHAT-IF intro became `CHOOSE ONE CHANGE. THE DESK SHOWS THE MONEY. YOU DECIDE.` and
+   its plan-cushion line gained the same plain explanation.
+9. The guide intro now says it checks the price and whether both clubs can finish; its
+   locked pick-N label gained `ENTER THE PICK NUMBER YOU WANT.`
+10. Commissioner copy now says the commissioner `MAKES THE TRADE OR SAYS NO` instead of
+    `executes or declines`.
+11. Companion claim/approval instructions, shared-room review, correction help, and
+    hotseat cover help were converted to direct all-caps sentences.
+12. Companion `ON PICK` became `CURRENT PICK`; visible order-club names render uppercase.
+13. `LEGAL-FINISH CUSHION` became `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM`,
+    including a direct `YOU ARE $X SHORT` form.
+14. `RATIONAL BUYER(S)` became `CLUB(S) COULD TAKE HIM BEFORE YOUR TURN`; the zero case is
+    `NO CLUB IS LIKELY TO TAKE HIM BEFORE YOUR TURN.` The advisor LOG uses the same copy.
+15. Dynamic locked engine messages render with uppercase chrome without changing their
+    stored/test-characterized text; desk and FARM player names also render uppercase.
+
+Locked words intentionally retained under D11: `HAND ADD`, `DRAFT SEED`, the R1/R2 line,
+`PLAN CUSHION`, `REVERT`, `REVOKE`, and `EXECUTE TRADE`.
+
+### Five-sound inventory
+
+Exactly five sounds remain:
+
+1. `nav` — public club-lens navigation and completed correction.
+2. `gavel` — only after the pick save succeeds and the recorded state latches.
+3. `turn` — when the active private seat owns the current turn.
+4. `snipe` — only on a revealed private seat when its board target is taken.
+5. `danger` — only on a revealed private seat when its candidate becomes blocked.
+
+The one `kbl-snake-sounds-enabled` localStorage preference is read by both MLB and FARM
+rooms and written whenever the room toggle changes. Default remains ON; blocked browser
+storage falls back safely without blocking the room.
+
+### Gates 1-5
+
+1. **TypeScript:** `npx tsc -b --pretty false` — exit 0, no diagnostics.
+2. **Build:** `npm run build` — exit 0. Only the existing six-month-old Browserslist data
+   warning printed.
+3. **G1 + every snake-named suite:** 25 files passed, 108 tests passed. G1 SHA remained
+   unchanged.
+4. **Every auction-named suite:** 39 files, exit 0. Frozen auction path stayed green.
+5. **One full Vitest:** 645 files passed / 8 skipped; 9,659 tests passed / 15 skipped;
+   one contract-listed batch-only `LeagueBuilderDraftSetup.money` flake. The exact file
+   passed solo, 16/16. No deterministic red remains.
+
+The first post-implementation full run found one genuine S7 regression before the final
+gate: an older initializer mock returned the MLB session for the session-2 lookup. The
+production reader now accepts that key only when the record explicitly says FARM; the
+exact failed file, the adapter test, and unchanged G1 all passed after the fix.
+
+`git diff --check` exits 0.
+
+### Auditor attack list
+
+1. Re-run G1 from the unchanged SHA and independently count 176 MLB + 80 FARM player
+   morale rows, eight fan rows, 176 MLB baselines, and 80 hidden FARM records.
+2. Mutation-test `pick.pick - 1` against completed-pick array order and acquiring club;
+   absolute FARM slot salary must survive both attacks.
+3. Return a non-FARM record from the session-2 reader and prove it is ignored; return a
+   completed FARM record with missing/invalid IV and prove initialization fails before
+   baseline writes.
+4. Compare auction initialization inputs/outputs before and after this diff, including
+   FARM auction morale and draft-baseline rows.
+5. Verify no hidden FARM rating or computed IV is written to a new field, rendered in a
+   component, or included in FARM True Value baseline rows.
+6. Exercise logo encoding in Safari/iPad and a browser without WebP canvas support; prove
+   output is PNG/WebP, no dimension exceeds 128, and decoded data stays below 32 KiB.
+7. Save/reload a real team logo and inspect the order strip, club lens, and ritual card;
+   confirm the auction UI receives no logo/copy change.
+8. Toggle sound OFF, reload both MLB and FARM routes, then toggle ON; ensure no private
+   snipe/danger sound fires while covered or merely because the toggle changed.
+9. Search every snake-rendered string for `%`, lowercase chrome, and engine/finance words;
+   verify D11-locked words were explained rather than reworded.
+10. Re-run the full suite under load and confirm any red is either the named solo-green
+    family or a newly reported failure, never silently characterized.
+
+**S7 COMPLETE — AMENDMENT 1 + G2 + G3 GREEN; GATES 1-5 SATISFIED.**
+
+---
+
+## AUDIT — opus, independent, 2026-07-11 — VERDICT: APPROVE ("ready for JK's browser walk")
+Everything re-derived: G1 SHA byte-match then green from the unchanged repro; slot-key
+mutation (array-order swap) goes RED immediately — the absolute-slot invariant is
+guarded, not decorative; fail-closed session-2 read is production code (non-FARM
+ignored; missing slots/invalid IV throws BEFORE baseline writes); farm talent via the
+same priceFarmAuctionProspect seam; no hidden-rating leak (transient in-memory only;
+farm excluded from True Value baselines); auction branch behaviorally identical (40
+files/500 tests green); G1 un-gameable (every assertion reloads real storage; 256
+morale rows independently counted); logo slot exact (pre-write 32KiB reject, three
+render paths, no schema change); copy/sounds clean (D11 locks explained-beside; five
+sounds; reveal-gated; persisted toggle).
+NOTES (non-blocking): toggling sound ON while revealed with a live snipe key can
+re-fire one sound; hypothetical snake-MLB+auction-farm config would skip farm baseline
+rows (unreachable in the real program — captain glanced, consistent with intent);
+report's "8 fan rows" phrasing not hard-pinned by G1 (core proof intact).

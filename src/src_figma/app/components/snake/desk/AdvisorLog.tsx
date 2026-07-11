@@ -4,7 +4,7 @@ export function AdvisorLog({ entries }: { entries: readonly AdvisorLogEntry[] })
   return (
     <div className="space-y-2" aria-label="Advisor log">
       {entries.map((entry) => (
-        <p key={entry.key} className={`border-l-4 border-[var(--ballpark-brass)] pl-3 ${entry.expired ? 'opacity-55' : 'font-bold'}`}>
+        <p key={entry.key} className={`border-l-4 border-[var(--ballpark-brass)] pl-3 uppercase ${entry.expired ? 'opacity-55' : 'font-bold'}`}>
           {entry.expired ? 'EXPIRED — ' : ''}{entry.text}
         </p>
       ))}

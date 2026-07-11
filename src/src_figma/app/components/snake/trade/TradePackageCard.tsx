@@ -15,7 +15,7 @@ export function TradePackageCard(props: {
 }) {
   return (
     <div className="mt-4 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-4" aria-live="polite">
-      <p className="font-bold">{props.answer.message}</p>
+      <p className="font-bold uppercase">{props.answer.message}</p>
       {props.answer.nextPickMoves.map((move) => (
         <p key={move.teamId} className="mt-2 text-sm font-bold">
           {(props.teams.find((team) => team.id === move.teamId)?.name ?? 'CLUB').toUpperCase()} NEXT PICK MOVES: {pickLabel(move.before)} → {pickLabel(move.after)}

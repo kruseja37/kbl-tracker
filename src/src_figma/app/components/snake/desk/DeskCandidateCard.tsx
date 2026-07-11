@@ -5,7 +5,7 @@ export function DeskCandidateCard({ candidate, boardSlot }: { candidate: DeskCan
   return (
     <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <strong className={candidate.drafted ? 'line-through opacity-60' : ''}>{candidate.name}</strong>
+        <strong className={`uppercase ${candidate.drafted ? 'line-through opacity-60' : ''}`}>{candidate.name}</strong>
         <span className="border-2 border-[var(--ballpark-brass)] px-2 py-0.5 text-[10px] font-bold">{candidate.archetypeChip}</span>
         <span className="text-xs font-bold">{candidate.fitWord}</span>
       </div>
@@ -18,7 +18,7 @@ export function DeskCandidateCard({ candidate, boardSlot }: { candidate: DeskCan
       <p className="mt-1 text-xs font-bold">NEXT PICK — {risk}</p>
       {candidate.riskReason && <details className="mt-1 text-xs"><summary>WHY THIS READ?</summary><p>{candidate.riskReason}</p></details>}
       <p className="mt-2 text-sm">{candidate.legalFinishLine}</p>
-      <p className="mt-2 text-sm font-bold">{boardSlot ? `FITS YOUR BOARD — ${boardSlot} SLOT` : candidate.boardFallout ?? 'OFF-BOARD — CHOOSE A SLOT TO PRICE THE CHANGE.'}</p>
+      <p className="mt-2 text-sm font-bold">{boardSlot ? `FITS YOUR BOARD — ${boardSlot} SLOT` : candidate.boardFallout ?? 'NOT ON YOUR BOARD — CHOOSE A SLOT TO PRICE THE CHANGE.'}</p>
     </div>
   );
 }

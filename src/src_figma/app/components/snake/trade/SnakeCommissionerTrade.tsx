@@ -64,7 +64,7 @@ export function SnakeCommissionerTrade(props: {
     <section aria-label="Commissioner trade">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMMISSIONER</p>
       <h2 className="ballpark-title mt-1 text-2xl">TRADE PICKS</h2>
-      <p className="mt-2 text-sm">Both GMs agree in the room. The commissioner checks the guide, then executes or declines.</p>
+      <p className="mt-2 text-sm">BOTH GMS AGREE IN THE ROOM. THE COMMISSIONER CHECKS THE GUIDE, THEN MAKES THE TRADE OR SAYS NO.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm font-bold">BUYING CLUB
           <select aria-label="BUYING CLUB" className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={buyerTeamId} onChange={(event) => { setBuyerTeamId(event.target.value); resetPackage(); }}>
@@ -94,7 +94,7 @@ export function SnakeCommissionerTrade(props: {
           <button className="ballpark-press-button ballpark-press-md ballpark-press-default" disabled={working} onClick={resetPackage}>DECLINE</button>
         </div>}
       </>}
-      {status && <p className="mt-4 font-bold" role="status">{status}</p>}
+      {status && <p className="mt-4 font-bold uppercase" role="status">{status}</p>}
     </section>
   );
 }

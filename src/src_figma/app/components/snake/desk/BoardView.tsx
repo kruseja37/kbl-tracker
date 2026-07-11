@@ -29,14 +29,18 @@ export function BoardView(props: {
         ))}
       </div>
       {props.planBill && (
-        <div className="mt-4 grid grid-cols-3 gap-2 border-4 border-[var(--ballpark-brass)] p-3 text-center">
-          <div><p className="text-xs font-bold">PLAN COST</p><strong>${Math.round(props.planBill.planCost).toLocaleString()}</strong></div>
-          <div><p className="text-xs font-bold">PLAN TAX</p><strong>${Math.round(props.planBill.planTax).toLocaleString()}</strong></div>
-          <div><p className="text-xs font-bold">PLAN CUSHION</p><strong>${Math.round(props.planBill.planCushion).toLocaleString()}</strong></div>
+        <div className="mt-4 border-4 border-[var(--ballpark-brass)] p-3 text-center">
+          <div className="grid grid-cols-3 gap-2">
+            <div><p className="text-xs font-bold">PLAN COST</p><strong>${Math.round(props.planBill.planCost).toLocaleString()}</strong></div>
+            <div><p className="text-xs font-bold">PLAN TAX</p><strong>${Math.round(props.planBill.planTax).toLocaleString()}</strong></div>
+            <div><p className="text-xs font-bold">PLAN CUSHION</p><strong>${Math.round(props.planBill.planCushion).toLocaleString()}</strong></div>
+          </div>
+          <p className="mt-2 text-xs font-bold">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p>
         </div>
       )}
       <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
         <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
+        <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p>
         <div className="mt-3 space-y-2">
           {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
         </div>

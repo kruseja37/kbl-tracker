@@ -59,6 +59,7 @@ import {
   isSavedAuctionMutationGuardMessage,
   useSavedAuctionMutationGuard,
 } from "../utils/savedAuctionMutationGuard";
+import { resizeTeamLogo } from "../../utils/logoImage";
 
 const ERA_FLAVORS: EraFlavor[] = ['GOLDEN_AGE', 'CLASSIC_TV', 'MODERN_LOCAL'];
 
@@ -112,6 +113,7 @@ interface TeamFormData {
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
+  logoUrl: string;
   foundedYear: string;
   championships: string;
   backstory: string;
@@ -175,6 +177,7 @@ const DEFAULT_FORM_DATA: TeamFormData = {
   primaryColor: "#FF6600",
   secondaryColor: "#000000",
   accentColor: "",
+  logoUrl: "",
   foundedYear: "",
   championships: "0",
   backstory: "",
@@ -266,6 +269,8 @@ export function LeagueBuilderTeams() {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [formData, setFormData] = useState<TeamFormData>(() => createDefaultFormData());
   const [isSaving, setIsSaving] = useState(false);
+  const [isLogoProcessing, setIsLogoProcessing] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isCapIdentityOpen, setIsCapIdentityOpen] = useState(true);
@@ -386,6 +391,7 @@ export function LeagueBuilderTeams() {
   const openCreateModal = () => {
     setEditingTeam(null);
     setSaveError(null);
+    setLogoError(null);
     setFormData(createDefaultFormData());
     setIsCapIdentityOpen(true);
     setIsFarmCapIdentityOpen(true);
@@ -411,6 +417,7 @@ export function LeagueBuilderTeams() {
       primaryColor: team.colors.primary,
       secondaryColor: team.colors.secondary,
       accentColor: team.colors.accent || "",
+      logoUrl: team.logoUrl || "",
       foundedYear: team.foundedYear?.toString() || "",
       championships: team.championships?.toString() || "0",
       backstory: team.backstory || "",
@@ -444,6 +451,7 @@ export function LeagueBuilderTeams() {
     setIsModalOpen(false);
     setEditingTeam(null);
     setSaveError(null);
+    setLogoError(null);
     setFormData(createDefaultFormData());
     autosavedTeamMetadataRef.current = null;
   };
@@ -526,6 +534,20 @@ export function LeagueBuilderTeams() {
       managerHometown: profile?.hometown || "",
       managerStyleLabel: profile?.managementStyle?.label || "",
     }));
+  };
+
+  const handleLogoFile = async (file: File | undefined) => {
+    if (!file) return;
+    setIsLogoProcessing(true);
+    setLogoError(null);
+    try {
+      const logoUrl = await resizeTeamLogo(file);
+      setFormData((prev) => ({ ...prev, logoUrl }));
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : "THAT PICTURE COULD NOT BE READ");
+    } finally {
+      setIsLogoProcessing(false);
+    }
   };
 
   const persistManagerForTeam = async (team: Team): Promise<Team> => {
@@ -643,6 +665,7 @@ export function LeagueBuilderTeams() {
           secondary: formData.secondaryColor,
           accent: formData.accentColor || undefined,
         },
+        logoUrl: formData.logoUrl || undefined,
         foundedYear: formData.foundedYear
           ? parseInt(formData.foundedYear, 10)
           : undefined,
@@ -2208,6 +2231,35 @@ export function LeagueBuilderTeams() {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="team-logo" className="block text-sm font-bold mb-2">Team Logo</label>
+                <div className="flex items-center gap-4">
+                  <input
+                    id="team-logo"
+                    aria-label="Team Logo"
+                    type="file"
+                    accept="image/png,image/webp,image/jpeg"
+                    disabled={isLogoProcessing}
+                    onChange={(event) => void handleLogoFile(event.target.files?.[0])}
+                    className="min-w-0 flex-1 bg-[#4A6844] border-[4px] border-[#3F5A3A] p-3 text-sm text-[#E8E8D8] file:mr-3 file:border-0 file:bg-[#E8E8D8] file:px-3 file:py-2 file:font-bold file:text-[#2d3d2f]"
+                  />
+                  {formData.logoUrl && (
+                    <>
+                      <img className="h-16 w-16 object-contain" src={formData.logoUrl} alt="Team logo preview" />
+                      <button
+                        type="button"
+                        className="border-2 border-[#E8E8D8] px-3 py-2 text-xs font-bold"
+                        onClick={() => setFormData((prev) => ({ ...prev, logoUrl: "" }))}
+                      >
+                        REMOVE LOGO
+                      </button>
+                    </>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-[#E8E8D8]/70">PNG, WEBP, OR JPG · RESIZED TO 128 × 128</p>
+                {logoError && <p className="mt-2 font-bold text-red-200" role="alert">{logoError}</p>}
               </div>
 
               {/* History */}

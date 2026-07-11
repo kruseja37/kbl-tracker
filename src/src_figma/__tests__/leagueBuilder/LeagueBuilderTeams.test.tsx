@@ -14,6 +14,7 @@ import { archetypeToCapIdentity } from '../../../engines/archetypeIdentity';
 import { LUXURY_CAP_TABLES } from '../../../data/tierParams';
 import { normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
 import { applyIdentitySelection, shiftLuxuryCaps } from '../../../engines/leagueConstruction';
+import { resizeTeamLogo, TEAM_LOGO_TOO_BIG_MESSAGE } from '../../utils/logoImage';
 
 // ============================================
 // MOCKS
@@ -102,6 +103,11 @@ vi.mock('../../../utils/managerIdentityStorage', () => ({
   })),
 }));
 
+vi.mock('../../utils/logoImage', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/logoImage')>('../../utils/logoImage');
+  return { ...actual, resizeTeamLogo: vi.fn() };
+});
+
 // ============================================
 // TESTS
 // ============================================
@@ -111,6 +117,7 @@ describe('LeagueBuilderTeams Component', () => {
     vi.clearAllMocks();
     vi.mocked(getAuctionSession).mockResolvedValue(null);
     vi.mocked(getAuctionSessionById).mockResolvedValue(null);
+    vi.mocked(resizeTeamLogo).mockResolvedValue('data:image/webp;base64,TEAMLOGO');
   });
 
   describe('Header', () => {
@@ -182,6 +189,44 @@ describe('LeagueBuilderTeams Component', () => {
   });
 
   describe('Edit Team', () => {
+    test('resizes a selected logo before saving it in the existing team field', async () => {
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+      await screen.findByDisplayValue('Boston Sox');
+
+      const file = new File(['image'], 'logo.png', { type: 'image/png' });
+      fireEvent.change(screen.getByLabelText('Team Logo'), { target: { files: [file] } });
+
+      expect(await screen.findByAltText('Team logo preview')).toHaveAttribute(
+        'src',
+        'data:image/webp;base64,TEAMLOGO',
+      );
+      expect(resizeTeamLogo).toHaveBeenCalledWith(file);
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateTeam).toHaveBeenCalledWith(expect.objectContaining({
+          id: 'team-1',
+          logoUrl: 'data:image/webp;base64,TEAMLOGO',
+        }));
+      });
+    });
+
+    test('rejects an over-cap encoded logo before any team write', async () => {
+      vi.mocked(resizeTeamLogo).mockRejectedValueOnce(new Error(TEAM_LOGO_TOO_BIG_MESSAGE));
+      render(<LeagueBuilderTeams />);
+      fireEvent.click(screen.getAllByTitle('Edit team')[0]);
+      await screen.findByDisplayValue('Boston Sox');
+
+      fireEvent.change(screen.getByLabelText('Team Logo'), {
+        target: { files: [new File(['image'], 'huge.png', { type: 'image/png' })] },
+      });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(TEAM_LOGO_TOO_BIG_MESSAGE);
+      expect(screen.queryByAltText('Team logo preview')).not.toBeInTheDocument();
+      expect(mockUpdateTeam).not.toHaveBeenCalled();
+    });
+
     test('clicking edit button opens modal', async () => {
       render(<LeagueBuilderTeams />);
       const editButtons = screen.getAllByTitle('Edit team');

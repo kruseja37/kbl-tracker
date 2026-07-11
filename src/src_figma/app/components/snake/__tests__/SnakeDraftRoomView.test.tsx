@@ -79,6 +79,8 @@ describe('SnakeDraftRoomView', () => {
 
   it('renders team colors and logo through the ritual card', () => {
     render(<SnakeDraftRoomView {...props()} />);
+    expect(screen.getByAltText('Kodiaks logo in draft order')).toBeInTheDocument();
+    expect(screen.getByAltText('Kodiaks logo in club lens')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
     fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
     const card = screen.getByTestId('ritual-card');
