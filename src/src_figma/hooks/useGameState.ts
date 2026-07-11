@@ -425,6 +425,8 @@ export interface BetweenPlayEventDetails {
   leverageIndex?: number;
   inning?: number;
   halfInning?: "TOP" | "BOTTOM";
+  /** Durable event-log identities that caused a manual notable event. */
+  sourceEventIds?: string[];
 }
 
 // Pitch count prompt types per PITCH_COUNT_TRACKING_SPEC.md
@@ -492,6 +494,10 @@ export interface UseGameStateReturn {
     pitchCount?: number,
   ) => Promise<void>;
   commitPlateAppearance: (action: PlateAppearanceAction) => Promise<void>;
+  appendFameEvent: (
+    event: FameEventRecord,
+    sourceEventIds?: string[],
+  ) => void;
   recordEvent: (
     eventType: EventType,
     runnerId?: string,
@@ -8456,10 +8462,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           description: `${eventType} in inning ${details?.inning || gameState.inning} (LI: ${li.toFixed(2)})`,
         };
 
-        // Manual special-event provenance is supplied by GameTracker's source
-        // AtBatEvent. Until that fenced UI seam can pass the durable eventId,
-        // retain the fame event without guessing from the current sequence.
-        appendFameEvent(fameEvent);
+        // Provenance is supplied by the UI seam that owns the durable event ID.
+        // Never infer a source from sequence/current-play position.
+        appendFameEvent(fameEvent, details?.sourceEventIds);
         console.log(
           `[Fame] Recorded: ${eventType} for ${recipientName}, value=${adjustedFame.toFixed(2)} (${fameEvent.fameType})`,
         );
@@ -12646,6 +12651,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     scoreboard,
     playerStats,
     pitcherStats,
+    appendFameEvent,
     recordHit,
     recordOut,
     recordWalk,

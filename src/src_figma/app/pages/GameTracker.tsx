@@ -937,11 +937,9 @@ import {
 } from "../../../engines/mojoEngine";
 import { FITNESS_STATES } from "../../../engines/fitnessEngine";
 import {
-  useFameTracking,
-  type FameEventDisplay,
-  formatFameValue,
-  getFameColor,
-  getLITier,
+  appendDetectedFameEvents,
+  formatNeutralFameEventActivity,
+  toCatalogFameEventType,
 } from "@/app/hooks/useFameTracking";
 import {
   toMojoLabel,
@@ -954,8 +952,6 @@ import {
   useFanMorale,
   type GameResult as FanMoraleGameResult,
 } from "../hooks/useFanMorale";
-// MAJ-04: Wire narrative engine
-import { generateGameRecap } from "../engines/narrativeIntegration";
 import {
   getLeverageIndex,
   type GameStateForLI,
@@ -1397,6 +1393,7 @@ export function GameTracker() {
     playerStats,
     pitcherStats,
     commitPlateAppearance,
+    appendFameEvent,
     recordEvent,
     recordPlayerStateChange,
     reassignRunnerEventAttribution,
@@ -2059,15 +2056,8 @@ export function GameTracker() {
     notifyPersistenceMetadataChanged("player-state-change");
   }, [gameInitialized, notifyPersistenceMetadataChanged, playerStateHook.players]);
 
-  // Fame tracking
-  const fameTrackingHook = useFameTracking({
-    gameId: gameId || "demo-game",
-    gameMode: effectiveGameMode,
-    isPlayoffs: isPlayoffGame,
-    playoffRound: effectivePlayoffRound,
-    isEliminationGame: effectiveIsEliminationGame,
-    isClinchGame: effectiveIsClinchGame,
-  });
+  // Fame capture uses useGameState's durable archive ledger. This page keeps
+  // only detection-key memory so rerenders cannot append the same event twice.
   const recordedAutoFameKeysRef = useRef<Set<string>>(new Set());
   const processedAutoFameAtBatIdsRef = useRef<Set<string>>(new Set());
   const activeSaveAppearancesRef = useRef<
@@ -2079,24 +2069,41 @@ export function GameTracker() {
   >(async () => {});
 
   const recordDetectedFameEvents = useCallback(
-    (events: DetectedFameEvent[]) => {
-      for (const event of events) {
-        if (recordedAutoFameKeysRef.current.has(event.detectionKey)) {
-          continue;
-        }
+    (events: DetectedFameEvent[], sourceEventIds?: string[]) => {
+      const appended = appendDetectedFameEvents({
+        events,
+        recordedDetectionKeys: recordedAutoFameKeysRef.current,
+        appendFameEvent,
+        gameMode: effectiveGameMode,
+        playoffContext: isPlayoffGame
+          ? {
+              isPlayoffs: true,
+              round: effectivePlayoffRound,
+              isEliminationGame: effectiveIsEliminationGame,
+              isClinchGame: effectiveIsClinchGame,
+            }
+          : undefined,
+        sourceEventIds,
+      });
 
-        recordedAutoFameKeysRef.current.add(event.detectionKey);
-        fameTrackingHook.recordFameEvent(
-          event.eventType,
-          event.playerId,
-          event.playerName,
-          event.inning,
-          event.halfInning,
-          event.leverageIndex,
+      for (const event of appended) {
+        pushActivityLog(
+          formatNeutralFameEventActivity(
+            event.eventType as FameEventType,
+            event.playerName,
+          ),
         );
       }
     },
-    [fameTrackingHook],
+    [
+      appendFameEvent,
+      effectiveGameMode,
+      effectiveIsClinchGame,
+      effectiveIsEliminationGame,
+      effectivePlayoffRound,
+      isPlayoffGame,
+      pushActivityLog,
+    ],
   );
 
   useEffect(() => {
@@ -2105,21 +2112,6 @@ export function GameTracker() {
     activeSaveAppearancesRef.current = {};
     completedSaveAppearancesRef.current = [];
   }, [gameId]);
-
-  const lastFameKeyRef = useRef<string>("");
-  useEffect(() => {
-    const event = fameTrackingHook.lastEvent;
-    if (!event) {
-      lastFameKeyRef.current = "";
-      return;
-    }
-    const key = `${event.label}-${event.finalFame}-${event.icon}`;
-    if (lastFameKeyRef.current === key) return;
-    lastFameKeyRef.current = key;
-    pushActivityLog(
-      `✨ ${event.label} (${formatFameValue(event.finalFame)} Fame)`,
-    );
-  }, [fameTrackingHook.lastEvent, formatFameValue, pushActivityLog]);
 
   // MAJ-02: Fan morale tracking — one hook per team for dual-team franchise support
   // In exhibition mode these are instantiated but never called (no morale in exhibition)
@@ -4118,7 +4110,7 @@ export function GameTracker() {
         ...detectTriplePlayEvents(committedEvent, defendersByPosition),
         ...detectBackToBackHREvents(committedEvent, previousAtBat),
         ...detectWalkOffHREvent(committedEvent, scheduledInnings),
-      ]);
+      ], [committedEvent.eventId]);
 
       const startContext = buildSaveAppearanceStartContextFromAtBat(
         committedEvent,
@@ -8029,7 +8021,30 @@ export function GameTracker() {
           leverageIndex: sourceAtBat?.leverageIndex,
           inning: sourceAtBat?.inning,
           halfInning: sourceAtBat?.halfInning,
+          sourceEventIds: sourceAtBat?.eventId
+            ? [sourceAtBat.eventId]
+            : undefined,
         });
+
+        const catalogFameEventType = toCatalogFameEventType(normalizedEventType);
+        if (catalogFameEventType) {
+          const fameActorName =
+            normalizedEventType === "WEB_GEM" ||
+            normalizedEventType === "ROBBERY"
+              ? event.fielderName || "Fielder"
+              : normalizedEventType === "TOOTBLAN"
+                ? resolvedRunnerName || resolvedRunnerId || "Runner"
+                : sourceAtBat?.batterName ||
+                  event.batterName ||
+                  resolvedCurrentBatterName ||
+                  gameState.currentBatterName;
+          pushActivityLog(
+            formatNeutralFameEventActivity(
+              catalogFameEventType,
+              fameActorName,
+            ),
+          );
+        }
 
         const sourceBatterId =
           sourceAtBat?.batterId || event.batterId || gameState.currentBatterId;
@@ -8142,6 +8157,7 @@ export function GameTracker() {
       getLeadRunnerIdentity,
       getRosterIdFromName,
       playerStateHook,
+      pushActivityLog,
       queuePlayLogRefresh,
       recordEvent,
       recordPlayerStateChange,
@@ -11324,59 +11340,27 @@ export function GameTracker() {
             (pStats.hitByPitch || 0) === 0;
           const isMaddux = isShutout && pStats.pitchCount < 100;
 
-          if (isPerfectGame) {
-            fameTrackingHook.recordFameEvent(
-              "PERFECT_GAME" as FameEventType,
-              pitcherId,
-              pitcherName,
-              gameState.inning,
-              gameState.isTop ? "TOP" : "BOTTOM",
-              1.0,
-            );
-            console.log(`[MAJ-09] Perfect Game detected for ${pitcherId}`);
-          } else if (isNoHitter) {
-            fameTrackingHook.recordFameEvent(
-              "NO_HITTER" as FameEventType,
-              pitcherId,
-              pitcherName,
-              gameState.inning,
-              gameState.isTop ? "TOP" : "BOTTOM",
-              1.0,
-            );
-            console.log(`[MAJ-09] No-Hitter detected for ${pitcherId}`);
-          } else if (isMaddux) {
-            fameTrackingHook.recordFameEvent(
-              "MADDUX" as FameEventType,
-              pitcherId,
-              pitcherName,
-              gameState.inning,
-              gameState.isTop ? "TOP" : "BOTTOM",
-              1.0,
-            );
-            console.log(`[MAJ-09] Maddux detected for ${pitcherId}`);
-          } else if (isShutout) {
-            fameTrackingHook.recordFameEvent(
-              "SHUTOUT" as FameEventType,
-              pitcherId,
-              pitcherName,
-              gameState.inning,
-              gameState.isTop ? "TOP" : "BOTTOM",
-              1.0,
-            );
-            console.log(
-              `[MAJ-09] Complete Game Shutout detected for ${pitcherId}`,
-            );
-          } else {
-            fameTrackingHook.recordFameEvent(
-              "COMPLETE_GAME" as FameEventType,
-              pitcherId,
-              pitcherName,
-              gameState.inning,
-              gameState.isTop ? "TOP" : "BOTTOM",
-              1.0,
-            );
-            console.log(`[MAJ-09] Complete Game detected for ${pitcherId}`);
-          }
+          const eventType: FameEventType = isPerfectGame
+            ? "PERFECT_GAME"
+            : isNoHitter
+              ? "NO_HITTER"
+              : isMaddux
+                ? "MADDUX"
+                : isShutout
+                  ? "SHUTOUT"
+                  : "COMPLETE_GAME";
+          recordDetectedFameEvents([
+            {
+              detectionKey: `game-end:${gameState.gameId}:${eventType}:${pitcherId}`,
+              eventType,
+              playerId: pitcherId,
+              playerName: pitcherName,
+              inning: gameState.inning,
+              halfInning: gameState.isTop ? "TOP" : "BOTTOM",
+              leverageIndex: 1,
+            },
+          ]);
+          console.log(`[MAJ-09] ${eventType} detected for ${pitcherId}`);
         }
       } catch (detectionError) {
         console.warn(
@@ -11464,37 +11448,6 @@ export function GameTracker() {
             moraleError,
           );
         }
-      }
-
-      // MAJ-04: Generate game recap narratives (dual perspective)
-      let gameNarrative = null;
-      let awayNarrative = null;
-      try {
-        const homeWonForNarrative = gameState.homeScore > gameState.awayScore;
-        // Home team perspective
-        gameNarrative = generateGameRecap({
-          teamName: homeTeamName,
-          opponentName: awayTeamName,
-          teamScore: gameState.homeScore,
-          opponentScore: gameState.awayScore,
-          isShutout: gameState.awayScore === 0 && homeWonForNarrative,
-        });
-        // Away team perspective
-        awayNarrative = generateGameRecap({
-          teamName: awayTeamName,
-          opponentName: homeTeamName,
-          teamScore: gameState.awayScore,
-          opponentScore: gameState.homeScore,
-          isShutout: gameState.homeScore === 0 && !homeWonForNarrative,
-        });
-        console.log(
-          `[MAJ-04] Dual narratives: Home "${gameNarrative.headline}", Away "${awayNarrative.headline}"`,
-        );
-      } catch (narrativeError) {
-        console.warn(
-          "[MAJ-04] Narrative generation error (non-blocking):",
-          narrativeError,
-        );
       }
 
       const computedSeasonId =
@@ -11664,8 +11617,6 @@ export function GameTracker() {
           statsScopeId: computedStatsScopeId,
           competitionType: effectiveCompetitionType,
           competitionId: effectiveCompetitionId,
-          gameNarrative,
-          awayNarrative,
         },
       });
       console.debug("[END-GAME] Step 6: Navigation called");
@@ -11699,7 +11650,6 @@ export function GameTracker() {
     gameId,
     gameState,
     pitcherStats,
-    fameTrackingHook,
     recordDetectedFameEvents,
     homeFanMorale,
     awayFanMorale,
@@ -11777,42 +11727,6 @@ export function GameTracker() {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      {/* Fame Event Popup - Shows when fame events are detected */}
-      {fameTrackingHook.showEventPopup && fameTrackingHook.lastEvent && (
-        <div
-          className="fixed top-20 right-4 z-50 animate-bounce"
-          onClick={() => fameTrackingHook.dismissEventPopup()}
-        >
-          <div
-            className="px-4 py-3 border-4 border-[#FFD700] shadow-[4px_4px_0px_0px_rgba(0,0,0,0.5)] cursor-pointer"
-            style={{
-              backgroundColor: getFameColor(
-                fameTrackingHook.lastEvent.finalFame,
-              ),
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{fameTrackingHook.lastEvent.icon}</span>
-              <div>
-                <div className="text-white font-bold text-sm">
-                  {fameTrackingHook.lastEvent.label}
-                </div>
-                <div className="text-white/80 text-xs">
-                  {formatFameValue(fameTrackingHook.lastEvent.finalFame)} Fame
-                  {fameTrackingHook.lastEvent.liMultiplier > 1.0 && (
-                    <span className="ml-1">
-                      (
-                      {getLITier(fameTrackingHook.lastEvent.liMultiplier).label}
-                      )
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Player State Notifications - Shows Mojo/Fitness changes */}
       {playerStateHook.notifications.length > 0 && (
         <div className="fixed top-20 left-4 z-50 space-y-2">
@@ -12823,13 +12737,13 @@ export function GameTracker() {
                 pendingPitcherUiChangeRef.current = null;
               }
               if (result.immaculateInning) {
-                fameTrackingHook.recordFameEvent(
-                  "IMMACULATE_INNING" as FameEventType,
-                  result.immaculateInning.pitcherId,
-                  result.immaculateInning.pitcherName,
-                  gameState.inning,
-                  gameState.isTop ? "TOP" : "BOTTOM",
-                  1.0,
+                // useGameState already appended the provenance-linked durable
+                // fame event while confirming the pitch-count ledger row.
+                pushActivityLog(
+                  formatNeutralFameEventActivity(
+                    "IMMACULATE_INNING",
+                    result.immaculateInning.pitcherName,
+                  ),
                 );
               }
             }}
