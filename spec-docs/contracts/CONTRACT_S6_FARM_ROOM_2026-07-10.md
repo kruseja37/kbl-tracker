@@ -196,3 +196,178 @@ guardrail):
    budget input to buildFarmSlotTable.
 Resume from the STOP seam; the entry/exit round-trip test now runs through these two
 granted seams. Everything else binds unchanged.
+
+---
+
+## FINAL BUILDER REPORT — Codex S6 (2026-07-10) — COMPLETE
+
+### Outcome
+
+S6 is implemented on `codex/snake-s6-farm` under Amendment 1. No git write command was
+run. The three pre-existing untracked captain helpers (`DISPATCH_PROMPT.txt`,
+`run_lane.sh`, `sentinel.sh`) remain untouched.
+
+The post-scout route now sends only snake-format leagues to
+`/snake-room?leagueId=…&phase=farm`; auction-format leagues retain the exact existing
+farm-auction route. The farm room reuses the S2 five-state ritual, privacy cover, sounds,
+commissioner controls, guide, and pick-ownership model. It stores a separate additive
+farm-mode session record in the existing `mlbDraftSessions` store, preserving the
+completed MLB session for franchise initialization (no DB bump).
+
+The farm room renders only the active club's own scout grade, range, confidence, and
+SCOUT'S CALL. Its board is ordered by those scout-visible grades. Named SCOUT PRESSURE
+combines only that club's scout snapshot with public roster counts and runs through the
+existing actionable/expiring Advisor LOG model. No true ratings, true grade, IV,
+TRUE COST, fit-from-true-ratings, or survival/rational-room read renders in farm mode.
+
+The new slot engine creates one frozen geometric salary chart at farm-session creation:
+first slot = exactly 3x the last slot, rounded salaries sum to 75% of league farm budgets,
+and every salary remains attached to its absolute pick after trades. The farm guide uses
+that chart as posted prices. Its execution gate rechecks equal pick counts, live ownership,
+remaining unique prospect supply, and exact remaining-slot salaries against each club's
+farm budget. The final recorded pick keeps its payoff frame; explicit ADVANCE commits the
+prospects to `farmRoster` with their frozen slot salaries and hidden reveal state, then
+routes to staff hire.
+
+### Files changed
+
+- `src/engines/snakeFarmSlots.ts` (new)
+- `src/engines/__tests__/snakeFarmSlots.test.ts` (new)
+- `src/src_figma/app/components/snake/farm/FarmPrivateDesk.tsx` (new)
+- `src/src_figma/app/components/snake/farm/farmRoomModel.ts` (new)
+- `src/src_figma/app/components/snake/farm/__tests__/FarmPrivateDesk.test.tsx` (new)
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`
+- `src/src_figma/app/components/snake/__tests__/SnakeDraftRoomView.test.tsx`
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.farm.test.tsx` (new)
+- `src/src_figma/app/utils/draftRouting.ts` (Amendment 1 grant)
+- `src/src_figma/__tests__/leagueBuilder/draftRouting.test.ts`
+- `src/src_figma/__tests__/leagueBuilder/LeagueBuilderLeagues.test.tsx`
+- `src/utils/leagueBuilderStorage.ts` (two additive optional session fields only)
+- `src/utils/leagueBuilderAuctionPipeline.ts` (one additive export only; existing farm-auction commit unchanged)
+- `src/utils/tests/draftPipeline.integration.test.ts`
+- `spec-docs/contracts/CONTRACT_S6_FARM_ROOM_2026-07-10.md` (this report)
+
+### Spec-first / falsification evidence
+
+The first S6 run was intentionally red: the new engine import did not exist and the two
+snake-farm route assertions still received the auction route. After implementation, the
+focused S6 proof passed:
+
+```
+Test Files  4 passed (4)
+Tests       9 passed | 16 skipped (25)
+Duration    2.68s
+```
+
+Covered: 3x/75% slot calibration, absolute-pick freeze, affordable/over-budget trades,
+separate farm-session creation, frozen trade execution, own-scout variance, the fog
+render tripwire, real post-scout farm-session creation, and real farm-roster commit.
+
+The NFL caught two implementation hazards before the final gates:
+
+1. An assertion was initially inserted into the existing auction commit by matching the
+   wrong nearby line. Gate 1 rejected it; the assertion moved into the new snake-farm
+   export and the existing auction function returned to byte-identical content.
+2. Replacing the season-1 MLB snake record would have made downstream franchise code read
+   farm picks as MLB picks. The farm session now uses a separate record key in the same
+   existing store; a test pins that its ID differs and the MLB record remains intact.
+
+### Gates 1–5 — real output
+
+**Gate 1 — TypeScript**
+
+Command: `npx tsc -b --pretty false`
+
+```
+exit_code: 0
+diagnostics: none
+```
+
+**Gate 2 — production build**
+
+Command: `npm run build`
+
+```
+✓ 2678 modules transformed.
+✓ built in 10.05s
+PWA v1.2.0 — 199 precache entries
+exit_code: 0
+```
+
+Only the repo's existing dynamic-import and large-chunk warnings appeared.
+
+**Gate 3 — owned + S2/S3/S4 snake suites**
+
+Complete snake engine/room/desk/trade/farm/page set:
+
+```
+Test Files  20 passed (20)
+Tests       97 passed (97)
+Duration    4.94s
+```
+
+The real draft pipeline suite also passed all 17 tests, including the new S6 farm commit,
+the six-draft D1 snake gauntlet, reset guards, scout/staff persistence, and franchise
+launch coverage.
+
+**Gate 4 — auction preservation suites**
+
+All test files whose filename contains auction/Auction (including MLB auction UI, farm
+auction UI/hook/pool/session/wallet, AuctionStage, state machine, tax, market, reserve,
+completion, sim, and both gauntlets):
+
+```
+Test Files  34 passed (34)
+Tests       371 passed (371)
+Duration    63.63s
+exit_code: 0
+```
+
+**Gate 5 — one full Vitest**
+
+Command: `NODE_ENV= npm test -- --run`
+
+```
+Test Files  2 failed | 638 passed | 8 skipped (648)
+Tests       2 failed | 9642 passed | 15 skipped (9659)
+Duration    230.16s
+```
+
+The two reds were unrelated batch-pressure flakes, not deterministic regressions:
+
+- `LeagueBuilderDraftSetup.poolLock.test.tsx` — `manual exclusion does not beat a
+  roster-design pin during regeneration` timed out at 15s; exact solo rerun passed
+  `1/1` in 2.244s (file `1 passed`, exit 0).
+- `franchiseOffseasonGuards.component.test.tsx` — RatingsAdjustmentFlow remained on its
+  async loading frame in the full batch; exact solo rerun passed `1/1` in 125ms (file
+  `1 passed`, exit 0). This is the previously observed async-loading batch flake family.
+
+Verdict: zero deterministic new reds. Gates 1–5 pass under the contract's characterized
+solo-verification rule.
+
+### Scope / remaining acceptance
+
+- No auction flow, auction engine, flag, App route, companion surface, reducer ritual
+  state, DB version, or existing auction commit function was changed.
+- No browser pass was required by this lane contract and none was claimed. JK's later
+  full-program browser walk remains the acceptance gate.
+- S6 is ready for independent audit under the builder/auditor triangle.
+
+---
+
+## AUDIT — opus, independent, 2026-07-10 — VERDICT: APPROVE
+Fog CLEAN (true data never leaves buildFarmFogCard; board sorts by SCOUTED grade;
+candidate contract structurally has no true-rating field; rival scout snapshots
+unreachable) · slot math EXACT (re-derived independently on three fixtures: sum =
+75% post-rounding to the $1000 unit, first = 3× last, monotonic; throws rather than
+lie) · trade gate exact arithmetic, at-budget passes/over refuses, MLB seating proof
+never consulted in farm mode · both granted seams within grant (routing literal
+byte-identical for auction leagues; ONE additive pipeline export, existing functions
+byte-unchanged; committed prospects land ratingRevealState 'hidden' via the real
+path) · session separation safe (::2 key; franchise init reads season-1 explicitly) ·
+reducer untouched (single additive optional onDraftComplete prop) · partition exact ·
+copy clean.
+MERGE NOTES: leagueBuilderStorage.ts co-touched by S5 (different additive fields —
+reconcile trivially); captain runs a build post-merge; S5 approval-card mount is the
+captain stitch.

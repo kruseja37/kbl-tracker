@@ -389,7 +389,7 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(draftRouteForFormat('snake')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
-      expect(farmDraftRouteForFormat('snake')).toBe('/league-builder/farm-auction-draft');
+      expect(farmDraftRouteForFormat('snake')).toBe('/snake-room');
       expect(farmDraftRouteForFormat('auction')).toBe('/league-builder/farm-auction-draft');
       expect(farmDraftRouteForFormat(undefined)).toBe('/league-builder/farm-auction-draft');
     });
@@ -399,7 +399,7 @@ describe('LeagueBuilderLeagues Component', () => {
         '/league-builder/auction-draft?leagueId=league-2',
       );
       expect(farmDraftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
-        '/league-builder/farm-auction-draft?leagueId=league-2',
+        '/snake-room?leagueId=league-2&phase=farm',
       );
 
       await renderSettledLeagueBuilderLeagues();
