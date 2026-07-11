@@ -1,0 +1,551 @@
+{
+  "method": {
+    "componentNormalization": "abs(variant - baseline) / max(1, abs(baseline))",
+    "distributionImpact": "mean normalized component impact across all five checkpoints",
+    "knobImpact": "maximum low/high variant impact; six output families receive equal weight",
+    "inertRule": "all sweeped checkpoint summaries are byte-equal to baseline",
+    "unstableRule": "runaway normalized divergence or at least three sign flips in a monitored checkpoint series"
+  },
+  "ranking": [
+    {
+      "rank": 1,
+      "knobId": "fame-decay-per-update",
+      "normalizedImpact": 0.287438,
+      "inert": false,
+      "unstable": true,
+      "variants": [
+        {
+          "variantId": "fame-decay-per-update-low",
+          "setting": "low (0.5x)",
+          "normalizedImpact": 0.074812,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0.386346,
+            "morale": 0.062526,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "fame",
+              "normalizedImpact": 0.386346
+            },
+            {
+              "distribution": "morale",
+              "normalizedImpact": 0.062526
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "fame-decay-per-update-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "fame-decay-per-update-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0.287438,
+          "groupImpact": {
+            "development": 0.01834,
+            "traits": 0.035714,
+            "fame": 1.544116,
+            "morale": 0.126457,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "fame",
+              "normalizedImpact": 1.544116
+            },
+            {
+              "distribution": "morale",
+              "normalizedImpact": 0.126457
+            },
+            {
+              "distribution": "traits",
+              "normalizedImpact": 0.035714
+            },
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.01834
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": [
+            "fame upper-quartile clamp saturation: p75 19.106 -> 50",
+            "fame lower-clamp saturation: min -15.211 -> -30"
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "knobId": "relationship-formation-threshold",
+      "normalizedImpact": 0.07738,
+      "inert": false,
+      "unstable": true,
+      "variants": [
+        {
+          "variantId": "relationship-formation-threshold-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "relationship-formation-threshold-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0.07738,
+          "groupImpact": {
+            "development": 0.016004,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0.127961,
+            "events": 0,
+            "relationships": 0.320313
+          },
+          "movedDistributions": [
+            {
+              "distribution": "relationships",
+              "normalizedImpact": 0.320313
+            },
+            {
+              "distribution": "morale",
+              "normalizedImpact": 0.127961
+            },
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.016004
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "knobId": "checkpoint-cadence",
+      "normalizedImpact": 0.060381,
+      "inert": false,
+      "unstable": false,
+      "variants": [
+        {
+          "variantId": "checkpoint-cadence-5",
+          "setting": "standard (5 checkpoints)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "checkpoint-cadence-10",
+          "setting": "frequent (10 checkpoints)",
+          "normalizedImpact": 0.060381,
+          "groupImpact": {
+            "development": 0.061371,
+            "traits": 0,
+            "fame": 0.00273,
+            "morale": 0.102869,
+            "events": 0,
+            "relationships": 0.195313
+          },
+          "movedDistributions": [
+            {
+              "distribution": "relationships",
+              "normalizedImpact": 0.195313
+            },
+            {
+              "distribution": "morale",
+              "normalizedImpact": 0.102869
+            },
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.061371
+            },
+            {
+              "distribution": "fame",
+              "normalizedImpact": 0.00273
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "knobId": "morale-personality-spread",
+      "normalizedImpact": 0.013564,
+      "inert": false,
+      "unstable": false,
+      "variants": [
+        {
+          "variantId": "morale-personality-spread-low",
+          "setting": "low (0.5x)",
+          "normalizedImpact": 0.008783,
+          "groupImpact": {
+            "development": 0.001555,
+            "traits": 0.035714,
+            "fame": 0,
+            "morale": 0.015426,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "traits",
+              "normalizedImpact": 0.035714
+            },
+            {
+              "distribution": "morale",
+              "normalizedImpact": 0.015426
+            },
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.001555
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "morale-personality-spread-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "morale-personality-spread-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0.013564,
+          "groupImpact": {
+            "development": 0.0092,
+            "traits": 0.035714,
+            "fame": 0,
+            "morale": 0.036471,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "morale",
+              "normalizedImpact": 0.036471
+            },
+            {
+              "distribution": "traits",
+              "normalizedImpact": 0.035714
+            },
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.0092
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "knobId": "age-gravity-band-slopes",
+      "normalizedImpact": 0.004911,
+      "inert": false,
+      "unstable": false,
+      "variants": [
+        {
+          "variantId": "age-gravity-band-slopes-low",
+          "setting": "low (0x)",
+          "normalizedImpact": 0.002482,
+          "groupImpact": {
+            "development": 0.014892,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.014892
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "age-gravity-band-slopes-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "age-gravity-band-slopes-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0.004911,
+          "groupImpact": {
+            "development": 0.029463,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.029463
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "knobId": "fan-dampener-strength",
+      "normalizedImpact": 0.003952,
+      "inert": false,
+      "unstable": false,
+      "variants": [
+        {
+          "variantId": "fan-dampener-strength-low",
+          "setting": "low (0.5x)",
+          "normalizedImpact": 0.003853,
+          "groupImpact": {
+            "development": 0.023118,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.023118
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "fan-dampener-strength-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "fan-dampener-strength-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0.003952,
+          "groupImpact": {
+            "development": 0.023711,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [
+            {
+              "distribution": "development",
+              "normalizedImpact": 0.023711
+            }
+          ],
+          "exactMatchToBaseline": false,
+          "unstableSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "knobId": "k5-backlash-curve",
+      "normalizedImpact": 0,
+      "inert": true,
+      "unstable": false,
+      "variants": [
+        {
+          "variantId": "k5-backlash-curve-low",
+          "setting": "low (0.5x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "k5-backlash-curve-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "k5-backlash-curve-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 8,
+      "knobId": "performance-signal-scale",
+      "normalizedImpact": 0,
+      "inert": true,
+      "unstable": false,
+      "variants": [
+        {
+          "variantId": "performance-signal-scale-low",
+          "setting": "low (0.5x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "performance-signal-scale-default",
+          "setting": "default (1x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        },
+        {
+          "variantId": "performance-signal-scale-high",
+          "setting": "high (2x)",
+          "normalizedImpact": 0,
+          "groupImpact": {
+            "development": 0,
+            "traits": 0,
+            "fame": 0,
+            "morale": 0,
+            "events": 0,
+            "relationships": 0
+          },
+          "movedDistributions": [],
+          "exactMatchToBaseline": true,
+          "unstableSignals": []
+        }
+      ]
+    }
+  ],
+  "inertKnobs": [
+    "k5-backlash-curve",
+    "performance-signal-scale"
+  ],
+  "unstableKnobs": [
+    "fame-decay-per-update",
+    "relationship-formation-threshold"
+  ],
+  "notSweepable": [
+    "wpa-to-heat-scale"
+  ]
+}

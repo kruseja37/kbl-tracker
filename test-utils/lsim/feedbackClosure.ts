@@ -28,6 +28,12 @@ import {
   type LsimDevelopmentConfirmPolicy,
   type LsimDevelopmentResolutionTrace,
 } from './feedbackPolicy';
+import {
+  buildTune0CheckpointMetrics,
+  readTune0MetricSnapshot,
+  type Tune0CheckpointMetrics,
+} from './tune0Metrics';
+import type { LsimStateSnapshot } from './invariants/types';
 
 export interface LsimFeedbackClosureConfig {
   seed: string;
@@ -37,6 +43,8 @@ export interface LsimFeedbackClosureConfig {
   recoveryStartsAtGameNumber: number;
   policy?: LsimDevelopmentConfirmPolicy;
   checkpointCadence?: CheckpointCadence;
+  /** TUNE-0 can skip expensive intermediate whole-DB digests; finalDigest is always captured. */
+  captureCheckpointStoreDigest?: boolean;
   condition?: {
     playerIds: string[];
     mojoLevel: MojoLevel;
@@ -56,6 +64,7 @@ export interface LsimFeedbackCheckpointTrace {
   trackedNegativePressure: number;
   trackedProposalCount: number;
   storeDigest: string;
+  tune0Metrics: Tune0CheckpointMetrics;
 }
 
 export interface LsimFeedbackClosureRun {
@@ -141,6 +150,7 @@ export async function runLsimFeedbackClosure(
   const boundarySet = new Set(boundaries);
   const gameTraces: LsimFeedbackGameTrace[] = [];
   const checkpointTraces: LsimFeedbackCheckpointTrace[] = [];
+  let previousCheckpointSnapshot: LsimStateSnapshot | undefined;
   const originalRandom = Math.random;
   const flags = forceAllPhase2FlagsOn();
 
@@ -236,7 +246,8 @@ export async function runLsimFeedbackClosure(
       const trackedRatings = resolutions.filter((resolution) =>
         resolution.proposalKind === 'rating' && isTracked(config, resolution.playerId),
       );
-      const dump = await dumpLsimStores();
+      const snapshot = await readTune0MetricSnapshot(context, gameNumber, boundaries);
+      const dump = config.captureCheckpointStoreDigest === false ? null : await dumpLsimStores();
       checkpointTraces.push({
         boundaryGameNumber: gameNumber,
         resolutions,
@@ -245,8 +256,10 @@ export async function runLsimFeedbackClosure(
           0,
         ),
         trackedProposalCount: trackedRatings.length,
-        storeDigest: dump.digest,
+        storeDigest: dump?.digest ?? 'not-captured',
+        tune0Metrics: buildTune0CheckpointMetrics(snapshot, previousCheckpointSnapshot),
       });
+      previousCheckpointSnapshot = snapshot;
     }
 
     const finalStore = await dumpLsimStores();
