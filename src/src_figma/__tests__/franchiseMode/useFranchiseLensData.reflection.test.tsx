@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -33,6 +33,10 @@ const mocks = vi.hoisted(() => ({
   mockCallUpFranchisePlayer: vi.fn(),
   mockSendDownFranchisePlayer: vi.fn(),
   mockExecuteManualFranchiseTrade: vi.fn(),
+  mockListUnresolvedDevelopment: vi.fn(),
+  mockGetDevelopmentHistory: vi.fn(),
+  mockResolveRatingsProposal: vi.fn(),
+  mockResolveTraitProposal: vi.fn(),
 }));
 
 vi.mock("../../../hooks/useSeasonStats", () => ({
@@ -74,7 +78,7 @@ vi.mock("../../../utils/franchiseMoraleState", () => ({
 }));
 
 vi.mock("../../../utils/franchisePlayerMoraleSpecAdapter", () => ({
-  getPlayerMoraleSpecState: vi.fn(() => ({ value: 50, state: "Neutral", trend: "flat", history: [] })),
+  getPlayerMoraleSpecState: vi.fn(() => "CONTENT"),
 }));
 
 vi.mock("../../../engines/ratingsOverlayMerge", () => ({
@@ -157,6 +161,13 @@ vi.mock("../../../utils/franchiseTradeAdapter", () => ({
   executeManualFranchiseTrade: mocks.mockExecuteManualFranchiseTrade,
 }));
 
+vi.mock("../../../utils/franchiseConsoleMirror", () => ({
+  listUnresolvedDevelopment: mocks.mockListUnresolvedDevelopment,
+  getDevelopmentHistory: mocks.mockGetDevelopmentHistory,
+  resolveRatingsProposal: mocks.mockResolveRatingsProposal,
+  resolveTraitProposal: mocks.mockResolveTraitProposal,
+}));
+
 import { useFranchiseLensData } from "../../hooks/useFranchiseLensData";
 
 function team(id: string, name: string, abbreviation: string) {
@@ -186,6 +197,42 @@ function standing(teamId: string, wins: number, losses: number) {
     runDiff: 0,
     homeRecord: { wins, losses: 0 },
     awayRecord: { wins: 0, losses },
+  };
+}
+
+function player(id: string, morale = 99) {
+  return {
+    id,
+    firstName: "Piper",
+    lastName: "Truth",
+    gender: "F",
+    age: 25,
+    bats: "R",
+    throws: "R",
+    primaryPosition: "CF",
+    secondaryPosition: "LF",
+    power: 50,
+    contact: 51,
+    speed: 52,
+    fielding: 53,
+    arm: 54,
+    velocity: 0,
+    junk: 0,
+    accuracy: 0,
+    arsenal: [],
+    overallGrade: "B",
+    personality: "Competitive",
+    chemistry: "Competitive",
+    morale,
+    mojo: "Normal",
+    fame: 0,
+    salary: 1_000_000,
+    trait1: null,
+    trait2: null,
+    leagueAssignments: [{ leagueId: "league-1", teamId: "home-team", rosterStatus: "MLB" }],
+    editHistory: [],
+    createdDate: "2026-01-01T00:00:00.000Z",
+    lastModified: "2026-01-01T00:00:00.000Z",
   };
 }
 
@@ -314,6 +361,10 @@ describe("useFranchiseLensData schedule reflection", () => {
     mocks.mockComputeFranchiseRaceCandidateRows.mockResolvedValue({});
     mocks.mockLoadFranchiseConditionSnapshots.mockResolvedValue([]);
     mocks.mockGetRecentMilestones.mockResolvedValue([]);
+    mocks.mockListUnresolvedDevelopment.mockResolvedValue([]);
+    mocks.mockGetDevelopmentHistory.mockResolvedValue([]);
+    mocks.mockResolveRatingsProposal.mockResolvedValue({ outcome: "resolved", overlay: {} });
+    mocks.mockResolveTraitProposal.mockResolvedValue({ outcome: "resolved", overlay: {} });
   });
 
   test("advances past completed and skipped games while reflecting updated standings", async () => {
@@ -366,5 +417,161 @@ describe("useFranchiseLensData schedule reflection", () => {
     expect(result.current.error).toBeNull();
     expect(result.current.active?.managerName).toBe("Home Team Manager");
     expect(result.current.active?.reporter).toBeUndefined();
+  });
+
+  test("maps the service worklist with true checkpoint ordinals, oldest first, and stamped from-to values", async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValue([player("player-1")]);
+    mocks.mockListUnresolvedDevelopment.mockResolvedValue([
+      {
+        boundaryGameNumber: 24,
+        ordinal: 2,
+        ordinalCount: 5,
+        proposals: [{
+          kind: "rating",
+          overlay: {
+            id: "rating-24",
+            playerId: "player-1",
+            ratingKey: "power",
+            expectedPriorValue: 50,
+            proposedValue: 55,
+          },
+        }],
+      },
+      {
+        boundaryGameNumber: 48,
+        ordinal: 4,
+        ordinalCount: 5,
+        proposals: [{
+          kind: "trait",
+          overlay: {
+            id: "trait-48",
+            playerId: "player-1",
+            valence: "gain",
+            traitName: "Clutch",
+            displacesTraitName: null,
+            expectedPriorValue: { trait1: null, trait2: null },
+            proposedValue: { trait1: "Clutch", trait2: null },
+          },
+        }],
+      },
+    ]);
+
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.hub.checkpoint?.groups?.map((group) => group.label)).toEqual([
+      "Checkpoint 2 of 5 — game 24",
+      "Checkpoint 4 of 5 — game 48",
+    ]);
+    expect(result.current.hub.checkpoint?.groups?.[0].players[0].proposals?.[0].ratingChange).toEqual({
+      label: "Power",
+      from: 50,
+      to: 55,
+    });
+  });
+
+  test("routes confirm-adjusted through the mirror service with the currently displayed prior value", async () => {
+    mocks.mockResolveRatingsProposal.mockResolvedValue({
+      outcome: "resolved",
+      currentValue: 54,
+      overlay: { confirmationStatus: "confirmed-applied" },
+    });
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.resolveDevelopment({
+        proposalId: "rating-adjust",
+        kind: "rating",
+        action: "confirm-adjusted",
+        observedPriorValue: 50,
+        actualValue: 54,
+      });
+    });
+
+    expect(mocks.mockResolveRatingsProposal).toHaveBeenCalledWith("rating-adjust", {
+      action: "confirm-adjusted",
+      observedPriorValue: 50,
+      actualValue: 54,
+      rejectReason: undefined,
+      actor: "Franchise Lens",
+    });
+  });
+
+  test("uses canonical morale snapshots for the pulse and derives both player and fan trends", async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValue([player("player-1", 99)]);
+    mocks.mockListFranchiseMoraleSnapshots.mockResolvedValue([
+      {
+        targetType: "player",
+        playerId: "player-1",
+        currentValue: 37,
+        history: [{ previousValue: 32, currentValue: 37, delta: 5, reason: "Walk-off", timestamp: "2026-07-10T00:00:00Z" }],
+      },
+      {
+        targetType: "team-fan",
+        teamId: "home-team",
+        currentValue: 44,
+        history: [{ previousValue: 50, currentValue: 44, delta: -6, reason: "Sweep", timestamp: "2026-07-10T00:00:00Z" }],
+      },
+    ]);
+
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.hub.pulse.clubhouseAvg).toBe(37);
+    expect(result.current.hub.pulse.fanMorale?.trend).toBe("down");
+    expect(result.current.hub.roster[0].morale).toMatchObject({ value: 37, trend: "up" });
+  });
+
+  test("deduplicates the news wire and filters museum and milestones to this franchise", async () => {
+    mocks.mockGetAllFranchisePlayers.mockResolvedValue([player("player-1")]);
+    mocks.mockListSeasonNewsItemsForFranchiseSeason.mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({
+        id: `news-${index}`,
+        eventType: "MILESTONE",
+        headline: `Headline ${index}`,
+        body: `Body ${index}`,
+        dramaticWeight: 100 - index,
+      })),
+    );
+    mocks.mockGetChampionships.mockResolvedValue([
+      { year: 2026, champion: "Home Team", championId: "home-team" },
+      { year: 2025, champion: "Other Club", championId: "other-team" },
+    ]);
+    mocks.mockGetAwardWinners.mockResolvedValue([
+      { year: 2026, awardType: "MVP", playerName: "Piper Truth", teamId: "home-team" },
+      { year: 2025, awardType: "MVP", playerName: "Stranger", teamId: "other-team" },
+    ]);
+    mocks.mockGetRecentMilestones.mockResolvedValue([
+      { id: "ours", playerId: "player-1", seasonId: "franchise-reflect-season-1", achievedDate: 2, description: "Our milestone", tier: 1 },
+      { id: "theirs", playerId: "player-1", seasonId: "other-franchise-season-1", achievedDate: 1, description: "Bleed milestone", tier: 1 },
+    ]);
+
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    const storyHeadlines = new Set(result.current.hub.news?.stories.map((story) => story.headline));
+    expect(result.current.hub.news?.wire?.every((item) => !storyHeadlines.has(item.text))).toBe(true);
+    expect(result.current.hub.almanac?.trophyCase?.map((trophy) => trophy.holder)).toEqual([
+      "Home Team",
+      "Piper Truth",
+    ]);
+    expect(result.current.hub.moments?.ceremony?.champion).toBe("Home Team");
+    expect(result.current.hub.roster[0].detail?.milestones?.map((milestone) => milestone.label)).toEqual(["Our milestone"]);
+  });
+
+  test("shares the run-differential tiebreak for table order and pulse rank and reports real L10 length", async () => {
+    mocks.mockCalculateStandings.mockResolvedValue([
+      { ...standing("home-team", 1, 1), runDiff: 2, lastTenWins: 1 },
+      { ...standing("away-team", 1, 1), runDiff: 9, lastTenWins: 1 },
+    ]);
+    const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.hub.standings?.divisions[0].rows.slice(0, 2).map((row) => row.teamId)).toEqual(["away-team", "home-team"]);
+    expect(result.current.hub.pulse.standingLabel).toBe("2nd of 3");
+    expect(result.current.hub.standings?.divisions[0].rows.find((row) => row.teamId === "home-team")?.lastTenGames).toBe(2);
+    expect(result.current.hub.home?.nextGame).toMatchObject({ activeTeamId: "home-team", awayTeamId: "home-team" });
+    expect(result.current.hub.home?.impactCards.some((card) => card.detail.includes("Above .500"))).toBe(false);
   });
 });
