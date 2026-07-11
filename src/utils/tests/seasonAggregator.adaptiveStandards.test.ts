@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import {
+  aggregateGameToSeason,
   getScaledQualityStartThresholds,
   isCompleteGameByContext,
   isQualityStartByContext,
+  MissingSeasonScopeError,
 } from '../seasonAggregator';
+import type { PersistedGameState } from '../gameStorage';
 
 describe('season aggregator adaptive standards', () => {
   test('scales quality-start thresholds for short games', () => {
@@ -28,5 +31,11 @@ describe('season aggregator adaptive standards', () => {
     expect(isQualityStartByContext(shortGameStart, { scheduledInnings: 9 })).toBe(false);
     expect(isCompleteGameByContext(shortGameStart, { scheduledInnings: 6 })).toBe(false);
     expect(isCompleteGameByContext({ ...shortGameStart, outsRecorded: 18 }, { scheduledInnings: 6 })).toBe(true);
+  });
+
+  test('rejects aggregation without an explicit season scope before any season write', async () => {
+    await expect(
+      aggregateGameToSeason({ gameId: 'missing-season-scope' } as PersistedGameState),
+    ).rejects.toBeInstanceOf(MissingSeasonScopeError);
   });
 });

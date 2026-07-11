@@ -18,6 +18,7 @@ import {
   getRecentGames,
   loadCurrentGame,
   saveCurrentGame,
+  UnclassifiableGameModeError,
 } from '../../../utils/gameStorage';
 
 function createPersistedGameState(
@@ -113,6 +114,17 @@ describe('completed game franchise identity', () => {
       scheduleGameId: 'schedule-game-1',
       completedCivilDate: '2026-07-11',
     });
+  });
+
+  test('archiveCompletedGame rejects a fresh identityless archive before writing', async () => {
+    const gameState = createPersistedGameState({
+      gameId: 'identityless-fresh-archive',
+    });
+
+    await expect(
+      archiveCompletedGame(gameState, { away: 1, home: 2 }),
+    ).rejects.toBeInstanceOf(UnclassifiableGameModeError);
+    await expect(getCompletedGameById(gameState.gameId)).resolves.toBeNull();
   });
 
   test('archiveCompletedGame persists scoped spray-enriched at-bat evidence', async () => {
@@ -379,7 +391,6 @@ describe('completed game franchise identity', () => {
       [],
       undefined,
       {
-        statsScopeId: 'exhibition-scope',
         competitionType: 'exhibition',
         competitionId: 'league-1',
         leagueId: 'league-1',
@@ -425,7 +436,11 @@ describe('completed game franchise identity', () => {
     );
 
     await expect(getRecentGames(10, { competitionType: 'exhibition' })).resolves.toEqual([
-      expect.objectContaining({ gameId: 'scope-exhibition-game' }),
+      expect.objectContaining({
+        gameId: 'scope-exhibition-game',
+        seasonId: undefined,
+        statsScopeId: undefined,
+      }),
     ]);
     await expect(
       getRecentGames(10, {

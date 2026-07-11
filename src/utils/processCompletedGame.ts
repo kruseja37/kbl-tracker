@@ -1184,6 +1184,8 @@ export function shouldAggregateToRegularSeasonStats(
 ): boolean {
   const competitionType =
     archiveOptions?.context?.competitionType ?? gameState.competitionType;
+  const franchiseId =
+    archiveOptions?.context?.franchiseId ?? gameState.franchiseId;
   const playoffId = archiveOptions?.context?.playoffId ?? gameState.playoffId;
   const playoffSeriesId =
     archiveOptions?.context?.playoffSeriesId ?? gameState.playoffSeriesId;
@@ -1193,9 +1195,8 @@ export function shouldAggregateToRegularSeasonStats(
     archiveOptions?.context?.isEliminationGame ?? gameState.isEliminationGame;
 
   return (
-    competitionType !== 'exhibition' &&
-    competitionType !== 'playoff' &&
-    competitionType !== 'elimination' &&
+    competitionType === 'franchise' &&
+    nonEmptyScopeId(franchiseId) !== null &&
     !playoffId &&
     !playoffSeriesId &&
     playoffGameNumber === undefined &&

@@ -373,6 +373,8 @@ describe("GameTracker launch state", () => {
       state: {
         gameMode: "exhibition",
         competitionType: "exhibition",
+        competitionId: "league-exhibition",
+        leagueId: "league-exhibition",
         awayTeamId: "away-team",
         homeTeamId: "home-team",
         awayTeamName: "Away Team",

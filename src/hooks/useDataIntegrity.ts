@@ -15,10 +15,16 @@ import {
   markAggregationFailed,
   type GameHeader,
 } from '../utils/eventLog';
-import { getCompletedGameById, type PersistedGameState } from '../utils/gameStorage';
-import { aggregateGameToSeason } from '../utils/seasonAggregator';
-import { registerAlmanacPlayers } from '../utils/registerAlmanacPlayers';
-import { resolveExhibitionLeagueId } from '../utils/gameStorage';
+import {
+  classifyCompletedGameMode,
+  getCompletedGameById,
+  resolveExhibitionLeagueId,
+  type PersistedGameState,
+} from '../utils/gameStorage';
+import {
+  processCompletedGame,
+  shouldAggregateToRegularSeasonStats,
+} from '../utils/processCompletedGame';
 
 // ============================================
 // TYPES
@@ -52,15 +58,19 @@ export interface UseDataIntegrityReturn {
 /**
  * Re-aggregate a completed game from its archived record.
  *
- * Loads the CompletedGameRecord from IndexedDB and runs it through
- * the real aggregation pipeline (aggregateGameToSeason + registerAlmanacPlayers).
- * This is the recovery path for games where processCompletedGame failed or timed out.
+ * Loads the CompletedGameRecord from IndexedDB, classifies its product mode,
+ * and only resumes franchise regular-season work through processCompletedGame.
+ * Non-season modes are reconciled without reaching their mode-owned writers.
  */
-async function reAggregateFromArchive(header: GameHeader): Promise<boolean> {
+export type ArchivedGameRecoveryOutcome = 'recovered' | 'quarantined' | 'missing';
+
+export async function recoverArchivedGame(
+  header: GameHeader,
+): Promise<ArchivedGameRecoveryOutcome> {
   const archived = await getCompletedGameById(header.gameId);
   if (!archived) {
     console.warn(`[DataIntegrity] Game ${header.gameId} not found in completedGames — cannot recover`);
-    return false;
+    return 'missing';
   }
 
   // Build a minimal PersistedGameState from the archived record
@@ -96,21 +106,84 @@ async function reAggregateFromArchive(header: GameHeader): Promise<boolean> {
     competitionType: archived.competitionType,
     competitionId: archived.competitionId,
     leagueId: archived.leagueId,
+    franchiseId: archived.franchiseId,
+    scheduleGameId: archived.scheduleGameId,
+    playoffSeriesId: archived.playoffSeriesId,
+    playoffGameNumber: archived.playoffGameNumber,
+    playoffId: archived.playoffId,
+    playoffRound: archived.playoffRound,
+    isEliminationGame: archived.isEliminationGame,
+    isClinchGame: archived.isClinchGame,
   };
 
-  // Run through real aggregation pipeline
-  await aggregateGameToSeason(gameStateForAggregation, {
-    seasonId: archived.statsScopeId || archived.seasonId,
-  });
-
-  // Register players in Almanac
   const resolvedLeagueId = resolveExhibitionLeagueId(archived);
-  if (resolvedLeagueId) {
-    await registerAlmanacPlayers(gameStateForAggregation, resolvedLeagueId);
+  const mode = classifyCompletedGameMode({
+    competitionType: archived.competitionType,
+    competitionId: archived.competitionId,
+    leagueId: resolvedLeagueId,
+    franchiseId: archived.franchiseId,
+    playoffId: archived.playoffId,
+    playoffSeriesId: archived.playoffSeriesId,
+    playoffGameNumber: archived.playoffGameNumber,
+    isEliminationGame: archived.isEliminationGame,
+  });
+  if (!mode) {
+    console.error(
+      `[DataIntegrity] QUARANTINED unclassifiable completed-game archive ${archived.gameId}; no recovery writes were performed`,
+    );
+    return 'quarantined';
   }
 
-  console.log(`[DataIntegrity] Re-aggregated game ${header.gameId} to season stats`);
-  return true;
+  const archiveOptions = {
+    finalScore: archived.finalScore,
+    inningScores: archived.inningScores ?? [],
+    seasonId: archived.seasonId,
+    context: {
+      statsScopeId: archived.statsScopeId,
+      competitionType: archived.competitionType,
+      competitionId: archived.competitionId,
+      competitionName: archived.competitionName,
+      playoffSeriesId: archived.playoffSeriesId,
+      playoffGameNumber: archived.playoffGameNumber,
+      playoffId: archived.playoffId,
+      playoffRound: archived.playoffRound,
+      isEliminationGame: archived.isEliminationGame,
+      isClinchGame: archived.isClinchGame,
+      leagueId: resolvedLeagueId,
+      franchiseId: archived.franchiseId,
+      scheduleGameId: archived.scheduleGameId,
+      totalInnings: archived.totalInnings,
+      useGhostRunner: archived.useGhostRunner,
+      extraInningRunner: archived.extraInningRunner,
+      extraInningRunnerDelay: archived.extraInningRunnerDelay,
+      pogPlayerId: archived.pogPlayerId,
+      playersOfTheGame: archived.playersOfTheGame,
+      playerWpaTotals: archived.playerWpaTotals,
+      managerWpaTotals: archived.managerWpaTotals,
+      atBatEvents: archived.atBatEvents,
+      fieldingEvents: archived.fieldingEvents,
+    },
+  };
+
+  if (shouldAggregateToRegularSeasonStats(gameStateForAggregation, archiveOptions)) {
+    await processCompletedGame(
+      gameStateForAggregation,
+      {
+        seasonId: archived.statsScopeId ?? archived.seasonId,
+        detectMilestones: true,
+        franchiseId: archived.franchiseId,
+        currentSeason: archived.seasonNumber,
+      },
+      resolvedLeagueId,
+      archiveOptions,
+    );
+    console.log(`[DataIntegrity] Recovered franchise game ${header.gameId} through completion pipeline`);
+    return 'recovered';
+  }
+
+  await markGameAggregated(header.gameId);
+  console.log(`[DataIntegrity] Reconciled ${mode} game ${header.gameId} without regular-season writes`);
+  return 'recovered';
 }
 
 // ============================================
@@ -192,14 +265,14 @@ export function useDataIntegrity(): UseDataIntegrityReturn {
         try {
           console.log(`[DataIntegrity] Recovering game ${game.gameId} (${i + 1}/${gamesToProcess.length})`);
 
-          // Re-aggregate from archived CompletedGameRecord
-          const success = await reAggregateFromArchive(game);
-          if (!success) {
+          // Recover or reconcile from the archived CompletedGameRecord.
+          const outcome = await recoverArchivedGame(game);
+          if (outcome === 'missing') {
             throw new Error('Game not found in completedGames archive');
           }
-
-          // Mark as aggregated
-          await markGameAggregated(game.gameId);
+          if (outcome === 'quarantined') {
+            continue;
+          }
 
           console.log(`[DataIntegrity] Successfully recovered game ${game.gameId}`);
         } catch (err) {

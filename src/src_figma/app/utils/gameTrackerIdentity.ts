@@ -56,6 +56,13 @@ export interface ResolvedGameTrackerIdentity {
   seasonNumber: number;
 }
 
+export class InvalidGameTrackerLaunchIdentityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidGameTrackerLaunchIdentityError";
+  }
+}
+
 export function resolveGameTrackerIdentity(params: {
   navigationState?: GameTrackerIdentityNavigationState | null;
   restoredContext?: RestoredGameTrackerIdentityContext | null;
@@ -119,25 +126,29 @@ export function resolveGameTrackerIdentity(params: {
     restoredContext?.playoffId ??
     gameState?.playoffId ??
     (competitionType === "playoff" ? competitionId : undefined);
+  const hasSeasonScope =
+    competitionType === "franchise" || competitionType === "playoff";
   const seasonId =
-    competitionType === "elimination"
-      ? undefined
-      : navigationState?.seasonId ??
+    hasSeasonScope
+      ? navigationState?.seasonId ??
         restoredContext?.seasonId ??
         gameState?.seasonId ??
         (restoredContext?.statsScopeId?.includes("season-")
           ? restoredContext.statsScopeId
           : rawFranchiseId
             ? getFranchiseSeasonId(rawFranchiseId, seasonNumber)
-            : `season-${seasonNumber}`);
+            : undefined)
+      : undefined;
   const statsScopeId =
     competitionType === "elimination" && eliminationId
       ? getEliminationStatsScopeId(eliminationId)
-      : navigationState?.statsScopeId ||
-        restoredContext?.statsScopeId ||
-        gameState?.statsScopeId ||
-        seasonId ||
-        fallbackStatsScopeId;
+      : hasSeasonScope
+        ? navigationState?.statsScopeId ||
+          restoredContext?.statsScopeId ||
+          gameState?.statsScopeId ||
+          seasonId ||
+          fallbackStatsScopeId
+        : undefined;
   const gameMode =
     navigationState?.gameMode ||
     (competitionType === "elimination"
@@ -163,8 +174,28 @@ export function resolveGameTrackerIdentity(params: {
     seasonNumber,
   };
 
+  if (navigationState && !navigationState.competitionType) {
+    throw new InvalidGameTrackerLaunchIdentityError(
+      "Invalid new game launch identity: an explicit competition type is required",
+    );
+  }
+
   const scopeErrors = validateModeCompetitionScope(resolved);
+  if (
+    navigationState &&
+    competitionType === "exhibition" &&
+    !resolved.leagueId &&
+    !resolved.competitionId
+  ) {
+    scopeErrors.push("exhibition scope requires league identity");
+  }
+
   if (scopeErrors.length > 0) {
+    if (navigationState) {
+      throw new InvalidGameTrackerLaunchIdentityError(
+        `Invalid new game launch identity: ${scopeErrors.join("; ")}`,
+      );
+    }
     console.warn("[GameTrackerIdentity] Resolved incomplete competition scope:", scopeErrors);
   }
 
