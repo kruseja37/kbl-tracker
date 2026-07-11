@@ -99,3 +99,100 @@ suites green. 5. ONE full vitest (known solo-flakes — verify solo if red).
 
 ## PROTOCOL
 No git write commands. Spec-first tests. UNKNOWN = STOP. Builder report appended here.
+
+---
+
+## BUILDER REPORT — Codex S6 (2026-07-10) — BLOCKED / CONTRACT STOP
+
+### Outcome
+
+STOPPED before tests or implementation at the contract's required entry/exit preflight.
+No git write command was run. No production code or test file was changed. The only
+lane-owned change is this required builder report; the pre-existing untracked captain
+artifacts `DISPATCH_PROMPT.txt`, `run_lane.sh`, and `sentinel.sh` remain untouched.
+
+### Blocking precondition 1 — the real post-scout continuation does not enter a farm snake session
+
+`ScoutHire` persists the league's scout assignments and then calls
+`farmDraftRouteForLeague(activeLeague)` (`src/src_figma/app/pages/ScoutHire.tsx:65-76`).
+The routing helper ignores `LeagueTemplate.draftFormat` and unconditionally returns
+`/league-builder/farm-auction-draft` (`src/src_figma/app/utils/draftRouting.ts:16-20,
+49-50`). Therefore the contract's required real continuation arc cannot create or open
+the S6 farm-mode snake session.
+
+Repairing that seam requires editing `ScoutHire.tsx` and/or `draftRouting.ts`. Neither
+path is in S6's owned-edit list (`FILE SURFACE`, lines 75-84), and the user explicitly
+made the parallel-lane file boundaries hard. Editing the routed farm-auction page or
+`App.tsx` instead would cross the frozen-auction/S5 boundary.
+
+### Blocking precondition 2 — the existing farm commit path cannot accept the snake session model
+
+The only existing farm handoff is
+`commitCompletedFarmAuctionSessionToLeagueRosters`. Its input is specifically
+`AuctionSession` plus `FarmAuctionPool`; it requires auction completion and reads
+`session.teams[].roster[]` (`src/utils/leagueBuilderAuctionPipeline.ts:450-475`). The
+shared snake session instead stores `pickOrder`, `completedPicks`, and
+`currentPickIndex` in `LeagueBuilderMlbDraftSession`; it has no auction `state` or
+`teams[].roster[]` shape.
+
+The contract says to STOP if that existing farm commit path cannot accept snake-farm
+sessions (`F2`, lines 61-65). Making it accept the snake model would require an edit to
+`leagueBuilderAuctionPipeline.ts`, which is outside the owned surface and is part of the
+frozen auction pipeline. Synthesizing a fake `AuctionSession` in the page would be a
+forked adapter around the exact incompatibility the STOP clause names, so it was not
+attempted.
+
+### Farm-budget source check
+
+The money source itself is not the blocker. Existing farm session creation derives one
+`farmTierCap` from the real prospect pool and builds each club's farm wallet as
+`max(0, farmTierCap - committedFarmSalaries) + mlbBudgetCarryover`
+(`src/utils/farmAuctionSession.ts:41-78`; `src/utils/farmAuctionWallet.ts:60-79`). That
+is an available per-club budget source for a future amended contract.
+
+### Spec-first tests and Gates 1-5
+
+- Spec-first red tests: **NOT WRITTEN** — the required integration preconditions failed
+  before implementation authority existed.
+- Gates 1-5: **NOT RUN** — the contract orders an immediate STOP for this exact handoff
+  incompatibility. Running the gates on an intentionally unimplemented lane would not
+  be completion evidence.
+
+### Required captain ruling / amendment
+
+S6 can resume only after the captain amends the hard file surface and chooses the
+canonical seams for both:
+
+1. post-scout routing into a farm-mode `LeagueBuilderMlbDraftSession`; and
+2. farm roster/player commit from that session, either by authorizing an additive snake
+   input in `leagueBuilderAuctionPipeline.ts` or by naming another existing compatible
+   commit seam.
+
+No other S6 work was started because both seams are mandatory to the contract's
+entry/exit round-trip test.
+
+---
+
+## AMENDMENT 1 (captain ruling on the STOP, 2026-07-10) — the two seam grants
+
+Both preconditions upheld. Ownership grants (additive-only, auction suites remain the
+guardrail):
+1. ROUTING: S6 may edit src/src_figma/app/utils/draftRouting.ts — add a snake branch
+   keyed on the league's draft format so the post-scout continuation routes snake-format
+   leagues into the farm-mode snake session (/snake-room with the farm session), while
+   auction-format leagues keep the EXISTING farm-auction route byte-unchanged. A
+   minimal ScoutHire.tsx touch is allowed ONLY if the helper's signature genuinely
+   cannot carry the branch (prefer helper-only).
+2. FARM COMMIT: S6 may add ONE new additive export to
+   src/utils/leagueBuilderAuctionPipeline.ts —
+   `commitCompletedSnakeFarmSessionToLeagueRosters` — mirroring the existing
+   `commitCompletedSnakeSessionToLeagueRosters` (:385) pattern but writing the
+   `farmRoster` field and converting via the existing `farmProspectToPlayer` (:320)
+   with each pick's FROZEN slot salary as the salary input. NO edits to any existing
+   function in that file; the existing farm-auction commit stays byte-identical.
+3. Farm budget source ratified per your own check: farmTierCap derivation +
+   `max(0, farmTierCap − committedFarmSalaries) + mlbBudgetCarryover`
+   (farmAuctionSession.ts:41-78, farmAuctionWallet.ts:60-79) is the per-club farm
+   budget input to buildFarmSlotTable.
+Resume from the STOP seam; the entry/exit round-trip test now runs through these two
+granted seams. Everything else binds unchanged.
