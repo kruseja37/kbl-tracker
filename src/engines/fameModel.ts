@@ -243,7 +243,7 @@ export function resolveFameTier(
   }
 
   if (reachFloor > FAME_TIER_RANK.UNKNOWN && heatRank === FAME_TIER_RANK.UNKNOWN) {
-    return 'LOCAL_HERO';
+    return FAME_TIER_BY_RANK[reachFloor];
   }
 
   return FAME_TIER_BY_RANK[heatRank];
@@ -268,7 +268,6 @@ export function classifyFameVsMerit(
   config: FameTuning = FAME_TUNING,
 ): FameVsMeritClassification {
   const fameRank = FAME_TIER_RANK[fameTier];
-  const fameMagnitude = Math.abs(fameRank);
   const meritScore = meritLevelToScore(meritLevel);
 
   if (meritScore >= config.classifier.snubMeritMinScore && fameRank <= config.classifier.lowFameMaxRank) {
@@ -277,7 +276,7 @@ export function classifyFameVsMerit(
 
   if (
     meritScore <= config.classifier.bustMeritMaxScore
-    && fameMagnitude >= config.classifier.highFameMinRank
+    && fameRank >= config.classifier.highFameMinRank
   ) {
     return 'bust';
   }

@@ -25,6 +25,7 @@ import {
 } from './leagueBuilderStorage';
 import {
   franchiseRelationshipEdgeId,
+  getFranchiseRelationshipEdge,
   putFranchiseRelationshipEdge,
   type FranchiseRelationshipEdgeScopeInput,
   type RelationshipEdgeRow,
@@ -132,11 +133,15 @@ export async function persistDarkRelationshipFormationForCompletedGame(
   const createdAt = resolveDeterministicCreatedAt(gameState, gameNumber);
   const rows = buildRelationshipEdgeRows(scope, gameNumber, createdAt, roster);
 
+  let written = 0;
   for (const row of rows) {
+    const existing = await getFranchiseRelationshipEdge(row.id);
+    if (existing) continue;
     await putFranchiseRelationshipEdge(row);
+    written += 1;
   }
 
-  return { status: 'written', written: rows.length };
+  return { status: 'written', written };
 }
 
 function buildRelationshipEdgeRows(

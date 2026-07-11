@@ -53,6 +53,12 @@ describe('fameModel L6a pure engine', () => {
     expect(tier).toBe('NATIONAL_ICON');
   });
 
+  test('display tier preserves the full positive reach-floor magnitude when Heat cools to Unknown', () => {
+    expect(resolveFameTier(1, FAME_TIER_RANK.REGIONAL_STAR)).toBe('REGIONAL_STAR');
+    expect(resolveFameTier(0, FAME_TIER_RANK.IMMORTAL_LEGEND)).toBe('IMMORTAL_LEGEND');
+    expect(resolveFameTier(0, FAME_TIER_RANK.UNKNOWN)).toBe('UNKNOWN');
+  });
+
   test('trade reset drops reach floor and pulls Heat toward Unknown while retaining some', () => {
     const record: FameModelRecord = {
       heat: 24,
@@ -105,6 +111,10 @@ describe('fameModel L6a pure engine', () => {
   test('fame-vs-merit classifies snub and bust', () => {
     expect(classifyFameVsMerit('UNKNOWN', 'elite')).toBe('snub');
     expect(classifyFameVsMerit('NATIONAL_ICON', 'low')).toBe('bust');
+  });
+
+  test('negative fame magnitude never classifies a low-merit player as a bust', () => {
+    expect(classifyFameVsMerit('DESPISED', 'low')).toBe('aligned');
   });
 
   test('channel aggregation sums with channel sub-aggregates', () => {

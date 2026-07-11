@@ -213,6 +213,46 @@ describe('franchise dark flashpoint-decay compute', () => {
     seam.mockRestore();
   });
 
+  test('on then off then on restarts the consecutive-game counter', async () => {
+    setFranchisePhase2FlashpointEnabledForTests(true);
+    vi.spyOn(flashpointCompute.flashpointSeam, 'resolveProcessedTeamPlayerIds')
+      .mockResolvedValue(new Set(['player-albatross']));
+    vi.spyOn(flashpointCompute.flashpointSeam, 'resolveTurnedOnPlayers')
+      .mockResolvedValueOnce([{ playerId: 'player-albatross', kind: 'albatross' }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ playerId: 'player-albatross', kind: 'albatross' }]);
+
+    await persistDarkFlashpointDecayForCompletedGame(
+      gameState({ gameId: 'flashpoint-game-on-1' }),
+      scope,
+    );
+    await persistDarkFlashpointDecayForCompletedGame(
+      gameState({ gameId: 'flashpoint-game-off' }),
+      scope,
+    );
+    const resolvedRow = await getFranchiseFlashpointDecayRow(scope, 'player-albatross');
+    await persistDarkFlashpointDecayForCompletedGame(
+      gameState({ gameId: 'flashpoint-game-on-2' }),
+      scope,
+    );
+    const retriggeredRow = await getFranchiseFlashpointDecayRow(scope, 'player-albatross');
+
+    expect(resolvedRow).toMatchObject({
+      flashpointKind: null,
+      consecutiveGamesUnresolved: 0,
+      lastGameTax: 0,
+      accumulatedFanMoraleTax: -0.5,
+      updatedAtCheckpoint: 'flashpoint-game-off',
+    });
+    expect(retriggeredRow).toMatchObject({
+      flashpointKind: 'albatross',
+      consecutiveGamesUnresolved: 1,
+      lastGameTax: -0.5,
+      accumulatedFanMoraleTax: -1,
+      updatedAtCheckpoint: 'flashpoint-game-on-2',
+    });
+  });
+
   test('the live seam resolveTurnedOnPlayers returns [] when no active or locked Albatross is seeded', async () => {
     await expect(flashpointCompute.resolveTurnedOnPlayers(scope, gameState())).resolves.toEqual([]);
   });
