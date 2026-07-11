@@ -10,6 +10,11 @@ export function DeskCandidateCard({ candidate, boardSlot }: { candidate: DeskCan
         <span className="text-xs font-bold">{candidate.fitWord}</span>
       </div>
       <p className="mt-2 text-sm font-bold">TRUE COST ${Math.round(candidate.trueCost).toLocaleString()}</p>
+      {candidate.marginalTax < 0 && (
+        <p className="mt-1 text-xs font-bold text-[var(--ballpark-brass)]">
+          YOUR TAX BILL GOES DOWN ${Math.round(Math.abs(candidate.marginalTax)).toLocaleString()} IF YOU TAKE HIM
+        </p>
+      )}
       <p className="mt-1 text-xs font-bold">NEXT PICK — {risk}</p>
       {candidate.riskReason && <details className="mt-1 text-xs"><summary>WHY THIS READ?</summary><p>{candidate.riskReason}</p></details>}
       <p className="mt-2 text-sm">{candidate.legalFinishLine}</p>
