@@ -63,3 +63,11 @@ describe('PrivateDesk', () => {
     expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
   });
 });
+
+describe('downward tax consequence copy (TAXSWING seam)', () => {
+  it('renders YOUR TAX BILL GOES DOWN when the marginal tax is negative', async () => {
+    const { DeskCandidateCard } = await import('../DeskCandidateCard');
+    render(<DeskCandidateCard candidate={{ ...candidate, marginalTax: -12345 }} />);
+    expect(screen.getByText(/YOUR TAX BILL GOES DOWN \$12,345 IF YOU TAKE HIM/)).toBeInTheDocument();
+  });
+});
