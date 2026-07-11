@@ -132,6 +132,12 @@ describe('persistDarkL11AutoBackstopForCompletedGame', () => {
     vi.spyOn(autoBackstopSeam, 'getTeamFanMorale').mockImplementation(async (_scope, teamId) =>
       teamId === 'team-home' ? 20 : 50,
     );
+    vi.spyOn(autoBackstopSeam, 'getManagerAssignment').mockResolvedValue({
+      managerId: 'manager-home',
+      teamId: 'team-home',
+      mode: 'franchise',
+      instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    });
     vi.spyOn(autoBackstopSeam, 'rollManagerBackstop').mockReturnValue(0.001);
     const fireSpy = vi.spyOn(autoBackstopSeam, 'fireManager').mockResolvedValue({
       status: 'fired',
@@ -151,6 +157,8 @@ describe('persistDarkL11AutoBackstopForCompletedGame', () => {
       instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
       reason: 'auto-backstop',
       endDate: new Date(atBatTimestamp).toISOString(),
+      expectedManagerId: 'manager-home',
+      executionGameId: gameState.gameId,
     });
   });
 

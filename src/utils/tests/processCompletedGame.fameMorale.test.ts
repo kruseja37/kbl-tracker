@@ -34,6 +34,7 @@ import {
 import { getFranchiseDatabaseName } from '../franchisePersistenceContract';
 import { persistFameMoraleConsequencesAfterFame } from '../processCompletedGame';
 import {
+  deriveCompletedGameResultContext,
   persistDarkChannelAFanMoraleForCompletedGame,
   persistDarkChannelBSteadyFanMoraleForCompletedGame,
 } from '../processCompletedGame';
@@ -221,12 +222,13 @@ describe('processCompletedGame fame morale emitter', () => {
     });
 
     const fameResult = await persistDarkFameRecordsForCompletedGame(completedGame, scope);
-    await persistFameMoraleConsequencesAfterFame(completedGame, scope, fameResult.playerHeatDeltas);
+    await persistFameMoraleConsequencesAfterFame(completedGame, scope, fameResult.moraleRelevantPlayerHeatDeltas);
 
     expect(fameResult).toEqual({
       status: 'written',
       written: 1,
       playerHeatDeltas: [{ playerId: 'player-fame', heatDelta: 4 }],
+      moraleRelevantPlayerHeatDeltas: [{ playerId: 'player-fame', heatDelta: 4 }],
     });
     await expect(getFranchiseFameRecord(scope, 'player-fame')).resolves.toMatchObject({
       heat: 4,
@@ -234,6 +236,133 @@ describe('processCompletedGame fame morale emitter', () => {
     });
     await expect(getFranchiseMoraleSnapshot(scope, 'player', 'player-fame')).resolves.toBeNull();
     await expect(getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-a')).resolves.toBeNull();
+  });
+
+  test('completed-game result truth honors scheduled innings, pitching team, and real walk-offs', () => {
+    const pitcher = (
+      teamId: string,
+      outsRecorded: number,
+      runsAllowed = 0,
+      hitsAllowed = 0,
+    ): PersistedGameState['pitcherGameStats'][number] => ({
+      pitcherId: `${teamId}-starter`,
+      pitcherName: `${teamId} Starter`,
+      teamId,
+      isStarter: true,
+      entryInning: 1,
+      outsRecorded,
+      hitsAllowed,
+      runsAllowed,
+      earnedRuns: runsAllowed,
+      walksAllowed: 0,
+      strikeoutsThrown: 5,
+      homeRunsAllowed: 0,
+      hitBatters: 0,
+      basesReachedViaError: 0,
+      wildPitches: 0,
+      pitchCount: 80,
+      battersFaced: 24,
+      consecutiveHRsAllowed: 0,
+      firstInningRuns: 0,
+      basesLoadedWalks: 0,
+      inningsComplete: Math.floor(outsRecorded / 3),
+      decision: null,
+      save: false,
+      hold: false,
+      blownSave: false,
+    });
+
+    const sevenInning = deriveCompletedGameResultContext(
+      gameState({
+        totalInnings: 7,
+        inning: 7,
+        homeScore: 2,
+        awayScore: 0,
+        pitcherGameStats: [pitcher('team-b', 21)],
+      }),
+      null,
+      Array.from({ length: 7 }, (_, index) => ({ away: 0, home: index === 0 ? 2 : 0 })),
+    );
+    expect(sevenInning.get('team-b')?.result).toMatchObject({ isNoHitter: true, isShutout: true });
+
+    const nineInning = deriveCompletedGameResultContext(
+      gameState({
+        totalInnings: 9,
+        inning: 9,
+        homeScore: 2,
+        awayScore: 0,
+        pitcherGameStats: [pitcher('team-b', 27)],
+      }),
+      null,
+      Array.from({ length: 9 }, (_, index) => ({ away: 0, home: index === 0 ? 2 : 0 })),
+    );
+    expect(nineInning.get('team-b')?.result).toMatchObject({ isNoHitter: true, isShutout: true });
+
+    const extraInning = deriveCompletedGameResultContext(
+      gameState({
+        totalInnings: 7,
+        inning: 8,
+        halfInning: 'TOP',
+        homeScore: 0,
+        awayScore: 1,
+        pitcherGameStats: [pitcher('team-a', 21), pitcher('team-b', 21, 1, 1)],
+      }),
+      null,
+      [
+        ...Array.from({ length: 7 }, () => ({ away: 0, home: 0 })),
+        { away: 1, home: 0 },
+      ],
+    );
+    expect(extraInning.get('team-a')?.result.isShutout).toBe(true);
+    expect(extraInning.get('team-b')?.result.isShutout).toBe(false);
+
+    const blowoutBottom = deriveCompletedGameResultContext(
+      gameState({ homeScore: 10, awayScore: 0, inning: 7, totalInnings: 7 }),
+      null,
+      [
+        { away: 0, home: 5 },
+        ...Array.from({ length: 5 }, () => ({ away: 0, home: 0 })),
+        { away: 0, home: 5 },
+      ],
+    );
+    expect(blowoutBottom.get('team-b')?.result.isWalkOff).toBe(false);
+
+    const genuineWalkOff = deriveCompletedGameResultContext(
+      gameState({ homeScore: 3, awayScore: 2, inning: 7, totalInnings: 7 }),
+      null,
+      [
+        { away: 2, home: 2 },
+        ...Array.from({ length: 5 }, () => ({ away: 0, home: 0 })),
+        { away: 0, home: 1 },
+      ],
+    );
+    expect(genuineWalkOff.get('team-b')?.result.isWalkOff).toBe(true);
+  });
+
+  test('pure fame decay produces no morale event while game input remains morale-relevant', async () => {
+    setFranchisePhase2FameEnabledForTests(true);
+    setFranchisePhase2MoraleEnabledForTests(true);
+    await saveFranchisePlayer(scope.franchiseId, player({ id: 'player-fame' }));
+
+    const eventful = gameState({
+      gameId: 'fame-morale-eventful',
+      playerWpaTotals: [playerTotal('player-fame', 1)],
+    });
+    const first = await persistDarkFameRecordsForCompletedGame(eventful, scope);
+    await persistFameMoraleConsequencesAfterFame(eventful, scope, first.moraleRelevantPlayerHeatDeltas);
+
+    const quiet = gameState({
+      gameId: 'fame-morale-quiet',
+      playerWpaTotals: [playerTotal('player-fame', 0)],
+    });
+    const second = await persistDarkFameRecordsForCompletedGame(quiet, scope);
+    await persistFameMoraleConsequencesAfterFame(quiet, scope, second.moraleRelevantPlayerHeatDeltas);
+
+    expect(first.playerHeatDeltas).toEqual([{ playerId: 'player-fame', heatDelta: 10 }]);
+    expect(first.moraleRelevantPlayerHeatDeltas).toEqual([{ playerId: 'player-fame', heatDelta: 10 }]);
+    expect(second.playerHeatDeltas).toEqual([{ playerId: 'player-fame', heatDelta: -1.5 }]);
+    expect(second.moraleRelevantPlayerHeatDeltas).toEqual([{ playerId: 'player-fame', heatDelta: 0 }]);
+    expect((await getFranchiseMoraleSnapshot(scope, 'player', 'player-fame'))?.history).toHaveLength(1);
   });
 
   test('stable fame sourceEventId dedupes morale and duplicate checkpoint skips fame loop', async () => {
@@ -246,20 +375,22 @@ describe('processCompletedGame fame morale emitter', () => {
     });
 
     const firstFameResult = await persistDarkFameRecordsForCompletedGame(completedGame, scope);
-    await persistFameMoraleConsequencesAfterFame(completedGame, scope, firstFameResult.playerHeatDeltas);
-    await persistFameMoraleConsequencesAfterFame(completedGame, scope, firstFameResult.playerHeatDeltas);
+    await persistFameMoraleConsequencesAfterFame(completedGame, scope, firstFameResult.moraleRelevantPlayerHeatDeltas);
+    await persistFameMoraleConsequencesAfterFame(completedGame, scope, firstFameResult.moraleRelevantPlayerHeatDeltas);
     const duplicateFameResult = await persistDarkFameRecordsForCompletedGame(completedGame, scope);
-    await persistFameMoraleConsequencesAfterFame(completedGame, scope, duplicateFameResult.playerHeatDeltas);
+    await persistFameMoraleConsequencesAfterFame(completedGame, scope, duplicateFameResult.moraleRelevantPlayerHeatDeltas);
 
     expect(firstFameResult).toEqual({
       status: 'written',
       written: 1,
       playerHeatDeltas: [{ playerId: 'player-fame', heatDelta: 10 }],
+      moraleRelevantPlayerHeatDeltas: [{ playerId: 'player-fame', heatDelta: 10 }],
     });
     expect(duplicateFameResult).toEqual({
       status: 'written',
       written: 0,
       playerHeatDeltas: [],
+      moraleRelevantPlayerHeatDeltas: [],
     });
 
     const moraleSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-fame');
@@ -322,9 +453,16 @@ describe('processCompletedGame fame morale emitter', () => {
       }),
     ]);
 
-    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope))
+    const archiveOptions = {
+      inningScores: [
+        { away: 2, home: 2 },
+        ...Array.from({ length: 7 }, () => ({ away: 0, home: 0 })),
+        { away: 0, home: 3 },
+      ],
+    };
+    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope, archiveOptions))
       .resolves.toEqual({ status: 'written', written: 2 });
-    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope))
+    await expect(persistDarkChannelAFanMoraleForCompletedGame(completedGame, scope, archiveOptions))
       .resolves.toEqual({ status: 'written', written: 0 });
 
     const home = await getFranchiseMoraleSnapshot(scope, 'team-fan', 'team-b');

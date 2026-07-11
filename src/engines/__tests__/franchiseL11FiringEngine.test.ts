@@ -88,10 +88,21 @@ describe('franchiseL11FiringEngine L11-1 pure manager-firing engine', () => {
     const struggling = computeFranchiseL11Firing({ teamFanMorale: 25, players: [] });
     const bottomed = computeFranchiseL11Firing({ teamFanMorale: -100, players: [] });
 
-    expect(neutral.reliefBumpDelta).toBe(FRANCHISE_L11_FIRING_TUNING.reliefBase);
+    expect(neutral.reliefBumpDelta).toBe(0);
     expect(struggling.reliefBumpDelta).toBeGreaterThan(neutral.reliefBumpDelta);
     expect(struggling.reliefBumpDelta).toBe(8);
     expect(bottomed.reliefBumpDelta).toBe(FRANCHISE_L11_FIRING_TUNING.reliefMax);
+  });
+
+  test('firing a beloved manager causes continuously scaled fan backlash', () => {
+    const neutral = computeFranchiseL11Firing({ teamFanMorale: 50, players: [] });
+    const liked = computeFranchiseL11Firing({ teamFanMorale: 80, players: [] });
+    const adored = computeFranchiseL11Firing({ teamFanMorale: 100, players: [] });
+
+    expect(neutral.reliefBumpDelta).toBe(0);
+    expect(liked.reliefBumpDelta).toBeLessThan(0);
+    expect(adored.reliefBumpDelta).toBeLessThan(liked.reliefBumpDelta);
+    expect(computeFranchiseL11Firing({ teamFanMorale: 25, players: [] }).reliefBumpDelta).toBe(8);
   });
 
   test('extreme valueDelta respects rippleFloor', () => {

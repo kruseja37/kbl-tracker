@@ -14,7 +14,7 @@ import {
 } from '../engines/franchiseL11FiringEngine';
 import { normalizePersonality } from '../engines/masterMoraleMatrix';
 import type { HiddenModifiers } from '../types/game';
-import type { ManagerFiredReason, ManagerMode } from '../types/managerWpa';
+import type { ManagerAssignment, ManagerFiredReason, ManagerMode } from '../types/managerWpa';
 import {
   getAllFranchisePlayers,
   getAllFranchiseTeams,
@@ -51,10 +51,12 @@ export interface FireManagerParams extends FranchiseMoraleScope {
   endDate: string;
   skipUserConfirm?: boolean;
   suppressFanReliefBump?: boolean;
+  expectedManagerId?: string;
+  executionGameId?: string;
 }
 
 export interface FireManagerResult {
-  status: 'dark-noop' | 'fired' | 'no-active-manager';
+  status: 'dark-noop' | 'fired' | 'no-active-manager' | 'manager-mismatch' | 'already-fired-for-game';
   firingReport?: FranchiseL11FiringReport;
   reliefApplied: boolean;
   ripplesApplied: number;
@@ -135,6 +137,7 @@ export const managerFiringSeam = {
 };
 
 type RequiredFireManagerParams = FireManagerParams & { mode: ManagerMode };
+type GameStampedManagerAssignment = ManagerAssignment & { lastFiredGameId?: string };
 
 export async function fireManager(params: FireManagerParams): Promise<FireManagerResult> {
   if (!isFranchisePhase2L11Enabled()) {
@@ -153,7 +156,27 @@ export async function fireManager(params: FireManagerParams): Promise<FireManage
     mode,
     instanceId: params.instanceId,
   });
-  if (!assignment || assignment.fired || assignment.endDate) {
+  if (!assignment) {
+    return { status: 'no-active-manager', reliefApplied: false, ripplesApplied: 0 };
+  }
+  const stampedAssignment = assignment as GameStampedManagerAssignment;
+  if (params.executionGameId && stampedAssignment.lastFiredGameId === params.executionGameId) {
+    return {
+      status: 'already-fired-for-game',
+      reliefApplied: false,
+      ripplesApplied: 0,
+      reason: `Manager firing already executed for game "${params.executionGameId}".`,
+    };
+  }
+  if (params.expectedManagerId && assignment.managerId !== params.expectedManagerId) {
+    return {
+      status: 'manager-mismatch',
+      reliefApplied: false,
+      ripplesApplied: 0,
+      reason: `Expected manager "${params.expectedManagerId}" but found "${assignment.managerId}".`,
+    };
+  }
+  if (assignment.fired || assignment.endDate) {
     return { status: 'no-active-manager', reliefApplied: false, ripplesApplied: 0 };
   }
 
@@ -167,11 +190,17 @@ export async function fireManager(params: FireManagerParams): Promise<FireManage
     players: snapshot.players,
     reason: params.reason,
   });
-  const sourceEventId = `manager-fired:${params.teamId}:${params.seasonId}:${params.instanceId}`;
+  const sourceEventId = [
+    'manager-fired',
+    params.teamId,
+    params.seasonId,
+    params.instanceId,
+    ...(params.executionGameId ? [params.executionGameId] : []),
+  ].join(':');
   let reliefApplied = false;
   let ripplesApplied = 0;
 
-  if (!params.suppressFanReliefBump && firingReport.reliefBumpDelta > 0) {
+  if (!params.suppressFanReliefBump && firingReport.reliefBumpDelta !== 0) {
     reliefApplied = await managerFiringSeam.applyFranchiseMoraleEffect({
       ...resolvedParams,
       targetType: 'team-fan',
@@ -222,13 +251,15 @@ export async function fireManager(params: FireManagerParams): Promise<FireManage
   });
 
   const successorProfile = await saveManagerProfile(buildDefaultManagerProfile(snapshot.teamIdentity));
-  await saveManagerAssignment({
+  const successorAssignment: GameStampedManagerAssignment = {
     managerId: successorProfile.managerId,
     teamId: params.teamId,
     mode,
     instanceId: params.instanceId,
     startDate: params.endDate,
-  });
+    ...(params.executionGameId ? { lastFiredGameId: params.executionGameId } : {}),
+  };
+  await saveManagerAssignment(successorAssignment);
 
   return {
     status: 'fired',
