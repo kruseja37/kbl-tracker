@@ -20,6 +20,7 @@ import {
   type BandPriorities,
   type ConstructionPlayer,
   applyIdentitySelection,
+  assignLuxuryTaxPitchingGroups,
   assessSolvency,
   buildSnakeOrder,
   cheapestFillCost,
@@ -33,6 +34,8 @@ import {
   shiftLuxuryCaps,
   validateTrade,
 } from '../leagueConstruction';
+import { auctionMarginalTaxWithCaps } from '../auctionLuxuryTax';
+import { LEGAL_ROSTER } from '../../data/rosterConstruction';
 
 const MOD_STATS = Object.keys(MOD_STAT_TO_LUX) as ModStat[];
 
@@ -49,7 +52,8 @@ const composeGoldens: Array<{ name: string; priorities: BandPriorities; increase
   { name: 'power_only', priorities: { ...zeroPriorities, Power: 5 }, increase: ['Great Bambino', 'Fence Swingers'] },
   { name: 'contact_only', priorities: { ...zeroPriorities, Contact: 5 }, increase: ['Bloop Hitters', 'Warning Track'] },
   { name: 'speed_only', priorities: { ...zeroPriorities, Speed: 5 }, increase: ['Run Like the Wind', 'Warning Track'] },
-  { name: 'defense_only', priorities: { ...zeroPriorities, Defense: 5 }, increase: ['Catch the Ball!', 'Defense First'] },
+  // CONTRACT_TAXSWING_2026-07-10 Amendment 1: the 0.85 pitching retune moves Defense First ahead.
+  { name: 'defense_only', priorities: { ...zeroPriorities, Defense: 5 }, increase: ['Defense First', 'Catch the Ball!'] },
   { name: 'rotation_only', priorities: { ...zeroPriorities, Rotation: 5 }, increase: ['JNK', 'Rotation Boost'] },
   { name: 'bullpen_only', priorities: { ...zeroPriorities, Bullpen: 5 }, increase: ['Junk Ballers', 'JNK'] },
   { name: 'power_rotation', priorities: { ...zeroPriorities, Power: 4, Rotation: 4 }, increase: ['POW', 'JNK'] },
@@ -67,7 +71,8 @@ const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }
     identity: { increase: ['Defense First', 'Bullpen Boost'], decrease: ['Call Your Shot'] },
     shift: {
       POW: -0.22, CON: -0.07339449541284404, SPD: 0.23636363636363636, FLD: 0.6102564102564103, ARM: 0.3008849557522124,
-      RVEL: -0.2, RJNK: -0.15384615384615385, RACC: -0.09615384615384616, PVEL: -0.03076923076923077, PJNK: 0.03333333333333333, PACC: 0.09090909090909091,
+      // CONTRACT_TAXSWING_2026-07-10 Amendment 1: recomputed from the ruled 0.85 pitching fractions.
+      RVEL: -0.17, RJNK: -0.130769, RACC: -0.08173, PVEL: -0.007692, PJNK: 0.073333, PACC: 0.109091,
     },
   },
   {
@@ -138,6 +143,45 @@ function pitcher(
     bat: { POW: 20, CON: 20, SPD: 20, FLD: 50, ARM: 50, ...bat },
     pit: { VEL: 50, JNK: 50, ACC: 50, ...pit },
   };
+}
+
+const PITCHING_TAX_STATS = ['VEL', 'JNK', 'ACC'] as const;
+
+function pitchingAssignmentCaps(bullpenCap = 0): LuxuryCapRow[] {
+  return PITCHING_TAX_STATS.flatMap((stat) => [
+    {
+      group: 'rotation' as const,
+      stat,
+      topN: LEGAL_ROSTER.startingPitchers,
+      cap: 0,
+      penaltyCurve: 1,
+      penaltyPer100: 100,
+      minAdder: 0,
+    },
+    {
+      group: 'bullpen' as const,
+      stat,
+      topN: LEGAL_ROSTER.startingPitchers,
+      cap: bullpenCap,
+      penaltyCurve: 1,
+      penaltyPer100: 100,
+      minAdder: 0,
+    },
+  ]);
+}
+
+function bindingOver(
+  result: ReturnType<typeof luxuryTax>,
+  group: 'rotation' | 'bullpen',
+  stat: (typeof PITCHING_TAX_STATS)[number],
+): number {
+  return result.binding.find((row) => row.group === group && row.stat === stat)?.over ?? 0;
+}
+
+function groupTax(result: ReturnType<typeof luxuryTax>, group: 'rotation' | 'bullpen'): number {
+  return result.binding
+    .filter((row) => row.group === group)
+    .reduce((sum, row) => sum + row.tax, 0);
 }
 
 function expectedTax(roster: ConstructionPlayer[], caps: LuxuryCapRow[]) {
@@ -243,22 +287,125 @@ describe('leagueConstruction T8a pure engine', () => {
     expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'FLD' && row.over > 0)).toBe(true);
   });
 
-  test('luxuryTax counts SP/RP VEL in both rotation and bullpen binding rows', () => {
-    const roster = [
-      pitcher('hybrid', 'SP/RP', { VEL: 99, JNK: 50, ACC: 50 }),
-      pitcher('sp2', 'SP', { VEL: 96, JNK: 50, ACC: 50 }),
-      pitcher('sp3', 'SP', { VEL: 94, JNK: 50, ACC: 50 }),
-      pitcher('sp4', 'SP', { VEL: 92, JNK: 50, ACC: 50 }),
-      pitcher('rp1', 'RP', { VEL: 98, JNK: 50, ACC: 50 }),
-      pitcher('rp2', 'RP', { VEL: 97, JNK: 50, ACC: 50 }),
+  describe('TAXSWING named single-assignment scenarios', () => {
+    const pureStarters = [
+      pitcher('sp-a', 'SP', { VEL: 40, JNK: 41, ACC: 42 }),
+      pitcher('sp-b', 'SP', { VEL: 50, JNK: 51, ACC: 52 }),
+      pitcher('sp-c', 'SP', { VEL: 60, JNK: 61, ACC: 62 }),
+      pitcher('sp-d', 'SP', { VEL: 70, JNK: 71, ACC: 72 }),
     ];
-    const caps = LUXURY_CAP_TABLES.juiced.filter((row) => row.stat === 'VEL');
-    const actual = luxuryTax(roster, caps, 'taxed');
+    const eliteSwing = pitcher('swing-elite', 'SP/RP', { VEL: 99, JNK: 99, ACC: 99 });
 
-    const rotationVel = actual.binding.find((row) => row.group === 'rotation' && row.stat === 'VEL');
-    const bullpenVel = actual.binding.find((row) => row.group === 'bullpen' && row.stat === 'VEL');
-    expect(rotationVel?.over).toBeCloseTo((99 + 96 + 94 + 92) - 272.9, 10);
-    expect(bullpenVel?.over).toBeCloseTo((99 + 98 + 97) - 234.1, 10);
+    test('A. 4 SP + elite SP/RP taxes the four pure starters in rotation and the swing arm only in the bullpen', () => {
+      const roster = [...pureStarters, eliteSwing];
+      const assignment = assignLuxuryTaxPitchingGroups(roster);
+      const actual = luxuryTax(roster, pitchingAssignmentCaps(), 'taxed');
+
+      expect(assignment.rotation.map((player) => player.id)).toEqual(['sp-a', 'sp-b', 'sp-c', 'sp-d']);
+      expect(assignment.bullpen.map((player) => player.id)).toEqual(['swing-elite']);
+      expect(bindingOver(actual, 'rotation', 'VEL')).toBe(40 + 50 + 60 + 70);
+      expect(bindingOver(actual, 'rotation', 'JNK')).toBe(41 + 51 + 61 + 71);
+      expect(bindingOver(actual, 'rotation', 'ACC')).toBe(42 + 52 + 62 + 72);
+      for (const stat of PITCHING_TAX_STATS) {
+        expect(bindingOver(actual, 'bullpen', stat), stat).toBe(99);
+      }
+    });
+
+    test('B. 3 SP + elite SP/RP promotes the swing arm into rotation and excludes it from bullpen', () => {
+      const roster = [...pureStarters.slice(0, 3), eliteSwing];
+      const assignment = assignLuxuryTaxPitchingGroups(roster);
+      const actual = luxuryTax(roster, pitchingAssignmentCaps(), 'taxed');
+
+      expect(assignment.rotation.map((player) => player.id)).toEqual(['sp-a', 'sp-b', 'sp-c', 'swing-elite']);
+      expect(assignment.bullpen).toEqual([]);
+      expect(bindingOver(actual, 'rotation', 'VEL')).toBe(40 + 50 + 60 + 99);
+      expect(bindingOver(actual, 'rotation', 'JNK')).toBe(41 + 51 + 61 + 99);
+      expect(bindingOver(actual, 'rotation', 'ACC')).toBe(42 + 52 + 62 + 99);
+      for (const stat of PITCHING_TAX_STATS) {
+        expect(bindingOver(actual, 'bullpen', stat), stat).toBe(0);
+      }
+    });
+
+    test('C. adding a fourth pure SP reassigns the swing arm to the pen and preserves a negative signed auction marginal', () => {
+      const rosterB = [...pureStarters.slice(0, 3), eliteSwing];
+      const fourthPureStarter = pitcher('sp-new-fourth', 'SP', { VEL: 10, JNK: 10, ACC: 10 });
+      const caps = pitchingAssignmentCaps(10_000);
+      const before = luxuryTax(rosterB, caps, 'taxed');
+      const after = luxuryTax([...rosterB, fourthPureStarter], caps, 'taxed');
+      const afterAssignment = assignLuxuryTaxPitchingGroups([...rosterB, fourthPureStarter]);
+      const expectedMarginal = after.charged - before.charged;
+      const auctionMarginal = auctionMarginalTaxWithCaps(
+        rosterB,
+        fourthPureStarter,
+        undefined,
+        caps,
+      );
+
+      expect(afterAssignment.rotation.map((player) => player.id)).toEqual([
+        'sp-a',
+        'sp-b',
+        'sp-c',
+        'sp-new-fourth',
+      ]);
+      expect(afterAssignment.bullpen.map((player) => player.id)).toEqual(['swing-elite']);
+      expect(groupTax(after, 'rotation')).toBeLessThan(groupTax(before, 'rotation'));
+      expect(expectedMarginal).toBeLessThan(0);
+      expect(auctionMarginal).toBe(expectedMarginal);
+      expect(auctionMarginal).toBeLessThan(0);
+    });
+
+    test('D. an all-swing staff promotes only the best four mean-rated arms and taxes the remainder in the bullpen', () => {
+      const roster = [
+        pitcher('swing-90', 'SP/RP', { VEL: 90, JNK: 90, ACC: 90 }),
+        pitcher('swing-80', 'SP/RP', { VEL: 80, JNK: 80, ACC: 80 }),
+        pitcher('swing-70', 'SP/RP', { VEL: 70, JNK: 70, ACC: 70 }),
+        pitcher('swing-60', 'SP/RP', { VEL: 60, JNK: 60, ACC: 60 }),
+        pitcher('swing-50', 'SP/RP', { VEL: 50, JNK: 50, ACC: 50 }),
+      ];
+      const assignment = assignLuxuryTaxPitchingGroups(roster);
+      const actual = luxuryTax(roster, pitchingAssignmentCaps(), 'taxed');
+
+      expect(assignment.rotation.map((player) => player.id)).toEqual([
+        'swing-90',
+        'swing-80',
+        'swing-70',
+        'swing-60',
+      ]);
+      expect(assignment.bullpen.map((player) => player.id)).toEqual(['swing-50']);
+      for (const stat of PITCHING_TAX_STATS) {
+        expect(bindingOver(actual, 'rotation', stat), stat).toBe(90 + 80 + 70 + 60);
+        expect(bindingOver(actual, 'bullpen', stat), stat).toBe(50);
+      }
+    });
+
+    test('E. equal-mean swing promotions break ties by player id ascending, independent of roster order', () => {
+      const equalMeanArms = [
+        pitcher('z-last', 'SP/RP', { VEL: 100, JNK: 40, ACC: 40 }),
+        pitcher('d-fourth', 'SP/RP', { VEL: 60, JNK: 60, ACC: 60 }),
+        pitcher('b-second', 'SP/RP', { VEL: 80, JNK: 50, ACC: 50 }),
+        pitcher('a-first', 'SP/RP', { VEL: 90, JNK: 45, ACC: 45 }),
+        pitcher('c-third', 'SP/RP', { VEL: 70, JNK: 55, ACC: 55 }),
+      ];
+      const caps = pitchingAssignmentCaps();
+      const assignment = assignLuxuryTaxPitchingGroups(equalMeanArms);
+      const actual = luxuryTax(equalMeanArms, caps, 'taxed');
+      const reversed = luxuryTax([...equalMeanArms].reverse(), caps, 'taxed');
+
+      expect(assignment.rotation.map((player) => player.id)).toEqual([
+        'a-first',
+        'b-second',
+        'c-third',
+        'd-fourth',
+      ]);
+      expect(assignment.bullpen.map((player) => player.id)).toEqual(['z-last']);
+      expect(actual).toEqual(reversed);
+      expect(bindingOver(actual, 'rotation', 'VEL')).toBe(90 + 80 + 70 + 60);
+      expect(bindingOver(actual, 'rotation', 'JNK')).toBe(45 + 50 + 55 + 60);
+      expect(bindingOver(actual, 'rotation', 'ACC')).toBe(45 + 50 + 55 + 60);
+      expect(bindingOver(actual, 'bullpen', 'VEL')).toBe(100);
+      expect(bindingOver(actual, 'bullpen', 'JNK')).toBe(40);
+      expect(bindingOver(actual, 'bullpen', 'ACC')).toBe(40);
+    });
   });
 
   test('derivePickValueChart sorts descending, preserves length, and reflects steeper juiced-shaped pools', () => {

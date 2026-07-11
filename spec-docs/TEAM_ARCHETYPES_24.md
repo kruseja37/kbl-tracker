@@ -72,7 +72,8 @@ Forearm-bashing bombs and cannon arms; the pitching leaks. **+power +arm → −
 
 ### Launch & Leather — *2016 Cubs · 2021 Astros*
 Mash and pick it clean; if the staff could find the zone they'd be unbeatable. **+power +defense → −command.**
-> Power +5 (cap +7.5%) · Fielding +13 (cap +22%) · Rotation command −15 (cap −25%) · Bullpen command −18 (cap −30%)
+> Power +5 (cap +7.5%) · Fielding +13 (cap +22%) · Rotation command −12 (cap −20%) · Bullpen command −10.8 (cap −18%)
+> *CONTRACT_TAXSWING_2026-07-10 Amendment 1 parity retune; identity direction and flavor unchanged.*
 
 ### Gap-to-Gap — *2003 Red Sox · 1996 Indians*
 Line drives in the gaps all day; the pitching just tries to keep up. **+contact +power → −rotation command −bullpen velo.**
@@ -136,7 +137,8 @@ Run prevention: elite gloves behind pinpoint starters. **+defense +rotation comm
 
 ### Shift-Era Suppressors — *2008 & 2010 Rays*
 Modern run prevention: defense and power arms, light bats. **+defense +rotation velo → −contact −bullpen command.**
-> Fielding +20 (cap +33%) · Rotation velo +10 (cap +16%) · Contact −9 (cap −15%) · Bullpen command −18 (cap −30%)
+> Fielding +20 (cap +33%) · Rotation velo +10 (cap +16%) · Contact −9 (cap −15%) · Bullpen command −14.4 (cap −24%)
+> *CONTRACT_TAXSWING_2026-07-10 Amendment 1 parity retune; identity direction and flavor unchanged.*
 
 ---
 

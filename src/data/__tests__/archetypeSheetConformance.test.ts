@@ -39,14 +39,16 @@ const RATIFIED_SHIFTS: Record<string, Record<string, number>> = {
   'hdh-royals': { 'bullpen/ACC': 0.09, 'hitters/SPD': 0.12, 'hitters/POW': -0.025, 'rotation/ACC': -0.0625 },
   'the-opener': { 'bullpen/VEL': 0.30, 'bullpen/JNK': 0.35, 'rotation/VEL': -0.24, 'rotation/ACC': -0.25 },
   'the-oriole-way': { 'hitters/FLD': 0.33, 'rotation/ACC': 0.375, 'hitters/SPD': -0.12, 'bullpen/VEL': -0.20 },
-  'shift-era-suppressors': { 'hitters/FLD': 0.33, 'rotation/VEL': 0.16, 'hitters/CON': -0.15, 'bullpen/ACC': -0.30 },
+  // CONTRACT_TAXSWING_2026-07-10 Amendment 1: bullpen-command cap shift retuned from -0.30.
+  'shift-era-suppressors': { 'hitters/FLD': 0.33, 'rotation/VEL': 0.16, 'hitters/CON': -0.15, 'bullpen/ACC': -0.24 },
   'big-red-machine': { 'hitters/CON': 0.15, 'hitters/FLD': 0.22, 'hitters/POW': 0.025, 'rotation/VEL': -0.24, 'rotation/ACC': -0.25 },
   'hit-em-where-they-aint': { 'hitters/CON': 0.15, 'hitters/SPD': 0.12, 'hitters/POW': -0.10 },
   'toolsy-burners': { 'hitters/POW': 0.05, 'hitters/SPD': 0.18, 'rotation/ACC': -0.25, 'hitters/FLD': -0.22 },
   'cannon-corps': { 'hitters/ARM': 0.24, 'hitters/FLD': 0.22, 'hitters/POW': -0.05, 'hitters/SPD': -0.12 },
   'gap-to-gap': { 'hitters/CON': 0.15, 'hitters/POW': 0.05, 'rotation/ACC': -0.25, 'bullpen/VEL': -0.20 },
   'web-gems': { 'hitters/FLD': 0.44, 'hitters/ARM': 0.12, 'hitters/POW': -0.075, 'hitters/CON': -0.05 },
-  'launch-and-leather': { 'hitters/POW': 0.075, 'hitters/FLD': 0.22, 'rotation/ACC': -0.25, 'bullpen/ACC': -0.30 },
+  // CONTRACT_TAXSWING_2026-07-10 Amendment 1: command cap shifts retuned from -0.25/-0.30.
+  'launch-and-leather': { 'hitters/POW': 0.075, 'hitters/FLD': 0.22, 'rotation/ACC': -0.20, 'bullpen/ACC': -0.18 },
   'no-glove-offense': { 'hitters/POW': 0.05, 'hitters/CON': 0.10, 'hitters/FLD': -0.33, 'hitters/ARM': -0.18 },
   'wheels-and-cannons': { 'hitters/SPD': 0.18, 'hitters/ARM': 0.12, 'hitters/POW': -0.10 },
   'rangy-defenders': { 'hitters/SPD': 0.12, 'hitters/ARM': 0.12, 'hitters/FLD': 0.22, 'hitters/POW': -0.075, 'hitters/CON': -0.05 },

@@ -46,7 +46,7 @@ describe('historical team archetypes — locked set, all tiers', () => {
   // timeout; the parity assertions below are UNTOUCHED (frozen gate).
   it('stays within the ±10% parity band across juiced / standard / nerfed, and prints the landscape', { timeout: 30000 }, () => {
     const pool = loadPool();
-    for (const tier of ['juiced', 'standard', 'nerfed'] as const satisfies readonly TierKey[]) {
+    const reports = (['juiced', 'standard', 'nerfed'] as const satisfies readonly TierKey[]).map((tier) => {
       const report = runBalanceSim(pool, SIM_SET, tier, 20, 0.1);
       const inBand = report.results.length - report.outliers.length;
       const rows = report.results
@@ -59,11 +59,17 @@ describe('historical team archetypes — locked set, all tiers', () => {
       );
       // eslint-disable-next-line no-console
       console.log('  ' + rows.map((r) => `${r.name} ${(r.dev * 100).toFixed(1)}%`).join('  ·  '));
-      expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
-      // Every archetype must field a LEGAL SMB4 roster (8 field + backup C + 13-14 position / 8-9 pitchers,
-      // ≥4 SP + ≥4 RP) — so the parity result translates to a real auction draft, not impossible teams (JK 2026-06-30).
-      expect(report.results.every((r) => r.legalRoster)).toBe(true);
-      expect(report.withinBand).toBe(true);
-    }
+      return { tier, report };
+    });
+
+    // CONTRACT_TAXSWING_2026-07-10 Amendment 1: run and print every tier before parity asserts.
+    expect(reports.every(({ report }) => report.results.every((r) => r.rosterSize === 22))).toBe(true);
+    // Every archetype must field a LEGAL SMB4 roster (8 field + backup C + 13-14 position / 8-9 pitchers,
+    // ≥4 SP + ≥4 RP) — so the parity result translates to a real auction draft, not impossible teams (JK 2026-06-30).
+    expect(reports.every(({ report }) => report.results.every((r) => r.legalRoster))).toBe(true);
+    const tierViolations = reports.flatMap(({ tier, report }) =>
+      report.outliers.map((outlier) => `${tier}: ${outlier.name} ${(outlier.deviation * 100).toFixed(1)}%`),
+    );
+    expect(tierViolations, `Parity violations across all tiers:\n${tierViolations.join('\n')}`).toEqual([]);
   });
 });
