@@ -1,6 +1,16 @@
 import type { KblWpaPlayerTotal } from '../../src/utils/kblWpaAttribution';
 import type { PersistedGameState } from '../../src/utils/gameStorage';
 import type { Player } from '../../src/utils/leagueBuilderStorage';
+import { getAllFranchisePlayers } from '../../src/utils/franchisePlayerStorage';
+import { loadFranchiseConditionSnapshots } from '../../src/utils/mojoFitnessStorage';
+import {
+  applyCombinedMultiplier,
+  type FitnessState,
+} from '../../src/engines/fitnessEngine';
+import {
+  getMojoStatMultiplier,
+  type MojoLevel,
+} from '../../src/engines/mojoEngine';
 import {
   lsimArchiveOptionsFor,
   type LsimArchiveOptions,
@@ -12,11 +22,62 @@ export interface LsimSyntheticCompletedGame {
   gameState: PersistedGameState;
   archiveOptions: LsimArchiveOptions;
   finalScore: { away: number; home: number };
+  performanceReads?: LsimPlayerPerformanceRead[];
 }
 
 export interface LsimSyntheticGameOptions {
   gameNumber?: number;
   seed?: string;
+  performanceReads?: LsimPlayerPerformanceRead[];
+}
+
+export type LsimRatingKey =
+  | 'power'
+  | 'contact'
+  | 'speed'
+  | 'fielding'
+  | 'arm'
+  | 'velocity'
+  | 'junk'
+  | 'accuracy';
+
+export interface LsimRegimePhase {
+  id: string;
+  startGameNumber: number;
+  endGameNumber: number;
+  playerIds?: string[];
+  teamIds?: string[];
+  hitTendencyMultiplier: number;
+  powerTendencyMultiplier: number;
+  seededJitter?: number;
+}
+
+export interface LsimPerformanceRegime {
+  id: string;
+  phases: LsimRegimePhase[];
+}
+
+export interface LsimSampledBattingWindow {
+  plateAppearances: number;
+  hits: number;
+  extraBaseHits: number;
+  homeRuns: number;
+  weightedOutput: number;
+}
+
+export interface LsimPlayerPerformanceRead {
+  playerId: string;
+  teamId: string;
+  gameNumber: number;
+  storedRatings: Record<LsimRatingKey, number>;
+  effectiveRatings: Record<LsimRatingKey, number>;
+  mojoLevel: MojoLevel;
+  fitnessState: FitnessState;
+  regimeId: string;
+  regimePhaseId: string;
+  hitTendency: number;
+  powerTendency: number;
+  sampledWindow: LsimSampledBattingWindow;
 }
 
 const GAME_STARTED_AT = Date.UTC(2026, 5, 19, 19, 5, 0);
@@ -34,6 +95,149 @@ function seedHash(seed: string): number {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
   return hash;
+}
+
+function seededUnit(seed: string): number {
+  return seedHash(seed) / 0x100000000;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function legacyMojoLevel(player: Player): MojoLevel {
+  if (player.mojo === 'On Fire') return 2;
+  if (player.mojo === 'Hot') return 1;
+  if (player.mojo === 'Cold') return -1;
+  if (player.mojo === 'Ice Cold') return -2;
+  return 0;
+}
+
+function playerTeamId(player: Player, leagueId: string): string {
+  return player.leagueAssignments?.find((assignment) => assignment.leagueId === leagueId)?.teamId ?? '';
+}
+
+function matchingRegimePhase(
+  regime: LsimPerformanceRegime,
+  player: Player,
+  teamId: string,
+  gameNumber: number,
+): LsimRegimePhase | undefined {
+  return regime.phases.find((phase) =>
+    gameNumber >= phase.startGameNumber &&
+    gameNumber <= phase.endGameNumber &&
+    (!phase.playerIds || phase.playerIds.includes(player.id)) &&
+    (!phase.teamIds || phase.teamIds.includes(teamId)),
+  );
+}
+
+function tendencyMultipliers(
+  regime: LsimPerformanceRegime,
+  phase: LsimRegimePhase | undefined,
+  playerId: string,
+  gameNumber: number,
+  seed: string,
+): { hit: number; power: number; phaseId: string } {
+  if (!phase) return { hit: 1, power: 1, phaseId: 'neutral' };
+  const jitter = Math.max(0, phase.seededJitter ?? 0);
+  const signedJitter = jitter === 0
+    ? 0
+    : ((seededUnit(`${seed}:${regime.id}:${phase.id}:${playerId}:${gameNumber}:jitter`) * 2) - 1) * jitter;
+  return {
+    hit: Math.max(0, phase.hitTendencyMultiplier * (1 + signedJitter)),
+    power: Math.max(0, phase.powerTendencyMultiplier * (1 + signedJitter)),
+    phaseId: phase.id,
+  };
+}
+
+export function sampleLsimBattingWindow(input: {
+  seed: string;
+  playerId: string;
+  hitTendency: number;
+  powerTendency: number;
+  plateAppearances?: number;
+}): LsimSampledBattingWindow {
+  const plateAppearances = input.plateAppearances ?? 20_000;
+  let hits = 0;
+  let extraBaseHits = 0;
+  let homeRuns = 0;
+  for (let pa = 0; pa < plateAppearances; pa += 1) {
+    const hit = seededUnit(`${input.seed}:${input.playerId}:sample:${pa}:hit`) < input.hitTendency;
+    if (!hit) continue;
+    hits += 1;
+    const powerRoll = seededUnit(`${input.seed}:${input.playerId}:sample:${pa}:power`);
+    if (powerRoll < input.powerTendency) {
+      extraBaseHits += 1;
+      if (powerRoll < input.powerTendency * 0.42) homeRuns += 1;
+    }
+  }
+  return {
+    plateAppearances,
+    hits,
+    extraBaseHits,
+    homeRuns,
+    weightedOutput: hits + (2 * extraBaseHits) + (3 * homeRuns),
+  };
+}
+
+export function buildLsimPlayerPerformanceRead(input: {
+  player: Player;
+  teamId: string;
+  gameNumber: number;
+  seed: string;
+  regime: LsimPerformanceRegime;
+  mojoLevel?: MojoLevel;
+  fitnessState?: FitnessState;
+}): LsimPlayerPerformanceRead {
+  const mojoLevel = input.mojoLevel ?? legacyMojoLevel(input.player);
+  const fitnessState = input.fitnessState ?? 'FIT';
+  const storedRatings: Record<LsimRatingKey, number> = {
+    power: input.player.power,
+    contact: input.player.contact,
+    speed: input.player.speed,
+    fielding: input.player.fielding,
+    arm: input.player.arm,
+    velocity: input.player.velocity,
+    junk: input.player.junk,
+    accuracy: input.player.accuracy,
+  };
+  const mojoMultiplier = getMojoStatMultiplier(mojoLevel);
+  const effectiveRatings = Object.fromEntries(
+    Object.entries(storedRatings).map(([key, value]) => [
+      key,
+      applyCombinedMultiplier(value, mojoMultiplier, fitnessState),
+    ]),
+  ) as Record<LsimRatingKey, number>;
+  const phase = matchingRegimePhase(input.regime, input.player, input.teamId, input.gameNumber);
+  const multipliers = tendencyMultipliers(
+    input.regime,
+    phase,
+    input.player.id,
+    input.gameNumber,
+    input.seed,
+  );
+  const hitTendency = clamp((0.08 + (effectiveRatings.contact / 250)) * multipliers.hit, 0.02, 0.72);
+  const powerTendency = clamp((0.03 + (effectiveRatings.power / 360)) * multipliers.power, 0.005, 0.55);
+  return {
+    playerId: input.player.id,
+    teamId: input.teamId,
+    gameNumber: input.gameNumber,
+    storedRatings,
+    effectiveRatings,
+    mojoLevel,
+    fitnessState,
+    regimeId: input.regime.id,
+    regimePhaseId: multipliers.phaseId,
+    hitTendency,
+    powerTendency,
+    sampledWindow: sampleLsimBattingWindow({
+      seed: input.seed,
+      playerId: input.player.id,
+      hitTendency,
+      powerTendency,
+      plateAppearances: phase ? 20_000 : 0,
+    }),
+  };
 }
 
 function rosterIndexFor(player: Player): number {
@@ -112,7 +316,67 @@ function battingStatsFor(
   starPlayerId: string,
   gameNumber: number,
   hash: number,
+  performanceRead?: LsimPlayerPerformanceRead,
 ): PersistedGameState['playerStats'][string] {
+  if (performanceRead) {
+    const pa = player.id === starPlayerId ? 5 : 4;
+    let singles = 0;
+    let doubles = 0;
+    let triples = 0;
+    let hr = 0;
+    let walks = 0;
+    let strikeouts = 0;
+    for (let appearance = 0; appearance < pa; appearance += 1) {
+      const scope = `${hash}:${gameNumber}:${player.id}:${appearance}`;
+      const walk = seededUnit(`${scope}:walk`) < 0.07;
+      if (walk) {
+        walks += 1;
+        continue;
+      }
+      const hit = seededUnit(`${scope}:hit`) < performanceRead.hitTendency;
+      if (!hit) {
+        if (seededUnit(`${scope}:out`) > performanceRead.hitTendency * 0.9) strikeouts += 1;
+        continue;
+      }
+      const powerRoll = seededUnit(`${scope}:power`);
+      if (powerRoll < performanceRead.powerTendency * 0.42) hr += 1;
+      else if (powerRoll < performanceRead.powerTendency * 0.86) doubles += 1;
+      else if (powerRoll < performanceRead.powerTendency) triples += 1;
+      else singles += 1;
+    }
+    const hits = singles + doubles + triples + hr;
+    const runsCreated = doubles + (2 * triples) + (3 * hr);
+    return {
+      playerName: fullName(player),
+      teamId,
+      pa,
+      ab: pa - walks,
+      h: hits,
+      singles,
+      doubles,
+      triples,
+      hr,
+      rbi: Math.min(7, hits + runsCreated),
+      r: Math.min(5, hits + hr),
+      bb: walks,
+      hbp: 0,
+      k: strikeouts,
+      sb: performanceRead.effectiveRatings.speed >= 75 && hits > 0 ? 1 : 0,
+      cs: 0,
+      sf: 0,
+      sh: 0,
+      gidp: 0,
+      putouts: Math.max(1, Math.round(performanceRead.effectiveRatings.fielding / 15)),
+      assists: Math.max(0, Math.round(performanceRead.effectiveRatings.arm / 30)),
+      fieldingErrors: seededUnit(`${hash}:${gameNumber}:${player.id}:error`) >
+        clamp(0.9 + (performanceRead.effectiveRatings.fielding / 1000), 0.9, 0.995) ? 1 : 0,
+      grandSlams: 0,
+      d3kOutcomes: 0,
+      divingCatches: performanceRead.effectiveRatings.fielding >= 85 ? 1 : 0,
+      robberies: 0,
+      nutshots: 0,
+    };
+  }
   const isStar = player.id === starPlayerId;
   const isHome = role === 'home';
   const decline = declineIntensityFor(player, teamId, gameNumber, hash);
@@ -360,6 +624,10 @@ export function generateLsimSyntheticCompletedGame(
     : optionsOrSeed;
   const gameNumber = options.gameNumber ?? context.ids.checkpointGameNumber;
   const seed = options.seed ?? `lsim-h2-g${gameNumber}`;
+  const performanceReads = options.performanceReads;
+  const performanceReadByPlayerId = new Map(
+    (performanceReads ?? []).map((read) => [read.playerId, read]),
+  );
   const scheduleGame = context.scheduleByGameNumber.get(gameNumber);
   if (!scheduleGame) {
     throw new Error(`[L-SIM] Missing schedule row for gameNumber ${gameNumber}`);
@@ -391,10 +659,28 @@ export function generateLsimSyntheticCompletedGame(
   const playerStats: PersistedGameState['playerStats'] = {};
 
   for (const [index, player] of homeSeed.positionPlayers.entries()) {
-    playerStats[player.id] = battingStatsFor(player, homeSeed.team.id, index, 'home', trueValueStarPlayer.id, gameNumber, hash);
+    playerStats[player.id] = battingStatsFor(
+      player,
+      homeSeed.team.id,
+      index,
+      'home',
+      trueValueStarPlayer.id,
+      gameNumber,
+      hash,
+      performanceReadByPlayerId.get(player.id),
+    );
   }
   for (const [index, player] of awaySeed.positionPlayers.entries()) {
-    playerStats[player.id] = battingStatsFor(player, awaySeed.team.id, index, 'away', trueValueStarPlayer.id, gameNumber, hash);
+    playerStats[player.id] = battingStatsFor(
+      player,
+      awaySeed.team.id,
+      index,
+      'away',
+      trueValueStarPlayer.id,
+      gameNumber,
+      hash,
+      performanceReadByPlayerId.get(player.id),
+    );
   }
 
   const pitcherGameStats = [
@@ -526,5 +812,54 @@ export function generateLsimSyntheticCompletedGame(
     gameState,
     finalScore,
     archiveOptions: lsimArchiveOptionsFor(scheduleGame, finalScore),
+    ...(performanceReads ? { performanceReads } : {}),
   };
+}
+
+export async function generateRatingsAwareLsimSyntheticCompletedGame(
+  context: LsimSandboxContext,
+  options: Omit<LsimSyntheticGameOptions, 'performanceReads'> & {
+    regime: LsimPerformanceRegime;
+  },
+): Promise<LsimSyntheticCompletedGame> {
+  const gameNumber = options.gameNumber ?? context.ids.checkpointGameNumber;
+  const seed = options.seed ?? `lsim-feedback-g${gameNumber}`;
+  const [players, conditionSnapshots] = await Promise.all([
+    getAllFranchisePlayers(context.ids.franchiseId),
+    loadFranchiseConditionSnapshots(context.ids.franchiseId).catch(() => []),
+  ]);
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const conditionByPlayerId = new Map(
+    conditionSnapshots.map((snapshot) => [snapshot.playerId, snapshot]),
+  );
+  const freshPlayer = (player: Player): Player => playerById.get(player.id) ?? player;
+  const freshContext: LsimSandboxContext = {
+    ...context,
+    teamSeeds: context.teamSeeds.map((teamSeed) => ({
+      ...teamSeed,
+      mlbPlayers: teamSeed.mlbPlayers.map(freshPlayer),
+      farmPlayers: teamSeed.farmPlayers.map(freshPlayer),
+      positionPlayers: teamSeed.positionPlayers.map(freshPlayer),
+      pitchers: teamSeed.pitchers.map(freshPlayer),
+    })),
+  };
+  const performanceReads = players
+    .map((player) => {
+      const condition = conditionByPlayerId.get(player.id);
+      return buildLsimPlayerPerformanceRead({
+        player,
+        teamId: playerTeamId(player, context.ids.leagueId),
+        gameNumber,
+        seed,
+        regime: options.regime,
+        mojoLevel: condition?.mojoLevel,
+        fitnessState: condition?.fitnessState,
+      });
+    })
+    .sort((left, right) => left.playerId.localeCompare(right.playerId));
+  return generateLsimSyntheticCompletedGame(freshContext, {
+    gameNumber,
+    seed,
+    performanceReads,
+  });
 }
