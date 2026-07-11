@@ -411,6 +411,20 @@ export interface LeagueBuilderMlbDraftSession {
     /** The visible shuffle seed shown on the ORDER card. */
     orderSeed: string;
   };
+  /**
+   * CONTRACT_S5_COMPANIONS_2026-07-10 Amendment 1: v1 companions are the league
+   * owner's own same-account devices. This is a render-level table-consent record;
+   * server-side seat ACLs for guest accounts are deliberately deferred to v2.
+   */
+  snakeCompanions?: {
+    roomCode: string;
+    claims: Array<{
+      deviceId: string;
+      gmName: string;
+      teamId: string;
+      status: 'pending' | 'approved' | 'revoked';
+    }>;
+  };
   paused?: boolean;
   correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
   /** Monotonic session revision used to reject stale guide packages at execution. */
