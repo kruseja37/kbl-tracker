@@ -134,22 +134,6 @@ export const LI_BOUNDS = {
 } as const;
 
 /**
- * Inning multipliers by inning (1-9)
- * Late innings = higher leverage
- */
-const INNING_MULTIPLIERS: Record<number, number> = {
-  1: 0.70,
-  2: 0.75,
-  3: 0.80,
-  4: 0.85,
-  5: 0.90,
-  6: 1.00,
-  7: 1.20,
-  8: 1.50,
-  9: 2.00,
-};
-
-/**
  * Walk-off potential boost (bottom of final inning when tied or trailing)
  */
 const WALKOFF_BOOST = 1.40;

@@ -70,6 +70,7 @@ export async function persistDarkRelationshipOvertakeForCompletedGame(
   let written = 0;
   for (const [id, pair] of Array.from(overtakesByEdgeId.entries()).sort(([left], [right]) => left.localeCompare(right))) {
     const existing = await getFranchiseRelationshipEdge(id);
+    if (existing) continue;
     const [player1Id, player2Id] = [pair.prior, pair.new].sort((left, right) =>
       left.localeCompare(right),
     ) as [string, string];
@@ -83,12 +84,12 @@ export async function persistDarkRelationshipOvertakeForCompletedGame(
       player2Id,
       type: 'RIVALRY',
       formationSource: 'overtake',
-      intensity: Math.max(existing?.intensity ?? 0, OVERTAKE_RIVALRY_TUNING.intensity),
+      intensity: OVERTAKE_RIVALRY_TUNING.intensity,
       potential: false,
-      accuracy: Math.max(existing?.accuracy ?? 0, OVERTAKE_RIVALRY_TUNING.accuracy),
-      formedAtGameNumber: existing?.formedAtGameNumber ?? gameNumber,
+      accuracy: OVERTAKE_RIVALRY_TUNING.accuracy,
+      formedAtGameNumber: gameNumber,
       dissolvedAtGameNumber: null,
-      createdAt: existing?.createdAt ?? createdAt,
+      createdAt,
       updatedAt: createdAt,
     };
 

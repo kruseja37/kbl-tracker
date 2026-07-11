@@ -33,8 +33,11 @@ import {
 import {
   clearFranchiseRelationshipEdgesForTests,
   franchiseRelationshipEdgeId,
+  getFranchiseRelationshipEdge,
   getFranchiseRelationshipEdgesByScope,
+  putFranchiseRelationshipEdge,
   resetFranchiseRelationshipEdgesForTests,
+  type RelationshipEdgeRow,
 } from '../franchiseRelationshipEdgesStorage';
 import { setFranchisePhase2L13EnabledForTests } from '../franchisePhase2Flags';
 import type { PersistedGameState } from '../gameStorage';
@@ -191,6 +194,48 @@ describe('persistDarkRelationshipFormationForCompletedGame', () => {
     expect(new Set(secondRows.map((row) => row.id)).size).toBe(secondRows.length);
     expect(secondRows.every((row) => row.formedAtGameNumber === 20 && row.potential === false)).toBe(true);
     expect(secondRows.every((row) => row.id === franchiseRelationshipEdgeId(scope, row.player1Id, row.player2Id, row.type))).toBe(true);
+  });
+
+  test('checkpoint formation preserves an existing overtake rivalry row untouched', async () => {
+    setFranchisePhase2L13EnabledForTests(true);
+    seedCheckpointReads(20);
+    vi.spyOn(relationshipFormationSeam, 'resolveRelationshipFormationRoster').mockResolvedValue(roster());
+    vi.spyOn(relationshipFormationSeam, 'computeRelationshipFormationEdges').mockReturnValue([{
+      player1Id: 'mentor',
+      player2Id: 'young',
+      type: 'RIVALRY',
+      intensity: 0.8,
+      potential: false,
+      accuracy: 0.9,
+      score: 0.9,
+      threshold: 0.78,
+      effectiveThreshold: 0.78,
+      seededRoll: 0,
+      seed: 'formation-retry',
+    }]);
+    const id = franchiseRelationshipEdgeId(scope, 'mentor', 'young', 'RIVALRY');
+    const existing: RelationshipEdgeRow = {
+      id,
+      ...scope,
+      player1Id: 'mentor',
+      player2Id: 'young',
+      type: 'RIVALRY',
+      formationSource: 'overtake',
+      intensity: 0.5,
+      potential: false,
+      accuracy: 1,
+      formedAtGameNumber: 7,
+      dissolvedAtGameNumber: null,
+      createdAt: 700,
+      updatedAt: 700,
+    };
+    await putFranchiseRelationshipEdge(existing);
+
+    const result = await persistDarkRelationshipFormationForCompletedGame(gameState(), scope);
+    const row = await getFranchiseRelationshipEdge(id);
+
+    expect(result).toEqual({ status: 'written', written: 0 });
+    expect(row).toEqual(existing);
   });
 
   test('withholds writes at non-checkpoint games', async () => {

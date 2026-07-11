@@ -200,10 +200,15 @@ describe('persistDarkRelationshipOvertakeForCompletedGame', () => {
     expect(await getFranchiseRelationshipEdgesByScope(scope)).toEqual([]);
   });
 
-  test('upsert is upward-only and does not downgrade existing intensity', async () => {
+  test('an existing All-Star snub rivalry survives a later overtake untouched', async () => {
     setFranchisePhase2L13EnabledForTests(true);
     seedScheduleGame(7);
-    const existing = edge({ intensity: 0.9, accuracy: 0.9, formedAtGameNumber: 3 });
+    const existing = edge({
+      formationSource: 'asg-snub',
+      intensity: 0.9,
+      accuracy: 0.9,
+      formedAtGameNumber: 3,
+    });
     await putFranchiseRelationshipEdge(existing);
 
     const result = await persistDarkRelationshipOvertakeForCompletedGame(
@@ -213,14 +218,8 @@ describe('persistDarkRelationshipOvertakeForCompletedGame', () => {
     );
     const row = await getFranchiseRelationshipEdge(existing.id);
 
-    expect(result).toEqual({ status: 'written', written: 1 });
-    expect(row).toMatchObject({
-      intensity: 0.9,
-      accuracy: 1,
-      formedAtGameNumber: 3,
-      createdAt: 123,
-      formationSource: 'overtake',
-    });
+    expect(result).toEqual({ status: 'written', written: 0 });
+    expect(row).toEqual(existing);
   });
 
   test('deduplicates repeated same-pair overtakes in one completed game', async () => {

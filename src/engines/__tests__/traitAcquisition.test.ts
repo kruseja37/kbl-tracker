@@ -1306,6 +1306,25 @@ describe('traitAcquisition gates and reconciliation (VI.1 / VI.2 / VI.3)', () =>
     ]);
   });
 
+  test('losing a held trait allows gaining its opposite in the same checkpoint', () => {
+    const result = computeTraitAcquisition(
+      input({
+        heldTraits: [{ traitName: 'Choker', strength: 0.4 }],
+        candidates: [
+          { traitName: 'Choker', score: score('Choker', 0.2) },
+          { traitName: 'Clutch', score: score('Clutch', 0.9) },
+        ],
+      }),
+      NO_SWING_FORCE_GAIN_TUNING,
+    );
+
+    expect(result.proposals).toMatchObject([
+      { traitName: 'Choker', valence: 'lose', probability: 0.2 },
+      { traitName: 'Clutch', valence: 'gain', probability: 0.9 },
+    ]);
+    expect(result.skipped).toEqual([]);
+  });
+
   test('when both sides of an opposite pair are gains, only the higher gainScore survives', () => {
     expect(computeTraitWeight('Clutch')).toBeCloseTo(0.4822222222222223, 10);
     expect(computeTraitWeight('Choker')).toBeCloseTo(0.44333333333333336, 10);
