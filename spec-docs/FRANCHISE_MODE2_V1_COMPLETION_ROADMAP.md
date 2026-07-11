@@ -4,7 +4,14 @@ Recommended reasoning effort: high for implementation slices, medium for audits 
 
 ## Current Source Of Truth
 
-This document is the canonical Mode 2 v1 roadmap. `FRANCHISE_MODE2_V1_CONTEXT_CARD.md` is the compact resume card, and older roadmap/resync docs are historical context unless this file explicitly references them.
+**AUTHORITY OVERRIDE — 2026-07-11 (JK living-season rulings).** The living-season program is
+active: `OBSERVER_GROUNDWORK_BRIEF_2026-07-11.md` §5 carries JK's binding rulings and supersedes this
+roadmap's blanket blocks on **relationship mutation**, **story persistence beyond the random-event
+log**, and **morale automation** — those behaviors are now sanctioned WHEN flag-gated under the
+living-season activation program (per-league activation, default-off until the tuning gate passes).
+Clauses in this file blocking them are subordinate to the brief; they still bind OUTSIDE the flag-gated
+soul pipeline (e.g. score-only rows still never create player morale/stats/relationships). Completed
+history sections below are unedited. This document is the canonical Mode 2 v1 roadmap. `FRANCHISE_MODE2_V1_CONTEXT_CARD.md` is the compact resume card, and older roadmap/resync docs are historical context unless this file explicitly references them.
 
 Manual smoke feedback remains a bug and feature backlog. The build order for Mode 2 should follow this file unless explicitly revised.
 
