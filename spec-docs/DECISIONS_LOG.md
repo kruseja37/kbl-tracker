@@ -3704,3 +3704,46 @@ code against itself). Any future retune must update the sheet + the test table i
 
 **OPEN (JK, parked, not ruled here):** whether HDH's identity at roughly 1/5 of its original magnitude
 still FEELS like a distinct archetype in play. The numbers are balanced; the feel question is JK's.
+
+---
+
+## 2026-07-11 — R-E: Living-season dynamics philosophy (JK ruling, binding for all tuning)
+
+**Ruling (JK, verbatim intent):** The living season is designed to feel like **multiple seasons
+compressed into one**. Rating points move up AND down as the system dictates, driven by player
+performance — **no magnitude caps** like "+3..6 points per season" as design targets. The likely
+season end-state is **playoffs + championship with NO rollover to a season 2**; the season itself is
+the whole product arc. Every engine influences and is influenced by every other engine — that
+interconnection is the heart of the mode, not a risk to be dampened.
+
+**The only two legitimate brakes on dynamics:**
+1. **Less meaningful outcomes for the user** — e.g. the TUNE-0 2× fame-retention run minting 38
+   Immortal legends out of 102 players, which defeats the fame band's whole purpose (JK: "just
+   silly and clearly less meaningful").
+2. **A chaotic feel** — movement so noisy it stops reading as cause-and-effect.
+
+**Consequence for TUNE-0 ratification:** the draft target bands in
+`TUNE0_BASELINE_2026-07-11.md` §T3 that express MAGNITUDE CAPS (notably the age-gravity
+"+3..6 total rating points" row) are SUPERSEDED as targets. Targets must be reframed as
+**meaningfulness/shape criteria**: distribution shape, tier separation (stars distinguishable from
+scrubs), no clamp saturation, cause-readability — not point ceilings. The addendum in that doc
+records the reframe. Tuning defaults lean BOLD; conservatism is not a virtue in this mode.
+
+## 2026-07-11 — R-F: Relationship formation must be organic per-game, not checkpoint-batched (JK ruling)
+
+**Finding that triggered it:** the TUNE-0 cadence sweep moved relationship formation writes 32→57
+when checkpoint count doubled. JK asked why checkpoints would affect relationships at all — "they
+should happen organically on any given day." Code truth confirmed his suspicion: the L13-3a
+compatibility-based formation writer (`franchiseRelationshipFormationCompute.ts`) is **gated on
+checkpoint boundaries** (`isCheckpointBoundary` → else `not-checkpoint`, zero writes) — a batch
+sweep, by original build design, "at the same cadence-aware checkpoint boundary as the dark
+ratings-development sweep."
+
+**Ruling:** compatibility-based relationship formation (RIVALRY/FEUD/MENTORSHIP/FRIENDSHIP from
+personality + hidden modifiers + age) must evaluate **every completed game** with a per-game seeded
+hazard, so edges form organically across the season instead of in checkpoint batches. The
+event-driven edge writers (record-overtake rivalry, All-Star snub, envy) already fire organically
+and are unchanged. Checkpoint cadence must stop being an input to relationship volume.
+
+**Build:** contract `spec-docs/contracts/CONTRACT_RELORGANIC_2026-07-11.md` (Codex Sol lane,
+flag-gated L13 dark path, no store-shape change).

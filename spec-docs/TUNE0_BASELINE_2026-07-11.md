@@ -110,6 +110,36 @@ Normalized component impact is `abs(variant − baseline) / max(1, abs(baseline)
 
 Once `wpaToHeatScale` becomes harness-injectable, its first target should be judged against the fame target row above, not tuned independently.
 
+### ADDENDUM 2026-07-11 (same day) — JK ruling R-E reframes these targets; R-F invalidates one knob's premise
+
+**R-E (dynamics philosophy — `DECISIONS_LOG.md` 2026-07-11):** the living season is designed to feel
+like multiple seasons compressed into one; ratings move up and down as performance dictates, with
+**no magnitude caps as design targets**. The only legitimate brakes are (1) less-meaningful outcomes
+(e.g. 38/102 Immortals — clamp saturation destroying the fame band's meaning) and (2) a chaotic,
+cause-unreadable feel. Consequences for the table above:
+
+- **Age-gravity row:** the "+3..6 total rating points per star per season" band is **WITHDRAWN** —
+  it was a magnitude cap. Replacement target shape: young-vs-prime **separation stays readable**
+  (young mean signed proposal remains above prime's at every slope setting — direction, not
+  ceiling), star trajectories remain **distinguishable** from median players, and no rating clamps
+  saturate. Total movement is unbounded by design.
+- **Checkpoint-cadence + fan-dampener rows:** the proposal-count/absolute-point bands become
+  **descriptive baselines, not acceptance ceilings**. The acceptance criterion is
+  cause-readability + distribution shape, not volume.
+- **Fame row STANDS** — it is already a shape/meaningfulness target (tier separation, clamp share),
+  which is exactly R-E's kind of brake. The Immortal 5–15% band is a meaning floor, not a
+  conservatism cap.
+- **Morale-spread row:** the cohort-separation half stands (shape); the aggregate net/absolute band
+  becomes descriptive.
+
+**R-F (organic relationships — `DECISIONS_LOG.md` 2026-07-11):** the relationship-threshold and
+cadence rows measured a formation writer that is checkpoint-batch-gated — which JK ruled a defect
+(formation must be organic per-game; contract `CONTRACT_RELORGANIC_2026-07-11.md`). After
+RELORGANIC lands: (a) checkpoint cadence must show **near-zero** relationship-family impact (its
+0.195 relationship impact above becomes a regression signal, not a dial), and (b) the
+relationship-threshold knob must be re-swept against the per-game hazard model — its current
+numbers describe the batch model and do not carry over.
+
 ## T4. Honest limits
 
 - This is one deterministic synthetic seed per variant, not a variance study. Ranking is repeatable, not confidence-interval robust.
