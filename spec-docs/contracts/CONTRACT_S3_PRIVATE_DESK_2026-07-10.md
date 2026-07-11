@@ -100,3 +100,137 @@ LeagueBuilderDraftSetup family, franchiseManualSmokeFixture — verify solo if r
 ## PROTOCOL
 No git write commands (captain cuts commits). UNKNOWN/surprise = STOP and report.
 Builder report appended here: file:line, REAL gate outputs, STOPs, auditor attack list.
+
+---
+
+## BUILDER REPORT — Codex S3 (2026-07-10) — BLOCKED / CONTRACT STOP
+
+### Outcome
+
+STOPPED at the required `UNKNOWN = STOP` boundary before page-level data wiring and before
+Gates 1→5. No git write command was run. No auction file, engine, storage schema, route,
+flag, snake-setup file, or ritual reducer was edited. The tree remains intentionally dirty
+for the captain.
+
+### Blocking UNKNOWN — rational-room player fit input is absent
+
+S3 must display the S1a rational-room risk verbatim, and the program says that playout is
+driven by every rival's locked archetype. `playSnakeRationalRoom` can do that only when each
+`SnakeRationalPlayer` carries `archetypeWeights`; it passes that field to `computeOwnValue`
+at `src/engines/snakeRationalRoom.ts:153-166`. The fit engine explicitly falls back to a
+neutral multiplier of `1` when the field is absent at
+`src/engines/auctionMarketModel.ts:419-431`.
+
+The snake room's registered pool contains only id/IV rows, stored `Player` has no band-weight
+field, and no S1a-approved rating→band adapter exists in the contract surface. Therefore:
+
+- passing `undefined` would produce a risk badge that is not the required collective-archetype
+  read;
+- inventing rating→band math in this UI lane would be new engine/math work and violate
+  `ENGINES ARE DONE (gaps = STOP)`;
+- importing auction-session private/flow state to obtain weights would violate the frozen-auction
+  and public-input laws.
+
+Captain must provide one of: (1) the canonical existing adapter and path S3 is authorized to
+consume, or (2) an amended engine/data contract that supplies public per-player band weights to
+the snake pool. Work must resume from this seam; do not substitute neutral risk copy.
+
+### Spec-first work completed before the STOP
+
+- First-Law/frozen-touch model scaffolding:
+  `src/src_figma/app/components/snake/desk/deskModel.ts:11-209` — positional advisor seed,
+  unique 22-slot seed, unavailable-only backfill, PLAN BROKEN, actionable LOG expiry, and CT1
+  top-N bullpen-arms tax-core copy. It exposes no optimizer/search/recommendation API.
+- Desk UI scaffolding:
+  `src/src_figma/app/components/snake/desk/PrivateDesk.tsx:13-43` plus BoardView,
+  RankingsView using the existing `RankReorderList`, candidate fallout cards, AdvisorLog, and
+  consequence-only WHAT-IF KEEP/REVERT controls.
+- Fail-closed S2 seam:
+  `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx:43-64,300-318` accepts the desk as
+  a private child and renders it only inside the existing `useSeatReveal` branch.
+- Spec-first tests:
+  `deskModel.test.ts`, `PrivateDesk.test.tsx`, and the added reveal-gating case in
+  `SnakeDraftRoomView.test.tsx`.
+
+The required initial red proof was real:
+
+```text
+FAIL  .../desk/__tests__/PrivateDesk.test.tsx
+Error: Failed to resolve import "../PrivateDesk"
+
+FAIL  .../desk/__tests__/deskModel.test.ts
+Error: Failed to resolve import "../deskModel"
+
+FAIL  .../snake/__tests__/SnakeDraftRoomView.test.tsx
+ReferenceError: renderRoom is not defined
+
+Test Files  3 failed (3)
+Tests       1 failed | 10 passed (11)
+```
+
+Focused implementation proof at the STOP seam:
+
+```text
+RUN  v4.0.18 /private/tmp/kbl-s3
+
+✓ .../desk/__tests__/PrivateDesk.test.tsx (1 test) 152ms
+✓ .../desk/__tests__/deskModel.test.ts (5 tests) 5ms
+✓ .../snake/__tests__/SnakeDraftRoomView.test.tsx (11 tests) 838ms
+
+Test Files  3 passed (3)
+Tests       17 passed (17)
+Duration    1.93s
+```
+
+`NODE_ENV= npx tsc --noEmit` also exited 0 with no compiler output after that focused run.
+This is not Gate 1 completion: the binding 1→5 sequence was deliberately not started after
+the UNKNOWN was confirmed.
+
+### Gates
+
+- Gates 1→5: **NOT RUN — contract STOP before final integration.**
+- Auction preservation gate: **NOT RUN — no auction file was touched, but the contract still
+  requires the real 28-file gate after the blocker is resolved.**
+- Full suite: **NOT RUN — must remain the single Gate-5 invocation after Gates 1→4.**
+
+### Auditor / captain: attack these first after unblock
+
+1. Prove the supplied player-band adapter is canonical, public, and makes rival locked
+   archetypes materially affect `playSnakeRationalRoom`; neutral `1` is a reject.
+2. Attack the initial 22-slot seed for positional legality and the First Law: it may seed once,
+   but no hand-touched survivor may ever move except unavailable-slot backfill.
+3. Verify page persistence uses only the existing `saveMlbDraftSession` helper and per-seat
+   `seatBoards`, with no schema/version change.
+4. Verify the desk subtree never mounts while covered, including pick/trade/lens/seat auto-cover.
+5. Verify every candidate's TRUE COST, legal-finish line, risk, and board fallout is engine-sourced
+   after the missing adapter is supplied; no neutral/fabricated fallback may ship.
+
+---
+
+## AMENDMENT 1 (captain ruling on the STOP, 2026-07-10) — the canonical player→band adapter
+
+The STOP is upheld and the finding is bigger than S3: player-side `archetypeWeights`
+has NEVER been populated anywhere in the live app — even the auction ran player-band
+fit at neutral 1. The captain (math authority) has authored the missing adapter
+directly in this tree:
+
+- `src/engines/snakePlayerBands.ts` — `derivePlayerBandWeights(input)`: rating/99
+  linear weights, role-masked (hitters → Power/Contact/Speed/Defense with
+  Defense=(FLD+ARM)/2; pitchers → Rotation/Bullpen per role, SP/RP carries both,
+  mirroring the cap tables; unknown role degrades to both pens, never to zero).
+- `src/engines/__tests__/snakePlayerBands.test.ts` — 6 tests, green; tsc clean.
+
+Binding on S3 (resume from this seam):
+1. EVERY fit consumption in this lane derives weights through `derivePlayerBandWeights`
+   — never hand-built at a call site (the adapter-reuse law). This includes the
+   rational-room pool assembly in SnakeDraftRoom.tsx (thread real weights into
+   `SnakeRationalPlayer.archetypeWeights`) and any desk card fit chip/word.
+2. Build the room's pool rows from the stored Player ratings + pos shape (both already
+   loaded on the page path); `isPitcher`/`role` come from the same shape projection the
+   page already computes.
+3. Neutral fallback is FORBIDDEN in S3 surfaces: a pool row missing ratings is a loud
+   console.warn + the card renders "FIT UNKNOWN" (copy-law words), never a silent 1.
+4. The auditor's attack list item 1 stands: rival locked archetypes must materially
+   change `playSnakeRationalRoom` output in your tests (two different archetype rooms
+   → different risk reads for a band-skewed player).
+5. Do not modify the adapter. If it proves insufficient → STOP again.
