@@ -220,7 +220,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-2', gameNumber: 2 } as never);
     vi.mocked(getGameHeadersForScope).mockResolvedValue([]);
     vi.mocked(getGameEvents).mockResolvedValue([]);
-    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10 } as never);
+    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10, gamesPerTeam: 10 } as never);
     vi.mocked(getSeasonBattingStats).mockResolvedValue([]);
     vi.mocked(getSeasonPitchingStats).mockResolvedValue([]);
     vi.mocked(getAllFieldingStats).mockResolvedValue([]);
@@ -284,6 +284,31 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     expect(ratingConfidence('power', 9999, 162)).toBe(1);
     expect(ratingConfidence('contact', 251, 81)).toBe(1);
     expect(ratingConfidence('velocity', 200, 162)).toBeCloseTo(0.5);
+  });
+
+  test('six-team confidence uses frozen per-team games instead of league-wide games', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-4', gameNumber: 4 } as never);
+    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 20, gamesPerTeam: 20 } as never);
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([
+      entry({ playerId: 'player-hitter', signalByRatingKey: { power: 1 }, sampleByRatingKey: { power: 31 } }),
+    ]);
+    const singleTeamEquivalent = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+
+    await overlayStorage.clearFranchiseRatingsOverlaysForTests();
+    vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-12', gameNumber: 12 } as never);
+    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 60, gamesPerTeam: 20 } as never);
+    const sixTeamLeague = await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+
+    expect(ratingConfidence('power', 31, 20)).toBeCloseTo(0.5, 1);
+    expect(singleTeamEquivalent).toEqual({ status: 'written', written: 1 });
+    expect(sixTeamLeague).toEqual(singleTeamEquivalent);
+  });
+
+  test('confidence is invariant to team count when games per team is unchanged', () => {
+    const oneTeamEquivalent = ratingConfidence('velocity', 74, 20);
+    const sixTeamLeague = ratingConfidence('velocity', 74, 20);
+    expect(sixTeamLeague).toBe(oneTeamEquivalent);
   });
 
   test('isCheckpointBoundary supports frequent ten-boundary cadence via the third parameter', () => {
@@ -628,7 +653,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
   test('frequent cadence from season metadata makes game 3 of 10 a checkpoint boundary', async () => {
     setFranchisePhase2CheckpointEnabledForTests(true);
     vi.mocked(getScheduledGame).mockResolvedValue({ id: 'scheduled-checkpoint-3', gameNumber: 3 } as never);
-    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10, checkpointCadence: 'frequent' } as never);
+    vi.mocked(getSeasonMetadata).mockResolvedValue({ totalGames: 10, gamesPerTeam: 10, checkpointCadence: 'frequent' } as never);
     const shifter = entry({ playerId: 'player-frequent', signalByRatingKey: { power: 1 } });
     vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
 

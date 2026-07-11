@@ -28,6 +28,7 @@ import type {
 } from './gameStorage';
 import {
   aggregateGameToSeason,
+  isCompleteGameByContext,
   type GameAggregationOptions,
   type GameAggregationResult,
 } from './seasonAggregator';
@@ -893,9 +894,10 @@ function fanMoraleTimestamp(
   };
 }
 
-function deriveCompletedGameResultContext(
+export function deriveCompletedGameResultContext(
   gameState: PersistedGameState,
   leagueId: string | null,
+  inningScores: readonly { away: number; home: number }[] = [],
 ): Map<string, { result: GameResult; rivalName?: string }> {
   const homeWon = gameState.homeScore > gameState.awayScore;
   const homeRunDiff = gameState.homeScore - gameState.awayScore;
@@ -904,20 +906,32 @@ function deriveCompletedGameResultContext(
     leagueId && areRivals(leagueId, gameState.homeTeamId, gameState.awayTeamId),
   );
 
-  let isNoHitter = false;
-  let isShutout = false;
+  const noHitterTeamIds = new Set<string>();
+  const shutoutTeamIds = new Set<string>();
+  const scheduledInnings = positiveFiniteNumber(gameState.totalInnings) ?? 9;
   for (const pStats of gameState.pitcherGameStats) {
-    if (pStats.isStarter && pStats.outsRecorded >= 27) {
+    if (isCompleteGameByContext(pStats, { scheduledInnings })) {
       if (pStats.hitsAllowed === 0 && pStats.runsAllowed === 0) {
-        isNoHitter = true;
+        noHitterTeamIds.add(pStats.teamId);
       }
       if (pStats.runsAllowed === 0) {
-        isShutout = true;
+        shutoutTeamIds.add(pStats.teamId);
       }
     }
   }
 
-  const isWalkOff = homeWon && gameState.halfInning === 'BOTTOM';
+  const finalInningScore = inningScores[gameState.inning - 1];
+  const homeScoreBeforeFinalBottom = finalInningScore
+    ? gameState.homeScore - finalInningScore.home
+    : null;
+  const isWalkOff = Boolean(
+    homeWon &&
+    gameState.halfInning === 'BOTTOM' &&
+    finalInningScore &&
+    finalInningScore.home > 0 &&
+    homeScoreBeforeFinalBottom !== null &&
+    homeScoreBeforeFinalBottom <= gameState.awayScore,
+  );
   const context = new Map<string, { result: GameResult; rivalName?: string }>();
 
   context.set(gameState.homeTeamId, {
@@ -925,8 +939,8 @@ function deriveCompletedGameResultContext(
       gameId: gameState.gameId,
       won: homeWon,
       isWalkOff,
-      isNoHitter: isNoHitter && homeWon,
-      isShutout: isShutout && homeWon,
+      isNoHitter: noHitterTeamIds.has(gameState.homeTeamId),
+      isShutout: shutoutTeamIds.has(gameState.homeTeamId),
       isBlowout,
       vsRival: isRivalMatchup,
       runDifferential: homeRunDiff,
@@ -940,8 +954,8 @@ function deriveCompletedGameResultContext(
       gameId: gameState.gameId,
       won: !homeWon,
       isWalkOff,
-      isNoHitter: isNoHitter && !homeWon,
-      isShutout: isShutout && !homeWon,
+      isNoHitter: noHitterTeamIds.has(gameState.awayTeamId),
+      isShutout: shutoutTeamIds.has(gameState.awayTeamId),
       isBlowout,
       vsRival: isRivalMatchup,
       runDifferential: -homeRunDiff,
@@ -1059,7 +1073,11 @@ export async function persistDarkChannelAFanMoraleForCompletedGame(
 
   const checkpoint = await resolveFanMoraleCheckpoint(gameState, archiveOptions);
   const leagueId = archiveOptions?.context?.leagueId ?? resolveExhibitionLeagueId(gameState) ?? null;
-  const resultByTeam = deriveCompletedGameResultContext(gameState, leagueId);
+  const resultByTeam = deriveCompletedGameResultContext(
+    gameState,
+    leagueId,
+    archiveOptions?.inningScores,
+  );
   const timestamp = fanMoraleTimestamp(gameState, checkpoint);
   let written = 0;
 
@@ -1421,7 +1439,7 @@ async function processLivingSeasonBranches(
       await persistFameMoraleConsequencesAfterFame(
         gameState,
         trueValueScope,
-        fameResult.playerHeatDeltas,
+        fameResult.moraleRelevantPlayerHeatDeltas ?? fameResult.playerHeatDeltas,
         archiveOptions,
       );
       return fameResult.written > 0;

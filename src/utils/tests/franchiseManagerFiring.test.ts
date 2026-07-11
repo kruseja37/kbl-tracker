@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { fireManager, managerFiringSeam, type FireManagerParams } from '../franchiseManagerFiring';
 import {
+  type ApplyFranchiseMoraleEffectInput,
   getFranchiseMoraleSnapshot,
   resetFranchiseMoraleDatabaseForTests,
 } from '../franchiseMoraleState';
@@ -222,7 +223,7 @@ describe('fireManager', () => {
     expect(result.status).toBe('fired');
     expect(result.firedManagerId).toBe('manager-incumbent');
     expect(result.successorManagerId).toBe('team-alpha-manager');
-    expect(result.reliefApplied).toBe(true);
+    expect(result.reliefApplied).toBe(false);
     expect(result.ripplesApplied).toBe(1);
     expect(result.firingReport?.playerRipples).toEqual([
       expect.objectContaining({ playerId: 'player-negative', untouchable: false }),
@@ -284,12 +285,7 @@ describe('fireManager', () => {
     const negativeSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-negative');
     const positiveSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', 'player-positive');
 
-    expect(fanSnapshot?.currentValue).toBeGreaterThan(50);
-    expect(fanSnapshot?.history[0]).toMatchObject({
-      sourceEventId: `manager-fired:${baseParams.teamId}:${baseParams.seasonId}:${baseParams.instanceId}`,
-      reason: 'manager.fired.relief',
-      timestamp: baseParams.endDate,
-    });
+    expect(fanSnapshot).toBeNull();
     expect(negativeSnapshot?.currentValue).toBeLessThan(50);
     expect(negativeSnapshot?.history[0]).toMatchObject({
       sourceEventId: `manager-fired:${baseParams.teamId}:${baseParams.seasonId}:${baseParams.instanceId}:player-negative`,
@@ -315,6 +311,29 @@ describe('fireManager', () => {
     });
   });
 
+  test('beloved-manager backlash is persisted as a negative fan-morale effect', async () => {
+    setFranchisePhase2L11EnabledForTests(true);
+    await seedActiveManager();
+    vi.spyOn(managerFiringSeam, 'resolveFiringSnapshot').mockResolvedValue({
+      teamFanMorale: 80,
+      teamIdentity: { id: 'team-alpha', name: 'Alpha' },
+      players: [],
+    });
+    const writes: ApplyFranchiseMoraleEffectInput[] = [];
+    vi.spyOn(managerFiringSeam, 'applyFranchiseMoraleEffect').mockImplementation(async (input) => {
+      writes.push(input);
+      return true;
+    });
+
+    const result = await fireManager(baseParams);
+
+    expect(result.status).toBe('fired');
+    expect(result.reliefApplied).toBe(true);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ targetType: 'team-fan', delta: expect.any(Number) });
+    expect(writes[0].delta).toBeLessThan(0);
+  });
+
   test('no active manager returns no-active-manager without writes', async () => {
     setFranchisePhase2L11EnabledForTests(true);
     await seedRosterAndValue();
@@ -326,6 +345,48 @@ describe('fireManager', () => {
     expect(resolveSpy).not.toHaveBeenCalled();
     await expect(getFranchiseMoraleSnapshot(scope, 'team-fan', baseParams.teamId)).resolves.toBeNull();
     await expect(listManagerAssignments({ mode: 'franchise', instanceId: baseParams.instanceId })).resolves.toEqual([]);
+  });
+
+  test('same-game replay is guarded after the successor is installed', async () => {
+    setFranchisePhase2L11EnabledForTests(true);
+    await seedActiveManager();
+    await seedRosterAndValue();
+
+    const first = await fireManager({
+      ...baseParams,
+      expectedManagerId: 'manager-incumbent',
+      executionGameId: 'game-42',
+    });
+    const second = await fireManager({
+      ...baseParams,
+      expectedManagerId: first.successorManagerId,
+      executionGameId: 'game-42',
+    });
+
+    expect(first.status).toBe('fired');
+    expect(second).toMatchObject({ status: 'already-fired-for-game', reliefApplied: false, ripplesApplied: 0 });
+    await expect(getManagerAssignment({
+      teamId: baseParams.teamId,
+      mode: 'franchise',
+      instanceId: baseParams.instanceId,
+    })).resolves.toMatchObject({ managerId: first.successorManagerId, lastFiredGameId: 'game-42' });
+  });
+
+  test('expected-manager compare-and-swap refuses to fire an installed successor', async () => {
+    setFranchisePhase2L11EnabledForTests(true);
+    await seedActiveManager();
+    await seedRosterAndValue();
+
+    const result = await fireManager({ ...baseParams, expectedManagerId: 'some-other-manager' });
+
+    expect(result).toMatchObject({ status: 'manager-mismatch', reliefApplied: false, ripplesApplied: 0 });
+    const assignment = await getManagerAssignment({
+      teamId: baseParams.teamId,
+      mode: 'franchise',
+      instanceId: baseParams.instanceId,
+    });
+    expect(assignment).toMatchObject({ managerId: 'manager-incumbent' });
+    expect(assignment?.fired).not.toBe(true);
   });
 
   test('same inputs with fixed endDate produce the same result and write sequence', async () => {

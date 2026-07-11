@@ -26,7 +26,10 @@ import {
   type FireManagerParams,
   type FireManagerResult,
 } from './franchiseManagerFiring';
-import { LEAGUE_BUILDER_MANAGER_INSTANCE_ID } from './managerIdentityStorage';
+import {
+  getManagerAssignment,
+  LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+} from './managerIdentityStorage';
 import type { CompletedGameArchiveOptions } from './franchiseCheckpointSweepCompute';
 
 export const L11_AUTO_BACKSTOP_TUNING = {
@@ -85,6 +88,7 @@ export const autoBackstopSeam = {
   resolveLeagueAndInstance,
   getTeamFanMorale,
   rollManagerBackstop,
+  getManagerAssignment,
   fireManager: callFireManager,
 };
 
@@ -150,6 +154,14 @@ export async function persistDarkL11AutoBackstopForCompletedGame(
     const morale = await autoBackstopSeam.getTeamFanMorale(scope, teamId);
     if (morale >= L11_AUTO_BACKSTOP_TUNING.armingThreshold) continue;
 
+    const assignment = await autoBackstopSeam.getManagerAssignment({
+      teamId,
+      mode: 'franchise',
+      instanceId: resolved.instanceId,
+    });
+    const lastFiredGameId = (assignment as (typeof assignment & { lastFiredGameId?: string }))?.lastFiredGameId;
+    if (!assignment || assignment.fired || assignment.endDate || lastFiredGameId === gameState.gameId) continue;
+
     const seed = `${scope.franchiseId}:${scope.seasonId}:${gameNumber}:${teamId}:manager-backstop`;
     const roll = autoBackstopSeam.rollManagerBackstop(seed);
     if (roll >= L11_AUTO_BACKSTOP_TUNING.perGameProbability) continue;
@@ -163,6 +175,8 @@ export async function persistDarkL11AutoBackstopForCompletedGame(
         instanceId: resolved.instanceId,
         reason: 'auto-backstop',
         endDate: createdAt,
+        expectedManagerId: assignment.managerId,
+        executionGameId: gameState.gameId,
       });
       if (result.status === 'fired') fired += 1;
     } catch (error) {

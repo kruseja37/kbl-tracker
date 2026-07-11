@@ -728,6 +728,79 @@ describe("KBL WPA attribution", () => {
     expect(sumCredits(credits, "away") + sumCredits(credits, "home")).toBeCloseTo(0, 5);
   });
 
+  test("missing-id caught stealing reconstructs the current pitcher and conserves WPA", () => {
+    const starterAtBat = createAtBat({ eventIndex: 1, pitcherId: "home-starter", pitcherName: "Home Starter" });
+    const change: BetweenPlayEvent = {
+      eventId: "game-1_bp_change",
+      gameId: "game-1",
+      timestamp: 2,
+      eventIndex: 2,
+      type: "pitcher_change",
+      gameState: { inning: 6, halfInning: "TOP", outs: 0, score: { away: 2, home: 2 }, runnersOn: {} },
+      pitcherChange: {
+        outgoingPitcherId: "home-starter",
+        incomingPitcherId: "home-reliever",
+        incomingPitcherName: "Home Reliever",
+        inheritedRunners: 0,
+      },
+    };
+    const orphan: BetweenPlayEvent = {
+      eventId: "game-1_bp_orphan_cs",
+      gameId: "game-1",
+      timestamp: 3,
+      eventIndex: 3,
+      type: "caught_stealing",
+      gameState: { inning: 6, halfInning: "TOP", outs: 1, score: { away: 2, home: 2 }, runnersOn: { first: "away-runner" } },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 1,
+        toBase: 2,
+        outcome: "out",
+        reason: "caught_stealing",
+      },
+    };
+
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [starterAtBat],
+      betweenPlayEvents: [change, orphan],
+      awayTeamId: "away",
+      homeTeamId: "home",
+    });
+
+    expect(totalFor(credits, "home-reliever")).toBeGreaterThan(0);
+    expect(sumCredits(credits, "away") + sumCredits(credits, "home")).toBeCloseTo(0, 5);
+    expect(credits.unattributedDefensiveWpa).toBe(0);
+  });
+
+  test("unresolvable orphaned defensive WPA is exposed exactly", () => {
+    const orphan: BetweenPlayEvent = {
+      eventId: "game-1_bp_unresolved_sb",
+      gameId: "game-1",
+      timestamp: 1,
+      eventIndex: 1,
+      type: "stolen_base",
+      gameState: { inning: 6, halfInning: "TOP", outs: 1, score: { away: 2, home: 2 }, runnersOn: { first: "away-runner" } },
+      runnerAction: {
+        runnerId: "away-runner",
+        runnerName: "Away Runner",
+        fromBase: 1,
+        toBase: 2,
+        outcome: "safe",
+        reason: "stolen_base",
+      },
+    };
+    const credits = deriveKblWpaCredits({
+      atBatEvents: [],
+      betweenPlayEvents: [orphan],
+      awayTeamId: "away",
+      homeTeamId: "home",
+    });
+
+    expect(sumCredits(credits, "home")).toBe(0);
+    expect(credits.unattributedDefensiveWpa).toBeCloseTo(-sumCredits(credits, "away"), 5);
+  });
+
   test("between-play safe advancements still get WPA when the stored snapshot is post-move", () => {
     const event: BetweenPlayEvent = {
       eventId: "game-1_bp_2",
