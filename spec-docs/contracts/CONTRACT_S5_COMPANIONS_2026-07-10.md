@@ -192,3 +192,198 @@ phones handed to friends). Consequences:
    already covers it (S3 machinery).
 Resume from the STOP seam and build S5a/S5b/S5c under this model. Everything else in
 the contract binds unchanged.
+
+---
+
+## BUILDER FINAL REPORT — Codex S5 (2026-07-10) — AMENDMENT 1 COMPLETE
+
+### Outcome
+
+S5a/S5b/S5c are complete under Amendment 1's ruled same-account hardware model. No git
+write command was run. No auction file, S6-owned room/view file, desk/trade internal,
+engine, flag, reducer, store name, or DB version was changed. The three pre-existing
+untracked captain artifacts remain untouched.
+
+The new default-off `/snake-companion` route now:
+
+- enumerates the signed-in account's existing leagues and MLB draft sessions, then matches
+  the entered four-digit room code;
+- persists a stable per-device id locally and submits the named GM's claim into the granted
+  `snakeCompanions` session field;
+- stays fail-closed before approval, while pending, after refusal/revoke, or after the old
+  device is replaced by a new claim for the same seat;
+- polls the existing account-scoped `syncEngine.pull()` path every five seconds and again
+  on `visibilitychange`, then reloads the current session;
+- constructs and renders only the approved seat's `seatBoards[teamId]` record through the
+  existing S3 `PrivateDesk`, plus the public order/ticker and the read-only S4
+  `SnakeTradeGuide` fixed to that seat;
+- persists only that seat's ranking/board edits through the existing
+  `saveMlbDraftSession` path after re-reading and validating both current session revision
+  and current board revision. A conflict refuses with `THE DRAFT MOVED ON — REFRESH`;
+- contains no pick arm/record, gavel, commissioner, correction, pause, trade-execute, or
+  other main-device control.
+
+The standalone `CompanionApprovalCard` generates the room code on first open when needed,
+shows pending claims with APPROVE/REFUSE, shows approved devices with per-device REVOKE,
+and deliberately is not mounted into the concurrently-owned S6 room/view files.
+
+The storage comment states the v1 boundary honestly: these are the league owner's own
+same-account devices and privacy is table-consent/render-level; guest-account server-side
+seat ACL is the booked v2 lane.
+
+### Spec-first / negative-feedback evidence
+
+The first focused run was RED before implementation exactly because the new model and
+surfaces did not exist:
+
+```text
+FAIL CompanionSurfaces.test.tsx — Failed to resolve ../CompanionApprovalCard
+FAIL companionModel.test.ts — Failed to resolve ../companionModel
+Test Files  2 failed | 1 passed (3)
+Tests       1 passed (1)
+```
+
+The implemented focused gate pins:
+
+- no private render before approval and immediate loss after revoke;
+- one device per seat, replacement of the old device, and a plain refusal for a fourth
+  companion;
+- exact one-seat board isolation with the sibling seat record preserved byte-for-byte;
+- stale session and stale board revision refusal;
+- board/ranking edit round-trip in the granted `seatBoards` field;
+- standalone approve/refuse/revoke behavior and room-code display;
+- no-execute companion tree tripwire;
+- five-second pull, visible-tab pull, and cleanup;
+- route hidden with the snake-v1 flag OFF and registered with it ON;
+- all pre-existing S3 desk/reveal tests unchanged and green.
+
+Static no-execute grep over the production companion page/folder returned no matches for
+`GAVEL|COMMISSIONER|EXECUTE|onRecordPick|SnakeCommissionerTrade`. The only production
+`seatBoards` lookup on the companion page is the approved claimed team id.
+
+### Final Gates 1→5 — real terminal output
+
+**Gate 1 — `npx tsc -b --pretty false`**
+
+```text
+GATE1_EXIT=0
+(no compiler output)
+```
+
+**Gate 2 — `npm run build`**
+
+```text
+✓ 2680 modules transformed.
+✓ built in 12.04s
+PWA v1.2.0
+precache  200 entries (5464.48 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1d305bb8.js
+GATE2_EXIT=0
+```
+
+Only the existing Browserslist, dynamic-import, and chunk-size warnings were emitted.
+
+**Gate 3 — owned companion + S3 desk/reveal suites**
+
+```text
+Test Files  8 passed (8)
+Tests       35 passed (35)
+Duration    2.24s
+GATE3_EXIT=0
+```
+
+**Gate 4 — every current auction-named suite**
+
+```text
+GATE4_FILE_COUNT=39
+Test Files  36 passed | 3 skipped (39)
+Tests       452 passed | 6 skipped (458)
+Duration    64.59s
+GATE4_EXIT=0
+```
+
+**Gate 5 — the one full `NODE_ENV= npx vitest run` invocation**
+
+```text
+Test Files  2 failed | 639 passed | 8 skipped (649)
+Tests       2 failed | 9640 passed | 15 skipped (9657)
+Duration    293.89s
+GATE5_EXIT=1
+```
+
+Both reds were timeout-only members of the contract's characterized
+`LeagueBuilderDraftSetup` full-suite pressure family:
+
+```text
+LeagueBuilderDraftSetup.money.test.tsx
+  Cap Fit diagnostic survives preset, source, Regenerate, and Reroll without salary cap mutation
+  timed out at 20000ms
+
+LeagueBuilderDraftSetup.poolLock.test.tsx
+  reroll preserves roster-design pinned players as hard keeps
+  timed out at 15000ms
+```
+
+The exact two-test solo verification was green:
+
+```text
+Test Files  2 passed (2)
+Tests       2 passed | 35 skipped (37)
+Duration    13.07s
+SOLO_VERIFY_EXIT=0
+```
+
+Verdict: zero new deterministic reds; the full-suite Gate 5 result matches the documented
+solo-flake protocol.
+
+### Changed-path inventory
+
+S5 changed paths: **13** (12 implementation/test paths plus this required final report).
+
+1. `src/App.tsx` — default-off companion lazy route.
+2. `src/utils/leagueBuilderStorage.ts` — the one granted additive `snakeCompanions` field
+   and honest v1/v2 privacy-boundary comment.
+3. `src/src_figma/app/pages/SnakeCompanion.tsx` — room discovery, claim/revoke state,
+   approved-seat-only desk/guide/public frame, current-revision writes, and sync refresh.
+4. `src/src_figma/app/components/snake/companion/companionModel.ts` — fail-closed claim,
+   approval/revoke/replacement/cap, and stale own-seat board-write model.
+5. `src/src_figma/app/components/snake/companion/companionFreshness.ts` — five-second and
+   visibility refresh scheduler.
+6. `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx` — claim and
+   covered/pending UI.
+7. `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx` — standalone
+   main-device room-code and approval card.
+8. `src/src_figma/app/components/snake/companion/SnakeCompanionFrame.tsx` — public frame,
+   claimed private desk, and read-only guide mount.
+9. `src/src_figma/app/components/snake/companion/__tests__/companionModel.test.ts` — lifecycle,
+   capacity/replacement, isolation, stale write, and seatBoards round-trip tests.
+10. `src/src_figma/app/components/snake/companion/__tests__/companionFreshness.test.ts` —
+    interval/visibility/cleanup proof.
+11. `src/src_figma/app/components/snake/companion/__tests__/CompanionSurfaces.test.tsx` —
+    approval-card and no-execute/private-tree render tests.
+12. `src/src_figma/__tests__/pages/SnakeCompanion.route.test.tsx` — route flag OFF/ON tests.
+13. `spec-docs/contracts/CONTRACT_S5_COMPANIONS_2026-07-10.md` — this final report.
+
+Pre-existing untracked, untouched captain artifacts: `DISPATCH_PROMPT.txt`, `run_lane.sh`,
+`sentinel.sh`.
+
+**S5 AMENDMENT 1 COMPLETE — ready for independent audit.**
+
+---
+
+## AUDIT — opus, independent, 2026-07-10 — VERDICT: APPROVE
+Fail-closed proven STRUCTURAL (private board never computed for an unapproved device,
+not merely hidden); no leak constructible (wrong-name, seat-replacement, inter-poll
+revoke race all cover); one-seat isolation exact (every seatBoards access keyed to the
+claimed team; sibling byte-preservation pinned); no-execute clean (grep + tree); stale
+writes doubly guarded (session + board revision), residual TOCTOU sub-ms within the
+ruled v1 LWW tolerance; Amendment 1 conformance exact (no new sync infra; 5s pull +
+visibilitychange with teardown); storage grant exact (one field, model-level 4th-claim
+refusal); partition clean; flag OFF double-gated.
+NOTES: add a page-level integration test mounting the REAL desk with a pending claim
+(frame test currently uses stubs); tighten CompanionApprovalCard effect deps.
+CAPTAIN MERGE DUTY: mount CompanionApprovalCard into the room post-S6 (one line,
+session/teams/onChange via saveMlbDraftSession) — until then the flow is correctly
+inert in production.

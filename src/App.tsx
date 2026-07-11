@@ -123,6 +123,7 @@ const SnakeDraftSetup = lazy(() =>
   })),
 );
 const SnakeDraftRoom = lazy(() => import("./src_figma/app/pages/SnakeDraftRoom"));
+const SnakeCompanion = lazy(() => import("./src_figma/app/pages/SnakeCompanion"));
 const SeasonRulesPreview = lazy(() =>
   import("./src_figma/app/pages/SeasonRulesPreview").then((module) => ({
     default: module.SeasonRulesPreview,
@@ -412,6 +413,9 @@ function App() {
         ) : null}
         {isSnakeDraftV1Enabled() ? (
           <Route path="/snake-room" element={<SnakeDraftRoom />} />
+        ) : null}
+        {isSnakeDraftV1Enabled() ? (
+          <Route path="/snake-companion" element={<SnakeCompanion />} />
         ) : null}
         <Route path="/league-builder/scout-hire" element={<ScoutHire />} />
         <Route
