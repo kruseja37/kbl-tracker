@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest';
 import {
   computeRelationshipFormationEdges,
   L13_3A_RELATIONSHIP_EDGE_TYPES,
+  RELATIONSHIP_FORMATION_TUNING,
+  relationshipFormationHazardProbability,
   relationshipFormationSeed,
   type RelationshipFormationContext,
   type RelationshipFormationPlayer,
@@ -11,7 +13,7 @@ const CONTEXT: RelationshipFormationContext = {
   franchiseId: 'franchise-1',
   seasonId: 'season-1',
   statsScopeId: 'scope-1',
-  gameNumber: 12,
+  gameNumber: 35,
 };
 
 function player(
@@ -96,18 +98,32 @@ describe('relationshipFormation', () => {
     expect(friendship?.potential).toBe(true);
   });
 
-  test('is deterministic for the same seed and only emits the L13-3a edge types', () => {
+  test('is deterministic for the same per-game seed and only emits the L13-3a edge types', () => {
     const players = [
       player('p2', { personality: 'Jolly', age: 35, modifiers: { loyalty: 100, ambition: 50, resilience: 100, charisma: 100 } }),
       player('p1', { personality: 'Relaxed', age: 22, modifiers: { loyalty: 100, ambition: 50, resilience: 100, charisma: 100 } }),
     ];
     const first = computeRelationshipFormationEdges(players, CONTEXT);
     const second = computeRelationshipFormationEdges([...players].reverse(), CONTEXT);
-    const changedCheckpoint = computeRelationshipFormationEdges(players, { ...CONTEXT, gameNumber: 13 });
+    const changedGameContext = { ...CONTEXT, gameNumber: CONTEXT.gameNumber + 1 };
 
     expect(second).toEqual(first);
-    expect(changedCheckpoint[0]?.seed).not.toBe(first[0]?.seed);
+    expect(relationshipFormationSeed(changedGameContext, 'p1', 'p2', 'FRIENDSHIP')).not.toBe(
+      relationshipFormationSeed(CONTEXT, 'p1', 'p2', 'FRIENDSHIP'),
+    );
     expect(first.every((edge) => L13_3A_RELATIONSHIP_EDGE_TYPES.includes(edge.type))).toBe(true);
+  });
+
+  test('maps score margin to the ruled per-game hazard bands and caps', () => {
+    const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds.FRIENDSHIP;
+    const window = RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow;
+
+    expect(relationshipFormationHazardProbability(threshold - window - 0.0001, 'FRIENDSHIP')).toBe(0);
+    expect(relationshipFormationHazardProbability(threshold - window, 'FRIENDSHIP')).toBeCloseTo(0.03, 10);
+    expect(relationshipFormationHazardProbability(threshold - 0.01, 'FRIENDSHIP')).toBeCloseTo(0.07, 10);
+    expect(relationshipFormationHazardProbability(threshold, 'FRIENDSHIP')).toBeCloseTo(0.02, 10);
+    expect(relationshipFormationHazardProbability(threshold + 0.1, 'FRIENDSHIP')).toBeCloseTo(0.32, 10);
+    expect(relationshipFormationHazardProbability(threshold + 1, 'FRIENDSHIP')).toBe(0.35);
   });
 
   test('canonicalizes the seeded pair while retaining directional edge output', () => {
