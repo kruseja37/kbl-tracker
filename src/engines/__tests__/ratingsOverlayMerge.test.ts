@@ -84,6 +84,16 @@ describe('ratingsOverlayMerge L2b pure engine', () => {
     ).toEqual({ power: 50, contact: 60 });
   });
 
+  test('excludes applied legacy-confirmed rows because the player record is already truth', () => {
+    expect(
+      mergeRatingsOverlays(
+        { power: 55, contact: 60 },
+        [overlay({ delta: 5, applied: true })],
+        5,
+      ),
+    ).toEqual({ power: 55, contact: 60 });
+  });
+
   test('sums multiple confirmed active overlays on the same rating key', () => {
     const overlays = [
       overlay({ id: 'power-plus', sourceEventId: 'event-plus', delta: 3 }),

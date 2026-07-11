@@ -84,6 +84,7 @@ export function applyTraitDisplacement(
 export function confirmTraitOverlay(
   overlay: FranchiseTraitOverlayRow,
 ): FranchiseTraitOverlayRow {
+  if (overlay.confirmationStatus !== 'pending') return { ...overlay };
   return {
     ...overlay,
     confirmationStatus: 'confirmed',
@@ -125,7 +126,7 @@ export function summarizeTraitOverlayChangeLog(
   valence: 'gain' | 'lose';
   traitName: string;
   displacesTraitName: string | null;
-  confirmationStatus: 'pending' | 'confirmed';
+  confirmationStatus: FranchiseTraitOverlayRow['confirmationStatus'];
   applied: boolean;
   summary: string;
 }> {
