@@ -186,6 +186,33 @@ export async function aggregateGameToSeason(
       seasonTotalGames ?? milestoneConfig?.gamesPerSeason ?? DEFAULT_TOTAL_GAMES,
     );
 
+    // KERNEL-TRUTH-1 A: milestone crossing detection must compare against the
+    // rows as they existed before this game's season-stat writes.
+    const previousSeasonBattingByPlayerId = new Map<string, PlayerSeasonBatting>();
+    for (const [playerId, gameStats] of Object.entries(gameState.playerStats)) {
+      previousSeasonBattingByPlayerId.set(
+        playerId,
+        await getOrCreateBattingStats(
+          seasonId,
+          playerId,
+          gameStats.playerName || playerId,
+          gameStats.teamId || gameState.awayTeamId,
+        ),
+      );
+    }
+    const previousSeasonPitchingByPlayerId = new Map<string, PlayerSeasonPitching>();
+    for (const pitcherStats of gameState.pitcherGameStats) {
+      previousSeasonPitchingByPlayerId.set(
+        pitcherStats.pitcherId,
+        await getOrCreatePitchingStats(
+          seasonId,
+          pitcherStats.pitcherId,
+          pitcherStats.pitcherName,
+          pitcherStats.teamId,
+        ),
+      );
+    }
+
     // Aggregate batting stats for all players
     await aggregateBattingStats(gameState, seasonId);
 
@@ -216,7 +243,13 @@ export async function aggregateGameToSeason(
         gameState,
         seasonId,
         resolvedMilestoneConfig,
-        { franchiseId, currentGame, currentSeason }
+        {
+          franchiseId,
+          currentGame,
+          currentSeason,
+          previousSeasonBattingByPlayerId,
+          previousSeasonPitchingByPlayerId,
+        }
       );
 
       // Log milestone achievements for debugging/analytics

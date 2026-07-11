@@ -5,6 +5,7 @@ import {
   applyHonorHeatBump,
   applyHeatUpdate,
   applyWarLegitimacyGravity,
+  updateReachFloor,
   FAME_TUNING,
   warPercentileToMeritLevel,
   type ChannelTaggedFameInput,
@@ -135,7 +136,7 @@ export async function persistDarkFameRecordsForCompletedGame(
       heat = applyHonorHeatBump(heat, bump);
       bumpByPlayer.delete(playerId);
     }
-    const reachFloor = stored.reachFloor;
+    const reachFloor = updateReachFloor(stored.reachFloor, heat);
     const heatDelta = heat - stored.heat;
     const wasNegative = stored.wasNegative || heat < FAME_TUNING.heat.neutral;
     playerHeatDeltas.push({ playerId, heatDelta });
@@ -170,6 +171,7 @@ export async function persistDarkFameRecordsForCompletedGame(
       rows.push({
         ...storedRow,
         heat,
+        reachFloor: updateReachFloor(stored.reachFloor, heat),
         wasNegative,
       });
       continue;
@@ -181,7 +183,7 @@ export async function persistDarkFameRecordsForCompletedGame(
       statsScopeId: fameScope.statsScopeId,
       playerId,
       heat,
-      reachFloor: 0,
+      reachFloor: updateReachFloor(0, heat),
       wasNegative,
       channelTotal: 0,
       channelByChannel: aggregateChannelFame([]).byChannel,

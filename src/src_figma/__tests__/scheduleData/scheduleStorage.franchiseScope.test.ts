@@ -176,6 +176,7 @@ describe('scheduleStorage franchise scoping', () => {
       statsScopeId: 'franchise-score-only-season-1',
       awayTeamId: 'team-a',
       homeTeamId: 'team-b',
+      date: 'July 12',
     });
 
     const completed = await completeFranchiseScheduleGameScoreOnly({
@@ -362,6 +363,7 @@ describe('scheduleStorage franchise scoping', () => {
       seasonId: 'franchise-score-only-season-4',
       awayTeamId: 'team-a',
       homeTeamId: 'team-b',
+      date: 'July 12',
     });
     const input = {
       scheduleGameId: scheduledGame.id,
@@ -376,6 +378,10 @@ describe('scheduleStorage franchise scoping', () => {
     const second = await completeFranchiseScheduleGameScoreOnly(input);
 
     expect(second).toEqual(first);
+    expect(first).toMatchObject({
+      date: 'July 12',
+      completedCivilDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    });
     await expect(getScheduleMetadataByFranchise('franchise-score-only', 4)).resolves.toMatchObject({
       totalGamesScheduled: 1,
       totalGamesCompleted: 1,
@@ -398,6 +404,7 @@ describe('scheduleStorage franchise scoping', () => {
       seasonId: 'franchise-game-tracker-season-5',
       awayTeamId: 'team-a',
       homeTeamId: 'team-b',
+      date: 'July 13',
     });
 
     await completeGame(scheduledGame.id, {
@@ -406,12 +413,15 @@ describe('scheduleStorage franchise scoping', () => {
       winningTeamId: 'team-b',
       losingTeamId: 'team-a',
       gameLogId: 'completed-game-tracker-1',
+      completedCivilDate: '2026-07-11',
     });
 
     await expect(getGame(scheduledGame.id)).resolves.toMatchObject({
       status: 'COMPLETED',
       completionSource: 'game-tracker',
       gameLogId: 'completed-game-tracker-1',
+      date: 'July 13',
+      completedCivilDate: '2026-07-11',
     });
     await expect(completeFranchiseScheduleGameScoreOnly({
       scheduleGameId: scheduledGame.id,

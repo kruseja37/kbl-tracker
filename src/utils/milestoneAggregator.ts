@@ -264,7 +264,7 @@ export async function checkAndProcessSeasonBattingMilestones(
   previousStats: PlayerSeasonBatting | null,
   gameId: string,
   config: MilestoneConfig = DEFAULT_CONFIG
-): Promise<{ milestones: MilestoneDetectionResult[]; fameEvents: FameEvent[] }> {
+): Promise<{ milestones: MilestoneDetectionResult[]; fameEvents: FameEvent[]; records: CareerMilestone[] }> {
   const achievedSet = await getAchievedMilestonesSet(playerId);
 
   const milestones = checkSeasonBattingMilestones(
@@ -274,11 +274,19 @@ export async function checkAndProcessSeasonBattingMilestones(
     config
   );
 
-  const fameEvents = milestones.map(m =>
-    milestoneToFameEvent(m, playerId, playerName, teamId, gameId)
-  );
+  const fameEvents: FameEvent[] = [];
+  const records: CareerMilestone[] = [];
+  for (const milestone of milestones) {
+    fameEvents.push(milestoneToFameEvent(milestone, playerId, playerName, teamId, gameId));
+    const record = createMilestoneRecord(milestone, playerId, playerName, gameId, currentStats.seasonId);
+    record.id = `season:${currentStats.seasonId}:${milestone.eventType}:${milestone.threshold}:${playerId}`;
+    record.milestoneType = `${milestone.eventType}_${currentStats.seasonId}`;
+    record.statCategory = 'batting';
+    records.push(record);
+    await recordCareerMilestone(record);
+  }
 
-  return { milestones, fameEvents };
+  return { milestones, fameEvents, records };
 }
 
 /**
@@ -292,7 +300,7 @@ export async function checkAndProcessSeasonPitchingMilestones(
   previousStats: PlayerSeasonPitching | null,
   gameId: string,
   config: MilestoneConfig = DEFAULT_CONFIG
-): Promise<{ milestones: MilestoneDetectionResult[]; fameEvents: FameEvent[] }> {
+): Promise<{ milestones: MilestoneDetectionResult[]; fameEvents: FameEvent[]; records: CareerMilestone[] }> {
   const achievedSet = await getAchievedMilestonesSet(playerId);
 
   const milestones = checkSeasonPitchingMilestones(
@@ -302,11 +310,19 @@ export async function checkAndProcessSeasonPitchingMilestones(
     config
   );
 
-  const fameEvents = milestones.map(m =>
-    milestoneToFameEvent(m, playerId, playerName, teamId, gameId)
-  );
+  const fameEvents: FameEvent[] = [];
+  const records: CareerMilestone[] = [];
+  for (const milestone of milestones) {
+    fameEvents.push(milestoneToFameEvent(milestone, playerId, playerName, teamId, gameId));
+    const record = createMilestoneRecord(milestone, playerId, playerName, gameId, currentStats.seasonId);
+    record.id = `season:${currentStats.seasonId}:${milestone.eventType}:${milestone.threshold}:${playerId}`;
+    record.milestoneType = `${milestone.eventType}_${currentStats.seasonId}`;
+    record.statCategory = 'pitching';
+    records.push(record);
+    await recordCareerMilestone(record);
+  }
 
-  return { milestones, fameEvents };
+  return { milestones, fameEvents, records };
 }
 
 /**
@@ -690,6 +706,8 @@ export interface AggregationOptions {
   franchiseId?: string;           // Required for franchise tracking
   currentGame?: number;           // Game number in season (for leader tracking activation)
   currentSeason?: number;         // Season number (1 = first season)
+  previousSeasonBattingByPlayerId?: ReadonlyMap<string, PlayerSeasonBatting>;
+  previousSeasonPitchingByPlayerId?: ReadonlyMap<string, PlayerSeasonPitching>;
 }
 
 export async function aggregateGameWithMilestones(
@@ -720,12 +738,8 @@ export async function aggregateGameWithMilestones(
     const teamId = gameStats.teamId || gameState.awayTeamId; // CRIT-02: Use actual team from game stats
 
     // Get previous season stats for comparison
-    const previousSeasonStats = await getOrCreateBattingStats(
-      seasonId,
-      playerId,
-      playerName,
-      teamId
-    );
+    const previousSeasonStats = options?.previousSeasonBattingByPlayerId?.get(playerId) ??
+      await getOrCreateBattingStats(seasonId, playerId, playerName, teamId);
 
     // Aggregate to career and get before/after
     const careerResult = await aggregateGameToCareerBatting(
@@ -757,6 +771,7 @@ export async function aggregateGameWithMilestones(
 
     result.seasonMilestones.push(...seasonMilestoneResult.milestones);
     result.fameEvents.push(...seasonMilestoneResult.fameEvents);
+    result.milestonesRecorded.push(...seasonMilestoneResult.records);
 
     // Check career milestones
     const careerMilestoneResult = await checkAndProcessCareerBattingMilestones(
@@ -828,12 +843,13 @@ export async function aggregateGameWithMilestones(
   // Process each pitcher
   for (const pitcherStats of gameState.pitcherGameStats) {
     // Get previous season stats for comparison
-    const previousSeasonStats = await getOrCreatePitchingStats(
-      seasonId,
-      pitcherStats.pitcherId,
-      pitcherStats.pitcherName,
-      pitcherStats.teamId
-    );
+    const previousSeasonStats = options?.previousSeasonPitchingByPlayerId?.get(pitcherStats.pitcherId) ??
+      await getOrCreatePitchingStats(
+        seasonId,
+        pitcherStats.pitcherId,
+        pitcherStats.pitcherName,
+        pitcherStats.teamId,
+      );
 
     // Aggregate to career and get before/after
     const careerResult = await aggregateGameToCareerPitching(gameState, pitcherStats);
@@ -858,6 +874,7 @@ export async function aggregateGameWithMilestones(
 
     result.seasonMilestones.push(...seasonMilestoneResult.milestones);
     result.fameEvents.push(...seasonMilestoneResult.fameEvents);
+    result.milestonesRecorded.push(...seasonMilestoneResult.records);
 
     // Check career milestones
     const careerMilestoneResult = await checkAndProcessCareerPitchingMilestones(

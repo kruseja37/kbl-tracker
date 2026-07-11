@@ -15,6 +15,7 @@ vi.mock('../eventLog', () => ({
   markAggregationFailed: mocks.markAggregationFailed,
   markGameAggregated: mocks.markGameAggregated,
   getFieldingEventsForScope: vi.fn().mockResolvedValue([]),
+  getGameHeadersForScope: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../playerOverrides', () => ({
@@ -37,7 +38,13 @@ import { aggregateGameToPlayoffStats, createPlayoff, getPlayoffStats, resetPlayo
 import { processCompletedGame, shouldAggregateToRegularSeasonStats } from '../processCompletedGame';
 import { getCompletedGameById } from '../gameStorage';
 import { buildFranchisePlayerTeamStatStints } from '../franchiseStatAttribution';
-import { getSeasonBattingStats, getSeasonMetadata } from '../seasonStorage';
+import {
+  createInitialBattingStats,
+  getSeasonBattingStats,
+  getSeasonMetadata,
+  updateBattingStats,
+} from '../seasonStorage';
+import { getPlayerMilestones } from '../careerStorage';
 import { resetTrackerDbForTests } from '../trackerDb';
 import type { PersistedGameState } from '../gameStorage';
 
@@ -204,6 +211,113 @@ describe('processCompletedGame stat truth boundary', () => {
     await expect(getSeasonMetadata('franchise-a-season-1')).resolves.toMatchObject({
       gamesPlayed: 1,
     });
+  });
+
+  test('season milestone crossing persists once and its fame event reaches the completed archive', async () => {
+    await updateBattingStats({
+      ...createInitialBattingStats(
+        'franchise-a-season-1',
+        'player-1',
+        'Jordan Switch',
+        'team-a',
+      ),
+      games: 20,
+      pa: 80,
+      ab: 72,
+      hits: 40,
+      singles: 1,
+      homeRuns: 39,
+    });
+    const milestoneGame = gameState({
+      gameId: 'season-milestone-40-hr',
+      playerStats: {
+        'player-1': batter('Jordan Switch', 'team-a', {
+          h: 1,
+          singles: 0,
+          hr: 1,
+          rbi: 1,
+          r: 1,
+        }),
+      },
+    });
+
+    await processCompletedGame(milestoneGame, {
+      seasonId: 'franchise-a-season-1',
+      detectMilestones: true,
+      milestoneConfig: { gamesPerSeason: 162, inningsPerGame: 9 },
+    });
+
+    await expect(getCompletedGameById(milestoneGame.gameId)).resolves.toMatchObject({
+      fameEvents: [expect.objectContaining({ eventType: 'SEASON_40_HR', playerId: 'player-1' })],
+    });
+    await expect(getPlayerMilestones('player-1')).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'season:franchise-a-season-1:SEASON_40_HR:40:player-1',
+          milestoneType: 'SEASON_40_HR_franchise-a-season-1',
+        }),
+      ]),
+    );
+  });
+
+  test('exhibition archives remain available without writing generic regular-season stats', async () => {
+    const exhibition = gameState({
+      gameId: 'exhibition-no-season-pollution',
+      seasonId: undefined,
+      statsScopeId: undefined,
+      franchiseId: undefined,
+      competitionType: 'exhibition',
+      competitionId: 'league-exhibition',
+      leagueId: 'league-exhibition',
+    });
+
+    expect(shouldAggregateToRegularSeasonStats(exhibition)).toBe(false);
+    await processCompletedGame(exhibition, { seasonId: 'season-1', detectMilestones: false });
+
+    await expect(getSeasonBattingStats('season-1')).resolves.toEqual([]);
+    await expect(getCompletedGameById(exhibition.gameId)).resolves.toMatchObject({
+      competitionType: 'exhibition',
+      leagueId: 'league-exhibition',
+    });
+    expect((await getCompletedGameById(exhibition.gameId))?.livingSeasonProcessing).toBeUndefined();
+  });
+
+  test('rejects disagreeing regular-season seasonId/statsScopeId before any write', async () => {
+    const mismatched = gameState({
+      gameId: 'scope-mismatch',
+      seasonId: 'franchise-a-season-1',
+      statsScopeId: 'franchise-a-season-2',
+    });
+
+    await expect(processCompletedGame(mismatched, {
+      seasonId: 'franchise-a-season-1',
+      detectMilestones: false,
+    })).rejects.toThrow(
+      'Regular-season completion scope mismatch: seasonId "franchise-a-season-1" does not match statsScopeId "franchise-a-season-2" for game scope-mismatch',
+    );
+
+    await expect(getSeasonBattingStats('franchise-a-season-1')).resolves.toEqual([]);
+    await expect(getSeasonBattingStats('franchise-a-season-2')).resolves.toEqual([]);
+    await expect(getCompletedGameById('scope-mismatch')).resolves.toBeNull();
+    expect(mocks.markGameAggregated).not.toHaveBeenCalled();
+    expect(mocks.registerAlmanacPlayers).not.toHaveBeenCalled();
+  });
+
+  test('keeps matching and single-identifier regular-season completions valid', async () => {
+    await expect(processCompletedGame(gameState({ gameId: 'scope-match' }), {
+      seasonId: 'franchise-a-season-1',
+      detectMilestones: false,
+    })).resolves.toMatchObject({ aggregation: { success: true } });
+    await expect(processCompletedGame(gameState({
+      gameId: 'scope-single',
+      statsScopeId: undefined,
+    }), {
+      seasonId: 'franchise-a-season-1',
+      detectMilestones: false,
+    })).resolves.toMatchObject({ aggregation: { success: true } });
+
+    await expect(getCompletedGameById('scope-match')).resolves.not.toBeNull();
+    await expect(getCompletedGameById('scope-single')).resolves.not.toBeNull();
   });
 
   test('playoff games archive and aggregate to playoff stats without regular-season contamination', async () => {

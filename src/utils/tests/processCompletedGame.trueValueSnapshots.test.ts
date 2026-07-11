@@ -29,8 +29,6 @@ vi.mock('../gameStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../gameStorage')>();
   return {
     ...actual,
-    archiveCompletedGame: mocks.archiveCompletedGame,
-    getCompletedGameById: mocks.getCompletedGameById,
     resolveExhibitionLeagueId: mocks.resolveExhibitionLeagueId,
   };
 });
@@ -59,7 +57,8 @@ vi.mock('../../src_figma/app/engines/warOrchestrator', () => ({
   calculateAndPersistSeasonWAR: mocks.calculateAndPersistSeasonWAR,
 }));
 
-vi.mock('../franchiseTrueValueStorage', () => ({
+vi.mock('../franchiseTrueValueStorage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../franchiseTrueValueStorage')>()),
   calculateAndPersistFranchiseTrueValueForSeason: mocks.calculateAndPersistFranchiseTrueValueForSeason,
 }));
 
@@ -82,6 +81,12 @@ import {
 } from '../franchiseTrueValueSnapshotsStorage';
 import { addGame, clearAllSchedules } from '../scheduleStorage';
 import { resetTrackerDbForTests } from '../trackerDb';
+import { stadiumRecordsTapSeam } from '../franchiseStadiumRecordsTap';
+import {
+  setFranchisePhase2FameEnabledForTests,
+  setFranchisePhase2StadiumRecordsEnabledForTests,
+} from '../franchisePhase2Flags';
+import { getCompletedGameById, getSoulOutcomes } from '../gameStorage';
 
 const scope = {
   franchiseId: 'franchise-snapshot',
@@ -181,10 +186,10 @@ describe('processCompletedGame True Value snapshot capture', () => {
     resetFranchiseTrueValueSnapshotsDatabaseForTests();
     await deleteDatabase('kbl-tracker').catch(() => undefined);
     await clearAllSchedules().catch(() => undefined);
+    setFranchisePhase2FameEnabledForTests(null);
+    setFranchisePhase2StadiumRecordsEnabledForTests(null);
 
     mocks.aggregateGameToSeason.mockResolvedValue({ success: true, milestones: null });
-    mocks.archiveCompletedGame.mockResolvedValue(undefined);
-    mocks.getCompletedGameById.mockResolvedValue(null);
     mocks.resolveExhibitionLeagueId.mockReturnValue(null);
     mocks.getGameHeader.mockResolvedValue(null);
     mocks.markAggregationFailed.mockResolvedValue(undefined);
@@ -224,6 +229,8 @@ describe('processCompletedGame True Value snapshot capture', () => {
     resetFranchiseTrueValueSnapshotsDatabaseForTests();
     await deleteDatabase('kbl-tracker').catch(() => undefined);
     await clearAllSchedules().catch(() => undefined);
+    setFranchisePhase2FameEnabledForTests(null);
+    setFranchisePhase2StadiumRecordsEnabledForTests(null);
   });
 
   test('writes snapshot rows with TV fields and scheduled game-number checkpoint', async () => {
@@ -271,9 +278,19 @@ describe('processCompletedGame True Value snapshot capture', () => {
         computedAt: '2026-06-17T00:00:00.000Z',
       },
     ]);
+    const archive = await getCompletedGameById('snapshot-game-1');
+    expect(archive && getSoulOutcomes(archive)).toMatchObject({
+      version: '1',
+      overall: 'complete',
+      branches: {
+        fame: { status: 'OFF' },
+        moraleAuto: { status: 'OFF' },
+        trueValueSnapshot: { status: 'SUCCESS' },
+      },
+    });
   });
 
-  test('re-completing the same game overwrites the same checkpoint instead of duplicating rows', async () => {
+  test('re-completing the same game skips the already-successful snapshot branch', async () => {
     const scheduledGame = await addGame({
       ...scope,
       seasonNumber: 1,
@@ -316,12 +333,13 @@ describe('processCompletedGame True Value snapshot capture', () => {
         ...scope,
         playerId: 'player-1',
         checkpoint: 3,
-        trueValue: 14,
-        valueDelta: 5,
-        warPercentile: 0.9,
+        trueValue: 10,
+        valueDelta: 1,
+        warPercentile: 0.6,
         computedAt: '2026-06-17T00:00:00.000Z',
       },
     ]);
+    expect(mocks.calculateAndPersistFranchiseTrueValueForSeason).toHaveBeenCalledTimes(1);
   });
 
   test('playoff and elimination completions do not write regular-season snapshot rows', async () => {
@@ -368,7 +386,41 @@ describe('processCompletedGame True Value snapshot capture', () => {
     await expect(getFranchiseTrueValueSnapshotRowsByScope(scope)).resolves.toEqual([]);
   });
 
-  test('snapshot-store failure warns and does not fail game completion', async () => {
+  test('archives before the stadium tap so the candidate set includes the just-completed game', async () => {
+    setFranchisePhase2StadiumRecordsEnabledForTests(true);
+    const loadRecentGames = stadiumRecordsTapSeam.getRecentGames;
+    let observedGameIds: string[] = [];
+    vi.spyOn(stadiumRecordsTapSeam, 'getRecentGames').mockImplementation(async (...args) => {
+      const rows = await loadRecentGames(...args);
+      observedGameIds = rows.map((row) => row.gameId);
+      return rows;
+    });
+
+    const completedGame = gameState({ gameId: 'stadium-archive-early', stadiumName: 'Apple Field' });
+    const completionOptions = { seasonId: scope.seasonId, detectMilestones: false };
+    const archiveOptions = {
+      seasonId: scope.seasonId,
+      context: {
+        ...scope,
+        competitionType: 'franchise' as const,
+        competitionId: scope.franchiseId,
+        franchiseId: scope.franchiseId,
+      },
+    };
+
+    await processCompletedGame(
+      completedGame,
+      completionOptions,
+      undefined,
+      archiveOptions,
+    );
+
+    expect(observedGameIds).toContain('stadium-archive-early');
+    await processCompletedGame(completedGame, completionOptions, undefined, archiveOptions);
+    expect(stadiumRecordsTapSeam.getRecentGames).toHaveBeenCalledTimes(1);
+  });
+
+  test('snapshot-store failure leaves a retryable partial archive and reruns only the failed branch', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const originalPut = IDBObjectStore.prototype.put;
     const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function put(value: unknown, key?: IDBValidKey) {
@@ -384,12 +436,66 @@ describe('processCompletedGame True Value snapshot capture', () => {
     )).resolves.toMatchObject({ aggregation: { success: true } });
 
     expect(warn).toHaveBeenCalledWith(
-      '[TrueValueSnapshots] failed to persist True Value snapshots for completed game snapshot-store-failure:',
+      '[trueValueSnapshot] living-season branch failed for completed game snapshot-store-failure:',
       expect.any(Error),
     );
-    expect(mocks.archiveCompletedGame).toHaveBeenCalled();
+
+    await expect(getCompletedGameById('snapshot-store-failure')).resolves.toMatchObject({
+      livingSeasonProcessing: {
+        overall: 'partial-failure',
+        branches: {
+          trueValueSnapshot: {
+            status: 'FAILED',
+            errorCode: 'Error',
+            errorMessage: 'snapshot store failed',
+          },
+        },
+      },
+    });
 
     putSpy.mockRestore();
+    await expect(processCompletedGame(
+      gameState({ gameId: 'snapshot-store-failure' }),
+      { seasonId: scope.seasonId, detectMilestones: false },
+    )).resolves.toMatchObject({ aggregation: { success: true } });
+    expect(mocks.aggregateGameToSeason).toHaveBeenCalledTimes(1);
+    await expect(getCompletedGameById('snapshot-store-failure')).resolves.toMatchObject({
+      livingSeasonProcessing: {
+        overall: 'complete',
+        branches: { trueValueSnapshot: { status: 'NO_EVENT' } },
+      },
+    });
+
+    warn.mockRestore();
+  });
+
+  test('leaves stadium-dependent branches unrun when stadium fails', async () => {
+    setFranchisePhase2StadiumRecordsEnabledForTests(true);
+    setFranchisePhase2FameEnabledForTests(true);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const stadiumSpy = vi.spyOn(stadiumRecordsTapSeam, 'getRecentGames').mockRejectedValueOnce(
+      new Error('stadium candidates unavailable'),
+    );
+
+    await expect(processCompletedGame(
+      gameState({ gameId: 'stadium-branch-failure' }),
+      { seasonId: scope.seasonId, detectMilestones: false },
+    )).resolves.toMatchObject({ aggregation: { success: true } });
+
+    const archive = await getCompletedGameById('stadium-branch-failure');
+    expect(archive && getSoulOutcomes(archive)).toMatchObject({
+      overall: 'partial-failure',
+      branches: {
+        stadium: {
+          status: 'FAILED',
+          errorMessage: 'stadium candidates unavailable',
+        },
+      },
+    });
+    expect(archive?.livingSeasonProcessing?.branches.fame).toBeUndefined();
+    expect(archive?.livingSeasonProcessing?.branches.moraleAuto).toBeUndefined();
+    expect(archive?.livingSeasonProcessing?.branches.L13).toBeUndefined();
+    stadiumSpy.mockRestore();
     warn.mockRestore();
   });
 });

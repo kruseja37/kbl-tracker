@@ -430,6 +430,7 @@ export async function resolveCheckpointRoster(
     }
 
     const hidden = player.hiddenPersonalityModifiers ?? NEUTRAL_HIDDEN_MODIFIERS;
+    const playerMoraleSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', player.id);
 
     roster.push({
       playerId: player.id,
@@ -442,7 +443,7 @@ export async function resolveCheckpointRoster(
         ambition: hidden.ambition,
         resilience: hidden.resilience,
       },
-      playerMorale: player.morale,
+      playerMorale: playerMoraleSnapshot?.currentValue ?? player.morale,
       teamFanMorale: teamId ? await teamFanMoraleByTeamId.get(teamId)! : 50,
       ageBand,
       signalByRatingKey: signalMap.get(player.id) ?? {},

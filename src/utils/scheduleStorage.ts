@@ -10,6 +10,7 @@
  */
 
 import { syncEngine } from './syncEngine';
+import { getDeviceLocalCivilDate } from './civilDate';
 
 const DB_NAME = 'kbl-schedule';
 const DB_VERSION = 2;
@@ -54,6 +55,7 @@ export interface ScheduledGame {
   importedAt?: number;          // timestamp for accepted user-provided CSV imports
   source?: 'manual' | 'csv-import';
   completedAt?: number;         // timestamp
+  completedCivilDate?: string;  // device-local YYYY-MM-DD at result confirmation
 }
 
 export interface ScheduleMetadata {
@@ -113,6 +115,7 @@ export interface GameResult {
   winningTeamId: string;
   losingTeamId: string;
   gameLogId?: string;
+  completedCivilDate?: string;
 }
 
 export interface CompleteFranchiseScoreOnlyInput {
@@ -565,7 +568,9 @@ export async function updateGameStatus(gameId: string, status: GameStatus): Prom
 
       game.status = status;
       if (status === 'COMPLETED') {
-        game.completedAt = Date.now();
+        const now = Date.now();
+        game.completedAt = now;
+        game.completedCivilDate = getDeviceLocalCivilDate(now);
       }
 
       const putRequest = store.put(game);
@@ -615,6 +620,7 @@ export async function completeGame(gameId: string, result: GameResult): Promise<
       game.gameLogId = result.gameLogId;
       game.completionSource = 'game-tracker';
       game.resultEnteredAt = now;
+      game.completedCivilDate = result.completedCivilDate ?? getDeviceLocalCivilDate(now);
       delete game.scoreOnlyResultId;
 
       const putRequest = store.put(game);
@@ -701,6 +707,7 @@ export async function completeFranchiseScheduleGameScoreOnly(
         result,
         completedAt: now,
         resultEnteredAt: now,
+        completedCivilDate: getDeviceLocalCivilDate(now),
         completionSource: 'score-only',
         scoreOnlyResultId: `score-only:${input.franchiseId}:${input.seasonId}:${game.id}`,
         gameLogId: undefined,
