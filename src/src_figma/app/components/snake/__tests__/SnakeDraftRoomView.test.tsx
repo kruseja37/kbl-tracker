@@ -30,6 +30,12 @@ function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoom
 }
 
 describe('SnakeDraftRoomView', () => {
+  it('keeps the private desk absent while covered and renders it only after reveal', () => {
+    render(<SnakeDraftRoomView {...props({ privateDesk: <div>SECRET BOARD CONTENT</div> })} />);
+    expect(screen.queryByText('SECRET BOARD CONTENT')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /REVEAL .* SEAT/ }));
+    expect(screen.getByText('SECRET BOARD CONTENT')).toBeInTheDocument();
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

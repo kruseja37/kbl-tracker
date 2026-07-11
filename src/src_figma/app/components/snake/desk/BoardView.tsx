@@ -1,0 +1,46 @@
+import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
+import type { SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
+import { DeskCandidateCard } from './DeskCandidateCard';
+import type { DeskCandidate, TaxCoreRow } from './deskModel';
+
+export function BoardView(props: {
+  candidates: readonly DeskCandidate[];
+  boardSlots: Partial<Record<SnakeBoardSlotId, string>>;
+  brokenSlots: readonly SnakeBoardSlotId[];
+  planBill: SnakePlanBill | null;
+  taxCoreRows: readonly TaxCoreRow[];
+  slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
+}) {
+  const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
+  return (
+    <div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {Object.entries(props.boardSlots).map(([slotId, playerId]) => (
+          <div key={slotId} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
+            <p className="text-[10px] font-bold text-[var(--ballpark-brass)]">{slotId}</p>
+            {byId.get(playerId)
+              ? <DeskCandidateCard candidate={byId.get(playerId)!} boardSlot={slotId} />
+              : <p className="font-bold">{playerId}</p>}
+            {props.brokenSlots.includes(slotId as SnakeBoardSlotId) && <p className="text-sm font-black text-[var(--ballpark-warn-text)]">PLAN BROKEN</p>}
+            {(props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2 && !props.brokenSlots.includes(slotId as SnakeBoardSlotId) && (
+              <p className="mt-2 text-xs font-black text-[var(--ballpark-warn-text)]">YOUR {slotId} SLOT IS DOWN TO DEPTH — {props.slotDepth[slotId as SnakeBoardSlotId]} LEFT YOU'VE RANKED</p>
+            )}
+          </div>
+        ))}
+      </div>
+      {props.planBill && (
+        <div className="mt-4 grid grid-cols-3 gap-2 border-4 border-[var(--ballpark-brass)] p-3 text-center">
+          <div><p className="text-xs font-bold">PLAN COST</p><strong>${Math.round(props.planBill.planCost).toLocaleString()}</strong></div>
+          <div><p className="text-xs font-bold">PLAN TAX</p><strong>${Math.round(props.planBill.planTax).toLocaleString()}</strong></div>
+          <div><p className="text-xs font-bold">PLAN CUSHION</p><strong>${Math.round(props.planBill.planCushion).toLocaleString()}</strong></div>
+        </div>
+      )}
+      <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
+        <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
+        <div className="mt-3 space-y-2">
+          {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
+        </div>
+      </details>
+    </div>
+  );
+}

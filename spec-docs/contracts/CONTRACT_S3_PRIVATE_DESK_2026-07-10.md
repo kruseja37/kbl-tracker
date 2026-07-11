@@ -234,3 +234,179 @@ Binding on S3 (resume from this seam):
    change `playSnakeRationalRoom` output in your tests (two different archetype rooms
    → different risk reads for a band-skewed player).
 5. Do not modify the adapter. If it proves insufficient → STOP again.
+
+---
+
+## FINAL BUILDER REPORT — Codex S3 (2026-07-10) — COMPLETE
+
+### Outcome
+
+S3 is complete from the upheld STOP seam. The private desk is wired into the live snake
+room with the captain-authored player-band adapter, GO-locked club archetypes, engine-backed
+rational-room reads, the two distinct money bills, per-seat board persistence, frozen-touch
+backfill, actionable/expiring LOG lines, slot-depth warnings, and consequence-only WHAT-IF
+KEEP/REVERT. No git write command was run. The prior BLOCKED report remains above as the trail.
+
+No auction file, engine file, storage schema/version, route, flag, snake-setup file, or ritual
+reducer was edited. `src/engines/snakePlayerBands.ts` and its captain-authored test are
+byte-untouched. The pre-existing untracked operator files `DISPATCH_PROMPT.txt`, `run_lane.sh`,
+and `sentinel.sh` were read only for the lane command context and were not modified.
+
+### Amendment 1 and page-level wiring
+
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts:42-74` is the one page adapter:
+  every stored-player row calls `derivePlayerBandWeights`; missing required ratings emit a loud
+  `console.warn` and set `fitKnown=false`. `fitWord` renders `FIT UNKNOWN` instead of silently
+  accepting the neutral market fallback (`:98-115`).
+- `deskRoomModel.ts:76-157` resolves each seat from the archetype locked in
+  `session.snakeSetup`, builds the real picked roster/spend state, and delegates the categorical
+  read verbatim to `playSnakeRationalRoom`. The desk never reads rival boards or rankings.
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx:100-150` restricts the live room to the
+  GO-selected/version-trimmed `snakeSetup.poolPlayerIds`, projects stored ratings/position shape,
+  and constructs every rational-room row through that adapter.
+- `SnakeDraftRoom.tsx:219-382` assembles fit-adjusted advisor worth through the existing
+  `computeOwnValue` + `assembleBoard` seams; computes TRUE COST, LEGAL-FINISH CUSHION, PLAN
+  COST/TAX/CUSHION, rational risk/reasons, board fallout, depth, CT1 tax-core rows, backfills,
+  PLAN BROKEN, and the actionable LOG from the existing engines and persisted session state.
+- `SnakeDraftRoom.tsx:384-419` seeds/backfills and persists only the active seat's `seatBoards`
+  record through the existing `saveMlbDraftSession` helper; rank edits increment the seat record,
+  preserve every other seat, and stamp touched player IDs as frozen.
+- `SnakeDraftRoom.tsx:421-455` plus
+  `src/src_figma/app/components/snake/desk/WhatIfSandbox.tsx:5-49` price only the GM's chosen
+  move, show both PLAN and engine-backed LEGAL-FINISH consequences, reject an illegal slot KEEP,
+  and expose no optimizer/search/suggested-move API.
+- `SnakeDraftRoom.tsx:498-540` mounts the full desk as the existing private-pane child.
+  `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx:298-319` renders that child only
+  after the current seat is revealed; covered/shared states never mount its content.
+
+### Frozen-touch / First-Law behavior
+
+- `src/src_figma/app/components/snake/desk/deskModel.ts:68-126` seeds unique 22-player boards
+  from positional advisor rankings, recognizes SP/RP swing eligibility for both staff classes,
+  and contains no optimization entrypoint.
+- `deskModel.ts:128-184` backfills only an unavailable slot from the GM's own persisted order;
+  every surviving placement and the ranking record stay unchanged, with PLAN BROKEN on exhaustion.
+- The Board, Rankings, candidate fallout, tax-core tap-down, depth warning, LOG, and WHAT-IF UI
+  live entirely under `src/src_figma/app/components/snake/desk/` and use the two-bill/copy names
+  required by the contract. Bullpen tax copy is always `top-N bullpen arms`; no CP tax line exists.
+
+### Adversarial test evidence
+
+- `deskRoomModel.test.ts:100-152`: captain adapter weights are non-neutral; changing only a
+  rival's locked archetype changes the same power-skewed player's read from `LIKELY_GONE` to
+  `SAFE_TO_WAIT`; missing ratings warn + show `FIT UNKNOWN`; a seat-board update preserves the
+  other seat; later team edits cannot replace the session's locked archetype.
+- `deskModel.test.ts:43-126`: 22 unique slots, no-optimizer tripwire, SP/RP dual eligibility,
+  illegal WHAT-IF rejection, frozen survivor/backfill, PLAN BROKEN, LOG expiry, and CT1 copy.
+- `PrivateDesk.test.tsx:26-60`: distinct PLAN bill, engine legal-finish bill, risk/fallout,
+  slot consequence, and KEEP/REVERT controls.
+- `SnakeDraftRoomView.test.tsx:32-38`: private desk content is absent while covered and appears
+  only after reveal; the existing auto-cover/pause/trade/correction tests remain green.
+
+The NFL caught one real omission after the first green pass: WHAT-IF showed only the plan bill
+and allowed an illegal slot KEEP. That pass was invalidated, the narrow correction above was
+made, and Gates 1→5 were restarted from Gate 1. Only the restarted outputs below are final.
+
+### Final Gates 1→5 — real terminal output
+
+**Gate 1 — `NODE_ENV= npx tsc --noEmit`**
+
+```text
+FINAL_GATE1_EXIT=0
+(no compiler output)
+```
+
+**Gate 2 — `NODE_ENV= npm run build`**
+
+```text
+✓ built in 10.53s
+PWA v1.2.0
+precache  197 entries (5445.98 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-1d305bb8.js
+FINAL_GATE2_EXIT=0
+```
+
+Vite emitted only its existing chunk-size/dynamic-import warnings.
+
+**Gate 3 — owned S3 suites + captain adapter suite**
+
+```text
+Test Files  5 passed (5)
+Tests       29 passed (29)
+Duration    1.98s
+FINAL_GATE3_EXIT=0
+```
+
+**Gate 4 — auction preservation**
+
+The repo currently has 36 auction-named test files, so the final run used all 36 as a strict
+superset of the contract's historical 28-file gate.
+
+```text
+FINAL_GATE4_FILE_COUNT=36
+Test Files  36 passed (36)
+Tests       452 passed (452)
+Duration    70.06s
+FINAL_GATE4_EXIT=0
+```
+
+**Gate 5 — one full final `npx vitest run` after the restart**
+
+```text
+Test Files  635 passed | 8 skipped (643)
+Tests       9619 passed | 15 skipped (9634)
+Duration    235.33s
+FINAL_GATE5_EXIT=0
+```
+
+There were zero red files, so no solo-flake rerun was needed.
+
+Final hygiene: `git diff --check` exited 0 with no output; adapter diff was empty; auction-path
+diff was empty.
+
+### STOPs / surprises
+
+- No unresolved UNKNOWN or contract STOP remains.
+- The live page had been reading the full registered pool rather than the version-trimmed pool
+  locked at GO. S3's rational-room assembly now consumes the session-selected IDs, within the
+  allowed page integration surface.
+- The first Gate-2 capture returned a still-running terminal session before its exit marker;
+  the final restarted Gate 2 was polled to its real exit 0 and is the only build evidence above.
+
+### Auditor attack-first list
+
+1. Run an 8-club real browser draft with sharply different locked archetypes and confirm the
+   same target's risk changes without exposing any rival private board/ranking data.
+2. Attack mid-draft reload and two-seat edits against IndexedDB: each seat's `seatBoards` record,
+   frozen rankings, revision, backfills, and selected version pool must round-trip unchanged.
+3. Draft/retire a board target and an SP/RP version: only its slot may backfill, the next hand-ranked
+   eligible name must promote, and exhaustion must show PLAN BROKEN without moving a survivor.
+4. Try WHAT-IF with an off-board member, a board-to-board swap, and an illegal hitter→SP slot:
+   tax must depend only on membership, both bills must update, illegal KEEP must stay disabled,
+   and REVERT must restore byte-identical saved board state.
+5. Verify every private surface auto-covers on pick advance, public-lens change, pause/trade ritual
+   changes, and reload; no desk name, LOG line, risk reason, or sound may leak to the shared frame.
+
+---
+
+## AUDIT — opus, independent, 2026-07-10 — VERDICT: APPROVE-WITH-NOTES
+Gates re-run independently (tsc clean · 5 owned suites 29/29 · 8 auction spot suites
+green incl. production gauntlet · S2 room suites green). All eight attack vectors PASS:
+First Law holds under auditor-authored probes (no-op reconcile returns the same object
+reference; rival-worth inversion never re-sorts; backfill promotes the GM's own order,
+not advisor-best) · neutral-fit ban enforced (adapter byte-identical to the captain
+commit; archetype sensitivity proven non-decorative: LIKELY_GONE vs SAFE_TO_WAIT under
+different locked rivals) · locked-at-GO honored against live-state edits · frozen-touch/
+backfill/PLAN BROKEN exact · two bills distinct + membership-only tax + what-if
+consequences-only w/ byte-identical REVERT · zero percentages · CT1 copy (no CP line) ·
+privacy unmount-not-hide + LOG leash + partition clean.
+NOTES (non-blocking): spurious first-open backfill LOG lines on mid-draft first open
+(cosmetic); boards persist for CPU/on-clock seats (harmless extra writes); startWhatIf
+lacks try/catch on an unreachable two-version case.
+CARRY-FORWARDS: S4 — reuse the privateDesk seam + consequences-only pattern; no
+"suggested trade" surface ever. TAXSWING — deskModel belongs()/buildTaxCoreRows
+hand-rolls the swing-arm grouping for the tax-core NAME LIST (dollars are engine-
+sourced and stay correct); the TAXSWING merge must re-check the explainer grouping so
+names match the new settled tax.
