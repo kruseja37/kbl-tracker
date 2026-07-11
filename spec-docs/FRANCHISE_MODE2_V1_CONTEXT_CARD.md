@@ -74,8 +74,8 @@ Goal: verify the no-awards season-complete summary/manifest in real-app smoke. I
 - No-awards Season Summary manifests are review packages only and must not be treated as awards, season rollover, or Mode 3 handoff execution.
 - TWO-WAY designation routing is pitcher-only for internal v1; stricter two-way Team MVP criteria are deferred.
 - Older full-system designation lock/carryover wording is subordinate to the v1 matrix until a separate final-designation promotion slice is approved.
-- No relationship mutation.
-- No story persistence beyond the random-event log.
+- ~~No relationship mutation.~~ **AMENDED 2026-07-11 (JK living-season rulings, `OBSERVER_GROUNDWORK_BRIEF_2026-07-11.md` §5 R1):** flag-gated relationship formation/intensity/dissolution is sanctioned under the living-season activation program. Surviving boundary: no relationship mutation outside the flag-gated soul pipeline.
+- ~~No story persistence beyond the random-event log.~~ **AMENDED 2026-07-11 (JK living-season rulings, brief §5 R5/R10):** SeasonNews/GameStory persistence and the deterministic Game Day digest are sanctioned. Surviving boundary: LLM output is narration only — never event detection, math, or a stored fact's source of truth.
 - No adaptive park-factor persistence, custom stadium factor entry, or final park-adjusted value/WAR consumers.
 - Archive `game.parkFactors` trust has been tightened to accept only verified SMB4 seed inputs; adaptive park-factor persistence remains blocked.
 - No Mode 3/offseason handoff or execution.
