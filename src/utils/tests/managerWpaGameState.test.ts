@@ -3077,6 +3077,12 @@ describe("committed manager WPA game state", () => {
       { away: 3, home: 2 },
       [],
       "season-1",
+      {
+        statsScopeId: "season-1",
+        competitionType: "franchise",
+        competitionId: "franchise-manager-wpa",
+        franchiseId: "franchise-manager-wpa",
+      },
     );
 
     const archived = await getCompletedGameById(gameId);

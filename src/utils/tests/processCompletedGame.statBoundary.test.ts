@@ -272,7 +272,7 @@ describe('processCompletedGame stat truth boundary', () => {
     });
 
     expect(shouldAggregateToRegularSeasonStats(exhibition)).toBe(false);
-    await processCompletedGame(exhibition, { seasonId: 'season-1', detectMilestones: false });
+    await processCompletedGame(exhibition, { detectMilestones: false });
 
     await expect(getSeasonBattingStats('season-1')).resolves.toEqual([]);
     await expect(getCompletedGameById(exhibition.gameId)).resolves.toMatchObject({
@@ -280,6 +280,25 @@ describe('processCompletedGame stat truth boundary', () => {
       leagueId: 'league-exhibition',
     });
     expect((await getCompletedGameById(exhibition.gameId))?.livingSeasonProcessing).toBeUndefined();
+  });
+
+  test('missing competition identity is rejected without regular-season aggregation or archive writes', async () => {
+    const unclassified = gameState({
+      gameId: 'missing-competition-type',
+      competitionType: undefined,
+      competitionId: undefined,
+      franchiseId: undefined,
+    });
+
+    expect(shouldAggregateToRegularSeasonStats(unclassified)).toBe(false);
+    await expect(processCompletedGame(unclassified, {
+      seasonId: 'season-1',
+      detectMilestones: false,
+    })).rejects.toThrow(/classifiable game mode/i);
+
+    await expect(getSeasonBattingStats('season-1')).resolves.toEqual([]);
+    await expect(getCompletedGameById(unclassified.gameId)).resolves.toBeNull();
+    expect(mocks.markGameAggregated).not.toHaveBeenCalled();
   });
 
   test('rejects disagreeing regular-season seasonId/statsScopeId before any write', async () => {

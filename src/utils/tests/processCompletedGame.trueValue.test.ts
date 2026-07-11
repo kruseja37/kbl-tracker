@@ -509,7 +509,7 @@ describe('processCompletedGame True Value persistence gate', () => {
     warn.mockRestore();
   });
 
-  test('archives a non-franchise regular-season game without a living-season ledger and treats resume as finished', async () => {
+  test('does not aggregate an identityless completion as a phantom regular-season game', async () => {
     const genericGame = gameState({
       gameId: 'generic-regular-season',
       franchiseId: undefined,
@@ -521,9 +521,6 @@ describe('processCompletedGame True Value persistence gate', () => {
 
     expect(mocks.archiveRecord?.livingSeasonProcessing).toBeUndefined();
     expect(mocks.patchCompletedGameLivingSeasonProcessing).not.toHaveBeenCalled();
-
-    await processCompletedGame(genericGame, { seasonId: 'season-1', detectMilestones: false });
-    expect(mocks.aggregateGameToSeason).toHaveBeenCalledTimes(1);
-    expect(mocks.patchCompletedGameLivingSeasonProcessing).not.toHaveBeenCalled();
+    expect(mocks.aggregateGameToSeason).not.toHaveBeenCalled();
   });
 });

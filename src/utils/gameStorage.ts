@@ -37,6 +37,15 @@ export type CompetitionType =
   | "playoff"
   | "elimination";
 
+export type CompletedGameProductMode = "exhibition" | "elimination" | "franchise";
+
+export class UnclassifiableGameModeError extends Error {
+  constructor(gameId: string) {
+    super(`Cannot archive completed game ${gameId}: fresh archives require a classifiable game mode`);
+    this.name = "UnclassifiableGameModeError";
+  }
+}
+
 // Store names
 const STORES = {
   CURRENT_GAME: "currentGame",
@@ -638,6 +647,60 @@ export interface CompletedGameRecord {
   livingSeasonProcessing?: LivingSeasonProcessing;
 }
 
+function hasNonEmptyIdentity(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function classifyCompletedGameMode(
+  game: Pick<
+    CompletedGameRecord,
+    | "competitionType"
+    | "competitionId"
+    | "leagueId"
+    | "franchiseId"
+    | "playoffId"
+    | "playoffSeriesId"
+    | "playoffGameNumber"
+    | "isEliminationGame"
+  >,
+): CompletedGameProductMode | null {
+  const hasPlayoffMarker =
+    hasNonEmptyIdentity(game.playoffId) ||
+    hasNonEmptyIdentity(game.playoffSeriesId) ||
+    game.playoffGameNumber !== undefined;
+
+  if (game.competitionType === "exhibition") {
+    return !hasPlayoffMarker &&
+      game.isEliminationGame !== true &&
+      !hasNonEmptyIdentity(game.franchiseId) &&
+      (hasNonEmptyIdentity(game.leagueId) || hasNonEmptyIdentity(game.competitionId))
+      ? "exhibition"
+      : null;
+  }
+
+  if (game.competitionType === "franchise") {
+    return hasNonEmptyIdentity(game.franchiseId) || hasPlayoffMarker
+      ? "franchise"
+      : null;
+  }
+
+  if (game.competitionType === "playoff") {
+    return hasPlayoffMarker || hasNonEmptyIdentity(game.competitionId)
+      ? "franchise"
+      : null;
+  }
+
+  if (game.competitionType === "elimination") {
+    return game.isEliminationGame === true || hasNonEmptyIdentity(game.competitionId)
+      ? "elimination"
+      : null;
+  }
+
+  if (game.isEliminationGame === true) return "elimination";
+  if (hasPlayoffMarker) return "franchise";
+  return null;
+}
+
 export const LIVING_SEASON_PROCESSING_VERSION = "1";
 
 export const SOUL_BRANCH_KEYS = [
@@ -906,7 +969,13 @@ export async function archiveCompletedGame(
   seasonId?: string,
   context?: ArchiveCompletedGameContext,
 ): Promise<void> {
-  const db = await initDatabase();
+  const competitionType = context?.competitionType ?? gameState.competitionType;
+  const competitionId = context?.competitionId ?? gameState.competitionId;
+  const franchiseId = context?.franchiseId ?? gameState.franchiseId;
+  const playoffId = context?.playoffId ?? gameState.playoffId;
+  const playoffSeriesId = context?.playoffSeriesId ?? gameState.playoffSeriesId;
+  const playoffGameNumber = context?.playoffGameNumber ?? gameState.playoffGameNumber;
+  const isEliminationGame = context?.isEliminationGame ?? gameState.isEliminationGame;
   const resolvedLeagueId =
     context?.leagueId ??
     resolveExhibitionLeagueId({
@@ -914,6 +983,21 @@ export async function archiveCompletedGame(
       competitionId: context?.competitionId ?? gameState.competitionId,
       competitionType: context?.competitionType ?? gameState.competitionType,
     });
+  const mode = classifyCompletedGameMode({
+    competitionType,
+    competitionId,
+    leagueId: resolvedLeagueId,
+    franchiseId,
+    playoffId,
+    playoffSeriesId,
+    playoffGameNumber,
+    isEliminationGame,
+  });
+  if (!mode) {
+    throw new UnclassifiableGameModeError(gameState.gameId);
+  }
+
+  const db = await initDatabase();
   const resolvedStadiumName = gameState.stadiumName ?? null;
   const resolvedStadiumId =
     context?.stadiumId ??
@@ -933,20 +1017,20 @@ export async function archiveCompletedGame(
       getDeviceLocalCivilDate(),
     seasonId,
     statsScopeId: context?.statsScopeId ?? gameState.statsScopeId ?? seasonId,
-    competitionType: context?.competitionType ?? gameState.competitionType,
-    competitionId: context?.competitionId ?? gameState.competitionId,
+    competitionType,
+    competitionId,
     competitionName: context?.competitionName ?? gameState.competitionName,
     playoffSeriesId:
-      context?.playoffSeriesId ?? gameState.playoffSeriesId ?? undefined,
+      playoffSeriesId ?? undefined,
     playoffGameNumber:
-      context?.playoffGameNumber ?? gameState.playoffGameNumber ?? undefined,
-    playoffId: context?.playoffId ?? gameState.playoffId ?? undefined,
+      playoffGameNumber ?? undefined,
+    playoffId: playoffId ?? undefined,
     playoffRound: context?.playoffRound ?? gameState.playoffRound,
     isEliminationGame:
-      context?.isEliminationGame ?? gameState.isEliminationGame,
+      isEliminationGame,
     isClinchGame: context?.isClinchGame ?? gameState.isClinchGame,
     leagueId: resolvedLeagueId,
-    franchiseId: context?.franchiseId ?? gameState.franchiseId,
+    franchiseId,
     scheduleGameId: context?.scheduleGameId ?? gameState.scheduleGameId,
     seasonNumber: gameState.seasonNumber,
     stadiumName: resolvedStadiumName,
@@ -1077,53 +1161,6 @@ export async function patchCompletedGameLivingSeasonProcessing(
     transaction.onabort = () => reject(
       transaction.error ?? new Error("Living-season archive patch aborted"),
     );
-  });
-}
-
-/**
- * Archive a batch-simulated game (lightweight — no full game state needed).
- * Writes directly to the completedGames store so calculateStandings can find it.
- */
-export async function archiveBatchGameResult(params: {
-  awayTeamId: string;
-  homeTeamId: string;
-  awayScore: number;
-  homeScore: number;
-  seasonId?: string;
-}): Promise<void> {
-  const db = await initDatabase();
-
-  const record: CompletedGameRecord = {
-    gameId: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    date: Date.now(),
-    seasonId: params.seasonId || "season-1",
-    seasonNumber: 1,
-    stadiumName: null,
-    awayTeamId: params.awayTeamId,
-    homeTeamId: params.homeTeamId,
-    awayTeamName: params.awayTeamId,
-    homeTeamName: params.homeTeamId,
-    finalScore: { away: params.awayScore, home: params.homeScore },
-    innings: 9,
-    totalInnings: 9,
-    fameEvents: [],
-    playerStats: {},
-    pitcherGameStats: [],
-    activityLog: [],
-    inningScores: [],
-  };
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readwrite");
-    const store = transaction.objectStore(STORES.COMPLETED_GAMES);
-    const request = store.put(record);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
-      if (!syncEngine.isSuppressed()) {
-        syncEngine.upsert('kbl-tracker', 'completedGames', record.gameId, record);
-      }
-      resolve();
-    };
   });
 }
 

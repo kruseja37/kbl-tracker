@@ -119,6 +119,9 @@ async function initializeGame(result: {
       awayBench: [],
       homeBench: [],
       seasonNumber: 1,
+      competitionType: "exhibition",
+      competitionId: "league-exhibition",
+      leagueId: "league-exhibition",
       ...overrides,
     });
   });
@@ -162,7 +165,44 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
       1,
     );
     expect(mockProcessCompletedGame).toHaveBeenCalledTimes(1);
+    expect(mockProcessCompletedGame).toHaveBeenCalledWith(
+      expect.objectContaining({
+        competitionType: "exhibition",
+        seasonId: undefined,
+        statsScopeId: undefined,
+      }),
+      expect.objectContaining({ seasonId: undefined }),
+      "league-exhibition",
+      expect.objectContaining({
+        seasonId: undefined,
+        context: expect.objectContaining({
+          competitionType: "exhibition",
+          statsScopeId: undefined,
+        }),
+      }),
+    );
     expect(result.current.pitchCountPrompt).toBeNull();
+  });
+
+  test("rejects a franchise completion with no explicit season scope before completion writes", async () => {
+    const { result } = renderHook(() => useGameState());
+    await initializeGame(result, {
+      competitionType: "franchise",
+      competitionId: "franchise-no-scope",
+      franchiseId: "franchise-no-scope",
+      seasonId: undefined,
+      statsScopeId: undefined,
+    });
+
+    await act(async () => {
+      await expect(result.current.endGame()).rejects.toThrow(
+        /franchise game.*season scope/i,
+      );
+    });
+
+    expect(mockCompleteGame).not.toHaveBeenCalled();
+    expect(mockProcessCompletedGame).not.toHaveBeenCalled();
+    expect(mockArchiveCompletedGame).not.toHaveBeenCalled();
   });
 
   test("blocks downstream completion when processCompletedGame fails after pitch-count confirmation", async () => {
@@ -194,7 +234,7 @@ describe("bugfix R4-02: end-game pitch count continuation", () => {
       expect.any(Object),
       expect.any(Object),
       expect.any(Array),
-      expect.anything(),
+      undefined,
       expect.objectContaining({
         aggregationStatus: "incomplete",
         aggregationError: "aggregation exploded",
