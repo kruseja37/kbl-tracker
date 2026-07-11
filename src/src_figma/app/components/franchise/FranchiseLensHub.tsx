@@ -1,7 +1,8 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { ScheduleContent } from "../ScheduleContent";
 import { FranchiseLineupsBoard } from "./FranchiseLineupsBoard";
 import { FITNESS_STATES, type FitnessState } from "../../../../engines/fitnessEngine";
+import { CANONICAL_TRAIT_NAMES } from "../../../../engines/traitRealityScorer";
 import type { FranchiseScheduleImportRow, ScheduledGame } from "../../../../utils/scheduleStorage";
 
 /**
@@ -56,6 +57,7 @@ export interface ImpactCardVM {
 
 export interface NextGameVM {
   scheduleGameId?: string;
+  activeTeamId?: string;
   awayTeamId?: string;
   homeTeamId?: string;
   gameNumber?: number;
@@ -109,7 +111,19 @@ export interface PlayerMoraleVM {
 /* ===== Player drawer (the per-player depth, opened from a roster name) ===== */
 export interface RatingBarVM { label: string; base: number; current: number }   // 0–99
 export interface ValuePointVM { checkpoint: string; value: number }              // True Value sparkline
-export interface TraitTimelineVM { valence: "gain" | "lose"; trait: string; displaces?: string; atGame: number }
+export interface TraitTimelineVM { valence: "gain" | "lose"; trait: string; displaces?: string; atGame: number; status?: "applied" | "proposed" }
+export interface DevelopmentHistoryVM {
+  id: string;
+  kind: "rating" | "trait";
+  change: string;
+  proposed: string;
+  actual?: string;
+  status: "confirmed-applied" | "rejected" | "conflict" | "apply-failed" | "pending" | "confirmed";
+  resolvedCivilDate?: string;
+  resolvedBy?: string;
+  rejectReason?: string;
+  applyError?: string;
+}
 export type TieType = "RIVALRY" | "FEUD" | "MENTORSHIP" | "FRIENDSHIP" | "ROMANCE" | "HISTORY";
 export interface TieVM { partner: string; type: TieType; intensity: number; sinceGame?: number; potential?: boolean; moraleImpact?: number }
 export interface FameVM {
@@ -144,6 +158,7 @@ export interface PlayerDetailVM {
   careerLine?: { label: string; value: string }[];   // career totals
   careerAwards?: CareerAwardVM[];
   milestones?: MilestoneVM[];
+  developmentHistory?: DevelopmentHistoryVM[];
   designationEffect?: string;
 }
 
@@ -179,6 +194,7 @@ export interface StandingRowVM {
   winPct: number;            // 0..1 (rendered .XXX, no leading zero)
   gamesBack: number;         // 0 → division leader (renders "—")
   lastTenWins: number;       // L10 shows {wins}-{10 − wins}
+  lastTenGames?: number;     // actual games in the rolling window (0..10)
   streak: { type: "W" | "L"; count: number };
   runDiff: number;           // +/-, signed in chalk
   home: { wins: number; losses: number };
@@ -264,18 +280,37 @@ export interface StadiumVM {
 /* ===== Checkpoint confirmation worklist (the moment-driven transcription takeover) ===== */
 export interface RatingChangeVM { label: string; from: number; to: number }
 export interface TraitChangeVM { valence: "gain" | "lose"; trait: string; displaces?: string }
+export interface TraitSlotsVM { trait1: string | null; trait2: string | null }
+export interface CheckpointProposalVM {
+  id: string;
+  kind: "rating" | "trait";
+  retry?: true;
+  observedPriorValue?: number | TraitSlotsVM;
+  ratingChange?: { label: string; from?: number; to?: number };
+  traitChange?: TraitChangeVM & { from?: TraitSlotsVM; to?: TraitSlotsVM };
+}
 export interface CheckpointPlayerVM {
   id: string;
   name: string;
   position: string;
-  ratingChanges: RatingChangeVM[];
-  traitChanges: TraitChangeVM[];
+  ratingChanges?: RatingChangeVM[];
+  traitChanges?: TraitChangeVM[];
+  proposals?: CheckpointProposalVM[];
+}
+export interface CheckpointGroupVM {
+  boundaryGameNumber: number;
+  ordinal: number;
+  ordinalCount: number;
+  label: string;
+  stalePlan?: true;
+  players: CheckpointPlayerVM[];
 }
 export interface CheckpointVM {
   number: number;            // 1–5 (every 20%)
   label: string;             // "Checkpoint 3 of 5"
   pctLabel?: string;         // "the 60% mark"
   players: CheckpointPlayerVM[];
+  groups?: CheckpointGroupVM[];
 }
 
 /* ===== Tentpole takeovers (the season's big moments) ===== */
@@ -464,6 +499,19 @@ export interface HubVM {
 
 /* ===== Roster-move actions (optional; wired by the live-data page, absent in the static mock) ===== */
 export interface RosterActionResult { success: boolean; message?: string }
+export interface DevelopmentResolutionRequest {
+  proposalId: string;
+  kind: "rating" | "trait";
+  action: "confirm" | "confirm-adjusted" | "reject" | "retry";
+  observedPriorValue: number | TraitSlotsVM;
+  actualValue?: number | TraitSlotsVM;
+  rejectReason?: string;
+}
+export interface DevelopmentResolutionResult {
+  outcome: "resolved" | "conflict" | "apply-failed" | "recovered" | "noop" | "error";
+  currentValue?: number | TraitSlotsVM;
+  message?: string;
+}
 export interface TradeProposal {
   sourceTeamId: string;
   targetTeamId: string;
@@ -475,6 +523,7 @@ export interface FranchiseLensActions {
   onSendDown: (playerId: string, teamId: string) => Promise<RosterActionResult>;
   onExecuteTrade: (proposal: TradeProposal) => Promise<RosterActionResult>;
   onSetFitness: (playerId: string, state: FitnessState) => Promise<RosterActionResult>;
+  onResolveDevelopment?: (request: DevelopmentResolutionRequest) => Promise<DevelopmentResolutionResult>;
   onScoreGame?: (scheduleGameId?: string) => void;
   onScoreOnlyGame?: (scheduleGameId?: string) => void;
   onSkipGame?: (scheduleGameId?: string) => void;
@@ -542,6 +591,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions, sc
   const [openMorale, setOpenMorale] = useState<string | null>(null); // playerId | "fan" | null
   const [openPlayer, setOpenPlayer] = useState<PlayerRowVM | null>(null);
   const [openMoment, setOpenMoment] = useState<string | null>(null);
+  const [openCheckpoint, setOpenCheckpoint] = useState<CheckpointVM | null>(null);
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null);
   const [helpOn, setHelpOn] = useState(false);
 
@@ -593,7 +643,14 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions, sc
             </div>
 
             {tab === "The Clubhouse" ? (
-              <SeasonHome hub={hub} actions={actions} onAction={(a) => setOpenMoment(a)} />
+              <SeasonHome
+                hub={hub}
+                actions={actions}
+                onAction={(action) => {
+                  if (action === "checkpoint" && hub.checkpoint) setOpenCheckpoint(hub.checkpoint);
+                  setOpenMoment(action);
+                }}
+              />
             ) : tab === "Roster" ? (
               <RosterTab
                 active={active}
@@ -641,7 +698,13 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions, sc
       {pendingMove && actions ? (
         <RosterMoveConfirm move={pendingMove} actions={actions} onClose={() => setPendingMove(null)} />
       ) : null}
-      {openMoment === "checkpoint" && hub.checkpoint ? <CheckpointTakeover cp={hub.checkpoint} onClose={() => setOpenMoment(null)} /> : null}
+      {openMoment === "checkpoint" && openCheckpoint ? (
+        <CheckpointTakeover
+          cp={openCheckpoint}
+          onResolve={actions?.onResolveDevelopment}
+          onClose={() => { setOpenMoment(null); setOpenCheckpoint(null); }}
+        />
+      ) : null}
       {openMoment === "firing" && hub.moments?.firing ? <FiringTakeover m={hub.moments.firing} onClose={() => setOpenMoment(null)} /> : null}
       {openMoment === "rebrand" && hub.moments?.rebrand ? <RebrandTakeover m={hub.moments.rebrand} onClose={() => setOpenMoment(null)} /> : null}
       {openMoment === "ceremony" && hub.moments?.ceremony ? <CeremonyTakeover m={hub.moments.ceremony} active={active} onClose={() => setOpenMoment(null)} /> : null}
@@ -732,9 +795,9 @@ function SeasonHome({ hub, actions, onAction }: { hub: HubVM; actions?: Franchis
             <div className="fen-sectlab">Tonight</div>
             <div className="fen-nextgame">
               <div className="fen-mteams">
-                <div className="fen-mt"><div className="lg">{home.nextGame.awayAbbr}</div><div className="nm">{home.nextGame.awayName}</div><div className="rc">{home.nextGame.awayRecord}</div></div>
+                <div className={`fen-mt${home.nextGame.activeTeamId === home.nextGame.awayTeamId ? " you" : ""}`}><div className="lg">{home.nextGame.awayAbbr}</div><div className="nm">{home.nextGame.awayName}</div><div className="rc">{home.nextGame.awayRecord}</div></div>
                 <div className="fen-vs">@</div>
-                <div className="fen-mt you"><div className="lg">{home.nextGame.homeAbbr}</div><div className="nm">{home.nextGame.homeName}</div><div className="rc">{home.nextGame.homeRecord}</div></div>
+                <div className={`fen-mt${home.nextGame.activeTeamId === home.nextGame.homeTeamId || !home.nextGame.activeTeamId ? " you" : ""}`}><div className="lg">{home.nextGame.homeAbbr}</div><div className="nm">{home.nextGame.homeName}</div><div className="rc">{home.nextGame.homeRecord}</div></div>
               </div>
               <button
                 type="button"
@@ -1200,7 +1263,7 @@ function StandingsRacesTab({ hub, active }: { hub: HubVM; active: ActiveTeamVM }
                     <div className="fen-rnumcell soft">{r.losses}</div>
                     <div className={`fen-rnumcell${tone}`}>{pct3(r.winPct)}</div>
                     <div className="fen-rnumcell soft">{r.gamesBack === 0 ? "—" : r.gamesBack.toFixed(1)}</div>
-                    <div className="fen-rnumcell">{r.lastTenWins}-{10 - r.lastTenWins}</div>
+                    <div className="fen-rnumcell">{r.lastTenWins}-{Math.max(0, (r.lastTenGames ?? Math.min(10, r.wins + r.losses)) - r.lastTenWins)}</div>
                     <div className={`fen-rnumcell ${r.streak.type === "W" ? "stw" : "stl"}`}>{r.streak.type}{r.streak.count}</div>
                     <div className={`fen-rnumcell ${r.runDiff >= 0 ? "pos" : "neg"}`}>{r.runDiff >= 0 ? "+" : "−"}{Math.abs(r.runDiff)}</div>
                     <div className="fen-rnumcell soft">{r.home.wins}-{r.home.losses}</div>
@@ -1606,6 +1669,32 @@ function DrawerSection({ title, hint, children }: { title: string; hint?: string
   );
 }
 
+function DevelopmentLog({ entries }: { entries: DevelopmentHistoryVM[] }) {
+  return (
+    <details className="fen-dsect" data-testid="development-log">
+      <summary className="fen-sectlab">Development log <span className="lite">· {entries.length}</span></summary>
+      <div className="fen-traittl">
+        {entries.map((entry) => (
+          <div className="tl" key={entry.id}>
+            <span className="ar">{entry.kind === "rating" ? "#" : "◆"}</span>
+            <span className="tx">
+              <b>{entry.change}</b> · proposed {entry.proposed}
+              {entry.actual ? ` · actually entered ${entry.actual}` : ""}
+              <br />
+              <span className="fen-muted">
+                {entry.status}{entry.resolvedCivilDate ? ` · ${entry.resolvedCivilDate}` : ""}
+                {entry.resolvedBy ? ` · ${entry.resolvedBy}` : ""}
+              </span>
+              {entry.rejectReason ? <><br /><span>Reason: {entry.rejectReason}</span></> : null}
+              {entry.applyError ? <><br /><span>Apply error: {entry.applyError}</span></> : null}
+            </span>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 /** Best→worst, the order the user picks from. JUICED↑ … HURT↓; FIT is neutral/default. */
 const FITNESS_ORDER: FitnessState[] = ["JUICED", "FIT", "WELL", "STRAINED", "WEAK", "HURT"];
 
@@ -1617,11 +1706,26 @@ const FITNESS_ORDER: FitnessState[] = ["JUICED", "FIT", "WELL", "STRAINED", "WEA
 function FitnessPicker({ current, onSet }: { current: FitnessState; onSet: (state: FitnessState) => Promise<RosterActionResult> }) {
   const [sel, setSel] = useState<FitnessState>(current);
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => setSel(current), [current]);
   const def = FITNESS_STATES[sel];
-  const choose = (state: FitnessState) => { setSel(state); setOpen(false); void onSet(state); };
+  const choose = async (state: FitnessState) => {
+    const previous = sel;
+    setSel(state);
+    setOpen(false);
+    setError(null);
+    setBusy(true);
+    const result = await onSet(state);
+    setBusy(false);
+    if (!result.success) {
+      setSel(previous);
+      setError(result.message ?? "Could not save fitness.");
+    }
+  };
   return (
     <div className="fen-fitpick">
-      <button type="button" className="chip fen-fitpick-btn" onClick={() => setOpen((v) => !v)} aria-label="Set fitness">
+      <button type="button" className="chip fen-fitpick-btn" onClick={() => setOpen((v) => !v)} aria-label="Set fitness" disabled={busy}>
         Fitness · <span style={{ color: def.color }}>{def.emoji} {def.displayName}</span> <span className="caret">▾</span>
       </button>
       {open ? (
@@ -1629,7 +1733,7 @@ function FitnessPicker({ current, onSet }: { current: FitnessState; onSet: (stat
           {FITNESS_ORDER.map((state) => {
             const fd = FITNESS_STATES[state];
             return (
-              <button type="button" key={state} className={`fen-fitpick-opt${state === sel ? " on" : ""}`} onClick={() => choose(state)} role="option" aria-selected={state === sel}>
+              <button type="button" key={state} className={`fen-fitpick-opt${state === sel ? " on" : ""}`} onClick={() => void choose(state)} role="option" aria-selected={state === sel} disabled={busy}>
                 <span className="ic" style={{ color: fd.color }}>{fd.emoji}</span>
                 <span className="nm">{fd.displayName}</span>
                 <span className="mu">×{fd.multiplier.toFixed(2)}</span>
@@ -1638,6 +1742,7 @@ function FitnessPicker({ current, onSet }: { current: FitnessState; onSet: (stat
           })}
         </div>
       ) : null}
+      {error ? <div className="fen-cp-sub fen-r" role="alert">{error}</div> : null}
     </div>
   );
 }
@@ -1705,8 +1810,8 @@ function PlayerDrawer({ player, onClose, onSendDown, onSetFitness }: { player: P
               <div className="fen-traittl">
                 {d.traitTimeline.map((e, i) => (
                   <div className={`tl ${e.valence}`} key={i}>
-                    <span className="ar">{e.valence === "gain" ? "▲" : "▼"}</span>
-                    <span className="tx">{e.valence === "gain" ? "Earned" : "Lost"} <b>{e.trait}</b>{e.displaces ? ` (displaced ${e.displaces})` : ""}</span>
+                    <span className="ar">{e.status === "proposed" ? "○" : e.valence === "gain" ? "▲" : "▼"}</span>
+                    <span className="tx">{e.status === "proposed" ? "Proposed" : e.valence === "gain" ? "Earned" : "Lost"} <b>{e.trait}</b>{e.displaces ? ` (displaced ${e.displaces})` : ""}</span>
                     <span className="g">g{e.atGame}</span>
                   </div>
                 ))}
@@ -1759,6 +1864,8 @@ function PlayerDrawer({ player, onClose, onSendDown, onSetFitness }: { player: P
             ))}
           </DrawerSection>
         ) : null}
+
+        {d?.developmentHistory && d.developmentHistory.length ? <DevelopmentLog entries={d.developmentHistory} /> : null}
 
         {!d ? <div className="fen-empty">Full dossier fills in as the season runs.</div> : null}
       </div>
@@ -2148,12 +2255,131 @@ function TradeBuilder({
 }
 
 /* ===== Checkpoint confirmation worklist (moment-driven takeover) ===== */
-function CheckpointTakeover({ cp, onClose }: { cp: CheckpointVM; onClose: () => void }) {
-  const [done, setDone] = useState<Set<string>>(new Set());
-  const toggle = (id: string) => setDone((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const total = cp.players.length;
-  const entered = done.size;
-  const allDone = total > 0 && entered >= total;
+const TRAIT_SLOT_OPTIONS = [...CANONICAL_TRAIT_NAMES].sort((left, right) => left.localeCompare(right));
+
+interface ProposalUiState {
+  outcome?: DevelopmentResolutionResult["outcome"];
+  currentValue?: number | TraitSlotsVM;
+  message?: string;
+  retry?: true;
+}
+
+function slotsText(value: TraitSlotsVM | undefined): string {
+  if (!value) return "—";
+  return [value.trait1, value.trait2].filter(Boolean).join(" / ") || "no traits";
+}
+
+function normalizedCheckpointGroups(cp: CheckpointVM): CheckpointGroupVM[] {
+  if (cp.groups?.length) return cp.groups;
+  return [{
+    boundaryGameNumber: cp.number,
+    ordinal: cp.number,
+    ordinalCount: 5,
+    label: cp.label,
+    players: cp.players.map((player) => ({
+      ...player,
+      proposals: player.proposals ?? [
+        ...(player.ratingChanges ?? []).map((change, index): CheckpointProposalVM => ({
+          id: `legacy-rating-${player.id}-${index}`,
+          kind: "rating",
+          observedPriorValue: change.from,
+          ratingChange: change,
+        })),
+        ...(player.traitChanges ?? []).map((change, index): CheckpointProposalVM => ({
+          id: `legacy-trait-${player.id}-${index}`,
+          kind: "trait",
+          traitChange: change,
+        })),
+      ],
+    })),
+  }];
+}
+
+export function CheckpointTakeover({
+  cp,
+  onClose,
+  onResolve,
+}: {
+  cp: CheckpointVM;
+  onClose: () => void;
+  onResolve?: (request: DevelopmentResolutionRequest) => Promise<DevelopmentResolutionResult>;
+}) {
+  // Freeze the opened worklist. A service reload removes terminal rows, but a conflict receipt must
+  // remain visible in this open takeover long enough to show the newly-read current value honestly.
+  const [groups] = useState<CheckpointGroupVM[]>(() => normalizedCheckpointGroups(cp));
+  const [states, setStates] = useState<Record<string, ProposalUiState>>({});
+  const [adjustments, setAdjustments] = useState<Record<string, string>>({});
+  const [traitAdjustments, setTraitAdjustments] = useState<Record<string, TraitSlotsVM>>({});
+  const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const proposals = groups.flatMap((group) =>
+    group.players.flatMap((player) => (player.proposals ?? []).map((proposal) => ({ proposal, player }))),
+  );
+  const isComplete = (id: string) => {
+    const outcome = states[id]?.outcome;
+    return outcome === "resolved" || outcome === "recovered" || outcome === "noop";
+  };
+  const entered = proposals.filter(({ proposal }) => isComplete(proposal.id)).length;
+  const total = proposals.length;
+  const allDone = total > 0 && entered === total;
+
+  const runResolution = async (
+    proposal: CheckpointProposalVM,
+    action: DevelopmentResolutionRequest["action"],
+  ): Promise<DevelopmentResolutionResult> => {
+    if (!onResolve || proposal.observedPriorValue === undefined) {
+      const unavailable = { outcome: "error" as const, message: "The currently displayed prior value is unavailable." };
+      setStates((current) => ({ ...current, [proposal.id]: unavailable }));
+      return unavailable;
+    }
+    const traitDraft = proposal.kind === "trait"
+      ? traitAdjustments[proposal.id] ?? proposal.traitChange?.to ?? proposal.traitChange?.from
+      : undefined;
+    const ratingDraft = adjustments[proposal.id] ?? String(proposal.ratingChange?.to ?? "");
+    const actualValue = action === "confirm-adjusted"
+      ? proposal.kind === "rating"
+        ? Number(ratingDraft)
+        : traitDraft
+      : undefined;
+    setBusyId(proposal.id);
+    const result = await onResolve({
+      proposalId: proposal.id,
+      kind: proposal.kind,
+      action,
+      observedPriorValue: proposal.observedPriorValue,
+      actualValue,
+      rejectReason: rejectReasons[proposal.id],
+    });
+    setBusyId(null);
+    setStates((current) => ({
+      ...current,
+      [proposal.id]: {
+        outcome: result.outcome,
+        currentValue: result.currentValue,
+        message: result.outcome === "conflict"
+          ? "changed underneath — showing current value"
+          : result.message,
+        ...(result.outcome === "apply-failed" ? { retry: true as const } : {}),
+      },
+    }));
+    return result;
+  };
+
+  const markAllEntered = async () => {
+    const remaining = proposals.filter(({ proposal }) => !isComplete(proposal.id) && states[proposal.id]?.outcome !== "conflict");
+    setBatchProgress({ current: 0, total: remaining.length });
+    for (let index = 0; index < remaining.length; index += 1) {
+      const { proposal } = remaining[index];
+      setBatchProgress({ current: index + 1, total: remaining.length });
+      const retry = proposal.retry || states[proposal.id]?.retry;
+      const result = await runResolution(proposal, retry ? "retry" : "confirm");
+      if (result.outcome !== "resolved" && result.outcome !== "recovered" && result.outcome !== "noop") break;
+    }
+    setBatchProgress(null);
+  };
+
   return (
     <div className="fen-cp" role="dialog" aria-label={cp.label}>
       <div className="fen-cp-panel fen-aged">
@@ -2161,49 +2387,92 @@ function CheckpointTakeover({ cp, onClose }: { cp: CheckpointVM; onClose: () => 
           <div className="fen-cp-head">
             <div>
               <div className="fen-cp-kick">⚠ The league just shifted</div>
-              <h2 className="fen-chalk fen-y">{cp.label}</h2>
-              <div className="fen-cp-sub">Type each <b>new number</b> into SMB4, then check the player off. {cp.pctLabel ? `Fired at ${cp.pctLabel}.` : ""}</div>
+              <h2 className="fen-chalk fen-y">Development worklist</h2>
+              <div className="fen-cp-sub">Record what SMB4 actually accepted. Every proposal gets its own durable receipt.</div>
             </div>
             <button type="button" className="fen-cp-x" onClick={onClose} aria-label="Close">×</button>
           </div>
           <div className="fen-cp-prog">
             <span className="bar"><span className="fill" style={{ width: `${total ? Math.round((entered / total) * 100) : 0}%` }} /></span>
-            <span className="lab fen-chalk">{entered} of {total} entered</span>
+            <span className="lab fen-chalk">{batchProgress ? `Marking ${batchProgress.current} of ${batchProgress.total}` : `${entered} of ${total} entered`}</span>
           </div>
-          <div className="fen-cp-grid">
-            {cp.players.map((pl) => {
-              const ok = done.has(pl.id);
-              return (
-                <div className={`fen-cp-card${ok ? " ok" : ""}`} key={pl.id}>
-                  <div className="ph">
-                    <span className="pos">{pl.position}</span>
-                    <span className="nm fen-chalk">{pl.name}</span>
-                    <button type="button" className={`chk${ok ? " on" : ""}`} onClick={() => toggle(pl.id)}>{ok ? "✓ entered" : "mark entered"}</button>
+          {groups.map((group) => (
+            <section key={`${group.boundaryGameNumber}-${group.ordinal}`} data-testid="checkpoint-group">
+              <div className="fen-sectlab">
+                {group.label}
+                {group.stalePlan ? <span className="lite fen-r"> · from an earlier schedule</span> : null}
+              </div>
+              <div className="fen-cp-grid">
+                {group.players.map((player) => (
+                  <div className="fen-cp-card" key={`${group.label}-${player.id}`}>
+                    <div className="ph"><span className="pos">{player.position}</span><span className="nm fen-chalk">{player.name}</span></div>
+                    <div className="changes">
+                      {(player.proposals ?? []).map((proposal) => {
+                        const state = states[proposal.id];
+                        const retry = proposal.retry || state?.retry;
+                        const terminal = isComplete(proposal.id) || state?.outcome === "conflict";
+                        const traitDraft = traitAdjustments[proposal.id] ?? proposal.traitChange?.to ?? proposal.traitChange?.from ?? { trait1: null, trait2: null };
+                        const currentDisplay = state?.currentValue;
+                        return (
+                          <div className={proposal.kind === "rating" ? "rc" : `tc ${proposal.traitChange?.valence ?? ""}`} key={proposal.id} data-testid={`proposal-${proposal.id}`}>
+                            <div style={{ flex: 1 }}>
+                              {proposal.kind === "rating" ? (
+                                <>
+                                  <span className="rl">{proposal.ratingChange?.label}</span>{" "}
+                                  <span className="rf">{typeof currentDisplay === "number" ? currentDisplay : proposal.ratingChange?.from ?? "—"}</span>
+                                  <span className="ar"> → </span><span className="rt fen-y">{proposal.ratingChange?.to ?? "—"}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="ar">{proposal.traitChange?.valence === "gain" ? "＋" : "－"}</span>{" "}
+                                  <span>{proposal.traitChange?.valence === "gain" ? "Gain" : "Lose"} <b className="fen-y">{proposal.traitChange?.trait}</b></span>
+                                  <div className="fen-muted">{slotsText(typeof currentDisplay === "object" ? currentDisplay : proposal.traitChange?.from)} → {slotsText(proposal.traitChange?.to)}</div>
+                                </>
+                              )}
+                              {state?.message ? <div className="fen-cp-sub fen-r" role="status">{state.message}</div> : null}
+                              {isComplete(proposal.id) ? <div className="fen-cp-sub fen-y">✓ receipt saved</div> : null}
+                            </div>
+                            {!terminal ? (
+                              <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
+                                {retry ? (
+                                  <button type="button" className="chk" disabled={busyId !== null} onClick={() => void runResolution(proposal, "retry")}>Retry apply</button>
+                                ) : (
+                                  <>
+                                    <button type="button" className="chk" disabled={busyId !== null || !onResolve} onClick={() => void runResolution(proposal, "confirm")}>Entered in SMB4 as proposed</button>
+                                    {proposal.kind === "rating" ? (
+                                      <label className="fen-cp-sub">Actually accepted
+                                        <input aria-label={`${proposal.ratingChange?.label ?? "Rating"} actual value`} type="number" value={adjustments[proposal.id] ?? String(proposal.ratingChange?.to ?? "")} onChange={(event) => setAdjustments((current) => ({ ...current, [proposal.id]: event.target.value }))} />
+                                      </label>
+                                    ) : (
+                                      <div className="fen-cp-sub">
+                                        {(["trait1", "trait2"] as const).map((slot, index) => (
+                                          <label key={slot}>Actual slot {index + 1}
+                                            <select aria-label={`Actual trait slot ${index + 1}`} value={traitDraft[slot] ?? ""} onChange={(event) => setTraitAdjustments((current) => ({ ...current, [proposal.id]: { ...traitDraft, [slot]: event.target.value || null } }))}>
+                                              <option value="">None</option>
+                                              {TRAIT_SLOT_OPTIONS.map((trait) => <option key={trait} value={trait}>{trait}</option>)}
+                                            </select>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <button type="button" className="chk" disabled={busyId !== null || !onResolve} onClick={() => void runResolution(proposal, "confirm-adjusted")}>Adjust to actual</button>
+                                    <input aria-label={`Reject reason for ${proposal.id}`} placeholder="Short rejection reason" value={rejectReasons[proposal.id] ?? ""} onChange={(event) => setRejectReasons((current) => ({ ...current, [proposal.id]: event.target.value }))} />
+                                    <button type="button" className="chk" disabled={busyId !== null || !onResolve || !(rejectReasons[proposal.id]?.trim())} onClick={() => void runResolution(proposal, "reject")}>Reject proposal</button>
+                                  </>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="changes">
-                    {pl.ratingChanges.map((r, i) => {
-                      const d = r.to - r.from;
-                      return (
-                        <div className="rc" key={i}>
-                          <span className="rl">{r.label}</span>
-                          <span className="rf">{r.from}</span><span className="ar">→</span><span className="rt fen-y">{r.to}</span>
-                          <span className={`dl ${d >= 0 ? "up" : "dn"}`}>{d >= 0 ? "▲" : "▼"}{Math.abs(d)}</span>
-                        </div>
-                      );
-                    })}
-                    {pl.traitChanges.map((t, i) => (
-                      <div className={`tc ${t.valence}`} key={i}>
-                        <span className="ar">{t.valence === "gain" ? "＋" : "－"}</span>
-                        <span>{t.valence === "gain" ? "Gain" : "Lose"} <b className={t.valence === "gain" ? "fen-y" : ""}>{t.trait}</b>{t.displaces ? ` (replaces ${t.displaces})` : ""}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                ))}
+              </div>
+            </section>
+          ))}
           <div className="fen-cp-foot">
-            <button type="button" className="fen-cp-allbtn" onClick={() => setDone(new Set(cp.players.map((p) => p.id)))}>Mark all entered</button>
+            <button type="button" className="fen-cp-allbtn" disabled={busyId !== null || !onResolve || allDone} onClick={() => void markAllEntered()}>Mark all entered</button>
             <button type="button" className="fen-cp-donebtn" onClick={onClose}>{allDone ? "All set — close" : "Close for now"}</button>
           </div>
         </div>

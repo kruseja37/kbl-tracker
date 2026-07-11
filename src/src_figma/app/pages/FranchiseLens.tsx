@@ -61,6 +61,7 @@ export function FranchiseLens() {
     sendDown,
     executeTrade,
     setFitness,
+    resolveDevelopment,
   } =
     useFranchiseLensData(franchiseId, seasonNumber, viewedTeamId);
   const leagueId = franchiseConfig?.league ?? hub.lineups?.leagueId ?? "sml";
@@ -374,6 +375,7 @@ export function FranchiseLens() {
           onSendDown: sendDown,
           onExecuteTrade: executeTrade,
           onSetFitness: setFitness,
+          onResolveDevelopment: resolveDevelopment,
           onScoreGame: handleScoreGame,
           onScoreOnlyGame: openScoreOnlyModal,
           onSkipGame: openSkipConfirm,

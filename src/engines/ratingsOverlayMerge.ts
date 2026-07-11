@@ -48,6 +48,7 @@ export function resolveActiveOverlayDeltas(
   for (const overlay of overlays) {
     if (
       overlay.confirmationStatus !== 'confirmed' ||
+      overlay.applied === true ||
       !isOverlayActive(overlay, currentGameNumber)
     ) {
       continue;
