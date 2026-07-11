@@ -77,3 +77,147 @@ LeagueBuilderDraftSetup, franchiseManualSmokeFixture — verify solo if red).
 No git write commands (captain cuts commits). UNKNOWN/surprise = STOP and report.
 Builder report appended to this file: what was built (file:line), REAL gate outputs,
 STOPs, what the auditor should attack first.
+
+---
+
+## BUILDER REPORT — Codex S1B (2026-07-10) — BLOCKED
+
+### Outcome
+
+**BLOCKED by a contract-level UNKNOWN.** I stopped before the ordered gate sequence and
+did not run any git write command. The partial tree is intentionally dirty for the
+captain to inspect or amend. No auction page/flow/component, `src/engines/*`,
+`leagueBuilderStorage.ts`, S2-owned component, sound, or room file was edited.
+
+### Partial build present in the tree
+
+- A new four-card setup page is present at
+  `src/src_figma/app/pages/SnakeDraftSetup.tsx:28-389`: source-league pool selection,
+  source-identity-threaded version grouping, version picker, hand removal, S1a seating
+  proof rendering, expandable club rows, visible seeded shuffle, tap-two swap, snake
+  preview/turn callouts, revision-safe `CHECKING…`, and a draft-session creation attempt.
+- N1 is wired at `SnakeDraftSetup.tsx:62-98,111-121,203-244`: carried `sourceId` reaches
+  `deriveVersionGroupId`; stripped same-name cards show the contract's loud warning and
+  emit `console.warn`.
+- The default-OFF v1 flag is in `src/utils/franchisePhase2Flags.ts:160-172`; the guarded
+  `/snake-setup` route and required S2 merge comment are in `src/App.tsx:409-412`.
+- Spec-first component coverage is in
+  `src/src_figma/__tests__/pages/SnakeDraftSetup.test.tsx`; the default-OFF route check is
+  in `SnakeDraftSetup.route.test.tsx`.
+
+### Spec-first red evidence
+
+The owned test was run before the page existed:
+
+```text
+ RUN  v4.0.18 /private/tmp/kbl-s1b
+
+ ❯ src/src_figma/__tests__/pages/SnakeDraftSetup.test.tsx (0 test)
+
+ FAIL  src/src_figma/__tests__/pages/SnakeDraftSetup.test.tsx
+Error: Failed to resolve import "../../app/pages/SnakeDraftSetup"
+
+ Test Files  1 failed (1)
+      Tests  no tests
+```
+
+### Verification completed before the STOP
+
+Focused owned tests plus the bare TypeScript check were run together. The test output was:
+
+```text
+ RUN  v4.0.18 /private/tmp/kbl-s1b
+
+ ✓ src/src_figma/__tests__/pages/SnakeDraftSetup.route.test.tsx (1 test) 410ms
+ ✓ src/src_figma/__tests__/pages/SnakeDraftSetup.test.tsx (5 tests) 307ms
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  18:06:02
+   Duration  1.98s (transform 1.11s, setup 94ms, import 1.50s, tests 717ms, environment 604ms)
+```
+
+The following `npx tsc --noEmit` in the same `&&` command exited 0 with no output.
+
+The formal Gate 1→5 sequence was **not** started after the STOP. Therefore there is no
+build, auction-28, or full-suite claim in this report.
+
+### Binding STOP / UNKNOWN
+
+`LeagueBuilderMlbDraftSession` has no S1b setup fields for:
+
+- selected pool player IDs / selected version card per human;
+- club GM name;
+- companion-vs-hotseat declaration;
+- locked team archetype.
+
+The partial GO handler at `SnakeDraftSetup.tsx:282-305` can persist only seed, pick order,
+and the pre-existing S1a session fields. Proceeding would silently throw away Card 1's
+version/pool decisions and Card 2's room decisions before navigation. Adding those fields
+requires an additive edit to `src/utils/leagueBuilderStorage.ts` and a session-model ruling;
+that file is outside S1b's owned surface, and the contract says engines/session foundations
+are done. Encoding them into an unrelated existing field would be improvisation.
+
+The stored `Player` interface also does not guarantee the historical adapter's `sourceId`.
+The partial page correctly threads it when carried and warns loudly when stripped, but a
+durable adapter-to-storage handoff remains dependent on the captain's intended source path.
+
+### Captain decision needed before resume
+
+Amend S1a/S1b authority with the exact additive session fields (and ownership for the
+storage edit), or name the already-existing durable record that S2 will read for all four
+setup decisions. Once resolved, the builder should first add a GO-persistence test proving
+that S2 receives the chosen version/pool and club declarations, then finish hand add/remove,
+run Gates 1→5 in order, and replace this BLOCKED report with final evidence.
+
+### Auditor / captain: attack first
+
+1. Confirm the setup-to-room data contract; do not accept a session that preserves only
+   order and seed.
+2. Confirm the historical adapter source identity survives into the actual stored pool,
+   not only injected component fixtures.
+3. Review the partial REMOVE behavior before continuation: it currently removes the first
+   card in a rendered group and the hand-ADD restore surface is not yet implemented.
+4. Re-run all ordered gates only after the authority amendment; no auction-preservation or
+   full-suite evidence exists for this blocked partial tree.
+
+---
+
+## AMENDMENT 2 (captain ruling on the STOP, 2026-07-10) — the setup record
+
+The STOP is upheld: the session must durably carry all four setup decisions. Ruling:
+
+1. OWNERSHIP GRANT: S1b may make ONE additive-only edit to
+   `src/utils/leagueBuilderStorage.ts` — extend `LeagueBuilderMlbDraftSession` with a
+   single new OPTIONAL field. No store renames, no DB version change, no edits to any
+   existing field or its semantics. (The concurrent S2 lane is forbidden from this file,
+   so the partition holds.)
+2. THE FIELD (exact shape; keep names):
+   ```ts
+   snakeSetup?: {
+     /** Final trimmed pool: the chosen version card per human, plus all non-versioned picks. */
+     poolPlayerIds: string[];
+     /** versionGroupId -> chosen playerId (only groups with >1 card). */
+     versionSelections: Record<string, string>;
+     /** Per seat, locked at GO. */
+     clubs: Array<{
+       teamId: string;
+       gmName?: string;
+       hotseat: boolean;          // companion-vs-hotseat declaration
+       archetypeId?: string;      // the LOCKED-at-GO archetype (rational room input)
+     }>;
+     /** The visible shuffle seed shown on the ORDER card. */
+     orderSeed: string;
+   }
+   ```
+3. GO writes it atomically with the session creation; it is the setup→room data
+   contract. Downstream (S2/S3) reads locked archetypes and hotseat declarations from
+   here — never from live league state (locked means locked).
+4. Required new test: GO-persistence — create a session through the real storage path
+   and assert a reader gets back the full snakeSetup record (pool, versions, clubs,
+   seed) plus the S1a fields.
+5. sourceId durability: keep the current thread-it-through + loud-warning behavior;
+   the durable adapter-to-storage handoff is EXPLICITLY deferred to the legends-library
+   thread (do not widen Player storage here). Note it in your report.
+6. Then: finish REMOVE/hand-ADD per the report's own note 3, and run Gates 1→5 in
+   order, replacing the BLOCKED report with final evidence.
