@@ -188,3 +188,14 @@ describe('SnakeDraftRoomView', () => {
     expect(oscillator.start).toHaveBeenCalledTimes(8);
   });
 });
+
+describe('companion approval room tool (S5 mount stitch)', () => {
+  it('opens the companion approval surface from the COMPANIONS button and never renders it unbidden', () => {
+    const { unmount } = render(<SnakeDraftRoomView {...props({ companionApproval: <div>APPROVAL-SURFACE</div> })} />);
+    expect(screen.queryByText('APPROVAL-SURFACE')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANIONS' }));
+    expect(screen.getByText('APPROVAL-SURFACE')).toBeInTheDocument();
+    expect(screen.getByText('COMPANION DEVICES')).toBeInTheDocument();
+    unmount();
+  });
+});

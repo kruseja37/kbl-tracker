@@ -61,6 +61,7 @@ export interface SnakeDraftRoomViewProps {
   privateDesk?: ReactNode;
   tradeGuide?: ReactNode;
   commissionerTrade?: ReactNode;
+  companionApproval?: ReactNode;
   onPauseChange: (paused: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
@@ -76,7 +77,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const [state, dispatch] = useReducer(snakeRoomReducer, props.paused, createSnakeRoomState);
   const [lensId, setLensId] = useState(props.activeSeatId ?? props.teams[0]?.id ?? null);
   const [passCoverOpen, setPassCoverOpen] = useState(Boolean(props.hotseatNextName));
-  const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | null>(null);
+  const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | 'COMPANIONS' | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedHold = useRef(false);
   const stateRef = useRef(state);
@@ -214,16 +215,17 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           </button>
           {props.tradeGuide && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'GUIDE' ? null : 'GUIDE')}>THE GUIDE</button>}
           {props.commissionerTrade && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'TRADE' ? null : 'TRADE')}>TRADE</button>}
+          {props.companionApproval && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool((current) => current === 'COMPANIONS' ? null : 'COMPANIONS')}>COMPANIONS</button>}
         </div>
       </header>
 
       {openRoomTool && (
-        <section className="ballpark-panel mb-5" aria-label={openRoomTool === 'GUIDE' ? 'Shared trade guide' : 'Commissioner trade flow'}>
+        <section className="ballpark-panel mb-5" aria-label={openRoomTool === 'GUIDE' ? 'Shared trade guide' : openRoomTool === 'TRADE' ? 'Commissioner trade flow' : 'Companion device approval'}>
           <div className="ballpark-panel-strip mb-4 flex items-center justify-between">
-            <span className="font-bold">{openRoomTool === 'GUIDE' ? 'THE GUIDE' : 'COMMISSIONER TRADE'}</span>
+            <span className="font-bold">{openRoomTool === 'GUIDE' ? 'THE GUIDE' : openRoomTool === 'TRADE' ? 'COMMISSIONER TRADE' : 'COMPANION DEVICES'}</span>
             <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setOpenRoomTool(null)}>CLOSE</button>
           </div>
-          {openRoomTool === 'GUIDE' ? props.tradeGuide : props.commissionerTrade}
+          {openRoomTool === 'GUIDE' ? props.tradeGuide : openRoomTool === 'TRADE' ? props.commissionerTrade : props.companionApproval}
         </section>
       )}
 

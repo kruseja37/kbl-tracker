@@ -47,6 +47,7 @@ import {
 import type { DeskWhatIf } from '../components/snake/desk/WhatIfSandbox';
 import type { SnakeBoardSlotId, SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
+import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
 import {
   executeAskedPickTrade,
@@ -875,6 +876,11 @@ function MlbSnakeDraftRoom() {
         sessionRevision={session.revision ?? 0}
         onAsk={askTradeGuide}
         onExecute={executeTrade}
+      />}
+      companionApproval={<CompanionApprovalCard
+        session={session}
+        teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+        onChange={(next) => void persist(next)}
       />}
       onPauseChange={(paused) => void setPaused(paused)}
       onRecordPick={recordPick}
