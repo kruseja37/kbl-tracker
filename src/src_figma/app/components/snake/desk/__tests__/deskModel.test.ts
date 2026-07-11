@@ -125,3 +125,43 @@ describe('private desk model', () => {
     expect(rows.map((row) => row.label).join(' ')).not.toMatch(/\bCP\b/);
   });
 });
+
+describe('tax-core explainer matches the settled single-assignment grouping (TAXSWING seam)', () => {
+  it('never names a swing arm in the rotation rows when four pure starters are on the board', () => {
+    const board = [
+      ...['SP-A', 'SP-B', 'SP-C', 'SP-D'].map((id) => candidate(id, 'SP', 500)),
+      candidate('SWING-ELITE', 'SP/RP', 999),
+      candidate('RP-1', 'RP', 400),
+    ];
+    const rows = buildTaxCoreRows({
+      candidates: board,
+      boardPlayerIds: board.map((row) => row.id),
+      caps: [
+        { group: 'rotation', stat: 'VEL', topN: 4, cap: 200, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0 },
+        { group: 'bullpen', stat: 'VEL', topN: 4, cap: 200, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0 },
+      ],
+    });
+    const rotation = rows.find((row) => row.key === 'rotation:VEL')!;
+    const bullpen = rows.find((row) => row.key === 'bullpen:VEL')!;
+    expect(rotation.playerNames).not.toContain('SWING-ELITE');
+    expect(bullpen.playerNames).toContain('SWING-ELITE');
+  });
+
+  it('promotes a swing arm into the rotation rows only to fill a real shortfall', () => {
+    const board = [
+      ...['SP-A', 'SP-B', 'SP-C'].map((id) => candidate(id, 'SP', 500)),
+      candidate('SWING-ELITE', 'SP/RP', 999),
+      candidate('RP-1', 'RP', 400),
+    ];
+    const rows = buildTaxCoreRows({
+      candidates: board,
+      boardPlayerIds: board.map((row) => row.id),
+      caps: [
+        { group: 'rotation', stat: 'VEL', topN: 4, cap: 200, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0 },
+        { group: 'bullpen', stat: 'VEL', topN: 4, cap: 200, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0 },
+      ],
+    });
+    expect(rows.find((row) => row.key === 'rotation:VEL')!.playerNames).toContain('SWING-ELITE');
+    expect(rows.find((row) => row.key === 'bullpen:VEL')!.playerNames).not.toContain('SWING-ELITE');
+  });
+});

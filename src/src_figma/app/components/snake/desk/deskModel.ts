@@ -1,6 +1,9 @@
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
-import type { ConstructionPlayer } from '../../../../../engines/leagueConstruction';
+import {
+  assignLuxuryTaxPitchingGroups,
+  type ConstructionPlayer,
+} from '../../../../../engines/leagueConstruction';
 import type { SnakeRiskRead } from '../../../../../engines/snakeRationalRoom';
 import {
   SNAKE_BOARD_SLOT_IDS,
@@ -201,11 +204,9 @@ function rating(player: ConstructionPlayer, stat: LuxuryCapRow['stat']): number 
   return player.bat[stat];
 }
 
-function belongs(player: ConstructionPlayer, group: LuxuryCapRow['group']): boolean {
-  if (group === 'hitters') return !player.isPitcher;
-  if (group === 'rotation') return player.isPitcher && (player.role === 'SP' || player.role === 'SP/RP');
-  return player.isPitcher && (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP');
-}
+// The explainer names arms exactly the way the settled tax groups them
+// (assignLuxuryTaxPitchingGroups — TAXSWING single assignment; a swing arm is never
+// listed in both groups).
 
 function statWord(stat: LuxuryCapRow['stat']): string {
   return ({ POW: 'POWER', CON: 'CONTACT', SPD: 'SPEED', FLD: 'FIELDING', ARM: 'ARM', VEL: 'VELOCITY', JNK: 'JUNK', ACC: 'ACCURACY' })[stat];
@@ -218,10 +219,18 @@ export function buildTaxCoreRows(input: {
 }): TaxCoreRow[] {
   const boardIds = new Set(input.boardPlayerIds);
   const players = input.candidates.filter((candidate) => boardIds.has(candidate.id));
+  const pitchingGroups = assignLuxuryTaxPitchingGroups(players.map((candidate) => candidate.construction));
+  const rotationIds = new Set(pitchingGroups.rotation.map((player) => player.id));
+  const bullpenIds = new Set(pitchingGroups.bullpen.map((player) => player.id));
+  const inGroup = (player: ConstructionPlayer, group: LuxuryCapRow['group']): boolean => {
+    if (group === 'hitters') return !player.isPitcher;
+    if (group === 'rotation') return rotationIds.has(player.id);
+    return bullpenIds.has(player.id);
+  };
   return input.caps.map((cap) => {
     const groupWord = cap.group === 'hitters' ? 'HITTERS' : cap.group === 'rotation' ? 'STARTERS' : 'BULLPEN ARMS';
     const core = players
-      .filter((candidate) => belongs(candidate.construction, cap.group))
+      .filter((candidate) => inGroup(candidate.construction, cap.group))
       .sort((left, right) => rating(right.construction, cap.stat) - rating(left.construction, cap.stat) || left.id.localeCompare(right.id))
       .slice(0, cap.topN);
     return {
