@@ -305,7 +305,7 @@ describe('franchise console mirror service', () => {
     });
   });
 
-  test('a compare-and-set race is recorded as conflict without overwriting the concurrent player value', async () => {
+  test('a compare-and-set race is recorded as a terminal conflict without overwriting the concurrent player value', async () => {
     const player = makePlayer({ id: 'player-cas-race', power: 50 });
     const pending = ratingsOverlay({ playerId: player.id });
     await saveFranchisePlayer(franchiseId, player);
@@ -329,9 +329,13 @@ describe('franchise console mirror service', () => {
       overlay: { confirmationStatus: 'conflict', applied: false },
     });
     expect((await getFranchisePlayer(franchiseId, player.id))?.power).toBe(61);
+
+    const repeated = await resolveRatingsProposal(pending.id, { action: 'confirm' });
+    expect(repeated).toEqual({ outcome: 'noop', overlay: result.overlay });
+    expect((await getFranchisePlayer(franchiseId, player.id))?.power).toBe(61);
   });
 
-  test('a proven player-write failure is durable and stores only a bounded error', async () => {
+  test('a proven player-write failure is listed and a successful retry confirms the original intent', async () => {
     const player = makePlayer({ id: 'player-write-failure', power: 50 });
     const pending = ratingsOverlay({ playerId: player.id });
     await saveFranchisePlayer(franchiseId, player);
@@ -355,6 +359,69 @@ describe('franchise console mirror service', () => {
     });
     expect(result.overlay.applyError).toHaveLength(240);
     expect((await getFranchisePlayer(franchiseId, player.id))?.power).toBe(50);
+
+    const groups = await listUnresolvedDevelopment(franchiseId, seasonId);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      boundaryGameNumber: 24,
+      ordinal: 2,
+      proposals: [{
+        kind: 'rating',
+        retry: true,
+        overlay: { id: pending.id, confirmationStatus: 'apply-failed' },
+      }],
+    });
+
+    franchiseConsoleMirrorSeam.compareAndSetFranchisePlayer = originalSeam.compareAndSetFranchisePlayer;
+    const retried = await resolveRatingsProposal(pending.id, { action: 'confirm' });
+
+    expect(retried).toMatchObject({
+      outcome: 'recovered',
+      expectedPriorValue: 50,
+      currentValue: 55,
+      overlay: {
+        confirmationStatus: 'confirmed-applied',
+        applied: true,
+        expectedPriorValue: 50,
+        proposedValue: 55,
+        actualEnteredValue: 55,
+        applyError: undefined,
+      },
+    });
+    expect((await getFranchisePlayer(franchiseId, player.id))?.power).toBe(55);
+    expect(await listUnresolvedDevelopment(franchiseId, seasonId)).toEqual([]);
+  });
+
+  test('retrying an apply-failed proposal conflicts honestly when the player value moved', async () => {
+    const player = makePlayer({ id: 'player-retry-conflict', power: 50 });
+    const pending = ratingsOverlay({ playerId: player.id });
+    await saveFranchisePlayer(franchiseId, player);
+    await putFranchiseRatingsOverlay(pending);
+    franchiseConsoleMirrorSeam.compareAndSetFranchisePlayer = vi.fn(async () => {
+      throw new Error('first player write failed');
+    });
+
+    const failed = await resolveRatingsProposal(pending.id, {
+      action: 'confirm',
+      observedPriorValue: 50,
+    });
+    expect(failed.overlay.confirmationStatus).toBe('apply-failed');
+
+    await saveFranchisePlayer(franchiseId, { ...player, power: 61 });
+    franchiseConsoleMirrorSeam.compareAndSetFranchisePlayer = originalSeam.compareAndSetFranchisePlayer;
+    const retried = await resolveRatingsProposal(pending.id, { action: 'confirm' });
+
+    expect(retried).toMatchObject({
+      outcome: 'conflict',
+      expectedPriorValue: 50,
+      currentValue: 61,
+      overlay: {
+        confirmationStatus: 'conflict',
+        applied: false,
+        actualEnteredValue: 55,
+      },
+    });
+    expect((await getFranchisePlayer(franchiseId, player.id))?.power).toBe(61);
   });
 
   test('re-resolving a terminal row is an idempotent no-op', async () => {
