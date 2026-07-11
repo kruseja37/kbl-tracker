@@ -12,6 +12,7 @@ import {
   classifyFameVsMerit,
   createIconicEventFameInput,
   getBaseIconicFameValue,
+  heatToFameTier,
   resolveFameTier,
   updateReachFloor,
   warPercentileToMeritLevel,
@@ -39,12 +40,40 @@ describe('fameModel L6a pure engine', () => {
 
   test('reach ratchets up and never erodes in-season', () => {
     const localFloor = updateReachFloor(FAME_TIER_RANK.UNKNOWN, 4);
-    const nationalFloor = updateReachFloor(localFloor, 18);
-    const stillNational = updateReachFloor(nationalFloor, 1);
+    const stillLocal = updateReachFloor(localFloor, 1);
 
     expect(localFloor).toBe(FAME_TIER_RANK.LOCAL_HERO);
-    expect(nationalFloor).toBe(FAME_TIER_RANK.NATIONAL_ICON);
-    expect(stillNational).toBe(FAME_TIER_RANK.NATIONAL_ICON);
+    expect(stillLocal).toBe(FAME_TIER_RANK.LOCAL_HERO);
+  });
+
+  test('DESPISED Heat does not raise the positive reach floor', () => {
+    expect(updateReachFloor(FAME_TIER_RANK.UNKNOWN, -18)).toBe(FAME_TIER_RANK.UNKNOWN);
+  });
+
+  test('POLARIZING Heat does not raise the positive reach floor', () => {
+    expect(updateReachFloor(FAME_TIER_RANK.UNKNOWN, -3)).toBe(FAME_TIER_RANK.UNKNOWN);
+  });
+
+  test('NATIONAL_ICON Heat ratchets the positive reach floor to rank 3', () => {
+    expect(updateReachFloor(FAME_TIER_RANK.UNKNOWN, 18)).toBe(FAME_TIER_RANK.NATIONAL_ICON);
+  });
+
+  test('a formerly DESPISED player cooling to UNKNOWN stays UNKNOWN with negative history preserved', () => {
+    const despisedRecord: FameModelRecord = {
+      heat: -18,
+      reachFloor: updateReachFloor(FAME_TIER_RANK.UNKNOWN, -18),
+      wasNegative: true,
+    };
+    const cooledRecord: FameModelRecord = {
+      ...despisedRecord,
+      heat: 0,
+      reachFloor: updateReachFloor(despisedRecord.reachFloor, 0),
+    };
+
+    expect(cooledRecord.wasNegative).toBe(true);
+    expect(resolveFameTier(cooledRecord.heat, cooledRecord.reachFloor)).toBe(
+      heatToFameTier(cooledRecord.heat),
+    );
   });
 
   test('display tier is Heat floored at Reach', () => {

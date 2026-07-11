@@ -212,6 +212,11 @@ export function heatToFameTier(heat: number, config: FameTuning = FAME_TUNING): 
   return 'DESPISED';
 }
 
+/**
+ * Ratchets reach to the highest positive fame tier ever reached.
+ * Negative notoriety never raises the floor; callers preserve it via `wasNegative`.
+ * JK ruling R-A (2026-07-11).
+ */
 export function updateReachFloor(
   currentReachFloor: number,
   heat: number,
@@ -223,8 +228,7 @@ export function updateReachFloor(
     return currentReachFloor;
   }
 
-  const reachedMagnitude = Math.abs(heatRank);
-  return Math.max(currentReachFloor, reachedMagnitude);
+  return Math.max(currentReachFloor, Math.max(0, heatRank));
 }
 
 export function resolveFameTier(
