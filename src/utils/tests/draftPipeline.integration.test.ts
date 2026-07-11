@@ -33,6 +33,7 @@ import {
   buildAuctionPlayers,
   buildAuctionTeams,
   commitCompletedFarmAuctionSessionToLeagueRosters,
+  commitCompletedSnakeFarmSessionToLeagueRosters,
   commitCompletedMlbAuctionSessionToLeagueRosters,
   commitCompletedSnakeSessionToLeagueRosters,
   MLB_AUCTION_SEASON,
@@ -2157,6 +2158,67 @@ describe('draft pipeline integration', () => {
       settledSalary: 234_567,
       leagueAssignments: [{ leagueId, teamId: teamIds[1], rosterStatus: 'MLB' }],
     });
+  });
+
+  test('S6 commits a completed farm snake with the frozen absolute-slot salaries', async () => {
+    const leagueId = 'snake-farm-commit';
+    const teamIds = ['farm-a', 'farm-b'];
+    for (const teamId of teamIds) {
+      await saveTeam(makeCommitRegressionTeam(teamId, leagueId, teamId === teamIds[0] ? 'human' : 'ai'));
+      await saveTeamRoster(createEmptyTeamRoster(teamId));
+    }
+    const built = buildFarmAuctionSession({
+      leagueId,
+      teams: teamIds.map((teamId) => ({ teamId })),
+      seed: 'snake-farm-commit-seed',
+      poolMultiplier: 1,
+    });
+    const chosen = built.pool.prospects.slice(0, 2);
+    const session = {
+      id: createMlbDraftSessionId(leagueId, 1),
+      leagueId,
+      seasonNumber: 1,
+      seed: 'snake-farm-commit-seed',
+      workflowVersion: 'snake-v1-farm',
+      engineMethodVersion: 'snake-s6',
+      tier: 'standard' as const,
+      balanceMode: 'taxed' as const,
+      rounds: 1,
+      draftPhase: 'FARM' as const,
+      farmSlotSalaries: [30_000, 10_000],
+      pickOrder: [
+        { round: 1, pick: 1, teamId: teamIds[0] },
+        { round: 1, pick: 2, teamId: teamIds[1] },
+      ],
+      completedPicks: [
+        { round: 1, pick: 1, teamId: teamIds[0], playerId: chosen[0].id, settledSalary: 30_000 },
+        { round: 1, pick: 2, teamId: teamIds[1], playerId: chosen[1].id, settledSalary: 10_000 },
+      ],
+      currentPickIndex: 2,
+      createdDate: '2026-07-10',
+      lastModified: '2026-07-10',
+    };
+
+    const report = await commitCompletedSnakeFarmSessionToLeagueRosters({
+      leagueId,
+      session,
+      pool: built.pool,
+    });
+
+    expect(report).toEqual({
+      leagueId,
+      rosterStatus: 'FARM',
+      committedPlayerIds: chosen.map((prospect) => prospect.id),
+      teamRosterCounts: { [teamIds[0]]: 1, [teamIds[1]]: 1 },
+    });
+    await expect(getTeamRoster(teamIds[0])).resolves.toMatchObject({ farmRoster: [chosen[0].id] });
+    await expect(getTeamRoster(teamIds[1])).resolves.toMatchObject({ farmRoster: [chosen[1].id] });
+    await expect(getPlayer(chosen[0].id)).resolves.toMatchObject({
+      salary: 30_000,
+      settledSalary: 30_000,
+      ratingRevealState: 'hidden',
+    });
+    await expect(getPlayer(chosen[1].id)).resolves.toMatchObject({ salary: 10_000, settledSalary: 10_000 });
   });
 
   test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {

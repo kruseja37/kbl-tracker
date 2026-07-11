@@ -380,6 +380,10 @@ export interface LeagueBuilderMlbDraftSession {
   tier: TierKey;
   balanceMode: BalanceMode;
   rounds: number;
+  /** S6 reuses the snake room/session record for the short farm draft. */
+  draftPhase?: 'MLB' | 'FARM';
+  /** Frozen once when a FARM session is created; index = absolute pick - 1. */
+  farmSlotSalaries?: number[];
   pickOrder: Array<{ round: number; pick: number; teamId: string }>;
   completedPicks: Array<{
     round: number;

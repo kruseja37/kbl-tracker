@@ -14,9 +14,9 @@ export function mlbDraftRouteForFormat(
 export const draftRouteForFormat = mlbDraftRouteForFormat;
 
 export function farmDraftRouteForFormat(
-  _format: LeagueTemplate["draftFormat"],
-): "/league-builder/farm-auction-draft" {
-  return "/league-builder/farm-auction-draft";
+  format: LeagueTemplate["draftFormat"],
+): "/league-builder/farm-auction-draft" | "/snake-room" {
+  return format === "snake" ? "/snake-room" : "/league-builder/farm-auction-draft";
 }
 
 type DraftRouteOptions = {
@@ -47,7 +47,8 @@ export function draftRouteForLeague(league: Pick<LeagueTemplate, "id" | "draftFo
 }
 
 export function farmDraftRouteForLeague(league: Pick<LeagueTemplate, "id" | "draftFormat">): string {
-  return withLeagueId(farmDraftRouteForFormat(league.draftFormat), league.id);
+  const route = withLeagueId(farmDraftRouteForFormat(league.draftFormat), league.id);
+  return league.draftFormat === "snake" ? `${route}&phase=farm` : route;
 }
 
 export function draftSetupRouteForLeague(league: Pick<LeagueTemplate, "id">, options?: DraftRouteOptions): string {

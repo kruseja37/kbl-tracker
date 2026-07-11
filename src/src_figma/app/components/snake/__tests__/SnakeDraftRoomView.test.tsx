@@ -147,6 +147,22 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('COMETS IS REVIEWING THE BOARD')).toBeInTheDocument();
   });
 
+  it('hands a completed farm room off only after the final recorded-pick advance', async () => {
+    vi.useFakeTimers();
+    const onDraftComplete = vi.fn();
+    const finalProps = props({ order: [{ pick: 1, teamId: 'a' }], onDraftComplete });
+    const { rerender } = render(<SnakeDraftRoomView {...finalProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    rerender(<SnakeDraftRoomView {...finalProps} currentPickIndex={1} candidate={null} />);
+
+    expect(onDraftComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'ADVANCE TO NEXT PICK' }));
+    expect(onDraftComplete).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels a mid-hold live-pick trade without recording', async () => {
     vi.useFakeTimers();
     const saveSession = vi.fn();

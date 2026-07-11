@@ -65,6 +65,7 @@ export interface SnakeDraftRoomViewProps {
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
   onSoundsEnabledChange: (enabled: boolean) => void;
+  onDraftComplete?: () => void | Promise<void>;
 }
 
 function teamName(team: SnakeRoomTeam | undefined): string {
@@ -291,7 +292,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               )}
               {state.phase === 'ANNOUNCE' && <div className="mt-4 h-4 w-full border-2 border-current"><div className="h-full animate-[snakeHold_1s_linear_forwards] bg-current" /></div>}
               {state.phase === 'RECORDED' && (
-                <button className="ballpark-press-button ballpark-press-lg mt-7 border-current bg-black/30" onClick={() => dispatch({ type: 'ADVANCE', candidateId: props.candidate?.id ?? null })}>
+                <button className="ballpark-press-button ballpark-press-lg mt-7 border-current bg-black/30" onClick={() => {
+                  dispatch({ type: 'ADVANCE', candidateId: props.candidate?.id ?? null });
+                  if (props.currentPickIndex >= props.order.length) void props.onDraftComplete?.();
+                }}>
                   ADVANCE TO NEXT PICK
                 </button>
               )}
