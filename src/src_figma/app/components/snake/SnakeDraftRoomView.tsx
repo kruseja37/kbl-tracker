@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { Eye, EyeOff, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 import { useSeatReveal } from '../../hooks/useSeatReveal';
@@ -57,6 +57,7 @@ export interface SnakeDraftRoomViewProps {
   practiceMode?: boolean;
   privateSnipeKey?: string | null;
   dangerKey?: string | null;
+  privateDesk?: ReactNode;
   onPauseChange: (paused: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
@@ -297,6 +298,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             <div className="ballpark-panel-strip"><span className="font-bold">YOUR PRIVATE DRAFT DESK</span></div>
             {!props.activeSeatId ? <p>NO SEAT IS ACTIVE.</p> : reveal.revealed ? (
               <div>
+                {props.privateDesk}
                 {props.candidate ? (
                   <>
                     <p className="text-xs font-bold text-[var(--ballpark-brass)]">READ THE PICK</p>
