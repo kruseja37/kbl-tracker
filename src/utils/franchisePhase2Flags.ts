@@ -159,7 +159,7 @@ export function setSnakeDraftPocEnabledForTests(enabled: boolean | null): void {
 
 // CONTRACT_S1B_SETUP_UI_2026-07-10: the production snake-draft path stays dark until
 // the captain deliberately flips this new v1 gate. It is separate from the older POC.
-export const SNAKE_DRAFT_V1_ENABLED_DEFAULT = false;
+export const SNAKE_DRAFT_V1_ENABLED_DEFAULT = true;
 
 let snakeDraftV1EnabledOverride: boolean | null = null;
 
