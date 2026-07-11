@@ -396,6 +396,21 @@ export interface LeagueBuilderMlbDraftSession {
   /** S1A session-v2 additions. All are optional so old sessions remain readable in-place. */
   seatBoards?: Record<string, SnakeSeatBoardRecord>;
   versionState?: SnakeVersionState;
+  snakeSetup?: {
+    /** Final trimmed pool: the chosen version card per human, plus all non-versioned picks. */
+    poolPlayerIds: string[];
+    /** versionGroupId -> chosen playerId (only groups with >1 card). */
+    versionSelections: Record<string, string>;
+    /** Per seat, locked at GO. */
+    clubs: Array<{
+      teamId: string;
+      gmName?: string;
+      hotseat: boolean;
+      archetypeId?: string;
+    }>;
+    /** The visible shuffle seed shown on the ORDER card. */
+    orderSeed: string;
+  };
   paused?: boolean;
   correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
   /** Monotonic session revision used to reject stale guide packages at execution. */

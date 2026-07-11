@@ -3,7 +3,7 @@ import { Navigate, Routes, Route } from "react-router-dom";
 import { PostGameRouteBoundary } from "./components/PostGameRouteBoundary";
 import { FRANCHISE_MANUAL_SMOKE_SETUP_ROUTE } from "./utils/franchiseManualSmokeFixtureGate";
 import { hydrateFranchisePhase2ActivationCache } from "./utils/franchisePhase2Activation";
-import { isSnakeDraftPocEnabled } from "./utils/franchisePhase2Flags";
+import { isSnakeDraftPocEnabled, isSnakeDraftV1Enabled } from "./utils/franchisePhase2Flags";
 
 // Global styles
 import "./styles/global.css";
@@ -115,6 +115,11 @@ const LeagueBuilderDraftSetup = lazy(() =>
 const LeagueBuilderSnakeDraft = lazy(() =>
   import("./src_figma/app/pages/LeagueBuilderSnakeDraft").then((module) => ({
     default: module.LeagueBuilderSnakeDraft,
+  })),
+);
+const SnakeDraftSetup = lazy(() =>
+  import("./src_figma/app/pages/SnakeDraftSetup").then((module) => ({
+    default: module.SnakeDraftSetup,
   })),
 );
 const SeasonRulesPreview = lazy(() =>
@@ -401,6 +406,10 @@ function App() {
         {isSnakeDraftPocEnabled() ? (
           <Route path="/league-builder/snake-draft" element={<LeagueBuilderSnakeDraft />} />
         ) : null}
+        {isSnakeDraftV1Enabled() ? (
+          <Route path="/snake-setup" element={<SnakeDraftSetup />} />
+        ) : null}
+        {/* S2 route lands at merge. The room module does not exist in this lane. */}
         <Route path="/league-builder/scout-hire" element={<ScoutHire />} />
         <Route
           path="/league-builder/auction-draft"
