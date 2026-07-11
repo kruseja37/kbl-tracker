@@ -116,7 +116,12 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'shift-era-suppressors', name: 'Shift-Era Suppressors', exemplars: ['2008 Rays', '2010 Rays'], era: '2010s',
     lore: 'Modern run prevention: defense and power arms, light bats.', identity: '+defense +rotation velocity → −contact −bullpen command',
-    boosts: ['FLD', 'ROT_VEL'], nerfs: ['CON', 'PEN_ACC'], spec: { FLD: 1.5, ROT_VEL: 1, CON: -1.5, PEN_ACC: -1 },
+    boosts: ['FLD', 'ROT_VEL'], nerfs: ['CON', 'PEN_ACC'], spec: {
+      FLD: 1.5,
+      ROT_VEL: 1,
+      CON: -1.5,
+      PEN_ACC: -0.8, // CONTRACT_TAXSWING_2026-07-10 Amendment 1: ruled parity retune from -1.0.
+    },
   },
   {
     id: 'big-red-machine', name: 'Big Red Machine', exemplars: ['1975 Reds', '1976 Reds'], era: '1970s',
@@ -155,7 +160,12 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'launch-and-leather', name: 'Launch & Leather', exemplars: ['2016 Cubs', '2021 Astros'], era: 'three-true-outcomes + gloves',
     lore: 'Mash and pick it clean; if the staff could find the zone they would be unbeatable.', identity: '+power +defense → −command (rotation & bullpen)',
-    boosts: ['POW', 'FLD'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: { POW: 1.5, FLD: 1, ROT_ACC: -1, PEN_ACC: -1 },
+    boosts: ['POW', 'FLD'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: {
+      POW: 1.5,
+      FLD: 1,
+      ROT_ACC: -0.8, // CONTRACT_TAXSWING_2026-07-10 Amendment 1: ruled parity retune from -1.0.
+      PEN_ACC: -0.6, // CONTRACT_TAXSWING_2026-07-10 Amendment 1: ruled parity retune from -1.0.
+    },
   },
   {
     id: 'no-glove-offense', name: 'No-Glove Offense', exemplars: ['1930 Phillies', '1996 Rockies'], era: 'all bat, no glove',

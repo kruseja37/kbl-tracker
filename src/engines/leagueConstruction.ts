@@ -250,10 +250,49 @@ function playerRating(player: ConstructionPlayer, stat: LuxuryStat): number {
   return player.bat[stat];
 }
 
+export type LuxuryTaxPitchingGroups = {
+  rotation: ConstructionRoster;
+  bullpen: ConstructionRoster;
+};
+
+function pitchingMean(player: ConstructionPlayer): number {
+  return ((player.pit?.VEL ?? 0) + (player.pit?.JNK ?? 0) + (player.pit?.ACC ?? 0)) / 3;
+}
+
+/**
+ * TAXSWING (2026-07-10): assign each SP/RP swing arm to exactly one settlement-tax group.
+ * Pure SPs own rotation seats first; when fewer than the legal four-man rotation are present,
+ * the best remaining swing arms fill the shortfall by mean(VEL,JNK,ACC). Equal means break by
+ * player id ascending so the assignment is independent of roster input order.
+ */
+export function assignLuxuryTaxPitchingGroups(roster: ConstructionRoster): LuxuryTaxPitchingGroups {
+  const pureStarters = roster.filter((player) => player.isPitcher && player.role === 'SP');
+  const rankedSwingArms = roster
+    .filter((player) => player.isPitcher && player.role === 'SP/RP')
+    .sort((left, right) => {
+      const meanDelta = pitchingMean(right) - pitchingMean(left);
+      if (meanDelta !== 0) return meanDelta;
+      return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+    });
+  const promotionCount = Math.max(
+    0,
+    Math.min(rankedSwingArms.length, LEGAL_ROSTER.startingPitchers - pureStarters.length),
+  );
+  const promotedSwingArms = rankedSwingArms.slice(0, promotionCount);
+  const unpromotedSwingArms = rankedSwingArms.slice(promotionCount);
+  const pureRelievers = roster.filter(
+    (player) => player.isPitcher && (player.role === 'RP' || player.role === 'CP'),
+  );
+
+  return {
+    rotation: [...pureStarters, ...promotedSwingArms],
+    bullpen: [...pureRelievers, ...unpromotedSwingArms],
+  };
+}
+
 export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode: BalanceMode): TaxResult {
   const hitters = roster.filter((player) => !player.isPitcher);
-  const rotation = roster.filter((player) => player.isPitcher && (player.role === 'SP' || player.role === 'SP/RP'));
-  const bullpen = roster.filter((player) => player.isPitcher && (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP'));
+  const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
 
   let wouldBeTax = 0;
   const binding: TaxBinding[] = [];

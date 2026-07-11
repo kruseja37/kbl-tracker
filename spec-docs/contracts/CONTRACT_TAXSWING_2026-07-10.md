@@ -304,3 +304,170 @@ Then re-run Gates 3→5 (full sequence from Gate 1 if any code beyond constants 
 NOTE for the report: the S3 desk (merging separately) carries a tax-core explainer
 that must be re-synced to assignLuxuryTaxPitchingGroups at merge time — captain-owned
 seam, do not reach for it from this tree.
+
+---
+
+## BUILDER FINAL REPORT — Codex, 2026-07-10 — AMENDMENT 1 COMPLETE
+
+### Amendment implementation
+
+- `src/data/historicalArchetypes.ts:123,166-167` — applied the ruled values exactly:
+  Shift-Era Suppressors `PEN_ACC -0.8`; Launch & Leather `ROT_ACC -0.8` and
+  `PEN_ACC -0.6`. Each changed constant cites this contract and Amendment 1.
+- `src/data/tierParams.ts:174-229` — scaled only RVEL/RJNK/RACC/PVEL/PJNK/PACC by
+  `0.85` for Call Your Shot, Defense First, Lazer Guns, and Track Stars, stored at
+  the file's existing six-decimal precision. All 20 batting-side entries are unchanged;
+  every changed pitching constant carries the required Amendment 1 comment.
+- `src/engines/__tests__/historicalArchetypes.test.ts:48-73` — all three tiers now run
+  and print before any assertion. A single collected violation list reports every tier
+  in one failure instead of masking STANDARD behind JUICED. The ±10% band is unchanged.
+- `spec-docs/TEAM_ARCHETYPES_24.md:73-76,138-141` and
+  `src/data/__tests__/archetypeSheetConformance.test.ts:42-50` — re-synced the ratified
+  sheet and its conformance weld to the Amendment 1 values after the first Gate-5 rerun
+  honestly exposed the stale expectations. Both rows cite Amendment 1; identity direction
+  and flavor remain unchanged.
+
+### Verified parity results
+
+The captain's simulator findings reproduced exactly against the real gates:
+
+```text
+historical set:
+  juiced   24/24 in band   max deviation 6.8%
+  standard 24/24 in band   max deviation 3.9%
+  nerfed   24/24 in band   max deviation 0.7%
+
+workbook set:
+  standard 33/33 in band   max deviation 8.6%
+```
+
+Focused conformance + both balance gates after the reference-sheet sync:
+
+```text
+Test Files  3 passed (3)
+Tests       28 passed (28)
+```
+
+The fallback `0.7` scale was not used.
+
+### Explained rebaselines (no fixture or behavior bending)
+
+1. `leagueConstruction.test.ts:55-56` — Defense First now precedes Catch the Ball in
+   the defense-only identity composition because its ruled pitching fractions changed
+   the deterministic score. The expected order cites Amendment 1.
+2. `leagueConstruction.test.ts:70-75` — the combined Defense First + Bullpen Boost −
+   Call Your Shot pitching shift golden was recomputed directly from the ruled `0.85`
+   fractions. Batting expectations are byte-unchanged; the rebaseline cites Amendment 1.
+3. `auctionGauntlet.test.ts:897-912` — the real CPU path's cap-crossing fixture moved:
+   D5 is now correctly zero-tax, while D6 carries positive exact-marginal settlement tax
+   (`$60,132.11` in the deterministic run). The six-draft global real-tax-reachability
+   assertion remains, every roster still completes legally, and no CPU rule, fixture,
+   band, threshold, pool, or auction flow changed. Both expectation changes cite Amendment 1.
+4. `archetypeSheetConformance.test.ts:42-50` — the two old sheet-derived cap-shift
+   expectations were re-pinned to Shift-Era bullpen ACC `-0.24` and Launch & Leather
+   rotation/bullpen ACC `-0.20/-0.18`, directly matching the ruled spec multipliers.
+
+No settlement-dollar snapshot was loosened. No acceptance band or count threshold moved.
+
+### Gate sequence — real terminal results
+
+Per Amendment 1, Gates 3→5 were rerun. Gates 1→2 from the original execution record
+remain valid because the resumed production changes were constants only; no production
+code beyond those constants moved.
+
+Gate 3, settlement/completion/snake engine set:
+
+```text
+Test Files  9 passed (9)
+Tests       101 passed (101)
+```
+
+Gate 4, every auction-scoped test path under `src/` and `scripts/` (39 files):
+
+```text
+Test Files  36 passed | 3 skipped (39)
+Tests       452 passed | 6 skipped (458)
+```
+
+Gate 5, one full Vitest run after all explained expectation syncs:
+
+```text
+Test Files  631 passed | 8 skipped (639)
+Tests       9604 passed | 15 skipped (9619)
+Duration    236.75s
+```
+
+Zero failed files and zero failed tests. The first post-retune Gate-5 pass had exactly two
+deterministic reds in `archetypeSheetConformance.test.ts` (the old Shift-Era and Launch &
+Leather sheet values); those were explained by Amendment 1, synced in both the sheet and
+its weld, proven focused 28/28, then the full suite was rerun to the green footer above.
+
+Capture note: the final Vitest process completed and wrote the green footer above; the
+surrounding zsh capture wrapper then rejected `status=$?` because `status` is a read-only
+zsh variable. That post-run wrapper error did not affect Vitest or its completed summary.
+
+`git diff --check` is clean.
+
+### Copy / cross-lane seam
+
+- No live copy in this tree claims `rotation = SP + SP/RP`; no copy lock was rewritten.
+- The separately merging S3 desk still must re-sync its tax-core explainer to
+  `assignLuxuryTaxPitchingGroups` at merge time. This remains captain-owned and was not
+  reached for from TAXSWING.
+
+### Final changed-path report
+
+Builder-owned paths after this report (9):
+
+- `src/engines/leagueConstruction.ts`
+- `src/engines/__tests__/leagueConstruction.test.ts`
+- `src/data/historicalArchetypes.ts`
+- `src/data/tierParams.ts`
+- `src/engines/__tests__/historicalArchetypes.test.ts`
+- `src/engines/__tests__/auctionGauntlet.test.ts`
+- `spec-docs/TEAM_ARCHETYPES_24.md`
+- `src/data/__tests__/archetypeSheetConformance.test.ts`
+- `spec-docs/contracts/CONTRACT_TAXSWING_2026-07-10.md`
+
+Pre-existing captain harness paths remain untracked and untouched:
+
+- `DISPATCH_PROMPT.txt`
+- `run_lane.sh`
+- `sentinel.sh`
+
+No git write command was run.
+
+### Auditor attack list (delta)
+
+1. Verify every one of the 24 workbook pitching fractions equals its pre-amendment value
+   times `0.85` at six-decimal storage precision and that all batting fractions are unchanged.
+2. Re-run the three-tier reporter and confirm STANDARD prints even if JUICED is mutation-red.
+3. Mutation-test D5/D6 expectations: the global real-tax reachability assertion must fail
+   if all settlement tax disappears; do not accept the per-draft rebaseline as a tax bypass.
+4. Confirm the reference sheet, conformance weld, and source multipliers agree for the two
+   historical identities and retain their original direction/flavor.
+5. Recheck the original TAXSWING attacks: comparator/input-order determinism, five-pure-SP
+   top-N behavior, signed negative marginal propagation, and S3 downward-copy merge seam.
+
+**VERDICT: COMPLETE, ready for independent audit and captain commit.** The upheld Gate-5
+STOP is resolved by the exact ruled retune; all required gates are green with no unexplained
+shift and no git write command.
+
+---
+
+## AUDIT — opus, independent, 2026-07-10 — VERDICT: APPROVE-WITH-NOTES
+Everything re-derived from scratch: assignment rule mutation-tested both directions
+(comparator flip → E red; sort flip → D red); disjoint slices prove no dual counting;
+ROTATION_ARMS derived not hardcoded; negative marginal flows unclamped through
+auctionMarginalTaxWithCaps; retune constants exact to 6dp with no sign flips; parity
+margins reproduced (24/24 all tiers 6.8/3.9/0.7%; workbook 33/33 8.6%); all four
+rebaselines independently re-derived (gauntlet reachability assertion STRENGTHENED to
+global-explicit); tier-mask fix mutation-tested (reports all three tiers); blast sweep
+exact (9 declared paths); no snapshot loosened.
+NOTES carried to merge: (1) captain-owned S3 seam — desk tax-core explainer re-syncs
+to assignLuxuryTaxPitchingGroups AND the consequence copy must render a DOWNWARD tax
+outcome in plain words (negative marginals now reachable, no live copy renders it);
+(2) liquidityAwareBidding.ts:210 Math.max(0,·) clamp is conservative-safe today but
+would hide a tax decrease if ever surfaced as a GM-facing number — flagged;
+(3) poolFeasibility dual-group membership confirmed correct (supply adequacy, not
+settlement — a non-inheritor, not a divergence).
