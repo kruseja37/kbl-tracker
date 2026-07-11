@@ -40,6 +40,7 @@ describe('PrivateDesk', () => {
       onStartWhatIf={() => undefined}
       onKeepWhatIf={onKeepWhatIf}
       onRevertWhatIf={onRevertWhatIf}
+      tradeGuide={<div>POSTED PRICE GUIDE</div>}
       whatIf={{
         slotId: 'SS', playerId: 'muraski', planCost: 80, planTax: 10, planCushion: 30,
         legal: true, legalityLine: 'THE CHOSEN BOARD SLOTS STILL WORK.', legalFinishLine: candidate.legalFinishLine,
@@ -58,5 +59,7 @@ describe('PrivateDesk', () => {
     fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
     expect(onKeepWhatIf).toHaveBeenCalledTimes(1);
     expect(onRevertWhatIf).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
   });
 });
