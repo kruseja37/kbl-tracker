@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "tune0-variant-v1",
+  "generatedAt": "2026-07-11T12:00:00.000Z",
+  "knobId": "relationship-formation-threshold",
+  "variantId": "relationship-formation-threshold-low",
+  "setting": "low (0.5x; runtime runaway at both 4 and 2 games/team)",
+  "factor": 0.5,
+  "status": "UNSTABLE-RUNTIME",
+  "reason": "The leg exceeded six minutes after uniform reduction to 4 games/team, then exceeded six minutes again at 2 games/team. No numeric checkpoint result is claimed.",
+  "injected": {
+    "thresholds": {
+      "RIVALRY": 0.39,
+      "FEUD": 0.39,
+      "MENTORSHIP": 0.4,
+      "FRIENDSHIP": 0.42
+    },
+    "seededThresholdWindowHeld": 0.03
+  },
+  "seed": "lsim-fidelity-1",
+  "gamesPerTeam": 2,
+  "totalScheduledGames": 6,
+  "checkpointCount": 5,
+  "checkpointGameNumbers": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "checkpoints": null,
+  "finalDigest": null
+}

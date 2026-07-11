@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "tune0-variant-v1",
+  "generatedAt": "2026-07-11T12:00:00.000Z",
+  "knobId": "wpa-to-heat-scale",
+  "variantId": "wpa-to-heat-scale-high",
+  "setting": "high (2x)",
+  "factor": 2,
+  "status": "NOT-SWEEPABLE",
+  "reason": "FAME_INPUT_TUNING is module-private in src/utils/franchiseFameCompute.ts; varying it requires a production src edit, forbidden by TUNE-0.",
+  "injected": null,
+  "seed": "lsim-fidelity-1",
+  "gamesPerTeam": 4,
+  "totalScheduledGames": null,
+  "checkpointCount": null,
+  "checkpointGameNumbers": null,
+  "checkpoints": null,
+  "finalDigest": null
+}

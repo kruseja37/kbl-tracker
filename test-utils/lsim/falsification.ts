@@ -16,6 +16,11 @@ import { describe, expect, test } from 'vitest';
 import { TRAIT_OPPOSITES } from '../../src/engines/traitAcquisition';
 import { getSoulInvariantChecks } from './invariants/soul';
 import type { LsimInvariantResult, LsimStateSnapshot } from './invariants/types';
+import {
+  getFeedbackClosureInvariantChecks,
+  type LsimFeedbackClosureProof,
+} from './feedbackClosure';
+import { decisionForDevelopmentProposal } from './feedbackPolicy';
 
 const CHECKS = getSoulInvariantChecks();
 const FINITE_CHANNELS = { wpa_spine: 0, iconic_event: 0, status: 0, defensive: 0, role_player: 0 };
@@ -608,5 +613,59 @@ describe('L-SIM invariant falsification audit', () => {
     const result = resultFor('soul.emission-snub-signal', snap);
     expect(result.pass).toBe(true);
     expect(result.detail).toContain('LIVE-PENDING');
+  });
+
+  test('fidelity.feedback-loop-closes PASSES valid proof and TRIPS RED when next-game read is broken', () => {
+    const [closureCheck] = getFeedbackClosureInvariantChecks();
+    const proof = {
+      target: {
+        playerId: 'p', ratingKey: 'contact', firstBoundary: 2, laterBoundary: 4,
+        priorValue: 70, appliedValue: 69, laterExpectedPriorValue: 69, nextGameNumber: 3,
+        counterfactualWindow: { plateAppearances: 20_000, hits: 7_000, extraBaseHits: 1_000, homeRuns: 300, weightedOutput: 9_900 },
+        appliedWindow: { plateAppearances: 20_000, hits: 6_900, extraBaseHits: 990, homeRuns: 295, weightedOutput: 9_765 },
+      },
+      steps: {
+        checkpointProposedTargetChange: true,
+        confirmPolicyAppliedThroughRealService: true,
+        storedValueChangedExactlyOnce: true,
+        nextSyntheticGameReadAppliedValue: true,
+        outputMovedExpectedDirection: true,
+        laterProposalBaselinedFromChangedValue: true,
+        sameSeedReplayByteIdentical: true,
+      },
+      slumpRecoveryPressureReleased: true,
+      neutralControlOutperformedSlump: true,
+      firstDigest: 'same',
+      replayDigest: 'same',
+      byteIdenticalArtifact: true,
+      slumpPressure: 8,
+      recoveryPressure: 2,
+    } satisfies LsimFeedbackClosureProof;
+
+    expect(closureCheck(proof).pass).toBe(true);
+    const broken = structuredClone(proof);
+    broken.steps.nextSyntheticGameReadAppliedValue = false;
+    const result = closureCheck(broken);
+    expect(result.pass).toBe(false);
+    expect(result.detail).toContain('nextSyntheticGameReadAppliedValue');
+  });
+
+  test('feedback confirm policy selects reject, delay, and adjust scenario rules', () => {
+    const proposal = {
+      kind: 'rating',
+      overlay: { id: 'o', playerId: 'p', ratingKey: 'contact', delta: -1 } as never,
+    } as const;
+    expect(decisionForDevelopmentProposal({
+      defaultDecision: { action: 'confirm' },
+      rules: [{ match: { boundaryGameNumber: 2 }, decision: { action: 'delay' } }],
+    }, proposal, 2)).toEqual({ action: 'delay' });
+    expect(decisionForDevelopmentProposal({
+      defaultDecision: { action: 'confirm' },
+      rules: [{ match: { playerId: 'p' }, decision: { action: 'reject', reason: 'scenario' } }],
+    }, proposal, 2)).toEqual({ action: 'reject', reason: 'scenario' });
+    expect(decisionForDevelopmentProposal({
+      defaultDecision: { action: 'confirm' },
+      rules: [{ match: { ratingKey: 'contact' }, decision: { action: 'adjust', ratingValue: 77 } }],
+    }, proposal, 2)).toEqual({ action: 'adjust', ratingValue: 77 });
   });
 });

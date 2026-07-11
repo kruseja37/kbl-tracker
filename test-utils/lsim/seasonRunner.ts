@@ -299,7 +299,7 @@ function buildSyntheticPitcherKeepInEvent(input: {
   };
 }
 
-async function seedSyntheticEventLog(
+export async function seedSyntheticEventLog(
   context: LsimSandboxContext,
   synthetic: LsimSyntheticCompletedGame,
   gameNumber: number,
