@@ -84,3 +84,14 @@ FAILURE PROTOCOL: anchor mismatch → STOP + report. Ambiguity → quote this co
 semantics this contract doesn't answer → STOP (never improvise).
 
 Use xhigh reasoning effort. Think step-by-step.
+
+## AMENDMENT 1 (captain, 2026-07-11 — from the deep pass + hunt, pre-dispatch)
+Checkpoint identity: overlay `sourceEventId` is `checkpoint-<GAME NUMBER>` (e.g. checkpoint-24 on a
+60-game season), NOT an ordinal — the UI currently mislabels it "Checkpoint 24 of 5" (deep-pass #1).
+Therefore `listUnresolvedDevelopment` must return, per checkpoint group: `{ boundaryGameNumber,
+ordinal, ordinalCount }` where ordinal/ordinalCount derive from the season's boundary plan
+(`isCheckpointBoundary` positions for the season's totalGames + cadence — import the existing helpers
+from `franchiseCheckpointSweepCompute`, read-only; that file stays fenced). Additionally, resolution
+records must persist `boundaryGameNumber` AND `ordinal` so the change history reads correctly. The
+verified hunt finding C8 (Math.max strands older checkpoints) is solved by this contract's oldest-first
+ordering — add a test proving two pending checkpoints surface oldest-first with correct ordinals.

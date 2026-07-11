@@ -387,3 +387,6 @@ Reporter Dramatic Weight (§9)
 | **Total tunable knob rows** | **134** |
 
 (Several rows are multi-value clusters — e.g. `MORALE_TUNING.personality` is one row covering 7 personalities × 5 parameters each, `BASE_MORALE_IMPACTS` is one row covering 23 event types — so the raw count of individually-adjustable numbers is materially higher than 134, likely 300+. JK's ~100 estimate is a reasonable floor for "named tunable clusters"; this registry counts at the cluster level for readability while preserving every sub-value inline.)
+
+
+> **CORRECTION 2026-07-11 (hunt X12, dual-verified):** `INNING_MULTIPLIERS` (leverageCalculator.ts) is DEAD CODE — zero readers; the live inning factor is computed elsewhere. Any row above listing it as LIVE is wrong; it is being deleted in HUNTFIX-ENGINE E8.

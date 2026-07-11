@@ -84,6 +84,32 @@ Legend: ✅ true today · 🔧 fixed by slice N · ⏳ hunt may add rows · ❌ 
 | #13-18 minors | 5 batch |
 | #19 undo never rewinds fame | 5 (GameTracker surface — fenced from slices 1-4) |
 
+## 3b. HUNT RESULTS (2026-07-11, 78 agents, dual-opus verification) — adjudicated + routed
+
+47 raw findings → **15 confirmed / 12 contested (captain adjudicated: 9 real, 2 latent-note, 1 legacy-
+scope) / 6 refuted.** Full detail: workflow `wf_790afef0-e54` journal.
+
+| Finding | Verdict | Slice |
+|---|---|---|
+| C15 fWAR positional adj ∝ 1/seasonLength (**critical**, live WAR) | confirmed | HUNTFIX-ENGINE E1 (dispatched) + dedicated opus math audit |
+| C2 resolveFameTier hardcodes LOCAL_HERO, discards floor magnitude (spec §20.3 violation) | confirmed | E2 |
+| C3 trait being lost still blocks gaining its opposite (lossNames filter missing) | confirmed | E3 |
+| X2 WPA defensive budget dropped on SB/CS without fielder ids (conservation break) | confirmed | E4 |
+| X4 flashpoint "consecutive" counter is cumulative (never resets) | confirmed | E5 |
+| C14+X9 event-driven RIVALRY edges blindly overwritten (overtake + formation writers) | confirmed | E6 |
+| X3 classifyFameVsMerit bust-branch uses magnitude (DESPISED → 'bust') | confirmed (dark) | E7 |
+| X12 INNING_MULTIPLIERS dead code + knob registry wrongly lists LIVE | confirmed | E8 + registry corrected |
+| C4 immaculate inning checks CUMULATIVE pitches ===9 (per-inning counter is dead code) | confirmed | HUNTFIX-TRACKER T1 (dispatched) |
+| C5 D3K persists runsScored:0 while the score advances (self-contradicting archive row) | confirmed | T2 |
+| C6 quick-error path: run lost + bases/tracker/score three-way desync | confirmed | T3 |
+| deep-pass #19 undo never rewinds fame | confirmed | T4 |
+| C1 27-out CG detection (DEFAULT config is 7 innings!) + deep-pass #6 walk-off mislabel | confirmed | KERNEL2 follow-up (same file as in-flight KERNEL — do not amend mid-build) |
+| X5 L11 firing has NO per-game idempotency + deep-pass #2 fame honor-bump guard hole | confirmed-latent | **KERNEL AUDITOR NOTES** — branch-level rerun safety must cover both before partial-failure reprocessing ships |
+| C7 pulse stale morale (= deep-pass #4), C8 checkpoint Math.max stranding, C9 rank tiebreak mismatch, C10 .500 copy, C11 hardcoded L10-of-10 column, C12 'Tonight' home-slot highlight, C13 fitness picker shows unpersisted state, X7 global trophy case bleed, X8 global ceremony bleed, deep-pass #3 milestone bleed | confirmed | MIRRORUI-1 (slice 4 — one lane owns Lens/Hub files) |
+| X6 firing always yields positive fan relief even for content fans | mechanics confirmed | JK tuning fork (with deep-pass #7/#8/#9/#10) |
+| X10/X11 gamesPlayed/6 week counter unit mismatch + score-only bypass | confirmed, legacy surface | already ruled do-not-use (R7); remove the display with Season Summary repair (deferred R4) |
+| X1 batterHand:'S' park factors | latent (no L/R split exists in any ParkFactors today) | note only; ticket rides with park-factor work |
+
 ## 4. Verification gates (every slice)
 Build exit 0 → FULL vitest (read summary; two known solo-green flakes are baseline) → proving tests
 per defect (fail-before/pass-after) → L-SIM smoke in-memory compare (canonical baselines regenerate
