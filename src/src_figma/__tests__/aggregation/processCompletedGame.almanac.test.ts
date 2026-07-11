@@ -9,6 +9,8 @@ const {
   mockMarkGameAggregated,
   mockGetEffectivePlayer,
   mockRegisterAlmanacPlayers,
+  mockPatchCompletedGameLivingSeasonProcessing,
+  archiveRecord,
 } = vi.hoisted(() => ({
   mockAggregateGameToSeason: vi.fn().mockResolvedValue({
     success: true,
@@ -27,6 +29,8 @@ const {
   mockMarkGameAggregated: vi.fn().mockResolvedValue(undefined),
   mockGetEffectivePlayer: vi.fn(),
   mockRegisterAlmanacPlayers: vi.fn().mockResolvedValue(undefined),
+  mockPatchCompletedGameLivingSeasonProcessing: vi.fn(),
+  archiveRecord: { current: null as Record<string, unknown> | null },
 }));
 
 vi.mock('../../../utils/seasonAggregator', () => ({
@@ -36,6 +40,13 @@ vi.mock('../../../utils/seasonAggregator', () => ({
 vi.mock('../../../utils/gameStorage', () => ({
   archiveCompletedGame: mockArchiveCompletedGame,
   getCompletedGameById: mockGetCompletedGameById,
+  getSoulOutcomes: (record: { livingSeasonProcessing?: unknown }) => record.livingSeasonProcessing ?? null,
+  LIVING_SEASON_PROCESSING_VERSION: '1',
+  SOUL_BRANCH_KEYS: [
+    'fame', 'moraleAuto', 'checkpointDev', 'traits', 'L10', 'L11',
+    'L12raceAllstar', 'L13', 'stadium', 'trueValueSnapshot',
+  ],
+  patchCompletedGameLivingSeasonProcessing: mockPatchCompletedGameLivingSeasonProcessing,
   resolveExhibitionLeagueId: (game: {
     leagueId?: string;
     competitionId?: string;
@@ -195,7 +206,39 @@ describe('processCompletedGame exhibition almanac registration', () => {
       milestonesRecorded: [],
     });
     mockGetEffectivePlayer.mockResolvedValue(mockEffectivePlayer);
-    mockGetCompletedGameById.mockResolvedValue(null);
+    archiveRecord.current = null;
+    mockArchiveCompletedGame.mockImplementation(async (
+      state: ReturnType<typeof createGameState>,
+      _score: unknown,
+      _innings: unknown,
+      seasonId: string | undefined,
+      context: Record<string, unknown> | undefined,
+    ) => {
+      archiveRecord.current = {
+        gameId: state.gameId,
+        aggregationStatus: 'aggregated',
+        seasonId,
+        statsScopeId: context?.statsScopeId ?? seasonId,
+        franchiseId: context?.franchiseId,
+        seasonNumber: state.seasonNumber,
+        livingSeasonProcessing: context?.livingSeasonProcessing,
+      };
+    });
+    mockGetCompletedGameById.mockImplementation(async (gameId: string) => (
+      archiveRecord.current?.gameId === gameId ? archiveRecord.current : null
+    ));
+    mockPatchCompletedGameLivingSeasonProcessing.mockImplementation(async (
+      _gameId: string,
+      update: (current: Record<string, unknown>) => Record<string, unknown>,
+    ) => {
+      archiveRecord.current = {
+        ...archiveRecord.current,
+        livingSeasonProcessing: update(
+          archiveRecord.current?.livingSeasonProcessing as Record<string, unknown>,
+        ),
+      };
+      return archiveRecord.current;
+    });
     mockGetGameHeader.mockResolvedValue(null);
   });
 
@@ -231,7 +274,14 @@ describe('processCompletedGame exhibition almanac registration', () => {
   });
 
   test('does not archive or register almanac players when season aggregation fails', async () => {
-    const gameState = createGameState();
+    const gameState = {
+      ...createGameState(),
+      competitionType: 'franchise' as const,
+      competitionId: 'franchise-fail',
+      franchiseId: 'franchise-fail',
+      seasonId: 'franchise-fail-season-1',
+      statsScopeId: 'franchise-fail-season-1',
+    };
     mockAggregateGameToSeason.mockResolvedValueOnce({
       success: false,
       milestones: null,

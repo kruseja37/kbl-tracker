@@ -63,6 +63,11 @@ import {
   resetFranchiseTraitOverlaysForTests,
 } from '../franchiseTraitOverlayStorage';
 import { setFranchisePhase2TraitsEnabledForTests } from '../franchisePhase2Flags';
+import {
+  clearFranchiseMoraleDatabaseForTests,
+  resetFranchiseMoraleDatabaseForTests,
+  seedFranchiseMoraleBaseline,
+} from '../franchiseMoraleState';
 import type { PersistedGameState } from '../gameStorage';
 import type {
   SeasonTraitCandidate,
@@ -377,6 +382,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     TRAIT_ACQUISITION_TUNING.trendTiltWeight = trendTiltWeightDefault;
     resetFranchiseTraitOverlaysForTests();
     await deleteDatabase(DB_NAME);
+    resetFranchiseMoraleDatabaseForTests();
+    await clearFranchiseMoraleDatabaseForTests();
     await deleteFranchiseDatabase(ROSTER_DB_FRANCHISE_ID);
     setFranchisePhase2TraitsEnabledForTests(null);
   });
@@ -386,6 +393,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     setFranchisePhase2TraitsEnabledForTests(null);
     resetFranchiseTraitOverlaysForTests();
     await deleteDatabase(DB_NAME);
+    resetFranchiseMoraleDatabaseForTests();
+    await clearFranchiseMoraleDatabaseForTests();
     await deleteFranchiseDatabase(ROSTER_DB_FRANCHISE_ID);
   });
 
@@ -679,13 +688,23 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(secondRows).toEqual(firstRows);
   });
 
-  test('resolveTraitGrantRoster carries player fielding and arm ratings onto roster entries', async () => {
+  test('resolveTraitGrantRoster carries ratings and prefers canonical snapshot morale', async () => {
     await saveFranchiseTeam(ROSTER_DB_FRANCHISE_ID, makeTeam());
     await saveFranchisePlayer(ROSTER_DB_FRANCHISE_ID, makePlayer({
       id: 'fielder-ratings',
       fielding: 64,
       arm: 88,
     }));
+    await seedFranchiseMoraleBaseline({
+      franchiseId: ROSTER_DB_FRANCHISE_ID,
+      seasonId: scope.seasonId,
+      statsScopeId: scope.statsScopeId,
+      seasonNumber: 1,
+      targetType: 'player',
+      playerId: 'fielder-ratings',
+      value: 73,
+      timestamp: '2026-07-11T12:00:00.000Z',
+    });
 
     const roster = await traitGrantSeam.resolveTraitGrantRoster({
       franchiseId: ROSTER_DB_FRANCHISE_ID,
@@ -699,6 +718,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
       role: 'position',
       fielding: 64,
       arm: 88,
+      currentMorale: 73,
     });
   });
 

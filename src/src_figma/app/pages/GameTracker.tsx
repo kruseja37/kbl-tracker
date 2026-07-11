@@ -974,6 +974,7 @@ import {
 } from "../../../utils/seasonStorage";
 // T0-05: Schedule persistence — mark played games as COMPLETED
 import { completeGame as completeScheduleGame } from "../../../utils/scheduleStorage";
+import { getDeviceLocalCivilDate } from "../../../utils/civilDate";
 import {
   buildSaveAppearanceStartContextFromAtBat,
   buildSaveAppearanceUpdateContextFromAtBat,
@@ -5439,7 +5440,7 @@ export function GameTracker() {
           },
           gameMode: effectiveReporterGameMode,
           reporterScope: effectiveReporterScope,
-          gameDate: new Date().toISOString().slice(0, 10),
+          gameDate: getDeviceLocalCivilDate(),
           opponentByReporter: {
             home: awayTeamId,
             away: homeTeamId,
@@ -11596,6 +11597,7 @@ export function GameTracker() {
             winningTeamId: winnerId,
             losingTeamId: loserId,
             gameLogId: completedGameId,
+            completedCivilDate: getDeviceLocalCivilDate(),
           });
           console.log(
             `[T0-05] Schedule game ${effectiveScheduleGameId} marked COMPLETED — winner: ${winnerId}`,
@@ -11633,7 +11635,7 @@ export function GameTracker() {
               },
               gameMode: effectiveReporterGameMode,
               reporterScope: effectiveReporterScope,
-              gameDate: new Date().toISOString().slice(0, 10),
+              gameDate: getDeviceLocalCivilDate(),
               opponentByReporter: {
                 home: awayTeamId,
                 away: homeTeamId,

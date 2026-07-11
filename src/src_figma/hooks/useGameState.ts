@@ -30,6 +30,7 @@ import {
 } from "../../utils/eventLog";
 import type { GameAggregationOptions } from "../../utils/seasonAggregator";
 import { processCompletedGame } from "../../utils/processCompletedGame";
+import { getDeviceLocalCivilDate } from "../../utils/civilDate";
 import { deriveCommittedManagerDecisionState } from "../../utils/managerWpaGameState";
 import { deriveKblWpaCredits } from "../../utils/kblWpaAttribution";
 import { getStableParkId } from "../../data/parkLookup";
@@ -10847,6 +10848,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   // Internal function to complete game after pitch counts confirmed
   const completeGameInternal = useCallback(
     async (opts?: EndGameOptions) => {
+      const completedCivilDate = getDeviceLocalCivilDate();
       const activityLog = opts?.activityLog ?? [];
       const resolvedArchiveLeagueId =
         opts?.leagueId ??
@@ -11056,6 +11058,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           id: "current",
           gameId: gameState.gameId,
           savedAt: Date.now(),
+          completedCivilDate,
           inning: gameState.inning,
           halfInning: gameState.isTop ? "TOP" : "BOTTOM",
           outs: gameState.outs,
@@ -11886,6 +11889,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
   const endGame = useCallback(
     async (options?: EndGameOptions) => {
       try {
+        const completedCivilDate = getDeviceLocalCivilDate();
         // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
         // Build persisted state for archiving — include player name and team
         const activityLog = options?.activityLog ?? [];
@@ -12092,6 +12096,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         id: "current",
         gameId: gameState.gameId,
         savedAt: Date.now(),
+        completedCivilDate,
         inning: gameState.inning,
         halfInning: gameState.isTop ? "TOP" : "BOTTOM",
         outs: gameState.outs,

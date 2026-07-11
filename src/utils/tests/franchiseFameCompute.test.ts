@@ -171,7 +171,7 @@ describe('franchise dark fame compute', () => {
     await expect(getFranchiseFameRecord(scope, 'player-both')).resolves.toBeNull();
   });
 
-  test('flag-on path decays on write, preserves stored reach floor, latches negative heat, and skips checkpoint re-entry', async () => {
+  test('flag-on path decays on write, ratchets reach floor upward only, latches negative heat, and skips checkpoint re-entry', async () => {
     setFranchisePhase2FameEnabledForTests(true);
     const firstGame = gameState({
       gameId: 'fame-game-1',
@@ -194,7 +194,7 @@ describe('franchise dark fame compute', () => {
     });
     expect(firstRow).toMatchObject({
       heat: 10,
-      reachFloor: 0,
+      reachFloor: 2,
       wasNegative: false,
       channelTotal: 10,
       defensiveFame: 1,
@@ -217,7 +217,7 @@ describe('franchise dark fame compute', () => {
     });
     expect(secondRow).toMatchObject({
       heat: -3.5,
-      reachFloor: 0,
+      reachFloor: 2,
       wasNegative: true,
       channelTotal: -12,
       defensiveFame: -1,
