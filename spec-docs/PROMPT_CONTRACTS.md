@@ -30434,3 +30434,281 @@ finish the others, report the blocked one (partial landing is acceptable for A-H
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: KERNEL-TRUTH-1 ===== -->
+
+<!-- ===== CONTRACT: MIRROR-1 ===== -->
+# CONTRACT MIRROR-1 — console-mirror confirmation: schema + service (no UI in this contract)
+ROUTE: Codex 5.6 SOL | xhigh reasoning effort
+DATE: 2026-07-11 · Captain: Fable · Repo worktree: /Users/johnkruse/Projects/kbl-mirror (branch codex/console-mirror)
+
+## Product ruling (JK 2026-07-11, verbatim intent)
+"The user has to change the ratings/traits in the SMB4 console itself for gameplay, but we ALSO need
+the living-season engine to know the current state of traits/ratings, so it should also make these
+changes in the app so the app matches the console; then at the next checkpoint, ratings and traits can
+update again, etc." Plus: "users have to sign off on changes in case there are bugs; make it an easy
+confirmation log that keeps the change history somewhere hidden but easy to find and also lets the
+user reject any changes."
+Authority: `spec-docs/OBSERVER_GROUNDWORK_BRIEF_2026-07-11.md` §5 R2. Peer-reviewed design (Codex 5.6
+Sol, 2026-07-11): confirmation is a STATE MACHINE with compare-and-set, not a checkbox.
+
+## Current verified state (re-read each anchor before editing; mismatch → STOP)
+- Ratings overlay status is only `pending | confirmed` (`src/utils/franchiseRatingsOverlayStorage.ts:15`);
+  `confirmOverlay` flips status only, applies nothing (`src/engines/ratingsOverlayConfirmation.ts:71`);
+  no production caller for either.
+- Trait applier `applyConfirmedTraitOverlay` mutates player trait1/trait2 then updates the overlay in a
+  second DB and admits non-atomicity (`src/utils/franchiseTraitConfirmApply.ts:19,41`); no production caller.
+- Lens merges CONFIRMED overlays over the stored player ratings (`src/engines/ratingsOverlayMerge.ts:42`) —
+  once applied rows mutate the player record this becomes a DOUBLE-APPLY hazard.
+
+## SCOPE
+
+**A. Status model (both overlay stores).**
+Extend to: `pending → confirmed-applied | rejected | conflict | apply-failed`, plus `applied: boolean`
+(traits already have it; add for ratings). Resolution metadata on the row (all optional for legacy
+rows): `expectedPriorValue`, `proposedValue`, `actualEnteredValue` (may differ from proposed — SMB4
+clamps, user adjusts), `resolvedAt` (epoch) + `resolvedCivilDate` (device-local YYYY-MM-DD),
+`resolvedBy` (free actor/device string), `rejectReason?`, `playerRecordRevision?`, bounded
+`applyError?`. NO new IndexedDB store, NO trackerDb version bump — these are field additions on
+existing stores' rows.
+
+**B. The mirror service** — new `src/utils/franchiseConsoleMirror.ts`:
+1. `listUnresolvedDevelopment(franchiseId, seasonId)` → proposals grouped by checkpoint, OLDEST
+   unresolved checkpoint first (the current UI picks the newest and strands older ones — the service
+   contract must make oldest-first the only easy path).
+2. `resolveRatingsProposal(overlayId, resolution)` where resolution =
+   `{ action: 'confirm' | 'confirm-adjusted' | 'reject', actualValue?, actor? }`:
+   - COMPARE-AND-SET: if the player's CURRENT app value ≠ the proposal's `expectedPriorValue` → mark
+     `conflict`, apply nothing, return the conflict info. Never stack a stale delta.
+   - confirm/confirm-adjusted: write the final value (proposed or actual) to the FRANCHISE PLAYER
+     RECORD (the same store franchise rosters read), then mark the overlay `confirmed-applied` with
+     full resolution metadata. If the player write succeeded but the overlay update throws → row must
+     be recoverable: a re-run detects the already-applied player value and completes the overlay update
+     idempotently (`apply-failed` is the durable state only when the PLAYER write failed).
+   - reject: mark `rejected` + reason; player record untouched.
+3. `resolveTraitProposal(overlayId, resolution)` — same contract, wrapping the existing
+   `applyConfirmedTraitOverlay` mechanics (reuse its mutation logic; do not duplicate it) with CAS
+   (expected prior trait state), the new statuses, and idempotent crash recovery.
+4. `getDevelopmentHistory(franchiseId, playerId)` → chronological resolved rows (both kinds) — this IS
+   JK's "hidden but easy to find" change history; the UI contract will surface it.
+5. Every mutation idempotent: re-resolving a resolved row is a no-op returning current state.
+
+**C. Kill the double-apply.**
+`ratingsOverlayMerge` (and any other consumer of confirmed overlays) must EXCLUDE rows with
+`applied: true` — the player record is already the truth for applied rows. Legacy `confirmed`
+(unapplied) rows keep today's merge behavior. Prove with a test: applied row + merge → base value used.
+
+**D. Explicitly OUT of scope / FENCE**
+- NO UI files (`useFranchiseLensData.ts`, `FranchiseLensHub.tsx` — next contract).
+- Do NOT touch KERNEL-lane files: `processCompletedGame.ts`, `seasonAggregator.ts`,
+  `milestoneAggregator.ts`, `milestoneDetector.ts`, `franchiseCheckpointSweepCompute.ts`,
+  `franchiseTraitGrantCompute.ts`, `franchiseFameCompute.ts`, `franchiseStadiumRecordsTap.ts`,
+  `scheduleStorage.ts`, `gameStorage.ts`, `GameTracker.tsx`, `careerStorage.ts`.
+- Do NOT block new-proposal generation for players with unresolved rows (that lives in the sweep
+  compute — fenced); note it as a carry-forward in your report.
+- No flag/activation changes; no test-utils/lsim changes.
+
+## VERIFICATION (paste all)
+1. `NODE_ENV= npm run build` → exit 0 (tail).
+2. `NODE_ENV= npx vitest run` — FULL suite (storage-type ripple risk). Known solo-green batch flakes
+   (LeagueBuilderDraftSetup, franchiseManualSmokeFixture) are baseline; any other new red is yours.
+3. Proving tests: CAS conflict path; reject path; confirm-adjusted (actual ≠ proposed → actual wins);
+   idempotent re-resolve; trait crash-recovery (player mutated, overlay update failed → re-run
+   completes); merge excludes applied rows; oldest-first ordering from `listUnresolvedDevelopment`.
+4. Changed-files list + the exact status-union and new-field diffs for both storage modules.
+
+FORMAT: 1. Files changed 2. Per-scope-item (A-D) 3. Verification pasted 4. "MIRROR-1 complete" OR
+"BLOCKED: <exact reason>". Commit on branch codex/console-mirror if the sandbox permits; else clean
+tree + say so. NEVER push.
+FAILURE PROTOCOL: anchor mismatch → STOP + report. Ambiguity → quote this contract + STOP. Product
+semantics this contract doesn't answer → STOP (never improvise).
+
+Use xhigh reasoning effort. Think step-by-step.
+
+## AMENDMENT 1 (captain, 2026-07-11 — from the deep pass + hunt, pre-dispatch)
+Checkpoint identity: overlay `sourceEventId` is `checkpoint-<GAME NUMBER>` (e.g. checkpoint-24 on a
+60-game season), NOT an ordinal — the UI currently mislabels it "Checkpoint 24 of 5" (deep-pass #1).
+Therefore `listUnresolvedDevelopment` must return, per checkpoint group: `{ boundaryGameNumber,
+ordinal, ordinalCount }` where ordinal/ordinalCount derive from the season's boundary plan
+(`isCheckpointBoundary` positions for the season's totalGames + cadence — import the existing helpers
+from `franchiseCheckpointSweepCompute`, read-only; that file stays fenced). Additionally, resolution
+records must persist `boundaryGameNumber` AND `ordinal` so the change history reads correctly. The
+verified hunt finding C8 (Math.max strands older checkpoints) is solved by this contract's oldest-first
+ordering — add a test proving two pending checkpoints surface oldest-first with correct ordinals.
+<!-- ===== END CONTRACT: MIRROR-1 ===== -->
+
+<!-- ===== CONTRACT: HUNTFIX-ENGINE-1 ===== -->
+# CONTRACT HUNTFIX-ENGINE-1 — engine & compute truth batch (8 verified defects)
+ROUTE: Codex 5.6 SOL | xhigh reasoning effort
+DATE: 2026-07-11 · Captain: Fable · Worktree: /Users/johnkruse/Projects/kbl-hfe (branch codex/huntfix-engine)
+
+## Authority
+Living-season program (`OBSERVER_GROUNDWORK_BRIEF_2026-07-11.md` §5). Every defect below was found by
+an adversarially-verified hunt (2 independent opus verifiers each) on main @ e5f4213c and routed by the
+captain (`LIVING_SEASON_V1_EXECUTION_MAP.md`). Re-read every anchor before editing; mismatch → STOP.
+
+## SCOPE
+
+**E1 (CRITICAL — product math, will get a dedicated opus audit). fWAR positional adjustment is
+inversely proportional to season length.** `src/engines/fwarCalculator.ts:475-481` (+ duplicate at
+`:539-544`): `positionalAdjustment = POSITIONAL_ADJUSTMENTS[pos] × (gamesPlayed/seasonGames)` then
+`÷ runsPerWin(seasonGames)`. The constants are calibrated per-48-games (C=3.7 ≈ 12.5-per-162 MLB
+value — verify the calibration comment in source). Full-time catcher: 50-game season → +1.20 fWAR;
+162-game → +0.37; 24-game → +2.50. Every OTHER WAR run term scales with playing time and cancels the
+runsPerWin season-scaling; this flat constant does not. FIX: positional runs must scale with actual
+games played against the 48-game calibration base (posRuns = C × gamesPlayed/48), making full-time
+positional WAR season-length-invariant (~+1.25 catcher). Verify the intended semantic against the
+calibration comments + `spec-docs` WAR references before choosing the final formula — if the spec
+contradicts the 48-game base, STOP and report. Fix BOTH copies. Tests: same player/participation at
+24/50/162 games yields the same positional WAR (±rounding); relative positional ordering (C > SS > CF
+… < DH) preserved.
+
+**E2. resolveFameTier discards the reach floor's magnitude.** `src/engines/fameModel.ts:245-247`: the
+`reachFloor > 0 && heatRank === UNKNOWN` branch hardcodes `'LOCAL_HERO'`. A REGIONAL_STAR-or-higher
+floor (rank 2-5) with cooled heat resolves BELOW its own floor — violating §20.3 "displayed tier floors
+heat at reach" (`FRANCHISE_V1_LIVING_SEASON_SPEC.md` ~L381-386). FIX: return
+`FAME_TIER_BY_RANK[reachFloor]`. Test: floor 2 + heat 1 → REGIONAL_STAR; floor 5 + heat 0 →
+IMMORTAL_LEGEND; floor 0 unchanged.
+
+**E3. A trait being LOST still blocks gaining its opposite.** `src/engines/traitAcquisition.ts:640`:
+the offsetting-pair guard checks unfiltered `heldNames`, while the elite-pitch (:662-664) and capacity
+(:682) passes correctly exclude `lossNames`. Lose-Choker + gain-Clutch at one checkpoint drops the gain
+(reason `offsetting_pair_held`) and permanently blocks the flip. FIX: exclude traits in `lossNames`
+from the offsetting-pair check, matching the sibling passes. Test: the clean flip (lose Choker → gain
+Clutch same checkpoint) produces both proposals.
+
+**E4. WPA defensive budget silently dropped on SB/CS rows missing fielder ids.**
+`src/utils/kblWpaAttribution.ts:~1373` (`deriveBetweenPlayCredits`): caught_stealing/stolen_base (and
+symmetric wild_pitch/passed_ball/pickoff/advance rows) with neither catcherId nor pitcherId produce an
+empty defensive credit list — the play budget is not conserved. FIX per the module's own conservation
+convention: route the orphaned defensive share to the fielding TEAM's current pitcher when resolvable
+from the row/game context; if truly unresolvable, assign to the team-level bucket the module already
+uses for unattributed credit (find it — do not invent a new one; if none exists, STOP and report).
+Credit-conservation tests must cover the missing-id path. The L-SIM manager/WPA conservation proof must
+stay green.
+
+**E5. Flashpoint "consecutive" counter is actually cumulative.**
+`src/utils/franchiseFlashpointDecayCompute.ts:~150`: `consecutiveGamesUnresolved` never resets when a
+player's flashpoint turns off; a resolved-then-retriggered flashpoint resumes the old count and
+compounds a larger tax than a fresh one. FIX: reset the counter when the flashpoint is not active for a
+processed game (true consecutive semantics). Test: on→off→on yields a restarted count.
+
+**E6. Event-driven RIVALRY edges are blindly overwritten.**
+`src/utils/franchiseRelationshipOvertakeCompute.ts:71-97` and
+`src/utils/franchiseRelationshipFormationCompute.ts:135-137` put-overwrite the deterministic edge id
+without the `if (existing) continue` guard their honor-lock sibling uses — wiping formation
+source/history when the same pair re-forms via a different trigger. FIX: add the same existing-edge
+guard (preserve the original formationSource/formedAtGameNumber; intensity updates stay the
+intensity-compute's job). Tests: overtake-then-checkpoint-formation preserves the original edge row;
+snub-lock survives a later overtake.
+
+**E7 (dark fix). classifyFameVsMerit 'bust' tests magnitude, not rank.**
+`src/engines/fameModel.ts:278-281`: uses `fameMagnitude` (abs) so a DESPISED low-merit player
+classifies 'bust' (= overrated darling). FIX: test `fameRank >= config.classifier.highFameMinRank`
+(positive-rank semantics, matching the snub/darling branches). No production consumer today — pure
+function + tests only.
+
+**E8. Delete the dead INNING_MULTIPLIERS table.** `src/engines/leverageCalculator.ts:~140`: defined,
+never read, and contradicts the live inning factor. Remove it (and any doc-comment references in the
+file). Captain updates the knob registry separately — do not touch spec-docs.
+
+## FENCE
+Only the files named above (+ their test files). Do NOT touch: processCompletedGame.ts,
+seasonAggregator.ts, franchiseFameCompute.ts, franchiseStadiumRecordsTap.ts, scheduleStorage.ts,
+GameTracker.tsx, careerStorage.ts (KERNEL lane); useGameState.ts (TRACKER lane); overlay storages /
+franchiseTraitConfirmApply / ratingsOverlayConfirmation / ratingsOverlayMerge (MIRROR lane);
+useFranchiseLensData.ts / FranchiseLensHub.tsx (UI lane); test-utils/lsim/** except reading; no flag
+changes; no new stores.
+
+## VERIFICATION (paste all)
+1. `NODE_ENV= npm run build` exit 0 (tail).
+2. `NODE_ENV= npx vitest run` FULL suite — read the summary; the two known solo-green batch flakes are
+   baseline; machine may be running sibling lanes — a NEW red must be retried solo before you own it.
+3. Proving tests per item E1-E7 (fail-before/pass-after; state file names).
+4. E1: paste the 24/50/162-game positional-WAR invariance table.
+5. Changed-files list.
+
+FORMAT: files changed → per-item result → verification → "HUNTFIX-ENGINE-1 complete" or "BLOCKED: <why>".
+Commit on branch if sandbox permits; NEVER push.
+FAILURE PROTOCOL: anchor mismatch / spec contradiction / missing team-credit bucket (E4) → STOP +
+report that item, finish the others (items are separable).
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: HUNTFIX-ENGINE-1 ===== -->
+
+<!-- ===== CONTRACT: HUNTFIX-TRACKER-1 ===== -->
+# CONTRACT HUNTFIX-TRACKER-1 — GameTracker truth seams (4 verified defects, one file)
+ROUTE: Codex 5.6 SOL | xhigh reasoning effort
+DATE: 2026-07-11 · Captain: Fable · Worktree: /Users/johnkruse/Projects/kbl-hft (branch codex/huntfix-tracker)
+
+## Authority
+Living-season program (`OBSERVER_GROUNDWORK_BRIEF_2026-07-11.md` §5); defects verified by the
+adversarial hunt + captain deep pass (`CAPTAIN_DEEP_PASS_2026-07-11.md` #19) on main @ e5f4213c.
+All work in `src/src_figma/hooks/useGameState.ts` (+ tests). GameTracker's UI is SET (JK) — these are
+logic/persistence truth fixes, zero visual changes. Re-read every anchor; mismatch → STOP.
+
+## SCOPE
+
+**T1. Immaculate-inning detection compares a CUMULATIVE pitch count to 9.**
+`useGameState.ts:10486` (check), `:10528` (+2 IMMACULATE_INNING fame), `:10545` (cumulative
+`stats.pitchCount = finalCount`). The intended per-inning counter `inningPitchesRef.current.pitches` is
+dead — only ever reset to 0 (`:4172`, `:5035`, `:10760`), never incremented. A reliever with any prior
+pitches can never register an immaculate inning; only a starter's 9-pitch first inning fires. FIX:
+compute the INNING's pitch delta (start-of-inning cumulative snapshot vs end-of-inning cumulative — the
+end-of-half-inning confirm flow already knows both; either wire `inningPitchesRef` for real or derive
+the delta at the check). The strikeout-count condition stays as-is. Tests: reliever 15-cumulative + 9-
+pitch 3K inning → fires; 10-pitch 3K inning → does not; starter first-inning 9-pitch 3K → still fires.
+
+**T2. D3K persists `runsScored: 0` while the score advances.**
+`useGameState.ts:7672` hardcodes the archived AtBatEvent's `runsScored: 0` even when the dropped-third-
+strike wild-pitch/passed-ball scores a runner — the same play's run IS in awayScoreAfter/homeScoreAfter
+(:7545-7550), the scoreboard (:7825), gameState (:7871-7872), and the runner's R (:7806). The persisted
+row contradicts its own score-after fields; any event-sum reconstruction undercounts. FIX: persist the
+actual computed runsScored (from :7540-7544). `rbiCount: 0` is CORRECT baseball (no RBI on WP/PB) —
+leave it. Test: D3K with R3 scoring → event.runsScored 1 and scoreAfter delta consistent.
+
+**T3. Quick-error path loses the run AND desyncs three states.**
+Path: HITS "E" → Error Details position button → `handleQuickErrorDetail` →
+`commitPlateAppearance({type:"error", rbi:0})` → `recordError(0, undefined)` (no runnerData). With R3:
+the no-runnerData branch at `useGameState.ts:8249` clears third ("R3 scores") while `runsScored`
+derives only from runnerData (:7922-7925) = 0 → no run added (:8265-8266), AND the errorTracker only
+advances runners when runnerData exists → tracker still shows R3 occupied. Three-way desync: bases
+empty / tracker occupied / score unchanged — a lost run. FIX: make the default no-runnerData semantics
+COHERENT — either (a) the default branch derives runner outcomes and runs from the same default
+advancement it applies (score the run it moves), keeping tracker in sync, or (b) the quick path
+supplies explicit default runnerData. Choose the smaller diff consistent with how the detailed error
+path behaves; the three states (bases, tracker, score) must agree in every case. Tests: quick-error
+with R3 → run scores, bases/tracker/score agree; quick-error bases-empty unchanged; detailed-error path
+regression-covered.
+
+**T4. Undo never rewinds fame.**
+`undoLastAction` (:5768-5806) undoes the event-log row, but `fameEventsRef` (:3365-3376) keeps every
+accumulated fame event — an undone play's fame ships to the archive (deep-pass #19: record a web gem,
+undo it, +0.75 fame survives). FIX: tag each appended fame entry with the event-log linkage available
+at append time (the current at-bat/between-play event id or event index the play writes), and on
+successful undo remove fame entries tagged to the undone action id(s) (including the paired at-bat undo
+in the end-of-half-inning case). Manual quick-button special events that create their own between-play
+rows must carry their own row's id. If a fame append site genuinely has NO event-log row to link
+(verify each appendFameEvent caller), STOP and report that site rather than guessing. Persisted
+snapshot (`buildPersistedFameEvents`) and archive flow unchanged apart from the corrected contents.
+Tests: play+fame → undo → fame ref empty + next snapshot fameEvents empty; multi-event game → undo last
+only removes the last play's fame; end-of-half-inning paired undo removes both rows' fame.
+
+## FENCE
+`src/src_figma/hooks/useGameState.ts` + test files ONLY. No UI component changes, no engine/storage
+module edits, no GameTracker.tsx edits (KERNEL lane owns its civil-date site). No schema changes to
+persisted shapes beyond T2's corrected value and T4's fame-entry internal tagging (hook-local; the
+persisted FameEventRecord shape must NOT change — verify before finishing).
+
+## VERIFICATION (paste all)
+1. `NODE_ENV= npm run build` exit 0 (tail).
+2. `NODE_ENV= npx vitest run` FULL suite (summary, not exit code; two known solo-green batch flakes are
+   baseline; retry any new red solo before owning it — sibling lanes may be loading the machine).
+3. Proving tests T1-T4 (fail-before/pass-after, file names).
+4. Changed-files list.
+
+FORMAT: files changed → per-item → verification → "HUNTFIX-TRACKER-1 complete" or "BLOCKED: <why>".
+Commit on branch if sandbox permits; NEVER push.
+FAILURE PROTOCOL: anchor mismatch → STOP that item, finish others. T4 linkage impossible at any append
+site → STOP that site, report, finish the rest of T4 where linkable.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: HUNTFIX-TRACKER-1 ===== -->

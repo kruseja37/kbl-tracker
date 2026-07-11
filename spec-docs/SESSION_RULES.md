@@ -378,6 +378,14 @@ When your context is approaching its limit (compaction near or imminent):
 
 ## Lessons Learned (pending JK ratification)
 
+- **When committing from the PRIMARY shared checkout, always verify `git branch --show-current` in the
+  SAME command as the commit**, because concurrent sessions switch the checkout's branch mid-session —
+  on 2026-07-11 a living-season docs commit landed on the snake thread's `captain/snake-format-option`
+  because that session had switched the shared tree between my commits; rescue = cherry-pick to a clean
+  branch off origin/main + PR. Better: captains commit from their own worktrees, never the shared tree.
+  (Fable, self-caught 2026-07-11.)
+
+
 - When spawning ANY subagent or workflow agent, always pass an explicit model (sonnet mechanical / opus audits) because agents without a model override silently inherit the captain's session model and burn its budget (2026-07-08 incident: SOT-sweep verifiers + design agents inherited Fable; JK flagged the burn twice).
 - When monitoring long background dispatches, always use a token-free bash sentinel that wakes the captain only on stall/completion, never a timed captain heartbeat, because each timed wake-up costs a full expensive-context turn with usually nothing to do.
 - When a lane changes extraction/engine behavior that page-level test fixtures consume, always include the consuming pages' test suites in the lane's contract gates because POOLFLOOR was green by its own engine gates yet invalidated 26 tests across 4 page suites that only the closing full-suite run caught.

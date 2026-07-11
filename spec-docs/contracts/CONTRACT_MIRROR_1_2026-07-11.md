@@ -84,3 +84,36 @@ FAILURE PROTOCOL: anchor mismatch → STOP + report. Ambiguity → quote this co
 semantics this contract doesn't answer → STOP (never improvise).
 
 Use xhigh reasoning effort. Think step-by-step.
+
+## AMENDMENT 1 (captain, 2026-07-11 — from the deep pass + hunt, pre-dispatch)
+Checkpoint identity: overlay `sourceEventId` is `checkpoint-<GAME NUMBER>` (e.g. checkpoint-24 on a
+60-game season), NOT an ordinal — the UI currently mislabels it "Checkpoint 24 of 5" (deep-pass #1).
+Therefore `listUnresolvedDevelopment` must return, per checkpoint group: `{ boundaryGameNumber,
+ordinal, ordinalCount }` where ordinal/ordinalCount derive from the season's boundary plan
+(`isCheckpointBoundary` positions for the season's totalGames + cadence — import the existing helpers
+from `franchiseCheckpointSweepCompute`, read-only; that file stays fenced). Additionally, resolution
+records must persist `boundaryGameNumber` AND `ordinal` so the change history reads correctly. The
+verified hunt finding C8 (Math.max strands older checkpoints) is solved by this contract's oldest-first
+ordering — add a test proving two pending checkpoints surface oldest-first with correct ordinals.
+
+## AMENDMENT 2 (captain ruling on the BLOCK, 2026-07-11 — the STOP was correct, both contradictions are real)
+1. **Rejection reason:** resolution input becomes
+   `{ action: 'confirm' | 'confirm-adjusted' | 'reject', actualValue?, actor?, rejectReason? }` —
+   `rejectReason` optional at the type level, REQUIRED by the service when action==='reject' (throw a
+   typed validation error if absent).
+2. **CAS without generator snapshots (fence stands — KERNEL is concurrently editing both generators):**
+   two-tier compare-and-set:
+   - Rows carrying `expectedPriorValue` (future rows, stamped by the post-KERNEL follow-up
+     MIRROR-1b — NOT this contract): strict CAS against it.
+   - Rows without it (ALL rows today): the resolver REQUIRES the caller to pass
+     `observedPriorValue` — the value the UI displayed when the user made the decision (for ratings: the
+     player's current rating captured at takeover render; for traits: the observed `{trait1, trait2}`
+     pre-state). CAS = player's CURRENT value at resolve time must equal `observedPriorValue`, else
+     `conflict`. Missing `observedPriorValue` on a snapshot-less row → typed validation error, never a
+     silent apply. This still kills stale-delta stacking (the protection CAS exists for); sweep-time
+     stamping arrives in MIRROR-1b.
+3. **Trait actualValue shape (accepted from the builder's recommendation):**
+   `{ trait1: string | null; trait2: string | null }` — the post-console trait state the user actually
+   entered in SMB4.
+4. Everything else in the contract + Amendment 1 stands. Same fences, same verification. Report
+   "MIRROR-1 complete (Amendment 2)" or a new BLOCKED.
