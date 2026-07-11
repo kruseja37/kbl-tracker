@@ -796,15 +796,16 @@ describe('LeagueBuilderLeagues Component', () => {
   });
 
   describe('Draft Format', () => {
-    test('draft format selector only offers auction', async () => {
+    test('draft format selector offers auction (default) and snake', async () => {
       await renderSettledLeagueBuilderLeagues();
       await openCreateLeagueModal();
 
       const options = within(screen.getByLabelText('Draft format')).getAllByRole('option');
-      expect(options).toHaveLength(1);
+      expect(options).toHaveLength(2);
       expect(options[0]).toHaveValue('auction');
       expect(options[0]).toHaveTextContent('Auction (default)');
-      expect(screen.queryByRole('option', { name: /snake/i })).not.toBeInTheDocument();
+      expect(options[1]).toHaveValue('snake');
+      expect(options[1]).toHaveTextContent('Snake');
     });
 
     test('creating a league persists default auction draft format', async () => {
