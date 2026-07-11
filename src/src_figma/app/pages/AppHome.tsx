@@ -7,10 +7,10 @@ export function AppHome() {
   const [syncOpen, setSyncOpen] = useState(false);
   const { status, recoverUnaggregatedGames } = useDataIntegrity();
 
-  // Auto-recover unaggregated games on startup
+  // Auto-reconcile completed games on startup using fail-closed mode classification.
   useEffect(() => {
     if (status.checked && (status.needsAggregation > 0 || status.hasErrors > 0)) {
-      console.log(`[AppHome] Auto-recovering ${status.needsAggregation + status.hasErrors} unaggregated games`);
+      console.log(`[AppHome] Mode-aware recovery for ${status.needsAggregation + status.hasErrors} completed games`);
       recoverUnaggregatedGames().catch(console.error);
     }
   }, [status.checked, status.needsAggregation, status.hasErrors, recoverUnaggregatedGames]);

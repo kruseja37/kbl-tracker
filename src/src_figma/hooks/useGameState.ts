@@ -181,6 +181,45 @@ export interface EndGameOptions {
   managerByTeamId?: Record<string, string | undefined>;
 }
 
+export class MissingGameCompletionScopeError extends Error {
+  constructor(gameId: string) {
+    super(`Cannot complete franchise game ${gameId}: an explicit season scope is required`);
+    this.name = "MissingGameCompletionScopeError";
+  }
+}
+
+function nonEmptyCompletionScope(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function resolveGameCompletionScopes(input: {
+  gameId: string;
+  competitionType?: CompetitionType;
+  seasonId?: string;
+  fallbackSeasonId?: string;
+  statsScopeId?: string;
+  fallbackStatsScopeId?: string;
+}): { seasonId: string | undefined; statsScopeId: string | undefined } {
+  if (input.competitionType === "exhibition") {
+    return { seasonId: undefined, statsScopeId: undefined };
+  }
+
+  const seasonId =
+    nonEmptyCompletionScope(input.seasonId) ??
+    nonEmptyCompletionScope(input.fallbackSeasonId);
+  const statsScopeId =
+    nonEmptyCompletionScope(input.statsScopeId) ??
+    nonEmptyCompletionScope(input.fallbackStatsScopeId) ??
+    seasonId;
+
+  if (input.competitionType === "franchise" && !statsScopeId) {
+    throw new MissingGameCompletionScopeError(input.gameId);
+  }
+
+  return { seasonId, statsScopeId };
+}
+
 export interface ScoreboardState {
   innings: { away: number | undefined; home: number | undefined }[];
   away: { runs: number; hits: number; errors: number };
@@ -10956,11 +10995,20 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
     async (opts?: EndGameOptions) => {
       const completedCivilDate = getDeviceLocalCivilDate();
       const activityLog = opts?.activityLog ?? [];
+      const completionCompetitionType =
+        opts?.competitionType ?? competitionTypeRef.current;
+      const completionScopes = resolveGameCompletionScopes({
+        gameId: gameState.gameId,
+        competitionType: completionCompetitionType,
+        seasonId: opts?.seasonId,
+        fallbackSeasonId: seasonIdRef.current,
+        statsScopeId: opts?.statsScopeId,
+        fallbackStatsScopeId: statsScopeIdRef.current,
+      });
       const resolvedArchiveLeagueId =
         opts?.leagueId ??
         leagueIdRef.current ??
-        ((opts?.competitionType ?? competitionTypeRef.current) === "exhibition" ||
-        !(opts?.competitionType ?? competitionTypeRef.current)
+        (completionCompetitionType === "exhibition"
           ? (opts?.competitionId ?? competitionIdRef.current)
           : undefined);
       setIsSaving(true);
@@ -11191,13 +11239,9 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           stadiumName: resolvedStadium,
           stadiumId: resolvedStadium ? getStableParkId(resolvedStadium) : null,
           parkFactors: getDerivedParkFactorsIfAvailable(resolvedStadium),
-          seasonId: seasonIdRef.current || undefined,
-          statsScopeId:
-            opts?.statsScopeId ??
-            statsScopeIdRef.current ??
-            seasonIdRef.current ??
-            undefined,
-          competitionType: opts?.competitionType ?? competitionTypeRef.current,
+          seasonId: completionScopes.seasonId,
+          statsScopeId: completionScopes.statsScopeId,
+          competitionType: completionCompetitionType,
           competitionId: opts?.competitionId ?? competitionIdRef.current,
           competitionName: competitionNameRef.current,
           franchiseId: opts?.franchiseId ?? franchiseIdRef.current,
@@ -11293,14 +11337,8 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         const alreadyAggregated = header?.aggregated === true;
         let endGameAggregationSucceeded = alreadyAggregated;
 
-        const targetStatsScopeId =
-          opts?.statsScopeId ??
-          statsScopeIdRef.current ??
-          opts?.seasonId ??
-          seasonIdRef.current ??
-          "season-1";
-        const archivedSeasonId =
-          opts?.seasonId ?? seasonIdRef.current ?? undefined;
+        const targetStatsScopeId = completionScopes.statsScopeId;
+        const archivedSeasonId = completionScopes.seasonId;
         const currentSeasonNumber =
           opts?.currentSeason ?? gameState.seasonNumber;
         const aggregationOptions: GameAggregationOptions = {
@@ -11317,7 +11355,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         const archiveContext = {
           statsScopeId: targetStatsScopeId,
           competitionType:
-            opts?.competitionType ?? competitionTypeRef.current,
+            completionCompetitionType,
           competitionId: opts?.competitionId ?? competitionIdRef.current,
           competitionName: competitionNameRef.current,
           playoffSeriesId: playoffSeriesIdRef.current || undefined,
@@ -12009,22 +12047,24 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         // Archive game FIRST so PostGameSummary can load it (EXH-011 fix)
         // Build persisted state for archiving — include player name and team
         const activityLog = options?.activityLog ?? [];
-        const archivedSeasonId =
-          options?.seasonId ?? seasonIdRef.current ?? undefined;
-        const statsScopeIdValue =
-          options?.statsScopeId ??
-          statsScopeIdRef.current ??
-          options?.seasonId ??
-          seasonIdRef.current ??
-          "season-1";
+        const completionCompetitionType =
+          options?.competitionType ?? competitionTypeRef.current;
+        const completionScopes = resolveGameCompletionScopes({
+          gameId: gameState.gameId,
+          competitionType: completionCompetitionType,
+          seasonId: options?.seasonId,
+          fallbackSeasonId: seasonIdRef.current,
+          statsScopeId: options?.statsScopeId,
+          fallbackStatsScopeId: statsScopeIdRef.current,
+        });
+        const archivedSeasonId = completionScopes.seasonId;
+        const statsScopeIdValue = completionScopes.statsScopeId;
         const currentSeasonNumber =
           options?.currentSeason ?? gameState.seasonNumber;
         const resolvedArchiveLeagueId =
           options?.leagueId ??
           leagueIdRef.current ??
-          ((options?.competitionType ?? competitionTypeRef.current) ===
-            "exhibition" ||
-          !(options?.competitionType ?? competitionTypeRef.current)
+          (completionCompetitionType === "exhibition"
             ? (options?.competitionId ?? competitionIdRef.current)
             : undefined);
         const endGameOptions: EndGameOptions = {
@@ -12032,7 +12072,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
           seasonId: archivedSeasonId,
           statsScopeId: statsScopeIdValue,
           competitionType:
-            options?.competitionType ?? competitionTypeRef.current,
+            completionCompetitionType,
           competitionId: options?.competitionId ?? competitionIdRef.current,
           leagueId: resolvedArchiveLeagueId,
           franchiseId: options?.franchiseId ?? franchiseIdRef.current,
@@ -12241,7 +12281,7 @@ export function useGameState(initialGameId?: string): UseGameStateReturn {
         parkFactors: getDerivedParkFactorsIfAvailable(resolvedStadium),
         seasonId: archivedSeasonId,
         statsScopeId: statsScopeIdValue,
-        competitionType: options?.competitionType ?? competitionTypeRef.current,
+        competitionType: completionCompetitionType,
         competitionId: options?.competitionId ?? competitionIdRef.current,
         competitionName: competitionNameRef.current,
         franchiseId: options?.franchiseId ?? franchiseIdRef.current,

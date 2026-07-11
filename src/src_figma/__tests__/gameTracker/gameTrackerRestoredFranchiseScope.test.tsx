@@ -552,4 +552,55 @@ describe("restored GameTracker franchise scope", () => {
       statsScopeId: "elimination-elim-restored",
     });
   });
+
+  test("fresh exhibition identity carries league identity without a season scope", () => {
+    expect(
+      resolveGameTrackerIdentity({
+        navigationState: {
+          gameMode: "exhibition",
+          competitionType: "exhibition",
+          competitionId: "league-exhibition",
+          leagueId: "league-exhibition",
+          seasonId: "season-1",
+          statsScopeId: "season-1",
+        },
+      }),
+    ).toMatchObject({
+      competitionType: "exhibition",
+      leagueId: "league-exhibition",
+      seasonId: undefined,
+      statsScopeId: undefined,
+    });
+  });
+
+  test("fresh launch without an explicit competition type is loudly rejected", () => {
+    expect(() =>
+      resolveGameTrackerIdentity({
+        navigationState: {
+          gameMode: "franchise",
+          franchiseId: "franchise-missing-type",
+          seasonId: "franchise-missing-type-season-1",
+          statsScopeId: "franchise-missing-type-season-1",
+        },
+      }),
+    ).toThrow(/new game launch.*competition type/i);
+  });
+
+  test("restored legacy identity keeps warning tolerance instead of throwing", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    expect(() =>
+      resolveGameTrackerIdentity({
+        navigationState: null,
+        restoredContext: {
+          competitionType: "elimination",
+        },
+      }),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(
+      "[GameTrackerIdentity] Resolved incomplete competition scope:",
+      expect.arrayContaining([expect.stringMatching(/eliminationId/)]),
+    );
+    warn.mockRestore();
+  });
 });

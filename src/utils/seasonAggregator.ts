@@ -139,6 +139,13 @@ export interface GameAggregationResult {
   error?: string;
 }
 
+export class MissingSeasonScopeError extends Error {
+  constructor(gameId: string) {
+    super(`Cannot aggregate completed game ${gameId}: an explicit seasonId is required`);
+    this.name = 'MissingSeasonScopeError';
+  }
+}
+
 /**
  * Options for game aggregation
  */
@@ -166,8 +173,12 @@ export async function aggregateGameToSeason(
   gameState: PersistedGameState,
   options: GameAggregationOptions = {}
 ): Promise<GameAggregationResult> {
+  const explicitSeasonId = options.seasonId?.trim();
+  if (!explicitSeasonId) {
+    throw new MissingSeasonScopeError(gameState.gameId);
+  }
+
   const {
-    seasonId = DEFAULT_SEASON_ID,
     detectMilestones = true,
     milestoneConfig,
     franchiseId,
@@ -177,6 +188,7 @@ export async function aggregateGameToSeason(
     seasonName = DEFAULT_SEASON_NAME,
     seasonTotalGames,
   } = options;
+  const seasonId = explicitSeasonId;
   try {
     // Ensure season exists
     await getOrCreateSeason(
