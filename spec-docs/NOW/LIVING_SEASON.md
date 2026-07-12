@@ -34,3 +34,18 @@ threshold/window edges; (c) harness invariants asserting a retired model; (d) ch
 of anything that should be organic. Full audit lessons: Fable memory `audit-lessons-2026-07-11`
 (incl. the stale-base trap: base-verify against CURRENT origin/main, name the SHA).
 - `LIVING_SEASON_NARRATIVE_MATHEMATICS_2026-07-11.md` — Fable's final design: the v1.1 magic layer (stakes, memory, arcs, camera, pacing) — read at the tuning sit-down, build order §8.
+
+## LATE-NIGHT ADDENDUM (Fable's final hours — verify PR states on crossing)
+- **PR #106 — Living Season Test Drive** (dev page `/__preview/living-season-test-drive`): synthetic
+  games through the REAL pipeline + a plain-language per-game receipt panel. This is how JK (and
+  you) walk the season in minutes instead of hour-long console games. Merge → seed → drive.
+- **PR #107 — the transcription cockpit**: the takeover redesigned for hours-long use (compact
+  rows, Enter-rhythm, progressive disclosure, DOM bomb defused); clubhouse two-column; **Big
+  Moments was a wiring bug — data existed, feed never converted it — now fixed**; help-button law
+  applied with a tripwire test.
+- **MERGED #105 — STAKES-1-CORE**: pre-game stakes vector (narrative math §1) as pure compute.
+  NEXT NARRATIVE LANE: wire it to the Tonight card + one pre-game reporter item (§8 step 1's UI
+  half — blocked until #107 merges to avoid file collision), then CAMERA-1 (§4).
+- **The help-button law** (JK, in the SESSION_RULES pending pen — ask him to say "ratify"):
+  explanatory text behind `?`, inline copy = labels/values/states/one-liners. Enforced by a
+  tripwire test in #107; apply everywhere going forward.
