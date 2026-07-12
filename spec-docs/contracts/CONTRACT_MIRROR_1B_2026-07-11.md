@@ -62,3 +62,21 @@ FAILURE PROTOCOL: service fallback semantics ambiguous for a trait case → STOP
 evidence, finish ratings side; anchor drift → re-locate by symbol.
 
 Use xhigh reasoning effort. Think step-by-step.
+
+---
+## AMENDMENT 1 (captain, same day) — S2 unblocked: carry slot identity to the sweep
+
+Builder STOP verified correct: `TraitGrantRosterEntry.heldTraitNames` filters
+`[player.trait1, player.trait2]` into a bag (franchiseTraitGrantCompute.ts:~139), discarding slot
+position, while `applyTraitDisplacement` (traitOverlayConfirmation.ts:~50) is slot-positional.
+
+FENCE CHANGE: `franchiseTraitGrantCompute.ts` is now whole-file in scope. Carry `trait1` and
+`trait2` VERBATIM (null included) on the roster entry alongside the existing `heldTraitNames`
+(keep it — downstream candidate logic uses the bag). Then stamp trait overlay rows:
+`expectedPriorValue` = the slot occupant the proposal will displace/fill at sweep time (null for
+an empty-slot fill), `proposedValue` = the trait the slot will hold after apply — derived to match
+`applyTraitDisplacement`'s resolution order EXACTLY (displaces-match first, then trait1-empty,
+then trait2-empty). Lose-valence: expectedPriorValue = the trait being lost, proposedValue = null.
+S3 invariant tests now extend to traits: equivalence (a), drift-conflict (b, fail-before), and
+determinism (c) each get a trait twin. Everything else in the base contract stands, including the
+no-full-suite rule.
