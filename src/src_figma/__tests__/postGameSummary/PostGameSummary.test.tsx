@@ -484,6 +484,15 @@ describe('PostGameSummary Component', () => {
       expect(await screen.findByText('SUPER MEGA')).toBeInTheDocument();
       expect(screen.getByText('BASEBALL')).toBeInTheDocument();
     });
+
+    test('does not render the retired franchise Fame leaderboard placeholder', async () => {
+      render(<PostGameSummary />);
+      expect(await screen.findByText('POST-GAME REPORT')).toBeInTheDocument();
+      expect(screen.queryByTestId('fame-leaderboard-card')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Franchise Fame leaderboard integration/i),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('Run standings table', () => {

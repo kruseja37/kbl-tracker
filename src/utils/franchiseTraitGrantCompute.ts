@@ -29,6 +29,7 @@ import {
 } from '../engines/traitAcquisition';
 import type { HiddenModifiers } from '../types/game';
 import type { PersistedGameState } from './gameStorage';
+import { getFranchiseMoraleSnapshot } from './franchiseMoraleState';
 import {
   getBetweenPlayEvents,
   getGameEvents,
@@ -128,12 +129,13 @@ export async function resolveTraitGrantRoster(
     if (getPlayerRosterStatusForLeague(player, leagueId) !== 'MLB') continue;
 
     const isPitcher = getPlayerIsPitcher(player);
+    const playerMoraleSnapshot = await getFranchiseMoraleSnapshot(scope, 'player', player.id);
     roster.push({
       playerId: player.id,
       role: isPitcher ? 'pitcher' : 'position',
       personality: player.personality,
       modifiers: player.hiddenPersonalityModifiers,
-      currentMorale: player.morale,
+      currentMorale: playerMoraleSnapshot?.currentValue ?? player.morale,
       heldTraitNames: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
       bats: player.bats,
       throws: player.throws,

@@ -787,6 +787,35 @@ describe('Season fWAR Calculation', () => {
     expect(result.positionalAdjustment).toBeCloseTo(POSITIONAL_ADJUSTMENTS['1B'], 1);
   });
 
+  test('full-time positional WAR is invariant across 24, 50, and 162-game seasons', () => {
+    const positionalWar = [24, 50, 162].map((seasonGames) => {
+      const result = calculateSeasonFWAR([], 'C', seasonGames, seasonGames);
+      return result.positionalAdjustment / result.runsPerWin;
+    });
+
+    expect(positionalWar[0]).toBeCloseTo(positionalWar[1], 2);
+    expect(positionalWar[1]).toBeCloseTo(positionalWar[2], 2);
+    expect(positionalWar[0]).toBeCloseTo(1.25, 2);
+  });
+
+  test('positional WAR ordering is preserved across the calibrated position ladder', () => {
+    const positions: Position[] = ['C', 'SS', 'CF', '2B', '3B', 'P', 'RF', 'LF', '1B', 'DH'];
+    const positionalWar = positions.map((position) => {
+      const result = calculateSeasonFWAR([], position, 48, 48);
+      return result.positionalAdjustment / result.runsPerWin;
+    });
+
+    expect(positionalWar[0]).toBeGreaterThan(positionalWar[1]);
+    expect(positionalWar[1]).toBeGreaterThan(positionalWar[2]);
+    expect(positionalWar[2]).toBe(positionalWar[3]);
+    expect(positionalWar[3]).toBe(positionalWar[4]);
+    expect(positionalWar[4]).toBeGreaterThan(positionalWar[5]);
+    expect(positionalWar[5]).toBeGreaterThan(positionalWar[6]);
+    expect(positionalWar[6]).toBe(positionalWar[7]);
+    expect(positionalWar[7]).toBeGreaterThan(positionalWar[8]);
+    expect(positionalWar[8]).toBeGreaterThan(positionalWar[9]);
+  });
+
   test('tracks run categories separately', () => {
     const events: FieldingEvent[] = [
       createFieldingEvent('putout', 'SS', { putoutType: 'infield', difficulty: 'routine' }),
@@ -850,6 +879,15 @@ describe('fWAR from Basic Stats', () => {
     const half = calculateFWARFromStats(stats, 'SS', 24, 48);
 
     expect(full.positionalAdjustment).toBeGreaterThan(half.positionalAdjustment);
+  });
+
+  test('stats fallback uses the same 48-game positional calibration', () => {
+    const emptyStats = { putouts: 0, assists: 0, errors: 0, doublePlays: 0 };
+    const positionalWar = [24, 50, 162].map((seasonGames) =>
+      calculateFWARFromStats(emptyStats, 'C', seasonGames, seasonGames).fWAR,
+    );
+
+    expect(positionalWar).toEqual([1.25, 1.25, 1.25]);
   });
 });
 

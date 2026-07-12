@@ -240,6 +240,105 @@ export async function saveFranchisePlayer(
   return fullPlayer;
 }
 
+export type FranchisePlayerCompareAndSetResult =
+  | { status: 'updated'; previous: Player; player: Player }
+  | { status: 'conflict'; player: Player }
+  | { status: 'not-found' };
+
+export class FranchisePlayerPostCommitError extends Error {
+  readonly cause: unknown;
+  readonly previous: Player;
+  readonly player: Player;
+
+  constructor(cause: unknown, previous: Player, player: Player) {
+    super('The franchise player write committed, but a post-commit side effect failed.');
+    this.name = 'FranchisePlayerPostCommitError';
+    this.cause = cause;
+    this.previous = previous;
+    this.player = player;
+  }
+}
+
+/**
+ * Atomically checks and updates one franchise player inside a single IndexedDB
+ * transaction. Callers supply synchronous value predicates/transforms so a
+ * competing player write cannot land between the comparison and the put.
+ */
+export async function compareAndSetFranchisePlayer(
+  franchiseId: string,
+  playerId: string,
+  matchesExpected: (current: Player) => boolean,
+  update: (current: Player) => Player,
+): Promise<FranchisePlayerCompareAndSetResult> {
+  const db = await initFranchiseDatabase(franchiseId);
+  const tx = db.transaction(STORES.PLAYERS, 'readwrite');
+  const completion = transactionToPromise(tx);
+  const store = tx.objectStore(STORES.PLAYERS);
+  const request = store.get(playerId);
+  let result: FranchisePlayerCompareAndSetResult | undefined;
+  let callbackError: unknown;
+
+  request.onsuccess = () => {
+    try {
+      const current = request.result as Player | undefined;
+      if (!current) {
+        result = { status: 'not-found' };
+        return;
+      }
+      if (!matchesExpected(current)) {
+        result = { status: 'conflict', player: current };
+        return;
+      }
+
+      const candidate = update(current);
+      const saved: Player = {
+        ...candidate,
+        id: current.id,
+        createdDate: current.createdDate,
+        lastModified: nowISO(),
+        leagueAssignments: candidate.leagueAssignments ?? [],
+        editHistory: candidate.editHistory ?? [],
+      };
+      store.put(saved);
+      result = { status: 'updated', previous: current, player: saved };
+    } catch (error) {
+      callbackError = error;
+      tx.abort();
+    }
+  };
+
+  try {
+    await completion;
+  } catch (error) {
+    throw callbackError ?? error;
+  }
+  if (!result) {
+    throw new Error(`Player compare-and-set completed without a result for ${playerId}.`);
+  }
+
+  if (result.status === 'updated') {
+    try {
+      if (!syncEngine.isSuppressed()) {
+        syncEngine.upsert(
+          getFranchiseDatabaseName(franchiseId),
+          STORES.PLAYERS,
+          result.player.id,
+          result.player,
+        );
+      }
+      await markFranchiseTeamSnapshotsStaleForPlayerChange(
+        franchiseId,
+        result.previous,
+        result.player,
+      );
+    } catch (error) {
+      throw new FranchisePlayerPostCommitError(error, result.previous, result.player);
+    }
+  }
+
+  return result;
+}
+
 export async function getFranchiseTeam(franchiseId: string, teamId: string): Promise<Team | null> {
   const db = await initFranchiseDatabase(franchiseId);
   const tx = db.transaction(STORES.TEAMS, 'readonly');

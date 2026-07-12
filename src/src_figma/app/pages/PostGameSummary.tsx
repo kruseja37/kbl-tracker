@@ -841,10 +841,13 @@ export function PostGameSummary({
                   awayTeamName={awayTeamName}
                 />
 
-                <FameLeaderboardCard
-                  game={gameData}
-                  gameMode={resolvedGameMode}
-                />
+                {resolvedGameMode !== "franchise" &&
+                resolvedGameMode !== "playoff" ? (
+                  <FameLeaderboardCard
+                    game={gameData}
+                    gameMode={resolvedGameMode}
+                  />
+                ) : null}
 
                 {resolvedGameMode === "elimination" ? (
                   <FamePromotionBanner

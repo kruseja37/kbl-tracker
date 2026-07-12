@@ -112,6 +112,8 @@ export const POSITIONAL_ADJUSTMENTS = {
   P: 0,
 } as const;
 
+const POSITIONAL_ADJUSTMENT_CALIBRATION_GAMES = 48;
+
 // ============================================
 // TYPES
 // ============================================
@@ -471,8 +473,8 @@ export function calculateSeasonFWAR(
 
   const totalRunsSaved = putoutRuns + assistRuns + dpRuns + errorRuns + starPlayRuns;
 
-  // Positional adjustment (prorated by games played)
-  const playingTimeFactor = gamesPlayed / seasonGames;
+  // Positional runs are calibrated per 48 games, independent of season length.
+  const playingTimeFactor = gamesPlayed / POSITIONAL_ADJUSTMENT_CALIBRATION_GAMES;
   const positionalAdjustment = (POSITIONAL_ADJUSTMENTS[primaryPosition] || 0) * playingTimeFactor;
 
   // Convert to WAR
@@ -535,8 +537,8 @@ export function calculateFWARFromStats(
 
   const totalRunsSaved = putoutRuns + assistRuns + dpRuns + errorRuns;
 
-  // Positional adjustment
-  const playingTimeFactor = gamesPlayed / seasonGames;
+  // Positional runs are calibrated per 48 games, independent of season length.
+  const playingTimeFactor = gamesPlayed / POSITIONAL_ADJUSTMENT_CALIBRATION_GAMES;
   const positionalAdjustment = (POSITIONAL_ADJUSTMENTS[position] || 0) * playingTimeFactor;
 
   // Convert to WAR

@@ -635,9 +635,11 @@ function reconcileGainProposals(args: {
       : base;
   };
 
+  const lossNames = new Set(args.loseProposals.map((proposal) => proposal.traitName));
+
   for (const proposal of args.gainProposals) {
     const opposite = TRAIT_OPPOSITES[proposal.traitName];
-    if (opposite && args.heldNames.has(opposite)) {
+    if (opposite && args.heldNames.has(opposite) && !lossNames.has(opposite)) {
       dropped.add(proposal.traitName);
       args.skipped.push({ traitName: proposal.traitName, reason: 'offsetting_pair_held' });
     }
@@ -655,7 +657,6 @@ function reconcileGainProposals(args: {
     args.skipped.push({ traitName: drop, reason: 'offsetting_pair_held' });
   }
 
-  const lossNames = new Set(args.loseProposals.map((proposal) => proposal.traitName));
   // §0.6b / T-9c: at most ONE Elite-pitch trait per player (mirrors T-4c
   // generation). Held elite (not being lost) DEFENDS; otherwise the strongest
   // same-cycle elite gain wins.

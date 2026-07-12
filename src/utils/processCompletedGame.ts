@@ -6,7 +6,8 @@
  *   2. archiveCompletedGame() — writes to completedGames store
  *
  * Stat truth boundary:
- * - franchise/exhibition completions aggregate into regular-season season stats.
+ * - franchise completions aggregate into regular-season season stats.
+ * - exhibition/playoff/elimination completions never contaminate those rows.
  * - playoff/elimination completions are archived here, then their callers write to
  *   postseason-specific stores. They must not contaminate regular-season rows.
  *
@@ -17,7 +18,14 @@
  * Per FRANCHISE_API_MAP.md §11
  */
 
-import type { PersistedGameState, PlayerRatingsSnapshot } from './gameStorage';
+import type {
+  CompletedGameRecord,
+  LivingSeasonProcessing,
+  PersistedGameState,
+  PlayerRatingsSnapshot,
+  SoulBranchKey,
+  SoulBranchOutcome,
+} from './gameStorage';
 import {
   aggregateGameToSeason,
   type GameAggregationOptions,
@@ -26,7 +34,11 @@ import {
 import {
   archiveCompletedGame,
   getCompletedGameById,
+  getSoulOutcomes,
+  LIVING_SEASON_PROCESSING_VERSION,
+  patchCompletedGameLivingSeasonProcessing,
   resolveExhibitionLeagueId,
+  SOUL_BRANCH_KEYS,
 } from './gameStorage';
 import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
 import { getFranchiseConfig } from './franchiseManager';
@@ -41,6 +53,7 @@ import {
 } from '../src_figma/app/engines/warOrchestrator';
 import {
   calculateAndPersistFranchiseTrueValueForSeason,
+  getFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
 import {
@@ -1162,6 +1175,7 @@ export function shouldAggregateToRegularSeasonStats(
     archiveOptions?.context?.isEliminationGame ?? gameState.isEliminationGame;
 
   return (
+    competitionType !== 'exhibition' &&
     competitionType !== 'playoff' &&
     competitionType !== 'elimination' &&
     !playoffId &&
@@ -1169,6 +1183,24 @@ export function shouldAggregateToRegularSeasonStats(
     playoffGameNumber === undefined &&
     isEliminationGame !== true
   );
+}
+
+function nonEmptyScopeId(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function assertRegularSeasonScopeIdentity(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): void {
+  if (!shouldAggregateToRegularSeasonStats(gameState, archiveOptions)) return;
+  const seasonId = nonEmptyScopeId(gameState.seasonId);
+  const statsScopeId = nonEmptyScopeId(gameState.statsScopeId);
+  if (seasonId && statsScopeId && seasonId !== statsScopeId) {
+    throw new Error(
+      `Regular-season completion scope mismatch: seasonId "${seasonId}" does not match statsScopeId "${statsScopeId}" for game ${gameState.gameId}`,
+    );
+  }
 }
 
 function buildPlayerRatingsSnapshot(
@@ -1233,6 +1265,251 @@ async function capturePlayerRatingsSnapshots(
   );
 }
 
+function pendingLivingSeasonProcessing(): LivingSeasonProcessing {
+  return {
+    version: LIVING_SEASON_PROCESSING_VERSION,
+    overall: 'pending',
+    branches: {},
+  };
+}
+
+function livingSeasonApplies(
+  gameState: PersistedGameState,
+  archiveOptions?: CompletedGameArchiveOptions,
+): boolean {
+  return Boolean(getCompletedGameFranchiseId(gameState, archiveOptions))
+    && Number.isInteger(gameState.seasonNumber)
+    && Number(gameState.seasonNumber) > 0;
+}
+
+function unavailableTrueValueScopeOutcome(): SoulBranchOutcome {
+  return {
+    status: 'FAILED',
+    errorCode: 'TV_SCOPE_UNAVAILABLE',
+    errorMessage: 'True Value scope unavailable after franchise WAR/True Value persistence',
+  };
+}
+
+function boundedSoulFailure(error: unknown): SoulBranchOutcome {
+  const value = error as { code?: unknown; name?: unknown; message?: unknown } | null;
+  const rawCode = typeof value?.code === 'string'
+    ? value.code
+    : typeof value?.name === 'string'
+      ? value.name
+      : 'SOUL_BRANCH_ERROR';
+  const rawMessage = typeof value?.message === 'string' ? value.message : String(error);
+  return {
+    status: 'FAILED',
+    errorCode: rawCode.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 40) || 'SOUL_BRANCH_ERROR',
+    errorMessage: rawMessage.replace(/\s+/g, ' ').trim().slice(0, 180) || 'Soul branch failed',
+  };
+}
+
+function resultHasWrites(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  const value = result as Record<string, unknown>;
+  for (const key of [
+    'written',
+    'changes',
+    'fired',
+    'ratchetedCount',
+    'updated',
+    'hitCount',
+    'recoveryCount',
+    'chargedCount',
+  ]) {
+    if (typeof value[key] === 'number' && value[key] > 0) return true;
+  }
+  return ['persisted', 'persisted-locked'].includes(String(value.status ?? ''));
+}
+
+async function trueValueResultFromArchive(
+  archive: CompletedGameRecord,
+): Promise<PersistedTrueValueResult | null> {
+  const franchiseId = archive.franchiseId;
+  const seasonId = archive.seasonId ?? archive.statsScopeId;
+  const statsScopeId = archive.statsScopeId ?? seasonId;
+  const seasonNumber = archive.seasonNumber;
+  if (!franchiseId || !seasonId || !statsScopeId || !seasonNumber) return null;
+
+  const rows = await getFranchiseTrueValueRows({ franchiseId, seasonId, statsScopeId });
+  return { franchiseId, seasonId, statsScopeId, seasonNumber, rows };
+}
+
+async function processLivingSeasonBranches(
+  gameState: PersistedGameState,
+  trueValueScope: PersistedTrueValueResult | null,
+  archiveOptions: CompletedGameArchiveOptions | undefined,
+  applicable: boolean,
+): Promise<void> {
+  let archive = await getCompletedGameById(gameState.gameId);
+  if (!archive) throw new Error(`Completed game ${gameState.gameId} missing before soul processing`);
+  let processing = getSoulOutcomes(archive) ?? pendingLivingSeasonProcessing();
+
+  const runBranch = async (
+    branch: SoulBranchKey,
+    enabled: boolean,
+    action: () => Promise<boolean>,
+  ): Promise<boolean | undefined> => {
+    const prior = processing.branches[branch];
+    if (prior && prior.status !== 'FAILED') return undefined;
+
+    let outcome: SoulBranchOutcome;
+    let didEvent: boolean | undefined;
+    if (!enabled) {
+      outcome = { status: 'OFF' };
+    } else if (!trueValueScope) {
+      outcome = unavailableTrueValueScopeOutcome();
+    } else {
+      try {
+        didEvent = await action();
+        outcome = { status: didEvent ? 'SUCCESS' : 'NO_EVENT' };
+      } catch (error) {
+        outcome = boundedSoulFailure(error);
+        console.warn(`[${branch}] living-season branch failed for completed game ${gameState.gameId}:`, error);
+      }
+    }
+
+    archive = await patchCompletedGameLivingSeasonProcessing(gameState.gameId, (current) => ({
+      ...current,
+      version: LIVING_SEASON_PROCESSING_VERSION,
+      overall: 'pending',
+      branches: { ...current.branches, [branch]: outcome },
+    }));
+    processing = getSoulOutcomes(archive) ?? processing;
+    return didEvent;
+  };
+
+  const stadiumChanges: FranchiseStadiumRecordChange[] = [];
+  const preGameHomeParkRivals = new Map<string, string | null>();
+
+  await runBranch('trueValueSnapshot', applicable, async () => {
+    if (!trueValueScope) return false;
+    await persistTrueValueSnapshotsForCompletedGame(gameState, trueValueScope, archiveOptions);
+    return trueValueScope.rows.length > 0;
+  });
+
+  await runBranch('stadium', applicable && isFranchisePhase2StadiumRecordsEnabled(), async () => {
+    if (!trueValueScope) return false;
+    for (const teamId of completedGameTeamIds(gameState)) {
+      preGameHomeParkRivals.set(
+        teamId,
+        (await getHomeParkRival(trueValueScope, teamId))?.rivalTeamId ?? null,
+      );
+    }
+    const stadiumResult = await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
+    stadiumChanges.push(...stadiumResult.changeList);
+    let changed = stadiumResult.changeList.length > 0;
+    const rivalResult = await persistDarkHomeParkRivalForCompletedGame(gameState, trueValueScope, archiveOptions);
+    changed = resultHasWrites(rivalResult) || changed;
+    return changed;
+  });
+
+  // Fame, automatic morale, and relationship overtake consume this game's
+  // stadium deltas. If the stadium branch failed, leave those branches truly
+  // unrun so a retry can rebuild the deltas before applying them.
+  const stadiumReady = !trueValueScope || processing.branches.stadium?.status !== 'FAILED';
+  if (stadiumReady) {
+    await runBranch('fame', applicable && isFranchisePhase2FameEnabled(), async () => {
+      if (!trueValueScope) return false;
+      const fameResult = await persistDarkFameRecordsForCompletedGame(
+        gameState,
+        trueValueScope,
+        archiveOptions,
+        stadiumChanges,
+      );
+      await persistFameMoraleConsequencesAfterFame(
+        gameState,
+        trueValueScope,
+        fameResult.playerHeatDeltas,
+        archiveOptions,
+      );
+      return fameResult.written > 0;
+    });
+
+    await runBranch(
+      'moraleAuto',
+      applicable && (isFranchisePhase2MoraleEnabled() || isFranchisePhase2FlashpointEnabled()),
+      async () => {
+        if (!trueValueScope) return false;
+        const results: unknown[] = [];
+        if (isFranchisePhase2MoraleEnabled()) {
+          results.push(await persistDarkParkRecordMoraleForCompletedGame(
+            gameState,
+            trueValueScope,
+            stadiumChanges,
+            archiveOptions,
+          ));
+          results.push(await persistDarkRivalGameMoraleForCompletedGame(
+            gameState,
+            trueValueScope,
+            preGameHomeParkRivals,
+            archiveOptions,
+          ));
+        }
+        if (isFranchisePhase2FlashpointEnabled()) {
+          results.push(await persistDarkFlashpointDecayForCompletedGame(gameState, trueValueScope, archiveOptions));
+        }
+        results.push(await persistDarkChannelAFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions));
+        results.push(await persistDarkChannelBSteadyFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions));
+        results.push(await persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions));
+        return results.some(resultHasWrites);
+      },
+    );
+  }
+
+  await runBranch('checkpointDev', applicable && isFranchisePhase2CheckpointEnabled(), async () => {
+    if (!trueValueScope) return false;
+    return resultHasWrites(await persistDarkCheckpointSweepForCompletedGame(gameState, trueValueScope, archiveOptions));
+  });
+
+  await runBranch('traits', applicable && isFranchisePhase2TraitsEnabled(), async () => {
+    if (!trueValueScope) return false;
+    return resultHasWrites(await persistDarkTraitGrantForCompletedGame(gameState, trueValueScope, archiveOptions));
+  });
+
+  if (stadiumReady) {
+    await runBranch('L13', applicable && isFranchisePhase2L13Enabled(), async () => {
+      if (!trueValueScope) return false;
+      const results = [
+        await persistDarkRelationshipFormationForCompletedGame(gameState, trueValueScope, archiveOptions),
+        await persistDarkRelationshipOvertakeForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions),
+        await persistDarkRelationshipIntensityForCompletedGame(gameState, trueValueScope, archiveOptions),
+        await persistDarkRelationshipMoraleForCompletedGame(gameState, trueValueScope, archiveOptions),
+      ];
+      return results.some(resultHasWrites);
+    });
+  }
+
+  await runBranch('L10', applicable && isFranchisePhase2L10Enabled(), async () => {
+    if (!trueValueScope) return false;
+    return resultHasWrites(await persistDarkL10ForCompletedGame(gameState, trueValueScope, archiveOptions));
+  });
+
+  await runBranch('L11', applicable && isFranchisePhase2L11Enabled(), async () => {
+    if (!trueValueScope) return false;
+    const result = await persistDarkL11AutoBackstopForCompletedGame(gameState, trueValueScope, archiveOptions);
+    return result.fired > 0;
+  });
+
+  await runBranch('L12raceAllstar', applicable && isFranchisePhase2L12Enabled(), async () => {
+    if (!trueValueScope) return false;
+    const raceResult = await recomputeFranchiseL12StandingsForCompletedGame(gameState, trueValueScope, archiveOptions);
+    const allStarResult = await persistFranchiseAllStarRosterForCompletedGame(gameState, trueValueScope, archiveOptions);
+    return raceResult.status === 'computed' || allStarResult.status.startsWith('persisted');
+  });
+
+  await patchCompletedGameLivingSeasonProcessing(gameState.gameId, (current) => {
+    const completeMap = SOUL_BRANCH_KEYS.every((branch) => current.branches[branch] !== undefined);
+    const failed = SOUL_BRANCH_KEYS.some((branch) => current.branches[branch]?.status === 'FAILED');
+    return {
+      ...current,
+      version: LIVING_SEASON_PROCESSING_VERSION,
+      overall: failed || !completeMap ? 'partial-failure' : 'complete',
+    };
+  });
+}
+
 /**
  * Process a completed game through the full pipeline.
  *
@@ -1246,6 +1523,9 @@ export async function processCompletedGame(
   leagueId?: string,
   archiveOptions?: CompletedGameArchiveOptions,
 ): Promise<ProcessGameResult> {
+  // KERNEL-TRUTH-1 B: reject contradictory regular-season identity before
+  // any persistence call can write a partial completion.
+  assertRegularSeasonScopeIdentity(gameState, archiveOptions);
   const resolvedLeagueId = leagueId ?? resolveExhibitionLeagueId(gameState);
   const registerCompletedGameForAlmanac = async (): Promise<void> => {
     const almanacCompetitionType =
@@ -1273,11 +1553,40 @@ export async function processCompletedGame(
 
   const existingArchive = await getCompletedGameById(gameState.gameId);
   if (existingArchive && existingArchive.aggregationStatus !== 'incomplete') {
+    const soulOutcomes = getSoulOutcomes(existingArchive);
+    // Legacy rows predate KERNEL-TRUTH-1 and retain the old finished meaning.
+    if (!soulOutcomes || soulOutcomes.overall === 'complete') {
+      return { aggregation: { success: true, milestones: null } };
+    }
+
+    // Resume soul work from the durable archive, not from a caller's stale
+    // pre-aggregation state. In particular, season-milestone fame is created
+    // during core aggregation and exists only in the early archive after a
+    // crash between core completion and the fame branch.
+    gameState.fameEvents = existingArchive.fameEvents;
+    gameState.playerRatingsSnapshots = existingArchive.playerRatingsSnapshots;
+    const trueValueScope = await trueValueResultFromArchive(existingArchive);
+    await processLivingSeasonBranches(
+      gameState,
+      trueValueScope,
+      archiveOptions,
+      shouldAggregateToRegularSeasonStats(gameState, archiveOptions),
+    );
+    try {
+      await markGameAggregated(gameState.gameId);
+    } catch (error) {
+      console.warn('[processCompletedGame] Failed to mark resumed game aggregated:', error);
+    }
+    await registerCompletedGameForAlmanac();
     return { aggregation: { success: true, milestones: null } };
   }
 
   const header = await getGameHeader(gameState.gameId);
   if (header?.aggregated === true) {
+    const livingSeasonProcessing = shouldAggregateToRegularSeasonStats(gameState, archiveOptions)
+      && livingSeasonApplies(gameState, archiveOptions)
+      ? pendingLivingSeasonProcessing()
+      : undefined;
     await archiveCompletedGame(
       gameState,
       archiveOptions?.finalScore ?? {
@@ -1286,17 +1595,31 @@ export async function processCompletedGame(
       },
       archiveOptions?.inningScores ?? [],
       archiveOptions?.seasonId ?? options?.seasonId,
-      archiveOptions?.context ?? {
-        leagueId: resolvedLeagueId,
+      {
+        ...(archiveOptions?.context ?? { leagueId: resolvedLeagueId }),
+        completedCivilDate: gameState.completedCivilDate,
+        livingSeasonProcessing,
       },
     );
     await registerCompletedGameForAlmanac();
+    if (livingSeasonProcessing?.overall === 'pending') {
+      const archive = await getCompletedGameById(gameState.gameId);
+      await processLivingSeasonBranches(
+        gameState,
+        archive ? await trueValueResultFromArchive(archive) : null,
+        archiveOptions,
+        true,
+      );
+    }
     return { aggregation: { success: true, milestones: null } };
   }
 
   let aggregation: GameAggregationResult = { success: true, milestones: null };
+  let trueValueScope: PersistedTrueValueResult | null = null;
+  const isRegularSeason = shouldAggregateToRegularSeasonStats(gameState, archiveOptions);
+  const isLivingSeasonGame = isRegularSeason && livingSeasonApplies(gameState, archiveOptions);
 
-  if (shouldAggregateToRegularSeasonStats(gameState, archiveOptions)) {
+  if (isRegularSeason) {
     // Step 1: Aggregate regular-season game stats to season totals.
     aggregation = await aggregateGameToSeason(gameState, options);
 
@@ -1316,6 +1639,15 @@ export async function processCompletedGame(
       );
     }
 
+    // KERNEL-TRUTH-1 A: milestone fame is part of this game's durable truth,
+    // not an aggregation-only side result.
+    const milestoneFameEvents = aggregation.milestones?.fameEvents ?? [];
+    if (milestoneFameEvents.length > 0) {
+      const byId = new Map(gameState.fameEvents.map((event) => [event.id, event]));
+      for (const event of milestoneFameEvents) byId.set(event.id, event);
+      gameState.fameEvents = Array.from(byId.values());
+    }
+
     let warScope: PersistedWarScope | null = null;
     try {
       warScope = await persistSeasonWarAfterAggregation(gameState, options, archiveOptions, resolvedLeagueId ?? null);
@@ -1323,184 +1655,22 @@ export async function processCompletedGame(
       console.warn('[WAR] failed to persist season WAR for completed game ' + gameState.gameId + ':', error);
     }
     if (warScope) {
-      let trueValueScope: PersistedTrueValueResult | null = null;
       try {
         trueValueScope = await persistTrueValueAfterWar(gameState, warScope, archiveOptions);
       } catch (error) {
         console.warn('[TrueValue] failed to persist True Value for completed game ' + gameState.gameId + ':', error);
       }
-      if (trueValueScope) {
-        try {
-          await persistTrueValueSnapshotsForCompletedGame(gameState, trueValueScope, archiveOptions);
-        } catch (error) {
-          console.warn('[TrueValueSnapshots] failed to persist True Value snapshots for completed game ' + gameState.gameId + ':', error);
-        }
-        let stadiumChanges: FranchiseStadiumRecordChange[] = [];
-        if (isFranchisePhase2StadiumRecordsEnabled()) {
-          try {
-            const stadiumResult = await persistDarkStadiumRecordsForCompletedGame(gameState, trueValueScope, archiveOptions);
-            stadiumChanges = stadiumResult.changeList;
-          } catch (e) {
-            console.warn('[StadiumRecords] dark stadium-records detect tap skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        const preGameHomeParkRivals = new Map<string, string | null>();
-        if (isFranchisePhase2StadiumRecordsEnabled()) {
-          try {
-            for (const teamId of completedGameTeamIds(gameState)) {
-              preGameHomeParkRivals.set(
-                teamId,
-                (await getHomeParkRival(trueValueScope, teamId))?.rivalTeamId ?? null,
-              );
-            }
-          } catch (e) {
-            console.warn('[HomeParkRival] dark pre-game home-park rival snapshot skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2StadiumRecordsEnabled()) {
-          try {
-            await persistDarkHomeParkRivalForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[HomeParkRival] dark home-park rival tap skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2FameEnabled()) {
-          try {
-            const fameResult = await persistDarkFameRecordsForCompletedGame(gameState, trueValueScope, archiveOptions, stadiumChanges);
-            await persistFameMoraleConsequencesAfterFame(
-              gameState,
-              trueValueScope,
-              fameResult.playerHeatDeltas,
-              archiveOptions,
-            );
-          } catch (e) {
-            console.warn('[Fame] dark fame compute skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2MoraleEnabled()) {
-          try {
-            await persistDarkParkRecordMoraleForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
-          } catch (e) {
-            console.warn('[ParkRecordMorale] dark park-record morale skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2MoraleEnabled()) {
-          try {
-            await persistDarkRivalGameMoraleForCompletedGame(gameState, trueValueScope, preGameHomeParkRivals, archiveOptions);
-          } catch (e) {
-            console.warn('[RivalGameMorale] dark rival-game morale skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2FlashpointEnabled()) {
-          try {
-            await persistDarkFlashpointDecayForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[Flashpoint] dark flashpoint-decay compute skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        try {
-          await persistDarkChannelAFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
-        } catch (e) {
-          console.warn('[FanMorale] dark §20.6 Channel A game-swing write skipped for completed game ' + gameState.gameId + ':', e);
-        }
-        try {
-          await persistDarkChannelBSteadyFanMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
-        } catch (e) {
-          console.warn('[FanMorale] dark §20.6 Channel B steady Fan Favorite write skipped for completed game ' + gameState.gameId + ':', e);
-        }
-        if (isFranchisePhase2CheckpointEnabled()) {
-          try {
-            await persistDarkCheckpointSweepForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[Checkpoint] dark ratings-development checkpoint sweep skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2TraitsEnabled()) {
-          try {
-            await persistDarkTraitGrantForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[Traits] dark trait-grant compute skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2L13Enabled()) {
-          try {
-            await persistDarkRelationshipFormationForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L13] dark relationship formation skipped for completed game ' + gameState.gameId + ':', e);
-          }
-          try {
-            await persistDarkRelationshipOvertakeForCompletedGame(gameState, trueValueScope, stadiumChanges, archiveOptions);
-          } catch (e) {
-            console.warn('[L13] dark relationship overtake skipped for completed game ' + gameState.gameId + ':', e);
-          }
-          try {
-            await persistDarkRelationshipIntensityForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L13] dark relationship intensity skipped for completed game ' + gameState.gameId + ':', e);
-          }
-          try {
-            await persistDarkRelationshipMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L13] dark relationship morale skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        if (isFranchisePhase2L10Enabled()) {
-          try {
-            await persistDarkL10ForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L10] dark random-event sweep skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        try {
-          await persistDarkTradeDemandMoraleForCompletedGame(gameState, trueValueScope, archiveOptions);
-        } catch (e) {
-          console.warn('[MoraleMatrix] dark trade-demand morale write skipped for completed game ' + gameState.gameId + ':', e);
-        }
-        if (isFranchisePhase2L11Enabled()) {
-          try {
-            await persistDarkL11AutoBackstopForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L11] auto-backstop dark compute failed', e);
-          }
-        }
-        if (isFranchisePhase2L12Enabled()) {
-          try {
-            await recomputeFranchiseL12StandingsForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L12] dark race-standing recompute skipped for completed game ' + gameState.gameId + ':', e);
-          }
-          try {
-            await persistFranchiseAllStarRosterForCompletedGame(gameState, trueValueScope, archiveOptions);
-          } catch (e) {
-            console.warn('[L12] dark All-Star roster persist skipped for completed game ' + gameState.gameId + ':', e);
-          }
-        }
-        try {
-          const designationScope: PersistedTrueValueScope = {
-            franchiseId: trueValueScope.franchiseId,
-            seasonId: trueValueScope.seasonId,
-            statsScopeId: trueValueScope.statsScopeId,
-            seasonNumber: trueValueScope.seasonNumber,
-          };
-          await persistProjectedDesignationsAfterTrueValue(gameState, designationScope);
-        } catch (error) {
-          console.warn('[Designations] failed to persist projected designations for completed game ' + gameState.gameId + ':', error);
-        }
-      }
     }
-  }
-
-  try {
-    await markGameAggregated(gameState.gameId);
-  } catch (error) {
-    console.warn('[processCompletedGame] Failed to mark game aggregated:', error);
   }
 
   if (resolvedLeagueId) {
     await capturePlayerRatingsSnapshots(gameState, resolvedLeagueId);
   }
 
-  // Step 2: Archive to completedGames store
+  // KERNEL-TRUTH-1 H: core truth is archived before any best-effort soul branch.
+  const livingSeasonProcessing = isLivingSeasonGame
+    ? pendingLivingSeasonProcessing()
+    : undefined;
   await archiveCompletedGame(
     gameState,
     archiveOptions?.finalScore ?? {
@@ -1509,15 +1679,41 @@ export async function processCompletedGame(
     },
     archiveOptions?.inningScores ?? [],
     archiveOptions?.seasonId ?? options?.seasonId,
-    archiveOptions?.context ?? {
-      leagueId: resolvedLeagueId,
+    {
+      ...(archiveOptions?.context ?? { leagueId: resolvedLeagueId }),
+      completedCivilDate: gameState.completedCivilDate,
+      livingSeasonProcessing,
     }
   );
 
-  // Step 3: Register players in Almanac canonical registry. Franchise
+  try {
+    await markGameAggregated(gameState.gameId);
+  } catch (error) {
+    console.warn('[processCompletedGame] Failed to mark game aggregated:', error);
+  }
+
+  // Register players in Almanac canonical registry. Franchise
   // archives may not have an exhibition league id, but they still have a
   // durable franchise/competition instance for Almanac continuity.
   await registerCompletedGameForAlmanac();
+
+  if (isLivingSeasonGame) {
+    await processLivingSeasonBranches(gameState, trueValueScope, archiveOptions, true);
+
+    if (trueValueScope) {
+      try {
+        const designationScope: PersistedTrueValueScope = {
+          franchiseId: trueValueScope.franchiseId,
+          seasonId: trueValueScope.seasonId,
+          statsScopeId: trueValueScope.statsScopeId,
+          seasonNumber: trueValueScope.seasonNumber,
+        };
+        await persistProjectedDesignationsAfterTrueValue(gameState, designationScope);
+      } catch (error) {
+        console.warn('[Designations] failed to persist projected designations for completed game ' + gameState.gameId + ':', error);
+      }
+    }
+  }
 
   return { aggregation };
 }

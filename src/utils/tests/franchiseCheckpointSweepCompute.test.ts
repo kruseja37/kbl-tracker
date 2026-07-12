@@ -1146,7 +1146,11 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         { effectivePosition: 'SS', startsShare: 0.75 },
       ])),
     } as never);
-    vi.mocked(getFranchiseMoraleSnapshot).mockResolvedValue({ currentValue: 71 } as never);
+    vi.mocked(getFranchiseMoraleSnapshot).mockImplementation(async (_scope, targetType, targetId) => {
+      if (targetType === 'team-fan') return { currentValue: 71 } as never;
+      if (targetId === 'hitter-tv') return { currentValue: 71 } as never;
+      return null;
+    });
     const signalSpy = vi.spyOn(checkpointRatingSignal, 'computeCheckpointRatingSignals');
     const recentRates = {
       actualByCat: {
@@ -1212,7 +1216,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
       },
       personality: 'JOLLY',
       modifiers: neutralModifiers,
-      playerMorale: 64,
+      playerMorale: 71,
       teamFanMorale: 71,
       createdAt: '2026-06-18T01:00:00.000Z',
     });
@@ -1232,8 +1236,9 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
       arm: 0,
     });
     expect(farmEntry?.createdAt).toBeNull();
+    expect(farmEntry?.playerMorale).toBe(50);
     expect(farmEntry?.signalByRatingKey).toEqual(expect.any(Object));
-    expect(getFranchiseMoraleSnapshot).toHaveBeenCalledTimes(1);
+    expect(getFranchiseMoraleSnapshot).toHaveBeenCalledTimes(7);
   });
 
   test('compute module source stays deterministic and store-safe', () => {

@@ -29,6 +29,7 @@ import { getStableParkId } from "../data/parkLookup";
 import { getDerivedParkFactorsIfAvailable } from "../engines/parkFactorDeriver";
 import { getTrackerDb } from "./trackerDb";
 import { syncEngine } from "./syncEngine";
+import { getDeviceLocalCivilDate } from "./civilDate";
 
 export type CompetitionType =
   | "exhibition"
@@ -68,6 +69,7 @@ export interface PersistedGameState {
   id: string; // Always 'current' for the active game
   gameId: string;
   savedAt: number;
+  completedCivilDate?: string;
 
   // Core game state
   inning: number;
@@ -572,6 +574,7 @@ export async function hasSavedGame(): Promise<boolean> {
 export interface CompletedGameRecord {
   gameId: string;
   date: number;
+  completedCivilDate?: string;
   seasonId?: string;
   statsScopeId?: string;
   competitionType?: CompetitionType;
@@ -632,6 +635,44 @@ export interface CompletedGameRecord {
   playerRatingsSnapshots?: PersistedGameState["playerRatingsSnapshots"];
   aggregationStatus?: "aggregated" | "unaggregated" | "incomplete";
   aggregationError?: string;
+  livingSeasonProcessing?: LivingSeasonProcessing;
+}
+
+export const LIVING_SEASON_PROCESSING_VERSION = "1";
+
+export const SOUL_BRANCH_KEYS = [
+  "fame",
+  "moraleAuto",
+  "checkpointDev",
+  "traits",
+  "L10",
+  "L11",
+  "L12raceAllstar",
+  "L13",
+  "stadium",
+  "trueValueSnapshot",
+] as const;
+
+export type SoulBranchKey = (typeof SOUL_BRANCH_KEYS)[number];
+export type SoulBranchStatus = "OFF" | "SUCCESS" | "NO_EVENT" | "FAILED";
+
+export interface SoulBranchOutcome {
+  status: SoulBranchStatus;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface LivingSeasonProcessing {
+  version: string;
+  overall: "pending" | "complete" | "partial-failure";
+  branches: Partial<Record<SoulBranchKey, SoulBranchOutcome>>;
+}
+
+/** Pure reader for consumers that need the durable soul-branch truth. */
+export function getSoulOutcomes(
+  record: Pick<CompletedGameRecord, "livingSeasonProcessing">,
+): LivingSeasonProcessing | null {
+  return record.livingSeasonProcessing ?? null;
 }
 
 // ============================================
@@ -766,6 +807,8 @@ interface ArchiveCompletedGameContext {
   };
   aggregationStatus?: CompletedGameRecord["aggregationStatus"];
   aggregationError?: string;
+  completedCivilDate?: string;
+  livingSeasonProcessing?: LivingSeasonProcessing;
 }
 
 function enrichArchivedFameEvents(
@@ -884,6 +927,10 @@ export async function archiveCompletedGame(
   const record: CompletedGameRecord = {
     gameId: gameState.gameId,
     date: Date.now(),
+    completedCivilDate:
+      context?.completedCivilDate ??
+      gameState.completedCivilDate ??
+      getDeviceLocalCivilDate(),
     seasonId,
     statsScopeId: context?.statsScopeId ?? gameState.statsScopeId ?? seasonId,
     competitionType: context?.competitionType ?? gameState.competitionType,
@@ -926,6 +973,7 @@ export async function archiveCompletedGame(
     playersOfTheGame: context?.playersOfTheGame,
     aggregationStatus: context?.aggregationStatus ?? "aggregated",
     aggregationError: context?.aggregationError,
+    livingSeasonProcessing: context?.livingSeasonProcessing,
     // --- NEW: ARCHIVE THE ADVANCED ARRAYS ---
     managerDecisions: gameState.managerDecisions || [],
     managerDeploymentStints: gameState.managerDeploymentStints || [],
@@ -979,6 +1027,56 @@ export async function archiveCompletedGame(
       }
       resolve();
     };
+  });
+}
+
+/**
+ * Safely patch the whole completed-game row after a soul branch finishes.
+ * Sync mirrors whole records, so every ledger update must pass through this
+ * single read-modify-write path rather than issuing an ad-hoc partial put.
+ */
+export async function patchCompletedGameLivingSeasonProcessing(
+  gameId: string,
+  update: (current: LivingSeasonProcessing) => LivingSeasonProcessing,
+): Promise<CompletedGameRecord> {
+  const db = await initDatabase();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.COMPLETED_GAMES, "readwrite");
+    const store = transaction.objectStore(STORES.COMPLETED_GAMES);
+    const getRequest = store.get(gameId);
+
+    getRequest.onerror = () => reject(getRequest.error);
+    getRequest.onsuccess = () => {
+      const record = getRequest.result as CompletedGameRecord | undefined;
+      if (!record) {
+        reject(new Error(`Completed game ${gameId} not found for living-season patch`));
+        return;
+      }
+
+      const current = record.livingSeasonProcessing ?? {
+        version: LIVING_SEASON_PROCESSING_VERSION,
+        overall: "pending" as const,
+        branches: {},
+      };
+      const updated: CompletedGameRecord = {
+        ...record,
+        livingSeasonProcessing: update(current),
+      };
+      const putRequest = store.put(updated);
+      putRequest.onerror = () => reject(putRequest.error);
+      putRequest.onsuccess = () => {
+        if (!syncEngine.isSuppressed()) {
+          syncEngine.upsert("kbl-tracker", "completedGames", gameId, updated);
+        }
+        resolve(updated);
+      };
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(
+      transaction.error ?? new Error("Living-season archive patch aborted"),
+    );
   });
 }
 

@@ -71,6 +71,22 @@ import { loadSnakeSoundsEnabled, saveSnakeSoundsEnabled } from '../../utils/snak
 
 const SEASON_NUMBER = 1;
 
+export function snakeRoomMissingLegCopy(input: {
+  league: boolean;
+  pool: boolean;
+  session: boolean;
+}): string {
+  const missing = [
+    !input.league ? 'LEAGUE' : null,
+    !input.pool ? 'SAVED DRAFT POOL' : null,
+    !input.session ? 'DRAFT SESSION' : null,
+  ].filter((value): value is string => Boolean(value));
+  const subject = missing.length > 1
+    ? `${missing.slice(0, -1).join(', ')} AND ${missing.at(-1)}`
+    : missing[0] ?? 'ROOM DATA';
+  return `THE ${subject} ${missing.length === 1 ? 'IS' : 'ARE'} MISSING. GO BACK TO SNAKE DRAFT SETUP AND PRESS START THE DRAFT AGAIN.`;
+}
+
 function isSnakeRoomEnabled(): boolean {
   const maybeEnabled = (phaseFlags as typeof phaseFlags & { isSnakeDraftV1Enabled?: () => boolean }).isSnakeDraftV1Enabled;
   return maybeEnabled?.() ?? false;
@@ -814,7 +830,7 @@ function MlbSnakeDraftRoom() {
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
   if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p></div></main>;
-  if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">FINISH SNAKE DRAFT SETUP FIRST.</p></div></main>;
+  if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
 
   return (
     <SnakeDraftRoomView

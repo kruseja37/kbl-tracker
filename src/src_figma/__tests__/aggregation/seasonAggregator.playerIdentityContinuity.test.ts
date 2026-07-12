@@ -278,5 +278,16 @@ describe('season aggregator player identity continuity', () => {
       undefined,
       expect.objectContaining({})
     );
+    const milestoneOptions = mockAggregateGameWithMilestones.mock.calls[0]?.[3];
+    expect(milestoneOptions.previousSeasonBattingByPlayerId.get('lb-away-ss')).toMatchObject({
+      playerId: 'lb-away-ss',
+      games: 0,
+      hits: 0,
+    });
+    expect(milestoneOptions.previousSeasonPitchingByPlayerId.get('lb-home-sp')).toMatchObject({
+      playerId: 'lb-home-sp',
+      games: 0,
+      wins: 0,
+    });
   });
 });

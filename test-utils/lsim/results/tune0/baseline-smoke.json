@@ -1,0 +1,1378 @@
+{
+  "schemaVersion": "tune0-smoke-v1",
+  "generatedAt": "2026-07-11T12:00:00.000Z",
+  "seed": "opus-audit-scaled",
+  "gamesPerTeam": 8,
+  "gamesSimulated": 24,
+  "totalScheduledGames": 24,
+  "checkpointCadence": "standard",
+  "checkpointGameNumbers": [
+    5,
+    10,
+    15,
+    20,
+    24
+  ],
+  "stoppedEarly": false,
+  "finalDigest": "6463239:5efe000e",
+  "invariantResults": {
+    "stats.completed-games-count": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.team-game-conservation": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.league-wins-equal-losses": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.league-runs-scored-equal-allowed": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.standings-match-completed-games": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.batting-row-arithmetic": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.pitching-row-arithmetic": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.fielding-row-arithmetic": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.war-fields-finite": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.no-nan-or-infinity": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.derived-rate-ranges": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "stats.last-game-applied-to-season-totals": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.fame-components-finite": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.fame-reach-monotonic": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.fame-heat-fickle": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "INVESTIGATE"
+    },
+    "soul.fame-war-legitimacy-floor": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "INVESTIGATE"
+    },
+    "soul.l12-race-no-nan-resolve-tier": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.morale-bounds": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.flashpoint-compounding-clamped": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.designation-six-slots-single-holder": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.albatross-2x-min-salary-overpaid-gate": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.l10-per-game-cadence": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "INVESTIGATE"
+    },
+    "soul.l11-backstop-under-25-plus-roll": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.per-write-idempotency": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.checkpoint-cadence-matches-setting": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.l13-relationship-formation-checkpoint-write": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.l13-relationship-intensity-lifecycle": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.l13-relationship-morale-development-boundary": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.l13-rep4-fan-nudge-boundary": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.ratings-overlay-validity": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.trait-two-slot-no-offset-hysteresis": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.persistence-backup-migration-proof": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.channel-separation-double-count-guards": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.all-star-sixty-percent-lock": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.reach-floor-ratchet": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.tv-freeze": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.awards-off-frozen-artifact": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "CRITICAL"
+    },
+    "soul.emission-snub-signal": {
+      "pass": 24,
+      "fail": 0,
+      "tag": "INVESTIGATE"
+    }
+  },
+  "findings": [],
+  "finalDistributions": {
+    "fameTierDistribution": {
+      "IMMORTAL_LEGEND": 1,
+      "GLOBAL_SUPERSTAR": 3,
+      "NATIONAL_ICON": 26,
+      "REGIONAL_STAR": 30,
+      "LOCAL_HERO": 28,
+      "UNKNOWN": 11,
+      "POLARIZING": 2,
+      "NOTORIOUS": 1,
+      "DESPISED": 0
+    },
+    "fameHeatTransitions": {
+      "up": 315,
+      "down": 254
+    },
+    "traitGrantLossCounts": {
+      "gain": 135,
+      "lose": 1,
+      "byTrait": {
+        "Cannon Arm": {
+          "gain": 23,
+          "lose": 0
+        },
+        "Easy Target": {
+          "gain": 1,
+          "lose": 0
+        },
+        "Mind Gamer": {
+          "gain": 2,
+          "lose": 0
+        },
+        "Big Hack": {
+          "gain": 3,
+          "lose": 0
+        },
+        "Noodle Arm": {
+          "gain": 15,
+          "lose": 0
+        },
+        "Wild Thrower": {
+          "gain": 33,
+          "lose": 0
+        },
+        "Tough Out": {
+          "gain": 5,
+          "lose": 0
+        },
+        "Slow Poke": {
+          "gain": 1,
+          "lose": 0
+        },
+        "Injury Prone": {
+          "gain": 3,
+          "lose": 0
+        },
+        "Durable": {
+          "gain": 2,
+          "lose": 1
+        },
+        "BB Prone": {
+          "gain": 1,
+          "lose": 0
+        },
+        "Crossed Up": {
+          "gain": 13,
+          "lose": 0
+        },
+        "Falls Behind": {
+          "gain": 4,
+          "lose": 0
+        },
+        "Specialist": {
+          "gain": 5,
+          "lose": 0
+        },
+        "Wild Thing": {
+          "gain": 9,
+          "lose": 0
+        },
+        "Workhorse": {
+          "gain": 2,
+          "lose": 0
+        },
+        "CON vs LHP": {
+          "gain": 1,
+          "lose": 0
+        },
+        "Gets Ahead": {
+          "gain": 5,
+          "lose": 0
+        },
+        "Clutch": {
+          "gain": 2,
+          "lose": 0
+        },
+        "K Collector": {
+          "gain": 3,
+          "lose": 0
+        },
+        "Reverse Splits": {
+          "gain": 2,
+          "lose": 0
+        }
+      }
+    },
+    "awardMargins": [
+      {
+        "category": "CY_YOUNG",
+        "winnerPlayerId": "lsim-team-03-mlb-17-RP",
+        "topMarginToWinner": 0,
+        "candidateCount": 12,
+        "finalized": true
+      },
+      {
+        "category": "MANAGER_OF_YEAR",
+        "winnerPlayerId": "lsim-team-03:manager",
+        "topMarginToWinner": 0,
+        "candidateCount": 6,
+        "finalized": true
+      }
+    ],
+    "randomEventFrequencyByFamily": {
+      "performance": 12,
+      "roster": 3,
+      "role": 6,
+      "pitching": 3,
+      "trait": 9,
+      "wildcard": 3,
+      "cosmetic": 5,
+      "team": 1
+    },
+    "moraleRanges": {
+      "player": {
+        "min": 0,
+        "max": 99,
+        "count": 102
+      },
+      "teamFan": {
+        "min": 42,
+        "max": 81,
+        "count": 6
+      },
+      "autoBackstopFirings": 1,
+      "autoBackstopFiringRate": 0.041666666666666664
+    },
+    "flashpointTaxMagnitudes": {
+      "count": 2,
+      "minLastGameTax": -0.65,
+      "maxLastGameTax": -0.6,
+      "totalAccumulatedFanMoraleTax": -3.9499999999999997,
+      "byKind": {
+        "albatross": {
+          "count": 2,
+          "accumulatedFanMoraleTax": -3.9499999999999997
+        }
+      }
+    }
+  },
+  "checkpoints": [
+    {
+      "checkpointIndex": 1,
+      "boundaryGameNumber": 5,
+      "developmentProposals": {
+        "total": {
+          "count": 21,
+          "min": -2,
+          "max": 4,
+          "mean": 1.190476,
+          "sum": 25,
+          "absoluteMean": 1.857143,
+          "absoluteSum": 39,
+          "positive": 15,
+          "negative": 6,
+          "zero": 0
+        },
+        "byAgeBand": {
+          "18-21": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "22-24": {
+            "count": 13,
+            "min": -2,
+            "max": 4,
+            "mean": 1.384615,
+            "sum": 18,
+            "absoluteMean": 2,
+            "absoluteSum": 26,
+            "positive": 10,
+            "negative": 3,
+            "zero": 0
+          },
+          "25-31": {
+            "count": 8,
+            "min": -1,
+            "max": 3,
+            "mean": 0.875,
+            "sum": 7,
+            "absoluteMean": 1.625,
+            "absoluteSum": 13,
+            "positive": 5,
+            "negative": 3,
+            "zero": 0
+          },
+          "32-35": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "36+": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          }
+        }
+      },
+      "traitProposals": {
+        "gain": 2,
+        "lose": 0,
+        "byTrait": {
+          "Crossed Up": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Wild Thing": {
+            "gain": 1,
+            "lose": 0
+          }
+        }
+      },
+      "fame": {
+        "heat": {
+          "count": 67,
+          "min": -5.476,
+          "max": 36.736,
+          "mean": 4.540493,
+          "sum": 304.213,
+          "absoluteMean": 5.151358,
+          "absoluteSum": 345.141,
+          "p25": 0.57,
+          "median": 1.776,
+          "p75": 3.04
+        },
+        "tierCounts": {
+          "IMMORTAL_LEGEND": 1,
+          "GLOBAL_SUPERSTAR": 2,
+          "NATIONAL_ICON": 8,
+          "REGIONAL_STAR": 3,
+          "LOCAL_HERO": 4,
+          "UNKNOWN": 45,
+          "POLARIZING": 4,
+          "NOTORIOUS": 0,
+          "DESPISED": 0
+        }
+      },
+      "moraleDeltas": {
+        "player": {
+          "count": 69,
+          "min": -15,
+          "max": 34,
+          "mean": 1.782609,
+          "sum": 123,
+          "absoluteMean": 3.115942,
+          "absoluteSum": 215,
+          "changed": 48,
+          "up": 31,
+          "down": 17
+        },
+        "teamFan": {
+          "count": 6,
+          "min": -30,
+          "max": 27,
+          "mean": -4.5,
+          "sum": -27,
+          "absoluteMean": 14.166667,
+          "absoluteSum": 85,
+          "changed": 6,
+          "up": 3,
+          "down": 3
+        }
+      },
+      "events": {
+        "l10New": 7,
+        "l10Cumulative": 7,
+        "l10ByFamily": {
+          "trait": 2,
+          "pitching": 1,
+          "cosmetic": 1,
+          "wildcard": 1,
+          "performance": 1,
+          "team": 1
+        },
+        "l11New": 0,
+        "l11Cumulative": 0,
+        "l11ByReason": {}
+      },
+      "relationships": {
+        "formedNew": 11,
+        "formedCumulative": 11,
+        "potentialCumulative": 0,
+        "dissolvedCumulative": 0,
+        "byTypeNew": {
+          "RIVALRY": 6,
+          "MENTORSHIP": 4,
+          "FEUD": 1
+        }
+      }
+    },
+    {
+      "checkpointIndex": 2,
+      "boundaryGameNumber": 10,
+      "developmentProposals": {
+        "total": {
+          "count": 58,
+          "min": -3,
+          "max": 4,
+          "mean": 0.465517,
+          "sum": 27,
+          "absoluteMean": 1.844828,
+          "absoluteSum": 107,
+          "positive": 31,
+          "negative": 27,
+          "zero": 0
+        },
+        "byAgeBand": {
+          "18-21": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "22-24": {
+            "count": 25,
+            "min": -3,
+            "max": 4,
+            "mean": 0.72,
+            "sum": 18,
+            "absoluteMean": 2,
+            "absoluteSum": 50,
+            "positive": 15,
+            "negative": 10,
+            "zero": 0
+          },
+          "25-31": {
+            "count": 33,
+            "min": -2,
+            "max": 3,
+            "mean": 0.272727,
+            "sum": 9,
+            "absoluteMean": 1.727273,
+            "absoluteSum": 57,
+            "positive": 16,
+            "negative": 17,
+            "zero": 0
+          },
+          "32-35": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "36+": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          }
+        }
+      },
+      "traitProposals": {
+        "gain": 10,
+        "lose": 0,
+        "byTrait": {
+          "Crossed Up": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Falls Behind": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Wild Thing": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Gets Ahead": {
+            "gain": 2,
+            "lose": 0
+          },
+          "K Collector": {
+            "gain": 1,
+            "lose": 0
+          }
+        }
+      },
+      "fame": {
+        "heat": {
+          "count": 86,
+          "min": -6.011,
+          "max": 36.736,
+          "mean": 5.875721,
+          "sum": 505.312,
+          "absoluteMean": 6.571465,
+          "absoluteSum": 565.146,
+          "p25": 2.2,
+          "median": 4.5125,
+          "p75": 7.5965
+        },
+        "tierCounts": {
+          "IMMORTAL_LEGEND": 1,
+          "GLOBAL_SUPERSTAR": 2,
+          "NATIONAL_ICON": 10,
+          "REGIONAL_STAR": 10,
+          "LOCAL_HERO": 32,
+          "UNKNOWN": 27,
+          "POLARIZING": 4,
+          "NOTORIOUS": 0,
+          "DESPISED": 0
+        }
+      },
+      "moraleDeltas": {
+        "player": {
+          "count": 87,
+          "min": -35,
+          "max": 39,
+          "mean": 0.586207,
+          "sum": 51,
+          "absoluteMean": 4.885057,
+          "absoluteSum": 425,
+          "changed": 53,
+          "up": 30,
+          "down": 23
+        },
+        "teamFan": {
+          "count": 6,
+          "min": -2,
+          "max": 21,
+          "mean": 5.166667,
+          "sum": 31,
+          "absoluteMean": 5.833333,
+          "absoluteSum": 35,
+          "changed": 5,
+          "up": 4,
+          "down": 1
+        }
+      },
+      "events": {
+        "l10New": 10,
+        "l10Cumulative": 17,
+        "l10ByFamily": {
+          "performance": 5,
+          "roster": 2,
+          "role": 2,
+          "wildcard": 1
+        },
+        "l11New": 0,
+        "l11Cumulative": 0,
+        "l11ByReason": {}
+      },
+      "relationships": {
+        "formedNew": 7,
+        "formedCumulative": 14,
+        "potentialCumulative": 0,
+        "dissolvedCumulative": 0,
+        "byTypeNew": {
+          "RIVALRY": 3,
+          "MENTORSHIP": 4
+        }
+      }
+    },
+    {
+      "checkpointIndex": 3,
+      "boundaryGameNumber": 15,
+      "developmentProposals": {
+        "total": {
+          "count": 80,
+          "min": -3,
+          "max": 5,
+          "mean": 0.1,
+          "sum": 8,
+          "absoluteMean": 2.05,
+          "absoluteSum": 164,
+          "positive": 39,
+          "negative": 41,
+          "zero": 0
+        },
+        "byAgeBand": {
+          "18-21": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "22-24": {
+            "count": 30,
+            "min": -3,
+            "max": 5,
+            "mean": 0.733333,
+            "sum": 22,
+            "absoluteMean": 2.266667,
+            "absoluteSum": 68,
+            "positive": 16,
+            "negative": 14,
+            "zero": 0
+          },
+          "25-31": {
+            "count": 50,
+            "min": -3,
+            "max": 3,
+            "mean": -0.28,
+            "sum": -14,
+            "absoluteMean": 1.92,
+            "absoluteSum": 96,
+            "positive": 23,
+            "negative": 27,
+            "zero": 0
+          },
+          "32-35": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "36+": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          }
+        }
+      },
+      "traitProposals": {
+        "gain": 11,
+        "lose": 0,
+        "byTrait": {
+          "Specialist": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Wild Thing": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Crossed Up": {
+            "gain": 2,
+            "lose": 0
+          },
+          "Gets Ahead": {
+            "gain": 1,
+            "lose": 0
+          },
+          "K Collector": {
+            "gain": 2,
+            "lose": 0
+          },
+          "Falls Behind": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Reverse Splits": {
+            "gain": 1,
+            "lose": 0
+          }
+        }
+      },
+      "fame": {
+        "heat": {
+          "count": 98,
+          "min": -8.668,
+          "max": 42.736,
+          "mean": 10.419265,
+          "sum": 1021.088,
+          "absoluteMean": 10.842429,
+          "absoluteSum": 1062.558,
+          "p25": 3.9305,
+          "median": 10.7905,
+          "p75": 15.7675
+        },
+        "tierCounts": {
+          "IMMORTAL_LEGEND": 1,
+          "GLOBAL_SUPERSTAR": 2,
+          "NATIONAL_ICON": 26,
+          "REGIONAL_STAR": 33,
+          "LOCAL_HERO": 22,
+          "UNKNOWN": 13,
+          "POLARIZING": 1,
+          "NOTORIOUS": 0,
+          "DESPISED": 0
+        }
+      },
+      "moraleDeltas": {
+        "player": {
+          "count": 101,
+          "min": -30,
+          "max": 15,
+          "mean": -0.237624,
+          "sum": -24,
+          "absoluteMean": 3.485149,
+          "absoluteSum": 352,
+          "changed": 68,
+          "up": 43,
+          "down": 25
+        },
+        "teamFan": {
+          "count": 6,
+          "min": 0,
+          "max": 15,
+          "mean": 7.5,
+          "sum": 45,
+          "absoluteMean": 7.5,
+          "absoluteSum": 45,
+          "changed": 5,
+          "up": 5,
+          "down": 0
+        }
+      },
+      "events": {
+        "l10New": 7,
+        "l10Cumulative": 24,
+        "l10ByFamily": {
+          "performance": 1,
+          "cosmetic": 2,
+          "role": 1,
+          "trait": 2,
+          "wildcard": 1
+        },
+        "l11New": 1,
+        "l11Cumulative": 1,
+        "l11ByReason": {
+          "fired": 1
+        }
+      },
+      "relationships": {
+        "formedNew": 15,
+        "formedCumulative": 24,
+        "potentialCumulative": 0,
+        "dissolvedCumulative": 0,
+        "byTypeNew": {
+          "RIVALRY": 10,
+          "MENTORSHIP": 4,
+          "FEUD": 1
+        }
+      }
+    },
+    {
+      "checkpointIndex": 4,
+      "boundaryGameNumber": 20,
+      "developmentProposals": {
+        "total": {
+          "count": 117,
+          "min": -4,
+          "max": 5,
+          "mean": 0.641026,
+          "sum": 75,
+          "absoluteMean": 2.179487,
+          "absoluteSum": 255,
+          "positive": 67,
+          "negative": 50,
+          "zero": 0
+        },
+        "byAgeBand": {
+          "18-21": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "22-24": {
+            "count": 43,
+            "min": -4,
+            "max": 5,
+            "mean": 1.116279,
+            "sum": 48,
+            "absoluteMean": 2.511628,
+            "absoluteSum": 108,
+            "positive": 24,
+            "negative": 19,
+            "zero": 0
+          },
+          "25-31": {
+            "count": 74,
+            "min": -3,
+            "max": 4,
+            "mean": 0.364865,
+            "sum": 27,
+            "absoluteMean": 1.986486,
+            "absoluteSum": 147,
+            "positive": 43,
+            "negative": 31,
+            "zero": 0
+          },
+          "32-35": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "36+": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          }
+        }
+      },
+      "traitProposals": {
+        "gain": 42,
+        "lose": 0,
+        "byTrait": {
+          "Cannon Arm": {
+            "gain": 9,
+            "lose": 0
+          },
+          "Easy Target": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Big Hack": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Wild Thrower": {
+            "gain": 12,
+            "lose": 0
+          },
+          "Noodle Arm": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Tough Out": {
+            "gain": 2,
+            "lose": 0
+          },
+          "Durable": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Injury Prone": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Specialist": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Wild Thing": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Workhorse": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Crossed Up": {
+            "gain": 4,
+            "lose": 0
+          },
+          "Gets Ahead": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Clutch": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Falls Behind": {
+            "gain": 1,
+            "lose": 0
+          }
+        }
+      },
+      "fame": {
+        "heat": {
+          "count": 101,
+          "min": -8.678,
+          "max": 27.94,
+          "mean": 8.508752,
+          "sum": 859.384,
+          "absoluteMean": 9.146356,
+          "absoluteSum": 923.782,
+          "p25": 2.8,
+          "median": 8.365,
+          "p75": 14.294
+        },
+        "tierCounts": {
+          "IMMORTAL_LEGEND": 1,
+          "GLOBAL_SUPERSTAR": 3,
+          "NATIONAL_ICON": 25,
+          "REGIONAL_STAR": 31,
+          "LOCAL_HERO": 25,
+          "UNKNOWN": 12,
+          "POLARIZING": 4,
+          "NOTORIOUS": 0,
+          "DESPISED": 0
+        }
+      },
+      "moraleDeltas": {
+        "player": {
+          "count": 102,
+          "min": -19,
+          "max": 16,
+          "mean": -0.078431,
+          "sum": -8,
+          "absoluteMean": 2.529412,
+          "absoluteSum": 258,
+          "changed": 59,
+          "up": 37,
+          "down": 22
+        },
+        "teamFan": {
+          "count": 6,
+          "min": 0,
+          "max": 10,
+          "mean": 5,
+          "sum": 30,
+          "absoluteMean": 5,
+          "absoluteSum": 30,
+          "changed": 5,
+          "up": 5,
+          "down": 0
+        }
+      },
+      "events": {
+        "l10New": 11,
+        "l10Cumulative": 35,
+        "l10ByFamily": {
+          "performance": 4,
+          "trait": 3,
+          "cosmetic": 2,
+          "role": 1,
+          "pitching": 1
+        },
+        "l11New": 0,
+        "l11Cumulative": 1,
+        "l11ByReason": {
+          "fired": 1
+        }
+      },
+      "relationships": {
+        "formedNew": 5,
+        "formedCumulative": 24,
+        "potentialCumulative": 0,
+        "dissolvedCumulative": 0,
+        "byTypeNew": {
+          "MENTORSHIP": 4,
+          "FEUD": 1
+        }
+      }
+    },
+    {
+      "checkpointIndex": 5,
+      "boundaryGameNumber": 24,
+      "developmentProposals": {
+        "total": {
+          "count": 103,
+          "min": -4,
+          "max": 5,
+          "mean": 0.15534,
+          "sum": 16,
+          "absoluteMean": 2.135922,
+          "absoluteSum": 220,
+          "positive": 49,
+          "negative": 54,
+          "zero": 0
+        },
+        "byAgeBand": {
+          "18-21": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "22-24": {
+            "count": 37,
+            "min": -4,
+            "max": 5,
+            "mean": 0.837838,
+            "sum": 31,
+            "absoluteMean": 2.567568,
+            "absoluteSum": 95,
+            "positive": 20,
+            "negative": 17,
+            "zero": 0
+          },
+          "25-31": {
+            "count": 66,
+            "min": -4,
+            "max": 3,
+            "mean": -0.227273,
+            "sum": -15,
+            "absoluteMean": 1.893939,
+            "absoluteSum": 125,
+            "positive": 29,
+            "negative": 37,
+            "zero": 0
+          },
+          "32-35": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          },
+          "36+": {
+            "count": 0,
+            "min": null,
+            "max": null,
+            "mean": null,
+            "sum": 0,
+            "absoluteMean": null,
+            "absoluteSum": 0,
+            "positive": 0,
+            "negative": 0,
+            "zero": 0
+          }
+        }
+      },
+      "traitProposals": {
+        "gain": 70,
+        "lose": 1,
+        "byTrait": {
+          "Cannon Arm": {
+            "gain": 14,
+            "lose": 0
+          },
+          "Mind Gamer": {
+            "gain": 2,
+            "lose": 0
+          },
+          "Noodle Arm": {
+            "gain": 12,
+            "lose": 0
+          },
+          "Wild Thrower": {
+            "gain": 21,
+            "lose": 0
+          },
+          "Tough Out": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Slow Poke": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Injury Prone": {
+            "gain": 2,
+            "lose": 0
+          },
+          "BB Prone": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Big Hack": {
+            "gain": 2,
+            "lose": 0
+          },
+          "CON vs LHP": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Durable": {
+            "gain": 1,
+            "lose": 1
+          },
+          "Crossed Up": {
+            "gain": 3,
+            "lose": 0
+          },
+          "Gets Ahead": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Workhorse": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Clutch": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Wild Thing": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Specialist": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Falls Behind": {
+            "gain": 1,
+            "lose": 0
+          },
+          "Reverse Splits": {
+            "gain": 1,
+            "lose": 0
+          }
+        }
+      },
+      "fame": {
+        "heat": {
+          "count": 102,
+          "min": -9.061,
+          "max": 27.94,
+          "mean": 8.577108,
+          "sum": 874.865,
+          "absoluteMean": 9.050578,
+          "absoluteSum": 923.159,
+          "p25": 3.09225,
+          "median": 8.498,
+          "p75": 13.619
+        },
+        "tierCounts": {
+          "IMMORTAL_LEGEND": 1,
+          "GLOBAL_SUPERSTAR": 3,
+          "NATIONAL_ICON": 26,
+          "REGIONAL_STAR": 30,
+          "LOCAL_HERO": 28,
+          "UNKNOWN": 11,
+          "POLARIZING": 2,
+          "NOTORIOUS": 1,
+          "DESPISED": 0
+        }
+      },
+      "moraleDeltas": {
+        "player": {
+          "count": 102,
+          "min": -20,
+          "max": 3,
+          "mean": -0.656863,
+          "sum": -67,
+          "absoluteMean": 1.696078,
+          "absoluteSum": 173,
+          "changed": 64,
+          "up": 42,
+          "down": 22
+        },
+        "teamFan": {
+          "count": 6,
+          "min": -5,
+          "max": 6,
+          "mean": 2.333333,
+          "sum": 14,
+          "absoluteMean": 4,
+          "absoluteSum": 24,
+          "changed": 5,
+          "up": 4,
+          "down": 1
+        }
+      },
+      "events": {
+        "l10New": 7,
+        "l10Cumulative": 42,
+        "l10ByFamily": {
+          "pitching": 1,
+          "role": 2,
+          "trait": 2,
+          "roster": 1,
+          "performance": 1
+        },
+        "l11New": 0,
+        "l11Cumulative": 1,
+        "l11ByReason": {
+          "fired": 1
+        }
+      },
+      "relationships": {
+        "formedNew": 11,
+        "formedCumulative": 30,
+        "potentialCumulative": 0,
+        "dissolvedCumulative": 0,
+        "byTypeNew": {
+          "RIVALRY": 6,
+          "MENTORSHIP": 4,
+          "FEUD": 1
+        }
+      }
+    }
+  ]
+}

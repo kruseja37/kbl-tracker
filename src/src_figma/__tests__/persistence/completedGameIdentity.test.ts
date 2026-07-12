@@ -86,6 +86,7 @@ describe('completed game franchise identity', () => {
     await archiveCompletedGame(
       createPersistedGameState({
         gameId: 'completed-franchise-game-context',
+        completedCivilDate: '2026-07-11',
       }),
       { away: 3, home: 5 },
       [],
@@ -110,6 +111,7 @@ describe('completed game franchise identity', () => {
       competitionId: 'franchise-1',
       franchiseId: 'franchise-1',
       scheduleGameId: 'schedule-game-1',
+      completedCivilDate: '2026-07-11',
     });
   });
 

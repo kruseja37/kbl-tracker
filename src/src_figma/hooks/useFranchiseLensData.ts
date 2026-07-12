@@ -86,7 +86,16 @@ import {
 import {
   getFranchiseTraitOverlaysByScope,
   type FranchiseTraitOverlayRow,
+  type FranchiseTraitSlotValue,
 } from "../../utils/franchiseTraitOverlayStorage";
+import {
+  getDevelopmentHistory,
+  listUnresolvedDevelopment,
+  resolveRatingsProposal,
+  resolveTraitProposal,
+  type DevelopmentHistoryEntry,
+  type UnresolvedDevelopmentCheckpoint,
+} from "../../utils/franchiseConsoleMirror";
 import {
   getFranchiseRelationshipEdgesByScope,
   type RelationshipEdgeRow,
@@ -129,7 +138,9 @@ import type {
   AwardSlotVM,
   CeremonyMomentVM,
   CheckpointPlayerVM,
+  CheckpointProposalVM,
   CheckpointVM,
+  DevelopmentHistoryVM,
   FameVM,
   FarmPlayerVM,
   FormStateVM,
@@ -210,6 +221,8 @@ interface RawData {
   raceScores: Partial<Record<FranchiseWarAwardCategory, FranchiseRaceCandidateScore[]>>;
   conditionSnapshots: MojoFitnessSnapshot[];
   milestones: CareerMilestone[];
+  unresolvedDevelopment: UnresolvedDevelopmentCheckpoint[];
+  developmentHistory: DevelopmentHistoryEntry[];
 }
 
 /**
@@ -275,6 +288,23 @@ export interface UseFranchiseLensDataReturn {
   executeTrade: (req: LensTradeRequest) => Promise<LensRosterActionResult>;
   /** Set a player's fitness state (carries into the next game launch, like elimination mode). */
   setFitness: (playerId: string, state: FitnessState) => Promise<LensRosterActionResult>;
+  /** Resolve one console-mirror proposal; every call is one durable service receipt. */
+  resolveDevelopment: (request: LensDevelopmentResolutionRequest) => Promise<LensDevelopmentResolutionResult>;
+}
+
+export interface LensDevelopmentResolutionRequest {
+  proposalId: string;
+  kind: "rating" | "trait";
+  action: "confirm" | "confirm-adjusted" | "reject" | "retry";
+  observedPriorValue: number | FranchiseTraitSlotValue;
+  actualValue?: number | FranchiseTraitSlotValue;
+  rejectReason?: string;
+}
+
+export interface LensDevelopmentResolutionResult {
+  outcome: "resolved" | "conflict" | "apply-failed" | "recovered" | "noop" | "error";
+  currentValue?: number | FranchiseTraitSlotValue;
+  message?: string;
 }
 
 type FranchiseLensViewReturn = Pick<
@@ -319,6 +349,16 @@ function toMoraleHistory(snapshot: FranchiseMoraleSnapshot | null): MoraleHistor
     .map((entry) => ({ delta: Math.round(entry.delta), reason: entry.reason, week: "" }));
 }
 
+function moraleTrend(snapshot: FranchiseMoraleSnapshot | null): "up" | "down" | "flat" {
+  const latest = snapshot?.history
+    .slice()
+    .sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp))[0];
+  if (!latest) return "flat";
+  if (latest.delta > 0 || latest.currentValue > latest.previousValue) return "up";
+  if (latest.delta < 0 || latest.currentValue < latest.previousValue) return "down";
+  return "flat";
+}
+
 function mapDesignation(
   row: FranchisePlayerDesignationRecord | undefined,
 ): { label: string; kind: "gold" | "albatross" } | undefined {
@@ -356,6 +396,7 @@ interface DrawerContext {
   fameByPlayer: Map<string, FranchiseFameRecordRow>;
   fitnessByPlayer: Map<string, FitnessState>;
   milestonesByPlayer: Map<string, CareerMilestone[]>;
+  developmentHistoryByPlayer: Map<string, DevelopmentHistoryEntry[]>;
   nameById: Map<string, string>;
   currentGameNumber: number;
 }
@@ -396,13 +437,64 @@ function buildValueTrend(rows: FranchiseTrueValueSnapshotRow[]): ValuePointVM[] 
 
 function buildTraitTimeline(rows: FranchiseTraitOverlayRow[]): TraitTimelineVM[] {
   return [...rows]
+    .filter((row) =>
+      row.confirmationStatus === "confirmed-applied" ||
+      row.confirmationStatus === "pending" ||
+      row.confirmationStatus === "apply-failed" ||
+      (row.confirmationStatus === "confirmed" && row.applied !== true),
+    )
     .sort((a, b) => a.createdAtGameNumber - b.createdAtGameNumber)
     .map((row) => ({
       valence: row.valence,
       trait: row.traitName,
       displaces: row.displacesTraitName ?? undefined,
       atGame: row.createdAtGameNumber,
+      status: row.confirmationStatus === "confirmed-applied" ? "applied" as const : "proposed" as const,
     }));
+}
+
+function traitSlotsLabel(value: FranchiseTraitSlotValue | undefined): string {
+  if (!value) return "not recorded";
+  return [value.trait1, value.trait2].filter(Boolean).join(" / ") || "no traits";
+}
+
+function buildDevelopmentHistory(rows: DevelopmentHistoryEntry[]): DevelopmentHistoryVM[] {
+  return rows.map((entry) => {
+    if (entry.kind === "rating") {
+      const row = entry.overlay;
+      const status = row.confirmationStatus;
+      const proposed = row.proposedValue ?? row.expectedPriorValue;
+      const actual = row.actualEnteredValue;
+      return {
+        id: row.id,
+        kind: "rating" as const,
+        change: RATING_LABELS[row.ratingKey] ?? row.ratingKey,
+        proposed: row.expectedPriorValue !== undefined && proposed !== undefined
+          ? `${row.expectedPriorValue} → ${proposed}`
+          : proposed !== undefined ? String(proposed) : "not recorded",
+        actual: actual !== undefined ? String(actual) : undefined,
+        status,
+        resolvedCivilDate: row.resolvedCivilDate,
+        resolvedBy: row.resolvedBy,
+        rejectReason: row.rejectReason,
+        applyError: row.applyError,
+      };
+    }
+    const row = entry.overlay;
+    const status = row.confirmationStatus;
+    return {
+      id: row.id,
+      kind: "trait" as const,
+      change: `${row.valence === "gain" ? "Gain" : "Lose"} ${row.traitName}`,
+      proposed: `${traitSlotsLabel(row.expectedPriorValue)} → ${traitSlotsLabel(row.proposedValue)}`,
+      actual: row.actualEnteredValue ? traitSlotsLabel(row.actualEnteredValue) : undefined,
+      status,
+      resolvedCivilDate: row.resolvedCivilDate,
+      resolvedBy: row.resolvedBy,
+      rejectReason: row.rejectReason,
+      applyError: row.applyError,
+    };
+  });
 }
 
 function buildTies(
@@ -489,11 +581,11 @@ function buildPlayerRow(player: Player, teamId: string, ctx: DrawerContext): Pla
     ctx.designations.find((row) => row.playerId === player.id && row.teamId === teamId),
   );
   const snapshot = ctx.moraleByPlayer.get(player.id) ?? null;
-  const moraleValue = snapshot?.currentValue ?? player.morale ?? 50;
+  const moraleValue = snapshot?.currentValue ?? 50;
   const morale: PlayerMoraleVM = {
     value: moraleValue,
     state: getPlayerMoraleSpecState(moraleValue),
-    trend: "flat",
+    trend: moraleTrend(snapshot),
     history: toMoraleHistory(snapshot),
   };
 
@@ -523,6 +615,7 @@ function buildPlayerRow(player: Player, teamId: string, ctx: DrawerContext): Pla
     ties: ties.length ? ties : undefined,
     fame: buildFame(ctx.fameByPlayer.get(player.id)),
     milestones: buildMilestones(ctx.milestonesByPlayer.get(player.id)),
+    developmentHistory: buildDevelopmentHistory(ctx.developmentHistoryByPlayer.get(player.id) ?? []),
     designationEffect: designationEffectLine(designation),
   };
 
@@ -561,17 +654,26 @@ function buildStandingsVM(
         winPct: standing?.winPct ?? 0,
         gamesBack: standing?.gamesBack ?? 0,
         lastTenWins: standing?.lastTenWins ?? 0,
+        lastTenGames: Math.min(10, (standing?.wins ?? 0) + (standing?.losses ?? 0)),
         streak: standing?.streak ?? { type: "W", count: 0 },
         runDiff: standing?.runDiff ?? 0,
         home: standing?.homeRecord ?? { wins: 0, losses: 0 },
         away: standing?.awayRecord ?? { wins: 0, losses: 0 },
       };
     })
-    .sort((a, b) => b.winPct - a.winPct || b.wins - a.wins || a.name.localeCompare(b.name));
+    .sort(compareLensStandings);
   const groupName = config?.leagueDetails?.name ?? config?.franchiseName ?? "League";
 
   const { races, awards } = buildAwardRacesAndHardware(raceScores, players, teamMeta);
   return { divisions: [{ name: groupName, rows }], races, awards: awards.length ? awards : undefined };
+}
+
+/** One comparator owns both the rendered table order and the pulse rank label. */
+export function compareLensStandings(
+  left: Pick<TeamStanding, "winPct" | "runDiff">,
+  right: Pick<TeamStanding, "winPct" | "runDiff">,
+): number {
+  return right.winPct - left.winPct || right.runDiff - left.runDiff;
 }
 
 /**
@@ -627,20 +729,23 @@ function buildAwardRacesAndHardware(
 function buildPulse(
   teamPlayers: Player[],
   activeTeamId: string,
+  playerMoraleById: Map<string, FranchiseMoraleSnapshot>,
   fanSnapshot: FranchiseMoraleSnapshot | null,
-  standings: TeamStanding[],
+  standings: StandingRowVM[],
 ): PulseVM {
-  const moraleValues = teamPlayers.map((player) => player.morale ?? 50);
+  const moraleValues = teamPlayers
+    .map((player) => playerMoraleById.get(player.id)?.currentValue)
+    .filter((value): value is number => value !== undefined);
   const clubhouseAvg = moraleValues.length
     ? Math.round(moraleValues.reduce((sum, value) => sum + value, 0) / moraleValues.length)
     : undefined;
   const payroll = teamPlayers.reduce((sum, player) => sum + (Number(player.salary) || 0), 0);
 
   const fanMorale = fanSnapshot
-    ? { value: fanSnapshot.currentValue, trend: "flat" as const, history: toMoraleHistory(fanSnapshot) }
+    ? { value: fanSnapshot.currentValue, trend: moraleTrend(fanSnapshot), history: toMoraleHistory(fanSnapshot) }
     : undefined;
 
-  const ranked = [...standings].sort((a, b) => b.winPct - a.winPct);
+  const ranked = [...standings].sort(compareLensStandings);
   const rank = ranked.findIndex((standing) => standing.teamId === activeTeamId);
   const standingLabel =
     rank >= 0 && standings.length > 0 ? `${ordinal(rank + 1)} of ${standings.length}` : undefined;
@@ -1075,6 +1180,9 @@ function buildNewsVM(
   const sorted = [...news].sort((a, b) => b.dramaticWeight - a.dramaticWeight);
   const lead = sorted[0];
   const rest = lead ? sorted.slice(1) : [];
+  const displayedStories = rest.slice(0, 8);
+  const displayedIds = new Set([lead?.id, ...displayedStories.map((item) => item.id)].filter(Boolean));
+  const wireItems = sorted.filter((item) => !displayedIds.has(item.id)).slice(0, 14);
   const byline = reporter ? reporter.name : "the Tootwhistle desk";
   const recaps = buildRecaps(stories, schedule, teamMeta);
 
@@ -1092,14 +1200,14 @@ function buildNewsVM(
           dramaticWeight: lead.dramaticWeight,
         }
       : undefined,
-    stories: rest.slice(0, 8).map((item) => ({
+    stories: displayedStories.map((item) => ({
       category: prettyEvent(item.eventType),
       headline: item.headline,
       excerpt: item.body,
       byline,
       dramaticWeight: item.dramaticWeight,
     })),
-    wire: rest.slice(0, 14).map((item) => ({
+    wire: wireItems.map((item) => ({
       type: prettyEvent(item.eventType),
       text: item.headline,
       tone: eventTone(item.eventType),
@@ -1123,67 +1231,91 @@ function reporterAvatar(avatarEra: BeatReporter["avatarEra"]): "fedora" | "heads
 }
 
 function buildCheckpointVM(
-  ratingsOverlays: FranchiseRatingsOverlayRow[],
-  traitOverlays: FranchiseTraitOverlayRow[],
+  unresolved: UnresolvedDevelopmentCheckpoint[],
   players: Player[],
 ): CheckpointVM | undefined {
-  const pendingRatings = ratingsOverlays.filter((row) => row.confirmationStatus === "pending");
-  const pendingTraits = traitOverlays.filter((row) => row.confirmationStatus === "pending");
-  if (pendingRatings.length === 0 && pendingTraits.length === 0) return undefined;
-
-  const checkpointNumber = (sourceEventId: string | undefined): number | null => {
-    const match = /checkpoint-(\d+)/i.exec(sourceEventId ?? "");
-    return match ? Number(match[1]) : null;
-  };
-  const numbers = [...pendingRatings, ...pendingTraits]
-    .map((row) => checkpointNumber(row.sourceEventId))
-    .filter((value): value is number => value != null);
-  if (numbers.length === 0) return undefined;
-  const number = Math.max(...numbers);
-  const sourceId = `checkpoint-${number}`;
-
+  if (unresolved.length === 0) return undefined;
   const playerById = new Map(players.map((player) => [player.id, player]));
-  const byPlayer = new Map<string, { ratingChanges: RatingChangeVM[]; traitChanges: TraitChangeVM[] }>();
-  const ensure = (playerId: string) => {
-    const existing = byPlayer.get(playerId) ?? { ratingChanges: [], traitChanges: [] };
-    byPlayer.set(playerId, existing);
-    return existing;
-  };
 
-  for (const row of pendingRatings.filter((r) => r.sourceEventId === sourceId)) {
-    const player = playerById.get(row.playerId);
-    if (!player) continue;
-    const base = (player as unknown as Record<string, number>)[row.ratingKey] ?? 0;
-    ensure(row.playerId).ratingChanges.push({
-      label: RATING_LABELS[row.ratingKey] ?? row.ratingKey,
-      from: base,
-      to: base + row.delta,
+  const groups = unresolved.map((group) => {
+    const byPlayer = new Map<string, CheckpointProposalVM[]>();
+    for (const proposal of group.proposals) {
+      if (proposal.kind === "rating") {
+        const row = proposal.overlay;
+        const player = playerById.get(row.playerId);
+        const existing = byPlayer.get(row.playerId) ?? [];
+        const recordValue = player
+          ? (player as unknown as Record<string, unknown>)[row.ratingKey]
+          : undefined;
+        const observedPriorValue = row.expectedPriorValue ??
+          (typeof recordValue === "number" && Number.isFinite(recordValue) ? recordValue : undefined);
+        existing.push({
+          id: row.id,
+          kind: "rating",
+          retry: proposal.retry,
+          observedPriorValue,
+          ratingChange: {
+            label: RATING_LABELS[row.ratingKey] ?? row.ratingKey,
+            from: row.expectedPriorValue ?? observedPriorValue,
+            // The service-stamped proposal is the display truth; never rebuild it from player + delta.
+            to: row.proposedValue,
+          },
+        });
+        byPlayer.set(row.playerId, existing);
+      } else {
+        const row = proposal.overlay;
+        const player = playerById.get(row.playerId);
+        const existing = byPlayer.get(row.playerId) ?? [];
+        const playerSlots: FranchiseTraitSlotValue = {
+          trait1: player?.trait1 ?? null,
+          trait2: player?.trait2 ?? null,
+        };
+        const observedPriorValue = row.expectedPriorValue ?? playerSlots;
+        existing.push({
+          id: row.id,
+          kind: "trait",
+          retry: proposal.retry,
+          observedPriorValue,
+          traitChange: {
+            valence: row.valence,
+            trait: row.traitName,
+            displaces: row.displacesTraitName ?? undefined,
+            from: row.expectedPriorValue ?? observedPriorValue,
+            // Trait slot truth is also service-stamped; the UI does not replay displacement logic.
+            to: row.proposedValue,
+          },
+        });
+        byPlayer.set(row.playerId, existing);
+      }
+    }
+    const checkpointPlayers: CheckpointPlayerVM[] = [...byPlayer.entries()].map(([playerId, proposals]) => {
+      const player = playerById.get(playerId);
+      return {
+        id: playerId,
+        name: player ? `${player.firstName} ${player.lastName}`.trim() : playerId,
+        position: player?.primaryPosition ?? "",
+        proposals,
+      };
     });
-  }
-  for (const row of pendingTraits.filter((r) => r.sourceEventId === sourceId)) {
-    ensure(row.playerId).traitChanges.push({
-      valence: row.valence,
-      trait: row.traitName,
-      displaces: row.displacesTraitName ?? undefined,
-    });
-  }
-
-  const cpPlayers: CheckpointPlayerVM[] = [...byPlayer.entries()].map(([playerId, changes]) => {
-    const player = playerById.get(playerId);
     return {
-      id: playerId,
-      name: player ? `${player.firstName} ${player.lastName}`.trim() : playerId,
-      position: player?.primaryPosition ?? "",
-      ratingChanges: changes.ratingChanges,
-      traitChanges: changes.traitChanges,
+      boundaryGameNumber: group.boundaryGameNumber,
+      ordinal: group.ordinal,
+      ordinalCount: group.ordinalCount,
+      label: group.stalePlan
+        ? `Game ${group.boundaryGameNumber || "unknown"}`
+        : `Checkpoint ${group.ordinal} of ${group.ordinalCount} — game ${group.boundaryGameNumber}`,
+      stalePlan: group.stalePlan,
+      players: checkpointPlayers,
     };
   });
 
+  const first = groups[0];
   return {
-    number,
-    label: `Checkpoint ${number} of 5`,
-    pctLabel: `the ${number * 20}% mark`,
-    players: cpPlayers,
+    number: first.ordinal,
+    label: first.label,
+    pctLabel: first.stalePlan ? undefined : `game ${first.boundaryGameNumber}`,
+    players: first.players,
+    groups,
   };
 }
 
@@ -1206,6 +1338,7 @@ function buildNextGameVM(
   const abbrOf = (teamId: string) => teamMeta.get(teamId)?.abbr ?? teamId;
   return {
     scheduleGameId: next.id,
+    activeTeamId,
     awayTeamId: next.awayTeamId,
     homeTeamId: next.homeTeamId,
     gameNumber: next.gameNumber,
@@ -1276,7 +1409,7 @@ function buildHomeVM(
   }
   const standing = standingByTeam.get(activeTeam.id);
   if (standing && standing.wins + standing.losses > 0) {
-    const winning = standing.winPct >= 0.5;
+    const winning = standing.winPct > 0.5;
     impactCards.push({
       kind: winning ? "good" : "info",
       icon: winning ? "📈" : "📊",
@@ -1430,6 +1563,8 @@ function buildReturn(
     raceScores,
     conditionSnapshots,
     milestones,
+    unresolvedDevelopment,
+    developmentHistory,
   } = raw;
   const fitnessByPlayer = new Map<string, FitnessState>(
     conditionSnapshots.map((snap) => [snap.playerId, snap.fitnessState]),
@@ -1439,6 +1574,12 @@ function buildReturn(
     const list = milestonesByPlayer.get(ms.playerId);
     if (list) list.push(ms);
     else milestonesByPlayer.set(ms.playerId, [ms]);
+  }
+  const developmentHistoryByPlayer = new Map<string, DevelopmentHistoryEntry[]>();
+  for (const entry of developmentHistory) {
+    const list = developmentHistoryByPlayer.get(entry.overlay.playerId) ?? [];
+    list.push(entry);
+    developmentHistoryByPlayer.set(entry.overlay.playerId, list);
   }
 
   const teamMeta = new Map<string, TeamMeta>(
@@ -1518,6 +1659,7 @@ function buildReturn(
     fameByPlayer: new Map(fameRecords.map((row) => [row.playerId, row])),
     fitnessByPlayer,
     milestonesByPlayer,
+    developmentHistoryByPlayer,
     nameById: new Map(players.map((p) => [p.id, `${p.firstName} ${p.lastName}`.trim()])),
     currentGameNumber: completedGameNumbers.length ? Math.max(...completedGameNumbers) : 0,
   };
@@ -1558,7 +1700,11 @@ function buildReturn(
   };
 
   const payroll = teamPlayers.reduce((sum, player) => sum + (Number(player.salary) || 0), 0);
-  const checkpointVM = buildCheckpointVM(ratingsOverlays, traitOverlays, players);
+  const checkpointVM = buildCheckpointVM(unresolvedDevelopment, players);
+  const franchiseTeamIds = new Set(teams.map((team) => team.id));
+  const franchiseChampionships = championships.filter((record) => franchiseTeamIds.has(record.championId));
+  const franchiseAwards = awards.filter((award) => franchiseTeamIds.has(award.teamId));
+  const standingsVM = buildStandingsVM(teams, standingByTeam, config, raceScores, players, teamMeta);
 
   const hub: HubVM = {
     home: buildHomeVM(
@@ -1571,19 +1717,25 @@ function buildReturn(
       fanSnapshot?.currentValue,
       byline,
     ),
-    pulse: buildPulse(teamPlayers, activeTeam.id, fanSnapshot, standings),
+    pulse: buildPulse(
+      teamPlayers,
+      activeTeam.id,
+      playerMoraleById,
+      fanSnapshot,
+      standingsVM.divisions.flatMap((division) => division.rows),
+    ),
     roster,
     rosterExtras: buildRosterExtrasVM(players, activeTeam.id, payroll, teamPlayers.length),
-    standings: buildStandingsVM(teams, standingByTeam, config, raceScores, players, teamMeta),
+    standings: standingsVM,
     stadium: buildStadiumVM(activeTeam),
     schedule: buildScheduleVM(schedule, activeTeam.id, teamMeta),
     playoffs: buildPlayoffsVM(playoffs, playoffSeries, activeTeam.id, teamMeta),
     trades: buildTradesVM(transactions, activeTeam.id, teamMeta, ctx.nameById),
     tradeCandidates: buildTradeCandidates(teams, players, activeTeam.id, teamMeta),
-    almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, championships, awards),
+    almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, franchiseChampionships, franchiseAwards),
     news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
     checkpoint: checkpointVM,
-    moments: buildMomentsVM(championships, awards, teamMeta),
+    moments: buildMomentsVM(franchiseChampionships, franchiseAwards, teamMeta),
     lineups: buildLineupsContextVM(schedule, activeTeam.id, standingByTeam, teamMeta, config),
     loading: false,
   };
@@ -1711,6 +1863,47 @@ export function useFranchiseLensData(
     [franchiseId, reload],
   );
 
+  const resolveDevelopment = useCallback(
+    async (request: LensDevelopmentResolutionRequest): Promise<LensDevelopmentResolutionResult> => {
+      try {
+        const action = request.action === "retry" ? "confirm" : request.action;
+        const result = request.kind === "rating"
+          ? await resolveRatingsProposal(request.proposalId, {
+              action,
+              observedPriorValue: typeof request.observedPriorValue === "number"
+                ? request.observedPriorValue
+                : undefined,
+              actualValue: typeof request.actualValue === "number" ? request.actualValue : undefined,
+              rejectReason: request.rejectReason,
+              actor: "Franchise Lens",
+            })
+          : await resolveTraitProposal(request.proposalId, {
+              action,
+              observedPriorValue: typeof request.observedPriorValue === "object"
+                ? request.observedPriorValue
+                : undefined,
+              actualValue: typeof request.actualValue === "object"
+                ? request.actualValue
+                : undefined,
+              rejectReason: request.rejectReason,
+              actor: "Franchise Lens",
+            });
+        reload();
+        return {
+          outcome: result.outcome,
+          currentValue: result.currentValue,
+          message: result.outcome === "apply-failed" ? result.overlay.applyError : undefined,
+        };
+      } catch (caught) {
+        return {
+          outcome: "error",
+          message: caught instanceof Error ? caught.message : "Could not resolve development proposal.",
+        };
+      }
+    },
+    [reload],
+  );
+
   useEffect(() => {
     if (!franchiseId) {
       setRaw(null);
@@ -1767,6 +1960,10 @@ export function useFranchiseLensData(
         const ratingsOverlays = await getFranchiseRatingsOverlaysByScope(scope).catch(() => []);
         const trueValueSnapshots = await getFranchiseTrueValueSnapshotRowsByScope(scope).catch(() => []);
         const traitOverlays = await getFranchiseTraitOverlaysByScope(scope).catch(() => []);
+        const unresolvedDevelopment = await listUnresolvedDevelopment(franchiseId, seasonId);
+        const developmentHistory = (
+          await Promise.all(players.map((player) => getDevelopmentHistory(franchiseId, player.id)))
+        ).flat();
         const relationshipEdges = await getFranchiseRelationshipEdgesByScope(scope).catch(() => []);
         const fameRecords = await getFranchiseFameRecordRowsByScope(scope).catch(() => []);
         // Phase-4 newsroom: franchise-season news + per-game recaps + the beat reporters. Empty/null
@@ -1791,7 +1988,10 @@ export function useFranchiseLensData(
         );
         // Career milestones (global career store; one read, grouped by player in the VM). Empty until
         // a played season records them. Career stat line / awards deferred per JK — milestones only.
-        const milestones = await getRecentMilestones(5000).catch((): CareerMilestone[] => []);
+        // A milestone's season scope is the durable franchise identity; player ids alone can survive
+        // copies/imports and would let another franchise's career receipt bleed into this drawer.
+        const milestones = (await getRecentMilestones(5000).catch((): CareerMilestone[] => []))
+          .filter((milestone) => milestone.seasonId.startsWith(`${franchiseId}-season-`));
         if (cancelled) return;
         setRaw({
           config,
@@ -1818,6 +2018,8 @@ export function useFranchiseLensData(
           raceScores: raceScores ?? {},
           conditionSnapshots: conditionSnapshots ?? [],
           milestones: milestones ?? [],
+          unresolvedDevelopment: unresolvedDevelopment ?? [],
+          developmentHistory: developmentHistory ?? [],
         });
         setIsLoading(false);
       } catch (caught) {
@@ -1850,8 +2052,9 @@ export function useFranchiseLensData(
       sendDown,
       executeTrade,
       setFitness,
+      resolveDevelopment,
     }),
-    [view, seasonId, raw?.config, raw?.teams, reload, callUp, sendDown, executeTrade, setFitness],
+    [view, seasonId, raw?.config, raw?.teams, reload, callUp, sendDown, executeTrade, setFitness, resolveDevelopment],
   );
 }
 

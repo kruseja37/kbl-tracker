@@ -19,15 +19,18 @@
 
 import { computeFlashpointGameTax, type FlashpointKind } from '../engines/flashpointDecay';
 import type { PersistedGameState } from './gameStorage';
+import { getAllFranchisePlayers, getAllFranchiseTeams } from './franchisePlayerStorage';
 import { getFranchiseDesignationRow } from './franchiseDesignationStorage';
 import {
   getFranchiseFlashpointDecayRow,
+  getFranchiseFlashpointDecayRowsByScope,
   saveFranchiseFlashpointDecayRows,
   type FranchiseFlashpointDecayRow,
   type FranchiseFlashpointDecayScopeInput,
 } from './franchiseFlashpointDecayStorage';
 import { getFranchiseTradeDemandRowsByScope } from './franchiseTradeDemandStorage';
 import { isFranchisePhase2FlashpointEnabled } from './franchisePhase2Flags';
+import { getPlayerTeamIdForLeague } from './leagueBuilderStorage';
 import { getGame as getScheduledGame } from './scheduleStorage';
 
 export interface CompletedGameArchiveOptions {
@@ -109,9 +112,31 @@ export async function resolveTurnedOnPlayers(
   return turnedOnPlayers;
 }
 
+export async function resolveProcessedTeamPlayerIds(
+  scope: FlashpointScope,
+  gameState: PersistedGameState,
+): Promise<Set<string>> {
+  const teamIds = new Set(
+    [gameState.homeTeamId, gameState.awayTeamId]
+      .map((teamId) => teamId?.trim())
+      .filter((teamId): teamId is string => Boolean(teamId)),
+  );
+  const teams = await getAllFranchiseTeams(scope.franchiseId);
+  const leagueId = teams.find((team) => teamIds.has(team.id))?.leagueIds?.[0];
+  if (!leagueId) return new Set();
+
+  const players = await getAllFranchisePlayers(scope.franchiseId);
+  return new Set(
+    players
+      .filter((player) => teamIds.has(getPlayerTeamIdForLeague(player, leagueId) ?? ''))
+      .map((player) => player.id),
+  );
+}
+
 /** Single indirection point so the seam is mockable from the compute path. */
 export const flashpointSeam = {
   resolveTurnedOnPlayers,
+  resolveProcessedTeamPlayerIds,
 };
 
 export async function persistDarkFlashpointDecayForCompletedGame(
@@ -128,16 +153,32 @@ export async function persistDarkFlashpointDecayForCompletedGame(
   }
 
   const turnedOn = await flashpointSeam.resolveTurnedOnPlayers(scope, gameState);
-  if (turnedOn.length === 0) {
-    return {
-      status: 'dark-noop',
-      written: 0,
-      reason: 'No turned-on players (seam empty until L7/L10/L13); nothing accumulated.',
-    };
-  }
-
   const checkpoint = await resolveFlashpointCheckpoint(gameState, archiveOptions);
   const rows: FranchiseFlashpointDecayRow[] = [];
+  const turnedOnPlayerIds = new Set(turnedOn.map((player) => player.playerId));
+  const processedTeamPlayerIds = await flashpointSeam.resolveProcessedTeamPlayerIds(scope, gameState);
+  const storedRows = await getFranchiseFlashpointDecayRowsByScope(scope);
+
+  for (const storedRow of storedRows) {
+    if (
+      turnedOnPlayerIds.has(storedRow.playerId) ||
+      !processedTeamPlayerIds.has(storedRow.playerId) ||
+      storedRow.updatedAtCheckpoint === checkpoint ||
+      (storedRow.flashpointKind === null &&
+        storedRow.consecutiveGamesUnresolved === 0 &&
+        storedRow.lastGameTax === 0)
+    ) {
+      continue;
+    }
+
+    rows.push({
+      ...storedRow,
+      flashpointKind: null,
+      consecutiveGamesUnresolved: 0,
+      lastGameTax: 0,
+      updatedAtCheckpoint: checkpoint,
+    });
+  }
 
   for (const player of turnedOn) {
     const storedRow = await getFranchiseFlashpointDecayRow(scope, player.playerId);
@@ -166,6 +207,14 @@ export async function persistDarkFlashpointDecayForCompletedGame(
       lastGameTax: taxResult.gameTax,
       updatedAtCheckpoint: checkpoint,
     });
+  }
+
+  if (rows.length === 0 && turnedOn.length === 0) {
+    return {
+      status: 'dark-noop',
+      written: 0,
+      reason: 'No turned-on players (seam empty until L7/L10/L13); nothing accumulated.',
+    };
   }
 
   await saveFranchiseFlashpointDecayRows(rows);
