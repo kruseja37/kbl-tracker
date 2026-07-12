@@ -118,12 +118,35 @@ describe('relationshipFormation', () => {
     const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds.FRIENDSHIP;
     const window = RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow;
 
-    expect(relationshipFormationHazardProbability(threshold - window - 0.0001, 'FRIENDSHIP')).toBe(0);
-    expect(relationshipFormationHazardProbability(threshold - window, 'FRIENDSHIP')).toBeCloseTo(0.03, 10);
-    expect(relationshipFormationHazardProbability(threshold - 0.01, 'FRIENDSHIP')).toBeCloseTo(0.07, 10);
-    expect(relationshipFormationHazardProbability(threshold, 'FRIENDSHIP')).toBeCloseTo(0.02, 10);
-    expect(relationshipFormationHazardProbability(threshold + 0.1, 'FRIENDSHIP')).toBeCloseTo(0.32, 10);
-    expect(relationshipFormationHazardProbability(threshold + 1, 'FRIENDSHIP')).toBe(0.35);
+    expect(relationshipFormationHazardProbability(threshold - window - 0.0001, 'FRIENDSHIP', true)).toBe(0);
+    expect(relationshipFormationHazardProbability(threshold - window, 'FRIENDSHIP', true)).toBeCloseTo(0.03, 10);
+    expect(relationshipFormationHazardProbability(threshold - 0.01, 'FRIENDSHIP', true)).toBeCloseTo(0.07, 10);
+    expect(relationshipFormationHazardProbability(threshold, 'FRIENDSHIP', false)).toBeCloseTo(0.02, 10);
+    expect(relationshipFormationHazardProbability(threshold + 0.1, 'FRIENDSHIP', false)).toBeCloseTo(0.32, 10);
+    expect(relationshipFormationHazardProbability(threshold + 1, 'FRIENDSHIP', false)).toBe(0.35);
+  });
+
+  test('keeps the live same-team hazard monotone at every relationship threshold', () => {
+    for (const type of L13_3A_RELATIONSHIP_EDGE_TYPES) {
+      const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds[type];
+      const scores = [
+        threshold - RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow,
+        threshold - Number.EPSILON,
+        threshold,
+        threshold + 0.01,
+        threshold + 0.05,
+        threshold + 0.2,
+      ];
+      const probabilities = scores.map((score) =>
+        relationshipFormationHazardProbability(score, type, false),
+      );
+
+      expect(relationshipFormationHazardProbability(threshold - Number.EPSILON, type, false)).toBe(0);
+      expect(relationshipFormationHazardProbability(threshold, type, false)).toBe(
+        RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeBase,
+      );
+      expect(probabilities.every((value, index) => index === 0 || value >= probabilities[index - 1])).toBe(true);
+    }
   });
 
   test('canonicalizes the seeded pair while retaining directional edge output', () => {

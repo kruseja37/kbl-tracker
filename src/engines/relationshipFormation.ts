@@ -157,7 +157,11 @@ export function computeRelationshipFormationEdges(
         const seed = relationshipFormationSeed(context, candidate.player1Id, candidate.player2Id, candidate.type);
         const seededRoll = stableUnitInterval(seed);
         const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds[candidate.type];
-        const hazardProbability = relationshipFormationHazardProbability(candidate.score, candidate.type);
+        const hazardProbability = relationshipFormationHazardProbability(
+          candidate.score,
+          candidate.type,
+          candidate.potential,
+        );
         if (seededRoll >= hazardProbability) continue;
 
         edges.push({
@@ -186,6 +190,7 @@ export function computeRelationshipFormationEdges(
 export function relationshipFormationHazardProbability(
   score: number,
   type: RelationshipFormationEdgeType,
+  canBePotential: boolean,
 ): number {
   const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds[type];
   const window = RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow;
@@ -194,6 +199,7 @@ export function relationshipFormationHazardProbability(
 
   if (score < threshold - window) return 0;
   if (margin < 0) {
+    if (!canBePotential) return 0;
     return clamp(
       tuning.potentialBase + (tuning.potentialSlopePerPoint * (margin + window)),
       0,
