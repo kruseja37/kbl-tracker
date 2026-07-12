@@ -74,3 +74,11 @@ what's wrong.
   second time it costs trust.
 - Asking him something the repo/spec already answers, or re-litigating a ruled decision.
 - Quietly shrinking scope. Say the cost, propose the cut, let him rule.
+
+## The help-button law (he has asked over and over — stop making him)
+Explanatory/instructional text in product UI goes BEHIND the screen's `?` Help affordance,
+period. Inline copy is limited to: labels, values, states, and one-line action consequences.
+Models keep decorating screens with explainer paragraphs "to be helpful" — JK: "no matter what
+I say, I can't get AI to hide it behind the help button... explanatory text has spoiled our
+draft UI." When you feel the urge to explain a mechanic on-screen, that content belongs in the
+Help drawer. Dev-only pages are exempt. (2026-07-11.)
