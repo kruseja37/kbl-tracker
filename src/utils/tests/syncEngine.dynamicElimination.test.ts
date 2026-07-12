@@ -1095,6 +1095,216 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]);
   });
 
+  test("companion claim and approval round-trip across isolated device stores", async () => {
+    let syncEngine = await loadFreshSyncEngine();
+    let storage = await import("../leagueBuilderStorage");
+    const { approveCompanionClaim, submitCompanionClaim } = await import(
+      "../../src_figma/app/components/snake/companion/companionModel"
+    );
+    const { applySnakePickWithCorrection } = await import("../../engines/snakeSession");
+    const initialBoard = {
+      slots: {},
+      rankings: { global: ["player-board-old"] },
+      revision: 1,
+    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
+
+    await storage.saveLeagueTemplate({
+      id: "companion-league",
+      name: "Companion Sync League",
+      description: "",
+      teamIds: ["team-a"],
+      rulesPresetId: "rules-1",
+    });
+    await storage.saveMlbDraftSession({
+      id: storage.createMlbDraftSessionId("companion-league", 1),
+      leagueId: "companion-league",
+      seasonNumber: 1,
+      seed: "companion-seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard",
+      balanceMode: "balanced",
+      rounds: 22,
+      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      completedPicks: [],
+      currentPickIndex: 0,
+      revision: 1,
+      seatBoards: { "team-a": initialBoard },
+      snakeSetup: {
+        poolPlayerIds: ["player-main-pick", "player-board-old", "player-board-new"],
+        clubs: [{ teamId: "team-a", gmName: "Alex", seatMode: "companion" }],
+        draftOrderTeamIds: ["team-a"],
+      },
+      snakeCompanions: { roomCode: "4821", claims: [] },
+    });
+    await syncEngine.flush({ throwOnPending: true });
+
+    expect(mockState.cloudRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        user_id: "user-1",
+        db_name: "kbl-league-builder",
+        store_name: "leagueTemplates",
+        record_key: JSON.stringify("companion-league"),
+      }),
+      expect.objectContaining({
+        user_id: "user-1",
+        db_name: "kbl-league-builder",
+        store_name: "mlbDraftSessions",
+        record_key: JSON.stringify(storage.createMlbDraftSessionId("companion-league", 1)),
+      }),
+    ]));
+
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+
+    expect((await storage.getAllLeagueTemplates()).map((entry) => entry.id)).toContain("companion-league");
+    const phoneSession = await storage.getMlbDraftSession("companion-league", 1);
+    expect(phoneSession?.snakeCompanions?.roomCode).toBe("4821");
+    const claim = submitCompanionClaim(phoneSession!, {
+      deviceId: "phone-device",
+      gmName: "Alex",
+      roomCode: "4821",
+    });
+    expect(claim.ok).toBe(true);
+    await storage.patchMlbDraftSessionSnakeCompanions({
+      leagueId: "companion-league",
+      seasonNumber: 1,
+      patch: () => claim.session!.snakeCompanions!,
+    });
+    await syncEngine.flush({ throwOnPending: true });
+    expect(mockState.cloudRows.find((row) => (
+      row.store_name === "mlbDraftSessions" && row.record_key === JSON.stringify(storage.createMlbDraftSessionId("companion-league", 1))
+    ))?.data).toEqual(expect.objectContaining({
+      snakeCompanions: expect.objectContaining({
+        claims: [expect.objectContaining({ deviceId: "phone-device", status: "pending" })],
+      }),
+    }));
+
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const mainSession = await storage.getMlbDraftSession("companion-league", 1);
+    expect(mainSession?.snakeCompanions?.claims[0]?.status).toBe("pending");
+    await storage.patchMlbDraftSessionSnakeCompanions({
+      leagueId: "companion-league",
+      seasonNumber: 1,
+      patch: (current) => approveCompanionClaim(
+        { ...mainSession!, snakeCompanions: current },
+        "phone-device",
+        "approved",
+      ).snakeCompanions!,
+    });
+    await syncEngine.flush({ throwOnPending: true });
+
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const approvedOnPhone = await storage.getMlbDraftSession("companion-league", 1);
+    expect(approvedOnPhone?.snakeCompanions?.claims).toEqual([
+      expect.objectContaining({ deviceId: "phone-device", status: "approved" }),
+    ]);
+
+    // The phone now holds a stale copy. Switch to the main device, record a pick,
+    // and push it before the phone attempts its board edit.
+    const stalePhoneSession = structuredClone(approvedOnPhone!);
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const beforeMainPick = await storage.getMlbDraftSession("companion-league", 1);
+    const afterMainPick = applySnakePickWithCorrection({
+      session: beforeMainPick!,
+      player: { playerId: "player-main-pick" },
+      settledSalary: 42_000,
+      marginalTax: 0,
+      versionPool: [{ playerId: "player-main-pick" }],
+    });
+    await storage.saveMlbDraftRoomSession(afterMainPick);
+    await syncEngine.flush({ throwOnPending: true });
+
+    // Restore the phone's pre-pick local snapshot without queueing a cloud write.
+    // Its production flow pulls first, then patches only its own board field.
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    const suppressPhoneSeed = vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(true);
+    await storage.saveMlbDraftSession(stalePhoneSession);
+    suppressPhoneSeed.mockRestore();
+    await syncEngine.pull({ throwOnError: true });
+    const phoneAfterPull = await storage.getMlbDraftSession("companion-league", 1);
+    expect(phoneAfterPull?.completedPicks).toEqual([
+      expect.objectContaining({ playerId: "player-main-pick" }),
+    ]);
+    const phoneBoard = phoneAfterPull?.seatBoards?.["team-a"];
+    expect(phoneBoard?.revision).toBe(1);
+    await storage.patchMlbDraftSessionSeatBoard({
+      leagueId: "companion-league",
+      seasonNumber: 1,
+      teamId: "team-a",
+      expectedBoardRevision: phoneBoard!.revision,
+      board: {
+        ...phoneBoard!,
+        rankings: { ...phoneBoard!.rankings, global: ["player-board-new"] },
+        revision: phoneBoard!.revision + 1,
+      },
+    });
+    await syncEngine.flush({ throwOnPending: true });
+
+    // Both origins pull the converged cloud row: neither the main pick nor the
+    // phone's board edit may disappear.
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const mainAfterPull = await storage.getMlbDraftSession("companion-league", 1);
+    expect(mainAfterPull?.completedPicks).toEqual([
+      expect.objectContaining({ playerId: "player-main-pick" }),
+    ]);
+    expect(mainAfterPull?.seatBoards?.["team-a"].rankings.global).toEqual(["player-board-new"]);
+
+    storage.__resetLeagueBuilderDatabaseForTests();
+    syncEngine.destroy();
+    await deleteDatabase("kbl-league-builder");
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const phoneAfterFinalPull = await storage.getMlbDraftSession("companion-league", 1);
+    expect(phoneAfterFinalPull?.completedPicks).toEqual([
+      expect.objectContaining({ playerId: "player-main-pick" }),
+    ]);
+    expect(phoneAfterFinalPull?.seatBoards?.["team-a"].rankings.global).toEqual(["player-board-new"]);
+  });
+
   test("replaceCloudWithLocal uploads copied elimination players and teams", async () => {
     await seedEliminationMeta("elim-sync");
     await seedCopiedDb(

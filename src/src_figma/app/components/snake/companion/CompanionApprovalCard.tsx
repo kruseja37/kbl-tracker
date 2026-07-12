@@ -5,6 +5,7 @@ import {
   type LeagueBuilderMlbDraftSession,
   type SnakeCompanionState,
 } from '../../../../../utils/leagueBuilderStorage';
+import { CompanionHelp } from './CompanionHelp';
 import { approveCompanionClaim, ensureCompanionRoom } from './companionModel';
 
 export interface CompanionApprovalCardProps {
@@ -47,7 +48,9 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
       <p className="mt-2 font-bold">ON YOUR PHONE, GO TO: {`${window.location.origin}/snake-companion`} — SAME WI-FI</p>
-      <p className="mt-2 text-sm">USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
+      <CompanionHelp>
+        <p>USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
+      </CompanionHelp>
       <div className="mt-4 grid gap-3">
         {companions.claims.filter((claim) => claim.status === 'pending').map((claim) => (
           <div key={claim.deviceId} className="border-4 border-[var(--ballpark-panel-border)] p-3">

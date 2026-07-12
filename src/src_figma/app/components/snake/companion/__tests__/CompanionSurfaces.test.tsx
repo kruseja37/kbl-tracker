@@ -10,6 +10,7 @@ vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) =
 
 import type { LeagueBuilderMlbDraftSession } from '../../../../../../utils/leagueBuilderStorage';
 import { CompanionApprovalCard } from '../CompanionApprovalCard';
+import { CompanionClaimScreen } from '../CompanionClaimScreen';
 import { SnakeCompanionFrame } from '../SnakeCompanionFrame';
 
 const session = {
@@ -39,6 +40,9 @@ describe('S5 companion surfaces', () => {
     />);
     expect(screen.getByText('ROOM CODE 4821')).toBeInTheDocument();
     expect(screen.getByText(`ON YOUR PHONE, GO TO: ${window.location.origin}/snake-companion — SAME WI-FI`)).toBeInTheDocument();
+    expect(screen.queryByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
+    expect(screen.getByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).toBeInTheDocument();
     expect(screen.getByText('LET ALEX SEE THE KODIAKS DESK?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
@@ -56,12 +60,27 @@ describe('S5 companion surfaces', () => {
       order={[{ pick: 7, teamName: 'Kodiaks' }, { pick: 8, teamName: 'Comets' }]}
       ticker={['COMETS SELECTED PLAYER B']}
       privateDesk={<div>TEAM A PRIVATE BOARD</div>}
-      tradeGuide={<div>READ-ONLY POSTED GUIDE</div>}
       onSignOut={() => undefined}
     />);
     expect(screen.getByText('YOUR PRIVATE DRAFT DESK')).toBeInTheDocument();
     expect(screen.getByText('TEAM A PRIVATE BOARD')).toBeInTheDocument();
-    expect(screen.getByText('READ-ONLY POSTED GUIDE')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/TEAM B PRIVATE BOARD|GAVEL|COMMISSIONER|EXECUTE TRADE|RECORD PICK/i);
+  });
+
+  it('keeps pending-device explanation behind Help and exposes the signed-in account control', () => {
+    const signOut = vi.fn();
+    render(<CompanionClaimScreen
+      pending
+      accountEmail="owner@example.com"
+      onSignOut={signOut}
+      onClaim={vi.fn()}
+    />);
+
+    expect(screen.getByText(/ACCOUNT OWNER@EXAMPLE.COM/)).toBeInTheDocument();
+    expect(screen.queryByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
+    expect(screen.getByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'SIGN OUT' }));
+    expect(signOut).toHaveBeenCalledOnce();
   });
 });

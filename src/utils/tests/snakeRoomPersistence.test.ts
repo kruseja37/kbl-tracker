@@ -15,6 +15,7 @@ import {
   clearAllLeagueBuilderData,
   createMlbDraftSessionId,
   getMlbDraftSession,
+  patchMlbDraftSessionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
   saveMlbDraftRoomSession,
   saveMlbDraftSession,
@@ -140,5 +141,38 @@ describe('PERFROOM room-session persistence', () => {
     expect(saved.seatBoards?.['team-a']).toEqual(board(2, 'room-a-2'));
     expect(saved.seatBoards?.['team-b']).toEqual(board(2, 'phone-b-2'));
     expect(saved.revision).toBe(3);
+  });
+
+  test('a seat-board patch ignores unrelated session revision changes and rejects a stale board revision', async () => {
+    await saveMlbDraftSession({
+      ...session(),
+      seatBoards: { 'team-a': board(1, 'board-a-1'), 'team-b': board(4, 'board-b-4') },
+      completedPicks: [{ round: 1, pick: 1, teamId: 'team-b', playerId: 'new-main-pick' }],
+      currentPickIndex: 1,
+      revision: 9,
+    });
+
+    const saved = await patchMlbDraftSessionSeatBoard({
+      leagueId: 'perfroom-league',
+      teamId: 'team-a',
+      board: board(2, 'phone-board-a-2'),
+      expectedBoardRevision: 1,
+    });
+
+    expect(saved.completedPicks).toEqual([
+      expect.objectContaining({ playerId: 'new-main-pick' }),
+    ]);
+    expect(saved.seatBoards?.['team-a']).toEqual(board(2, 'phone-board-a-2'));
+    expect(saved.seatBoards?.['team-b']).toEqual(board(4, 'board-b-4'));
+    expect(saved.revision).toBe(10);
+
+    await expect(patchMlbDraftSessionSeatBoard({
+      leagueId: 'perfroom-league',
+      teamId: 'team-a',
+      board: board(3, 'stale-overwrite'),
+      expectedBoardRevision: 1,
+    })).rejects.toThrow('Seat board team-a changed before it could be saved.');
+    expect((await getMlbDraftSession('perfroom-league', 1))?.seatBoards?.['team-a'])
+      .toEqual(board(2, 'phone-board-a-2'));
   });
 });

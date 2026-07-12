@@ -7,6 +7,7 @@ import { Cloud, CloudOff, Loader2, X, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { syncEngine, type SyncDiagnosticsSnapshot } from '../../../utils/syncEngine';
+import { LoginForm } from './LoginForm';
 
 interface SyncModalProps {
   isOpen: boolean;
@@ -63,52 +64,6 @@ export function SyncModal({ isOpen, onClose }: SyncModalProps) {
         )}
       </div>
     </div>
-  );
-}
-
-function LoginForm({ onSignIn, error }: { onSignIn: (email: string, password: string) => Promise<void>; error: string | null }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    await onSignIn(email, password);
-    setLoading(false);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <p className="text-xs text-gray-400 mb-4">Sign in to sync data across devices.</p>
-
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        className="w-full bg-black border-2 border-gray-600 text-white text-xs p-3 font-mono focus:border-[#0066FF] outline-none"
-        required
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        className="w-full bg-black border-2 border-gray-600 text-white text-xs p-3 font-mono focus:border-[#0066FF] outline-none"
-        required
-      />
-
-      {error && <p className="text-[#FF4444] text-[10px]">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="w-full bg-[#0066FF] text-black font-['Press_Start_2P'] text-[10px] py-3 hover:bg-[#3388FF] disabled:opacity-50"
-      >
-        {loading ? 'SIGNING IN...' : 'SIGN IN'}
-      </button>
-    </form>
   );
 }
 
