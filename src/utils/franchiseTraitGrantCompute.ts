@@ -27,6 +27,7 @@ import {
   computeTraitAcquisition,
   TRAIT_ACQUISITION_TUNING,
 } from '../engines/traitAcquisition';
+import { applyTraitDisplacement } from '../engines/traitOverlayConfirmation';
 import type { HiddenModifiers } from '../types/game';
 import type { PersistedGameState } from './gameStorage';
 import { getFranchiseMoraleSnapshot } from './franchiseMoraleState';
@@ -90,6 +91,8 @@ export interface TraitGrantRosterEntry {
   modifiers?: HiddenModifiers;
   currentMorale?: number;
   heldTraitNames: string[];
+  trait1: string | null;
+  trait2: string | null;
   bats: 'L' | 'R' | 'S';
   throws: 'L' | 'R';
   primaryPosition: string;
@@ -137,6 +140,8 @@ export async function resolveTraitGrantRoster(
       modifiers: player.hiddenPersonalityModifiers,
       currentMorale: playerMoraleSnapshot?.currentValue ?? player.morale,
       heldTraitNames: [player.trait1, player.trait2].filter((trait): trait is string => Boolean(trait)),
+      trait1: player.trait1 ?? null,
+      trait2: player.trait2 ?? null,
       bats: player.bats,
       throws: player.throws,
       primaryPosition: player.primaryPosition,
@@ -284,6 +289,12 @@ export async function persistDarkTraitGrantForCompletedGame(
     });
 
     for (const proposal of acquisition.proposals) {
+      const expectedPriorValue = { trait1: entry.trait1, trait2: entry.trait2 };
+      const displacement = applyTraitDisplacement(expectedPriorValue, {
+        valence: proposal.valence,
+        traitName: proposal.traitName,
+        displacesTraitName: proposal.displaces ?? null,
+      });
       rows.push({
         id: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:${entry.playerId}:${proposal.traitName}:${sourceEventId}`,
         franchiseId: scope.franchiseId,
@@ -295,6 +306,10 @@ export async function persistDarkTraitGrantForCompletedGame(
         displacesTraitName: proposal.displaces ?? null,
         realityPercentile: proposal.realityPercentile,
         probability: proposal.probability,
+        expectedPriorValue,
+        ...(displacement.applied
+          ? { proposedValue: { trait1: displacement.trait1, trait2: displacement.trait2 } }
+          : {}),
         confirmationStatus: 'pending',
         applied: false,
         source: 'trait-grant',

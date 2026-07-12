@@ -29,9 +29,13 @@ import {
 import { getGame as getScheduledGame } from '../scheduleStorage';
 import { getGameEvents, getGameHeadersForScope } from '../eventLog';
 import {
+  deleteFranchiseDatabase,
+  getFranchisePlayer,
   getAllFranchisePlayers,
   getAllFranchiseTeams,
+  saveFranchisePlayer,
 } from '../franchisePlayerStorage';
+import { resolveRatingsProposal } from '../franchiseConsoleMirror';
 import { getPlayerTeamIdForLeague } from '../leagueBuilderStorage';
 import { getFranchiseTrueValueRows } from '../franchiseTrueValueStorage';
 import { getFranchiseMoraleSnapshot } from '../franchiseMoraleState';
@@ -61,7 +65,8 @@ vi.mock('../eventLog', async (importActual) => ({
   getGameEvents: vi.fn(),
 }));
 
-vi.mock('../franchisePlayerStorage', () => ({
+vi.mock('../franchisePlayerStorage', async (importActual) => ({
+  ...(await importActual<typeof import('../franchisePlayerStorage')>()),
   getAllFranchisePlayers: vi.fn(),
   getAllFranchiseTeams: vi.fn(),
 }));
@@ -225,6 +230,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     vi.mocked(getSeasonPitchingStats).mockResolvedValue([]);
     vi.mocked(getAllFieldingStats).mockResolvedValue([]);
     vi.mocked(buildFranchiseEffectivePositionReport).mockResolvedValue({ playerPositions: {} } as never);
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-11T18:00:00.000Z'));
     vi.spyOn(checkpointSweepSeam, 'resolveWindowActivePlayerIds').mockResolvedValue({
       hitters: new Set([
         'player-shifter',
@@ -243,6 +249,7 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
     setFranchisePhase2CheckpointEnabledForTests(null);
     await overlayStorage.clearFranchiseRatingsOverlaysForTests();
     overlayStorage.resetFranchiseRatingsOverlaysForTests();
+    await deleteFranchiseDatabase(scope.franchiseId);
     await deleteDatabase('kbl-tracker');
   });
 
@@ -383,6 +390,8 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         playerId: shifter.playerId,
         ratingKey,
         delta: dev.appliedDelta,
+        expectedPriorValue: shifter.baseRatings[ratingKey],
+        proposedValue: shifter.baseRatings[ratingKey] + dev.appliedDelta,
         kind: 'permanent',
         expiresAtGameNumber: null,
         confirmationStatus: 'pending',
@@ -392,6 +401,127 @@ describe('franchise dark ratings-development checkpoint sweep', () => {
         createdAt: shifter.createdAt,
       },
     ]);
+  });
+
+  test('S3(a) stamped and unstamped twins resolve byte-identically when the player has not drifted', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const shifter = entry({ playerId: 'player-equivalence', signalByRatingKey: { power: 1 } });
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set([shifter.playerId]),
+      pitchers: new Set(),
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+    await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const [stamped] = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+    const { expectedPriorValue: _expected, proposedValue: _proposed, ...unstamped } = stamped;
+    const fixedEpoch = Date.parse('2026-07-11T18:00:00.000Z');
+    const RealDate = Date;
+    vi.stubGlobal('Date', class extends RealDate {
+      constructor(value?: string | number) {
+        super(value ?? fixedEpoch);
+      }
+
+      static now(): number {
+        return fixedEpoch;
+      }
+    });
+
+    const resolveVariant = async (row: typeof stamped) => {
+      await overlayStorage.clearFranchiseRatingsOverlaysForTests();
+      await deleteFranchiseDatabase(scope.franchiseId);
+      await saveFranchisePlayer(scope.franchiseId, player({ id: row.playerId, power: 50 }));
+      await overlayStorage.putFranchiseRatingsOverlay(row);
+      const result = await resolveRatingsProposal(row.id, {
+        action: 'confirm',
+        observedPriorValue: 50,
+      });
+      return {
+        result,
+        player: await getFranchisePlayer(scope.franchiseId, row.playerId),
+      };
+    };
+
+    try {
+      const stampedOutcome = await resolveVariant(stamped);
+      const unstampedOutcome = await resolveVariant(unstamped);
+
+      expect(unstampedOutcome).toEqual(stampedOutcome);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('S3(b) fail-before/pass-after: a sweep stamp conflicts on post-sweep rating drift while its unstamped twin silently applies', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const shifter = entry({ playerId: 'player-drift', signalByRatingKey: { power: 1 } });
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set([shifter.playerId]),
+      pitchers: new Set(),
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+    await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const [stamped] = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+    const { expectedPriorValue: _expected, proposedValue: _proposed, ...unstamped } = stamped;
+    const driftedValue = 61;
+
+    const resolveVariant = async (row: typeof stamped) => {
+      await overlayStorage.clearFranchiseRatingsOverlaysForTests();
+      await deleteFranchiseDatabase(scope.franchiseId);
+      await saveFranchisePlayer(scope.franchiseId, player({ id: row.playerId, power: driftedValue }));
+      await overlayStorage.putFranchiseRatingsOverlay(row);
+      const result = await resolveRatingsProposal(row.id, {
+        action: 'confirm',
+        observedPriorValue: driftedValue,
+      });
+      return {
+        result,
+        power: (await getFranchisePlayer(scope.franchiseId, row.playerId))?.power,
+      };
+    };
+
+    const stampedOutcome = await resolveVariant(stamped);
+    const unstampedOutcome = await resolveVariant(unstamped);
+
+    expect(stampedOutcome).toMatchObject({
+      result: {
+        outcome: 'conflict',
+        expectedPriorValue: 50,
+        currentValue: driftedValue,
+      },
+      power: driftedValue,
+    });
+    expect(unstampedOutcome).toMatchObject({
+      result: {
+        outcome: 'resolved',
+        expectedPriorValue: driftedValue,
+      },
+      power: driftedValue + stamped.delta,
+    });
+  });
+
+  test('S3(c) identical sweep inputs produce identical CAS stamps', async () => {
+    setFranchisePhase2CheckpointEnabledForTests(true);
+    const shifter = entry({ playerId: 'player-stamp-determinism', signalByRatingKey: { power: 1 } });
+    vi.mocked(checkpointSweepSeam.resolveWindowActivePlayerIds).mockResolvedValue({
+      hitters: new Set([shifter.playerId]),
+      pitchers: new Set(),
+    });
+    vi.spyOn(checkpointSweepSeam, 'resolveCheckpointRoster').mockResolvedValue([shifter]);
+
+    await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const [first] = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+    await persistDarkCheckpointSweepForCompletedGame(gameState(), scope);
+    const [second] = await overlayStorage.getFranchiseRatingsOverlaysByScope(scope);
+
+    expect({
+      expectedPriorValue: second.expectedPriorValue,
+      proposedValue: second.proposedValue,
+    }).toEqual({
+      expectedPriorValue: first.expectedPriorValue,
+      proposedValue: first.proposedValue,
+    });
+    expect(first.expectedPriorValue).toBe(50);
+    expect(first.proposedValue).toBe(50 + first.delta);
   });
 
   test('checkpoint-one keeps recent rates empty so default overlays stay cumulative-only', async () => {
