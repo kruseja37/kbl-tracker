@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "tune1-dormant-knobs-v1",
+  "generatedAt": "2026-07-11T20:00:00.000Z",
+  "status": "DORMANT-LIVE-PATH",
+  "knobs": [
+    "RELATIONSHIP_FORMATION_TUNING.perGameHazard.potentialBase",
+    "RELATIONSHIP_FORMATION_TUNING.perGameHazard.potentialSlopePerPoint",
+    "RELATIONSHIP_FORMATION_TUNING.perGameHazard.potentialCap"
+  ],
+  "reason": "The live organic writer groups the MLB roster by team before scoring. Same-team candidates have potential=false, so the potential hazard branch is unreachable on this path; cross-team potential pools are not evaluated.",
+  "swept": false
+}

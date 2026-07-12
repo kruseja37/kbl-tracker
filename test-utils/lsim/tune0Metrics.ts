@@ -1,5 +1,13 @@
 import { FAME_TIER_ORDER, resolveFameTier, type FameTier } from '../../src/engines/fameModel';
+import {
+  computeRelationshipFormationEdges,
+  L13_3A_RELATIONSHIP_EDGE_TYPES,
+  RELATIONSHIP_FORMATION_TUNING,
+  type RelationshipFormationEdgeType,
+  type RelationshipFormationPlayer,
+} from '../../src/engines/relationshipFormation';
 import type { ExpectedStatsAgeBand } from '../../src/engines/expectedStatsEngine';
+import type { FranchiseRelationshipEdgeScopeInput } from '../../src/utils/franchiseRelationshipEdgesStorage';
 import type { LsimStateSnapshot } from './invariants/types';
 import type { LsimSandboxContext } from './sandbox';
 import { getAllFranchisePlayers } from '../../src/utils/franchisePlayerStorage';
@@ -10,6 +18,10 @@ import { getFranchiseL10OverlaysByScope } from '../../src/utils/franchiseL10Over
 import { getFranchiseRelationshipEdgesByScope } from '../../src/utils/franchiseRelationshipEdgesStorage';
 import { listFranchiseMoraleSnapshots } from '../../src/utils/franchiseMoraleState';
 import { listManagerProfiles } from '../../src/utils/managerIdentityStorage';
+import {
+  summarizeRelationshipMoraleDeltas,
+  type LsimRelationshipMoraleDeltaSummary,
+} from './invariants/soul';
 
 const AGE_BANDS: ExpectedStatsAgeBand[] = ['18-21', '22-24', '25-31', '32-35', '36+'];
 
@@ -33,6 +45,49 @@ export interface Tune0MoraleDeltaMetrics extends Tune0NumericDistribution {
   changed: number;
   up: number;
   down: number;
+}
+
+export interface Tune0OrganicTimingBand {
+  candidateCount: number;
+  formedCount: number;
+  meanGameWithUnformedCensored: number | null;
+  meanFormationGame: number | null;
+  minThresholdMargin: number | null;
+  maxThresholdMargin: number | null;
+}
+
+export interface Tune0OrganicRelationshipMetrics {
+  uniqueFormedEdges: number;
+  uniqueFormedEdgesByType: Record<RelationshipFormationEdgeType, number>;
+  activeEdgesAtEnd: number;
+  formationGameSpread: {
+    distinctGames: number;
+    firstGame: number | null;
+    lastGame: number | null;
+    largestSingleGameBatch: number;
+    batchesByGame: Record<string, number>;
+  };
+  perTeamEdgeCounts: {
+    teamCount: number;
+    min: number | null;
+    median: number | null;
+    max: number | null;
+    byTeam: Record<string, number>;
+    unassignedEdges: number;
+  };
+  candidateCoverage: {
+    candidateEdges: number;
+    formedCandidateEdges: number;
+    formedFraction: number | null;
+    strictSubset: boolean;
+  };
+  compatibilityTiming: {
+    marginal: Tune0OrganicTimingBand;
+    middle: Tune0OrganicTimingBand;
+    strong: Tune0OrganicTimingBand;
+    strongerFormsEarlierMonotone: boolean | null;
+  };
+  moraleCascade: LsimRelationshipMoraleDeltaSummary;
 }
 
 export interface Tune0CheckpointMetrics {
@@ -69,6 +124,7 @@ export interface Tune0CheckpointMetrics {
     potentialCumulative: number;
     dissolvedCumulative: number;
     byTypeNew: Record<string, number>;
+    organic: Tune0OrganicRelationshipMetrics;
   };
 }
 
@@ -131,6 +187,215 @@ function increment(target: Record<string, number>, key: string): void {
   target[key] = (target[key] ?? 0) + 1;
 }
 
+function emptyTypeCounts(): Record<RelationshipFormationEdgeType, number> {
+  return Object.fromEntries(
+    L13_3A_RELATIONSHIP_EDGE_TYPES.map((type) => [type, 0]),
+  ) as Record<RelationshipFormationEdgeType, number>;
+}
+
+function relationshipKey(player1Id: string, player2Id: string, type: string): string {
+  const [left, right] = [player1Id, player2Id].sort((a, b) => a.localeCompare(b));
+  return `${left}:${right}:${type}`;
+}
+
+function playerTeamId(
+  player: LsimStateSnapshot['players'][number],
+  leagueId: string | undefined,
+): string | null {
+  const assignment = player.leagueAssignments?.find((entry) =>
+    entry.rosterStatus === 'MLB' && (!leagueId || entry.leagueId === leagueId),
+  );
+  return assignment?.teamId ?? null;
+}
+
+interface OrganicCandidate {
+  key: string;
+  teamId: string;
+  type: RelationshipFormationEdgeType;
+  thresholdMargin: number;
+}
+
+function organicCandidates(
+  snapshot: LsimStateSnapshot,
+  scope?: FranchiseRelationshipEdgeScopeInput,
+): OrganicCandidate[] {
+  if (!scope) return [];
+  const leagueId = snapshot.teams[0]?.leagueIds?.[0];
+  const playersByTeam = new Map<string, RelationshipFormationPlayer[]>();
+  for (const player of snapshot.players) {
+    const teamId = playerTeamId(player, leagueId);
+    if (!teamId) continue;
+    const players = playersByTeam.get(teamId) ?? [];
+    players.push({
+      playerId: player.id,
+      teamId,
+      personality: player.personality,
+      age: player.age,
+      modifiers: player.hiddenPersonalityModifiers,
+    });
+    playersByTeam.set(teamId, players);
+  }
+
+  const hazard = RELATIONSHIP_FORMATION_TUNING.perGameHazard as unknown as Record<string, number>;
+  const activeSnapshot = {
+    activeBase: hazard.activeBase,
+    activeSlopePerPoint: hazard.activeSlopePerPoint,
+    activeCap: hazard.activeCap,
+  };
+  const candidates: OrganicCandidate[] = [];
+  try {
+    // Harness-only discovery: probability 1 exposes every above-threshold active
+    // candidate while preserving the live scoring and threshold implementation.
+    hazard.activeBase = 1;
+    hazard.activeSlopePerPoint = 0;
+    hazard.activeCap = 1;
+    for (const [teamId, players] of [...playersByTeam.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const edges = computeRelationshipFormationEdges(players, {
+        ...scope,
+        gameNumber: 1,
+      });
+      for (const edge of edges) {
+        if (edge.potential) continue;
+        candidates.push({
+          key: relationshipKey(edge.player1Id, edge.player2Id, edge.type),
+          teamId,
+          type: edge.type,
+          thresholdMargin: round(edge.score - edge.threshold),
+        });
+      }
+    }
+  } finally {
+    Object.assign(hazard, activeSnapshot);
+  }
+  return candidates.sort((left, right) =>
+    left.thresholdMargin - right.thresholdMargin || left.key.localeCompare(right.key),
+  );
+}
+
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : round((sorted[middle - 1] + sorted[middle]) / 2);
+}
+
+function timingBand(
+  candidates: readonly OrganicCandidate[],
+  formedAtByKey: ReadonlyMap<string, number>,
+  censorGameNumber: number,
+): Tune0OrganicTimingBand {
+  const formedGames = candidates
+    .map((candidate) => formedAtByKey.get(candidate.key))
+    .filter((value): value is number => value !== undefined);
+  const censoredGames = candidates.map((candidate) => formedAtByKey.get(candidate.key) ?? censorGameNumber);
+  return {
+    candidateCount: candidates.length,
+    formedCount: formedGames.length,
+    meanGameWithUnformedCensored: censoredGames.length > 0
+      ? round(censoredGames.reduce((total, value) => total + value, 0) / censoredGames.length)
+      : null,
+    meanFormationGame: formedGames.length > 0
+      ? round(formedGames.reduce((total, value) => total + value, 0) / formedGames.length)
+      : null,
+    minThresholdMargin: candidates.length > 0 ? candidates[0].thresholdMargin : null,
+    maxThresholdMargin: candidates.length > 0 ? candidates[candidates.length - 1].thresholdMargin : null,
+  };
+}
+
+export function buildTune0OrganicRelationshipMetrics(
+  snapshot: LsimStateSnapshot,
+  scope?: FranchiseRelationshipEdgeScopeInput,
+): Tune0OrganicRelationshipMetrics {
+  const formedEdges = snapshot.relationshipEdges.filter((row) =>
+    row.formedAtGameNumber !== null &&
+    (row.formationSource === undefined || row.formationSource === 'formation'),
+  );
+  const byType = emptyTypeCounts();
+  const batchesByGame: Record<string, number> = {};
+  for (const edge of formedEdges) {
+    if (L13_3A_RELATIONSHIP_EDGE_TYPES.includes(edge.type as RelationshipFormationEdgeType)) {
+      byType[edge.type as RelationshipFormationEdgeType] += 1;
+    }
+    increment(batchesByGame, String(edge.formedAtGameNumber));
+  }
+  const formationGames = Object.keys(batchesByGame).map(Number).sort((left, right) => left - right);
+
+  const leagueId = snapshot.teams[0]?.leagueIds?.[0];
+  const teamByPlayer = new Map(
+    snapshot.players.map((player) => [player.id, playerTeamId(player, leagueId)]),
+  );
+  const teamIds = snapshot.teamIds.length > 0
+    ? [...snapshot.teamIds]
+    : [...new Set([...teamByPlayer.values()].filter((value): value is string => Boolean(value)))];
+  const byTeam = Object.fromEntries(teamIds.sort().map((teamId) => [teamId, 0]));
+  let unassignedEdges = 0;
+  for (const edge of formedEdges) {
+    const teamId = teamByPlayer.get(edge.player1Id) ?? teamByPlayer.get(edge.player2Id) ?? null;
+    if (!teamId || !(teamId in byTeam)) {
+      unassignedEdges += 1;
+      continue;
+    }
+    byTeam[teamId] += 1;
+  }
+  const teamCounts = Object.values(byTeam);
+
+  const candidates = organicCandidates(snapshot, scope);
+  const candidateKeys = new Set(candidates.map((candidate) => candidate.key));
+  const formedAtByKey = new Map(
+    formedEdges.map((edge) => [
+      relationshipKey(edge.player1Id, edge.player2Id, edge.type),
+      edge.formedAtGameNumber as number,
+    ]),
+  );
+  const firstCut = Math.floor(candidates.length / 3);
+  const secondCut = Math.floor((candidates.length * 2) / 3);
+  const marginal = timingBand(candidates.slice(0, firstCut), formedAtByKey, snapshot.gameNumber + 1);
+  const middle = timingBand(candidates.slice(firstCut, secondCut), formedAtByKey, snapshot.gameNumber + 1);
+  const strong = timingBand(candidates.slice(secondCut), formedAtByKey, snapshot.gameNumber + 1);
+  const timingMeans = [marginal, middle, strong].map((band) => band.meanGameWithUnformedCensored);
+  const monotone = timingMeans.every((value) => value !== null)
+    ? (timingMeans[2] as number) <= (timingMeans[1] as number) &&
+      (timingMeans[1] as number) <= (timingMeans[0] as number)
+    : null;
+  const formedCandidateEdges = [...formedAtByKey.keys()].filter((key) => candidateKeys.has(key)).length;
+
+  return {
+    uniqueFormedEdges: formedEdges.length,
+    uniqueFormedEdgesByType: byType,
+    activeEdgesAtEnd: formedEdges.filter((row) => row.dissolvedAtGameNumber === null).length,
+    formationGameSpread: {
+      distinctGames: formationGames.length,
+      firstGame: formationGames[0] ?? null,
+      lastGame: formationGames.at(-1) ?? null,
+      largestSingleGameBatch: Math.max(0, ...Object.values(batchesByGame)),
+      batchesByGame,
+    },
+    perTeamEdgeCounts: {
+      teamCount: teamCounts.length,
+      min: teamCounts.length > 0 ? Math.min(...teamCounts) : null,
+      median: median(teamCounts),
+      max: teamCounts.length > 0 ? Math.max(...teamCounts) : null,
+      byTeam,
+      unassignedEdges,
+    },
+    candidateCoverage: {
+      candidateEdges: candidates.length,
+      formedCandidateEdges,
+      formedFraction: candidates.length > 0 ? round(formedCandidateEdges / candidates.length) : null,
+      strictSubset: candidates.length > 0 && formedCandidateEdges < candidates.length,
+    },
+    compatibilityTiming: {
+      marginal,
+      middle,
+      strong,
+      strongerFormsEarlierMonotone: monotone,
+    },
+    moraleCascade: summarizeRelationshipMoraleDeltas(snapshot),
+  };
+}
+
 function managerFirings(snapshot: LsimStateSnapshot): Array<Record<string, unknown>> {
   const managerDb = snapshot.storeDump.databases['kbl-manager-identity'] ?? {};
   const assignments = (managerDb.managerAssignments ?? [])
@@ -156,6 +421,7 @@ function moraleIdentity(row: LsimStateSnapshot['moraleSnapshots'][number]): stri
 export function buildTune0CheckpointMetrics(
   snapshot: LsimStateSnapshot,
   previousCheckpoint?: LsimStateSnapshot,
+  relationshipScope?: FranchiseRelationshipEdgeScopeInput,
 ): Tune0CheckpointMetrics {
   const previousBoundary = previousCheckpoint?.gameNumber ?? 0;
   const ages = new Map(snapshot.players.map((player) => [player.id, ageBand(player.age)]));
@@ -258,6 +524,7 @@ export function buildTune0CheckpointMetrics(
       potentialCumulative: snapshot.relationshipEdges.filter((row) => row.potential).length,
       dissolvedCumulative: snapshot.relationshipEdges.filter((row) => row.dissolvedAtGameNumber !== null).length,
       byTypeNew,
+      organic: buildTune0OrganicRelationshipMetrics(snapshot, relationshipScope),
     },
   };
 }
@@ -321,8 +588,8 @@ export async function readTune0MetricSnapshot(
     checkpointCadence: 'standard',
     checkpointCount: checkpointGameNumbers.length,
     checkpointGameNumbers,
-    teamIds: [],
-    teams: [],
+    teamIds: context.teams.map((team) => team.id),
+    teams: context.teams,
     players,
     seasonMetadata: null,
     completedGames: [],
