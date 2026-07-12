@@ -2,6 +2,20 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-11 (evening close-out — scribe pass, docs-only) — JK'S PHONE FOUND "COMPANION DOESN'T WORK"; NEW ONE-PAGE PICKUP DOC WRITTEN
+
+**Trigger:** JK ended his session for the night with one finding, no further detail: "companion doesn't work" on his phone. His parting directive was to leave the docs in a state where tomorrow's session understands, in plain terms, what the snake draft is and isn't — rather than having to reconstruct that from the long banner history.
+
+**What this pass did:** read the actual `SnakeCompanion.tsx` page and the sync engine it depends on to find a concrete, evidence-backed suspect (not a guess). Finding: the companion page never shows any sign-in screen, and every sync operation in `syncEngine.ts` silently returns early — no error surfaced anywhere — when the device isn't signed into an account. So an unsigned-in phone polls the room code forever and just sits on "that room code does not match," with no indication that signing in is the missing step. This traces back to a real, previously-made ruling (S5/PR #72): v1's companion model assumed every device is the league owner's OWN hardware, already signed into the same account. JK's phone tonight likely wasn't already signed in, which is exactly the case that ruling didn't cover from the companion page's own UI.
+
+**This has NOT been fixed or re-tested live tonight** — it's a code-inspection finding only, the strongest available lead, not a confirmed root cause until someone adds a sign-in path and actually tries it on a real phone.
+
+**New doc:** `spec-docs/SNAKE_DRAFT_TRUTH_2026-07-11.md` — a one-page, plain-language pickup doc covering what the snake draft IS (setup → room → private desk → guide/trades → farm snake → season handoff, all engine-verified, JK-walked through setup/room/picks and one bug-fix wave), what it ISN'T (companion cross-device NOT working, plus the standing v1 exclusions — CPU seats, drafted-player trades, playoffs/offseason, All-Star game, auction changes), and tomorrow's pickup order (companion fix + live retest first, then continue the walkthrough, then the smaller ledger items).
+
+**Docs touched this pass:** `CURRENT_STATE.md` (LIVE HEADER points at the new truth doc, companion status stated as NOT WORKING), `V1_BUILD_STATUS.md` (companion row flipped to cross-device UNVERIFIED/NOT WORKING), `CONTINUITY_CHECKPOINT.md` (snake-thread section refreshed for cold pickup). No code was touched — this is a docs-only close-out.
+
+---
+
 ## 2026-07-11 (JK's live browser walkthrough of the snake draft — Fable captain, Codex 5.6-sol builders, opus audits) — WALKTHROUGH WAVE 1: FIVE BUGS FOUND, FIVE FIXED, ALL MERGED (PRs #90/#91/#96/#97/#98)
 
 **Trigger:** with the snake-draft build program code-complete (S0-S7, per the 2026-07-10 sessions below), JK sat down to actually play it in a real browser for the first time. This was the first genuine hands-on test of the whole path, and it immediately surfaced real bugs that no amount of automated testing had caught — because they were all about the SEAM between screens (setup→room, room→resume, phone→room), not about any single engine's math.
