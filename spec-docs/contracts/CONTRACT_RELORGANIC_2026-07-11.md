@@ -90,3 +90,30 @@ exact seam; baseline re-bake shows non-relationship families moving → STOP wit
 separable.
 
 Use xhigh reasoning effort. Think step-by-step.
+
+---
+## AMENDMENT 1 (captain audit finding, same day) — monotone hazard on the live path
+
+Captain audit found a contract-authored defect (the captain's own D1 mapping, not a builder error):
+in this codebase `potential` on a formation edge means CROSS-TEAM pair (`isPotentialEdge` =
+different teamIds), and the writer only builds SAME-TEAM candidate pools — so D1's
+"sub-threshold window → potential-edge hazard" branch actually mints ACTIVE edges below the
+compatibility threshold, and faster (pPot(m→0⁻) ≈ 0.088/game) than a pair just ABOVE the
+threshold (pAct(0) = 0.02/game). Worse compatibility must never form relationships faster —
+monotonicity in score is a hard requirement (JK R-E: no illogical, cause-unreadable dynamics).
+
+FIX (implement exactly):
+1. `relationshipFormationHazardProbability(score, type, canBePotential: boolean)` — when
+   `margin < 0`: return the potential-branch hazard ONLY if `canBePotential` is true; otherwise 0.
+   The edge-loop caller passes `candidate.potential` (the cross-team flag). Above-threshold branch
+   unchanged.
+2. New proving test — MONOTONICITY on the live (same-team, canBePotential=false) path: for each
+   type, hazard is non-decreasing in score; specifically p(threshold − ε) === 0 and
+   p(threshold) === activeBase.
+3. Update any test fixture that relied on sub-threshold same-team formation; list each with a
+   one-line justification.
+4. `LIVING_SEASON_KNOBS.md`: annotate the two potential* hazard knobs as applying only to
+   cross-team candidate pools — currently DORMANT in the live writer (same-team pools only).
+Everything else in the base contract stands. Re-run: build, the two focused suites, and the
+fail-before/pass-after proof for the monotonicity test. No full suite, no L-SIM (captain owns
+those this pass).
