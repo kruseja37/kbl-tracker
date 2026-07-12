@@ -1,17 +1,15 @@
 /**
- * L13-3a — dark relationship-edge formation checkpoint writer.
+ * L13-3a — dark per-game relationship-edge formation writer.
  *
  * This is the first writer to the L13-1 relationship edge store. It is build-dark
  * behind the default-OFF L13 flag, forms only RIVALRY/FEUD/MENTORSHIP/FRIENDSHIP,
- * and writes deterministic rows at the same cadence-aware checkpoint boundary as
- * the dark ratings-development sweep.
+ * and evaluates deterministic organic formation after every completed franchise game.
  */
 
 import {
   computeRelationshipFormationEdges,
   type RelationshipFormationPlayer,
 } from '../engines/relationshipFormation';
-import { checkpointCountForCadence } from '../data/rosterEngineConstants';
 import type { HiddenModifiers } from '../types/game';
 import type { PersistedGameState } from './gameStorage';
 import {
@@ -25,18 +23,16 @@ import {
 } from './leagueBuilderStorage';
 import {
   franchiseRelationshipEdgeId,
-  getFranchiseRelationshipEdge,
+  getFranchiseRelationshipEdgesByScope,
   putFranchiseRelationshipEdge,
   type FranchiseRelationshipEdgeScopeInput,
   type RelationshipEdgeRow,
 } from './franchiseRelationshipEdgesStorage';
 import {
-  isCheckpointBoundary,
   resolveCheckpointGameNumber,
   type CompletedGameArchiveOptions,
 } from './franchiseCheckpointSweepCompute';
 import { isFranchisePhase2L13Enabled } from './franchisePhase2Flags';
-import { getSeasonMetadata } from './seasonStorage';
 
 export type RelationshipFormationScope = FranchiseRelationshipEdgeScopeInput & {
   franchiseId: string;
@@ -106,24 +102,13 @@ export async function persistDarkRelationshipFormationForCompletedGame(
     return {
       status: 'dark-noop',
       written: 0,
-      reason: 'Unresolved league game number; cannot place a relationship-formation checkpoint.',
+      reason: 'Unresolved league game number; cannot evaluate relationship formation.',
     };
   }
 
-  const seasonMetadata = await getSeasonMetadata(scope.seasonId);
-  const totalGames = seasonMetadata?.totalGames;
-  if (!totalGames || totalGames <= 0) {
-    return {
-      status: 'dark-noop',
-      written: 0,
-      reason: 'No season totalGames; cannot place a relationship-formation checkpoint.',
-    };
-  }
-
-  const checkpointCount = checkpointCountForCadence(seasonMetadata?.checkpointCadence);
-  if (!isCheckpointBoundary(gameNumber, totalGames, checkpointCount)) {
-    return { status: 'not-checkpoint', written: 0 };
-  }
+  const existingById = new Map(
+    (await getFranchiseRelationshipEdgesByScope(scope)).map((row) => [row.id, row]),
+  );
 
   const roster = await relationshipFormationSeam.resolveRelationshipFormationRoster(scope);
   if (roster.length === 0) {
@@ -135,9 +120,23 @@ export async function persistDarkRelationshipFormationForCompletedGame(
 
   let written = 0;
   for (const row of rows) {
-    const existing = await getFranchiseRelationshipEdge(row.id);
-    if (existing) continue;
-    await putFranchiseRelationshipEdge(row);
+    const existing = existingById.get(row.id);
+    if (existing && (!existing.potential || row.potential)) continue;
+
+    const nextRow = existing
+      ? {
+          ...existing,
+          ...row,
+          potential: false,
+          formedAtGameNumber: gameNumber,
+          dissolvedAtGameNumber: existing.dissolvedAtGameNumber,
+          createdAt: existing.createdAt,
+          updatedAt: createdAt,
+        }
+      : row;
+
+    await putFranchiseRelationshipEdge(nextRow);
+    existingById.set(nextRow.id, nextRow);
     written += 1;
   }
 

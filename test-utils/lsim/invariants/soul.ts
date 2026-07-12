@@ -57,6 +57,7 @@ const L13_3A_RELATIONSHIP_TYPES = new Set<RelationshipEdgeType>([
 ]);
 const EVENT_DRIVEN_SOURCES = new Set<string>(['overtake', 'envy', 'asg-snub']);
 const EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM = 24; // OPEN-DECISION placeholder (§16); event-driven (overtake + envy + asg-snub) edges get their own generous cap, tuned from the full-season count.
+const ORGANIC_EDGE_DENSITY_PER_TEAM = 8; // R-F runaway guard (§16): per-game hazard formation must stay MEANINGFUL — tighten from the observed season count, never loosen silently.
 // §5.3 season-end honor edge: MVP/CY emit an AWARD_RESULT nod + a close-loser snub.
 // Mirrors franchiseSeasonEndHonors.ts:19 (SEASON_END_SNUB_TOP_N) + :29-32 (SEASON_END_HONORS, honorKind === award category).
 const SEASON_END_SNUB_TOP_N = 3;
@@ -541,25 +542,25 @@ function checkpointCadence(snapshot: LsimStateSnapshot): LsimInvariantResult {
   );
 }
 
-function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): LsimInvariantResult {
-  const reached = reachedCheckpoints(snapshot);
+function relationshipFormationOrganic(snapshot: LsimStateSnapshot): LsimInvariantResult {
+  // R-F (JK 2026-07-11): compatibility-based formation is ORGANIC — evaluated after every
+  // completed game via a seeded per-game hazard. Checkpoint boundaries are no longer a valid
+  // constraint on formedAtGameNumber; the retired batch model asserted them here.
   const eventDrivenEdges = snapshot.relationshipEdges.filter((row) =>
     EVENT_DRIVEN_SOURCES.has(row.formationSource as string),
   );
-  const checkpointEdges = snapshot.relationshipEdges.filter((row) =>
+  const organicEdges = snapshot.relationshipEdges.filter((row) =>
     !EVENT_DRIVEN_SOURCES.has(row.formationSource as string),
   );
   const edgeIds = snapshot.relationshipEdges.map((row) => row.id);
   const duplicateIds = edgeIds.filter((id, index) => edgeIds.indexOf(id) !== index);
-  const allowedCheckpoints = new Set(snapshot.checkpointGameNumbers);
-  const currentIsCheckpoint = allowedCheckpoints.has(snapshot.gameNumber);
   const formedAtNumbers = Array.from(new Set(
-    checkpointEdges
+    organicEdges
       .map((row) => row.formedAtGameNumber)
       .filter((gameNumber): gameNumber is number => Number.isInteger(gameNumber)),
   )).sort((left, right) => left - right);
-  const nonBoundaryFormation = formedAtNumbers.filter((gameNumber) =>
-    !allowedCheckpoints.has(gameNumber) || gameNumber > snapshot.gameNumber,
+  const formedAtOutOfRange = formedAtNumbers.filter((gameNumber) =>
+    gameNumber < 1 || gameNumber > snapshot.gameNumber,
   );
   const badIds = snapshot.relationshipEdges.filter((row) =>
     row.id !== franchiseRelationshipEdgeId(row, row.player1Id, row.player2Id, row.type),
@@ -572,14 +573,14 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
     row.potential !== false ||
     !Number.isInteger(row.formedAtGameNumber),
   );
-  const finalDensityLimit = Math.max(1, snapshot.teamIds.length * 3);
-  const densityExceeded = checkpointEdges.length > finalDensityLimit;
-  const missingEdgesAfterCheckpoint = reached.length > 0 && checkpointEdges.length === 0;
-  const missingCurrentCheckpointWrite = currentIsCheckpoint &&
-    snapshot.gameNumber > 0 &&
-    checkpointEdges.length > 0 &&
-    !formedAtNumbers.includes(snapshot.gameNumber);
-  const shouldBeEmptyPreCheckpoint = reached.length === 0 && checkpointEdges.length > 0;
+  const finalDensityLimit = Math.max(1, snapshot.teamIds.length * ORGANIC_EDGE_DENSITY_PER_TEAM);
+  const densityExceeded = organicEdges.length > finalDensityLimit;
+  // Liveness: with default hazard knobs the harness fixtures must form SOMETHING organically.
+  const missingOrganicEdges = snapshot.gamesSimulated >= 8 && organicEdges.length === 0;
+  // Organic spread: formation must not collapse back into a single batch spike.
+  const spreadTooNarrow = snapshot.gamesSimulated >= 16 &&
+    organicEdges.length >= 5 &&
+    formedAtNumbers.length < 3;
   const eventDrivenDensityLimit = Math.max(1, snapshot.teamIds.length * EVENT_DRIVEN_EDGE_DENSITY_PER_TEAM);
   const eventDrivenDensityExceeded = eventDrivenEdges.length > eventDrivenDensityLimit;
   const eventDrivenFormedAtNumbers = eventDrivenEdges
@@ -597,24 +598,23 @@ function relationshipFormationCheckpointWrite(snapshot: LsimStateSnapshot): Lsim
   );
   const pass =
     duplicateIds.length === 0 &&
-    nonBoundaryFormation.length === 0 &&
+    formedAtOutOfRange.length === 0 &&
     badIds.length === 0 &&
     forbiddenTypes.length === 0 &&
     badPotentialState.length === 0 &&
     !densityExceeded &&
-    !missingEdgesAfterCheckpoint &&
-    !missingCurrentCheckpointWrite &&
-    !shouldBeEmptyPreCheckpoint &&
+    !missingOrganicEdges &&
+    !spreadTooNarrow &&
     !eventDrivenDensityExceeded &&
     badEventDriven.length === 0;
 
   return invariantResult(
-    'soul.l13-relationship-formation-checkpoint-write',
+    'soul.l13-relationship-formation-organic',
     CRITICAL,
     pass,
     pass
-      ? `edges=${snapshot.relationshipEdges.length}; checkpointEdges=${checkpointEdges.length}; eventDrivenEdges=${eventDrivenEdges.length}; checkpointFormedAt=${formedAtNumbers.join(',') || 'none'}; eventDrivenFormedAtRange=${eventDrivenRange}; current=${snapshot.gameNumber}; cadence=${snapshot.checkpointCadence}; checkpointDensityLimit=${finalDensityLimit}; eventDrivenDensityLimit=${eventDrivenDensityLimit}; no duplicate ids`
-      : `edges=${snapshot.relationshipEdges.length}; checkpointEdges=${checkpointEdges.length}; eventDrivenEdges=${eventDrivenEdges.length}; checkpointFormedAt=${formedAtNumbers.join(',') || 'none'}; eventDrivenFormedAtRange=${eventDrivenRange}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; nonBoundary=${nonBoundaryFormation.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; eventDrivenDensityExceeded=${eventDrivenDensityExceeded}; badEventDriven=${badEventDriven.slice(0, 4).map((row) => row.id).join(',') || 'none'}; missingAfterCheckpoint=${missingEdgesAfterCheckpoint}; missingCurrentBoundary=${missingCurrentCheckpointWrite}; preCheckpointNonEmpty=${shouldBeEmptyPreCheckpoint}`,
+      ? `edges=${snapshot.relationshipEdges.length}; organicEdges=${organicEdges.length}; eventDrivenEdges=${eventDrivenEdges.length}; organicFormedAt=${formedAtNumbers.join(',') || 'none'}; eventDrivenFormedAtRange=${eventDrivenRange}; current=${snapshot.gameNumber}; organicDensityLimit=${finalDensityLimit}; eventDrivenDensityLimit=${eventDrivenDensityLimit}; no duplicate ids`
+      : `edges=${snapshot.relationshipEdges.length}; organicEdges=${organicEdges.length}; eventDrivenEdges=${eventDrivenEdges.length}; organicFormedAt=${formedAtNumbers.join(',') || 'none'}; eventDrivenFormedAtRange=${eventDrivenRange}; dup=${duplicateIds.slice(0, 4).join(',') || 'none'}; formedAtOutOfRange=${formedAtOutOfRange.join(',') || 'none'}; badIds=${badIds.slice(0, 4).map((row) => row.id).join(',') || 'none'}; forbidden=${forbiddenTypes.map((row) => row.type).join(',') || 'none'}; badPotential=${badPotentialState.slice(0, 4).map((row) => row.id).join(',') || 'none'}; densityExceeded=${densityExceeded}; missingOrganicEdges=${missingOrganicEdges}; spreadTooNarrow=${spreadTooNarrow}; eventDrivenDensityExceeded=${eventDrivenDensityExceeded}; badEventDriven=${badEventDriven.slice(0, 4).map((row) => row.id).join(',') || 'none'}`,
   );
 }
 
@@ -1375,7 +1375,7 @@ export function getSoulInvariantChecks(): LsimInvariantCheck[] {
     l11BackstopGate,
     replayIdempotency,
     checkpointCadence,
-    relationshipFormationCheckpointWrite,
+    relationshipFormationOrganic,
     relationshipIntensityLifecycle,
     relationshipMoraleTapDevelopmentBoundary,
     relationshipRep4FanNudgeBoundary,

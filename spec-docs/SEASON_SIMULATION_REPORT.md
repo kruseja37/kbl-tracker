@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 9425360:10944d37 |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9492375:0f21226d |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 9492375:0f21226d |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 12637840:61e18afb |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 12724789:6760ceaa |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 12724789:6760ceaa |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
@@ -16,35 +16,35 @@ Exact baseline games simulated: **60**
 
 Checkpoint cadence: **standard** (5 boundaries)
 
-Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-010.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-020.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-030.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-040.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-050.json, /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/lsim-h2-baseline-checkpoint-060.json
+Checkpoint files: /Users/johnkruse/Projects/kbl-relorganic/test-utils/lsim/results/lsim-h2-baseline-checkpoint-010.json, /Users/johnkruse/Projects/kbl-relorganic/test-utils/lsim/results/lsim-h2-baseline-checkpoint-020.json, /Users/johnkruse/Projects/kbl-relorganic/test-utils/lsim/results/lsim-h2-baseline-checkpoint-030.json, /Users/johnkruse/Projects/kbl-relorganic/test-utils/lsim/results/lsim-h2-baseline-checkpoint-040.json, /Users/johnkruse/Projects/kbl-relorganic/test-utils/lsim/results/lsim-h2-baseline-checkpoint-050.json, /Users/johnkruse/Projects/kbl-relorganic/test-utils/lsim/results/lsim-h2-baseline-checkpoint-060.json
 
 ## L13 Relationship Morale Deltas
 
 ```json
 {
-  "relationshipHits": 400,
+  "relationshipHits": 694,
   "relationshipRecoveries": 2,
-  "relationshipChargedMatchups": 6,
-  "relationshipPlayerGroups": 16,
+  "relationshipChargedMatchups": 84,
+  "relationshipPlayerGroups": 110,
   "duplicateSourceIds": 0,
   "recoveredGroups": 2,
   "recoveredGroupsNetZero": 2,
   "nonZeroRecoveredGroups": 0,
-  "hitDeltaTotal": 244,
-  "recoveryDeltaTotal": 11,
-  "chargedDeltaTotal": 0,
-  "chargedPositiveDeltas": 3,
-  "chargedNegativeDeltas": 3,
+  "hitDeltaTotal": -821,
+  "recoveryDeltaTotal": -11,
+  "chargedDeltaTotal": -2,
+  "chargedPositiveDeltas": 39,
+  "chargedNegativeDeltas": 41,
   "recoveredGroupsNetDelta": 0,
-  "ratingsDevelopmentRows": 427,
+  "ratingsDevelopmentRows": 357,
   "moraleToWarLeaks": 0,
   "sampleSourceEventIds": [
-    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-43",
-    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-43",
-    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-58",
-    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-04-mlb-05-3B:lsim-team-05-mlb-05-3B:FEUD:game-58",
-    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-05-mlb-04-SS:lsim-team-05-mlb-05-3B:FEUD:game-13",
-    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-05-mlb-04-SS:lsim-team-05-mlb-05-3B:FEUD:game-13"
+    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-01-mlb-01-C:lsim-team-04-mlb-10-C:RIVALRY:game-48",
+    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-01-mlb-01-C:lsim-team-04-mlb-10-C:RIVALRY:game-48",
+    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-01-mlb-02-1B:lsim-team-03-mlb-02-1B:RIVALRY:game-47",
+    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-01-mlb-02-1B:lsim-team-03-mlb-02-1B:RIVALRY:game-47",
+    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-01-mlb-04-SS:lsim-team-03-mlb-04-SS:RIVALRY:game-47",
+    "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-01-mlb-04-SS:lsim-team-03-mlb-04-SS:RIVALRY:game-47"
   ]
 }
 ```
@@ -68,7 +68,7 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 | soul.l10-per-game-cadence | INVESTIGATE | 60 | 0 |
 | soul.l11-backstop-under-25-plus-roll | CRITICAL | 60 | 0 |
 | soul.l12-race-no-nan-resolve-tier | CRITICAL | 60 | 0 |
-| soul.l13-relationship-formation-checkpoint-write | CRITICAL | 60 | 0 |
+| soul.l13-relationship-formation-organic | CRITICAL | 60 | 0 |
 | soul.l13-relationship-intensity-lifecycle | CRITICAL | 60 | 0 |
 | soul.l13-relationship-morale-development-boundary | CRITICAL | 60 | 0 |
 | soul.l13-rep4-fan-nudge-boundary | CRITICAL | 60 | 0 |
@@ -103,125 +103,133 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
 {
   "fameTierDistribution": {
     "IMMORTAL_LEGEND": 1,
-    "GLOBAL_SUPERSTAR": 3,
-    "NATIONAL_ICON": 1,
-    "REGIONAL_STAR": 5,
-    "LOCAL_HERO": 5,
-    "UNKNOWN": 11,
-    "POLARIZING": 19,
-    "NOTORIOUS": 10,
-    "DESPISED": 11
+    "GLOBAL_SUPERSTAR": 1,
+    "NATIONAL_ICON": 30,
+    "REGIONAL_STAR": 33,
+    "LOCAL_HERO": 28,
+    "UNKNOWN": 5,
+    "POLARIZING": 4,
+    "NOTORIOUS": 0,
+    "DESPISED": 0
   },
   "fameHeatTransitions": {
-    "up": 527,
-    "down": 760
+    "up": 705,
+    "down": 616
   },
   "traitGrantLossCounts": {
-    "gain": 640,
+    "gain": 641,
     "lose": 4,
     "byTrait": {
+      "Big Hack": {
+        "gain": 27,
+        "lose": 0
+      },
       "Cannon Arm": {
-        "gain": 124,
+        "gain": 121,
         "lose": 0
       },
       "Easy Target": {
-        "gain": 4,
-        "lose": 0
-      },
-      "Inside Pitch": {
-        "gain": 7,
+        "gain": 6,
         "lose": 0
       },
       "Outside Pitch": {
-        "gain": 11,
+        "gain": 8,
         "lose": 0
       },
       "Noodle Arm": {
-        "gain": 85,
-        "lose": 0
-      },
-      "Whiffer": {
-        "gain": 17,
+        "gain": 104,
         "lose": 0
       },
       "Wild Thrower": {
-        "gain": 164,
-        "lose": 0
-      },
-      "Big Hack": {
-        "gain": 22,
+        "gain": 174,
         "lose": 0
       },
       "Mind Gamer": {
-        "gain": 17,
-        "lose": 0
-      },
-      "Tough Out": {
-        "gain": 43,
-        "lose": 0
-      },
-      "Rally Starter": {
-        "gain": 8,
-        "lose": 0
-      },
-      "Slow Poke": {
-        "gain": 5,
-        "lose": 0
-      },
-      "Durable": {
-        "gain": 41,
-        "lose": 3
-      },
-      "Injury Prone": {
-        "gain": 8,
-        "lose": 0
-      },
-      "Clutch": {
         "gain": 15,
         "lose": 0
       },
-      "Composed": {
-        "gain": 1,
-        "lose": 0
-      },
-      "Crossed Up": {
-        "gain": 6,
-        "lose": 0
-      },
-      "K Collector": {
+      "Slow Poke": {
         "gain": 3,
-        "lose": 1
-      },
-      "Specialist": {
-        "gain": 6,
         "lose": 0
       },
-      "Workhorse": {
-        "gain": 19,
+      "Tough Out": {
+        "gain": 29,
+        "lose": 0
+      },
+      "CON vs LHP": {
+        "gain": 2,
+        "lose": 0
+      },
+      "Inside Pitch": {
+        "gain": 8,
         "lose": 0
       },
       "POW vs LHP": {
-        "gain": 13,
+        "gain": 10,
+        "lose": 0
+      },
+      "Rally Starter": {
+        "gain": 3,
+        "lose": 0
+      },
+      "Durable": {
+        "gain": 44,
+        "lose": 3
+      },
+      "Injury Prone": {
+        "gain": 7,
+        "lose": 0
+      },
+      "BB Prone": {
+        "gain": 2,
+        "lose": 0
+      },
+      "Crossed Up": {
+        "gain": 11,
+        "lose": 0
+      },
+      "K Collector": {
+        "gain": 5,
+        "lose": 1
+      },
+      "Specialist": {
+        "gain": 5,
+        "lose": 0
+      },
+      "Workhorse": {
+        "gain": 17,
+        "lose": 0
+      },
+      "Gets Ahead": {
+        "gain": 3,
         "lose": 0
       },
       "Reverse Splits": {
         "gain": 5,
         "lose": 0
       },
-      "Wild Thing": {
-        "gain": 6,
+      "Whiffer": {
+        "gain": 13,
         "lose": 0
       },
       "Sprinter": {
+        "gain": 4,
+        "lose": 0
+      },
+      "Clutch": {
         "gain": 2,
         "lose": 0
       },
-      "Choker": {
-        "gain": 3,
+      "Wild Thing": {
+        "gain": 8,
         "lose": 0
       },
       "Falls Behind": {
-        "gain": 5,
+        "gain": 4,
+        "lose": 0
+      },
+      "Metal Head": {
+        "gain": 1,
         "lose": 0
       }
     }
@@ -239,6 +247,13 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
       "winnerPlayerId": "lsim-team-05-mlb-22-CF",
       "topMarginToWinner": 0,
       "candidateCount": 84,
+      "finalized": true
+    },
+    {
+      "category": "MANAGER_OF_YEAR",
+      "winnerPlayerId": "lsim-team-06:manager",
+      "topMarginToWinner": 0,
+      "candidateCount": 6,
       "finalized": true
     },
     {
@@ -277,10 +292,10 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
     "player": {
       "min": 0,
       "max": 99,
-      "count": 85
+      "count": 102
     },
     "teamFan": {
-      "min": 29,
+      "min": 56,
       "max": 99,
       "count": 6
     },
@@ -288,14 +303,18 @@ Checkpoint files: /Users/johnkruse/Projects/kbl-tracker/test-utils/lsim/results/
     "autoBackstopFiringRate": 0.016666666666666666
   },
   "flashpointTaxMagnitudes": {
-    "count": 5,
-    "minLastGameTax": -1.1,
-    "maxLastGameTax": -0.55,
-    "totalAccumulatedFanMoraleTax": -21.25,
+    "count": 6,
+    "minLastGameTax": -0.6,
+    "maxLastGameTax": 0,
+    "totalAccumulatedFanMoraleTax": -20.8,
     "byKind": {
+      "null": {
+        "count": 4,
+        "accumulatedFanMoraleTax": -16.65
+      },
       "albatross": {
-        "count": 5,
-        "accumulatedFanMoraleTax": -21.25
+        "count": 2,
+        "accumulatedFanMoraleTax": -4.15
       }
     }
   }

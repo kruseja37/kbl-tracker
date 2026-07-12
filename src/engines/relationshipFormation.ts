@@ -38,7 +38,6 @@ export interface RelationshipFormationEdge {
   accuracy: number;
   score: number;
   threshold: number;
-  effectiveThreshold: number;
   seededRoll: number;
   seed: string;
 }
@@ -91,6 +90,18 @@ export const RELATIONSHIP_FORMATION_TUNING = {
     FRIENDSHIP: 0.84,
   } satisfies Record<RelationshipFormationEdgeType, number>,
   seededThresholdWindow: 0.03,
+  /**
+   * R-F / §16 SIM-TUNE placeholders. These per-game hazard defaults are live
+   * only behind the L13 flag and remain subject to the relationship re-bake.
+   */
+  perGameHazard: {
+    activeBase: 0.02,
+    activeSlopePerPoint: 3.0,
+    activeCap: 0.35,
+    potentialBase: 0.03,
+    potentialSlopePerPoint: 2.0,
+    potentialCap: 0.15,
+  },
   youngAgeMax: 24,
   veteranAgeMin: 30,
   activeIntensityFloor: 0.35,
@@ -146,8 +157,12 @@ export function computeRelationshipFormationEdges(
         const seed = relationshipFormationSeed(context, candidate.player1Id, candidate.player2Id, candidate.type);
         const seededRoll = stableUnitInterval(seed);
         const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds[candidate.type];
-        const effectiveThreshold = threshold + (seededRoll * RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow);
-        if (candidate.score < effectiveThreshold) continue;
+        const hazardProbability = relationshipFormationHazardProbability(
+          candidate.score,
+          candidate.type,
+          candidate.potential,
+        );
+        if (seededRoll >= hazardProbability) continue;
 
         edges.push({
           player1Id: candidate.player1Id,
@@ -156,7 +171,6 @@ export function computeRelationshipFormationEdges(
           potential: candidate.potential,
           score: round4(candidate.score),
           threshold,
-          effectiveThreshold: round4(effectiveThreshold),
           seededRoll: round4(seededRoll),
           seed,
           intensity: relationshipIntensity(candidate.score, candidate.potential),
@@ -170,6 +184,32 @@ export function computeRelationshipFormationEdges(
     left.player1Id.localeCompare(right.player1Id) ||
     left.player2Id.localeCompare(right.player2Id) ||
     left.type.localeCompare(right.type),
+  );
+}
+
+export function relationshipFormationHazardProbability(
+  score: number,
+  type: RelationshipFormationEdgeType,
+  canBePotential: boolean,
+): number {
+  const threshold = RELATIONSHIP_FORMATION_TUNING.thresholds[type];
+  const window = RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow;
+  const margin = score - threshold;
+  const tuning = RELATIONSHIP_FORMATION_TUNING.perGameHazard;
+
+  if (score < threshold - window) return 0;
+  if (margin < 0) {
+    if (!canBePotential) return 0;
+    return clamp(
+      tuning.potentialBase + (tuning.potentialSlopePerPoint * (margin + window)),
+      0,
+      tuning.potentialCap,
+    );
+  }
+  return clamp(
+    tuning.activeBase + (tuning.activeSlopePerPoint * margin),
+    0,
+    tuning.activeCap,
   );
 }
 
@@ -374,7 +414,11 @@ function clampModifier(value: number): number {
 }
 
 function clamp01(value: number): number {
-  return Math.min(1, Math.max(0, value));
+  return clamp(value, 0, 1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function average(left: number, right: number): number {
