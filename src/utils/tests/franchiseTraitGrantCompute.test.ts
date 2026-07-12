@@ -55,11 +55,14 @@ import {
 } from '../franchiseTraitGrantCompute';
 import {
   deleteFranchiseDatabase,
+  getFranchisePlayer,
   saveFranchisePlayer,
   saveFranchiseTeam,
 } from '../franchisePlayerStorage';
 import {
+  clearFranchiseTraitOverlaysForTests,
   getFranchiseTraitOverlaysByScope,
+  putFranchiseTraitOverlay,
   resetFranchiseTraitOverlaysForTests,
 } from '../franchiseTraitOverlayStorage';
 import { setFranchisePhase2TraitsEnabledForTests } from '../franchisePhase2Flags';
@@ -74,8 +77,12 @@ import type {
   SeasonTraitCandidateInput,
 } from '../../engines/traitCandidateBuilder';
 import { SMB4_FULL_GRADE_SCALE } from '../../engines/smb4GradeEmulator';
-import { TRAIT_ACQUISITION_TUNING } from '../../engines/traitAcquisition';
+import {
+  TRAIT_ACQUISITION_TUNING,
+  type TraitChangeProposal,
+} from '../../engines/traitAcquisition';
 import type { Player, Team } from '../leagueBuilderStorage';
+import { resolveTraitProposal } from '../franchiseConsoleMirror';
 
 const DB_NAME = 'kbl-tracker';
 const ROSTER_DB_FRANCHISE_ID = 'franchise-trait-roster-ratings';
@@ -135,6 +142,29 @@ function candidate(
     },
     signalValue: realityPercentile,
     sampleSize: 20,
+  };
+}
+
+function proposal(
+  overrides: Partial<TraitChangeProposal> = {},
+): TraitChangeProposal {
+  return {
+    traitName: 'Clutch',
+    valence: 'gain',
+    imageValence: 'positive',
+    probability: 0.81,
+    realityPercentile: 0.9,
+    factors: {
+      ambitionTilt: 1,
+      resilienceTilt: 1,
+      imageAxisTilt: 1,
+      moraleFactor: 1,
+      rosterRoleFactor: 1,
+      charismaTilt: 1,
+      resiliencePositiveTilt: 1,
+      trendTilt: 1,
+    },
+    ...overrides,
   };
 }
 
@@ -342,6 +372,8 @@ function stubTraitPipeline(): void {
       modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
       currentMorale: 50,
       heldTraitNames: ['Choker'],
+      trait1: 'Choker',
+      trait2: null,
       bats: 'R',
       throws: 'R',
       primaryPosition: 'CF',
@@ -385,6 +417,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     resetFranchiseMoraleDatabaseForTests();
     await clearFranchiseMoraleDatabaseForTests();
     await deleteFranchiseDatabase(ROSTER_DB_FRANCHISE_ID);
+    await deleteFranchiseDatabase(scope.franchiseId);
     setFranchisePhase2TraitsEnabledForTests(null);
   });
 
@@ -396,6 +429,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     resetFranchiseMoraleDatabaseForTests();
     await clearFranchiseMoraleDatabaseForTests();
     await deleteFranchiseDatabase(ROSTER_DB_FRANCHISE_ID);
+    await deleteFranchiseDatabase(scope.franchiseId);
   });
 
   test('flag off returns dark-noop without loading schedule, season, events, roster, or overlays', async () => {
@@ -450,6 +484,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
       displacesTraitName: 'Choker',
       realityPercentile: 0.9,
       probability: 0.81,
+      expectedPriorValue: { trait1: 'Choker', trait2: null },
+      proposedValue: { trait1: 'Clutch', trait2: null },
       confirmationStatus: 'pending',
       applied: false,
       source: 'trait-grant',
@@ -460,6 +496,185 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(traitGrantSeam.computeTraitAcquisition).toHaveBeenCalledWith(expect.objectContaining({
       seed: `${scope.franchiseId}:${scope.seasonId}:${scope.statsScopeId}:player-alpha:trait-grant-20`,
     }));
+  });
+
+  test('stamps exact slot snapshots for named displacement, empty-slot order, and lose valence', async () => {
+    setFranchisePhase2TraitsEnabledForTests(true);
+    seedCheckpointReads();
+    const cases = [
+      {
+        name: 'named displacement wins before an empty slot',
+        trait1: 'Choker',
+        trait2: null,
+        heldTraitNames: ['Choker'],
+        proposal: proposal({ displaces: 'Choker' }),
+        expected: { trait1: 'Choker', trait2: null },
+        proposed: { trait1: 'Clutch', trait2: null },
+      },
+      {
+        name: 'trait1 empty fills first',
+        trait1: null,
+        trait2: 'Durable',
+        heldTraitNames: ['Durable'],
+        proposal: proposal(),
+        expected: { trait1: null, trait2: 'Durable' },
+        proposed: { trait1: 'Clutch', trait2: 'Durable' },
+      },
+      {
+        name: 'trait2 empty fills second',
+        trait1: 'Durable',
+        trait2: null,
+        heldTraitNames: ['Durable'],
+        proposal: proposal(),
+        expected: { trait1: 'Durable', trait2: null },
+        proposed: { trait1: 'Durable', trait2: 'Clutch' },
+      },
+      {
+        name: 'lose clears the held slot',
+        trait1: 'Durable',
+        trait2: 'Choker',
+        heldTraitNames: ['Durable', 'Choker'],
+        proposal: proposal({
+          traitName: 'Choker',
+          valence: 'lose',
+          imageValence: 'negative',
+        }),
+        expected: { trait1: 'Durable', trait2: 'Choker' },
+        proposed: { trait1: 'Durable', trait2: null },
+      },
+    ] as const;
+    let activeCase: (typeof cases)[number] = cases[0];
+    vi.spyOn(traitGrantSeam, 'resolveTraitGrantRoster').mockImplementation(async () => [{
+      playerId: 'player-alpha',
+      role: 'position',
+      personality: 'Competitive',
+      modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
+      currentMorale: 50,
+      heldTraitNames: [...activeCase.heldTraitNames],
+      trait1: activeCase.trait1,
+      trait2: activeCase.trait2,
+      bats: 'R',
+      throws: 'R',
+      primaryPosition: 'CF',
+      speed: 70,
+      fielding: 72,
+      arm: 83,
+    }]);
+    vi.spyOn(traitGrantSeam, 'computeSeasonTraitCandidates').mockReturnValue(new Map());
+    vi.spyOn(traitGrantSeam, 'computeTraitAcquisition').mockImplementation(() => ({
+      proposals: [activeCase.proposal],
+      skipped: [],
+    }));
+
+    for (const testCase of cases) {
+      activeCase = testCase;
+      await clearFranchiseTraitOverlaysForTests();
+      const result = await persistDarkTraitGrantForCompletedGame(gameState, scope);
+      const [row] = await getFranchiseTraitOverlaysByScope(scope);
+
+      expect(result, testCase.name).toEqual({ status: 'written', written: 1 });
+      expect(row, testCase.name).toMatchObject({
+        expectedPriorValue: testCase.expected,
+        proposedValue: testCase.proposed,
+      });
+    }
+  });
+
+  test('S3(a) trait stamped and unstamped twins resolve byte-identically without drift', async () => {
+    setFranchisePhase2TraitsEnabledForTests(true);
+    seedCheckpointReads();
+    stubTraitPipeline();
+    await persistDarkTraitGrantForCompletedGame(gameState, scope);
+    const [stamped] = await getFranchiseTraitOverlaysByScope(scope);
+    const { expectedPriorValue: _expected, proposedValue: _proposed, ...unstamped } = stamped;
+    const fixedEpoch = Date.parse('2026-07-11T18:00:00.000Z');
+    const RealDate = Date;
+    vi.stubGlobal('Date', class extends RealDate {
+      constructor(value?: string | number) {
+        super(value ?? fixedEpoch);
+      }
+
+      static now(): number {
+        return fixedEpoch;
+      }
+    });
+
+    const resolveVariant = async (row: typeof stamped) => {
+      await clearFranchiseTraitOverlaysForTests();
+      await deleteFranchiseDatabase(scope.franchiseId);
+      await saveFranchisePlayer(scope.franchiseId, makePlayer({
+        id: row.playerId,
+        trait1: 'Choker',
+        trait2: undefined,
+      }));
+      await putFranchiseTraitOverlay(row);
+      const result = await resolveTraitProposal(row.id, {
+        action: 'confirm',
+        observedPriorValue: { trait1: 'Choker', trait2: null },
+      });
+      return {
+        result,
+        player: await getFranchisePlayer(scope.franchiseId, row.playerId),
+      };
+    };
+
+    try {
+      const stampedOutcome = await resolveVariant(stamped);
+      const unstampedOutcome = await resolveVariant(unstamped);
+
+      expect(unstampedOutcome).toEqual(stampedOutcome);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('S3(b) fail-before/pass-after: a trait sweep stamp conflicts on slot drift while its unstamped twin silently applies', async () => {
+    setFranchisePhase2TraitsEnabledForTests(true);
+    seedCheckpointReads();
+    stubTraitPipeline();
+    await persistDarkTraitGrantForCompletedGame(gameState, scope);
+    const [stamped] = await getFranchiseTraitOverlaysByScope(scope);
+    const { expectedPriorValue: _expected, proposedValue: _proposed, ...unstamped } = stamped;
+    const driftedValue = { trait1: 'Durable', trait2: null } as const;
+
+    const resolveVariant = async (row: typeof stamped) => {
+      await clearFranchiseTraitOverlaysForTests();
+      await deleteFranchiseDatabase(scope.franchiseId);
+      await saveFranchisePlayer(scope.franchiseId, makePlayer({
+        id: row.playerId,
+        trait1: driftedValue.trait1,
+        trait2: undefined,
+      }));
+      await putFranchiseTraitOverlay(row);
+      const result = await resolveTraitProposal(row.id, {
+        action: 'confirm',
+        observedPriorValue: driftedValue,
+      });
+      const saved = await getFranchisePlayer(scope.franchiseId, row.playerId);
+      return {
+        result,
+        slots: { trait1: saved?.trait1 ?? null, trait2: saved?.trait2 ?? null },
+      };
+    };
+
+    const stampedOutcome = await resolveVariant(stamped);
+    const unstampedOutcome = await resolveVariant(unstamped);
+
+    expect(stampedOutcome).toMatchObject({
+      result: {
+        outcome: 'conflict',
+        expectedPriorValue: { trait1: 'Choker', trait2: null },
+        currentValue: driftedValue,
+      },
+      slots: driftedValue,
+    });
+    expect(unstampedOutcome).toMatchObject({
+      result: {
+        outcome: 'resolved',
+        expectedPriorValue: driftedValue,
+      },
+      slots: { trait1: 'Durable', trait2: 'Clutch' },
+    });
   });
 
   test('default trend weight keeps a later checkpoint byte-identical and invokes the candidate builder only once', async () => {
@@ -474,6 +689,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
         currentMorale: 50,
         heldTraitNames: ['Choker'],
+        trait1: 'Choker',
+        trait2: null,
         bats: 'R',
         throws: 'R',
         primaryPosition: 'CF',
@@ -547,6 +764,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
         currentMorale: 50,
         heldTraitNames: [],
+        trait1: null,
+        trait2: null,
         bats: 'R',
         throws: 'R',
         primaryPosition: 'CF',
@@ -561,6 +780,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
         currentMorale: 50,
         heldTraitNames: [],
+        trait1: null,
+        trait2: null,
         bats: 'R',
         throws: 'R',
         primaryPosition: 'LF',
@@ -627,6 +848,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
         currentMorale: 50,
         heldTraitNames: [],
+        trait1: null,
+        trait2: null,
         bats: 'R',
         throws: 'R',
         primaryPosition: 'CF',
@@ -669,7 +892,7 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     });
   });
 
-  test('two runs with the same seeded state write identical rows', async () => {
+  test('S3(c) identical trait sweep inputs produce byte-identical rows and CAS stamps', async () => {
     setFranchisePhase2TraitsEnabledForTests(true);
     seedCheckpointReads();
     stubTraitPipeline();
@@ -686,6 +909,10 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     const secondRows = await getFranchiseTraitOverlaysByScope(scope);
 
     expect(secondRows).toEqual(firstRows);
+    expect(firstRows[0]).toMatchObject({
+      expectedPriorValue: { trait1: 'Choker', trait2: null },
+      proposedValue: { trait1: 'Clutch', trait2: null },
+    });
   });
 
   test('resolveTraitGrantRoster carries ratings and prefers canonical snapshot morale', async () => {
@@ -716,6 +943,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
     expect(roster[0]).toMatchObject({
       playerId: 'fielder-ratings',
       role: 'position',
+      trait1: null,
+      trait2: null,
       fielding: 64,
       arm: 88,
       currentMorale: 73,
@@ -738,6 +967,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
         currentMorale: 50,
         heldTraitNames: [],
+        trait1: null,
+        trait2: null,
         bats: 'L',
         throws: 'R',
         primaryPosition: '2B',
@@ -753,6 +984,8 @@ describe('persistDarkTraitGrantForCompletedGame', () => {
         modifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
         currentMorale: 50,
         heldTraitNames: [],
+        trait1: null,
+        trait2: null,
         bats: 'S',
         throws: 'L',
         primaryPosition: 'SP',

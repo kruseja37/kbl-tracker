@@ -567,6 +567,8 @@ export async function persistDarkCheckpointSweepForCompletedGame(
         playerId: entry.playerId,
         ratingKey,
         delta: dev.appliedDelta,
+        expectedPriorValue: baseRatingValue,
+        proposedValue: baseRatingValue + dev.appliedDelta,
         kind: 'permanent',
         expiresAtGameNumber: null,
         confirmationStatus: 'pending',
