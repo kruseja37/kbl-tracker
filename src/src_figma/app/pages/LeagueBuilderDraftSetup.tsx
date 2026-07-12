@@ -116,6 +116,7 @@ import {
   DEFAULT_POOL_SIZE_MULTIPLIER,
   DEFAULT_POOL_QUALITY_CENTER,
   extractPoolFromDemand,
+  matchesPositionSupplyFloor,
   poolBalancePresetTuning,
   POOL_BALANCE_PRESETS,
   POOL_QUALITY_CENTER_STOPS,
@@ -128,6 +129,7 @@ import {
   type PoolFromDemandResult,
   type PoolQualityCenter,
   type PoolSourceMode,
+  type PositionSupplyFloorResult,
   type TeamDesignInput,
 } from "../../../engines/poolFromDemand";
 import {
@@ -1018,6 +1020,39 @@ function rosterPositionMap(players: readonly Player[]): RosterPositionMap {
 
 function positionFloorReadinessLine(floor: { label: string; available: number; teams: number }): string {
   return `THE POOL IS SHORT ON ${floor.label} — ${floor.available} FOR ${floor.teams} CLUBS; RE-EXTRACT.`;
+}
+
+// BLOCKFIX (JK repro 2026-07-12): the old pool-first blocked line said "add players or raise the
+// cap" even when the TRUE binding constraint was position/role supply (the SML-import repro stayed
+// blocked after raising the cap 1.2M -> 10M). These split the seat failure into its real causes so
+// the ALWAYS-visible warning names the actual missing floors instead of misdirecting to the cap.
+function splitFloorsByUniverseSupply(
+  floors: readonly PositionSupplyFloorResult[],
+  universeShapes: readonly ReturnType<typeof toRosterSlotPlayer>[],
+): {
+  regenerable: PositionSupplyFloorResult[];
+  universeShort: Array<PositionSupplyFloorResult & { universeAvailable: number }>;
+} {
+  const regenerable: PositionSupplyFloorResult[] = [];
+  const universeShort: Array<PositionSupplyFloorResult & { universeAvailable: number }> = [];
+  for (const floor of floors) {
+    const universeAvailable = universeShapes.filter((shape) => matchesPositionSupplyFloor(shape, floor)).length;
+    if (universeAvailable >= floor.needed) regenerable.push(floor);
+    else universeShort.push({ ...floor, universeAvailable });
+  }
+  return { regenerable, universeShort };
+}
+
+function poolFloorShortBlockedLine(floors: readonly PositionSupplyFloorResult[]): string {
+  const parts = floors.map((floor) => `${floor.label} (${floor.available} of ${floor.needed} for ${floor.teams} clubs)`);
+  return `The pool is short on ${parts.join(", ")} — REGENERATE PRODUCTION-SHAPED POOL or add players at those spots, then LOCK POOL.`;
+}
+
+function universeFloorShortBlockedLine(
+  floors: readonly (PositionSupplyFloorResult & { universeAvailable: number })[],
+): string {
+  const parts = floors.map((floor) => `${floor.label} (${floor.universeAvailable} available, ${floor.needed} needed for ${floor.teams} clubs)`);
+  return `The source universe itself is short on ${parts.join(", ")} — regenerating can't create them; check more source leagues or add players who cover those spots.`;
 }
 
 export const BOARD_POSITION_DEPTH = 5;
@@ -2063,7 +2098,9 @@ export function LeagueBuilderDraftSetup() {
       poolSizeMultiplier: poolBalanceTuning.poolSlackFactor,
     });
     const demandPlayers = demandUniverseFromPlayers(inPoolPlayers);
-    const legal = tierBudget > 0 && league.teamIds.length > 0
+    // BLOCKFIX: keep the whole seat verdict (not just .holds) — `failing.overrun` is how the
+    // readiness panel tells a genuine cap blockage apart from a position/role supply blockage.
+    const seatVerdict = tierBudget > 0 && league.teamIds.length > 0
       ? seatAllClubs(
           demandPlayers.map((player) => ({
             id: player.id,
@@ -2073,9 +2110,10 @@ export function LeagueBuilderDraftSetup() {
           })),
           league.teamIds.length,
           tierBudget,
-        ).holds
+        )
       : null;
-    return buildNumericPoolShapeDiagnostics({
+    const legal = seatVerdict ? seatVerdict.holds : null;
+    const diagnostics = buildNumericPoolShapeDiagnostics({
       players: demandPlayers,
       requiredRosterDemand: shapedTarget.demandBase,
       targetSize: shapedTarget.effectiveTarget,
@@ -2096,6 +2134,10 @@ export function LeagueBuilderDraftSetup() {
       fullPoolEligibleCandidateCount: universePlayers.length,
       legalCompletionFeasible: legal,
     });
+    return {
+      ...diagnostics,
+      seatFailing: seatVerdict && !seatVerdict.holds ? seatVerdict.failing ?? null : null,
+    };
   }, [inPoolPlayers, league, universePlayers.length, poolBalancePreset, poolBalanceTuning, poolMode, poolProvenance, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
   const poolFirstManualShapeWarnings = useMemo(() => {
     if (!poolFirstManualShapeDiagnostics) return [];
@@ -3391,6 +3433,16 @@ export function LeagueBuilderDraftSetup() {
     !poolTrailing;
   const poolFirstLegalCompletionBlocked =
     poolMode === "pool-first" && poolFirstManualShapeDiagnostics?.legalCompletionFeasible === false;
+  // BLOCKFIX (JK repro 2026-07-12): legality-shape view of the source universe, used to tell
+  // "regenerate/add can fix this" apart from "the checked source leagues themselves lack the role".
+  const universeRosterShapes = useMemo(
+    () => Object.values(rosterPositionMap(universePlayers)),
+    [universePlayers],
+  );
+  const poolFirstBlockedFloorSplit = useMemo(() => {
+    if (!poolFirstLegalCompletionBlocked || sufficiency.positionFloorReasons.length === 0) return null;
+    return splitFloorsByUniverseSupply(sufficiency.positionFloorReasons, universeRosterShapes);
+  }, [poolFirstLegalCompletionBlocked, sufficiency.positionFloorReasons, universeRosterShapes]);
 
   // BOARDFIX2 (Item A): JK's real league still couldn't start even after BOARDFIX1's pool-display
   // fix landed -- the gate itself was never wrong, but the ONLY explanation on screen was
@@ -3455,7 +3507,21 @@ export function LeagueBuilderDraftSetup() {
       } else {
         if (!locked) {
           if (poolFirstLegalCompletionBlocked) {
-            readinessReasons.push("The pool can't legally seat every club at 22 under the cap yet — add players or raise the cap, then LOCK POOL.");
+            // BLOCKFIX (JK repro 2026-07-12): name the TRUE binding constraint. The old single
+            // line said "add players or raise the cap" even when no cap would ever help (the
+            // SML-import universe simply lacks the roles) — raising 1.2M -> 10M changed nothing.
+            if (poolFirstBlockedFloorSplit) {
+              if (poolFirstBlockedFloorSplit.regenerable.length > 0) {
+                readinessReasons.push(poolFloorShortBlockedLine(poolFirstBlockedFloorSplit.regenerable));
+              }
+              if (poolFirstBlockedFloorSplit.universeShort.length > 0) {
+                readinessReasons.push(universeFloorShortBlockedLine(poolFirstBlockedFloorSplit.universeShort));
+              }
+            } else if (poolFirstManualShapeDiagnostics?.seatFailing?.overrun !== undefined) {
+              readinessReasons.push("The pool covers every position, but a legal 22 doesn't fit under the cap for every club — raise the cap or add cheaper players, then LOCK POOL.");
+            } else {
+              readinessReasons.push("The pool covers every position, but the same players are carrying too many spots — add more players, then LOCK POOL.");
+            }
           } else if (inPoolPlayers.length === 0) {
             readinessReasons.push("The pool is empty — add players below, then LOCK POOL.");
           } else {
@@ -3880,6 +3946,15 @@ export function LeagueBuilderDraftSetup() {
       {" "}· swaps {poolFirstShapeReport.numericShape.g1SwapCount ?? 0}
       {poolFirstShapeReport.numericShape.overTargetReason ? <> · over target: {poolFirstShapeReport.numericShape.overTargetReason}</> : null}
       {poolFirstShapeReport.numericShape.qualityCenterShortfallReason ? <> · quality note: {poolFirstShapeReport.numericShape.qualityCenterShortfallReason}</> : null}
+      {/* BLOCKFIX (JK repro 2026-07-12): the extraction already knew when the source universe
+          itself couldn't supply a role floor (result.shortfalls, e.g. "The uploaded universe has
+          3 closers; 24 required..."), but pool-first never showed it — so REGENERATE looked like
+          it silently did nothing. State-triggered warning, ALWAYS-visible per skin standard §7. */}
+      {poolFirstShapeReport.shortfalls.length > 0 ? (
+        <div className="mt-2 font-bold text-[var(--ballpark-warn-text)]">
+          {poolFirstShapeReport.shortfalls.map((shortfall: DemandShortfall) => shortfall.message).join(" · ")}
+        </div>
+      ) : null}
     </div>
   ) : null;
 

@@ -7,6 +7,13 @@
       "runtimeArgs": ["node_modules/.bin/vite", "--host", "--port", "5199"],
       "port": 5199,
       "autoPort": false
+    },
+    {
+      "name": "dev-alt",
+      "runtimeExecutable": "/Users/johnkruse/.nvm/versions/node/v20.20.0/bin/node",
+      "runtimeArgs": ["node_modules/.bin/vite", "--host", "--port", "5233"],
+      "port": 5233,
+      "autoPort": false
     }
   ]
 }

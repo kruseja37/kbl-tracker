@@ -878,8 +878,12 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.queryByTestId("draft-readiness-panel")).not.toBeInTheDocument();
     });
 
-    test("pool-first: names a pool that can't legally seat every club at 22 under the cap", async () => {
-      const expensivePlayers = makeLegalRosterPlayers(2_000_000); // one legal 22, priced way over a small cap
+    test("pool-first: a supply-shape-blocked pool names the missing position floors, not the cap (BLOCKFIX 2026-07-12)", async () => {
+      // One legal 22 for 2 clubs: the seat check fails on SHAPE (44 slots, 22 bodies), and the
+      // whole app universe is the same 22 — so no cap raise can ever fix it. The old copy said
+      // "add players or raise the cap" (JK's SML repro: 1.2M -> 10M changed nothing); the new
+      // copy must name the missing floors and say the SOURCE UNIVERSE is what's short.
+      const expensivePlayers = makeLegalRosterPlayers(2_000_000);
       mockLeagueData({
         league: makeLeague({ draftPoolMode: "pool-first", salaryCap: 1_000_000 }),
         players: expensivePlayers,
@@ -893,7 +897,30 @@ describe("LeagueBuilderDraftSetup", () => {
       render(<LeagueBuilderDraftSetup />);
 
       const panel = await screen.findByTestId("draft-readiness-panel");
-      expect(await within(panel).findByText(/can't legally seat every club at 22 under the cap/i)).toBeInTheDocument();
+      expect(await within(panel).findByText(/The source universe itself is short on .*CATCHERS/i)).toBeInTheDocument();
+      expect(within(panel).queryByText(/raise the cap/i)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
+    });
+
+    test("pool-first: a genuinely cap-blocked pool (positions covered, priced over cap) still points at the cap (BLOCKFIX 2026-07-12)", async () => {
+      // Same floor-complete 55-player shape the design-first fixture uses, repriced so every legal
+      // 22 costs 2.2M against a 1M cap: the seat check fails on BUDGET (failing.overrun), every
+      // position floor is met, so the cap advice is the honest one here.
+      const cappedPlayers = makeFinalizedDesignFirstPlayers().map((player) => ({ ...player, salary: 100_000 }));
+      mockLeagueData({
+        league: makeLeague({ draftPoolMode: "pool-first", salaryCap: 1_000_000 }),
+        players: cappedPlayers,
+        pool: makePool({
+          locked: false,
+          players: cappedPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: cappedPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+
+      const panel = await screen.findByTestId("draft-readiness-panel");
+      expect(await within(panel).findByText(/doesn't fit under the cap for every club — raise the cap or add cheaper players/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /START THE DRAFT/i })).toBeDisabled();
     });
 
