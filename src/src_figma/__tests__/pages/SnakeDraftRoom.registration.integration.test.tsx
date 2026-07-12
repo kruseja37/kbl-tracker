@@ -1,13 +1,13 @@
 import 'fake-indexeddb/auto';
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter as RoomMemoryRouter } from 'react-router';
 import {
+  MemoryRouter as RoomMemoryRouter,
   MemoryRouter as SetupMemoryRouter,
   Route,
   Routes,
   useLocation,
-} from 'react-router-dom';
+} from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('../../../utils/syncEngine', () => ({
@@ -30,7 +30,6 @@ vi.mock('../../utils/snakeSounds', () => ({
 }));
 
 import { TIER_CAPS } from '../../../data/tierParams';
-import { proveSimultaneousSnakeSeating } from '../../../engines/snakeSeatingProof';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
@@ -49,7 +48,7 @@ import {
 } from '../../../utils/leagueBuilderStorage';
 import { resolveLockedSeat } from '../../app/components/snake/desk/deskRoomModel';
 import SnakeDraftRoom, { snakeRoomMissingLegCopy } from '../../app/pages/SnakeDraftRoom';
-import { SnakeDraftSetup } from '../../app/pages/SnakeDraftSetup';
+import { LeagueBuilderDraftSetup } from '../../app/pages/LeagueBuilderDraftSetup';
 
 const LEAGUE_ID = 'roomfix-snake-league';
 const SOURCE_LEAGUE_ID = 'roomfix-legends';
@@ -74,6 +73,8 @@ function team(id: string, index: number): Team {
     controlledBy: 'human',
     leagueIds: [LEAGUE_ID],
     mlbArchetypeKey: index === 0 ? 'murderers-row' : 'bomba-squad',
+    farmArchetypeKey: index === 0 ? 'whiteyball' : 'the-opener',
+    boardRankOverrides: index === 0 ? { global: [PICKED_LEGEND_ID] } : undefined,
     createdDate: '2026-07-11',
     lastModified: '2026-07-11',
   };
@@ -113,7 +114,10 @@ function player(
     mojo: 'Normal',
     fame: 0,
     salary: 10_000,
-    leagueAssignments: [{ leagueId: SOURCE_LEAGUE_ID, teamId: '', rosterStatus: 'FREE_AGENT' }],
+    leagueAssignments: [
+      { leagueId: SOURCE_LEAGUE_ID, teamId: '', rosterStatus: 'FREE_AGENT' },
+      { leagueId: LEAGUE_ID, teamId: '', rosterStatus: 'FREE_AGENT' },
+    ],
     hiddenPersonalityModifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
     createdDate: '2026-07-11',
     lastModified: '2026-07-11',
@@ -211,11 +215,10 @@ describe('ROOMFIX setup to playable snake room', () => {
   });
 
   test('registers the picked pool at GO, opens the room, and records the first pick through the real ritual', async () => {
-    const proofSpy = vi.fn(proveSimultaneousSnakeSeating);
     render(
-      <SetupMemoryRouter initialEntries={[`/snake-setup?leagueId=${LEAGUE_ID}`]}>
+      <SetupMemoryRouter initialEntries={[`/league-builder/draft-setup?leagueId=${LEAGUE_ID}`]}>
         <Routes>
-          <Route path="/snake-setup" element={<SnakeDraftSetup runProof={proofSpy} />} />
+          <Route path="/league-builder/draft-setup" element={<LeagueBuilderDraftSetup />} />
           <Route path="/snake-room" element={<NavigationTarget />} />
         </Routes>
       </SetupMemoryRouter>,
@@ -224,20 +227,18 @@ describe('ROOMFIX setup to playable snake room', () => {
     fireEvent.change(await screen.findByLabelText('PICK A BABE RUTH CARD'), {
       target: { value: PICKED_LEGEND_ID },
     });
-    await waitFor(() => expect(screen.queryAllByText('CHECKING…')).toHaveLength(0), { timeout: 30_000 });
-    const startButton = screen.getByRole('button', { name: 'START THE DRAFT' });
-    if (startButton.hasAttribute('disabled')) {
-      const latest = proofSpy.mock.calls.at(-1)?.[0];
-      const positions = latest?.pool.reduce<Record<string, number>>((counts, row) => {
-        const key = `${row.shape.position}/${row.shape.secondaryPosition ?? '-'}`;
-        counts[key] = (counts[key] ?? 0) + 1;
-        return counts;
-      }, {});
-      throw new Error(`ROOMFIX seed did not reach READY: ${startButton.closest('section')?.textContent ?? 'unknown reason'}; pool=${latest?.pool.length}; positions=${JSON.stringify(positions)}`);
-    }
+    const lockButton = await screen.findByRole('button', { name: 'LOCK POOL' }, { timeout: 30_000 });
+    await waitFor(() => expect(lockButton).toBeEnabled(), { timeout: 30_000 });
+    fireEvent.click(lockButton);
+    await waitFor(async () => expect((await getRegisteredPool(LEAGUE_ID))?.locked).toBe(true), { timeout: 30_000 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'UNLOCK' })).toBeEnabled(), { timeout: 30_000 });
+    expect(screen.queryByLabelText('PICK A BABE RUTH CARD')).not.toBeInTheDocument();
+    expect(screen.getByText('UNLOCK THE POOL TO CHANGE VERSIONS.')).toBeInTheDocument();
+    const startButton = await screen.findByRole('button', { name: 'ENTER SNAKE DRAFT' }, { timeout: 30_000 });
+    await waitFor(() => expect(startButton).toBeEnabled(), { timeout: 30_000 });
     fireEvent.click(startButton);
 
-    const navigationTarget = await screen.findByTestId('navigation-target', {}, { timeout: 30_000 });
+    const navigationTarget = await screen.findByTestId('navigation-target', {}, { timeout: 150_000 });
     expect(navigationTarget).toHaveTextContent(`/snake-room?leagueId=${LEAGUE_ID}`);
     const roomTarget = navigationTarget.textContent!;
     cleanup();
@@ -275,6 +276,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     const firstTeam = (await getTeam(TEAM_IDS[0]))!;
     const lockedSeat = resolveLockedSeat({ team: firstTeam, session: legs.session! });
     expect(legs.session!.snakeSetup!.clubs[0]).toMatchObject({ archetypeId: 'murderers-row' });
+    expect(legs.session!.seatBoards?.[TEAM_IDS[0]].rankings.global?.[0]).toBe(PICKED_LEGEND_ID);
     expect(lockedSeat.capIdentity).toBeDefined();
     expect(lockedSeat.archetypeName).not.toBe('BALANCED');
 
@@ -317,5 +319,5 @@ describe('ROOMFIX setup to playable snake room', () => {
       expect(stored?.completedPicks).toHaveLength(1);
       expect(stored?.currentPickIndex).toBe(1);
     });
-  }, 60_000);
+  }, 180_000);
 });

@@ -1178,3 +1178,11 @@ Previous `CURRENT_STATE.md` live header's first row was the 2026-07-08 M1c P1 CP
 ## Outgoing Live Header Snapshot — before 2026-07-09 POOLFLOOR session end
 
 Previous `CURRENT_STATE.md` live header's first row was the 2026-07-09 scribe booking pass banner recording TAXPRECISION, FLOORREFIT, STALEPARITY, ARCHLOCK, and the open GAUNTLET stranding investigation. This session refreshed the live header to record the POOLFLOOR build in `/private/tmp/kbl-poolfloor2`, the red-first GAUNTLET-2 production-default repro, the hard-position extraction floors, the D2/D3 green gauntlet result, the focused gates, and the pending independent audit.
+
+## Outgoing Live Header Snapshot — before 2026-07-11 UNIFYSETUP STOP
+
+The prior live header recorded the SNAKE v1 program as code-complete with S4-S6
+merged, S7 plus the companion stitch still open, and JK's browser walkthrough next.
+This lane adds a branch-local UNIFYSETUP status above it: implementation and focused
+firewalls are green, but the one-worker full suite has two non-amended failures, so
+the lane is stopped pending a captain ruling rather than marked complete.

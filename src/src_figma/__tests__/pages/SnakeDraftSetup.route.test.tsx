@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../utils/franchisePhase2Activation', () => ({
@@ -11,13 +11,22 @@ vi.mock('../../../utils/franchisePhase2Flags', () => ({
   isSnakeDraftV1Enabled: () => false,
 }));
 
+vi.mock('../../app/pages/LeagueBuilderDraftSetup', () => ({
+  LeagueBuilderDraftSetup: () => {
+    const location = useLocation();
+    return <div data-testid="unified-setup-location">{location.pathname}{location.search}</div>;
+  },
+}));
+
 import App from '../../../App';
 
 afterEach(() => vi.clearAllMocks());
 
-describe('snake v1 route gate', () => {
-  it('keeps /snake-setup hidden while the default-off flag is off', async () => {
-    render(<MemoryRouter initialEntries={['/snake-setup']}><App /></MemoryRouter>);
-    expect(await screen.findByRole('heading', { name: 'Page Not Found' })).toBeInTheDocument();
+describe('retired snake setup route', () => {
+  it('redirects to the unified setup while preserving leagueId', async () => {
+    render(<MemoryRouter initialEntries={['/snake-setup?leagueId=league-42']}><App /></MemoryRouter>);
+    expect(await screen.findByTestId('unified-setup-location')).toHaveTextContent(
+      '/league-builder/draft-setup?leagueId=league-42',
+    );
   });
 });
