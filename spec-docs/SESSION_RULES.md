@@ -376,15 +376,21 @@ When your context is approaching its limit (compaction near or imminent):
 
 ---
 
+## Help-Button UI Law (Non-Negotiable — RATIFIED by JK 2026-07-11)
+
+When adding ANY explanatory or instructional text to product UI, always place it behind the
+screen's Help affordance (the `?` button pattern the Lens already uses) — inline UI copy is
+limited to labels, values, states, and one-line action consequences — because inline explainer
+text has repeatedly spoiled the draft UI's cleanliness and JK has had to repeat this ask
+("no matter what I say, I can't get AI to hide it behind the help button"). Every product
+screen that carries explanatory content gets its own `?` Help affordance if missing. Density
+corollary: one clean primary action per row; details behind progressive disclosure; no dead
+columns, orphaned tab/chip rows, or walls of always-expanded controls. Dev-only surfaces
+(Phase2 console, Test Drive) are exempt. (JK directive 2026-07-11; ratified 2026-07-12.)
+
+---
+
 ## Lessons Learned (pending JK ratification)
-
-- **When adding ANY explanatory or instructional text to product UI, always place it behind the
-  screen's Help affordance (the `?` button pattern the Lens already uses) — inline UI copy is
-  limited to labels, values, states, and one-line action consequences — because inline explainer
-  text has repeatedly spoiled the draft UI's cleanliness and JK has had to repeat this ask
-  ("no matter what I say, I can't get AI to hide it behind the help button"). Dev-only surfaces
-  (Phase2 console, Test Drive) are exempt. (JK directive 2026-07-11.)
-
 
 - **When committing from the PRIMARY shared checkout, always verify `git branch --show-current` in the
   SAME command as the commit**, because concurrent sessions switch the checkout's branch mid-session —
